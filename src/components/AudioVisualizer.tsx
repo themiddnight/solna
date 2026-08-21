@@ -93,7 +93,55 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       animationId = requestAnimationFrame(render);
     };
 
-    // Helper: Spectrum Bars
+    // Helper: Logarithmic frequency data sampling
+    const getLogFrequencyData = (
+      data: Uint8Array,
+      numPoints: number,
+      len: number
+    ): number[] => {
+      const result: number[] = new Array(numPoints).fill(0);
+      const minBin = 1;
+      const maxBin = Math.max(minBin + 1, Math.floor(len * 0.85)); // 20Hz - ~18kHz range
+
+      for (let i = 0; i < numPoints; i++) {
+        const fractionStart = i / numPoints;
+        const fractionEnd = (i + 1) / numPoints;
+
+        // Exponential/logarithmic bin mapping
+        const startBin = Math.min(
+          maxBin - 1,
+          Math.floor(minBin * Math.pow(maxBin / minBin, fractionStart))
+        );
+        const endBin = Math.min(
+          maxBin,
+          Math.max(
+            startBin + 1,
+            Math.floor(minBin * Math.pow(maxBin / minBin, fractionEnd))
+          )
+        );
+
+        let sum = 0;
+        let count = 0;
+        let peak = 0;
+
+        for (let b = startBin; b < endBin; b++) {
+          const val = data[b] || 0;
+          sum += val;
+          if (val > peak) peak = val;
+          count++;
+        }
+
+        const avg = count > 0 ? sum / count : 0;
+        const blended = avg * 0.65 + peak * 0.35;
+        // Treble compensation tilt
+        const trebleTilt = 1 + (i / numPoints) * 0.4;
+        result[i] = Math.min(255, blended * trebleTilt);
+      }
+
+      return result;
+    };
+
+    // Helper: Spectrum Bars (Logarithmic scale)
     const renderBars = (
       c: CanvasRenderingContext2D,
       w: number,
@@ -102,31 +150,27 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       len: number,
       theme: string
     ) => {
-      const barCount = Math.min(32, Math.floor(w / 4));
-      const barWidth = Math.max(2, (w / barCount) - 1.5);
-      const step = Math.floor(len / barCount);
+      const barCount = Math.min(36, Math.max(12, Math.floor(w / 5)));
+      const gap = 1.5;
+      const barWidth = Math.max(2, (w - (barCount - 1) * gap) / barCount);
+      const logData = getLogFrequencyData(data, barCount, len);
 
       if (peaksRef.current.length !== barCount) {
         peaksRef.current = new Array(barCount).fill(0);
       }
 
       for (let i = 0; i < barCount; i++) {
-        let val = 0;
-        for (let j = 0; j < step; j++) {
-          val += data[i * step + j] || 0;
-        }
-        val = val / step;
-
+        const val = logData[i] || 0;
         const percent = val / 255;
         const barHeight = Math.max(2, percent * (h - 4));
-        const x = i * (barWidth + 1.5);
+        const x = i * (barWidth + gap);
         const y = h - barHeight;
 
         // Peak drop falloff
         if (barHeight > peaksRef.current[i]) {
           peaksRef.current[i] = barHeight;
         } else {
-          peaksRef.current[i] = Math.max(0, peaksRef.current[i] - 0.5);
+          peaksRef.current[i] = Math.max(0, peaksRef.current[i] - 0.6);
         }
 
         // Gradient for bars
@@ -162,7 +206,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       }
     };
 
-    // Helper: Spectrum Wave (smooth curve with area gradient fill)
+    // Helper: Spectrum Wave (Logarithmic Scale curve with area gradient fill)
     const renderSpectrumWave = (
       c: CanvasRenderingContext2D,
       w: number,
@@ -172,8 +216,8 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       theme: string,
       isSounding: boolean
     ) => {
-      const samplePoints = 48;
-      const step = Math.floor(len / samplePoints);
+      const samplePoints = 56;
+      const logData = getLogFrequencyData(data, samplePoints, len);
       const points: { x: number; y: number }[] = [];
 
       // Smooth with previous frame for fluid animation
@@ -182,20 +226,16 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       }
 
       for (let i = 0; i < samplePoints; i++) {
-        let sum = 0;
-        for (let j = 0; j < step; j++) {
-          sum += data[i * step + j] || 0;
-        }
-        const raw = sum / step;
+        const raw = logData[i] || 0;
         // Interpolate for buttery smoothness
-        const smoothed = prevDataRef.current[i] * 0.4 + (raw / 255) * 0.6;
+        const smoothed = prevDataRef.current[i] * 0.35 + (raw / 255) * 0.65;
         prevDataRef.current[i] = smoothed;
 
         const x = (i / (samplePoints - 1)) * w;
         // If sound is playing, use magnitude, otherwise slight resting ripple
-        const idleWave = Math.sin(Date.now() * 0.003 + i * 0.2) * 2;
+        const idleWave = Math.sin(Date.now() * 0.003 + i * 0.2) * 1.5;
         const y = isSounding
-          ? h - Math.max(3, smoothed * (h - 6)) - 3
+          ? h - Math.max(2, smoothed * (h - 5)) - 2
           : h / 2 + idleWave;
 
         points.push({ x, y });
@@ -273,7 +313,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       c.shadowBlur = 0; // reset
     };
 
-    // Helper: Oscilloscope (Time-Domain Wave)
+    // Helper: Oscilloscope (Time-Domain Wave with Centered X-Axis, Positive Up & Negative Down)
     const renderOscilloscope = (
       c: CanvasRenderingContext2D,
       w: number,
@@ -283,42 +323,100 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       theme: string,
       isSounding: boolean
     ) => {
-      c.lineWidth = isSounding ? 2 : 1.2;
-      c.strokeStyle =
-        theme === 'emerald'
-          ? '#34d399'
-          : theme === 'amber'
-          ? '#fbbf24'
-          : theme === 'cyberpunk'
-          ? '#38bdf8'
-          : '#818cf8';
+      const centerY = h / 2;
 
-      c.shadowBlur = isSounding ? 8 : 1;
-      c.shadowColor = c.strokeStyle;
-
+      // 1. Draw Centered Zero-Crossing Reference X-Axis Line
       c.beginPath();
-      const sliceWidth = w / len;
-      let x = 0;
+      c.strokeStyle = 'rgba(99, 102, 241, 0.22)';
+      c.lineWidth = 1;
+      c.setLineDash([3, 3]);
+      c.moveTo(0, centerY);
+      c.lineTo(w, centerY);
+      c.stroke();
+      c.setLineDash([]); // Reset dash
 
-      for (let i = 0; i < len; i++) {
-        const v = data[i] / 128.0; // 0..2 centered at 1
-        const y = (v * h) / 2;
-
-        if (i === 0) {
-          c.moveTo(x, y);
-        } else {
-          c.lineTo(x, y);
+      // 2. Trigger detection to stabilize waveform display
+      let triggerOffset = 0;
+      for (let i = 0; i < Math.min(len / 2, 256); i++) {
+        if (data[i] < 128 && data[i + 1] >= 128) {
+          triggerOffset = i;
+          break;
         }
-
-        x += sliceWidth;
       }
 
-      c.lineTo(w, h / 2);
+      const activeSamples = Math.min(len - triggerOffset, 512);
+      const sliceWidth = w / (activeSamples - 1);
+      const points: { x: number; y: number }[] = [];
+      const amplitudeLimit = (h / 2) * 0.88;
+
+      for (let i = 0; i < activeSamples; i++) {
+        const rawByte = data[triggerOffset + i] !== undefined ? data[triggerOffset + i] : 128;
+        // Normalized from -1.0 (negative trough) to +1.0 (positive crest), centered at 0
+        const normalized = (rawByte - 128) / 128.0;
+        const x = i * sliceWidth;
+        // Positive goes UP (y decreases), Negative goes DOWN (y increases), Zero stays at centerY
+        const y = centerY - (normalized * amplitudeLimit);
+        points.push({ x, y });
+      }
+
+      if (points.length === 0) return;
+
+      // 3. Draw subtle dual-sided center glow fill
+      const themeColor =
+        theme === 'emerald'
+          ? '#10b981'
+          : theme === 'amber'
+          ? '#f59e0b'
+          : theme === 'cyberpunk'
+          ? '#38bdf8'
+          : '#6366f1';
+
+      if (isSounding) {
+        c.beginPath();
+        c.moveTo(points[0].x, centerY);
+        for (let i = 0; i < points.length; i++) {
+          c.lineTo(points[i].x, points[i].y);
+        }
+        c.lineTo(points[points.length - 1].x, centerY);
+        c.closePath();
+        c.fillStyle =
+          theme === 'cyberpunk'
+            ? 'rgba(56, 189, 248, 0.12)'
+            : theme === 'emerald'
+            ? 'rgba(16, 185, 129, 0.12)'
+            : 'rgba(99, 102, 241, 0.12)';
+        c.fill();
+      }
+
+      // 4. Draw Oscilloscope Beam Curve
+      c.beginPath();
+      c.moveTo(points[0].x, points[0].y);
+
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i];
+        const p1 = points[i + 1];
+        const midX = (p0.x + p1.x) / 2;
+        const midY = (p0.y + p1.y) / 2;
+        c.quadraticCurveTo(p0.x, p0.y, midX, midY);
+      }
+      c.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+
+      c.shadowBlur = isSounding ? 10 : 2;
+      c.shadowColor = themeColor;
+      c.strokeStyle =
+        theme === 'emerald'
+          ? '#6ee7b7'
+          : theme === 'amber'
+          ? '#fde68a'
+          : theme === 'cyberpunk'
+          ? '#7dd3fc'
+          : '#c7d2fe';
+      c.lineWidth = isSounding ? 2.2 : 1.2;
       c.stroke();
       c.shadowBlur = 0;
     };
 
-    // Helper: Ambient Background Visualizer
+    // Helper: Ambient Background Visualizer (Logarithmic frequency response)
     const renderAmbientBg = (
       c: CanvasRenderingContext2D,
       w: number,
@@ -331,6 +429,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
     ) => {
       const time = Date.now() * 0.0015;
       const numWaves = 3;
+      const logData = getLogFrequencyData(data, 32, len);
 
       for (let waveIdx = 0; waveIdx < numWaves; waveIdx++) {
         c.beginPath();
@@ -338,8 +437,8 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
         c.moveTo(0, h);
 
         for (let x = 0; x <= w; x += 15) {
-          const binIdx = Math.floor((x / w) * (len / 4));
-          const freqMag = isSounding ? (data[binIdx] || 0) / 255 : 0.05;
+          const binIdx = Math.min(31, Math.floor((x / w) * 32));
+          const freqMag = isSounding ? (logData[binIdx] || 0) / 255 : 0.05;
           const sine1 = Math.sin(time + x * 0.005 + baseOffset) * 20;
           const sine2 = Math.cos(time * 0.8 + x * 0.008) * 15;
           const y = h * 0.65 - (freqMag * h * 0.45 + sine1 + sine2) * (1 - waveIdx * 0.2);
