@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                  String               @id @default(uuid())
+  email               String?              @unique
+  username            String?
+  passwordHash        String?
+  emailVerified       Boolean              @default(false)
+  userType            UserType             @default(REGISTERED)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  onboardingTourPromptedAt DateTime?
+  role                UserRole             @default(USER)
+  profilePictureUrl   String?
+  bandMemberships     BandMember[]
+  emailVerifications  EmailVerification[]
+  oauthAccounts       OAuthAccount[]
+  passwordResets      PasswordReset[]
+  contributions       ProjectContributor[]
+  refreshTokens       RefreshToken[]
+  savedProjects       SavedProject[]
+  aiSettings          UserAiSettings?
+  preferences         UserPreferences?
+  presets             UserPreset[]
+
+  @@map("users")
+}
+
+model UserAiSettings {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  provider   String   @default("openai")
+  enabled    Boolean  @default(false)
+  apiKeyHash String?
+  settings   Json?
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_ai_settings")
+}
+
+model UserPreferences {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  theme     String   @default("dark")
+  settings  Json?
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model EmailVerification {
+  id           String    @id @default(uuid())
+  userId       String
+  token        String    @unique
+  otpCodeHash  String?
+  otpExpiresAt DateTime?
+  attempts     Int       @default(0)
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("email_verifications")
+}
+
+model PasswordReset {
+  id           String    @id @default(uuid())
+  userId       String
+  token        String    @unique
+  otpCodeHash  String?
+  otpExpiresAt DateTime?
+  attempts     Int       @default(0)
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+  usedAt       DateTime?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("password_resets")
+}
+
+model OAuthAccount {
+  id         String   @id @default(uuid())
+  userId     String
+  provider   String
+  providerId String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@index([userId])
+  @@map("oauth_accounts")
+}
+
+model UserPreset {
+  id         String     @id @default(uuid())
+  userId     String
+  presetType PresetType
+  name       String
+  data       Json
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, presetType])
+  @@map("user_presets")
+}
+
+model SavedProject {
+  id           String               @id @default(uuid())
+  userId       String
+  name         String
+  roomType     String
+  metadata     Json?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  visibility   ProjectVisibility    @default(PRIVATE)
+  description  String?
+  allowFork    Boolean              @default(false) // Allow other users to fork this project
+  forkedFromId String? // Reference to the original project if this is a fork
+  isLocked     Boolean              @default(false)
+  forkChain    Json?
+  contributors ProjectContributor[]
+  bands        Band[]               @relation("ProjectBands")
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  forkedFrom   SavedProject?        @relation("ProjectForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
+  forks        SavedProject[]       @relation("ProjectForks")
+
+  @@index([userId])
+  @@index([userId, updatedAt])
+  @@index([visibility, updatedAt])
+  @@index([roomType, updatedAt])
+  @@index([forkedFromId])
+  @@map("saved_projects")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Band {
+  id             String         @id @default(uuid())
+  name           String
+  description    String?
+  inviteToken    String         @unique @default(uuid())
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  members        BandMember[]
+  sharedProjects SavedProject[] @relation("ProjectBands")
+
+  @@map("bands")
+}
+
+model BandMember {
+  id       String   @id @default(uuid())
+  bandId   String
+  userId   String
+  role     BandRole @default(MEMBER)
+  joinedAt DateTime @default(now())
+  band     Band     @relation(fields: [bandId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([bandId, userId])
+  @@index([bandId])
+  @@index([userId])
+  @@map("band_members")
+}
+
+model ProjectContributor {
+  id                String       @id @default(uuid())
+  projectId         String
+  userId            String
+  lastContributedAt DateTime     @default(now())
+  project           SavedProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+  @@map("project_contributors")
+}
+
+enum UserType {
+  REGISTERED
+  ARTIST
+  PRO
+}
+
+enum PresetType {
+  SYNTH
+  EFFECT
+  SEQUENCER
+  INSTRUMENT
+}
+
+enum BandRole {
+  OWNER
+  MEMBER
+}
+
+enum ProjectVisibility {
+  PRIVATE
+  BAND
+  PUBLIC
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}

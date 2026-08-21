@@ -1,0 +1,252 @@
+import React from 'react';
+import { 
+  Play, 
+  Square, 
+  Disc3, 
+  Sliders, 
+  Grid, 
+  Sparkles, 
+  Users, 
+  FolderOpen, 
+  Music, 
+  Volume2,
+  Clock,
+  Radio
+} from 'lucide-react';
+import { ViewMode } from '../types';
+
+interface HeaderProps {
+  currentView: ViewMode;
+  onSelectView: (view: ViewMode) => void;
+  isPlaying: boolean;
+  onTogglePlay: () => void;
+  bpm: number;
+  onChangeBpm: (bpm: number) => void;
+  metronomeActive: boolean;
+  onToggleMetronome: () => void;
+  masterVolume: number;
+  onChangeMasterVolume: (vol: number) => void;
+  onOpenAi: () => void;
+  onOpenRooms: () => void;
+  onOpenProjects: () => void;
+  activeRoomName: string;
+  connectedCount: number;
+}
+
+export const Header: React.FC<HeaderProps> = ({
+  currentView,
+  onSelectView,
+  isPlaying,
+  onTogglePlay,
+  bpm,
+  onChangeBpm,
+  metronomeActive,
+  onToggleMetronome,
+  masterVolume,
+  onChangeMasterVolume,
+  onOpenAi,
+  onOpenRooms,
+  onOpenProjects,
+  activeRoomName,
+  connectedCount,
+}) => {
+  return (
+    <header className="bg-[#12152A] border-b border-[#252B48] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-sm select-none sticky top-0 z-40">
+      {/* Brand & Room Info */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 via-indigo-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <Radio className="w-4 h-4 text-white animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-base tracking-tight bg-gradient-to-r from-white via-slate-100 to-indigo-200 bg-clip-text text-transparent">
+                murva
+              </span>
+              <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30">
+                Studio
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              <span className="truncate max-w-[140px] font-medium text-slate-300">{activeRoomName}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Room Collaboration Pill */}
+        <button
+          id="btn-room-collab"
+          onClick={onOpenRooms}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#1C213E] hover:bg-[#252B48] text-slate-300 border border-[#2D355A] transition-colors text-xs cursor-pointer"
+          title="Collaborative Jam Rooms"
+        >
+          <Users className="w-3.5 h-3.5 text-indigo-400" />
+          <span>{connectedCount} online</span>
+        </button>
+      </div>
+
+      {/* Primary Navigation Tabs */}
+      <nav className="flex items-center p-1 rounded-lg bg-[#0B0D19] border border-[#252B48] overflow-x-auto max-w-full">
+        <button
+          id="tab-synth"
+          onClick={() => onSelectView('synth')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            currentView === 'synth'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
+          }`}
+        >
+          <Sliders className="w-3.5 h-3.5" />
+          <span>Synth</span>
+        </button>
+
+        <button
+          id="tab-drums"
+          onClick={() => onSelectView('drums')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            currentView === 'drums'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
+          }`}
+        >
+          <Disc3 className="w-3.5 h-3.5" />
+          <span>Drum Pads</span>
+        </button>
+
+        <button
+          id="tab-sequencer"
+          onClick={() => onSelectView('sequencer')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            currentView === 'sequencer'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
+          }`}
+        >
+          <Grid className="w-3.5 h-3.5" />
+          <span>Step Matrix</span>
+        </button>
+
+        <button
+          id="tab-chords"
+          onClick={() => onSelectView('chords')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            currentView === 'chords'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
+          }`}
+        >
+          <Music className="w-3.5 h-3.5" />
+          <span>Chords & Scales</span>
+        </button>
+
+        <button
+          id="tab-arrange"
+          onClick={() => onSelectView('arrange')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            currentView === 'arrange'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          <span>Timeline DAW</span>
+        </button>
+
+        <button
+          id="tab-effects"
+          onClick={() => onSelectView('effects')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            currentView === 'effects'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
+          }`}
+        >
+          <Sliders className="w-3.5 h-3.5" />
+          <span>Master FX</span>
+        </button>
+      </nav>
+
+      {/* Right Controls & Quick Actions */}
+      <div className="flex items-center gap-2.5">
+        {/* Play / Stop Master Transport */}
+        <button
+          id="btn-transport-play"
+          onClick={onTogglePlay}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+            isPlaying
+              ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md shadow-amber-500/30'
+              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30'
+          }`}
+        >
+          {isPlaying ? <Square className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+          <span>{isPlaying ? 'STOP' : 'PLAY'}</span>
+        </button>
+
+        {/* BPM Selector */}
+        <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#252B48] px-2 py-1 rounded-md text-xs">
+          <span className="text-[10px] text-slate-400 font-mono">BPM</span>
+          <input
+            id="input-bpm"
+            type="number"
+            min={40}
+            max={240}
+            value={bpm}
+            onChange={(e) => onChangeBpm(Number(e.target.value))}
+            className="w-12 bg-transparent text-center font-mono font-bold text-indigo-300 focus:outline-none focus:text-white"
+          />
+        </div>
+
+        {/* Metronome Toggle */}
+        <button
+          id="btn-metronome-toggle"
+          onClick={onToggleMetronome}
+          className={`p-1.5 rounded-md border text-xs cursor-pointer transition-colors ${
+            metronomeActive
+              ? 'bg-indigo-600 border-indigo-500 text-white'
+              : 'bg-[#1C213E] border-[#2D355A] text-slate-400 hover:text-slate-200'
+          }`}
+          title="Metronome"
+        >
+          <Clock className="w-4 h-4" />
+        </button>
+
+        {/* Master Volume */}
+        <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#252B48] px-2 py-1 rounded-md">
+          <Volume2 className="w-3.5 h-3.5 text-slate-400" />
+          <input
+            id="slider-master-volume"
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={masterVolume}
+            onChange={(e) => onChangeMasterVolume(parseFloat(e.target.value))}
+            className="w-16 h-1 bg-[#252B48] rounded cursor-pointer"
+            title="Master Output Gain"
+          />
+        </div>
+
+        {/* AI Music Companion Modal Trigger */}
+        <button
+          id="btn-open-ai"
+          onClick={onOpenAi}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 text-white font-medium text-xs shadow-md shadow-purple-600/20 hover:brightness-110 transition-all cursor-pointer"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>AI Companion</span>
+        </button>
+
+        {/* Project Modal Trigger */}
+        <button
+          id="btn-open-projects"
+          onClick={onOpenProjects}
+          className="p-1.5 rounded-md bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white transition-colors cursor-pointer"
+          title="Save / Load / Export Track"
+        >
+          <FolderOpen className="w-4 h-4" />
+        </button>
+      </div>
+    </header>
+  );
+};

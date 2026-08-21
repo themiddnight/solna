@@ -1,0 +1,70 @@
+.reconnect-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.reconnect-badge.reconnecting {
+  background-color: color-mix(in oklab, var(--color-warning) 15%, transparent);
+  color: var(--color-warning);
+  border: 1px solid color-mix(in oklab, var(--color-warning) 30%, transparent);
+  animation: reconnect-pulse 1.5s infinite ease-in-out;
+}
+
+.reconnect-badge.connected.success-flash {
+  background-color: color-mix(in oklab, var(--color-success) 15%, transparent);
+  color: var(--color-success);
+  border: 1px solid color-mix(in oklab, var(--color-success) 30%, transparent);
+  animation: reconnect-fade-out 3s forwards;
+}
+
+.reconnect-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.reconnect-dot.bg-warning {
+  background-color: var(--color-warning);
+  box-shadow: 0 0 8px var(--color-warning);
+}
+
+.reconnect-dot.bg-success {
+  background-color: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success);
+}
+
+@keyframes reconnect-pulse {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.6;
+    transform: scale(0.98);
+  }
+}
+
+@keyframes reconnect-fade-out {
+  0% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}

@@ -1,0 +1,2 @@
+-- This migration was already applied in production but the file was missing locally
+-- Creating empty migration file to sync migration history
