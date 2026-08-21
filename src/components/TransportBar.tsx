@@ -6,6 +6,8 @@ import { AudioVisualizer, VisualizerMode } from './AudioVisualizer';
 interface TransportBarProps {
   isPlaying: boolean;
   onTogglePlay: () => void;
+  isPlayingAll: boolean;
+  onTogglePlayAll: () => void;
   bpm: number;
   onChangeBpm: (bpm: number) => void;
   scaleRoot: string;
@@ -18,6 +20,8 @@ interface TransportBarProps {
 export const TransportBar: React.FC<TransportBarProps> = ({
   isPlaying,
   onTogglePlay,
+  isPlayingAll,
+  onTogglePlayAll,
   bpm,
   onChangeBpm,
   scaleRoot,
@@ -71,6 +75,21 @@ export const TransportBar: React.FC<TransportBarProps> = ({
       {/* Left Transport Actions */}
       <div className="flex items-center gap-2">
         <button
+          id="btn-bottom-play-all"
+          onClick={onTogglePlayAll}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+            isPlayingAll
+              ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20'
+          }`}
+        >
+          {isPlayingAll ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
+          <span>{isPlayingAll ? 'STOP ALL' : 'PLAY ALL'}</span>
+        </button>
+
+        <div className="w-px h-8 bg-[#252B48] mx-1" />
+
+        <button
           id="btn-bottom-play"
           onClick={onTogglePlay}
           disabled={isPlayDisabled}
@@ -79,7 +98,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
               ? 'bg-slate-800 text-slate-500 border border-[#252B48] cursor-not-allowed opacity-50'
               : isPlaying
               ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md shadow-amber-500/20'
-              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
+              : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20'
           }`}
         >
           {isPlaying ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
@@ -146,12 +165,6 @@ export const TransportBar: React.FC<TransportBarProps> = ({
           </button>
         </div>
 
-        <div className="hidden lg:flex items-center gap-1.5 bg-[#0B0D19] border border-[#252B48] px-2.5 py-1.5 rounded-lg shrink-0">
-          <Music className="w-3.5 h-3.5 text-indigo-400" />
-          <span className="text-slate-400">Key:</span>
-          <span className="font-bold text-slate-100">{scaleRoot}</span>
-          <span className="text-indigo-400 font-medium">({scaleType})</span>
-        </div>
       </div>
 
       {/* Right Meter & Master Gain */}

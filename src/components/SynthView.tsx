@@ -67,7 +67,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
   const handleNoteOn = useCallback((note: string) => {
     audioEngine.init();
     // Pass params as-is so params.octave (synth pitch offset) applies on top of the keyboard note
-    audioEngine.triggerSynthNoteOn(note, params);
+    audioEngine.triggerSynthNoteOn(note, params, 1.0);
     setActiveNotes((prev) => new Set(prev).add(note));
   }, [params]);
 
@@ -167,7 +167,6 @@ export const SynthView: React.FC<SynthViewProps> = ({
                 16-Voice Engine
               </span>
             </h2>
-            <p className="text-xs text-slate-400">Dual oscillators, multi-mode filter, ADSR envelope, and LFO modulation</p>
           </div>
         </div>
 
@@ -623,6 +622,10 @@ export const SynthView: React.FC<SynthViewProps> = ({
 
           {/* Keyboard Octave Pagination — independent from synth pitch octave */}
           <div className="flex items-center gap-1.5">
+            <div className="text-[11px] font-mono text-slate-500 mr-2">
+              {Array.from(activeNotes).join(', ') || 'No note'}
+            </div>
+            
             <span className="text-[11px] text-slate-500 font-mono mr-1">KB OCT</span>
             <button
               id="btn-keyboard-octave-down"
@@ -647,14 +650,11 @@ export const SynthView: React.FC<SynthViewProps> = ({
             >
               <ChevronRight className="w-4 h-4" />
             </button>
-            <div className="text-[11px] font-mono text-slate-500 ml-2">
-              {Array.from(activeNotes).join(', ') || 'No note'}
-            </div>
           </div>
         </div>
 
         {/* Keyboard Keys Layout — uses keyboardOctave for display range */}
-        <div className="relative h-44 flex select-none bg-[#0B0D19] p-2 rounded-lg border border-[#252B48] overflow-x-auto">
+        <div className="relative h-[130px] flex select-none bg-[#0B0D19] p-2 rounded-lg border border-[#252B48] overflow-x-auto">
           {(keyboardMode === 'scale-locked'
             ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
             : getChromaticKeyboardNotes(keyboardOctave)
@@ -662,6 +662,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
             const isActive = activeNotes.has(k.note);
             // Render all scale-locked keys as white
             if (keyboardMode !== 'scale-locked' && k.isBlack) {
+              const marginLeft = getBlackKeyMargin(k.note);
               return (
                 <div
                   key={k.note}
@@ -671,13 +672,14 @@ export const SynthView: React.FC<SynthViewProps> = ({
                   onMouseLeave={() => isActive && handleNoteOff(k.note)}
                   onTouchStart={(e) => { e.preventDefault(); handleNoteOn(k.note); }}
                   onTouchEnd={(e) => { e.preventDefault(); handleNoteOff(k.note); }}
-                  className={`absolute z-10 w-9 h-28 rounded-b-md border border-slate-900 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
+                  className={`absolute z-10 w-9 h-[80px] rounded-b-md border border-slate-900 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
                     isActive
                       ? 'bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-lg shadow-indigo-500/50 scale-[0.98]'
                       : 'bg-gradient-to-b from-slate-800 to-slate-950 hover:bg-slate-800'
                   }`}
                   style={{
                     left: `${getBlackKeyLeftOffset(noteIndex)}%`,
+                    marginLeft: `${marginLeft}px`,
                   }}
                 >
                   <span className="text-[9px] font-mono font-bold text-slate-300">{k.label}</span>
@@ -738,6 +740,19 @@ function getBlackKeyLeftOffset(noteIndex: number): number {
     15: whiteKeyWidth * 8.7,   // D# (2nd octave)
   };
   return offsets[noteIndex] ?? 0;
+}
+
+function getBlackKeyMargin(note: string): number {
+  const margins: Record<string, number> = {
+    'C#3': 18,
+    'D#3': 18,
+    'F#3': 12,
+    'G#3': 12,
+    'A#3': 12,
+    'C#4': 8,
+    'D#4': 8,
+  };
+  return margins[note] ?? 0;
 }
 
 function getScaleLockedKeyboardNotes(root: string, scaleType: string, octaveOffset: number) {

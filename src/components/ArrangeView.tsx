@@ -357,9 +357,6 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
                 Interactive Piano Roll & Synth DAW
               </span>
             </h2>
-            <p className="text-xs text-slate-400">
-              Double-click any region to open Piano Roll • Click Instrument icon to setup per-track sound
-            </p>
           </div>
         </div>
 

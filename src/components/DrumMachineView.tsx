@@ -56,7 +56,6 @@ export const DrumMachineView: React.FC = () => {
                 8-Velocity Trigger Matrix
               </span>
             </h2>
-            <p className="text-xs text-slate-400">Real-time synthesized percussion with instant strike response</p>
           </div>
         </div>
 

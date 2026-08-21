@@ -1,7 +1,5 @@
 import React from 'react';
 import { 
-  Play, 
-  Square, 
   Disc3, 
   Sliders, 
   Grid, 
@@ -19,8 +17,6 @@ import { ROOTS, SCALES } from '../utils/musicTheory';
 interface HeaderProps {
   currentView: ViewMode;
   onSelectView: (view: ViewMode) => void;
-  isPlaying: boolean;
-  onTogglePlay: () => void;
   bpm: number;
   onChangeBpm: (bpm: number) => void;
   metronomeActive: boolean;
@@ -36,16 +32,11 @@ interface HeaderProps {
   onChangeScaleRoot: (root: string) => void;
   scaleType: string;
   onChangeScaleType: (type: string) => void;
-  isSequencerPlaying: boolean;
-  isChordsPlaying: boolean;
-  isArrangePlaying: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   currentView,
   onSelectView,
-  isPlaying,
-  onTogglePlay,
   bpm,
   onChangeBpm,
   metronomeActive,
@@ -61,9 +52,6 @@ export const Header: React.FC<HeaderProps> = ({
   onChangeScaleRoot,
   scaleType,
   onChangeScaleType,
-  isSequencerPlaying,
-  isChordsPlaying,
-  isArrangePlaying,
 }) => {
   return (
     <header className="bg-[#12152A] border-b border-[#252B48] px-4 py-2.5 flex flex-col gap-2.5 text-sm select-none sticky top-0 z-40">
@@ -102,7 +90,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Primary Navigation Tabs with Playing Indicators */}
+        {/* Primary Navigation Tabs */}
         <nav className="flex items-center p-1 rounded-lg bg-[#0B0D19] border border-[#252B48] overflow-x-auto max-w-full gap-1">
           <button
             id="tab-synth"
@@ -141,9 +129,6 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Grid className="w-3.5 h-3.5" />
             <span>Step Matrix</span>
-            {isSequencerPlaying && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping absolute -top-1 -right-1" title="Step Matrix Playing" />
-            )}
           </button>
 
           <button
@@ -156,10 +141,7 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <Music className="w-3.5 h-3.5" />
-            <span>Chords & Scales</span>
-            {isChordsPlaying && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping absolute -top-1 -right-1" title="Chords Progression Playing" />
-            )}
+            <span>Chords</span>
           </button>
 
           <button
@@ -173,9 +155,6 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Clock className="w-3.5 h-3.5" />
             <span>Timeline DAW</span>
-            {isArrangePlaying && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping absolute -top-1 -right-1" title="Timeline DAW Playing" />
-            )}
           </button>
 
           <button
@@ -193,14 +172,15 @@ export const Header: React.FC<HeaderProps> = ({
         </nav>
       </div>
 
-      {/* Row 2: Master Key & Scale Selector Row (between [header -- tabs] and [play...ai companion, file button]) */}
+      {/* Row 2: Master Key, Scale Selector & Transport Controls */}
       <div className="flex items-center justify-between gap-3 px-3 py-1.5 bg-[#0B0D19] border border-[#252B48] rounded-xl flex-wrap">
         <div className="flex items-center gap-2">
           <Music className="w-4 h-4 text-indigo-400" />
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Master Key & Scale:</span>
+          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Studio Setup:</span>
         </div>
+        
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Root Picker */}
+          {/* Key & Scale Pickers */}
           <div className="flex items-center gap-1.5 bg-[#12152A] border border-[#2D355A] px-2.5 py-1 rounded-lg">
             <span className="text-xs text-slate-400 font-mono">Key:</span>
             <select
@@ -216,8 +196,6 @@ export const Header: React.FC<HeaderProps> = ({
               ))}
             </select>
           </div>
-
-          {/* Scale Type Picker */}
           <div className="flex items-center gap-1.5 bg-[#12152A] border border-[#2D355A] px-2.5 py-1 rounded-lg">
             <span className="text-xs text-slate-400 font-mono">Scale:</span>
             <select
@@ -234,95 +212,65 @@ export const Header: React.FC<HeaderProps> = ({
             </select>
           </div>
 
-          <span className="text-[11px] text-slate-400 font-mono hidden md:inline">
-            Active Scale: <strong className="text-indigo-300">{scaleRoot} {scaleType}</strong>
-          </span>
-        </div>
-      </div>
+          <div className="w-px h-6 bg-[#252B48]" />
 
-      {/* Row 3: Play, BPM, Metronome, Volume, AI Companion, Project Modal */}
-      <div className="flex items-center justify-between gap-3 flex-wrap pt-1 border-t border-[#252B48]/60">
-        <div className="flex items-center gap-2 text-xs text-slate-400">
-          <span className="font-mono text-[11px]">Global Studio Transport</span>
-        </div>
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Play / Stop Master Transport */}
-          <button
-            id="btn-transport-play"
-            onClick={onTogglePlay}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
-              isPlaying
-                ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md shadow-amber-500/30'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30'
-            }`}
-          >
-            {isPlaying ? <Square className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-            <span>{isPlaying ? 'STOP STUDIO' : 'PLAY STUDIO'}</span>
-          </button>
-
-          {/* BPM Selector */}
-          <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#252B48] px-2 py-1 rounded-md text-xs">
-            <span className="text-[10px] text-slate-400 font-mono">BPM</span>
-            <input
-              id="input-bpm"
-              type="number"
-              min={40}
-              max={240}
-              value={bpm}
-              onChange={(e) => onChangeBpm(Number(e.target.value))}
-              className="w-12 bg-transparent text-center font-mono font-bold text-indigo-300 focus:outline-none focus:text-white"
-            />
+          {/* Transport & Utility Controls */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-[#12152A] border border-[#252B48] px-2 py-1 rounded-md text-xs">
+              <span className="text-[10px] text-slate-400 font-mono">BPM</span>
+              <input
+                id="input-bpm"
+                type="number"
+                min={40}
+                max={240}
+                value={bpm}
+                onChange={(e) => onChangeBpm(Number(e.target.value))}
+                className="w-12 bg-transparent text-center font-mono font-bold text-indigo-300 focus:outline-none focus:text-white"
+              />
+            </div>
+            <button
+              id="btn-metronome-toggle"
+              onClick={onToggleMetronome}
+              className={`p-1.5 rounded-md border text-xs cursor-pointer transition-colors ${
+                metronomeActive
+                  ? 'bg-indigo-600 border-indigo-500 text-white'
+                  : 'bg-[#1C213E] border-[#2D355A] text-slate-400 hover:text-slate-200'
+              }`}
+              title="Metronome"
+            >
+              <Clock className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-1.5 bg-[#12152A] border border-[#252B48] px-2 py-1.5 rounded-md">
+              <Volume2 className="w-3.5 h-3.5 text-slate-400" />
+              <input
+                id="slider-master-volume"
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={masterVolume}
+                onChange={(e) => onChangeMasterVolume(parseFloat(e.target.value))}
+                className="w-16 h-1 bg-[#252B48] rounded cursor-pointer"
+                title="Master Output Gain"
+              />
+            </div>
+            <button
+              id="btn-open-ai"
+              onClick={onOpenAi}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 text-white font-medium text-xs shadow-md shadow-purple-600/20 hover:brightness-110 transition-all cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>AI Companion</span>
+            </button>
+            <button
+              id="btn-open-projects"
+              onClick={onOpenProjects}
+              className="p-1.5 rounded-md bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white transition-colors cursor-pointer"
+              title="Save / Load / Export Track"
+            >
+              <FolderOpen className="w-4 h-4" />
+            </button>
           </div>
-
-          {/* Metronome Toggle */}
-          <button
-            id="btn-metronome-toggle"
-            onClick={onToggleMetronome}
-            className={`p-1.5 rounded-md border text-xs cursor-pointer transition-colors ${
-              metronomeActive
-                ? 'bg-indigo-600 border-indigo-500 text-white'
-                : 'bg-[#1C213E] border-[#2D355A] text-slate-400 hover:text-slate-200'
-            }`}
-            title="Metronome"
-          >
-            <Clock className="w-4 h-4" />
-          </button>
-
-          {/* Master Volume */}
-          <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#252B48] px-2 py-1 rounded-md">
-            <Volume2 className="w-3.5 h-3.5 text-slate-400" />
-            <input
-              id="slider-master-volume"
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={masterVolume}
-              onChange={(e) => onChangeMasterVolume(parseFloat(e.target.value))}
-              className="w-16 h-1 bg-[#252B48] rounded cursor-pointer"
-              title="Master Output Gain"
-            />
-          </div>
-
-          {/* AI Music Companion Modal Trigger */}
-          <button
-            id="btn-open-ai"
-            onClick={onOpenAi}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 text-white font-medium text-xs shadow-md shadow-purple-600/20 hover:brightness-110 transition-all cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>AI Companion</span>
-          </button>
-
-          {/* Project Modal Trigger */}
-          <button
-            id="btn-open-projects"
-            onClick={onOpenProjects}
-            className="p-1.5 rounded-md bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white transition-colors cursor-pointer"
-            title="Save / Load / Export Track"
-          >
-            <FolderOpen className="w-4 h-4" />
-          </button>
         </div>
       </div>
     </header>

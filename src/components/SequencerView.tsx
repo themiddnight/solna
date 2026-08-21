@@ -11,6 +11,8 @@ interface SequencerViewProps {
   onTogglePlay: () => void;
   synthParams: SynthParams;
   onBeatTick?: () => void;
+  masterSequencerVolume: number;
+  onChangeMasterSequencerVolume: (volume: number) => void;
 }
 
 const GENRE_PRESETS: Record<string, Record<string, boolean[]>> = {
@@ -69,6 +71,8 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
   onTogglePlay,
   synthParams,
   onBeatTick,
+  masterSequencerVolume,
+  onChangeMasterSequencerVolume,
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [selectedGenre, setSelectedGenre] = useState<string>('Synthwave');
@@ -90,10 +94,10 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
         if (track.steps[stepIndex]) {
           if (track.instrument === 'synth' || track.instrument === 'bass') {
             const note = track.instrument === 'bass' ? 'C2' : 'C4';
-            audioEngine.triggerSynthNoteOn(note, synthParams, track.volume);
+            audioEngine.triggerSynthNoteOn(note, synthParams, masterSequencerVolume);
             setTimeout(() => audioEngine.triggerSynthNoteOff(note), stepDurationMs * 0.8);
           } else {
-            audioEngine.triggerDrum(track.instrument, track.volume);
+            audioEngine.triggerDrum(track.instrument, masterSequencerVolume);
           }
         }
       });
@@ -212,28 +216,24 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
                 1/16 Quantized Grid
               </span>
             </h2>
-            <p className="text-xs text-slate-400">Poly-rhythmic multi-channel drum machine and bass sequencer</p>
           </div>
         </div>
 
         {/* Preset & Action Buttons */}
         <div className="flex items-center flex-wrap gap-2">
-          {/* Play / Pause Matrix */}
-          <button
-            id="btn-sequencer-play"
-            onClick={() => {
-              audioEngine.init();
-              onTogglePlay();
-            }}
-            className={`px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-colors ${
-              isPlaying
-                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 animate-pulse'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-            }`}
-          >
-            {isPlaying ? <Square className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-            <span>{isPlaying ? 'Pause Matrix' : 'Play Matrix'}</span>
-          </button>
+          {/* Master Volume */}
+          <div className="flex items-center gap-2 mr-4">
+            <Volume2 className="w-4 h-4 text-emerald-400" />
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={masterSequencerVolume}
+              onChange={(e) => onChangeMasterSequencerVolume(parseFloat(e.target.value))}
+              className="w-24 h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-emerald-500"
+            />
+          </div>
 
           {/* Genre selector */}
           <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#2D355A] px-2.5 py-1 rounded-lg">
@@ -330,6 +330,22 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => {
+                      audioEngine.init();
+                      if (track.instrument === 'synth' || track.instrument === 'bass') {
+                        const note = track.instrument === 'bass' ? 'C2' : 'C4';
+                        audioEngine.triggerSynthNoteOn(note, synthParams, 0.8);
+                        setTimeout(() => audioEngine.triggerSynthNoteOff(note), 500);
+                      } else {
+                        audioEngine.triggerDrum(track.instrument, 0.8);
+                      }
+                    }}
+                    className="p-1 text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                    title="Preview Instrument"
+                  >
+                    <Play className="w-3.5 h-3.5" />
+                  </button>
                   <button
                     id={`btn-mute-${track.id}`}
                     onClick={() => toggleMute(track.id)}

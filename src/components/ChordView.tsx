@@ -23,6 +23,8 @@ interface ChordViewProps {
   isPlaying: boolean;
   onTogglePlay: () => void;
   onBeatTick?: () => void;
+  masterChordVelocity: number;
+  onChangeMasterChordVelocity: (velocity: number) => void;
 }
 
 const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -351,6 +353,8 @@ export const ChordView: React.FC<ChordViewProps> = ({
   isPlaying,
   onTogglePlay,
   onBeatTick,
+  masterChordVelocity,
+  onChangeMasterChordVelocity,
 }) => {
   const [activeChordId, setActiveChordId] = useState<string | null>(null);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
@@ -420,7 +424,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
 
     const notes = generateBlockChordNotes(chord.quality, chord.root, 4);
     notes.forEach((n) => {
-      audioEngine.triggerSynthNoteOn(n, synthParams, 0.7);
+      audioEngine.triggerSynthNoteOn(n, synthParams, masterChordVelocity);
     });
 
     setTimeout(() => {
@@ -536,28 +540,11 @@ export const ChordView: React.FC<ChordViewProps> = ({
             <h2 className="font-bold text-base text-slate-100 flex items-center gap-2">
               Music Theory & Chord Studio
             </h2>
-            <p className="text-xs text-slate-400">Harmonization, chord voicings, and progression designer</p>
           </div>
         </div>
 
         {/* Action Controls & Independent Chords Play */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Play / Pause Chords */}
-          <button
-            id="btn-chords-play"
-            onClick={() => {
-              audioEngine.init();
-              onTogglePlay();
-            }}
-            className={`px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-colors ${
-              isPlaying
-                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 animate-pulse'
-                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-            }`}
-          >
-            {isPlaying ? <Square className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-            <span>{isPlaying ? 'Pause Chords' : 'Play Chords'}</span>
-          </button>
 
           {/* Quick Save Current Progression */}
           <button
@@ -673,60 +660,9 @@ export const ChordView: React.FC<ChordViewProps> = ({
         </div>
       )}
 
-      {/* Visual Scale Degrees Strip */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 shadow-md flex items-center justify-between flex-wrap gap-2">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-          Scale Notes ({scaleRoot} {scaleType}):
-        </span>
-        <div className="flex items-center gap-2 flex-wrap">
-          {scaleNotes.map((note, idx) => (
-            <div
-              key={idx}
-              className={`px-3 py-1 rounded-lg font-mono text-xs font-bold border transition-all ${
-                idx === 0
-                  ? 'bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-500/30'
-                  : 'bg-[#0B0D19] border-[#252B48] text-slate-300'
-              }`}
-            >
-              <span className="text-[9px] opacity-60 block font-normal text-center">
-                {idx === 0 ? 'Tonic' : `deg ${idx + 1}`}
-              </span>
-              {note}
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Visual Scale Degrees Strip (DELETED) */}
 
-      {/* Quick Access Top Progression Presets Strip */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3.5 shadow-md flex items-center justify-between flex-wrap gap-2.5">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-purple-400" />
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-            Quick Progression Presets:
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {CHORD_PROGRESSION_TEMPLATES.slice(0, 5).map((tpl) => (
-            <button
-              key={tpl.name}
-              onClick={() => applyProgressionTemplate(tpl)}
-              className="px-2.5 py-1 rounded-lg bg-[#0B0D19] hover:bg-[#1A1F3B] border border-[#252B48] hover:border-indigo-500/50 text-slate-300 hover:text-white text-xs font-medium transition-all cursor-pointer shadow-xs"
-              title={`${tpl.name} (${tpl.roman})`}
-            >
-              <span className="text-slate-200 font-semibold">{tpl.name.split(' (')[0]}</span>
-              <span className="text-[10px] text-purple-400 font-mono ml-1.5">{tpl.roman}</span>
-            </button>
-          ))}
-
-          <button
-            onClick={() => setIsLibraryOpen(true)}
-            className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 ml-1 hover:underline cursor-pointer"
-          >
-            <span>View All ({totalProgressionsCount}) ➔</span>
-          </button>
-        </div>
-      </div>
+      {/* Quick Access Top Progression Presets Strip (DELETED) */}
 
       {/* Active Progression Blocks & Playable Chord Pads */}
       <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-xl space-y-3">
@@ -741,6 +677,18 @@ export const ChordView: React.FC<ChordViewProps> = ({
                 <span>Auto-Reharmonized to {scaleRoot} {scaleType}</span>
               </span>
             )}
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] text-slate-500">Master Velocity</label>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={masterChordVelocity}
+              onChange={(e) => onChangeMasterChordVelocity(parseFloat(e.target.value))}
+              className="w-24 h-1.5 bg-[#12152A] rounded-lg cursor-pointer"
+            />
           </div>
           <button
             id="btn-add-chord"

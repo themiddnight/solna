@@ -90,15 +90,6 @@ const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     muted: false,
     color: 'bg-purple-500',
   },
-  {
-    id: 'track-bass',
-    name: 'Synth Bass',
-    instrument: 'bass',
-    steps: [true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false],
-    volume: 0.8,
-    muted: false,
-    color: 'bg-indigo-500',
-  },
 ];
 
 const INITIAL_CHORDS: ChordItem[] = [
@@ -426,6 +417,8 @@ export function App() {
   const [scaleRoot, setScaleRoot] = useState<string>('A');
   const [scaleType, setScaleType] = useState<string>('Natural Minor');
   const [masterVolume, setMasterVolume] = useState<number>(0.85);
+  const [masterChordVelocity, setMasterChordVelocity] = useState<number>(0.7);
+  const [masterSequencerVolume, setMasterSequencerVolume] = useState<number>(0.8);
 
   // Modals
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -524,8 +517,6 @@ export function App() {
       <Header
         currentView={activeTab}
         onSelectView={setActiveTab}
-        isPlaying={anyPlaying}
-        onTogglePlay={toggleMasterPlay}
         bpm={bpm}
         onChangeBpm={setBpm}
         metronomeActive={metronomeActive}
@@ -544,9 +535,6 @@ export function App() {
         onChangeScaleRoot={setScaleRoot}
         scaleType={scaleType}
         onChangeScaleType={setScaleType}
-        isSequencerPlaying={isSequencerPlaying}
-        isChordsPlaying={isChordsPlaying}
-        isArrangePlaying={isArrangePlaying}
       />
 
       {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity */}
@@ -571,6 +559,8 @@ export function App() {
             onTogglePlay={toggleSequencerPlay}
             synthParams={synthParams}
             onBeatTick={triggerBeatTick}
+            masterSequencerVolume={masterSequencerVolume}
+            onChangeMasterSequencerVolume={setMasterSequencerVolume}
           />
         </div>
         <div className={activeTab === 'chords' ? 'block' : 'hidden'}>
@@ -586,6 +576,8 @@ export function App() {
             isPlaying={isChordsPlaying}
             onTogglePlay={toggleChordsPlay}
             onBeatTick={triggerBeatTick}
+            masterChordVelocity={masterChordVelocity}
+            onChangeMasterChordVelocity={setMasterChordVelocity}
           />
         </div>
         <div className={activeTab === 'arrange' ? 'block' : 'hidden'}>
@@ -609,6 +601,8 @@ export function App() {
       <TransportBar
         isPlaying={isCurrentTabPlaying}
         onTogglePlay={toggleCurrentTabPlay}
+        isPlayingAll={anyPlaying}
+        onTogglePlayAll={toggleMasterPlay}
         isPlayDisabled={isPlayDisabled}
         bpm={bpm}
         onChangeBpm={setBpm}

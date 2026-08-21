@@ -33,7 +33,6 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
                 Analog Modeling
               </span>
             </h2>
-            <p className="text-xs text-slate-400">Real-time studio reverberation, stereo delay, wave saturation, and 3-band parametric EQ</p>
           </div>
         </div>
       </div>
