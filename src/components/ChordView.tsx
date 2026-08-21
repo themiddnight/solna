@@ -1,8 +1,14 @@
-import React, { useState, useCallback } from 'react';
-import { Music, Play, Sparkles, Plus, Trash2, ArrowRight } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Music, Play, Sparkles, Plus, Trash2, ArrowRight, Library, Bookmark, Check } from 'lucide-react';
 import { ChordItem, SynthParams } from '../types';
 import { audioEngine } from '../audio/engine';
 import { generateBlockChordNotes } from '../../shared/src/index';
+import {
+  ChordPresetLibrary,
+  getCustomChordProgressions,
+  saveCustomChordProgression,
+  CustomChordProgressionItem,
+} from './ChordPresetLibrary';
 
 interface ChordViewProps {
   chords: ChordItem[];
@@ -338,8 +344,15 @@ export const ChordView: React.FC<ChordViewProps> = ({
   synthParams,
 }) => {
   const [activeChordId, setActiveChordId] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [templateSearch, setTemplateSearch] = useState<string>('');
+  const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
+  const [customProgressions, setCustomProgressions] = useState<CustomChordProgressionItem[]>([]);
+  const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
+  const [quickSaveName, setQuickSaveName] = useState<string>('');
+  const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCustomProgressions(getCustomChordProgressions());
+  }, [isLibraryOpen]);
 
   // Calculate notes in selected scale
   const rootIdx = ROOTS.indexOf(scaleRoot);
@@ -381,6 +394,25 @@ export const ChordView: React.FC<ChordViewProps> = ({
     onChangeChords(newChords);
   };
 
+  const handleQuickSaveSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickSaveName.trim() || chords.length === 0) return;
+
+    const saved = saveCustomChordProgression(
+      quickSaveName.trim(),
+      chords,
+      'User',
+      'Saved from Chord View',
+      chords.map((c) => `${c.root}${c.quality}`).join(' → ')
+    );
+
+    setCustomProgressions(getCustomChordProgressions());
+    setIsQuickSaving(false);
+    setQuickSaveName('');
+    setSaveToast(`Saved progression "${saved.name}"!`);
+    setTimeout(() => setSaveToast(null), 3000);
+  };
+
   const addChord = () => {
     const newChord: ChordItem = {
       id: `chord-${Date.now()}`,
@@ -411,34 +443,25 @@ export const ChordView: React.FC<ChordViewProps> = ({
     );
   };
 
-  const categories = ['All', 'Pop & EDM', 'Jazz & Neo-Soul', 'Lofi & R&B', 'Anime & J-Pop', 'Rock & Blues', 'Cinematic & Modal', 'Classical & Baroque'];
-
-  const filteredTemplates = CHORD_PROGRESSION_TEMPLATES.filter((tpl) => {
-    const matchesCategory = selectedCategory === 'All' || tpl.category === selectedCategory;
-    const matchesSearch =
-      tpl.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
-      tpl.roman.toLowerCase().includes(templateSearch.toLowerCase()) ||
-      tpl.description.toLowerCase().includes(templateSearch.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const totalProgressionsCount = CHORD_PROGRESSION_TEMPLATES.length + customProgressions.length;
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">
       {/* Scale & Music Theory Header */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-lg">
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-lg relative">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
             <Music className="w-5 h-5" />
           </div>
           <div>
             <h2 className="font-bold text-base text-slate-100 flex items-center gap-2">
-              Music Theory & Chord Progression Studio
+              Music Theory & Chord Studio
             </h2>
-            <p className="text-xs text-slate-400">Scale harmonization, chord voicings, and progression designer</p>
+            <p className="text-xs text-slate-400">Harmonization, chord voicings, and progression designer</p>
           </div>
         </div>
 
-        {/* Root and Scale Selectors */}
+        {/* Action Controls & Root/Scale Selectors */}
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Root Picker */}
           <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#2D355A] px-2.5 py-1 rounded-lg">
@@ -473,8 +496,78 @@ export const ChordView: React.FC<ChordViewProps> = ({
               ))}
             </select>
           </div>
+
+          {/* Quick Save Current Progression */}
+          <button
+            id="btn-quick-save-chord-progression"
+            onClick={() => {
+              setQuickSaveName(`Progression in ${scaleRoot}`);
+              setIsQuickSaving(true);
+            }}
+            className="flex items-center gap-1.5 bg-[#171B36] hover:bg-[#22284C] text-slate-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[#2D355A] transition-colors cursor-pointer shadow-xs"
+            title="Save current chord progression to LocalStorage"
+          >
+            <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Save</span>
+          </button>
+
+          {/* Open Presets Library Drawer Button */}
+          <button
+            id="btn-open-chord-presets-library"
+            onClick={() => setIsLibraryOpen(true)}
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-md transition-colors cursor-pointer"
+            title="Open Chord Progression Library Drawer (Categorized, search, audition, export/import)"
+          >
+            <Library className="w-3.5 h-3.5" />
+            <span>Progressions Library</span>
+            <span className="bg-indigo-700/80 text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+              {totalProgressionsCount}
+            </span>
+          </button>
         </div>
+
+        {/* Floating Save Toast */}
+        {saveToast && (
+          <div className="absolute top-full right-4 mt-2 z-20 bg-emerald-950 border border-emerald-500/50 text-emerald-300 text-xs px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1">
+            <Check className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{saveToast}</span>
+          </div>
+        )}
       </div>
+
+      {/* Quick Save Modal Popover */}
+      {isQuickSaving && (
+        <div className="bg-[#171B38] border border-indigo-500/40 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xl animate-in fade-in">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
+            <Bookmark className="w-4 h-4 text-indigo-400" />
+            <span>Save Custom Chord Progression to Browser:</span>
+          </div>
+          <form onSubmit={handleQuickSaveSubmit} className="flex items-center gap-2 flex-1 max-w-md">
+            <input
+              type="text"
+              required
+              autoFocus
+              placeholder="Progression Name..."
+              value={quickSaveName}
+              onChange={(e) => setQuickSaveName(e.target.value)}
+              className="flex-1 bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+            />
+            <button
+              type="submit"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-xs transition-colors shrink-0"
+            >
+              Save Progression
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsQuickSaving(false)}
+              className="bg-[#0B0D19] hover:bg-[#1A1F3A] text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-[#252B48] transition-colors shrink-0"
+            >
+              Cancel
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Visual Scale Degrees Strip */}
       <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 shadow-md flex items-center justify-between flex-wrap gap-2">
@@ -500,79 +593,34 @@ export const ChordView: React.FC<ChordViewProps> = ({
         </div>
       </div>
 
-      {/* Progression Templates & Quick Builders */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-md space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            Harmonic Progression Library ({CHORD_PROGRESSION_TEMPLATES.length} Presets)
+      {/* Quick Access Top Progression Presets Strip */}
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3.5 shadow-md flex items-center justify-between flex-wrap gap-2.5">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-purple-400" />
+          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+            Quick Progression Presets:
           </span>
-
-          <input
-            type="text"
-            placeholder="Search progressions (e.g. Neo-Soul, Anime, J-Pop, 2-5-1)..."
-            value={templateSearch}
-            onChange={(e) => setTemplateSearch(e.target.value)}
-            className="bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-full sm:w-64"
-          />
         </div>
 
-        {/* Category Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          {categories.map((cat) => (
+        <div className="flex items-center gap-2 flex-wrap">
+          {CHORD_PROGRESSION_TEMPLATES.slice(0, 5).map((tpl) => (
             <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
-                selectedCategory === cat
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'bg-[#0B0D19] hover:bg-[#1A1F3B] text-slate-400 hover:text-slate-200 border border-[#252B48]'
-              }`}
+              key={tpl.name}
+              onClick={() => applyProgressionTemplate(tpl)}
+              className="px-2.5 py-1 rounded-lg bg-[#0B0D19] hover:bg-[#1A1F3B] border border-[#252B48] hover:border-indigo-500/50 text-slate-300 hover:text-white text-xs font-medium transition-all cursor-pointer shadow-xs"
+              title={`${tpl.name} (${tpl.roman})`}
             >
-              {cat}
+              <span className="text-slate-200 font-semibold">{tpl.name.split(' (')[0]}</span>
+              <span className="text-[10px] text-purple-400 font-mono ml-1.5">{tpl.roman}</span>
             </button>
           ))}
-        </div>
 
-        {/* Templates Grid Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
-          {filteredTemplates.map((template) => {
-            const baseRootIndex = ROOTS.indexOf(scaleRoot) >= 0 ? ROOTS.indexOf(scaleRoot) : 0;
-            const previewChordNames = template.relativeChords
-              .map((rc) => `${ROOTS[(baseRootIndex + rc.interval) % 12]}${rc.quality}`)
-              .join(' → ');
-
-            return (
-              <button
-                key={template.name}
-                id={`btn-template-${template.name.replace(/\s+/g, '-').toLowerCase()}`}
-                onClick={() => applyProgressionTemplate(template)}
-                className="text-left p-3 rounded-xl bg-[#0B0D19] hover:bg-[#161B38] border border-[#252B48] hover:border-indigo-500/50 transition-all cursor-pointer group flex flex-col justify-between space-y-2 shadow-xs"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-xs font-bold text-slate-200 group-hover:text-indigo-300 transition-colors">
-                      {template.name}
-                    </span>
-                    <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#1C213E] text-indigo-300">
-                      {template.category}
-                    </span>
-                  </div>
-                  <div className="text-[11px] font-mono text-purple-400 font-semibold mb-1">
-                    {template.roman}
-                  </div>
-                  <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">
-                    {template.description}
-                  </p>
-                </div>
-
-                <div className="pt-2 border-t border-[#1C2242] flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                  <span>In {scaleRoot}: <span className="text-slate-200 font-semibold">{previewChordNames}</span></span>
-                  <span className="text-indigo-400 group-hover:translate-x-0.5 transition-transform">Apply ➔</span>
-                </div>
-              </button>
-            );
-          })}
+          <button
+            onClick={() => setIsLibraryOpen(true)}
+            className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 ml-1 hover:underline cursor-pointer"
+          >
+            <span>View All ({totalProgressionsCount}) ➔</span>
+          </button>
         </div>
       </div>
 
@@ -697,6 +745,16 @@ export const ChordView: React.FC<ChordViewProps> = ({
           })}
         </div>
       </div>
+
+      {/* Full Chord Preset Library Sidebar Drawer */}
+      <ChordPresetLibrary
+        isOpen={isLibraryOpen}
+        onClose={() => setIsLibraryOpen(false)}
+        currentChords={chords}
+        scaleRoot={scaleRoot}
+        synthParams={synthParams}
+        onApplyChords={(newChords) => onChangeChords(newChords)}
+      />
     </div>
   );
 };
