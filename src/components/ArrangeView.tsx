@@ -58,10 +58,15 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
   const [isLooping, setIsLooping] = useState<boolean>(true);
   const [loopEndBars, setLoopEndBars] = useState<number>(8);
 
-  const numBars = 16;
+  const maxRegionEndBeat = Math.max(
+    16 * 4,
+    ...tracks.flatMap((t) => (t.regions.length > 0 ? t.regions.map((r) => r.startBeat + r.durationBeats) : [16 * 4]))
+  );
+  const numBars = Math.max(16, Math.ceil(maxRegionEndBeat / 4));
   const barWidth = 90 * zoom; // px per bar
   const beatWidth = barWidth / 4; // px per quarter note
   const stepWidth = barWidth / 16; // px per 16th note
+  const totalTimelineWidth = numBars * barWidth;
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stepDurationMs = (60 / bpm / 4) * 1000; // 16th note duration in ms
@@ -417,169 +422,172 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
 
       {/* Main Timeline Workspace */}
       <div className="bg-[#12152A] border border-[#252B48] rounded-xl shadow-xl overflow-x-auto select-none">
-        {/* Measures / Beats Ruler */}
-        <div className="flex border-b border-[#252B48] bg-[#0B0D19] sticky top-0 z-20 min-w-[900px]">
-          <div className="w-64 p-2 text-xs font-mono font-bold text-slate-400 border-r border-[#252B48] flex items-center justify-between shrink-0">
-            <span>TRACK INSTRUMENT</span>
-            <span className="text-[10px] text-slate-500 font-normal">VOL / PAN</span>
-          </div>
+        <div className="w-max min-w-full">
+          {/* Measures / Beats Ruler */}
+          <div className="flex border-b border-[#252B48] bg-[#0B0D19] sticky top-0 z-20 w-max min-w-full">
+            <div className="w-64 p-2 text-xs font-mono font-bold text-slate-400 border-r border-[#252B48] flex items-center justify-between shrink-0 sticky left-0 z-30 bg-[#0B0D19]">
+              <span>TRACK INSTRUMENT</span>
+              <span className="text-[10px] text-slate-500 font-normal">VOL / PAN</span>
+            </div>
 
-          {/* Clickable Seek Ruler */}
-          <div
-            onClick={handleSeek}
-            className="flex-1 flex relative h-8 items-center cursor-pointer hover:bg-indigo-950/20 transition-colors"
-          >
-            {Array.from({ length: numBars }).map((_, barIdx) => (
-              <div
-                key={barIdx}
-                className="border-r border-[#252B48]/80 text-[10px] font-mono text-slate-400 px-1.5 flex items-center justify-between shrink-0"
-                style={{ width: `${barWidth}px` }}
-              >
-                <span className="font-bold text-indigo-300">{barIdx + 1}</span>
-                <span className="text-slate-600 text-[8px]">.1</span>
-              </div>
-            ))}
-
-            {/* Ruler Playhead Marker Indicator */}
+            {/* Clickable Seek Ruler */}
             <div
-              className="absolute top-0 bottom-0 w-3 -ml-1.5 flex flex-col items-center pointer-events-none z-30"
-              style={{ left: `${playheadPositionPx}px` }}
+              onClick={handleSeek}
+              className="relative h-8 flex items-center cursor-pointer hover:bg-indigo-950/20 transition-colors shrink-0"
+              style={{ width: `${totalTimelineWidth}px`, minWidth: `${totalTimelineWidth}px` }}
             >
-              <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[7px] border-t-amber-400" />
+              {Array.from({ length: numBars }).map((_, barIdx) => (
+                <div
+                  key={barIdx}
+                  className="border-r border-[#252B48]/80 text-[10px] font-mono text-slate-400 px-1.5 flex items-center justify-between shrink-0"
+                  style={{ width: `${barWidth}px` }}
+                >
+                  <span className="font-bold text-indigo-300">{barIdx + 1}</span>
+                  <span className="text-slate-600 text-[8px]">.1</span>
+                </div>
+              ))}
+
+              {/* Ruler Playhead Marker Indicator */}
+              <div
+                className="absolute top-0 bottom-0 w-3 -ml-1.5 flex flex-col items-center pointer-events-none z-30"
+                style={{ left: `${playheadPositionPx}px` }}
+              >
+                <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[7px] border-t-amber-400" />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Track Lanes Container with Full-height Playhead */}
-        <div className="divide-y divide-[#252B48]/60 min-w-[900px] relative">
-          {/* Continuous Vertical Playhead Line across all tracks */}
-          <div
-            className="absolute top-0 bottom-0 w-0.5 bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)] pointer-events-none z-30"
-            style={{ left: `${256 + playheadPositionPx}px` }} // 256px = w-64 track header width
-          />
-
-          {tracks.map((track) => (
+          {/* Track Lanes Container with Full-height Playhead */}
+          <div className="divide-y divide-[#252B48]/60 relative w-max min-w-full">
+            {/* Continuous Vertical Playhead Line across all tracks */}
             <div
-              key={track.id}
-              id={`arrange-lane-${track.id}`}
-              className={`flex items-stretch hover:bg-[#161B36]/50 transition-colors ${
-                selectedTrackId === track.id ? 'bg-[#181D3C]' : ''
-              }`}
-            >
-              {/* Left Track Header & Channel Strip */}
-              <div className="w-64 p-2.5 bg-[#0E1122] border-r border-[#252B48] flex flex-col justify-between space-y-2 shrink-0">
-                {/* Track Name & Instrument Sound Inspector Button */}
-                <div className="flex items-center justify-between gap-1.5">
-                  <button
-                    onClick={() => setInspectingTrack(track)}
-                    className="flex items-center gap-2 truncate text-left group cursor-pointer"
-                    title="Click to open Track Synth & Instrument Setup"
-                  >
-                    <div className={`w-3 h-3 rounded-full ${track.color} shrink-0 group-hover:scale-110 transition-transform`} />
-                    <div className="truncate">
-                      <div className="text-xs font-bold text-slate-200 truncate group-hover:text-indigo-300 transition-colors">
-                        {track.name}
-                      </div>
-                      <div className="text-[9px] font-mono text-slate-400 capitalize">
-                        {track.type} • {track.synthParams?.preset || 'Custom'}
-                      </div>
-                    </div>
-                  </button>
+              className="absolute top-0 bottom-0 w-0.5 bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)] pointer-events-none z-30"
+              style={{ left: `${256 + playheadPositionPx}px` }} // 256px = w-64 track header width
+            />
 
-                  <div className="flex items-center gap-1">
-                    {/* Synth Setup Button */}
+            {tracks.map((track) => (
+              <div
+                key={track.id}
+                id={`arrange-lane-${track.id}`}
+                className={`flex items-stretch hover:bg-[#161B36]/50 transition-colors w-max min-w-full ${
+                  selectedTrackId === track.id ? 'bg-[#181D3C]' : ''
+                }`}
+              >
+                {/* Left Track Header & Channel Strip */}
+                <div className="w-64 p-2.5 bg-[#0E1122] border-r border-[#252B48] flex flex-col justify-between space-y-2 shrink-0 sticky left-0 z-10 shadow-sm">
+                  {/* Track Name & Instrument Sound Inspector Button */}
+                  <div className="flex items-center justify-between gap-1.5">
                     <button
                       onClick={() => setInspectingTrack(track)}
-                      className="p-1 rounded bg-[#171C3A] hover:bg-indigo-600 text-slate-300 hover:text-white transition-colors cursor-pointer border border-[#2B335C]"
-                      title="Open Track Synth Setup"
+                      className="flex items-center gap-2 truncate text-left group cursor-pointer"
+                      title="Click to open Track Synth & Instrument Setup"
                     >
-                      <Sliders className="w-3 h-3" />
+                      <div className={`w-3 h-3 rounded-full ${track.color} shrink-0 group-hover:scale-110 transition-transform`} />
+                      <div className="truncate">
+                        <div className="text-xs font-bold text-slate-200 truncate group-hover:text-indigo-300 transition-colors">
+                          {track.name}
+                        </div>
+                        <div className="text-[9px] font-mono text-slate-400 capitalize">
+                          {track.type} • {track.synthParams?.preset || 'Custom'}
+                        </div>
+                      </div>
                     </button>
 
-                    {/* Delete Track */}
+                    <div className="flex items-center gap-1">
+                      {/* Synth Setup Button */}
+                      <button
+                        onClick={() => setInspectingTrack(track)}
+                        className="p-1 rounded bg-[#171C3A] hover:bg-indigo-600 text-slate-300 hover:text-white transition-colors cursor-pointer border border-[#2B335C]"
+                        title="Open Track Synth Setup"
+                      >
+                        <Sliders className="w-3 h-3" />
+                      </button>
+
+                      {/* Delete Track */}
+                      <button
+                        id={`btn-delete-track-${track.id}`}
+                        onClick={() => deleteTrack(track.id)}
+                        className="p-1 rounded hover:bg-rose-950/60 text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
+                        title="Delete Track"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Track Mute, Solo, Volume & Pan */}
+                  <div className="flex items-center justify-between gap-1 pt-1">
+                    <div className="flex items-center gap-1">
+                      <button
+                        id={`btn-mute-arrange-${track.id}`}
+                        onClick={() => toggleMute(track.id)}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer transition-colors ${
+                          track.muted
+                            ? 'bg-rose-500 text-white'
+                            : 'bg-[#1C213E] text-slate-400 hover:text-white'
+                        }`}
+                        title="Mute Track"
+                      >
+                        M
+                      </button>
+                      <button
+                        id={`btn-solo-arrange-${track.id}`}
+                        onClick={() => toggleSolo(track.id)}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer transition-colors ${
+                          track.solo
+                            ? 'bg-amber-500 text-slate-950'
+                            : 'bg-[#1C213E] text-slate-400 hover:text-white'
+                        }`}
+                        title="Solo Track"
+                      >
+                        S
+                      </button>
+                    </div>
+
+                    {/* Volume Slider */}
+                    <div className="flex items-center gap-1">
+                      <Volume2 className="w-3 h-3 text-slate-500" />
+                      <input
+                        id={`slider-vol-arrange-${track.id}`}
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={track.volume}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          onChangeTracks(tracks.map((t) => (t.id === track.id ? { ...t, volume: val } : t)));
+                        }}
+                        className="w-14 h-1 bg-[#252B48] rounded cursor-pointer accent-indigo-500"
+                        title={`Volume: ${Math.round(track.volume * 100)}%`}
+                      />
+                    </div>
+
+                    {/* Add Clip Button */}
                     <button
-                      id={`btn-delete-track-${track.id}`}
-                      onClick={() => deleteTrack(track.id)}
-                      className="p-1 rounded hover:bg-rose-950/60 text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
-                      title="Delete Track"
+                      onClick={() => addRegionToTrack(track.id)}
+                      className="p-1 rounded bg-[#1A1F3B] hover:bg-indigo-600 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      title="Add new Region Clip to track"
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Plus className="w-3 h-3" />
                     </button>
                   </div>
                 </div>
 
-                {/* Track Mute, Solo, Volume & Pan */}
-                <div className="flex items-center justify-between gap-1 pt-1">
-                  <div className="flex items-center gap-1">
-                    <button
-                      id={`btn-mute-arrange-${track.id}`}
-                      onClick={() => toggleMute(track.id)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer transition-colors ${
-                        track.muted
-                          ? 'bg-rose-500 text-white'
-                          : 'bg-[#1C213E] text-slate-400 hover:text-white'
-                      }`}
-                      title="Mute Track"
-                    >
-                      M
-                    </button>
-                    <button
-                      id={`btn-solo-arrange-${track.id}`}
-                      onClick={() => toggleSolo(track.id)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer transition-colors ${
-                        track.solo
-                          ? 'bg-amber-500 text-slate-950'
-                          : 'bg-[#1C213E] text-slate-400 hover:text-white'
-                      }`}
-                      title="Solo Track"
-                    >
-                      S
-                    </button>
-                  </div>
-
-                  {/* Volume Slider */}
-                  <div className="flex items-center gap-1">
-                    <Volume2 className="w-3 h-3 text-slate-500" />
-                    <input
-                      id={`slider-vol-arrange-${track.id}`}
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.01}
-                      value={track.volume}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value);
-                        onChangeTracks(tracks.map((t) => (t.id === track.id ? { ...t, volume: val } : t)));
-                      }}
-                      className="w-14 h-1 bg-[#252B48] rounded cursor-pointer accent-indigo-500"
-                      title={`Volume: ${Math.round(track.volume * 100)}%`}
+                {/* Right Timeline Region Blocks Lane */}
+                <div
+                  onClick={handleSeek}
+                  className="relative h-20 bg-[#0B0D19]/40 overflow-hidden flex items-center p-2 cursor-pointer shrink-0"
+                  style={{ width: `${totalTimelineWidth}px`, minWidth: `${totalTimelineWidth}px` }}
+                >
+                  {/* Background Grid Lines per Bar */}
+                  {Array.from({ length: numBars }).map((_, barIdx) => (
+                    <div
+                      key={barIdx}
+                      className="absolute top-0 bottom-0 border-r border-[#1E2342]/40 pointer-events-none"
+                      style={{ left: `${barIdx * barWidth}px` }}
                     />
-                  </div>
-
-                  {/* Add Clip Button */}
-                  <button
-                    onClick={() => addRegionToTrack(track.id)}
-                    className="p-1 rounded bg-[#1A1F3B] hover:bg-indigo-600 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                    title="Add new Region Clip to track"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Right Timeline Region Blocks Lane */}
-              <div
-                onClick={handleSeek}
-                className="flex-1 relative h-20 bg-[#0B0D19]/40 overflow-hidden flex items-center p-2 cursor-pointer"
-              >
-                {/* Background Grid Lines per Bar */}
-                {Array.from({ length: numBars }).map((_, barIdx) => (
-                  <div
-                    key={barIdx}
-                    className="absolute top-0 bottom-0 border-r border-[#1E2342]/40 pointer-events-none"
-                    style={{ left: `${barIdx * barWidth}px` }}
-                  />
-                ))}
+                  ))}
 
                 {/* Region Clips */}
                 {track.regions.map((region) => {
@@ -679,6 +687,7 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
           ))}
         </div>
       </div>
+    </div>
 
       {/* Piano Roll MIDI Note Editor Modal */}
       {editingRegion && (
