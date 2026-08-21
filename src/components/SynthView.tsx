@@ -1,159 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Sliders, Activity, Zap, Volume2, Sparkles } from 'lucide-react';
+import { Sliders, Activity, Zap, Volume2, Sparkles, Bookmark, Plus, Library, FolderOpen, Check } from 'lucide-react';
 import { SynthParams } from '../types';
 import { audioEngine } from '../audio/engine';
+import {
+  FACTORY_PRESETS,
+  SynthPresetItem,
+  getCustomPresets,
+  saveCustomPreset,
+} from '../audio/synthPresets';
+import { SynthPresetLibrary } from './SynthPresetLibrary';
 
 interface SynthViewProps {
   params: SynthParams;
   onChangeParams: (newParams: SynthParams) => void;
 }
-
-const PRESETS: Record<string, Partial<SynthParams>> = {
-  'Cosmic Lead': {
-    oscType: 'sawtooth',
-    subOscVolume: 0.2,
-    noiseVolume: 0.05,
-    detune: 5,
-    filterType: 'lowpass',
-    filterCutoff: 2800,
-    filterResonance: 3.5,
-    filterEnvAmount: 1200,
-    attack: 0.02,
-    decay: 0.3,
-    sustain: 0.7,
-    release: 0.4,
-    lfoRate: 4,
-    lfoDepth: 0.15,
-    lfoTarget: 'cutoff',
-    octave: 0,
-  },
-  '808 Deep Bass': {
-    oscType: 'sine',
-    subOscVolume: 0.8,
-    noiseVolume: 0.0,
-    detune: 0,
-    filterType: 'lowpass',
-    filterCutoff: 450,
-    filterResonance: 1.5,
-    filterEnvAmount: 200,
-    attack: 0.005,
-    decay: 0.5,
-    sustain: 0.4,
-    release: 0.35,
-    lfoRate: 1,
-    lfoDepth: 0.0,
-    lfoTarget: 'pitch',
-    octave: -1,
-  },
-  'Warm PolyPad': {
-    oscType: 'triangle',
-    subOscVolume: 0.3,
-    noiseVolume: 0.02,
-    detune: 10,
-    filterType: 'lowpass',
-    filterCutoff: 1400,
-    filterResonance: 2.0,
-    filterEnvAmount: 600,
-    attack: 0.4,
-    decay: 0.8,
-    sustain: 0.85,
-    release: 1.2,
-    lfoRate: 0.5,
-    lfoDepth: 0.25,
-    lfoTarget: 'cutoff',
-    octave: 0,
-  },
-  'Acid Synth': {
-    oscType: 'sawtooth',
-    subOscVolume: 0.4,
-    noiseVolume: 0.0,
-    detune: 0,
-    filterType: 'lowpass',
-    filterCutoff: 1200,
-    filterResonance: 12.0,
-    filterEnvAmount: 3500,
-    attack: 0.005,
-    decay: 0.2,
-    sustain: 0.15,
-    release: 0.2,
-    lfoRate: 6,
-    lfoDepth: 0.4,
-    lfoTarget: 'cutoff',
-    octave: -1,
-  },
-  'Dream Keys': {
-    oscType: 'sine',
-    subOscVolume: 0.1,
-    noiseVolume: 0.01,
-    detune: 4,
-    filterType: 'lowpass',
-    filterCutoff: 3200,
-    filterResonance: 1.2,
-    filterEnvAmount: 800,
-    attack: 0.01,
-    decay: 0.6,
-    sustain: 0.4,
-    release: 0.6,
-    lfoRate: 2.5,
-    lfoDepth: 0.1,
-    lfoTarget: 'pitch',
-    octave: 0,
-  },
-  'Pluck': {
-    oscType: 'square',
-    subOscVolume: 0.2,
-    noiseVolume: 0.05,
-    detune: 8,
-    filterType: 'lowpass',
-    filterCutoff: 4000,
-    filterResonance: 4.0,
-    filterEnvAmount: 2800,
-    attack: 0.005,
-    decay: 0.15,
-    sustain: 0.05,
-    release: 0.25,
-    lfoRate: 0.5,
-    lfoDepth: 0.0,
-    lfoTarget: 'cutoff',
-    octave: 0,
-  },
-  'Vintage Brass': {
-    oscType: 'sawtooth',
-    subOscVolume: 0.35,
-    noiseVolume: 0.03,
-    detune: 12,
-    filterType: 'lowpass',
-    filterCutoff: 2100,
-    filterResonance: 2.8,
-    filterEnvAmount: 1800,
-    attack: 0.08,
-    decay: 0.4,
-    sustain: 0.6,
-    release: 0.5,
-    lfoRate: 5,
-    lfoDepth: 0.15,
-    lfoTarget: 'volume',
-    octave: 0,
-  },
-  'Cyber Drone': {
-    oscType: 'square',
-    subOscVolume: 0.6,
-    noiseVolume: 0.1,
-    detune: 18,
-    filterType: 'bandpass',
-    filterCutoff: 1100,
-    filterResonance: 6.0,
-    filterEnvAmount: 400,
-    attack: 0.8,
-    decay: 1.5,
-    sustain: 0.9,
-    release: 2.0,
-    lfoRate: 0.2,
-    lfoDepth: 0.4,
-    lfoTarget: 'cutoff',
-    octave: -1,
-  },
-};
 
 const KEYBOARD_NOTES = [
   { note: 'C3', label: 'C3', key: 'a', isBlack: false },
@@ -178,6 +38,20 @@ const KEYBOARD_NOTES = [
 
 export const SynthView: React.FC<SynthViewProps> = ({ params, onChangeParams }) => {
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
+  const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
+  const [customPresets, setCustomPresets] = useState<SynthPresetItem[]>([]);
+  const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
+  const [quickSaveName, setQuickSaveName] = useState<string>('');
+  const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  // Sync custom presets from local storage
+  const reloadPresets = useCallback(() => {
+    setCustomPresets(getCustomPresets());
+  }, []);
+
+  useEffect(() => {
+    reloadPresets();
+  }, [reloadPresets, isLibraryOpen]);
 
   const handleNoteOn = useCallback((note: string) => {
     audioEngine.init();
@@ -221,21 +95,49 @@ export const SynthView: React.FC<SynthViewProps> = ({ params, onChangeParams }) 
     };
   }, [handleNoteOn, handleNoteOff]);
 
-  const setPreset = (presetName: string) => {
-    const presetData = PRESETS[presetName];
-    if (presetData) {
-      onChangeParams({
-        ...params,
-        ...presetData,
-        preset: presetName,
-      });
+  const handleSelectPreset = (preset: SynthPresetItem) => {
+    onChangeParams({
+      ...params,
+      ...preset.params,
+      preset: preset.name,
+    });
+    setSaveToast(`Loaded "${preset.name}"`);
+    setTimeout(() => setSaveToast(null), 2500);
+  };
+
+  const handleDropdownChange = (name: string) => {
+    // Check factory presets first
+    const factory = FACTORY_PRESETS.find((p) => p.name === name);
+    if (factory) {
+      handleSelectPreset(factory);
+      return;
+    }
+    // Check custom presets
+    const custom = customPresets.find((p) => p.name === name);
+    if (custom) {
+      handleSelectPreset(custom);
     }
   };
+
+  const handleQuickSaveSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickSaveName.trim()) return;
+
+    const saved = saveCustomPreset(quickSaveName, params, 'User');
+    reloadPresets();
+    setIsQuickSaving(false);
+    setQuickSaveName('');
+    handleSelectPreset(saved);
+    setSaveToast(`Preset "${saved.name}" saved!`);
+    setTimeout(() => setSaveToast(null), 3000);
+  };
+
+  const totalPresetsCount = FACTORY_PRESETS.length + customPresets.length;
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">
       {/* Top Synth Header & Presets */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg relative">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
             <Zap className="w-5 h-5" />
@@ -251,24 +153,107 @@ export const SynthView: React.FC<SynthViewProps> = ({ params, onChangeParams }) 
           </div>
         </div>
 
-        {/* Preset Selector */}
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-purple-400" />
-          <span className="text-xs text-slate-400 font-medium">Preset:</span>
-          <select
-            id="select-synth-preset"
-            value={params.preset}
-            onChange={(e) => setPreset(e.target.value)}
-            className="bg-[#0B0D19] border border-[#2D355A] text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer"
+        {/* Preset Selector & Presets Library Controls */}
+        <div className="flex items-center flex-wrap gap-2">
+          {/* Quick Dropdown with Groups */}
+          <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#2D355A] rounded-lg px-2.5 py-1">
+            <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            <select
+              id="select-synth-preset"
+              value={params.preset}
+              onChange={(e) => handleDropdownChange(e.target.value)}
+              className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer pr-2 font-medium"
+            >
+              <optgroup label="Factory Presets">
+                {FACTORY_PRESETS.map((p) => (
+                  <option key={p.id} value={p.name} className="bg-[#0B0D19] text-slate-200">
+                    {p.name} ({p.category})
+                  </option>
+                ))}
+              </optgroup>
+              {customPresets.length > 0 && (
+                <optgroup label="My Custom Presets (LocalStorage)">
+                  {customPresets.map((p) => (
+                    <option key={p.id} value={p.name} className="bg-[#0B0D19] text-purple-300">
+                      ★ {p.name} ({p.category})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
+
+          {/* Quick Save Current Preset Button */}
+          <button
+            id="btn-quick-save-preset"
+            onClick={() => {
+              setQuickSaveName(params.preset ? `${params.preset} (Custom)` : 'My Synth Patch');
+              setIsQuickSaving(true);
+            }}
+            className="flex items-center gap-1.5 bg-[#171B36] hover:bg-[#22284C] text-slate-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[#2D355A] transition-colors shadow-xs"
+            title="Save current synth sound to LocalStorage"
           >
-            {Object.keys(PRESETS).map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
+            <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Save</span>
+          </button>
+
+          {/* Open Full Presets Library Drawer */}
+          <button
+            id="btn-open-presets-library"
+            onClick={() => setIsLibraryOpen(true)}
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-md transition-colors"
+            title="Open Presets Library (Search, audition, export/import)"
+          >
+            <Library className="w-3.5 h-3.5" />
+            <span>Presets Library</span>
+            <span className="bg-indigo-700/80 text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+              {totalPresetsCount}
+            </span>
+          </button>
         </div>
+
+        {/* Floating Save Toast */}
+        {saveToast && (
+          <div className="absolute top-full right-4 mt-2 z-20 bg-emerald-950 border border-emerald-500/50 text-emerald-300 text-xs px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1">
+            <Check className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{saveToast}</span>
+          </div>
+        )}
       </div>
+
+      {/* Quick Save Modal Popover */}
+      {isQuickSaving && (
+        <div className="bg-[#171B38] border border-indigo-500/40 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xl animate-in fade-in">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
+            <Bookmark className="w-4 h-4 text-indigo-400" />
+            <span>Save Custom Synth Preset to Browser:</span>
+          </div>
+          <form onSubmit={handleQuickSaveSubmit} className="flex items-center gap-2 flex-1 max-w-md">
+            <input
+              type="text"
+              required
+              autoFocus
+              placeholder="Preset Name..."
+              value={quickSaveName}
+              onChange={(e) => setQuickSaveName(e.target.value)}
+              className="flex-1 bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+            />
+            <button
+              type="submit"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-xs transition-colors shrink-0"
+            >
+              Save Patch
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsQuickSaving(false)}
+              className="bg-[#0B0D19] hover:bg-[#1A1F3A] text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-[#252B48] transition-colors shrink-0"
+            >
+              Cancel
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Control Panels Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -665,6 +650,17 @@ export const SynthView: React.FC<SynthViewProps> = ({ params, onChangeParams }) 
           })}
         </div>
       </div>
+
+      {/* Preset Library Sidebar Drawer / Modal */}
+      <SynthPresetLibrary
+        isOpen={isLibraryOpen}
+        onClose={() => setIsLibraryOpen(false)}
+        currentParams={params}
+        onSelectPreset={(preset) => {
+          handleSelectPreset(preset);
+          setIsLibraryOpen(false);
+        }}
+      />
     </div>
   );
 };
