@@ -318,7 +318,7 @@ export function App() {
       />
 
       {/* Main Workspace Body */}
-      <main className="flex-1 pb-6">
+      <main className="flex-1 pb-0">
         {activeTab === 'synth' && (
           <SynthView params={synthParams} onChangeParams={setSynthParams} />
         )}
