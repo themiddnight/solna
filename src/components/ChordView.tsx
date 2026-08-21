@@ -28,39 +28,305 @@ const SCALES: Record<string, { name: string; intervals: number[] }> = {
   'Blues': { name: 'Blues Scale', intervals: [0, 3, 5, 6, 7, 10] },
 };
 
-const CHORD_PROGRESSION_TEMPLATES: Record<string, Array<{ root: string; quality: string; bars: number }>> = {
-  'Pop Anthem (I - V - vi - IV)': [
-    { root: 'C', quality: 'maj', bars: 1 },
-    { root: 'G', quality: 'maj', bars: 1 },
-    { root: 'A', quality: 'min', bars: 1 },
-    { root: 'F', quality: 'maj', bars: 1 },
-  ],
-  'Jazz Standard (ii - V - I - vi)': [
-    { root: 'D', quality: 'min7', bars: 1 },
-    { root: 'G', quality: '7', bars: 1 },
-    { root: 'C', quality: 'maj7', bars: 1 },
-    { root: 'A', quality: 'min7', bars: 1 },
-  ],
-  'Emotional Synthwave (vi - IV - I - V)': [
-    { root: 'A', quality: 'min', bars: 1 },
-    { root: 'F', quality: 'maj', bars: 1 },
-    { root: 'C', quality: 'maj', bars: 1 },
-    { root: 'G', quality: 'maj', bars: 1 },
-  ],
-  'Neo-Soul Modal Flow (i - iv - VII - III)': [
-    { root: 'D', quality: 'min7', bars: 1 },
-    { root: 'G', quality: 'min7', bars: 1 },
-    { root: 'C', quality: '7', bars: 1 },
-    { root: 'F', quality: 'maj7', bars: 1 },
-  ],
-  '12-Bar Blues Loop': [
-    { root: 'C', quality: '7', bars: 2 },
-    { root: 'F', quality: '7', bars: 1 },
-    { root: 'C', quality: '7', bars: 1 },
-    { root: 'G', quality: '7', bars: 1 },
-    { root: 'F', quality: '7', bars: 1 },
-  ],
-};
+export interface ProgressionTemplate {
+  name: string;
+  category: 'Pop & EDM' | 'Jazz & Neo-Soul' | 'Lofi & R&B' | 'Rock & Blues' | 'Anime & J-Pop' | 'Cinematic & Modal' | 'Classical & Baroque';
+  roman: string;
+  description: string;
+  // Semitone intervals relative to the chosen key's root (0 = Key root)
+  // along with chord quality for key transposition
+  relativeChords: Array<{ interval: number; quality: string; bars: number }>;
+}
+
+export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
+  // Pop & EDM
+  {
+    name: 'Pop Anthem (Axis of Awesome)',
+    category: 'Pop & EDM',
+    roman: 'I – V – vi – IV',
+    description: 'The iconic 4-chord progression found in hundreds of legendary hit songs.',
+    relativeChords: [
+      { interval: 0, quality: 'maj', bars: 1 },  // I
+      { interval: 7, quality: 'maj', bars: 1 },  // V
+      { interval: 9, quality: 'min', bars: 1 },  // vi
+      { interval: 5, quality: 'maj', bars: 1 },  // IV
+    ],
+  },
+  {
+    name: 'Emotional Pop / Synthwave',
+    category: 'Pop & EDM',
+    roman: 'vi – IV – I – V',
+    description: 'Moody, heroic, and emotional minor opening used widely in synthwave and EDM anthems.',
+    relativeChords: [
+      { interval: 9, quality: 'min', bars: 1 },  // vi
+      { interval: 5, quality: 'maj', bars: 1 },  // IV
+      { interval: 0, quality: 'maj', bars: 1 },  // I
+      { interval: 7, quality: 'maj', bars: 1 },  // V
+    ],
+  },
+  {
+    name: '50s Doo-Wop / Stand By Me',
+    category: 'Pop & EDM',
+    roman: 'I – vi – IV – V',
+    description: 'Timeless vintage progression with romantic, uplifting harmonic resolution.',
+    relativeChords: [
+      { interval: 0, quality: 'maj', bars: 1 },  // I
+      { interval: 9, quality: 'min', bars: 1 },  // vi
+      { interval: 5, quality: 'maj', bars: 1 },  // IV
+      { interval: 7, quality: 'maj', bars: 1 },  // V
+    ],
+  },
+  {
+    name: 'Future Bass / Modern EDM Lift',
+    category: 'Pop & EDM',
+    roman: 'IVmaj7 – V7 – iiim7 – vim7',
+    description: 'Lush 7th chord cadence creating unstoppable momentum and euphoric drops.',
+    relativeChords: [
+      { interval: 5, quality: 'maj7', bars: 1 }, // IVmaj7
+      { interval: 7, quality: '7', bars: 1 },    // V7
+      { interval: 4, quality: 'min7', bars: 1 }, // iiim7
+      { interval: 9, quality: 'min7', bars: 1 }, // vim7
+    ],
+  },
+  {
+    name: 'Club Dance & House Groove',
+    category: 'Pop & EDM',
+    roman: 'i – VI – VII – v',
+    description: 'Driving natural minor cadence standard in modern deep house and Eurodance.',
+    relativeChords: [
+      { interval: 0, quality: 'min7', bars: 1 }, // i
+      { interval: 8, quality: 'maj7', bars: 1 }, // VI
+      { interval: 10, quality: '7', bars: 1 },   // VII
+      { interval: 7, quality: 'min7', bars: 1 }, // v
+    ],
+  },
+
+  // Jazz & Neo-Soul
+  {
+    name: 'Jazz ii-V-I-VI Turnaround',
+    category: 'Jazz & Neo-Soul',
+    roman: 'ii7 – V7 – Imaj7 – VI7',
+    description: 'The definitive jazz standard backbone with secondary dominant turnaround.',
+    relativeChords: [
+      { interval: 2, quality: 'min7', bars: 1 },  // ii7
+      { interval: 7, quality: '7', bars: 1 },     // V7
+      { interval: 0, quality: 'maj7', bars: 1 },  // Imaj7
+      { interval: 9, quality: '7', bars: 1 },     // VI7
+    ],
+  },
+  {
+    name: 'Neo-Soul Butter Flow',
+    category: 'Jazz & Neo-Soul',
+    roman: 'Imaj9 – viim7b5 – III7 – vim9',
+    description: 'Complex soulful harmony with minor 7b5 leading into an altered dominant resolve.',
+    relativeChords: [
+      { interval: 0, quality: 'maj9', bars: 1 },  // Imaj9
+      { interval: 11, quality: 'm7b5', bars: 1 }, // viim7b5
+      { interval: 4, quality: '7', bars: 1 },     // III7
+      { interval: 9, quality: 'min9', bars: 1 },  // vim9
+    ],
+  },
+  {
+    name: 'Coltrane / Modal Interchange Cycle',
+    category: 'Jazz & Neo-Soul',
+    roman: 'Imaj7 – bVImaj7 – bIImaj7 – V7',
+    description: 'Chromatic third root movement giving a vibrant, otherworldly jazz color.',
+    relativeChords: [
+      { interval: 0, quality: 'maj7', bars: 1 },  // Imaj7
+      { interval: 8, quality: 'maj7', bars: 1 },  // bVImaj7
+      { interval: 1, quality: 'maj7', bars: 1 },  // bIImaj7
+      { interval: 7, quality: '7sus4', bars: 1 }, // V7sus4
+    ],
+  },
+
+  // Lofi & R&B
+  {
+    name: 'Lofi Hip Hop Rainy Cafe',
+    category: 'Lofi & R&B',
+    roman: 'ii9 – V13 – Imaj9 – IVmaj7',
+    description: 'Warm, relaxed extended 9th chords perfect for vinyl crackle and mellow beats.',
+    relativeChords: [
+      { interval: 2, quality: 'min9', bars: 1 },  // ii9
+      { interval: 7, quality: '7', bars: 1 },     // V7
+      { interval: 0, quality: 'maj9', bars: 1 },  // Imaj9
+      { interval: 5, quality: 'maj7', bars: 1 },  // IVmaj7
+    ],
+  },
+  {
+    name: 'Modern R&B / Trapsoul Vibe',
+    category: 'Lofi & R&B',
+    roman: 'i9 – iv7 – VII9 – IIImaj7',
+    description: 'Sultry, deep progression popularized by modern R&B, Drake, and SZA.',
+    relativeChords: [
+      { interval: 0, quality: 'min9', bars: 1 },  // i9
+      { interval: 5, quality: 'min7', bars: 1 },  // iv7
+      { interval: 10, quality: '9', bars: 1 },    // VII9
+      { interval: 3, quality: 'maj7', bars: 1 },  // IIImaj7
+    ],
+  },
+  {
+    name: 'Melancholy Bedroom Pop',
+    category: 'Lofi & R&B',
+    roman: 'Imaj7 – IVmaj7 – ii7 – V7',
+    description: 'Intimate, nostalgic daydream feel with soft major-7th oscillations.',
+    relativeChords: [
+      { interval: 0, quality: 'maj7', bars: 1 },  // Imaj7
+      { interval: 5, quality: 'maj7', bars: 1 },  // IVmaj7
+      { interval: 2, quality: 'min7', bars: 1 },  // ii7
+      { interval: 7, quality: '7', bars: 1 },     // V7
+    ],
+  },
+
+  // Anime & J-Pop
+  {
+    name: 'Royal Road / Oudo (王道進行)',
+    category: 'Anime & J-Pop',
+    roman: 'IVmaj7 – V7 – iiim7 – vim7',
+    description: 'The golden standard of J-Pop, anime openings (YOASOBI, Radwimps), and Shibuya-kei.',
+    relativeChords: [
+      { interval: 5, quality: 'maj7', bars: 1 }, // IVmaj7
+      { interval: 7, quality: '7', bars: 1 },    // V7
+      { interval: 4, quality: 'min7', bars: 1 }, // iiim7
+      { interval: 9, quality: 'min7', bars: 1 }, // vim7
+    ],
+  },
+  {
+    name: 'Just the Two of Us / Marusa (丸サ進行)',
+    category: 'Anime & J-Pop',
+    roman: 'IVmaj7 – III7 – vim7 – I7',
+    description: 'Infectious groove with chromatic dominant transition used in City Pop & Funk.',
+    relativeChords: [
+      { interval: 5, quality: 'maj7', bars: 1 }, // IVmaj7
+      { interval: 4, quality: '7', bars: 1 },    // III7 (secondary dominant)
+      { interval: 9, quality: 'min7', bars: 1 }, // vim7
+      { interval: 0, quality: '7', bars: 1 },    // I7
+    ],
+  },
+  {
+    name: 'Komuro / Heroic J-Rock (小室進行)',
+    category: 'Anime & J-Pop',
+    roman: 'vi – IV – V – I',
+    description: 'High-energy, heroic resolution made famous by Tetsuya Komuro and 90s/00s anime.',
+    relativeChords: [
+      { interval: 9, quality: 'min', bars: 1 },  // vi
+      { interval: 5, quality: 'maj', bars: 1 },  // IV
+      { interval: 7, quality: 'maj', bars: 1 },  // V
+      { interval: 0, quality: 'maj', bars: 1 },  // I
+    ],
+  },
+
+  // Rock & Blues
+  {
+    name: '12-Bar Blues Standard',
+    category: 'Rock & Blues',
+    roman: 'I7 – IV7 – I7 – V7 – IV7 – I7',
+    description: 'The foundational 12-bar blues form loaded with dominant 7th grit.',
+    relativeChords: [
+      { interval: 0, quality: '7', bars: 2 },  // I7
+      { interval: 5, quality: '7', bars: 1 },  // IV7
+      { interval: 0, quality: '7', bars: 1 },  // I7
+      { interval: 7, quality: '7', bars: 1 },  // V7
+      { interval: 5, quality: '7', bars: 1 },  // IV7
+      { interval: 0, quality: '7', bars: 2 },  // I7
+    ],
+  },
+  {
+    name: 'Classic Rock Anthem / Grunge',
+    category: 'Rock & Blues',
+    roman: 'I – bVII – IV – I',
+    description: 'Mixolydian modal swagger heard in Led Zeppelin, AC/DC, and Nirvana.',
+    relativeChords: [
+      { interval: 0, quality: 'maj', bars: 1 },  // I
+      { interval: 10, quality: 'maj', bars: 1 }, // bVII
+      { interval: 5, quality: 'maj', bars: 1 },  // IV
+      { interval: 0, quality: 'maj', bars: 1 },  // I
+    ],
+  },
+  {
+    name: 'Andalusian / Flamenco Descent',
+    category: 'Rock & Blues',
+    roman: 'i – bVII – bVI – V',
+    description: 'Dramatic descending Phrygian bassline cadence heard in rock and Spanish flamenco.',
+    relativeChords: [
+      { interval: 0, quality: 'min', bars: 1 },  // i
+      { interval: 10, quality: 'maj', bars: 1 }, // bVII
+      { interval: 8, quality: 'maj', bars: 1 },  // bVI
+      { interval: 7, quality: '7', bars: 1 },    // V7
+    ],
+  },
+
+  // Cinematic & Modal
+  {
+    name: 'Epic Hans Zimmer Ostinato',
+    category: 'Cinematic & Modal',
+    roman: 'i – bVI – III – bVII',
+    description: 'Monumental cinematic progression for soaring blockbuster film scores and trailers.',
+    relativeChords: [
+      { interval: 0, quality: 'min', bars: 1 },  // i
+      { interval: 8, quality: 'maj', bars: 1 },  // bVI
+      { interval: 3, quality: 'maj', bars: 1 },  // III
+      { interval: 10, quality: 'maj', bars: 1 }, // bVII
+    ],
+  },
+  {
+    name: 'Dorian Space Voyage',
+    category: 'Cinematic & Modal',
+    roman: 'i7 – IV7 – i7 – IV7',
+    description: 'Floating, futuristic vamp (Pink Floyd, Daft Punk, Odesza).',
+    relativeChords: [
+      { interval: 0, quality: 'min7', bars: 1 }, // i7
+      { interval: 5, quality: '7', bars: 1 },    // IV7 (Major IV in Dorian)
+      { interval: 0, quality: 'min7', bars: 1 }, // i7
+      { interval: 5, quality: '7', bars: 1 },    // IV7
+    ],
+  },
+  {
+    name: 'Lydian Wonder / Dreamscape',
+    category: 'Cinematic & Modal',
+    roman: 'Imaj7 – II – Imaj7 – II',
+    description: 'Magical raised-4th harmony used by John Williams and Joe Hisaishi (Ghibli).',
+    relativeChords: [
+      { interval: 0, quality: 'maj7', bars: 1 }, // Imaj7
+      { interval: 2, quality: 'maj', bars: 1 },  // II (Major 2 in Lydian)
+      { interval: 0, quality: 'maj7', bars: 1 }, // Imaj7
+      { interval: 2, quality: 'maj', bars: 1 },  // II
+    ],
+  },
+
+  // Classical & Baroque
+  {
+    name: 'Pachelbel Canon Cadence',
+    category: 'Classical & Baroque',
+    roman: 'I – V – vi – iii – IV – I – IV – V',
+    description: 'The golden baroque harmonic sequence celebrated across 300 years of music.',
+    relativeChords: [
+      { interval: 0, quality: 'maj', bars: 1 },  // I
+      { interval: 7, quality: 'maj', bars: 1 },  // V
+      { interval: 9, quality: 'min', bars: 1 },  // vi
+      { interval: 4, quality: 'min', bars: 1 },  // iii
+      { interval: 5, quality: 'maj', bars: 1 },  // IV
+      { interval: 0, quality: 'maj', bars: 1 },  // I
+      { interval: 5, quality: 'maj', bars: 1 },  // IV
+      { interval: 7, quality: 'maj', bars: 1 },  // V
+    ],
+  },
+  {
+    name: 'Passacaglia / Circle of Fifths Descent',
+    category: 'Classical & Baroque',
+    roman: 'i – iv – VII – III – VI – iio – V – i',
+    description: 'Hypnotic circular resolution driving classical drama and cinematic tension.',
+    relativeChords: [
+      { interval: 0, quality: 'min', bars: 1 },  // i
+      { interval: 5, quality: 'min', bars: 1 },  // iv
+      { interval: 10, quality: 'maj', bars: 1 }, // VII
+      { interval: 3, quality: 'maj', bars: 1 },  // III
+      { interval: 8, quality: 'maj', bars: 1 },  // VI
+      { interval: 2, quality: 'dim', bars: 1 },  // iio
+      { interval: 7, quality: '7', bars: 1 },    // V7
+      { interval: 0, quality: 'min', bars: 1 },  // i
+    ],
+  },
+];
 
 export const ChordView: React.FC<ChordViewProps> = ({
   chords,
@@ -72,6 +338,8 @@ export const ChordView: React.FC<ChordViewProps> = ({
   synthParams,
 }) => {
   const [activeChordId, setActiveChordId] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [templateSearch, setTemplateSearch] = useState<string>('');
 
   // Calculate notes in selected scale
   const rootIdx = ROOTS.indexOf(scaleRoot);
@@ -95,17 +363,20 @@ export const ChordView: React.FC<ChordViewProps> = ({
     }, 1200);
   }, [synthParams]);
 
-  const applyProgressionTemplate = (name: string) => {
-    const template = CHORD_PROGRESSION_TEMPLATES[name];
-    if (!template) return;
+  // Transpose the template's relative intervals cleanly to the current selected Key Root
+  const applyProgressionTemplate = (template: ProgressionTemplate) => {
+    const baseRootIndex = ROOTS.indexOf(scaleRoot) >= 0 ? ROOTS.indexOf(scaleRoot) : 0;
 
-    const newChords: ChordItem[] = template.map((c, i) => ({
-      id: `chord-${Date.now()}-${i}`,
-      root: c.root,
-      quality: c.quality,
-      bars: c.bars,
-      notes: generateBlockChordNotes(c.quality, c.root, 4),
-    }));
+    const newChords: ChordItem[] = template.relativeChords.map((c, i) => {
+      const transposedRoot = ROOTS[(baseRootIndex + c.interval) % 12];
+      return {
+        id: `chord-${Date.now()}-${i}`,
+        root: transposedRoot,
+        quality: c.quality,
+        bars: c.bars,
+        notes: generateBlockChordNotes(c.quality, transposedRoot, 4),
+      };
+    });
 
     onChangeChords(newChords);
   };
@@ -139,6 +410,17 @@ export const ChordView: React.FC<ChordViewProps> = ({
       })
     );
   };
+
+  const categories = ['All', 'Pop & EDM', 'Jazz & Neo-Soul', 'Lofi & R&B', 'Anime & J-Pop', 'Rock & Blues', 'Cinematic & Modal', 'Classical & Baroque'];
+
+  const filteredTemplates = CHORD_PROGRESSION_TEMPLATES.filter((tpl) => {
+    const matchesCategory = selectedCategory === 'All' || tpl.category === selectedCategory;
+    const matchesSearch =
+      tpl.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+      tpl.roman.toLowerCase().includes(templateSearch.toLowerCase()) ||
+      tpl.description.toLowerCase().includes(templateSearch.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">
@@ -197,7 +479,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
       {/* Visual Scale Degrees Strip */}
       <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 shadow-md flex items-center justify-between flex-wrap gap-2">
         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-          Scale Notes:
+          Scale Notes ({scaleRoot} {scaleType}):
         </span>
         <div className="flex items-center gap-2 flex-wrap">
           {scaleNotes.map((note, idx) => (
@@ -219,22 +501,78 @@ export const ChordView: React.FC<ChordViewProps> = ({
       </div>
 
       {/* Progression Templates & Quick Builders */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-md space-y-2">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
-          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-          Harmonic Progression Templates
-        </span>
-        <div className="flex items-center gap-2 flex-wrap">
-          {Object.keys(CHORD_PROGRESSION_TEMPLATES).map((templateName) => (
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-md space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            Harmonic Progression Library ({CHORD_PROGRESSION_TEMPLATES.length} Presets)
+          </span>
+
+          <input
+            type="text"
+            placeholder="Search progressions (e.g. Neo-Soul, Anime, J-Pop, 2-5-1)..."
+            value={templateSearch}
+            onChange={(e) => setTemplateSearch(e.target.value)}
+            className="bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-full sm:w-64"
+          />
+        </div>
+
+        {/* Category Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          {categories.map((cat) => (
             <button
-              key={templateName}
-              id={`btn-template-${templateName.replace(/\s+/g, '-').toLowerCase()}`}
-              onClick={() => applyProgressionTemplate(templateName)}
-              className="px-3 py-1.5 rounded-lg bg-[#0B0D19] hover:bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white text-xs font-medium transition-all cursor-pointer"
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                selectedCategory === cat
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-[#0B0D19] hover:bg-[#1A1F3B] text-slate-400 hover:text-slate-200 border border-[#252B48]'
+              }`}
             >
-              {templateName}
+              {cat}
             </button>
           ))}
+        </div>
+
+        {/* Templates Grid Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+          {filteredTemplates.map((template) => {
+            const baseRootIndex = ROOTS.indexOf(scaleRoot) >= 0 ? ROOTS.indexOf(scaleRoot) : 0;
+            const previewChordNames = template.relativeChords
+              .map((rc) => `${ROOTS[(baseRootIndex + rc.interval) % 12]}${rc.quality}`)
+              .join(' → ');
+
+            return (
+              <button
+                key={template.name}
+                id={`btn-template-${template.name.replace(/\s+/g, '-').toLowerCase()}`}
+                onClick={() => applyProgressionTemplate(template)}
+                className="text-left p-3 rounded-xl bg-[#0B0D19] hover:bg-[#161B38] border border-[#252B48] hover:border-indigo-500/50 transition-all cursor-pointer group flex flex-col justify-between space-y-2 shadow-xs"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-xs font-bold text-slate-200 group-hover:text-indigo-300 transition-colors">
+                      {template.name}
+                    </span>
+                    <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#1C213E] text-indigo-300">
+                      {template.category}
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-mono text-purple-400 font-semibold mb-1">
+                    {template.roman}
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">
+                    {template.description}
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-[#1C2242] flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                  <span>In {scaleRoot}: <span className="text-slate-200 font-semibold">{previewChordNames}</span></span>
+                  <span className="text-indigo-400 group-hover:translate-x-0.5 transition-transform">Apply ➔</span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -327,15 +665,30 @@ export const ChordView: React.FC<ChordViewProps> = ({
                       onChange={(e) => updateChord(chord.id, { quality: e.target.value })}
                       className="w-full bg-[#12152A] border border-[#2D355A] text-slate-200 text-xs rounded p-1"
                     >
-                      <option value="maj">Major</option>
-                      <option value="min">Minor</option>
-                      <option value="maj7">Major 7th</option>
-                      <option value="min7">Minor 7th</option>
-                      <option value="7">Dominant 7th</option>
-                      <option value="dim">Diminished</option>
-                      <option value="aug">Augmented</option>
-                      <option value="sus2">Sus 2</option>
-                      <option value="sus4">Sus 4</option>
+                      <optgroup label="Triads">
+                        <option value="maj">Major (maj)</option>
+                        <option value="min">Minor (min)</option>
+                        <option value="dim">Diminished (dim)</option>
+                        <option value="aug">Augmented (aug)</option>
+                        <option value="sus2">Sus 2</option>
+                        <option value="sus4">Sus 4</option>
+                      </optgroup>
+                      <optgroup label="7th Chords">
+                        <option value="maj7">Major 7th (maj7)</option>
+                        <option value="min7">Minor 7th (min7)</option>
+                        <option value="7">Dominant 7th (7)</option>
+                        <option value="m7b5">Half-Dim (m7b5)</option>
+                        <option value="dim7">Diminished 7th (dim7)</option>
+                        <option value="7sus4">7 Sus 4</option>
+                      </optgroup>
+                      <optgroup label="Extensions & Additions">
+                        <option value="9">Dominant 9th (9)</option>
+                        <option value="maj9">Major 9th (maj9)</option>
+                        <option value="min9">Minor 9th (min9)</option>
+                        <option value="add9">Add 9</option>
+                        <option value="6">Major 6th (6)</option>
+                        <option value="min6">Minor 6th (min6)</option>
+                      </optgroup>
                     </select>
                   </div>
                 </div>
