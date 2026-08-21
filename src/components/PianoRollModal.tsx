@@ -511,7 +511,11 @@ export const PianoRollModal: React.FC<PianoRollModalProps> = ({
                   } ${inScale ? 'font-bold' : 'opacity-60'}`}
                 >
                   <span>{note}</span>
-                  {inScale && <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />}
+                  {inScale && (
+                    <span className="flex items-center gap-0.5 text-[9px] text-indigo-300 bg-indigo-500/20 px-1 py-0.2 rounded font-semibold border border-indigo-500/30" title="In-Scale Note">
+                      ✨
+                    </span>
+                  )}
                 </button>
               );
             })}

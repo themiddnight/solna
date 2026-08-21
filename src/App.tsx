@@ -334,7 +334,25 @@ const INITIAL_USERS: RoomUser[] = [
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ViewMode>('synth');
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isSequencerPlaying, setIsSequencerPlaying] = useState<boolean>(false);
+  const [isChordsPlaying, setIsChordsPlaying] = useState<boolean>(false);
+  const [isArrangePlaying, setIsArrangePlaying] = useState<boolean>(false);
+
+  const anyPlaying = isSequencerPlaying || isChordsPlaying || isArrangePlaying;
+
+  const toggleMasterPlay = () => {
+    audioEngine.init();
+    if (anyPlaying) {
+      setIsSequencerPlaying(false);
+      setIsChordsPlaying(false);
+      setIsArrangePlaying(false);
+    } else {
+      setIsSequencerPlaying(true);
+      setIsChordsPlaying(true);
+      setIsArrangePlaying(true);
+    }
+  };
+
   const [metronomeActive, setMetronomeActive] = useState<boolean>(false);
   const [bpm, setBpm] = useState<number>(120);
   const [scaleRoot, setScaleRoot] = useState<string>('A');
@@ -365,11 +383,6 @@ export function App() {
     window.addEventListener('click', handleFirstClick);
     return () => window.removeEventListener('click', handleFirstClick);
   }, []);
-
-  const togglePlay = () => {
-    audioEngine.init();
-    setIsPlaying((prev) => !prev);
-  };
 
   const handleApplyDrumPattern = (pattern: Record<string, boolean[]>) => {
     setSequencerTracks((prev) =>
@@ -443,8 +456,8 @@ export function App() {
       <Header
         currentView={activeTab}
         onSelectView={setActiveTab}
-        isPlaying={isPlaying}
-        onTogglePlay={togglePlay}
+        isPlaying={anyPlaying}
+        onTogglePlay={toggleMasterPlay}
         bpm={bpm}
         onChangeBpm={setBpm}
         metronomeActive={metronomeActive}
@@ -459,25 +472,39 @@ export function App() {
         onOpenProjects={() => setIsProjectModalOpen(true)}
         activeRoomName={projectTitle}
         connectedCount={users.length}
+        scaleRoot={scaleRoot}
+        onChangeScaleRoot={setScaleRoot}
+        scaleType={scaleType}
+        onChangeScaleType={setScaleType}
+        isSequencerPlaying={isSequencerPlaying}
+        isChordsPlaying={isChordsPlaying}
+        isArrangePlaying={isArrangePlaying}
       />
 
-      {/* Main Workspace Body */}
-      <main className="flex-1 pb-0">
-        {activeTab === 'synth' && (
-          <SynthView params={synthParams} onChangeParams={setSynthParams} />
-        )}
-        {activeTab === 'drums' && <DrumMachineView />}
-        {activeTab === 'sequencer' && (
+      {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity */}
+      <main className="flex-1 pb-0 relative">
+        <div className={activeTab === 'synth' ? 'block' : 'hidden'}>
+          <SynthView 
+            params={synthParams} 
+            onChangeParams={setSynthParams} 
+            scaleRoot={scaleRoot} 
+            scaleType={scaleType} 
+          />
+        </div>
+        <div className={activeTab === 'drums' ? 'block' : 'hidden'}>
+          <DrumMachineView />
+        </div>
+        <div className={activeTab === 'sequencer' ? 'block' : 'hidden'}>
           <SequencerView
             tracks={sequencerTracks}
             onChangeTracks={setSequencerTracks}
             bpm={bpm}
-            isPlaying={isPlaying}
-            onTogglePlay={togglePlay}
+            isPlaying={isSequencerPlaying}
+            onTogglePlay={() => setIsSequencerPlaying((prev) => !prev)}
             synthParams={synthParams}
           />
-        )}
-        {activeTab === 'chords' && (
+        </div>
+        <div className={activeTab === 'chords' ? 'block' : 'hidden'}>
           <ChordView
             chords={chords}
             onChangeChords={setChords}
@@ -486,28 +513,31 @@ export function App() {
             scaleType={scaleType}
             onChangeScaleType={setScaleType}
             synthParams={synthParams}
+            bpm={bpm}
+            isPlaying={isChordsPlaying}
+            onTogglePlay={() => setIsChordsPlaying((prev) => !prev)}
           />
-        )}
-        {activeTab === 'arrange' && (
+        </div>
+        <div className={activeTab === 'arrange' ? 'block' : 'hidden'}>
           <ArrangeView
             tracks={arrangeTracks}
             onChangeTracks={setArrangeTracks}
             bpm={bpm}
-            isPlaying={isPlaying}
-            onTogglePlay={togglePlay}
+            isPlaying={isArrangePlaying}
+            onTogglePlay={() => setIsArrangePlaying((prev) => !prev)}
             scaleRoot={scaleRoot}
             scaleType={scaleType}
           />
-        )}
-        {activeTab === 'effects' && (
+        </div>
+        <div className={activeTab === 'effects' ? 'block' : 'hidden'}>
           <EffectsRackView effects={effects} onChangeEffects={setEffects} />
-        )}
+        </div>
       </main>
 
       {/* Persistent Transport Bar at bottom */}
       <TransportBar
-        isPlaying={isPlaying}
-        onTogglePlay={togglePlay}
+        isPlaying={anyPlaying}
+        onTogglePlay={toggleMasterPlay}
         bpm={bpm}
         onChangeBpm={setBpm}
         scaleRoot={scaleRoot}

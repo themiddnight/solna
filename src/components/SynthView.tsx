@@ -9,10 +9,13 @@ import {
   saveCustomPreset,
 } from '../audio/synthPresets';
 import { SynthPresetLibrary } from './SynthPresetLibrary';
+import { isNoteInScale, getScaleNotes } from '../utils/musicTheory';
 
 interface SynthViewProps {
   params: SynthParams;
   onChangeParams: (newParams: SynthParams) => void;
+  scaleRoot?: string;
+  scaleType?: string;
 }
 
 const KEYBOARD_NOTES = [
@@ -36,13 +39,19 @@ const KEYBOARD_NOTES = [
   { note: 'F4', label: 'F4', key: "'", isBlack: false },
 ];
 
-export const SynthView: React.FC<SynthViewProps> = ({ params, onChangeParams }) => {
+export const SynthView: React.FC<SynthViewProps> = ({ 
+  params, 
+  onChangeParams,
+  scaleRoot = 'C',
+  scaleType = 'Major'
+}) => {
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [customPresets, setCustomPresets] = useState<SynthPresetItem[]>([]);
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [quickSaveName, setQuickSaveName] = useState<string>('');
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [keyboardMode, setKeyboardMode] = useState<'chromatic' | 'scale-locked'>('chromatic');
 
   // Sync custom presets from local storage
   const reloadPresets = useCallback(() => {
@@ -585,14 +594,22 @@ export const SynthView: React.FC<SynthViewProps> = ({ params, onChangeParams }) 
 
       {/* Interactive Piano Keyboard */}
       <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-xl">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
               Interactive Keyboard
             </span>
-            <span className="text-[11px] text-slate-400">
-              (Use mouse, touch, or QWERTY keys: <span className="font-mono text-indigo-300">A W S E D F T G Y H U J K</span>)
-            </span>
+            <button
+              onClick={() => setKeyboardMode(keyboardMode === 'chromatic' ? 'scale-locked' : 'chromatic')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer border ${
+                keyboardMode === 'scale-locked'
+                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-xs'
+                  : 'bg-[#0B0D19] border-[#252B48] text-slate-400 hover:text-slate-200'
+              }`}
+              title="Toggle Scale Locked Mode (cuts notes outside active scale)"
+            >
+              {keyboardMode === 'scale-locked' ? `Scale Locked (${scaleRoot} ${scaleType})` : 'Chromatic Mode'}
+            </button>
           </div>
           <div className="text-[11px] font-mono text-slate-400">
             Active: {Array.from(activeNotes).join(', ') || 'None'}
@@ -601,9 +618,16 @@ export const SynthView: React.FC<SynthViewProps> = ({ params, onChangeParams }) 
 
         {/* Keyboard Keys Layout */}
         <div className="relative h-44 flex select-none bg-[#0B0D19] p-2 rounded-lg border border-[#252B48] overflow-x-auto">
-          {KEYBOARD_NOTES.map((k) => {
+          {(keyboardMode === 'scale-locked'
+            ? getScaleNotes(scaleRoot, scaleType).flatMap((note, i) => [
+                { note: `${note}3`, label: note, isBlack: false },
+                { note: `${note}4`, label: note, isBlack: false },
+              ])
+            : KEYBOARD_NOTES.filter((k) => keyboardMode === 'chromatic' || isNoteInScale(k.note, scaleRoot, scaleType))
+          ).map((k) => {
             const isActive = activeNotes.has(k.note);
-            if (k.isBlack) {
+            // Render all scale-locked keys as white
+            if (keyboardMode !== 'scale-locked' && k.isBlack) {
               return (
                 <div
                   key={k.note}

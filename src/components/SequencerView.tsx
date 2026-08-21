@@ -201,6 +201,23 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
 
         {/* Preset & Action Buttons */}
         <div className="flex items-center flex-wrap gap-2">
+          {/* Play / Pause Matrix */}
+          <button
+            id="btn-sequencer-play"
+            onClick={() => {
+              audioEngine.init();
+              onTogglePlay();
+            }}
+            className={`px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-colors ${
+              isPlaying
+                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 animate-pulse'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+            }`}
+          >
+            {isPlaying ? <Square className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+            <span>{isPlaying ? 'Pause Matrix' : 'Play Matrix'}</span>
+          </button>
+
           {/* Genre selector */}
           <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#2D355A] px-2.5 py-1 rounded-lg">
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />

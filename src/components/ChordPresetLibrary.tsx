@@ -21,6 +21,7 @@ import {
 } from './ChordView';
 import { audioEngine } from '../audio/engine';
 import { generateBlockChordNotes } from '../../shared/src/index';
+import { reharmonizeProgressionToScale } from '../utils/musicTheory';
 
 const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const LOCAL_STORAGE_CUSTOM_CHORDS_KEY = 'murva_chord_custom_progressions_v1';
@@ -79,6 +80,8 @@ export function deleteCustomChordProgression(id: string): CustomChordProgression
 interface ChordPresetLibraryProps {
   currentChords: ChordItem[];
   scaleRoot: string;
+  scaleType: string;
+  autoReharmonize: boolean;
   synthParams: SynthParams;
   onApplyChords: (chords: ChordItem[]) => void;
   isOpen: boolean;
@@ -88,6 +91,8 @@ interface ChordPresetLibraryProps {
 export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   currentChords,
   scaleRoot,
+  scaleType,
+  autoReharmonize,
   synthParams,
   onApplyChords,
   isOpen,
@@ -119,10 +124,10 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     'Classical & Baroque',
   ];
 
-  // Helper to convert template into chords transposed to scaleRoot
+  // Helper to convert template into chords transposed to scaleRoot and optionally auto-reharmonized
   const resolveTemplateChords = (template: ProgressionTemplate): ChordItem[] => {
     const baseRootIndex = ROOTS.indexOf(scaleRoot) >= 0 ? ROOTS.indexOf(scaleRoot) : 0;
-    return template.relativeChords.map((rc, i) => {
+    let chords: ChordItem[] = template.relativeChords.map((rc, i) => {
       const transposedRoot = ROOTS[(baseRootIndex + rc.interval) % 12];
       return {
         id: `tpl-chord-${Date.now()}-${i}`,
@@ -132,6 +137,24 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
         notes: generateBlockChordNotes(rc.quality, transposedRoot, 4),
       };
     });
+
+    if (autoReharmonize) {
+      chords = reharmonizeProgressionToScale(chords, scaleRoot, scaleType);
+    }
+    return chords;
+  };
+
+  const resolveCustomChords = (customChords: ChordItem[]): ChordItem[] => {
+    let chords = customChords.map((c, i) => ({
+      ...c,
+      id: c.id || `custom-chord-${Date.now()}-${i}`,
+      notes: generateBlockChordNotes(c.quality, c.root, 4),
+    }));
+
+    if (autoReharmonize) {
+      chords = reharmonizeProgressionToScale(chords, scaleRoot, scaleType);
+    }
+    return chords;
   };
 
   // Filter Factory Templates
@@ -359,68 +382,81 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
                 <span>My Custom Progressions ({filteredCustom.length})</span>
               </div>
               <div className="space-y-2">
-                {filteredCustom.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-3 rounded-xl bg-[#0B0D19] border border-[#2D355A] hover:border-purple-500/50 transition-all flex flex-col gap-2 group relative shadow-xs"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-xs text-slate-200 truncate">
-                            {item.name}
-                          </span>
-                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-purple-950/80 border border-purple-800 text-purple-300">
-                            Custom
-                          </span>
+                {filteredCustom.map((item) => {
+                  const resolvedCustom = resolveCustomChords(item.chords);
+                  const previewNames = resolvedCustom.map((c) => `${c.root}${c.quality}`).join(' → ');
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-3 rounded-xl bg-[#0B0D19] border border-[#2D355A] hover:border-purple-500/50 transition-all flex flex-col gap-2 group relative shadow-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-xs text-slate-200 truncate">
+                              {item.name}
+                            </span>
+                            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-purple-950/80 border border-purple-800 text-purple-300">
+                              Custom
+                            </span>
+                            {autoReharmonize && (
+                              <span className="text-[9px] font-semibold text-purple-300 bg-purple-500/20 px-1.5 py-0.2 rounded border border-purple-500/30 flex items-center gap-0.5">
+                                <Sparkles className="w-2.5 h-2.5 text-purple-400" /> Auto
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] font-mono text-indigo-400 font-semibold mt-0.5">
+                            {item.roman}
+                          </div>
+                          {item.description && (
+                            <p className="text-[10px] text-slate-400 mt-1 line-clamp-1">
+                              {item.description}
+                            </p>
+                          )}
+                          <div className="text-[10px] font-mono text-slate-500 mt-1">
+                            In {scaleRoot} {scaleType}: <span className="text-slate-300 font-semibold">{previewNames}</span>
+                          </div>
                         </div>
-                        <div className="text-[11px] font-mono text-indigo-400 font-semibold mt-0.5">
-                          {item.roman}
+
+                        <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                          {/* Play/Audition Button */}
+                          <button
+                            onClick={(e) => handleAudition(resolvedCustom, item.name, e)}
+                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                              auditioningName === item.name
+                                ? 'bg-purple-600 border-purple-400 text-white animate-pulse'
+                                : 'bg-[#171B36] hover:bg-[#20264A] text-purple-400 border-[#2D355A]'
+                            }`}
+                            title="Audition Progression Sound"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                          </button>
+
+                          {/* Apply Button */}
+                          <button
+                            onClick={() => {
+                              onApplyChords(resolvedCustom);
+                              onClose();
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <span>Load</span>
+                          </button>
+
+                          {/* Delete Button */}
+                          <button
+                            onClick={(e) => handleDeleteCustom(item.id, item.name, e)}
+                            className="p-1.5 rounded-lg bg-[#171B36] hover:bg-red-950/80 text-slate-400 hover:text-red-400 border border-[#2D355A] hover:border-red-800/50 transition-colors cursor-pointer"
+                            title="Delete Custom Progression"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-                        {item.description && (
-                          <p className="text-[10px] text-slate-400 mt-1 line-clamp-1">
-                            {item.description}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-1 shrink-0">
-                        {/* Play/Audition Button */}
-                        <button
-                          onClick={(e) => handleAudition(item.chords, item.name, e)}
-                          className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                            auditioningName === item.name
-                              ? 'bg-purple-600 border-purple-400 text-white animate-pulse'
-                              : 'bg-[#171B36] hover:bg-[#20264A] text-purple-400 border-[#2D355A]'
-                          }`}
-                          title="Audition Progression Sound"
-                        >
-                          <Play className="w-3.5 h-3.5 fill-current" />
-                        </button>
-
-                        {/* Apply Button */}
-                        <button
-                          onClick={() => {
-                            onApplyChords(item.chords);
-                            onClose();
-                          }}
-                          className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1"
-                        >
-                          <span>Load</span>
-                        </button>
-
-                        {/* Delete Button */}
-                        <button
-                          onClick={(e) => handleDeleteCustom(item.id, item.name, e)}
-                          className="p-1.5 rounded-lg bg-[#171B36] hover:bg-red-950/80 text-slate-400 hover:text-red-400 border border-[#2D355A] hover:border-red-800/50 transition-colors cursor-pointer"
-                          title="Delete Custom Progression"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -454,13 +490,18 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-bold text-xs text-slate-200 group-hover:text-indigo-300 transition-colors truncate">
                               {tpl.name}
                             </span>
                             <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#1C213E] text-indigo-300 shrink-0">
                               {tpl.category}
                             </span>
+                            {autoReharmonize && (
+                              <span className="text-[9px] font-semibold text-purple-300 bg-purple-500/20 px-1.5 py-0.2 rounded border border-purple-500/30 flex items-center gap-0.5">
+                                <Sparkles className="w-2.5 h-2.5 text-purple-400" /> Auto
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] font-mono text-purple-400 font-semibold mt-0.5">
                             {tpl.roman}

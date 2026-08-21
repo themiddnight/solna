@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { Music, Play, Sparkles, Plus, Trash2, ArrowRight, Library, Bookmark, Check } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { Music, Play, Square, Sparkles, Plus, Trash2, ArrowRight, Library, Bookmark, Check } from 'lucide-react';
 import { ChordItem, SynthParams } from '../types';
 import { audioEngine } from '../audio/engine';
 import { generateBlockChordNotes } from '../../shared/src/index';
+import { reharmonizeProgressionToScale } from '../utils/musicTheory';
 import {
   ChordPresetLibrary,
   getCustomChordProgressions,
@@ -18,6 +19,9 @@ interface ChordViewProps {
   scaleType: string;
   onChangeScaleType: (type: string) => void;
   synthParams: SynthParams;
+  bpm: number;
+  isPlaying: boolean;
+  onTogglePlay: () => void;
 }
 
 const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -342,17 +346,63 @@ export const ChordView: React.FC<ChordViewProps> = ({
   scaleType,
   onChangeScaleType,
   synthParams,
+  bpm,
+  isPlaying,
+  onTogglePlay,
 }) => {
   const [activeChordId, setActiveChordId] = useState<string | null>(null);
+  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  const playTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [customProgressions, setCustomProgressions] = useState<CustomChordProgressionItem[]>([]);
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [quickSaveName, setQuickSaveName] = useState<string>('');
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [autoReharmonize, setAutoReharmonize] = useState<boolean>(true);
+  const [isAutoReharmonizedIndicator, setIsAutoReharmonizedIndicator] = useState<boolean>(false);
 
   useEffect(() => {
     setCustomProgressions(getCustomChordProgressions());
   }, [isLibraryOpen]);
+
+  // Master Playback Loop effect
+  useEffect(() => {
+    if (!isPlaying || chords.length === 0) {
+      setPlayingIndex(null);
+      if (playTimerRef.current) clearTimeout(playTimerRef.current);
+      return;
+    }
+
+    let currentIndex = 0;
+    const beatDurationMs = (60 / bpm) * 1000;
+
+    const stepPlay = () => {
+      const chord = chords[currentIndex % chords.length];
+      playChord(chord);
+      setPlayingIndex(currentIndex % chords.length);
+
+      const durationBeats = (chord.bars || 1) * 4;
+      const durationMs = durationBeats * beatDurationMs;
+
+      currentIndex++;
+      playTimerRef.current = setTimeout(stepPlay, durationMs);
+    };
+
+    stepPlay();
+
+    return () => {
+      if (playTimerRef.current) clearTimeout(playTimerRef.current);
+    };
+  }, [isPlaying, bpm, chords]);
+
+  // Auto-reharmonize current chords when scale/root changes if autoReharmonize is enabled
+  useEffect(() => {
+    if (autoReharmonize && chords.length > 0) {
+      const updated = reharmonizeProgressionToScale(chords, scaleRoot, scaleType);
+      onChangeChords(updated);
+      setIsAutoReharmonizedIndicator(true);
+    }
+  }, [scaleRoot, scaleType]);
 
   // Calculate notes in selected scale
   const rootIdx = ROOTS.indexOf(scaleRoot);
@@ -376,11 +426,11 @@ export const ChordView: React.FC<ChordViewProps> = ({
     }, 1200);
   }, [synthParams]);
 
-  // Transpose the template's relative intervals cleanly to the current selected Key Root
+  // Transpose the template's relative intervals cleanly to the current selected Key Root and optionally auto-reharmonize
   const applyProgressionTemplate = (template: ProgressionTemplate) => {
     const baseRootIndex = ROOTS.indexOf(scaleRoot) >= 0 ? ROOTS.indexOf(scaleRoot) : 0;
 
-    const newChords: ChordItem[] = template.relativeChords.map((c, i) => {
+    let newChords: ChordItem[] = template.relativeChords.map((c, i) => {
       const transposedRoot = ROOTS[(baseRootIndex + c.interval) % 12];
       return {
         id: `chord-${Date.now()}-${i}`,
@@ -391,7 +441,31 @@ export const ChordView: React.FC<ChordViewProps> = ({
       };
     });
 
+    if (autoReharmonize) {
+      newChords = reharmonizeProgressionToScale(newChords, scaleRoot, scaleType);
+      setIsAutoReharmonizedIndicator(true);
+    } else {
+      setIsAutoReharmonizedIndicator(false);
+    }
+
     onChangeChords(newChords);
+  };
+
+  const handleApplyLibraryChords = (libraryChords: ChordItem[]) => {
+    let finalChords = libraryChords.map((c, i) => ({
+      ...c,
+      id: `lib-chord-${Date.now()}-${i}`,
+      notes: generateBlockChordNotes(c.quality, c.root, 4),
+    }));
+
+    if (autoReharmonize) {
+      finalChords = reharmonizeProgressionToScale(finalChords, scaleRoot, scaleType);
+      setIsAutoReharmonizedIndicator(true);
+    } else {
+      setIsAutoReharmonizedIndicator(false);
+    }
+
+    onChangeChords(finalChords);
   };
 
   const handleQuickSaveSubmit = (e: React.FormEvent) => {
@@ -461,41 +535,24 @@ export const ChordView: React.FC<ChordViewProps> = ({
           </div>
         </div>
 
-        {/* Action Controls & Root/Scale Selectors */}
+        {/* Action Controls & Independent Chords Play */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Root Picker */}
-          <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#2D355A] px-2.5 py-1 rounded-lg">
-            <span className="text-xs text-slate-400 font-mono">Key:</span>
-            <select
-              id="select-scale-root"
-              value={scaleRoot}
-              onChange={(e) => onChangeScaleRoot(e.target.value)}
-              className="bg-transparent text-xs font-bold text-indigo-300 focus:outline-none cursor-pointer"
-            >
-              {ROOTS.map((r) => (
-                <option key={r} value={r} className="bg-[#12152A]">
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Scale Type Picker */}
-          <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#2D355A] px-2.5 py-1 rounded-lg">
-            <span className="text-xs text-slate-400 font-mono">Scale:</span>
-            <select
-              id="select-scale-type"
-              value={scaleType}
-              onChange={(e) => onChangeScaleType(e.target.value)}
-              className="bg-transparent text-xs font-bold text-indigo-300 focus:outline-none cursor-pointer"
-            >
-              {Object.keys(SCALES).map((s) => (
-                <option key={s} value={s} className="bg-[#12152A]">
-                  {SCALES[s].name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Play / Pause Chords */}
+          <button
+            id="btn-chords-play"
+            onClick={() => {
+              audioEngine.init();
+              onTogglePlay();
+            }}
+            className={`px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-colors ${
+              isPlaying
+                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 animate-pulse'
+                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+            }`}
+          >
+            {isPlaying ? <Square className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+            <span>{isPlaying ? 'Pause Chords' : 'Play Chords'}</span>
+          </button>
 
           {/* Quick Save Current Progression */}
           <button
@@ -509,6 +566,48 @@ export const ChordView: React.FC<ChordViewProps> = ({
           >
             <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
             <span className="hidden sm:inline">Save</span>
+          </button>
+
+          {/* Option B Re-harmonize Button */}
+          <button
+            id="btn-reharmonize-chord-progression"
+            onClick={() => {
+              const updated = reharmonizeProgressionToScale(chords, scaleRoot, scaleType);
+              onChangeChords(updated);
+              setIsAutoReharmonizedIndicator(true);
+              setSaveToast(`Re-harmonized progression to ${scaleRoot} ${scaleType} (Option B)!`);
+              setTimeout(() => setSaveToast(null), 3000);
+            }}
+            className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-md transition-colors cursor-pointer"
+            title="Option B: Diatonically snap current chord progression to active key and scale"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-200" />
+            <span>Re-harmonize (Option B)</span>
+          </button>
+
+          {/* Auto-Reharmonize Toggle */}
+          <button
+            id="btn-toggle-auto-reharmonize"
+            onClick={() => {
+              const nextVal = !autoReharmonize;
+              setAutoReharmonize(nextVal);
+              if (nextVal && chords.length > 0) {
+                const updated = reharmonizeProgressionToScale(chords, scaleRoot, scaleType);
+                onChangeChords(updated);
+                setIsAutoReharmonizedIndicator(true);
+              } else {
+                setIsAutoReharmonizedIndicator(false);
+              }
+            }}
+            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
+              autoReharmonize
+                ? 'bg-purple-600/30 border-purple-500/50 text-purple-200'
+                : 'bg-[#0B0D19] border-[#2D355A] text-slate-400'
+            }`}
+            title="Toggle automatic re-harmonization when loading presets or changing scales"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${autoReharmonize ? 'text-purple-300' : 'text-slate-500'}`} />
+            <span>Auto-Reharmonize: {autoReharmonize ? 'ON' : 'OFF'}</span>
           </button>
 
           {/* Open Presets Library Drawer Button */}
@@ -626,10 +725,18 @@ export const ChordView: React.FC<ChordViewProps> = ({
 
       {/* Active Progression Blocks & Playable Chord Pads */}
       <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-xl space-y-3">
-        <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-            Active Chord Progression Loop ({chords.length} Chords)
-          </span>
+        <div className="flex items-center justify-between border-b border-[#252B48] pb-2 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+              Active Chord Progression Loop ({chords.length} Chords)
+            </span>
+            {isAutoReharmonizedIndicator && (
+              <span className="flex items-center gap-1 bg-purple-500/20 border border-purple-500/40 text-purple-300 text-[10px] font-semibold px-2 py-0.5 rounded-full animate-in fade-in" title="Automatically reharmonized to active scale">
+                <Sparkles className="w-3 h-3 text-purple-400" />
+                <span>Auto-Reharmonized to {scaleRoot} {scaleType}</span>
+              </span>
+            )}
+          </div>
           <button
             id="btn-add-chord"
             onClick={addChord}
@@ -642,7 +749,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2">
           {chords.map((chord, idx) => {
-            const isActive = activeChordId === chord.id;
+            const isActive = playingIndex === idx || activeChordId === chord.id;
             return (
               <div
                 key={chord.id}
@@ -752,8 +859,10 @@ export const ChordView: React.FC<ChordViewProps> = ({
         onClose={() => setIsLibraryOpen(false)}
         currentChords={chords}
         scaleRoot={scaleRoot}
+        scaleType={scaleType}
+        autoReharmonize={autoReharmonize}
         synthParams={synthParams}
-        onApplyChords={(newChords) => onChangeChords(newChords)}
+        onApplyChords={handleApplyLibraryChords}
       />
     </div>
   );
