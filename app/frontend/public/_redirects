@@ -1,0 +1,4 @@
+# Handle client-side routing
+/invite/*    /index.html   200
+/room/*      /index.html   200
+/*           /index.html   200 

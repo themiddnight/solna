@@ -1,0 +1,6 @@
+{
+  "name": "murva",
+  "description": "Collaborative real-time music making app — virtual instruments, step sequencer, multi-track timeline, and audio synthesis.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,49 @@
+# murva — collaborative music making app
+# Real-time collaborative music creation
+
+User-agent: *
+Allow: /
+
+# Public pages
+Allow: /login
+Allow: /register
+
+# Static assets
+Allow: /assets/
+Allow: /images/
+
+# Private / auth-gated areas — not publicly accessible
+Disallow: /profile
+Disallow: /community
+Disallow: /account
+
+# Ephemeral / per-instance routes — not stable, indexable URLs
+Disallow: /perform/
+Disallow: /arrange/
+Disallow: /invite/
+Disallow: /join/
+
+# Auth utility routes — no content to index
+Disallow: /auth/
+Disallow: /verify-email
+Disallow: /reset-password
+Disallow: /offline
+
+# Crawl delay for better server performance
+Crawl-delay: 1
+
+# Sitemap location
+Sitemap: https://murva-beta.themiddnight.dev/sitemap.xml
+
+# Additional search engine directives
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Slurp
+Allow: /
+Crawl-delay: 2

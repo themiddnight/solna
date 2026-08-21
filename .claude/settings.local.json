@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(railway --version)",
+      "Bash(railway whoami:*)",
+      "Bash(railway --help)",
+      "Bash(railway status:*)",
+      "Bash(railway logs:*)",
+      "Bash(railway deployment:*)",
+      "Bash(railway list:*)",
+      "Bash(railway service:*)",
+      "Bash(railway open:*)",
+      "Bash(railway environment:*)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(grep -n \"listRooms\\\\|getRooms\\\\|/rooms\" app/backend/src/routes/*.ts)",
+      "Bash(grep -n \"getAllRooms\" app/backend/src/domains/room-management/application/*.ts)",
+      "Bash(find app/frontend/src -type f \\\\\\(-name *Api.ts -o -name api.ts -o -name *Service.ts \\\\\\))",
+      "Bash(xargs ls:*)",
+      "Bash(bunx tsc:*)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(bun run *)",
+      "Bash(bunx playwright *)",
+      "Bash(git ls-tree *)",
+      "Bash(echo \"EXIT: $?\")",
+      "mcp__linear__get_issue",
+      "WebSearch",
+      "Bash(npx eslint *)",
+      "Bash(bunx eslint *)",
+      "Bash(bunx jest *)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "linear"
+  ],
+  "worktree": {
+    "bgIsolation": "none"
+  }
+}

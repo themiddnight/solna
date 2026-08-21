@@ -1,0 +1,36 @@
+{
+  "default": {
+    "title": "COLLAB | Collaborative Music App",
+    "description": "Create, jam, and collaborate with musicians in real-time. Music In Your Hands.",
+    "keywords": "music, collaboration, jam band, real-time, musicians, online music, collaborative music, music app, virtual band, music creation",
+    "ogTitle": "COLLAB - Jam Band",
+    "ogDescription": "Collaborative music app - Music In Your Hands",
+    "ogImage": "https://jam-band-fe.vercel.app/assets/cover.jpg",
+    "ogType": "website",
+    "twitterTitle": "COLLAB - Jam Band",
+    "twitterDescription": "Collaborative music app - Music In Your Hands",
+    "twitterImage": "https://jam-band-fe.vercel.app/assets/cover.jpg"
+  },
+  "pages": {
+    "/": {
+      "title": "COLLAB | Collaborative Music App",
+      "description": "Create, jam, and collaborate with musicians in real-time. Music In Your Hands.",
+      "priority": 1.0
+    },
+    "/lobby": {
+      "title": "Music Lobby | COLLAB",
+      "description": "Join music rooms and start jamming with other musicians in real-time.",
+      "priority": 0.9
+    },
+    "/room": {
+      "title": "Music Room | COLLAB",
+      "description": "Real-time collaborative music creation with multiple instruments and musicians.",
+      "priority": 0.8
+    },
+    "/invite": {
+      "title": "Invite Friends | COLLAB",
+      "description": "Invite friends to join your music session and start creating together.",
+      "priority": 0.7
+    }
+  }
+} 
