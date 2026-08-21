@@ -75,10 +75,10 @@ export const PianoRollModal: React.FC<PianoRollModalProps> = ({
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const totalSteps = durationBars * 16; // 16 16th steps per bar
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const armedRef = useRef(false);
   const gridContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const trackSynthParams: SynthParams = track.synthParams || {
+  const trackSynthParams: SynthParams = {
     oscType: 'sawtooth',
     subOscVolume: 0.2,
     noiseVolume: 0.01,
@@ -91,11 +91,16 @@ export const PianoRollModal: React.FC<PianoRollModalProps> = ({
     decay: 0.3,
     sustain: 0.6,
     release: 0.4,
+    filterAttack: 0.02,
+    filterDecay: 0.3,
+    filterSustain: 0,
+    filterRelease: 0.4,
     lfoRate: 4,
     lfoDepth: 0.1,
     lfoTarget: 'cutoff',
     octave: 0,
     preset: track.name,
+    ...(track.synthParams ?? {}),
   };
 
   // Check if a note is in the selected musical scale
@@ -158,46 +163,40 @@ export const PianoRollModal: React.FC<PianoRollModalProps> = ({
 
   useEffect(() => {
     if (!isPlaying) {
+      armedRef.current = false;
       setCurrentStep(-1);
-      if (timerRef.current) clearTimeout(timerRef.current);
       return;
     }
 
-    const stepTick = () => {
-      setCurrentStep((prev) => {
-        const next = (prev + 1) % totalSteps;
+    return audioEngine.subscribeClock((step, _beat, time) => {
+      // Start aligned to the next quarter-note boundary of the shared grid
+      if (!armedRef.current) {
+        if (step % 4 !== 0) return;
+        armedRef.current = true;
+      }
+      const s = step % totalSteps;
+      setCurrentStep(s);
 
-        // Trigger any notes starting on this step
-        const notesOnThisStep = notes.filter((n) => n.startStep === next);
-        notesOnThisStep.forEach((n) => {
-          const durationSec = (n.durationSteps * stepDurationMs) / 1000;
-          if (track.type === 'drums') {
-            audioEngine.triggerDrum('snare', n.velocity || defaultVelocity);
-          } else {
-            audioEngine.triggerTrackNote(
-              track.id,
-              n.note,
-              trackSynthParams,
-              n.velocity || defaultVelocity,
-              track.volume,
-              durationSec,
-              track.pan
-            );
-          }
-        });
-
-        return next;
+      const notesOnThisStep = notes.filter((n) => n.startStep === s);
+      notesOnThisStep.forEach((n) => {
+        const durationSec = (n.durationSteps * stepDurationMs) / 1000;
+        if (track.type === 'drums') {
+          audioEngine.triggerDrum('snare', n.velocity || defaultVelocity, time);
+        } else {
+          audioEngine.triggerTrackNote(
+            track.id,
+            n.note,
+            trackSynthParams,
+            n.velocity || defaultVelocity,
+            track.volume,
+            durationSec,
+            track.pan,
+            time
+          );
+        }
       });
-
-      timerRef.current = setTimeout(stepTick, stepDurationMs);
-    };
-
-    timerRef.current = setTimeout(stepTick, stepDurationMs);
-
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [isPlaying, bpm, stepDurationMs, totalSteps, notes, track, trackSynthParams, defaultVelocity]);
+    });
+  }, [isPlaying, totalSteps, notes, track, trackSynthParams, defaultVelocity, stepDurationMs]);
 
   // Melodic Pattern Generators
   const generatePattern = (type: 'arpeggio' | 'bass' | 'chords' | 'melody') => {

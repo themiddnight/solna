@@ -20,6 +20,10 @@ export interface SynthParams {
   decay: number;
   sustain: number;
   release: number;
+  filterAttack: number;
+  filterDecay: number;
+  filterSustain: number;
+  filterRelease: number;
   lfoRate: number;
   lfoDepth: number;
   lfoTarget: 'cutoff' | 'pitch' | 'volume';

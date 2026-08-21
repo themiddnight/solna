@@ -23,11 +23,21 @@ class AudioEngine {
   private dryGain: GainNode | null = null;
 
   // Active voices tracking
-  private activeVoices = new Map<string, { oscs: OscillatorNode[]; gains: GainNode[]; filter: BiquadFilterNode }>();
+  private activeVoices = new Map<string, { oscs: OscillatorNode[]; gains: GainNode[]; filter: BiquadFilterNode; filterCutoff: number; filterRelease: number; lfo?: OscillatorNode; lfoGain?: GainNode; lfoTarget?: SynthParams['lfoTarget'] }>();
 
   // Metronome click buffer
   private clickBufferHigh: AudioBuffer | null = null;
   private clickBufferLow: AudioBuffer | null = null;
+
+  // Shared lookahead clock (Tone.js-style): one master 16th-note grid on the
+  // audio timeline that every player subscribes to, so they cannot drift apart.
+  private clockTimer: ReturnType<typeof setInterval> | null = null;
+  private clockBpm = 120;
+  private clockStepIndex = 0; // monotonic 16th-step counter while the clock runs
+  private clockNextStepTime = 0; // audio-clock seconds of the next step to schedule
+  private clockListeners = new Set<(step: number, beat: number, time: number) => void>();
+  private static readonly CLOCK_LOOKAHEAD = 0.1; // schedule events this far ahead
+  private static readonly CLOCK_UPDATE_MS = 25;
 
   async init(): Promise<void> {
     if (this.isInitialized && this.ctx && this.ctx.state === 'running') return;
@@ -42,6 +52,58 @@ class AudioEngine {
     this.setupMasterChain();
     this.createClickBuffers();
     this.isInitialized = true;
+  }
+
+  /**
+   * Subscribe to the shared 16th-note clock. The listener receives the exact
+   * audio-clock time each step should sound, so callers can schedule
+   * sample-accurately. The clock runs while at least one listener subscribes.
+   */
+  subscribeClock(listener: (step: number, beat: number, time: number) => void): () => void {
+    this.clockListeners.add(listener);
+    if (this.clockListeners.size === 1) {
+      this.startClockTimer();
+    }
+    return () => {
+      this.clockListeners.delete(listener);
+      if (this.clockListeners.size === 0) {
+        this.stopClockTimer();
+      }
+    };
+  }
+
+  setClockBpm(bpm: number): void {
+    this.clockBpm = Math.max(20, Math.min(300, bpm));
+  }
+
+  private startClockTimer(): void {
+    this.stopClockTimer();
+    this.clockStepIndex = 0;
+    this.clockNextStepTime = this.ctx ? this.ctx.currentTime + 0.05 : 0;
+    this.clockTimer = setInterval(() => this.clockTick(), AudioEngine.CLOCK_UPDATE_MS);
+  }
+
+  private stopClockTimer(): void {
+    if (this.clockTimer) {
+      clearInterval(this.clockTimer);
+      this.clockTimer = null;
+    }
+  }
+
+  private clockTick(): void {
+    if (!this.ctx) return;
+    // Resync after long stalls (tab slept, context created late) instead of bursting missed steps
+    if (this.clockNextStepTime < this.ctx.currentTime - 0.5) {
+      this.clockNextStepTime = this.ctx.currentTime + 0.05;
+    }
+    const stepDuration = 60 / this.clockBpm / 4;
+    while (this.clockNextStepTime < this.ctx.currentTime + AudioEngine.CLOCK_LOOKAHEAD) {
+      const time = this.clockNextStepTime;
+      const step = this.clockStepIndex;
+      this.clockListeners.forEach((fn) => fn(step, Math.floor(step / 4), time));
+      this.clockNextStepTime += stepDuration;
+      this.clockStepIndex++;
+    }
   }
 
   private setupMasterChain(): void {
@@ -201,11 +263,12 @@ class AudioEngine {
     velocity = 0.8,
     trackVolume = 1.0,
     durationSec = 0.4,
-    pan = 0
+    pan = 0,
+    time?: number
   ): void {
     if (!this.ctx || !this.dryGain) return;
     const freq = this.noteToFrequency(noteName, params.octave);
-    const now = this.ctx.currentTime;
+    const now = time ?? this.ctx.currentTime;
 
     try {
       // Primary Oscillator
@@ -225,10 +288,11 @@ class AudioEngine {
       filter.frequency.setValueAtTime(params.filterCutoff, now);
       filter.Q.setValueAtTime(params.filterResonance, now);
 
-      // Filter Envelope
-      const filterTarget = Math.min(20000, Math.max(20, params.filterCutoff + params.filterEnvAmount));
-      filter.frequency.exponentialRampToValueAtTime(Math.max(20, filterTarget), now + Math.max(0.01, params.attack));
-      filter.frequency.exponentialRampToValueAtTime(Math.max(20, params.filterCutoff), now + params.attack + params.decay);
+      // Filter Envelope (VCF ADSR)
+      const filterPeak = Math.min(20000, Math.max(20, params.filterCutoff + params.filterEnvAmount));
+      const filterSustainLevel = Math.min(20000, Math.max(20, params.filterCutoff + params.filterEnvAmount * params.filterSustain));
+      filter.frequency.exponentialRampToValueAtTime(filterPeak, now + Math.max(0.01, params.filterAttack));
+      filter.frequency.exponentialRampToValueAtTime(filterSustainLevel, now + params.filterAttack + params.filterDecay);
 
       // Amplitude Envelope
       const gainNode = this.ctx.createGain();
@@ -247,6 +311,11 @@ class AudioEngine {
       const releaseStart = now + Math.max(0.05, durationSec);
       gainNode.gain.setValueAtTime(Math.max(0.0001, gainNode.gain.value), releaseStart);
       gainNode.gain.exponentialRampToValueAtTime(0.00001, releaseStart + Math.max(0.05, params.release));
+
+      // VCF envelope release: ramp filter back to base cutoff
+      filter.frequency.cancelScheduledValues(releaseStart);
+      filter.frequency.setValueAtTime(Math.max(20, filter.frequency.value), releaseStart);
+      filter.frequency.exponentialRampToValueAtTime(Math.max(20, params.filterCutoff), releaseStart + Math.max(0.01, params.filterRelease));
 
       // Stereo Panner (if available)
       let outNode: AudioNode = gainNode;
@@ -271,7 +340,7 @@ class AudioEngine {
       osc1.start(now);
       oscSub.start(now);
 
-      const stopTime = releaseStart + Math.max(0.05, params.release) + 0.05;
+      const stopTime = releaseStart + Math.max(0.05, params.release, params.filterRelease) + 0.05;
       osc1.stop(stopTime);
       oscSub.stop(stopTime);
 
@@ -284,17 +353,17 @@ class AudioEngine {
         } catch {
           // ignore
         }
-      }, (stopTime - now + 0.1) * 1000);
+      }, (stopTime - this.ctx.currentTime + 0.1) * 1000);
     } catch (err) {
       console.error('Track note error:', err);
     }
   }
 
   // Synthesizer Note On
-  triggerSynthNoteOn(noteName: string, params: SynthParams, velocity = 0.8): void {
+  triggerSynthNoteOn(noteName: string, params: SynthParams, velocity = 0.8, time?: number): void {
     if (!this.ctx || !this.dryGain) return;
     const freq = this.noteToFrequency(noteName, params.octave);
-    const now = this.ctx.currentTime;
+    const now = time ?? this.ctx.currentTime;
 
     // Stop existing voice if note is already sounding
     this.triggerSynthNoteOff(noteName);
@@ -316,10 +385,11 @@ class AudioEngine {
     filter.frequency.setValueAtTime(params.filterCutoff, now);
     filter.Q.setValueAtTime(params.filterResonance, now);
 
-    // Filter Envelope
-    const filterTarget = Math.min(20000, Math.max(20, params.filterCutoff + params.filterEnvAmount));
-    filter.frequency.exponentialRampToValueAtTime(Math.max(20, filterTarget), now + Math.max(0.01, params.attack));
-    filter.frequency.exponentialRampToValueAtTime(Math.max(20, params.filterCutoff), now + params.attack + params.decay);
+    // Filter Envelope (VCF ADSR)
+    const filterPeak = Math.min(20000, Math.max(20, params.filterCutoff + params.filterEnvAmount));
+    const filterSustainLevel = Math.min(20000, Math.max(20, params.filterCutoff + params.filterEnvAmount * params.filterSustain));
+    filter.frequency.exponentialRampToValueAtTime(filterPeak, now + Math.max(0.01, params.filterAttack));
+    filter.frequency.exponentialRampToValueAtTime(filterSustainLevel, now + params.filterAttack + params.filterDecay);
 
     // Amplitude Envelope
     const gainNode = this.ctx.createGain();
@@ -332,10 +402,12 @@ class AudioEngine {
     gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, peakGain * params.sustain), now + params.attack + params.decay);
 
     // LFO
+    let lfo: OscillatorNode | undefined;
+    let lfoGain: GainNode | undefined;
     if (params.lfoDepth > 0) {
-      const lfo = this.ctx.createOscillator();
+      lfo = this.ctx.createOscillator();
       lfo.frequency.value = params.lfoRate;
-      const lfoGain = this.ctx.createGain();
+      lfoGain = this.ctx.createGain();
 
       if (params.lfoTarget === 'cutoff') {
         lfoGain.gain.value = params.lfoDepth * 1500;
@@ -373,22 +445,33 @@ class AudioEngine {
       oscs: [osc1, oscSub],
       gains: [gainNode, subGain],
       filter,
+      filterCutoff: params.filterCutoff,
+      filterRelease: params.filterRelease,
+      lfo,
+      lfoGain,
+      lfoTarget: params.lfoTarget,
     });
   }
 
   // Synthesizer Note Off
-  triggerSynthNoteOff(noteName: string, releaseTime = 0.3): void {
+  triggerSynthNoteOff(noteName: string, releaseTime = 0.3, time?: number): void {
     if (!this.ctx) return;
     const voice = this.activeVoices.get(noteName);
     if (!voice) return;
 
-    const now = this.ctx.currentTime;
+    const now = time ?? this.ctx.currentTime;
     const mainGain = voice.gains[0];
 
     try {
       mainGain.gain.cancelScheduledValues(now);
       mainGain.gain.setValueAtTime(Math.max(0.0001, mainGain.gain.value), now);
       mainGain.gain.exponentialRampToValueAtTime(0.00001, now + Math.max(0.01, releaseTime));
+
+      // VCF envelope release: ramp filter back to base cutoff
+      const filterRelease = Math.max(0.01, voice.filterRelease);
+      voice.filter.frequency.cancelScheduledValues(now);
+      voice.filter.frequency.setValueAtTime(Math.max(20, voice.filter.frequency.value), now);
+      voice.filter.frequency.exponentialRampToValueAtTime(Math.max(20, voice.filterCutoff), now + filterRelease);
 
       setTimeout(() => {
         voice.oscs.forEach((osc) => {
@@ -398,7 +481,13 @@ class AudioEngine {
           try { g.disconnect(); } catch { /* ignore */ }
         });
         try { voice.filter.disconnect(); } catch { /* ignore */ }
-      }, (releaseTime + 0.1) * 1000);
+        if (voice.lfo) {
+          try { voice.lfo.stop(); voice.lfo.disconnect(); } catch { /* ignore */ }
+        }
+        if (voice.lfoGain) {
+          try { voice.lfoGain.disconnect(); } catch { /* ignore */ }
+        }
+      }, (Math.max(releaseTime, filterRelease) + Math.max(0, now - this.ctx.currentTime) + 0.1) * 1000);
     } catch {
       // ignore
     }
@@ -406,10 +495,95 @@ class AudioEngine {
     this.activeVoices.delete(noteName);
   }
 
-  // Drum Synthesizer Trigger
-  triggerDrum(type: string, velocity = 0.8): void {
-    if (!this.ctx || !this.dryGain) return;
+  private cancelAndHold(param: AudioParam, now: number): void {
+    try {
+      param.cancelAndHoldAtTime(now);
+    } catch {
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(param.value, now);
+    }
+  }
+
+  // Live-update every sounding voice so knob tweaks are audible immediately
+  // instead of only on the next note. ADSR timing values still apply to the
+  // next note (standard synth behavior); release cutoff stays in sync.
+  updateSynthParams(params: SynthParams): void {
+    if (!this.ctx) return;
     const now = this.ctx.currentTime;
+    const tc = 0.03; // smoothing time constant in seconds
+
+    const sustainCutoff = Math.min(
+      20000,
+      Math.max(20, params.filterCutoff + params.filterEnvAmount * params.filterSustain)
+    );
+
+    for (const voice of this.activeVoices.values()) {
+      const osc = voice.oscs[0];
+
+      osc.type = params.oscType;
+      this.cancelAndHold(osc.detune, now);
+      osc.detune.setTargetAtTime(params.detune, now, tc);
+
+      voice.filter.type = params.filterType;
+      this.cancelAndHold(voice.filter.frequency, now);
+      voice.filter.frequency.setTargetAtTime(sustainCutoff, now, tc);
+      this.cancelAndHold(voice.filter.Q, now);
+      voice.filter.Q.setTargetAtTime(params.filterResonance, now, tc);
+
+      const subGain = voice.gains[1];
+      this.cancelAndHold(subGain.gain, now);
+      subGain.gain.setTargetAtTime(params.subOscVolume, now, tc);
+
+      // Keep the note-off filter release ramp in sync with the new cutoff
+      voice.filterCutoff = params.filterCutoff;
+      voice.filterRelease = params.filterRelease;
+
+      if (params.lfoDepth > 0) {
+        let lfo = voice.lfo;
+        let lfoGain = voice.lfoGain;
+        if (!lfo || !lfoGain) {
+          lfo = this.ctx.createOscillator();
+          lfo.frequency.value = params.lfoRate;
+          lfoGain = this.ctx.createGain();
+          lfoGain.gain.value = 0;
+          lfo.connect(lfoGain);
+          lfo.start(now);
+          voice.lfo = lfo;
+          voice.lfoGain = lfoGain;
+        }
+        if (voice.lfoTarget !== params.lfoTarget) {
+          try {
+            lfoGain.disconnect();
+          } catch {
+            // ignore
+          }
+          if (params.lfoTarget === 'cutoff') {
+            lfoGain.connect(voice.filter.frequency);
+          } else if (params.lfoTarget === 'pitch') {
+            lfoGain.connect(osc.detune);
+          } else {
+            lfoGain.connect(voice.gains[0].gain);
+          }
+          voice.lfoTarget = params.lfoTarget;
+        }
+        lfo.frequency.setTargetAtTime(params.lfoRate, now, tc);
+        const depth =
+          params.lfoTarget === 'cutoff'
+            ? params.lfoDepth * 1500
+            : params.lfoTarget === 'pitch'
+              ? params.lfoDepth * 50
+              : params.lfoDepth * 0.2;
+        lfoGain.gain.setTargetAtTime(depth, now, tc);
+      } else if (voice.lfoGain) {
+        voice.lfoGain.gain.setTargetAtTime(0, now, tc);
+      }
+    }
+  }
+
+  // Drum Synthesizer Trigger
+  triggerDrum(type: string, velocity = 0.8, time?: number): void {
+    if (!this.ctx || !this.dryGain) return;
+    const now = time ?? this.ctx.currentTime;
 
     switch (type.toLowerCase()) {
       case 'kick': {

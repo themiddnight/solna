@@ -438,83 +438,161 @@ export const SynthView: React.FC<SynthViewProps> = ({
         </div>
 
         {/* 3. Envelope ADSR */}
-        <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md">
+        <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3 shadow-md">
           <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
               <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
               3. ADSR Envelope
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">AMP / VCA</span>
+            <span className="text-[10px] text-slate-400 font-mono">AMP + FILTER</span>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 text-center">
-            {/* Attack */}
-            <div>
-              <span className="text-[10px] text-slate-400 block font-mono">ATT</span>
-              <input
-                id="slider-env-attack"
-                type="range"
-                min={0.005}
-                max={2.0}
-                step={0.01}
-                value={params.attack}
-                onChange={(e) => onChangeParams({ ...params, attack: parseFloat(e.target.value) })}
-                className="h-20 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1"
-              />
-              <span className="text-[10px] font-mono text-emerald-300 block">{params.attack.toFixed(2)}s</span>
+          {/* AMP / VCA */}
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">AMP / VCA</span>
+              <span className="flex-1 h-px bg-[#252B48]" />
             </div>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              {/* Attack */}
+              <div>
+                <span className="text-[10px] text-slate-400 block font-mono">ATT</span>
+                <input
+                  id="slider-env-attack"
+                  type="range"
+                  min={0.005}
+                  max={2.0}
+                  step={0.01}
+                  value={params.attack}
+                  onChange={(e) => onChangeParams({ ...params, attack: parseFloat(e.target.value) })}
+                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-emerald-500"
+                />
+                <span className="text-[10px] font-mono text-emerald-300 block">{params.attack.toFixed(2)}s</span>
+              </div>
 
-            {/* Decay */}
-            <div>
-              <span className="text-[10px] text-slate-400 block font-mono">DEC</span>
-              <input
-                id="slider-env-decay"
-                type="range"
-                min={0.01}
-                max={2.0}
-                step={0.01}
-                value={params.decay}
-                onChange={(e) => onChangeParams({ ...params, decay: parseFloat(e.target.value) })}
-                className="h-20 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1"
-              />
-              <span className="text-[10px] font-mono text-emerald-300 block">{params.decay.toFixed(2)}s</span>
-            </div>
+              {/* Decay */}
+              <div>
+                <span className="text-[10px] text-slate-400 block font-mono">DEC</span>
+                <input
+                  id="slider-env-decay"
+                  type="range"
+                  min={0.01}
+                  max={2.0}
+                  step={0.01}
+                  value={params.decay}
+                  onChange={(e) => onChangeParams({ ...params, decay: parseFloat(e.target.value) })}
+                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-emerald-500"
+                />
+                <span className="text-[10px] font-mono text-emerald-300 block">{params.decay.toFixed(2)}s</span>
+              </div>
 
-            {/* Sustain */}
-            <div>
-              <span className="text-[10px] text-slate-400 block font-mono">SUS</span>
-              <input
-                id="slider-env-sustain"
-                type="range"
-                min={0}
-                max={1.0}
-                step={0.01}
-                value={params.sustain}
-                onChange={(e) => onChangeParams({ ...params, sustain: parseFloat(e.target.value) })}
-                className="h-20 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1"
-              />
-              <span className="text-[10px] font-mono text-emerald-300 block">{(params.sustain * 100).toFixed(0)}%</span>
-            </div>
+              {/* Sustain */}
+              <div>
+                <span className="text-[10px] text-slate-400 block font-mono">SUS</span>
+                <input
+                  id="slider-env-sustain"
+                  type="range"
+                  min={0}
+                  max={1.0}
+                  step={0.01}
+                  value={params.sustain}
+                  onChange={(e) => onChangeParams({ ...params, sustain: parseFloat(e.target.value) })}
+                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-emerald-500"
+                />
+                <span className="text-[10px] font-mono text-emerald-300 block">{(params.sustain * 100).toFixed(0)}%</span>
+              </div>
 
-            {/* Release */}
-            <div>
-              <span className="text-[10px] text-slate-400 block font-mono">REL</span>
-              <input
-                id="slider-env-release"
-                type="range"
-                min={0.01}
-                max={3.0}
-                step={0.01}
-                value={params.release}
-                onChange={(e) => onChangeParams({ ...params, release: parseFloat(e.target.value) })}
-                className="h-20 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1"
-              />
-              <span className="text-[10px] font-mono text-emerald-300 block">{params.release.toFixed(2)}s</span>
+              {/* Release */}
+              <div>
+                <span className="text-[10px] text-slate-400 block font-mono">REL</span>
+                <input
+                  id="slider-env-release"
+                  type="range"
+                  min={0.01}
+                  max={3.0}
+                  step={0.01}
+                  value={params.release}
+                  onChange={(e) => onChangeParams({ ...params, release: parseFloat(e.target.value) })}
+                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-emerald-500"
+                />
+                <span className="text-[10px] font-mono text-emerald-300 block">{params.release.toFixed(2)}s</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* 4. LFO & Master Pitch */}
+          {/* FILTER / VCF */}
+          <div className="border-t border-[#252B48] pt-2.5">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] font-mono text-pink-400 uppercase tracking-wider">FILTER / VCF</span>
+              <span className="flex-1 h-px bg-[#252B48]" />
+            </div>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              {/* Filter Attack */}
+              <div>
+                <span className="text-[10px] text-slate-400 block font-mono">ATT</span>
+                <input
+                  id="slider-env-filter-attack"
+                  type="range"
+                  min={0.005}
+                  max={2.0}
+                  step={0.01}
+                  value={params.filterAttack}
+                  onChange={(e) => onChangeParams({ ...params, filterAttack: parseFloat(e.target.value) })}
+                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-pink-500"
+                />
+                <span className="text-[10px] font-mono text-pink-300 block">{params.filterAttack.toFixed(2)}s</span>
+              </div>
+
+              {/* Filter Decay */}
+              <div>
+                <span className="text-[10px] text-slate-400 block font-mono">DEC</span>
+                <input
+                  id="slider-env-filter-decay"
+                  type="range"
+                  min={0.01}
+                  max={2.0}
+                  step={0.01}
+                  value={params.filterDecay}
+                  onChange={(e) => onChangeParams({ ...params, filterDecay: parseFloat(e.target.value) })}
+                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-pink-500"
+                />
+                <span className="text-[10px] font-mono text-pink-300 block">{params.filterDecay.toFixed(2)}s</span>
+              </div>
+
+              {/* Filter Sustain */}
+              <div>
+                <span className="text-[10px] text-slate-400 block font-mono">SUS</span>
+                <input
+                  id="slider-env-filter-sustain"
+                  type="range"
+                  min={0}
+                  max={1.0}
+                  step={0.01}
+                  value={params.filterSustain}
+                  onChange={(e) => onChangeParams({ ...params, filterSustain: parseFloat(e.target.value) })}
+                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-pink-500"
+                />
+                <span className="text-[10px] font-mono text-pink-300 block">{(params.filterSustain * 100).toFixed(0)}%</span>
+              </div>
+
+              {/* Filter Release */}
+              <div>
+                <span className="text-[10px] text-slate-400 block font-mono">REL</span>
+                <input
+                  id="slider-env-filter-release"
+                  type="range"
+                  min={0.01}
+                  max={3.0}
+                  step={0.01}
+                  value={params.filterRelease}
+                  onChange={(e) => onChangeParams({ ...params, filterRelease: parseFloat(e.target.value) })}
+                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-pink-500"
+                />
+                <span className="text-[10px] font-mono text-pink-300 block">{params.filterRelease.toFixed(2)}s</span>
+              </div>
+            </div>
+          </div>
+        </div>        {/* 4. LFO & Master Pitch */}
         <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md">
           <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">

@@ -202,7 +202,7 @@ export const TrackSynthInspector: React.FC<TrackSynthInspectorProps> = ({
   const [volume, setVolume] = useState<number>(track.volume);
   const [pan, setPan] = useState<number>(track.pan || 0);
 
-  const initialSynth: SynthParams = track.synthParams || {
+  const initialSynth: SynthParams = {
     oscType: 'sawtooth',
     subOscVolume: 0.3,
     noiseVolume: 0.02,
@@ -215,11 +215,16 @@ export const TrackSynthInspector: React.FC<TrackSynthInspectorProps> = ({
     decay: 0.4,
     sustain: 0.6,
     release: 0.5,
+    filterAttack: 0.02,
+    filterDecay: 0.4,
+    filterSustain: 0,
+    filterRelease: 0.5,
     lfoRate: 3.5,
     lfoDepth: 0.2,
     lfoTarget: 'cutoff',
     octave: 0,
     preset: 'Custom Setup',
+    ...(track.synthParams ?? {}),
   };
 
   const [synth, setSynth] = useState<SynthParams>(initialSynth);

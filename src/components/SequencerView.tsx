@@ -10,7 +10,6 @@ interface SequencerViewProps {
   isPlaying: boolean;
   onTogglePlay: () => void;
   synthParams: SynthParams;
-  onBeatTick?: () => void;
   masterSequencerVolume: number;
   onChangeMasterSequencerVolume: (volume: number) => void;
 }
@@ -70,69 +69,51 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
   isPlaying,
   onTogglePlay,
   synthParams,
-  onBeatTick,
   masterSequencerVolume,
   onChangeMasterSequencerVolume,
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [selectedGenre, setSelectedGenre] = useState<string>('Synthwave');
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  // Real-time playback stepper — driven by the shared audio-clock scheduler
+  const armedRef = useRef(false);
   const stepDurationMs = (60 / bpm / 4) * 1000;
 
-  // Real-time playback stepper
-  useEffect(() => {
-    if (!isPlaying) {
-      setCurrentStep(0);
-      if (timerRef.current) clearTimeout(timerRef.current);
-      return;
-    }
-
-    const playStepSounds = (stepIndex: number) => {
+  const playStepSounds = useCallback(
+    (stepIndex: number, time: number) => {
       tracks.forEach((track) => {
         if (track.muted) return;
         if (track.steps[stepIndex]) {
           if (track.instrument === 'synth' || track.instrument === 'bass') {
             const note = track.instrument === 'bass' ? 'C2' : 'C4';
-            audioEngine.triggerSynthNoteOn(note, synthParams, masterSequencerVolume);
-            setTimeout(() => audioEngine.triggerSynthNoteOff(note), stepDurationMs * 0.8);
+            audioEngine.triggerSynthNoteOn(note, synthParams, masterSequencerVolume, time);
+            audioEngine.triggerSynthNoteOff(note, synthParams.release, time + (stepDurationMs / 1000) * 0.8);
           } else {
-            audioEngine.triggerDrum(track.instrument, masterSequencerVolume);
+            audioEngine.triggerDrum(track.instrument, masterSequencerVolume, time);
           }
         }
       });
-    };
+    },
+    [tracks, synthParams, masterSequencerVolume, stepDurationMs]
+  );
 
-    const stepTick = () => {
-      setCurrentStep((prev) => {
-        const next = (prev + 1) % 16;
-        
-        // Trigger beat tick on quarter notes (steps 0, 4, 8, 12)
-        if (next % 4 === 0 && onBeatTick) {
-          onBeatTick();
-        }
-
-        // Trigger sounds for active notes on this step
-        playStepSounds(next);
-
-        return next;
-      });
-
-      timerRef.current = setTimeout(stepTick, stepDurationMs);
-    };
-
-    // Play step 0 immediately
-    if (onBeatTick) {
-      onBeatTick();
+  useEffect(() => {
+    if (!isPlaying) {
+      armedRef.current = false;
+      setCurrentStep(0);
+      return;
     }
-    playStepSounds(0);
 
-    timerRef.current = setTimeout(stepTick, stepDurationMs);
-
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [isPlaying, bpm, stepDurationMs, tracks, synthParams, onBeatTick]);
+    return audioEngine.subscribeClock((step, _beat, time) => {
+      // Start aligned to the next quarter-note boundary of the shared grid
+      if (!armedRef.current) {
+        if (step % 4 !== 0) return;
+        armedRef.current = true;
+      }
+      const stepInLoop = step % 16;
+      setCurrentStep(stepInLoop);
+      playStepSounds(stepInLoop, time);
+    });
+  }, [isPlaying, playStepSounds]);
 
   const toggleStep = (trackId: string, stepIndex: number) => {
     onChangeTracks(

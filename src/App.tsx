@@ -37,6 +37,10 @@ const INITIAL_SYNTH_PARAMS: SynthParams = {
   decay: 0.4,
   sustain: 0.6,
   release: 0.5,
+  filterAttack: 0.02,
+  filterDecay: 0.4,
+  filterSustain: 0,
+  filterRelease: 0.5,
   lfoRate: 3.5,
   lfoDepth: 0.2,
   lfoTarget: 'cutoff',
@@ -122,6 +126,10 @@ const INITIAL_ARRANGE_TRACKS: ArrangeTrack[] = [
       decay: 0.35,
       sustain: 0.65,
       release: 0.45,
+      filterAttack: 0.02,
+      filterDecay: 0.35,
+      filterSustain: 0,
+      filterRelease: 0.45,
       lfoRate: 4,
       lfoDepth: 0.15,
       lfoTarget: 'cutoff',
@@ -223,6 +231,10 @@ const INITIAL_ARRANGE_TRACKS: ArrangeTrack[] = [
       decay: 0.3,
       sustain: 0.3,
       release: 0.2,
+      filterAttack: 0.01,
+      filterDecay: 0.3,
+      filterSustain: 0,
+      filterRelease: 0.2,
       lfoRate: 1,
       lfoDepth: 0,
       lfoTarget: 'cutoff',
@@ -279,6 +291,10 @@ const INITIAL_ARRANGE_TRACKS: ArrangeTrack[] = [
       decay: 1.0,
       sustain: 0.8,
       release: 1.2,
+      filterAttack: 0.35,
+      filterDecay: 1.0,
+      filterSustain: 0,
+      filterRelease: 1.2,
       lfoRate: 2,
       lfoDepth: 0.2,
       lfoTarget: 'cutoff',
@@ -331,12 +347,6 @@ export function App() {
 
   const anyPlaying = isSequencerPlaying || isChordsPlaying || isArrangePlaying;
 
-  const lastBeatTimeRef = useRef<number>(0);
-
-  const triggerBeatTick = useCallback(() => {
-    lastBeatTimeRef.current = performance.now();
-  }, []);
-
   const toggleMasterPlay = () => {
     audioEngine.init();
     if (anyPlaying) {
@@ -344,54 +354,26 @@ export function App() {
       setIsChordsPlaying(false);
       setIsArrangePlaying(false);
     } else {
-      // เมื่อกด Play All (Header) จะเริ่มบีตแรกพร้อมกันทันที
-      lastBeatTimeRef.current = performance.now();
+      // Play All: every view starts together on the shared engine clock
       setIsSequencerPlaying(true);
       setIsChordsPlaying(true);
       setIsArrangePlaying(true);
     }
   };
 
-  const startPlayingWithSync = (setPlayingState: React.Dispatch<React.SetStateAction<boolean>>) => {
-    audioEngine.init();
-    const isAnyOtherPlaying = isSequencerPlaying || isChordsPlaying || isArrangePlaying;
-
-    if (isAnyOtherPlaying) {
-      const beatDurationMs = (60 / bpm) * 1000;
-      const elapsed = performance.now() - lastBeatTimeRef.current;
-      const delay = beatDurationMs - (elapsed % beatDurationMs);
-
-      setTimeout(() => {
-        setPlayingState(true);
-      }, delay);
-    } else {
-      lastBeatTimeRef.current = performance.now();
-      setPlayingState(true);
-    }
-  };
-
   const toggleSequencerPlay = () => {
-    if (isSequencerPlaying) {
-      setIsSequencerPlaying(false);
-    } else {
-      startPlayingWithSync(setIsSequencerPlaying);
-    }
+    audioEngine.init();
+    setIsSequencerPlaying((prev) => !prev);
   };
 
   const toggleChordsPlay = () => {
-    if (isChordsPlaying) {
-      setIsChordsPlaying(false);
-    } else {
-      startPlayingWithSync(setIsChordsPlaying);
-    }
+    audioEngine.init();
+    setIsChordsPlaying((prev) => !prev);
   };
 
   const toggleArrangePlay = () => {
-    if (isArrangePlaying) {
-      setIsArrangePlaying(false);
-    } else {
-      startPlayingWithSync(setIsArrangePlaying);
-    }
+    audioEngine.init();
+    setIsArrangePlaying((prev) => !prev);
   };
 
   const isCurrentTabPlaying = 
@@ -414,6 +396,11 @@ export function App() {
 
   const [metronomeActive, setMetronomeActive] = useState<boolean>(false);
   const [bpm, setBpm] = useState<number>(120);
+
+  // Keep the engine's shared clock in sync with the UI bpm
+  useEffect(() => {
+    audioEngine.setClockBpm(bpm);
+  }, [bpm]);
   const [scaleRoot, setScaleRoot] = useState<string>('A');
   const [scaleType, setScaleType] = useState<string>('Natural Minor');
   const [masterVolume, setMasterVolume] = useState<number>(0.85);
@@ -427,6 +414,11 @@ export function App() {
 
   // States
   const [synthParams, setSynthParams] = useState<SynthParams>(INITIAL_SYNTH_PARAMS);
+
+  // Push synth param tweaks into the audio engine so currently sounding notes update in realtime
+  useEffect(() => {
+    audioEngine.updateSynthParams(synthParams);
+  }, [synthParams]);
   const [sequencerTracks, setSequencerTracks] = useState<SequencerTrack[]>(INITIAL_SEQUENCER_TRACKS);
   const [chords, setChords] = useState<ChordItem[]>(INITIAL_CHORDS);
   const [arrangeTracks, setArrangeTracks] = useState<ArrangeTrack[]>(INITIAL_ARRANGE_TRACKS);
@@ -558,7 +550,6 @@ export function App() {
             isPlaying={isSequencerPlaying}
             onTogglePlay={toggleSequencerPlay}
             synthParams={synthParams}
-            onBeatTick={triggerBeatTick}
             masterSequencerVolume={masterSequencerVolume}
             onChangeMasterSequencerVolume={setMasterSequencerVolume}
           />
@@ -575,7 +566,6 @@ export function App() {
             bpm={bpm}
             isPlaying={isChordsPlaying}
             onTogglePlay={toggleChordsPlay}
-            onBeatTick={triggerBeatTick}
             masterChordVelocity={masterChordVelocity}
             onChangeMasterChordVelocity={setMasterChordVelocity}
           />
@@ -589,7 +579,6 @@ export function App() {
             onTogglePlay={toggleArrangePlay}
             scaleRoot={scaleRoot}
             scaleType={scaleType}
-            onBeatTick={triggerBeatTick}
           />
         </div>
         <div className={activeTab === 'effects' ? 'block' : 'hidden'}>

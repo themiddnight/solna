@@ -22,7 +22,6 @@ interface ChordViewProps {
   bpm: number;
   isPlaying: boolean;
   onTogglePlay: () => void;
-  onBeatTick?: () => void;
   masterChordVelocity: number;
   onChangeMasterChordVelocity: (velocity: number) => void;
 }
@@ -349,16 +348,29 @@ export const ChordView: React.FC<ChordViewProps> = ({
   scaleType,
   onChangeScaleType,
   synthParams,
-  bpm,
   isPlaying,
   onTogglePlay,
-  onBeatTick,
   masterChordVelocity,
   onChangeMasterChordVelocity,
 }) => {
   const [activeChordId, setActiveChordId] = useState<string | null>(null);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
-  const playTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const playChord = useCallback((chord: ChordItem, time?: number) => {
+    audioEngine.init();
+    setActiveChordId(chord.id);
+
+    const notes = generateBlockChordNotes(chord.quality, chord.root, 4);
+    const offTime = time !== undefined ? time + 1.2 : undefined;
+    notes.forEach((n) => {
+      audioEngine.triggerSynthNoteOn(n, synthParams, masterChordVelocity, time);
+      audioEngine.triggerSynthNoteOff(n, 0.5, offTime);
+    });
+
+    // UI-only: clear the highlight after the chord's fixed 1.2s hold
+    setTimeout(() => setActiveChordId(null), 1200);
+  }, [synthParams, masterChordVelocity]);
+
+  // Master Playback Loop — driven by the shared audio-clock scheduler
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [customProgressions, setCustomProgressions] = useState<CustomChordProgressionItem[]>([]);
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
@@ -366,43 +378,33 @@ export const ChordView: React.FC<ChordViewProps> = ({
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [autoReharmonize, setAutoReharmonize] = useState<boolean>(true);
   const [isAutoReharmonizedIndicator, setIsAutoReharmonizedIndicator] = useState<boolean>(false);
+  const armedRef = useRef(false);
+  const chordIndexRef = useRef(0);
+  const nextBarStepRef = useRef(0);
 
-  useEffect(() => {
-    setCustomProgressions(getCustomChordProgressions());
-  }, [isLibraryOpen]);
-
-  // Master Playback Loop effect
   useEffect(() => {
     if (!isPlaying || chords.length === 0) {
+      armedRef.current = false;
       setPlayingIndex(null);
-      if (playTimerRef.current) clearTimeout(playTimerRef.current);
       return;
     }
 
-    let currentIndex = 0;
-    const beatDurationMs = (60 / bpm) * 1000;
-
-    const stepPlay = () => {
-      if (onBeatTick) {
-        onBeatTick();
+    return audioEngine.subscribeClock((step, _beat, time) => {
+      // Start aligned to the next quarter-note boundary of the shared grid
+      if (!armedRef.current) {
+        if (step % 4 !== 0) return;
+        armedRef.current = true;
+        chordIndexRef.current = 0;
+        nextBarStepRef.current = step;
       }
-      const chord = chords[currentIndex % chords.length];
-      playChord(chord);
-      setPlayingIndex(currentIndex % chords.length);
-
-      const durationBeats = (chord.bars || 1) * 4;
-      const durationMs = durationBeats * beatDurationMs;
-
-      currentIndex++;
-      playTimerRef.current = setTimeout(stepPlay, durationMs);
-    };
-
-    stepPlay();
-
-    return () => {
-      if (playTimerRef.current) clearTimeout(playTimerRef.current);
-    };
-  }, [isPlaying, bpm, chords, onBeatTick]);
+      if (step < nextBarStepRef.current) return;
+      const chord = chords[chordIndexRef.current % chords.length];
+      playChord(chord, time);
+      setPlayingIndex(chordIndexRef.current % chords.length);
+      nextBarStepRef.current = step + (chord.bars || 1) * 16;
+      chordIndexRef.current++;
+    });
+  }, [isPlaying, chords, playChord]);
 
   // Auto-reharmonize current chords when scale/root changes if autoReharmonize is enabled
   useEffect(() => {
@@ -417,23 +419,6 @@ export const ChordView: React.FC<ChordViewProps> = ({
   const rootIdx = ROOTS.indexOf(scaleRoot);
   const intervals = SCALES[scaleType]?.intervals || [0, 2, 4, 5, 7, 9, 11];
   const scaleNotes = intervals.map((int) => ROOTS[(rootIdx + int) % 12]);
-
-  const playChord = useCallback((chord: ChordItem) => {
-    audioEngine.init();
-    setActiveChordId(chord.id);
-
-    const notes = generateBlockChordNotes(chord.quality, chord.root, 4);
-    notes.forEach((n) => {
-      audioEngine.triggerSynthNoteOn(n, synthParams, masterChordVelocity);
-    });
-
-    setTimeout(() => {
-      notes.forEach((n) => {
-        audioEngine.triggerSynthNoteOff(n, 0.5);
-      });
-      setActiveChordId(null);
-    }, 1200);
-  }, [synthParams]);
 
   // Transpose the template's relative intervals cleanly to the current selected Key Root and optionally auto-reharmonize
   const applyProgressionTemplate = (template: ProgressionTemplate) => {
