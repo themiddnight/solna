@@ -51,25 +51,45 @@ export interface SequencerTrack {
   velocities?: number[];
 }
 
-export interface ArrangeTrack {
+export type InstrumentType =
+  | 'synth'
+  | 'lead'
+  | 'bass'
+  | 'pad'
+  | 'pluck'
+  | 'piano'
+  | 'drums'
+  | 'chords'
+  | 'audio';
+
+export interface RegionNote {
   id: string;
-  name: string;
-  color: string;
-  type: 'synth' | 'drums' | 'bass' | 'chords' | 'audio';
-  volume: number;
-  pan: number;
-  muted: boolean;
-  solo: boolean;
-  regions: ArrangeRegion[];
+  note: string; // e.g. "C4", "D#4", "G4"
+  startStep: number; // in 16th steps within the region (0 to durationBeats * 4 - 1)
+  durationSteps: number; // in 16th steps (e.g. 1 = 16th note, 2 = 8th, 4 = quarter)
+  velocity?: number; // 0 to 1
 }
 
 export interface ArrangeRegion {
   id: string;
   name: string;
-  startBeat: number;
-  durationBeats: number;
+  startBeat: number; // in beats (4 beats = 1 bar)
+  durationBeats: number; // in beats (e.g. 16 beats = 4 bars)
   color?: string;
-  notes?: Array<{ note: string; beat: number; duration: number }>;
+  notes?: RegionNote[];
+}
+
+export interface ArrangeTrack {
+  id: string;
+  name: string;
+  color: string;
+  type: InstrumentType;
+  synthParams?: SynthParams; // Custom sound design per track
+  volume: number;
+  pan: number;
+  muted: boolean;
+  solo: boolean;
+  regions: ArrangeRegion[];
 }
 
 export interface ChordItem {

@@ -193,6 +193,103 @@ class AudioEngine {
     source.start();
   }
 
+  // Track-aware Note Trigger with full duration, synth params, and panning
+  triggerTrackNote(
+    trackId: string,
+    noteName: string,
+    params: SynthParams,
+    velocity = 0.8,
+    trackVolume = 1.0,
+    durationSec = 0.4,
+    pan = 0
+  ): void {
+    if (!this.ctx || !this.dryGain) return;
+    const freq = this.noteToFrequency(noteName, params.octave);
+    const now = this.ctx.currentTime;
+
+    try {
+      // Primary Oscillator
+      const osc1 = this.ctx.createOscillator();
+      osc1.type = params.oscType;
+      osc1.frequency.setValueAtTime(freq, now);
+      osc1.detune.setValueAtTime(params.detune, now);
+
+      // Sub Oscillator
+      const oscSub = this.ctx.createOscillator();
+      oscSub.type = 'sine';
+      oscSub.frequency.setValueAtTime(freq / 2, now);
+
+      // Filter
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = params.filterType;
+      filter.frequency.setValueAtTime(params.filterCutoff, now);
+      filter.Q.setValueAtTime(params.filterResonance, now);
+
+      // Filter Envelope
+      const filterTarget = Math.min(20000, Math.max(20, params.filterCutoff + params.filterEnvAmount));
+      filter.frequency.exponentialRampToValueAtTime(Math.max(20, filterTarget), now + Math.max(0.01, params.attack));
+      filter.frequency.exponentialRampToValueAtTime(Math.max(20, params.filterCutoff), now + params.attack + params.decay);
+
+      // Amplitude Envelope
+      const gainNode = this.ctx.createGain();
+      const subGain = this.ctx.createGain();
+      subGain.gain.value = params.subOscVolume;
+
+      const peakGain = Math.max(0.001, velocity * trackVolume * 0.45);
+      gainNode.gain.setValueAtTime(0.0001, now);
+      gainNode.gain.exponentialRampToValueAtTime(peakGain, now + Math.max(0.005, params.attack));
+      gainNode.gain.exponentialRampToValueAtTime(
+        Math.max(0.0001, peakGain * params.sustain),
+        now + params.attack + params.decay
+      );
+
+      // Schedule release at note end
+      const releaseStart = now + Math.max(0.05, durationSec);
+      gainNode.gain.setValueAtTime(Math.max(0.0001, gainNode.gain.value), releaseStart);
+      gainNode.gain.exponentialRampToValueAtTime(0.00001, releaseStart + Math.max(0.05, params.release));
+
+      // Stereo Panner (if available)
+      let outNode: AudioNode = gainNode;
+      if (this.ctx.createStereoPanner && pan !== 0) {
+        const panner = this.ctx.createStereoPanner();
+        panner.pan.setValueAtTime(Math.max(-1, Math.min(1, pan)), now);
+        gainNode.connect(panner);
+        outNode = panner;
+      }
+
+      // Connect nodes
+      osc1.connect(filter);
+      oscSub.connect(subGain);
+      subGain.connect(filter);
+      filter.connect(gainNode);
+
+      // Route to master chain
+      outNode.connect(this.dryGain);
+      if (this.delayNode) outNode.connect(this.delayNode);
+      if (this.reverbNode) outNode.connect(this.reverbNode);
+
+      osc1.start(now);
+      oscSub.start(now);
+
+      const stopTime = releaseStart + Math.max(0.05, params.release) + 0.05;
+      osc1.stop(stopTime);
+      oscSub.stop(stopTime);
+
+      setTimeout(() => {
+        try {
+          osc1.disconnect();
+          oscSub.disconnect();
+          filter.disconnect();
+          gainNode.disconnect();
+        } catch {
+          // ignore
+        }
+      }, (stopTime - now + 0.1) * 1000);
+    } catch (err) {
+      console.error('Track note error:', err);
+    }
+  }
+
   // Synthesizer Note On
   triggerSynthNoteOn(noteName: string, params: SynthParams, velocity = 0.8): void {
     if (!this.ctx || !this.dryGain) return;
