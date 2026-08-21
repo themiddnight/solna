@@ -1,0 +1,10 @@
+{
+  "name": "Murva Music Studio",
+  "description": "Full-stack interactive music creation studio with synthesizer, sequencer, chord builder, drum machine, and real-time collaboration.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
