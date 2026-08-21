@@ -424,8 +424,8 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
       <div className="bg-[#12152A] border border-[#252B48] rounded-xl shadow-xl overflow-x-auto select-none">
         <div className="w-max min-w-full">
           {/* Measures / Beats Ruler */}
-          <div className="flex border-b border-[#252B48] bg-[#0B0D19] sticky top-0 z-20 w-max min-w-full">
-            <div className="w-64 p-2 text-xs font-mono font-bold text-slate-400 border-r border-[#252B48] flex items-center justify-between shrink-0 sticky left-0 z-30 bg-[#0B0D19]">
+          <div className="flex border-b border-[#252B48] bg-[#0B0D19] sticky top-0 z-40 w-max min-w-full">
+            <div className="w-64 p-2 text-xs font-mono font-bold text-slate-400 border-r border-[#252B48] flex items-center justify-between shrink-0 sticky left-0 z-50 bg-[#0B0D19] shadow-md">
               <span>TRACK INSTRUMENT</span>
               <span className="text-[10px] text-slate-500 font-normal">VOL / PAN</span>
             </div>
@@ -433,7 +433,7 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
             {/* Clickable Seek Ruler */}
             <div
               onClick={handleSeek}
-              className="relative h-8 flex items-center cursor-pointer hover:bg-indigo-950/20 transition-colors shrink-0"
+              className="relative h-8 flex items-center cursor-pointer hover:bg-indigo-950/20 transition-colors shrink-0 z-10"
               style={{ width: `${totalTimelineWidth}px`, minWidth: `${totalTimelineWidth}px` }}
             >
               {Array.from({ length: numBars }).map((_, barIdx) => (
@@ -461,7 +461,7 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
           <div className="divide-y divide-[#252B48]/60 relative w-max min-w-full">
             {/* Continuous Vertical Playhead Line across all tracks */}
             <div
-              className="absolute top-0 bottom-0 w-0.5 bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)] pointer-events-none z-30"
+              className="absolute top-0 bottom-0 w-0.5 bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)] pointer-events-none z-15"
               style={{ left: `${256 + playheadPositionPx}px` }} // 256px = w-64 track header width
             />
 
@@ -474,7 +474,7 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
                 }`}
               >
                 {/* Left Track Header & Channel Strip */}
-                <div className="w-64 p-2.5 bg-[#0E1122] border-r border-[#252B48] flex flex-col justify-between space-y-2 shrink-0 sticky left-0 z-10 shadow-sm">
+                <div className="w-64 p-2.5 bg-[#0E1122] border-r border-[#252B48] flex flex-col justify-between space-y-2 shrink-0 sticky left-0 z-30 shadow-[4px_0_12px_rgba(0,0,0,0.5)]">
                   {/* Track Name & Instrument Sound Inspector Button */}
                   <div className="flex items-center justify-between gap-1.5">
                     <button
