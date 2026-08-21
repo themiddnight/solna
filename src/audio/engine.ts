@@ -484,6 +484,26 @@ class AudioEngine {
     }
   }
 
+  getAudioContext(): AudioContext | null {
+    return this.ctx;
+  }
+
+  getAnalyser(): AnalyserNode | null {
+    return this.analyser;
+  }
+
+  getByteFrequencyData(array: Uint8Array): void {
+    if (this.analyser) {
+      this.analyser.getByteFrequencyData(array as any);
+    }
+  }
+
+  getByteTimeDomainData(array: Uint8Array): void {
+    if (this.analyser) {
+      this.analyser.getByteTimeDomainData(array as any);
+    }
+  }
+
   getAudioLevel(): number {
     if (!this.analyser) return 0;
     const data = new Uint8Array(this.analyser.frequencyBinCount);

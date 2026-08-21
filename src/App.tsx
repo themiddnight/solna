@@ -10,6 +10,7 @@ import { TransportBar } from './components/TransportBar';
 import { AiCompanionModal } from './components/AiCompanionModal';
 import { RoomCollaborationModal } from './components/RoomCollaborationModal';
 import { ProjectModal } from './components/ProjectModal';
+import { AudioVisualizer } from './components/AudioVisualizer';
 import { audioEngine } from './audio/engine';
 import {
   ViewMode,
@@ -282,7 +283,18 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0C17] text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-[#0A0C17] text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white relative overflow-hidden">
+      {/* Real-time Atmospheric Background Frequency Wave Visualizer */}
+      <div className="absolute inset-0 pointer-events-none z-0 opacity-25 overflow-hidden">
+        <AudioVisualizer
+          mode="ambient-bg"
+          height="100%"
+          className="w-full h-full"
+          colorTheme="indigo"
+          ambientOpacity={0.2}
+        />
+      </div>
+
       {/* Navigation Header */}
       <Header
         currentView={activeTab}

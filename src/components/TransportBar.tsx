@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, Circle, Repeat, Volume2, Music, Clock } from 'lucide-react';
+import { Play, Square, Circle, Repeat, Volume2, Music, Clock, Waves } from 'lucide-react';
 import { audioEngine } from '../audio/engine';
+import { AudioVisualizer, VisualizerMode } from './AudioVisualizer';
 
 interface TransportBarProps {
   isPlaying: boolean;
@@ -27,6 +28,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
   const [isLooping, setIsLooping] = useState(true);
   const [vuLevel, setVuLevel] = useState(0);
   const [seconds, setSeconds] = useState(0);
+  const [vizMode, setVizMode] = useState<VisualizerMode>('wave');
 
   // Meter polling loop
   useEffect(() => {
@@ -114,12 +116,37 @@ export const TransportBar: React.FC<TransportBarProps> = ({
         </div>
       </div>
 
-      {/* Middle Harmony & Scale Info */}
-      <div className="hidden md:flex items-center gap-2 bg-[#0B0D19] border border-[#252B48] px-3 py-1.5 rounded-lg">
-        <Music className="w-3.5 h-3.5 text-indigo-400" />
-        <span className="text-slate-400">Key:</span>
-        <span className="font-bold text-slate-100">{scaleRoot}</span>
-        <span className="text-indigo-400 font-medium">({scaleType})</span>
+      {/* Middle Harmony & Scale Info & Audio Spectrum Wave */}
+      <div className="flex-1 max-w-xs md:max-w-md hidden sm:flex items-center gap-3">
+        {/* Real-time Spectrum Wave in Transport */}
+        <div className="flex-1 bg-[#0B0D19] border border-[#252B48] rounded-lg p-1 flex items-center relative overflow-hidden shadow-inner group">
+          <AudioVisualizer
+            mode={vizMode}
+            height={32}
+            className="w-full rounded"
+            colorTheme="indigo"
+            showControls={false}
+          />
+          <button
+            onClick={() => {
+              const modes: VisualizerMode[] = ['wave', 'bars', 'oscilloscope'];
+              const nextIndex = (modes.indexOf(vizMode) + 1) % modes.length;
+              setVizMode(modes[nextIndex]);
+            }}
+            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-[#161B36]/80 hover:bg-indigo-600 text-slate-300 hover:text-white p-1 rounded text-[10px] flex items-center gap-1 border border-[#252B48]"
+            title="Click to switch Visualizer Mode (Wave / Bars / Oscilloscope)"
+          >
+            <Waves className="w-2.5 h-2.5" />
+            <span className="capitalize text-[8px]">{vizMode}</span>
+          </button>
+        </div>
+
+        <div className="hidden lg:flex items-center gap-1.5 bg-[#0B0D19] border border-[#252B48] px-2.5 py-1.5 rounded-lg shrink-0">
+          <Music className="w-3.5 h-3.5 text-indigo-400" />
+          <span className="text-slate-400">Key:</span>
+          <span className="font-bold text-slate-100">{scaleRoot}</span>
+          <span className="text-indigo-400 font-medium">({scaleType})</span>
+        </div>
       </div>
 
       {/* Right Meter & Master Gain */}
