@@ -445,7 +445,7 @@ Provide creative musical advice, chord substitutions, and arrangement ideas in c
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`murva collaborative music studio running on http://0.0.0.0:${PORT}`);
+    console.log(`murva collaborative music studio running on http://localhost:${PORT}`);
   });
 }
 
