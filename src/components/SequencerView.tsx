@@ -10,6 +10,7 @@ interface SequencerViewProps {
   isPlaying: boolean;
   onTogglePlay: () => void;
   synthParams: SynthParams;
+  onBeatTick?: () => void;
 }
 
 const GENRE_PRESETS: Record<string, Record<string, boolean[]>> = {
@@ -67,6 +68,7 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
   isPlaying,
   onTogglePlay,
   synthParams,
+  onBeatTick,
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [selectedGenre, setSelectedGenre] = useState<string>('Synthwave');
@@ -82,23 +84,32 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
       return;
     }
 
+    const playStepSounds = (stepIndex: number) => {
+      tracks.forEach((track) => {
+        if (track.muted) return;
+        if (track.steps[stepIndex]) {
+          if (track.instrument === 'synth' || track.instrument === 'bass') {
+            const note = track.instrument === 'bass' ? 'C2' : 'C4';
+            audioEngine.triggerSynthNoteOn(note, synthParams, track.volume);
+            setTimeout(() => audioEngine.triggerSynthNoteOff(note), stepDurationMs * 0.8);
+          } else {
+            audioEngine.triggerDrum(track.instrument, track.volume);
+          }
+        }
+      });
+    };
+
     const stepTick = () => {
       setCurrentStep((prev) => {
         const next = (prev + 1) % 16;
         
+        // Trigger beat tick on quarter notes (steps 0, 4, 8, 12)
+        if (next % 4 === 0 && onBeatTick) {
+          onBeatTick();
+        }
+
         // Trigger sounds for active notes on this step
-        tracks.forEach((track) => {
-          if (track.muted) return;
-          if (track.steps[next]) {
-            if (track.instrument === 'synth' || track.instrument === 'bass') {
-              const note = track.instrument === 'bass' ? 'C2' : 'C4';
-              audioEngine.triggerSynthNoteOn(note, synthParams, track.volume);
-              setTimeout(() => audioEngine.triggerSynthNoteOff(note), stepDurationMs * 0.8);
-            } else {
-              audioEngine.triggerDrum(track.instrument, track.volume);
-            }
-          }
-        });
+        playStepSounds(next);
 
         return next;
       });
@@ -106,12 +117,18 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
       timerRef.current = setTimeout(stepTick, stepDurationMs);
     };
 
+    // Play step 0 immediately
+    if (onBeatTick) {
+      onBeatTick();
+    }
+    playStepSounds(0);
+
     timerRef.current = setTimeout(stepTick, stepDurationMs);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isPlaying, bpm, stepDurationMs, tracks, synthParams]);
+  }, [isPlaying, bpm, stepDurationMs, tracks, synthParams, onBeatTick]);
 
   const toggleStep = (trackId: string, stepIndex: number) => {
     onChangeTracks(

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Sliders, Activity, Zap, Volume2, Sparkles, Bookmark, Plus, Library, FolderOpen, Check } from 'lucide-react';
+import { Sliders, Activity, Zap, Volume2, Sparkles, Bookmark, Plus, Library, FolderOpen, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { SynthParams } from '../types';
 import { audioEngine } from '../audio/engine';
 import {
@@ -9,7 +9,7 @@ import {
   saveCustomPreset,
 } from '../audio/synthPresets';
 import { SynthPresetLibrary } from './SynthPresetLibrary';
-import { isNoteInScale, getScaleNotes } from '../utils/musicTheory';
+import { isNoteInScale, getScaleNotes, ROOTS } from '../utils/musicTheory';
 
 interface SynthViewProps {
   params: SynthParams;
@@ -52,6 +52,8 @@ export const SynthView: React.FC<SynthViewProps> = ({
   const [quickSaveName, setQuickSaveName] = useState<string>('');
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [keyboardMode, setKeyboardMode] = useState<'chromatic' | 'scale-locked'>('chromatic');
+  // Keyboard display octave — independent from synth pitch octave (params.octave)
+  const [keyboardOctave, setKeyboardOctave] = useState<number>(0);
 
   // Sync custom presets from local storage
   const reloadPresets = useCallback(() => {
@@ -64,6 +66,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
 
   const handleNoteOn = useCallback((note: string) => {
     audioEngine.init();
+    // Pass params as-is so params.octave (synth pitch offset) applies on top of the keyboard note
     audioEngine.triggerSynthNoteOn(note, params);
     setActiveNotes((prev) => new Set(prev).add(note));
   }, [params]);
@@ -77,12 +80,15 @@ export const SynthView: React.FC<SynthViewProps> = ({
     });
   }, [params.release]);
 
-  // QWERTY Computer Keyboard mapping
+  // QWERTY Computer Keyboard mapping — uses keyboardOctave, NOT params.octave
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.repeat) return;
-      const keyObj = KEYBOARD_NOTES.find((n) => n.key.toLowerCase() === e.key.toLowerCase());
+      const notesList = keyboardMode === 'scale-locked'
+        ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
+        : getChromaticKeyboardNotes(keyboardOctave);
+      const keyObj = notesList.find((n) => n.key.toLowerCase() === e.key.toLowerCase());
       if (keyObj) {
         handleNoteOn(keyObj.note);
       }
@@ -90,7 +96,10 @@ export const SynthView: React.FC<SynthViewProps> = ({
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      const keyObj = KEYBOARD_NOTES.find((n) => n.key.toLowerCase() === e.key.toLowerCase());
+      const notesList = keyboardMode === 'scale-locked'
+        ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
+        : getChromaticKeyboardNotes(keyboardOctave);
+      const keyObj = notesList.find((n) => n.key.toLowerCase() === e.key.toLowerCase());
       if (keyObj) {
         handleNoteOff(keyObj.note);
       }
@@ -102,7 +111,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [handleNoteOn, handleNoteOff]);
+  }, [handleNoteOn, handleNoteOff, keyboardMode, scaleRoot, scaleType, keyboardOctave]);
 
   const handleSelectPreset = (preset: SynthPresetItem) => {
     onChangeParams({
@@ -611,20 +620,45 @@ export const SynthView: React.FC<SynthViewProps> = ({
               {keyboardMode === 'scale-locked' ? `Scale Locked (${scaleRoot} ${scaleType})` : 'Chromatic Mode'}
             </button>
           </div>
-          <div className="text-[11px] font-mono text-slate-400">
-            Active: {Array.from(activeNotes).join(', ') || 'None'}
+
+          {/* Keyboard Octave Pagination — independent from synth pitch octave */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-500 font-mono mr-1">KB OCT</span>
+            <button
+              id="btn-keyboard-octave-down"
+              onClick={() => setKeyboardOctave((o) => Math.max(-2, o - 1))}
+              disabled={keyboardOctave <= -2}
+              className="w-7 h-7 flex items-center justify-center rounded-md bg-[#0B0D19] border border-[#252B48] text-slate-400 hover:text-white hover:border-indigo-500 hover:bg-indigo-600/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+              title="Keyboard Octave Down"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="min-w-[52px] h-7 flex items-center justify-center rounded-md bg-indigo-600/15 border border-indigo-500/40 px-2">
+              <span className="text-xs font-mono font-bold text-indigo-300">
+                {keyboardOctave >= 0 ? `+${keyboardOctave}` : keyboardOctave} Oct
+              </span>
+            </div>
+            <button
+              id="btn-keyboard-octave-up"
+              onClick={() => setKeyboardOctave((o) => Math.min(2, o + 1))}
+              disabled={keyboardOctave >= 2}
+              className="w-7 h-7 flex items-center justify-center rounded-md bg-[#0B0D19] border border-[#252B48] text-slate-400 hover:text-white hover:border-indigo-500 hover:bg-indigo-600/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+              title="Keyboard Octave Up"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <div className="text-[11px] font-mono text-slate-500 ml-2">
+              {Array.from(activeNotes).join(', ') || 'No note'}
+            </div>
           </div>
         </div>
 
-        {/* Keyboard Keys Layout */}
+        {/* Keyboard Keys Layout — uses keyboardOctave for display range */}
         <div className="relative h-44 flex select-none bg-[#0B0D19] p-2 rounded-lg border border-[#252B48] overflow-x-auto">
           {(keyboardMode === 'scale-locked'
-            ? getScaleNotes(scaleRoot, scaleType).flatMap((note, i) => [
-                { note: `${note}3`, label: note, isBlack: false },
-                { note: `${note}4`, label: note, isBlack: false },
-              ])
-            : KEYBOARD_NOTES.filter((k) => keyboardMode === 'chromatic' || isNoteInScale(k.note, scaleRoot, scaleType))
-          ).map((k) => {
+            ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
+            : getChromaticKeyboardNotes(keyboardOctave)
+          ).map((k, noteIndex) => {
             const isActive = activeNotes.has(k.note);
             // Render all scale-locked keys as white
             if (keyboardMode !== 'scale-locked' && k.isBlack) {
@@ -643,7 +677,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
                       : 'bg-gradient-to-b from-slate-800 to-slate-950 hover:bg-slate-800'
                   }`}
                   style={{
-                    left: `${getBlackKeyLeftOffset(k.note)}%`,
+                    left: `${getBlackKeyLeftOffset(noteIndex)}%`,
                   }}
                 >
                   <span className="text-[9px] font-mono font-bold text-slate-300">{k.label}</span>
@@ -689,16 +723,76 @@ export const SynthView: React.FC<SynthViewProps> = ({
   );
 };
 
-function getBlackKeyLeftOffset(note: string): number {
+// Use note index within KEYBOARD_NOTES (0-based) to compute black key position
+// Index positions of black keys in KEYBOARD_NOTES: 1(C#), 3(D#), 6(F#), 8(G#), 10(A#), 13(C#), 15(D#)
+// This is index-based so it works correctly regardless of which octave range is displayed
+function getBlackKeyLeftOffset(noteIndex: number): number {
   const whiteKeyWidth = 100 / 11;
-  const offsets: Record<string, number> = {
-    'C#3': whiteKeyWidth * 0.7,
-    'D#3': whiteKeyWidth * 1.7,
-    'F#3': whiteKeyWidth * 3.7,
-    'G#3': whiteKeyWidth * 4.7,
-    'A#3': whiteKeyWidth * 5.7,
-    'C#4': whiteKeyWidth * 7.7,
-    'D#4': whiteKeyWidth * 8.7,
+  const offsets: Record<number, number> = {
+    1:  whiteKeyWidth * 0.7,   // C#
+    3:  whiteKeyWidth * 1.7,   // D#
+    6:  whiteKeyWidth * 3.7,   // F#
+    8:  whiteKeyWidth * 4.7,   // G#
+    10: whiteKeyWidth * 5.7,   // A#
+    13: whiteKeyWidth * 7.7,   // C# (2nd octave)
+    15: whiteKeyWidth * 8.7,   // D# (2nd octave)
   };
-  return offsets[note] || 0;
+  return offsets[noteIndex] ?? 0;
+}
+
+function getScaleLockedKeyboardNotes(root: string, scaleType: string, octaveOffset: number) {
+  const scaleNotes = getScaleNotes(root, scaleType);
+  const shortcutKeys = ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', "'"];
+  
+  let currentOctave = 3 + octaveOffset;
+  let prevNoteIndex = -1;
+  
+  const octavesToGenerate = 2;
+  const allScaleNotesWithOctave: { note: string; label: string }[] = [];
+  
+  for (let oct = 0; oct < octavesToGenerate; oct++) {
+    for (let i = 0; i < scaleNotes.length; i++) {
+      const noteName = scaleNotes[i];
+      const noteIndex = ROOTS.indexOf(noteName as any);
+      
+      if (prevNoteIndex !== -1 && noteIndex < prevNoteIndex) {
+        currentOctave++;
+      }
+      
+      allScaleNotesWithOctave.push({
+        note: `${noteName}${currentOctave}`,
+        label: `${noteName}${currentOctave}`,
+      });
+      
+      prevNoteIndex = noteIndex;
+    }
+  }
+  
+  return allScaleNotesWithOctave.map((item, index) => {
+    return {
+      note: item.note,
+      label: item.label,
+      key: index < shortcutKeys.length ? shortcutKeys[index] : '',
+      isBlack: false,
+    };
+  });
+}
+
+// Chromatic keyboard always starts from C — octaveOffset shifts the range up/down
+// Not affected by master key/scale; regex supports any octave number
+function getChromaticKeyboardNotes(octaveOffset: number) {
+  return KEYBOARD_NOTES.map((k) => {
+    const match = k.note.match(/^([A-G][#b]?)(-?\d+)/);
+    if (match) {
+      const noteName = match[1];
+      const origOct = parseInt(match[2], 10);
+      const targetOct = origOct + octaveOffset;
+      return {
+        ...k,
+        note: `${noteName}${targetOct}`,
+        label: k.isBlack ? noteName : `${noteName}${targetOct}`,
+      };
+    }
+    return k;
+  });
 }

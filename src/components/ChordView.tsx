@@ -22,6 +22,7 @@ interface ChordViewProps {
   bpm: number;
   isPlaying: boolean;
   onTogglePlay: () => void;
+  onBeatTick?: () => void;
 }
 
 const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -349,6 +350,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
   bpm,
   isPlaying,
   onTogglePlay,
+  onBeatTick,
 }) => {
   const [activeChordId, setActiveChordId] = useState<string | null>(null);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
@@ -377,6 +379,9 @@ export const ChordView: React.FC<ChordViewProps> = ({
     const beatDurationMs = (60 / bpm) * 1000;
 
     const stepPlay = () => {
+      if (onBeatTick) {
+        onBeatTick();
+      }
       const chord = chords[currentIndex % chords.length];
       playChord(chord);
       setPlayingIndex(currentIndex % chords.length);
@@ -393,7 +398,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
     return () => {
       if (playTimerRef.current) clearTimeout(playTimerRef.current);
     };
-  }, [isPlaying, bpm, chords]);
+  }, [isPlaying, bpm, chords, onBeatTick]);
 
   // Auto-reharmonize current chords when scale/root changes if autoReharmonize is enabled
   useEffect(() => {

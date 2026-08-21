@@ -12,6 +12,7 @@ interface TransportBarProps {
   scaleType: string;
   masterVolume: number;
   onChangeMasterVolume: (vol: number) => void;
+  isPlayDisabled?: boolean;
 }
 
 export const TransportBar: React.FC<TransportBarProps> = ({
@@ -23,6 +24,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
   scaleType,
   masterVolume,
   onChangeMasterVolume,
+  isPlayDisabled = false,
 }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLooping, setIsLooping] = useState(true);
@@ -71,8 +73,11 @@ export const TransportBar: React.FC<TransportBarProps> = ({
         <button
           id="btn-bottom-play"
           onClick={onTogglePlay}
+          disabled={isPlayDisabled}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-            isPlaying
+            isPlayDisabled
+              ? 'bg-slate-800 text-slate-500 border border-[#252B48] cursor-not-allowed opacity-50'
+              : isPlaying
               ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md shadow-amber-500/20'
               : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
           }`}

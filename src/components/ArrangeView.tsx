@@ -34,6 +34,7 @@ interface ArrangeViewProps {
   onTogglePlay?: () => void;
   scaleRoot?: string;
   scaleType?: string;
+  onBeatTick?: () => void;
 }
 
 export const ArrangeView: React.FC<ArrangeViewProps> = ({
@@ -44,6 +45,7 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
   onTogglePlay,
   scaleRoot = 'A',
   scaleType = 'Natural Minor',
+  onBeatTick,
 }) => {
   const [zoom, setZoom] = useState<number>(1);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
@@ -80,6 +82,67 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
 
     const hasSolo = tracks.some((t) => t.solo);
 
+    const playArrangeStepSounds = (stepIndex: number) => {
+      tracks.forEach((track) => {
+        // Check Mute / Solo logic
+        if (track.muted) return;
+        if (hasSolo && !track.solo) return;
+
+        const trackSynth = track.synthParams || {
+          oscType: 'sawtooth',
+          subOscVolume: 0.3,
+          noiseVolume: 0.01,
+          detune: 6,
+          filterType: 'lowpass',
+          filterCutoff: 3000,
+          filterResonance: 3.0,
+          filterEnvAmount: 1200,
+          attack: 0.02,
+          decay: 0.4,
+          sustain: 0.6,
+          release: 0.5,
+          lfoRate: 3.5,
+          lfoDepth: 0.2,
+          lfoTarget: 'cutoff',
+          octave: 0,
+          preset: track.name,
+        };
+
+        // Find active regions containing this step
+        track.regions.forEach((region) => {
+          const regionStartStep = region.startBeat * 4;
+          const regionDurationSteps = region.durationBeats * 4;
+          const regionEndStep = regionStartStep + regionDurationSteps;
+
+          if (stepIndex >= regionStartStep && stepIndex < regionEndStep) {
+            const relativeStep = stepIndex - regionStartStep;
+
+            if (region.notes && region.notes.length > 0) {
+              const notesToPlay = region.notes.filter((n) => n.startStep === relativeStep);
+              notesToPlay.forEach((n) => {
+                const durationSec = (n.durationSteps * stepDurationMs) / 1000;
+                if (track.type === 'drums') {
+                  // Map drum note or trigger drum
+                  const drumType = getDrumTypeFromNote(n.note);
+                  audioEngine.triggerDrum(drumType, (n.velocity || 0.8) * track.volume);
+                } else {
+                  audioEngine.triggerTrackNote(
+                    track.id,
+                    n.note,
+                    trackSynth,
+                    n.velocity || 0.8,
+                    track.volume,
+                    durationSec,
+                    track.pan || 0
+                  );
+                }
+              });
+            }
+          }
+        });
+      });
+    };
+
     const stepTick = () => {
       setCurrentBeat((prevBeat) => {
         const nextStep = Math.round(prevBeat * 4) + 1;
@@ -87,65 +150,13 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
         const stepInTimeline = nextStep % maxSteps;
         const nextBeat = stepInTimeline / 4;
 
+        // Trigger beat tick on quarter notes (steps 0, 4, 8, 12...)
+        if (stepInTimeline % 4 === 0 && onBeatTick) {
+          onBeatTick();
+        }
+
         // Trigger notes for all active tracks & regions at this exact 16th step
-        tracks.forEach((track) => {
-          // Check Mute / Solo logic
-          if (track.muted) return;
-          if (hasSolo && !track.solo) return;
-
-          const trackSynth = track.synthParams || {
-            oscType: 'sawtooth',
-            subOscVolume: 0.3,
-            noiseVolume: 0.01,
-            detune: 6,
-            filterType: 'lowpass',
-            filterCutoff: 3000,
-            filterResonance: 3.0,
-            filterEnvAmount: 1200,
-            attack: 0.02,
-            decay: 0.4,
-            sustain: 0.6,
-            release: 0.5,
-            lfoRate: 3.5,
-            lfoDepth: 0.2,
-            lfoTarget: 'cutoff',
-            octave: 0,
-            preset: track.name,
-          };
-
-          // Find active regions containing this step
-          track.regions.forEach((region) => {
-            const regionStartStep = region.startBeat * 4;
-            const regionDurationSteps = region.durationBeats * 4;
-            const regionEndStep = regionStartStep + regionDurationSteps;
-
-            if (stepInTimeline >= regionStartStep && stepInTimeline < regionEndStep) {
-              const relativeStep = stepInTimeline - regionStartStep;
-
-              if (region.notes && region.notes.length > 0) {
-                const notesToPlay = region.notes.filter((n) => n.startStep === relativeStep);
-                notesToPlay.forEach((n) => {
-                  const durationSec = (n.durationSteps * stepDurationMs) / 1000;
-                  if (track.type === 'drums') {
-                    // Map drum note or trigger drum
-                    const drumType = getDrumTypeFromNote(n.note);
-                    audioEngine.triggerDrum(drumType, (n.velocity || 0.8) * track.volume);
-                  } else {
-                    audioEngine.triggerTrackNote(
-                      track.id,
-                      n.note,
-                      trackSynth,
-                      n.velocity || 0.8,
-                      track.volume,
-                      durationSec,
-                      track.pan || 0
-                    );
-                  }
-                });
-              }
-            }
-          });
-        });
+        playArrangeStepSounds(stepInTimeline);
 
         return nextBeat;
       });
@@ -153,12 +164,18 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
       timerRef.current = setTimeout(stepTick, stepDurationMs);
     };
 
+    // Play step 0 immediately
+    if (onBeatTick) {
+      onBeatTick();
+    }
+    playArrangeStepSounds(0);
+
     timerRef.current = setTimeout(stepTick, stepDurationMs);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isPlaying, bpm, stepDurationMs, tracks, isLooping, loopEndBars, numBars]);
+  }, [isPlaying, bpm, stepDurationMs, tracks, isLooping, loopEndBars, numBars, onBeatTick]);
 
   // Helper for drum mapping
   const getDrumTypeFromNote = (noteName: string): string => {

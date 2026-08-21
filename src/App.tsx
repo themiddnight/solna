@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Header } from './components/Header';
 import { SynthView } from './components/SynthView';
 import { DrumMachineView } from './components/DrumMachineView';
@@ -340,6 +340,12 @@ export function App() {
 
   const anyPlaying = isSequencerPlaying || isChordsPlaying || isArrangePlaying;
 
+  const lastBeatTimeRef = useRef<number>(0);
+
+  const triggerBeatTick = useCallback(() => {
+    lastBeatTimeRef.current = performance.now();
+  }, []);
+
   const toggleMasterPlay = () => {
     audioEngine.init();
     if (anyPlaying) {
@@ -347,11 +353,73 @@ export function App() {
       setIsChordsPlaying(false);
       setIsArrangePlaying(false);
     } else {
+      // เมื่อกด Play All (Header) จะเริ่มบีตแรกพร้อมกันทันที
+      lastBeatTimeRef.current = performance.now();
       setIsSequencerPlaying(true);
       setIsChordsPlaying(true);
       setIsArrangePlaying(true);
     }
   };
+
+  const startPlayingWithSync = (setPlayingState: React.Dispatch<React.SetStateAction<boolean>>) => {
+    audioEngine.init();
+    const isAnyOtherPlaying = isSequencerPlaying || isChordsPlaying || isArrangePlaying;
+
+    if (isAnyOtherPlaying) {
+      const beatDurationMs = (60 / bpm) * 1000;
+      const elapsed = performance.now() - lastBeatTimeRef.current;
+      const delay = beatDurationMs - (elapsed % beatDurationMs);
+
+      setTimeout(() => {
+        setPlayingState(true);
+      }, delay);
+    } else {
+      lastBeatTimeRef.current = performance.now();
+      setPlayingState(true);
+    }
+  };
+
+  const toggleSequencerPlay = () => {
+    if (isSequencerPlaying) {
+      setIsSequencerPlaying(false);
+    } else {
+      startPlayingWithSync(setIsSequencerPlaying);
+    }
+  };
+
+  const toggleChordsPlay = () => {
+    if (isChordsPlaying) {
+      setIsChordsPlaying(false);
+    } else {
+      startPlayingWithSync(setIsChordsPlaying);
+    }
+  };
+
+  const toggleArrangePlay = () => {
+    if (isArrangePlaying) {
+      setIsArrangePlaying(false);
+    } else {
+      startPlayingWithSync(setIsArrangePlaying);
+    }
+  };
+
+  const isCurrentTabPlaying = 
+    activeTab === 'sequencer' ? isSequencerPlaying :
+    activeTab === 'chords' ? isChordsPlaying :
+    activeTab === 'arrange' ? isArrangePlaying :
+    false;
+
+  const toggleCurrentTabPlay = () => {
+    if (activeTab === 'sequencer') {
+      toggleSequencerPlay();
+    } else if (activeTab === 'chords') {
+      toggleChordsPlay();
+    } else if (activeTab === 'arrange') {
+      toggleArrangePlay();
+    }
+  };
+
+  const isPlayDisabled = !['sequencer', 'chords', 'arrange'].includes(activeTab);
 
   const [metronomeActive, setMetronomeActive] = useState<boolean>(false);
   const [bpm, setBpm] = useState<number>(120);
@@ -500,8 +568,9 @@ export function App() {
             onChangeTracks={setSequencerTracks}
             bpm={bpm}
             isPlaying={isSequencerPlaying}
-            onTogglePlay={() => setIsSequencerPlaying((prev) => !prev)}
+            onTogglePlay={toggleSequencerPlay}
             synthParams={synthParams}
+            onBeatTick={triggerBeatTick}
           />
         </div>
         <div className={activeTab === 'chords' ? 'block' : 'hidden'}>
@@ -515,7 +584,8 @@ export function App() {
             synthParams={synthParams}
             bpm={bpm}
             isPlaying={isChordsPlaying}
-            onTogglePlay={() => setIsChordsPlaying((prev) => !prev)}
+            onTogglePlay={toggleChordsPlay}
+            onBeatTick={triggerBeatTick}
           />
         </div>
         <div className={activeTab === 'arrange' ? 'block' : 'hidden'}>
@@ -524,9 +594,10 @@ export function App() {
             onChangeTracks={setArrangeTracks}
             bpm={bpm}
             isPlaying={isArrangePlaying}
-            onTogglePlay={() => setIsArrangePlaying((prev) => !prev)}
+            onTogglePlay={toggleArrangePlay}
             scaleRoot={scaleRoot}
             scaleType={scaleType}
+            onBeatTick={triggerBeatTick}
           />
         </div>
         <div className={activeTab === 'effects' ? 'block' : 'hidden'}>
@@ -536,8 +607,9 @@ export function App() {
 
       {/* Persistent Transport Bar at bottom */}
       <TransportBar
-        isPlaying={anyPlaying}
-        onTogglePlay={toggleMasterPlay}
+        isPlaying={isCurrentTabPlaying}
+        onTogglePlay={toggleCurrentTabPlay}
+        isPlayDisabled={isPlayDisabled}
         bpm={bpm}
         onChangeBpm={setBpm}
         scaleRoot={scaleRoot}
