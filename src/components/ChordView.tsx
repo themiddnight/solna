@@ -47,10 +47,10 @@ export interface ProgressionTemplate {
 export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
   // Pop & EDM
   {
-    name: 'Pop Anthem (Axis of Awesome)',
+    name: 'Classic 4-Chord Pop Anthem',
     category: 'Pop & EDM',
     roman: 'I – V – vi – IV',
-    description: 'The iconic 4-chord progression found in hundreds of legendary hit songs.',
+    description: 'The definitive major-scale pop progression creating an instantly uplifting and catchy flow.',
     relativeChords: [
       { interval: 0, quality: 'maj', bars: 1 },  // I
       { interval: 7, quality: 'maj', bars: 1 },  // V
@@ -59,10 +59,10 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     ],
   },
   {
-    name: 'Emotional Pop / Synthwave',
+    name: 'Emotional Minor Synthwave',
     category: 'Pop & EDM',
     roman: 'vi – IV – I – V',
-    description: 'Moody, heroic, and emotional minor opening used widely in synthwave and EDM anthems.',
+    description: 'Moody, heroic, and emotional minor opening used widely in synthwave, EDM, and cinematic anthems.',
     relativeChords: [
       { interval: 9, quality: 'min', bars: 1 },  // vi
       { interval: 5, quality: 'maj', bars: 1 },  // IV
@@ -71,10 +71,10 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     ],
   },
   {
-    name: '50s Doo-Wop / Stand By Me',
+    name: 'Classic 50s Doo-Wop Cadence',
     category: 'Pop & EDM',
     roman: 'I – vi – IV – V',
-    description: 'Timeless vintage progression with romantic, uplifting harmonic resolution.',
+    description: 'Timeless vintage progression with warm, romantic, and circular harmonic resolution.',
     relativeChords: [
       { interval: 0, quality: 'maj', bars: 1 },  // I
       { interval: 9, quality: 'min', bars: 1 },  // vi
@@ -83,7 +83,7 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     ],
   },
   {
-    name: 'Future Bass / Modern EDM Lift',
+    name: 'Future Bass / Euphoric EDM Lift',
     category: 'Pop & EDM',
     roman: 'IVmaj7 – V7 – iiim7 – vim7',
     description: 'Lush 7th chord cadence creating unstoppable momentum and euphoric drops.',
@@ -98,7 +98,7 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     name: 'Club Dance & House Groove',
     category: 'Pop & EDM',
     roman: 'i – VI – VII – v',
-    description: 'Driving natural minor cadence standard in modern deep house and Eurodance.',
+    description: 'Driving natural minor cadence standard in modern deep house and electronic dance music.',
     relativeChords: [
       { interval: 0, quality: 'min7', bars: 1 }, // i
       { interval: 8, quality: 'maj7', bars: 1 }, // VI
@@ -112,7 +112,7 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     name: 'Jazz ii-V-I-VI Turnaround',
     category: 'Jazz & Neo-Soul',
     roman: 'ii7 – V7 – Imaj7 – VI7',
-    description: 'The definitive jazz standard backbone with secondary dominant turnaround.',
+    description: 'The quintessential jazz standard backbone featuring a secondary dominant turnaround.',
     relativeChords: [
       { interval: 2, quality: 'min7', bars: 1 },  // ii7
       { interval: 7, quality: '7', bars: 1 },     // V7
@@ -124,7 +124,7 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     name: 'Neo-Soul Butter Flow',
     category: 'Jazz & Neo-Soul',
     roman: 'Imaj9 – viim7b5 – III7 – vim9',
-    description: 'Complex soulful harmony with minor 7b5 leading into an altered dominant resolve.',
+    description: 'Complex soulful harmony with half-diminished 7b5 leading into a dominant resolution.',
     relativeChords: [
       { interval: 0, quality: 'maj9', bars: 1 },  // Imaj9
       { interval: 11, quality: 'm7b5', bars: 1 }, // viim7b5
@@ -133,10 +133,10 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     ],
   },
   {
-    name: 'Coltrane / Modal Interchange Cycle',
+    name: 'Chromatic Mediants / Giant Step Cycle',
     category: 'Jazz & Neo-Soul',
     roman: 'Imaj7 – bVImaj7 – bIImaj7 – V7',
-    description: 'Chromatic third root movement giving a vibrant, otherworldly jazz color.',
+    description: 'Chromatic third root movements providing a vibrant, otherworldly modal jazz coloration.',
     relativeChords: [
       { interval: 0, quality: 'maj7', bars: 1 },  // Imaj7
       { interval: 8, quality: 'maj7', bars: 1 },  // bVImaj7
@@ -147,10 +147,10 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
 
   // Lofi & R&B
   {
-    name: 'Lofi Hip Hop Rainy Cafe',
+    name: 'Lofi Extended 9th Coffeehouse',
     category: 'Lofi & R&B',
     roman: 'ii9 – V13 – Imaj9 – IVmaj7',
-    description: 'Warm, relaxed extended 9th chords perfect for vinyl crackle and mellow beats.',
+    description: 'Warm, relaxed extended 9th and 13th chords tailored for mellow beats and study sessions.',
     relativeChords: [
       { interval: 2, quality: 'min9', bars: 1 },  // ii9
       { interval: 7, quality: '7', bars: 1 },     // V7
@@ -159,10 +159,10 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     ],
   },
   {
-    name: 'Modern R&B / Trapsoul Vibe',
+    name: 'Contemporary R&B / Trap-Soul Flow',
     category: 'Lofi & R&B',
     roman: 'i9 – iv7 – VII9 – IIImaj7',
-    description: 'Sultry, deep progression popularized by modern R&B, Drake, and SZA.',
+    description: 'Sultry, atmospheric minor progression standard in contemporary R&B and downtempo production.',
     relativeChords: [
       { interval: 0, quality: 'min9', bars: 1 },  // i9
       { interval: 5, quality: 'min7', bars: 1 },  // iv7
@@ -174,7 +174,7 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     name: 'Melancholy Bedroom Pop',
     category: 'Lofi & R&B',
     roman: 'Imaj7 – IVmaj7 – ii7 – V7',
-    description: 'Intimate, nostalgic daydream feel with soft major-7th oscillations.',
+    description: 'Intimate, nostalgic daydream feel with soft major-7th oscillations and tender resolutions.',
     relativeChords: [
       { interval: 0, quality: 'maj7', bars: 1 },  // Imaj7
       { interval: 5, quality: 'maj7', bars: 1 },  // IVmaj7
@@ -185,10 +185,10 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
 
   // Anime & J-Pop
   {
-    name: 'Royal Road / Oudo (王道進行)',
+    name: 'Royal Road / Oudo Cadence (王道進行)',
     category: 'Anime & J-Pop',
     roman: 'IVmaj7 – V7 – iiim7 – vim7',
-    description: 'The golden standard of J-Pop, anime openings (YOASOBI, Radwimps), and Shibuya-kei.',
+    description: 'The golden standard harmonic sequence of Asian pop and modern dynamic anime theme tracks.',
     relativeChords: [
       { interval: 5, quality: 'maj7', bars: 1 }, // IVmaj7
       { interval: 7, quality: '7', bars: 1 },    // V7
@@ -197,10 +197,10 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     ],
   },
   {
-    name: 'Just the Two of Us / Marusa (丸サ進行)',
+    name: 'City Pop / Marusa Groove (丸サ進行)',
     category: 'Anime & J-Pop',
     roman: 'IVmaj7 – III7 – vim7 – I7',
-    description: 'Infectious groove with chromatic dominant transition used in City Pop & Funk.',
+    description: 'Infectious groove with secondary dominant transition standard in vintage City Pop and Funk.',
     relativeChords: [
       { interval: 5, quality: 'maj7', bars: 1 }, // IVmaj7
       { interval: 4, quality: '7', bars: 1 },    // III7 (secondary dominant)
@@ -209,10 +209,10 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     ],
   },
   {
-    name: 'Komuro / Heroic J-Rock (小室進行)',
+    name: 'Heroic Anthem / J-Rock Drive',
     category: 'Anime & J-Pop',
     roman: 'vi – IV – V – I',
-    description: 'High-energy, heroic resolution made famous by Tetsuya Komuro and 90s/00s anime.',
+    description: 'High-energy, heroic minor-to-major resolution celebrating triumph and determination.',
     relativeChords: [
       { interval: 9, quality: 'min', bars: 1 },  // vi
       { interval: 5, quality: 'maj', bars: 1 },  // IV
@@ -226,7 +226,7 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     name: '12-Bar Blues Standard',
     category: 'Rock & Blues',
     roman: 'I7 – IV7 – I7 – V7 – IV7 – I7',
-    description: 'The foundational 12-bar blues form loaded with dominant 7th grit.',
+    description: 'The foundational public domain 12-bar blues form loaded with dominant 7th grit.',
     relativeChords: [
       { interval: 0, quality: '7', bars: 2 },  // I7
       { interval: 5, quality: '7', bars: 1 },  // IV7
@@ -237,10 +237,10 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     ],
   },
   {
-    name: 'Classic Rock Anthem / Grunge',
+    name: 'Mixolydian Rock Anthem',
     category: 'Rock & Blues',
     roman: 'I – bVII – IV – I',
-    description: 'Mixolydian modal swagger heard in Led Zeppelin, AC/DC, and Nirvana.',
+    description: 'Modal rock swagger featuring the flattened seventh chord for a gritty, driving feel.',
     relativeChords: [
       { interval: 0, quality: 'maj', bars: 1 },  // I
       { interval: 10, quality: 'maj', bars: 1 }, // bVII
@@ -252,7 +252,7 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     name: 'Andalusian / Flamenco Descent',
     category: 'Rock & Blues',
     roman: 'i – bVII – bVI – V',
-    description: 'Dramatic descending Phrygian bassline cadence heard in rock and Spanish flamenco.',
+    description: 'Dramatic descending Phrygian bassline cadence rooted in historic Spanish folk and acoustic rock.',
     relativeChords: [
       { interval: 0, quality: 'min', bars: 1 },  // i
       { interval: 10, quality: 'maj', bars: 1 }, // bVII
@@ -263,10 +263,10 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
 
   // Cinematic & Modal
   {
-    name: 'Epic Hans Zimmer Ostinato',
+    name: 'Epic Cinematic Ostinato',
     category: 'Cinematic & Modal',
     roman: 'i – bVI – III – bVII',
-    description: 'Monumental cinematic progression for soaring blockbuster film scores and trailers.',
+    description: 'Monumental cinematic progression built for soaring blockbuster film scores and orchestral trailers.',
     relativeChords: [
       { interval: 0, quality: 'min', bars: 1 },  // i
       { interval: 8, quality: 'maj', bars: 1 },  // bVI
@@ -278,7 +278,7 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     name: 'Dorian Space Voyage',
     category: 'Cinematic & Modal',
     roman: 'i7 – IV7 – i7 – IV7',
-    description: 'Floating, futuristic vamp (Pink Floyd, Daft Punk, Odesza).',
+    description: 'Floating, futuristic vamp utilizing natural 6th modal harmonization for electronic soundscapes.',
     relativeChords: [
       { interval: 0, quality: 'min7', bars: 1 }, // i7
       { interval: 5, quality: '7', bars: 1 },    // IV7 (Major IV in Dorian)
@@ -287,10 +287,10 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     ],
   },
   {
-    name: 'Lydian Wonder / Dreamscape',
+    name: 'Lydian Dreamscape',
     category: 'Cinematic & Modal',
     roman: 'Imaj7 – II – Imaj7 – II',
-    description: 'Magical raised-4th harmony used by John Williams and Joe Hisaishi (Ghibli).',
+    description: 'Magical raised-4th harmony evoking wonder, airborne flight, and majestic adventure.',
     relativeChords: [
       { interval: 0, quality: 'maj7', bars: 1 }, // Imaj7
       { interval: 2, quality: 'maj', bars: 1 },  // II (Major 2 in Lydian)
@@ -301,10 +301,10 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
 
   // Classical & Baroque
   {
-    name: 'Pachelbel Canon Cadence',
+    name: 'Baroque Canon Cadence',
     category: 'Classical & Baroque',
     roman: 'I – V – vi – iii – IV – I – IV – V',
-    description: 'The golden baroque harmonic sequence celebrated across 300 years of music.',
+    description: 'The golden traditional baroque harmonic sequence celebrated across 300 years of music history.',
     relativeChords: [
       { interval: 0, quality: 'maj', bars: 1 },  // I
       { interval: 7, quality: 'maj', bars: 1 },  // V
@@ -320,7 +320,7 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
     name: 'Passacaglia / Circle of Fifths Descent',
     category: 'Classical & Baroque',
     roman: 'i – iv – VII – III – VI – iio – V – i',
-    description: 'Hypnotic circular resolution driving classical drama and cinematic tension.',
+    description: 'Hypnotic circular resolution driving classical drama, emotional tension, and resolve.',
     relativeChords: [
       { interval: 0, quality: 'min', bars: 1 },  // i
       { interval: 5, quality: 'min', bars: 1 },  // iv
