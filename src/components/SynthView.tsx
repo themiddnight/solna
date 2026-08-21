@@ -36,185 +36,6 @@ const KEYBOARD_NOTES = [
   { note: 'F4', label: 'F4', key: "'", isBlack: false },
 ];
 
-/**
- * Real-time Oscillator Waveform Box
- * Displays waveform with center horizontal X-axis (zero crossing),
- * showing positive crests UP and negative troughs DOWN.
- */
-const OscillatorCanvas: React.FC<{ params: SynthParams; activeNotesCount: number }> = ({
-  params,
-  activeNotesCount,
-}) => {
-  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
-
-  React.useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animId: number;
-
-    const render = () => {
-      const w = canvas.width;
-      const h = canvas.height;
-      const centerY = h / 2;
-
-      ctx.clearRect(0, 0, w, h);
-
-      // 1. Draw Zero-Crossing Reference Center Line
-      ctx.beginPath();
-      ctx.strokeStyle = 'rgba(99, 102, 241, 0.25)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
-      ctx.moveTo(0, centerY);
-      ctx.lineTo(w, centerY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // 2. Axis label markers (+ and -)
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.4)';
-      ctx.font = '8px monospace';
-      ctx.fillText('+1', 4, 10);
-      ctx.fillText('0', 4, centerY - 2);
-      ctx.fillText('-1', 4, h - 3);
-
-      const analyser = audioEngine.getAnalyser();
-      const isSounding = activeNotesCount > 0 && analyser;
-
-      const points: { x: number; y: number }[] = [];
-      const numPoints = 128;
-      const amp = (h / 2) * 0.82;
-
-      if (isSounding && analyser) {
-        // Read live Web Audio PCM time-domain buffer
-        const bufferLen = analyser.frequencyBinCount;
-        const timeData = new Uint8Array(bufferLen);
-        analyser.getByteTimeDomainData(timeData);
-
-        // Stabilize trigger
-        let triggerOffset = 0;
-        for (let i = 0; i < Math.min(bufferLen / 2, 256); i++) {
-          if (timeData[i] < 128 && timeData[i + 1] >= 128) {
-            triggerOffset = i;
-            break;
-          }
-        }
-
-        const slice = Math.min(bufferLen - triggerOffset, 256);
-        for (let i = 0; i < numPoints; i++) {
-          const idx = triggerOffset + Math.floor((i / (numPoints - 1)) * slice);
-          const raw = timeData[idx] !== undefined ? timeData[idx] : 128;
-          // Normalized -1.0 to +1.0
-          const norm = (raw - 128) / 128.0;
-          const x = (i / (numPoints - 1)) * w;
-          // Positive UP, Negative DOWN
-          const y = centerY - (norm * amp);
-          points.push({ x, y });
-        }
-      } else {
-        // Mathematical Oscillator Waveform Model with Sub-Osc & Detune
-        const time = Date.now() * 0.0025;
-        const cycles = 2.5; // Display 2.5 complete wave cycles across the box
-
-        for (let i = 0; i < numPoints; i++) {
-          const t = (i / (numPoints - 1)) * cycles * 2 * Math.PI + (time % (2 * Math.PI));
-          let val = 0;
-
-          // Main oscillator
-          if (params.oscType === 'sine') {
-            val = Math.sin(t);
-          } else if (params.oscType === 'square') {
-            val = Math.sin(t) >= 0 ? 0.9 : -0.9;
-          } else if (params.oscType === 'sawtooth') {
-            val = 2 * ((t / (2 * Math.PI)) - Math.floor(0.5 + (t / (2 * Math.PI))));
-          } else if (params.oscType === 'triangle') {
-            val = 2 * Math.abs(2 * ((t / (2 * Math.PI)) - Math.floor(0.5 + (t / (2 * Math.PI))))) - 1;
-          }
-
-          // Blend sub-oscillator (sine wave at half frequency)
-          if (params.subOscVolume > 0) {
-            const subVal = Math.sin(t * 0.5);
-            val = val * (1 - params.subOscVolume * 0.3) + subVal * params.subOscVolume * 0.5;
-          }
-
-          // Blend detune spread (chorus shimmer)
-          if (params.detune > 0) {
-            const detuneFactor = 1 + (params.detune / 1200);
-            const detuneVal = Math.sin(t * detuneFactor);
-            val = val * 0.8 + detuneVal * 0.2;
-          }
-
-          // Add slight noise
-          if (params.noiseVolume > 0) {
-            val += (Math.random() * 2 - 1) * params.noiseVolume * 0.35;
-          }
-
-          // Clamp
-          val = Math.max(-1, Math.min(1, val));
-
-          const x = (i / (numPoints - 1)) * w;
-          const y = centerY - (val * amp);
-          points.push({ x, y });
-        }
-      }
-
-      // Shaded area fill from center zero-axis to waveform
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, centerY);
-      for (let i = 0; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
-      }
-      ctx.lineTo(points[points.length - 1].x, centerY);
-      ctx.closePath();
-      ctx.fillStyle = isSounding ? 'rgba(99, 102, 241, 0.22)' : 'rgba(99, 102, 241, 0.1)';
-      ctx.fill();
-
-      // Main glowing waveform stroke line
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0 = points[i];
-        const p1 = points[i + 1];
-        const midX = (p0.x + p1.x) / 2;
-        const midY = (p0.y + p1.y) / 2;
-        ctx.quadraticCurveTo(p0.x, p0.y, midX, midY);
-      }
-      ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-
-      ctx.shadowBlur = isSounding ? 10 : 3;
-      ctx.shadowColor = '#818cf8';
-      ctx.strokeStyle = isSounding ? '#c7d2fe' : '#a5b4fc';
-      ctx.lineWidth = isSounding ? 2.2 : 1.8;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      animId = requestAnimationFrame(render);
-    };
-
-    const handleResize = () => {
-      const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      ctx.scale(dpr, dpr);
-    };
-
-    handleResize();
-    const observer = new ResizeObserver(handleResize);
-    observer.observe(canvas);
-
-    animId = requestAnimationFrame(render);
-
-    return () => {
-      cancelAnimationFrame(animId);
-      observer.disconnect();
-    };
-  }, [params, activeNotesCount]);
-
-  return <canvas ref={canvasRef} className="w-full h-full block rounded" />;
-};
-
 export const SynthView: React.FC<SynthViewProps> = ({ params, onChangeParams }) => {
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
@@ -448,7 +269,7 @@ export const SynthView: React.FC<SynthViewProps> = ({ params, onChangeParams }) 
 
           <div>
             <label className="text-xs text-slate-400 block mb-1.5 font-medium">Waveform</label>
-            <div className="grid grid-cols-4 gap-1 mb-2">
+            <div className="grid grid-cols-4 gap-1">
               {(['sawtooth', 'square', 'sine', 'triangle'] as const).map((w) => (
                 <button
                   key={w}
@@ -463,17 +284,6 @@ export const SynthView: React.FC<SynthViewProps> = ({ params, onChangeParams }) 
                   {w.slice(0, 4)}
                 </button>
               ))}
-            </div>
-
-            {/* Centered Oscilloscope Waveform Display Box */}
-            <div className="bg-[#0B0D19] border border-[#252B48] rounded-lg p-2 relative overflow-hidden">
-              <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono mb-1">
-                <span>OSC WAVEFORM (+ / -)</span>
-                <span className="text-indigo-400 font-semibold uppercase">{params.oscType}</span>
-              </div>
-              <div className="h-16 w-full relative">
-                <OscillatorCanvas params={params} activeNotesCount={activeNotes.size} />
-              </div>
             </div>
           </div>
 

@@ -70,17 +70,25 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       analyser.getByteFrequencyData(freqData);
       analyser.getByteTimeDomainData(timeData);
 
-      // Check if there is actual audio activity
+      // Check if there is actual audio activity (filter out digital silence & DC bias)
       let energy = 0;
       for (let i = 0; i < bufferLength; i++) {
         energy += freqData[i];
       }
       const avgEnergy = energy / bufferLength;
-      const isSounding = avgEnergy > 1.5;
+
+      let maxDeviation = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const dev = Math.abs(timeData[i] - 128);
+        if (dev > maxDeviation) maxDeviation = dev;
+      }
+
+      // Strictly consider sounding only if audio is genuinely active
+      const isSounding = avgEnergy > 2.5 && maxDeviation > 3;
       setIsActive(isSounding);
 
       if (mode === 'bars') {
-        renderBars(ctx, width, height, freqData, bufferLength, colorTheme);
+        renderBars(ctx, width, height, freqData, bufferLength, colorTheme, isSounding);
       } else if (mode === 'oscilloscope') {
         renderOscilloscope(ctx, width, height, timeData, bufferLength, colorTheme, isSounding);
       } else if (mode === 'ambient-bg') {
@@ -148,12 +156,13 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       h: number,
       data: Uint8Array,
       len: number,
-      theme: string
+      theme: string,
+      isSounding: boolean
     ) => {
       const barCount = Math.min(36, Math.max(12, Math.floor(w / 5)));
       const gap = 1.5;
       const barWidth = Math.max(2, (w - (barCount - 1) * gap) / barCount);
-      const logData = getLogFrequencyData(data, barCount, len);
+      const logData = isSounding ? getLogFrequencyData(data, barCount, len) : new Array(barCount).fill(0);
 
       if (peaksRef.current.length !== barCount) {
         peaksRef.current = new Array(barCount).fill(0);
@@ -161,8 +170,8 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
 
       for (let i = 0; i < barCount; i++) {
         const val = logData[i] || 0;
-        const percent = val / 255;
-        const barHeight = Math.max(2, percent * (h - 4));
+        const percent = isSounding ? val / 255 : 0;
+        const barHeight = isSounding ? Math.max(2, percent * (h - 4)) : 0;
         const x = i * (barWidth + gap);
         const y = h - barHeight;
 
@@ -170,39 +179,43 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
         if (barHeight > peaksRef.current[i]) {
           peaksRef.current[i] = barHeight;
         } else {
-          peaksRef.current[i] = Math.max(0, peaksRef.current[i] - 0.6);
+          peaksRef.current[i] = Math.max(0, peaksRef.current[i] - (isSounding ? 0.6 : 1.2));
         }
 
-        // Gradient for bars
-        const grad = c.createLinearGradient(0, h, 0, 0);
-        if (theme === 'emerald') {
-          grad.addColorStop(0, '#059669');
-          grad.addColorStop(0.7, '#10b981');
-          grad.addColorStop(1, '#6ee7b7');
-        } else if (theme === 'amber') {
-          grad.addColorStop(0, '#d97706');
-          grad.addColorStop(0.7, '#f59e0b');
-          grad.addColorStop(1, '#fde68a');
-        } else if (theme === 'cyberpunk') {
-          grad.addColorStop(0, '#ec4899');
-          grad.addColorStop(0.5, '#a855f7');
-          grad.addColorStop(1, '#38bdf8');
-        } else {
-          // Default Indigo
-          grad.addColorStop(0, '#4338ca');
-          grad.addColorStop(0.6, '#6366f1');
-          grad.addColorStop(1, '#a5b4fc');
-        }
+        if (barHeight > 0) {
+          // Gradient for bars
+          const grad = c.createLinearGradient(0, h, 0, 0);
+          if (theme === 'emerald') {
+            grad.addColorStop(0, '#059669');
+            grad.addColorStop(0.7, '#10b981');
+            grad.addColorStop(1, '#6ee7b7');
+          } else if (theme === 'amber') {
+            grad.addColorStop(0, '#d97706');
+            grad.addColorStop(0.7, '#f59e0b');
+            grad.addColorStop(1, '#fde68a');
+          } else if (theme === 'cyberpunk') {
+            grad.addColorStop(0, '#ec4899');
+            grad.addColorStop(0.5, '#a855f7');
+            grad.addColorStop(1, '#38bdf8');
+          } else {
+            // Default Indigo
+            grad.addColorStop(0, '#4338ca');
+            grad.addColorStop(0.6, '#6366f1');
+            grad.addColorStop(1, '#a5b4fc');
+          }
 
-        c.fillStyle = grad;
-        c.beginPath();
-        c.roundRect ? c.roundRect(x, y, barWidth, barHeight, [2, 2, 0, 0]) : c.rect(x, y, barWidth, barHeight);
-        c.fill();
+          c.fillStyle = grad;
+          c.beginPath();
+          c.roundRect ? c.roundRect(x, y, barWidth, barHeight, [2, 2, 0, 0]) : c.rect(x, y, barWidth, barHeight);
+          c.fill();
+        }
 
         // Peak line
-        const peakY = h - peaksRef.current[i] - 1;
-        c.fillStyle = theme === 'cyberpunk' ? '#f43f5e' : '#e0e7ff';
-        c.fillRect(x, Math.max(0, peakY), barWidth, 1.5);
+        if (peaksRef.current[i] > 1) {
+          const peakY = h - peaksRef.current[i] - 1;
+          c.fillStyle = theme === 'cyberpunk' ? '#f43f5e' : '#e0e7ff';
+          c.fillRect(x, Math.max(0, peakY), barWidth, 1.5);
+        }
       }
     };
 
@@ -217,7 +230,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       isSounding: boolean
     ) => {
       const samplePoints = 56;
-      const logData = getLogFrequencyData(data, samplePoints, len);
+      const logData = isSounding ? getLogFrequencyData(data, samplePoints, len) : new Array(samplePoints).fill(0);
       const points: { x: number; y: number }[] = [];
 
       // Smooth with previous frame for fluid animation
@@ -227,59 +240,61 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
 
       for (let i = 0; i < samplePoints; i++) {
         const raw = logData[i] || 0;
-        // Interpolate for buttery smoothness
-        const smoothed = prevDataRef.current[i] * 0.35 + (raw / 255) * 0.65;
+        // Interpolate for buttery smoothness (fast decay if sound stopped)
+        const decayFactor = isSounding ? 0.35 : 0.7;
+        const smoothed = prevDataRef.current[i] * decayFactor + (isSounding ? (raw / 255) * (1 - decayFactor) : 0);
         prevDataRef.current[i] = smoothed;
 
         const x = (i / (samplePoints - 1)) * w;
-        // If sound is playing, use magnitude, otherwise slight resting ripple
-        const idleWave = Math.sin(Date.now() * 0.003 + i * 0.2) * 1.5;
+        // If sound is playing, use magnitude; if idle/silent, sit flat at bottom baseline
         const y = isSounding
-          ? h - Math.max(2, smoothed * (h - 5)) - 2
-          : h / 2 + idleWave;
+          ? h - Math.max(2, smoothed * (h - 4)) - 2
+          : h - 2;
 
         points.push({ x, y });
       }
 
-      // Draw Gradient Area Fill
-      const grad = c.createLinearGradient(0, 0, 0, h);
-      if (theme === 'emerald') {
-        grad.addColorStop(0, 'rgba(16, 185, 129, 0.45)');
-        grad.addColorStop(0.5, 'rgba(5, 150, 105, 0.2)');
-        grad.addColorStop(1, 'rgba(4, 120, 87, 0.0)');
-      } else if (theme === 'amber') {
-        grad.addColorStop(0, 'rgba(245, 158, 11, 0.45)');
-        grad.addColorStop(0.5, 'rgba(217, 119, 6, 0.2)');
-        grad.addColorStop(1, 'rgba(180, 83, 9, 0.0)');
-      } else if (theme === 'cyberpunk') {
-        grad.addColorStop(0, 'rgba(236, 72, 153, 0.5)');
-        grad.addColorStop(0.5, 'rgba(168, 85, 247, 0.25)');
-        grad.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
-      } else {
-        // Indigo
-        grad.addColorStop(0, 'rgba(99, 102, 241, 0.45)');
-        grad.addColorStop(0.5, 'rgba(79, 70, 229, 0.2)');
-        grad.addColorStop(1, 'rgba(49, 46, 129, 0.0)');
+      if (isSounding) {
+        // Draw Gradient Area Fill
+        const grad = c.createLinearGradient(0, 0, 0, h);
+        if (theme === 'emerald') {
+          grad.addColorStop(0, 'rgba(16, 185, 129, 0.45)');
+          grad.addColorStop(0.5, 'rgba(5, 150, 105, 0.2)');
+          grad.addColorStop(1, 'rgba(4, 120, 87, 0.0)');
+        } else if (theme === 'amber') {
+          grad.addColorStop(0, 'rgba(245, 158, 11, 0.45)');
+          grad.addColorStop(0.5, 'rgba(217, 119, 6, 0.2)');
+          grad.addColorStop(1, 'rgba(180, 83, 9, 0.0)');
+        } else if (theme === 'cyberpunk') {
+          grad.addColorStop(0, 'rgba(236, 72, 153, 0.5)');
+          grad.addColorStop(0.5, 'rgba(168, 85, 247, 0.25)');
+          grad.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+        } else {
+          // Indigo
+          grad.addColorStop(0, 'rgba(99, 102, 241, 0.45)');
+          grad.addColorStop(0.5, 'rgba(79, 70, 229, 0.2)');
+          grad.addColorStop(1, 'rgba(49, 46, 129, 0.0)');
+        }
+
+        c.beginPath();
+        c.moveTo(points[0].x, h);
+        c.lineTo(points[0].x, points[0].y);
+
+        for (let i = 0; i < points.length - 1; i++) {
+          const p0 = points[i];
+          const p1 = points[i + 1];
+          const midX = (p0.x + p1.x) / 2;
+          const midY = (p0.y + p1.y) / 2;
+          c.quadraticCurveTo(p0.x, p0.y, midX, midY);
+        }
+        c.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        c.lineTo(w, h);
+        c.closePath();
+        c.fillStyle = grad;
+        c.fill();
       }
 
-      c.beginPath();
-      c.moveTo(points[0].x, h);
-      c.lineTo(points[0].x, points[0].y);
-
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0 = points[i];
-        const p1 = points[i + 1];
-        const midX = (p0.x + p1.x) / 2;
-        const midY = (p0.y + p1.y) / 2;
-        c.quadraticCurveTo(p0.x, p0.y, midX, midY);
-      }
-      c.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-      c.lineTo(w, h);
-      c.closePath();
-      c.fillStyle = grad;
-      c.fill();
-
-      // Top glowing stroke line
+      // Top glowing stroke line (or flat resting baseline when idle)
       c.beginPath();
       c.moveTo(points[0].x, points[0].y);
       for (let i = 0; i < points.length - 1; i++) {
@@ -291,7 +306,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       }
       c.lineTo(points[points.length - 1].x, points[points.length - 1].y);
 
-      c.shadowBlur = isSounding ? 10 : 2;
+      c.shadowBlur = isSounding ? 10 : 0;
       c.shadowColor =
         theme === 'emerald'
           ? '#34d399'
@@ -300,15 +315,16 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
           : theme === 'cyberpunk'
           ? '#f472b6'
           : '#818cf8';
-      c.strokeStyle =
-        theme === 'emerald'
+      c.strokeStyle = isSounding
+        ? (theme === 'emerald'
           ? '#6ee7b7'
           : theme === 'amber'
           ? '#fde68a'
           : theme === 'cyberpunk'
           ? '#f9a8d4'
-          : '#c7d2fe';
-      c.lineWidth = isSounding ? 2 : 1.2;
+          : '#c7d2fe')
+        : 'rgba(99, 102, 241, 0.25)';
+      c.lineWidth = isSounding ? 2 : 1;
       c.stroke();
       c.shadowBlur = 0; // reset
     };
@@ -324,44 +340,67 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       isSounding: boolean
     ) => {
       const centerY = h / 2;
+      const amplitudeLimit = Math.max(4, (h / 2) - 4); // Max distance from center to top (+1) or bottom (-1)
 
-      // 1. Draw Centered Zero-Crossing Reference X-Axis Line
+      // 1. Draw Axis Reference Grid Lines (+1 Top, 0 Center, -1 Bottom)
       c.beginPath();
-      c.strokeStyle = 'rgba(99, 102, 241, 0.22)';
+      c.strokeStyle = 'rgba(99, 102, 241, 0.2)';
       c.lineWidth = 1;
       c.setLineDash([3, 3]);
+      
+      // Top +1 boundary reference
+      c.moveTo(0, 3);
+      c.lineTo(w, 3);
+
+      // Center 0V zero-crossing line
       c.moveTo(0, centerY);
       c.lineTo(w, centerY);
+
+      // Bottom -1 boundary reference
+      c.moveTo(0, h - 3);
+      c.lineTo(w, h - 3);
       c.stroke();
       c.setLineDash([]); // Reset dash
 
-      // 2. Trigger detection to stabilize waveform display
-      let triggerOffset = 0;
-      for (let i = 0; i < Math.min(len / 2, 256); i++) {
-        if (data[i] < 128 && data[i + 1] >= 128) {
-          triggerOffset = i;
-          break;
-        }
-      }
+      // 2. Axis Scale Labels (+1 at Top, 0 at Center, -1 at Bottom)
+      c.fillStyle = 'rgba(148, 163, 184, 0.45)';
+      c.font = '8px monospace';
+      c.fillText('+1', 3, 9);
+      c.fillText(' 0', 3, centerY + 3);
+      c.fillText('-1', 3, h - 5);
 
-      const activeSamples = Math.min(len - triggerOffset, 512);
-      const sliceWidth = w / (activeSamples - 1);
       const points: { x: number; y: number }[] = [];
-      const amplitudeLimit = (h / 2) * 0.88;
 
-      for (let i = 0; i < activeSamples; i++) {
-        const rawByte = data[triggerOffset + i] !== undefined ? data[triggerOffset + i] : 128;
-        // Normalized from -1.0 (negative trough) to +1.0 (positive crest), centered at 0
-        const normalized = (rawByte - 128) / 128.0;
-        const x = i * sliceWidth;
-        // Positive goes UP (y decreases), Negative goes DOWN (y increases), Zero stays at centerY
-        const y = centerY - (normalized * amplitudeLimit);
-        points.push({ x, y });
+      if (!isSounding) {
+        // When completely idle / silent, render a clean resting flat line at centerY
+        points.push({ x: 0, y: centerY });
+        points.push({ x: w, y: centerY });
+      } else {
+        // Trigger detection to stabilize waveform display
+        let triggerOffset = 0;
+        for (let i = 0; i < Math.min(len / 2, 256); i++) {
+          if (data[i] < 128 && data[i + 1] >= 128) {
+            triggerOffset = i;
+            break;
+          }
+        }
+
+        const activeSamples = Math.min(len - triggerOffset, 512);
+        const sliceWidth = w / (activeSamples - 1);
+
+        for (let i = 0; i < activeSamples; i++) {
+          const rawByte = data[triggerOffset + i] !== undefined ? data[triggerOffset + i] : 128;
+          // Normalized from -1.0 (negative trough) to +1.0 (positive crest), centered at 0
+          const normalized = (rawByte - 128) / 128.0;
+          const x = i * sliceWidth;
+          // Positive goes UP (y decreases), Negative goes DOWN (y increases), Zero stays at centerY
+          const y = centerY - (normalized * amplitudeLimit);
+          points.push({ x, y });
+        }
       }
 
       if (points.length === 0) return;
 
-      // 3. Draw subtle dual-sided center glow fill
       const themeColor =
         theme === 'emerald'
           ? '#10b981'
@@ -371,6 +410,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
           ? '#38bdf8'
           : '#6366f1';
 
+      // 3. Draw subtle dual-sided center glow fill when sounding
       if (isSounding) {
         c.beginPath();
         c.moveTo(points[0].x, centerY);
@@ -381,36 +421,41 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
         c.closePath();
         c.fillStyle =
           theme === 'cyberpunk'
-            ? 'rgba(56, 189, 248, 0.12)'
+            ? 'rgba(56, 189, 248, 0.14)'
             : theme === 'emerald'
-            ? 'rgba(16, 185, 129, 0.12)'
-            : 'rgba(99, 102, 241, 0.12)';
+            ? 'rgba(16, 185, 129, 0.14)'
+            : 'rgba(99, 102, 241, 0.14)';
         c.fill();
       }
 
-      // 4. Draw Oscilloscope Beam Curve
+      // 4. Draw Oscilloscope Beam Curve (or flat line at centerY)
       c.beginPath();
       c.moveTo(points[0].x, points[0].y);
 
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0 = points[i];
-        const p1 = points[i + 1];
-        const midX = (p0.x + p1.x) / 2;
-        const midY = (p0.y + p1.y) / 2;
-        c.quadraticCurveTo(p0.x, p0.y, midX, midY);
+      if (points.length > 2) {
+        for (let i = 0; i < points.length - 1; i++) {
+          const p0 = points[i];
+          const p1 = points[i + 1];
+          const midX = (p0.x + p1.x) / 2;
+          const midY = (p0.y + p1.y) / 2;
+          c.quadraticCurveTo(p0.x, p0.y, midX, midY);
+        }
+        c.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+      } else {
+        c.lineTo(points[points.length - 1].x, points[points.length - 1].y);
       }
-      c.lineTo(points[points.length - 1].x, points[points.length - 1].y);
 
-      c.shadowBlur = isSounding ? 10 : 2;
+      c.shadowBlur = isSounding ? 10 : 0;
       c.shadowColor = themeColor;
-      c.strokeStyle =
-        theme === 'emerald'
+      c.strokeStyle = isSounding
+        ? (theme === 'emerald'
           ? '#6ee7b7'
           : theme === 'amber'
           ? '#fde68a'
           : theme === 'cyberpunk'
           ? '#7dd3fc'
-          : '#c7d2fe';
+          : '#c7d2fe')
+        : 'rgba(99, 102, 241, 0.35)';
       c.lineWidth = isSounding ? 2.2 : 1.2;
       c.stroke();
       c.shadowBlur = 0;
