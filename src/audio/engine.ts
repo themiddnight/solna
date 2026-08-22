@@ -1,4 +1,5 @@
 import { SynthParams, MasterEffects } from '../types';
+import { sixteenthNoteMs, noteFrequency } from '../utils/musicTheory';
 
 class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -37,6 +38,7 @@ class AudioEngine {
   private clockNextStepTime = 0; // audio-clock seconds of the next step to schedule
   private clockListeners = new Set<(step: number, beat: number, time: number) => void>();
   private static readonly CLOCK_LOOKAHEAD = 0.1; // schedule events this far ahead
+  private static readonly CLOCK_REANCHOR_DELAY = 0.05; // gap used to re-anchor the schedule after resets and stalls
   private static readonly CLOCK_UPDATE_MS = 25;
 
   async init(): Promise<void> {
@@ -82,7 +84,7 @@ class AudioEngine {
    */
   resetClock(): void {
     this.clockStepIndex = 0;
-    this.clockNextStepTime = this.ctx ? this.ctx.currentTime + 0.05 : 0;
+    this.clockNextStepTime = this.ctx ? this.ctx.currentTime + AudioEngine.CLOCK_REANCHOR_DELAY : 0;
   }
 
   // The shared clock keeps its grid position across stop/start and
@@ -105,9 +107,9 @@ class AudioEngine {
     if (!this.ctx) return;
     // Resync after long stalls (tab slept, context created late) instead of bursting missed steps
     if (this.clockNextStepTime < this.ctx.currentTime - 0.5) {
-      this.clockNextStepTime = this.ctx.currentTime + 0.05;
+      this.clockNextStepTime = this.ctx.currentTime + AudioEngine.CLOCK_REANCHOR_DELAY;
     }
-    const stepDuration = 60 / this.clockBpm / 4;
+    const stepDuration = sixteenthNoteMs(this.clockBpm) / 1000;
     while (this.clockNextStepTime < this.ctx.currentTime + AudioEngine.CLOCK_LOOKAHEAD) {
       const time = this.clockNextStepTime;
       const step = this.clockStepIndex;
@@ -269,7 +271,7 @@ class AudioEngine {
   // Synthesizer Note On
   triggerSynthNoteOn(noteName: string, params: SynthParams, velocity = 0.8, time?: number, source = 'synth'): void {
     if (!this.ctx || !this.dryGain) return;
-    const freq = this.noteToFrequency(noteName, params.octave);
+    const freq = noteFrequency(noteName, params.octave);
     const now = time ?? this.ctx.currentTime;
 
     // Stop existing voice if note is already sounding
@@ -702,20 +704,8 @@ class AudioEngine {
     return sum / (data.length * 255);
   }
 
-  private noteToFrequency(note: string, octaveOffset = 0): number {
-    const noteMap: Record<string, number> = {
-      C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5,
-      'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11,
-    };
-
-    const match = note.match(/^([A-Ga-g][#b]?)(-?\d+)?$/);
-    if (!match) return 440;
-
-    const noteName = match[1].toUpperCase();
-    const octave = (match[2] ? parseInt(match[2], 10) : 4) + octaveOffset;
-    const semitones = (noteMap[noteName] ?? 9) + (octave - 4) * 12;
-    return 440 * Math.pow(2, (semitones - 9) / 12);
-  }
 }
+
+export const STEPS_PER_BAR = 16;
 
 export const audioEngine = new AudioEngine();

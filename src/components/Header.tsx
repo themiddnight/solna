@@ -31,6 +31,19 @@ interface HeaderProps {
   onChangeScaleType: (type: string) => void;
 }
 
+const NAV_TABS: Array<
+  | { view: ViewMode; label: string; icon: typeof Disc3; relative?: boolean }
+  | 'divider'
+> = [
+  { view: 'synth', label: 'Synth', icon: Sliders },
+  { view: 'drums', label: 'Drum Pads', icon: Disc3 },
+  'divider',
+  { view: 'sequencer', label: 'Step Matrix', icon: Grid, relative: true },
+  { view: 'chords', label: 'Chords', icon: Music, relative: true },
+  'divider',
+  { view: 'effects', label: 'Master FX', icon: Sliders },
+];
+
 export const Header: React.FC<HeaderProps> = ({
   currentView,
   onSelectView,
@@ -77,74 +90,27 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Primary Navigation Tabs */}
         <nav className="flex items-center p-1 rounded-lg bg-[#0B0D19] border border-[#252B48] overflow-x-auto max-w-full gap-1">
-          <button
-            id="tab-synth"
-            onClick={() => onSelectView('synth')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              currentView === 'synth'
-                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
-            }`}
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span>Synth</span>
-          </button>
-
-          <button
-            id="tab-drums"
-            onClick={() => onSelectView('drums')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              currentView === 'drums'
-                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
-            }`}
-          >
-            <Disc3 className="w-3.5 h-3.5" />
-            <span>Drum Pads</span>
-          </button>
-
-          <div className="w-px h-5 bg-[#252B48] mx-1 shrink-0" />
-
-          <button
-            id="tab-sequencer"
-            onClick={() => onSelectView('sequencer')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap relative ${
-              currentView === 'sequencer'
-                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
-            }`}
-          >
-            <Grid className="w-3.5 h-3.5" />
-            <span>Step Matrix</span>
-          </button>
-
-          <button
-            id="tab-chords"
-            onClick={() => onSelectView('chords')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap relative ${
-              currentView === 'chords'
-                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
-            }`}
-          >
-            <Music className="w-3.5 h-3.5" />
-            <span>Chords</span>
-          </button>
-
-          <div className="w-px h-5 bg-[#252B48] mx-1 shrink-0" />
-
-          <button
-            id="tab-effects"
-            onClick={() => onSelectView('effects')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              currentView === 'effects'
-                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
-            }`}
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span>Master FX</span>
-          </button>
+          {NAV_TABS.map((tab, index) =>
+            tab === 'divider' ? (
+              <div key={`divider-${index}`} className="w-px h-5 bg-[#252B48] mx-1 shrink-0" />
+            ) : (
+              <button
+                key={tab.view}
+                id={`tab-${tab.view}`}
+                onClick={() => onSelectView(tab.view)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap${
+                  tab.relative ? ' relative' : ''
+                } ${
+                  currentView === tab.view
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
+                }`}
+              >
+                <tab.icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            )
+          )}
         </nav>
       </div>
 

@@ -1,5 +1,4 @@
 export type ViewMode = 
-  | 'perform'
   | 'synth'
   | 'drums'
   | 'sequencer'
@@ -88,9 +87,7 @@ export interface ProjectState {
   bpm: number;
   scaleRoot: string;
   scaleType: string;
-  timeSignature?: string;
   synthParams?: SynthParams;
-  synth?: SynthParams;
   sequencerTracks: SequencerTrack[];
   chords: ChordItem[];
   effects: MasterEffects;

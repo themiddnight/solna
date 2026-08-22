@@ -1,3 +1,4 @@
+import { Chord, Interval, Note, transpose } from 'tonal';
 import { ChordItem } from '../types';
 
 export const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
@@ -88,7 +89,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
  * Returns all notes contained in the given scale for a root note (e.g. ['C', 'D', 'E', 'F', 'G', 'A', 'B'])
  */
 export function getScaleNotes(root: string, scaleType: string): string[] {
-  const rootIndex = ROOTS.indexOf(root as RootNote) >= 0 ? ROOTS.indexOf(root as RootNote) : 0;
+  const rootIndex = rootSemitone(root);
   const scale = SCALES[scaleType] || SCALES['Major'];
   return scale.intervals.map((int) => ROOTS[(rootIndex + int) % 12]);
 }
@@ -97,14 +98,12 @@ export function getScaleNotes(root: string, scaleType: string): string[] {
  * Checks if a note (with or without octave, e.g. 'C#4' or 'A') is in the specified scale
  */
 export function isNoteInScale(noteWithOrWithoutOctave: string, root: string, scaleType: string): boolean {
-  const match = noteWithOrWithoutOctave.match(/^([A-G][#b]?)/);
-  if (!match) return false;
-  const noteLetter = match[1];
-  const rootIndex = ROOTS.indexOf(root as RootNote);
-  const noteIndex = ROOTS.indexOf(noteLetter as RootNote);
-  if (rootIndex === -1 || noteIndex === -1) return false;
+  const note = Note.get(noteWithOrWithoutOctave);
+  if (note.empty) return false;
+  const rootNote = Note.get(root);
+  if (rootNote.empty) return false;
 
-  const interval = (noteIndex - rootIndex + 12) % 12;
+  const interval = (note.chroma - rootNote.chroma + 12) % 12;
   const scale = SCALES[scaleType] || SCALES['Major'];
   return scale.intervals.includes(interval);
 }
@@ -119,7 +118,7 @@ export function getDiatonicChordForDegree(
   scaleType: string,
   use7ths = false
 ): { root: string; quality: string; degreeName: string } {
-  const rootIndex = ROOTS.indexOf(root as RootNote) >= 0 ? ROOTS.indexOf(root as RootNote) : 0;
+  const rootIndex = rootSemitone(root);
   const scale = SCALES[scaleType] || SCALES['Major'];
   const numDegrees = scale.intervals.length;
 
@@ -153,12 +152,12 @@ export function reharmonizeProgressionToScale(
   newScaleType: string,
   octave = 4
 ): ChordItem[] {
-  const newRootIndex = ROOTS.indexOf(newRoot as RootNote) >= 0 ? ROOTS.indexOf(newRoot as RootNote) : 0;
+  const newRootIndex = rootSemitone(newRoot);
   const scale = SCALES[newScaleType] || SCALES['Major'];
 
   return currentChords.map((chord, idx) => {
     // Find semitone distance of chord from previous context, or snap to nearest scale degree
-    const currentRootIdx = ROOTS.indexOf(chord.root as RootNote) >= 0 ? ROOTS.indexOf(chord.root as RootNote) : 0;
+    const currentRootIdx = rootSemitone(chord.root);
     const intervalFromNewRoot = (currentRootIdx - newRootIndex + 12) % 12;
 
     // Find closest degree in scale
@@ -202,36 +201,48 @@ export function quarterNoteMs(bpm: number): number {
   return (60 / Math.max(1, bpm)) * 1000;
 }
 
+export function rootSemitone(root: string): number {
+  const n = Note.get(root);
+  return n.empty ? 0 : n.chroma;
+}
+
+export function sixteenthNoteMs(bpm: number): number {
+  return quarterNoteMs(bpm) / 4;
+}
+
+export function noteFrequency(note: string, octaveOffset = 0): number {
+  const midi = Note.midi(note);
+  if (midi == null) return 440;
+  return 440 * Math.pow(2, (midi + 12 * octaveOffset - 69) / 12);
+}
+
+export function shiftNoteOctave(note: string, octaves: number): string {
+  if (octaves === 0) return note;
+  const degree = 8 + 7 * (Math.abs(octaves) - 1);
+  const shifted = transpose(note, `${octaves > 0 ? '' : '-'}${degree}P`);
+  return shifted || note;
+}
+
+// App quality names that differ from tonal's chord-type tokens (keys are lowercase — lookups use toLowerCase())
+const TONAL_CHORD_ALIASES: Record<string, string> = {
+  min9: 'm9',
+  min6: 'm6',
+  minmaj7: 'mMaj7',
+};
+
 export function generateBlockChordNotes(chord: string, root = 'C', octave = 4): string[] {
-  const chordMap: Record<string, number[]> = {
-    maj: [0, 4, 7],
-    min: [0, 3, 7],
-    dim: [0, 3, 6],
-    dim7: [0, 3, 6, 9],
-    m7b5: [0, 3, 6, 10],
-    aug: [0, 4, 8],
-    '7': [0, 4, 7, 10],
-    maj7: [0, 4, 7, 11],
-    min7: [0, 3, 7, 10],
-    '9': [0, 4, 7, 10, 14],
-    maj9: [0, 4, 7, 11, 14],
-    min9: [0, 3, 7, 10, 14],
-    add9: [0, 4, 7, 14],
-    '6': [0, 4, 7, 9],
-    min6: [0, 3, 7, 9],
-    sus2: [0, 2, 7],
-    sus4: [0, 5, 7],
-    '7sus4': [0, 5, 7, 10],
-  };
+  const tonalType = TONAL_CHORD_ALIASES[chord.toLowerCase()] || chord.toLowerCase();
+  const chordData = Chord.getChord(tonalType, root);
+  const resolved = chordData.empty ? Chord.getChord('maj', root) : chordData;
+  if (resolved.empty) return [];
 
-  const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const rootIndex = notes.indexOf(root.toUpperCase()) >= 0 ? notes.indexOf(root.toUpperCase()) : 0;
-  const intervals = chordMap[chord.toLowerCase()] || [0, 4, 7];
+  const rootMidi = Note.midi(`${root}${octave}`) ?? Note.midi(`C${octave}`) ?? 60;
 
-  return intervals.map((semitones) => {
-    const totalSemitones = rootIndex + semitones;
-    const noteName = notes[totalSemitones % 12];
-    const oct = octave + Math.floor(totalSemitones / 12);
+  return resolved.intervals.map((ivl) => {
+    const semitones = Interval.semitones(ivl);
+    const midi = rootMidi + (Number.isFinite(semitones) ? semitones : 0);
+    const noteName = ROOTS[((midi % 12) + 12) % 12];
+    const oct = Math.floor(midi / 12) - 1;
     return `${noteName}${oct}`;
   });
 }

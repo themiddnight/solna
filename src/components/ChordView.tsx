@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Music, Play, Square, Sparkles, Plus, Trash2, ArrowRight, Library, Bookmark, Check, Link2 } from 'lucide-react';
 import { ChordItem, SynthParams } from '../types';
-import { audioEngine } from '../audio/engine';
+import { audioEngine, STEPS_PER_BAR } from '../audio/engine';
 import { FACTORY_PRESETS, getCustomPresets } from '../audio/synthPresets';
-import { RHYTHM_PATTERNS, RHYTHM_STYLE_GROUPS, RhythmPattern, shiftNoteOctave } from '../audio/rhythmPatterns';
-import { deriveChordNotes, reharmonizeProgressionToScale, generateBlockChordNotes, quarterNoteMs } from '../utils/musicTheory';
+import { RHYTHM_PATTERNS, RHYTHM_STYLE_GROUPS, RhythmPattern } from '../audio/rhythmPatterns';
+import { deriveChordNotes, reharmonizeProgressionToScale, generateBlockChordNotes, quarterNoteMs, sixteenthNoteMs, rootSemitone, shiftNoteOctave, SCALES, ROOTS } from '../utils/musicTheory';
 import {
   ChordPresetLibrary,
   getCustomChordProgressions,
@@ -36,20 +36,6 @@ interface ChordViewProps {
 }
 
 const SELECT_BASE = 'bg-[#171B36] border border-[#2D355A] rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-200';
-
-const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-
-const SCALES: Record<string, { name: string; intervals: number[] }> = {
-  'Major': { name: 'Major (Ionian)', intervals: [0, 2, 4, 5, 7, 9, 11] },
-  'Natural Minor': { name: 'Natural Minor (Aeolian)', intervals: [0, 2, 3, 5, 7, 8, 10] },
-  'Harmonic Minor': { name: 'Harmonic Minor', intervals: [0, 2, 3, 5, 7, 8, 11] },
-  'Dorian': { name: 'Dorian (Funk / Modal)', intervals: [0, 2, 3, 5, 7, 9, 10] },
-  'Mixolydian': { name: 'Mixolydian (Blues / Rock)', intervals: [0, 2, 4, 5, 7, 9, 10] },
-  'Lydian': { name: 'Lydian (Bright / Dreamy)', intervals: [0, 2, 4, 6, 7, 9, 11] },
-  'Minor Pentatonic': { name: 'Minor Pentatonic', intervals: [0, 3, 5, 7, 10] },
-  'Major Pentatonic': { name: 'Major Pentatonic', intervals: [0, 2, 4, 7, 9] },
-  'Blues': { name: 'Blues Scale', intervals: [0, 3, 5, 6, 7, 10] },
-};
 
 export interface ProgressionTemplate {
   name: string;
@@ -391,7 +377,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
     audioEngine.init();
 
     const notes = generateBlockChordNotes(chord.quality, chord.root, chordOctave);
-    const stepDur = quarterNoteMs(bpm) / 4000;
+    const stepDur = sixteenthNoteMs(bpm) / 1000;
     const totalBars = chord.bars || 1;
 
     // Precompute the pattern's events once per chord trigger (bar-invariant)
@@ -413,7 +399,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
       });
     });
 
-    const barDur = stepDur * 16;
+    const barDur = stepDur * STEPS_PER_BAR;
     for (let bar = 0; bar < totalBars; bar++) {
       const barStart = startTime + bar * barDur;
       for (const ev of events) {
@@ -446,7 +432,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
     return audioEngine.subscribeClock((step, _beat, time) => {
       // Start aligned to the next bar boundary so chord changes land on beat 1
       if (!armedRef.current) {
-        if (step % 16 !== 0) return;
+        if (step % STEPS_PER_BAR !== 0) return;
         armedRef.current = true;
         chordIndexRef.current = 0;
         nextBarStepRef.current = step;
@@ -456,7 +442,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
       playChordWithRhythm(chord, time, rhythmPattern);
       setPlayingIndex(chordIndexRef.current % chords.length);
       setActiveChordId(chord.id);
-      nextBarStepRef.current = step + (chord.bars || 1) * 16;
+      nextBarStepRef.current = step + (chord.bars || 1) * STEPS_PER_BAR;
       chordIndexRef.current++;
     });
   }, [isPlaying, chords, playChordWithRhythm, rhythmPattern]);
@@ -471,13 +457,13 @@ export const ChordView: React.FC<ChordViewProps> = ({
   }, [scaleRoot, scaleType]);
 
   // Calculate notes in selected scale
-  const rootIdx = ROOTS.indexOf(scaleRoot);
+  const rootIdx = rootSemitone(scaleRoot);
   const intervals = SCALES[scaleType]?.intervals || [0, 2, 4, 5, 7, 9, 11];
   const scaleNotes = intervals.map((int) => ROOTS[(rootIdx + int) % 12]);
 
   // Transpose the template's relative intervals cleanly to the current selected Key Root and optionally auto-reharmonize
   const applyProgressionTemplate = (template: ProgressionTemplate) => {
-    const baseRootIndex = ROOTS.indexOf(scaleRoot) >= 0 ? ROOTS.indexOf(scaleRoot) : 0;
+    const baseRootIndex = rootSemitone(scaleRoot);
 
     let newChords: ChordItem[] = template.relativeChords.map((c, i) => {
       const transposedRoot = ROOTS[(baseRootIndex + c.interval) % 12];

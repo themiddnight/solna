@@ -49,8 +49,6 @@ export const TransportBar: React.FC<TransportBarProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [isPlaying]);
 
-
-
   return (
     <div className="bg-[#12152A] border-t border-[#252B48] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
       {/* Left Transport Actions */}
@@ -85,7 +83,6 @@ export const TransportBar: React.FC<TransportBarProps> = ({
           {isPlaying ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
           <span>{isPlaying ? 'PAUSE' : 'PLAY'}</span>
         </button>
-
 
       </div>
 

@@ -20,10 +20,8 @@ import {
   CHORD_PROGRESSION_TEMPLATES,
 } from './ChordView';
 import { audioEngine } from '../audio/engine';
-import { generateBlockChordNotes } from '../utils/musicTheory';
-import { reharmonizeProgressionToScale } from '../utils/musicTheory';
+import { generateBlockChordNotes, reharmonizeProgressionToScale, rootSemitone, ROOTS } from '../utils/musicTheory';
 
-const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const LOCAL_STORAGE_CUSTOM_CHORDS_KEY = 'murva_chord_custom_progressions_v1';
 
 export interface CustomChordProgressionItem {
@@ -126,7 +124,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
 
   // Helper to convert template into chords transposed to scaleRoot and optionally auto-reharmonized
   const resolveTemplateChords = (template: ProgressionTemplate): ChordItem[] => {
-    const baseRootIndex = ROOTS.indexOf(scaleRoot) >= 0 ? ROOTS.indexOf(scaleRoot) : 0;
+    const baseRootIndex = rootSemitone(scaleRoot);
     let chords: ChordItem[] = template.relativeChords.map((rc, i) => {
       const transposedRoot = ROOTS[(baseRootIndex + rc.interval) % 12];
       return {

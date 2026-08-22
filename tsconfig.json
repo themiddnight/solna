@@ -1,10 +1,4 @@
 {
   "extends": "./tsconfig.strict.json",
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*", "./app/frontend/src/*", "./app/backend/src/*"]
-    }
-  },
   "include": ["src/**/*", "server.ts", "vite.config.ts"]
 }

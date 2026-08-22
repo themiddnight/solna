@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { SynthView } from './components/SynthView';
 import { DrumMachineView } from './components/DrumMachineView';
@@ -132,19 +132,21 @@ export function App() {
     }
   };
 
-  const toggleSequencerPlay = () => {
-    audioEngine.init();
+  const resetClockIfStopped = () => {
     if (!isSequencerPlaying && !isChordsPlaying) {
       audioEngine.resetClock();
     }
+  };
+
+  const toggleSequencerPlay = () => {
+    audioEngine.init();
+    resetClockIfStopped();
     setIsSequencerPlaying((prev) => !prev);
   };
 
   const toggleChordsPlay = () => {
     audioEngine.init();
-    if (!isSequencerPlaying && !isChordsPlaying) {
-      audioEngine.resetClock();
-    }
+    resetClockIfStopped();
     setIsChordsPlaying((prev) => !prev);
   };
 

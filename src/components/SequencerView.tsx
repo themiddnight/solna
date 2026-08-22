@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Grid, Play, Square, RotateCcw, Shuffle, ArrowLeft, ArrowRight, Volume2, VolumeX, Sparkles } from 'lucide-react';
 import { SequencerTrack, SynthParams } from '../types';
-import { audioEngine } from '../audio/engine';
+import { audioEngine, STEPS_PER_BAR } from '../audio/engine';
+import { sixteenthNoteMs } from '../utils/musicTheory';
 
 interface SequencerViewProps {
   tracks: SequencerTrack[];
@@ -139,7 +140,7 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
   const [selectedGenre, setSelectedGenre] = useState<string>('Synthwave');
   // Real-time playback stepper — driven by the shared audio-clock scheduler
   const armedRef = useRef(false);
-  const stepDurationMs = (60 / bpm / 4) * 1000;
+  const stepDurationMs = sixteenthNoteMs(bpm);
 
   const playStepSounds = useCallback(
     (stepIndex: number, time: number) => {
@@ -169,10 +170,10 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
     return audioEngine.subscribeClock((step, _beat, time) => {
       // Start aligned to the next bar boundary so the 16-step loop lands on beat 1
       if (!armedRef.current) {
-        if (step % 16 !== 0) return;
+        if (step % STEPS_PER_BAR !== 0) return;
         armedRef.current = true;
       }
-      const stepInLoop = step % 16;
+      const stepInLoop = step % STEPS_PER_BAR;
       setCurrentStep(stepInLoop);
       playStepSounds(stepInLoop, time);
     });

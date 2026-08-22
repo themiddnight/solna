@@ -53,10 +53,6 @@ const strum = (
   spreadMs,
 });
 
-export function shiftNoteOctave(note: string, octaves: number): string {
-  return note.replace(/(-?\d+)$/, (m) => String(parseInt(m, 10) + octaves));
-}
-
 export const RHYTHM_PATTERNS: RhythmPattern[] = [
   {
     id: 'sustained',
