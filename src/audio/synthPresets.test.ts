@@ -149,4 +149,32 @@ describe('custom chord progression helpers (store-backed wrappers)', () => {
     expect(deleteCustomChordProgression(saved.id)).toEqual([]);
     expect(getCustomChordProgressions()).toEqual([]);
   });
+
+  test('importing multiple progressions yields distinct ids and delete-one-leaves-one', () => {
+    const chord: ChordItem = {
+      id: 'c1',
+      root: 'C',
+      quality: 'maj7',
+      bars: 1,
+      notes: ['C4', 'E4', 'G4', 'B4'],
+    };
+    const imported = [
+      { name: 'Prog A', category: 'User', description: '', roman: 'I', chords: [chord] },
+      { name: 'Prog B', category: 'User', description: '', roman: 'ii', chords: [chord] },
+    ];
+    // Mirror the import handler's loop (reverse walk, one save per item).
+    [...imported]
+      .reverse()
+      .forEach((item) => {
+        saveCustomChordProgression(item.name, item.chords, item.category, item.description, item.roman);
+      });
+
+    const inStore = useAppStore.getState().customChordProgressions;
+    expect(inStore).toHaveLength(2);
+    const ids = inStore.map((c) => c.id);
+    expect(new Set(ids).size).toBe(2);
+
+    deleteCustomChordProgression(inStore[0].id);
+    expect(getCustomChordProgressions()).toHaveLength(1);
+  });
 });

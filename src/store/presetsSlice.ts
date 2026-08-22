@@ -56,7 +56,7 @@ export function createPresetsSlice(set: Set, _get: Get): PresetsSlice {
 
     saveCustomChordProgression: (name, chords, category = 'User', description = '', roman = '') => {
       const newItem = {
-        id: `chord-prog-${Date.now()}`,
+        id: `chord-prog-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         name,
         category,
         description,

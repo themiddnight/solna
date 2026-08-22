@@ -111,6 +111,11 @@ class FakeAudioContext {
   }
 }
 
+// The store must not be imported statically: its persist middleware reads
+// localStorage during creation, so the fake globals above must be installed
+// first. bun caches the module, so every test shares one store instance.
+let storeModule: Promise<typeof import('./store')> | null = null;
+
 beforeAll(() => {
   Object.defineProperty(globalThis, 'localStorage', { value: fakeLocalStorage, configurable: true });
   Object.defineProperty(globalThis, 'window', { value: globalThis, configurable: true });
@@ -134,10 +139,6 @@ afterEach(() => {
   fakeLocalStorage.clear();
 });
 
-// The store must not be imported statically: its persist middleware reads
-// localStorage during creation, so the fake globals above must be installed
-// first. bun caches the module, so every test shares one store instance.
-let storeModule: Promise<typeof import('./store')> | null = null;
 function getStore(): Promise<typeof import('./store')> {
   storeModule ??= import('./store');
   return storeModule;
