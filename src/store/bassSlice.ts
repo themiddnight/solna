@@ -1,0 +1,17 @@
+import type { StoreApi } from 'zustand';
+import { BASS_PATTERNS } from '../audio/bassPatterns';
+import type { AppStore, BassSlice } from './types';
+
+type Set = StoreApi<AppStore>['setState'];
+type Get = StoreApi<AppStore>['getState'];
+
+/** Bass module slice: pattern/feel/octave plus per-layer mute and volume. */
+export function createBassSlice(_set: Set, _get: Get): BassSlice {
+  return {
+    bassPatternId: BASS_PATTERNS[0].id,
+    bassFeel: 0.5,
+    bassOctave: 2,
+    bassMuted: false,
+    bassVolume: 1.0,
+  };
+}

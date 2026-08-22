@@ -61,6 +61,16 @@ export interface ChordItem {
   bassNote?: string | null; // bass override note name ('E4'); null/absent = auto root
 }
 
+export interface CustomChordProgressionItem {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  roman: string;
+  chords: ChordItem[];
+  createdAt: number;
+}
+
 export interface MasterEffects {
   reverbWet: number;
   reverbDecay: number;

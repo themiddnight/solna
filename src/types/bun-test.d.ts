@@ -6,6 +6,21 @@
 declare module 'bun:test' {
   export function describe(name: string, fn: () => void): void;
   export function test(name: string, fn: () => void): void;
+  export function beforeAll(fn: () => void | Promise<void>): void;
+  export function beforeEach(fn: () => void | Promise<void>): void;
+  export function afterEach(fn: () => void | Promise<void>): void;
+
+  export interface Mock<T extends (...args: never[]) => unknown> {
+    mock: {
+      calls: unknown[][];
+    };
+    mockClear(): Mock<T>;
+  }
+
+  export function spyOn<O extends object, M extends (...args: never[]) => unknown>(
+    obj: O,
+    method: keyof O & string
+  ): Mock<M>;
 
   export interface Matchers<T = unknown> {
     not: Matchers<T>;
@@ -15,6 +30,11 @@ declare module 'bun:test' {
     toBeCloseTo(expected: number, numDigits?: number): void;
     toHaveLength(length: number): void;
     toBeTruthy(): void;
+    toBeNull(): void;
+    toBeDefined(): void;
+    toHaveProperty(key: string): void;
+    toHaveBeenCalled(): void;
+    toHaveBeenCalledTimes(expected: number): void;
   }
 
   export function expect<T>(actual: T): Matchers<T>;

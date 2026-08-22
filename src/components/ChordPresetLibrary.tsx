@@ -15,6 +15,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { ChordItem, SynthParams } from '../types';
+import type { CustomChordProgressionItem } from '../types';
 import {
   ProgressionTemplate,
   CHORD_PROGRESSION_TEMPLATES,
@@ -22,17 +23,9 @@ import {
 import { audioEngine } from '../audio/engine';
 import { generateBlockChordNotes, reharmonizeProgressionToScale, rootSemitone, ROOTS } from '../utils/musicTheory';
 
-const LOCAL_STORAGE_CUSTOM_CHORDS_KEY = 'murva_chord_custom_progressions_v1';
+export type { CustomChordProgressionItem };
 
-export interface CustomChordProgressionItem {
-  id: string;
-  name: string;
-  category: string;
-  description: string;
-  roman: string;
-  chords: ChordItem[];
-  createdAt: number;
-}
+const LOCAL_STORAGE_CUSTOM_CHORDS_KEY = 'murva_chord_custom_progressions_v1';
 
 export function getCustomChordProgressions(): CustomChordProgressionItem[] {
   try {

@@ -22,98 +22,12 @@ import {
 } from './types';
 import { deriveChordNotes } from './utils/musicTheory';
 import { DRUM_KITS } from './audio/drumKits';
-
-const INITIAL_SYNTH_PARAMS: SynthParams = {
-  oscType: 'sawtooth',
-  subOscVolume: 0.3,
-  noiseVolume: 0.02,
-  detune: 6,
-  filterType: 'lowpass',
-  filterCutoff: 2400,
-  filterResonance: 3.0,
-  filterEnvAmount: 1200,
-  attack: 0.02,
-  decay: 0.4,
-  sustain: 0.6,
-  release: 0.5,
-  filterAttack: 0.02,
-  filterDecay: 0.4,
-  filterSustain: 0,
-  filterRelease: 0.5,
-  lfoRate: 3.5,
-  lfoDepth: 0.2,
-  lfoTarget: 'cutoff',
-  octave: 0,
-  preset: 'Cosmic Lead',
-};
-
-const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
-  {
-    id: 'track-kick',
-    name: 'Kick 808',
-    instrument: 'kick',
-    steps: [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false],
-    volume: 0.9,
-    muted: false,
-    color: 'bg-rose-500',
-  },
-  {
-    id: 'track-snare',
-    name: 'Snare Snap',
-    instrument: 'snare',
-    steps: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false],
-    volume: 0.85,
-    muted: false,
-    color: 'bg-amber-500',
-  },
-  {
-    id: 'track-hihat',
-    name: 'Closed Hat',
-    instrument: 'hihat',
-    steps: [true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false],
-    volume: 0.75,
-    muted: false,
-    color: 'bg-emerald-500',
-  },
-  {
-    id: 'track-openhat',
-    name: 'Open Hat',
-    instrument: 'openhat',
-    steps: [false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false],
-    volume: 0.8,
-    muted: false,
-    color: 'bg-cyan-500',
-  },
-  {
-    id: 'track-clap',
-    name: 'Hand Clap',
-    instrument: 'clap',
-    steps: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false],
-    volume: 0.85,
-    muted: false,
-    color: 'bg-purple-500',
-  },
-];
-
-const INITIAL_CHORDS: ChordItem[] = [
-  { id: 'chord-1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] },
-  { id: 'chord-2', root: 'F', quality: 'maj7', bars: 1, notes: ['F3', 'A3', 'C4', 'E4'] },
-  { id: 'chord-3', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] },
-  { id: 'chord-4', root: 'G', quality: '7', bars: 1, notes: ['G3', 'B3', 'D4', 'F4'] },
-];
-
-const INITIAL_EFFECTS: MasterEffects = {
-  reverbWet: 0.25,
-  reverbDecay: 2.4,
-  delayWet: 0.2,
-  delayTime: '8n',
-  delayFeedback: 0.35,
-  distortionWet: 0.1,
-  eqLow: 2,
-  eqMid: 0,
-  eqHigh: 3,
-  compressorThreshold: -16,
-};
+import {
+  INITIAL_CHORDS,
+  INITIAL_EFFECTS,
+  INITIAL_SEQUENCER_TRACKS,
+  INITIAL_SYNTH_PARAMS,
+} from './store/initialState';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ViewMode>('synth');
