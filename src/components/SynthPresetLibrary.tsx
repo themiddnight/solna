@@ -13,14 +13,19 @@ import {
   Download,
   Upload,
   Volume2,
+  Tag,
 } from 'lucide-react';
 import { SynthParams } from '../types';
 import {
   getAllSynthPresets,
   SynthPresetItem,
+  SynthPresetCategory,
+  SYNTH_CATEGORIES,
   getCustomPresets,
   saveCustomPreset,
   deleteCustomPreset,
+  getCategoryMeta,
+  getPresetsGroupedByCategory,
 } from '../audio/synthPresets';
 import { audioEngine } from '../audio/engine';
 
@@ -42,7 +47,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showSaveModal, setShowSaveModal] = useState<boolean>(false);
   const [newPresetName, setNewPresetName] = useState<string>('');
-  const [newPresetCategory, setNewPresetCategory] = useState<SynthPresetItem['category']>('User');
+  const [newPresetCategory, setNewPresetCategory] = useState<SynthPresetCategory>('Lead');
   const [newPresetDesc, setNewPresetDesc] = useState<string>('');
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
@@ -53,23 +58,40 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
 
   const allPresets = useMemo(() => getAllSynthPresets(customPresets), [customPresets]);
 
-  const categories = ['All', 'User', 'Lead', 'Bass', 'Pad', 'Keys', 'Pluck', 'Brass', 'FX'];
+  const categoryChips = [
+    { id: 'All', label: 'All' },
+    { id: 'Bass', label: 'Bass' },
+    { id: 'Lead', label: 'Lead' },
+    { id: 'Pad', label: 'Pad' },
+    { id: 'Keys', label: 'Keys' },
+    { id: 'Pluck', label: 'Pluck' },
+    { id: 'Brass', label: 'Brass' },
+    { id: 'FX', label: 'FX' },
+    { id: 'User', label: 'Custom' },
+  ];
 
-  const filteredPresets = allPresets.filter((item) => {
-    const matchesCategory =
-      selectedCategory === 'All'
-        ? true
-        : selectedCategory === 'User'
-        ? !item.isFactory
-        : item.category.toLowerCase() === selectedCategory.toLowerCase();
+  const categoryGroups = useMemo(
+    () => getPresetsGroupedByCategory(allPresets),
+    [allPresets]
+  );
 
-    const matchesSearch =
-      searchQuery.trim() === '' ||
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredPresets = useMemo(() => {
+    return allPresets.filter((item) => {
+      const matchesCategory =
+        selectedCategory === 'All'
+          ? true
+          : selectedCategory === 'User'
+          ? !item.isFactory || item.category === 'User'
+          : item.category.toLowerCase() === selectedCategory.toLowerCase();
 
-    return matchesCategory && matchesSearch;
-  });
+      const matchesSearch =
+        searchQuery.trim() === '' ||
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      return matchesCategory && matchesSearch;
+    });
+  }, [allPresets, selectedCategory, searchQuery]);
 
   const handleSavePreset = (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,7 +107,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
     setShowSaveModal(false);
     setNewPresetName('');
     setNewPresetDesc('');
-    setSaveSuccessMsg(`Preset "${created.name}" saved!`);
+    setSaveSuccessMsg(`Preset "${created.name}" saved to [${created.category}]!`);
     setTimeout(() => setSaveSuccessMsg(null), 3000);
     onSelectPreset(created);
   };
@@ -163,12 +185,12 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
                   {allPresets.length} Total
                 </span>
               </h3>
-              <p className="text-[11px] text-slate-400">Browse, audition, and save custom sound patches</p>
+              <p className="text-[11px] text-slate-400">Categorized factory sounds & custom user patches</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-[#1C213E] transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-[#1C213E] transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -182,7 +204,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
                 setNewPresetName(currentParams.preset ? `${currentParams.preset} (Custom)` : 'My Synth Patch');
                 setShowSaveModal(true);
               }}
-              className="flex-1 flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 px-3 rounded-lg shadow-md transition-colors"
+              className="flex-1 flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 px-3 rounded-lg shadow-md transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               Save Current Sound
@@ -191,7 +213,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
             <button
               onClick={handleExport}
               disabled={customPresets.length === 0}
-              className="px-2.5 py-2 bg-[#0B0D19] hover:bg-[#1A1F3A] disabled:opacity-40 text-slate-300 text-xs rounded-lg border border-[#252B48] transition-colors flex items-center gap-1"
+              className="px-2.5 py-2 bg-[#0B0D19] hover:bg-[#1A1F3A] disabled:opacity-40 text-slate-300 text-xs rounded-lg border border-[#252B48] transition-colors flex items-center gap-1 cursor-pointer"
               title="Export User Presets to JSON"
             >
               <Download className="w-3.5 h-3.5" />
@@ -226,21 +248,39 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
             )}
           </div>
 
-          {/* Category Chips */}
+          {/* Category Filter Chips */}
           <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none text-[11px]">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-2.5 py-1 rounded-md font-medium whitespace-nowrap transition-colors ${
-                  selectedCategory === cat
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]'
-                }`}
-              >
-                {cat === 'User' ? `Custom (${customPresets.length})` : cat}
-              </button>
-            ))}
+            {categoryChips.map((cat) => {
+              const count =
+                cat.id === 'All'
+                  ? allPresets.length
+                  : cat.id === 'User'
+                  ? allPresets.filter((p) => !p.isFactory || p.category === 'User').length
+                  : allPresets.filter((p) => p.category === cat.id).length;
+
+              const isSelected = selectedCategory === cat.id;
+
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`px-2 py-1 rounded-md font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1 text-xs ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]'
+                  }`}
+                >
+                  <span>{cat.label}</span>
+                  <span
+                    className={`text-[9px] px-1 rounded-full font-mono ${
+                      isSelected ? 'bg-indigo-700 text-white' : 'bg-[#161B36] text-slate-400'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {saveSuccessMsg && (
@@ -273,7 +313,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
               <input
                 type="text"
                 required
-                placeholder="e.g. Blade Runner Lead"
+                placeholder="e.g. Hyper Saw Lead"
                 value={newPresetName}
                 onChange={(e) => setNewPresetName(e.target.value)}
                 className="w-full bg-[#0B0D19] border border-[#252B48] rounded-md px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
@@ -285,17 +325,14 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
                 <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Category</label>
                 <select
                   value={newPresetCategory}
-                  onChange={(e) => setNewPresetCategory(e.target.value as any)}
+                  onChange={(e) => setNewPresetCategory(e.target.value as SynthPresetCategory)}
                   className="w-full bg-[#0B0D19] border border-[#252B48] rounded-md px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                 >
-                  <option value="Lead">Lead</option>
-                  <option value="Bass">Bass</option>
-                  <option value="Pad">Pad</option>
-                  <option value="Keys">Keys</option>
-                  <option value="Pluck">Pluck</option>
-                  <option value="Brass">Brass</option>
-                  <option value="FX">FX</option>
-                  <option value="User">User / Custom</option>
+                  {SYNTH_CATEGORIES.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -303,7 +340,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
                 <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Description (Optional)</label>
                 <input
                   type="text"
-                  placeholder="e.g. Heavy filtered sound"
+                  placeholder="e.g. Heavy punchy lead tone"
                   value={newPresetDesc}
                   onChange={(e) => setNewPresetDesc(e.target.value)}
                   className="w-full bg-[#0B0D19] border border-[#252B48] rounded-md px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
@@ -315,13 +352,13 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
               <button
                 type="button"
                 onClick={() => setShowSaveModal(false)}
-                className="px-3 py-1 bg-[#0B0D19] text-slate-400 hover:text-slate-200 text-xs rounded-md border border-[#252B48]"
+                className="px-3 py-1 bg-[#0B0D19] text-slate-400 hover:text-slate-200 text-xs rounded-md border border-[#252B48] cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-md shadow-xs"
+                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-md shadow-xs cursor-pointer"
               >
                 Save Preset
               </button>
@@ -330,7 +367,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
         )}
 
         {/* Preset Cards List */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
           {filteredPresets.length === 0 ? (
             <div className="text-center py-12 text-slate-500 text-xs space-y-2">
               <FolderOpen className="w-8 h-8 mx-auto opacity-40 text-indigo-400" />
@@ -344,88 +381,32 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
                 </button>
               )}
             </div>
-          ) : (
-            filteredPresets.map((preset) => {
-              const isCurrent = currentParams.preset === preset.name;
-              const oscType = preset.params.oscType || 'sawtooth';
-              const filterType = preset.params.filterType || 'lowpass';
-              const cutoff = preset.params.filterCutoff || 2000;
-
-              return (
-                <div
-                  key={preset.id}
-                  onClick={() => onSelectPreset(preset)}
-                  className={`p-3 rounded-xl border transition-all cursor-pointer group relative ${
-                    isCurrent
-                      ? 'bg-indigo-950/40 border-indigo-500/80 shadow-md ring-1 ring-indigo-500/50'
-                      : 'bg-[#0B0D19] border-[#252B48] hover:border-indigo-500/50 hover:bg-[#151933]'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-semibold text-xs text-slate-100 truncate group-hover:text-indigo-300 transition-colors">
-                          {preset.name}
-                        </h4>
-                        {isCurrent && (
-                          <span className="text-[9px] bg-indigo-500 text-white px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">
-                            Active
-                          </span>
-                        )}
-                        <span
-                          className={`text-[9px] px-1.5 py-0.2 rounded border font-mono ${
-                            preset.isFactory
-                              ? 'bg-slate-800/80 text-slate-400 border-slate-700'
-                              : 'bg-purple-950/60 text-purple-300 border-purple-800/50'
-                          }`}
-                        >
-                          {preset.category}
-                        </span>
-                      </div>
-
-                      {preset.description && (
-                        <p className="text-[11px] text-slate-400 line-clamp-1 mb-2">
-                          {preset.description}
-                        </p>
-                      )}
-
-                      {/* Sound Badge Attributes */}
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
-                        <span className="bg-[#12152A] px-1.5 py-0.5 rounded border border-[#252B48] flex items-center gap-1">
-                          <Activity className="w-2.5 h-2.5 text-indigo-400" />
-                          {oscType}
-                        </span>
-                        <span className="bg-[#12152A] px-1.5 py-0.5 rounded border border-[#252B48] flex items-center gap-1">
-                          <Sliders className="w-2.5 h-2.5 text-pink-400" />
-                          {filterType === 'lowpass' ? 'LPF' : filterType === 'highpass' ? 'HPF' : 'BPF'} {Math.round(cutoff)}Hz
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Action buttons */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={(e) => handleAudition(preset, e)}
-                        className="p-1.5 rounded-lg bg-[#161B36] hover:bg-indigo-600 text-slate-300 hover:text-white transition-colors border border-[#252B48]"
-                        title="Audition Sound (Play Note)"
-                      >
-                        <Volume2 className="w-3.5 h-3.5" />
-                      </button>
-
-                      {!preset.isFactory && (
-                        <button
-                          onClick={(e) => handleDelete(preset.id, preset.name, e)}
-                          className="p-1.5 rounded-lg bg-[#161B36] hover:bg-red-600 text-slate-400 hover:text-white transition-colors border border-[#252B48]"
-                          title="Delete Custom Preset"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+          ) : selectedCategory === 'All' && !searchQuery.trim() ? (
+            /* Organized Category Sections when viewing All without search */
+            categoryGroups.map((group) => (
+              <div key={group.category} className="space-y-2">
+                <div className="flex items-center justify-between px-1 pt-2 pb-1 border-b border-[#1E2344]">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-semibold ${group.badgeClass}`}>
+                      {group.category}
+                    </span>
+                    <span className="text-xs font-bold text-slate-200">{group.label}</span>
                   </div>
+                  {group.description && (
+                    <span className="text-[10px] text-slate-500 truncate max-w-[160px]">
+                      {group.description}
+                    </span>
+                  )}
                 </div>
-              );
-            })
+
+                <div className="space-y-2">
+                  {group.presets.map((preset) => renderPresetCard(preset))}
+                </div>
+              </div>
+            ))
+          ) : (
+            /* Filtered flat list */
+            filteredPresets.map((preset) => renderPresetCard(preset))
           )}
         </div>
 
@@ -434,7 +415,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
           <span>Storage: Browser LocalStorage</span>
           <button
             onClick={onClose}
-            className="px-3 py-1 bg-[#1A1F3A] hover:bg-[#252B48] text-slate-200 rounded-lg text-xs transition-colors"
+            className="px-3 py-1 bg-[#1A1F3A] hover:bg-[#252B48] text-slate-200 rounded-lg text-xs transition-colors cursor-pointer font-medium"
           >
             Done
           </button>
@@ -442,4 +423,84 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
       </div>
     </div>
   );
+
+  function renderPresetCard(preset: SynthPresetItem) {
+    const isCurrent = currentParams.preset === preset.name;
+    const oscType = preset.params.oscType || 'sawtooth';
+    const filterType = preset.params.filterType || 'lowpass';
+    const cutoff = preset.params.filterCutoff || 2000;
+    const meta = getCategoryMeta(preset.category);
+
+    return (
+      <div
+        key={preset.id}
+        onClick={() => onSelectPreset(preset)}
+        className={`p-3 rounded-xl border transition-all cursor-pointer group relative ${
+          isCurrent
+            ? 'bg-indigo-950/40 border-indigo-500/80 shadow-md ring-1 ring-indigo-500/50'
+            : 'bg-[#0B0D19] border-[#252B48] hover:border-indigo-500/50 hover:bg-[#151933]'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h4 className="font-semibold text-xs text-slate-100 truncate group-hover:text-indigo-300 transition-colors">
+                {preset.name}
+              </h4>
+              {isCurrent && (
+                <span className="text-[9px] bg-indigo-500 text-white px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">
+                  Active
+                </span>
+              )}
+              <span
+                className={`text-[9px] px-1.5 py-0.2 rounded border font-mono ${meta.badgeClass}`}
+              >
+                {preset.category}
+              </span>
+            </div>
+
+            {preset.description && (
+              <p className="text-[11px] text-slate-400 line-clamp-1 mb-2">
+                {preset.description}
+              </p>
+            )}
+
+            {/* Sound Badge Attributes */}
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+              <span className="bg-[#12152A] px-1.5 py-0.5 rounded border border-[#252B48] flex items-center gap-1">
+                <Activity className="w-2.5 h-2.5 text-indigo-400" />
+                {oscType}
+              </span>
+              <span className="bg-[#12152A] px-1.5 py-0.5 rounded border border-[#252B48] flex items-center gap-1">
+                <Sliders className="w-2.5 h-2.5 text-pink-400" />
+                {filterType === 'lowpass' ? 'LPF' : filterType === 'highpass' ? 'HPF' : 'BPF'} {Math.round(cutoff)}Hz
+              </span>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={(e) => handleAudition(preset, e)}
+              className="p-1.5 rounded-lg bg-[#161B36] hover:bg-indigo-600 text-slate-300 hover:text-white transition-colors border border-[#252B48] cursor-pointer"
+              title="Audition Sound (Play Note)"
+            >
+              <Volume2 className="w-3.5 h-3.5" />
+            </button>
+
+            {!preset.isFactory && (
+              <button
+                onClick={(e) => handleDelete(preset.id, preset.name, e)}
+                className="p-1.5 rounded-lg bg-[#161B36] hover:bg-red-600 text-slate-400 hover:text-white transition-colors border border-[#252B48] cursor-pointer"
+                title="Delete Custom Preset"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 };
+

@@ -29,13 +29,15 @@ class AudioEngine {
 
   // Per-source buses: one gain bus per source string ('synth', 'chord', 'bass', ...).
   // Voice gains connect here instead of straight to dry/effects, so a whole layer
-  // (e.g. bass) can be muted with one click-free ramp.
+  // (e.g. bass) can be muted or leveled with one click-free ramp.
   private sourceBuses = new Map<string, GainNode>();
   private sourceMuted = new Map<string, boolean>();
+  private sourceGains = new Map<string, number>();
 
-  // Metronome click buffer
+  // Metronome click buffer & state
   private clickBufferHigh: AudioBuffer | null = null;
   private clickBufferLow: AudioBuffer | null = null;
+  private metronomeEnabled = false;
   private noiseBuffer: AudioBuffer | null = null;
   private levelBuffer: Uint8Array<ArrayBuffer> | null = null;
 
@@ -73,12 +75,25 @@ class AudioEngine {
    * sample-accurately. Once started the clock runs continuously; re-subscribing
    * never restarts the grid, so live changes stay glitch-free.
    */
+  setMetronomeEnabled(enabled: boolean): void {
+    this.metronomeEnabled = enabled;
+    if (enabled) {
+      this.ensureClockRunning();
+    } else if (this.clockListeners.size === 0) {
+      this.stopClockTimer();
+    }
+  }
+
+  isMetronomeEnabled(): boolean {
+    return this.metronomeEnabled;
+  }
+
   subscribeClock(listener: (step: number, beat: number, time: number) => void): () => void {
     this.clockListeners.add(listener);
     this.ensureClockRunning();
     return () => {
       this.clockListeners.delete(listener);
-      if (this.clockListeners.size === 0) {
+      if (this.clockListeners.size === 0 && !this.metronomeEnabled) {
         this.stopClockTimer();
       }
     };
@@ -124,6 +139,9 @@ class AudioEngine {
     while (this.clockNextStepTime < this.ctx.currentTime + AudioEngine.CLOCK_LOOKAHEAD) {
       const time = this.clockNextStepTime;
       const step = this.clockStepIndex;
+      if (this.metronomeEnabled && step % 4 === 0) {
+        this.playMetronomeClick(step % 16 === 0, time);
+      }
       this.clockListeners.forEach((fn) => fn(step, Math.floor(step / 4), time));
       this.clockNextStepTime += stepDuration;
       this.clockStepIndex++;
@@ -269,7 +287,7 @@ class AudioEngine {
     this.clickBufferLow = bufLow;
   }
 
-  playMetronomeClick(isDownbeat = false): void {
+  playMetronomeClick(isDownbeat = false, time?: number): void {
     if (!this.ctx || !this.dryGain) return;
     const buffer = isDownbeat ? this.clickBufferHigh : this.clickBufferLow;
     if (!buffer) return;
@@ -281,7 +299,8 @@ class AudioEngine {
 
     source.connect(gain);
     gain.connect(this.dryGain);
-    source.start();
+    const now = time ?? this.ctx.currentTime;
+    source.start(now);
   }
 
   // Synthesizer Note On
@@ -461,7 +480,8 @@ class AudioEngine {
     let bus = this.sourceBuses.get(source);
     if (!bus) {
       bus = this.ctx.createGain();
-      bus.gain.value = this.sourceMuted.get(source) ? 0 : 1; // muted bus is silent from birth
+      const baseGain = this.sourceGains.get(source) ?? 1;
+      bus.gain.value = this.sourceMuted.get(source) ? 0 : baseGain;
       bus.connect(this.dryGain);
       if (this.delayNode) bus.connect(this.delayNode);
       if (this.reverbNode) bus.connect(this.reverbNode);
@@ -474,15 +494,24 @@ class AudioEngine {
   // Mute/unmute an entire source layer on its bus: ~10 ms ramp (click-free),
   // instantly cuts tails/effects, and survives across effect/param updates.
   setSourceMuted(source: string, muted: boolean): void {
-    // Persist the mute state across AudioContext rebuilds (mute is bus-level, so
-    // a bus created later for this source must be silent from birth). Record it
-    // even before the context exists, so an early App mount doesn't lose it.
     this.sourceMuted.set(source, muted);
     if (!this.ctx) return;
     const bus = this.sourceBuses.get(source) ?? this.getSourceBus(source);
     const now = this.ctx.currentTime;
+    const targetGain = muted ? 0 : (this.sourceGains.get(source) ?? 1);
     bus.gain.cancelScheduledValues(now);
-    bus.gain.setTargetAtTime(muted ? 0 : 1, now, 0.01);
+    bus.gain.setTargetAtTime(targetGain, now, 0.01);
+  }
+
+  // Set gain/volume for an entire source layer (e.g. chord, bass, synth)
+  setSourceGain(source: string, volume: number): void {
+    this.sourceGains.set(source, volume);
+    if (!this.ctx) return;
+    const bus = this.sourceBuses.get(source) ?? this.getSourceBus(source);
+    const now = this.ctx.currentTime;
+    const isMuted = this.sourceMuted.get(source);
+    bus.gain.cancelScheduledValues(now);
+    bus.gain.setTargetAtTime(isMuted ? 0 : Math.max(0, Math.min(1.5, volume)), now, 0.01);
   }
 
   private cancelAndHold(param: AudioParam, now: number): void {
@@ -765,13 +794,21 @@ class AudioEngine {
 
   updateEffects(fx: MasterEffects): void {
     if (!this.ctx) return;
-    if (this.reverbGain) this.reverbGain.gain.setTargetAtTime(fx.reverbWet, this.ctx.currentTime, 0.05);
-    if (this.delayGain) this.delayGain.gain.setTargetAtTime(fx.delayWet, this.ctx.currentTime, 0.05);
-    if (this.delayFeedbackGain) this.delayFeedbackGain.gain.setTargetAtTime(fx.delayFeedback, this.ctx.currentTime, 0.05);
-    if (this.distortionGain) this.distortionGain.gain.setTargetAtTime(fx.distortionWet, this.ctx.currentTime, 0.05);
-    if (this.eqLowNode) this.eqLowNode.gain.setTargetAtTime(fx.eqLow, this.ctx.currentTime, 0.05);
-    if (this.eqMidNode) this.eqMidNode.gain.setTargetAtTime(fx.eqMid, this.ctx.currentTime, 0.05);
-    if (this.eqHighNode) this.eqHighNode.gain.setTargetAtTime(fx.eqHigh, this.ctx.currentTime, 0.05);
+    const reverbWet = fx.reverbBypass ? 0 : fx.reverbWet;
+    const delayWet = fx.delayBypass ? 0 : fx.delayWet;
+    const delayFeedback = fx.delayBypass ? 0 : fx.delayFeedback;
+    const distortionWet = fx.distortionBypass ? 0 : fx.distortionWet;
+    const eqLow = fx.eqBypass ? 0 : fx.eqLow;
+    const eqMid = fx.eqBypass ? 0 : fx.eqMid;
+    const eqHigh = fx.eqBypass ? 0 : fx.eqHigh;
+
+    if (this.reverbGain) this.reverbGain.gain.setTargetAtTime(reverbWet, this.ctx.currentTime, 0.05);
+    if (this.delayGain) this.delayGain.gain.setTargetAtTime(delayWet, this.ctx.currentTime, 0.05);
+    if (this.delayFeedbackGain) this.delayFeedbackGain.gain.setTargetAtTime(delayFeedback, this.ctx.currentTime, 0.05);
+    if (this.distortionGain) this.distortionGain.gain.setTargetAtTime(distortionWet, this.ctx.currentTime, 0.05);
+    if (this.eqLowNode) this.eqLowNode.gain.setTargetAtTime(eqLow, this.ctx.currentTime, 0.05);
+    if (this.eqMidNode) this.eqMidNode.gain.setTargetAtTime(eqMid, this.ctx.currentTime, 0.05);
+    if (this.eqHighNode) this.eqHighNode.gain.setTargetAtTime(eqHigh, this.ctx.currentTime, 0.05);
   }
 
   setMasterVolume(vol: number): void {

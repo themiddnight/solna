@@ -18,13 +18,16 @@ import { audioEngine } from "../audio/engine";
 import {
   ALL_FACTORY_PRESETS,
   SynthPresetItem,
+  SynthPresetCategory,
+  SYNTH_CATEGORIES,
   findPresetByName,
   getAllSynthPresets,
   getCustomPresets,
   saveCustomPreset,
+  getPresetsGroupedByCategory,
+  getCategoryMeta,
 } from "../audio/synthPresets";
 import { SynthPresetLibrary } from "./SynthPresetLibrary";
-import { DrumPads } from "./DrumPads";
 import { isNoteInScale, getScaleNotes, ROOTS } from "../utils/musicTheory";
 import { isTypingTarget, shortcutLabel } from "../utils/keyboard";
 import { resolveSynthControlChannel } from "../utils/synthControl";
@@ -52,8 +55,6 @@ interface SynthViewProps {
   onChangeChordSynthParams: (newParams: SynthParams) => void;
   bassSynthParams: SynthParams;
   onChangeBassSynthParams: (newParams: SynthParams) => void;
-  soundKit: string;
-  onChangeSoundKit: (kit: string) => void;
   scaleRoot?: string;
   scaleType?: string;
 }
@@ -88,8 +89,6 @@ export const SynthView: React.FC<SynthViewProps> = React.memo(({
   onChangeChordSynthParams,
   bassSynthParams,
   onChangeBassSynthParams,
-  soundKit,
-  onChangeSoundKit,
   scaleRoot = "C",
   scaleType = "Major",
 }) => {
@@ -108,6 +107,8 @@ export const SynthView: React.FC<SynthViewProps> = React.memo(({
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [customPresets, setCustomPresets] = useState<SynthPresetItem[]>([]);
   const allPresets = useMemo(() => getAllSynthPresets(customPresets), [customPresets]);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
+  const [quickSaveCategory, setQuickSaveCategory] = useState<SynthPresetCategory>("User");
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [quickSaveName, setQuickSaveName] = useState<string>("");
   const [saveToast, setSaveToast] = useState<string | null>(null);
@@ -126,28 +127,76 @@ export const SynthView: React.FC<SynthViewProps> = React.memo(({
     reloadPresets();
   }, [reloadPresets, isLibraryOpen]);
 
-  // The keyboard always plays the main synth, regardless of which
-  // destination the control panel is editing.
+  const categoryGroups = useMemo(
+    () => getPresetsGroupedByCategory(allPresets),
+    [allPresets]
+  );
+
+  const activePresetItem = useMemo(
+    () => findPresetByName(params.preset, allPresets),
+    [params.preset, allPresets]
+  );
+
+  const activeCategoryMeta = useMemo(() => {
+    if (!activePresetItem) return null;
+    return getCategoryMeta(activePresetItem.category);
+  }, [activePresetItem]);
+
+  // Presets list based on selectedCategoryFilter for step navigation
+  const selectablePresets = useMemo(() => {
+    if (selectedCategoryFilter === "All") return allPresets;
+    if (selectedCategoryFilter === "User")
+      return allPresets.filter((p) => !p.isFactory || p.category === "User");
+    return allPresets.filter((p) => p.category === selectedCategoryFilter);
+  }, [selectedCategoryFilter, allPresets]);
+
+  const handleCategoryFilterClick = (catId: string) => {
+    setSelectedCategoryFilter(catId);
+    if (catId === "All") return;
+    const matching =
+      catId === "User"
+        ? allPresets.filter((p) => !p.isFactory || p.category === "User")
+        : allPresets.filter((p) => p.category === catId);
+    if (matching.length > 0) {
+      const currentInCat = matching.some((p) => p.name === params.preset);
+      if (!currentInCat) {
+        handleSelectPreset(matching[0]);
+      }
+    }
+  };
+
+  const handleStepPreset = (direction: -1 | 1) => {
+    if (selectablePresets.length === 0) return;
+    const currentIndex = selectablePresets.findIndex(
+      (p) => p.name === params.preset
+    );
+    let nextIndex = currentIndex + direction;
+    if (nextIndex < 0) nextIndex = selectablePresets.length - 1;
+    if (nextIndex >= selectablePresets.length) nextIndex = 0;
+    handleSelectPreset(selectablePresets[nextIndex]);
+  };
+
+  // The keyboard auditions the currently selected control target (Synth, Chord, or Bass)
+  // so the sound designer can hear the immediate adjustments.
   const handleNoteOn = useCallback(
     (note: string) => {
       audioEngine.init();
-      // Pass params as-is so params.octave (synth pitch offset) applies on top of the keyboard note
-      audioEngine.triggerSynthNoteOn(note, synthParams, 1.0);
+      audioEngine.triggerSynthNoteOn(note, params, 1.0, undefined, controlTarget);
       setActiveNotes((prev) => new Set(prev).add(note));
     },
-    [synthParams],
+    [params, controlTarget],
   );
 
   const handleNoteOff = useCallback(
     (note: string) => {
-      audioEngine.triggerSynthNoteOff(note, synthParams.release);
+      audioEngine.triggerSynthNoteOff(note, params.release, undefined, controlTarget);
       setActiveNotes((prev) => {
         const next = new Set(prev);
         next.delete(note);
         return next;
       });
     },
-    [synthParams.release],
+    [params.release, controlTarget],
   );
 
   // QWERTY Computer Keyboard mapping — uses keyboardOctave, NOT params.octave
@@ -198,7 +247,7 @@ export const SynthView: React.FC<SynthViewProps> = React.memo(({
       ...preset.params,
       preset: preset.name,
     });
-    setSaveToast(`Loaded "${preset.name}"`);
+    setSaveToast(`Loaded [${preset.category}] "${preset.name}"`);
     setTimeout(() => setSaveToast(null), 2500);
   };
 
@@ -211,12 +260,12 @@ export const SynthView: React.FC<SynthViewProps> = React.memo(({
     e.preventDefault();
     if (!quickSaveName.trim()) return;
 
-    const saved = saveCustomPreset(quickSaveName, params, "User");
+    const saved = saveCustomPreset(quickSaveName, params, quickSaveCategory);
     reloadPresets();
     setIsQuickSaving(false);
     setQuickSaveName("");
     handleSelectPreset(saved);
-    setSaveToast(`Preset "${saved.name}" saved!`);
+    setSaveToast(`Preset "${saved.name}" saved to ${saved.category}!`);
     setTimeout(() => setSaveToast(null), 3000);
   };
 
@@ -225,111 +274,204 @@ export const SynthView: React.FC<SynthViewProps> = React.memo(({
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">
       {/* Top Synth Header & Presets */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg relative">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
-            <Zap className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="font-bold text-base text-slate-100 flex items-center gap-2">
-              Analog Polyphonic Synthesizer
-            </h2>
-          </div>
-        </div>
-
-        {/* Control Destination Selector */}
-        <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#2D355A] rounded-lg p-1">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold pl-1.5 pr-1">
-            Control
-          </span>
-          {(
-            [
-              ["synth", "Synth"],
-              ["chord", "Chord"],
-              ["bass", "Bass"],
-            ] as [SynthControlTarget, string][]
-          ).map(([target, label]) => (
-            <button
-              key={target}
-              onClick={() => onChangeControlTarget(target)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
-                controlTarget === target
-                  ? TARGET_STYLES[target].activeBtn
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Preset Selector & Presets Library Controls */}
-        <div className="flex items-center flex-wrap gap-2">
-          {/* Quick Dropdown with Groups */}
-          <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#2D355A] rounded-lg px-2.5 py-1">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-            <select
-              id="select-synth-preset"
-              value={params.preset}
-              onChange={(e) => handleDropdownChange(e.target.value)}
-              className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer pr-2 font-medium"
-            >
-              <optgroup label="Factory Presets">
-                {ALL_FACTORY_PRESETS.map((p) => (
-                  <option
-                    key={p.id}
-                    value={p.name}
-                    className="bg-[#0B0D19] text-slate-200"
-                  >
-                    {p.name} ({p.category})
-                  </option>
-                ))}
-              </optgroup>
-              {customPresets.length > 0 && (
-                <optgroup label="My Custom Presets (LocalStorage)">
-                  {customPresets.map((p) => (
-                    <option
-                      key={p.id}
-                      value={p.name}
-                      className="bg-[#0B0D19] text-purple-300"
-                    >
-                      ★ {p.name} ({p.category})
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 flex flex-col gap-3.5 shadow-lg relative">
+        {/* Row 1: Brand & Control Target + Save & Library Actions */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
+              <Zap className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="font-bold text-base text-slate-100 flex items-center gap-2">
+                Analog Polyphonic Synthesizer
+              </h2>
+            </div>
           </div>
 
-          {/* Quick Save Current Preset Button */}
-          <button
-            id="btn-quick-save-preset"
-            onClick={() => {
-              setQuickSaveName(
-                params.preset ? `${params.preset} (Custom)` : "My Synth Patch",
-              );
-              setIsQuickSaving(true);
-            }}
-            className="flex items-center gap-1.5 bg-[#171B36] hover:bg-[#22284C] text-slate-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[#2D355A] transition-colors shadow-xs"
-            title="Save current synth sound to LocalStorage"
-          >
-            <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">Save</span>
-          </button>
-
-          {/* Open Full Presets Library Drawer */}
-          <button
-            id="btn-open-presets-library"
-            onClick={() => setIsLibraryOpen(true)}
-            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-md transition-colors"
-            title="Open Presets Library (Search, audition, export/import)"
-          >
-            <Library className="w-3.5 h-3.5" />
-            <span>Presets Library</span>
-            <span className="bg-indigo-700/80 text-[10px] px-1.5 py-0.2 rounded-full font-mono">
-              {totalPresetsCount}
+          {/* Control Destination Selector */}
+          <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#2D355A] rounded-lg p-1">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold pl-1.5 pr-1">
+              Control
             </span>
-          </button>
+            {(
+              [
+                ["synth", "Synth"],
+                ["chord", "Chord"],
+                ["bass", "Bass"],
+              ] as [SynthControlTarget, string][]
+            ).map(([target, label]) => (
+              <button
+                key={target}
+                onClick={() => onChangeControlTarget(target)}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
+                  controlTarget === target
+                    ? TARGET_STYLES[target].activeBtn
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Actions: Save Current & Full Presets Library */}
+          <div className="flex items-center gap-2">
+            <button
+              id="btn-quick-save-preset"
+              onClick={() => {
+                setQuickSaveName(
+                  params.preset ? `${params.preset} (Custom)` : "My Synth Patch",
+                );
+                setQuickSaveCategory(activePresetItem?.category ?? "User");
+                setIsQuickSaving(true);
+              }}
+              className="flex items-center gap-1.5 bg-[#171B36] hover:bg-[#22284C] text-slate-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[#2D355A] transition-colors shadow-xs cursor-pointer"
+              title="Save current synth sound to LocalStorage"
+            >
+              <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Save</span>
+            </button>
+
+            <button
+              id="btn-open-presets-library"
+              onClick={() => setIsLibraryOpen(true)}
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-md transition-colors cursor-pointer"
+              title="Open Presets Library (Search, audition, export/import)"
+            >
+              <Library className="w-3.5 h-3.5" />
+              <span>Presets Library</span>
+              <span className="bg-indigo-700/80 text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+                {totalPresetsCount}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Row 2: Categorized Preset Selection Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 bg-[#0B0D19] border border-[#252B48] p-2 rounded-xl">
+          {/* Category Filter Tabs */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[11px]">
+            <span className="text-[10px] uppercase font-bold text-slate-500 px-1 font-mono">
+              Category:
+            </span>
+            {[
+              { id: "All", label: "All" },
+              { id: "Bass", label: "Bass" },
+              { id: "Lead", label: "Lead" },
+              { id: "Pad", label: "Pad" },
+              { id: "Keys", label: "Keys" },
+              { id: "Pluck", label: "Pluck" },
+              { id: "Brass", label: "Brass" },
+              { id: "FX", label: "FX" },
+              { id: "User", label: "Custom" },
+            ].map((cat) => {
+              const isSelected = selectedCategoryFilter === cat.id;
+              const count =
+                cat.id === "All"
+                  ? allPresets.length
+                  : cat.id === "User"
+                    ? allPresets.filter((p) => !p.isFactory || p.category === "User").length
+                    : allPresets.filter((p) => p.category === cat.id).length;
+
+              return (
+                <button
+                  key={cat.id}
+                  id={`filter-category-${cat.id.toLowerCase()}`}
+                  onClick={() => handleCategoryFilterClick(cat.id)}
+                  className={`px-2 py-1 rounded-md font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1 text-xs ${
+                    isSelected
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/80"
+                  }`}
+                >
+                  <span>{cat.label}</span>
+                  <span
+                    className={`text-[9px] px-1 rounded-full font-mono ${
+                      isSelected
+                        ? "bg-indigo-700 text-white"
+                        : "bg-[#161B36] text-slate-400"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Categorized Dropdown + Step Navigation + Active Category Tag */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Active Category Pill Tag */}
+            {activeCategoryMeta && (
+              <span
+                className={`text-[10px] font-mono px-2 py-0.5 rounded border font-semibold ${activeCategoryMeta.badgeClass}`}
+                title={`Category: ${activeCategoryMeta.label} - ${activeCategoryMeta.description}`}
+              >
+                {activeCategoryMeta.shortLabel}
+              </span>
+            )}
+
+            {/* Step Previous Preset Button */}
+            <button
+              id="btn-prev-synth-preset"
+              onClick={() => handleStepPreset(-1)}
+              className="p-1.5 rounded-lg bg-[#12152A] hover:bg-[#1C213E] text-slate-300 hover:text-white border border-[#2D355A] cursor-pointer transition-colors"
+              title="Previous Preset"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Categorized Dropdown with Optgroups */}
+            <div className="flex items-center gap-1.5 bg-[#12152A] border border-[#2D355A] rounded-lg px-2.5 py-1">
+              <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <select
+                id="select-synth-preset"
+                value={params.preset}
+                onChange={(e) => handleDropdownChange(e.target.value)}
+                className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer pr-2 font-medium max-w-[180px] sm:max-w-[240px] truncate"
+              >
+                {categoryGroups
+                  .filter((g) =>
+                    selectedCategoryFilter === "All"
+                      ? true
+                      : selectedCategoryFilter === "User"
+                        ? g.category === "User"
+                        : g.category === selectedCategoryFilter
+                  )
+                  .map((group) => (
+                    <optgroup
+                      key={group.category}
+                      label={group.label}
+                      className="bg-[#12152A] text-indigo-300 font-bold"
+                    >
+                      {group.presets.map((p) => (
+                        <option
+                          key={p.id}
+                          value={p.name}
+                          className={
+                            p.isFactory
+                              ? "bg-[#0B0D19] text-slate-200 font-normal"
+                              : "bg-[#0B0D19] text-purple-300 font-normal"
+                          }
+                        >
+                          {!p.isFactory ? `★ ${p.name}` : p.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+              </select>
+            </div>
+
+            {/* Step Next Preset Button */}
+            <button
+              id="btn-next-synth-preset"
+              onClick={() => handleStepPreset(1)}
+              className="p-1.5 rounded-lg bg-[#12152A] hover:bg-[#1C213E] text-slate-300 hover:text-white border border-[#2D355A] cursor-pointer transition-colors"
+              title="Next Preset"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Floating Save Toast */}
@@ -341,16 +483,16 @@ export const SynthView: React.FC<SynthViewProps> = React.memo(({
         )}
       </div>
 
-      {/* Quick Save Modal Popover */}
+      {/* Quick Save Modal Popover with Category selection */}
       {isQuickSaving && (
         <div className="bg-[#171B38] border border-indigo-500/40 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xl animate-in fade-in">
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
             <Bookmark className="w-4 h-4 text-indigo-400" />
-            <span>Save Custom Synth Preset to Browser:</span>
+            <span>Save Custom Preset to LocalStorage:</span>
           </div>
           <form
             onSubmit={handleQuickSaveSubmit}
-            className="flex items-center gap-2 flex-1 max-w-md"
+            className="flex items-center gap-2 flex-1 max-w-xl flex-wrap sm:flex-nowrap"
           >
             <input
               type="text"
@@ -359,18 +501,29 @@ export const SynthView: React.FC<SynthViewProps> = React.memo(({
               placeholder="Preset Name..."
               value={quickSaveName}
               onChange={(e) => setQuickSaveName(e.target.value)}
-              className="flex-1 bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+              className="flex-1 min-w-[140px] bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
             />
+            <select
+              value={quickSaveCategory}
+              onChange={(e) => setQuickSaveCategory(e.target.value as SynthPresetCategory)}
+              className="bg-[#0B0D19] border border-[#2D355A] rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              {SYNTH_CATEGORIES.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
             <button
               type="submit"
-              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-xs transition-colors shrink-0"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-xs transition-colors shrink-0 cursor-pointer"
             >
               Save Patch
             </button>
             <button
               type="button"
               onClick={() => setIsQuickSaving(false)}
-              className="bg-[#0B0D19] hover:bg-[#1A1F3A] text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-[#252B48] transition-colors shrink-0"
+              className="bg-[#0B0D19] hover:bg-[#1A1F3A] text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-[#252B48] transition-colors shrink-0 cursor-pointer"
             >
               Cancel
             </button>
@@ -946,6 +1099,18 @@ export const SynthView: React.FC<SynthViewProps> = React.memo(({
             <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
               Interactive Keyboard
             </span>
+            <span
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                controlTarget === "synth"
+                  ? "bg-slate-700/50 border-slate-600 text-slate-200"
+                  : controlTarget === "chord"
+                    ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300"
+                    : "bg-emerald-600/20 border-emerald-500/40 text-emerald-300"
+              }`}
+              title="Current audition sound engine"
+            >
+              Audition: {controlTarget === "synth" ? "Main Synth" : controlTarget === "chord" ? "Chord Synth" : "Bass Synth"}
+            </span>
             <button
               onClick={() =>
                 setKeyboardMode(
@@ -1078,9 +1243,6 @@ export const SynthView: React.FC<SynthViewProps> = React.memo(({
           })}
         </div>
       </div>
-
-      {/* Compact Drum Pads — two groups of four under the keyboard */}
-      <DrumPads soundKit={soundKit} onChangeSoundKit={onChangeSoundKit} />
 
       {/* Preset Library Sidebar Drawer / Modal */}
       <SynthPresetLibrary

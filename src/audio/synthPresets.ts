@@ -1,10 +1,87 @@
 import { SynthParams } from '../types';
 import { FACTORY_BASS_PRESETS } from './bassPresets';
 
+export type SynthPresetCategory =
+  | 'Bass'
+  | 'Lead'
+  | 'Pad'
+  | 'Keys'
+  | 'Pluck'
+  | 'Brass'
+  | 'FX'
+  | 'User';
+
+export interface SynthPresetCategoryMeta {
+  id: SynthPresetCategory;
+  label: string;
+  shortLabel: string;
+  badgeClass: string;
+  description: string;
+}
+
+export const SYNTH_CATEGORIES: SynthPresetCategoryMeta[] = [
+  {
+    id: 'Bass',
+    label: 'Bass',
+    shortLabel: 'Bass',
+    badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    description: 'Sub-basses, 808s, reese, acid, and bassline tones',
+  },
+  {
+    id: 'Lead',
+    label: 'Lead',
+    shortLabel: 'Lead',
+    badgeClass: 'bg-pink-500/20 text-pink-300 border-pink-500/30',
+    description: 'Cutting leads, vocal sweeps, and melodic solo synthesizers',
+  },
+  {
+    id: 'Pad',
+    label: 'Pad',
+    shortLabel: 'Pad',
+    badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
+    description: 'Lush ambient textures, string ensembles, and warm backdrops',
+  },
+  {
+    id: 'Keys',
+    label: 'Keys',
+    shortLabel: 'Keys',
+    badgeClass: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+    description: 'Electric pianos, bells, chimes, and organ keyboards',
+  },
+  {
+    id: 'Pluck',
+    label: 'Pluck',
+    shortLabel: 'Pluck',
+    badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    description: 'Snappy transients, percussive mallets, and short plucks',
+  },
+  {
+    id: 'Brass',
+    label: 'Brass',
+    shortLabel: 'Brass',
+    badgeClass: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+    description: 'Analog synth horns, power stabs, and fanfare swells',
+  },
+  {
+    id: 'FX',
+    label: 'FX',
+    shortLabel: 'FX',
+    badgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+    description: 'Atmospheric drones, sweeps, noise risers, and sci-fi zaps',
+  },
+  {
+    id: 'User',
+    label: 'Custom / User',
+    shortLabel: 'Custom',
+    badgeClass: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
+    description: 'Custom user patches saved to browser storage',
+  },
+];
+
 export interface SynthPresetItem {
   id: string;
   name: string;
-  category: 'Lead' | 'Bass' | 'Pad' | 'Keys' | 'Pluck' | 'Brass' | 'FX' | 'User';
+  category: SynthPresetCategory;
   params: Partial<SynthParams>;
   isFactory?: boolean;
   createdAt?: number;
@@ -477,6 +554,180 @@ export const FACTORY_PRESETS: SynthPresetItem[] = [
       octave: 0,
     },
   },
+  {
+    id: 'factory-hyper-saw-lead',
+    name: 'Hyper Saw Lead',
+    category: 'Lead',
+    isFactory: true,
+    description: 'Massive stacked sawtooth lead with bright cutoff and snappy attack',
+    params: {
+      oscType: 'sawtooth',
+      subOscVolume: 0.35,
+      noiseVolume: 0.04,
+      detune: 16,
+      filterType: 'lowpass',
+      filterCutoff: 3800,
+      filterResonance: 2.2,
+      filterEnvAmount: 2000,
+      attack: 0.008,
+      decay: 0.3,
+      sustain: 0.75,
+      release: 0.35,
+      filterAttack: 0.008,
+      filterDecay: 0.35,
+      filterSustain: 0.3,
+      filterRelease: 0.35,
+      lfoRate: 3.5,
+      lfoDepth: 0.08,
+      lfoTarget: 'pitch',
+      octave: 0,
+    },
+  },
+  {
+    id: 'factory-reese-sub-bass',
+    name: 'Reese Sub Bass',
+    category: 'Bass',
+    isFactory: true,
+    description: 'Warm chorused reese bass with subtle pitch detuning and sub weight',
+    params: {
+      oscType: 'sawtooth',
+      subOscVolume: 0.7,
+      noiseVolume: 0.0,
+      detune: 14,
+      filterType: 'lowpass',
+      filterCutoff: 650,
+      filterResonance: 2.5,
+      filterEnvAmount: 400,
+      attack: 0.02,
+      decay: 0.4,
+      sustain: 0.8,
+      release: 0.4,
+      filterAttack: 0.02,
+      filterDecay: 0.4,
+      filterSustain: 0.4,
+      filterRelease: 0.4,
+      lfoRate: 0.8,
+      lfoDepth: 0.15,
+      lfoTarget: 'cutoff',
+      octave: -1,
+    },
+  },
+  {
+    id: 'factory-celestial-shimmer',
+    name: 'Celestial Shimmer',
+    category: 'Pad',
+    isFactory: true,
+    description: 'Dreamy high-register pad that blooms with slow ethereal movement',
+    params: {
+      oscType: 'sine',
+      subOscVolume: 0.15,
+      noiseVolume: 0.03,
+      detune: 12,
+      filterType: 'lowpass',
+      filterCutoff: 2400,
+      filterResonance: 3.0,
+      filterEnvAmount: 1100,
+      attack: 0.6,
+      decay: 1.5,
+      sustain: 0.9,
+      release: 2.5,
+      filterAttack: 0.8,
+      filterDecay: 1.8,
+      filterSustain: 0.6,
+      filterRelease: 2.5,
+      lfoRate: 0.4,
+      lfoDepth: 0.3,
+      lfoTarget: 'cutoff',
+      octave: 1,
+    },
+  },
+  {
+    id: 'factory-fm-tine-piano',
+    name: 'FM Tine Piano',
+    category: 'Keys',
+    isFactory: true,
+    description: '80s digital electric piano chime with percussive key strike',
+    params: {
+      oscType: 'triangle',
+      subOscVolume: 0.2,
+      noiseVolume: 0.02,
+      detune: 5,
+      filterType: 'lowpass',
+      filterCutoff: 3600,
+      filterResonance: 2.0,
+      filterEnvAmount: 1400,
+      attack: 0.005,
+      decay: 0.7,
+      sustain: 0.3,
+      release: 0.7,
+      filterAttack: 0.005,
+      filterDecay: 0.5,
+      filterSustain: 0.15,
+      filterRelease: 0.7,
+      lfoRate: 3.0,
+      lfoDepth: 0.06,
+      lfoTarget: 'volume',
+      octave: 0,
+    },
+  },
+  {
+    id: 'factory-trance-pluck',
+    name: 'Trance Pluck',
+    category: 'Pluck',
+    isFactory: true,
+    description: 'Ultra-fast saw pluck with high resonance envelope bite',
+    params: {
+      oscType: 'sawtooth',
+      subOscVolume: 0.25,
+      noiseVolume: 0.02,
+      detune: 10,
+      filterType: 'lowpass',
+      filterCutoff: 3400,
+      filterResonance: 5.0,
+      filterEnvAmount: 3000,
+      attack: 0.002,
+      decay: 0.18,
+      sustain: 0.02,
+      release: 0.2,
+      filterAttack: 0.002,
+      filterDecay: 0.16,
+      filterSustain: 0,
+      filterRelease: 0.2,
+      lfoRate: 1.0,
+      lfoDepth: 0.0,
+      lfoTarget: 'cutoff',
+      octave: 0,
+    },
+  },
+  {
+    id: 'factory-noise-riser-fx',
+    name: 'Noise Riser FX',
+    category: 'FX',
+    isFactory: true,
+    description: 'Atmospheric building noise sweep for transitions and build-ups',
+    params: {
+      oscType: 'square',
+      subOscVolume: 0.1,
+      noiseVolume: 0.4,
+      detune: 20,
+      filterType: 'highpass',
+      filterCutoff: 600,
+      filterResonance: 4.5,
+      filterEnvAmount: 2200,
+      attack: 1.2,
+      decay: 0.8,
+      sustain: 0.7,
+      release: 1.5,
+      filterAttack: 1.5,
+      filterDecay: 1.0,
+      filterSustain: 0.5,
+      filterRelease: 1.5,
+      lfoRate: 6.0,
+      lfoDepth: 0.35,
+      lfoTarget: 'cutoff',
+      octave: 0,
+    },
+  },
 ];
 
 const STORAGE_KEY = 'murva_synth_custom_presets_v1';
@@ -498,7 +749,7 @@ export function getCustomPresets(): SynthPresetItem[] {
 export function saveCustomPreset(
   name: string,
   params: SynthParams,
-  category: SynthPresetItem['category'] = 'User',
+  category: SynthPresetCategory = 'User',
   description = ''
 ): SynthPresetItem {
   const current = getCustomPresets();
@@ -562,4 +813,62 @@ export function getAllSynthPresets(custom: SynthPresetItem[]): SynthPresetItem[]
 export function findPresetByName(name: string, presets: SynthPresetItem[]): SynthPresetItem | undefined {
   if (!name) return undefined;
   return presets.find((p) => p.name === name);
+}
+
+export interface CategoryPresetGroup {
+  category: SynthPresetCategory;
+  label: string;
+  badgeClass: string;
+  description: string;
+  presets: SynthPresetItem[];
+}
+
+/**
+ * Organizes presets into structured categories ('Bass', 'Lead', 'Pad', 'Keys', 'Pluck', 'Brass', 'FX', 'User')
+ * instead of a single flat list.
+ */
+export function getPresetsGroupedByCategory(allPresets: SynthPresetItem[]): CategoryPresetGroup[] {
+  const order: SynthPresetCategory[] = ['Bass', 'Lead', 'Pad', 'Keys', 'Pluck', 'Brass', 'FX', 'User'];
+  const groups: CategoryPresetGroup[] = [];
+
+  for (const cat of order) {
+    const meta = SYNTH_CATEGORIES.find((c) => c.id === cat) ?? {
+      id: cat,
+      label: cat,
+      shortLabel: cat,
+      badgeClass: 'bg-slate-700/50 text-slate-300 border-slate-600',
+      description: '',
+    };
+
+    const matching = allPresets.filter((p) => {
+      if (cat === 'User') {
+        return !p.isFactory || p.category === 'User';
+      }
+      return p.isFactory && p.category === cat;
+    });
+
+    if (matching.length > 0) {
+      groups.push({
+        category: cat,
+        label: cat === 'User' ? `Custom / Saved (${matching.length})` : `${meta.label} (${matching.length})`,
+        badgeClass: meta.badgeClass,
+        description: meta.description,
+        presets: matching,
+      });
+    }
+  }
+
+  return groups;
+}
+
+export function getCategoryMeta(category: SynthPresetCategory): SynthPresetCategoryMeta {
+  return (
+    SYNTH_CATEGORIES.find((c) => c.id === category) ?? {
+      id: category,
+      label: category,
+      shortLabel: category,
+      badgeClass: 'bg-slate-700/50 text-slate-300 border-slate-600',
+      description: '',
+    }
+  );
 }

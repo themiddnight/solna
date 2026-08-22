@@ -64,19 +64,24 @@ export interface ChordItem {
 export interface MasterEffects {
   reverbWet: number;
   reverbDecay: number;
+  reverbBypass?: boolean;
   delayWet: number;
   delayTime: string;
   delayFeedback: number;
+  delayBypass?: boolean;
   distortionDrive?: number;
   distortionWet: number;
+  distortionBypass?: boolean;
   chorusRate?: number;
   chorusDepth?: number;
   chorusWet?: number;
   eqLow: number;
   eqMid: number;
   eqHigh: number;
+  eqBypass?: boolean;
   compressorThreshold: number;
   compressorRatio?: number;
+  compressorBypass?: boolean;
 }
 
 

@@ -16,6 +16,7 @@ import { SequencerTrack, SynthParams } from "../types";
 import { audioEngine, STEPS_PER_BAR } from "../audio/engine";
 import { sixteenthNoteMs } from "../utils/musicTheory";
 import { DRUM_KITS, GENRE_TO_KIT } from "../audio/drumKits";
+import { DrumPads } from "./DrumPads";
 
 interface SequencerViewProps {
   tracks: SequencerTrack[];
@@ -1927,6 +1928,9 @@ export const SequencerView: React.FC<SequencerViewProps> = React.memo(({
           ))}
         </div>
       </div>
+
+      {/* Live Performance Drum Pads */}
+      <DrumPads soundKit={soundKit} onChangeSoundKit={onChangeSoundKit} />
     </div>
   );
 });

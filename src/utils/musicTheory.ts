@@ -142,6 +142,46 @@ export function getDiatonicChordForDegree(
   };
 }
 
+export interface BorrowedChord {
+  root: string;
+  quality: string;
+  label: string;
+}
+
+/**
+ * Returns a curated list of popular borrowed chords (modal interchange / chromatic chords) for the given scale/key.
+ */
+export function getBorrowedChords(root: string, scaleType: string): BorrowedChord[] {
+  const rootIndex = rootSemitone(root);
+  if (scaleType === 'Major' || scaleType === 'Lydian' || scaleType === 'Mixolydian') {
+    return [
+      { root: ROOTS[(rootIndex + 5) % 12], quality: 'min', label: 'iv (Minor IV)' },
+      { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: '♭VI (Flat VI)' },
+      { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: '♭VII (Flat VII)' },
+      { root: ROOTS[(rootIndex + 3) % 12], quality: 'maj', label: '♭III (Flat III)' },
+      { root: ROOTS[(rootIndex + 1) % 12], quality: 'maj', label: '♭II (Neapolitan)' },
+      { root: ROOTS[(rootIndex + 2) % 12], quality: 'min7', label: 'iiø7 (Half-Dim)' },
+    ];
+  } else if (scaleType === 'Natural Minor' || scaleType === 'Harmonic Minor' || scaleType === 'Dorian' || scaleType === 'Phrygian') {
+    return [
+      { root: ROOTS[(rootIndex + 5) % 12], quality: 'maj', label: 'IV (Major IV)' },
+      { root: ROOTS[(rootIndex + 7) % 12], quality: 'maj', label: 'V (Major V)' },
+      { root: ROOTS[(rootIndex + 4) % 12], quality: 'maj', label: 'III (Major III)' },
+      { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: 'VI (Major VI)' },
+      { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: 'VII (Major VII)' },
+    ];
+  } else {
+    // Default universal borrowed / chromatic accents
+    return [
+      { root: ROOTS[(rootIndex + 3) % 12], quality: 'maj', label: '♭III' },
+      { root: ROOTS[(rootIndex + 5) % 12], quality: 'min', label: 'iv' },
+      { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: '♭VI' },
+      { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: '♭VII' },
+    ];
+  }
+}
+
+
 /**
  * Re-harmonizes / snaps an existing chord progression to the nearest diatonic degrees of a new Key/Scale.
  * Option B: Diatonic Re-harmonization

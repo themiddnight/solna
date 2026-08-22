@@ -329,10 +329,8 @@ export function App() {
       <Header
         currentView={activeTab}
         onSelectView={setActiveTab}
-        bpm={bpm}
-        onChangeBpm={setBpm}
-        masterVolume={masterVolume}
-        onChangeMasterVolume={handleMasterVolumeChange}
+        isSequencerPlaying={isSequencerPlaying}
+        isChordsPlaying={isChordsPlaying}
         onOpenAi={openAiModal}
         onOpenProjects={openProjectsModal}
         projectTitle={projectTitle}
@@ -354,8 +352,6 @@ export function App() {
             onChangeChordSynthParams={setChordSynthParams}
             bassSynthParams={bassSynthParams}
             onChangeBassSynthParams={setBassSynthParams}
-            soundKit={soundKit}
-            onChangeSoundKit={setSoundKit}
             scaleRoot={scaleRoot}
             scaleType={scaleType}
           />
@@ -409,6 +405,7 @@ export function App() {
 
       {/* Persistent Transport Bar at bottom */}
       <TransportBar
+        currentView={activeTab}
         isPlaying={isCurrentTabPlaying}
         onTogglePlay={toggleCurrentTabPlay}
         isPlayingAll={anyPlaying}
@@ -419,7 +416,7 @@ export function App() {
         scaleRoot={scaleRoot}
         scaleType={scaleType}
         masterVolume={masterVolume}
-        onChangeMasterVolume={setMasterVolume}
+        onChangeMasterVolume={handleMasterVolumeChange}
       />
 
       {/* Modals */}
