@@ -65,7 +65,7 @@ resolveBassSteps(
 - Approach tokens (`approachChromaticAbove/Below`, `approachDiatonicUp`, `approachFifthOfNext`) ชี้หา `bassRoot` ของ**คอร์ดถัดไป**ใน progression (คอร์ดสุดท้าย wrap กลับคอร์ดแรก)
 - `approachChromaticAbove/Below` = target ±1 semitone; `approachFifthOfNext` = target +7 semitones; `approachDiatonicUp` = scale step เหนือ target 1 ขั้นตาม `scaleRoot`/`scaleType` ที่ส่งเข้า (ใช้ `SCALES` ใน `musicTheory.ts`)
 - Deterministic variations: pattern ที่ต้องการสลับ above/below ใช้ `chordIndex % 2` (bar คู่ = above, bar คี่ = below)
-- Output noteName ผ่าน `noteFrequency`/`shiftNoteOctave` ตาม octave + `octaveShift`
+- Output noteName สร้างด้วย Tonal `Note.midi`/`Note.fromMidi` ใน format `'C4'` แบบเดียวกับ `generateBlockChordNotes` — **octave ฝังใน note name** (params.octave ของ preset คงเป็น 0 ตาม convention ของ `INITIAL_SYNTH_PARAMS`) + `octaveShift` บวกเข้า midi
 - Timing: `timeOffsetSec = step * (sixteenthNoteMs(bpm) / 1000)`, `holdSec = holdSteps * stepDur` (staccato → คูณ 0.5)
 
 ### Factory patterns (อ้างอิงจาก research)
@@ -136,7 +136,7 @@ export const FACTORY_BASS_PRESETS: SynthPresetItem[] = [
       filterType: 'lowpass', filterCutoff: 220, filterResonance: 1, filterEnvAmount: 0,
       attack: 0.01, decay: 0.2, sustain: 0.9, release: 0.6,
       filterAttack: 0.01, filterDecay: 0.1, filterSustain: 1, filterRelease: 0.3,
-      lfoRate: 4, lfoDepth: 0, lfoTarget: 'volume', octave: 2, preset: 'Deep Sine Sub' },
+      lfoRate: 4, lfoDepth: 0, lfoTarget: 'volume', octave: 0, preset: 'Deep Sine Sub' },
   },
   {
     id: 'bass-round-pluck', name: 'Round Pluck',
@@ -144,7 +144,7 @@ export const FACTORY_BASS_PRESETS: SynthPresetItem[] = [
       filterType: 'lowpass', filterCutoff: 400, filterResonance: 4, filterEnvAmount: 900,
       attack: 0.005, decay: 0.25, sustain: 0.4, release: 0.25,
       filterAttack: 0.005, filterDecay: 0.3, filterSustain: 0.1, filterRelease: 0.3,
-      lfoRate: 0, lfoDepth: 0, lfoTarget: 'volume', octave: 2, preset: 'Round Pluck' },
+      lfoRate: 0, lfoDepth: 0, lfoTarget: 'volume', octave: 0, preset: 'Round Pluck' },
   },
   {
     id: 'bass-punchy-square', name: 'Punchy Square',
@@ -152,7 +152,7 @@ export const FACTORY_BASS_PRESETS: SynthPresetItem[] = [
       filterType: 'lowpass', filterCutoff: 500, filterResonance: 2, filterEnvAmount: 300,
       attack: 0.005, decay: 0.15, sustain: 0.5, release: 0.15,
       filterAttack: 0.005, filterDecay: 0.15, filterSustain: 0.2, filterRelease: 0.2,
-      lfoRate: 0, lfoDepth: 0, lfoTarget: 'volume', octave: 2, preset: 'Punchy Square' },
+      lfoRate: 0, lfoDepth: 0, lfoTarget: 'volume', octave: 0, preset: 'Punchy Square' },
   },
   {
     id: 'bass-saw-growl', name: 'Saw Growl',
@@ -160,7 +160,7 @@ export const FACTORY_BASS_PRESETS: SynthPresetItem[] = [
       filterType: 'lowpass', filterCutoff: 700, filterResonance: 6, filterEnvAmount: 500,
       attack: 0.01, decay: 0.2, sustain: 0.6, release: 0.3,
       filterAttack: 0.01, filterDecay: 0.25, filterSustain: 0.3, filterRelease: 0.3,
-      lfoRate: 0, lfoDepth: 0, lfoTarget: 'volume', octave: 2, preset: 'Saw Growl' },
+      lfoRate: 0, lfoDepth: 0, lfoTarget: 'volume', octave: 0, preset: 'Saw Growl' },
   },
   {
     id: 'bass-warm-tri', name: 'Warm Triangle',
@@ -168,7 +168,7 @@ export const FACTORY_BASS_PRESETS: SynthPresetItem[] = [
       filterType: 'lowpass', filterCutoff: 350, filterResonance: 1, filterEnvAmount: 0,
       attack: 0.03, decay: 0.3, sustain: 0.8, release: 0.5,
       filterAttack: 0.03, filterDecay: 0.3, filterSustain: 1, filterRelease: 0.4,
-      lfoRate: 0, lfoDepth: 0, lfoTarget: 'volume', octave: 2, preset: 'Warm Triangle' },
+      lfoRate: 0, lfoDepth: 0, lfoTarget: 'volume', octave: 0, preset: 'Warm Triangle' },
   },
 ];
 ```
