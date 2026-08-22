@@ -584,8 +584,13 @@ class AudioEngine {
       Math.max(20, params.filterCutoff + params.filterEnvAmount * params.filterSustain)
     );
 
-    for (const voice of this.activeVoices.values()) {
-      if (source && voice.source !== source) continue;
+    // Iterate every tracked voice of the source (or all of them), not just
+    // the dedup map's latest-per-note entries: a sounding voice that a later
+    // same-note hit replaced in activeVoices must still be re-shaped live.
+    const voices = source
+      ? this.sourceVoices.get(source) ?? new Set<SynthVoice>()
+      : new Set<SynthVoice>(Array.from(this.sourceVoices.values()).flatMap((set) => Array.from(set)));
+    for (const voice of voices) {
       // Only re-shape voices that are sounding right now. Voices scheduled
       // ahead keep the envelopes they were planned with (their next trigger
       // already uses the latest params); re-targeting them here would cancel

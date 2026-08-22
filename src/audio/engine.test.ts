@@ -161,6 +161,29 @@ describe('live param updates', () => {
     expect(voice.filter.frequency.cancels).not.toContain(t0);
   });
 
+  test('a live param update reaches the sounding voice even when a later same-note hit replaced it in the dedup map', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    // Chord pattern with a repeated note: the second hit is pre-scheduled, so
+    // the dedup map points at it while the first hit is the one sounding now.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.3, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.8, 'chord');
+
+    // The first hit is sounding right now (t0 + 0.15 < its release at t0 + 0.3).
+    ctx.currentTime = t0 + 0.15;
+    engine.updateSynthParams({ ...SYNTH, oscType: 'sine' }, 'chord');
+
+    const voices = Array.from(
+      (engine as any).sourceVoices.get('chord') as Set<{ startTime: number; oscs: { type: string }[] }>,
+    );
+    const sounding = voices.filter((v) => v.startTime <= ctx.currentTime);
+    expect(sounding.length).toBe(1);
+    expect(sounding[0].oscs[0].type).toBe('sine');
+  });
+
   test('retriggering a live synth note still releases the old voice immediately', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
