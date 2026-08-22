@@ -105,6 +105,6 @@ export interface ProjectState {
   synthParams?: SynthParams;
   sequencerTracks: SequencerTrack[];
   chords: ChordItem[];
-  effects?: MasterEffects; // optional: App no longer composes effects into the project object
+  effects: MasterEffects;
   masterVolume?: number;
 }

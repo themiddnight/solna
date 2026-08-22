@@ -16,7 +16,7 @@ import { useTabRouting } from './routing/useTabRouting';
 
 /**
  * The currently-open project, composed from store selectors (replaces the old
- * `currentProject` useMemo in App). The object is memoized over the same seven
+ * `currentProject` useMemo in App). The object is memoized over the same eight
  * values so the memoized ProjectModal keeps its old referential stability.
  */
 function useProjectState(): ProjectState {
@@ -27,6 +27,7 @@ function useProjectState(): ProjectState {
   const synthParams = useAppStore((s) => s.synthParams);
   const sequencerTracks = useAppStore((s) => s.sequencerTracks);
   const chords = useAppStore((s) => s.chords);
+  const effects = useAppStore((s) => s.effects);
   return useMemo(
     () => ({
       id: 'proj-active',
@@ -37,8 +38,9 @@ function useProjectState(): ProjectState {
       synthParams,
       sequencerTracks,
       chords,
+      effects,
     }),
-    [projectTitle, bpm, scaleRoot, scaleType, synthParams, sequencerTracks, chords]
+    [projectTitle, bpm, scaleRoot, scaleType, synthParams, sequencerTracks, chords, effects]
   );
 }
 
