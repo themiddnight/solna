@@ -67,7 +67,7 @@ export const KEYBOARD_NOTES = [
   { note: "F4", label: "F4", key: "Quote", isBlack: false },
 ];
 
-export const SynthView: React.FC = React.memo(() => {
+export const SynthView = () => {
   // Synth slice state + setters (named after the old props so the rest of the
   // component body is unchanged).
   const controlTarget = useAppStore((s) => s.controlTarget);
@@ -1245,7 +1245,7 @@ export const SynthView: React.FC = React.memo(() => {
       />
     </div>
   );
-});
+};
 
 // Use note index within KEYBOARD_NOTES (0-based) to compute black key position
 // Index positions of black keys in KEYBOARD_NOTES: 1(C#), 3(D#), 6(F#), 8(G#), 10(A#), 13(C#), 15(D#)

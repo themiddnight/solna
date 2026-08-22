@@ -12,6 +12,7 @@ import { TAB_VALUES, parseTabParam, pushTabToUrl, replaceTabInUrl } from './tabR
  * case the caller should rewrite the URL with replaceState (no history entry).
  */
 export function resolveInitialTab(search: string): { tab: ViewMode; needsNormalize: boolean } {
+  // parseTabParam is the source of truth for tab parsing — change parsing there, not here.
   const tab = parseTabParam(search);
   const query = search.startsWith('?') ? search.slice(1) : search;
   const rawTab = new URLSearchParams(query).get('tab');

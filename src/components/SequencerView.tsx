@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Grid,
   Play,
@@ -1557,7 +1557,7 @@ const GENRE_PRESETS: Record<string, Record<string, boolean[]>> = {
   },
 };
 
-export const SequencerView: React.FC = React.memo(() => {
+export const SequencerView = () => {
   // Sequencer/transport/synth state + setters (named after the old props so the
   // rest of the component body is unchanged).
   const tracks = useAppStore((s) => s.sequencerTracks);
@@ -1924,4 +1924,4 @@ export const SequencerView: React.FC = React.memo(() => {
       <DrumPads soundKit={soundKit} onChangeSoundKit={onChangeSoundKit} />
     </div>
   );
-});
+};

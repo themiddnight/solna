@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Header } from './components/Header';
 import { SynthView } from './components/SynthView';
 import { SequencerView } from './components/SequencerView';
@@ -16,7 +16,7 @@ import { useTabRouting } from './routing/useTabRouting';
 
 /**
  * The currently-open project, composed from store selectors (replaces the old
- * `currentProject` useMemo in App). The object is memoized over the same eight
+ * `currentProject` useMemo in App). The object is memoized over the same seven
  * values so the memoized ProjectModal keeps its old referential stability.
  */
 function useProjectState(): ProjectState {
@@ -27,7 +27,6 @@ function useProjectState(): ProjectState {
   const synthParams = useAppStore((s) => s.synthParams);
   const sequencerTracks = useAppStore((s) => s.sequencerTracks);
   const chords = useAppStore((s) => s.chords);
-  const effects = useAppStore((s) => s.effects);
   return useMemo(
     () => ({
       id: 'proj-active',
@@ -38,9 +37,8 @@ function useProjectState(): ProjectState {
       synthParams,
       sequencerTracks,
       chords,
-      effects,
     }),
-    [projectTitle, bpm, scaleRoot, scaleType, synthParams, sequencerTracks, chords, effects]
+    [projectTitle, bpm, scaleRoot, scaleType, synthParams, sequencerTracks, chords]
   );
 }
 
