@@ -10,6 +10,8 @@ import { AiCompanionModal } from './components/AiCompanionModal';
 import { ProjectModal } from './components/ProjectModal';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import { audioEngine } from './audio/engine';
+import { FACTORY_BASS_PRESETS } from './audio/bassPresets';
+import { BASS_PATTERNS } from './audio/bassPatterns';
 import {
   ViewMode,
   SynthParams,
@@ -196,6 +198,13 @@ export function App() {
   const [chordRhythmId, setChordRhythmId] = useState<string>('sustained');
   const [chordOctave, setChordOctave] = useState<number>(4);
 
+  // Bass module: own preset/pattern/octave plus per-layer mutes (session-local, not persisted)
+  const [bassSynthParams, setBassSynthParams] = useState<SynthParams>({ ...INITIAL_SYNTH_PARAMS, ...FACTORY_BASS_PRESETS[0].params });
+  const [bassPatternId, setBassPatternId] = useState<string>(BASS_PATTERNS[0].id);
+  const [bassOctave, setBassOctave] = useState<number>(2);
+  const [chordMuted, setChordMuted] = useState<boolean>(false);
+  const [bassMuted, setBassMuted] = useState<boolean>(false);
+
   // Push param tweaks into sounding voices. The main pass runs last so it wins
   // over the chord pass while follow is on; the chord pass is skipped then.
   useEffect(() => {
@@ -204,6 +213,13 @@ export function App() {
     }
     audioEngine.updateSynthParams(synthParams, followMainSynth ? undefined : 'synth');
   }, [synthParams, chordSynthParams, followMainSynth]);
+
+  // Per-layer mutes live on the engine's source buses: scheduling keeps running,
+  // the bus gain decides audibility (instant, click-free).
+  useEffect(() => {
+    audioEngine.setSourceMuted('chord', chordMuted);
+    audioEngine.setSourceMuted('bass', bassMuted);
+  }, [chordMuted, bassMuted]);
   const [sequencerTracks, setSequencerTracks] = useState<SequencerTrack[]>(INITIAL_SEQUENCER_TRACKS);
   const [chords, setChords] = useState<ChordItem[]>(INITIAL_CHORDS);
 
