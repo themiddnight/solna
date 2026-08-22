@@ -378,6 +378,16 @@ export function App() {
             onTogglePlay={toggleChordsPlay}
             masterChordVelocity={masterChordVelocity}
             onChangeMasterChordVelocity={setMasterChordVelocity}
+            bassSynthParams={bassSynthParams}
+            onChangeBassSynthParams={setBassSynthParams}
+            bassPatternId={bassPatternId}
+            onChangeBassPatternId={setBassPatternId}
+            bassOctave={bassOctave}
+            onChangeBassOctave={setBassOctave}
+            chordMuted={chordMuted}
+            onToggleChordMuted={() => setChordMuted((prev) => !prev)}
+            bassMuted={bassMuted}
+            onToggleBassMuted={() => setBassMuted((prev) => !prev)}
           />
         </div>
         <div className={activeTab === 'effects' ? 'block' : 'hidden'}>

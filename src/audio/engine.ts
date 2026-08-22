@@ -447,8 +447,8 @@ class AudioEngine {
   // Mute/unmute an entire source layer on its bus: ~10 ms ramp (click-free),
   // instantly cuts tails/effects, and survives across effect/param updates.
   setSourceMuted(source: string, muted: boolean): void {
-    const bus = this.sourceBuses.get(source);
-    if (!bus || !this.ctx) return;
+    if (!this.ctx) return;
+    const bus = this.sourceBuses.get(source) ?? this.getSourceBus(source);
     const now = this.ctx.currentTime;
     bus.gain.cancelScheduledValues(now);
     bus.gain.setTargetAtTime(muted ? 0 : 1, now, 0.01);

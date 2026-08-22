@@ -1,9 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Music, Play, Square, Sparkles, Plus, Trash2, ArrowRight, Library, Bookmark, Check, Link2 } from 'lucide-react';
+import { Music, Play, Square, Sparkles, Plus, Trash2, ArrowRight, Library, Bookmark, Check, Link2, Volume2, VolumeX } from 'lucide-react';
 import { ChordItem, SynthParams } from '../types';
 import { audioEngine, STEPS_PER_BAR } from '../audio/engine';
 import { FACTORY_PRESETS, getCustomPresets } from '../audio/synthPresets';
 import { RHYTHM_PATTERNS, RHYTHM_STYLE_GROUPS, RhythmPattern } from '../audio/rhythmPatterns';
+import { FACTORY_BASS_PRESETS } from '../audio/bassPresets';
+import { BASS_PATTERNS, BASS_STYLE_GROUPS, BassPattern } from '../audio/bassPatterns';
 import { deriveChordNotes, reharmonizeProgressionToScale, generateBlockChordNotes, quarterNoteMs, sixteenthNoteMs, rootSemitone, shiftNoteOctave, SCALES, ROOTS } from '../utils/musicTheory';
 import {
   ChordPresetLibrary,
@@ -28,6 +30,16 @@ interface ChordViewProps {
   onChangeRhythmId: (id: string) => void;
   chordOctave: number;
   onChangeChordOctave: (octave: number) => void;
+  bassSynthParams: SynthParams;
+  onChangeBassSynthParams: (params: SynthParams) => void;
+  bassPatternId: string;
+  onChangeBassPatternId: (id: string) => void;
+  bassOctave: number;
+  onChangeBassOctave: (octave: number) => void;
+  chordMuted: boolean;
+  onToggleChordMuted: () => void;
+  bassMuted: boolean;
+  onToggleBassMuted: () => void;
   bpm: number;
   isPlaying: boolean;
   onTogglePlay: () => void;
@@ -353,6 +365,16 @@ export const ChordView: React.FC<ChordViewProps> = ({
   onChangeRhythmId,
   chordOctave,
   onChangeChordOctave,
+  bassSynthParams,
+  onChangeBassSynthParams,
+  bassPatternId,
+  onChangeBassPatternId,
+  bassOctave,
+  onChangeBassOctave,
+  chordMuted,
+  onToggleChordMuted,
+  bassMuted,
+  onToggleBassMuted,
   bpm,
   isPlaying,
   onTogglePlay,
@@ -417,6 +439,8 @@ export const ChordView: React.FC<ChordViewProps> = ({
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [autoReharmonize, setAutoReharmonize] = useState<boolean>(true);
   const [isAutoReharmonizedIndicator, setIsAutoReharmonizedIndicator] = useState<boolean>(false);
+  const [selectedBassPresetId, setSelectedBassPresetId] = useState<string>(FACTORY_BASS_PRESETS[0].id);
+  const bassPattern = BASS_PATTERNS.find((p) => p.id === bassPatternId) ?? BASS_PATTERNS[0];
   const armedRef = useRef(false);
   const chordIndexRef = useRef(0);
   const nextBarStepRef = useRef(0);
@@ -634,6 +658,43 @@ export const ChordView: React.FC<ChordViewProps> = ({
           >
             <Link2 className={`w-3.5 h-3.5 ${followMainSynth ? 'text-indigo-300' : 'text-slate-500'}`} />
             <span>Follow Main Synth: {followMainSynth ? 'ON' : 'OFF'}</span>
+          </button>
+
+          {/* Per-layer mute toggles (engine source buses — tails cut instantly) */}
+          <button
+            id="btn-mute-chord"
+            onClick={onToggleChordMuted}
+            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
+              chordMuted
+                ? 'bg-rose-600/30 border-rose-500/50 text-rose-200'
+                : 'bg-[#0B0D19] border-[#2D355A] text-slate-400'
+            }`}
+            title="Mute the chord layer on its engine bus (instant, includes tails)"
+          >
+            {chordMuted ? (
+              <VolumeX className="w-3.5 h-3.5 text-rose-300" />
+            ) : (
+              <Volume2 className="w-3.5 h-3.5 text-indigo-300" />
+            )}
+            <span>Chord: {chordMuted ? 'OFF' : 'ON'}</span>
+          </button>
+
+          <button
+            id="btn-mute-bass"
+            onClick={onToggleBassMuted}
+            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
+              bassMuted
+                ? 'bg-rose-600/30 border-rose-500/50 text-rose-200'
+                : 'bg-[#0B0D19] border-[#2D355A] text-slate-400'
+            }`}
+            title="Mute the bass layer on its engine bus (instant, includes tails)"
+          >
+            {bassMuted ? (
+              <VolumeX className="w-3.5 h-3.5 text-rose-300" />
+            ) : (
+              <Volume2 className="w-3.5 h-3.5 text-emerald-300" />
+            )}
+            <span>Bass: {bassMuted ? 'OFF' : 'ON'}</span>
           </button>
 
           {/* Quick Save Current Progression */}
@@ -894,10 +955,93 @@ export const ChordView: React.FC<ChordViewProps> = ({
                       </optgroup>
                     </select>
                   </div>
+
+                  <div className="col-span-2">
+                    <label className="text-[10px] text-slate-500 block mb-0.5">Bass</label>
+                    <select
+                      id={`select-chord-bass-${chord.id}`}
+                      value={chord.bassNote ?? ''}
+                      onChange={(e) => updateChord(chord.id, { bassNote: e.target.value || null })}
+                      className="w-full bg-[#12152A] border border-[#2D355A] text-slate-200 text-xs rounded p-1"
+                      title="Bass note override for this chord (slash chord / inversion). Auto = chord root."
+                    >
+                      <option value="">Auto</option>
+                      {chord.notes.slice(1, 4).map((n, i) => (
+                        <option key={`${n}-${i}`} value={n}>
+                          {['3rd', '5th', '7th'][i]} ({n})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Bass Module Panel */}
+      <div className="mt-4 bg-[#12152A] border border-[#252B48] rounded-xl p-4">
+        <div className="mb-3">
+          <h3 className="text-sm font-bold text-emerald-300">Bass Module</h3>
+          <p className="text-[10px] text-slate-500">
+            Bass line follows the same chord progression loop; pattern steps are 16th notes.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="text-[10px] text-slate-500 block mb-1">Bass Preset</label>
+            <select
+              id="select-bass-sound-preset"
+              value={selectedBassPresetId}
+              onChange={(e) => {
+                const preset = FACTORY_BASS_PRESETS.find((p) => p.id === e.target.value);
+                if (!preset) return;
+                setSelectedBassPresetId(preset.id);
+                onChangeBassSynthParams({ ...bassSynthParams, ...preset.params });
+              }}
+              className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+              title="Bass sound preset (dedicated bass factory presets)"
+            >
+              {FACTORY_BASS_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-slate-500 block mb-1">Bass Octave</label>
+            <select
+              id="select-bass-octave"
+              value={bassOctave}
+              onChange={(e) => onChangeBassOctave(parseInt(e.target.value, 10))}
+              className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+              title="Register for the bass line (embedded in the note names)"
+            >
+              {[1, 2, 3, 4].map((o) => (
+                <option key={o} value={o}>Oct {o}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-slate-500 block mb-1">Bass Pattern</label>
+            <select
+              id="select-bass-rhythm-pattern"
+              value={bassPatternId}
+              onChange={(e) => onChangeBassPatternId(e.target.value)}
+              className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+              title="Bass pattern (16th-note grid, deterministic)"
+            >
+              {BASS_STYLE_GROUPS.map((group) => (
+                <optgroup key={group.style} label={group.style}>
+                  {group.patterns.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
