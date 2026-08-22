@@ -25,7 +25,7 @@ class AudioEngine {
   private dryGain: GainNode | null = null;
 
   // Active voices tracking
-  private activeVoices = new Map<string, { oscs: OscillatorNode[]; gains: GainNode[]; filter: BiquadFilterNode; filterCutoff: number; filterRelease: number; lfo?: OscillatorNode; lfoGain?: GainNode; lfoTarget?: SynthParams['lfoTarget']; sustainLevel: number; source: string }>();
+  private activeVoices = new Map<string, { oscs: OscillatorNode[]; gains: GainNode[]; filter: BiquadFilterNode; filterCutoff: number; filterRelease: number; lfo?: OscillatorNode; lfoGain?: GainNode; lfoTarget?: SynthParams['lfoTarget']; sustainLevel: number; source: string; startTime: number; releaseScheduledAt?: number }>();
 
   // Per-source buses: one gain bus per source string ('synth', 'chord', 'bass', ...).
   // Voice gains connect here instead of straight to dry/effects, so a whole layer
@@ -301,12 +301,15 @@ class AudioEngine {
       }
     }
 
-    // Stop existing voice if note is already sounding. Skipped for bass:
-    // the mono kill above already releases every sounding bass voice at the
-    // new note's start, and a second release here would truncate at
-    // scheduling time instead.
+    // Stop an existing live voice of the same note. Skipped when the existing
+    // voice already has its release planned (pre-scheduled pattern hits):
+    // re-releasing at scheduling time would truncate its envelope. Bass is
+    // handled by the mono kill above.
     if (source !== 'bass') {
-      this.triggerSynthNoteOff(noteName, 0.3, undefined, source);
+      const existing = this.activeVoices.get(`${source}:${noteName}`);
+      if (!existing?.releaseScheduledAt) {
+        this.triggerSynthNoteOff(noteName, 0.3, undefined, source);
+      }
     }
 
     // Primary Oscillator
@@ -390,6 +393,8 @@ class AudioEngine {
       lfoTarget: params.lfoTarget,
       sustainLevel: peakGain * params.sustain,
       source,
+      startTime: now,
+      releaseScheduledAt: undefined,
     });
   }
 
@@ -403,15 +408,10 @@ class AudioEngine {
     const now = time ?? this.ctx.currentTime;
     const mainGain = voice.gains[0];
 
-    // Bass voices stay tracked until teardown so the mono kill can release a
-    // live voice at the new note's start; every other source removes the
-    // entry immediately, so the same-note dedup in triggerSynthNoteOn never
-    // touches a voice whose envelope is already fully scheduled (multi-hit
-    // chord patterns would otherwise be silenced except for their last hit).
-    const deferDelete = source === 'bass';
-    if (!deferDelete) {
-      this.activeVoices.delete(voiceKey);
-    }
+    // All voices stay tracked until teardown so live param updates can reach
+    // sounding (or still-scheduled) voices; the same-note dedup in
+    // triggerSynthNoteOn skips voices whose release is already planned here.
+    voice.releaseScheduledAt = now;
 
     try {
       mainGain.gain.cancelScheduledValues(now);
@@ -430,11 +430,10 @@ class AudioEngine {
       voice.filter.frequency.exponentialRampToValueAtTime(Math.max(20, voice.filterCutoff), now + filterRelease);
 
       setTimeout(() => {
-        // Deferred deletion for bass only, and only if the voice is still the
-        // current entry — a same-note retrigger overwrites the map entry with
-        // a new voice before this timeout fires, and the identity guard
-        // prevents deleting the new voice's entry.
-        if (deferDelete && this.activeVoices.get(voiceKey) === voice) {
+        // Only delete the map entry if this voice is still the current one —
+        // a same-note retrigger overwrites the entry before this timeout
+        // fires. The voice's own nodes are always torn down regardless.
+        if (this.activeVoices.get(voiceKey) === voice) {
           this.activeVoices.delete(voiceKey);
         }
         voice.oscs.forEach((osc) => {
@@ -511,6 +510,14 @@ class AudioEngine {
 
     for (const voice of this.activeVoices.values()) {
       if (source && voice.source !== source) continue;
+      // Only re-shape voices that are sounding right now. Voices scheduled
+      // ahead keep the envelopes they were planned with (their next trigger
+      // already uses the latest params); re-targeting them here would cancel
+      // their scheduled ramps, release ramps included.
+      if (voice.startTime > this.ctx.currentTime) continue;
+      // A voice already in its release tail keeps the ramp it was scheduled
+      // with; re-targeting its filter mid-release would cancel the fade.
+      if (voice.releaseScheduledAt !== undefined && voice.releaseScheduledAt <= this.ctx.currentTime) continue;
       const osc = voice.oscs[0];
 
       osc.type = params.oscType;

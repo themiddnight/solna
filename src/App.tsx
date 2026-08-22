@@ -10,6 +10,7 @@ import { AiCompanionModal } from './components/AiCompanionModal';
 import { ProjectModal } from './components/ProjectModal';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import { audioEngine } from './audio/engine';
+import type { SynthControlTarget } from './utils/synthControl';
 import { FACTORY_BASS_PRESETS } from './audio/bassPresets';
 import { BASS_PATTERNS } from './audio/bassPatterns';
 import {
@@ -192,9 +193,10 @@ export function App() {
 
   // States
   const [synthParams, setSynthParams] = useState<SynthParams>(INITIAL_SYNTH_PARAMS);
-  // Chord mode keeps its own sound: a preset-driven param set plus a follow toggle
+  // Chord mode keeps its own sound: a preset-driven param set, editable from the synth page
   const [chordSynthParams, setChordSynthParams] = useState<SynthParams>(INITIAL_SYNTH_PARAMS);
-  const [followMainSynth, setFollowMainSynth] = useState<boolean>(false);
+  // Which param set the synth page controls (knobs, presets, keyboard preview all follow this)
+  const [controlTarget, setControlTarget] = useState<SynthControlTarget>('synth');
   const [chordRhythmId, setChordRhythmId] = useState<string>('sustained');
   const [chordOctave, setChordOctave] = useState<number>(4);
 
@@ -205,14 +207,12 @@ export function App() {
   const [chordMuted, setChordMuted] = useState<boolean>(false);
   const [bassMuted, setBassMuted] = useState<boolean>(false);
 
-  // Push param tweaks into sounding voices. The main pass runs last so it wins
-  // over the chord pass while follow is on; the chord pass is skipped then.
+  // Push param tweaks into sounding voices per source
   useEffect(() => {
-    if (!followMainSynth) {
-      audioEngine.updateSynthParams(chordSynthParams, 'chord');
-    }
-    audioEngine.updateSynthParams(synthParams, followMainSynth ? undefined : 'synth');
-  }, [synthParams, chordSynthParams, followMainSynth]);
+    audioEngine.updateSynthParams(chordSynthParams, 'chord');
+    audioEngine.updateSynthParams(synthParams, 'synth');
+    audioEngine.updateSynthParams(bassSynthParams, 'bass');
+  }, [synthParams, chordSynthParams, bassSynthParams]);
 
   // Per-layer mutes live on the engine's source buses: scheduling keeps running,
   // the bus gain decides audibility (instant, click-free).
@@ -332,11 +332,17 @@ export function App() {
       {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity */}
       <main className="flex-1 pb-0 relative">
         <div className={activeTab === 'synth' ? 'block' : 'hidden'}>
-          <SynthView 
-            params={synthParams} 
-            onChangeParams={setSynthParams} 
-            scaleRoot={scaleRoot} 
-            scaleType={scaleType} 
+          <SynthView
+            controlTarget={controlTarget}
+            onChangeControlTarget={setControlTarget}
+            synthParams={synthParams}
+            onChangeSynthParams={setSynthParams}
+            chordSynthParams={chordSynthParams}
+            onChangeChordSynthParams={setChordSynthParams}
+            bassSynthParams={bassSynthParams}
+            onChangeBassSynthParams={setBassSynthParams}
+            scaleRoot={scaleRoot}
+            scaleType={scaleType}
           />
         </div>
         <div className={activeTab === 'drums' ? 'block' : 'hidden'}>
@@ -367,8 +373,6 @@ export function App() {
             synthParams={synthParams}
             chordSynthParams={chordSynthParams}
             onChangeChordSynthParams={setChordSynthParams}
-            followMainSynth={followMainSynth}
-            onToggleFollowMain={() => setFollowMainSynth((prev) => !prev)}
             rhythmId={chordRhythmId}
             onChangeRhythmId={setChordRhythmId}
             chordOctave={chordOctave}

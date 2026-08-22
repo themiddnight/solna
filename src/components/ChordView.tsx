@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Music, Play, Square, Sparkles, Plus, Trash2, ArrowRight, Library, Bookmark, Check, Link2, Volume2, VolumeX } from 'lucide-react';
+import { Music, Play, Square, Sparkles, Plus, Trash2, ArrowRight, Library, Bookmark, Check, Volume2, VolumeX } from 'lucide-react';
 import { ChordItem, SynthParams } from '../types';
 import { audioEngine, STEPS_PER_BAR } from '../audio/engine';
-import { FACTORY_PRESETS, getCustomPresets } from '../audio/synthPresets';
+import { FACTORY_PRESETS, getCustomPresets, getAllSynthPresets, findPresetByName } from '../audio/synthPresets';
 import { RHYTHM_PATTERNS, RHYTHM_STYLE_GROUPS, RhythmPattern } from '../audio/rhythmPatterns';
 import { FACTORY_BASS_PRESETS } from '../audio/bassPresets';
 import { BASS_PATTERNS, BASS_STYLE_GROUPS, BassPattern, resolveBassSteps } from '../audio/bassPatterns';
@@ -24,8 +24,6 @@ interface ChordViewProps {
   synthParams: SynthParams;
   chordSynthParams: SynthParams;
   onChangeChordSynthParams: (params: SynthParams) => void;
-  followMainSynth: boolean;
-  onToggleFollowMain: () => void;
   rhythmId: string;
   onChangeRhythmId: (id: string) => void;
   chordOctave: number;
@@ -359,8 +357,6 @@ export const ChordView: React.FC<ChordViewProps> = ({
   synthParams,
   chordSynthParams,
   onChangeChordSynthParams,
-  followMainSynth,
-  onToggleFollowMain,
   rhythmId,
   onChangeRhythmId,
   chordOctave,
@@ -383,7 +379,6 @@ export const ChordView: React.FC<ChordViewProps> = ({
 }) => {
   const [activeChordId, setActiveChordId] = useState<string | null>(null);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
-  const [selectedChordPresetId, setSelectedChordPresetId] = useState<string | null>(null);
 
   // Chord sound presets: factory presets plus presets saved from the synth view
   const customPresets = getCustomPresets();
@@ -463,11 +458,19 @@ export const ChordView: React.FC<ChordViewProps> = ({
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [autoReharmonize, setAutoReharmonize] = useState<boolean>(true);
   const [isAutoReharmonizedIndicator, setIsAutoReharmonizedIndicator] = useState<boolean>(false);
-  const [selectedBassPresetId, setSelectedBassPresetId] = useState<string>(FACTORY_BASS_PRESETS[0].id);
   const bassPattern = BASS_PATTERNS.find((p) => p.id === bassPatternId) ?? BASS_PATTERNS[0];
   const armedRef = useRef(false);
   const chordIndexRef = useRef(0);
   const nextBarStepRef = useRef(0);
+
+  // Latest callbacks via ref so param slides (which re-create these callbacks
+  // every tick) never resubscribe the clock. Resubscribing on every slider
+  // event stops/restarts the shared clock interval faster than it can fire —
+  // the scheduler stalls and the next chord arrives late.
+  const playFnsRef = useRef({ playChordWithRhythm, playBassWithPattern });
+  useEffect(() => {
+    playFnsRef.current = { playChordWithRhythm, playBassWithPattern };
+  });
 
   useEffect(() => {
     if (!isPlaying || chords.length === 0) {
@@ -487,14 +490,14 @@ export const ChordView: React.FC<ChordViewProps> = ({
       }
       if (step < nextBarStepRef.current) return;
       const chord = chords[chordIndexRef.current % chords.length];
-      playChordWithRhythm(chord, time, rhythmPattern);
-      playBassWithPattern(chord, time, bassPattern);
+      playFnsRef.current.playChordWithRhythm(chord, time, rhythmPattern);
+      playFnsRef.current.playBassWithPattern(chord, time, bassPattern);
       setPlayingIndex(chordIndexRef.current % chords.length);
       setActiveChordId(chord.id);
       nextBarStepRef.current = step + (chord.bars || 1) * STEPS_PER_BAR;
       chordIndexRef.current++;
     });
-  }, [isPlaying, chords, playChordWithRhythm, playBassWithPattern, rhythmPattern, bassPattern]);
+  }, [isPlaying, chords, rhythmPattern, bassPattern]);
 
   // Auto-reharmonize current chords when scale/root changes if autoReharmonize is enabled
   useEffect(() => {
@@ -616,25 +619,23 @@ export const ChordView: React.FC<ChordViewProps> = ({
           {/* Chord Sound Preset Select */}
           <select
             id="select-chord-sound-preset"
-            value={selectedChordPresetId ?? ''}
-            disabled={followMainSynth}
+            value={chordSynthParams.preset ?? ''}
             onChange={(e) => {
-              const preset = [...FACTORY_PRESETS, ...customPresets].find((p) => p.id === e.target.value);
+              const preset = findPresetByName(e.target.value, [...FACTORY_PRESETS, ...customPresets]);
               if (!preset) return;
-              setSelectedChordPresetId(preset.id);
-              onChangeChordSynthParams({ ...chordSynthParams, ...preset.params });
+              onChangeChordSynthParams({ ...chordSynthParams, ...preset.params, preset: preset.name });
             }}
-            className={`${SELECT_BASE} cursor-pointer ${followMainSynth ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[#22284C]'}`}
-            title="Chord sound preset — factory and saved presets. Disabled while following the main synth."
+            className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+            title="Chord sound preset — factory and saved presets, synced with the synth page"
           >
             <option value="">Chord Preset…</option>
             {FACTORY_PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+              <option key={p.id} value={p.name}>{p.name}</option>
             ))}
             {customPresets.length > 0 && (
               <optgroup label="Saved Presets">
                 {customPresets.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                  <option key={p.id} value={p.name}>{p.name}</option>
                 ))}
               </optgroup>
             )}
@@ -669,21 +670,6 @@ export const ChordView: React.FC<ChordViewProps> = ({
               </optgroup>
             ))}
           </select>
-
-          {/* Follow Main Synth Toggle */}
-          <button
-            id="btn-toggle-follow-main-synth"
-            onClick={onToggleFollowMain}
-            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
-              followMainSynth
-                ? 'bg-indigo-600/30 border-indigo-500/50 text-indigo-200'
-                : 'bg-[#0B0D19] border-[#2D355A] text-slate-400'
-            }`}
-            title="ON: chord sound mirrors the main synth in realtime. OFF: chords use the selected preset."
-          >
-            <Link2 className={`w-3.5 h-3.5 ${followMainSynth ? 'text-indigo-300' : 'text-slate-500'}`} />
-            <span>Follow Main Synth: {followMainSynth ? 'ON' : 'OFF'}</span>
-          </button>
 
           {/* Per-layer mute toggles (engine source buses — tails cut instantly) */}
           <button
@@ -841,7 +827,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
       {/* Quick Access Top Progression Presets Strip (DELETED) */}
 
       {/* Active Progression Blocks & Playable Chord Pads */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-xl space-y-3">
+      <div className="bg-[#12152A] border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 to-transparent rounded-xl p-4 shadow-xl space-y-3">
         <div className="flex items-center justify-between border-b border-[#252B48] pb-2 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
@@ -1007,7 +993,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
       </div>
 
       {/* Bass Module Panel */}
-      <div className="mt-4 bg-[#12152A] border border-[#252B48] rounded-xl p-4">
+      <div className="mt-4 bg-[#12152A] border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-xl p-4">
         <div className="mb-3">
           <h3 className="text-sm font-bold text-emerald-300">Bass Module</h3>
           <p className="text-[10px] text-slate-500">
@@ -1019,19 +1005,33 @@ export const ChordView: React.FC<ChordViewProps> = ({
             <label className="text-[10px] text-slate-500 block mb-1">Bass Preset</label>
             <select
               id="select-bass-sound-preset"
-              value={selectedBassPresetId}
+              value={bassSynthParams.preset ?? ''}
               onChange={(e) => {
-                const preset = FACTORY_BASS_PRESETS.find((p) => p.id === e.target.value);
+                const preset = findPresetByName(e.target.value, getAllSynthPresets(customPresets));
                 if (!preset) return;
-                setSelectedBassPresetId(preset.id);
-                onChangeBassSynthParams({ ...bassSynthParams, ...preset.params });
+                onChangeBassSynthParams({ ...bassSynthParams, ...preset.params, preset: preset.name });
               }}
               className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
-              title="Bass sound preset (dedicated bass factory presets)"
+              title="Bass sound preset — any factory, bass, or saved preset, synced with the synth page"
             >
-              {FACTORY_BASS_PRESETS.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
+              <option value="">Bass Preset…</option>
+              <optgroup label="Factory Presets">
+                {FACTORY_PRESETS.map((p) => (
+                  <option key={p.id} value={p.name}>{p.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Bass">
+                {FACTORY_BASS_PRESETS.map((p) => (
+                  <option key={p.id} value={p.name}>{p.name}</option>
+                ))}
+              </optgroup>
+              {customPresets.length > 0 && (
+                <optgroup label="Saved Presets">
+                  {customPresets.map((p) => (
+                    <option key={p.id} value={p.name}>{p.name}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
 

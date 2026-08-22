@@ -112,6 +112,67 @@ describe('scheduled chord hits', () => {
   });
 });
 
+describe('live param updates', () => {
+  test('a chord voice scheduled ahead stays tracked so param updates reach it', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 2, 'chord');
+
+    const voice = (engine as any).activeVoices.get('chord:C4');
+    expect(voice).toBeTruthy();
+
+    engine.updateSynthParams({ ...SYNTH, oscType: 'sine' }, 'chord');
+    expect(voice.oscs[0].type).toBe('sine');
+  });
+
+  test('updateSynthParams leaves a voice whose release has already started', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 1, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0, 'chord');
+
+    const voice = (engine as any).activeVoices.get('chord:C4');
+    expect(voice).toBeTruthy();
+
+    engine.updateSynthParams({ ...SYNTH, oscType: 'triangle' }, 'chord');
+    expect(voice.oscs[0].type).toBe('sawtooth');
+  });
+
+  test('updateSynthParams leaves a voice scheduled in the future untouched', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    // A voice starting 1 s ahead with its full envelope (attack ramps and the
+    // note-off release) already planned.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 1, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 3, 'chord');
+
+    const voice = (engine as any).activeVoices.get('chord:C4');
+    expect(voice).toBeTruthy();
+
+    engine.updateSynthParams({ ...SYNTH, oscType: 'sine' }, 'chord');
+
+    // Re-targeting a not-yet-started voice would cancel its planned envelope;
+    // it must keep the params it was scheduled with.
+    expect(voice.oscs[0].type).toBe('sawtooth');
+    expect(voice.filter.frequency.cancels).not.toContain(t0);
+  });
+
+  test('retriggering a live synth note still releases the old voice immediately', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'synth');
+
+    const oldVoiceGain = ctx._gains[0].gain;
+    expect(oldVoiceGain.cancels).toContain(t0);
+  });
+});
+
 describe('bass retrigger', () => {
   test('same-note retrigger releases the old voice at the new note start, not immediately', () => {
     const { engine, ctx } = freshEngine();

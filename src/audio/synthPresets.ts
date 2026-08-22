@@ -1,4 +1,5 @@
 import { SynthParams } from '../types';
+import { FACTORY_BASS_PRESETS } from './bassPresets';
 
 export interface SynthPresetItem {
   id: string;
@@ -547,4 +548,13 @@ export function deleteCustomPreset(id: string): SynthPresetItem[] {
     console.error('Failed to delete preset from localStorage:', err);
   }
   return updated;
+}
+
+export function getAllSynthPresets(custom: SynthPresetItem[]): SynthPresetItem[] {
+  return [...custom, ...FACTORY_PRESETS, ...FACTORY_BASS_PRESETS];
+}
+
+export function findPresetByName(name: string, presets: SynthPresetItem[]): SynthPresetItem | undefined {
+  if (!name) return undefined;
+  return presets.find((p) => p.name === name);
 }

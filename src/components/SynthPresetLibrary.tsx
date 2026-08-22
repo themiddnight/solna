@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { SynthParams } from '../types';
 import {
-  FACTORY_PRESETS,
+  getAllSynthPresets,
   SynthPresetItem,
   getCustomPresets,
   saveCustomPreset,
@@ -51,7 +51,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
     setCustomPresets(getCustomPresets());
   }, [isOpen]);
 
-  const allPresets: SynthPresetItem[] = [...customPresets, ...FACTORY_PRESETS];
+  const allPresets: SynthPresetItem[] = getAllSynthPresets(customPresets);
 
   const categories = ['All', 'User', 'Lead', 'Bass', 'Pad', 'Keys', 'Pluck', 'Brass', 'FX'];
 
