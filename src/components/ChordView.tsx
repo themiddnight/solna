@@ -5,7 +5,7 @@ import { audioEngine, STEPS_PER_BAR } from '../audio/engine';
 import { FACTORY_PRESETS, getCustomPresets } from '../audio/synthPresets';
 import { RHYTHM_PATTERNS, RHYTHM_STYLE_GROUPS, RhythmPattern } from '../audio/rhythmPatterns';
 import { FACTORY_BASS_PRESETS } from '../audio/bassPresets';
-import { BASS_PATTERNS, BASS_STYLE_GROUPS, BassPattern } from '../audio/bassPatterns';
+import { BASS_PATTERNS, BASS_STYLE_GROUPS, BassPattern, resolveBassSteps } from '../audio/bassPatterns';
 import { deriveChordNotes, reharmonizeProgressionToScale, generateBlockChordNotes, quarterNoteMs, sixteenthNoteMs, rootSemitone, shiftNoteOctave, SCALES, ROOTS } from '../utils/musicTheory';
 import {
   ChordPresetLibrary,
@@ -431,6 +431,19 @@ export const ChordView: React.FC<ChordViewProps> = ({
     }
   }, [bpm, chordSynthParams, chordOctave, masterChordVelocity]);
 
+  const playBassWithPattern = useCallback(
+    (chord: ChordItem, startTime: number, pattern: BassPattern) => {
+      audioEngine.init();
+      const chordIdx = Math.max(0, chords.indexOf(chord));
+      const events = resolveBassSteps(pattern, chords, chordIdx, bassOctave, scaleRoot, scaleType, bpm);
+      for (const ev of events) {
+        audioEngine.triggerSynthNoteOn(ev.noteName, bassSynthParams, ev.velocity, startTime + ev.timeOffsetSec, 'bass');
+        audioEngine.triggerSynthNoteOff(ev.noteName, bassSynthParams.release, startTime + ev.timeOffsetSec + ev.holdSec, 'bass');
+      }
+    },
+    [chords, bassOctave, scaleRoot, scaleType, bpm, bassSynthParams]
+  );
+
   // Master Playback Loop — driven by the shared audio-clock scheduler
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [customProgressions, setCustomProgressions] = useState<CustomChordProgressionItem[]>([]);
@@ -464,12 +477,13 @@ export const ChordView: React.FC<ChordViewProps> = ({
       if (step < nextBarStepRef.current) return;
       const chord = chords[chordIndexRef.current % chords.length];
       playChordWithRhythm(chord, time, rhythmPattern);
+      playBassWithPattern(chord, time, bassPattern);
       setPlayingIndex(chordIndexRef.current % chords.length);
       setActiveChordId(chord.id);
       nextBarStepRef.current = step + (chord.bars || 1) * STEPS_PER_BAR;
       chordIndexRef.current++;
     });
-  }, [isPlaying, chords, playChordWithRhythm, rhythmPattern]);
+  }, [isPlaying, chords, playChordWithRhythm, playBassWithPattern, rhythmPattern, bassPattern]);
 
   // Auto-reharmonize current chords when scale/root changes if autoReharmonize is enabled
   useEffect(() => {
@@ -885,6 +899,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
                   onClick={() => {
   const now = audioEngine.getAudioContext()?.currentTime ?? 0;
   playChordWithRhythm(chord, now, rhythmPattern);
+  playBassWithPattern(chord, now, bassPattern);
   setActiveChordId(chord.id);
   setTimeout(() => setActiveChordId(null), (chord.bars || 1) * quarterNoteMs(bpm) * 4);
 }}
