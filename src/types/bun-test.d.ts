@@ -8,11 +8,13 @@ declare module 'bun:test' {
   export function test(name: string, fn: () => void): void;
 
   export interface Matchers<T = unknown> {
+    not: Matchers<T>;
     toEqual(expected: unknown): void;
     toBe(expected: unknown): void;
     toContain(expected: unknown): void;
     toBeCloseTo(expected: number, numDigits?: number): void;
     toHaveLength(length: number): void;
+    toBeTruthy(): void;
   }
 
   export function expect<T>(actual: T): Matchers<T>;

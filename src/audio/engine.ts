@@ -301,8 +301,13 @@ class AudioEngine {
       }
     }
 
-    // Stop existing voice if note is already sounding
-    this.triggerSynthNoteOff(noteName, 0.3, undefined, source);
+    // Stop existing voice if note is already sounding. Skipped for bass:
+    // the mono kill above already releases every sounding bass voice at the
+    // new note's start, and a second release here would truncate at
+    // scheduling time instead.
+    if (source !== 'bass') {
+      this.triggerSynthNoteOff(noteName, 0.3, undefined, source);
+    }
 
     // Primary Oscillator
     const osc1 = this.ctx.createOscillator();
@@ -398,6 +403,16 @@ class AudioEngine {
     const now = time ?? this.ctx.currentTime;
     const mainGain = voice.gains[0];
 
+    // Bass voices stay tracked until teardown so the mono kill can release a
+    // live voice at the new note's start; every other source removes the
+    // entry immediately, so the same-note dedup in triggerSynthNoteOn never
+    // touches a voice whose envelope is already fully scheduled (multi-hit
+    // chord patterns would otherwise be silenced except for their last hit).
+    const deferDelete = source === 'bass';
+    if (!deferDelete) {
+      this.activeVoices.delete(voiceKey);
+    }
+
     try {
       mainGain.gain.cancelScheduledValues(now);
       // A release scheduled in the future can't read `.value` (the voice hasn't
@@ -415,11 +430,11 @@ class AudioEngine {
       voice.filter.frequency.exponentialRampToValueAtTime(Math.max(20, voice.filterCutoff), now + filterRelease);
 
       setTimeout(() => {
-        // Remove the voice from the map only at actual teardown time, and only if
-        // it is still the current entry — a same-note retrigger overwrites the map
-        // entry with a new voice before this timeout fires, and the identity guard
+        // Deferred deletion for bass only, and only if the voice is still the
+        // current entry — a same-note retrigger overwrites the map entry with
+        // a new voice before this timeout fires, and the identity guard
         // prevents deleting the new voice's entry.
-        if (this.activeVoices.get(voiceKey) === voice) {
+        if (deferDelete && this.activeVoices.get(voiceKey) === voice) {
           this.activeVoices.delete(voiceKey);
         }
         voice.oscs.forEach((osc) => {
