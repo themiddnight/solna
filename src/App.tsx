@@ -51,28 +51,23 @@ export function App() {
 
   // UI slice
   const activeTab = useAppStore((s) => s.activeTab);
-  const setActiveTab = useAppStore((s) => s.setActiveTab);
   const isAiModalOpen = useAppStore((s) => s.isAiModalOpen);
   const isProjectModalOpen = useAppStore((s) => s.isProjectModalOpen);
-  const openAiModal = useAppStore((s) => s.openAiModal);
   const closeAiModal = useAppStore((s) => s.closeAiModal);
-  const openProjectsModal = useAppStore((s) => s.openProjectsModal);
   const closeProjectsModal = useAppStore((s) => s.closeProjectsModal);
 
   // Transport slice
   const isSequencerPlaying = useAppStore((s) => s.isSequencerPlaying);
   const isChordsPlaying = useAppStore((s) => s.isChordsPlaying);
   const bpm = useAppStore((s) => s.bpm);
-  const setBpm = useAppStore((s) => s.setBpm);
-  const masterVolume = useAppStore((s) => s.masterVolume);
-  const setMasterVolume = useAppStore((s) => s.setMasterVolume);
-  const toggleMasterPlay = useAppStore((s) => s.toggleMasterPlay);
   const toggleSequencerPlay = useAppStore((s) => s.toggleSequencerPlay);
   const toggleChordsPlay = useAppStore((s) => s.toggleChordsPlay);
 
   // Music context slice
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
+  const setScaleRoot = useAppStore((s) => s.setScaleRoot);
+  const setScaleType = useAppStore((s) => s.setScaleType);
   const projectTitle = useAppStore((s) => s.projectTitle);
   const applyTemplate = useAppStore((s) => s.applyTemplate);
 
@@ -104,29 +99,6 @@ export function App() {
 
   // Effects slice
   const effects = useAppStore((s) => s.effects);
-  const setEffects = useAppStore((s) => s.setEffects);
-
-  const anyPlaying = isSequencerPlaying || isChordsPlaying;
-
-  const isCurrentTabPlaying =
-    activeTab === 'sequencer' ? isSequencerPlaying :
-    activeTab === 'chords' ? isChordsPlaying :
-    false;
-
-  const toggleCurrentTabPlay = useCallback(() => {
-    const {
-      activeTab: tab,
-      toggleSequencerPlay: toggleSeq,
-      toggleChordsPlay: toggleChords,
-    } = useAppStore.getState();
-    if (tab === 'sequencer') {
-      toggleSeq();
-    } else if (tab === 'chords') {
-      toggleChords();
-    }
-  }, []);
-
-  const isPlayDisabled = !['sequencer', 'chords'].includes(activeTab);
 
   // Initialize audio engine on first user interaction
   useEffect(() => {
@@ -138,12 +110,9 @@ export function App() {
     return () => window.removeEventListener('click', handleFirstClick);
   }, []);
 
-  // The store exposes actions only for the values listed in the task brief;
-  // the remaining values have no slice setter yet (Task 3-5 refactor their
+  // The remaining values have no slice setter yet (Task 4-6 refactor their
   // children), so they are written through direct setState calls — same
   // semantics as the original useState setters they replace.
-  const setScaleRoot = useCallback((value: string) => useAppStore.setState({ scaleRoot: value }), []);
-  const setScaleType = useCallback((value: string) => useAppStore.setState({ scaleType: value }), []);
   const setSynthParams = useCallback((value: SynthParams) => useAppStore.setState({ synthParams: value }), []);
   const setChordSynthParams = useCallback((value: SynthParams) => useAppStore.setState({ chordSynthParams: value }), []);
   const setBassSynthParams = useCallback((value: SynthParams) => useAppStore.setState({ bassSynthParams: value }), []);
@@ -180,19 +149,7 @@ export function App() {
       </div>
 
       {/* Navigation Header */}
-      <Header
-        currentView={activeTab}
-        onSelectView={setActiveTab}
-        isSequencerPlaying={isSequencerPlaying}
-        isChordsPlaying={isChordsPlaying}
-        onOpenAi={openAiModal}
-        onOpenProjects={openProjectsModal}
-        projectTitle={projectTitle}
-        scaleRoot={scaleRoot}
-        onChangeScaleRoot={setScaleRoot}
-        scaleType={scaleType}
-        onChangeScaleType={setScaleType}
-      />
+      <Header />
 
       {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity */}
       <main className="flex-1 min-h-0 relative overflow-y-auto">
@@ -257,25 +214,12 @@ export function App() {
           />
         </div>
         <div className={activeTab === 'effects' ? 'block' : 'hidden'}>
-          <EffectsRackView effects={effects} onChangeEffects={setEffects} />
+          <EffectsRackView />
         </div>
       </main>
 
       {/* Persistent Transport Bar at bottom */}
-      <TransportBar
-        currentView={activeTab}
-        isPlaying={isCurrentTabPlaying}
-        onTogglePlay={toggleCurrentTabPlay}
-        isPlayingAll={anyPlaying}
-        onTogglePlayAll={toggleMasterPlay}
-        isPlayDisabled={isPlayDisabled}
-        bpm={bpm}
-        onChangeBpm={setBpm}
-        scaleRoot={scaleRoot}
-        scaleType={scaleType}
-        masterVolume={masterVolume}
-        onChangeMasterVolume={setMasterVolume}
-      />
+      <TransportBar />
 
       {/* Modals */}
       <AiCompanionModal

@@ -29,6 +29,8 @@ export interface MusicContextSlice {
   scaleRoot: string;
   scaleType: string;
   projectTitle: string;
+  setScaleRoot: (root: string) => void;
+  setScaleType: (type: string) => void;
   applyTemplate: (templateName: string) => void;
 }
 

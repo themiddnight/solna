@@ -10,20 +10,7 @@ import {
 } from "lucide-react";
 import { ViewMode } from "../types";
 import { ROOTS, SCALES } from "../utils/musicTheory";
-
-interface HeaderProps {
-  currentView: ViewMode;
-  onSelectView: (view: ViewMode) => void;
-  isSequencerPlaying?: boolean;
-  isChordsPlaying?: boolean;
-  onOpenAi: () => void;
-  onOpenProjects: () => void;
-  projectTitle: string;
-  scaleRoot: string;
-  onChangeScaleRoot: (root: string) => void;
-  scaleType: string;
-  onChangeScaleType: (type: string) => void;
-}
+import { useAppStore } from "../store/store";
 
 const NAV_TABS: Array<
   | { view: ViewMode; label: string; icon: LucideIcon; playingKey?: "sequencer" | "chords" }
@@ -37,19 +24,22 @@ const NAV_TABS: Array<
   { view: "effects", label: "Master FX", icon: Sliders },
 ];
 
-export const Header: React.FC<HeaderProps> = React.memo(({
-  currentView,
-  onSelectView,
-  isSequencerPlaying = false,
-  isChordsPlaying = false,
-  onOpenAi,
-  onOpenProjects,
-  projectTitle,
-  scaleRoot,
-  onChangeScaleRoot,
-  scaleType,
-  onChangeScaleType,
-}) => {
+export const Header: React.FC = React.memo(() => {
+  // Granular selectors keep React.memo effective: this component re-renders
+  // only when a field it actually displays changes (action references are
+  // stable from the store, so they never invalidate the memo).
+  const activeTab = useAppStore((s) => s.activeTab);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const isSequencerPlaying = useAppStore((s) => s.isSequencerPlaying);
+  const isChordsPlaying = useAppStore((s) => s.isChordsPlaying);
+  const openAiModal = useAppStore((s) => s.openAiModal);
+  const openProjectsModal = useAppStore((s) => s.openProjectsModal);
+  const projectTitle = useAppStore((s) => s.projectTitle);
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const setScaleRoot = useAppStore((s) => s.setScaleRoot);
+  const scaleType = useAppStore((s) => s.scaleType);
+  const setScaleType = useAppStore((s) => s.setScaleType);
+
   return (
     <header className="bg-[#12152A] border-b border-[#252B48] px-4 py-2.5 flex flex-col gap-2.5 text-sm select-none sticky top-0 z-40">
       {/* Row 1: Brand & Room Info + Primary Navigation Tabs */}
@@ -101,9 +91,9 @@ export const Header: React.FC<HeaderProps> = React.memo(({
               <button
                 key={tab.view}
                 id={`tab-${tab.view}`}
-                onClick={() => onSelectView(tab.view)}
+                onClick={() => setActiveTab(tab.view)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap relative ${
-                  currentView === tab.view
+                  activeTab === tab.view
                     ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/30"
                     : "text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60"
                 }`}
@@ -135,7 +125,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             <select
               id="select-master-scale-root"
               value={scaleRoot}
-              onChange={(e) => onChangeScaleRoot(e.target.value)}
+              onChange={(e) => setScaleRoot(e.target.value)}
               className="bg-transparent text-xs font-bold text-indigo-300 focus:outline-none cursor-pointer"
             >
               {ROOTS.map((r) => (
@@ -150,7 +140,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             <select
               id="select-master-scale-type"
               value={scaleType}
-              onChange={(e) => onChangeScaleType(e.target.value)}
+              onChange={(e) => setScaleType(e.target.value)}
               className="bg-transparent text-xs font-bold text-indigo-300 focus:outline-none cursor-pointer"
             >
               {Object.keys(SCALES).map((s) => (
@@ -166,7 +156,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         <div className="flex items-center gap-2">
           <button
             id="btn-open-ai"
-            onClick={onOpenAi}
+            onClick={openAiModal}
             className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 text-white font-medium text-xs shadow-md shadow-purple-600/20 hover:brightness-110 transition-all cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -174,7 +164,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           </button>
           <button
             id="btn-open-projects"
-            onClick={onOpenProjects}
+            onClick={openProjectsModal}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white transition-colors cursor-pointer text-xs font-medium"
             title="Save / Load / Export Track"
           >

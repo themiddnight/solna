@@ -2,40 +2,56 @@ import React, { useState, useEffect, useRef } from "react";
 import { Play, Square, Volume2, Clock, Waves, Plus, Minus } from "lucide-react";
 import { audioEngine } from "../audio/engine";
 import { AudioVisualizer, VisualizerMode } from "./AudioVisualizer";
-import { ViewMode } from "../types";
+import { useAppStore } from "../store/store";
 
-interface TransportBarProps {
-  currentView?: ViewMode;
-  isPlaying: boolean;
-  onTogglePlay: () => void;
-  isPlayingAll: boolean;
-  onTogglePlayAll: () => void;
-  bpm: number;
-  onChangeBpm: (bpm: number) => void;
-  scaleRoot: string;
-  scaleType: string;
-  masterVolume: number;
-  onChangeMasterVolume: (vol: number) => void;
-  isPlayDisabled?: boolean;
-}
+export const TransportBar: React.FC = React.memo(() => {
+  // UI slice
+  const activeTab = useAppStore((s) => s.activeTab);
 
-export const TransportBar: React.FC<TransportBarProps> = React.memo(({
-  currentView = "synth",
-  isPlaying,
-  onTogglePlay,
-  isPlayingAll,
-  onTogglePlayAll,
-  bpm,
-  onChangeBpm,
-  scaleRoot,
-  scaleType,
-  masterVolume,
-  onChangeMasterVolume,
-  isPlayDisabled = false,
-}) => {
+  // Transport slice
+  const isSequencerPlaying = useAppStore((s) => s.isSequencerPlaying);
+  const isChordsPlaying = useAppStore((s) => s.isChordsPlaying);
+  const bpm = useAppStore((s) => s.bpm);
+  const setBpm = useAppStore((s) => s.setBpm);
+  const masterVolume = useAppStore((s) => s.masterVolume);
+  const setMasterVolume = useAppStore((s) => s.setMasterVolume);
+  const metronomeActive = useAppStore((s) => s.metronomeActive);
+  const toggleMetronome = useAppStore((s) => s.toggleMetronome);
+  const toggleMasterPlay = useAppStore((s) => s.toggleMasterPlay);
+
+  // Music context slice (read-only)
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const scaleType = useAppStore((s) => s.scaleType);
+
+  // Local visualizer state
   const [vuLevel, setVuLevel] = useState(0);
   const [vizMode, setVizMode] = useState<VisualizerMode>("wave");
-  const [metronomeActive, setMetronomeActive] = useState(false);
+
+  // Derived transport state (same logic that used to live in App.tsx)
+  const isPlaying =
+    activeTab === "sequencer"
+      ? isSequencerPlaying
+      : activeTab === "chords"
+        ? isChordsPlaying
+        : false;
+  const isPlayingAll = isSequencerPlaying || isChordsPlaying;
+  const isPlayDisabled = !["sequencer", "chords"].includes(activeTab);
+
+  // Toggle whichever engine is attached to the current tab (same semantics as
+  // the old toggleCurrentTabPlay handler in App.tsx)
+  const onTogglePlay = () => {
+    const {
+      activeTab: tab,
+      toggleSequencerPlay,
+      toggleChordsPlay,
+    } = useAppStore.getState();
+    if (tab === "sequencer") {
+      toggleSequencerPlay();
+    } else if (tab === "chords") {
+      toggleChordsPlay();
+    }
+  };
+  const onTogglePlayAll = toggleMasterPlay;
 
   // Meter polling loop — runs only while playing, and only commits state when
   // the level moved enough to change a VU segment (avoids 60 re-renders/sec)
@@ -60,15 +76,14 @@ export const TransportBar: React.FC<TransportBarProps> = React.memo(({
   }, [isPlaying, isPlayingAll]);
 
   const handleToggleMetronome = () => {
-    const next = !metronomeActive;
-    setMetronomeActive(next);
-    audioEngine.setMetronomeEnabled(next);
+    // Engine mirror happens via useEngineSync (one render later)
+    toggleMetronome();
   };
 
   const currentTabLabel =
-    currentView === "sequencer"
+    activeTab === "sequencer"
       ? "MATRIX"
-      : currentView === "chords"
+      : activeTab === "chords"
         ? "CHORDS"
         : "TAB";
 
@@ -129,7 +144,7 @@ export const TransportBar: React.FC<TransportBarProps> = React.memo(({
         <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#252B48] px-2 py-1 rounded-lg">
           <span className="text-[10px] text-slate-400 font-mono">BPM</span>
           <button
-            onClick={() => onChangeBpm(Math.max(40, bpm - 1))}
+            onClick={() => setBpm(Math.max(40, bpm - 1))}
             className="p-0.5 text-slate-400 hover:text-white rounded hover:bg-[#1C213E] cursor-pointer"
             title="Decrease BPM"
           >
@@ -141,11 +156,11 @@ export const TransportBar: React.FC<TransportBarProps> = React.memo(({
             min={40}
             max={240}
             value={bpm}
-            onChange={(e) => onChangeBpm(Number(e.target.value))}
+            onChange={(e) => setBpm(Number(e.target.value))}
             className="w-10 bg-transparent text-center font-mono font-bold text-indigo-300 focus:outline-none focus:text-white text-xs"
           />
           <button
-            onClick={() => onChangeBpm(Math.min(240, bpm + 1))}
+            onClick={() => setBpm(Math.min(240, bpm + 1))}
             className="p-0.5 text-slate-400 hover:text-white rounded hover:bg-[#1C213E] cursor-pointer"
             title="Increase BPM"
           >
@@ -233,11 +248,7 @@ export const TransportBar: React.FC<TransportBarProps> = React.memo(({
             max={1}
             step={0.01}
             value={masterVolume}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value);
-              onChangeMasterVolume(val);
-              audioEngine.setMasterVolume(val);
-            }}
+            onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
             className="w-16 sm:w-20 h-1.5 bg-[#252B48] rounded cursor-pointer accent-indigo-500"
             title={`Master Gain: ${(masterVolume * 100).toFixed(0)}%`}
           />

@@ -1,21 +1,15 @@
 import React from "react";
 import { Sliders, Waves, Activity, Sparkles, Power } from "lucide-react";
 import { MasterEffects } from "../types";
-import { audioEngine } from "../audio/engine";
+import { useAppStore } from "../store/store";
 
-interface EffectsRackViewProps {
-  effects: MasterEffects;
-  onChangeEffects: (effects: MasterEffects) => void;
-}
+export const EffectsRackView: React.FC = React.memo(() => {
+  const effects = useAppStore((s) => s.effects);
+  const setEffects = useAppStore((s) => s.setEffects);
 
-export const EffectsRackView: React.FC<EffectsRackViewProps> = React.memo(({
-  effects,
-  onChangeEffects,
-}) => {
   const updateFx = (updates: Partial<MasterEffects>) => {
-    const updated = { ...effects, ...updates };
-    onChangeEffects(updated);
-    audioEngine.updateEffects(updated);
+    // Engine mirror happens via useEngineSync (one render later)
+    setEffects({ ...effects, ...updates });
   };
 
   return (

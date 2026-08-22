@@ -25,6 +25,9 @@ export function createMusicContextSlice(set: Set, _get: Get): MusicContextSlice 
     scaleType: 'Natural Minor',
     projectTitle: 'Cosmic Horizon Jam',
 
+    setScaleRoot: (scaleRoot) => set({ scaleRoot }),
+    setScaleType: (scaleType) => set({ scaleType }),
+
     applyTemplate: (templateName) => {
       const template = TEMPLATES[templateName];
       if (!template) return;
