@@ -1,9 +1,11 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Music, Play, Square, Sparkles, Plus, Trash2, ArrowRight, Library, Bookmark, Check } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { Music, Play, Square, Sparkles, Plus, Trash2, ArrowRight, Library, Bookmark, Check, Link2 } from 'lucide-react';
 import { ChordItem, SynthParams } from '../types';
 import { audioEngine } from '../audio/engine';
-import { generateBlockChordNotes } from '../../shared/src/index';
-import { reharmonizeProgressionToScale } from '../utils/musicTheory';
+import { FACTORY_PRESETS, getCustomPresets } from '../audio/synthPresets';
+import { RHYTHM_PATTERNS, RHYTHM_STYLE_GROUPS, RhythmPattern, shiftNoteOctave } from '../audio/rhythmPatterns';
+import { generateBlockChordNotes, quarterNoteMs } from '../../shared/src/index';
+import { deriveChordNotes, reharmonizeProgressionToScale } from '../utils/musicTheory';
 import {
   ChordPresetLibrary,
   getCustomChordProgressions,
@@ -19,12 +21,22 @@ interface ChordViewProps {
   scaleType: string;
   onChangeScaleType: (type: string) => void;
   synthParams: SynthParams;
+  chordSynthParams: SynthParams;
+  onChangeChordSynthParams: (params: SynthParams) => void;
+  followMainSynth: boolean;
+  onToggleFollowMain: () => void;
+  rhythmId: string;
+  onChangeRhythmId: (id: string) => void;
+  chordOctave: number;
+  onChangeChordOctave: (octave: number) => void;
   bpm: number;
   isPlaying: boolean;
   onTogglePlay: () => void;
   masterChordVelocity: number;
   onChangeMasterChordVelocity: (velocity: number) => void;
 }
+
+const SELECT_BASE = 'bg-[#171B36] border border-[#2D355A] rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-200';
 
 const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -348,6 +360,15 @@ export const ChordView: React.FC<ChordViewProps> = ({
   scaleType,
   onChangeScaleType,
   synthParams,
+  chordSynthParams,
+  onChangeChordSynthParams,
+  followMainSynth,
+  onToggleFollowMain,
+  rhythmId,
+  onChangeRhythmId,
+  chordOctave,
+  onChangeChordOctave,
+  bpm,
   isPlaying,
   onTogglePlay,
   masterChordVelocity,
@@ -355,20 +376,53 @@ export const ChordView: React.FC<ChordViewProps> = ({
 }) => {
   const [activeChordId, setActiveChordId] = useState<string | null>(null);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
-  const playChord = useCallback((chord: ChordItem, time?: number) => {
-    audioEngine.init();
-    setActiveChordId(chord.id);
+  const [selectedChordPresetId, setSelectedChordPresetId] = useState<string | null>(null);
 
-    const notes = generateBlockChordNotes(chord.quality, chord.root, 4);
-    const offTime = time !== undefined ? time + 1.2 : undefined;
-    notes.forEach((n) => {
-      audioEngine.triggerSynthNoteOn(n, synthParams, masterChordVelocity, time);
-      audioEngine.triggerSynthNoteOff(n, 0.5, offTime);
+  // Chord sound presets: factory presets plus presets saved from the synth view
+  const customPresets = getCustomPresets();
+
+  const rhythmPattern = useMemo(
+    () => RHYTHM_PATTERNS.find((p) => p.id === rhythmId) ?? RHYTHM_PATTERNS[0],
+    [rhythmId]
+  );
+
+  // Schedule a whole chord across its bars using the selected rhythm pattern:
+  // block hits strike every note at once, strums cascade note-by-note.
+  const playChordWithRhythm = useCallback((chord: ChordItem, startTime: number, pattern: RhythmPattern) => {
+    audioEngine.init();
+
+    const notes = generateBlockChordNotes(chord.quality, chord.root, chordOctave);
+    const stepDur = quarterNoteMs(bpm) / 4000;
+    const totalBars = chord.bars || 1;
+
+    // Precompute the pattern's events once per chord trigger (bar-invariant)
+    const events = pattern.hits.flatMap((hit) => {
+      const offset = hit.step * stepDur;
+      const hold = Math.max(0.05, (hit.holdSteps ?? 1) * stepDur);
+      const baseVelocity = masterChordVelocity * (hit.velocity ?? 1);
+      const hitNotes = hit.note !== undefined ? [notes[hit.note]] : notes;
+      const isStrum = hit.type === 'strum';
+      const orderedNotes = isStrum && hit.direction === 'up' ? [...hitNotes].reverse() : hitNotes;
+      const spreadMs = hit.spreadMs ?? 30;
+
+      return orderedNotes.flatMap((n, i) => {
+        if (!n) return [];
+        const noteName = hit.octaveShift ? shiftNoteOctave(n, hit.octaveShift) : n;
+        const timeOffset = offset + (isStrum ? (i * spreadMs) / 1000 : 0);
+        const velocity = isStrum ? Math.max(0.1, baseVelocity * (1 - i * 0.08)) : baseVelocity;
+        return [{ noteName, velocity, timeOffset, hold }];
+      });
     });
 
-    // UI-only: clear the highlight after the chord's fixed 1.2s hold
-    setTimeout(() => setActiveChordId(null), 1200);
-  }, [synthParams, masterChordVelocity]);
+    const barDur = stepDur * 16;
+    for (let bar = 0; bar < totalBars; bar++) {
+      const barStart = startTime + bar * barDur;
+      for (const ev of events) {
+        audioEngine.triggerSynthNoteOn(ev.noteName, chordSynthParams, ev.velocity, barStart + ev.timeOffset, 'chord');
+        audioEngine.triggerSynthNoteOff(ev.noteName, chordSynthParams.release, barStart + ev.timeOffset + ev.hold, 'chord');
+      }
+    }
+  }, [bpm, chordSynthParams, chordOctave, masterChordVelocity]);
 
   // Master Playback Loop — driven by the shared audio-clock scheduler
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
@@ -386,6 +440,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
     if (!isPlaying || chords.length === 0) {
       armedRef.current = false;
       setPlayingIndex(null);
+      setActiveChordId(null);
       return;
     }
 
@@ -399,17 +454,18 @@ export const ChordView: React.FC<ChordViewProps> = ({
       }
       if (step < nextBarStepRef.current) return;
       const chord = chords[chordIndexRef.current % chords.length];
-      playChord(chord, time);
+      playChordWithRhythm(chord, time, rhythmPattern);
       setPlayingIndex(chordIndexRef.current % chords.length);
+      setActiveChordId(chord.id);
       nextBarStepRef.current = step + (chord.bars || 1) * 16;
       chordIndexRef.current++;
     });
-  }, [isPlaying, chords, playChord]);
+  }, [isPlaying, chords, playChordWithRhythm, rhythmPattern]);
 
   // Auto-reharmonize current chords when scale/root changes if autoReharmonize is enabled
   useEffect(() => {
     if (autoReharmonize && chords.length > 0) {
-      const updated = reharmonizeProgressionToScale(chords, scaleRoot, scaleType);
+      const updated = reharmonizeProgressionToScale(chords, scaleRoot, scaleType, chordOctave);
       onChangeChords(updated);
       setIsAutoReharmonizedIndicator(true);
     }
@@ -426,17 +482,20 @@ export const ChordView: React.FC<ChordViewProps> = ({
 
     let newChords: ChordItem[] = template.relativeChords.map((c, i) => {
       const transposedRoot = ROOTS[(baseRootIndex + c.interval) % 12];
-      return {
-        id: `chord-${Date.now()}-${i}`,
-        root: transposedRoot,
-        quality: c.quality,
-        bars: c.bars,
-        notes: generateBlockChordNotes(c.quality, transposedRoot, 4),
-      };
+      return deriveChordNotes(
+        {
+          id: `chord-${Date.now()}-${i}`,
+          root: transposedRoot,
+          quality: c.quality,
+          bars: c.bars,
+          notes: [],
+        },
+        chordOctave
+      );
     });
 
     if (autoReharmonize) {
-      newChords = reharmonizeProgressionToScale(newChords, scaleRoot, scaleType);
+      newChords = reharmonizeProgressionToScale(newChords, scaleRoot, scaleType, chordOctave);
       setIsAutoReharmonizedIndicator(true);
     } else {
       setIsAutoReharmonizedIndicator(false);
@@ -446,14 +505,12 @@ export const ChordView: React.FC<ChordViewProps> = ({
   };
 
   const handleApplyLibraryChords = (libraryChords: ChordItem[]) => {
-    let finalChords = libraryChords.map((c, i) => ({
-      ...c,
-      id: `lib-chord-${Date.now()}-${i}`,
-      notes: generateBlockChordNotes(c.quality, c.root, 4),
-    }));
+    let finalChords = libraryChords.map((c, i) =>
+      deriveChordNotes({ ...c, id: `lib-chord-${Date.now()}-${i}` }, chordOctave)
+    );
 
     if (autoReharmonize) {
-      finalChords = reharmonizeProgressionToScale(finalChords, scaleRoot, scaleType);
+      finalChords = reharmonizeProgressionToScale(finalChords, scaleRoot, scaleType, chordOctave);
       setIsAutoReharmonizedIndicator(true);
     } else {
       setIsAutoReharmonizedIndicator(false);
@@ -482,13 +539,10 @@ export const ChordView: React.FC<ChordViewProps> = ({
   };
 
   const addChord = () => {
-    const newChord: ChordItem = {
-      id: `chord-${Date.now()}`,
-      root: scaleRoot,
-      quality: 'maj7',
-      bars: 1,
-      notes: generateBlockChordNotes('maj7', scaleRoot, 4),
-    };
+    const newChord: ChordItem = deriveChordNotes(
+      { id: `chord-${Date.now()}`, root: scaleRoot, quality: 'maj7', bars: 1, notes: [] },
+      chordOctave
+    );
     onChangeChords([...chords, newChord]);
   };
 
@@ -500,13 +554,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
     onChangeChords(
       chords.map((c) => {
         if (c.id !== id) return c;
-        const root = updates.root || c.root;
-        const quality = updates.quality || c.quality;
-        return {
-          ...c,
-          ...updates,
-          notes: generateBlockChordNotes(quality, root, 4),
-        };
+        return deriveChordNotes({ ...c, ...updates }, chordOctave);
       })
     );
   };
@@ -531,6 +579,78 @@ export const ChordView: React.FC<ChordViewProps> = ({
         {/* Action Controls & Independent Chords Play */}
         <div className="flex items-center gap-2.5 flex-wrap">
 
+          {/* Chord Sound Preset Select */}
+          <select
+            id="select-chord-sound-preset"
+            value={selectedChordPresetId ?? ''}
+            disabled={followMainSynth}
+            onChange={(e) => {
+              const preset = [...FACTORY_PRESETS, ...customPresets].find((p) => p.id === e.target.value);
+              if (!preset) return;
+              setSelectedChordPresetId(preset.id);
+              onChangeChordSynthParams({ ...chordSynthParams, ...preset.params });
+            }}
+            className={`${SELECT_BASE} cursor-pointer ${followMainSynth ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[#22284C]'}`}
+            title="Chord sound preset — factory and saved presets. Disabled while following the main synth."
+          >
+            <option value="">Chord Preset…</option>
+            {FACTORY_PRESETS.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+            {customPresets.length > 0 && (
+              <optgroup label="Saved Presets">
+                {customPresets.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+
+          {/* Chord Octave Select */}
+          <select
+            id="select-chord-octave"
+            value={chordOctave}
+            onChange={(e) => onChangeChordOctave(parseInt(e.target.value, 10))}
+            className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+            title="Octave for chord playback"
+          >
+            {[2, 3, 4, 5, 6].map((o) => (
+              <option key={o} value={o}>Oct {o}</option>
+            ))}
+          </select>
+
+          {/* Chord Rhythm Pattern Select */}
+          <select
+            id="select-chord-rhythm-pattern"
+            value={rhythmId}
+            onChange={(e) => onChangeRhythmId(e.target.value)}
+            className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+            title="Rhythm pattern for chord playback"
+          >
+            {RHYTHM_STYLE_GROUPS.map((group) => (
+              <optgroup key={group.style} label={group.style}>
+                {group.patterns.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+
+          {/* Follow Main Synth Toggle */}
+          <button
+            id="btn-toggle-follow-main-synth"
+            onClick={onToggleFollowMain}
+            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
+              followMainSynth
+                ? 'bg-indigo-600/30 border-indigo-500/50 text-indigo-200'
+                : 'bg-[#0B0D19] border-[#2D355A] text-slate-400'
+            }`}
+            title="ON: chord sound mirrors the main synth in realtime. OFF: chords use the selected preset."
+          >
+            <Link2 className={`w-3.5 h-3.5 ${followMainSynth ? 'text-indigo-300' : 'text-slate-500'}`} />
+            <span>Follow Main Synth: {followMainSynth ? 'ON' : 'OFF'}</span>
+          </button>
+
           {/* Quick Save Current Progression */}
           <button
             id="btn-quick-save-chord-progression"
@@ -549,7 +669,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
           <button
             id="btn-reharmonize-chord-progression"
             onClick={() => {
-              const updated = reharmonizeProgressionToScale(chords, scaleRoot, scaleType);
+              const updated = reharmonizeProgressionToScale(chords, scaleRoot, scaleType, chordOctave);
               onChangeChords(updated);
               setIsAutoReharmonizedIndicator(true);
               setSaveToast(`Re-harmonized progression to ${scaleRoot} ${scaleType} (Option B)!`);
@@ -569,7 +689,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
               const nextVal = !autoReharmonize;
               setAutoReharmonize(nextVal);
               if (nextVal && chords.length > 0) {
-                const updated = reharmonizeProgressionToScale(chords, scaleRoot, scaleType);
+                const updated = reharmonizeProgressionToScale(chords, scaleRoot, scaleType, chordOctave);
                 onChangeChords(updated);
                 setIsAutoReharmonizedIndicator(true);
               } else {
@@ -716,7 +836,12 @@ export const ChordView: React.FC<ChordViewProps> = ({
                 {/* Big Interactive Chord Trigger Pad */}
                 <button
                   id={`btn-play-chord-${chord.id}`}
-                  onClick={() => playChord(chord)}
+                  onClick={() => {
+  const now = audioEngine.getAudioContext()?.currentTime ?? 0;
+  playChordWithRhythm(chord, now, rhythmPattern);
+  setActiveChordId(chord.id);
+  setTimeout(() => setActiveChordId(null), (chord.bars || 1) * quarterNoteMs(bpm) * 4);
+}}
                   className={`w-full py-4 rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer ${
                     isActive
                       ? 'bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-lg scale-98'

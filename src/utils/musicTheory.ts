@@ -151,7 +151,8 @@ export function getDiatonicChordForDegree(
 export function reharmonizeProgressionToScale(
   currentChords: ChordItem[],
   newRoot: string,
-  newScaleType: string
+  newScaleType: string,
+  octave = 4
 ): ChordItem[] {
   const newRootIndex = ROOTS.indexOf(newRoot as RootNote) >= 0 ? ROOTS.indexOf(newRoot as RootNote) : 0;
   const scale = SCALES[newScaleType] || SCALES['Major'];
@@ -188,7 +189,12 @@ export function reharmonizeProgressionToScale(
       id: chord.id || `chord-${Date.now()}-${idx}`,
       root: diatonic.root,
       quality: targetQuality,
-      notes: generateBlockChordNotes(targetQuality, diatonic.root, 4),
+      notes: generateBlockChordNotes(targetQuality, diatonic.root, octave),
     };
   });
+}
+
+/** Single source of truth for deriving a chord's note list from its root/quality/octave. */
+export function deriveChordNotes(chord: ChordItem, octave: number): ChordItem {
+  return { ...chord, notes: generateBlockChordNotes(chord.quality, chord.root, octave) };
 }

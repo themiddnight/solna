@@ -23,7 +23,7 @@ class AudioEngine {
   private dryGain: GainNode | null = null;
 
   // Active voices tracking
-  private activeVoices = new Map<string, { oscs: OscillatorNode[]; gains: GainNode[]; filter: BiquadFilterNode; filterCutoff: number; filterRelease: number; lfo?: OscillatorNode; lfoGain?: GainNode; lfoTarget?: SynthParams['lfoTarget'] }>();
+  private activeVoices = new Map<string, { oscs: OscillatorNode[]; gains: GainNode[]; filter: BiquadFilterNode; filterCutoff: number; filterRelease: number; lfo?: OscillatorNode; lfoGain?: GainNode; lfoTarget?: SynthParams['lfoTarget']; sustainLevel: number; source: string }>();
 
   // Metronome click buffer
   private clickBufferHigh: AudioBuffer | null = null;
@@ -57,13 +57,12 @@ class AudioEngine {
   /**
    * Subscribe to the shared 16th-note clock. The listener receives the exact
    * audio-clock time each step should sound, so callers can schedule
-   * sample-accurately. The clock runs while at least one listener subscribes.
+   * sample-accurately. Once started the clock runs continuously; re-subscribing
+   * never restarts the grid, so live changes stay glitch-free.
    */
   subscribeClock(listener: (step: number, beat: number, time: number) => void): () => void {
     this.clockListeners.add(listener);
-    if (this.clockListeners.size === 1) {
-      this.startClockTimer();
-    }
+    this.ensureClockRunning();
     return () => {
       this.clockListeners.delete(listener);
       if (this.clockListeners.size === 0) {
@@ -76,10 +75,12 @@ class AudioEngine {
     this.clockBpm = Math.max(20, Math.min(300, bpm));
   }
 
-  private startClockTimer(): void {
-    this.stopClockTimer();
-    this.clockStepIndex = 0;
-    this.clockNextStepTime = this.ctx ? this.ctx.currentTime + 0.05 : 0;
+  // The shared clock keeps its grid position across stop/start and
+  // re-subscription, so mid-playback view re-renders (param changes, pattern
+  // swaps) don't restart the grid and glitch every listener. clockTick's
+  // resync branch re-anchors the schedule after idle gaps.
+  private ensureClockRunning(): void {
+    if (this.clockTimer) return;
     this.clockTimer = setInterval(() => this.clockTick(), AudioEngine.CLOCK_UPDATE_MS);
   }
 
@@ -360,13 +361,13 @@ class AudioEngine {
   }
 
   // Synthesizer Note On
-  triggerSynthNoteOn(noteName: string, params: SynthParams, velocity = 0.8, time?: number): void {
+  triggerSynthNoteOn(noteName: string, params: SynthParams, velocity = 0.8, time?: number, source = 'synth'): void {
     if (!this.ctx || !this.dryGain) return;
     const freq = this.noteToFrequency(noteName, params.octave);
     const now = time ?? this.ctx.currentTime;
 
     // Stop existing voice if note is already sounding
-    this.triggerSynthNoteOff(noteName);
+    this.triggerSynthNoteOff(noteName, 0.3, undefined, source);
 
     // Primary Oscillator
     const osc1 = this.ctx.createOscillator();
@@ -441,7 +442,7 @@ class AudioEngine {
     osc1.start(now);
     oscSub.start(now);
 
-    this.activeVoices.set(noteName, {
+    this.activeVoices.set(`${source}:${noteName}`, {
       oscs: [osc1, oscSub],
       gains: [gainNode, subGain],
       filter,
@@ -450,13 +451,16 @@ class AudioEngine {
       lfo,
       lfoGain,
       lfoTarget: params.lfoTarget,
+      sustainLevel: peakGain * params.sustain,
+      source,
     });
   }
 
   // Synthesizer Note Off
-  triggerSynthNoteOff(noteName: string, releaseTime = 0.3, time?: number): void {
+  triggerSynthNoteOff(noteName: string, releaseTime = 0.3, time?: number, source = 'synth'): void {
     if (!this.ctx) return;
-    const voice = this.activeVoices.get(noteName);
+    const voiceKey = `${source}:${noteName}`;
+    const voice = this.activeVoices.get(voiceKey);
     if (!voice) return;
 
     const now = time ?? this.ctx.currentTime;
@@ -464,7 +468,12 @@ class AudioEngine {
 
     try {
       mainGain.gain.cancelScheduledValues(now);
-      mainGain.gain.setValueAtTime(Math.max(0.0001, mainGain.gain.value), now);
+      // A release scheduled in the future can't read `.value` (the voice hasn't
+      // sounded yet); fall back to the stored sustain level for a smooth tail.
+      const releaseFrom = now > this.ctx.currentTime + 0.01
+        ? Math.max(0.0001, voice.sustainLevel)
+        : Math.max(0.0001, mainGain.gain.value);
+      mainGain.gain.setValueAtTime(releaseFrom, now);
       mainGain.gain.exponentialRampToValueAtTime(0.00001, now + Math.max(0.01, releaseTime));
 
       // VCF envelope release: ramp filter back to base cutoff
@@ -492,7 +501,7 @@ class AudioEngine {
       // ignore
     }
 
-    this.activeVoices.delete(noteName);
+    this.activeVoices.delete(voiceKey);
   }
 
   private cancelAndHold(param: AudioParam, now: number): void {
@@ -507,7 +516,7 @@ class AudioEngine {
   // Live-update every sounding voice so knob tweaks are audible immediately
   // instead of only on the next note. ADSR timing values still apply to the
   // next note (standard synth behavior); release cutoff stays in sync.
-  updateSynthParams(params: SynthParams): void {
+  updateSynthParams(params: SynthParams, source?: string): void {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     const tc = 0.03; // smoothing time constant in seconds
@@ -518,6 +527,7 @@ class AudioEngine {
     );
 
     for (const voice of this.activeVoices.values()) {
+      if (source && voice.source !== source) continue;
       const osc = voice.oscs[0];
 
       osc.type = params.oscType;

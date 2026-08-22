@@ -22,7 +22,7 @@ import {
   RoomUser,
   ProjectState,
 } from './types';
-import { generateBlockChordNotes } from '../shared/src/index';
+import { deriveChordNotes } from './utils/musicTheory';
 
 const INITIAL_SYNTH_PARAMS: SynthParams = {
   oscType: 'sawtooth',
@@ -414,13 +414,27 @@ export function App() {
 
   // States
   const [synthParams, setSynthParams] = useState<SynthParams>(INITIAL_SYNTH_PARAMS);
+  // Chord mode keeps its own sound: a preset-driven param set plus a follow toggle
+  const [chordSynthParams, setChordSynthParams] = useState<SynthParams>(INITIAL_SYNTH_PARAMS);
+  const [followMainSynth, setFollowMainSynth] = useState<boolean>(false);
+  const [chordRhythmId, setChordRhythmId] = useState<string>('sustained');
+  const [chordOctave, setChordOctave] = useState<number>(4);
 
-  // Push synth param tweaks into the audio engine so currently sounding notes update in realtime
+  // Push param tweaks into sounding voices. The main pass runs last so it wins
+  // over the chord pass while follow is on; the chord pass is skipped then.
   useEffect(() => {
-    audioEngine.updateSynthParams(synthParams);
-  }, [synthParams]);
+    if (!followMainSynth) {
+      audioEngine.updateSynthParams(chordSynthParams, 'chord');
+    }
+    audioEngine.updateSynthParams(synthParams, followMainSynth ? undefined : 'synth');
+  }, [synthParams, chordSynthParams, followMainSynth]);
   const [sequencerTracks, setSequencerTracks] = useState<SequencerTrack[]>(INITIAL_SEQUENCER_TRACKS);
   const [chords, setChords] = useState<ChordItem[]>(INITIAL_CHORDS);
+
+  // Keep the displayed chord notes in sync with the chord octave
+  useEffect(() => {
+    setChords((prev) => prev.map((c) => deriveChordNotes(c, chordOctave)));
+  }, [chordOctave]);
   const [arrangeTracks, setArrangeTracks] = useState<ArrangeTrack[]>(INITIAL_ARRANGE_TRACKS);
   const [effects, setEffects] = useState<MasterEffects>(INITIAL_EFFECTS);
   const [users, setUsers] = useState<RoomUser[]>(INITIAL_USERS);
@@ -563,6 +577,14 @@ export function App() {
             scaleType={scaleType}
             onChangeScaleType={setScaleType}
             synthParams={synthParams}
+            chordSynthParams={chordSynthParams}
+            onChangeChordSynthParams={setChordSynthParams}
+            followMainSynth={followMainSynth}
+            onToggleFollowMain={() => setFollowMainSynth((prev) => !prev)}
+            rhythmId={chordRhythmId}
+            onChangeRhythmId={setChordRhythmId}
+            chordOctave={chordOctave}
+            onChangeChordOctave={setChordOctave}
             bpm={bpm}
             isPlaying={isChordsPlaying}
             onTogglePlay={toggleChordsPlay}
