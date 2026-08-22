@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { SynthView } from './components/SynthView';
 import { SequencerView } from './components/SequencerView';
@@ -10,143 +10,119 @@ import { ProjectModal } from './components/ProjectModal';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import { audioEngine } from './audio/engine';
 import type { SynthControlTarget } from './utils/synthControl';
-import { FACTORY_BASS_PRESETS } from './audio/bassPresets';
-import { BASS_PATTERNS } from './audio/bassPatterns';
-import {
-  ViewMode,
-  SynthParams,
-  SequencerTrack,
-  ChordItem,
-  MasterEffects,
-  ProjectState,
-} from './types';
-import { deriveChordNotes } from './utils/musicTheory';
-import { DRUM_KITS } from './audio/drumKits';
-import {
-  INITIAL_CHORDS,
-  INITIAL_EFFECTS,
-  INITIAL_SEQUENCER_TRACKS,
-  INITIAL_SYNTH_PARAMS,
-} from './store/initialState';
+import type { SynthParams, SequencerTrack, ChordItem, ProjectState } from './types';
+import { useAppStore } from './store/store';
+import { useEngineSync } from './store/engineSync';
+
+/**
+ * The currently-open project, composed from store selectors (replaces the old
+ * `currentProject` useMemo in App).
+ */
+function useProjectState(): ProjectState {
+  const projectTitle = useAppStore((s) => s.projectTitle);
+  const bpm = useAppStore((s) => s.bpm);
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const scaleType = useAppStore((s) => s.scaleType);
+  const synthParams = useAppStore((s) => s.synthParams);
+  const sequencerTracks = useAppStore((s) => s.sequencerTracks);
+  const chords = useAppStore((s) => s.chords);
+  const effects = useAppStore((s) => s.effects);
+  return {
+    id: 'proj-active',
+    title: projectTitle,
+    bpm,
+    scaleRoot,
+    scaleType,
+    synthParams,
+    sequencerTracks,
+    chords,
+    effects,
+  };
+}
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<ViewMode>('synth');
-  const [isSequencerPlaying, setIsSequencerPlaying] = useState<boolean>(false);
-  const [isChordsPlaying, setIsChordsPlaying] = useState<boolean>(false);
-  const [soundKit, setSoundKit] = useState<string>('Retro Drive');
+  // One-way bridge: store state -> audioEngine singleton (replaces the
+  // engine-sync useEffect blocks that used to live here).
+  useEngineSync();
+
+  // UI slice
+  const activeTab = useAppStore((s) => s.activeTab);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const isAiModalOpen = useAppStore((s) => s.isAiModalOpen);
+  const isProjectModalOpen = useAppStore((s) => s.isProjectModalOpen);
+  const openAiModal = useAppStore((s) => s.openAiModal);
+  const closeAiModal = useAppStore((s) => s.closeAiModal);
+  const openProjectsModal = useAppStore((s) => s.openProjectsModal);
+  const closeProjectsModal = useAppStore((s) => s.closeProjectsModal);
+
+  // Transport slice
+  const isSequencerPlaying = useAppStore((s) => s.isSequencerPlaying);
+  const isChordsPlaying = useAppStore((s) => s.isChordsPlaying);
+  const bpm = useAppStore((s) => s.bpm);
+  const setBpm = useAppStore((s) => s.setBpm);
+  const masterVolume = useAppStore((s) => s.masterVolume);
+  const setMasterVolume = useAppStore((s) => s.setMasterVolume);
+  const toggleMasterPlay = useAppStore((s) => s.toggleMasterPlay);
+  const toggleSequencerPlay = useAppStore((s) => s.toggleSequencerPlay);
+  const toggleChordsPlay = useAppStore((s) => s.toggleChordsPlay);
+
+  // Music context slice
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const scaleType = useAppStore((s) => s.scaleType);
+  const projectTitle = useAppStore((s) => s.projectTitle);
+  const applyTemplate = useAppStore((s) => s.applyTemplate);
+
+  // Synth slice
+  const synthParams = useAppStore((s) => s.synthParams);
+  const chordSynthParams = useAppStore((s) => s.chordSynthParams);
+  const bassSynthParams = useAppStore((s) => s.bassSynthParams);
+  const controlTarget = useAppStore((s) => s.controlTarget);
+  const applySynthPreset = useAppStore((s) => s.applySynthPreset);
+
+  // Chords slice
+  const chords = useAppStore((s) => s.chords);
+  const chordRhythmId = useAppStore((s) => s.chordRhythmId);
+  const chordFeel = useAppStore((s) => s.chordFeel);
+  const chordOctave = useAppStore((s) => s.chordOctave);
+  const chordMuted = useAppStore((s) => s.chordMuted);
+  const setChordOctave = useAppStore((s) => s.setChordOctave);
+
+  // Bass slice
+  const bassPatternId = useAppStore((s) => s.bassPatternId);
+  const bassFeel = useAppStore((s) => s.bassFeel);
+  const bassOctave = useAppStore((s) => s.bassOctave);
+  const bassMuted = useAppStore((s) => s.bassMuted);
+
+  // Sequencer slice
+  const sequencerTracks = useAppStore((s) => s.sequencerTracks);
+  const soundKit = useAppStore((s) => s.soundKit);
+  const applyDrumPattern = useAppStore((s) => s.applyDrumPattern);
+
+  // Effects slice
+  const effects = useAppStore((s) => s.effects);
+  const setEffects = useAppStore((s) => s.setEffects);
 
   const anyPlaying = isSequencerPlaying || isChordsPlaying;
 
-  useEffect(() => {
-    audioEngine.setDrumKit(DRUM_KITS[soundKit]);
-  }, [soundKit]);
-
-  const toggleMasterPlay = useCallback(() => {
-    audioEngine.init();
-    if (anyPlaying) {
-      setIsSequencerPlaying(false);
-      setIsChordsPlaying(false);
-    } else {
-      // Play All: every view starts together on the shared engine clock
-      audioEngine.resetClock();
-      setIsSequencerPlaying(true);
-      setIsChordsPlaying(true);
-    }
-  }, [anyPlaying]);
-
-  const resetClockIfStopped = useCallback(() => {
-    if (!isSequencerPlaying && !isChordsPlaying) {
-      audioEngine.resetClock();
-    }
-  }, [isSequencerPlaying, isChordsPlaying]);
-
-  const toggleSequencerPlay = useCallback(() => {
-    audioEngine.init();
-    resetClockIfStopped();
-    setIsSequencerPlaying((prev) => !prev);
-  }, [resetClockIfStopped]);
-
-  const toggleChordsPlay = useCallback(() => {
-    audioEngine.init();
-    resetClockIfStopped();
-    setIsChordsPlaying((prev) => !prev);
-  }, [resetClockIfStopped]);
-
-  const isCurrentTabPlaying = 
+  const isCurrentTabPlaying =
     activeTab === 'sequencer' ? isSequencerPlaying :
     activeTab === 'chords' ? isChordsPlaying :
     false;
 
   const toggleCurrentTabPlay = useCallback(() => {
-    if (activeTab === 'sequencer') {
-      toggleSequencerPlay();
-    } else if (activeTab === 'chords') {
-      toggleChordsPlay();
+    const {
+      activeTab: tab,
+      toggleSequencerPlay: toggleSeq,
+      toggleChordsPlay: toggleChords,
+    } = useAppStore.getState();
+    if (tab === 'sequencer') {
+      toggleSeq();
+    } else if (tab === 'chords') {
+      toggleChords();
     }
-  }, [activeTab, toggleSequencerPlay, toggleChordsPlay]);
+  }, []);
 
   const isPlayDisabled = !['sequencer', 'chords'].includes(activeTab);
-
-  const [bpm, setBpm] = useState<number>(120);
-
-  // Keep the engine's shared clock in sync with the UI bpm
-  useEffect(() => {
-    audioEngine.setClockBpm(bpm);
-  }, [bpm]);
-  const [scaleRoot, setScaleRoot] = useState<string>('A');
-  const [scaleType, setScaleType] = useState<string>('Natural Minor');
-  const [masterVolume, setMasterVolume] = useState<number>(0.85);
-
-  // Modals
-  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
-
-  // States
-  const [synthParams, setSynthParams] = useState<SynthParams>(INITIAL_SYNTH_PARAMS);
-  // Chord mode keeps its own sound: a preset-driven param set, editable from the synth page
-  const [chordSynthParams, setChordSynthParams] = useState<SynthParams>(INITIAL_SYNTH_PARAMS);
-  // Which param set the synth page controls (knobs and preset selects follow
-  // this; the keyboard always plays the main synth)
-  const [controlTarget, setControlTarget] = useState<SynthControlTarget>('synth');
-  const [chordRhythmId, setChordRhythmId] = useState<string>('sustained');
-  const [chordFeel, setChordFeel] = useState<number>(0.5);
-  const [chordOctave, setChordOctave] = useState<number>(4);
-
-  // Bass module: own preset/pattern/octave plus per-layer mutes (session-local, not persisted)
-  const [bassSynthParams, setBassSynthParams] = useState<SynthParams>({ ...INITIAL_SYNTH_PARAMS, ...FACTORY_BASS_PRESETS[0].params });
-  const [bassPatternId, setBassPatternId] = useState<string>(BASS_PATTERNS[0].id);
-  const [bassFeel, setBassFeel] = useState<number>(0.5);
-  const [bassOctave, setBassOctave] = useState<number>(2);
-  const [chordMuted, setChordMuted] = useState<boolean>(false);
-  const [bassMuted, setBassMuted] = useState<boolean>(false);
-
-  // Push param tweaks into sounding voices — one effect per source so a change
-  // to one param set re-shapes only that source's voices.
-  useEffect(() => {
-    audioEngine.updateSynthParams(synthParams, 'synth');
-  }, [synthParams]);
-  useEffect(() => {
-    audioEngine.updateSynthParams(chordSynthParams, 'chord');
-  }, [chordSynthParams]);
-  useEffect(() => {
-    audioEngine.updateSynthParams(bassSynthParams, 'bass');
-  }, [bassSynthParams]);
-
-  // Per-layer mutes live on the engine's source buses: scheduling keeps running,
-  // the bus gain decides audibility (instant, click-free).
-  useEffect(() => {
-    audioEngine.setSourceMuted('chord', chordMuted);
-    audioEngine.setSourceMuted('bass', bassMuted);
-  }, [chordMuted, bassMuted]);
-  const [sequencerTracks, setSequencerTracks] = useState<SequencerTrack[]>(INITIAL_SEQUENCER_TRACKS);
-  const [chords, setChords] = useState<ChordItem[]>(INITIAL_CHORDS);
-
-  // Keep the displayed chord notes in sync with the chord octave
-  useEffect(() => {
-    setChords((prev) => prev.map((c) => deriveChordNotes(c, chordOctave)));
-  }, [chordOctave]);
-  const [effects, setEffects] = useState<MasterEffects>(INITIAL_EFFECTS);
-  const [projectTitle, setProjectTitle] = useState<string>('Cosmic Horizon Jam');
 
   // Initialize audio engine on first user interaction
   useEffect(() => {
@@ -158,75 +134,33 @@ export function App() {
     return () => window.removeEventListener('click', handleFirstClick);
   }, []);
 
-  const handleMasterVolumeChange = useCallback((v: number) => {
-    setMasterVolume(v);
-    audioEngine.setMasterVolume(v);
+  // The store exposes actions only for the values listed in the task brief;
+  // the remaining values have no slice setter yet (Task 3-5 refactor their
+  // children), so they are written through direct setState calls — same
+  // semantics as the original useState setters they replace.
+  const setScaleRoot = useCallback((value: string) => useAppStore.setState({ scaleRoot: value }), []);
+  const setScaleType = useCallback((value: string) => useAppStore.setState({ scaleType: value }), []);
+  const setSynthParams = useCallback((value: SynthParams) => useAppStore.setState({ synthParams: value }), []);
+  const setChordSynthParams = useCallback((value: SynthParams) => useAppStore.setState({ chordSynthParams: value }), []);
+  const setBassSynthParams = useCallback((value: SynthParams) => useAppStore.setState({ bassSynthParams: value }), []);
+  const setControlTarget = useCallback((value: SynthControlTarget) => useAppStore.setState({ controlTarget: value }), []);
+  const setChordRhythmId = useCallback((value: string) => useAppStore.setState({ chordRhythmId: value }), []);
+  const setChordFeel = useCallback((value: number) => useAppStore.setState({ chordFeel: value }), []);
+  const setBassPatternId = useCallback((value: string) => useAppStore.setState({ bassPatternId: value }), []);
+  const setBassFeel = useCallback((value: number) => useAppStore.setState({ bassFeel: value }), []);
+  const setBassOctave = useCallback((value: number) => useAppStore.setState({ bassOctave: value }), []);
+  const setSequencerTracks = useCallback((value: SequencerTrack[]) => useAppStore.setState({ sequencerTracks: value }), []);
+  const setChords = useCallback((value: ChordItem[]) => useAppStore.setState({ chords: value }), []);
+  const setProjectTitle = useCallback((value: string) => useAppStore.setState({ projectTitle: value }), []);
+  const setSoundKit = useCallback((value: string) => useAppStore.setState({ soundKit: value }), []);
+  const toggleChordMuted = useCallback(() => {
+    useAppStore.setState((state) => ({ chordMuted: !state.chordMuted }));
+  }, []);
+  const toggleBassMuted = useCallback(() => {
+    useAppStore.setState((state) => ({ bassMuted: !state.bassMuted }));
   }, []);
 
-  const openAiModal = useCallback(() => setIsAiModalOpen(true), []);
-  const openProjectsModal = useCallback(() => setIsProjectModalOpen(true), []);
-  const closeAiModal = useCallback(() => setIsAiModalOpen(false), []);
-  const closeProjectsModal = useCallback(() => setIsProjectModalOpen(false), []);
-
-  const toggleChordMuted = useCallback(() => setChordMuted((prev) => !prev), []);
-  const toggleBassMuted = useCallback(() => setBassMuted((prev) => !prev), []);
-
-  const handleApplyDrumPattern = useCallback((pattern: Record<string, boolean[]>) => {
-    setSequencerTracks((prev) =>
-      prev.map((t) => {
-        if (pattern[t.instrument]) {
-          return { ...t, steps: [...pattern[t.instrument]] };
-        }
-        return t;
-      })
-    );
-  }, []);
-
-  const handleApplySynthPreset = useCallback((preset: Partial<SynthParams>) => {
-    setSynthParams((prev) => ({
-      ...prev,
-      ...preset,
-    }));
-  }, []);
-
-  const handleLoadTemplate = useCallback((templateName: string) => {
-    if (templateName === 'Synthwave Odyssey') {
-      setBpm(120);
-      setScaleRoot('A');
-      setScaleType('Natural Minor');
-      setProjectTitle('Synthwave Odyssey');
-    } else if (templateName === 'Lo-Fi Chill Hop') {
-      setBpm(85);
-      setScaleRoot('C');
-      setScaleType('Major');
-      setProjectTitle('Lo-Fi Chill Hop');
-    } else if (templateName === 'Cyber Electro Club') {
-      setBpm(128);
-      setScaleRoot('D');
-      setScaleType('Dorian');
-      setProjectTitle('Cyber Electro Club');
-    } else if (templateName === 'Funky Neo-Soul') {
-      setBpm(95);
-      setScaleRoot('F');
-      setScaleType('Major');
-      setProjectTitle('Funky Neo-Soul');
-    }
-  }, []);
-
-  const currentProject: ProjectState = useMemo(
-    () => ({
-      id: 'proj-active',
-      title: projectTitle,
-      bpm,
-      scaleRoot,
-      scaleType,
-      synthParams,
-      sequencerTracks,
-      chords,
-      effects,
-    }),
-    [projectTitle, bpm, scaleRoot, scaleType, synthParams, sequencerTracks, chords, effects]
-  );
+  const currentProject = useProjectState();
 
   return (
     <div className="h-dvh bg-[#0A0C17] text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white relative overflow-hidden">
@@ -336,7 +270,7 @@ export function App() {
         scaleRoot={scaleRoot}
         scaleType={scaleType}
         masterVolume={masterVolume}
-        onChangeMasterVolume={handleMasterVolumeChange}
+        onChangeMasterVolume={setMasterVolume}
       />
 
       {/* Modals */}
@@ -344,8 +278,8 @@ export function App() {
         isOpen={isAiModalOpen}
         onClose={closeAiModal}
         onApplyChords={setChords}
-        onApplyDrumPattern={handleApplyDrumPattern}
-        onApplySynthPreset={handleApplySynthPreset}
+        onApplyDrumPattern={applyDrumPattern}
+        onApplySynthPreset={applySynthPreset}
         currentKey={`${scaleRoot} ${scaleType}`}
         currentBpm={bpm}
       />
@@ -355,7 +289,7 @@ export function App() {
         onClose={closeProjectsModal}
         project={currentProject}
         onSaveProject={setProjectTitle}
-        onLoadTemplate={handleLoadTemplate}
+        onLoadTemplate={applyTemplate}
       />
     </div>
   );
