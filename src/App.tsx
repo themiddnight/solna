@@ -195,11 +195,13 @@ export function App() {
   // this; the keyboard always plays the main synth)
   const [controlTarget, setControlTarget] = useState<SynthControlTarget>('synth');
   const [chordRhythmId, setChordRhythmId] = useState<string>('sustained');
+  const [chordFeel, setChordFeel] = useState<number>(0.5);
   const [chordOctave, setChordOctave] = useState<number>(4);
 
   // Bass module: own preset/pattern/octave plus per-layer mutes (session-local, not persisted)
   const [bassSynthParams, setBassSynthParams] = useState<SynthParams>({ ...INITIAL_SYNTH_PARAMS, ...FACTORY_BASS_PRESETS[0].params });
   const [bassPatternId, setBassPatternId] = useState<string>(BASS_PATTERNS[0].id);
+  const [bassFeel, setBassFeel] = useState<number>(0.5);
   const [bassOctave, setBassOctave] = useState<number>(2);
   const [chordMuted, setChordMuted] = useState<boolean>(false);
   const [bassMuted, setBassMuted] = useState<boolean>(false);
@@ -381,6 +383,8 @@ export function App() {
             onChangeChordSynthParams={setChordSynthParams}
             rhythmId={chordRhythmId}
             onChangeRhythmId={setChordRhythmId}
+            chordFeel={chordFeel}
+            onChangeChordFeel={setChordFeel}
             chordOctave={chordOctave}
             onChangeChordOctave={setChordOctave}
             bpm={bpm}
@@ -390,6 +394,8 @@ export function App() {
             onChangeBassSynthParams={setBassSynthParams}
             bassPatternId={bassPatternId}
             onChangeBassPatternId={setBassPatternId}
+            bassFeel={bassFeel}
+            onChangeBassFeel={setBassFeel}
             bassOctave={bassOctave}
             onChangeBassOctave={setBassOctave}
             chordMuted={chordMuted}

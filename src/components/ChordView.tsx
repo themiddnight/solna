@@ -52,6 +52,7 @@ import {
   RHYTHM_PATTERNS,
   RHYTHM_STYLE_GROUPS,
   RhythmPattern,
+  feelToHoldScale,
 } from "../audio/rhythmPatterns";
 import { FACTORY_BASS_PRESETS } from "../audio/bassPresets";
 import {
@@ -93,12 +94,16 @@ interface ChordViewProps {
   onChangeChordSynthParams: (params: SynthParams) => void;
   rhythmId: string;
   onChangeRhythmId: (id: string) => void;
+  chordFeel: number;
+  onChangeChordFeel: (feel: number) => void;
   chordOctave: number;
   onChangeChordOctave: (octave: number) => void;
   bassSynthParams: SynthParams;
   onChangeBassSynthParams: (params: SynthParams) => void;
   bassPatternId: string;
   onChangeBassPatternId: (id: string) => void;
+  bassFeel: number;
+  onChangeBassFeel: (feel: number) => void;
   bassOctave: number;
   onChangeBassOctave: (octave: number) => void;
   chordMuted: boolean;
@@ -492,12 +497,16 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
   onChangeChordSynthParams,
   rhythmId,
   onChangeRhythmId,
+  chordFeel,
+  onChangeChordFeel,
   chordOctave,
   onChangeChordOctave,
   bassSynthParams,
   onChangeBassSynthParams,
   bassPatternId,
   onChangeBassPatternId,
+  bassFeel,
+  onChangeBassFeel,
   bassOctave,
   onChangeBassOctave,
   chordMuted,
@@ -533,9 +542,10 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
       const totalBars = chord.bars || 1;
 
       // Precompute the pattern's events once per chord trigger (bar-invariant)
+      const holdScale = feelToHoldScale(chordFeel);
       const events = pattern.hits.flatMap((hit) => {
         const offset = hit.step * stepDur;
-        const hold = Math.max(0.05, (hit.holdSteps ?? 1) * stepDur);
+        const hold = Math.max(0.05, (hit.holdSteps ?? 1) * stepDur * holdScale);
         const baseVelocity = hit.velocity ?? 0.8;
         const hitNotes = hit.note !== undefined ? [notes[hit.note]] : notes;
         const isStrum = hit.type === "strum";
@@ -561,7 +571,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
       const barDur = stepDur * STEPS_PER_BAR;
       scheduleBarInvariantEvents(events, chordSynthParams, "chord", startTime, barDur, totalBars);
     },
-    [bpm, chordSynthParams, chordOctave],
+    [bpm, chordSynthParams, chordOctave, chordFeel],
   );
 
   const playBassWithPattern = useCallback(
@@ -579,6 +589,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
         scaleRoot,
         scaleType,
         bpm,
+        feelToHoldScale(bassFeel),
       ).map((ev) => ({
         noteName: ev.noteName,
         velocity: ev.velocity,
@@ -591,7 +602,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
       const totalBars = chord.bars || 1;
       scheduleBarInvariantEvents(events, bassSynthParams, "bass", startTime, barDur, totalBars);
     },
-    [chords, bassOctave, scaleRoot, scaleType, bpm, bassSynthParams],
+    [chords, bassOctave, scaleRoot, scaleType, bpm, bassSynthParams, bassFeel],
   );
 
   // Master Playback Loop — driven by the shared audio-clock scheduler
@@ -1153,6 +1164,24 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
             ))}
           </select>
 
+          {/* Chord Feel Slider (tight ↔ loose) */}
+          <div className="flex items-center gap-1.5 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs">
+            <span className="text-[10px] text-slate-400 font-mono shrink-0">Feel</span>
+            <span className="text-[9px] text-slate-500 font-mono shrink-0">tight</span>
+            <input
+              id="slider-chord-feel"
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={chordFeel}
+              onChange={(e) => onChangeChordFeel(parseFloat(e.target.value))}
+              className="w-20 h-1 bg-[#0B0D19] rounded cursor-pointer accent-indigo-500"
+              title="Chord note length: tight (short holds) ↔ loose (long holds)"
+            />
+            <span className="text-[9px] text-slate-500 font-mono shrink-0">loose</span>
+          </div>
+
           {/* Chord Layer Volume Slider */}
           <div className="flex items-center gap-2 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs">
             <Volume2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
@@ -1467,6 +1496,24 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
                 </optgroup>
               ))}
             </select>
+          </div>
+
+          {/* Bass Feel Slider (tight ↔ loose) */}
+          <div className="flex items-center gap-1.5 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs">
+            <span className="text-[10px] text-slate-400 font-mono shrink-0">Feel</span>
+            <span className="text-[9px] text-slate-500 font-mono shrink-0">tight</span>
+            <input
+              id="slider-bass-feel"
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={bassFeel}
+              onChange={(e) => onChangeBassFeel(parseFloat(e.target.value))}
+              className="w-20 h-1 bg-[#0B0D19] rounded cursor-pointer accent-emerald-500"
+              title="Bass note length: tight (short holds) ↔ loose (long holds)"
+            />
+            <span className="text-[9px] text-slate-500 font-mono shrink-0">loose</span>
           </div>
 
           <div>

@@ -89,6 +89,14 @@ describe('timing, hold, staccato, velocity, rest, octaveShift (bpm 120 → 16th 
     const ev = resolveBassSteps(byId('funk-octaves'), [Cmaj7], 0, 2, 'A', 'Natural Minor', 120);
     expect(ev[0].holdSec).toBeCloseTo(0.0625, 5); // 0.125 * 0.5
   });
+  test('holdScale multiplies holdSec (loose x2)', () => {
+    const ev = resolveBassSteps(byId('driving-eighths'), [Cmaj7], 0, 2, 'A', 'Natural Minor', 120, 2);
+    expect(ev[0].holdSec).toBe(0.5);
+  });
+  test('holdScale multiplies holdSec (tight x0.5)', () => {
+    const ev = resolveBassSteps(byId('driving-eighths'), [Cmaj7], 0, 2, 'A', 'Natural Minor', 120, 0.5);
+    expect(ev[0].holdSec).toBeCloseTo(0.125, 5);
+  });
   test('velocity defaults to 0.8 and scales by step.velocity', () => {
     const p: BassPattern = { id: 'v', name: 'v', style: 'Walking', steps: [{ step: 0, note: 'root', velocity: 0.5 }, { step: 4, note: 'root' }] };
     const ev = resolveBassSteps(p, [Cmaj7], 0, 2, 'A', 'Natural Minor', 120);

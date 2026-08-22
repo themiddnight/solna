@@ -56,7 +56,8 @@ export function resolveBassSteps(
   octave: number,
   scaleRoot: string,
   scaleType: string,
-  bpm: number
+  bpm: number,
+  holdScale: number = 1
 ): ResolvedBassEvent[] {
   if (chords.length === 0) return [];
   const chord = chords[chordIndex % chords.length];
@@ -116,7 +117,7 @@ export function resolveBassSteps(
     }
     midi += 12 * (step.octaveShift ?? 0);
 
-    const holdSec = (step.holdSteps ?? 1) * stepDur * (step.staccato ? 0.5 : 1);
+    const holdSec = (step.holdSteps ?? 1) * stepDur * (step.staccato ? 0.5 : 1) * holdScale;
     events.push({
       noteName: Note.fromMidiSharps(midi) ?? 'C2',
       timeOffsetSec: step.step * stepDur,

@@ -195,3 +195,11 @@ export const RHYTHM_STYLE_GROUPS: { style: string; patterns: RhythmPattern[] }[]
   }
   return Array.from(byStyle, ([style, patterns]) => ({ style, patterns }));
 })();
+/**
+ * Maps the 0–1 "feel" slider to a hold-duration multiplier.
+ * 0.5 (center) = x1 neutral; 0 = x0.5 tight; 1 = x2 loose.
+ * Exponential so each slider half feels symmetric to the ear.
+ */
+export function feelToHoldScale(feel: number): number {
+  return 2 ** (2 * (feel - 0.5));
+}
