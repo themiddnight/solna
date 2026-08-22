@@ -93,7 +93,7 @@ export const DrumPads: React.FC<{ soundKit: string; onChangeSoundKit: (kit: stri
                     <button
                       id={`btn-pad-${pad.id}`}
                       onClick={() => triggerPad(pad)}
-                      className={`relative w-full h-16 rounded-lg bg-gradient-to-br ${pad.color} p-2 flex flex-col justify-between items-start text-white shadow-md cursor-pointer transition-all duration-75 active:scale-95 ${
+                      className={`relative w-full h-16 rounded-lg bg-gradient-to-br ${pad.color} p-2 flex flex-col justify-between items-start text-white shadow-md cursor-pointer transition-all duration-75 ${
                         isActive
                           ? 'ring-4 ring-white brightness-125 scale-95 shadow-white/30'
                           : 'hover:brightness-110'

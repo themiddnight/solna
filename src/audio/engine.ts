@@ -2,6 +2,22 @@ import { SynthParams, MasterEffects } from '../types';
 import { sixteenthNoteMs, noteFrequency } from '../utils/musicTheory';
 import { mergeDrumKit, type DrumKit } from './drumKits';
 
+type SynthVoice = {
+  oscs: OscillatorNode[];
+  gains: GainNode[];
+  filter: BiquadFilterNode;
+  filterCutoff: number;
+  filterRelease: number;
+  lfo?: OscillatorNode;
+  lfoGain?: GainNode;
+  lfoTarget?: SynthParams['lfoTarget'];
+  sustainLevel: number;
+  source: string;
+  noteName: string;
+  startTime: number;
+  releaseScheduledAt?: number;
+};
+
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private isInitialized = false;
@@ -24,8 +40,11 @@ class AudioEngine {
   private eqHighNode: BiquadFilterNode | null = null;
   private dryGain: GainNode | null = null;
 
-  // Active voices tracking
-  private activeVoices = new Map<string, { oscs: OscillatorNode[]; gains: GainNode[]; filter: BiquadFilterNode; filterCutoff: number; filterRelease: number; lfo?: OscillatorNode; lfoGain?: GainNode; lfoTarget?: SynthParams['lfoTarget']; sustainLevel: number; source: string; startTime: number; releaseScheduledAt?: number }>();
+  // Active voices tracking. activeVoices keys `${source}:${noteName}` and only
+  // keeps the LATEST voice per key; sourceVoices keeps every live or still-
+  // scheduled voice per source so a whole layer can be silenced at once.
+  private activeVoices = new Map<string, SynthVoice>();
+  private sourceVoices = new Map<string, Set<SynthVoice>>();
 
   // Per-source buses: one gain bus per source string ('synth', 'chord', 'bass', ...).
   // Voice gains connect here instead of straight to dry/effects, so a whole layer
@@ -400,7 +419,7 @@ class AudioEngine {
     osc1.start(now);
     oscSub.start(now);
 
-    this.activeVoices.set(`${source}:${noteName}`, {
+    const voice: SynthVoice = {
       oscs: [osc1, oscSub],
       gains: [gainNode, subGain],
       filter,
@@ -411,25 +430,38 @@ class AudioEngine {
       lfoTarget: params.lfoTarget,
       sustainLevel: peakGain * params.sustain,
       source,
+      noteName,
       startTime: now,
       releaseScheduledAt: undefined,
-    });
+    };
+    this.activeVoices.set(`${source}:${noteName}`, voice);
+    let voicesOfSource = this.sourceVoices.get(source);
+    if (!voicesOfSource) {
+      voicesOfSource = new Set();
+      this.sourceVoices.set(source, voicesOfSource);
+    }
+    voicesOfSource.add(voice);
   }
 
   // Synthesizer Note Off
   triggerSynthNoteOff(noteName: string, releaseTime = 0.3, time?: number, source = 'synth'): void {
     if (!this.ctx) return;
-    const voiceKey = `${source}:${noteName}`;
-    const voice = this.activeVoices.get(voiceKey);
+    const voice = this.activeVoices.get(`${source}:${noteName}`);
     if (!voice) return;
 
     const now = time ?? this.ctx.currentTime;
-    const mainGain = voice.gains[0];
-
     // All voices stay tracked until teardown so live param updates can reach
     // sounding (or still-scheduled) voices; the same-note dedup in
     // triggerSynthNoteOn skips voices whose release is already planned here.
     voice.releaseScheduledAt = now;
+    this.releaseVoice(voice, releaseTime, now);
+  }
+
+  // Silences one voice: cancels its envelopes, ramps amp/filter down, and
+  // tears the nodes down after the release tail.
+  private releaseVoice(voice: SynthVoice, releaseTime: number, now: number): void {
+    if (!this.ctx) return;
+    const mainGain = voice.gains[0];
 
     try {
       mainGain.gain.cancelScheduledValues(now);
@@ -447,6 +479,7 @@ class AudioEngine {
       voice.filter.frequency.setValueAtTime(Math.max(20, voice.filter.frequency.value), now);
       voice.filter.frequency.exponentialRampToValueAtTime(Math.max(20, voice.filterCutoff), now + filterRelease);
 
+      const voiceKey = `${voice.source}:${voice.noteName}`;
       setTimeout(() => {
         // Only delete the map entry if this voice is still the current one —
         // a same-note retrigger overwrites the entry before this timeout
@@ -454,6 +487,7 @@ class AudioEngine {
         if (this.activeVoices.get(voiceKey) === voice) {
           this.activeVoices.delete(voiceKey);
         }
+        this.sourceVoices.get(voice.source)?.delete(voice);
         voice.oscs.forEach((osc) => {
           try { osc.stop(); osc.disconnect(); } catch { /* ignore */ }
         });
@@ -470,6 +504,20 @@ class AudioEngine {
       }, (Math.max(releaseTime, filterRelease) + Math.max(0, now - this.ctx.currentTime) + 0.1) * 1000);
     } catch {
       // ignore
+    }
+  }
+
+  // Immediately silences every voice of a source — sounding ones and hits
+  // still scheduled in the future. Releasing a held preview stops the whole
+  // pattern, not just the last scheduled hit.
+  stopSource(source: string, releaseTime = 0.1): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const voices = this.sourceVoices.get(source);
+    if (!voices) return;
+    for (const voice of Array.from(voices)) {
+      voice.releaseScheduledAt = now;
+      this.releaseVoice(voice, releaseTime, now);
     }
   }
 

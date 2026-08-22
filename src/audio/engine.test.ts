@@ -192,3 +192,37 @@ describe('bass retrigger', () => {
     expect(oldVoiceGain.cancels).not.toContain(t0);
   });
 });
+
+describe('source stop (preview release)', () => {
+  test('stopSource silences every voice of the source, including future-scheduled pattern hits', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    // A multi-hit pattern pre-schedules all hits at once (as
+    // scheduleBarInvariantEvents does): two same-note hits plus another note.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.25, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.75, 'chord');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, t0 + 0.5, 'chord');
+    engine.triggerSynthNoteOn('F2', SYNTH, 0.8, t0, 'bass');
+
+    // Releasing the preview must cut the whole chord pattern immediately.
+    engine.stopSource('chord', 0.15);
+
+    // Every chord voice's main gain gets its envelope cancelled now —
+    // the sounding first hit and the two hits still scheduled in the future.
+    const chordVoices = (engine as any).sourceVoices.get('chord') as Set<{ gains: { gain: { cancels: number[] } }[] }>;
+    expect(chordVoices.size).toBe(3);
+    for (const v of chordVoices) {
+      expect(v.gains[0].gain.cancels).toContain(t0);
+    }
+
+    // The bass voice is untouched.
+    const bassVoices = (engine as any).sourceVoices.get('bass') as Set<{ gains: { gain: { cancels: number[] } }[] }>;
+    expect(bassVoices.size).toBe(1);
+    for (const v of bassVoices) {
+      expect(v.gains[0].gain.cancels).not.toContain(t0);
+    }
+  });
+});

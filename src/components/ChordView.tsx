@@ -869,24 +869,13 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
     e.stopPropagation();
     e.preventDefault();
     if (!audioEngine.getAudioContext()) return;
-    
+
     // Stop all active chord and bass notes immediately on release
     activePreviewTimeoutsRef.current.forEach(clearTimeout);
     activePreviewTimeoutsRef.current = [];
 
-    const tempChord: ChordItem = {
-      id: "preview",
-      root,
-      quality,
-      bars: 1,
-      notes: [],
-    };
-    const derived = deriveChordNotes(tempChord, chordOctave);
-    derived.notes.forEach((note) => {
-      if (note) {
-        audioEngine.triggerSynthNoteOff(note, 0.15, undefined, 'chord');
-      }
-    });
+    // Cuts the whole scheduled pattern, not just notes sounding right now.
+    audioEngine.stopSource('chord', 0.15);
   };
 
   const handleCardPreviewMouseDown = (e: React.MouseEvent | React.TouchEvent, chord: ChordItem) => {
@@ -903,19 +892,9 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
     if (!audioEngine.getAudioContext()) return;
     setActiveChordId(null);
 
-    const derived = deriveChordNotes(chord, chordOctave);
-    derived.notes.forEach((note) => {
-      if (note) {
-        audioEngine.triggerSynthNoteOff(note, 0.15, undefined, 'chord');
-      }
-    });
-    // Also stop bass notes
-    const bassDerived = resolveBassSteps(bassPattern, chords, Math.max(0, chords.indexOf(chord)), bassOctave, scaleRoot, scaleType, bpm);
-    bassDerived.forEach((ev) => {
-      if (ev.noteName) {
-        audioEngine.triggerSynthNoteOff(ev.noteName, 0.15, undefined, 'bass');
-      }
-    });
+    // Cuts the whole scheduled pattern (chord + bass), future hits included.
+    audioEngine.stopSource('chord', 0.15);
+    audioEngine.stopSource('bass', 0.15);
   };
 
   const removeChord = (id: string) => {
@@ -1279,7 +1258,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
                 <div
                   key={i}
                   onClick={() => addDiatonicChord(i)}
-                  className="group flex items-center gap-1.5 bg-[#12152A] hover:bg-indigo-600/30 border border-[#2D355A] hover:border-indigo-500/50 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer shadow-sm active:scale-95"
+                  className="group flex items-center gap-1.5 bg-[#12152A] hover:bg-indigo-600/30 border border-[#2D355A] hover:border-indigo-500/50 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer shadow-sm"
                   title={`Click to add ${diatonic.root} ${diatonic.quality} (${diatonic.degreeName})`}
                 >
                   <span className="font-mono text-[10px] text-indigo-400 font-bold group-hover:text-indigo-300 bg-[#1C213E] px-1.5 py-0.5 rounded">
@@ -1295,6 +1274,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
                     onMouseLeave={(e) => handlePreviewMouseUp(e, diatonic.root, diatonic.quality)}
                     onTouchStart={(e) => handlePreviewMouseDown(e, diatonic.root, diatonic.quality)}
                     onTouchEnd={(e) => handlePreviewMouseUp(e, diatonic.root, diatonic.quality)}
+                    onClick={(e) => e.stopPropagation()}
                     className="p-1 text-slate-400 hover:text-indigo-300 transition-colors ml-0.5 rounded hover:bg-[#252B48] cursor-pointer select-none"
                     title="Hold to Preview Chord Audio"
                   >
@@ -1319,7 +1299,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
                 <div
                   key={i}
                   onClick={() => addBorrowedChord(borrowed.root, borrowed.quality)}
-                  className="group flex items-center gap-1.5 bg-[#12152A] hover:bg-purple-600/30 border border-[#2D355A] hover:border-purple-500/50 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer shadow-sm active:scale-95"
+                  className="group flex items-center gap-1.5 bg-[#12152A] hover:bg-purple-600/30 border border-[#2D355A] hover:border-purple-500/50 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer shadow-sm"
                   title={`Click to add ${borrowed.label}: ${borrowed.root} ${borrowed.quality}`}
                 >
                   <span className="font-mono text-[10px] text-purple-300 font-bold group-hover:text-purple-200 bg-[#1C213E] px-1.5 py-0.5 rounded">
@@ -1335,6 +1315,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
                     onMouseLeave={(e) => handlePreviewMouseUp(e, borrowed.root, borrowed.quality)}
                     onTouchStart={(e) => handlePreviewMouseDown(e, borrowed.root, borrowed.quality)}
                     onTouchEnd={(e) => handlePreviewMouseUp(e, borrowed.root, borrowed.quality)}
+                    onClick={(e) => e.stopPropagation()}
                     className="p-1 text-slate-400 hover:text-purple-300 transition-colors ml-0.5 rounded hover:bg-[#252B48] cursor-pointer select-none"
                     title="Hold to Preview Chord Audio"
                   >
@@ -1357,6 +1338,9 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2">
               {chords.map((chord, idx) => {
+                const startBar = chords
+                  .slice(0, idx)
+                  .reduce((sum, c) => sum + (c.bars || 1), 1);
                 const isActive = playingIndex === idx || activeChordId === chord.id;
                 return (
                   <SortableChordCard
@@ -1364,6 +1348,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
                     chord={chord}
                     idx={idx}
                     totalChords={chords.length}
+                    startBar={startBar}
                     isActive={isActive}
                     rhythmPattern={rhythmPattern}
                     bassPattern={bassPattern}
@@ -1525,6 +1510,7 @@ interface SortableChordCardProps {
   chord: ChordItem;
   idx: number;
   totalChords: number;
+  startBar: number;
   isActive: boolean;
   rhythmPattern: RhythmPattern;
   bassPattern: BassPattern;
@@ -1544,6 +1530,7 @@ function SortableChordCard({
   chord,
   idx,
   totalChords,
+  startBar,
   isActive,
   rhythmPattern,
   bassPattern,
@@ -1596,7 +1583,7 @@ function SortableChordCard({
             <GripVertical className="w-3.5 h-3.5" />
           </button>
           <span className="text-[10px] font-mono font-bold text-slate-400 bg-[#1C213E] px-2 py-0.5 rounded">
-            Bar {idx + 1}
+            Bar {startBar}
           </span>
         </div>
         <div className="flex items-center gap-1">

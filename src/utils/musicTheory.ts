@@ -108,6 +108,36 @@ export function isNoteInScale(noteWithOrWithoutOctave: string, root: string, sca
   return scale.intervals.includes(interval);
 }
 
+// A chord belongs to the scale when every pitch class of its notes is in it.
+export function isChordDiatonic(
+  chordRoot: string,
+  quality: string,
+  root: string,
+  scaleType: string,
+): boolean {
+  const notes = generateBlockChordNotes(quality, chordRoot);
+  return (
+    notes.length > 0 && notes.every((n) => isNoteInScale(n, root, scaleType))
+  );
+}
+
+// True when the in-scale palette (triads or 7ths) renders the same root+quality.
+function isInScalePaletteChord(
+  chordRoot: string,
+  quality: string,
+  root: string,
+  scaleType: string,
+): boolean {
+  const scale = SCALES[scaleType] || SCALES['Major'];
+  for (let degree = 0; degree < scale.intervals.length; degree++) {
+    for (const use7ths of [false, true]) {
+      const chord = getDiatonicChordForDegree(degree, root, scaleType, use7ths);
+      if (chord.root === chordRoot && chord.quality === quality) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Given a scale degree index (0-based, 0 = Degree I, 1 = Degree II, etc.)
  * returns the diatonic root note and chord quality according to the active scale.
@@ -153,32 +183,39 @@ export interface BorrowedChord {
  */
 export function getBorrowedChords(root: string, scaleType: string): BorrowedChord[] {
   const rootIndex = rootSemitone(root);
-  if (scaleType === 'Major' || scaleType === 'Lydian' || scaleType === 'Mixolydian') {
-    return [
-      { root: ROOTS[(rootIndex + 5) % 12], quality: 'min', label: 'iv (Minor IV)' },
-      { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: '♭VI (Flat VI)' },
-      { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: '♭VII (Flat VII)' },
-      { root: ROOTS[(rootIndex + 3) % 12], quality: 'maj', label: '♭III (Flat III)' },
-      { root: ROOTS[(rootIndex + 1) % 12], quality: 'maj', label: '♭II (Neapolitan)' },
-      { root: ROOTS[(rootIndex + 2) % 12], quality: 'min7', label: 'iiø7 (Half-Dim)' },
-    ];
-  } else if (scaleType === 'Natural Minor' || scaleType === 'Harmonic Minor' || scaleType === 'Dorian' || scaleType === 'Phrygian') {
-    return [
-      { root: ROOTS[(rootIndex + 5) % 12], quality: 'maj', label: 'IV (Major IV)' },
-      { root: ROOTS[(rootIndex + 7) % 12], quality: 'maj', label: 'V (Major V)' },
-      { root: ROOTS[(rootIndex + 4) % 12], quality: 'maj', label: 'III (Major III)' },
-      { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: 'VI (Major VI)' },
-      { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: 'VII (Major VII)' },
-    ];
-  } else {
-    // Default universal borrowed / chromatic accents
-    return [
-      { root: ROOTS[(rootIndex + 3) % 12], quality: 'maj', label: '♭III' },
-      { root: ROOTS[(rootIndex + 5) % 12], quality: 'min', label: 'iv' },
-      { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: '♭VI' },
-      { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: '♭VII' },
-    ];
-  }
+  const candidates: BorrowedChord[] =
+    scaleType === 'Major' || scaleType === 'Lydian' || scaleType === 'Mixolydian'
+      ? [
+          { root: ROOTS[(rootIndex + 5) % 12], quality: 'min', label: 'iv (Minor IV)' },
+          { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: '♭VI (Flat VI)' },
+          { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: '♭VII (Flat VII)' },
+          { root: ROOTS[(rootIndex + 3) % 12], quality: 'maj', label: '♭III (Flat III)' },
+          { root: ROOTS[(rootIndex + 1) % 12], quality: 'maj', label: '♭II (Neapolitan)' },
+          { root: ROOTS[(rootIndex + 2) % 12], quality: 'm7b5', label: 'iiø7 (Half-Dim)' },
+        ]
+      : scaleType === 'Natural Minor' || scaleType === 'Harmonic Minor' || scaleType === 'Dorian' || scaleType === 'Phrygian'
+        ? [
+            { root: ROOTS[(rootIndex + 5) % 12], quality: 'maj', label: 'IV (Major IV)' },
+            { root: ROOTS[(rootIndex + 7) % 12], quality: 'maj', label: 'V (Major V)' },
+            { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: '♭VI (Flat VI)' },
+            { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: '♭VII (Flat VII)' },
+          ]
+        : [
+            // Default universal borrowed / chromatic accents
+            { root: ROOTS[(rootIndex + 3) % 12], quality: 'maj', label: '♭III' },
+            { root: ROOTS[(rootIndex + 5) % 12], quality: 'min', label: 'iv' },
+            { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: '♭VI' },
+            { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: '♭VII' },
+          ];
+
+  // Borrowed chords must stay chromatic: drop anything the active scale
+  // already contains (strictly diatonic) or that the in-scale palette
+  // renders with the same root and quality.
+  return candidates.filter(
+    (c) =>
+      !isChordDiatonic(c.root, c.quality, root, scaleType) &&
+      !isInScalePaletteChord(c.root, c.quality, root, scaleType),
+  );
 }
 
 
