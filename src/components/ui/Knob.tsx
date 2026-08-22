@@ -7,12 +7,13 @@ import {
   clamp,
   detentAngle,
   dragDeltaT,
+  nextKeyValue,
   progressDash,
   snapToStep,
   tToValue,
   valueToT,
 } from '../../utils/knob';
-import type { KnobIndicator, KnobScale, KnobSize } from '../../utils/knob';
+import type { KeyDir, KnobIndicator, KnobScale, KnobSize } from '../../utils/knob';
 
 export type { KnobIndicator, KnobScale, KnobSize };
 
@@ -45,7 +46,8 @@ interface GestureState {
  * Shared rotary knob primitive. Controlled-only (value/onChange).
  * Drag: pointer capture; the axis with the larger accumulated delta wins
  * (past AXIS_PICK_THRESHOLD_PX) and sticks for the whole gesture. Right/up
- * increase, left/down decrease; Shift divides sensitivity by 10. Ring per
+ * increase, left/down decrease; Shift divides sensitivity by 10.
+ * Keyboard: role="slider" with arrows/page/Home/End (spec §4.3). Ring per
  * `indicator` + optional fixed detent tick (visual only). The needle and the
  * progress-arc tip are derived from the same t (spec §5 invariant).
  */
@@ -105,6 +107,37 @@ export const Knob = ({
     gestureRef.current = null;
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {
+    if (disabled) return;
+    let dir: KeyDir | null = null;
+    switch (e.key) {
+      case 'ArrowUp':
+      case 'ArrowRight':
+        dir = 'inc';
+        break;
+      case 'ArrowDown':
+      case 'ArrowLeft':
+        dir = 'dec';
+        break;
+      case 'PageUp':
+        dir = 'page-inc';
+        break;
+      case 'PageDown':
+        dir = 'page-dec';
+        break;
+      case 'Home':
+        dir = 'min';
+        break;
+      case 'End':
+        dir = 'max';
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+    onChange(nextKeyValue(value, min, max, step, dir));
+  };
+
   return (
     <div className={className}>
       {label !== undefined && (
@@ -115,16 +148,26 @@ export const Knob = ({
       )}
       <svg
         id={id}
+        role="slider"
+        aria-label={label}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={value}
+        aria-valuetext={display}
+        aria-disabled={disabled}
+        tabIndex={disabled ? -1 : 0}
         width={pixelSize}
         height={pixelSize}
         viewBox="0 0 100 100"
-        className={`block text-[#877dca] touch-none select-none rounded-full ${
+        className={`block text-[#877dca] touch-none select-none rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-400/70 ${
           disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
         }`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endGesture}
         onPointerCancel={endGesture}
+        onLostPointerCapture={endGesture}
+        onKeyDown={handleKeyDown}
       >
         {/* indicator="progress": dark 270° ring (same thickness as the arc,
             spec §5) + progress arc from min (−135°) to the current angle. */}
