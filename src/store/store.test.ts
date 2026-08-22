@@ -1,5 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import type { StoreApi } from 'zustand';
 import { audioEngine } from '../audio/engine';
+import { createChordsSlice } from './chordsSlice';
 import { FACTORY_BASS_PRESETS } from '../audio/bassPresets';
 import { BASS_PATTERNS } from '../audio/bassPatterns';
 import { deriveChordNotes } from '../utils/musicTheory';
@@ -173,7 +175,7 @@ describe('store defaults', () => {
     expect(s.synthParams).toEqual(INITIAL_SYNTH_PARAMS);
     expect(s.chordSynthParams).toEqual(INITIAL_SYNTH_PARAMS);
     expect(s.bassSynthParams).toEqual({ ...INITIAL_SYNTH_PARAMS, ...FACTORY_BASS_PRESETS[0].params });
-    expect(s.chords).toEqual(INITIAL_CHORDS);
+    expect(s.chords).toEqual(INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)));
     expect(s.sequencerTracks).toEqual(INITIAL_SEQUENCER_TRACKS);
     expect(s.effects).toEqual(INITIAL_EFFECTS);
     expect(s.customSynthPresets).toEqual([]);
@@ -320,6 +322,49 @@ describe('setChordOctave', () => {
     expect(snapshots[0].chordOctave).toBe(6);
     expect(snapshots[0].chords).toEqual(chordsBefore.map((c) => deriveChordNotes(c, 6)));
     expect(useAppStore.getState().chords).toEqual(chordsBefore.map((c) => deriveChordNotes(c, 6)));
+  });
+});
+
+describe('chords initial octave', () => {
+  // Unit-test the slice factory directly: the shared singleton store is
+  // mutated by earlier tests (e.g. setChordOctave(6)), so its live state
+  // cannot be assumed pristine.
+  test('initial chords are derived at octave 4 (matches the old App mount effect)', () => {
+    const slice = createChordsSlice(
+      (() => {}) as unknown as StoreApi<AppStore>['setState'],
+      (() => ({})) as unknown as StoreApi<AppStore>['getState']
+    );
+    // The old App ran deriveChordNotes(c, chordOctave) on mount with octave 4
+    expect(slice.chords).toEqual(INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)));
+    // Sanity: this is NOT the raw INITIAL_CHORDS (those sit one octave lower)
+    expect(slice.chords).not.toEqual(INITIAL_CHORDS);
+    expect(slice.chords[0].notes).toEqual(deriveChordNotes(INITIAL_CHORDS[0], 4).notes);
+  });
+
+  test('persisted hydration returns stored chords verbatim (no re-derivation on load)', async () => {
+    const { useAppStore } = await getStore();
+    const customChords = [
+      { id: 'chord-x', root: 'C', quality: 'maj', bars: 2, notes: ['C3', 'E3', 'G3'] },
+    ];
+
+    // Persist custom chords (the persist middleware writes on every setState)
+    // and capture the exact payload it wrote.
+    useAppStore.setState({ chords: customChords });
+    const persistedPayload = fakeLocalStorage.getItem('murva_project_state_v1');
+    expect(persistedPayload).toContain('chord-x');
+
+    // Reset the in-memory chords to the initial derived set (simulating a
+    // fresh session), then put the captured payload back into storage
+    // directly — bypassing the store, whose next setState would overwrite it.
+    useAppStore.setState({ chords: INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)) });
+    fakeLocalStorage.setItem('murva_project_state_v1', persistedPayload!);
+
+    // Hydration merges the stored value: chords come back as stored, not re-derived
+    await useAppStore.persist.rehydrate();
+    expect(useAppStore.getState().chords).toEqual(customChords);
+    expect(useAppStore.getState().chords).not.toEqual(
+      INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4))
+    );
   });
 });
 

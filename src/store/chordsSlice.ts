@@ -13,7 +13,9 @@ type Get = StoreApi<AppStore>['getState'];
  */
 export function createChordsSlice(set: Set, _get: Get): ChordsSlice {
   return {
-    chords: INITIAL_CHORDS,
+    // The old App derived the chord notes on mount (useEffect on chordOctave),
+    // so the initial chords displayed at octave 4 — keep that exact value.
+    chords: INITIAL_CHORDS.map((chord) => deriveChordNotes(chord, 4)),
     chordRhythmId: 'sustained',
     chordFeel: 0.5,
     chordOctave: 4,

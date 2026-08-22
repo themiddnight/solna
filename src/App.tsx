@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import { Header } from './components/Header';
 import { SynthView } from './components/SynthView';
 import { SequencerView } from './components/SequencerView';
@@ -16,7 +16,8 @@ import { useEngineSync } from './store/engineSync';
 
 /**
  * The currently-open project, composed from store selectors (replaces the old
- * `currentProject` useMemo in App).
+ * `currentProject` useMemo in App). The object is memoized over the same eight
+ * values so the memoized ProjectModal keeps its old referential stability.
  */
 function useProjectState(): ProjectState {
   const projectTitle = useAppStore((s) => s.projectTitle);
@@ -27,17 +28,20 @@ function useProjectState(): ProjectState {
   const sequencerTracks = useAppStore((s) => s.sequencerTracks);
   const chords = useAppStore((s) => s.chords);
   const effects = useAppStore((s) => s.effects);
-  return {
-    id: 'proj-active',
-    title: projectTitle,
-    bpm,
-    scaleRoot,
-    scaleType,
-    synthParams,
-    sequencerTracks,
-    chords,
-    effects,
-  };
+  return useMemo(
+    () => ({
+      id: 'proj-active',
+      title: projectTitle,
+      bpm,
+      scaleRoot,
+      scaleType,
+      synthParams,
+      sequencerTracks,
+      chords,
+      effects,
+    }),
+    [projectTitle, bpm, scaleRoot, scaleType, synthParams, sequencerTracks, chords, effects]
+  );
 }
 
 export function App() {
