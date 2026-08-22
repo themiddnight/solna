@@ -10,6 +10,7 @@ import {
 } from '../audio/synthPresets';
 import { SynthPresetLibrary } from './SynthPresetLibrary';
 import { isNoteInScale, getScaleNotes, ROOTS } from '../utils/musicTheory';
+import { isTypingTarget, shortcutLabel } from '../utils/keyboard';
 
 interface SynthViewProps {
   params: SynthParams;
@@ -18,25 +19,25 @@ interface SynthViewProps {
   scaleType?: string;
 }
 
-const KEYBOARD_NOTES = [
-  { note: 'C3', label: 'C3', key: 'a', isBlack: false },
-  { note: 'C#3', label: 'C#', key: 'w', isBlack: true },
-  { note: 'D3', label: 'D3', key: 's', isBlack: false },
-  { note: 'D#3', label: 'D#', key: 'e', isBlack: true },
-  { note: 'E3', label: 'E3', key: 'd', isBlack: false },
-  { note: 'F3', label: 'F3', key: 'f', isBlack: false },
-  { note: 'F#3', label: 'F#', key: 't', isBlack: true },
-  { note: 'G3', label: 'G3', key: 'g', isBlack: false },
-  { note: 'G#3', label: 'G#', key: 'y', isBlack: true },
-  { note: 'A3', label: 'A3', key: 'h', isBlack: false },
-  { note: 'A#3', label: 'A#', key: 'u', isBlack: true },
-  { note: 'B3', label: 'B3', key: 'j', isBlack: false },
-  { note: 'C4', label: 'C4', key: 'k', isBlack: false },
-  { note: 'C#4', label: 'C#', key: 'o', isBlack: true },
-  { note: 'D4', label: 'D4', key: 'l', isBlack: false },
-  { note: 'D#4', label: 'D#', key: 'p', isBlack: true },
-  { note: 'E4', label: 'E4', key: ';', isBlack: false },
-  { note: 'F4', label: 'F4', key: "'", isBlack: false },
+export const KEYBOARD_NOTES = [
+  { note: 'C3', label: 'C3', key: 'KeyA', isBlack: false },
+  { note: 'C#3', label: 'C#', key: 'KeyW', isBlack: true },
+  { note: 'D3', label: 'D3', key: 'KeyS', isBlack: false },
+  { note: 'D#3', label: 'D#', key: 'KeyE', isBlack: true },
+  { note: 'E3', label: 'E3', key: 'KeyD', isBlack: false },
+  { note: 'F3', label: 'F3', key: 'KeyF', isBlack: false },
+  { note: 'F#3', label: 'F#', key: 'KeyT', isBlack: true },
+  { note: 'G3', label: 'G3', key: 'KeyG', isBlack: false },
+  { note: 'G#3', label: 'G#', key: 'KeyY', isBlack: true },
+  { note: 'A3', label: 'A3', key: 'KeyH', isBlack: false },
+  { note: 'A#3', label: 'A#', key: 'KeyU', isBlack: true },
+  { note: 'B3', label: 'B3', key: 'KeyJ', isBlack: false },
+  { note: 'C4', label: 'C4', key: 'KeyK', isBlack: false },
+  { note: 'C#4', label: 'C#', key: 'KeyO', isBlack: true },
+  { note: 'D4', label: 'D4', key: 'KeyL', isBlack: false },
+  { note: 'D#4', label: 'D#', key: 'KeyP', isBlack: true },
+  { note: 'E4', label: 'E4', key: 'Semicolon', isBlack: false },
+  { note: 'F4', label: 'F4', key: 'Quote', isBlack: false },
 ];
 
 export const SynthView: React.FC<SynthViewProps> = ({ 
@@ -51,7 +52,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [quickSaveName, setQuickSaveName] = useState<string>('');
   const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [keyboardMode, setKeyboardMode] = useState<'chromatic' | 'scale-locked'>('chromatic');
+  const [keyboardMode, setKeyboardMode] = useState<'chromatic' | 'scale-locked'>('scale-locked');
   // Keyboard display octave — independent from synth pitch octave (params.octave)
   const [keyboardOctave, setKeyboardOctave] = useState<number>(0);
 
@@ -83,23 +84,23 @@ export const SynthView: React.FC<SynthViewProps> = ({
   // QWERTY Computer Keyboard mapping — uses keyboardOctave, NOT params.octave
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (isTypingTarget(e)) return;
       if (e.repeat) return;
       const notesList = keyboardMode === 'scale-locked'
         ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
         : getChromaticKeyboardNotes(keyboardOctave);
-      const keyObj = notesList.find((n) => n.key.toLowerCase() === e.key.toLowerCase());
+      const keyObj = notesList.find((n) => n.key === e.code);
       if (keyObj) {
         handleNoteOn(keyObj.note);
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (isTypingTarget(e)) return;
       const notesList = keyboardMode === 'scale-locked'
         ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
         : getChromaticKeyboardNotes(keyboardOctave);
-      const keyObj = notesList.find((n) => n.key.toLowerCase() === e.key.toLowerCase());
+      const keyObj = notesList.find((n) => n.key === e.code);
       if (keyObj) {
         handleNoteOff(keyObj.note);
       }
@@ -761,7 +762,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
                   }}
                 >
                   <span className="text-[9px] font-mono font-bold text-slate-300">{k.label}</span>
-                  <span className="text-[8px] font-mono text-indigo-400 uppercase">{k.key}</span>
+                  <span className="text-[8px] font-mono text-indigo-400 uppercase">{shortcutLabel(k.key)}</span>
                 </div>
               );
             }
@@ -782,7 +783,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
                 }`}
               >
                 <span className="text-[10px] font-mono font-bold">{k.label}</span>
-                <span className="text-[9px] font-mono text-indigo-600 uppercase font-semibold">{k.key}</span>
+                <span className="text-[9px] font-mono text-indigo-600 uppercase font-semibold">{shortcutLabel(k.key)}</span>
               </div>
             );
           })}
@@ -835,7 +836,7 @@ function getBlackKeyMargin(note: string): number {
 
 function getScaleLockedKeyboardNotes(root: string, scaleType: string, octaveOffset: number) {
   const scaleNotes = getScaleNotes(root, scaleType);
-  const shortcutKeys = ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', "'"];
+  const shortcutKeys = ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon', 'Quote'];
   
   let currentOctave = 3 + octaveOffset;
   let prevNoteIndex = -1;

@@ -1,5 +1,6 @@
 import { SynthParams, MasterEffects } from '../types';
 import { sixteenthNoteMs, noteFrequency } from '../utils/musicTheory';
+import { mergeDrumKit, type DrumKit } from './drumKits';
 
 class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -29,6 +30,7 @@ class AudioEngine {
   // Metronome click buffer
   private clickBufferHigh: AudioBuffer | null = null;
   private clickBufferLow: AudioBuffer | null = null;
+  private noiseBuffer: AudioBuffer | null = null;
 
   // Shared lookahead clock (Tone.js-style): one master 16th-note grid on the
   // audio timeline that every player subscribes to, so they cannot drift apart.
@@ -40,6 +42,8 @@ class AudioEngine {
   private static readonly CLOCK_LOOKAHEAD = 0.1; // schedule events this far ahead
   private static readonly CLOCK_REANCHOR_DELAY = 0.05; // gap used to re-anchor the schedule after resets and stalls
   private static readonly CLOCK_UPDATE_MS = 25;
+
+  private drumKit: DrumKit = mergeDrumKit();
 
   async init(): Promise<void> {
     if (this.isInitialized && this.ctx && this.ctx.state === 'running') return;
@@ -498,35 +502,53 @@ class AudioEngine {
     }
   }
 
+  setDrumKit(kit?: Partial<DrumKit>): void {
+    this.drumKit = mergeDrumKit(kit);
+  }
+
   // Drum Synthesizer Trigger
   triggerDrum(type: string, velocity = 0.8, time?: number): void {
     if (!this.ctx || !this.dryGain) return;
     const now = time ?? this.ctx.currentTime;
+    const k = this.drumKit;
 
     switch (type.toLowerCase()) {
       case 'kick': {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        osc.frequency.setValueAtTime(150, now);
-        osc.frequency.exponentialRampToValueAtTime(35, now + 0.12);
-        gain.gain.setValueAtTime(velocity * 0.9, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+        osc.frequency.setValueAtTime(k.kick.freqStart, now);
+        osc.frequency.exponentialRampToValueAtTime(k.kick.freqEnd, now + k.kick.pitchTime);
+        gain.gain.setValueAtTime(velocity * k.kick.gain, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + k.kick.decay);
 
         osc.connect(gain);
         gain.connect(this.dryGain);
         osc.start(now);
-        osc.stop(now + 0.36);
+        osc.stop(now + k.kick.decay + 0.02);
+
+        if (k.kick.clickFreq && k.kick.clickLevel) {
+          const clickOsc = this.ctx.createOscillator();
+          const clickGain = this.ctx.createGain();
+          clickOsc.frequency.setValueAtTime(k.kick.clickFreq, now);
+          clickGain.gain.setValueAtTime(velocity * k.kick.clickLevel, now);
+          clickGain.gain.exponentialRampToValueAtTime(0.0001, now + (k.kick.clickDecay ?? 0.01));
+          clickOsc.connect(clickGain);
+          clickGain.connect(this.dryGain);
+          clickOsc.start(now);
+          clickOsc.stop(now + k.kick.decay + 0.02);
+        }
         break;
       }
       case 'snare': {
+        const s = k.snare;
         // Body
         const osc = this.ctx.createOscillator();
         const oscGain = this.ctx.createGain();
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(220, now);
-        osc.frequency.exponentialRampToValueAtTime(90, now + 0.08);
-        oscGain.gain.setValueAtTime(velocity * 0.5, now);
-        oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.frequency.setValueAtTime(s.bodyFreqStart, now);
+        osc.frequency.exponentialRampToValueAtTime(s.bodyFreqEnd, now + s.bodyTime);
+        oscGain.gain.setValueAtTime(velocity * s.bodyGain, now);
+        oscGain.gain.exponentialRampToValueAtTime(0.001, now + s.bodyDecay);
         osc.connect(oscGain);
         oscGain.connect(this.dryGain);
 
@@ -534,108 +556,113 @@ class AudioEngine {
         const noise = this.createNoiseNode();
         const filter = this.ctx.createBiquadFilter();
         filter.type = 'highpass';
-        filter.frequency.value = 1000;
+        filter.frequency.value = s.noiseFilter;
         const noiseGain = this.ctx.createGain();
-        noiseGain.gain.setValueAtTime(velocity * 0.6, now);
-        noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        noiseGain.gain.setValueAtTime(velocity * s.noiseGain, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + s.noiseDecay);
 
         noise.connect(filter);
         filter.connect(noiseGain);
         noiseGain.connect(this.dryGain);
-        if (this.reverbNode) noiseGain.connect(this.reverbNode);
+        if (this.reverbNode && s.reverbSend > 0) noiseGain.connect(this.reverbNode);
 
         osc.start(now);
         noise.start(now);
-        osc.stop(now + 0.2);
-        noise.stop(now + 0.25);
+        osc.stop(now + s.bodyDecay + 0.05);
+        noise.stop(now + s.noiseDecay + 0.03);
         break;
       }
       case 'hihat':
       case 'closedhat': {
+        const h = k.hihat;
         const noise = this.createNoiseNode();
         const filter = this.ctx.createBiquadFilter();
         filter.type = 'highpass';
-        filter.frequency.value = 7500;
+        filter.frequency.value = h.filter;
         const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(velocity * 0.4, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+        gain.gain.setValueAtTime(velocity * h.gain, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + h.decay);
 
         noise.connect(filter);
         filter.connect(gain);
         gain.connect(this.dryGain);
         noise.start(now);
-        noise.stop(now + 0.06);
+        noise.stop(now + h.decay + 0.01);
         break;
       }
       case 'openhat': {
+        const h = k.openhat;
         const noise = this.createNoiseNode();
         const filter = this.ctx.createBiquadFilter();
         filter.type = 'highpass';
-        filter.frequency.value = 6500;
+        filter.frequency.value = h.filter;
         const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(velocity * 0.45, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+        gain.gain.setValueAtTime(velocity * h.gain, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + h.decay);
 
         noise.connect(filter);
         filter.connect(gain);
         gain.connect(this.dryGain);
         if (this.delayNode) gain.connect(this.delayNode);
         noise.start(now);
-        noise.stop(now + 0.36);
+        noise.stop(now + h.decay + 0.01);
         break;
       }
       case 'clap': {
+        const c = k.clap;
         const noise = this.createNoiseNode();
         const filter = this.ctx.createBiquadFilter();
         filter.type = 'bandpass';
-        filter.frequency.value = 1200;
+        filter.frequency.value = c.filter;
         filter.Q.value = 1.5;
         const gain = this.ctx.createGain();
 
         // 3 quick micro-bursts for realistic clap texture
-        gain.gain.setValueAtTime(velocity * 0.5, now);
+        gain.gain.setValueAtTime(velocity * c.gain, now);
         gain.gain.setValueAtTime(0.1, now + 0.012);
-        gain.gain.setValueAtTime(velocity * 0.55, now + 0.024);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+        gain.gain.setValueAtTime(velocity * c.gain * 1.1, now + 0.024);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + c.decay);
 
         noise.connect(filter);
         filter.connect(gain);
         gain.connect(this.dryGain);
-        if (this.reverbNode) gain.connect(this.reverbNode);
+        if (this.reverbNode && c.reverbSend > 0) gain.connect(this.reverbNode);
         noise.start(now);
-        noise.stop(now + 0.22);
+        noise.stop(now + c.decay + 0.02);
         break;
       }
       case 'tom':
       case 'lowtom': {
+        const t = k.tom;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        osc.frequency.setValueAtTime(140, now);
-        osc.frequency.exponentialRampToValueAtTime(65, now + 0.2);
-        gain.gain.setValueAtTime(velocity * 0.7, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+        osc.frequency.setValueAtTime(t.freqStart, now);
+        osc.frequency.exponentialRampToValueAtTime(t.freqEnd, now + t.pitchTime);
+        gain.gain.setValueAtTime(velocity * t.gain, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + t.decay);
         osc.connect(gain);
         gain.connect(this.dryGain);
         osc.start(now);
-        osc.stop(now + 0.3);
+        osc.stop(now + t.decay + 0.02);
         break;
       }
       case 'crash':
       case 'ride': {
+        const cr = k.crash;
         const noise = this.createNoiseNode();
         const filter = this.ctx.createBiquadFilter();
         filter.type = 'bandpass';
-        filter.frequency.value = 5500;
+        filter.frequency.value = cr.filter;
         filter.Q.value = 0.8;
         const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(velocity * 0.5, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+        gain.gain.setValueAtTime(velocity * cr.gain, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + cr.decay);
         noise.connect(filter);
         filter.connect(gain);
         gain.connect(this.dryGain);
-        if (this.reverbNode) gain.connect(this.reverbNode);
+        if (this.reverbNode && cr.reverbSend > 0) gain.connect(this.reverbNode);
         noise.start(now);
-        noise.stop(now + 1.0);
+        noise.stop(now + cr.decay + 0.1);
         break;
       }
       default:
@@ -645,14 +672,17 @@ class AudioEngine {
 
   private createNoiseNode(): AudioBufferSourceNode {
     if (!this.ctx) return {} as AudioBufferSourceNode;
-    const bufferSize = this.ctx.sampleRate * 2;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
+    if (!this.noiseBuffer || this.noiseBuffer.sampleRate !== this.ctx.sampleRate) {
+      const bufferSize = this.ctx.sampleRate * 2;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      this.noiseBuffer = buffer;
     }
     const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
+    noise.buffer = this.noiseBuffer;
     return noise;
   }
 

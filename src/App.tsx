@@ -19,6 +19,7 @@ import {
   ProjectState,
 } from './types';
 import { deriveChordNotes } from './utils/musicTheory';
+import { DRUM_KITS } from './audio/drumKits';
 
 const INITIAL_SYNTH_PARAMS: SynthParams = {
   oscType: 'sawtooth',
@@ -116,8 +117,13 @@ export function App() {
   const [activeTab, setActiveTab] = useState<ViewMode>('synth');
   const [isSequencerPlaying, setIsSequencerPlaying] = useState<boolean>(false);
   const [isChordsPlaying, setIsChordsPlaying] = useState<boolean>(false);
+  const [soundKit, setSoundKit] = useState<string>('Retro Drive');
 
   const anyPlaying = isSequencerPlaying || isChordsPlaying;
+
+  useEffect(() => {
+    audioEngine.setDrumKit(DRUM_KITS[soundKit]);
+  }, [soundKit]);
 
   const toggleMasterPlay = () => {
     audioEngine.init();
@@ -318,7 +324,7 @@ export function App() {
           />
         </div>
         <div className={activeTab === 'drums' ? 'block' : 'hidden'}>
-          <DrumMachineView />
+          <DrumMachineView soundKit={soundKit} onChangeSoundKit={setSoundKit} />
         </div>
         <div className={activeTab === 'sequencer' ? 'block' : 'hidden'}>
           <SequencerView
@@ -330,6 +336,8 @@ export function App() {
             synthParams={synthParams}
             masterSequencerVolume={masterSequencerVolume}
             onChangeMasterSequencerVolume={setMasterSequencerVolume}
+            soundKit={soundKit}
+            onChangeSoundKit={setSoundKit}
           />
         </div>
         <div className={activeTab === 'chords' ? 'block' : 'hidden'}>

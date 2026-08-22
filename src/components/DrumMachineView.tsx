@@ -1,22 +1,23 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Disc3, Volume2, Sparkles, Sliders } from 'lucide-react';
 import { audioEngine } from '../audio/engine';
+import { DRUM_KITS } from '../audio/drumKits';
+import { isTypingTarget, shortcutLabel } from '../utils/keyboard';
 import { DrumPad } from '../types';
 
-const DEFAULT_PADS: DrumPad[] = [
-  { id: 'kick', name: 'Kick Drum', note: 'kick', color: 'from-rose-500 to-red-600', shortcut: '1', volume: 0.9, pitch: 0, decay: 0.3 },
-  { id: 'snare', name: 'Snare Snap', note: 'snare', color: 'from-amber-500 to-orange-600', shortcut: '2', volume: 0.85, pitch: 0, decay: 0.2 },
-  { id: 'hihat', name: 'Closed Hat', note: 'hihat', color: 'from-emerald-500 to-teal-600', shortcut: '3', volume: 0.75, pitch: 0, decay: 0.05 },
-  { id: 'openhat', name: 'Open Hat', note: 'openhat', color: 'from-cyan-500 to-blue-600', shortcut: '4', volume: 0.8, pitch: 0, decay: 0.35 },
-  { id: 'clap', name: 'Hand Clap', note: 'clap', color: 'from-purple-500 to-indigo-600', shortcut: 'Q', volume: 0.85, pitch: 0, decay: 0.2 },
-  { id: 'lowtom', name: 'Low Tom', note: 'tom', color: 'from-pink-500 to-rose-600', shortcut: 'W', volume: 0.8, pitch: 0, decay: 0.25 },
-  { id: 'hightom', name: 'High Tom', note: 'tom', color: 'from-violet-500 to-purple-600', shortcut: 'E', volume: 0.8, pitch: 4, decay: 0.2 },
-  { id: 'crash', name: 'Crash Cymbal', note: 'crash', color: 'from-yellow-400 to-amber-600', shortcut: 'R', volume: 0.75, pitch: 0, decay: 0.8 },
+export const DEFAULT_PADS: DrumPad[] = [
+  { id: 'kick', name: 'Kick Drum', note: 'kick', color: 'from-rose-500 to-red-600', shortcut: 'KeyZ', volume: 0.9, pitch: 0, decay: 0.3 },
+  { id: 'snare', name: 'Snare Snap', note: 'snare', color: 'from-amber-500 to-orange-600', shortcut: 'KeyX', volume: 0.85, pitch: 0, decay: 0.2 },
+  { id: 'hihat', name: 'Closed Hat', note: 'hihat', color: 'from-emerald-500 to-teal-600', shortcut: 'KeyC', volume: 0.75, pitch: 0, decay: 0.05 },
+  { id: 'openhat', name: 'Open Hat', note: 'openhat', color: 'from-cyan-500 to-blue-600', shortcut: 'KeyV', volume: 0.8, pitch: 0, decay: 0.35 },
+  { id: 'clap', name: 'Hand Clap', note: 'clap', color: 'from-purple-500 to-indigo-600', shortcut: 'KeyM', volume: 0.85, pitch: 0, decay: 0.2 },
+  { id: 'lowtom', name: 'Low Tom', note: 'tom', color: 'from-pink-500 to-rose-600', shortcut: 'Comma', volume: 0.8, pitch: 0, decay: 0.25 },
+  { id: 'hightom', name: 'High Tom', note: 'tom', color: 'from-violet-500 to-purple-600', shortcut: 'Period', volume: 0.8, pitch: 4, decay: 0.2 },
+  { id: 'crash', name: 'Crash Cymbal', note: 'crash', color: 'from-yellow-400 to-amber-600', shortcut: 'Slash', volume: 0.75, pitch: 0, decay: 0.8 },
 ];
 
-export const DrumMachineView: React.FC = () => {
+export const DrumMachineView: React.FC<{ soundKit: string; onChangeSoundKit: (kit: string) => void }> = ({ soundKit, onChangeSoundKit }) => {
   const [pads, setPads] = useState<DrumPad[]>(DEFAULT_PADS);
-  const [selectedKit, setSelectedKit] = useState<string>('808 Vintage');
   const [activePadId, setActivePadId] = useState<string | null>(null);
 
   const triggerPad = useCallback((pad: DrumPad) => {
@@ -29,9 +30,9 @@ export const DrumMachineView: React.FC = () => {
   // Keyboard shortcut listener for pads
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (isTypingTarget(e)) return;
       if (e.repeat) return;
-      const pad = pads.find((p) => p.shortcut.toLowerCase() === e.key.toLowerCase());
+      const pad = pads.find((p) => p.shortcut === e.code);
       if (pad) {
         triggerPad(pad);
       }
@@ -65,15 +66,15 @@ export const DrumMachineView: React.FC = () => {
           <span className="text-xs text-slate-400 font-medium">Drum Kit:</span>
           <select
             id="select-drum-kit"
-            value={selectedKit}
-            onChange={(e) => setSelectedKit(e.target.value)}
+            value={soundKit}
+            onChange={(e) => onChangeSoundKit(e.target.value)}
             className="bg-[#0B0D19] border border-[#2D355A] text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-pink-500 cursor-pointer"
           >
-            <option value="808 Vintage">808 Vintage Analog</option>
-            <option value="909 Modern">909 Dance & Club</option>
-            <option value="Acoustic Studio">Acoustic Studio Session</option>
-            <option value="Lo-Fi Vinyl">Lo-Fi Dust & Vinyl</option>
-            <option value="Trap Beat">Trap & Hyperpop</option>
+            {Object.keys(DRUM_KITS).map((k) => (
+              <option key={k} value={k} className="bg-[#0B0D19]">
+                {k}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -101,12 +102,12 @@ export const DrumMachineView: React.FC = () => {
                 <div className="flex items-center justify-between w-full">
                   <span className="text-xs font-bold uppercase tracking-wider">{pad.name}</span>
                   <span className="w-6 h-6 rounded-md bg-black/30 border border-white/20 text-[11px] font-mono font-bold flex items-center justify-center">
-                    {pad.shortcut}
+                    {shortcutLabel(pad.shortcut)}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between w-full text-[10px] opacity-80 font-mono">
-                  <span>{selectedKit.split(' ')[0]}</span>
+                  <span>{soundKit.split(' ')[0]}</span>
                   <span>VEL {(pad.volume * 127).toFixed(0)}</span>
                 </div>
               </button>

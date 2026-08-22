@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Grid, Play, Square, RotateCcw, Shuffle, ArrowLeft, ArrowRight, Volume2, VolumeX, Sparkles } from 'lucide-react';
+import { Grid, Play, Square, RotateCcw, Shuffle, ArrowLeft, ArrowRight, Volume2, VolumeX, Sparkles, Disc3 } from 'lucide-react';
 import { SequencerTrack, SynthParams } from '../types';
 import { audioEngine, STEPS_PER_BAR } from '../audio/engine';
 import { sixteenthNoteMs } from '../utils/musicTheory';
+import { DRUM_KITS, GENRE_TO_KIT } from '../audio/drumKits';
 
 interface SequencerViewProps {
   tracks: SequencerTrack[];
@@ -13,6 +14,8 @@ interface SequencerViewProps {
   synthParams: SynthParams;
   masterSequencerVolume: number;
   onChangeMasterSequencerVolume: (volume: number) => void;
+  soundKit: string;
+  onChangeSoundKit: (kit: string) => void;
 }
 
 const GENRE_PRESETS: Record<string, Record<string, boolean[]>> = {
@@ -135,9 +138,15 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
   synthParams,
   masterSequencerVolume,
   onChangeMasterSequencerVolume,
+  soundKit,
+  onChangeSoundKit,
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [selectedGenre, setSelectedGenre] = useState<string>('Synthwave');
+
+  useEffect(() => {
+    onChangeSoundKit(GENRE_TO_KIT[selectedGenre] ?? selectedGenre);
+  }, [selectedGenre, onChangeSoundKit]);
   // Real-time playback stepper — driven by the shared audio-clock scheduler
   const armedRef = useRef(false);
   const stepDurationMs = sixteenthNoteMs(bpm);
@@ -283,6 +292,7 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
           {/* Genre selector */}
           <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#2D355A] px-2.5 py-1 rounded-lg">
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="text-[10px] text-slate-400 font-mono">Pattern:</span>
             <select
               id="select-sequencer-genre"
               value={selectedGenre}
@@ -292,6 +302,24 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
               {Object.keys(GENRE_PRESETS).map((g) => (
                 <option key={g} value={g} className="bg-[#12152A]">
                   {g} Groove
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sound kit selector */}
+          <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#2D355A] px-2.5 py-1 rounded-lg">
+            <Disc3 className="w-3.5 h-3.5 text-pink-400" />
+            <span className="text-[10px] text-slate-400 font-mono">Sound:</span>
+            <select
+              id="select-sequencer-sound-kit"
+              value={soundKit}
+              onChange={(e) => onChangeSoundKit(e.target.value)}
+              className="bg-transparent text-xs text-slate-200 focus:outline-none cursor-pointer"
+            >
+              {Object.keys(DRUM_KITS).map((k) => (
+                <option key={k} value={k} className="bg-[#12152A]">
+                  {k}
                 </option>
               ))}
             </select>
