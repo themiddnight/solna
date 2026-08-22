@@ -24,8 +24,6 @@ interface SequencerViewProps {
   isPlaying: boolean;
   onTogglePlay: () => void;
   synthParams: SynthParams;
-  masterSequencerVolume: number;
-  onChangeMasterSequencerVolume: (volume: number) => void;
   soundKit: string;
   onChangeSoundKit: (kit: string) => void;
 }
@@ -1569,20 +1567,19 @@ const GENRE_PRESETS: Record<string, Record<string, boolean[]>> = {
   },
 };
 
-export const SequencerView: React.FC<SequencerViewProps> = ({
+export const SequencerView: React.FC<SequencerViewProps> = React.memo(({
   tracks,
   onChangeTracks,
   bpm,
   isPlaying,
   onTogglePlay,
   synthParams,
-  masterSequencerVolume,
-  onChangeMasterSequencerVolume,
   soundKit,
   onChangeSoundKit,
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [selectedGenre, setSelectedGenre] = useState<string>("Synthwave");
+  const [masterSequencerVolume, setMasterSequencerVolume] = useState<number>(0.8);
 
   useEffect(() => {
     onChangeSoundKit(GENRE_TO_KIT[selectedGenre] ?? selectedGenre);
@@ -1735,7 +1732,7 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
               step={0.05}
               value={masterSequencerVolume}
               onChange={(e) =>
-                onChangeMasterSequencerVolume(parseFloat(e.target.value))
+                setMasterSequencerVolume(parseFloat(e.target.value))
               }
               className="w-24 h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-emerald-500"
             />
@@ -1932,4 +1929,4 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
       </div>
     </div>
   );
-};
+});

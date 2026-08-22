@@ -16,7 +16,7 @@ export const DEFAULT_PADS: DrumPad[] = [
   { id: 'crash', name: 'Crash Cymbal', note: 'crash', color: 'from-yellow-400 to-amber-600', shortcut: 'Slash', volume: 0.75, pitch: 0, decay: 0.8 },
 ];
 
-export const DrumPads: React.FC<{ soundKit: string; onChangeSoundKit: (kit: string) => void }> = ({ soundKit, onChangeSoundKit }) => {
+export const DrumPads: React.FC<{ soundKit: string; onChangeSoundKit: (kit: string) => void }> = React.memo(({ soundKit, onChangeSoundKit }) => {
   const [pads, setPads] = useState<DrumPad[]>(DEFAULT_PADS);
   const [activePadId, setActivePadId] = useState<string | null>(null);
 
@@ -134,4 +134,4 @@ export const DrumPads: React.FC<{ soundKit: string; onChangeSoundKit: (kit: stri
       </div>
     </div>
   );
-};
+});

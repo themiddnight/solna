@@ -37,6 +37,7 @@ class AudioEngine {
   private clickBufferHigh: AudioBuffer | null = null;
   private clickBufferLow: AudioBuffer | null = null;
   private noiseBuffer: AudioBuffer | null = null;
+  private levelBuffer: Uint8Array<ArrayBuffer> | null = null;
 
   // Shared lookahead clock (Tone.js-style): one master 16th-note grid on the
   // audio timeline that every player subscribes to, so they cannot drift apart.
@@ -801,7 +802,11 @@ class AudioEngine {
 
   getAudioLevel(): number {
     if (!this.analyser) return 0;
-    const data = new Uint8Array(this.analyser.frequencyBinCount);
+    const binCount = this.analyser.frequencyBinCount;
+    if (!this.levelBuffer || this.levelBuffer.length !== binCount) {
+      this.levelBuffer = new Uint8Array(binCount);
+    }
+    const data = this.levelBuffer;
     this.analyser.getByteFrequencyData(data);
     let sum = 0;
     for (let i = 0; i < data.length; i++) {

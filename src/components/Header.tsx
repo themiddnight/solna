@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Sliders,
   Grid,
@@ -18,8 +18,6 @@ interface HeaderProps {
   onSelectView: (view: ViewMode) => void;
   bpm: number;
   onChangeBpm: (bpm: number) => void;
-  metronomeActive: boolean;
-  onToggleMetronome: () => void;
   masterVolume: number;
   onChangeMasterVolume: (vol: number) => void;
   onOpenAi: () => void;
@@ -43,13 +41,11 @@ const NAV_TABS: Array<
   { view: "effects", label: "Master FX", icon: Sliders },
 ];
 
-export const Header: React.FC<HeaderProps> = ({
+export const Header: React.FC<HeaderProps> = React.memo(({
   currentView,
   onSelectView,
   bpm,
   onChangeBpm,
-  metronomeActive,
-  onToggleMetronome,
   masterVolume,
   onChangeMasterVolume,
   onOpenAi,
@@ -60,6 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
   scaleType,
   onChangeScaleType,
 }) => {
+  const [metronomeActive, setMetronomeActive] = useState(false);
   return (
     <header className="bg-[#12152A] border-b border-[#252B48] px-4 py-2.5 flex flex-col gap-2.5 text-sm select-none sticky top-0 z-40">
       {/* Row 1: Brand & Room Info + Primary Navigation Tabs */}
@@ -177,7 +174,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <button
               id="btn-metronome-toggle"
-              onClick={onToggleMetronome}
+              onClick={() => setMetronomeActive((prev) => !prev)}
               className={`p-1.5 rounded-md border text-xs cursor-pointer transition-colors ${
                 metronomeActive
                   ? "bg-indigo-600 border-indigo-500 text-white"
@@ -224,4 +221,4 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
     </header>
   );
-};
+});

@@ -13,7 +13,7 @@ interface AudioVisualizerProps {
   ambientOpacity?: number;
 }
 
-export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
+export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
   mode: initialMode = 'wave',
   className = '',
   height = 40,
@@ -24,7 +24,9 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [mode, setMode] = useState<VisualizerMode>(initialMode);
-  const [isActive, setIsActive] = useState<boolean>(false);
+  // Sounding indicator is updated imperatively from the rAF loop — a React
+  // state update here would re-render the component every frame.
+  const indicatorRef = useRef<HTMLSpanElement | null>(null);
 
   // Peak hold data for spectrum bars
   const peaksRef = useRef<number[]>([]);
@@ -85,7 +87,13 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
 
       // Strictly consider sounding only if audio is genuinely active
       const isSounding = avgEnergy > 2.5 && maxDeviation > 3;
-      setIsActive(isSounding);
+      const indicator = indicatorRef.current;
+      if (indicator && indicator.dataset.sounding !== String(isSounding)) {
+        indicator.dataset.sounding = String(isSounding);
+        indicator.className = isSounding
+          ? 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping'
+          : 'w-1.5 h-1.5 rounded-full bg-slate-600';
+      }
 
       if (mode === 'bars') {
         renderBars(ctx, width, height, freqData, bufferLength, colorTheme, isSounding);
@@ -598,9 +606,8 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       {/* Subtle Live Signal Indicator */}
       <div className="absolute bottom-1 left-2 flex items-center gap-1 pointer-events-none opacity-60">
         <span
-          className={`w-1.5 h-1.5 rounded-full ${
-            isActive ? 'bg-emerald-400 animate-ping' : 'bg-slate-600'
-          }`}
+          ref={indicatorRef}
+          className="w-1.5 h-1.5 rounded-full bg-slate-600"
         />
         <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">
           {mode === 'wave' ? 'Spectrum Wave' : mode === 'bars' ? 'Spectrum Bars' : 'Waveform'}
@@ -608,4 +615,4 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       </div>
     </div>
   );
-};
+});

@@ -79,7 +79,7 @@ export const KEYBOARD_NOTES = [
   { note: "F4", label: "F4", key: "Quote", isBlack: false },
 ];
 
-export const SynthView: React.FC<SynthViewProps> = ({
+export const SynthView: React.FC<SynthViewProps> = React.memo(({
   controlTarget,
   onChangeControlTarget,
   synthParams,
@@ -1094,7 +1094,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
       />
     </div>
   );
-};
+});
 
 // Use note index within KEYBOARD_NOTES (0-based) to compute black key position
 // Index positions of black keys in KEYBOARD_NOTES: 1(C#), 3(D#), 6(F#), 8(G#), 10(A#), 13(C#), 15(D#)

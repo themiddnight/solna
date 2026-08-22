@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from './components/Header';
 import { SynthView } from './components/SynthView';
 import { SequencerView } from './components/SequencerView';
@@ -127,7 +127,7 @@ export function App() {
     audioEngine.setDrumKit(DRUM_KITS[soundKit]);
   }, [soundKit]);
 
-  const toggleMasterPlay = () => {
+  const toggleMasterPlay = useCallback(() => {
     audioEngine.init();
     if (anyPlaying) {
       setIsSequencerPlaying(false);
@@ -138,42 +138,41 @@ export function App() {
       setIsSequencerPlaying(true);
       setIsChordsPlaying(true);
     }
-  };
+  }, [anyPlaying]);
 
-  const resetClockIfStopped = () => {
+  const resetClockIfStopped = useCallback(() => {
     if (!isSequencerPlaying && !isChordsPlaying) {
       audioEngine.resetClock();
     }
-  };
+  }, [isSequencerPlaying, isChordsPlaying]);
 
-  const toggleSequencerPlay = () => {
+  const toggleSequencerPlay = useCallback(() => {
     audioEngine.init();
     resetClockIfStopped();
     setIsSequencerPlaying((prev) => !prev);
-  };
+  }, [resetClockIfStopped]);
 
-  const toggleChordsPlay = () => {
+  const toggleChordsPlay = useCallback(() => {
     audioEngine.init();
     resetClockIfStopped();
     setIsChordsPlaying((prev) => !prev);
-  };
+  }, [resetClockIfStopped]);
 
   const isCurrentTabPlaying = 
     activeTab === 'sequencer' ? isSequencerPlaying :
     activeTab === 'chords' ? isChordsPlaying :
     false;
 
-  const toggleCurrentTabPlay = () => {
+  const toggleCurrentTabPlay = useCallback(() => {
     if (activeTab === 'sequencer') {
       toggleSequencerPlay();
     } else if (activeTab === 'chords') {
       toggleChordsPlay();
     }
-  };
+  }, [activeTab, toggleSequencerPlay, toggleChordsPlay]);
 
   const isPlayDisabled = !['sequencer', 'chords'].includes(activeTab);
 
-  const [metronomeActive, setMetronomeActive] = useState<boolean>(false);
   const [bpm, setBpm] = useState<number>(120);
 
   // Keep the engine's shared clock in sync with the UI bpm
@@ -183,8 +182,6 @@ export function App() {
   const [scaleRoot, setScaleRoot] = useState<string>('A');
   const [scaleType, setScaleType] = useState<string>('Natural Minor');
   const [masterVolume, setMasterVolume] = useState<number>(0.85);
-  const [masterChordVelocity, setMasterChordVelocity] = useState<number>(0.7);
-  const [masterSequencerVolume, setMasterSequencerVolume] = useState<number>(0.8);
 
   // Modals
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -245,7 +242,20 @@ export function App() {
     return () => window.removeEventListener('click', handleFirstClick);
   }, []);
 
-  const handleApplyDrumPattern = (pattern: Record<string, boolean[]>) => {
+  const handleMasterVolumeChange = useCallback((v: number) => {
+    setMasterVolume(v);
+    audioEngine.setMasterVolume(v);
+  }, []);
+
+  const openAiModal = useCallback(() => setIsAiModalOpen(true), []);
+  const openProjectsModal = useCallback(() => setIsProjectModalOpen(true), []);
+  const closeAiModal = useCallback(() => setIsAiModalOpen(false), []);
+  const closeProjectsModal = useCallback(() => setIsProjectModalOpen(false), []);
+
+  const toggleChordMuted = useCallback(() => setChordMuted((prev) => !prev), []);
+  const toggleBassMuted = useCallback(() => setBassMuted((prev) => !prev), []);
+
+  const handleApplyDrumPattern = useCallback((pattern: Record<string, boolean[]>) => {
     setSequencerTracks((prev) =>
       prev.map((t) => {
         if (pattern[t.instrument]) {
@@ -254,16 +264,16 @@ export function App() {
         return t;
       })
     );
-  };
+  }, []);
 
-  const handleApplySynthPreset = (preset: Partial<SynthParams>) => {
+  const handleApplySynthPreset = useCallback((preset: Partial<SynthParams>) => {
     setSynthParams((prev) => ({
       ...prev,
       ...preset,
     }));
-  };
+  }, []);
 
-  const handleLoadTemplate = (templateName: string) => {
+  const handleLoadTemplate = useCallback((templateName: string) => {
     if (templateName === 'Synthwave Odyssey') {
       setBpm(120);
       setScaleRoot('A');
@@ -285,19 +295,22 @@ export function App() {
       setScaleType('Major');
       setProjectTitle('Funky Neo-Soul');
     }
-  };
+  }, []);
 
-  const currentProject: ProjectState = {
-    id: 'proj-active',
-    title: projectTitle,
-    bpm,
-    scaleRoot,
-    scaleType,
-    synthParams,
-    sequencerTracks,
-    chords,
-    effects,
-  };
+  const currentProject: ProjectState = useMemo(
+    () => ({
+      id: 'proj-active',
+      title: projectTitle,
+      bpm,
+      scaleRoot,
+      scaleType,
+      synthParams,
+      sequencerTracks,
+      chords,
+      effects,
+    }),
+    [projectTitle, bpm, scaleRoot, scaleType, synthParams, sequencerTracks, chords, effects]
+  );
 
   return (
     <div className="h-dvh bg-[#0A0C17] text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white relative overflow-hidden">
@@ -318,15 +331,10 @@ export function App() {
         onSelectView={setActiveTab}
         bpm={bpm}
         onChangeBpm={setBpm}
-        metronomeActive={metronomeActive}
-        onToggleMetronome={() => setMetronomeActive((prev) => !prev)}
         masterVolume={masterVolume}
-        onChangeMasterVolume={(v) => {
-          setMasterVolume(v);
-          audioEngine.setMasterVolume(v);
-        }}
-        onOpenAi={() => setIsAiModalOpen(true)}
-        onOpenProjects={() => setIsProjectModalOpen(true)}
+        onChangeMasterVolume={handleMasterVolumeChange}
+        onOpenAi={openAiModal}
+        onOpenProjects={openProjectsModal}
         projectTitle={projectTitle}
         scaleRoot={scaleRoot}
         onChangeScaleRoot={setScaleRoot}
@@ -360,8 +368,6 @@ export function App() {
             isPlaying={isSequencerPlaying}
             onTogglePlay={toggleSequencerPlay}
             synthParams={synthParams}
-            masterSequencerVolume={masterSequencerVolume}
-            onChangeMasterSequencerVolume={setMasterSequencerVolume}
             soundKit={soundKit}
             onChangeSoundKit={setSoundKit}
           />
@@ -384,8 +390,6 @@ export function App() {
             bpm={bpm}
             isPlaying={isChordsPlaying}
             onTogglePlay={toggleChordsPlay}
-            masterChordVelocity={masterChordVelocity}
-            onChangeMasterChordVelocity={setMasterChordVelocity}
             bassSynthParams={bassSynthParams}
             onChangeBassSynthParams={setBassSynthParams}
             bassPatternId={bassPatternId}
@@ -393,9 +397,9 @@ export function App() {
             bassOctave={bassOctave}
             onChangeBassOctave={setBassOctave}
             chordMuted={chordMuted}
-            onToggleChordMuted={() => setChordMuted((prev) => !prev)}
+            onToggleChordMuted={toggleChordMuted}
             bassMuted={bassMuted}
-            onToggleBassMuted={() => setBassMuted((prev) => !prev)}
+            onToggleBassMuted={toggleBassMuted}
           />
         </div>
         <div className={activeTab === 'effects' ? 'block' : 'hidden'}>
@@ -421,7 +425,7 @@ export function App() {
       {/* Modals */}
       <AiCompanionModal
         isOpen={isAiModalOpen}
-        onClose={() => setIsAiModalOpen(false)}
+        onClose={closeAiModal}
         onApplyChords={setChords}
         onApplyDrumPattern={handleApplyDrumPattern}
         onApplySynthPreset={handleApplySynthPreset}
@@ -431,9 +435,9 @@ export function App() {
 
       <ProjectModal
         isOpen={isProjectModalOpen}
-        onClose={() => setIsProjectModalOpen(false)}
+        onClose={closeProjectsModal}
         project={currentProject}
-        onSaveProject={(title) => setProjectTitle(title)}
+        onSaveProject={setProjectTitle}
         onLoadTemplate={handleLoadTemplate}
       />
     </div>

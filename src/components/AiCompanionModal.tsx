@@ -13,7 +13,7 @@ interface AiCompanionModalProps {
   currentBpm: number;
 }
 
-export const AiCompanionModal: React.FC<AiCompanionModalProps> = ({
+export const AiCompanionModal: React.FC<AiCompanionModalProps> = React.memo(({
   isOpen,
   onClose,
   onApplyChords,
@@ -284,4 +284,4 @@ export const AiCompanionModal: React.FC<AiCompanionModalProps> = ({
       </div>
     </div>
   );
-};
+});

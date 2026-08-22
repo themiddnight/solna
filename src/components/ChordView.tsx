@@ -85,8 +85,6 @@ interface ChordViewProps {
   bpm: number;
   isPlaying: boolean;
   onTogglePlay: () => void;
-  masterChordVelocity: number;
-  onChangeMasterChordVelocity: (velocity: number) => void;
 }
 
 const SELECT_BASE =
@@ -459,7 +457,7 @@ function scheduleBarInvariantEvents(
     }
   }
 }
-export const ChordView: React.FC<ChordViewProps> = ({
+export const ChordView: React.FC<ChordViewProps> = React.memo(({
   chords,
   onChangeChords,
   scaleRoot,
@@ -486,11 +484,10 @@ export const ChordView: React.FC<ChordViewProps> = ({
   bpm,
   isPlaying,
   onTogglePlay,
-  masterChordVelocity,
-  onChangeMasterChordVelocity,
 }) => {
   const [activeChordId, setActiveChordId] = useState<string | null>(null);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  const [masterChordVelocity, setMasterChordVelocity] = useState<number>(0.7);
 
   // Chord sound presets: factory presets plus presets saved from the synth view
   const customPresets = getCustomPresets();
@@ -916,7 +913,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
               step={0.05}
               value={masterChordVelocity}
               onChange={(e) =>
-                onChangeMasterChordVelocity(parseFloat(e.target.value))
+                setMasterChordVelocity(parseFloat(e.target.value))
               }
               className="w-24 h-1.5 bg-[#12152A] rounded-lg cursor-pointer"
             />
@@ -1323,4 +1320,4 @@ export const ChordView: React.FC<ChordViewProps> = ({
       />
     </div>
   );
-};
+});

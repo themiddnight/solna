@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Play, Square, Volume2, Music, Waves } from 'lucide-react';
 import { audioEngine } from '../audio/engine';
 import { AudioVisualizer, VisualizerMode } from './AudioVisualizer';
@@ -17,7 +17,7 @@ interface TransportBarProps {
   isPlayDisabled?: boolean;
 }
 
-export const TransportBar: React.FC<TransportBarProps> = ({
+export const TransportBar: React.FC<TransportBarProps> = React.memo(({
   isPlaying,
   onTogglePlay,
   isPlayingAll,
@@ -33,15 +33,21 @@ export const TransportBar: React.FC<TransportBarProps> = ({
   const [vuLevel, setVuLevel] = useState(0);
   const [vizMode, setVizMode] = useState<VisualizerMode>('wave');
 
-  // Meter polling loop
+  // Meter polling loop — runs only while playing, and only commits state when
+  // the level moved enough to change a VU segment (avoids 60 re-renders/sec)
+  const vuLevelRef = useRef(0);
   useEffect(() => {
+    if (!isPlaying) {
+      setVuLevel(0);
+      vuLevelRef.current = 0;
+      return;
+    }
     let animId: number;
     const updateMeter = () => {
-      if (isPlaying) {
-        const level = audioEngine.getAudioLevel();
+      const level = audioEngine.getAudioLevel();
+      if (Math.abs(level - vuLevelRef.current) > 0.02) {
+        vuLevelRef.current = level;
         setVuLevel(level);
-      } else {
-        setVuLevel(0);
       }
       animId = requestAnimationFrame(updateMeter);
     };
@@ -166,4 +172,4 @@ export const TransportBar: React.FC<TransportBarProps> = ({
       </div>
     </div>
   );
-};
+});

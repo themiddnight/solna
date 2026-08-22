@@ -10,7 +10,7 @@ interface ProjectModalProps {
   onLoadTemplate: (templateName: string) => void;
 }
 
-export const ProjectModal: React.FC<ProjectModalProps> = ({
+export const ProjectModal: React.FC<ProjectModalProps> = React.memo(({
   isOpen,
   onClose,
   project,
@@ -153,4 +153,4 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       </div>
     </div>
   );
-};
+});

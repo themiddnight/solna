@@ -8,7 +8,7 @@ interface EffectsRackViewProps {
   onChangeEffects: (effects: MasterEffects) => void;
 }
 
-export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
+export const EffectsRackView: React.FC<EffectsRackViewProps> = React.memo(({
   effects,
   onChangeEffects,
 }) => {
@@ -257,4 +257,4 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
       </div>
     </div>
   );
-};
+});
