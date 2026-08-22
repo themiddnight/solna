@@ -20,5 +20,12 @@ export function createSynthSlice(set: Set, _get: Get): SynthSlice {
     // Mirrors handleApplySynthPreset in App.tsx (shallow merge into synthParams).
     applySynthPreset: (preset) =>
       set((state) => ({ synthParams: { ...state.synthParams, ...preset } })),
+
+    // Setters backing the SynthView control panel (previously App.tsx
+    // setState wrappers with the same semantics).
+    setSynthParams: (synthParams) => set({ synthParams }),
+    setChordSynthParams: (chordSynthParams) => set({ chordSynthParams }),
+    setBassSynthParams: (bassSynthParams) => set({ bassSynthParams }),
+    setControlTarget: (controlTarget) => set({ controlTarget }),
   };
 }

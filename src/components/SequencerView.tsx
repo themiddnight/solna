@@ -12,22 +12,11 @@ import {
   Sparkles,
   Disc3,
 } from "lucide-react";
-import { SequencerTrack, SynthParams } from "../types";
 import { audioEngine, STEPS_PER_BAR } from "../audio/engine";
+import { useAppStore } from "../store/store";
 import { sixteenthNoteMs } from "../utils/musicTheory";
 import { DRUM_KITS, GENRE_TO_KIT } from "../audio/drumKits";
 import { DrumPads } from "./DrumPads";
-
-interface SequencerViewProps {
-  tracks: SequencerTrack[];
-  onChangeTracks: (tracks: SequencerTrack[]) => void;
-  bpm: number;
-  isPlaying: boolean;
-  onTogglePlay: () => void;
-  synthParams: SynthParams;
-  soundKit: string;
-  onChangeSoundKit: (kit: string) => void;
-}
 
 const GENRE_PRESETS: Record<string, Record<string, boolean[]>> = {
   Synthwave: {
@@ -1568,19 +1557,21 @@ const GENRE_PRESETS: Record<string, Record<string, boolean[]>> = {
   },
 };
 
-export const SequencerView: React.FC<SequencerViewProps> = React.memo(({
-  tracks,
-  onChangeTracks,
-  bpm,
-  isPlaying,
-  onTogglePlay,
-  synthParams,
-  soundKit,
-  onChangeSoundKit,
-}) => {
+export const SequencerView: React.FC = React.memo(() => {
+  // Sequencer/transport/synth state + setters (named after the old props so the
+  // rest of the component body is unchanged).
+  const tracks = useAppStore((s) => s.sequencerTracks);
+  const onChangeTracks = useAppStore((s) => s.setSequencerTracks);
+  const bpm = useAppStore((s) => s.bpm);
+  const isPlaying = useAppStore((s) => s.isSequencerPlaying);
+  const synthParams = useAppStore((s) => s.synthParams);
+  const soundKit = useAppStore((s) => s.soundKit);
+  const onChangeSoundKit = useAppStore((s) => s.setSoundKit);
+  const masterSequencerVolume = useAppStore((s) => s.masterSequencerVolume);
+  const setMasterSequencerVolume = useAppStore((s) => s.setMasterSequencerVolume);
+
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [selectedGenre, setSelectedGenre] = useState<string>("Synthwave");
-  const [masterSequencerVolume, setMasterSequencerVolume] = useState<number>(0.8);
 
   useEffect(() => {
     onChangeSoundKit(GENRE_TO_KIT[selectedGenre] ?? selectedGenre);

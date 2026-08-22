@@ -40,6 +40,10 @@ export interface SynthSlice {
   bassSynthParams: SynthParams;
   controlTarget: SynthControlTarget;
   applySynthPreset: (preset: Partial<SynthParams>) => void;
+  setSynthParams: (params: SynthParams) => void;
+  setChordSynthParams: (params: SynthParams) => void;
+  setBassSynthParams: (params: SynthParams) => void;
+  setControlTarget: (target: SynthControlTarget) => void;
 }
 
 export interface ChordsSlice {
@@ -65,6 +69,9 @@ export interface SequencerSlice {
   soundKit: string;
   masterSequencerVolume: number;
   applyDrumPattern: (pattern: Record<string, boolean[]>) => void;
+  setSequencerTracks: (tracks: SequencerTrack[]) => void;
+  setSoundKit: (kit: string) => void;
+  setMasterSequencerVolume: (volume: number) => void;
 }
 
 export interface EffectsSlice {

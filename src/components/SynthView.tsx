@@ -13,8 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { SynthParams } from "../types";
 import { audioEngine } from "../audio/engine";
+import { useAppStore } from "../store/store";
 import {
   ALL_FACTORY_PRESETS,
   SynthPresetItem,
@@ -46,19 +46,6 @@ const TARGET_STYLES: Record<SynthControlTarget, { tint: string; activeBtn: strin
   },
 };
 
-interface SynthViewProps {
-  controlTarget: SynthControlTarget;
-  onChangeControlTarget: (target: SynthControlTarget) => void;
-  synthParams: SynthParams;
-  onChangeSynthParams: (newParams: SynthParams) => void;
-  chordSynthParams: SynthParams;
-  onChangeChordSynthParams: (newParams: SynthParams) => void;
-  bassSynthParams: SynthParams;
-  onChangeBassSynthParams: (newParams: SynthParams) => void;
-  scaleRoot?: string;
-  scaleType?: string;
-}
-
 export const KEYBOARD_NOTES = [
   { note: "C3", label: "C3", key: "KeyA", isBlack: false },
   { note: "C#3", label: "C#", key: "KeyW", isBlack: true },
@@ -80,18 +67,20 @@ export const KEYBOARD_NOTES = [
   { note: "F4", label: "F4", key: "Quote", isBlack: false },
 ];
 
-export const SynthView: React.FC<SynthViewProps> = React.memo(({
-  controlTarget,
-  onChangeControlTarget,
-  synthParams,
-  onChangeSynthParams,
-  chordSynthParams,
-  onChangeChordSynthParams,
-  bassSynthParams,
-  onChangeBassSynthParams,
-  scaleRoot = "C",
-  scaleType = "Major",
-}) => {
+export const SynthView: React.FC = React.memo(() => {
+  // Synth slice state + setters (named after the old props so the rest of the
+  // component body is unchanged).
+  const controlTarget = useAppStore((s) => s.controlTarget);
+  const synthParams = useAppStore((s) => s.synthParams);
+  const chordSynthParams = useAppStore((s) => s.chordSynthParams);
+  const bassSynthParams = useAppStore((s) => s.bassSynthParams);
+  const onChangeControlTarget = useAppStore((s) => s.setControlTarget);
+  const onChangeSynthParams = useAppStore((s) => s.setSynthParams);
+  const onChangeChordSynthParams = useAppStore((s) => s.setChordSynthParams);
+  const onChangeBassSynthParams = useAppStore((s) => s.setBassSynthParams);
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const scaleType = useAppStore((s) => s.scaleType);
+
   // Route the control panel (knobs, preset selects) to the selected
   // destination; the keyboard always plays the main synth (see handleNoteOn)
   const channel = resolveSynthControlChannel(controlTarget, {

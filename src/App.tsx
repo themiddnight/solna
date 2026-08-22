@@ -9,8 +9,7 @@ import { AiCompanionModal } from './components/AiCompanionModal';
 import { ProjectModal } from './components/ProjectModal';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import { audioEngine } from './audio/engine';
-import type { SynthControlTarget } from './utils/synthControl';
-import type { SynthParams, SequencerTrack, ChordItem, ProjectState } from './types';
+import type { SynthParams, ChordItem, ProjectState } from './types';
 import { useAppStore } from './store/store';
 import { useEngineSync } from './store/engineSync';
 
@@ -57,10 +56,8 @@ export function App() {
   const closeProjectsModal = useAppStore((s) => s.closeProjectsModal);
 
   // Transport slice
-  const isSequencerPlaying = useAppStore((s) => s.isSequencerPlaying);
   const isChordsPlaying = useAppStore((s) => s.isChordsPlaying);
   const bpm = useAppStore((s) => s.bpm);
-  const toggleSequencerPlay = useAppStore((s) => s.toggleSequencerPlay);
   const toggleChordsPlay = useAppStore((s) => s.toggleChordsPlay);
 
   // Music context slice
@@ -75,7 +72,6 @@ export function App() {
   const synthParams = useAppStore((s) => s.synthParams);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
   const bassSynthParams = useAppStore((s) => s.bassSynthParams);
-  const controlTarget = useAppStore((s) => s.controlTarget);
   const applySynthPreset = useAppStore((s) => s.applySynthPreset);
 
   // Chords slice
@@ -93,8 +89,6 @@ export function App() {
   const bassMuted = useAppStore((s) => s.bassMuted);
 
   // Sequencer slice
-  const sequencerTracks = useAppStore((s) => s.sequencerTracks);
-  const soundKit = useAppStore((s) => s.soundKit);
   const applyDrumPattern = useAppStore((s) => s.applyDrumPattern);
 
   // Effects slice
@@ -110,22 +104,18 @@ export function App() {
     return () => window.removeEventListener('click', handleFirstClick);
   }, []);
 
-  // The remaining values have no slice setter yet (Task 4-6 refactor their
-  // children), so they are written through direct setState calls — same
-  // semantics as the original useState setters they replace.
-  const setSynthParams = useCallback((value: SynthParams) => useAppStore.setState({ synthParams: value }), []);
+  // The remaining values have no slice setter yet (ChordView is refactored in
+  // Task 5, modals keep props), so they are written through direct setState
+  // calls — same semantics as the original useState setters they replace.
   const setChordSynthParams = useCallback((value: SynthParams) => useAppStore.setState({ chordSynthParams: value }), []);
   const setBassSynthParams = useCallback((value: SynthParams) => useAppStore.setState({ bassSynthParams: value }), []);
-  const setControlTarget = useCallback((value: SynthControlTarget) => useAppStore.setState({ controlTarget: value }), []);
   const setChordRhythmId = useCallback((value: string) => useAppStore.setState({ chordRhythmId: value }), []);
   const setChordFeel = useCallback((value: number) => useAppStore.setState({ chordFeel: value }), []);
   const setBassPatternId = useCallback((value: string) => useAppStore.setState({ bassPatternId: value }), []);
   const setBassFeel = useCallback((value: number) => useAppStore.setState({ bassFeel: value }), []);
   const setBassOctave = useCallback((value: number) => useAppStore.setState({ bassOctave: value }), []);
-  const setSequencerTracks = useCallback((value: SequencerTrack[]) => useAppStore.setState({ sequencerTracks: value }), []);
   const setChords = useCallback((value: ChordItem[]) => useAppStore.setState({ chords: value }), []);
   const setProjectTitle = useCallback((value: string) => useAppStore.setState({ projectTitle: value }), []);
-  const setSoundKit = useCallback((value: string) => useAppStore.setState({ soundKit: value }), []);
   const toggleChordMuted = useCallback(() => {
     useAppStore.setState((state) => ({ chordMuted: !state.chordMuted }));
   }, []);
@@ -154,30 +144,10 @@ export function App() {
       {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity */}
       <main className="flex-1 min-h-0 relative overflow-y-auto">
         <div className={activeTab === 'synth' ? 'block' : 'hidden'}>
-          <SynthView
-            controlTarget={controlTarget}
-            onChangeControlTarget={setControlTarget}
-            synthParams={synthParams}
-            onChangeSynthParams={setSynthParams}
-            chordSynthParams={chordSynthParams}
-            onChangeChordSynthParams={setChordSynthParams}
-            bassSynthParams={bassSynthParams}
-            onChangeBassSynthParams={setBassSynthParams}
-            scaleRoot={scaleRoot}
-            scaleType={scaleType}
-          />
+          <SynthView />
         </div>
         <div className={activeTab === 'sequencer' ? 'block' : 'hidden'}>
-          <SequencerView
-            tracks={sequencerTracks}
-            onChangeTracks={setSequencerTracks}
-            bpm={bpm}
-            isPlaying={isSequencerPlaying}
-            onTogglePlay={toggleSequencerPlay}
-            synthParams={synthParams}
-            soundKit={soundKit}
-            onChangeSoundKit={setSoundKit}
-          />
+          <SequencerView />
         </div>
         <div className={activeTab === 'chords' ? 'block' : 'hidden'}>
           <ChordView

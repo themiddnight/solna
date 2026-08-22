@@ -24,5 +24,11 @@ export function createSequencerSlice(set: Set, _get: Get): SequencerSlice {
           return track;
         }),
       })),
+
+    // Setters backing the SequencerView grid and master volume (previously
+    // App.tsx setState wrappers / local useState with the same semantics).
+    setSequencerTracks: (sequencerTracks) => set({ sequencerTracks }),
+    setSoundKit: (soundKit) => set({ soundKit }),
+    setMasterSequencerVolume: (masterSequencerVolume) => set({ masterSequencerVolume }),
   };
 }
