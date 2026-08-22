@@ -436,9 +436,20 @@ export const ChordView: React.FC<ChordViewProps> = ({
       audioEngine.init();
       const chordIdx = Math.max(0, chords.indexOf(chord));
       const events = resolveBassSteps(pattern, chords, chordIdx, bassOctave, scaleRoot, scaleType, bpm);
-      for (const ev of events) {
-        audioEngine.triggerSynthNoteOn(ev.noteName, bassSynthParams, ev.velocity, startTime + ev.timeOffsetSec, 'bass');
-        audioEngine.triggerSynthNoteOff(ev.noteName, bassSynthParams.release, startTime + ev.timeOffsetSec + ev.holdSec, 'bass');
+      const stepDur = sixteenthNoteMs(bpm) / 1000;
+      const barDur = stepDur * STEPS_PER_BAR;
+      const totalBars = chord.bars || 1;
+      // Events are bar-invariant (the clock advances by barDur per bar); schedule
+      // the resolved set at each bar's start.
+      for (let bar = 0; bar < totalBars; bar++) {
+        const barStart = startTime + bar * barDur;
+        const isLastBar = bar === totalBars - 1;
+        for (const ev of events) {
+          // Approach tokens lead into the NEXT chord — only play them on the last bar.
+          if (!isLastBar && ev.token.startsWith('approach')) continue;
+          audioEngine.triggerSynthNoteOn(ev.noteName, bassSynthParams, ev.velocity, barStart + ev.timeOffsetSec, 'bass');
+          audioEngine.triggerSynthNoteOff(ev.noteName, bassSynthParams.release, barStart + ev.timeOffsetSec + ev.holdSec, 'bass');
+        }
       }
     },
     [chords, bassOctave, scaleRoot, scaleType, bpm, bassSynthParams]

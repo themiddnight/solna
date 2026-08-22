@@ -31,6 +31,7 @@ export interface ResolvedBassEvent {
   timeOffsetSec: number;
   holdSec: number;
   velocity: number;
+  token: BassNoteToken;    // originating step token (post-alternation); 'approach*' tokens lead into the NEXT chord
 }
 
 const TONE_INDEX: Record<'third' | 'fifth' | 'seventh', number> = { third: 1, fifth: 2, seventh: 3 };
@@ -121,6 +122,7 @@ export function resolveBassSteps(
       timeOffsetSec: step.step * stepDur,
       holdSec,
       velocity: 0.8 * (step.velocity ?? 1), // mirror the engine's default velocity
+      token,
     });
   }
   return events;

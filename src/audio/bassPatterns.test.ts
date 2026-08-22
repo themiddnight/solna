@@ -54,6 +54,13 @@ describe('approach tokens target the NEXT chord (with wrap)', () => {
     const ev = resolveBassSteps(byId('root-fifth-walk'), [Cmaj7, F7], 1, 2, 'A', 'Natural Minor', 120);
     expect(ev[3].noteName).toBe('G2'); // C2 (36) + 7 = 43
   });
+  test('resolved events carry the originating token (post-alternation) so multi-bar scheduling can skip approaches until the last bar', () => {
+    const ev0 = resolveBassSteps(byId('classic-walk'), [Cmaj7, F7], 0, 2, 'A', 'Natural Minor', 120);
+    expect(ev0.map((e) => e.token)).toEqual(['root', 'third', 'fifth', 'approachChromaticAbove']);
+    const ev1 = resolveBassSteps(byId('classic-walk'), [Cmaj7, F7], 1, 2, 'A', 'Natural Minor', 120);
+    expect(ev1[3].token).toBe('approachChromaticBelow'); // alternate flips on odd chordIndex
+    expect(ev1[3].token.startsWith('approach')).toBe(true);
+  });
 });
 
 describe('bassNote override', () => {
