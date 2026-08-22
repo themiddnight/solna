@@ -27,6 +27,11 @@ class AudioEngine {
   // Active voices tracking
   private activeVoices = new Map<string, { oscs: OscillatorNode[]; gains: GainNode[]; filter: BiquadFilterNode; filterCutoff: number; filterRelease: number; lfo?: OscillatorNode; lfoGain?: GainNode; lfoTarget?: SynthParams['lfoTarget']; sustainLevel: number; source: string }>();
 
+  // Per-source buses: one gain bus per source string ('synth', 'chord', 'bass', ...).
+  // Voice gains connect here instead of straight to dry/effects, so a whole layer
+  // (e.g. bass) can be muted with one click-free ramp.
+  private sourceBuses = new Map<string, GainNode>();
+
   // Metronome click buffer
   private clickBufferHigh: AudioBuffer | null = null;
   private clickBufferLow: AudioBuffer | null = null;
@@ -278,6 +283,15 @@ class AudioEngine {
     const freq = noteFrequency(noteName, params.octave);
     const now = time ?? this.ctx.currentTime;
 
+    // Bass is monophonic like a real bass: kill any other sounding bass voice
+    // BEFORE creating the new one. Keys are snapshotted because
+    // triggerSynthNoteOff deletes map entries while we iterate.
+    if (source === 'bass') {
+      for (const key of Array.from(this.activeVoices.keys())) {
+        if (key.startsWith('bass:')) this.triggerSynthNoteOff(key.slice(5), 0.05, undefined, 'bass');
+      }
+    }
+
     // Stop existing voice if note is already sounding
     this.triggerSynthNoteOff(noteName, 0.3, undefined, source);
 
@@ -345,11 +359,8 @@ class AudioEngine {
 
     filter.connect(gainNode);
 
-    // Route to dry, reverb, delay, distortion
-    gainNode.connect(this.dryGain);
-    if (this.delayNode) gainNode.connect(this.delayNode);
-    if (this.reverbNode) gainNode.connect(this.reverbNode);
-    if (this.distortionNode) gainNode.connect(this.distortionNode);
+    // Route through the per-source bus (lazily created) to dry/effects
+    gainNode.connect(this.getSourceBus(source));
 
     osc1.start(now);
     oscSub.start(now);
@@ -414,6 +425,33 @@ class AudioEngine {
     }
 
     this.activeVoices.delete(voiceKey);
+  }
+
+  // Lazily create (and cache) the gain bus for a source, wired like the old
+  // per-voice routing: dry + conditionally delay/reverb/distortion.
+  private getSourceBus(source: string): GainNode {
+    if (!this.ctx) throw new Error('AudioContext not initialized');
+    let bus = this.sourceBuses.get(source);
+    if (!bus) {
+      bus = this.ctx.createGain();
+      bus.gain.value = 1;
+      bus.connect(this.dryGain);
+      if (this.delayNode) bus.connect(this.delayNode);
+      if (this.reverbNode) bus.connect(this.reverbNode);
+      if (this.distortionNode) bus.connect(this.distortionNode);
+      this.sourceBuses.set(source, bus);
+    }
+    return bus;
+  }
+
+  // Mute/unmute an entire source layer on its bus: ~10 ms ramp (click-free),
+  // instantly cuts tails/effects, and survives across effect/param updates.
+  setSourceMuted(source: string, muted: boolean): void {
+    const bus = this.sourceBuses.get(source);
+    if (!bus || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    bus.gain.cancelScheduledValues(now);
+    bus.gain.setTargetAtTime(muted ? 0 : 1, now, 0.01);
   }
 
   private cancelAndHold(param: AudioParam, now: number): void {
