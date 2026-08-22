@@ -9,6 +9,7 @@ import {
   clamp,
   detentAngle,
   dragDeltaT,
+  nextKeyValue,
   progressDash,
   snapToStep,
   tToValue,
@@ -171,5 +172,61 @@ describe('dragDeltaT', () => {
 describe('SIZE_PX', () => {
   test('exposes the five Figma sizes', () => {
     expect(SIZE_PX).toEqual({ xs: 22, sm: 36, md: 48, lg: 60, xl: 72 });
+  });
+});
+
+describe('nextKeyValue', () => {
+  test('inc/dec move by one step', () => {
+    expect(nextKeyValue(0, 0, 1, 0.1, 'inc')).toBe(0.1);
+    expect(nextKeyValue(0.5, 0, 1, 0.1, 'dec')).toBe(0.4);
+  });
+
+  test('continuous step moves by 1% of the range', () => {
+    expect(nextKeyValue(0.5, 0, 1, undefined, 'inc')).toBeCloseTo(0.51, 10);
+    expect(nextKeyValue(0.5, 0, 1, undefined, 'dec')).toBeCloseTo(0.49, 10);
+  });
+
+  test('page keys move by 10 steps', () => {
+    expect(nextKeyValue(0, 0, 1, 0.01, 'page-inc')).toBe(0.1);
+    expect(nextKeyValue(0.5, 0, 1, 0.01, 'page-dec')).toBe(0.4);
+  });
+
+  test('continuous page moves by 10% of the range', () => {
+    expect(nextKeyValue(0.25, 0, 1, undefined, 'page-inc')).toBeCloseTo(0.35, 10);
+  });
+
+  test('Home/End jump to the bounds exactly, even off the step grid', () => {
+    expect(nextKeyValue(0.5, 0, 1, 0.3, 'min')).toBe(0);
+    expect(nextKeyValue(0.5, 0, 1, 0.3, 'max')).toBe(1);
+  });
+
+  test('clamps at the bounds', () => {
+    expect(nextKeyValue(0.99, 0, 1, 0.1, 'inc')).toBe(1);
+    expect(nextKeyValue(0.01, 0, 1, 0.1, 'dec')).toBe(0);
+  });
+
+  test('snaps stepped results onto the min-anchored grid', () => {
+    expect(nextKeyValue(50, 50, 12000, 10, 'inc')).toBe(60);
+    expect(nextKeyValue(12000, 50, 12000, 10, 'dec')).toBe(11990);
+  });
+
+  test('continuous ranges with non-zero min use 1% of the range', () => {
+    expect(nextKeyValue(0.5, -1, 1, undefined, 'inc')).toBeCloseTo(0.52, 10);
+  });
+});
+
+describe('degenerate and clamp edge cases', () => {
+  test('valueToT returns 0 when max <= min', () => {
+    expect(valueToT(0.5, 5, 5, 'linear')).toBe(0);
+    expect(valueToT(0.5, 5, 3, 'linear')).toBe(0);
+  });
+
+  test('tToValue clamps t outside [0, 1]', () => {
+    expect(tToValue(-1, 0, 1, 'linear')).toBe(0);
+    expect(tToValue(2, 0, 1, 'linear')).toBe(1);
+  });
+
+  test('snapToStep is a no-op for a negative step', () => {
+    expect(snapToStep(17, 0, -10)).toBe(17);
   });
 });

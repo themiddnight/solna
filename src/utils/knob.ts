@@ -119,3 +119,43 @@ export function dragDeltaT(deltaPx: number, fine: boolean): number {
   const base = deltaPx / DRAG_RANGE_PX;
   return fine ? base / FINE_DRAG_DIVISOR : base;
 }
+
+export type KeyDir = 'inc' | 'dec' | 'page-inc' | 'page-dec' | 'min' | 'max';
+
+/**
+ * Next value for keyboard navigation.
+ * inc/dec: ±1 step (continuous → 1% of range); page: ±10 steps (or 10% of
+ * range when continuous); min/max: the bounds exactly. Stepped results are
+ * snapped to the min-anchored grid, then clamped to [min, max].
+ */
+export function nextKeyValue(
+  value: number,
+  min: number,
+  max: number,
+  step: number | undefined,
+  dir: KeyDir,
+): number {
+  const hasStep = typeof step === 'number' && step > 0;
+  const singleStep = hasStep ? (step as number) : (max - min) * 0.01;
+  const pageStep = hasStep ? (step as number) * 10 : (max - min) * 0.1;
+  let next = value;
+  switch (dir) {
+    case 'inc':
+      next = value + singleStep;
+      break;
+    case 'dec':
+      next = value - singleStep;
+      break;
+    case 'page-inc':
+      next = value + pageStep;
+      break;
+    case 'page-dec':
+      next = value - pageStep;
+      break;
+    case 'min':
+      return min;
+    case 'max':
+      return max;
+  }
+  return clamp(snapToStep(next, min, step), min, max);
+}
