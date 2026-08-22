@@ -4,8 +4,7 @@ import { ChordItem, SynthParams } from '../types';
 import { audioEngine } from '../audio/engine';
 import { FACTORY_PRESETS, getCustomPresets } from '../audio/synthPresets';
 import { RHYTHM_PATTERNS, RHYTHM_STYLE_GROUPS, RhythmPattern, shiftNoteOctave } from '../audio/rhythmPatterns';
-import { generateBlockChordNotes, quarterNoteMs } from '../../shared/src/index';
-import { deriveChordNotes, reharmonizeProgressionToScale } from '../utils/musicTheory';
+import { deriveChordNotes, reharmonizeProgressionToScale, generateBlockChordNotes, quarterNoteMs } from '../utils/musicTheory';
 import {
   ChordPresetLibrary,
   getCustomChordProgressions,
@@ -445,9 +444,9 @@ export const ChordView: React.FC<ChordViewProps> = ({
     }
 
     return audioEngine.subscribeClock((step, _beat, time) => {
-      // Start aligned to the next quarter-note boundary of the shared grid
+      // Start aligned to the next bar boundary so chord changes land on beat 1
       if (!armedRef.current) {
-        if (step % 4 !== 0) return;
+        if (step % 16 !== 0) return;
         armedRef.current = true;
         chordIndexRef.current = 0;
         nextBarStepRef.current = step;

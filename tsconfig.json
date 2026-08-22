@@ -3,9 +3,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*", "./app/frontend/src/*", "./app/backend/src/*"],
-      "@jam-band/shared": ["./shared/src/index.ts"]
+      "@/*": ["./src/*", "./app/frontend/src/*", "./app/backend/src/*"]
     }
   },
-  "include": ["src/**/*", "shared/**/*", "server.ts", "vite.config.ts"]
+  "include": ["src/**/*", "server.ts", "vite.config.ts"]
 }

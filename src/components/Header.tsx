@@ -4,7 +4,6 @@ import {
   Sliders, 
   Grid, 
   Sparkles, 
-  Users, 
   FolderOpen, 
   Music, 
   Volume2,
@@ -24,10 +23,8 @@ interface HeaderProps {
   masterVolume: number;
   onChangeMasterVolume: (vol: number) => void;
   onOpenAi: () => void;
-  onOpenRooms: () => void;
   onOpenProjects: () => void;
-  activeRoomName: string;
-  connectedCount: number;
+  projectTitle: string;
   scaleRoot: string;
   onChangeScaleRoot: (root: string) => void;
   scaleType: string;
@@ -44,10 +41,8 @@ export const Header: React.FC<HeaderProps> = ({
   masterVolume,
   onChangeMasterVolume,
   onOpenAi,
-  onOpenRooms,
   onOpenProjects,
-  activeRoomName,
-  connectedCount,
+  projectTitle,
   scaleRoot,
   onChangeScaleRoot,
   scaleType,
@@ -73,21 +68,11 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                <span className="truncate max-w-[140px] font-medium text-slate-300">{activeRoomName}</span>
+                <span className="truncate max-w-[140px] font-medium text-slate-300">{projectTitle}</span>
               </div>
             </div>
           </div>
 
-          {/* Room Collaboration Pill */}
-          <button
-            id="btn-room-collab"
-            onClick={onOpenRooms}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#1C213E] hover:bg-[#252B48] text-slate-300 border border-[#2D355A] transition-colors text-xs cursor-pointer"
-            title="Collaborative Jam Rooms"
-          >
-            <Users className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{connectedCount} online</span>
-          </button>
         </div>
 
         {/* Primary Navigation Tabs */}
@@ -118,6 +103,8 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Drum Pads</span>
           </button>
 
+          <div className="w-px h-5 bg-[#252B48] mx-1 shrink-0" />
+
           <button
             id="tab-sequencer"
             onClick={() => onSelectView('sequencer')}
@@ -144,18 +131,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Chords</span>
           </button>
 
-          <button
-            id="tab-arrange"
-            onClick={() => onSelectView('arrange')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap relative ${
-              currentView === 'arrange'
-                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5" />
-            <span>Timeline DAW</span>
-          </button>
+          <div className="w-px h-5 bg-[#252B48] mx-1 shrink-0" />
 
           <button
             id="tab-effects"

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Sparkles, Wand2, Music, Grid, Zap, Check, Loader2 } from 'lucide-react';
 import { ChordItem, SequencerTrack, SynthParams } from '../types';
-import { generateBlockChordNotes } from '../../shared/src/index';
+import { generateBlockChordNotes } from '../utils/musicTheory';
 
 interface AiCompanionModalProps {
   isOpen: boolean;

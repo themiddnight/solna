@@ -14,8 +14,7 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*", "./app/frontend/src/*", "./app/backend/src/*"],
-      "@jam-band/shared": ["./shared/src/index.ts"]
+      "@/*": ["./src/*", "./app/frontend/src/*", "./app/backend/src/*"]
     }
   }
 }

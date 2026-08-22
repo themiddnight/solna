@@ -20,7 +20,7 @@ import {
   CHORD_PROGRESSION_TEMPLATES,
 } from './ChordView';
 import { audioEngine } from '../audio/engine';
-import { generateBlockChordNotes } from '../../shared/src/index';
+import { generateBlockChordNotes } from '../utils/musicTheory';
 import { reharmonizeProgressionToScale } from '../utils/musicTheory';
 
 const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];

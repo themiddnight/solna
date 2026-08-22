@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, Circle, Repeat, Volume2, Music, Clock, Waves } from 'lucide-react';
+import { Play, Square, Volume2, Music, Waves } from 'lucide-react';
 import { audioEngine } from '../audio/engine';
 import { AudioVisualizer, VisualizerMode } from './AudioVisualizer';
 
@@ -30,10 +30,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
   onChangeMasterVolume,
   isPlayDisabled = false,
 }) => {
-  const [isRecording, setIsRecording] = useState(false);
-  const [isLooping, setIsLooping] = useState(true);
   const [vuLevel, setVuLevel] = useState(0);
-  const [seconds, setSeconds] = useState(0);
   const [vizMode, setVizMode] = useState<VisualizerMode>('wave');
 
   // Meter polling loop
@@ -52,23 +49,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [isPlaying]);
 
-  // Playback timer
-  useEffect(() => {
-    if (!isPlaying) {
-      setSeconds(0);
-      return;
-    }
-    const interval = setInterval(() => {
-      setSeconds((s) => s + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isPlaying]);
 
-  const formatTime = (secs: number) => {
-    const mins = Math.floor(secs / 60);
-    const rem = secs % 60;
-    return `${mins.toString().padStart(2, '0')}:${rem.toString().padStart(2, '0')}`;
-  };
 
   return (
     <div className="bg-[#12152A] border-t border-[#252B48] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
@@ -105,39 +86,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
           <span>{isPlaying ? 'PAUSE' : 'PLAY'}</span>
         </button>
 
-        <button
-          id="btn-bottom-record"
-          onClick={() => setIsRecording(!isRecording)}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer border ${
-            isRecording
-              ? 'bg-rose-600 border-rose-500 text-white animate-pulse'
-              : 'bg-[#0B0D19] border-[#252B48] text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Circle className="w-3.5 h-3.5 fill-current" />
-          <span>REC</span>
-        </button>
 
-        <button
-          id="btn-bottom-loop"
-          onClick={() => setIsLooping(!isLooping)}
-          className={`p-2 rounded-lg border transition-all cursor-pointer ${
-            isLooping
-              ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300'
-              : 'bg-[#0B0D19] border-[#252B48] text-slate-400 hover:text-slate-200'
-          }`}
-          title="Loop Playback"
-        >
-          <Repeat className="w-4 h-4" />
-        </button>
-
-        {/* Time Counter */}
-        <div className="bg-[#0B0D19] border border-[#252B48] px-3 py-1.5 rounded-lg font-mono text-xs text-indigo-300 flex items-center gap-2">
-          <Clock className="w-3.5 h-3.5 text-slate-500" />
-          <span>{formatTime(seconds)}</span>
-          <span className="text-slate-600">|</span>
-          <span className="text-slate-400">4/4</span>
-        </div>
       </div>
 
       {/* Middle Harmony & Scale Info & Audio Spectrum Wave */}

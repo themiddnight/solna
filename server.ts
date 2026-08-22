@@ -3,82 +3,13 @@ import http from 'http';
 import path from 'path';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { Server as SocketIOServer } from 'socket.io';
 import { GoogleGenAI } from '@google/genai';
-import {
-  RoomType,
-  UserType,
-  CORE_NAMESPACES,
-  SHARED_EVENTS,
-  PERFORM_EVENTS,
-  ARRANGE_EVENTS,
-  ROOM_STATE_EVENTS,
-  METRONOME_CONSTANTS,
-  DEFAULT_COMPANION_CHORD_PROGRESSION,
-} from './shared/src/index';
 
 dotenv.config();
 
 const PORT = 3000;
 
-interface InMemRoom {
-  id: string;
-  name: string;
-  type: RoomType;
-  bpm: number;
-  timeSignature: string;
-  scale: string;
-  isPrivate: boolean;
-  maxMembers: number;
-  createdAt: number;
-  users: Array<{ id: string; name: string; instrument: string; isHost: boolean }>;
-  chordProgression: Array<{ root: string; quality: string; bars: number }>;
-}
-
-const inMemoryRooms = new Map<string, InMemRoom>();
 const inMemoryProjects = new Map<string, unknown>();
-
-// Seed default demo rooms
-inMemoryRooms.set('jam-lounge-1', {
-  id: 'jam-lounge-1',
-  name: 'Midnight Funk Lounge',
-  type: RoomType.PERFORM,
-  bpm: 110,
-  timeSignature: '4/4',
-  scale: 'D Dorian',
-  isPrivate: false,
-  maxMembers: 8,
-  createdAt: Date.now() - 100000,
-  users: [
-    { id: 'user-1', name: 'Cosmic Bassist', instrument: 'bass', isHost: true },
-    { id: 'user-2', name: 'Neon Keys', instrument: 'synthesizer', isHost: false },
-  ],
-  chordProgression: [
-    { root: 'D', quality: 'min7', bars: 2 },
-    { root: 'G', quality: '7', bars: 2 },
-  ],
-});
-
-inMemoryRooms.set('studio-arrange-1', {
-  id: 'studio-arrange-1',
-  name: 'Cyberpunk Lo-Fi Beat Lab',
-  type: RoomType.ARRANGE,
-  bpm: 85,
-  timeSignature: '4/4',
-  scale: 'A Minor',
-  isPrivate: false,
-  maxMembers: 6,
-  createdAt: Date.now() - 50000,
-  users: [
-    { id: 'user-3', name: 'SynthMaster', instrument: 'synthesizer', isHost: true },
-  ],
-  chordProgression: [
-    { root: 'A', quality: 'min', bars: 1 },
-    { root: 'F', quality: 'maj', bars: 1 },
-    { root: 'C', quality: 'maj', bars: 1 },
-    { root: 'G', quality: 'maj', bars: 1 },
-  ],
-});
 
 async function startServer() {
   const app = express();
@@ -87,152 +18,9 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
-  // Socket.IO Setup
-  const io = new SocketIOServer(server, {
-    cors: {
-      origin: '*',
-      methods: ['GET', 'POST'],
-    },
-  });
-
-  // Socket connection handlers
-  io.on('connection', (socket) => {
-    let currentRoomId: string | null = null;
-    let currentUserId = socket.id;
-    let currentUsername = `Musician_${socket.id.slice(0, 4)}`;
-
-    socket.on('join_room', (data: { roomId: string; username?: string; instrument?: string }) => {
-      currentRoomId = data.roomId;
-      if (data.username) currentUsername = data.username;
-      
-      socket.join(data.roomId);
-      
-      const room = inMemoryRooms.get(data.roomId);
-      if (room) {
-        const existingIdx = room.users.findIndex(u => u.id === currentUserId);
-        if (existingIdx === -1) {
-          room.users.push({
-            id: currentUserId,
-            name: currentUsername,
-            instrument: data.instrument || 'synthesizer',
-            isHost: room.users.length === 0,
-          });
-        }
-        io.to(data.roomId).emit('room_users', room.users);
-      }
-
-      socket.to(data.roomId).emit(SHARED_EVENTS.USER_JOINED, {
-        userId: currentUserId,
-        username: currentUsername,
-        instrument: data.instrument || 'synthesizer',
-      });
-    });
-
-    socket.on(PERFORM_EVENTS.NOTE_ON, (payload) => {
-      if (currentRoomId) {
-        socket.to(currentRoomId).emit(PERFORM_EVENTS.NOTE_ON, {
-          ...payload,
-          senderId: currentUserId,
-          senderName: currentUsername,
-        });
-      }
-    });
-
-    socket.on(PERFORM_EVENTS.NOTE_OFF, (payload) => {
-      if (currentRoomId) {
-        socket.to(currentRoomId).emit(PERFORM_EVENTS.NOTE_OFF, {
-          ...payload,
-          senderId: currentUserId,
-        });
-      }
-    });
-
-    socket.on(PERFORM_EVENTS.PARAM_CHANGE, (payload) => {
-      if (currentRoomId) {
-        socket.to(currentRoomId).emit(PERFORM_EVENTS.PARAM_CHANGE, payload);
-      }
-    });
-
-    socket.on(ARRANGE_EVENTS.CHORD_UPDATE, (payload) => {
-      if (currentRoomId) {
-        const room = inMemoryRooms.get(currentRoomId);
-        if (room && payload.chords) {
-          room.chordProgression = payload.chords;
-        }
-        socket.to(currentRoomId).emit(ARRANGE_EVENTS.CHORD_UPDATE, payload);
-      }
-    });
-
-    socket.on('metronome_update', (payload) => {
-      if (currentRoomId) {
-        const room = inMemoryRooms.get(currentRoomId);
-        if (room && payload.bpm) {
-          room.bpm = payload.bpm;
-        }
-        io.to(currentRoomId).emit('metronome_update', payload);
-      }
-    });
-
-    socket.on('voice_activity', (payload) => {
-      if (currentRoomId) {
-        socket.to(currentRoomId).emit('voice_activity', {
-          userId: currentUserId,
-          isSpeaking: payload.isSpeaking,
-          level: payload.level,
-        });
-      }
-    });
-
-    socket.on('disconnect', () => {
-      if (currentRoomId) {
-        const room = inMemoryRooms.get(currentRoomId);
-        if (room) {
-          room.users = room.users.filter(u => u.id !== currentUserId);
-          io.to(currentRoomId).emit('room_users', room.users);
-        }
-        socket.to(currentRoomId).emit(SHARED_EVENTS.USER_LEFT, {
-          userId: currentUserId,
-        });
-      }
-    });
-  });
-
   // REST API Routes
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', time: Date.now(), service: 'murva-core' });
-  });
-
-  app.get('/api/rooms', (_req, res) => {
-    const list = Array.from(inMemoryRooms.values());
-    res.json(list);
-  });
-
-  app.post('/api/rooms', (req, res) => {
-    const { name, type, bpm, timeSignature, scale, isPrivate, maxMembers } = req.body;
-    const id = `room-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    const newRoom: InMemRoom = {
-      id,
-      name: name || 'Untitled Jam Room',
-      type: type || RoomType.PERFORM,
-      bpm: Number(bpm) || METRONOME_CONSTANTS.DEFAULT_BPM,
-      timeSignature: timeSignature || '4/4',
-      scale: scale || 'C Major',
-      isPrivate: Boolean(isPrivate),
-      maxMembers: Number(maxMembers) || 8,
-      createdAt: Date.now(),
-      users: [],
-      chordProgression: DEFAULT_COMPANION_CHORD_PROGRESSION,
-    };
-    inMemoryRooms.set(id, newRoom);
-    res.status(201).json(newRoom);
-  });
-
-  app.get('/api/rooms/:id', (req, res) => {
-    const room = inMemoryRooms.get(req.params.id);
-    if (!room) {
-      return res.status(404).json({ error: 'Room not found' });
-    }
-    res.json(room);
   });
 
   app.get('/api/projects', (_req, res) => {
@@ -332,7 +120,7 @@ Respond ONLY with valid JSON in this exact structure:
   "tips": "Tips on layering and groove"
 }`;
         } else {
-          systemPrompt = `You are an AI music producer and assistant in the murva collaborative music app.
+          systemPrompt = `You are an AI music producer and assistant in the murva music app.
 User request: ${prompt}
 Provide creative musical advice, chord substitutions, and arrangement ideas in concise, highly structured JSON format:
 {
@@ -445,7 +233,7 @@ Provide creative musical advice, chord substitutions, and arrangement ideas in c
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`murva collaborative music studio running on http://localhost:${PORT}`);
+    console.log(`murva music studio running on http://localhost:${PORT}`);
   });
 }
 

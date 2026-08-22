@@ -4,11 +4,9 @@ import { SynthView } from './components/SynthView';
 import { DrumMachineView } from './components/DrumMachineView';
 import { SequencerView } from './components/SequencerView';
 import { ChordView } from './components/ChordView';
-import { ArrangeView } from './components/ArrangeView';
 import { EffectsRackView } from './components/EffectsRackView';
 import { TransportBar } from './components/TransportBar';
 import { AiCompanionModal } from './components/AiCompanionModal';
-import { RoomCollaborationModal } from './components/RoomCollaborationModal';
 import { ProjectModal } from './components/ProjectModal';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import { audioEngine } from './audio/engine';
@@ -17,9 +15,7 @@ import {
   SynthParams,
   SequencerTrack,
   ChordItem,
-  ArrangeTrack,
   MasterEffects,
-  RoomUser,
   ProjectState,
 } from './types';
 import { deriveChordNotes } from './utils/musicTheory';
@@ -103,223 +99,6 @@ const INITIAL_CHORDS: ChordItem[] = [
   { id: 'chord-4', root: 'G', quality: '7', bars: 1, notes: ['G3', 'B3', 'D4', 'F4'] },
 ];
 
-const INITIAL_ARRANGE_TRACKS: ArrangeTrack[] = [
-  {
-    id: 'arr-synth',
-    name: 'Lead Synthesizer',
-    color: 'bg-indigo-600',
-    type: 'lead',
-    volume: 0.85,
-    pan: -0.1,
-    muted: false,
-    solo: false,
-    synthParams: {
-      oscType: 'sawtooth',
-      subOscVolume: 0.25,
-      noiseVolume: 0.01,
-      detune: 6,
-      filterType: 'lowpass',
-      filterCutoff: 3400,
-      filterResonance: 3.2,
-      filterEnvAmount: 1400,
-      attack: 0.02,
-      decay: 0.35,
-      sustain: 0.65,
-      release: 0.45,
-      filterAttack: 0.02,
-      filterDecay: 0.35,
-      filterSustain: 0,
-      filterRelease: 0.45,
-      lfoRate: 4,
-      lfoDepth: 0.15,
-      lfoTarget: 'cutoff',
-      octave: 0,
-      preset: 'Cosmic Lead',
-    },
-    regions: [
-      {
-        id: 'r1',
-        name: 'Lead Hook A',
-        startBeat: 0,
-        durationBeats: 16,
-        notes: [
-          { id: 'n1', note: 'A4', startStep: 0, durationSteps: 4, velocity: 0.9 },
-          { id: 'n2', note: 'C5', startStep: 4, durationSteps: 2, velocity: 0.8 },
-          { id: 'n3', note: 'E5', startStep: 6, durationSteps: 2, velocity: 0.85 },
-          { id: 'n4', note: 'D5', startStep: 8, durationSteps: 6, velocity: 0.9 },
-          { id: 'n5', note: 'C5', startStep: 14, durationSteps: 2, velocity: 0.8 },
-          { id: 'n6', note: 'B4', startStep: 16, durationSteps: 4, velocity: 0.85 },
-          { id: 'n7', note: 'G4', startStep: 20, durationSteps: 4, velocity: 0.8 },
-          { id: 'n8', note: 'A4', startStep: 24, durationSteps: 8, velocity: 0.95 },
-        ],
-      },
-      {
-        id: 'r2',
-        name: 'Lead Climax B',
-        startBeat: 16,
-        durationBeats: 16,
-        notes: [
-          { id: 'n9', note: 'E5', startStep: 0, durationSteps: 2, velocity: 0.9 },
-          { id: 'n10', note: 'D5', startStep: 2, durationSteps: 2, velocity: 0.85 },
-          { id: 'n11', note: 'C5', startStep: 4, durationSteps: 4, velocity: 0.9 },
-          { id: 'n12', note: 'E5', startStep: 8, durationSteps: 4, velocity: 0.95 },
-          { id: 'n13', note: 'G5', startStep: 12, durationSteps: 4, velocity: 0.9 },
-          { id: 'n14', note: 'A5', startStep: 16, durationSteps: 8, velocity: 1.0 },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'arr-drums',
-    name: '808 Drum Machine',
-    color: 'bg-pink-600',
-    type: 'drums',
-    volume: 0.9,
-    pan: 0,
-    muted: false,
-    solo: false,
-    regions: [
-      {
-        id: 'r4',
-        name: 'Main 808 Groove',
-        startBeat: 0,
-        durationBeats: 16,
-        notes: [
-          { id: 'd1', note: 'C2', startStep: 0, durationSteps: 2, velocity: 0.95 },
-          { id: 'd2', note: 'F#2', startStep: 2, durationSteps: 1, velocity: 0.6 },
-          { id: 'd3', note: 'D2', startStep: 4, durationSteps: 2, velocity: 0.9 },
-          { id: 'd4', note: 'F#2', startStep: 6, durationSteps: 1, velocity: 0.6 },
-          { id: 'd5', note: 'C2', startStep: 8, durationSteps: 2, velocity: 0.95 },
-          { id: 'd6', note: 'F#2', startStep: 10, durationSteps: 1, velocity: 0.6 },
-          { id: 'd7', note: 'D2', startStep: 12, durationSteps: 2, velocity: 0.9 },
-          { id: 'd8', note: 'F#2', startStep: 14, durationSteps: 1, velocity: 0.7 },
-        ],
-      },
-      {
-        id: 'r5',
-        name: 'Drop Beat Groove',
-        startBeat: 16,
-        durationBeats: 16,
-        notes: [
-          { id: 'd9', note: 'C2', startStep: 0, durationSteps: 2, velocity: 1.0 },
-          { id: 'd10', note: 'D2', startStep: 4, durationSteps: 2, velocity: 0.95 },
-          { id: 'd11', note: 'C2', startStep: 8, durationSteps: 2, velocity: 1.0 },
-          { id: 'd12', note: 'D2', startStep: 12, durationSteps: 2, velocity: 0.95 },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'arr-bass',
-    name: '808 Sub-Bass',
-    color: 'bg-amber-600',
-    type: 'bass',
-    volume: 0.85,
-    pan: 0,
-    muted: false,
-    solo: false,
-    synthParams: {
-      oscType: 'sawtooth',
-      subOscVolume: 0.7,
-      noiseVolume: 0,
-      detune: 2,
-      filterType: 'lowpass',
-      filterCutoff: 900,
-      filterResonance: 4.5,
-      filterEnvAmount: 1800,
-      attack: 0.01,
-      decay: 0.3,
-      sustain: 0.3,
-      release: 0.2,
-      filterAttack: 0.01,
-      filterDecay: 0.3,
-      filterSustain: 0,
-      filterRelease: 0.2,
-      lfoRate: 1,
-      lfoDepth: 0,
-      lfoTarget: 'cutoff',
-      octave: -1,
-      preset: 'Acid 303 Bass',
-    },
-    regions: [
-      {
-        id: 'r9',
-        name: 'Acid Bass Line A',
-        startBeat: 0,
-        durationBeats: 16,
-        notes: [
-          { id: 'b1', note: 'A2', startStep: 0, durationSteps: 3, velocity: 0.95 },
-          { id: 'b2', note: 'A2', startStep: 4, durationSteps: 2, velocity: 0.85 },
-          { id: 'b3', note: 'C3', startStep: 8, durationSteps: 3, velocity: 0.9 },
-          { id: 'b4', note: 'E2', startStep: 12, durationSteps: 3, velocity: 0.9 },
-          { id: 'b5', note: 'G2', startStep: 14, durationSteps: 2, velocity: 0.8 },
-        ],
-      },
-      {
-        id: 'r10',
-        name: 'Acid Bass Line B',
-        startBeat: 16,
-        durationBeats: 16,
-        notes: [
-          { id: 'b6', note: 'A2', startStep: 0, durationSteps: 3, velocity: 0.95 },
-          { id: 'b7', note: 'G2', startStep: 4, durationSteps: 2, velocity: 0.85 },
-          { id: 'b8', note: 'F2', startStep: 8, durationSteps: 3, velocity: 0.9 },
-          { id: 'b9', note: 'E2', startStep: 12, durationSteps: 3, velocity: 0.9 },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'arr-chords',
-    name: 'Poly Harmonic Pad',
-    color: 'bg-emerald-600',
-    type: 'pad',
-    volume: 0.75,
-    pan: 0.2,
-    muted: false,
-    solo: false,
-    synthParams: {
-      oscType: 'sawtooth',
-      subOscVolume: 0.4,
-      noiseVolume: 0.02,
-      detune: 10,
-      filterType: 'lowpass',
-      filterCutoff: 2000,
-      filterResonance: 2.0,
-      filterEnvAmount: 700,
-      attack: 0.35,
-      decay: 1.0,
-      sustain: 0.8,
-      release: 1.2,
-      filterAttack: 0.35,
-      filterDecay: 1.0,
-      filterSustain: 0,
-      filterRelease: 1.2,
-      lfoRate: 2,
-      lfoDepth: 0.2,
-      lfoTarget: 'cutoff',
-      octave: 0,
-      preset: 'Lush Ambient Pad',
-    },
-    regions: [
-      {
-        id: 'r7',
-        name: 'Chords Ambient Pad',
-        startBeat: 0,
-        durationBeats: 32,
-        notes: [
-          { id: 'p1', note: 'A3', startStep: 0, durationSteps: 16, velocity: 0.75 },
-          { id: 'p2', note: 'C4', startStep: 0, durationSteps: 16, velocity: 0.75 },
-          { id: 'p3', note: 'E4', startStep: 0, durationSteps: 16, velocity: 0.75 },
-          { id: 'p4', note: 'F3', startStep: 16, durationSteps: 16, velocity: 0.75 },
-          { id: 'p5', note: 'A3', startStep: 16, durationSteps: 16, velocity: 0.75 },
-          { id: 'p6', note: 'C4', startStep: 16, durationSteps: 16, velocity: 0.75 },
-        ],
-      },
-    ],
-  },
-];
-
 const INITIAL_EFFECTS: MasterEffects = {
   reverbWet: 0.25,
   reverbDecay: 2.4,
@@ -333,53 +112,45 @@ const INITIAL_EFFECTS: MasterEffects = {
   compressorThreshold: -16,
 };
 
-const INITIAL_USERS: RoomUser[] = [
-  { id: 'u1', name: 'You (Alex)', role: 'creator', instrument: 'synth', isHost: true },
-  { id: 'u2', name: 'Maya Jam', role: 'collaborator', instrument: 'drums', isHost: false },
-  { id: 'u3', name: 'Leo Beats', role: 'collaborator', instrument: 'bass', isHost: false },
-];
-
 export function App() {
   const [activeTab, setActiveTab] = useState<ViewMode>('synth');
   const [isSequencerPlaying, setIsSequencerPlaying] = useState<boolean>(false);
   const [isChordsPlaying, setIsChordsPlaying] = useState<boolean>(false);
-  const [isArrangePlaying, setIsArrangePlaying] = useState<boolean>(false);
 
-  const anyPlaying = isSequencerPlaying || isChordsPlaying || isArrangePlaying;
+  const anyPlaying = isSequencerPlaying || isChordsPlaying;
 
   const toggleMasterPlay = () => {
     audioEngine.init();
     if (anyPlaying) {
       setIsSequencerPlaying(false);
       setIsChordsPlaying(false);
-      setIsArrangePlaying(false);
     } else {
       // Play All: every view starts together on the shared engine clock
+      audioEngine.resetClock();
       setIsSequencerPlaying(true);
       setIsChordsPlaying(true);
-      setIsArrangePlaying(true);
     }
   };
 
   const toggleSequencerPlay = () => {
     audioEngine.init();
+    if (!isSequencerPlaying && !isChordsPlaying) {
+      audioEngine.resetClock();
+    }
     setIsSequencerPlaying((prev) => !prev);
   };
 
   const toggleChordsPlay = () => {
     audioEngine.init();
+    if (!isSequencerPlaying && !isChordsPlaying) {
+      audioEngine.resetClock();
+    }
     setIsChordsPlaying((prev) => !prev);
-  };
-
-  const toggleArrangePlay = () => {
-    audioEngine.init();
-    setIsArrangePlaying((prev) => !prev);
   };
 
   const isCurrentTabPlaying = 
     activeTab === 'sequencer' ? isSequencerPlaying :
     activeTab === 'chords' ? isChordsPlaying :
-    activeTab === 'arrange' ? isArrangePlaying :
     false;
 
   const toggleCurrentTabPlay = () => {
@@ -387,12 +158,10 @@ export function App() {
       toggleSequencerPlay();
     } else if (activeTab === 'chords') {
       toggleChordsPlay();
-    } else if (activeTab === 'arrange') {
-      toggleArrangePlay();
     }
   };
 
-  const isPlayDisabled = !['sequencer', 'chords', 'arrange'].includes(activeTab);
+  const isPlayDisabled = !['sequencer', 'chords'].includes(activeTab);
 
   const [metronomeActive, setMetronomeActive] = useState<boolean>(false);
   const [bpm, setBpm] = useState<number>(120);
@@ -409,7 +178,6 @@ export function App() {
 
   // Modals
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
 
   // States
@@ -435,10 +203,7 @@ export function App() {
   useEffect(() => {
     setChords((prev) => prev.map((c) => deriveChordNotes(c, chordOctave)));
   }, [chordOctave]);
-  const [arrangeTracks, setArrangeTracks] = useState<ArrangeTrack[]>(INITIAL_ARRANGE_TRACKS);
   const [effects, setEffects] = useState<MasterEffects>(INITIAL_EFFECTS);
-  const [users, setUsers] = useState<RoomUser[]>(INITIAL_USERS);
-  const [currentRoomId, setCurrentRoomId] = useState<string>('room-alpha-jam');
   const [projectTitle, setProjectTitle] = useState<string>('Cosmic Horizon Jam');
 
   // Initialize audio engine on first user interaction
@@ -502,7 +267,6 @@ export function App() {
     synthParams,
     sequencerTracks,
     chords,
-    arrangeTracks,
     effects,
   };
 
@@ -533,10 +297,8 @@ export function App() {
           audioEngine.setMasterVolume(v);
         }}
         onOpenAi={() => setIsAiModalOpen(true)}
-        onOpenRooms={() => setIsRoomModalOpen(true)}
         onOpenProjects={() => setIsProjectModalOpen(true)}
-        activeRoomName={projectTitle}
-        connectedCount={users.length}
+        projectTitle={projectTitle}
         scaleRoot={scaleRoot}
         onChangeScaleRoot={setScaleRoot}
         scaleType={scaleType}
@@ -592,17 +354,6 @@ export function App() {
             onChangeMasterChordVelocity={setMasterChordVelocity}
           />
         </div>
-        <div className={activeTab === 'arrange' ? 'block' : 'hidden'}>
-          <ArrangeView
-            tracks={arrangeTracks}
-            onChangeTracks={setArrangeTracks}
-            bpm={bpm}
-            isPlaying={isArrangePlaying}
-            onTogglePlay={toggleArrangePlay}
-            scaleRoot={scaleRoot}
-            scaleType={scaleType}
-          />
-        </div>
         <div className={activeTab === 'effects' ? 'block' : 'hidden'}>
           <EffectsRackView effects={effects} onChangeEffects={setEffects} />
         </div>
@@ -632,17 +383,6 @@ export function App() {
         onApplySynthPreset={handleApplySynthPreset}
         currentKey={`${scaleRoot} ${scaleType}`}
         currentBpm={bpm}
-      />
-
-      <RoomCollaborationModal
-        isOpen={isRoomModalOpen}
-        onClose={() => setIsRoomModalOpen(false)}
-        currentRoomId={currentRoomId}
-        onJoinRoom={(id, name) => {
-          setCurrentRoomId(id);
-          setProjectTitle(name);
-        }}
-        users={users}
       />
 
       <ProjectModal

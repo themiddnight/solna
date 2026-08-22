@@ -167,9 +167,9 @@ export const SequencerView: React.FC<SequencerViewProps> = ({
     }
 
     return audioEngine.subscribeClock((step, _beat, time) => {
-      // Start aligned to the next quarter-note boundary of the shared grid
+      // Start aligned to the next bar boundary so the 16-step loop lands on beat 1
       if (!armedRef.current) {
-        if (step % 4 !== 0) return;
+        if (step % 16 !== 0) return;
         armedRef.current = true;
       }
       const stepInLoop = step % 16;

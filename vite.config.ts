@@ -8,7 +8,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@jam-band/shared': path.resolve(__dirname, './shared/src/index.ts'),
     },
   },
   server: {
