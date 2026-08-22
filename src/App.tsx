@@ -12,6 +12,7 @@ import { audioEngine } from './audio/engine';
 import type { ProjectState } from './types';
 import { useAppStore } from './store/store';
 import { useEngineSync } from './store/engineSync';
+import { useTabRouting } from './routing/useTabRouting';
 
 /**
  * The currently-open project, composed from store selectors (replaces the old
@@ -47,6 +48,9 @@ export function App() {
   // One-way bridge: store state -> audioEngine singleton (replaces the
   // engine-sync useEffect blocks that used to live here).
   useEngineSync();
+
+  // Two-way sync: URL ?tab= <-> uiSlice.activeTab (called exactly once).
+  useTabRouting();
 
   // UI slice
   const activeTab = useAppStore((s) => s.activeTab);
