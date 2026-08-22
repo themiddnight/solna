@@ -78,6 +78,7 @@ export const Knob = ({
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (disabled) return;
     e.preventDefault();
+    e.currentTarget.focus();
     e.currentTarget.setPointerCapture(e.pointerId);
     gestureRef.current = {
       axis: null,
@@ -183,7 +184,7 @@ export const Knob = ({
               strokeLinecap="round"
               pathLength={100}
               strokeDasharray={`${PROGRESS_ARC_UNITS} ${100 - PROGRESS_ARC_UNITS}`}
-              transform="rotate(-135 50 50)"
+              transform="rotate(135 50 50)"
             />
             {/* Butt caps keep the arc tip exactly on the needle. */}
             <circle
@@ -195,7 +196,7 @@ export const Knob = ({
               strokeWidth="10"
               pathLength={100}
               strokeDasharray={`${dash} ${100 - dash}`}
-              transform="rotate(-135 50 50)"
+              transform="rotate(135 50 50)"
             />
           </>
         )}
