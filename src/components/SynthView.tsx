@@ -28,6 +28,7 @@ import {
   getCategoryMeta,
 } from "../audio/synthPresets";
 import { SynthPresetLibrary } from "./SynthPresetLibrary";
+import { Knob } from "./ui/Knob";
 import { isNoteInScale, getScaleNotes, ROOTS } from "../utils/musicTheory";
 import { isTypingTarget, shortcutLabel } from "../utils/keyboard";
 import { resolveSynthControlChannel } from "../utils/synthControl";
@@ -667,77 +668,41 @@ export const SynthView = () => {
             </div>
           </div>
 
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">Cutoff Frequency</span>
-              <span className="font-mono text-pink-300">
-                {Math.round(params.filterCutoff)} Hz
-              </span>
-            </div>
-            <input
-              id="slider-filter-cutoff"
-              type="range"
-              min={50}
-              max={12000}
-              step={10}
-              value={params.filterCutoff}
-              onChange={(e) =>
-                onChangeParams({
-                  ...params,
-                  filterCutoff: parseFloat(e.target.value),
-                })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-pink-500"
-            />
-          </div>
+          <Knob
+            id="slider-filter-cutoff"
+            label="Cutoff Frequency"
+            value={params.filterCutoff}
+            min={50}
+            max={12000}
+            step={10}
+            scale="log"
+            format={(v) => `${Math.round(v)} Hz`}
+            onChange={(v) => onChangeParams({ ...params, filterCutoff: v })}
+          />
 
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">Resonance (Q)</span>
-              <span className="font-mono text-pink-300">
-                {params.filterResonance.toFixed(1)}
-              </span>
-            </div>
-            <input
-              id="slider-filter-resonance"
-              type="range"
-              min={0.1}
-              max={20}
-              step={0.1}
-              value={params.filterResonance}
-              onChange={(e) =>
-                onChangeParams({
-                  ...params,
-                  filterResonance: parseFloat(e.target.value),
-                })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-pink-500"
-            />
-          </div>
+          <Knob
+            id="slider-filter-resonance"
+            label="Resonance (Q)"
+            value={params.filterResonance}
+            min={0.1}
+            max={20}
+            step={0.1}
+            scale="linear"
+            format={(v) => v.toFixed(1)}
+            onChange={(v) => onChangeParams({ ...params, filterResonance: v })}
+          />
 
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">Env Mod Depth</span>
-              <span className="font-mono text-pink-300">
-                +{Math.round(params.filterEnvAmount)} Hz
-              </span>
-            </div>
-            <input
-              id="slider-filter-env"
-              type="range"
-              min={0}
-              max={6000}
-              step={50}
-              value={params.filterEnvAmount}
-              onChange={(e) =>
-                onChangeParams({
-                  ...params,
-                  filterEnvAmount: parseFloat(e.target.value),
-                })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-pink-500"
-            />
-          </div>
+          <Knob
+            id="slider-filter-env"
+            label="Env Mod Depth"
+            value={params.filterEnvAmount}
+            min={0}
+            max={6000}
+            step={50}
+            scale="linear"
+            format={(v) => `+${Math.round(v)} Hz`}
+            onChange={(v) => onChangeParams({ ...params, filterEnvAmount: v })}
+          />
         </div>
         {/* 3. Envelope ADSR */}
         <div
