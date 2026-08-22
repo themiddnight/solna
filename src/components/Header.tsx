@@ -1,6 +1,5 @@
 import React from 'react';
 import { 
-  Disc3, 
   Sliders, 
   Grid, 
   Sparkles, 
@@ -8,7 +7,8 @@ import {
   Music, 
   Volume2,
   Clock,
-  Radio
+  Radio,
+  type LucideIcon
 } from 'lucide-react';
 import { ViewMode } from '../types';
 import { ROOTS, SCALES } from '../utils/musicTheory';
@@ -32,12 +32,10 @@ interface HeaderProps {
 }
 
 const NAV_TABS: Array<
-  | { view: ViewMode; label: string; icon: typeof Disc3; relative?: boolean }
+  | { view: ViewMode; label: string; icon: LucideIcon; relative?: boolean }
   | 'divider'
 > = [
   { view: 'synth', label: 'Synth', icon: Sliders },
-  { view: 'drums', label: 'Drum Pads', icon: Disc3 },
-  'divider',
   { view: 'sequencer', label: 'Step Matrix', icon: Grid, relative: true },
   { view: 'chords', label: 'Chords', icon: Music, relative: true },
   'divider',

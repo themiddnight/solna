@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { SynthView } from './components/SynthView';
-import { DrumMachineView } from './components/DrumMachineView';
 import { SequencerView } from './components/SequencerView';
 import { ChordView } from './components/ChordView';
 import { EffectsRackView } from './components/EffectsRackView';
@@ -341,12 +340,11 @@ export function App() {
             onChangeChordSynthParams={setChordSynthParams}
             bassSynthParams={bassSynthParams}
             onChangeBassSynthParams={setBassSynthParams}
+            soundKit={soundKit}
+            onChangeSoundKit={setSoundKit}
             scaleRoot={scaleRoot}
             scaleType={scaleType}
           />
-        </div>
-        <div className={activeTab === 'drums' ? 'block' : 'hidden'}>
-          <DrumMachineView soundKit={soundKit} onChangeSoundKit={setSoundKit} />
         </div>
         <div className={activeTab === 'sequencer' ? 'block' : 'hidden'}>
           <SequencerView

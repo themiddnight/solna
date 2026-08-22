@@ -9,10 +9,15 @@ import {
   saveCustomPreset,
 } from '../audio/synthPresets';
 import { SynthPresetLibrary } from './SynthPresetLibrary';
+import { DrumPads } from './DrumPads';
 import { isNoteInScale, getScaleNotes, ROOTS } from '../utils/musicTheory';
 import { isTypingTarget, shortcutLabel } from '../utils/keyboard';
 import { resolveSynthControlChannel } from '../utils/synthControl';
 import type { SynthControlTarget } from '../utils/synthControl';
+import { FACTORY_BASS_PRESETS } from '../audio/bassPresets';
+
+// One unified factory list: synth, chord, and bass modes all pick from the same presets
+const ALL_FACTORY_PRESETS: SynthPresetItem[] = [...FACTORY_PRESETS, ...FACTORY_BASS_PRESETS];
 
 interface SynthViewProps {
   controlTarget: SynthControlTarget;
@@ -23,6 +28,8 @@ interface SynthViewProps {
   onChangeChordSynthParams: (newParams: SynthParams) => void;
   bassSynthParams: SynthParams;
   onChangeBassSynthParams: (newParams: SynthParams) => void;
+  soundKit: string;
+  onChangeSoundKit: (kit: string) => void;
   scaleRoot?: string;
   scaleType?: string;
 }
@@ -57,6 +64,8 @@ export const SynthView: React.FC<SynthViewProps> = ({
   onChangeChordSynthParams,
   bassSynthParams,
   onChangeBassSynthParams,
+  soundKit,
+  onChangeSoundKit,
   scaleRoot = 'C',
   scaleType = 'Major'
 }) => {
@@ -158,7 +167,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
 
   const handleDropdownChange = (name: string) => {
     // Check factory presets first
-    const factory = FACTORY_PRESETS.find((p) => p.name === name);
+    const factory = ALL_FACTORY_PRESETS.find((p) => p.name === name);
     if (factory) {
       handleSelectPreset(factory);
       return;
@@ -183,7 +192,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
     setTimeout(() => setSaveToast(null), 3000);
   };
 
-  const totalPresetsCount = FACTORY_PRESETS.length + customPresets.length;
+  const totalPresetsCount = ALL_FACTORY_PRESETS.length + customPresets.length;
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">
@@ -243,7 +252,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
               className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer pr-2 font-medium"
             >
               <optgroup label="Factory Presets">
-                {FACTORY_PRESETS.map((p) => (
+                {ALL_FACTORY_PRESETS.map((p) => (
                   <option key={p.id} value={p.name} className="bg-[#0B0D19] text-slate-200">
                     {p.name} ({p.category})
                   </option>
@@ -740,7 +749,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
       </div>
 
       {/* Interactive Piano Keyboard */}
-      <div className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-xl ${tintClass}`}>
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-xl">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
@@ -849,6 +858,9 @@ export const SynthView: React.FC<SynthViewProps> = ({
           })}
         </div>
       </div>
+
+      {/* Compact Drum Pads — two groups of four under the keyboard */}
+      <DrumPads soundKit={soundKit} onChangeSoundKit={onChangeSoundKit} />
 
       {/* Preset Library Sidebar Drawer / Modal */}
       <SynthPresetLibrary

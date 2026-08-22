@@ -1,6 +1,5 @@
 export type ViewMode = 
   | 'synth'
-  | 'drums'
   | 'sequencer'
   | 'chords'
   | 'effects';

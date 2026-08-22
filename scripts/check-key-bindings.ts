@@ -1,4 +1,4 @@
-import { DEFAULT_PADS } from '../src/components/DrumMachineView.tsx';
+import { DEFAULT_PADS } from '../src/components/DrumPads.tsx';
 import { KEYBOARD_NOTES } from '../src/components/SynthView.tsx';
 
 let failures = 0;
