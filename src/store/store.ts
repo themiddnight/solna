@@ -9,6 +9,7 @@ import { createChordsSlice } from './chordsSlice';
 import { createBassSlice } from './bassSlice';
 import { createSequencerSlice } from './sequencerSlice';
 import { createEffectsSlice } from './effectsSlice';
+import { INITIAL_EFFECTS } from './initialState';
 import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
 import { migrateLegacyPresets, removeLegacyKeys } from './migrate';
@@ -89,6 +90,56 @@ export function partializeAppState(state: AppStore): PersistedState {
   };
 }
 
+// Type-guard the parsed persisted payload before it is merged into the live
+// state. Corrupt JSON never reaches this point (createJSONStorage returns null
+// and persist falls back to defaults), but WRONG-TYPED values survive parsing
+// and would flow straight into engine setters (`bpm: "fast"` -> NaN clock,
+// string volumes -> setTargetAtTime(NaN)). Each checked key is clamped,
+// coerced, or dropped; dropped keys fall back to the freshly-built
+// currentState defaults. Only the keys listed here are checked — everything
+// else passes through unchanged.
+function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
+  if (typeof persisted !== 'object' || persisted === null) return {};
+  const sanitized = { ...(persisted as Record<string, unknown>) };
+
+  const clampFinite = (value: unknown, min: number, max: number, fallback: number): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+    return Math.min(max, Math.max(min, value));
+  };
+  const asBoolean = (value: unknown): boolean => (typeof value === 'boolean' ? value : false);
+  const asString = (value: unknown): string | undefined =>
+    typeof value === 'string' ? value : undefined;
+
+  sanitized.bpm = clampFinite(sanitized.bpm, 20, 300, 120);
+  sanitized.masterVolume = clampFinite(sanitized.masterVolume, 0, 1, 0.85);
+  sanitized.chordVolume = clampFinite(sanitized.chordVolume, 0, 1, 1.0);
+  sanitized.bassVolume = clampFinite(sanitized.bassVolume, 0, 1, 1.0);
+  sanitized.masterSequencerVolume = clampFinite(sanitized.masterSequencerVolume, 0, 1, 0.8);
+  sanitized.metronomeActive = asBoolean(sanitized.metronomeActive);
+  sanitized.chordMuted = asBoolean(sanitized.chordMuted);
+  sanitized.bassMuted = asBoolean(sanitized.bassMuted);
+  sanitized.soundKit = asString(sanitized.soundKit) ?? 'Retro Drive';
+  // Plain-object check only: a partial effects object with valid fields is
+  // preserved as-is; anything else falls back to the factory defaults.
+  sanitized.effects =
+    typeof sanitized.effects === 'object' &&
+    sanitized.effects !== null &&
+    !Array.isArray(sanitized.effects)
+      ? sanitized.effects
+      : INITIAL_EFFECTS;
+
+  // Arrays and free-form strings: drop invalid values so the currentState
+  // defaults win in the merge spread below.
+  for (const key of ['chords', 'sequencerTracks', 'customSynthPresets', 'customChordProgressions']) {
+    if (!Array.isArray(sanitized[key])) delete sanitized[key];
+  }
+  for (const key of ['scaleRoot', 'scaleType', 'projectTitle', 'chordRhythmId', 'bassPatternId']) {
+    if (typeof sanitized[key] !== 'string') delete sanitized[key];
+  }
+
+  return sanitized as unknown as Partial<AppStore>;
+}
+
 export const useAppStore = create<AppStore>()(
   persist(
     subscribeWithSelector((set, get, api) => {
@@ -114,11 +165,13 @@ export const useAppStore = create<AppStore>()(
       // before the merge (merge only fills empty arrays, so it is safe).
       migrate: (persisted, _version) =>
         migrateLegacyPresets((persisted ?? {}) as Partial<PersistedState>) as PersistedState,
-      // Runs on every hydration (also when nothing was stored): adopt any
-      // legacy presets into the freshly-built state, then drop the legacy
-      // keys once the merged state has been written under the new key.
+      // Runs on every hydration (also when nothing was stored): sanitize the
+      // parsed payload (wrong-typed persisted values must never reach the
+      // engine), adopt any legacy presets into the freshly-built state, then
+      // drop the legacy keys once the merged state has been written under the
+      // new key.
       merge: (persistedState, currentState) => {
-        const base = { ...currentState, ...(persistedState as Partial<AppStore> | undefined) };
+        const base = { ...currentState, ...sanitizePersistedState(persistedState) };
         return { ...base, ...migrateLegacyPresets(base as Partial<PersistedState>) };
       },
       // Post-hydration: the merged state (legacy presets adopted by `merge`

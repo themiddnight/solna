@@ -517,3 +517,199 @@ describe('legacy preset migration', () => {
     expect(fakeLocalStorage.getItem('murva_synth_custom_presets_v1')).toBeNull();
   });
 });
+
+describe('applyEngineSnapshot', () => {
+  test('pushes the persisted masterVolume and effects into the engine (post-init re-apply)', async () => {
+    // bun's spyOn calls through to the original by default, and the engine is
+    // already initialized by earlier tests, so suppress the real setters.
+    const setMasterVolume = spyOn(audioEngine, 'setMasterVolume').mockImplementation(() => {});
+    const updateEffects = spyOn(audioEngine, 'updateEffects').mockImplementation(() => {});
+
+    // engineSync imports the canonical (non-bust) store module, so the
+    // snapshot must be driven through that same instance.
+    const canonicalStore = (await import('./store')).useAppStore;
+    const snapshotEffects = { ...INITIAL_EFFECTS, reverbWet: 0.8 };
+    canonicalStore.setState({ masterVolume: 0.2, effects: snapshotEffects });
+
+    const { applyEngineSnapshot } = await import('./engineSync');
+    applyEngineSnapshot();
+
+    expect(setMasterVolume).toHaveBeenCalledWith(0.2);
+    expect(updateEffects).toHaveBeenCalledWith(snapshotEffects);
+  });
+});
+
+describe('persisted payload sanitization', () => {
+  test('wrong-typed persisted values hydrate to the store defaults', async () => {
+    const { useAppStore } = await getStore();
+
+    // Restore every field under test to its factory default so the fallback
+    // values below are observable.
+    useAppStore.setState({
+      bpm: 120,
+      masterVolume: 0.85,
+      chordVolume: 1.0,
+      bassVolume: 1.0,
+      masterSequencerVolume: 0.8,
+      metronomeActive: false,
+      chordMuted: false,
+      bassMuted: false,
+      soundKit: 'Retro Drive',
+      effects: INITIAL_EFFECTS,
+      scaleRoot: 'A',
+      scaleType: 'Natural Minor',
+      projectTitle: 'Cosmic Horizon Jam',
+      chordRhythmId: 'sustained',
+      bassPatternId: BASS_PATTERNS[0].id,
+    });
+    const chordsBefore = useAppStore.getState().chords;
+    const tracksBefore = useAppStore.getState().sequencerTracks;
+    const presetsBefore = useAppStore.getState().customSynthPresets;
+    const progressionsBefore = useAppStore.getState().customChordProgressions;
+
+    // Parseable but wrong-typed payload: JSON.parse accepts all of this.
+    fakeLocalStorage.setItem(
+      'murva_project_state_v1',
+      JSON.stringify({
+        version: 1,
+        state: {
+          bpm: 'fast',
+          masterVolume: 'loud',
+          chordVolume: -5,
+          bassVolume: 2,
+          masterSequencerVolume: null,
+          metronomeActive: 'yes',
+          chordMuted: 1,
+          bassMuted: null,
+          soundKit: 42,
+          effects: 42,
+          chords: 'not-an-array',
+          sequencerTracks: 7,
+          customSynthPresets: { id: 'x' },
+          customChordProgressions: 'nope',
+          scaleRoot: 42,
+          scaleType: true,
+          projectTitle: null,
+          chordRhythmId: 0,
+          bassPatternId: {},
+        },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const s = useAppStore.getState();
+    expect(s.bpm).toBe(120);
+    expect(s.masterVolume).toBe(0.85);
+    expect(s.chordVolume).toBe(0); // clamped into [0, 1]
+    expect(s.bassVolume).toBe(1); // clamped into [0, 1]
+    expect(s.masterSequencerVolume).toBe(0.8);
+    expect(s.metronomeActive).toBe(false);
+    expect(s.chordMuted).toBe(false);
+    expect(s.bassMuted).toBe(false);
+    expect(s.soundKit).toBe('Retro Drive');
+    expect(s.effects).toEqual(INITIAL_EFFECTS);
+    expect(s.scaleRoot).toBe('A');
+    expect(s.scaleType).toBe('Natural Minor');
+    expect(s.projectTitle).toBe('Cosmic Horizon Jam');
+    expect(s.chordRhythmId).toBe('sustained');
+    expect(s.bassPatternId).toBe(BASS_PATTERNS[0].id);
+    // Invalid arrays are dropped, leaving the pre-hydration state untouched.
+    expect(s.chords).toEqual(chordsBefore);
+    expect(s.sequencerTracks).toEqual(tracksBefore);
+    expect(s.customSynthPresets).toEqual(presetsBefore);
+    expect(s.customChordProgressions).toEqual(progressionsBefore);
+  });
+
+  test('valid persisted values pass through; out-of-range numbers are clamped', async () => {
+    const { useAppStore } = await getStore();
+    const partialEffects = { reverbWet: 0.9 };
+
+    useAppStore.setState({
+      bpm: 120,
+      masterVolume: 0.85,
+      chordVolume: 1.0,
+      bassVolume: 1.0,
+      masterSequencerVolume: 0.8,
+      metronomeActive: false,
+      chordMuted: false,
+      bassMuted: false,
+      soundKit: 'Retro Drive',
+      effects: INITIAL_EFFECTS,
+      scaleRoot: 'A',
+      scaleType: 'Natural Minor',
+      projectTitle: 'Cosmic Horizon Jam',
+      chordRhythmId: 'sustained',
+      bassPatternId: BASS_PATTERNS[0].id,
+      chords: [],
+      sequencerTracks: [],
+      customSynthPresets: [],
+      customChordProgressions: [],
+    });
+
+    fakeLocalStorage.setItem(
+      'murva_project_state_v1',
+      JSON.stringify({
+        version: 1,
+        state: {
+          bpm: 500,
+          masterVolume: 2,
+          chordVolume: -1,
+          bassVolume: 0.5,
+          masterSequencerVolume: 0.1,
+          metronomeActive: true,
+          chordMuted: true,
+          bassMuted: true,
+          soundKit: 'Deep Dub',
+          effects: partialEffects,
+          chords: [{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] }],
+          sequencerTracks: [],
+          customSynthPresets: [],
+          customChordProgressions: [],
+          scaleRoot: 'D',
+          scaleType: 'Major',
+          projectTitle: 'My Project',
+          chordRhythmId: 'stabs',
+          bassPatternId: 'bass-1',
+        },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const s = useAppStore.getState();
+    expect(s.bpm).toBe(300); // clamped into [20, 300]
+    expect(s.masterVolume).toBe(1); // clamped into [0, 1]
+    expect(s.chordVolume).toBe(0); // clamped into [0, 1]
+    expect(s.bassVolume).toBe(0.5);
+    expect(s.masterSequencerVolume).toBe(0.1);
+    expect(s.metronomeActive).toBe(true);
+    expect(s.chordMuted).toBe(true);
+    expect(s.bassMuted).toBe(true);
+    expect(s.soundKit).toBe('Deep Dub');
+    expect(s.effects).toEqual(partialEffects);
+    expect(s.chords).toEqual([{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] }]);
+    expect(s.sequencerTracks).toEqual([]);
+    expect(s.customSynthPresets).toEqual([]);
+    expect(s.customChordProgressions).toEqual([]);
+    expect(s.scaleRoot).toBe('D');
+    expect(s.scaleType).toBe('Major');
+    expect(s.projectTitle).toBe('My Project');
+    expect(s.chordRhythmId).toBe('stabs');
+    expect(s.bassPatternId).toBe('bass-1');
+  });
+
+  test('corrupt JSON in the legacy preset keys is ignored without crashing', async () => {
+    const { useAppStore } = await getStore();
+
+    useAppStore.setState({ customSynthPresets: [], customChordProgressions: [] });
+    useAppStore.persist.clearStorage();
+    fakeLocalStorage.setItem('murva_synth_custom_presets_v1', '{not json!!');
+    fakeLocalStorage.setItem('murva_chord_custom_progressions_v1', '[unclosed');
+
+    await useAppStore.persist.rehydrate();
+
+    expect(useAppStore.getState().customSynthPresets).toEqual([]);
+    expect(useAppStore.getState().customChordProgressions).toEqual([]);
+    // Rehydration still ran to completion and wrote the merged state back.
+    expect(fakeLocalStorage.getItem('murva_project_state_v1')).not.toBeNull();
+  });
+});

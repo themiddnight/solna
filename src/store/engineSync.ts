@@ -62,3 +62,17 @@ export function useEngineSync(): void {
     audioEngine.updateSynthParams(bassSynthParams, 'bass');
   }, [synthParams, chordSynthParams, bassSynthParams]);
 }
+
+/**
+ * Push the persisted audio-relevant snapshot into the engine. Called once from
+ * the app's first-user-interaction handler, right after `audioEngine.init()`:
+ * setMasterVolume / updateEffects are no-ops before the AudioContext exists
+ * (engine.ts), so the values hydrated from storage must be re-applied once the
+ * engine is live. Live changes keep flowing through useEngineSync's per-slice
+ * effects — this only covers the one-shot post-init gap.
+ */
+export function applyEngineSnapshot(): void {
+  const { masterVolume, effects } = useAppStore.getState();
+  audioEngine.setMasterVolume(masterVolume);
+  audioEngine.updateEffects(effects);
+}

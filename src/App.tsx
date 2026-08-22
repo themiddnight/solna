@@ -11,7 +11,7 @@ import { AudioVisualizer } from './components/AudioVisualizer';
 import { audioEngine } from './audio/engine';
 import type { ProjectState } from './types';
 import { useAppStore } from './store/store';
-import { useEngineSync } from './store/engineSync';
+import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
 import { useTabRouting } from './routing/useTabRouting';
 
 /**
@@ -81,6 +81,10 @@ export function App() {
   useEffect(() => {
     const handleFirstClick = () => {
       audioEngine.init();
+      // setMasterVolume / updateEffects were no-ops before the engine existed
+      // (engine.ts guards on this.ctx), so re-apply the persisted audio
+      // snapshot now that the engine is live.
+      applyEngineSnapshot();
       window.removeEventListener('click', handleFirstClick);
     };
     window.addEventListener('click', handleFirstClick);

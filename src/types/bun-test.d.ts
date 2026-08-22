@@ -15,6 +15,7 @@ declare module 'bun:test' {
       calls: unknown[][];
     };
     mockClear(): Mock<T>;
+    mockImplementation(fn: (...args: Parameters<T>) => ReturnType<T>): Mock<T>;
   }
 
   export function spyOn<O extends object, M extends (...args: never[]) => unknown>(
@@ -35,6 +36,7 @@ declare module 'bun:test' {
     toHaveProperty(key: string): void;
     toHaveBeenCalled(): void;
     toHaveBeenCalledTimes(expected: number): void;
+    toHaveBeenCalledWith(...expected: unknown[]): void;
   }
 
   export function expect<T>(actual: T): Matchers<T>;
