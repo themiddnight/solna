@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Sliders,
   Activity,
@@ -16,8 +16,10 @@ import {
 import { SynthParams } from "../types";
 import { audioEngine } from "../audio/engine";
 import {
-  FACTORY_PRESETS,
+  ALL_FACTORY_PRESETS,
   SynthPresetItem,
+  findPresetByName,
+  getAllSynthPresets,
   getCustomPresets,
   saveCustomPreset,
 } from "../audio/synthPresets";
@@ -27,13 +29,19 @@ import { isNoteInScale, getScaleNotes, ROOTS } from "../utils/musicTheory";
 import { isTypingTarget, shortcutLabel } from "../utils/keyboard";
 import { resolveSynthControlChannel } from "../utils/synthControl";
 import type { SynthControlTarget } from "../utils/synthControl";
-import { FACTORY_BASS_PRESETS } from "../audio/bassPresets";
 
-// One unified factory list: synth, chord, and bass modes all pick from the same presets
-const ALL_FACTORY_PRESETS: SynthPresetItem[] = [
-  ...FACTORY_PRESETS,
-  ...FACTORY_BASS_PRESETS,
-];
+// Shared per-destination accent styling for the card tint and selector buttons
+const TARGET_STYLES: Record<SynthControlTarget, { tint: string; activeBtn: string }> = {
+  synth: { tint: "", activeBtn: "bg-slate-600 text-white shadow-xs" },
+  chord: {
+    tint: "ring-1 ring-indigo-400/40 bg-gradient-to-br from-indigo-500/10 to-transparent",
+    activeBtn: "bg-indigo-600 text-white shadow-xs",
+  },
+  bass: {
+    tint: "ring-1 ring-emerald-400/40 bg-gradient-to-br from-emerald-500/10 to-transparent",
+    activeBtn: "bg-emerald-600 text-white shadow-xs",
+  },
+};
 
 interface SynthViewProps {
   controlTarget: SynthControlTarget;
@@ -85,7 +93,8 @@ export const SynthView: React.FC<SynthViewProps> = ({
   scaleRoot = "C",
   scaleType = "Major",
 }) => {
-  // Route every control (knobs, preset selects, keyboard preview) to the selected destination
+  // Route the control panel (knobs, preset selects) to the selected
+  // destination; the keyboard always plays the main synth (see handleNoteOn)
   const channel = resolveSynthControlChannel(controlTarget, {
     synth: { params: synthParams, setParams: onChangeSynthParams },
     chord: { params: chordSynthParams, setParams: onChangeChordSynthParams },
@@ -94,16 +103,11 @@ export const SynthView: React.FC<SynthViewProps> = ({
   const params = channel.params;
   const onChangeParams = channel.setParams;
 
-  // Card tint marking which destination the controls are editing
-  const tintClass =
-    controlTarget === "chord"
-      ? "ring-1 ring-indigo-400/40 bg-gradient-to-br from-indigo-500/10 to-transparent"
-      : controlTarget === "bass"
-        ? "ring-1 ring-emerald-400/40 bg-gradient-to-br from-emerald-500/10 to-transparent"
-        : "";
+  const tintClass = TARGET_STYLES[controlTarget].tint;
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [customPresets, setCustomPresets] = useState<SynthPresetItem[]>([]);
+  const allPresets = useMemo(() => getAllSynthPresets(customPresets), [customPresets]);
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [quickSaveName, setQuickSaveName] = useState<string>("");
   const [saveToast, setSaveToast] = useState<string | null>(null);
@@ -199,17 +203,8 @@ export const SynthView: React.FC<SynthViewProps> = ({
   };
 
   const handleDropdownChange = (name: string) => {
-    // Check factory presets first
-    const factory = ALL_FACTORY_PRESETS.find((p) => p.name === name);
-    if (factory) {
-      handleSelectPreset(factory);
-      return;
-    }
-    // Check custom presets
-    const custom = customPresets.find((p) => p.name === name);
-    if (custom) {
-      handleSelectPreset(custom);
-    }
+    const preset = findPresetByName(name, allPresets);
+    if (preset) handleSelectPreset(preset);
   };
 
   const handleQuickSaveSubmit = (e: React.FormEvent) => {
@@ -225,7 +220,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
     setTimeout(() => setSaveToast(null), 3000);
   };
 
-  const totalPresetsCount = ALL_FACTORY_PRESETS.length + customPresets.length;
+  const totalPresetsCount = allPresets.length;
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">
@@ -259,11 +254,7 @@ export const SynthView: React.FC<SynthViewProps> = ({
               onClick={() => onChangeControlTarget(target)}
               className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
                 controlTarget === target
-                  ? target === "chord"
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : target === "bass"
-                      ? "bg-emerald-600 text-white shadow-xs"
-                      : "bg-slate-600 text-white shadow-xs"
+                  ? TARGET_STYLES[target].activeBtn
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >

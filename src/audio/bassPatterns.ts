@@ -128,6 +128,10 @@ export function resolveBassSteps(
   return events;
 }
 
+export function isApproachToken(token: BassNoteToken): boolean {
+  return token.startsWith('approach');
+}
+
 export const BASS_PATTERNS: BassPattern[] = [
   {
     id: 'classic-walk',

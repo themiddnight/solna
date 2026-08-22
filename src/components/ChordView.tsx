@@ -37,6 +37,7 @@ import {
   BASS_PATTERNS,
   BASS_STYLE_GROUPS,
   BassPattern,
+  isApproachToken,
   resolveBassSteps,
 } from "../audio/bassPatterns";
 import {
@@ -420,6 +421,44 @@ export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
   },
 ];
 
+type BarInvariantEvent = {
+  noteName: string;
+  velocity: number;
+  timeOffset: number;
+  hold: number;
+  lastBarOnly?: boolean;
+};
+
+// Schedules one precomputed, bar-invariant event set at the start of each bar
+function scheduleBarInvariantEvents(
+  events: BarInvariantEvent[],
+  params: SynthParams,
+  source: string,
+  startTime: number,
+  barDur: number,
+  totalBars: number,
+): void {
+  for (let bar = 0; bar < totalBars; bar++) {
+    const barStart = startTime + bar * barDur;
+    const isLastBar = bar === totalBars - 1;
+    for (const ev of events) {
+      if (!isLastBar && ev.lastBarOnly) continue;
+      audioEngine.triggerSynthNoteOn(
+        ev.noteName,
+        params,
+        ev.velocity,
+        barStart + ev.timeOffset,
+        source,
+      );
+      audioEngine.triggerSynthNoteOff(
+        ev.noteName,
+        params.release,
+        barStart + ev.timeOffset + ev.hold,
+        source,
+      );
+    }
+  }
+}
 export const ChordView: React.FC<ChordViewProps> = ({
   chords,
   onChangeChords,
@@ -502,24 +541,7 @@ export const ChordView: React.FC<ChordViewProps> = ({
       });
 
       const barDur = stepDur * STEPS_PER_BAR;
-      for (let bar = 0; bar < totalBars; bar++) {
-        const barStart = startTime + bar * barDur;
-        for (const ev of events) {
-          audioEngine.triggerSynthNoteOn(
-            ev.noteName,
-            chordSynthParams,
-            ev.velocity,
-            barStart + ev.timeOffset,
-            "chord",
-          );
-          audioEngine.triggerSynthNoteOff(
-            ev.noteName,
-            chordSynthParams.release,
-            barStart + ev.timeOffset + ev.hold,
-            "chord",
-          );
-        }
-      }
+      scheduleBarInvariantEvents(events, chordSynthParams, "chord", startTime, barDur, totalBars);
     },
     [bpm, chordSynthParams, chordOctave, masterChordVelocity],
   );
@@ -528,6 +550,9 @@ export const ChordView: React.FC<ChordViewProps> = ({
     (chord: ChordItem, startTime: number, pattern: BassPattern) => {
       audioEngine.init();
       const chordIdx = Math.max(0, chords.indexOf(chord));
+      // Events are bar-invariant (the clock advances by barDur per bar); schedule
+      // the resolved set at each bar's start. Approach tokens lead into the NEXT
+      // chord, so they only play on the last bar.
       const events = resolveBassSteps(
         pattern,
         chords,
@@ -536,33 +561,17 @@ export const ChordView: React.FC<ChordViewProps> = ({
         scaleRoot,
         scaleType,
         bpm,
-      );
+      ).map((ev) => ({
+        noteName: ev.noteName,
+        velocity: ev.velocity,
+        timeOffset: ev.timeOffsetSec,
+        hold: ev.holdSec,
+        lastBarOnly: isApproachToken(ev.token),
+      }));
       const stepDur = sixteenthNoteMs(bpm) / 1000;
       const barDur = stepDur * STEPS_PER_BAR;
       const totalBars = chord.bars || 1;
-      // Events are bar-invariant (the clock advances by barDur per bar); schedule
-      // the resolved set at each bar's start.
-      for (let bar = 0; bar < totalBars; bar++) {
-        const barStart = startTime + bar * barDur;
-        const isLastBar = bar === totalBars - 1;
-        for (const ev of events) {
-          // Approach tokens lead into the NEXT chord — only play them on the last bar.
-          if (!isLastBar && ev.token.startsWith("approach")) continue;
-          audioEngine.triggerSynthNoteOn(
-            ev.noteName,
-            bassSynthParams,
-            ev.velocity,
-            barStart + ev.timeOffsetSec,
-            "bass",
-          );
-          audioEngine.triggerSynthNoteOff(
-            ev.noteName,
-            bassSynthParams.release,
-            barStart + ev.timeOffsetSec + ev.holdSec,
-            "bass",
-          );
-        }
-      }
+      scheduleBarInvariantEvents(events, bassSynthParams, "bass", startTime, barDur, totalBars);
     },
     [chords, bassOctave, scaleRoot, scaleType, bpm, bassSynthParams],
   );
@@ -928,10 +937,10 @@ export const ChordView: React.FC<ChordViewProps> = ({
             id="select-chord-sound-preset"
             value={chordSynthParams.preset ?? ""}
             onChange={(e) => {
-              const preset = findPresetByName(e.target.value, [
-                ...FACTORY_PRESETS,
-                ...customPresets,
-              ]);
+              const preset = findPresetByName(
+                e.target.value,
+                getAllSynthPresets(customPresets),
+              );
               if (!preset) return;
               onChangeChordSynthParams({
                 ...chordSynthParams,

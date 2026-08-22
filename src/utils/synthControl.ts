@@ -11,12 +11,6 @@ export function resolveSynthControlChannel(
   target: SynthControlTarget,
   channels: { synth: SynthParamChannel; chord: SynthParamChannel; bass: SynthParamChannel }
 ): SynthParamChannel {
-  switch (target) {
-    case 'chord':
-      return channels.chord;
-    case 'bass':
-      return channels.bass;
-    default:
-      return channels.synth;
-  }
+  // Unknown runtime values (e.g. a persisted target predating this union) fall back to synth
+  return channels[target] ?? channels.synth;
 }

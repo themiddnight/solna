@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Sparkles,
   Bookmark,
@@ -51,7 +51,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
     setCustomPresets(getCustomPresets());
   }, [isOpen]);
 
-  const allPresets: SynthPresetItem[] = getAllSynthPresets(customPresets);
+  const allPresets = useMemo(() => getAllSynthPresets(customPresets), [customPresets]);
 
   const categories = ['All', 'User', 'Lead', 'Bass', 'Pad', 'Keys', 'Pluck', 'Brass', 'FX'];
 

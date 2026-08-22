@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Disc3, Volume2, Sparkles } from 'lucide-react';
 import { audioEngine } from '../audio/engine';
 import { DRUM_KITS } from '../audio/drumKits';
@@ -43,7 +43,7 @@ export const DrumPads: React.FC<{ soundKit: string; onChangeSoundKit: (kit: stri
   }, [pads, triggerPad]);
 
   // Two groups of four, arranged in one row
-  const groups = [pads.slice(0, 4), pads.slice(4)];
+  const groups = useMemo(() => [pads.slice(0, 4), pads.slice(4)], [pads]);
 
   return (
     <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-xl">

@@ -194,7 +194,8 @@ export function App() {
   const [synthParams, setSynthParams] = useState<SynthParams>(INITIAL_SYNTH_PARAMS);
   // Chord mode keeps its own sound: a preset-driven param set, editable from the synth page
   const [chordSynthParams, setChordSynthParams] = useState<SynthParams>(INITIAL_SYNTH_PARAMS);
-  // Which param set the synth page controls (knobs, presets, keyboard preview all follow this)
+  // Which param set the synth page controls (knobs and preset selects follow
+  // this; the keyboard always plays the main synth)
   const [controlTarget, setControlTarget] = useState<SynthControlTarget>('synth');
   const [chordRhythmId, setChordRhythmId] = useState<string>('sustained');
   const [chordOctave, setChordOctave] = useState<number>(4);
@@ -206,12 +207,17 @@ export function App() {
   const [chordMuted, setChordMuted] = useState<boolean>(false);
   const [bassMuted, setBassMuted] = useState<boolean>(false);
 
-  // Push param tweaks into sounding voices per source
+  // Push param tweaks into sounding voices — one effect per source so a change
+  // to one param set re-shapes only that source's voices.
+  useEffect(() => {
+    audioEngine.updateSynthParams(synthParams, 'synth');
+  }, [synthParams]);
   useEffect(() => {
     audioEngine.updateSynthParams(chordSynthParams, 'chord');
-    audioEngine.updateSynthParams(synthParams, 'synth');
+  }, [chordSynthParams]);
+  useEffect(() => {
     audioEngine.updateSynthParams(bassSynthParams, 'bass');
-  }, [synthParams, chordSynthParams, bassSynthParams]);
+  }, [bassSynthParams]);
 
   // Per-layer mutes live on the engine's source buses: scheduling keeps running,
   // the bus gain decides audibility (instant, click-free).

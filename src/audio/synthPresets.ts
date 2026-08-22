@@ -550,8 +550,13 @@ export function deleteCustomPreset(id: string): SynthPresetItem[] {
   return updated;
 }
 
+export const ALL_FACTORY_PRESETS: SynthPresetItem[] = [
+  ...FACTORY_PRESETS,
+  ...FACTORY_BASS_PRESETS,
+];
+
 export function getAllSynthPresets(custom: SynthPresetItem[]): SynthPresetItem[] {
-  return [...custom, ...FACTORY_PRESETS, ...FACTORY_BASS_PRESETS];
+  return [...custom, ...ALL_FACTORY_PRESETS];
 }
 
 export function findPresetByName(name: string, presets: SynthPresetItem[]): SynthPresetItem | undefined {

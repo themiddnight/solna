@@ -302,14 +302,12 @@ class AudioEngine {
     }
 
     // Stop an existing live voice of the same note. Skipped when the existing
-    // voice already has its release planned (pre-scheduled pattern hits):
-    // re-releasing at scheduling time would truncate its envelope. Bass is
-    // handled by the mono kill above.
-    if (source !== 'bass') {
-      const existing = this.activeVoices.get(`${source}:${noteName}`);
-      if (!existing?.releaseScheduledAt) {
-        this.triggerSynthNoteOff(noteName, 0.3, undefined, source);
-      }
+    // voice already has its release planned (pre-scheduled pattern hits or the
+    // bass mono kill above): re-releasing at scheduling time would truncate
+    // its envelope.
+    const existing = this.activeVoices.get(`${source}:${noteName}`);
+    if (!existing?.releaseScheduledAt) {
+      this.triggerSynthNoteOff(noteName, 0.3, undefined, source);
     }
 
     // Primary Oscillator
