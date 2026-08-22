@@ -29,6 +29,7 @@
 ```ts
 export type KnobScale = 'linear' | 'log';
 export type KnobSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+export type KnobIndicator = 'progress' | 'none' | 'full';
 
 export interface KnobProps {
   value: number;
@@ -40,6 +41,8 @@ export interface KnobProps {
   size?: KnobSize;         // default 'md'
   label?: string;
   format?: (v: number) => string;  // default: String(v)
+  indicator?: KnobIndicator; // default 'progress' — วงแหวนแสดงความคืบหน้าตามเข็ม
+  detent?: number;           // ค่าที่วาดขีด notch; undefined = ไม่มี (visual only ไม่ snap)
   disabled?: boolean;
   id?: string;
   className?: string;
@@ -48,6 +51,11 @@ export interface KnobProps {
 
 - controlled เสมอ ไม่มี uncontrolled mode (YAGNI)
 - `scale: 'log'` ต้องใช้กับ `min > 0`; ถ้า `min <= 0` → fallback เป็น linear
+- `indicator`: `'none'` = วงบางสม่ำเสมอไม่มีส่วนที่เข้มตามเข็ม; `'full'` = วงหนา static เต็มวง;
+  ใช้กับ balance/pan (ตรงกลาง = 0) เช่น `<Knob indicator="none" detent={0} min={-1} max={1}>`
+- `detent`: ขีด notch ที่มุมของค่านั้น (valueToT + angleForT) — pan ได้ขีดที่ 12 น. โดยอัตโนมัติ
+  (0 = กลาง range); volume dB วาง `detent={0}` แล้วขีดไปอยู่ที่มุมของ 0dB ตาม scale จริง;
+  ค่านอก [min, max] → ไม่วาดขีด; visual only ไม่ snap ค่า
 - ตัวอย่างการผูก store: `onChange={(v) => onChangeParams({ ...params, detune: v })}` (ไม่ต้อง parseFloat)
 
 ## 4. พฤติกรรม
@@ -80,7 +88,9 @@ export interface KnobProps {
 - `<svg viewBox="0 0 100 100">` ต่อ knob: วงแหวน border + notch + **progress arc** + needle group + จุดกลาง
 - **Invariant: เข็มกับปลาย progress arc ใช้ `angleForT` ตัวเดียวกัน** — คำนวณจากค่า `value` เดียว
   ปลาย arc ชี้ตรงกับเข็มและค่าที่แสดงเสมอ (มี test ครอบ) ความหนา stroke ของ arc เท่ากับ border
-- Progress arc = ส่วนโค้งจากตำแหน่ง min (−135°) กวาดตามเข็มนาฬิกาถึงมุมปัจจุบัน สีเดียวกับเข็ม
+- Progress arc = ส่วนโค้งจากตำแหน่ง min (−135°) กวาดตามเข็มนาฬิกาถึงมุมปัจจุบัน สีเดียวกับเข็ม;
+  แสดงตาม `indicator`: `'progress'` (default) / `'none'` (ไม่วาด) / `'full'` (วงหนาเต็มวง static)
+- Detent notch: ขีดสั้นบนวงแหวนที่มุม `angleForT(valueToT(detent, ...))` — ข้ามเมื่อ detent นอก [min, max]
 - Needle หมุนด้วย CSS `transform: rotate()` + `transform-origin` กลาง; สี `fill="currentColor"`
   default `text-[#877dca]` (จาก design) override ได้ผ่าน `className`
 - ขนาดตาม Figma: xs 22 / sm 36 / md 48 (default) / lg 60 / xl 72 px; สัดส่วนเข็ม/จุดกลาง scale ตาม
@@ -95,6 +105,7 @@ export interface KnobProps {
   - linear map roundtrip (value → t → value)
   - log map roundtrip + fallback linear เมื่อ min ≤ 0
   - `angleForT`: 0 → −135°, 0.5 → 0°, 1 → +135° (เข็ม = ปลาย progress arc)
+  - `detentAngle`: ค่าใน range → มุมถูกต้อง; ค่านอก [min, max] → null (ไม่วาดขีด)
 - Component ไม่มี test infra (repo ไม่มี @testing-library) — `tsc --noEmit` + เช็คในเบราว์เซอร์
 
 ## 7. Migration (เฟสแรก)
