@@ -294,7 +294,7 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0C17] text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white relative overflow-hidden">
+    <div className="h-dvh bg-[#0A0C17] text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white relative overflow-hidden">
       {/* Real-time Atmospheric Background Frequency Wave Visualizer */}
       <div className="absolute inset-0 pointer-events-none z-0 opacity-25 overflow-hidden">
         <AudioVisualizer
@@ -329,7 +329,7 @@ export function App() {
       />
 
       {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity */}
-      <main className="flex-1 pb-0 relative">
+      <main className="flex-1 min-h-0 relative overflow-y-auto">
         <div className={activeTab === 'synth' ? 'block' : 'hidden'}>
           <SynthView
             controlTarget={controlTarget}

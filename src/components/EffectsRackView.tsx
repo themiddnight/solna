@@ -1,7 +1,7 @@
-import React from 'react';
-import { Sliders, Waves, Activity, Sparkles } from 'lucide-react';
-import { MasterEffects } from '../types';
-import { audioEngine } from '../audio/engine';
+import React from "react";
+import { Sliders, Waves, Activity, Sparkles } from "lucide-react";
+import { MasterEffects } from "../types";
+import { audioEngine } from "../audio/engine";
 
 interface EffectsRackViewProps {
   effects: MasterEffects;
@@ -29,9 +29,6 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
           <div>
             <h2 className="font-bold text-base text-slate-100 flex items-center gap-2">
               Studio Master Effects Rack
-              <span className="text-[11px] font-mono font-normal text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
-                Analog Modeling
-              </span>
             </h2>
           </div>
         </div>
@@ -46,13 +43,17 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
               <Waves className="w-3.5 h-3.5 text-cyan-400" />
               1. Space Reverb
             </span>
-            <span className="text-[10px] text-cyan-400 font-mono">CONVOLUTION</span>
+            <span className="text-[10px] text-cyan-400 font-mono">
+              CONVOLUTION
+            </span>
           </div>
 
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">Wet / Dry Mix</span>
-              <span className="font-mono text-cyan-300">{(effects.reverbWet * 100).toFixed(0)}%</span>
+              <span className="font-mono text-cyan-300">
+                {(effects.reverbWet * 100).toFixed(0)}%
+              </span>
             </div>
             <input
               id="slider-reverb-wet"
@@ -61,7 +62,9 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
               max={1}
               step={0.01}
               value={effects.reverbWet}
-              onChange={(e) => updateFx({ reverbWet: parseFloat(e.target.value) })}
+              onChange={(e) =>
+                updateFx({ reverbWet: parseFloat(e.target.value) })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-cyan-500"
             />
           </div>
@@ -69,7 +72,9 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">Decay Time</span>
-              <span className="font-mono text-cyan-300">{effects.reverbDecay.toFixed(1)}s</span>
+              <span className="font-mono text-cyan-300">
+                {effects.reverbDecay.toFixed(1)}s
+              </span>
             </div>
             <input
               id="slider-reverb-decay"
@@ -78,7 +83,9 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
               max={6.0}
               step={0.1}
               value={effects.reverbDecay}
-              onChange={(e) => updateFx({ reverbDecay: parseFloat(e.target.value) })}
+              onChange={(e) =>
+                updateFx({ reverbDecay: parseFloat(e.target.value) })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-cyan-500"
             />
           </div>
@@ -91,13 +98,17 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
               <Activity className="w-3.5 h-3.5 text-indigo-400" />
               2. Stereo Echo Delay
             </span>
-            <span className="text-[10px] text-indigo-400 font-mono">TAPE ECHO</span>
+            <span className="text-[10px] text-indigo-400 font-mono">
+              TAPE ECHO
+            </span>
           </div>
 
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">Wet / Dry Mix</span>
-              <span className="font-mono text-indigo-300">{(effects.delayWet * 100).toFixed(0)}%</span>
+              <span className="font-mono text-indigo-300">
+                {(effects.delayWet * 100).toFixed(0)}%
+              </span>
             </div>
             <input
               id="slider-delay-wet"
@@ -106,7 +117,9 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
               max={1}
               step={0.01}
               value={effects.delayWet}
-              onChange={(e) => updateFx({ delayWet: parseFloat(e.target.value) })}
+              onChange={(e) =>
+                updateFx({ delayWet: parseFloat(e.target.value) })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer"
             />
           </div>
@@ -114,7 +127,9 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">Feedback Repeats</span>
-              <span className="font-mono text-indigo-300">{(effects.delayFeedback * 100).toFixed(0)}%</span>
+              <span className="font-mono text-indigo-300">
+                {(effects.delayFeedback * 100).toFixed(0)}%
+              </span>
             </div>
             <input
               id="slider-delay-feedback"
@@ -123,7 +138,9 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
               max={0.9}
               step={0.01}
               value={effects.delayFeedback}
-              onChange={(e) => updateFx({ delayFeedback: parseFloat(e.target.value) })}
+              onChange={(e) =>
+                updateFx({ delayFeedback: parseFloat(e.target.value) })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer"
             />
           </div>
@@ -136,13 +153,17 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
               3. Tube Saturation
             </span>
-            <span className="text-[10px] text-amber-400 font-mono">OVERDRIVE</span>
+            <span className="text-[10px] text-amber-400 font-mono">
+              OVERDRIVE
+            </span>
           </div>
 
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">Drive / Crunch</span>
-              <span className="font-mono text-amber-300">{(effects.distortionWet * 100).toFixed(0)}%</span>
+              <span className="font-mono text-amber-300">
+                {(effects.distortionWet * 100).toFixed(0)}%
+              </span>
             </div>
             <input
               id="slider-distortion-wet"
@@ -151,7 +172,9 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
               max={1}
               step={0.01}
               value={effects.distortionWet}
-              onChange={(e) => updateFx({ distortionWet: parseFloat(e.target.value) })}
+              onChange={(e) =>
+                updateFx({ distortionWet: parseFloat(e.target.value) })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-amber-500"
             />
           </div>
@@ -164,50 +187,70 @@ export const EffectsRackView: React.FC<EffectsRackViewProps> = ({
               <Sliders className="w-3.5 h-3.5 text-emerald-400" />
               4. 3-Band Studio EQ
             </span>
-            <span className="text-[10px] text-emerald-400 font-mono">PARAMETRIC</span>
+            <span className="text-[10px] text-emerald-400 font-mono">
+              PARAMETRIC
+            </span>
           </div>
 
           <div className="grid grid-cols-3 gap-2 text-center">
             <div>
-              <span className="text-[10px] text-slate-400 block font-mono">LOW</span>
+              <span className="text-[10px] text-slate-400 block font-mono">
+                LOW
+              </span>
               <input
                 id="slider-eq-low"
                 type="range"
                 min={-15}
                 max={15}
                 value={effects.eqLow}
-                onChange={(e) => updateFx({ eqLow: parseInt(e.target.value, 10) })}
+                onChange={(e) =>
+                  updateFx({ eqLow: parseInt(e.target.value, 10) })
+                }
                 className="h-20 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1"
               />
-              <span className="text-[10px] font-mono text-emerald-300 block">{effects.eqLow > 0 ? `+${effects.eqLow}` : effects.eqLow}dB</span>
+              <span className="text-[10px] font-mono text-emerald-300 block">
+                {effects.eqLow > 0 ? `+${effects.eqLow}` : effects.eqLow}dB
+              </span>
             </div>
 
             <div>
-              <span className="text-[10px] text-slate-400 block font-mono">MID</span>
+              <span className="text-[10px] text-slate-400 block font-mono">
+                MID
+              </span>
               <input
                 id="slider-eq-mid"
                 type="range"
                 min={-15}
                 max={15}
                 value={effects.eqMid}
-                onChange={(e) => updateFx({ eqMid: parseInt(e.target.value, 10) })}
+                onChange={(e) =>
+                  updateFx({ eqMid: parseInt(e.target.value, 10) })
+                }
                 className="h-20 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1"
               />
-              <span className="text-[10px] font-mono text-emerald-300 block">{effects.eqMid > 0 ? `+${effects.eqMid}` : effects.eqMid}dB</span>
+              <span className="text-[10px] font-mono text-emerald-300 block">
+                {effects.eqMid > 0 ? `+${effects.eqMid}` : effects.eqMid}dB
+              </span>
             </div>
 
             <div>
-              <span className="text-[10px] text-slate-400 block font-mono">HIGH</span>
+              <span className="text-[10px] text-slate-400 block font-mono">
+                HIGH
+              </span>
               <input
                 id="slider-eq-high"
                 type="range"
                 min={-15}
                 max={15}
                 value={effects.eqHigh}
-                onChange={(e) => updateFx({ eqHigh: parseInt(e.target.value, 10) })}
+                onChange={(e) =>
+                  updateFx({ eqHigh: parseInt(e.target.value, 10) })
+                }
                 className="h-20 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1"
               />
-              <span className="text-[10px] font-mono text-emerald-300 block">{effects.eqHigh > 0 ? `+${effects.eqHigh}` : effects.eqHigh}dB</span>
+              <span className="text-[10px] font-mono text-emerald-300 block">
+                {effects.eqHigh > 0 ? `+${effects.eqHigh}` : effects.eqHigh}dB
+              </span>
             </div>
           </div>
         </div>

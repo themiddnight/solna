@@ -1,17 +1,17 @@
-import React from 'react';
-import { 
-  Sliders, 
-  Grid, 
-  Sparkles, 
-  FolderOpen, 
-  Music, 
+import React from "react";
+import {
+  Sliders,
+  Grid,
+  Sparkles,
+  FolderOpen,
+  Music,
   Volume2,
   Clock,
   Radio,
-  type LucideIcon
-} from 'lucide-react';
-import { ViewMode } from '../types';
-import { ROOTS, SCALES } from '../utils/musicTheory';
+  type LucideIcon,
+} from "lucide-react";
+import { ViewMode } from "../types";
+import { ROOTS, SCALES } from "../utils/musicTheory";
 
 interface HeaderProps {
   currentView: ViewMode;
@@ -33,13 +33,14 @@ interface HeaderProps {
 
 const NAV_TABS: Array<
   | { view: ViewMode; label: string; icon: LucideIcon; relative?: boolean }
-  | 'divider'
+  | "divider"
 > = [
-  { view: 'synth', label: 'Synth', icon: Sliders },
-  { view: 'sequencer', label: 'Step Matrix', icon: Grid, relative: true },
-  { view: 'chords', label: 'Chords', icon: Music, relative: true },
-  'divider',
-  { view: 'effects', label: 'Master FX', icon: Sliders },
+  { view: "synth", label: "Synth", icon: Sliders },
+  "divider",
+  { view: "sequencer", label: "Step Matrix", icon: Grid, relative: true },
+  { view: "chords", label: "Chords", icon: Music, relative: true },
+  "divider",
+  { view: "effects", label: "Master FX", icon: Sliders },
 ];
 
 export const Header: React.FC<HeaderProps> = ({
@@ -79,35 +80,39 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                <span className="truncate max-w-[140px] font-medium text-slate-300">{projectTitle}</span>
+                <span className="truncate max-w-[140px] font-medium text-slate-300">
+                  {projectTitle}
+                </span>
               </div>
             </div>
           </div>
-
         </div>
 
         {/* Primary Navigation Tabs */}
         <nav className="flex items-center p-1 rounded-lg bg-[#0B0D19] border border-[#252B48] overflow-x-auto max-w-full gap-1">
           {NAV_TABS.map((tab, index) =>
-            tab === 'divider' ? (
-              <div key={`divider-${index}`} className="w-px h-5 bg-[#252B48] mx-1 shrink-0" />
+            tab === "divider" ? (
+              <div
+                key={`divider-${index}`}
+                className="w-px h-5 bg-[#252B48] mx-1 shrink-0"
+              />
             ) : (
               <button
                 key={tab.view}
                 id={`tab-${tab.view}`}
                 onClick={() => onSelectView(tab.view)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap${
-                  tab.relative ? ' relative' : ''
+                  tab.relative ? " relative" : ""
                 } ${
                   currentView === tab.view
-                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60'
+                    ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/30"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60"
                 }`}
               >
                 <tab.icon className="w-3.5 h-3.5" />
                 <span>{tab.label}</span>
               </button>
-            )
+            ),
           )}
         </nav>
       </div>
@@ -116,9 +121,11 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center justify-between gap-3 px-3 py-1.5 bg-[#0B0D19] border border-[#252B48] rounded-xl flex-wrap">
         <div className="flex items-center gap-2">
           <Music className="w-4 h-4 text-indigo-400" />
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Studio Setup:</span>
+          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+            Studio Setup:
+          </span>
         </div>
-        
+
         <div className="flex items-center gap-3 flex-wrap">
           {/* Key & Scale Pickers */}
           <div className="flex items-center gap-1.5 bg-[#12152A] border border-[#2D355A] px-2.5 py-1 rounded-lg">
@@ -173,8 +180,8 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={onToggleMetronome}
               className={`p-1.5 rounded-md border text-xs cursor-pointer transition-colors ${
                 metronomeActive
-                  ? 'bg-indigo-600 border-indigo-500 text-white'
-                  : 'bg-[#1C213E] border-[#2D355A] text-slate-400 hover:text-slate-200'
+                  ? "bg-indigo-600 border-indigo-500 text-white"
+                  : "bg-[#1C213E] border-[#2D355A] text-slate-400 hover:text-slate-200"
               }`}
               title="Metronome"
             >
@@ -189,7 +196,9 @@ export const Header: React.FC<HeaderProps> = ({
                 max={1}
                 step={0.01}
                 value={masterVolume}
-                onChange={(e) => onChangeMasterVolume(parseFloat(e.target.value))}
+                onChange={(e) =>
+                  onChangeMasterVolume(parseFloat(e.target.value))
+                }
                 className="w-16 h-1 bg-[#252B48] rounded cursor-pointer"
                 title="Master Output Gain"
               />

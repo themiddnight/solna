@@ -1,23 +1,39 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Sliders, Activity, Zap, Volume2, Sparkles, Bookmark, Plus, Library, FolderOpen, Check, ChevronLeft, ChevronRight } from 'lucide-react';
-import { SynthParams } from '../types';
-import { audioEngine } from '../audio/engine';
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  Sliders,
+  Activity,
+  Zap,
+  Volume2,
+  Sparkles,
+  Bookmark,
+  Plus,
+  Library,
+  FolderOpen,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import { SynthParams } from "../types";
+import { audioEngine } from "../audio/engine";
 import {
   FACTORY_PRESETS,
   SynthPresetItem,
   getCustomPresets,
   saveCustomPreset,
-} from '../audio/synthPresets';
-import { SynthPresetLibrary } from './SynthPresetLibrary';
-import { DrumPads } from './DrumPads';
-import { isNoteInScale, getScaleNotes, ROOTS } from '../utils/musicTheory';
-import { isTypingTarget, shortcutLabel } from '../utils/keyboard';
-import { resolveSynthControlChannel } from '../utils/synthControl';
-import type { SynthControlTarget } from '../utils/synthControl';
-import { FACTORY_BASS_PRESETS } from '../audio/bassPresets';
+} from "../audio/synthPresets";
+import { SynthPresetLibrary } from "./SynthPresetLibrary";
+import { DrumPads } from "./DrumPads";
+import { isNoteInScale, getScaleNotes, ROOTS } from "../utils/musicTheory";
+import { isTypingTarget, shortcutLabel } from "../utils/keyboard";
+import { resolveSynthControlChannel } from "../utils/synthControl";
+import type { SynthControlTarget } from "../utils/synthControl";
+import { FACTORY_BASS_PRESETS } from "../audio/bassPresets";
 
 // One unified factory list: synth, chord, and bass modes all pick from the same presets
-const ALL_FACTORY_PRESETS: SynthPresetItem[] = [...FACTORY_PRESETS, ...FACTORY_BASS_PRESETS];
+const ALL_FACTORY_PRESETS: SynthPresetItem[] = [
+  ...FACTORY_PRESETS,
+  ...FACTORY_BASS_PRESETS,
+];
 
 interface SynthViewProps {
   controlTarget: SynthControlTarget;
@@ -35,27 +51,27 @@ interface SynthViewProps {
 }
 
 export const KEYBOARD_NOTES = [
-  { note: 'C3', label: 'C3', key: 'KeyA', isBlack: false },
-  { note: 'C#3', label: 'C#', key: 'KeyW', isBlack: true },
-  { note: 'D3', label: 'D3', key: 'KeyS', isBlack: false },
-  { note: 'D#3', label: 'D#', key: 'KeyE', isBlack: true },
-  { note: 'E3', label: 'E3', key: 'KeyD', isBlack: false },
-  { note: 'F3', label: 'F3', key: 'KeyF', isBlack: false },
-  { note: 'F#3', label: 'F#', key: 'KeyT', isBlack: true },
-  { note: 'G3', label: 'G3', key: 'KeyG', isBlack: false },
-  { note: 'G#3', label: 'G#', key: 'KeyY', isBlack: true },
-  { note: 'A3', label: 'A3', key: 'KeyH', isBlack: false },
-  { note: 'A#3', label: 'A#', key: 'KeyU', isBlack: true },
-  { note: 'B3', label: 'B3', key: 'KeyJ', isBlack: false },
-  { note: 'C4', label: 'C4', key: 'KeyK', isBlack: false },
-  { note: 'C#4', label: 'C#', key: 'KeyO', isBlack: true },
-  { note: 'D4', label: 'D4', key: 'KeyL', isBlack: false },
-  { note: 'D#4', label: 'D#', key: 'KeyP', isBlack: true },
-  { note: 'E4', label: 'E4', key: 'Semicolon', isBlack: false },
-  { note: 'F4', label: 'F4', key: 'Quote', isBlack: false },
+  { note: "C3", label: "C3", key: "KeyA", isBlack: false },
+  { note: "C#3", label: "C#", key: "KeyW", isBlack: true },
+  { note: "D3", label: "D3", key: "KeyS", isBlack: false },
+  { note: "D#3", label: "D#", key: "KeyE", isBlack: true },
+  { note: "E3", label: "E3", key: "KeyD", isBlack: false },
+  { note: "F3", label: "F3", key: "KeyF", isBlack: false },
+  { note: "F#3", label: "F#", key: "KeyT", isBlack: true },
+  { note: "G3", label: "G3", key: "KeyG", isBlack: false },
+  { note: "G#3", label: "G#", key: "KeyY", isBlack: true },
+  { note: "A3", label: "A3", key: "KeyH", isBlack: false },
+  { note: "A#3", label: "A#", key: "KeyU", isBlack: true },
+  { note: "B3", label: "B3", key: "KeyJ", isBlack: false },
+  { note: "C4", label: "C4", key: "KeyK", isBlack: false },
+  { note: "C#4", label: "C#", key: "KeyO", isBlack: true },
+  { note: "D4", label: "D4", key: "KeyL", isBlack: false },
+  { note: "D#4", label: "D#", key: "KeyP", isBlack: true },
+  { note: "E4", label: "E4", key: "Semicolon", isBlack: false },
+  { note: "F4", label: "F4", key: "Quote", isBlack: false },
 ];
 
-export const SynthView: React.FC<SynthViewProps> = ({ 
+export const SynthView: React.FC<SynthViewProps> = ({
   controlTarget,
   onChangeControlTarget,
   synthParams,
@@ -66,8 +82,8 @@ export const SynthView: React.FC<SynthViewProps> = ({
   onChangeBassSynthParams,
   soundKit,
   onChangeSoundKit,
-  scaleRoot = 'C',
-  scaleType = 'Major'
+  scaleRoot = "C",
+  scaleType = "Major",
 }) => {
   // Route every control (knobs, preset selects, keyboard preview) to the selected destination
   const channel = resolveSynthControlChannel(controlTarget, {
@@ -80,18 +96,20 @@ export const SynthView: React.FC<SynthViewProps> = ({
 
   // Card tint marking which destination the controls are editing
   const tintClass =
-    controlTarget === 'chord'
-      ? 'ring-1 ring-indigo-400/40 bg-gradient-to-br from-indigo-500/10 to-transparent'
-      : controlTarget === 'bass'
-        ? 'ring-1 ring-emerald-400/40 bg-gradient-to-br from-emerald-500/10 to-transparent'
-        : '';
+    controlTarget === "chord"
+      ? "ring-1 ring-indigo-400/40 bg-gradient-to-br from-indigo-500/10 to-transparent"
+      : controlTarget === "bass"
+        ? "ring-1 ring-emerald-400/40 bg-gradient-to-br from-emerald-500/10 to-transparent"
+        : "";
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [customPresets, setCustomPresets] = useState<SynthPresetItem[]>([]);
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
-  const [quickSaveName, setQuickSaveName] = useState<string>('');
+  const [quickSaveName, setQuickSaveName] = useState<string>("");
   const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [keyboardMode, setKeyboardMode] = useState<'chromatic' | 'scale-locked'>('scale-locked');
+  const [keyboardMode, setKeyboardMode] = useState<
+    "chromatic" | "scale-locked"
+  >("scale-locked");
   // Keyboard display octave — independent from synth pitch octave (params.octave)
   const [keyboardOctave, setKeyboardOctave] = useState<number>(0);
 
@@ -106,30 +124,37 @@ export const SynthView: React.FC<SynthViewProps> = ({
 
   // The keyboard always plays the main synth, regardless of which
   // destination the control panel is editing.
-  const handleNoteOn = useCallback((note: string) => {
-    audioEngine.init();
-    // Pass params as-is so params.octave (synth pitch offset) applies on top of the keyboard note
-    audioEngine.triggerSynthNoteOn(note, synthParams, 1.0);
-    setActiveNotes((prev) => new Set(prev).add(note));
-  }, [synthParams]);
+  const handleNoteOn = useCallback(
+    (note: string) => {
+      audioEngine.init();
+      // Pass params as-is so params.octave (synth pitch offset) applies on top of the keyboard note
+      audioEngine.triggerSynthNoteOn(note, synthParams, 1.0);
+      setActiveNotes((prev) => new Set(prev).add(note));
+    },
+    [synthParams],
+  );
 
-  const handleNoteOff = useCallback((note: string) => {
-    audioEngine.triggerSynthNoteOff(note, synthParams.release);
-    setActiveNotes((prev) => {
-      const next = new Set(prev);
-      next.delete(note);
-      return next;
-    });
-  }, [synthParams.release]);
+  const handleNoteOff = useCallback(
+    (note: string) => {
+      audioEngine.triggerSynthNoteOff(note, synthParams.release);
+      setActiveNotes((prev) => {
+        const next = new Set(prev);
+        next.delete(note);
+        return next;
+      });
+    },
+    [synthParams.release],
+  );
 
   // QWERTY Computer Keyboard mapping — uses keyboardOctave, NOT params.octave
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;
       if (e.repeat) return;
-      const notesList = keyboardMode === 'scale-locked'
-        ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
-        : getChromaticKeyboardNotes(keyboardOctave);
+      const notesList =
+        keyboardMode === "scale-locked"
+          ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
+          : getChromaticKeyboardNotes(keyboardOctave);
       const keyObj = notesList.find((n) => n.key === e.code);
       if (keyObj) {
         handleNoteOn(keyObj.note);
@@ -138,22 +163,30 @@ export const SynthView: React.FC<SynthViewProps> = ({
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;
-      const notesList = keyboardMode === 'scale-locked'
-        ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
-        : getChromaticKeyboardNotes(keyboardOctave);
+      const notesList =
+        keyboardMode === "scale-locked"
+          ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
+          : getChromaticKeyboardNotes(keyboardOctave);
       const keyObj = notesList.find((n) => n.key === e.code);
       if (keyObj) {
         handleNoteOff(keyObj.note);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [handleNoteOn, handleNoteOff, keyboardMode, scaleRoot, scaleType, keyboardOctave]);
+  }, [
+    handleNoteOn,
+    handleNoteOff,
+    keyboardMode,
+    scaleRoot,
+    scaleType,
+    keyboardOctave,
+  ]);
 
   const handleSelectPreset = (preset: SynthPresetItem) => {
     onChangeParams({
@@ -183,10 +216,10 @@ export const SynthView: React.FC<SynthViewProps> = ({
     e.preventDefault();
     if (!quickSaveName.trim()) return;
 
-    const saved = saveCustomPreset(quickSaveName, params, 'User');
+    const saved = saveCustomPreset(quickSaveName, params, "User");
     reloadPresets();
     setIsQuickSaving(false);
-    setQuickSaveName('');
+    setQuickSaveName("");
     handleSelectPreset(saved);
     setSaveToast(`Preset "${saved.name}" saved!`);
     setTimeout(() => setSaveToast(null), 3000);
@@ -205,21 +238,20 @@ export const SynthView: React.FC<SynthViewProps> = ({
           <div>
             <h2 className="font-bold text-base text-slate-100 flex items-center gap-2">
               Analog Polyphonic Synthesizer
-              <span className="text-[11px] font-mono font-normal text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
-                16-Voice Engine
-              </span>
             </h2>
           </div>
         </div>
 
         {/* Control Destination Selector */}
         <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#2D355A] rounded-lg p-1">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold pl-1.5 pr-1">Control</span>
+          <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold pl-1.5 pr-1">
+            Control
+          </span>
           {(
             [
-              ['synth', 'Synth'],
-              ['chord', 'Chord'],
-              ['bass', 'Bass'],
+              ["synth", "Synth"],
+              ["chord", "Chord"],
+              ["bass", "Bass"],
             ] as [SynthControlTarget, string][]
           ).map(([target, label]) => (
             <button
@@ -227,12 +259,12 @@ export const SynthView: React.FC<SynthViewProps> = ({
               onClick={() => onChangeControlTarget(target)}
               className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
                 controlTarget === target
-                  ? target === 'chord'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : target === 'bass'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'bg-slate-600 text-white shadow-xs'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? target === "chord"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : target === "bass"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-slate-600 text-white shadow-xs"
+                  : "text-slate-400 hover:text-slate-200"
               }`}
             >
               {label}
@@ -253,7 +285,11 @@ export const SynthView: React.FC<SynthViewProps> = ({
             >
               <optgroup label="Factory Presets">
                 {ALL_FACTORY_PRESETS.map((p) => (
-                  <option key={p.id} value={p.name} className="bg-[#0B0D19] text-slate-200">
+                  <option
+                    key={p.id}
+                    value={p.name}
+                    className="bg-[#0B0D19] text-slate-200"
+                  >
                     {p.name} ({p.category})
                   </option>
                 ))}
@@ -261,7 +297,11 @@ export const SynthView: React.FC<SynthViewProps> = ({
               {customPresets.length > 0 && (
                 <optgroup label="My Custom Presets (LocalStorage)">
                   {customPresets.map((p) => (
-                    <option key={p.id} value={p.name} className="bg-[#0B0D19] text-purple-300">
+                    <option
+                      key={p.id}
+                      value={p.name}
+                      className="bg-[#0B0D19] text-purple-300"
+                    >
                       ★ {p.name} ({p.category})
                     </option>
                   ))}
@@ -274,7 +314,9 @@ export const SynthView: React.FC<SynthViewProps> = ({
           <button
             id="btn-quick-save-preset"
             onClick={() => {
-              setQuickSaveName(params.preset ? `${params.preset} (Custom)` : 'My Synth Patch');
+              setQuickSaveName(
+                params.preset ? `${params.preset} (Custom)` : "My Synth Patch",
+              );
               setIsQuickSaving(true);
             }}
             className="flex items-center gap-1.5 bg-[#171B36] hover:bg-[#22284C] text-slate-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[#2D355A] transition-colors shadow-xs"
@@ -315,7 +357,10 @@ export const SynthView: React.FC<SynthViewProps> = ({
             <Bookmark className="w-4 h-4 text-indigo-400" />
             <span>Save Custom Synth Preset to Browser:</span>
           </div>
-          <form onSubmit={handleQuickSaveSubmit} className="flex items-center gap-2 flex-1 max-w-md">
+          <form
+            onSubmit={handleQuickSaveSubmit}
+            className="flex items-center gap-2 flex-1 max-w-md"
+          >
             <input
               type="text"
               required
@@ -345,39 +390,49 @@ export const SynthView: React.FC<SynthViewProps> = ({
       {/* Control Panels Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. Oscillators Section */}
-        <div className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}>
+        <div
+          className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
+        >
           <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5 text-indigo-400" />
               1. Oscillators
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">OSC 1 + SUB</span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              OSC 1 + SUB
+            </span>
           </div>
 
           <div>
-            <label className="text-xs text-slate-400 block mb-1.5 font-medium">Waveform</label>
+            <label className="text-xs text-slate-400 block mb-1.5 font-medium">
+              Waveform
+            </label>
             <div className="grid grid-cols-4 gap-1">
-              {(['sawtooth', 'square', 'sine', 'triangle'] as const).map((w) => (
-                <button
-                  key={w}
-                  id={`btn-wave-${w}`}
-                  onClick={() => onChangeParams({ ...params, oscType: w })}
-                  className={`py-1 text-[11px] rounded font-semibold capitalize transition-all cursor-pointer ${
-                    params.oscType === w
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]'
-                  }`}
-                >
-                  {w.slice(0, 4)}
-                </button>
-              ))}
+              {(["sawtooth", "square", "sine", "triangle"] as const).map(
+                (w) => (
+                  <button
+                    key={w}
+                    id={`btn-wave-${w}`}
+                    onClick={() => onChangeParams({ ...params, oscType: w })}
+                    className={`py-1 text-[11px] rounded font-semibold capitalize transition-all cursor-pointer ${
+                      params.oscType === w
+                        ? "bg-indigo-600 text-white shadow-sm"
+                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                    }`}
+                  >
+                    {w.slice(0, 4)}
+                  </button>
+                ),
+              )}
             </div>
           </div>
 
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">Sub-Osc Volume</span>
-              <span className="font-mono text-indigo-300">{(params.subOscVolume * 100).toFixed(0)}%</span>
+              <span className="font-mono text-indigo-300">
+                {(params.subOscVolume * 100).toFixed(0)}%
+              </span>
             </div>
             <input
               id="slider-sub-osc"
@@ -386,7 +441,12 @@ export const SynthView: React.FC<SynthViewProps> = ({
               max={1}
               step={0.01}
               value={params.subOscVolume}
-              onChange={(e) => onChangeParams({ ...params, subOscVolume: parseFloat(e.target.value) })}
+              onChange={(e) =>
+                onChangeParams({
+                  ...params,
+                  subOscVolume: parseFloat(e.target.value),
+                })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer"
             />
           </div>
@@ -394,7 +454,9 @@ export const SynthView: React.FC<SynthViewProps> = ({
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">Detune Spread</span>
-              <span className="font-mono text-indigo-300">{params.detune} ct</span>
+              <span className="font-mono text-indigo-300">
+                {params.detune} ct
+              </span>
             </div>
             <input
               id="slider-detune"
@@ -402,7 +464,12 @@ export const SynthView: React.FC<SynthViewProps> = ({
               min={0}
               max={50}
               value={params.detune}
-              onChange={(e) => onChangeParams({ ...params, detune: parseInt(e.target.value, 10) })}
+              onChange={(e) =>
+                onChangeParams({
+                  ...params,
+                  detune: parseInt(e.target.value, 10),
+                })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer"
             />
           </div>
@@ -410,7 +477,9 @@ export const SynthView: React.FC<SynthViewProps> = ({
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">Noise Generator</span>
-              <span className="font-mono text-indigo-300">{(params.noiseVolume * 100).toFixed(0)}%</span>
+              <span className="font-mono text-indigo-300">
+                {(params.noiseVolume * 100).toFixed(0)}%
+              </span>
             </div>
             <input
               id="slider-noise"
@@ -419,37 +488,47 @@ export const SynthView: React.FC<SynthViewProps> = ({
               max={0.5}
               step={0.01}
               value={params.noiseVolume}
-              onChange={(e) => onChangeParams({ ...params, noiseVolume: parseFloat(e.target.value) })}
+              onChange={(e) =>
+                onChangeParams({
+                  ...params,
+                  noiseVolume: parseFloat(e.target.value),
+                })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer"
             />
           </div>
         </div>
-
         {/* 2. Filter Section */}
-        <div className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}>
+        <div
+          className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
+        >
           <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
               <Sliders className="w-3.5 h-3.5 text-pink-400" />
               2. VCF Filter
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">24dB/OCT</span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              24dB/OCT
+            </span>
           </div>
 
           <div>
-            <label className="text-xs text-slate-400 block mb-1.5 font-medium">Filter Type</label>
+            <label className="text-xs text-slate-400 block mb-1.5 font-medium">
+              Filter Type
+            </label>
             <div className="grid grid-cols-3 gap-1">
-              {(['lowpass', 'bandpass', 'highpass'] as const).map((t) => (
+              {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
                 <button
                   key={t}
                   id={`btn-filter-${t}`}
                   onClick={() => onChangeParams({ ...params, filterType: t })}
                   className={`py-1 text-[11px] rounded font-semibold uppercase transition-all cursor-pointer ${
                     params.filterType === t
-                      ? 'bg-pink-600 text-white shadow-sm'
-                      : 'bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]'
+                      ? "bg-pink-600 text-white shadow-sm"
+                      : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
                   }`}
                 >
-                  {t === 'lowpass' ? 'LPF' : t === 'bandpass' ? 'BPF' : 'HPF'}
+                  {t === "lowpass" ? "LPF" : t === "bandpass" ? "BPF" : "HPF"}
                 </button>
               ))}
             </div>
@@ -458,7 +537,9 @@ export const SynthView: React.FC<SynthViewProps> = ({
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">Cutoff Frequency</span>
-              <span className="font-mono text-pink-300">{Math.round(params.filterCutoff)} Hz</span>
+              <span className="font-mono text-pink-300">
+                {Math.round(params.filterCutoff)} Hz
+              </span>
             </div>
             <input
               id="slider-filter-cutoff"
@@ -467,7 +548,12 @@ export const SynthView: React.FC<SynthViewProps> = ({
               max={12000}
               step={10}
               value={params.filterCutoff}
-              onChange={(e) => onChangeParams({ ...params, filterCutoff: parseFloat(e.target.value) })}
+              onChange={(e) =>
+                onChangeParams({
+                  ...params,
+                  filterCutoff: parseFloat(e.target.value),
+                })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-pink-500"
             />
           </div>
@@ -475,7 +561,9 @@ export const SynthView: React.FC<SynthViewProps> = ({
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">Resonance (Q)</span>
-              <span className="font-mono text-pink-300">{params.filterResonance.toFixed(1)}</span>
+              <span className="font-mono text-pink-300">
+                {params.filterResonance.toFixed(1)}
+              </span>
             </div>
             <input
               id="slider-filter-resonance"
@@ -484,7 +572,12 @@ export const SynthView: React.FC<SynthViewProps> = ({
               max={20}
               step={0.1}
               value={params.filterResonance}
-              onChange={(e) => onChangeParams({ ...params, filterResonance: parseFloat(e.target.value) })}
+              onChange={(e) =>
+                onChangeParams({
+                  ...params,
+                  filterResonance: parseFloat(e.target.value),
+                })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-pink-500"
             />
           </div>
@@ -492,7 +585,9 @@ export const SynthView: React.FC<SynthViewProps> = ({
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">Env Mod Depth</span>
-              <span className="font-mono text-pink-300">+{Math.round(params.filterEnvAmount)} Hz</span>
+              <span className="font-mono text-pink-300">
+                +{Math.round(params.filterEnvAmount)} Hz
+              </span>
             </div>
             <input
               id="slider-filter-env"
@@ -501,32 +596,44 @@ export const SynthView: React.FC<SynthViewProps> = ({
               max={6000}
               step={50}
               value={params.filterEnvAmount}
-              onChange={(e) => onChangeParams({ ...params, filterEnvAmount: parseFloat(e.target.value) })}
+              onChange={(e) =>
+                onChangeParams({
+                  ...params,
+                  filterEnvAmount: parseFloat(e.target.value),
+                })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-pink-500"
             />
           </div>
         </div>
-
         {/* 3. Envelope ADSR */}
-        <div className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3 shadow-md ${tintClass}`}>
+        <div
+          className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3 shadow-md ${tintClass}`}
+        >
           <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
               <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
               3. ADSR Envelope
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">AMP + FILTER</span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              AMP + FILTER
+            </span>
           </div>
 
           {/* AMP / VCA */}
           <div>
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">AMP / VCA</span>
+              <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
+                AMP / VCA
+              </span>
               <span className="flex-1 h-px bg-[#252B48]" />
             </div>
             <div className="grid grid-cols-4 gap-2 text-center">
               {/* Attack */}
               <div>
-                <span className="text-[10px] text-slate-400 block font-mono">ATT</span>
+                <span className="text-[10px] text-slate-400 block font-mono">
+                  ATT
+                </span>
                 <input
                   id="slider-env-attack"
                   type="range"
@@ -534,15 +641,24 @@ export const SynthView: React.FC<SynthViewProps> = ({
                   max={2.0}
                   step={0.01}
                   value={params.attack}
-                  onChange={(e) => onChangeParams({ ...params, attack: parseFloat(e.target.value) })}
+                  onChange={(e) =>
+                    onChangeParams({
+                      ...params,
+                      attack: parseFloat(e.target.value),
+                    })
+                  }
                   className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-emerald-500"
                 />
-                <span className="text-[10px] font-mono text-emerald-300 block">{params.attack.toFixed(2)}s</span>
+                <span className="text-[10px] font-mono text-emerald-300 block">
+                  {params.attack.toFixed(2)}s
+                </span>
               </div>
 
               {/* Decay */}
               <div>
-                <span className="text-[10px] text-slate-400 block font-mono">DEC</span>
+                <span className="text-[10px] text-slate-400 block font-mono">
+                  DEC
+                </span>
                 <input
                   id="slider-env-decay"
                   type="range"
@@ -550,15 +666,24 @@ export const SynthView: React.FC<SynthViewProps> = ({
                   max={2.0}
                   step={0.01}
                   value={params.decay}
-                  onChange={(e) => onChangeParams({ ...params, decay: parseFloat(e.target.value) })}
+                  onChange={(e) =>
+                    onChangeParams({
+                      ...params,
+                      decay: parseFloat(e.target.value),
+                    })
+                  }
                   className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-emerald-500"
                 />
-                <span className="text-[10px] font-mono text-emerald-300 block">{params.decay.toFixed(2)}s</span>
+                <span className="text-[10px] font-mono text-emerald-300 block">
+                  {params.decay.toFixed(2)}s
+                </span>
               </div>
 
               {/* Sustain */}
               <div>
-                <span className="text-[10px] text-slate-400 block font-mono">SUS</span>
+                <span className="text-[10px] text-slate-400 block font-mono">
+                  SUS
+                </span>
                 <input
                   id="slider-env-sustain"
                   type="range"
@@ -566,15 +691,24 @@ export const SynthView: React.FC<SynthViewProps> = ({
                   max={1.0}
                   step={0.01}
                   value={params.sustain}
-                  onChange={(e) => onChangeParams({ ...params, sustain: parseFloat(e.target.value) })}
+                  onChange={(e) =>
+                    onChangeParams({
+                      ...params,
+                      sustain: parseFloat(e.target.value),
+                    })
+                  }
                   className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-emerald-500"
                 />
-                <span className="text-[10px] font-mono text-emerald-300 block">{(params.sustain * 100).toFixed(0)}%</span>
+                <span className="text-[10px] font-mono text-emerald-300 block">
+                  {(params.sustain * 100).toFixed(0)}%
+                </span>
               </div>
 
               {/* Release */}
               <div>
-                <span className="text-[10px] text-slate-400 block font-mono">REL</span>
+                <span className="text-[10px] text-slate-400 block font-mono">
+                  REL
+                </span>
                 <input
                   id="slider-env-release"
                   type="range"
@@ -582,10 +716,17 @@ export const SynthView: React.FC<SynthViewProps> = ({
                   max={3.0}
                   step={0.01}
                   value={params.release}
-                  onChange={(e) => onChangeParams({ ...params, release: parseFloat(e.target.value) })}
+                  onChange={(e) =>
+                    onChangeParams({
+                      ...params,
+                      release: parseFloat(e.target.value),
+                    })
+                  }
                   className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-emerald-500"
                 />
-                <span className="text-[10px] font-mono text-emerald-300 block">{params.release.toFixed(2)}s</span>
+                <span className="text-[10px] font-mono text-emerald-300 block">
+                  {params.release.toFixed(2)}s
+                </span>
               </div>
             </div>
           </div>
@@ -593,13 +734,17 @@ export const SynthView: React.FC<SynthViewProps> = ({
           {/* FILTER / VCF */}
           <div className="border-t border-[#252B48] pt-2.5">
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[10px] font-mono text-pink-400 uppercase tracking-wider">FILTER / VCF</span>
+              <span className="text-[10px] font-mono text-pink-400 uppercase tracking-wider">
+                FILTER / VCF
+              </span>
               <span className="flex-1 h-px bg-[#252B48]" />
             </div>
             <div className="grid grid-cols-4 gap-2 text-center">
               {/* Filter Attack */}
               <div>
-                <span className="text-[10px] text-slate-400 block font-mono">ATT</span>
+                <span className="text-[10px] text-slate-400 block font-mono">
+                  ATT
+                </span>
                 <input
                   id="slider-env-filter-attack"
                   type="range"
@@ -607,15 +752,24 @@ export const SynthView: React.FC<SynthViewProps> = ({
                   max={2.0}
                   step={0.01}
                   value={params.filterAttack}
-                  onChange={(e) => onChangeParams({ ...params, filterAttack: parseFloat(e.target.value) })}
+                  onChange={(e) =>
+                    onChangeParams({
+                      ...params,
+                      filterAttack: parseFloat(e.target.value),
+                    })
+                  }
                   className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-pink-500"
                 />
-                <span className="text-[10px] font-mono text-pink-300 block">{params.filterAttack.toFixed(2)}s</span>
+                <span className="text-[10px] font-mono text-pink-300 block">
+                  {params.filterAttack.toFixed(2)}s
+                </span>
               </div>
 
               {/* Filter Decay */}
               <div>
-                <span className="text-[10px] text-slate-400 block font-mono">DEC</span>
+                <span className="text-[10px] text-slate-400 block font-mono">
+                  DEC
+                </span>
                 <input
                   id="slider-env-filter-decay"
                   type="range"
@@ -623,15 +777,24 @@ export const SynthView: React.FC<SynthViewProps> = ({
                   max={2.0}
                   step={0.01}
                   value={params.filterDecay}
-                  onChange={(e) => onChangeParams({ ...params, filterDecay: parseFloat(e.target.value) })}
+                  onChange={(e) =>
+                    onChangeParams({
+                      ...params,
+                      filterDecay: parseFloat(e.target.value),
+                    })
+                  }
                   className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-pink-500"
                 />
-                <span className="text-[10px] font-mono text-pink-300 block">{params.filterDecay.toFixed(2)}s</span>
+                <span className="text-[10px] font-mono text-pink-300 block">
+                  {params.filterDecay.toFixed(2)}s
+                </span>
               </div>
 
               {/* Filter Sustain */}
               <div>
-                <span className="text-[10px] text-slate-400 block font-mono">SUS</span>
+                <span className="text-[10px] text-slate-400 block font-mono">
+                  SUS
+                </span>
                 <input
                   id="slider-env-filter-sustain"
                   type="range"
@@ -639,15 +802,24 @@ export const SynthView: React.FC<SynthViewProps> = ({
                   max={1.0}
                   step={0.01}
                   value={params.filterSustain}
-                  onChange={(e) => onChangeParams({ ...params, filterSustain: parseFloat(e.target.value) })}
+                  onChange={(e) =>
+                    onChangeParams({
+                      ...params,
+                      filterSustain: parseFloat(e.target.value),
+                    })
+                  }
                   className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-pink-500"
                 />
-                <span className="text-[10px] font-mono text-pink-300 block">{(params.filterSustain * 100).toFixed(0)}%</span>
+                <span className="text-[10px] font-mono text-pink-300 block">
+                  {(params.filterSustain * 100).toFixed(0)}%
+                </span>
               </div>
 
               {/* Filter Release */}
               <div>
-                <span className="text-[10px] text-slate-400 block font-mono">REL</span>
+                <span className="text-[10px] text-slate-400 block font-mono">
+                  REL
+                </span>
                 <input
                   id="slider-env-filter-release"
                   type="range"
@@ -655,35 +827,49 @@ export const SynthView: React.FC<SynthViewProps> = ({
                   max={3.0}
                   step={0.01}
                   value={params.filterRelease}
-                  onChange={(e) => onChangeParams({ ...params, filterRelease: parseFloat(e.target.value) })}
+                  onChange={(e) =>
+                    onChangeParams({
+                      ...params,
+                      filterRelease: parseFloat(e.target.value),
+                    })
+                  }
                   className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-pink-500"
                 />
-                <span className="text-[10px] font-mono text-pink-300 block">{params.filterRelease.toFixed(2)}s</span>
+                <span className="text-[10px] font-mono text-pink-300 block">
+                  {params.filterRelease.toFixed(2)}s
+                </span>
               </div>
             </div>
           </div>
-        </div>        {/* 4. LFO & Master Pitch */}
-        <div className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}>
+        </div>{" "}
+        {/* 4. LFO & Master Pitch */}
+        <div
+          className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
+        >
           <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5 text-cyan-400" />
               4. LFO & Octave
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">MODULATION</span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              MODULATION
+            </span>
           </div>
 
           <div>
-            <label className="text-xs text-slate-400 block mb-1.5 font-medium">LFO Destination</label>
+            <label className="text-xs text-slate-400 block mb-1.5 font-medium">
+              LFO Destination
+            </label>
             <div className="grid grid-cols-3 gap-1">
-              {(['cutoff', 'pitch', 'volume'] as const).map((t) => (
+              {(["cutoff", "pitch", "volume"] as const).map((t) => (
                 <button
                   key={t}
                   id={`btn-lfo-target-${t}`}
                   onClick={() => onChangeParams({ ...params, lfoTarget: t })}
                   className={`py-1 text-[11px] rounded font-semibold capitalize transition-all cursor-pointer ${
                     params.lfoTarget === t
-                      ? 'bg-cyan-600 text-white shadow-sm'
-                      : 'bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]'
+                      ? "bg-cyan-600 text-white shadow-sm"
+                      : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
                   }`}
                 >
                   {t}
@@ -695,7 +881,9 @@ export const SynthView: React.FC<SynthViewProps> = ({
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">LFO Rate</span>
-              <span className="font-mono text-cyan-300">{params.lfoRate.toFixed(1)} Hz</span>
+              <span className="font-mono text-cyan-300">
+                {params.lfoRate.toFixed(1)} Hz
+              </span>
             </div>
             <input
               id="slider-lfo-rate"
@@ -704,7 +892,12 @@ export const SynthView: React.FC<SynthViewProps> = ({
               max={20}
               step={0.1}
               value={params.lfoRate}
-              onChange={(e) => onChangeParams({ ...params, lfoRate: parseFloat(e.target.value) })}
+              onChange={(e) =>
+                onChangeParams({
+                  ...params,
+                  lfoRate: parseFloat(e.target.value),
+                })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-cyan-500"
             />
           </div>
@@ -712,7 +905,9 @@ export const SynthView: React.FC<SynthViewProps> = ({
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-slate-400">LFO Depth</span>
-              <span className="font-mono text-cyan-300">{(params.lfoDepth * 100).toFixed(0)}%</span>
+              <span className="font-mono text-cyan-300">
+                {(params.lfoDepth * 100).toFixed(0)}%
+              </span>
             </div>
             <input
               id="slider-lfo-depth"
@@ -721,7 +916,12 @@ export const SynthView: React.FC<SynthViewProps> = ({
               max={1}
               step={0.01}
               value={params.lfoDepth}
-              onChange={(e) => onChangeParams({ ...params, lfoDepth: parseFloat(e.target.value) })}
+              onChange={(e) =>
+                onChangeParams({
+                  ...params,
+                  lfoDepth: parseFloat(e.target.value),
+                })
+              }
               className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-cyan-500"
             />
           </div>
@@ -736,8 +936,8 @@ export const SynthView: React.FC<SynthViewProps> = ({
                   onClick={() => onChangeParams({ ...params, octave: oct })}
                   className={`w-6 h-6 rounded text-xs font-mono font-bold flex items-center justify-center transition-colors cursor-pointer ${
                     params.octave === oct
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-[#0B0D19] text-slate-400 hover:text-white border border-[#252B48]'
+                      ? "bg-indigo-600 text-white"
+                      : "bg-[#0B0D19] text-slate-400 hover:text-white border border-[#252B48]"
                   }`}
                 >
                   {oct > 0 ? `+${oct}` : oct}
@@ -756,25 +956,33 @@ export const SynthView: React.FC<SynthViewProps> = ({
               Interactive Keyboard
             </span>
             <button
-              onClick={() => setKeyboardMode(keyboardMode === 'chromatic' ? 'scale-locked' : 'chromatic')}
+              onClick={() =>
+                setKeyboardMode(
+                  keyboardMode === "chromatic" ? "scale-locked" : "chromatic",
+                )
+              }
               className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer border ${
-                keyboardMode === 'scale-locked'
-                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-xs'
-                  : 'bg-[#0B0D19] border-[#252B48] text-slate-400 hover:text-slate-200'
+                keyboardMode === "scale-locked"
+                  ? "bg-indigo-600 border-indigo-500 text-white shadow-xs"
+                  : "bg-[#0B0D19] border-[#252B48] text-slate-400 hover:text-slate-200"
               }`}
               title="Toggle Scale Locked Mode (cuts notes outside active scale)"
             >
-              {keyboardMode === 'scale-locked' ? `Scale Locked (${scaleRoot} ${scaleType})` : 'Chromatic Mode'}
+              {keyboardMode === "scale-locked"
+                ? `Scale Locked (${scaleRoot} ${scaleType})`
+                : "Chromatic Mode"}
             </button>
           </div>
 
           {/* Keyboard Octave Pagination — independent from synth pitch octave */}
           <div className="flex items-center gap-1.5">
             <div className="text-[11px] font-mono text-slate-500 mr-2">
-              {Array.from(activeNotes).join(', ') || 'No note'}
+              {Array.from(activeNotes).join(", ") || "No note"}
             </div>
-            
-            <span className="text-[11px] text-slate-500 font-mono mr-1">KB OCT</span>
+
+            <span className="text-[11px] text-slate-500 font-mono mr-1">
+              KB OCT
+            </span>
             <button
               id="btn-keyboard-octave-down"
               onClick={() => setKeyboardOctave((o) => Math.max(-2, o - 1))}
@@ -786,7 +994,8 @@ export const SynthView: React.FC<SynthViewProps> = ({
             </button>
             <div className="min-w-[52px] h-7 flex items-center justify-center rounded-md bg-indigo-600/15 border border-indigo-500/40 px-2">
               <span className="text-xs font-mono font-bold text-indigo-300">
-                {keyboardOctave >= 0 ? `+${keyboardOctave}` : keyboardOctave} Oct
+                {keyboardOctave >= 0 ? `+${keyboardOctave}` : keyboardOctave}{" "}
+                Oct
               </span>
             </div>
             <button
@@ -803,13 +1012,13 @@ export const SynthView: React.FC<SynthViewProps> = ({
 
         {/* Keyboard Keys Layout — uses keyboardOctave for display range */}
         <div className="relative h-[130px] flex select-none bg-[#0B0D19] p-2 rounded-lg border border-[#252B48] overflow-x-auto">
-          {(keyboardMode === 'scale-locked'
+          {(keyboardMode === "scale-locked"
             ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
             : getChromaticKeyboardNotes(keyboardOctave)
           ).map((k, noteIndex) => {
             const isActive = activeNotes.has(k.note);
             // Render all scale-locked keys as white
-            if (keyboardMode !== 'scale-locked' && k.isBlack) {
+            if (keyboardMode !== "scale-locked" && k.isBlack) {
               const marginLeft = getBlackKeyMargin(k.note);
               return (
                 <div
@@ -818,20 +1027,30 @@ export const SynthView: React.FC<SynthViewProps> = ({
                   onMouseDown={() => handleNoteOn(k.note)}
                   onMouseUp={() => handleNoteOff(k.note)}
                   onMouseLeave={() => isActive && handleNoteOff(k.note)}
-                  onTouchStart={(e) => { e.preventDefault(); handleNoteOn(k.note); }}
-                  onTouchEnd={(e) => { e.preventDefault(); handleNoteOff(k.note); }}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    handleNoteOn(k.note);
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    handleNoteOff(k.note);
+                  }}
                   className={`absolute z-10 w-9 h-[80px] rounded-b-md border border-slate-900 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
                     isActive
-                      ? 'bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-lg shadow-indigo-500/50 scale-[0.98]'
-                      : 'bg-gradient-to-b from-slate-800 to-slate-950 hover:bg-slate-800'
+                      ? "bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-lg shadow-indigo-500/50 scale-[0.98]"
+                      : "bg-gradient-to-b from-slate-800 to-slate-950 hover:bg-slate-800"
                   }`}
                   style={{
                     left: `${getBlackKeyLeftOffset(noteIndex)}%`,
                     marginLeft: `${marginLeft}px`,
                   }}
                 >
-                  <span className="text-[9px] font-mono font-bold text-slate-300">{k.label}</span>
-                  <span className="text-[8px] font-mono text-indigo-400 uppercase">{shortcutLabel(k.key)}</span>
+                  <span className="text-[9px] font-mono font-bold text-slate-300">
+                    {k.label}
+                  </span>
+                  <span className="text-[8px] font-mono text-indigo-400 uppercase">
+                    {shortcutLabel(k.key)}
+                  </span>
                 </div>
               );
             }
@@ -843,16 +1062,26 @@ export const SynthView: React.FC<SynthViewProps> = ({
                 onMouseDown={() => handleNoteOn(k.note)}
                 onMouseUp={() => handleNoteOff(k.note)}
                 onMouseLeave={() => isActive && handleNoteOff(k.note)}
-                onTouchStart={(e) => { e.preventDefault(); handleNoteOn(k.note); }}
-                onTouchEnd={(e) => { e.preventDefault(); handleNoteOff(k.note); }}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  handleNoteOn(k.note);
+                }}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  handleNoteOff(k.note);
+                }}
                 className={`flex-1 h-full rounded-b-md border border-slate-700 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
                   isActive
-                    ? 'bg-gradient-to-b from-indigo-200 to-indigo-400 text-slate-950 shadow-inner scale-[0.99]'
-                    : 'bg-gradient-to-b from-slate-100 to-slate-200 text-slate-800 hover:from-white hover:to-slate-100'
+                    ? "bg-gradient-to-b from-indigo-200 to-indigo-400 text-slate-950 shadow-inner scale-[0.99]"
+                    : "bg-gradient-to-b from-slate-100 to-slate-200 text-slate-800 hover:from-white hover:to-slate-100"
                 }`}
               >
-                <span className="text-[10px] font-mono font-bold">{k.label}</span>
-                <span className="text-[9px] font-mono text-indigo-600 uppercase font-semibold">{shortcutLabel(k.key)}</span>
+                <span className="text-[10px] font-mono font-bold">
+                  {k.label}
+                </span>
+                <span className="text-[9px] font-mono text-indigo-600 uppercase font-semibold">
+                  {shortcutLabel(k.key)}
+                </span>
               </div>
             );
           })}
@@ -882,63 +1111,79 @@ export const SynthView: React.FC<SynthViewProps> = ({
 function getBlackKeyLeftOffset(noteIndex: number): number {
   const whiteKeyWidth = 100 / 11;
   const offsets: Record<number, number> = {
-    1:  whiteKeyWidth * 0.7,   // C#
-    3:  whiteKeyWidth * 1.7,   // D#
-    6:  whiteKeyWidth * 3.7,   // F#
-    8:  whiteKeyWidth * 4.7,   // G#
-    10: whiteKeyWidth * 5.7,   // A#
-    13: whiteKeyWidth * 7.7,   // C# (2nd octave)
-    15: whiteKeyWidth * 8.7,   // D# (2nd octave)
+    1: whiteKeyWidth * 0.7, // C#
+    3: whiteKeyWidth * 1.7, // D#
+    6: whiteKeyWidth * 3.7, // F#
+    8: whiteKeyWidth * 4.7, // G#
+    10: whiteKeyWidth * 5.7, // A#
+    13: whiteKeyWidth * 7.7, // C# (2nd octave)
+    15: whiteKeyWidth * 8.7, // D# (2nd octave)
   };
   return offsets[noteIndex] ?? 0;
 }
 
 function getBlackKeyMargin(note: string): number {
   const margins: Record<string, number> = {
-    'C#3': 18,
-    'D#3': 18,
-    'F#3': 12,
-    'G#3': 12,
-    'A#3': 12,
-    'C#4': 8,
-    'D#4': 8,
+    "C#3": 18,
+    "D#3": 18,
+    "F#3": 12,
+    "G#3": 12,
+    "A#3": 12,
+    "C#4": 8,
+    "D#4": 8,
   };
   return margins[note] ?? 0;
 }
 
-function getScaleLockedKeyboardNotes(root: string, scaleType: string, octaveOffset: number) {
+function getScaleLockedKeyboardNotes(
+  root: string,
+  scaleType: string,
+  octaveOffset: number,
+) {
   const scaleNotes = getScaleNotes(root, scaleType);
-  const shortcutKeys = ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon', 'Quote'];
-  
+  const shortcutKeys = [
+    "KeyA",
+    "KeyS",
+    "KeyD",
+    "KeyF",
+    "KeyG",
+    "KeyH",
+    "KeyJ",
+    "KeyK",
+    "KeyL",
+    "Semicolon",
+    "Quote",
+  ];
+
   let currentOctave = 3 + octaveOffset;
   let prevNoteIndex = -1;
-  
+
   const octavesToGenerate = 2;
   const allScaleNotesWithOctave: { note: string; label: string }[] = [];
-  
+
   for (let oct = 0; oct < octavesToGenerate; oct++) {
     for (let i = 0; i < scaleNotes.length; i++) {
       const noteName = scaleNotes[i];
       const noteIndex = ROOTS.indexOf(noteName as any);
-      
+
       if (prevNoteIndex !== -1 && noteIndex < prevNoteIndex) {
         currentOctave++;
       }
-      
+
       allScaleNotesWithOctave.push({
         note: `${noteName}${currentOctave}`,
         label: `${noteName}${currentOctave}`,
       });
-      
+
       prevNoteIndex = noteIndex;
     }
   }
-  
+
   return allScaleNotesWithOctave.map((item, index) => {
     return {
       note: item.note,
       label: item.label,
-      key: index < shortcutKeys.length ? shortcutKeys[index] : '',
+      key: index < shortcutKeys.length ? shortcutKeys[index] : "",
       isBlack: false,
     };
   });
