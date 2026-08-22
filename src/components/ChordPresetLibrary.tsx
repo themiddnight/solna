@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Sparkles,
   Bookmark,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ChordItem, SynthParams } from '../types';
 import type { CustomChordProgressionItem } from '../types';
+import { useAppStore } from '../store/store';
 import {
   ProgressionTemplate,
   CHORD_PROGRESSION_TEMPLATES,
@@ -25,17 +26,8 @@ import { generateBlockChordNotes, reharmonizeProgressionToScale, rootSemitone, R
 
 export type { CustomChordProgressionItem };
 
-const LOCAL_STORAGE_CUSTOM_CHORDS_KEY = 'murva_chord_custom_progressions_v1';
-
 export function getCustomChordProgressions(): CustomChordProgressionItem[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_CUSTOM_CHORDS_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error('Failed to load custom chord progressions:', err);
-    return [];
-  }
+  return useAppStore.getState().customChordProgressions;
 }
 
 export function saveCustomChordProgression(
@@ -45,27 +37,13 @@ export function saveCustomChordProgression(
   description = '',
   roman = ''
 ): CustomChordProgressionItem {
-  const custom = getCustomChordProgressions();
-  const newItem: CustomChordProgressionItem = {
-    id: `chord-prog-${Date.now()}`,
-    name,
-    category,
-    description,
-    roman: roman || chords.map((c) => `${c.root}${c.quality}`).join(' - '),
-    chords: [...chords],
-    createdAt: Date.now(),
-  };
-
-  const updated = [newItem, ...custom.filter((c) => c.name !== name)];
-  localStorage.setItem(LOCAL_STORAGE_CUSTOM_CHORDS_KEY, JSON.stringify(updated));
-  return newItem;
+  return useAppStore
+    .getState()
+    .saveCustomChordProgression(name, chords, category, description, roman);
 }
 
 export function deleteCustomChordProgression(id: string): CustomChordProgressionItem[] {
-  const custom = getCustomChordProgressions();
-  const updated = custom.filter((c) => c.id !== id);
-  localStorage.setItem(LOCAL_STORAGE_CUSTOM_CHORDS_KEY, JSON.stringify(updated));
-  return updated;
+  return useAppStore.getState().deleteCustomChordProgression(id);
 }
 
 interface ChordPresetLibraryProps {
@@ -89,7 +67,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   isOpen,
   onClose,
 }) => {
-  const [customProgressions, setCustomProgressions] = useState<CustomChordProgressionItem[]>([]);
+  const customProgressions = useAppStore((s) => s.customChordProgressions);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showSaveModal, setShowSaveModal] = useState<boolean>(false);
@@ -98,10 +76,6 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   const [newProgDesc, setNewProgDesc] = useState<string>('');
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [auditioningName, setAuditioningName] = useState<string | null>(null);
-
-  useEffect(() => {
-    setCustomProgressions(getCustomChordProgressions());
-  }, [isOpen]);
 
   const categories = [
     'All',
@@ -193,7 +167,6 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
       romanSummary
     );
 
-    setCustomProgressions(getCustomChordProgressions());
     setShowSaveModal(false);
     setNewProgName('');
     setNewProgDesc('');
@@ -204,8 +177,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   const handleDeleteCustom = (id: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm(`Delete custom progression "${name}"?`)) {
-      const updated = deleteCustomChordProgression(id);
-      setCustomProgressions(updated);
+      deleteCustomChordProgression(id);
     }
   };
 
@@ -259,9 +231,19 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
       try {
         const imported = JSON.parse(evt.target?.result as string);
         if (Array.isArray(imported)) {
-          const merged = [...imported, ...customProgressions];
-          localStorage.setItem(LOCAL_STORAGE_CUSTOM_CHORDS_KEY, JSON.stringify(merged));
-          setCustomProgressions(getCustomChordProgressions());
+          // Each save prepends to the store, so walk backwards to keep the
+          // imported file's original order on top of the existing list.
+          [...imported]
+            .reverse()
+            .forEach((item: CustomChordProgressionItem) => {
+              saveCustomChordProgression(
+                item.name,
+                item.chords,
+                item.category,
+                item.description,
+                item.roman
+              );
+            });
           setSaveSuccessMsg(`Imported ${imported.length} chord progressions!`);
           setTimeout(() => setSaveSuccessMsg(null), 3000);
         }

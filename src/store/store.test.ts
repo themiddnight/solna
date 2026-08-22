@@ -115,6 +115,12 @@ beforeAll(() => {
   Object.defineProperty(globalThis, 'localStorage', { value: fakeLocalStorage, configurable: true });
   Object.defineProperty(globalThis, 'window', { value: globalThis, configurable: true });
   Object.defineProperty(globalThis, 'AudioContext', { value: FakeAudioContext, configurable: true });
+  // bun test runs every test file in one shared process, so another file may
+  // already have evaluated the store module before this fake existed (its
+  // persist storage then resolved to bun's own storage). Re-evaluate the
+  // module under a cache-busting query so this file's store instance binds to
+  // the fake installed above.
+  storeModule = import(`./store?bust=${Date.now()}`);
 });
 
 beforeEach(async () => {

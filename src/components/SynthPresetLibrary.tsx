@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Sparkles,
   Bookmark,
@@ -21,12 +21,13 @@ import {
   SynthPresetItem,
   SynthPresetCategory,
   SYNTH_CATEGORIES,
-  getCustomPresets,
   saveCustomPreset,
   deleteCustomPreset,
   getCategoryMeta,
   getPresetsGroupedByCategory,
 } from '../audio/synthPresets';
+import { useAppStore } from '../store/store';
+import { INITIAL_SYNTH_PARAMS } from '../store/initialState';
 import { audioEngine } from '../audio/engine';
 
 interface SynthPresetLibraryProps {
@@ -42,7 +43,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   isOpen,
   onClose,
 }) => {
-  const [customPresets, setCustomPresets] = useState<SynthPresetItem[]>([]);
+  const customPresets = useAppStore((s) => s.customSynthPresets);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showSaveModal, setShowSaveModal] = useState<boolean>(false);
@@ -50,11 +51,6 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   const [newPresetCategory, setNewPresetCategory] = useState<SynthPresetCategory>('Lead');
   const [newPresetDesc, setNewPresetDesc] = useState<string>('');
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
-
-  // Load custom presets on mount / when opened
-  useEffect(() => {
-    setCustomPresets(getCustomPresets());
-  }, [isOpen]);
 
   const allPresets = useMemo(() => getAllSynthPresets(customPresets), [customPresets]);
 
@@ -103,7 +99,6 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
       newPresetCategory,
       newPresetDesc
     );
-    setCustomPresets(getCustomPresets());
     setShowSaveModal(false);
     setNewPresetName('');
     setNewPresetDesc('');
@@ -115,8 +110,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   const handleDelete = (id: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm(`Are you sure you want to delete preset "${name}"?`)) {
-      const updated = deleteCustomPreset(id);
-      setCustomPresets(updated);
+      deleteCustomPreset(id);
     }
   };
 
@@ -153,9 +147,20 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
       try {
         const imported = JSON.parse(evt.target?.result as string);
         if (Array.isArray(imported)) {
-          const merged = [...imported, ...customPresets];
-          localStorage.setItem('murva_synth_custom_presets_v1', JSON.stringify(merged));
-          setCustomPresets(getCustomPresets());
+          // Each save prepends to the store, so walk backwards to keep the
+          // imported file's original order on top of the existing list.
+          [...imported]
+            .reverse()
+            .forEach((item: SynthPresetItem) => {
+              saveCustomPreset(
+                item.name,
+                // Imported params may be partial; save the full shape so the
+                // stored preset stands on its own (all saved presets do).
+                { ...INITIAL_SYNTH_PARAMS, ...item.params },
+                item.category,
+                item.description
+              );
+            });
           setSaveSuccessMsg(`Imported ${imported.length} presets!`);
           setTimeout(() => setSaveSuccessMsg(null), 3000);
         }

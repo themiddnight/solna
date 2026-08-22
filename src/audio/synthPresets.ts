@@ -1,4 +1,5 @@
 import { SynthParams } from '../types';
+import { useAppStore } from '../store/store';
 import { FACTORY_BASS_PRESETS } from './bassPresets';
 
 export type SynthPresetCategory =
@@ -730,20 +731,8 @@ export const FACTORY_PRESETS: SynthPresetItem[] = [
   },
 ];
 
-const STORAGE_KEY = 'murva_synth_custom_presets_v1';
-
 export function getCustomPresets(): SynthPresetItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed;
-    }
-  } catch (err) {
-    console.warn('Failed to load synth presets from localStorage:', err);
-  }
-  return [];
+  return useAppStore.getState().customSynthPresets;
 }
 
 export function saveCustomPreset(
@@ -752,53 +741,18 @@ export function saveCustomPreset(
   category: SynthPresetCategory = 'User',
   description = ''
 ): SynthPresetItem {
-  const current = getCustomPresets();
-  const id = `user-preset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  
-  // Extract pure sound params
-  const { preset, ...pureParams } = params;
-  const newPreset: SynthPresetItem = {
-    id,
-    name: name.trim() || 'Untitled Preset',
-    category,
-    isFactory: false,
-    createdAt: Date.now(),
-    description: description.trim() || 'Custom user preset',
-    params: { ...pureParams },
-  };
-
-  const updated = [newPreset, ...current];
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  } catch (err) {
-    console.error('Failed to save preset to localStorage:', err);
-  }
-  return newPreset;
+  return useAppStore.getState().saveCustomPreset(name, params, category, description);
 }
 
 export function updateCustomPreset(
   id: string,
   updates: Partial<SynthPresetItem>
 ): SynthPresetItem[] {
-  const current = getCustomPresets();
-  const updated = current.map((p) => (p.id === id ? { ...p, ...updates } : p));
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  } catch (err) {
-    console.error('Failed to update preset in localStorage:', err);
-  }
-  return updated;
+  return useAppStore.getState().updateCustomPreset(id, updates);
 }
 
 export function deleteCustomPreset(id: string): SynthPresetItem[] {
-  const current = getCustomPresets();
-  const updated = current.filter((p) => p.id !== id);
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  } catch (err) {
-    console.error('Failed to delete preset from localStorage:', err);
-  }
-  return updated;
+  return useAppStore.getState().deleteCustomPreset(id);
 }
 
 export const ALL_FACTORY_PRESETS: SynthPresetItem[] = [
