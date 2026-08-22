@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
+  AXIS_PICK_THRESHOLD_PX,
   PROGRESS_ARC_UNITS,
   SIZE_PX,
   angleForT,
   clamp,
   detentAngle,
+  dragDeltaT,
   progressDash,
+  snapToStep,
   tToValue,
   valueToT,
 } from '../../utils/knob';
@@ -30,13 +33,21 @@ export interface KnobProps {
   className?: string;
 }
 
+/** Per-gesture drag state (a ref — survives re-renders mid-drag). */
+interface GestureState {
+  axis: 'x' | 'y' | null;
+  startT: number;
+  startX: number;
+  startY: number;
+}
+
 /**
  * Shared rotary knob primitive. Controlled-only (value/onChange).
- * Static render: ring per `indicator` ('progress' arc / 'none' thin ring /
- * 'full' static ring) + optional detent tick + rotating needle + center dot
- * + label/value row. Pointer drag (Task 4) and keyboard/ARIA (Task 5) are
- * layered on top. The needle and the progress-arc tip are both derived from
- * the same t, so they always point in the same direction (spec §5).
+ * Drag: pointer capture; the axis with the larger accumulated delta wins
+ * (past AXIS_PICK_THRESHOLD_PX) and sticks for the whole gesture. Right/up
+ * increase, left/down decrease; Shift divides sensitivity by 10. Ring per
+ * `indicator` + optional fixed detent tick (visual only). The needle and the
+ * progress-arc tip are derived from the same t (spec §5 invariant).
  */
 export const Knob = ({
   value,
@@ -54,12 +65,45 @@ export const Knob = ({
   id,
   className,
 }: KnobProps) => {
+  const gestureRef = useRef<GestureState | null>(null);
   const pixelSize = SIZE_PX[size];
   const t = clamp(valueToT(value, min, max, scale), 0, 1);
   const angle = angleForT(t);
   const dash = progressDash(t);
   const display = format(value);
   const detentAngleDeg = detent !== undefined ? detentAngle(detent, min, max, scale) : null;
+
+  const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (disabled) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    gestureRef.current = {
+      axis: null,
+      startT: clamp(valueToT(value, min, max, scale), 0, 1),
+      startX: e.clientX,
+      startY: e.clientY,
+    };
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const gesture = gestureRef.current;
+    if (disabled || !gesture) return;
+    const dx = e.clientX - gesture.startX;
+    const dy = e.clientY - gesture.startY;
+    if (gesture.axis === null) {
+      if (Math.abs(dx) < AXIS_PICK_THRESHOLD_PX && Math.abs(dy) < AXIS_PICK_THRESHOLD_PX) {
+        return;
+      }
+      gesture.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    }
+    const delta = gesture.axis === 'x' ? dx : -dy;
+    const nextT = clamp(gesture.startT + dragDeltaT(delta, e.shiftKey), 0, 1);
+    onChange(snapToStep(tToValue(nextT, min, max, scale), min, step));
+  };
+
+  const endGesture = () => {
+    gestureRef.current = null;
+  };
 
   return (
     <div className={className}>
@@ -75,8 +119,12 @@ export const Knob = ({
         height={pixelSize}
         viewBox="0 0 100 100"
         className={`block text-[#877dca] touch-none select-none rounded-full ${
-          disabled ? 'opacity-40' : 'cursor-pointer'
+          disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
         }`}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endGesture}
+        onPointerCancel={endGesture}
       >
         {/* indicator="progress": dark 270° ring (same thickness as the arc,
             spec §5) + progress arc from min (−135°) to the current angle. */}
