@@ -27,6 +27,7 @@ export function createMusicContextSlice(set: Set, _get: Get): MusicContextSlice 
 
     setScaleRoot: (scaleRoot) => set({ scaleRoot }),
     setScaleType: (scaleType) => set({ scaleType }),
+    setProjectTitle: (projectTitle) => set({ projectTitle }),
 
     applyTemplate: (templateName) => {
       const template = TEMPLATES[templateName];

@@ -41,6 +41,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChordItem, SynthParams } from "../types";
+import { useAppStore } from "../store/store";
 import { audioEngine, STEPS_PER_BAR } from "../audio/engine";
 import {
   getCustomPresets,
@@ -81,39 +82,6 @@ import {
   saveCustomChordProgression,
   CustomChordProgressionItem,
 } from "./ChordPresetLibrary";
-
-interface ChordViewProps {
-  chords: ChordItem[];
-  onChangeChords: (chords: ChordItem[]) => void;
-  scaleRoot: string;
-  onChangeScaleRoot: (root: string) => void;
-  scaleType: string;
-  onChangeScaleType: (type: string) => void;
-  synthParams: SynthParams;
-  chordSynthParams: SynthParams;
-  onChangeChordSynthParams: (params: SynthParams) => void;
-  rhythmId: string;
-  onChangeRhythmId: (id: string) => void;
-  chordFeel: number;
-  onChangeChordFeel: (feel: number) => void;
-  chordOctave: number;
-  onChangeChordOctave: (octave: number) => void;
-  bassSynthParams: SynthParams;
-  onChangeBassSynthParams: (params: SynthParams) => void;
-  bassPatternId: string;
-  onChangeBassPatternId: (id: string) => void;
-  bassFeel: number;
-  onChangeBassFeel: (feel: number) => void;
-  bassOctave: number;
-  onChangeBassOctave: (octave: number) => void;
-  chordMuted: boolean;
-  onToggleChordMuted: () => void;
-  bassMuted: boolean;
-  onToggleBassMuted: () => void;
-  bpm: number;
-  isPlaying: boolean;
-  onTogglePlay: () => void;
-}
 
 const SELECT_BASE =
   "bg-[#171B36] border border-[#2D355A] rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-200";
@@ -485,38 +453,40 @@ function scheduleBarInvariantEvents(
     }
   }
 }
-export const ChordView: React.FC<ChordViewProps> = React.memo(({
-  chords,
-  onChangeChords,
-  scaleRoot,
-  onChangeScaleRoot,
-  scaleType,
-  onChangeScaleType,
-  synthParams,
-  chordSynthParams,
-  onChangeChordSynthParams,
-  rhythmId,
-  onChangeRhythmId,
-  chordFeel,
-  onChangeChordFeel,
-  chordOctave,
-  onChangeChordOctave,
-  bassSynthParams,
-  onChangeBassSynthParams,
-  bassPatternId,
-  onChangeBassPatternId,
-  bassFeel,
-  onChangeBassFeel,
-  bassOctave,
-  onChangeBassOctave,
-  chordMuted,
-  onToggleChordMuted,
-  bassMuted,
-  onToggleBassMuted,
-  bpm,
-  isPlaying,
-  onTogglePlay,
-}) => {
+export const ChordView: React.FC = React.memo(() => {
+  // ChordView reads the store directly (Task 5): every value below replaces
+  // one of the ~34 props it used to receive from App.tsx.
+  const chords = useAppStore((s) => s.chords);
+  const setChords = useAppStore((s) => s.setChords);
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const scaleType = useAppStore((s) => s.scaleType);
+  const synthParams = useAppStore((s) => s.synthParams);
+  const chordSynthParams = useAppStore((s) => s.chordSynthParams);
+  const setChordSynthParams = useAppStore((s) => s.setChordSynthParams);
+  const bassSynthParams = useAppStore((s) => s.bassSynthParams);
+  const setBassSynthParams = useAppStore((s) => s.setBassSynthParams);
+  const rhythmId = useAppStore((s) => s.chordRhythmId);
+  const setChordRhythmId = useAppStore((s) => s.setChordRhythmId);
+  const chordFeel = useAppStore((s) => s.chordFeel);
+  const setChordFeel = useAppStore((s) => s.setChordFeel);
+  const chordOctave = useAppStore((s) => s.chordOctave);
+  const setChordOctave = useAppStore((s) => s.setChordOctave);
+  const bassPatternId = useAppStore((s) => s.bassPatternId);
+  const setBassPatternId = useAppStore((s) => s.setBassPatternId);
+  const bassFeel = useAppStore((s) => s.bassFeel);
+  const setBassFeel = useAppStore((s) => s.setBassFeel);
+  const bassOctave = useAppStore((s) => s.bassOctave);
+  const setBassOctave = useAppStore((s) => s.setBassOctave);
+  const chordMuted = useAppStore((s) => s.chordMuted);
+  const toggleChordMuted = useAppStore((s) => s.toggleChordMuted);
+  const bassMuted = useAppStore((s) => s.bassMuted);
+  const toggleBassMuted = useAppStore((s) => s.toggleBassMuted);
+  const bpm = useAppStore((s) => s.bpm);
+  const isPlaying = useAppStore((s) => s.isChordsPlaying);
+  const chordVolume = useAppStore((s) => s.chordVolume);
+  const setChordVolume = useAppStore((s) => s.setChordVolume);
+  const bassVolume = useAppStore((s) => s.bassVolume);
+  const setBassVolume = useAppStore((s) => s.setBassVolume);
   const [activeChordId, setActiveChordId] = useState<string | null>(null);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   // Chord sound presets: factory presets plus presets saved from the synth view
@@ -616,9 +586,6 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
   const [autoReharmonize, setAutoReharmonize] = useState<boolean>(true);
   const [isAutoReharmonizedIndicator, setIsAutoReharmonizedIndicator] =
     useState<boolean>(false);
-  // Layer balance gains
-  const [chordVolume, setChordVolume] = useState<number>(1.0);
-  const [bassVolume, setBassVolume] = useState<number>(1.0);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [use7thsInQuickAdd, setUse7thsInQuickAdd] = useState<boolean>(false);
 
@@ -639,7 +606,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
       const oldIndex = chords.findIndex((c) => c.id === active.id);
       const newIndex = chords.findIndex((c) => c.id === over.id);
       if (oldIndex !== -1 && newIndex !== -1) {
-        onChangeChords(arrayMove(chords, oldIndex, newIndex));
+        setChords(arrayMove(chords, oldIndex, newIndex));
       }
     }
   };
@@ -650,20 +617,20 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
     const updated = [...chords];
     const [removed] = updated.splice(index, 1);
     updated.splice(newIndex, 0, removed);
-    onChangeChords(updated);
+    setChords(updated);
   };
 
   const bassPattern =
     BASS_PATTERNS.find((p) => p.id === bassPatternId) ?? BASS_PATTERNS[0];
 
+  // Volumes live in the store; engineSync pushes them into the engine buses
+  // (no dual-write here — Task 5).
   const handleChordVolumeChange = (vol: number) => {
     setChordVolume(vol);
-    audioEngine.setSourceGain("chord", vol);
   };
 
   const handleBassVolumeChange = (vol: number) => {
     setBassVolume(vol);
-    audioEngine.setSourceGain("bass", vol);
   };
   const armedRef = useRef(false);
   const chordIndexRef = useRef(0);
@@ -714,7 +681,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
         scaleType,
         chordOctave,
       );
-      onChangeChords(updated);
+      setChords(updated);
       setIsAutoReharmonizedIndicator(true);
     }
   }, [scaleRoot, scaleType]);
@@ -754,7 +721,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
       setIsAutoReharmonizedIndicator(false);
     }
 
-    onChangeChords(newChords);
+    setChords(newChords);
   };
 
   const handleApplyLibraryChords = (libraryChords: ChordItem[]) => {
@@ -777,7 +744,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
       setIsAutoReharmonizedIndicator(false);
     }
 
-    onChangeChords(finalChords);
+    setChords(finalChords);
   };
 
   const handleQuickSaveSubmit = (e: React.FormEvent) => {
@@ -810,7 +777,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
       },
       chordOctave,
     );
-    onChangeChords([...chords, newChord]);
+    setChords([...chords, newChord]);
   };
 
   const addDiatonicChord = (degreeIndex: number) => {
@@ -830,7 +797,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
       },
       chordOctave,
     );
-    onChangeChords([...chords, newChord]);
+    setChords([...chords, newChord]);
   };
 
   const addBorrowedChord = (root: string, quality: string) => {
@@ -844,7 +811,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
       },
       chordOctave,
     );
-    onChangeChords([...chords, newChord]);
+    setChords([...chords, newChord]);
   };
 
   const activePreviewTimeoutsRef = useRef<number[]>([]);
@@ -909,11 +876,11 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
   };
 
   const removeChord = (id: string) => {
-    onChangeChords(chords.filter((c) => c.id !== id));
+    setChords(chords.filter((c) => c.id !== id));
   };
 
   const updateChord = (id: string, updates: Partial<ChordItem>) => {
-    onChangeChords(
+    setChords(
       chords.map((c) => {
         if (c.id !== id) return c;
         return deriveChordNotes({ ...c, ...updates }, chordOctave);
@@ -944,7 +911,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
           {/* Per-layer mute toggles (engine source buses — tails cut instantly) */}
           <button
             id="btn-mute-chord"
-            onClick={onToggleChordMuted}
+            onClick={toggleChordMuted}
             className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
               chordMuted
                 ? "bg-rose-600/30 border-rose-500/50 text-rose-200"
@@ -962,7 +929,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
 
           <button
             id="btn-mute-bass"
-            onClick={onToggleBassMuted}
+            onClick={toggleBassMuted}
             className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
               bassMuted
                 ? "bg-rose-600/30 border-rose-500/50 text-rose-200"
@@ -1097,7 +1064,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
                 getAllSynthPresets(customPresets),
               );
               if (!preset) return;
-              onChangeChordSynthParams({
+              setChordSynthParams({
                 ...chordSynthParams,
                 ...preset.params,
                 preset: preset.name,
@@ -1134,7 +1101,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
           <select
             id="select-chord-octave"
             value={chordOctave}
-            onChange={(e) => onChangeChordOctave(parseInt(e.target.value, 10))}
+            onChange={(e) => setChordOctave(parseInt(e.target.value, 10))}
             className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
             title="Octave for chord playback"
           >
@@ -1149,7 +1116,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
           <select
             id="select-chord-rhythm-pattern"
             value={rhythmId}
-            onChange={(e) => onChangeRhythmId(e.target.value)}
+            onChange={(e) => setChordRhythmId(e.target.value)}
             className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
             title="Rhythm pattern for chord playback"
           >
@@ -1175,7 +1142,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
               max={1}
               step={0.01}
               value={chordFeel}
-              onChange={(e) => onChangeChordFeel(parseFloat(e.target.value))}
+              onChange={(e) => setChordFeel(parseFloat(e.target.value))}
               className="w-20 h-1 bg-[#0B0D19] rounded cursor-pointer accent-indigo-500"
               title="Chord note length: tight (short holds) ↔ loose (long holds)"
             />
@@ -1211,7 +1178,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
                 scaleType,
                 chordOctave,
               );
-              onChangeChords(updated);
+              setChords(updated);
               setIsAutoReharmonizedIndicator(true);
               setSaveToast(
                 `Re-harmonized progression to ${scaleRoot} ${scaleType} (Option B)!`,
@@ -1238,7 +1205,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
                   scaleType,
                   chordOctave,
                 );
-                onChangeChords(updated);
+                setChords(updated);
                 setIsAutoReharmonizedIndicator(true);
               } else {
                 setIsAutoReharmonizedIndicator(false);
@@ -1422,7 +1389,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
                   getAllSynthPresets(customPresets),
                 );
                 if (!preset) return;
-                onChangeBassSynthParams({
+                setBassSynthParams({
                   ...bassSynthParams,
                   ...preset.params,
                   preset: preset.name,
@@ -1463,7 +1430,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
             <select
               id="select-bass-octave"
               value={bassOctave}
-              onChange={(e) => onChangeBassOctave(parseInt(e.target.value, 10))}
+              onChange={(e) => setBassOctave(parseInt(e.target.value, 10))}
               className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
               title="Register for the bass line (embedded in the note names)"
             >
@@ -1482,7 +1449,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
             <select
               id="select-bass-rhythm-pattern"
               value={bassPatternId}
-              onChange={(e) => onChangeBassPatternId(e.target.value)}
+              onChange={(e) => setBassPatternId(e.target.value)}
               className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
               title="Bass pattern (16th-note grid, deterministic)"
             >
@@ -1509,7 +1476,7 @@ export const ChordView: React.FC<ChordViewProps> = React.memo(({
               max={1}
               step={0.01}
               value={bassFeel}
-              onChange={(e) => onChangeBassFeel(parseFloat(e.target.value))}
+              onChange={(e) => setBassFeel(parseFloat(e.target.value))}
               className="w-20 h-1 bg-[#0B0D19] rounded cursor-pointer accent-emerald-500"
               title="Bass note length: tight (short holds) ↔ loose (long holds)"
             />

@@ -31,6 +31,7 @@ export interface MusicContextSlice {
   projectTitle: string;
   setScaleRoot: (root: string) => void;
   setScaleType: (type: string) => void;
+  setProjectTitle: (title: string) => void;
   applyTemplate: (templateName: string) => void;
 }
 
@@ -53,7 +54,12 @@ export interface ChordsSlice {
   chordOctave: number;
   chordMuted: boolean;
   chordVolume: number;
+  setChords: (chords: ChordItem[]) => void;
+  setChordRhythmId: (rhythmId: string) => void;
+  setChordFeel: (feel: number) => void;
   setChordOctave: (octave: number) => void;
+  setChordVolume: (volume: number) => void;
+  toggleChordMuted: () => void;
 }
 
 export interface BassSlice {
@@ -62,6 +68,11 @@ export interface BassSlice {
   bassOctave: number;
   bassMuted: boolean;
   bassVolume: number;
+  setBassPatternId: (patternId: string) => void;
+  setBassFeel: (feel: number) => void;
+  setBassOctave: (octave: number) => void;
+  setBassVolume: (volume: number) => void;
+  toggleBassMuted: () => void;
 }
 
 export interface SequencerSlice {

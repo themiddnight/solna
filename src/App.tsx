@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Header } from './components/Header';
 import { SynthView } from './components/SynthView';
 import { SequencerView } from './components/SequencerView';
@@ -9,7 +9,7 @@ import { AiCompanionModal } from './components/AiCompanionModal';
 import { ProjectModal } from './components/ProjectModal';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import { audioEngine } from './audio/engine';
-import type { SynthParams, ChordItem, ProjectState } from './types';
+import type { ProjectState } from './types';
 import { useAppStore } from './store/store';
 import { useEngineSync } from './store/engineSync';
 
@@ -56,43 +56,22 @@ export function App() {
   const closeProjectsModal = useAppStore((s) => s.closeProjectsModal);
 
   // Transport slice
-  const isChordsPlaying = useAppStore((s) => s.isChordsPlaying);
   const bpm = useAppStore((s) => s.bpm);
-  const toggleChordsPlay = useAppStore((s) => s.toggleChordsPlay);
 
   // Music context slice
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
-  const setScaleRoot = useAppStore((s) => s.setScaleRoot);
-  const setScaleType = useAppStore((s) => s.setScaleType);
-  const projectTitle = useAppStore((s) => s.projectTitle);
+  const setProjectTitle = useAppStore((s) => s.setProjectTitle);
   const applyTemplate = useAppStore((s) => s.applyTemplate);
 
   // Synth slice
-  const synthParams = useAppStore((s) => s.synthParams);
-  const chordSynthParams = useAppStore((s) => s.chordSynthParams);
-  const bassSynthParams = useAppStore((s) => s.bassSynthParams);
   const applySynthPreset = useAppStore((s) => s.applySynthPreset);
 
-  // Chords slice
-  const chords = useAppStore((s) => s.chords);
-  const chordRhythmId = useAppStore((s) => s.chordRhythmId);
-  const chordFeel = useAppStore((s) => s.chordFeel);
-  const chordOctave = useAppStore((s) => s.chordOctave);
-  const chordMuted = useAppStore((s) => s.chordMuted);
-  const setChordOctave = useAppStore((s) => s.setChordOctave);
-
-  // Bass slice
-  const bassPatternId = useAppStore((s) => s.bassPatternId);
-  const bassFeel = useAppStore((s) => s.bassFeel);
-  const bassOctave = useAppStore((s) => s.bassOctave);
-  const bassMuted = useAppStore((s) => s.bassMuted);
+  // Chords slice (ChordView reads the rest of the slice directly)
+  const setChords = useAppStore((s) => s.setChords);
 
   // Sequencer slice
   const applyDrumPattern = useAppStore((s) => s.applyDrumPattern);
-
-  // Effects slice
-  const effects = useAppStore((s) => s.effects);
 
   // Initialize audio engine on first user interaction
   useEffect(() => {
@@ -102,25 +81,6 @@ export function App() {
     };
     window.addEventListener('click', handleFirstClick);
     return () => window.removeEventListener('click', handleFirstClick);
-  }, []);
-
-  // The remaining values have no slice setter yet (ChordView is refactored in
-  // Task 5, modals keep props), so they are written through direct setState
-  // calls — same semantics as the original useState setters they replace.
-  const setChordSynthParams = useCallback((value: SynthParams) => useAppStore.setState({ chordSynthParams: value }), []);
-  const setBassSynthParams = useCallback((value: SynthParams) => useAppStore.setState({ bassSynthParams: value }), []);
-  const setChordRhythmId = useCallback((value: string) => useAppStore.setState({ chordRhythmId: value }), []);
-  const setChordFeel = useCallback((value: number) => useAppStore.setState({ chordFeel: value }), []);
-  const setBassPatternId = useCallback((value: string) => useAppStore.setState({ bassPatternId: value }), []);
-  const setBassFeel = useCallback((value: number) => useAppStore.setState({ bassFeel: value }), []);
-  const setBassOctave = useCallback((value: number) => useAppStore.setState({ bassOctave: value }), []);
-  const setChords = useCallback((value: ChordItem[]) => useAppStore.setState({ chords: value }), []);
-  const setProjectTitle = useCallback((value: string) => useAppStore.setState({ projectTitle: value }), []);
-  const toggleChordMuted = useCallback(() => {
-    useAppStore.setState((state) => ({ chordMuted: !state.chordMuted }));
-  }, []);
-  const toggleBassMuted = useCallback(() => {
-    useAppStore.setState((state) => ({ bassMuted: !state.bassMuted }));
   }, []);
 
   const currentProject = useProjectState();
@@ -150,38 +110,7 @@ export function App() {
           <SequencerView />
         </div>
         <div className={activeTab === 'chords' ? 'block' : 'hidden'}>
-          <ChordView
-            chords={chords}
-            onChangeChords={setChords}
-            scaleRoot={scaleRoot}
-            onChangeScaleRoot={setScaleRoot}
-            scaleType={scaleType}
-            onChangeScaleType={setScaleType}
-            synthParams={synthParams}
-            chordSynthParams={chordSynthParams}
-            onChangeChordSynthParams={setChordSynthParams}
-            rhythmId={chordRhythmId}
-            onChangeRhythmId={setChordRhythmId}
-            chordFeel={chordFeel}
-            onChangeChordFeel={setChordFeel}
-            chordOctave={chordOctave}
-            onChangeChordOctave={setChordOctave}
-            bpm={bpm}
-            isPlaying={isChordsPlaying}
-            onTogglePlay={toggleChordsPlay}
-            bassSynthParams={bassSynthParams}
-            onChangeBassSynthParams={setBassSynthParams}
-            bassPatternId={bassPatternId}
-            onChangeBassPatternId={setBassPatternId}
-            bassFeel={bassFeel}
-            onChangeBassFeel={setBassFeel}
-            bassOctave={bassOctave}
-            onChangeBassOctave={setBassOctave}
-            chordMuted={chordMuted}
-            onToggleChordMuted={toggleChordMuted}
-            bassMuted={bassMuted}
-            onToggleBassMuted={toggleBassMuted}
-          />
+          <ChordView />
         </div>
         <div className={activeTab === 'effects' ? 'block' : 'hidden'}>
           <EffectsRackView />

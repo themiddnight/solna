@@ -22,6 +22,12 @@ export function createChordsSlice(set: Set, _get: Get): ChordsSlice {
     chordMuted: false,
     chordVolume: 1.0,
 
+    setChords: (chords) => set({ chords }),
+    setChordRhythmId: (chordRhythmId) => set({ chordRhythmId }),
+    setChordFeel: (chordFeel) => set({ chordFeel }),
+    setChordVolume: (chordVolume) => set({ chordVolume }),
+    toggleChordMuted: () => set((state) => ({ chordMuted: !state.chordMuted })),
+
     setChordOctave: (chordOctave) =>
       set((state) => ({
         chordOctave,
