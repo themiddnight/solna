@@ -31,6 +31,7 @@ class AudioEngine {
   // Voice gains connect here instead of straight to dry/effects, so a whole layer
   // (e.g. bass) can be muted with one click-free ramp.
   private sourceBuses = new Map<string, GainNode>();
+  private sourceMuted = new Map<string, boolean>();
 
   // Metronome click buffer
   private clickBufferHigh: AudioBuffer | null = null;
@@ -130,6 +131,11 @@ class AudioEngine {
 
   private setupMasterChain(): void {
     if (!this.ctx) return;
+
+    // The master chain is (re)built on every AudioContext (re)creation; any
+    // per-source buses from the previous context are wired into dead nodes, so
+    // drop them — they are lazily recreated against the new context on demand.
+    this.sourceBuses.clear();
 
     // Master Output & Analyser
     this.masterGain = this.ctx.createGain();
@@ -286,9 +292,12 @@ class AudioEngine {
     // Bass is monophonic like a real bass: kill any other sounding bass voice
     // BEFORE creating the new one. Keys are snapshotted because
     // triggerSynthNoteOff deletes map entries while we iterate.
+    // Pass `time` so a live previous voice's release ramp starts exactly when the
+    // new note starts (not immediately); the release timeout already accounts for
+    // the future `time` in its delay math.
     if (source === 'bass') {
       for (const key of Array.from(this.activeVoices.keys())) {
-        if (key.startsWith('bass:')) this.triggerSynthNoteOff(key.slice(5), 0.05, undefined, 'bass');
+        if (key.startsWith('bass:')) this.triggerSynthNoteOff(key.slice(5), 0.05, time, 'bass');
       }
     }
 
@@ -406,6 +415,13 @@ class AudioEngine {
       voice.filter.frequency.exponentialRampToValueAtTime(Math.max(20, voice.filterCutoff), now + filterRelease);
 
       setTimeout(() => {
+        // Remove the voice from the map only at actual teardown time, and only if
+        // it is still the current entry — a same-note retrigger overwrites the map
+        // entry with a new voice before this timeout fires, and the identity guard
+        // prevents deleting the new voice's entry.
+        if (this.activeVoices.get(voiceKey) === voice) {
+          this.activeVoices.delete(voiceKey);
+        }
         voice.oscs.forEach((osc) => {
           try { osc.stop(); osc.disconnect(); } catch { /* ignore */ }
         });
@@ -423,8 +439,6 @@ class AudioEngine {
     } catch {
       // ignore
     }
-
-    this.activeVoices.delete(voiceKey);
   }
 
   // Lazily create (and cache) the gain bus for a source, wired like the old
@@ -434,7 +448,7 @@ class AudioEngine {
     let bus = this.sourceBuses.get(source);
     if (!bus) {
       bus = this.ctx.createGain();
-      bus.gain.value = 1;
+      bus.gain.value = this.sourceMuted.get(source) ? 0 : 1; // muted bus is silent from birth
       bus.connect(this.dryGain);
       if (this.delayNode) bus.connect(this.delayNode);
       if (this.reverbNode) bus.connect(this.reverbNode);
@@ -447,6 +461,10 @@ class AudioEngine {
   // Mute/unmute an entire source layer on its bus: ~10 ms ramp (click-free),
   // instantly cuts tails/effects, and survives across effect/param updates.
   setSourceMuted(source: string, muted: boolean): void {
+    // Persist the mute state across AudioContext rebuilds (mute is bus-level, so
+    // a bus created later for this source must be silent from birth). Record it
+    // even before the context exists, so an early App mount doesn't lose it.
+    this.sourceMuted.set(source, muted);
     if (!this.ctx) return;
     const bus = this.sourceBuses.get(source) ?? this.getSourceBus(source);
     const now = this.ctx.currentTime;
