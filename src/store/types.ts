@@ -100,11 +100,8 @@ export interface EffectsSlice {
 export interface UiSlice {
   // All ui state is transient (not persisted); the active tab comes from the URL query.
   activeTab: ViewMode;
-  isAiModalOpen: boolean;
   isProjectModalOpen: boolean;
   setActiveTab: (tab: ViewMode) => void;
-  openAiModal: () => void;
-  closeAiModal: () => void;
   openProjectsModal: () => void;
   closeProjectsModal: () => void;
 }

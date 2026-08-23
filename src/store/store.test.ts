@@ -180,7 +180,6 @@ describe('store defaults', () => {
     expect(s.bassVolume).toBe(1.0);
     expect(s.controlTarget).toBe('synth');
     expect(s.activeTab).toBe('synth');
-    expect(s.isAiModalOpen).toBe(false);
     expect(s.isProjectModalOpen).toBe(false);
     expect(s.synthParams).toEqual(INITIAL_SYNTH_PARAMS);
     expect(s.chordSynthParams).toEqual(INITIAL_SYNTH_PARAMS);
@@ -423,7 +422,6 @@ describe('persist partialize', () => {
 
     const excludedKeys = [
       'activeTab',
-      'isAiModalOpen',
       'isProjectModalOpen',
       'isSequencerPlaying',
       'isChordsPlaying',
@@ -440,8 +438,6 @@ describe('persist partialize', () => {
       'applyDrumPattern',
       'setEffects',
       'setActiveTab',
-      'openAiModal',
-      'closeAiModal',
       'openProjectsModal',
       'closeProjectsModal',
       'saveCustomPreset',

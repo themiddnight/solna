@@ -257,6 +257,11 @@ export function feelToHoldScale(feel: number): number {
   return 2 ** (2 * (feel - 0.5));
 }
 
+/** Equal-power per-voice gain scale: keeps dense chords at roughly constant loudness. */
+export function equalPowerVelocityScale(noteCount: number): number {
+  return 1 / Math.sqrt(Math.max(1, noteCount));
+}
+
 /** Full-bar hold duration, capped so a held chord never spills past its own length. */
 export function fullHoldDuration(totalBars: number, barDur: number, holdScale: number): number {
   return Math.min(totalBars * barDur * holdScale, totalBars * barDur);

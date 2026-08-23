@@ -2,7 +2,6 @@ import React from "react";
 import {
   Sliders,
   Grid,
-  Sparkles,
   FolderOpen,
   Music,
   Radio,
@@ -13,23 +12,35 @@ import { ROOTS, SCALES } from "../utils/musicTheory";
 import { useAppStore } from "../store/store";
 
 const NAV_TABS: Array<
-  | { view: ViewMode; label: string; icon: LucideIcon; playingKey?: "sequencer" | "chords" }
+  | {
+      view: ViewMode;
+      label: string;
+      icon: LucideIcon;
+      playingKey?: "sequencer" | "chords";
+    }
   | "divider"
 > = [
   { view: "synth", label: "Synth", icon: Sliders },
-  "divider",
-  { view: "sequencer", label: "Step Matrix", icon: Grid, playingKey: "sequencer" },
+  {
+    view: "sequencer",
+    label: "Step Matrix",
+    icon: Grid,
+    playingKey: "sequencer",
+  },
   { view: "chords", label: "Chords", icon: Music, playingKey: "chords" },
-  "divider",
-  { view: "effects", label: "Master FX", icon: Sliders },
 ];
+
+const MASTER_TABS: Array<{
+  view: ViewMode;
+  label: string;
+  icon: LucideIcon;
+}> = [{ view: "effects", label: "Master FX", icon: Sliders }];
 
 export const Header: React.FC = React.memo(() => {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const isSequencerPlaying = useAppStore((s) => s.isSequencerPlaying);
   const isChordsPlaying = useAppStore((s) => s.isChordsPlaying);
-  const openAiModal = useAppStore((s) => s.openAiModal);
   const openProjectsModal = useAppStore((s) => s.openProjectsModal);
   const projectTitle = useAppStore((s) => s.projectTitle);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
@@ -55,46 +66,71 @@ export const Header: React.FC = React.memo(() => {
       </div>
 
       {/* Primary Navigation Tabs */}
-      <nav className="flex items-center p-0.5 rounded-lg bg-[#0B0D19] border border-[#252B48] overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-0.5 shrink-0">
-        {NAV_TABS.map((tab, index) => {
-          if (tab === "divider") {
+      <nav className="flex items-center gap-2">
+        <div className="flex items-center p-0.5 rounded-lg bg-[#0B0D19] border border-[#252B48] overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-0.5 shrink-0">
+          {NAV_TABS.map((tab, index) => {
+            if (tab === "divider") {
+              return (
+                <div
+                  key={`divider-${index}`}
+                  className="w-px h-4 bg-[#252B48] mx-0.5 shrink-0 hidden sm:block"
+                />
+              );
+            }
+
+            const isTabPlaying =
+              tab.playingKey === "sequencer"
+                ? isSequencerPlaying
+                : tab.playingKey === "chords"
+                  ? isChordsPlaying
+                  : false;
+
             return (
-              <div
-                key={`divider-${index}`}
-                className="w-px h-4 bg-[#252B48] mx-0.5 shrink-0 hidden sm:block"
-              />
+              <button
+                key={tab.view}
+                id={`tab-${tab.view}`}
+                onClick={() => setActiveTab(tab.view)}
+                className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap relative ${
+                  activeTab === tab.view
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60"
+                }`}
+              >
+                <tab.icon className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden md:inline">{tab.label}</span>
+                {isTabPlaying && (
+                  <span
+                    className="flex h-1.5 w-1.5 relative ml-0.5"
+                    title="Playing"
+                  >
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                  </span>
+                )}
+              </button>
             );
-          }
+          })}
+        </div>
 
-          const isTabPlaying =
-            tab.playingKey === "sequencer"
-              ? isSequencerPlaying
-              : tab.playingKey === "chords"
-                ? isChordsPlaying
-                : false;
-
-          return (
-            <button
-              key={tab.view}
-              id={`tab-${tab.view}`}
-              onClick={() => setActiveTab(tab.view)}
-              className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap relative ${
-                activeTab === tab.view
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60"
-              }`}
-            >
-              <tab.icon className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden md:inline">{tab.label}</span>
-              {isTabPlaying && (
-                <span className="flex h-1.5 w-1.5 relative ml-0.5" title="Playing">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
-                </span>
-              )}
-            </button>
-          );
-        })}
+        <div className="flex items-center p-0.5 rounded-lg bg-[#0B0D19] border border-[#252B48] overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-0.5 shrink-0">
+          {MASTER_TABS.map((tab, index) => {
+            return (
+              <button
+                key={tab.view}
+                id={`tab-${tab.view}`}
+                onClick={() => setActiveTab(tab.view)}
+                className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap relative ${
+                  activeTab === tab.view
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/60"
+                }`}
+              >
+                <tab.icon className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden md:inline">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
       {/* Key, Scale & Global Actions */}
@@ -128,17 +164,6 @@ export const Header: React.FC = React.memo(() => {
             ))}
           </select>
         </div>
-
-        {/* AI Action */}
-        <button
-          id="btn-open-ai"
-          onClick={openAiModal}
-          className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-medium text-xs shadow-sm hover:brightness-110 transition-all cursor-pointer"
-          title="AI Music Companion"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">AI</span>
-        </button>
 
         {/* Projects Action */}
         <button

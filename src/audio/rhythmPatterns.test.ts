@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { feelToHoldScale, fullHoldDuration } from './rhythmPatterns';
+import { equalPowerVelocityScale, feelToHoldScale, fullHoldDuration } from './rhythmPatterns';
 
 describe('feelToHoldScale', () => {
   test('neutral (0.5) keeps the hold at x1', () => {
@@ -23,5 +23,20 @@ describe('fullHoldDuration', () => {
   });
   test('shortens the hold when holdScale < 1', () => {
     expect(fullHoldDuration(2, 2, 0.5)).toBeCloseTo(2, 5);
+  });
+});
+
+describe('equalPowerVelocityScale', () => {
+  test('a single note keeps its full velocity', () => {
+    expect(equalPowerVelocityScale(1)).toBeCloseTo(1, 5);
+  });
+  test('4 notes scale by 1/√4 = 0.5', () => {
+    expect(equalPowerVelocityScale(4)).toBeCloseTo(0.5, 5);
+  });
+  test('7 notes scale by 1/√7', () => {
+    expect(equalPowerVelocityScale(7)).toBeCloseTo(1 / Math.sqrt(7), 5);
+  });
+  test('zero notes fall back to 1 instead of Infinity', () => {
+    expect(equalPowerVelocityScale(0)).toBeCloseTo(1, 5);
   });
 });

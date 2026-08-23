@@ -11,12 +11,9 @@ type Get = StoreApi<AppStore>['getState'];
 export function createUiSlice(set: Set, _get: Get): UiSlice {
   return {
     activeTab: 'synth',
-    isAiModalOpen: false,
     isProjectModalOpen: false,
 
     setActiveTab: (activeTab) => set({ activeTab }),
-    openAiModal: () => set({ isAiModalOpen: true }),
-    closeAiModal: () => set({ isAiModalOpen: false }),
     openProjectsModal: () => set({ isProjectModalOpen: true }),
     closeProjectsModal: () => set({ isProjectModalOpen: false }),
   };

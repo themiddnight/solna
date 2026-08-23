@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   Sliders,
   Activity,
@@ -14,6 +20,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { audioEngine } from "../audio/engine";
+import { equalPowerVelocityScale } from "../audio/rhythmPatterns";
 import { buildArpSequence } from "../audio/arpeggiator";
 import { useAppStore } from "../store/store";
 import {
@@ -31,7 +38,13 @@ import {
 import { SynthPresetLibrary } from "./SynthPresetLibrary";
 import { SimpleSynthPanel } from "./SimpleSynthPanel";
 import { Knob } from "./ui/Knob";
-import { isNoteInScale, getScaleNotes, ROOTS, sixteenthNoteMs } from "../utils/musicTheory";
+import { isNoteInScale, sixteenthNoteMs } from "../utils/musicTheory";
+import {
+  clampKeyboardOctave,
+  getScaleLockedKeyboardNotes,
+  getScaleLockedKeyboardNotesFlat,
+  type ScaleKeyboardNote,
+} from "../utils/keyboard";
 import { isTypingTarget, shortcutLabel } from "../utils/keyboard";
 import { resolveSynthControlChannel } from "../utils/synthControl";
 import type { SynthControlTarget } from "../utils/synthControl";
@@ -216,12 +229,23 @@ export const SynthView = () => {
     (note: string) => {
       audioEngine.init();
       if (!params.arpActive) {
+        // Equal-power polyphony: a new note lowers every held voice so the
+        // total level stays flat as keys are added. The ref mirrors
+        // activeNotes synchronously so rapid presses see each other.
+        const held = arpStateRef.current.activeNotes;
+        const isNewNote = !held.has(note);
+        held.add(note);
+        const scale = equalPowerVelocityScale(held.size);
+        if (isNewNote) {
+          audioEngine.applySynthVelocityScale(scale);
+        }
         audioEngine.triggerSynthNoteOn(
           note,
           params,
           1.0,
           undefined,
           controlTarget,
+          scale,
         );
       }
       setActiveNotes((prev) => new Set(prev).add(note));
@@ -231,13 +255,18 @@ export const SynthView = () => {
 
   const handleNoteOff = useCallback(
     (note: string) => {
-      if (!params.arpActive) {
+      const held = arpStateRef.current.activeNotes;
+      const wasHeld = held.delete(note);
+      if (wasHeld && !params.arpActive) {
+        // Release first (marks the voice so re-scaling skips it), then let
+        // the remaining held voices rise back toward full level.
         audioEngine.triggerSynthNoteOff(
           note,
           params.release,
           undefined,
           controlTarget,
         );
+        audioEngine.applySynthVelocityScale(equalPowerVelocityScale(held.size));
       }
       setActiveNotes((prev) => {
         const next = new Set(prev);
@@ -281,8 +310,19 @@ export const SynthView = () => {
         const noteToPlay = sequence[index];
         const stepDurSec = stepDuration16th * 4;
         const holdSec = Math.max(0.04, stepDurSec * 0.85);
-        audioEngine.triggerSynthNoteOn(noteToPlay, currentParams, 0.9, time, currentTarget);
-        audioEngine.triggerSynthNoteOff(noteToPlay, currentParams.release, time + holdSec, currentTarget);
+        audioEngine.triggerSynthNoteOn(
+          noteToPlay,
+          currentParams,
+          0.9,
+          time,
+          currentTarget,
+        );
+        audioEngine.triggerSynthNoteOff(
+          noteToPlay,
+          currentParams.release,
+          time + holdSec,
+          currentTarget,
+        );
       } else if (currentParams.arpRate === "8n") {
         // 1 note every 2 sixteenth steps (eighth note)
         if (step % 2 !== 0) return;
@@ -290,25 +330,69 @@ export const SynthView = () => {
         const noteToPlay = sequence[index];
         const stepDurSec = stepDuration16th * 2;
         const holdSec = Math.max(0.04, stepDurSec * 0.85);
-        audioEngine.triggerSynthNoteOn(noteToPlay, currentParams, 0.9, time, currentTarget);
-        audioEngine.triggerSynthNoteOff(noteToPlay, currentParams.release, time + holdSec, currentTarget);
+        audioEngine.triggerSynthNoteOn(
+          noteToPlay,
+          currentParams,
+          0.9,
+          time,
+          currentTarget,
+        );
+        audioEngine.triggerSynthNoteOff(
+          noteToPlay,
+          currentParams.release,
+          time + holdSec,
+          currentTarget,
+        );
       } else if (currentParams.arpRate === "32n") {
         // 2 notes per sixteenth step (32nd note)
         const subDurSec = stepDuration16th / 2;
         const holdSec = Math.max(0.03, subDurSec * 0.85);
         const note1 = sequence[(step * 2) % sequence.length];
         const note2 = sequence[(step * 2 + 1) % sequence.length];
-        audioEngine.triggerSynthNoteOn(note1, currentParams, 0.9, time, currentTarget);
-        audioEngine.triggerSynthNoteOff(note1, currentParams.release, time + holdSec, currentTarget);
-        audioEngine.triggerSynthNoteOn(note2, currentParams, 0.9, time + subDurSec, currentTarget);
-        audioEngine.triggerSynthNoteOff(note2, currentParams.release, time + subDurSec + holdSec, currentTarget);
+        audioEngine.triggerSynthNoteOn(
+          note1,
+          currentParams,
+          0.9,
+          time,
+          currentTarget,
+        );
+        audioEngine.triggerSynthNoteOff(
+          note1,
+          currentParams.release,
+          time + holdSec,
+          currentTarget,
+        );
+        audioEngine.triggerSynthNoteOn(
+          note2,
+          currentParams,
+          0.9,
+          time + subDurSec,
+          currentTarget,
+        );
+        audioEngine.triggerSynthNoteOff(
+          note2,
+          currentParams.release,
+          time + subDurSec + holdSec,
+          currentTarget,
+        );
       } else {
         // Default 16n: 1 note every 1 sixteenth step
         const index = step % sequence.length;
         const noteToPlay = sequence[index];
         const holdSec = Math.max(0.04, stepDuration16th * 0.85);
-        audioEngine.triggerSynthNoteOn(noteToPlay, currentParams, 0.9, time, currentTarget);
-        audioEngine.triggerSynthNoteOff(noteToPlay, currentParams.release, time + holdSec, currentTarget);
+        audioEngine.triggerSynthNoteOn(
+          noteToPlay,
+          currentParams,
+          0.9,
+          time,
+          currentTarget,
+        );
+        audioEngine.triggerSynthNoteOff(
+          noteToPlay,
+          currentParams.release,
+          time + holdSec,
+          currentTarget,
+        );
       }
     });
 
@@ -322,7 +406,11 @@ export const SynthView = () => {
 
   // Silence lingering arp voices when all keys are released in arp mode
   useEffect(() => {
-    if (params.arpActive && activeNotes.size === 0 && audioEngine.getAudioContext()) {
+    if (
+      params.arpActive &&
+      activeNotes.size === 0 &&
+      audioEngine.getAudioContext()
+    ) {
       audioEngine.releaseSoundingVoices(controlTarget, params.release);
     }
   }, [params.arpActive, activeNotes.size, controlTarget, params.release]);
@@ -332,9 +420,21 @@ export const SynthView = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;
       if (e.repeat) return;
+      if (e.code === "Minus") {
+        setKeyboardOctave((o) => clampKeyboardOctave(o - 1));
+        return;
+      }
+      if (e.code === "Equal") {
+        setKeyboardOctave((o) => clampKeyboardOctave(o + 1));
+        return;
+      }
       const notesList =
         keyboardMode === "scale-locked"
-          ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
+          ? getScaleLockedKeyboardNotesFlat(
+              scaleRoot,
+              scaleType,
+              keyboardOctave,
+            )
           : getChromaticKeyboardNotes(keyboardOctave);
       const keyObj = notesList.find((n) => n.key === e.code);
       if (keyObj) {
@@ -346,7 +446,11 @@ export const SynthView = () => {
       if (isTypingTarget(e)) return;
       const notesList =
         keyboardMode === "scale-locked"
-          ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
+          ? getScaleLockedKeyboardNotesFlat(
+              scaleRoot,
+              scaleType,
+              keyboardOctave,
+            )
           : getChromaticKeyboardNotes(keyboardOctave);
       const keyObj = notesList.find((n) => n.key === e.code);
       if (keyObj) {
@@ -627,6 +731,99 @@ export const SynthView = () => {
           </div>
         )}
 
+        {/* Simple Mode: Preset Selector & Category Chips merged into the header card */}
+        {synthViewMode === "simple" && (
+          <div className="pt-3 border-t border-[#252B48] space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              {/* Preset Title & Category Badge */}
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                {activeCategoryMeta && (
+                  <span
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold ${activeCategoryMeta.badgeClass}`}
+                  >
+                    {activeCategoryMeta.label}
+                  </span>
+                )}
+                <p className="font-extrabold text-white tracking-tight truncate">
+                  {params.preset || "Default Sound"}
+                </p>
+              </div>
+
+              {/* Preset Stepper & Selector */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  id="btn-simple-prev-preset"
+                  onClick={() => handleStepPreset(-1)}
+                  className="p-2.5 rounded-xl bg-[#0B0D19] hover:bg-[#1C213E] text-slate-300 hover:text-white border border-[#2D355A] cursor-pointer transition-colors"
+                  title="Previous Sound"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <select
+                  id="select-simple-preset"
+                  value={params.preset}
+                  onChange={(e) => {
+                    const found = allPresets.find(
+                      (p) => p.name === e.target.value,
+                    );
+                    if (found) handleSelectPreset(found);
+                  }}
+                  className="bg-[#0B0D19] border border-[#2D355A] text-slate-100 text-xs font-semibold rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-500 cursor-pointer max-w-[200px] truncate"
+                >
+                  {allPresets.map((p) => (
+                    <option key={p.id} value={p.name} className="bg-[#12152A]">
+                      {p.category}: {p.name}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  id="btn-simple-next-preset"
+                  onClick={() => handleStepPreset(1)}
+                  className="p-2.5 rounded-xl bg-[#0B0D19] hover:bg-[#1C213E] text-slate-300 hover:text-white border border-[#2D355A] cursor-pointer transition-colors"
+                  title="Next Sound"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Category Quick Filter Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono mr-1">
+                Sound Style:
+              </span>
+              {[
+                { id: "All", label: "All Sounds", emoji: "✨" },
+                { id: "Lead", label: "Lead Melody", emoji: "⚡" },
+                { id: "Pad", label: "Ambient Pad", emoji: "🌌" },
+                { id: "Keys", label: "Keys & Piano", emoji: "🎹" },
+                { id: "Bass", label: "Deep Bass", emoji: "🔥" },
+                { id: "Pluck", label: "Snappy Pluck", emoji: "🪕" },
+                { id: "Brass", label: "Brass Stabs", emoji: "🎷" },
+                { id: "FX", label: "Sci-Fi FX", emoji: "🛸" },
+              ].map((cat) => {
+                const isSelected = selectedCategoryFilter === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => handleCategoryFilterClick(cat.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-indigo-600 text-white shadow-sm font-semibold"
+                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                    }`}
+                  >
+                    <span>{cat.emoji}</span>
+                    <span>{cat.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Floating Save Toast */}
         {saveToast && (
           <div className="absolute top-full right-4 mt-2 z-20 bg-emerald-950 border border-emerald-500/50 text-emerald-300 text-xs px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1">
@@ -689,32 +886,15 @@ export const SynthView = () => {
       {/* Simple Mode vs Pro Mode Body Panels */}
       {synthViewMode === "simple" ? (
         <>
-          <SimpleSynthPanel
-            params={params}
-            onChangeParams={onChangeParams}
-            controlTarget={controlTarget}
-            activePresetItem={activePresetItem}
-            allPresets={allPresets}
-            selectedCategoryFilter={selectedCategoryFilter}
-            onSelectCategoryFilter={handleCategoryFilterClick}
-            onSelectPreset={handleSelectPreset}
-            onStepPreset={handleStepPreset}
-            onOpenLibrary={() => setIsLibraryOpen(true)}
-            onQuickSave={() => {
-              setQuickSaveName(
-                params.preset ? `${params.preset} (Custom)` : "My Synth Patch",
-              );
-              setQuickSaveCategory(activePresetItem?.category ?? "User");
-              setIsQuickSaving(true);
-            }}
-          />
+          <SimpleSynthPanel params={params} onChangeParams={onChangeParams} />
 
           {/* Friendly Pro Mode Hint */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 bg-[#12152A]/70 border border-[#252B48] px-4 py-2.5 rounded-xl text-xs text-slate-300">
             <div className="flex items-center gap-2 text-slate-400">
               <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
               <span>
-                Want deep modular control over 5 oscillators, ADSR envelopes, filters & LFO modulation?
+                Want deep modular control over 5 oscillators, ADSR envelopes,
+                filters & LFO modulation?
               </span>
             </div>
             <button
@@ -728,476 +908,481 @@ export const SynthView = () => {
         </>
       ) : (
         /* Pro Mode: Control Panels Grid */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        {/* 1. Oscillators Section */}
-        <div
-          className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
-        >
-          <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5 text-indigo-400" />
-              1. Oscillators
-            </span>
-          </div>
-
-          <div>
-            <label className="text-xs text-slate-400 block mb-1.5 font-medium">
-              Waveform
-            </label>
-            <div className="grid grid-cols-4 gap-1">
-              {(["sawtooth", "square", "sine", "triangle"] as const).map(
-                (w) => (
-                  <button
-                    key={w}
-                    id={`btn-wave-${w}`}
-                    onClick={() => onChangeParams({ ...params, oscType: w })}
-                    className={`py-1 text-[11px] rounded font-semibold capitalize transition-all cursor-pointer ${
-                      params.oscType === w
-                        ? "bg-indigo-600 text-white shadow-sm"
-                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
-                    }`}
-                  >
-                    {w.slice(0, 4)}
-                  </button>
-                ),
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-start justify-between gap-2">
-            <Knob
-              id="slider-sub-osc"
-              label="Sub-Osc Volume"
-              color="text-indigo-400"
-              value={params.subOscVolume}
-              min={0}
-              max={1}
-              step={0.01}
-              format={(v) => `${(v * 100).toFixed(0)}%`}
-              onChange={(v) => onChangeParams({ ...params, subOscVolume: v })}
-            />
-
-            <Knob
-              id="slider-detune"
-              label="Detune Spread"
-              color="text-indigo-400"
-              value={params.detune}
-              min={0}
-              max={50}
-              step={1}
-              format={(v) => `${v} ct`}
-              onChange={(v) => onChangeParams({ ...params, detune: v })}
-            />
-
-            <Knob
-              id="slider-noise"
-              label="Noise Generator"
-              color="text-indigo-400"
-              value={params.noiseVolume}
-              min={0}
-              max={0.5}
-              step={0.01}
-              format={(v) => `${(v * 100).toFixed(0)}%`}
-              onChange={(v) => onChangeParams({ ...params, noiseVolume: v })}
-            />
-          </div>
-        </div>
-        {/* 2. Filter Section */}
-        <div
-          className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
-        >
-          <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Sliders className="w-3.5 h-3.5 text-pink-400" />
-              2. VCF Filter
-            </span>
-          </div>
-
-          <div>
-            <label className="text-xs text-slate-400 block mb-1.5 font-medium">
-              Filter Type
-            </label>
-            <div className="grid grid-cols-3 gap-1">
-              {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
-                <button
-                  key={t}
-                  id={`btn-filter-${t}`}
-                  onClick={() => onChangeParams({ ...params, filterType: t })}
-                  className={`py-1 text-[11px] rounded font-semibold uppercase transition-all cursor-pointer ${
-                    params.filterType === t
-                      ? "bg-pink-600 text-white shadow-sm"
-                      : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
-                  }`}
-                >
-                  {t === "lowpass" ? "LPF" : t === "bandpass" ? "BPF" : "HPF"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-start justify-between gap-2">
-            <Knob
-              id="slider-filter-cutoff"
-              label="Cutoff Frequency"
-              color="text-pink-400"
-              value={params.filterCutoff}
-              min={50}
-              max={12000}
-              step={10}
-              scale="log"
-              format={(v) => `${Math.round(v)} Hz`}
-              onChange={(v) => onChangeParams({ ...params, filterCutoff: v })}
-            />
-
-            <Knob
-              id="slider-filter-resonance"
-              label="Resonance (Q)"
-              color="text-pink-400"
-              value={params.filterResonance}
-              min={0.1}
-              max={20}
-              step={0.1}
-              scale="linear"
-              format={(v) => v.toFixed(1)}
-              onChange={(v) =>
-                onChangeParams({ ...params, filterResonance: v })
-              }
-            />
-
-            <Knob
-              id="slider-filter-env"
-              label="Env Mod Depth"
-              color="text-pink-400"
-              value={params.filterEnvAmount}
-              min={0}
-              max={6000}
-              step={50}
-              scale="linear"
-              format={(v) => `+${Math.round(v)} Hz`}
-              onChange={(v) =>
-                onChangeParams({ ...params, filterEnvAmount: v })
-              }
-            />
-          </div>
-        </div>
-        {/* 3. Envelope ADSR */}
-        <div
-          className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3 shadow-md ${tintClass}`}
-        >
-          <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
-              3. ADSR Envelope
-            </span>
-          </div>
-
-          {/* AMP / VCA */}
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
-                AMP / VCA
+        <div className="w-full flex flex-wrap gap-3">
+          {/* 1. Oscillators Section */}
+          <div
+            className={`flex-1 bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
+          >
+            <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
+              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-indigo-400" />
+                1. Oscillators
               </span>
-              <span className="flex-1 h-px bg-[#252B48]" />
             </div>
-            <div className="flex items-start justify-between gap-2">
-              {/* Attack */}
-              <Knob
-                id="slider-env-attack"
-                label="ATT"
-                color="text-emerald-400"
-                value={params.attack}
-                min={0.005}
-                max={2.0}
-                step={0.01}
-                format={(v) => `${v.toFixed(2)}s`}
-                onChange={(v) => onChangeParams({ ...params, attack: v })}
-              />
 
-              {/* Decay */}
-              <Knob
-                id="slider-env-decay"
-                label="DEC"
-                color="text-emerald-400"
-                value={params.decay}
-                min={0.01}
-                max={2.0}
-                step={0.01}
-                format={(v) => `${v.toFixed(2)}s`}
-                onChange={(v) => onChangeParams({ ...params, decay: v })}
-              />
-
-              {/* Sustain */}
-              <Knob
-                id="slider-env-sustain"
-                label="SUS"
-                color="text-emerald-400"
-                value={params.sustain}
-                min={0}
-                max={1.0}
-                step={0.01}
-                format={(v) => `${(v * 100).toFixed(0)}%`}
-                onChange={(v) => onChangeParams({ ...params, sustain: v })}
-              />
-
-              {/* Release */}
-              <Knob
-                id="slider-env-release"
-                label="REL"
-                color="text-emerald-400"
-                value={params.release}
-                min={0.01}
-                max={3.0}
-                step={0.01}
-                format={(v) => `${v.toFixed(2)}s`}
-                onChange={(v) => onChangeParams({ ...params, release: v })}
-              />
-            </div>
-          </div>
-
-          {/* FILTER / VCF */}
-          <div className="pt-2.5">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[10px] font-mono text-pink-400 uppercase tracking-wider">
-                FILTER / VCF
-              </span>
-              <span className="flex-1 h-px bg-[#252B48]" />
-            </div>
-            <div className="flex items-start justify-between gap-2">
-              {/* Filter Attack */}
-              <Knob
-                id="slider-env-filter-attack"
-                label="ATT"
-                color="text-pink-400"
-                value={params.filterAttack}
-                min={0.005}
-                max={2.0}
-                step={0.01}
-                format={(v) => `${v.toFixed(2)}s`}
-                onChange={(v) => onChangeParams({ ...params, filterAttack: v })}
-              />
-
-              {/* Filter Decay */}
-              <Knob
-                id="slider-env-filter-decay"
-                label="DEC"
-                color="text-pink-400"
-                value={params.filterDecay}
-                min={0.01}
-                max={2.0}
-                step={0.01}
-                format={(v) => `${v.toFixed(2)}s`}
-                onChange={(v) => onChangeParams({ ...params, filterDecay: v })}
-              />
-
-              {/* Filter Sustain */}
-              <Knob
-                id="slider-env-filter-sustain"
-                label="SUS"
-                color="text-pink-400"
-                value={params.filterSustain}
-                min={0}
-                max={1.0}
-                step={0.01}
-                format={(v) => `${(v * 100).toFixed(0)}%`}
-                onChange={(v) =>
-                  onChangeParams({ ...params, filterSustain: v })
-                }
-              />
-
-              {/* Filter Release */}
-              <Knob
-                id="slider-env-filter-release"
-                label="REL"
-                color="text-pink-400"
-                value={params.filterRelease}
-                min={0.01}
-                max={3.0}
-                step={0.01}
-                format={(v) => `${v.toFixed(2)}s`}
-                onChange={(v) =>
-                  onChangeParams({ ...params, filterRelease: v })
-                }
-              />
-            </div>
-          </div>
-        </div>{" "}
-        {/* 4. LFO & Master Pitch */}
-        <div
-          className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
-        >
-          <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5 text-cyan-400" />
-              4. LFO & Octave
-            </span>
-          </div>
-
-          <div>
-            <label className="text-xs text-slate-400 block mb-1.5 font-medium">
-              LFO Destination
-            </label>
-            <div className="grid grid-cols-3 gap-1">
-              {(["cutoff", "pitch", "volume"] as const).map((t) => (
-                <button
-                  key={t}
-                  id={`btn-lfo-target-${t}`}
-                  onClick={() => onChangeParams({ ...params, lfoTarget: t })}
-                  className={`py-1 text-[11px] rounded font-semibold capitalize transition-all cursor-pointer ${
-                    params.lfoTarget === t
-                      ? "bg-cyan-600 text-white shadow-sm"
-                      : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-start justify-around gap-2">
-            <Knob
-              id="slider-lfo-rate"
-              label="LFO Rate"
-              color="text-cyan-400"
-              value={params.lfoRate}
-              min={0.1}
-              max={20}
-              step={0.1}
-              format={(v) => `${v.toFixed(1)} Hz`}
-              onChange={(v) => onChangeParams({ ...params, lfoRate: v })}
-            />
-
-            <Knob
-              id="slider-lfo-depth"
-              label="LFO Depth"
-              color="text-cyan-400"
-              value={params.lfoDepth}
-              min={0}
-              max={1}
-              step={0.01}
-              format={(v) => `${(v * 100).toFixed(0)}%`}
-              onChange={(v) => onChangeParams({ ...params, lfoDepth: v })}
-            />
-          </div>
-
-          <div className="pt-1 flex items-center justify-between">
-            <span className="text-xs text-slate-400">Octave Pitch</span>
-            <div className="flex items-center gap-1">
-              {([-2, -1, 0, 1, 2] as const).map((oct) => (
-                <button
-                  key={oct}
-                  id={`btn-octave-${oct}`}
-                  onClick={() => onChangeParams({ ...params, octave: oct })}
-                  className={`w-6 h-6 rounded text-xs font-mono font-bold flex items-center justify-center transition-colors cursor-pointer ${
-                    params.octave === oct
-                      ? "bg-indigo-600 text-white"
-                      : "bg-[#0B0D19] text-slate-400 hover:text-white border border-[#252B48]"
-                  }`}
-                >
-                  {oct > 0 ? `+${oct}` : oct}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* 5. Arpeggiator */}
-        <div
-          className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
-        >
-          <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              5. Arpeggiator
-            </span>
-            <button
-              id="btn-toggle-arp"
-              onClick={() => {
-                audioEngine.init();
-                onChangeParams({
-                  ...params,
-                  arpActive: !params.arpActive,
-                });
-              }}
-              className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                params.arpActive
-                  ? "bg-purple-600 text-white shadow-md shadow-purple-500/30"
-                  : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
-              }`}
-            >
-              {params.arpActive ? "Active" : "Bypass"}
-            </button>
-          </div>
-
-          <div>
-            <label className="text-xs text-slate-400 block mb-1.5 font-medium">
-              Arp Mode
-            </label>
-            <div className="grid grid-cols-4 gap-1">
-              {(["up", "down", "updown", "random"] as const).map((m) => (
-                <button
-                  key={m}
-                  id={`btn-arp-mode-${m}`}
-                  onClick={() => onChangeParams({ ...params, arpMode: m })}
-                  className={`py-1 text-[10px] rounded font-semibold capitalize transition-all cursor-pointer ${
-                    (params.arpMode ?? "up") === m
-                      ? "bg-purple-600 text-white shadow-sm"
-                      : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
-                  }`}
-                >
-                  {m === "updown" ? "Up/Dn" : m}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-2">
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1 font-medium">
-                Rate
+              <label className="text-xs text-slate-400 block mb-1.5 font-medium">
+                Waveform
               </label>
-              <div className="flex gap-1">
-                {(["16n", "8n", "32n"] as const).map((r) => (
+              <div className="grid grid-cols-4 gap-1">
+                {(["sawtooth", "square", "sine", "triangle"] as const).map(
+                  (w) => (
+                    <button
+                      key={w}
+                      id={`btn-wave-${w}`}
+                      onClick={() => onChangeParams({ ...params, oscType: w })}
+                      className={`py-1 text-[11px] rounded font-semibold capitalize transition-all cursor-pointer ${
+                        params.oscType === w
+                          ? "bg-indigo-600 text-white shadow-sm"
+                          : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                      }`}
+                    >
+                      {w.slice(0, 4)}
+                    </button>
+                  ),
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-start justify-between gap-2">
+              <Knob
+                id="slider-sub-osc"
+                label="Sub-Osc"
+                color="text-indigo-400"
+                value={params.subOscVolume}
+                min={0}
+                max={1}
+                step={0.01}
+                format={(v) => `${(v * 100).toFixed(0)}%`}
+                onChange={(v) => onChangeParams({ ...params, subOscVolume: v })}
+              />
+
+              <Knob
+                id="slider-detune"
+                label="Detune"
+                color="text-indigo-400"
+                value={params.detune}
+                min={0}
+                max={50}
+                step={1}
+                format={(v) => `${v} ct`}
+                onChange={(v) => onChangeParams({ ...params, detune: v })}
+              />
+
+              <Knob
+                id="slider-noise"
+                label="Noise"
+                color="text-indigo-400"
+                value={params.noiseVolume}
+                min={0}
+                max={0.5}
+                step={0.01}
+                format={(v) => `${(v * 100).toFixed(0)}%`}
+                onChange={(v) => onChangeParams({ ...params, noiseVolume: v })}
+              />
+            </div>
+          </div>
+          {/* 2. Filter Section */}
+          <div
+            className={`flex-1 bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
+          >
+            <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
+              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-pink-400" />
+                2. VCF Filter
+              </span>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 block mb-1.5 font-medium">
+                Filter Type
+              </label>
+              <div className="grid grid-cols-3 gap-1">
+                {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
                   <button
-                    key={r}
-                    id={`btn-arp-rate-${r}`}
-                    onClick={() => onChangeParams({ ...params, arpRate: r })}
-                    className={`px-2 py-1 text-[11px] font-mono rounded font-semibold transition-all cursor-pointer ${
-                      (params.arpRate ?? "16n") === r
-                        ? "bg-purple-600 text-white"
+                    key={t}
+                    id={`btn-filter-${t}`}
+                    onClick={() => onChangeParams({ ...params, filterType: t })}
+                    className={`py-1 text-[11px] rounded font-semibold uppercase transition-all cursor-pointer ${
+                      params.filterType === t
+                        ? "bg-pink-600 text-white shadow-sm"
                         : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
                     }`}
                   >
-                    {r === "16n" ? "1/16" : r === "8n" ? "1/8" : "1/32"}
+                    {t === "lowpass" ? "LPF" : t === "bandpass" ? "BPF" : "HPF"}
                   </button>
                 ))}
               </div>
             </div>
 
+            <div className="flex items-start justify-between gap-2">
+              <Knob
+                id="slider-filter-cutoff"
+                label="Cutoff"
+                color="text-pink-400"
+                value={params.filterCutoff}
+                min={50}
+                max={12000}
+                step={10}
+                scale="log"
+                format={(v) => `${Math.round(v)} Hz`}
+                onChange={(v) => onChangeParams({ ...params, filterCutoff: v })}
+              />
+
+              <Knob
+                id="slider-filter-resonance"
+                label="Resonance"
+                color="text-pink-400"
+                value={params.filterResonance}
+                min={0.1}
+                max={20}
+                step={0.1}
+                scale="linear"
+                format={(v) => v.toFixed(1)}
+                onChange={(v) =>
+                  onChangeParams({ ...params, filterResonance: v })
+                }
+              />
+
+              <Knob
+                id="slider-filter-env"
+                label="Env Mod"
+                color="text-pink-400"
+                value={params.filterEnvAmount}
+                min={0}
+                max={6000}
+                step={50}
+                scale="linear"
+                format={(v) => `+${Math.round(v)} Hz`}
+                onChange={(v) =>
+                  onChangeParams({ ...params, filterEnvAmount: v })
+                }
+              />
+            </div>
+          </div>
+          {/* 3. Envelope ADSR */}
+          <div
+            className={`flex-1 bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3 shadow-md ${tintClass}`}
+          >
+            <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
+              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                3. ADSR Envelope
+              </span>
+            </div>
+
+            {/* AMP / VCA */}
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1 font-medium">
-                Octaves
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
+                  AMP / VCA
+                </span>
+                <span className="flex-1 h-px bg-[#252B48]" />
+              </div>
+              <div className="flex items-start justify-around gap-2">
+                {/* Attack */}
+                <Knob
+                  id="slider-env-attack"
+                  label="ATT"
+                  color="text-emerald-400"
+                  value={params.attack}
+                  min={0.005}
+                  max={2.0}
+                  step={0.01}
+                  format={(v) => `${v.toFixed(2)}s`}
+                  onChange={(v) => onChangeParams({ ...params, attack: v })}
+                />
+
+                {/* Decay */}
+                <Knob
+                  id="slider-env-decay"
+                  label="DEC"
+                  color="text-emerald-400"
+                  value={params.decay}
+                  min={0.01}
+                  max={2.0}
+                  step={0.01}
+                  format={(v) => `${v.toFixed(2)}s`}
+                  onChange={(v) => onChangeParams({ ...params, decay: v })}
+                />
+
+                {/* Sustain */}
+                <Knob
+                  id="slider-env-sustain"
+                  label="SUS"
+                  color="text-emerald-400"
+                  value={params.sustain}
+                  min={0}
+                  max={1.0}
+                  step={0.01}
+                  format={(v) => `${(v * 100).toFixed(0)}%`}
+                  onChange={(v) => onChangeParams({ ...params, sustain: v })}
+                />
+
+                {/* Release */}
+                <Knob
+                  id="slider-env-release"
+                  label="REL"
+                  color="text-emerald-400"
+                  value={params.release}
+                  min={0.01}
+                  max={3.0}
+                  step={0.01}
+                  format={(v) => `${v.toFixed(2)}s`}
+                  onChange={(v) => onChangeParams({ ...params, release: v })}
+                />
+              </div>
+            </div>
+
+            {/* FILTER / VCF */}
+            <div className="pt-2.5">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[10px] font-mono text-pink-400 uppercase tracking-wider">
+                  FILTER / VCF
+                </span>
+                <span className="flex-1 h-px bg-[#252B48]" />
+              </div>
+              <div className="flex items-start justify-around">
+                {/* Filter Attack */}
+                <Knob
+                  id="slider-env-filter-attack"
+                  label="ATT"
+                  color="text-pink-400"
+                  value={params.filterAttack}
+                  min={0.005}
+                  max={2.0}
+                  step={0.01}
+                  format={(v) => `${v.toFixed(2)}s`}
+                  onChange={(v) =>
+                    onChangeParams({ ...params, filterAttack: v })
+                  }
+                />
+
+                {/* Filter Decay */}
+                <Knob
+                  id="slider-env-filter-decay"
+                  label="DEC"
+                  color="text-pink-400"
+                  value={params.filterDecay}
+                  min={0.01}
+                  max={2.0}
+                  step={0.01}
+                  format={(v) => `${v.toFixed(2)}s`}
+                  onChange={(v) =>
+                    onChangeParams({ ...params, filterDecay: v })
+                  }
+                />
+
+                {/* Filter Sustain */}
+                <Knob
+                  id="slider-env-filter-sustain"
+                  label="SUS"
+                  color="text-pink-400"
+                  value={params.filterSustain}
+                  min={0}
+                  max={1.0}
+                  step={0.01}
+                  format={(v) => `${(v * 100).toFixed(0)}%`}
+                  onChange={(v) =>
+                    onChangeParams({ ...params, filterSustain: v })
+                  }
+                />
+
+                {/* Filter Release */}
+                <Knob
+                  id="slider-env-filter-release"
+                  label="REL"
+                  color="text-pink-400"
+                  value={params.filterRelease}
+                  min={0.01}
+                  max={3.0}
+                  step={0.01}
+                  format={(v) => `${v.toFixed(2)}s`}
+                  onChange={(v) =>
+                    onChangeParams({ ...params, filterRelease: v })
+                  }
+                />
+              </div>
+            </div>
+          </div>{" "}
+          {/* 4. LFO & Master Pitch */}
+          <div
+            className={`flex-1 bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
+          >
+            <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
+              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                4. LFO & Octave
+              </span>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 block mb-1.5 font-medium">
+                LFO Destination
               </label>
-              <div className="flex gap-1">
-                {[1, 2, 3].map((oct) => (
+              <div className="grid grid-cols-3 gap-1">
+                {(["cutoff", "pitch", "volume"] as const).map((t) => (
+                  <button
+                    key={t}
+                    id={`btn-lfo-target-${t}`}
+                    onClick={() => onChangeParams({ ...params, lfoTarget: t })}
+                    className={`py-1 text-[11px] rounded font-semibold capitalize transition-all cursor-pointer ${
+                      params.lfoTarget === t
+                        ? "bg-cyan-600 text-white shadow-sm"
+                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-start justify-around gap-2">
+              <Knob
+                id="slider-lfo-rate"
+                label="LFO Rate"
+                color="text-cyan-400"
+                value={params.lfoRate}
+                min={0.1}
+                max={20}
+                step={0.1}
+                format={(v) => `${v.toFixed(1)} Hz`}
+                onChange={(v) => onChangeParams({ ...params, lfoRate: v })}
+              />
+
+              <Knob
+                id="slider-lfo-depth"
+                label="LFO Depth"
+                color="text-cyan-400"
+                value={params.lfoDepth}
+                min={0}
+                max={1}
+                step={0.01}
+                format={(v) => `${(v * 100).toFixed(0)}%`}
+                onChange={(v) => onChangeParams({ ...params, lfoDepth: v })}
+              />
+            </div>
+
+            <div className="pt-1 flex items-center justify-between">
+              <span className="text-xs text-slate-400">Octave Pitch</span>
+              <div className="flex items-center gap-1">
+                {([-2, -1, 0, 1, 2] as const).map((oct) => (
                   <button
                     key={oct}
-                    id={`btn-arp-octave-${oct}`}
-                    onClick={() => onChangeParams({ ...params, arpOctaves: oct })}
-                    className={`w-7 py-1 text-xs font-mono font-bold rounded transition-all cursor-pointer ${
-                      (params.arpOctaves ?? 1) === oct
-                        ? "bg-purple-600 text-white"
-                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                    id={`btn-octave-${oct}`}
+                    onClick={() => onChangeParams({ ...params, octave: oct })}
+                    className={`w-6 h-6 rounded text-xs font-mono font-bold flex items-center justify-center transition-colors cursor-pointer ${
+                      params.octave === oct
+                        ? "bg-indigo-600 text-white"
+                        : "bg-[#0B0D19] text-slate-400 hover:text-white border border-[#252B48]"
                     }`}
                   >
-                    +{oct}
+                    {oct > 0 ? `+${oct}` : oct}
                   </button>
                 ))}
               </div>
             </div>
           </div>
+          {/* 5. Arpeggiator */}
+          <div
+            className={`flex-1 bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
+          >
+            <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
+              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                5. Arpeggiator
+              </span>
+              <button
+                id="btn-toggle-arp"
+                onClick={() => {
+                  audioEngine.init();
+                  onChangeParams({
+                    ...params,
+                    arpActive: !params.arpActive,
+                  });
+                }}
+                className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                  params.arpActive
+                    ? "bg-purple-600 text-white shadow-md shadow-purple-500/30"
+                    : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                }`}
+              >
+                {params.arpActive ? "Active" : "Bypass"}
+              </button>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 block mb-1.5 font-medium">
+                Arp Mode
+              </label>
+              <div className="grid grid-cols-4 gap-1">
+                {(["up", "down", "updown", "random"] as const).map((m) => (
+                  <button
+                    key={m}
+                    id={`btn-arp-mode-${m}`}
+                    onClick={() => onChangeParams({ ...params, arpMode: m })}
+                    className={`py-1 text-[10px] rounded font-semibold capitalize transition-all cursor-pointer ${
+                      (params.arpMode ?? "up") === m
+                        ? "bg-purple-600 text-white shadow-sm"
+                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                    }`}
+                  >
+                    {m === "updown" ? "Up/Dn" : m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1 font-medium">
+                  Rate
+                </label>
+                <div className="flex gap-1">
+                  {(["16n", "8n", "32n"] as const).map((r) => (
+                    <button
+                      key={r}
+                      id={`btn-arp-rate-${r}`}
+                      onClick={() => onChangeParams({ ...params, arpRate: r })}
+                      className={`px-2 py-1 text-[11px] font-mono rounded font-semibold transition-all cursor-pointer ${
+                        (params.arpRate ?? "16n") === r
+                          ? "bg-purple-600 text-white"
+                          : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                      }`}
+                    >
+                      {r === "16n" ? "1/16" : r === "8n" ? "1/8" : "1/32"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1 font-medium">
+                  Octaves
+                </label>
+                <div className="flex gap-1">
+                  {[1, 2, 3].map((oct) => (
+                    <button
+                      key={oct}
+                      id={`btn-arp-octave-${oct}`}
+                      onClick={() =>
+                        onChangeParams({ ...params, arpOctaves: oct })
+                      }
+                      className={`w-7 py-1 text-xs font-mono font-bold rounded transition-all cursor-pointer ${
+                        (params.arpOctaves ?? 1) === oct
+                          ? "bg-purple-600 text-white"
+                          : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                      }`}
+                    >
+                      +{oct}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
       )}
 
       {/* Interactive Piano Keyboard */}
@@ -1279,101 +1464,31 @@ export const SynthView = () => {
           </div>
         </div>
 
-        {/* Friendly Play Guide when in Simple Mode */}
-        {synthViewMode === "simple" && (
-          <div className="mb-3 px-3 py-1.5 rounded-lg bg-[#0B0D19] border border-[#252B48] flex items-center justify-between text-xs text-slate-300 flex-wrap gap-2">
-            <span className="flex items-center gap-1.5 text-[11px] text-slate-400 flex-wrap">
-              <span>🎹 Click keys below, or use computer keyboard:</span>
-              {(['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'] as const).map((k) => (
-                <kbd
-                  key={k}
-                  className="px-1.5 py-0.2 rounded bg-[#161B36] border border-[#2D355A] font-mono text-[10px] text-indigo-300 font-bold"
-                >
-                  {k}
-                </kbd>
-              ))}
-            </span>
-            <span className="text-[11px] text-emerald-400 font-medium hidden sm:inline">
-              ✓ Smart Key Lock ({scaleRoot} {scaleType})
-            </span>
-          </div>
-        )}
-
         {/* Keyboard Keys Layout — uses keyboardOctave for display range */}
-        <div className="relative h-[130px] flex select-none bg-[#0B0D19] p-2 rounded-lg border border-[#252B48] overflow-x-auto">
-          {(keyboardMode === "scale-locked"
-            ? getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave)
-            : getChromaticKeyboardNotes(keyboardOctave)
-          ).map((k, noteIndex) => {
-            const isActive = activeNotes.has(k.note);
-            // Render all scale-locked keys as white
-            if (keyboardMode !== "scale-locked" && k.isBlack) {
-              const marginLeft = getBlackKeyMargin(k.note);
-              return (
-                <div
-                  key={k.note}
-                  id={`key-${k.note}`}
-                  onMouseDown={() => handleNoteOn(k.note)}
-                  onMouseUp={() => handleNoteOff(k.note)}
-                  onMouseLeave={() => isActive && handleNoteOff(k.note)}
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    handleNoteOn(k.note);
-                  }}
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    handleNoteOff(k.note);
-                  }}
-                  className={`absolute z-10 w-9 h-[80px] rounded-b-md border border-slate-900 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
-                    isActive
-                      ? "bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-lg shadow-indigo-500/50 scale-[0.98]"
-                      : "bg-gradient-to-b from-slate-800 to-slate-950 hover:bg-slate-800"
-                  }`}
-                  style={{
-                    left: `${getBlackKeyLeftOffset(noteIndex)}%`,
-                    marginLeft: `${marginLeft}px`,
-                  }}
-                >
-                  <span className="text-[9px] font-mono font-bold text-slate-300">
-                    {k.label}
-                  </span>
-                  <span className="text-[8px] font-mono text-indigo-400 uppercase">
-                    {shortcutLabel(k.key)}
-                  </span>
-                </div>
-              );
-            }
-
-            return (
-              <div
-                key={k.note}
-                id={`key-${k.note}`}
-                onMouseDown={() => handleNoteOn(k.note)}
-                onMouseUp={() => handleNoteOff(k.note)}
-                onMouseLeave={() => isActive && handleNoteOff(k.note)}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  handleNoteOn(k.note);
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  handleNoteOff(k.note);
-                }}
-                className={`flex-1 h-full rounded-b-md border border-slate-700 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
-                  isActive
-                    ? "bg-gradient-to-b from-indigo-200 to-indigo-400 text-slate-950 shadow-inner scale-[0.99]"
-                    : "bg-gradient-to-b from-slate-100 to-slate-200 text-slate-800 hover:from-white hover:to-slate-100"
-                }`}
-              >
-                <span className="text-[10px] font-mono font-bold">
-                  {k.label}
-                </span>
-                <span className="text-[9px] font-mono text-indigo-600 uppercase font-semibold">
-                  {shortcutLabel(k.key)}
-                </span>
-              </div>
-            );
-          })}
+        <div
+          className={`flex justify-center relative h-[180px] select-none bg-[#0B0D19] p-2 rounded-lg border border-[#252B48] overflow-x-auto ${
+            keyboardMode === "scale-locked" ? "flex-col gap-1.5" : ""
+          }`}
+        >
+          {keyboardMode === "scale-locked" ? (
+            <ScaleLockedKeyboard
+              rows={getScaleLockedKeyboardNotes(
+                scaleRoot,
+                scaleType,
+                keyboardOctave,
+              )}
+              activeNotes={activeNotes}
+              onNoteOn={handleNoteOn}
+              onNoteOff={handleNoteOff}
+            />
+          ) : (
+            <ChromaticKeyboard
+              octaveOffset={keyboardOctave}
+              activeNotes={activeNotes}
+              onNoteOn={handleNoteOn}
+              onNoteOff={handleNoteOff}
+            />
+          )}
         </div>
       </div>
 
@@ -1391,88 +1506,181 @@ export const SynthView = () => {
   );
 };
 
-// Use note index within KEYBOARD_NOTES (0-based) to compute black key position
-// Index positions of black keys in KEYBOARD_NOTES: 1(C#), 3(D#), 6(F#), 8(G#), 10(A#), 13(C#), 15(D#)
-// This is index-based so it works correctly regardless of which octave range is displayed
-function getBlackKeyLeftOffset(noteIndex: number): number {
-  const whiteKeyWidth = 100 / 11;
-  const offsets: Record<number, number> = {
-    1: whiteKeyWidth * 0.7, // C#
-    3: whiteKeyWidth * 1.7, // D#
-    6: whiteKeyWidth * 3.7, // F#
-    8: whiteKeyWidth * 4.7, // G#
-    10: whiteKeyWidth * 5.7, // A#
-    13: whiteKeyWidth * 7.7, // C# (2nd octave)
-    15: whiteKeyWidth * 8.7, // D# (2nd octave)
-  };
-  return offsets[noteIndex] ?? 0;
+function ScaleLockedKey({
+  k,
+  isActive,
+  onNoteOn,
+  onNoteOff,
+}: {
+  k: ScaleKeyboardNote;
+  isActive: boolean;
+  onNoteOn: (note: string) => void;
+  onNoteOff: (note: string) => void;
+}) {
+  return (
+    <div
+      id={`key-${k.note}`}
+      onMouseDown={() => onNoteOn(k.note)}
+      onMouseUp={() => onNoteOff(k.note)}
+      onMouseLeave={() => isActive && onNoteOff(k.note)}
+      onTouchStart={(e) => {
+        e.preventDefault();
+        onNoteOn(k.note);
+      }}
+      onTouchEnd={(e) => {
+        e.preventDefault();
+        onNoteOff(k.note);
+      }}
+      className={`w-12 h-full rounded-b-md border border-slate-700 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
+        isActive
+          ? "bg-gradient-to-b from-indigo-200 to-indigo-400 text-slate-950 shadow-inner scale-[0.99]"
+          : "bg-gradient-to-b from-slate-100 to-slate-200 text-slate-800 hover:from-white hover:to-slate-100"
+      }`}
+    >
+      <span className="text-[10px] font-mono font-bold">{k.label}</span>
+      <span className="text-[9px] font-mono text-indigo-600 uppercase font-semibold">
+        {shortcutLabel(k.key)}
+      </span>
+    </div>
+  );
 }
 
-function getBlackKeyMargin(note: string): number {
-  const margins: Record<string, number> = {
-    "C#3": 18,
-    "D#3": 18,
-    "F#3": 12,
-    "G#3": 12,
-    "A#3": 12,
-    "C#4": 8,
-    "D#4": 8,
-  };
-  return margins[note] ?? 0;
+// Two QWERTY rows for scale-locked mode: top row (Q..]) above the home row
+// (A..'), staggered like a physical keyboard.
+function ScaleLockedKeyboard({
+  rows,
+  activeNotes,
+  onNoteOn,
+  onNoteOff,
+}: {
+  rows: { homeRow: ScaleKeyboardNote[]; topRow: ScaleKeyboardNote[] };
+  activeNotes: Set<string>;
+  onNoteOn: (note: string) => void;
+  onNoteOff: (note: string) => void;
+}) {
+  return (
+    <>
+      <div className="flex flex-1 w-full gap-0.5 [justify-content:safe_center]">
+        {rows.topRow.map((k) => (
+          <ScaleLockedKey
+            key={k.note}
+            k={k}
+            isActive={activeNotes.has(k.note)}
+            onNoteOn={onNoteOn}
+            onNoteOff={onNoteOff}
+          />
+        ))}
+      </div>
+      <div className="flex flex-1 w-full gap-0.5 [justify-content:safe_center]">
+        {rows.homeRow.map((k) => (
+          <ScaleLockedKey
+            key={k.note}
+            k={k}
+            isActive={activeNotes.has(k.note)}
+            onNoteOn={onNoteOn}
+            onNoteOff={onNoteOff}
+          />
+        ))}
+      </div>
+    </>
+  );
 }
 
-function getScaleLockedKeyboardNotes(
-  root: string,
-  scaleType: string,
-  octaveOffset: number,
-) {
-  const scaleNotes = getScaleNotes(root, scaleType);
-  const shortcutKeys = [
-    "KeyA",
-    "KeyS",
-    "KeyD",
-    "KeyF",
-    "KeyG",
-    "KeyH",
-    "KeyJ",
-    "KeyK",
-    "KeyL",
-    "Semicolon",
-    "Quote",
-  ];
+export function ChromaticKeyboard({
+  octaveOffset,
+  activeNotes,
+  onNoteOn,
+  onNoteOff,
+}: {
+  octaveOffset: number;
+  activeNotes: Set<string>;
+  onNoteOn: (note: string) => void;
+  onNoteOff: (note: string) => void;
+}) {
+  return (
+    <div className="relative flex">
+      {getChromaticKeyboardNotes(octaveOffset).map((k, noteIndex) => {
+        const isActive = activeNotes.has(k.note);
+        if (k.isBlack) {
+          return (
+            <div
+              key={k.note}
+              id={`key-${k.note}`}
+              onMouseDown={() => onNoteOn(k.note)}
+              onMouseUp={() => onNoteOff(k.note)}
+              onMouseLeave={() => isActive && onNoteOff(k.note)}
+              onTouchStart={(e) => {
+                e.preventDefault();
+                onNoteOn(k.note);
+              }}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                onNoteOff(k.note);
+              }}
+              className={`absolute z-10 w-9 h-[100px] rounded-b-md border border-slate-900 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
+                isActive
+                  ? "bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-lg shadow-indigo-500/50 scale-[0.98]"
+                  : "bg-gradient-to-b from-slate-800 to-slate-950 hover:bg-slate-800"
+              }`}
+              style={{
+                left: `${getBlackKeyLeftPx(noteIndex)}px`,
+              }}
+            >
+              <span className="text-[9px] font-mono font-bold text-slate-300">
+                {k.label}
+              </span>
+              <span className="text-[8px] font-mono text-indigo-400 uppercase">
+                {shortcutLabel(k.key)}
+              </span>
+            </div>
+          );
+        }
 
-  let currentOctave = 3 + octaveOffset;
-  let prevNoteIndex = -1;
+        return (
+          <div
+            key={k.note}
+            id={`key-${k.note}`}
+            onMouseDown={() => onNoteOn(k.note)}
+            onMouseUp={() => onNoteOff(k.note)}
+            onMouseLeave={() => isActive && onNoteOff(k.note)}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              onNoteOn(k.note);
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              onNoteOff(k.note);
+            }}
+            className={`w-16 h-full rounded-b-md border border-slate-700 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
+              isActive
+                ? "bg-gradient-to-b from-indigo-200 to-indigo-400 text-slate-950 shadow-inner scale-[0.99]"
+                : "bg-gradient-to-b from-slate-100 to-slate-200 text-slate-800 hover:from-white hover:to-slate-100"
+            }`}
+          >
+            <span className="text-[10px] font-mono font-bold">
+              {k.label}
+            </span>
+            <span className="text-[9px] font-mono text-indigo-600 uppercase font-semibold">
+              {shortcutLabel(k.key)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
-  const octavesToGenerate = 2;
-  const allScaleNotesWithOctave: { note: string; label: string }[] = [];
+// White key: w-16 (64px) + mx-0.5 (4px total) = 68px stride; black key: w-9 = 36px.
+// Positions are derived from white-key boundaries, so they hold at any octave
+// offset and container width.
+const WHITE_KEY_STRIDE_PX = 68;
+const BLACK_KEY_WIDTH_PX = 36;
 
-  for (let oct = 0; oct < octavesToGenerate; oct++) {
-    for (let i = 0; i < scaleNotes.length; i++) {
-      const noteName = scaleNotes[i];
-      const noteIndex = ROOTS.indexOf(noteName as any);
-
-      if (prevNoteIndex !== -1 && noteIndex < prevNoteIndex) {
-        currentOctave++;
-      }
-
-      allScaleNotesWithOctave.push({
-        note: `${noteName}${currentOctave}`,
-        label: `${noteName}${currentOctave}`,
-      });
-
-      prevNoteIndex = noteIndex;
-    }
-  }
-
-  return allScaleNotesWithOctave.map((item, index) => {
-    return {
-      note: item.note,
-      label: item.label,
-      key: index < shortcutKeys.length ? shortcutKeys[index] : "",
-      isBlack: false,
-    };
-  });
+export function getBlackKeyLeftPx(noteIndex: number): number {
+  const whiteKeysBefore = KEYBOARD_NOTES.slice(0, noteIndex).filter(
+    (k) => !k.isBlack,
+  ).length;
+  return whiteKeysBefore * WHITE_KEY_STRIDE_PX - BLACK_KEY_WIDTH_PX / 2;
 }
 
 // Chromatic keyboard always starts from C — octaveOffset shifts the range up/down

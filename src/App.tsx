@@ -6,7 +6,6 @@ import { SequencerView } from './components/SequencerView';
 import { ChordView } from './components/ChordView';
 import { EffectsRackView } from './components/EffectsRackView';
 import { TransportBar } from './components/TransportBar';
-import { AiCompanionModal } from './components/AiCompanionModal';
 import { ProjectModal } from './components/ProjectModal';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import { audioEngine } from './audio/engine';
@@ -55,28 +54,12 @@ export function App() {
 
   // UI slice
   const activeTab = useAppStore((s) => s.activeTab);
-  const isAiModalOpen = useAppStore((s) => s.isAiModalOpen);
   const isProjectModalOpen = useAppStore((s) => s.isProjectModalOpen);
-  const closeAiModal = useAppStore((s) => s.closeAiModal);
   const closeProjectsModal = useAppStore((s) => s.closeProjectsModal);
 
-  // Transport slice
-  const bpm = useAppStore((s) => s.bpm);
-
   // Music context slice
-  const scaleRoot = useAppStore((s) => s.scaleRoot);
-  const scaleType = useAppStore((s) => s.scaleType);
   const setProjectTitle = useAppStore((s) => s.setProjectTitle);
   const applyTemplate = useAppStore((s) => s.applyTemplate);
-
-  // Synth slice
-  const applySynthPreset = useAppStore((s) => s.applySynthPreset);
-
-  // Chords slice (ChordView reads the rest of the slice directly)
-  const setChords = useAppStore((s) => s.setChords);
-
-  // Sequencer slice
-  const applyDrumPattern = useAppStore((s) => s.applyDrumPattern);
 
   // Initialize audio engine on first user interaction
   useEffect(() => {
@@ -133,16 +116,6 @@ export function App() {
       <TransportBar />
 
       {/* Modals */}
-      <AiCompanionModal
-        isOpen={isAiModalOpen}
-        onClose={closeAiModal}
-        onApplyChords={setChords}
-        onApplyDrumPattern={applyDrumPattern}
-        onApplySynthPreset={applySynthPreset}
-        currentKey={`${scaleRoot} ${scaleType}`}
-        currentBpm={bpm}
-      />
-
       <ProjectModal
         isOpen={isProjectModalOpen}
         onClose={closeProjectsModal}

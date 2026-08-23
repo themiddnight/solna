@@ -24,21 +24,22 @@
 
 ## Spec coverage map
 
-| Spec section | Task |
-|---|---|
-| §3 API (KnobProps incl. `indicator`/`detent`, knob.ts pure functions incl. `detentAngle`) | 1, 2, 3 |
-| §4.1 drag (capture, axis pick, 200 px range, Shift ÷10) | 4 |
-| §4.2 mapping (linear/log, 270° arc, angleForT) | 1 |
-| §4.3 keyboard/ARIA (role=slider, arrows, PageUp/Down, Home/End, focus ring, disabled) | 5 |
+| Spec section                                                                                                        | Task                |
+| ------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| §3 API (KnobProps incl. `indicator`/`detent`, knob.ts pure functions incl. `detentAngle`)                           | 1, 2, 3             |
+| §4.1 drag (capture, axis pick, 200 px range, Shift ÷10)                                                             | 4                   |
+| §4.2 mapping (linear/log, 270° arc, angleForT)                                                                      | 1                   |
+| §4.3 keyboard/ARIA (role=slider, arrows, PageUp/Down, Home/End, focus ring, disabled)                               | 5                   |
 | §5 rendering (ring + notch + indicator modes + progress arc invariant + detent tick + needle + sizes + label/value) | 3 (verified in 4/5) |
-| §6 testing (bun test on pure functions incl. `detentAngle`; tsc + browser for component) | 1, 2, 3–6 |
-| §7 migration (Filter panel: cutoff log, resonance/env linear; defaults keep panel identical) | 6 |
+| §6 testing (bun test on pure functions incl. `detentAngle`; tsc + browser for component)                            | 1, 2, 3–6           |
+| §7 migration (Filter panel: cutoff log, resonance/env linear; defaults keep panel identical)                        | 6                   |
 
 ---
 
 ### Task 1: Pure knob math — constants, clamp, snap, mapping, angle, dash, drag, detent (TDD)
 
 **Files**
+
 - Create `src/utils/knob.ts` (implementation)
 - Create `src/utils/knob.test.ts` (tests)
 
@@ -49,23 +50,38 @@ Consumes: nothing (new module).
 Produces — `src/utils/knob.ts` must export exactly these (JSDoc above each, matching the `musicTheory.ts` convention):
 
 ```ts
-export type KnobScale = 'linear' | 'log';
-export type KnobSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
-export type KnobIndicator = 'progress' | 'none' | 'full';
-export const MIN_ANGLE_DEG = -135;          // needle angle at t=0 (7:30)
-export const SWEEP_DEG = 270;               // full rotation sweep
-export const DRAG_RANGE_PX = 200;           // full range per 200px drag
-export const FINE_DRAG_DIVISOR = 10;        // Shift = ÷10
-export const AXIS_PICK_THRESHOLD_PX = 3;    // axis-commit threshold
-export const PROGRESS_ARC_UNITS = 75;       // 270/360 × pathLength 100
+export type KnobScale = "linear" | "log";
+export type KnobSize = "xs" | "sm" | "md" | "lg" | "xl";
+export type KnobIndicator = "progress" | "none" | "full";
+export const MIN_ANGLE_DEG = -135; // needle angle at t=0 (7:30)
+export const SWEEP_DEG = 270; // full rotation sweep
+export const DRAG_RANGE_PX = 200; // full range per 200px drag
+export const FINE_DRAG_DIVISOR = 10; // Shift = ÷10
+export const AXIS_PICK_THRESHOLD_PX = 3; // axis-commit threshold
+export const PROGRESS_ARC_UNITS = 75; // 270/360 × pathLength 100
 export const SIZE_PX: Record<KnobSize, number>; // xs:22 sm:36 md:48 lg:60 xl:72
 
 export function clamp(value: number, min: number, max: number): number;
 export function snapToStep(value: number, min: number, step?: number): number;
-export function valueToT(value: number, min: number, max: number, scale: KnobScale): number;
-export function tToValue(t: number, min: number, max: number, scale: KnobScale): number;
-export function angleForT(t: number): number;   // MIN_ANGLE_DEG + t * SWEEP_DEG
-export function detentAngle(detent: number, min: number, max: number, scale: KnobScale): number | null;
+export function valueToT(
+  value: number,
+  min: number,
+  max: number,
+  scale: KnobScale,
+): number;
+export function tToValue(
+  t: number,
+  min: number,
+  max: number,
+  scale: KnobScale,
+): number;
+export function angleForT(t: number): number; // MIN_ANGLE_DEG + t * SWEEP_DEG
+export function detentAngle(
+  detent: number,
+  min: number,
+  max: number,
+  scale: KnobScale,
+): number | null;
 export function progressDash(t: number): number; // t * PROGRESS_ARC_UNITS
 export function dragDeltaT(deltaPx: number, fine: boolean): number; // (deltaPx/DRAG_RANGE_PX) / (fine ? FINE_DRAG_DIVISOR : 1)
 ```
@@ -73,6 +89,7 @@ export function dragDeltaT(deltaPx: number, fine: boolean): number; // (deltaPx/
 (`KeyDir` + `nextKeyValue` arrive in Task 2.)
 
 Behavior (from spec §4.2/§5, implement exactly):
+
 - log mapping: `value = min * (max/min)^t`, inverse `t = ln(value/min) / ln(max/min)`; if `min <= 0`, BOTH `valueToT` and `tToValue` fall back to linear.
 - `snapToStep` quantizes relative to `min` (`min + round((v-min)/step)*step`); no-op when `step` is undefined/0/negative.
 - Both mappers clamp their input (`value` into `[min,max]`, `t` into `[0,1]`); guard `max <= min` → t = 0.
@@ -81,6 +98,7 @@ Behavior (from spec §4.2/§5, implement exactly):
 Steps:
 
 - [ ] 1. Create the feature branch and commit this plan document first (the repo tracks `docs/superpowers/plans/` — see `2026-08-22-bass-module.md`):
+
   ```bash
   git checkout -b feat/knob-primitive
   git add docs/superpowers/plans/2026-08-23-knob-primitive.md
@@ -88,10 +106,11 @@ Steps:
 
   Co-Authored-By: Claude <noreply@anthropic.com>"
   ```
+
 - [ ] 2. Write `src/utils/knob.test.ts` — the FULL failing test file (bun style, matching `musicTheory.test.ts` — `import { describe, expect, test } from 'bun:test'`):
 
 ```ts
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from "bun:test";
 import {
   MIN_ANGLE_DEG,
   PROGRESS_ARC_UNITS,
@@ -105,163 +124,170 @@ import {
   snapToStep,
   tToValue,
   valueToT,
-} from './knob';
+} from "./knob";
 
-describe('clamp', () => {
-  test('clamps below min', () => {
+describe("clamp", () => {
+  test("clamps below min", () => {
     expect(clamp(-1, 0, 1)).toBe(0);
   });
 
-  test('clamps above max', () => {
+  test("clamps above max", () => {
     expect(clamp(2, 0, 1)).toBe(1);
   });
 
-  test('returns in-range values unchanged', () => {
+  test("returns in-range values unchanged", () => {
     expect(clamp(0.5, 0, 1)).toBe(0.5);
   });
 });
 
-describe('snapToStep', () => {
-  test('rounds to the nearest multiple of step', () => {
+describe("snapToStep", () => {
+  test("rounds to the nearest multiple of step", () => {
     expect(snapToStep(17, 0, 10)).toBe(20);
     expect(snapToStep(13, 0, 10)).toBe(10);
   });
 
-  test('measures from min, not from zero', () => {
+  test("measures from min, not from zero", () => {
     expect(snapToStep(12, 5, 2)).toBe(13);
   });
 
-  test('is a no-op without a step (undefined or 0)', () => {
+  test("is a no-op without a step (undefined or 0)", () => {
     expect(snapToStep(17, 0)).toBe(17);
     expect(snapToStep(17, 0, 0)).toBe(17);
   });
 });
 
-describe('linear valueToT / tToValue', () => {
-  test('maps endpoints', () => {
-    expect(valueToT(0, 0, 1, 'linear')).toBe(0);
-    expect(valueToT(1, 0, 1, 'linear')).toBe(1);
-    expect(tToValue(0, 0, 1, 'linear')).toBe(0);
-    expect(tToValue(1, 0, 1, 'linear')).toBe(1);
+describe("linear valueToT / tToValue", () => {
+  test("maps endpoints", () => {
+    expect(valueToT(0, 0, 1, "linear")).toBe(0);
+    expect(valueToT(1, 0, 1, "linear")).toBe(1);
+    expect(tToValue(0, 0, 1, "linear")).toBe(0);
+    expect(tToValue(1, 0, 1, "linear")).toBe(1);
   });
 
-  test('roundtrips value → t → value', () => {
+  test("roundtrips value → t → value", () => {
     for (const v of [0, 0.25, 0.5, 0.75, 1]) {
-      expect(tToValue(valueToT(v, 0, 1, 'linear'), 0, 1, 'linear')).toBeCloseTo(v, 10);
+      expect(tToValue(valueToT(v, 0, 1, "linear"), 0, 1, "linear")).toBeCloseTo(
+        v,
+        10,
+      );
     }
   });
 
-  test('clamps out-of-range values', () => {
-    expect(valueToT(-100, 0, 1, 'linear')).toBe(0);
-    expect(valueToT(100, 0, 1, 'linear')).toBe(1);
+  test("clamps out-of-range values", () => {
+    expect(valueToT(-100, 0, 1, "linear")).toBe(0);
+    expect(valueToT(100, 0, 1, "linear")).toBe(1);
   });
 });
 
-describe('log valueToT / tToValue', () => {
+describe("log valueToT / tToValue", () => {
   const min = 50;
   const max = 12000;
 
-  test('maps endpoints logarithmically', () => {
-    expect(valueToT(50, min, max, 'log')).toBe(0);
-    expect(valueToT(12000, min, max, 'log')).toBe(1);
-    expect(tToValue(0, min, max, 'log')).toBe(50);
-    expect(tToValue(1, min, max, 'log')).toBe(12000);
+  test("maps endpoints logarithmically", () => {
+    expect(valueToT(50, min, max, "log")).toBe(0);
+    expect(valueToT(12000, min, max, "log")).toBe(1);
+    expect(tToValue(0, min, max, "log")).toBe(50);
+    expect(tToValue(1, min, max, "log")).toBe(12000);
   });
 
-  test('t = 0.5 lands on the geometric mean', () => {
-    expect(tToValue(0.5, min, max, 'log')).toBeCloseTo(Math.sqrt(min * max), 6);
+  test("t = 0.5 lands on the geometric mean", () => {
+    expect(tToValue(0.5, min, max, "log")).toBeCloseTo(Math.sqrt(min * max), 6);
   });
 
-  test('roundtrips value → t → value', () => {
+  test("roundtrips value → t → value", () => {
     for (const v of [50, 100, 1000, 5000, 12000]) {
-      expect(tToValue(valueToT(v, min, max, 'log'), min, max, 'log')).toBeCloseTo(v, 6);
+      expect(
+        tToValue(valueToT(v, min, max, "log"), min, max, "log"),
+      ).toBeCloseTo(v, 6);
     }
   });
 
-  test('equal frequency ratios span equal t distances (log spacing)', () => {
-    const low = valueToT(200, min, max, 'log') - valueToT(100, min, max, 'log');
-    const high = valueToT(12000, min, max, 'log') - valueToT(6000, min, max, 'log');
+  test("equal frequency ratios span equal t distances (log spacing)", () => {
+    const low = valueToT(200, min, max, "log") - valueToT(100, min, max, "log");
+    const high =
+      valueToT(12000, min, max, "log") - valueToT(6000, min, max, "log");
     expect(low).toBeCloseTo(high, 10);
   });
 });
 
-describe('log mapping falls back to linear when min <= 0', () => {
-  test('min = 0 behaves linearly', () => {
-    expect(valueToT(0.5, 0, 1, 'log')).toBe(0.5);
-    expect(tToValue(0.25, 0, 1, 'log')).toBe(0.25);
+describe("log mapping falls back to linear when min <= 0", () => {
+  test("min = 0 behaves linearly", () => {
+    expect(valueToT(0.5, 0, 1, "log")).toBe(0.5);
+    expect(tToValue(0.25, 0, 1, "log")).toBe(0.25);
   });
 
-  test('negative min behaves linearly', () => {
-    expect(valueToT(-5, -10, 10, 'log')).toBe(0.25);
-    expect(tToValue(0.75, -10, 10, 'log')).toBe(5);
+  test("negative min behaves linearly", () => {
+    expect(valueToT(-5, -10, 10, "log")).toBe(0.25);
+    expect(tToValue(0.75, -10, 10, "log")).toBe(5);
   });
 });
 
-describe('angleForT', () => {
-  test('maps t to the 270° sweep (0 → 7:30, 0.5 → 12 o’clock, 1 → 4:30)', () => {
+describe("angleForT", () => {
+  test("maps t to the 270° sweep (0 → 7:30, 0.5 → 12 o’clock, 1 → 4:30)", () => {
     expect(angleForT(0)).toBe(-135);
     expect(angleForT(0.5)).toBe(0);
     expect(angleForT(1)).toBe(135);
   });
 
-  test('sweep span equals SWEEP_DEG', () => {
+  test("sweep span equals SWEEP_DEG", () => {
     expect(angleForT(1) - angleForT(0)).toBe(SWEEP_DEG);
   });
 });
 
-describe('progressDash', () => {
-  test('maps t to arc units on a pathLength=100 circle', () => {
+describe("progressDash", () => {
+  test("maps t to arc units on a pathLength=100 circle", () => {
     expect(progressDash(0)).toBe(0);
     expect(progressDash(0.5)).toBe(37.5);
     expect(progressDash(1)).toBe(PROGRESS_ARC_UNITS);
   });
 
-  test('needle angle and arc length derive from the same t (invariant)', () => {
+  test("needle angle and arc length derive from the same t (invariant)", () => {
     for (const t of [0, 0.25, 0.5, 0.75, 1]) {
-      const arcTipAngle = MIN_ANGLE_DEG + (progressDash(t) / PROGRESS_ARC_UNITS) * SWEEP_DEG;
+      const arcTipAngle =
+        MIN_ANGLE_DEG + (progressDash(t) / PROGRESS_ARC_UNITS) * SWEEP_DEG;
       expect(arcTipAngle).toBe(angleForT(t));
     }
   });
 });
 
-describe('detentAngle', () => {
-  test('returns the needle angle for an in-range detent', () => {
-    expect(detentAngle(0, 0, 1, 'linear')).toBe(angleForT(0));
-    expect(detentAngle(0.5, 0, 1, 'linear')).toBe(angleForT(0.5));
-    expect(detentAngle(1, 0, 1, 'linear')).toBe(angleForT(1));
+describe("detentAngle", () => {
+  test("returns the needle angle for an in-range detent", () => {
+    expect(detentAngle(0, 0, 1, "linear")).toBe(angleForT(0));
+    expect(detentAngle(0.5, 0, 1, "linear")).toBe(angleForT(0.5));
+    expect(detentAngle(1, 0, 1, "linear")).toBe(angleForT(1));
   });
 
-  test('returns null for detents below min or above max', () => {
-    expect(detentAngle(-0.1, 0, 1, 'linear')).toBeNull();
-    expect(detentAngle(1.1, 0, 1, 'linear')).toBeNull();
-    expect(detentAngle(49, 50, 12000, 'log')).toBeNull();
-    expect(detentAngle(12001, 50, 12000, 'log')).toBeNull();
+  test("returns null for detents below min or above max", () => {
+    expect(detentAngle(-0.1, 0, 1, "linear")).toBeNull();
+    expect(detentAngle(1.1, 0, 1, "linear")).toBeNull();
+    expect(detentAngle(49, 50, 12000, "log")).toBeNull();
+    expect(detentAngle(12001, 50, 12000, "log")).toBeNull();
   });
 
-  test('maps log detents through the log curve (geometric mean → 12 o’clock)', () => {
+  test("maps log detents through the log curve (geometric mean → 12 o’clock)", () => {
     const mid = Math.sqrt(50 * 12000);
-    expect(detentAngle(mid, 50, 12000, 'log')).toBeCloseTo(angleForT(0.5), 9);
+    expect(detentAngle(mid, 50, 12000, "log")).toBeCloseTo(angleForT(0.5), 9);
   });
 
-  test('boundary detents at exactly min/max are drawn (inclusive bounds)', () => {
-    expect(detentAngle(50, 50, 12000, 'log')).toBe(-135);
-    expect(detentAngle(12000, 50, 12000, 'log')).toBe(135);
+  test("boundary detents at exactly min/max are drawn (inclusive bounds)", () => {
+    expect(detentAngle(50, 50, 12000, "log")).toBe(-135);
+    expect(detentAngle(12000, 50, 12000, "log")).toBe(135);
   });
 });
 
-describe('dragDeltaT', () => {
-  test('full range per DRAG_RANGE_PX', () => {
+describe("dragDeltaT", () => {
+  test("full range per DRAG_RANGE_PX", () => {
     expect(dragDeltaT(DRAG_RANGE_PX, false)).toBe(1);
     expect(dragDeltaT(100, false)).toBe(0.5);
   });
 
-  test('shift divides sensitivity by FINE_DRAG_DIVISOR', () => {
+  test("shift divides sensitivity by FINE_DRAG_DIVISOR", () => {
     expect(dragDeltaT(100, true)).toBe(0.05);
   });
 });
 
-describe('SIZE_PX', () => {
-  test('exposes the five Figma sizes', () => {
+describe("SIZE_PX", () => {
+  test("exposes the five Figma sizes", () => {
     expect(SIZE_PX).toEqual({ xs: 22, sm: 36, md: 48, lg: 60, xl: 72 });
   });
 });
@@ -280,9 +306,9 @@ describe('SIZE_PX', () => {
  * knob sweep (0 = min at 7:30, 1 = max at 4:30, 0.5 = 12 o'clock).
  */
 
-export type KnobScale = 'linear' | 'log';
-export type KnobSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
-export type KnobIndicator = 'progress' | 'none' | 'full';
+export type KnobScale = "linear" | "log";
+export type KnobSize = "xs" | "sm" | "md" | "lg" | "xl";
+export type KnobIndicator = "progress" | "none" | "full";
 
 /** Needle angle (degrees) when t = 0 → the 7:30 position. */
 export const MIN_ANGLE_DEG = -135;
@@ -333,7 +359,7 @@ export function valueToT(
 ): number {
   if (max <= min) return 0;
   const v = clamp(value, min, max);
-  if (scale === 'log' && min > 0) {
+  if (scale === "log" && min > 0) {
     return Math.log(v / min) / Math.log(max / min);
   }
   return (v - min) / (max - min);
@@ -350,7 +376,7 @@ export function tToValue(
   scale: KnobScale,
 ): number {
   const tt = clamp(t, 0, 1);
-  if (scale === 'log' && min > 0) {
+  if (scale === "log" && min > 0) {
     return min * Math.pow(max / min, tt);
   }
   return min + tt * (max - min);
@@ -407,6 +433,7 @@ export function dragDeltaT(deltaPx: number, fine: boolean): number {
   bun test
   ```
 - [ ] 7. Commit:
+
   ```bash
   git add src/utils/knob.ts src/utils/knob.test.ts
   git commit -m "feat: add knob math utilities (clamp, snap, mapping, angle, dash, drag, detent)
@@ -419,6 +446,7 @@ export function dragDeltaT(deltaPx: number, fine: boolean): number {
 ### Task 2: Keyboard step navigation — `KeyDir` + `nextKeyValue` (TDD)
 
 **Files**
+
 - Modify `src/utils/knob.test.ts` (add tests)
 - Modify `src/utils/knob.ts` (add exports)
 
@@ -429,8 +457,14 @@ Consumes: existing `clamp`, `snapToStep` from the same module.
 Produces (added to `src/utils/knob.ts`):
 
 ```ts
-export type KeyDir = 'inc' | 'dec' | 'page-inc' | 'page-dec' | 'min' | 'max';
-export function nextKeyValue(value: number, min: number, max: number, step: number | undefined, dir: KeyDir): number;
+export type KeyDir = "inc" | "dec" | "page-inc" | "page-dec" | "min" | "max";
+export function nextKeyValue(
+  value: number,
+  min: number,
+  max: number,
+  step: number | undefined,
+  dir: KeyDir,
+): number;
 ```
 
 Behavior (spec §4.3, exactly): inc/dec = ±1 step (continuous step → 1% of range); page = ±10 steps (or 10% of range if continuous); min/max = the bounds exactly (returned as-is, no snap — so Home/End always reach the bounds even when the range is not a multiple of `step`). Other results are snapped (when stepped) then clamped to `[min, max]`.
@@ -454,47 +488,50 @@ import {
   snapToStep,
   tToValue,
   valueToT,
-} from './knob';
+} from "./knob";
 ```
 
 ```ts
-describe('nextKeyValue', () => {
-  test('inc/dec move by one step', () => {
-    expect(nextKeyValue(0, 0, 1, 0.1, 'inc')).toBe(0.1);
-    expect(nextKeyValue(0.5, 0, 1, 0.1, 'dec')).toBe(0.4);
+describe("nextKeyValue", () => {
+  test("inc/dec move by one step", () => {
+    expect(nextKeyValue(0, 0, 1, 0.1, "inc")).toBe(0.1);
+    expect(nextKeyValue(0.5, 0, 1, 0.1, "dec")).toBe(0.4);
   });
 
-  test('continuous step moves by 1% of the range', () => {
-    expect(nextKeyValue(0.5, 0, 1, undefined, 'inc')).toBeCloseTo(0.51, 10);
-    expect(nextKeyValue(0.5, 0, 1, undefined, 'dec')).toBeCloseTo(0.49, 10);
+  test("continuous step moves by 1% of the range", () => {
+    expect(nextKeyValue(0.5, 0, 1, undefined, "inc")).toBeCloseTo(0.51, 10);
+    expect(nextKeyValue(0.5, 0, 1, undefined, "dec")).toBeCloseTo(0.49, 10);
   });
 
-  test('page keys move by 10 steps', () => {
-    expect(nextKeyValue(0, 0, 1, 0.01, 'page-inc')).toBe(0.1);
-    expect(nextKeyValue(0.5, 0, 1, 0.01, 'page-dec')).toBe(0.4);
+  test("page keys move by 10 steps", () => {
+    expect(nextKeyValue(0, 0, 1, 0.01, "page-inc")).toBe(0.1);
+    expect(nextKeyValue(0.5, 0, 1, 0.01, "page-dec")).toBe(0.4);
   });
 
-  test('continuous page moves by 10% of the range', () => {
-    expect(nextKeyValue(0.25, 0, 1, undefined, 'page-inc')).toBeCloseTo(0.35, 10);
+  test("continuous page moves by 10% of the range", () => {
+    expect(nextKeyValue(0.25, 0, 1, undefined, "page-inc")).toBeCloseTo(
+      0.35,
+      10,
+    );
   });
 
-  test('Home/End jump to the bounds exactly, even off the step grid', () => {
-    expect(nextKeyValue(0.5, 0, 1, 0.3, 'min')).toBe(0);
-    expect(nextKeyValue(0.5, 0, 1, 0.3, 'max')).toBe(1);
+  test("Home/End jump to the bounds exactly, even off the step grid", () => {
+    expect(nextKeyValue(0.5, 0, 1, 0.3, "min")).toBe(0);
+    expect(nextKeyValue(0.5, 0, 1, 0.3, "max")).toBe(1);
   });
 
-  test('clamps at the bounds', () => {
-    expect(nextKeyValue(0.99, 0, 1, 0.1, 'inc')).toBe(1);
-    expect(nextKeyValue(0.01, 0, 1, 0.1, 'dec')).toBe(0);
+  test("clamps at the bounds", () => {
+    expect(nextKeyValue(0.99, 0, 1, 0.1, "inc")).toBe(1);
+    expect(nextKeyValue(0.01, 0, 1, 0.1, "dec")).toBe(0);
   });
 
-  test('snaps stepped results onto the min-anchored grid', () => {
-    expect(nextKeyValue(50, 50, 12000, 10, 'inc')).toBe(60);
-    expect(nextKeyValue(12000, 50, 12000, 10, 'dec')).toBe(11990);
+  test("snaps stepped results onto the min-anchored grid", () => {
+    expect(nextKeyValue(50, 50, 12000, 10, "inc")).toBe(60);
+    expect(nextKeyValue(12000, 50, 12000, 10, "dec")).toBe(11990);
   });
 
-  test('continuous ranges with non-zero min use 1% of the range', () => {
-    expect(nextKeyValue(0.5, -1, 1, undefined, 'inc')).toBeCloseTo(0.52, 10);
+  test("continuous ranges with non-zero min use 1% of the range", () => {
+    expect(nextKeyValue(0.5, -1, 1, undefined, "inc")).toBeCloseTo(0.52, 10);
   });
 });
 ```
@@ -506,7 +543,7 @@ describe('nextKeyValue', () => {
 - [ ] 3. Append to the end of `src/utils/knob.ts`:
 
 ```ts
-export type KeyDir = 'inc' | 'dec' | 'page-inc' | 'page-dec' | 'min' | 'max';
+export type KeyDir = "inc" | "dec" | "page-inc" | "page-dec" | "min" | "max";
 
 /**
  * Next value for keyboard navigation.
@@ -521,26 +558,26 @@ export function nextKeyValue(
   step: number | undefined,
   dir: KeyDir,
 ): number {
-  const hasStep = typeof step === 'number' && step > 0;
+  const hasStep = typeof step === "number" && step > 0;
   const singleStep = hasStep ? (step as number) : (max - min) * 0.01;
   const pageStep = hasStep ? (step as number) * 10 : (max - min) * 0.1;
   let next = value;
   switch (dir) {
-    case 'inc':
+    case "inc":
       next = value + singleStep;
       break;
-    case 'dec':
+    case "dec":
       next = value - singleStep;
       break;
-    case 'page-inc':
+    case "page-inc":
       next = value + pageStep;
       break;
-    case 'page-dec':
+    case "page-dec":
       next = value - pageStep;
       break;
-    case 'min':
+    case "min":
       return min;
-    case 'max':
+    case "max":
       return max;
   }
   return clamp(snapToStep(next, min, step), min, max);
@@ -557,6 +594,7 @@ export function nextKeyValue(
   bun test
   ```
 - [ ] 6. Commit:
+
   ```bash
   git add src/utils/knob.ts src/utils/knob.test.ts
   git commit -m "feat: add keyboard step navigation for knobs (nextKeyValue)
@@ -569,6 +607,7 @@ export function nextKeyValue(
 ### Task 3: `Knob` component — static render (ring modes, detent tick, needle, label row)
 
 **Files**
+
 - Create `src/components/ui/Knob.tsx` (directory does not exist yet — create it)
 - Temporarily modify `src/components/SynthView.tsx` (demo mount for browser verification; removed before commit)
 
@@ -582,15 +621,15 @@ Produces — `src/components/ui/Knob.tsx`:
 export interface KnobProps {
   value: number;
   onChange: (value: number) => void;
-  min?: number;           // default 0
-  max?: number;           // default 1
-  step?: number;          // default: continuous (no snap)
-  scale?: KnobScale;      // default 'linear'
-  size?: KnobSize;        // default 'md'
+  min?: number; // default 0
+  max?: number; // default 1
+  step?: number; // default: continuous (no snap)
+  scale?: KnobScale; // default 'linear'
+  size?: KnobSize; // default 'md'
   label?: string;
-  format?: (v: number) => string;   // default String(v)
-  indicator?: KnobIndicator;        // default 'progress' — arc follows the needle
-  detent?: number;                  // tick angle; undefined = no tick (visual only, never snaps)
+  format?: (v: number) => string; // default String(v)
+  indicator?: KnobIndicator; // default 'progress' — arc follows the needle
+  detent?: number; // tick angle; undefined = no tick (visual only, never snaps)
   disabled?: boolean;
   id?: string;
   className?: string;
@@ -599,12 +638,14 @@ export const Knob: (props: KnobProps) => JSX.Element;
 ```
 
 Rendering reference — Figma border SVG (`curl -sL -o /tmp/knob-border.svg "https://www.figma.com/api/mcp/asset/54376c1a-bedb-4259-9ab6-bea27b0b8299.svg"`, viewBox 50×50, NEVER committed, reference only). Its notch layout, adopted 1:1:
+
 - **Ring arc**: from the 7 o'clock position (14,44) up over the top (25,3) to the 5 o'clock position (36,44), round caps, white 50% (we render it dark `#252B48` to match the app's card borders on the `#12152A` panel face). Spec §4.2 defines the sweep as exactly 270° (7:30→4:30), which we follow — the Figma's 240° arc endpoints are only a visual reference. The Figma ring stroke is the default 1 (→ 2 in 100-space): that thin ring is what `indicator="none"` uses.
 - **Indicator notch**: exactly ONE static tick line at the 3 o'clock position, from just inside the ring (41,25.5) to the ring's outer edge (47,25.5) — doubled into 100-space as `x1="82" y1="51" x2="94" y2="51"`. Rendered in ALL indicator modes.
 - **Progress arc**: partial arc in `#877DCA`, thick stroke (5/50 = 10/100); in our build the progress arc must use butt caps (NOT round) so the dash end lands exactly on the needle tip (round caps would extend the visible arc ~6.5° past the needle, breaking the spec §5 invariant).
 - The knob face itself is transparent (shows the panel background); no fill circle.
 
 Indicator/detent render rules (spec §3/§5, exactly):
+
 - `indicator="progress"` (default): dark 270° ring (dasharray `75 25`, round caps) + progress arc (`currentColor`, dash = `progressDash(t)`, butt caps).
 - `indicator="none"`: NO progress arc; a single thin uniform FULL circle, `stroke="#252B48"` `strokeWidth="2"` (the Figma ring thickness). Used for balance/pan knobs, e.g. `<Knob indicator="none" detent={0} min={-1} max={1}>`.
 - `indicator="full"`: a full-circle static thick ring, `stroke="currentColor"` `strokeWidth="10"` (same stroke as the progress arc), no dasharray, no rotate — the value is not drawn onto it.
@@ -619,7 +660,7 @@ Steps:
   Write `src/components/ui/Knob.tsx` (static render only — pointer handlers arrive in Task 4, keyboard/ARIA in Task 5; the props are typed up front but only rendered/consumed where used; `tsconfig` is non-strict so unused destructured props do not fail `bun run lint`):
 
 ```tsx
-import React from 'react';
+import React from "react";
 import {
   PROGRESS_ARC_UNITS,
   SIZE_PX,
@@ -629,8 +670,8 @@ import {
   progressDash,
   tToValue,
   valueToT,
-} from '../../utils/knob';
-import type { KnobIndicator, KnobScale, KnobSize } from '../../utils/knob';
+} from "../../utils/knob";
+import type { KnobIndicator, KnobScale, KnobSize } from "../../utils/knob";
 
 export type { KnobIndicator, KnobScale, KnobSize };
 
@@ -665,11 +706,11 @@ export const Knob = ({
   min = 0,
   max = 1,
   step,
-  scale = 'linear',
-  size = 'md',
+  scale = "linear",
+  size = "md",
   label,
   format = String,
-  indicator = 'progress',
+  indicator = "progress",
   detent,
   disabled = false,
   id,
@@ -680,7 +721,8 @@ export const Knob = ({
   const angle = angleForT(t);
   const dash = progressDash(t);
   const display = format(value);
-  const detentAngleDeg = detent !== undefined ? detentAngle(detent, min, max, scale) : null;
+  const detentAngleDeg =
+    detent !== undefined ? detentAngle(detent, min, max, scale) : null;
 
   return (
     <div className={className}>
@@ -696,12 +738,12 @@ export const Knob = ({
         height={pixelSize}
         viewBox="0 0 100 100"
         className={`block text-[#877dca] touch-none select-none rounded-full ${
-          disabled ? 'opacity-40' : 'cursor-pointer'
+          disabled ? "opacity-40" : "cursor-pointer"
         }`}
       >
         {/* indicator="progress": dark 270° ring (same thickness as the arc,
             spec §5) + progress arc from min (−135°) to the current angle. */}
-        {indicator === 'progress' && (
+        {indicator === "progress" && (
           <>
             <circle
               cx="50"
@@ -730,7 +772,7 @@ export const Knob = ({
           </>
         )}
         {/* indicator="none": thin uniform full ring, no arc (pan/balance). */}
-        {indicator === 'none' && (
+        {indicator === "none" && (
           <circle
             cx="50"
             cy="50"
@@ -741,7 +783,7 @@ export const Knob = ({
           />
         )}
         {/* indicator="full": full-circle static thick ring, no dasharray. */}
-        {indicator === 'full' && (
+        {indicator === "full" && (
           <circle
             cx="50"
             cy="50"
@@ -778,7 +820,14 @@ export const Knob = ({
         )}
         {/* Needle — rotates around the knob center; same t as the arc tip. */}
         <g transform={`rotate(${angle} 50 50)`}>
-          <rect x="46" y="16" width="8" height="36" rx="4" fill="currentColor" />
+          <rect
+            x="46"
+            y="16"
+            width="8"
+            height="36"
+            rx="4"
+            fill="currentColor"
+          />
           <circle cx="50" cy="50" r="10" fill="currentColor" />
         </g>
       </svg>
@@ -798,7 +847,9 @@ export const Knob = ({
   ```
   Insert this block directly after the opening `<div className="p-4 max-w-7xl mx-auto space-y-4">` line:
   ```tsx
-  {/* TEMP demo mount — remove before commit */}
+  {
+    /* TEMP demo mount — remove before commit */
+  }
   <div className="flex flex-wrap items-end gap-6 bg-[#0B0D19] p-3 rounded-lg border border-[#252B48]">
     <Knob value={0} label="Min" />
     <Knob value={0.5} label="Mid" />
@@ -808,7 +859,7 @@ export const Knob = ({
     <Knob value={0.4} label="Detent" detent={0.4} />
     <Knob value={0.25} label="Tiny" size="xs" />
     <Knob value={0.75} label="Big Disabled" size="xl" disabled />
-  </div>
+  </div>;
   ```
 - [ ] 4. Browser check:
   ```bash
@@ -831,6 +882,7 @@ export const Knob = ({
   bun run lint
   ```
 - [ ] 6. Commit:
+
   ```bash
   git add src/components/ui/Knob.tsx
   git commit -m "feat: add Knob primitive static render (ring modes, detent tick, needle, label)
@@ -843,12 +895,14 @@ export const Knob = ({
 ### Task 4: Pointer drag interaction on `Knob`
 
 **Files**
+
 - Modify `src/components/ui/Knob.tsx`
 - Temporarily modify `src/components/SynthView.tsx` (demo mount; removed before commit)
 
 **Interfaces**
 
 Consumes (new imports from `../../utils/knob`): `AXIS_PICK_THRESHOLD_PX`, `DRAG_RANGE_PX`, `FINE_DRAG_DIVISOR`, `dragDeltaT`, `snapToStep` (plus the Task 3 imports, incl. `detentAngle`). Behavior, exactly per spec §4.1:
+
 - `pointerdown` → `e.preventDefault()` + `setPointerCapture(e.pointerId)` (drag continues outside the element) → snapshot `{ axis: null, startT, startX, startY }` in a ref (survives re-renders mid-gesture; `startT` is computed from the CURRENT `value` at gesture start, so the drag never drifts even with controlled updates).
 - Axis commit: while `axis === null`, require |dx| or |dy| ≥ `AXIS_PICK_THRESHOLD_PX`; the axis with the larger accumulated distance wins and STICKS for the whole gesture (spec §4.1 "ยึดแกนนั้นจนจบ gesture").
 - Per move: `delta = axis === 'x' ? dx : -dy` (right = increase, up = increase); `t = clamp(startT + dragDeltaT(delta, e.shiftKey), 0, 1)` — `e.shiftKey` is read live, so Shift can be pressed/released mid-gesture; `onChange(snapToStep(tToValue(t, min, max, scale), min, step))`.
@@ -860,7 +914,7 @@ Steps:
 - [ ] 1. Rewrite `src/components/ui/Knob.tsx` with the full listing below (static render + drag; keyboard/ARIA arrive in Task 5):
 
 ```tsx
-import React, { useRef } from 'react';
+import React, { useRef } from "react";
 import {
   AXIS_PICK_THRESHOLD_PX,
   PROGRESS_ARC_UNITS,
@@ -873,8 +927,8 @@ import {
   snapToStep,
   tToValue,
   valueToT,
-} from '../../utils/knob';
-import type { KnobIndicator, KnobScale, KnobSize } from '../../utils/knob';
+} from "../../utils/knob";
+import type { KnobIndicator, KnobScale, KnobSize } from "../../utils/knob";
 
 export type { KnobIndicator, KnobScale, KnobSize };
 
@@ -897,7 +951,7 @@ export interface KnobProps {
 
 /** Per-gesture drag state (a ref — survives re-renders mid-drag). */
 interface GestureState {
-  axis: 'x' | 'y' | null;
+  axis: "x" | "y" | null;
   startT: number;
   startX: number;
   startY: number;
@@ -917,11 +971,11 @@ export const Knob = ({
   min = 0,
   max = 1,
   step,
-  scale = 'linear',
-  size = 'md',
+  scale = "linear",
+  size = "md",
   label,
   format = String,
-  indicator = 'progress',
+  indicator = "progress",
   detent,
   disabled = false,
   id,
@@ -933,7 +987,8 @@ export const Knob = ({
   const angle = angleForT(t);
   const dash = progressDash(t);
   const display = format(value);
-  const detentAngleDeg = detent !== undefined ? detentAngle(detent, min, max, scale) : null;
+  const detentAngleDeg =
+    detent !== undefined ? detentAngle(detent, min, max, scale) : null;
 
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (disabled) return;
@@ -953,12 +1008,15 @@ export const Knob = ({
     const dx = e.clientX - gesture.startX;
     const dy = e.clientY - gesture.startY;
     if (gesture.axis === null) {
-      if (Math.abs(dx) < AXIS_PICK_THRESHOLD_PX && Math.abs(dy) < AXIS_PICK_THRESHOLD_PX) {
+      if (
+        Math.abs(dx) < AXIS_PICK_THRESHOLD_PX &&
+        Math.abs(dy) < AXIS_PICK_THRESHOLD_PX
+      ) {
         return;
       }
-      gesture.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      gesture.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
     }
-    const delta = gesture.axis === 'x' ? dx : -dy;
+    const delta = gesture.axis === "x" ? dx : -dy;
     const nextT = clamp(gesture.startT + dragDeltaT(delta, e.shiftKey), 0, 1);
     onChange(snapToStep(tToValue(nextT, min, max, scale), min, step));
   };
@@ -981,7 +1039,7 @@ export const Knob = ({
         height={pixelSize}
         viewBox="0 0 100 100"
         className={`block text-[#877dca] touch-none select-none rounded-full ${
-          disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+          disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
         }`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -990,7 +1048,7 @@ export const Knob = ({
       >
         {/* indicator="progress": dark 270° ring (same thickness as the arc,
             spec §5) + progress arc from min (−135°) to the current angle. */}
-        {indicator === 'progress' && (
+        {indicator === "progress" && (
           <>
             <circle
               cx="50"
@@ -1019,7 +1077,7 @@ export const Knob = ({
           </>
         )}
         {/* indicator="none": thin uniform full ring, no arc (pan/balance). */}
-        {indicator === 'none' && (
+        {indicator === "none" && (
           <circle
             cx="50"
             cy="50"
@@ -1030,7 +1088,7 @@ export const Knob = ({
           />
         )}
         {/* indicator="full": full-circle static thick ring, no dasharray. */}
-        {indicator === 'full' && (
+        {indicator === "full" && (
           <circle
             cx="50"
             cy="50"
@@ -1067,7 +1125,14 @@ export const Knob = ({
         )}
         {/* Needle — rotates around the knob center; same t as the arc tip. */}
         <g transform={`rotate(${angle} 50 50)`}>
-          <rect x="46" y="16" width="8" height="36" rx="4" fill="currentColor" />
+          <rect
+            x="46"
+            y="16"
+            width="8"
+            height="36"
+            rx="4"
+            fill="currentColor"
+          />
           <circle cx="50" cy="50" r="10" fill="currentColor" />
         </g>
       </svg>
@@ -1082,7 +1147,9 @@ export const Knob = ({
   ```
 - [ ] 3. Re-add the temporary demo mount to `src/components/SynthView.tsx` (same import already present; insert right after the opening `<div className="p-4 max-w-7xl mx-auto space-y-4">` line):
   ```tsx
-  {/* TEMP demo mount — remove before commit */}
+  {
+    /* TEMP demo mount — remove before commit */
+  }
   <div className="flex flex-wrap items-end gap-6 bg-[#0B0D19] p-3 rounded-lg border border-[#252B48]">
     <Knob value={0} label="Min" />
     <Knob value={0.5} label="Mid" />
@@ -1092,7 +1159,7 @@ export const Knob = ({
     <Knob value={0.4} label="Detent" detent={0.4} />
     <Knob value={0.25} label="Tiny" size="xs" />
     <Knob value={0.75} label="Big Disabled" size="xl" disabled />
-  </div>
+  </div>;
   ```
 - [ ] 4. Browser check (dev server: `bun run dev`; open `http://localhost:3000/?tab=synth`):
   - Drag the "Mid" knob right → value rises above 0.5; drag left → falls below; drag up → rises; drag down → falls. The value label, needle, and arc tip all update together (arc tip stays exactly on the needle — the spec §5 invariant).
@@ -1108,6 +1175,7 @@ export const Knob = ({
   bun run lint
   ```
 - [ ] 6. Commit:
+
   ```bash
   git add src/components/ui/Knob.tsx
   git commit -m "feat: add pointer drag interaction to Knob (axis pick, fine control)
@@ -1120,12 +1188,14 @@ export const Knob = ({
 ### Task 5: Keyboard + ARIA on `Knob`
 
 **Files**
+
 - Modify `src/components/ui/Knob.tsx`
 - Temporarily modify `src/components/SynthView.tsx` (demo mount; removed before commit)
 
 **Interfaces**
 
 Consumes (new import): `nextKeyValue` + type `KeyDir` from `../../utils/knob` (plus the Task 3/4 imports, incl. `detentAngle`/`KnobIndicator`). Behavior, exactly per spec §4.3:
+
 - `role="slider"`, `aria-valuemin={min}`, `aria-valuemax={max}`, `aria-valuenow={display}` (the formatted value string), `aria-disabled={disabled}`.
 - `aria-label` = the `label` prop (convention fixed in Global Constraints — no separate aria prop; all production usages pass `label`).
 - `tabIndex={disabled ? -1 : 0}` (disabled knobs leave the tab order).
@@ -1139,7 +1209,7 @@ Steps:
 - [ ] 1. Rewrite `src/components/ui/Knob.tsx` with the full listing below (Task 4 code + keyboard/ARIA):
 
 ```tsx
-import React, { useRef } from 'react';
+import React, { useRef } from "react";
 import {
   AXIS_PICK_THRESHOLD_PX,
   PROGRESS_ARC_UNITS,
@@ -1153,8 +1223,13 @@ import {
   snapToStep,
   tToValue,
   valueToT,
-} from '../../utils/knob';
-import type { KeyDir, KnobIndicator, KnobScale, KnobSize } from '../../utils/knob';
+} from "../../utils/knob";
+import type {
+  KeyDir,
+  KnobIndicator,
+  KnobScale,
+  KnobSize,
+} from "../../utils/knob";
 
 export type { KnobIndicator, KnobScale, KnobSize };
 
@@ -1177,7 +1252,7 @@ export interface KnobProps {
 
 /** Per-gesture drag state (a ref — survives re-renders mid-drag). */
 interface GestureState {
-  axis: 'x' | 'y' | null;
+  axis: "x" | "y" | null;
   startT: number;
   startX: number;
   startY: number;
@@ -1198,11 +1273,11 @@ export const Knob = ({
   min = 0,
   max = 1,
   step,
-  scale = 'linear',
-  size = 'md',
+  scale = "linear",
+  size = "md",
   label,
   format = String,
-  indicator = 'progress',
+  indicator = "progress",
   detent,
   disabled = false,
   id,
@@ -1214,7 +1289,8 @@ export const Knob = ({
   const angle = angleForT(t);
   const dash = progressDash(t);
   const display = format(value);
-  const detentAngleDeg = detent !== undefined ? detentAngle(detent, min, max, scale) : null;
+  const detentAngleDeg =
+    detent !== undefined ? detentAngle(detent, min, max, scale) : null;
 
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (disabled) return;
@@ -1234,12 +1310,15 @@ export const Knob = ({
     const dx = e.clientX - gesture.startX;
     const dy = e.clientY - gesture.startY;
     if (gesture.axis === null) {
-      if (Math.abs(dx) < AXIS_PICK_THRESHOLD_PX && Math.abs(dy) < AXIS_PICK_THRESHOLD_PX) {
+      if (
+        Math.abs(dx) < AXIS_PICK_THRESHOLD_PX &&
+        Math.abs(dy) < AXIS_PICK_THRESHOLD_PX
+      ) {
         return;
       }
-      gesture.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      gesture.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
     }
-    const delta = gesture.axis === 'x' ? dx : -dy;
+    const delta = gesture.axis === "x" ? dx : -dy;
     const nextT = clamp(gesture.startT + dragDeltaT(delta, e.shiftKey), 0, 1);
     onChange(snapToStep(tToValue(nextT, min, max, scale), min, step));
   };
@@ -1252,25 +1331,25 @@ export const Knob = ({
     if (disabled) return;
     let dir: KeyDir | null = null;
     switch (e.key) {
-      case 'ArrowUp':
-      case 'ArrowRight':
-        dir = 'inc';
+      case "ArrowUp":
+      case "ArrowRight":
+        dir = "inc";
         break;
-      case 'ArrowDown':
-      case 'ArrowLeft':
-        dir = 'dec';
+      case "ArrowDown":
+      case "ArrowLeft":
+        dir = "dec";
         break;
-      case 'PageUp':
-        dir = 'page-inc';
+      case "PageUp":
+        dir = "page-inc";
         break;
-      case 'PageDown':
-        dir = 'page-dec';
+      case "PageDown":
+        dir = "page-dec";
         break;
-      case 'Home':
-        dir = 'min';
+      case "Home":
+        dir = "min";
         break;
-      case 'End':
-        dir = 'max';
+      case "End":
+        dir = "max";
         break;
       default:
         return;
@@ -1300,7 +1379,7 @@ export const Knob = ({
         height={pixelSize}
         viewBox="0 0 100 100"
         className={`block text-[#877dca] touch-none select-none rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-400/70 ${
-          disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+          disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
         }`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -1310,7 +1389,7 @@ export const Knob = ({
       >
         {/* indicator="progress": dark 270° ring (same thickness as the arc,
             spec §5) + progress arc from min (−135°) to the current angle. */}
-        {indicator === 'progress' && (
+        {indicator === "progress" && (
           <>
             <circle
               cx="50"
@@ -1339,7 +1418,7 @@ export const Knob = ({
           </>
         )}
         {/* indicator="none": thin uniform full ring, no arc (pan/balance). */}
-        {indicator === 'none' && (
+        {indicator === "none" && (
           <circle
             cx="50"
             cy="50"
@@ -1350,7 +1429,7 @@ export const Knob = ({
           />
         )}
         {/* indicator="full": full-circle static thick ring, no dasharray. */}
-        {indicator === 'full' && (
+        {indicator === "full" && (
           <circle
             cx="50"
             cy="50"
@@ -1387,7 +1466,14 @@ export const Knob = ({
         )}
         {/* Needle — rotates around the knob center; same t as the arc tip. */}
         <g transform={`rotate(${angle} 50 50)`}>
-          <rect x="46" y="16" width="8" height="36" rx="4" fill="currentColor" />
+          <rect
+            x="46"
+            y="16"
+            width="8"
+            height="36"
+            rx="4"
+            fill="currentColor"
+          />
           <circle cx="50" cy="50" r="10" fill="currentColor" />
         </g>
       </svg>
@@ -1402,7 +1488,9 @@ export const Knob = ({
   ```
 - [ ] 3. Re-add the temporary demo mount to `src/components/SynthView.tsx` (same import already present; insert right after the opening `<div className="p-4 max-w-7xl mx-auto space-y-4">` line):
   ```tsx
-  {/* TEMP demo mount — remove before commit */}
+  {
+    /* TEMP demo mount — remove before commit */
+  }
   <div className="flex flex-wrap items-end gap-6 bg-[#0B0D19] p-3 rounded-lg border border-[#252B48]">
     <Knob value={0} label="Min" />
     <Knob value={0.5} label="Mid" />
@@ -1412,7 +1500,7 @@ export const Knob = ({
     <Knob value={0.4} label="Detent" detent={0.4} />
     <Knob value={0.25} label="Tiny" size="xs" />
     <Knob value={0.75} label="Big Disabled" size="xl" disabled />
-  </div>
+  </div>;
   ```
 - [ ] 4. Browser check (dev server: `bun run dev`; open `http://localhost:3000/?tab=synth`):
   - Tab repeatedly — the focus ring (`focus-visible` indigo outline) appears on each knob; the disabled knob is skipped. Note: focus lands on other page controls first — keep Tab-pressing until a knob rings; or click a knob once, then Tab/Shift+Tab moves between knobs.
@@ -1427,6 +1515,7 @@ export const Knob = ({
   bun run lint
   ```
 - [ ] 6. Commit:
+
   ```bash
   git add src/components/ui/Knob.tsx
   git commit -m "feat: add keyboard + ARIA support to Knob (slider semantics)
@@ -1439,6 +1528,7 @@ export const Knob = ({
 ### Task 6: Migrate the VCF Filter panel in `SynthView.tsx`
 
 **Files**
+
 - Modify `src/components/SynthView.tsx` (import + replace the 3 filter sliders)
 
 **Interfaces**
@@ -1446,6 +1536,7 @@ export const Knob = ({
 Consumes: `Knob` from `./ui/Knob` (import already present since Task 3). Produces: the same three DOM ids (`slider-filter-cutoff`, `slider-filter-resonance`, `slider-filter-env`) on the new knobs — verified: no other file references these ids, so renaming risk is zero.
 
 Migration decisions (from the current file, lines 670-740, and spec §7):
+
 - `filter-cutoff`: current `min={50}` is already > 0, so `scale="log"` is valid as-is — NO min change needed (spec §3's "min > 0 for log" holds with 50; the "use 20 as min" branch from the task brief does NOT apply — min 50 is intentional and preserved).
 - `filter-resonance`: linear, min 0.1 / max 20 / step 0.1.
 - `filter-env`: linear, min 0 / max 6000 / step 50.
@@ -1585,9 +1676,9 @@ Replace all three with:
   - The "2. VCF Filter" panel shows three knobs (Cutoff Frequency, Resonance (Q), Env Mod Depth) with the panel's three other controls (Filter Type buttons) unchanged. Panel layout intact; knob label rows align with the rest of the panel.
   - DevTools console — the ids are preserved:
     ```js
-    document.getElementById('slider-filter-cutoff') !== null &&
-    document.getElementById('slider-filter-resonance') !== null &&
-    document.getElementById('slider-filter-env') !== null
+    document.getElementById("slider-filter-cutoff") !== null &&
+      document.getElementById("slider-filter-resonance") !== null &&
+      document.getElementById("slider-filter-env") !== null;
     // → true
     ```
   - Values display exactly like before: cutoff shows e.g. `500 Hz` (preset-dependent), resonance `1.0`, env `+0 Hz`.
@@ -1598,6 +1689,7 @@ Replace all three with:
   - Switch the Control destination to Chord/Bass — the filter knobs reflect the chord/bass params (the panel is channel-routed via `params`/`onChangeParams`; knob values are fully controlled, so no action needed, just a visual sanity check).
   - Load a preset from the dropdown — the filter knobs jump to the preset's values (controlled update path verified).
 - [ ] 5. Commit:
+
   ```bash
   git add src/components/SynthView.tsx
   git commit -m "feat: migrate VCF Filter sliders to the Knob primitive

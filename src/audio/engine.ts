@@ -12,6 +12,7 @@ type SynthVoice = {
   lfoGain?: GainNode;
   lfoTarget?: SynthParams['lfoTarget'];
   sustainLevel: number;
+  envelopeScale: number;
   source: string;
   noteName: string;
   startTime: number;
@@ -26,6 +27,7 @@ class AudioEngine {
   private masterGain: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
+  private limiter: DynamicsCompressorNode | null = null;
 
   // Effect nodes
   private reverbNode: ConvolverNode | null = null;
@@ -186,9 +188,11 @@ class AudioEngine {
     // drop them — they are lazily recreated against the new context on demand.
     this.sourceBuses.clear();
 
-    // Master Output & Analyser
+    // Master Output & Analyser. 0.6 = deliberate −4.4 dB staging ceiling so
+    // the densest voicings peak around −6 dBFS before the compressor instead
+    // of clipping the destination.
     this.masterGain = this.ctx.createGain();
-    this.masterGain.gain.value = 0.8;
+    this.masterGain.gain.value = 0.6;
 
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 256;
@@ -201,6 +205,17 @@ class AudioEngine {
     this.compressor.ratio.value = 4;
     this.compressor.attack.value = 0.003;
     this.compressor.release.value = 0.25;
+
+    // Master limiter — mostly-idle safety net (Web Audio has no dedicated
+    // limiter; a max-ratio compressor with a hard-ish knee is the standard
+    // stand-in). Only catches overs above −3 dB; staging above should keep
+    // its gain reduction near zero.
+    this.limiter = this.ctx.createDynamicsCompressor();
+    this.limiter.threshold.value = -3;
+    this.limiter.knee.value = 0;
+    this.limiter.ratio.value = 20;
+    this.limiter.attack.value = 0.003;
+    this.limiter.release.value = 0.15;
 
     // 3-Band EQ
     this.eqLowNode = this.ctx.createBiquadFilter();
@@ -269,7 +284,8 @@ class AudioEngine {
     this.eqMidNode.connect(this.eqHighNode);
     this.eqHighNode.connect(this.compressor);
     this.compressor.connect(this.masterGain);
-    this.masterGain.connect(this.analyser);
+    this.masterGain.connect(this.limiter);
+    this.limiter.connect(this.analyser);
     this.analyser.connect(this.ctx.destination);
   }
 
@@ -341,7 +357,7 @@ class AudioEngine {
   }
 
   // Synthesizer Note On
-  triggerSynthNoteOn(noteName: string, params: SynthParams, velocity = 0.8, time?: number, source = 'synth'): void {
+  triggerSynthNoteOn(noteName: string, params: SynthParams, velocity = 0.8, time?: number, source = 'synth', scaleFactor = 1): void {
     if (!this.ctx || !this.dryGain) return;
     const freq = noteFrequency(noteName, params.octave);
     const now = time ?? this.ctx.currentTime;
@@ -395,7 +411,7 @@ class AudioEngine {
     const subGain = this.ctx.createGain();
     subGain.gain.value = params.subOscVolume;
 
-    const peakGain = velocity * 0.4;
+    const peakGain = velocity * 0.4 * scaleFactor;
     gainNode.gain.setValueAtTime(0.0001, now);
     gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain), now + Math.max(0.005, params.attack));
     gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, peakGain * params.sustain), now + params.attack + params.decay);
@@ -447,6 +463,7 @@ class AudioEngine {
       lfoGain,
       lfoTarget: params.lfoTarget,
       sustainLevel: peakGain * params.sustain,
+      envelopeScale: scaleFactor,
       source,
       noteName,
       startTime: now,
@@ -536,6 +553,28 @@ class AudioEngine {
     for (const voice of Array.from(voices)) {
       voice.releaseScheduledAt = now;
       this.releaseVoice(voice, releaseTime, now);
+    }
+  }
+
+  /**
+   * Re-balances every still-sounding voice for equal-power polyphony (held
+   * notes get quieter as more join). Voices with a planned release — pattern
+   * hits — keep their envelopes; envelopeScale makes repeated calls relative.
+   */
+  applySynthVelocityScale(scale: number): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    for (const voice of this.activeVoices.values()) {
+      if (voice.releaseScheduledAt !== undefined) continue;
+      const factor = scale / voice.envelopeScale;
+      if (Math.abs(factor - 1) < 0.001) continue;
+
+      voice.envelopeScale = scale;
+      voice.sustainLevel *= factor;
+      const gain = voice.gains[0].gain;
+      gain.cancelScheduledValues(now);
+      gain.setValueAtTime(Math.max(0.0001, gain.value), now);
+      gain.setTargetAtTime(Math.max(0.0001, voice.sustainLevel), now, 0.01);
     }
   }
 

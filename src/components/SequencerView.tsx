@@ -1570,7 +1570,9 @@ export const SequencerView = () => {
   const soundKit = useAppStore((s) => s.soundKit);
   const onChangeSoundKit = useAppStore((s) => s.setSoundKit);
   const masterSequencerVolume = useAppStore((s) => s.masterSequencerVolume);
-  const setMasterSequencerVolume = useAppStore((s) => s.setMasterSequencerVolume);
+  const setMasterSequencerVolume = useAppStore(
+    (s) => s.setMasterSequencerVolume,
+  );
   const drumFilterCutoff = useAppStore((s) => s.drumFilterCutoff);
   const drumFilterResonance = useAppStore((s) => s.drumFilterResonance);
   const drumFilterType = useAppStore((s) => s.drumFilterType);
@@ -1580,7 +1582,11 @@ export const SequencerView = () => {
 
   // Keep the drum bus filter in the audio graph in sync with the card knobs.
   useEffect(() => {
-    audioEngine.setDrumFilter(drumFilterCutoff, drumFilterResonance, drumFilterType);
+    audioEngine.setDrumFilter(
+      drumFilterCutoff,
+      drumFilterResonance,
+      drumFilterType,
+    );
   }, [drumFilterCutoff, drumFilterResonance, drumFilterType]);
 
   const [currentStep, setCurrentStep] = useState<number>(0);
@@ -1828,7 +1834,7 @@ export const SequencerView = () => {
             </span>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-5 flex-wrap">
             <div className="grid grid-cols-3 gap-1 w-32">
               {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
                 <button

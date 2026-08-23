@@ -57,7 +57,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             </button>
           </div>
 
-          <div className="flex items-start justify-around gap-2">
+          <div className="flex items-start justify-around gap-2 w-full min-w-max mx-auto">
             <Knob
               id="slider-reverb-wet"
               label="Mix"
@@ -113,7 +113,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             </button>
           </div>
 
-          <div className="flex items-start justify-around gap-2">
+          <div className="flex items-start justify-around gap-2 w-full min-w-max mx-auto">
             <Knob
               id="slider-delay-wet"
               label="Mix"
@@ -213,7 +213,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             </button>
           </div>
 
-          <div className="flex items-start justify-around gap-2">
+          <div className="flex items-start justify-around gap-2 w-full min-w-max mx-auto">
             <Knob
               id="slider-eq-low"
               label="LOW"

@@ -2,8 +2,12 @@ import { describe, expect, test, spyOn } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { audioEngine } from '../audio/engine';
 import type { ChordItem, SynthParams } from '../types';
+import { equalPowerVelocityScale } from '../audio/rhythmPatterns';
+import type { RhythmPattern } from '../audio/rhythmPatterns';
 import {
+  buildChordEvents,
   playChordLegato,
+  playFullHoldChord,
   scheduleBarInvariantEvents,
   startPatternLoop,
   previewChordForScale,
@@ -49,9 +53,12 @@ describe('legato chord preview', () => {
 
     expect(stopSpy).toHaveBeenCalledWith('chord', 0.05);
     expect(onSpy).toHaveBeenCalledTimes(3);
-    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, 0.8, 0, 'chord');
-    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, 0.8, 0, 'chord');
-    expect(onSpy).toHaveBeenCalledWith('G4', SYNTH, 0.8, 0, 'chord');
+    // Dense chords get per-voice 1/√n compensation so the summed preview
+    // no longer clips.
+    const scaled = 0.8 * equalPowerVelocityScale(3);
+    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, scaled, 0, 'chord');
+    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, scaled, 0, 'chord');
+    expect(onSpy).toHaveBeenCalledWith('G4', SYNTH, scaled, 0, 'chord');
     // Legato = the envelope sustains until the caller releases the preview.
     expect(offSpy).not.toHaveBeenCalled();
 
@@ -212,6 +219,72 @@ describe('scheduleBarInvariantEvents note-off clamping', () => {
     ]);
 
     offSpy.mockRestore();
+  });
+});
+
+describe('full-hold chord scheduling', () => {
+  test('plays every note at 1/√n velocity and releases at the hold end', () => {
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
+
+    const notes = ['C4', 'E4', 'G4', 'B4', 'D5', 'F5', 'A5'];
+    playFullHoldChord(notes, SYNTH, 10, 4);
+
+    const scaled = 0.8 * equalPowerVelocityScale(7);
+    for (const n of notes) {
+      expect(onSpy).toHaveBeenCalledWith(n, SYNTH, scaled, 10, 'chord');
+      expect(offSpy).toHaveBeenCalledWith(n, SYNTH.release, 14, 'chord');
+    }
+    expect(onSpy).toHaveBeenCalledTimes(7);
+
+    onSpy.mockRestore();
+    offSpy.mockRestore();
+  });
+});
+
+describe('buildChordEvents', () => {
+  const PATTERN: RhythmPattern = {
+    id: 'test',
+    name: 'Test',
+    style: 'Test',
+    hits: [{ step: 0, type: 'block', velocity: 0.8, holdSteps: 2 }],
+  };
+
+  test('scales block-hit velocity by 1/√n and keeps offset/hold math', () => {
+    const notes = ['C4', 'E4', 'G4', 'B4'];
+    const events = buildChordEvents(PATTERN, notes, 0.125, 1);
+
+    expect(events).toHaveLength(4);
+    const scaled = 0.8 * equalPowerVelocityScale(4);
+    for (const ev of events) {
+      expect(ev.velocity).toBe(scaled);
+      expect(ev.timeOffset).toBe(0);
+      expect(ev.hold).toBeCloseTo(0.25, 6);
+    }
+    expect(events.map((e) => e.noteName)).toEqual(notes);
+  });
+
+  test('keeps strum cascade ordering, spread timing, and scaled velocities', () => {
+    const strumPattern: RhythmPattern = {
+      id: 'test',
+      name: 'Test',
+      style: 'Test',
+      hits: [
+        { step: 4, type: 'strum', direction: 'up', velocity: 0.9, holdSteps: 2, spreadMs: 30 },
+      ],
+    };
+    const notes = ['C4', 'E4', 'G4'];
+    const events = buildChordEvents(strumPattern, notes, 0.125, 2);
+
+    // Up-strum = high to low.
+    expect(events.map((e) => e.noteName)).toEqual(['G4', 'E4', 'C4']);
+    const base = 0.9 * equalPowerVelocityScale(3);
+    expect(events[0].timeOffset).toBeCloseTo(4 * 0.125, 9);
+    expect(events[1].timeOffset).toBeCloseTo(4 * 0.125 + 0.03, 9);
+    expect(events[0].velocity).toBeCloseTo(Math.max(0.1, base * (1 - 0 * 0.08)), 12);
+    expect(events[1].velocity).toBeCloseTo(Math.max(0.1, base * (1 - 1 * 0.08)), 12);
+    expect(events[2].velocity).toBeCloseTo(Math.max(0.1, base * (1 - 2 * 0.08)), 12);
+    expect(events[0].hold).toBeCloseTo(2 * 0.125 * 2, 6);
   });
 });
 

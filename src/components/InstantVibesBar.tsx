@@ -2,28 +2,25 @@ import React, { useState } from 'react';
 import { Sparkles, Play, Check, Zap, Music, Volume2, ChevronDown, ChevronUp } from 'lucide-react';
 import { INSTANT_VIBES, InstantVibe, applyInstantVibeToStore } from '../audio/instantVibes';
 import { useAppStore } from '../store/store';
-import { audioEngine } from '../audio/engine';
+
+export function selectVibe(
+  vibe: InstantVibe,
+  deps: { onSelect: (id: string) => void; onToast: (text: string) => void }
+): void {
+  applyInstantVibeToStore(vibe);
+  deps.onSelect(vibe.id);
+  deps.onToast(`Loaded ${vibe.name} (${vibe.bpm} BPM · Key ${vibe.scaleRoot} ${vibe.scaleType})`);
+}
 
 export const InstantVibesBar: React.FC = React.memo(() => {
-  const isSequencerPlaying = useAppStore((s) => s.isSequencerPlaying);
-  const isChordsPlaying = useAppStore((s) => s.isChordsPlaying);
-  const toggleMasterPlay = useAppStore((s) => s.toggleMasterPlay);
   const projectTitle = useAppStore((s) => s.projectTitle);
 
   const [activeVibeId, setActiveVibeId] = useState<string | null>('synthwave-80s');
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
 
-  const handleSelectVibe = (vibe: InstantVibe, autoPlay = false) => {
-    applyInstantVibeToStore(vibe);
-    setActiveVibeId(vibe.id);
-    setFeedbackToast(`Loaded ${vibe.name} (${vibe.bpm} BPM · Key ${vibe.scaleRoot} ${vibe.scaleType})`);
-
-    if (autoPlay || (!isSequencerPlaying && !isChordsPlaying)) {
-      audioEngine.init();
-      toggleMasterPlay();
-    }
-
+  const handleSelectVibe = (vibe: InstantVibe) => {
+    selectVibe(vibe, { onSelect: setActiveVibeId, onToast: setFeedbackToast });
     setTimeout(() => {
       setFeedbackToast(null);
     }, 3000);

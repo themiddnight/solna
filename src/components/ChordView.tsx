@@ -53,6 +53,7 @@ import {
   RHYTHM_PATTERNS,
   RHYTHM_STYLE_GROUPS,
   RhythmPattern,
+  equalPowerVelocityScale,
   feelToHoldScale,
   fullHoldDuration,
 } from "../audio/rhythmPatterns";
@@ -427,6 +428,62 @@ type BarInvariantEvent = {
   lastBarOnly?: boolean;
 };
 
+// Precomputes one chord trigger's bar-invariant events from a rhythm pattern.
+export function buildChordEvents(
+  pattern: RhythmPattern,
+  notes: string[],
+  stepDur: number,
+  holdScale: number,
+): BarInvariantEvent[] {
+  return pattern.hits.flatMap((hit) => {
+    const offset = hit.step * stepDur;
+    const hold = Math.max(0.05, (hit.holdSteps ?? 1) * stepDur * holdScale);
+    const baseVelocity =
+      (hit.velocity ?? 0.8) * equalPowerVelocityScale(notes.length);
+    const hitNotes = hit.note !== undefined ? [notes[hit.note]] : notes;
+    const isStrum = hit.type === "strum";
+    const orderedNotes =
+      isStrum && hit.direction === "up" ? [...hitNotes].reverse() : hitNotes;
+    const spreadMs = hit.spreadMs ?? 30;
+
+    return orderedNotes.flatMap((n, i) => {
+      if (!n) return [];
+      const noteName = hit.octaveShift
+        ? shiftNoteOctave(n, hit.octaveShift)
+        : n;
+      const timeOffset = offset + (isStrum ? (i * spreadMs) / 1000 : 0);
+      const velocity = isStrum
+        ? Math.max(0.1, baseVelocity * (1 - i * 0.08))
+        : baseVelocity;
+      return [{ noteName, velocity, timeOffset, hold }];
+    });
+  });
+}
+
+// Held full-bar chord: strike every note together and release them together.
+export function playFullHoldChord(
+  notes: string[],
+  params: SynthParams,
+  startTime: number,
+  holdSec: number,
+): void {
+  for (const n of notes) {
+    audioEngine.triggerSynthNoteOn(
+      n,
+      params,
+      0.8 * equalPowerVelocityScale(notes.length),
+      startTime,
+      "chord",
+    );
+    audioEngine.triggerSynthNoteOff(
+      n,
+      params.release,
+      startTime + holdSec,
+      "chord",
+    );
+  }
+}
+
 // Schedules one precomputed, bar-invariant event set at the start of each bar
 export function scheduleBarInvariantEvents(
   events: BarInvariantEvent[],
@@ -467,7 +524,7 @@ export function scheduleBarInvariantEvents(
 /** Minimal engine surface the preview helpers depend on. */
 type PreviewEngine = Pick<
   typeof audioEngine,
-  'triggerSynthNoteOn' | 'triggerSynthNoteOff' | 'stopSource'
+  "triggerSynthNoteOn" | "triggerSynthNoteOff" | "stopSource"
 >;
 
 // Held chord preview: strike every note of the chord now and let the synth
@@ -479,9 +536,15 @@ export function playChordLegato(
   params: SynthParams,
   engine: PreviewEngine,
 ): void {
-  engine.stopSource('chord', 0.05);
+  engine.stopSource("chord", 0.05);
   for (const note of chord.notes) {
-    engine.triggerSynthNoteOn(note, params, 0.8, 0, 'chord');
+    engine.triggerSynthNoteOn(
+      note,
+      params,
+      0.8 * equalPowerVelocityScale(chord.notes.length),
+      0,
+      "chord",
+    );
   }
 }
 
@@ -516,7 +579,13 @@ export function previewChordForScale(
 ): ChordItem {
   const tonic = getDiatonicChordForDegree(0, scaleRoot, scaleType, false);
   return deriveChordNotes(
-    { id: 'preview', root: tonic.root, quality: tonic.quality, bars: 1, notes: [] },
+    {
+      id: "preview",
+      root: tonic.root,
+      quality: tonic.quality,
+      bars: 1,
+      notes: [],
+    },
     octave,
   );
 }
@@ -596,49 +665,12 @@ export const ChordView: React.FC = React.memo(() => {
       if (isFullHoldPattern) {
         // Sustained/Legato full-bar chords: hold continuously across all totalBars without per-bar re-strikes
         const fullChordHold = fullHoldDuration(totalBars, barDur, holdScale);
-        for (const n of notes) {
-          audioEngine.triggerSynthNoteOn(
-            n,
-            chordSynthParams,
-            0.8,
-            startTime,
-            "chord",
-          );
-          audioEngine.triggerSynthNoteOff(
-            n,
-            chordSynthParams.release,
-            startTime + fullChordHold,
-            "chord",
-          );
-        }
+        playFullHoldChord(notes, chordSynthParams, startTime, fullChordHold);
         return;
       }
 
       // Precompute the pattern's events once per chord trigger (bar-invariant)
-      const events = pattern.hits.flatMap((hit) => {
-        const offset = hit.step * stepDur;
-        const hold = Math.max(0.05, (hit.holdSteps ?? 1) * stepDur * holdScale);
-        const baseVelocity = hit.velocity ?? 0.8;
-        const hitNotes = hit.note !== undefined ? [notes[hit.note]] : notes;
-        const isStrum = hit.type === "strum";
-        const orderedNotes =
-          isStrum && hit.direction === "up"
-            ? [...hitNotes].reverse()
-            : hitNotes;
-        const spreadMs = hit.spreadMs ?? 30;
-
-        return orderedNotes.flatMap((n, i) => {
-          if (!n) return [];
-          const noteName = hit.octaveShift
-            ? shiftNoteOctave(n, hit.octaveShift)
-            : n;
-          const timeOffset = offset + (isStrum ? (i * spreadMs) / 1000 : 0);
-          const velocity = isStrum
-            ? Math.max(0.1, baseVelocity * (1 - i * 0.08))
-            : baseVelocity;
-          return [{ noteName, velocity, timeOffset, hold }];
-        });
-      });
+      const events = buildChordEvents(pattern, notes, stepDur, holdScale);
 
       scheduleBarInvariantEvents(
         events,
@@ -674,7 +706,11 @@ export const ChordView: React.FC = React.memo(() => {
 
       if (isFullHoldPattern) {
         // Sustained whole-note bass root: hold continuously across all totalBars
-        const fullBassHold = fullHoldDuration(totalBars, barDur, feelToHoldScale(bassFeel));
+        const fullBassHold = fullHoldDuration(
+          totalBars,
+          barDur,
+          feelToHoldScale(bassFeel),
+        );
         const resolved = resolveBassSteps(
           pattern,
           context,
@@ -1056,7 +1092,11 @@ export const ChordView: React.FC = React.memo(() => {
     e.preventDefault();
     audioEngine.init();
 
-    const previewChord = previewChordForScale(scaleRoot, scaleType, chordOctave);
+    const previewChord = previewChordForScale(
+      scaleRoot,
+      scaleType,
+      chordOctave,
+    );
     const barSeconds = previewBarSeconds(bpm) * (previewChord.bars || 1);
 
     chordPatternPreviewStopRef.current?.();
@@ -1086,12 +1126,17 @@ export const ChordView: React.FC = React.memo(() => {
     e.preventDefault();
     audioEngine.init();
 
-    const previewChord = previewChordForScale(scaleRoot, scaleType, chordOctave);
+    const previewChord = previewChordForScale(
+      scaleRoot,
+      scaleType,
+      chordOctave,
+    );
     const barSeconds = previewBarSeconds(bpm) * (previewChord.bars || 1);
 
     bassPatternPreviewStopRef.current?.();
     bassPatternPreviewStopRef.current = startPatternLoop(
-      (time) => playBassWithPattern(previewChord, time, bassPattern, [previewChord]),
+      (time) =>
+        playBassWithPattern(previewChord, time, bassPattern, [previewChord]),
       barSeconds,
       () => audioEngine.getAudioContext()?.currentTime ?? 0,
     );

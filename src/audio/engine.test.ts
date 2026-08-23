@@ -15,6 +15,7 @@ function fakeParam() {
   return {
     value: 1,
     cancels: [] as number[],
+    targets: [] as { v: number; t: number; tc: number }[],
     setValueAtTime(v: number, _t: number) {
       this.value = v;
     },
@@ -22,7 +23,9 @@ function fakeParam() {
       this.cancels.push(t);
     },
     exponentialRampToValueAtTime(_v: number, _t: number) {},
-    setTargetAtTime(_v: number, _t: number, _tc: number) {},
+    setTargetAtTime(v: number, t: number, tc: number) {
+      this.targets.push({ v, t, tc });
+    },
   };
 }
 
@@ -377,5 +380,132 @@ describe('releaseSoundingVoices', () => {
     engine.stopSource('chord', 0.1);
 
     expect(ctx._gains[0].gain.cancels).toContain(t0);
+  });
+});
+
+describe('master chain', () => {
+  // Full-fidelity fake context for setupMasterChain: every node records its
+  // connect() targets so the test can prove the exact wiring order.
+  function masterChainCtx() {
+    const mk = (type: string) => {
+      const n = fakeNode();
+      (n as any)._connectTargets = [] as unknown[];
+      (n as any).connect = (target: unknown) => {
+        (n as any)._connectTargets.push(target);
+      };
+      (n as any)._type = type;
+      return n;
+    };
+    return {
+      currentTime: 10,
+      sampleRate: 44100,
+      destination: {},
+      createOscillator: () => mk('osc'),
+      createGain: () => mk('gain'),
+      createBiquadFilter: () => mk('biquad'),
+      createDynamicsCompressor: () => {
+        const n: any = mk('compressor');
+        n.threshold = fakeParam();
+        n.knee = fakeParam();
+        n.ratio = fakeParam();
+        n.attack = fakeParam();
+        n.release = fakeParam();
+        return n;
+      },
+      createAnalyser: () => mk('analyser'),
+      createConvolver: () => mk('convolver'),
+      createWaveShaper: () => mk('waveshaper'),
+      createDelay: () => {
+        const n: any = mk('delay');
+        n.delayTime = fakeParam();
+        return n;
+      },
+      createBuffer: () => ({
+        length: 1024,
+        getChannelData: () => new Float32Array(1024),
+      }),
+      resume: async () => {},
+    };
+  }
+
+  test('stages masterGain at 0.6 and inserts a ratio-20 limiter between masterGain and the analyser', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+
+    const masterGain = (engine as any).masterGain;
+    const limiter = (engine as any).limiter;
+    const analyser = (engine as any).analyser;
+    const compressor = (engine as any).compressor;
+
+    expect(masterGain.gain.value).toBe(0.6);
+    expect(limiter).toBeDefined();
+    if (!limiter) return;
+
+    expect(limiter.threshold.value).toBe(-3);
+    expect(limiter.ratio.value).toBe(20);
+    expect(limiter.knee.value <= 6).toBe(true);
+    expect(limiter.attack.value).toBeCloseTo(0.003, 6);
+    expect(limiter.release.value <= 0.25).toBe(true);
+
+    // Wiring: compressor → masterGain → limiter → analyser → destination.
+    expect(masterGain._connectTargets).toEqual([limiter]);
+    expect(limiter._connectTargets).toEqual([analyser]);
+    expect(analyser._connectTargets).toEqual([ctx.destination]);
+    expect(compressor._connectTargets).toEqual([masterGain]);
+  });
+});
+
+describe('live polyphony equal-power scaling', () => {
+  test('applySynthVelocityScale re-scales every live voice and skips released ones', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('G4', SYNTH, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOff('G4', SYNTH.release, undefined, 'synth');
+
+    (engine as any).applySynthVelocityScale(0.5);
+
+    const voices = (engine as any).activeVoices;
+    const c4 = voices.get('synth:C4');
+    const g4 = voices.get('synth:G4');
+    const reScaledSustain = 0.8 * 0.4 * SYNTH.sustain * 0.5;
+
+    expect(c4.envelopeScale).toBe(0.5);
+    expect(c4.gains[0].gain.targets).toHaveLength(1);
+    expect(c4.gains[0].gain.targets[0].v).toBeCloseTo(reScaledSustain, 5);
+    expect(c4.gains[0].gain.targets[0].tc).toBe(0.01);
+    expect(c4.gains[0].gain.cancels).toContain(t0);
+
+    // The released voice keeps its own release ramp; no re-scale target.
+    expect(g4.gains[0].gain.targets).toHaveLength(0);
+  });
+
+  test('a voice triggered with a scaleFactor re-scales relative to it', () => {
+    const { engine } = freshEngine();
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 1.0, undefined, 'synth', 0.5);
+    const c4 = (engine as any).activeVoices.get('synth:C4');
+    expect(c4.envelopeScale).toBe(0.5);
+
+    (engine as any).applySynthVelocityScale(0.25);
+    expect(c4.gains[0].gain.targets).toHaveLength(1);
+    expect(c4.gains[0].gain.targets[0].v).toBeCloseTo(
+      1.0 * 0.4 * SYNTH.sustain * 0.25,
+      5,
+    );
+  });
+
+  test('a re-scale that matches the current scale leaves voices untouched', () => {
+    const { engine } = freshEngine();
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth');
+    (engine as any).applySynthVelocityScale(1);
+
+    const c4 = (engine as any).activeVoices.get('synth:C4');
+    expect(c4.gains[0].gain.targets).toHaveLength(0);
   });
 });
