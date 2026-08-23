@@ -1375,7 +1375,7 @@ export const ChordView: React.FC = React.memo(() => {
             16th notes.
           </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="flex flex-row flex-wrap items-end gap-3">
           <div>
             <label className="text-[10px] text-slate-500 block mb-1">
               Bass Preset
@@ -1483,7 +1483,7 @@ export const ChordView: React.FC = React.memo(() => {
             <span className="text-[9px] text-slate-500 font-mono shrink-0">loose</span>
           </div>
 
-          <div>
+          <div className="min-w-[160px]">
             <label className="text-[10px] text-slate-500 block mb-1">
               Bass Level ({Math.round(bassVolume * 100)}%)
             </label>
