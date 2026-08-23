@@ -78,7 +78,6 @@ export const Knob = ({
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (disabled) return;
     e.preventDefault();
-    e.currentTarget.focus();
     e.currentTarget.setPointerCapture(e.pointerId);
     gestureRef.current = {
       axis: null,
@@ -104,8 +103,9 @@ export const Knob = ({
     onChange(snapToStep(tToValue(nextT, min, max, scale), min, step));
   };
 
-  const endGesture = () => {
+  const endGesture = (e: React.PointerEvent<SVGSVGElement>) => {
     gestureRef.current = null;
+    e.currentTarget.blur();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {

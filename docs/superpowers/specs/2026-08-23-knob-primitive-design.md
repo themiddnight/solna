@@ -65,6 +65,8 @@ export interface KnobProps {
 - เลือกแกนจากระยะ |delta| สะสม เกิน 3px (กันสั่น) → ยึดแกนนั้นจนจบ gesture
 - Sensitivity: ~200px = เต็ม range; กด Shift = ÷10 (fine control)
 - clamp ใน [min, max]; snap ตาม `step` ใน space ของค่าจริง
+- Pointer interaction ไม่ focus knob — จบ gesture (pointerup/cancel) จะ blur คืน focus
+  ให้ keyboard (เช่น เล่น note); keyboard focus ผ่าน Tab ยังใช้งานได้พร้อม focus ring
 
 ### 4.2 การ map ค่า
 - `t = (value − min) / (max − min)` ∈ [0,1]
