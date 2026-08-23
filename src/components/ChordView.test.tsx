@@ -4,6 +4,7 @@ import { audioEngine } from '../audio/engine';
 import type { ChordItem, SynthParams } from '../types';
 import {
   playChordLegato,
+  scheduleBarInvariantEvents,
   startPatternLoop,
   previewChordForScale,
   previewBarSeconds,
@@ -147,6 +148,70 @@ describe('pattern preview chord & timing', () => {
   test('one bar lasts 16 sixteenth steps at the given bpm', () => {
     // 120 bpm → sixteenth = 0.125 s → one 16-step bar = 2 s.
     expect(previewBarSeconds(120)).toBe(2);
+  });
+});
+
+describe('scheduleBarInvariantEvents note-off clamping', () => {
+  // One bar = 2 s. A hit at 1.5 s holding 1.5 s would end at 3 s — past the
+  // chord end at 2 s — so its note-off must be clamped to the chord boundary.
+  test('clamps a last-bar note-off to the chord end', () => {
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
+
+    scheduleBarInvariantEvents(
+      [{ noteName: 'C4', velocity: 0.8, timeOffset: 1.5, hold: 1.5 }],
+      SYNTH,
+      'chord',
+      10,
+      2,
+      1,
+    );
+
+    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, 0.8, 11.5, 'chord');
+    expect(offSpy).toHaveBeenCalledWith('C4', SYNTH.release, 12, 'chord');
+
+    onSpy.mockRestore();
+    offSpy.mockRestore();
+  });
+
+  test('leaves an in-bounds hold untouched', () => {
+    const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
+
+    scheduleBarInvariantEvents(
+      [{ noteName: 'C4', velocity: 0.8, timeOffset: 0.5, hold: 0.5 }],
+      SYNTH,
+      'chord',
+      10,
+      2,
+      1,
+    );
+
+    expect(offSpy).toHaveBeenCalledWith('C4', SYNTH.release, 11, 'chord');
+
+    offSpy.mockRestore();
+  });
+
+  test('only clamps against the chord end, not the bar boundary', () => {
+    const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
+
+    // Two bars: bar 0 spans [10, 12], bar 1 spans [12, 14]. The same hit on
+    // bar 0 may drag across the bar boundary (same chord), but bar 1's copy
+    // is clamped to the chord end at 14.
+    scheduleBarInvariantEvents(
+      [{ noteName: 'C4', velocity: 0.8, timeOffset: 1.5, hold: 1.5 }],
+      SYNTH,
+      'chord',
+      10,
+      2,
+      2,
+    );
+
+    expect(offSpy.mock.calls).toEqual([
+      ['C4', SYNTH.release, 13, 'chord'],
+      ['C4', SYNTH.release, 14, 'chord'],
+    ]);
+
+    offSpy.mockRestore();
   });
 });
 

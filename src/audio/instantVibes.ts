@@ -161,7 +161,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
       Crash: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     },
 
-    // Chords: Velvet EP, relaxed swung feel
+    // Chords: Dream Keys, relaxed swung feel
     chords: [
       makeVibeChord('c1', 'C', 'maj7', 1, 4),
       makeVibeChord('c2', 'A', 'min7', 1, 4),
@@ -171,7 +171,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     chordRhythmId: 'lofiSwing',
     chordFeel: 0.78, // Loose swing
     chordOctave: 4,
-    chordPresetName: 'Velvet EP',
+    chordPresetName: 'Dream Keys',
     chordSynthParams: {
       oscType: 'sine',
       subOscVolume: 0.2,
@@ -211,7 +211,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     },
 
     // Main Synth: Warm Keys / Whistle
-    synthPresetName: 'Velvet EP',
+    synthPresetName: 'Dream Keys',
     synthParams: {
       oscType: 'sine',
       subOscVolume: 0.15,
@@ -281,7 +281,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     chordRhythmId: 'eighthPads',
     chordFeel: 0.12, // Strict tight sequencer grid
     chordOctave: 4,
-    chordPresetName: 'Neon 80s Polysynth',
+    chordPresetName: 'Neon Pluck',
     chordSynthParams: {
       oscType: 'sawtooth',
       subOscVolume: 0.3,
@@ -321,7 +321,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     },
 
     // Main Synth: Arpeggiator active
-    synthPresetName: 'Neon 80s Polysynth',
+    synthPresetName: 'Neon Pluck',
     synthParams: {
       oscType: 'sawtooth',
       filterCutoff: 4200,
@@ -395,7 +395,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     chordRhythmId: 'offbeatStabs',
     chordFeel: 0.05, // Laser tight
     chordOctave: 4,
-    chordPresetName: 'Hyper Saw',
+    chordPresetName: 'Hyper Saw Lead',
     chordSynthParams: {
       oscType: 'sawtooth',
       subOscVolume: 0.25,
@@ -431,7 +431,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     },
 
     // Main Synth: Cyber Pluck Arp
-    synthPresetName: 'Cyber Lead Pluck',
+    synthPresetName: 'Cyber Drone',
     synthParams: {
       oscType: 'square',
       filterCutoff: 5000,
@@ -489,7 +489,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
       Crash: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     },
 
-    // Chords: Celestial Pad, very loose and floating
+    // Chords: Celestial Shimmer, very loose and floating
     chords: [
       makeVibeChord('am1', 'D', 'maj7', 2, 4),
       makeVibeChord('am2', 'E', 'maj', 2, 4),
@@ -499,7 +499,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     chordRhythmId: 'sustained',
     chordFeel: 0.88, // Very loose, floating
     chordOctave: 4,
-    chordPresetName: 'Celestial Pad',
+    chordPresetName: 'Celestial Shimmer',
     chordSynthParams: {
       oscType: 'sine',
       subOscVolume: 0.3,
@@ -535,7 +535,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     },
 
     // Main Synth: Ethereal Bell Pad
-    synthPresetName: 'Celestial Pad',
+    synthPresetName: 'Celestial Shimmer',
     synthParams: {
       oscType: 'sine',
       filterCutoff: 2200,
@@ -594,7 +594,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
       Crash: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     },
 
-    // Chords: Soul Rhodes with syncopated push
+    // Chords: Mellow E-Piano with syncopated push
     chords: [
       makeVibeChord('bb1', 'E', 'min7', 1, 4),
       makeVibeChord('bb2', 'A', '7', 1, 4),
@@ -604,7 +604,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     chordRhythmId: 'syncopatedPush',
     chordFeel: 0.76, // Loose swing pocket
     chordOctave: 4,
-    chordPresetName: 'Soul Rhodes',
+    chordPresetName: 'Mellow E-Piano',
     chordSynthParams: {
       oscType: 'triangle',
       subOscVolume: 0.3,
@@ -642,8 +642,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
       release: 0.28,
     },
 
-    // Main Synth: Soul Rhodes Solo
-    synthPresetName: 'Soul Rhodes',
+    // Main Synth: Mellow E-Piano Solo
+    synthPresetName: 'Mellow E-Piano',
     synthParams: {
       oscType: 'triangle',
       filterCutoff: 3200,
@@ -697,7 +697,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
       Crash: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     },
 
-    // Chords: Eastern Bells & peaceful sustained pads
+    // Chords: Glocken Bell & peaceful sustained pads
     chords: [
       makeVibeChord('zn1', 'G', 'maj', 2, 4),
       makeVibeChord('zn2', 'C', 'maj', 2, 4),
@@ -707,7 +707,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     chordRhythmId: 'sustained',
     chordFeel: 0.65, // Peaceful organic breath
     chordOctave: 4,
-    chordPresetName: 'Eastern Bells',
+    chordPresetName: 'Glocken Bell',
     chordSynthParams: {
       oscType: 'triangle',
       subOscVolume: 0.2,
@@ -740,7 +740,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     },
 
     // Main Synth: Pentatonic Bell Arp
-    synthPresetName: 'Eastern Bells',
+    synthPresetName: 'Glocken Bell',
     synthParams: {
       oscType: 'triangle',
       filterCutoff: 3800,

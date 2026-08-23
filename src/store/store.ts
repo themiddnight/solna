@@ -9,7 +9,8 @@ import { createChordsSlice } from './chordsSlice';
 import { createBassSlice } from './bassSlice';
 import { createSequencerSlice } from './sequencerSlice';
 import { createEffectsSlice } from './effectsSlice';
-import { INITIAL_EFFECTS } from './initialState';
+import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
+import type { SynthParams } from '../types';
 import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
 import { migrateLegacyPresets, removeLegacyKeys } from './migrate';
@@ -101,6 +102,49 @@ export function partializeAppState(state: AppStore): PersistedState {
 // coerced, or dropped; dropped keys fall back to the freshly-built
 // currentState defaults. Only the keys listed here are checked — everything
 // else passes through unchanged.
+const OSC_TYPES = new Set(['sawtooth', 'square', 'sine', 'triangle']);
+const FILTER_TYPES = new Set(['lowpass', 'highpass', 'bandpass']);
+const LFO_TARGETS = new Set(['cutoff', 'pitch', 'volume']);
+const ARP_MODES = new Set(['up', 'down', 'updown', 'random']);
+const ARP_RATES = new Set(['4n', '8n', '16n', '32n']);
+
+/**
+ * Synth params are written straight onto AudioParams, so a wrong-typed
+ * persisted value (a string cutoff, a null attack) would land as
+ * setValueAtTime(NaN) and silence the voice. Each field keeps its stored value
+ * only when the type matches the factory default — and, for the enum fields,
+ * only when the engine and arpeggiator actually understand it.
+ */
+function sanitizeSynthParams(value: unknown): SynthParams {
+  const fallback = INITIAL_SYNTH_PARAMS;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return fallback;
+  const raw = value as Record<string, unknown>;
+  const out = { ...fallback } as Record<string, unknown>;
+
+  for (const [key, def] of Object.entries(fallback)) {
+    const stored = raw[key];
+    if (typeof def === 'number') {
+      out[key] = typeof stored === 'number' && Number.isFinite(stored) ? stored : def;
+    } else if (typeof def === 'boolean') {
+      out[key] = typeof stored === 'boolean' ? stored : def;
+    } else if (typeof def === 'string') {
+      out[key] = typeof stored === 'string' ? stored : def;
+    }
+  }
+
+  if (!OSC_TYPES.has(out.oscType as string)) out.oscType = fallback.oscType;
+  if (!FILTER_TYPES.has(out.filterType as string)) out.filterType = fallback.filterType;
+  if (!LFO_TARGETS.has(out.lfoTarget as string)) out.lfoTarget = fallback.lfoTarget;
+  if (!ARP_MODES.has(out.arpMode as string)) out.arpMode = fallback.arpMode;
+  if (!ARP_RATES.has(out.arpRate as string)) out.arpRate = fallback.arpRate;
+  // `portamento` is optional, so it has no factory default to key off above.
+  if (typeof raw.portamento === 'number' && Number.isFinite(raw.portamento)) {
+    out.portamento = raw.portamento;
+  }
+
+  return out as unknown as SynthParams;
+}
+
 function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (typeof persisted !== 'object' || persisted === null) return {};
   const sanitized = { ...(persisted as Record<string, unknown>) };
@@ -148,6 +192,12 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
     if (typeof sanitized[key] !== 'string') delete sanitized[key];
   }
 
+  // Only rewrite the synth param objects that were actually stored; an absent
+  // key must keep falling through to the freshly-built currentState default.
+  for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams']) {
+    if (key in sanitized) sanitized[key] = sanitizeSynthParams(sanitized[key]);
+  }
+
   return sanitized as unknown as Partial<AppStore>;
 }
 
@@ -169,13 +219,29 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: PERSIST_KEY,
-      version: 1,
+      version: 2,
       storage: createJSONStorage<PersistedState>(() => resolveStorage() ?? memoryStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
       // before the merge (merge only fills empty arrays, so it is safe).
-      migrate: (persisted, _version) =>
-        migrateLegacyPresets((persisted ?? {}) as Partial<PersistedState>) as PersistedState,
+      migrate: (persisted, version) => {
+        const migrated = migrateLegacyPresets(
+          (persisted ?? {}) as Partial<PersistedState>
+        ) as PersistedState;
+        if (version >= 2) return migrated;
+        // v1 persisted `arpActive: true` from an arpeggiator that never
+        // produced a note, while that same flag gated the keyboard's direct
+        // trigger — so those sessions came back with a silent keyboard. Clear
+        // the flag once on the way to v2; the arp can be switched back on.
+        const next = { ...migrated } as Record<string, unknown>;
+        for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams']) {
+          const params = next[key];
+          if (params && typeof params === 'object' && !Array.isArray(params)) {
+            next[key] = { ...(params as object), arpActive: false };
+          }
+        }
+        return next as unknown as PersistedState;
+      },
       // Runs on every hydration (also when nothing was stored): sanitize the
       // parsed payload (wrong-typed persisted values must never reach the
       // engine), adopt any legacy presets into the freshly-built state, then

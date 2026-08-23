@@ -734,3 +734,139 @@ describe('persisted payload sanitization', () => {
     expect(fakeLocalStorage.getItem('murva_project_state_v1')).not.toBeNull();
   });
 });
+
+describe('arp migration off stale persisted state', () => {
+  // A v1 payload could pin arpActive:true while the arpeggiator produced no
+  // notes at all, which silenced the keyboard on every later session. The
+  // version bump has to clear that flag so those users get their keys back.
+  test('a version-1 payload with arpActive:true hydrates with the arp disabled', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.persist.clearStorage();
+
+    fakeLocalStorage.setItem(
+      'murva_project_state_v1',
+      JSON.stringify({
+        version: 1,
+        state: {
+          synthParams: { ...INITIAL_SYNTH_PARAMS, arpActive: true },
+          chordSynthParams: { ...INITIAL_SYNTH_PARAMS, arpActive: true },
+          bassSynthParams: { ...INITIAL_SYNTH_PARAMS, arpActive: true },
+        },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const s = useAppStore.getState();
+    expect(s.synthParams.arpActive).toBe(false);
+    expect(s.chordSynthParams.arpActive).toBe(false);
+    expect(s.bassSynthParams.arpActive).toBe(false);
+  });
+
+  test('a version-1 payload keeps every other synth param it stored', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.persist.clearStorage();
+
+    fakeLocalStorage.setItem(
+      'murva_project_state_v1',
+      JSON.stringify({
+        version: 1,
+        state: {
+          synthParams: {
+            ...INITIAL_SYNTH_PARAMS,
+            arpActive: true,
+            filterCutoff: 900,
+            attack: 0.3,
+            preset: 'Acid Synth',
+          },
+        },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const s = useAppStore.getState();
+    expect(s.synthParams.filterCutoff).toBe(900);
+    expect(s.synthParams.attack).toBe(0.3);
+    expect(s.synthParams.preset).toBe('Acid Synth');
+  });
+
+  test('a current-version payload keeps arpActive:true so the arp stays usable', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.persist.clearStorage();
+
+    fakeLocalStorage.setItem(
+      'murva_project_state_v1',
+      JSON.stringify({
+        version: 2,
+        state: {
+          synthParams: { ...INITIAL_SYNTH_PARAMS, arpActive: true },
+        },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    expect(useAppStore.getState().synthParams.arpActive).toBe(true);
+  });
+});
+
+describe('synth param payload sanitization', () => {
+  test('a non-object synthParams payload falls back to the factory defaults', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.persist.clearStorage();
+    useAppStore.setState({ synthParams: INITIAL_SYNTH_PARAMS });
+
+    fakeLocalStorage.setItem(
+      'murva_project_state_v1',
+      JSON.stringify({ version: 2, state: { synthParams: 'not-an-object' } })
+    );
+
+    await useAppStore.persist.rehydrate();
+    expect(useAppStore.getState().synthParams).toEqual(INITIAL_SYNTH_PARAMS);
+  });
+
+  test('wrong-typed numeric synth params fall back instead of reaching the engine as NaN', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.persist.clearStorage();
+    useAppStore.setState({ synthParams: INITIAL_SYNTH_PARAMS });
+
+    fakeLocalStorage.setItem(
+      'murva_project_state_v1',
+      JSON.stringify({
+        version: 2,
+        state: {
+          synthParams: {
+            ...INITIAL_SYNTH_PARAMS,
+            filterCutoff: 'bright',
+            attack: null,
+            release: 'long',
+            octave: {},
+          },
+        },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const p = useAppStore.getState().synthParams;
+    expect(p.filterCutoff).toBe(INITIAL_SYNTH_PARAMS.filterCutoff);
+    expect(p.attack).toBe(INITIAL_SYNTH_PARAMS.attack);
+    expect(p.release).toBe(INITIAL_SYNTH_PARAMS.release);
+    expect(p.octave).toBe(INITIAL_SYNTH_PARAMS.octave);
+  });
+
+  test('an invalid arpMode falls back to a mode the arpeggiator understands', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.persist.clearStorage();
+
+    fakeLocalStorage.setItem(
+      'murva_project_state_v1',
+      JSON.stringify({
+        version: 2,
+        state: { synthParams: { ...INITIAL_SYNTH_PARAMS, arpMode: 'sideways', arpOctaves: 'two' } },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const p = useAppStore.getState().synthParams;
+    expect(p.arpMode).toBe('up');
+    expect(p.arpOctaves).toBe(1);
+  });
+});

@@ -54,6 +54,7 @@ import {
   RHYTHM_STYLE_GROUPS,
   RhythmPattern,
   feelToHoldScale,
+  fullHoldDuration,
 } from "../audio/rhythmPatterns";
 import { FACTORY_BASS_PRESETS } from "../audio/bassPresets";
 import {
@@ -427,7 +428,7 @@ type BarInvariantEvent = {
 };
 
 // Schedules one precomputed, bar-invariant event set at the start of each bar
-function scheduleBarInvariantEvents(
+export function scheduleBarInvariantEvents(
   events: BarInvariantEvent[],
   params: SynthParams,
   source: string,
@@ -435,6 +436,7 @@ function scheduleBarInvariantEvents(
   barDur: number,
   totalBars: number,
 ): void {
+  const chordEnd = startTime + totalBars * barDur;
   for (let bar = 0; bar < totalBars; bar++) {
     const barStart = startTime + bar * barDur;
     const isLastBar = bar === totalBars - 1;
@@ -447,10 +449,13 @@ function scheduleBarInvariantEvents(
         barStart + ev.timeOffset,
         source,
       );
+      // Clamp the note-off to the chord end so a long feel hold never
+      // overlaps the next chord; earlier bars may still drag across the
+      // bar boundary within the same chord.
       audioEngine.triggerSynthNoteOff(
         ev.noteName,
         params.release,
-        barStart + ev.timeOffset + ev.hold,
+        Math.min(barStart + ev.timeOffset + ev.hold, chordEnd),
         source,
       );
     }
@@ -590,7 +595,7 @@ export const ChordView: React.FC = React.memo(() => {
 
       if (isFullHoldPattern) {
         // Sustained/Legato full-bar chords: hold continuously across all totalBars without per-bar re-strikes
-        const fullChordHold = totalBars * barDur * holdScale;
+        const fullChordHold = fullHoldDuration(totalBars, barDur, holdScale);
         for (const n of notes) {
           audioEngine.triggerSynthNoteOn(
             n,
@@ -669,7 +674,7 @@ export const ChordView: React.FC = React.memo(() => {
 
       if (isFullHoldPattern) {
         // Sustained whole-note bass root: hold continuously across all totalBars
-        const fullBassHold = totalBars * barDur * feelToHoldScale(bassFeel);
+        const fullBassHold = fullHoldDuration(totalBars, barDur, feelToHoldScale(bassFeel));
         const resolved = resolveBassSteps(
           pattern,
           context,

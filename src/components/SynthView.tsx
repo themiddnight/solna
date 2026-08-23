@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Note, transpose } from "tonal";
 import {
   Sliders,
   Activity,
@@ -15,6 +14,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { audioEngine } from "../audio/engine";
+import { buildArpSequence } from "../audio/arpeggiator";
 import { useAppStore } from "../store/store";
 import {
   ALL_FACTORY_PRESETS,
@@ -265,39 +265,11 @@ export const SynthView = () => {
       if (!currentParams.arpActive) return;
       if (currentNotes.size === 0) return;
 
-      const notesArray = Array.from(currentNotes).sort((a, b) => {
-        const midiA = Note.midi(a) ?? 0;
-        const midiB = Note.midi(b) ?? 0;
-        return midiA - midiB;
-      });
-      if (notesArray.length === 0) return;
-
-      const octCount = Math.max(1, currentParams.arpOctaves ?? 1);
-      const expandedNotes: string[] = [];
-      for (let oct = 0; oct < octCount; oct++) {
-        for (const noteStr of notesArray) {
-          const transposed = transpose(noteStr, `${oct} oct`);
-          if (transposed) expandedNotes.push(transposed);
-        }
-      }
-      if (expandedNotes.length === 0) return;
-
-      let sequence: string[] = [];
-      const mode = currentParams.arpMode ?? "up";
-      if (mode === "up") {
-        sequence = [...expandedNotes];
-      } else if (mode === "down") {
-        sequence = [...expandedNotes].reverse();
-      } else if (mode === "updown") {
-        const rev = [...expandedNotes].reverse();
-        if (expandedNotes.length > 2) {
-          rev.shift();
-          rev.pop();
-        }
-        sequence = [...expandedNotes, ...rev];
-      } else if (mode === "random") {
-        sequence = [...expandedNotes].sort(() => Math.random() - 0.5);
-      }
+      const sequence = buildArpSequence(
+        currentNotes,
+        currentParams.arpMode ?? "up",
+        currentParams.arpOctaves ?? 1,
+      );
       if (sequence.length === 0) return;
 
       const stepDuration16th = sixteenthNoteMs(currentBpm) / 1000;
@@ -343,7 +315,7 @@ export const SynthView = () => {
     return () => {
       unsubscribe();
       if (audioEngine.getAudioContext()) {
-        audioEngine.stopSource(controlTarget, params.release);
+        audioEngine.releaseSoundingVoices(controlTarget, params.release);
       }
     };
   }, [params.arpActive, controlTarget, params.release]);
@@ -351,7 +323,7 @@ export const SynthView = () => {
   // Silence lingering arp voices when all keys are released in arp mode
   useEffect(() => {
     if (params.arpActive && activeNotes.size === 0 && audioEngine.getAudioContext()) {
-      audioEngine.stopSource(controlTarget, params.release);
+      audioEngine.releaseSoundingVoices(controlTarget, params.release);
     }
   }, [params.arpActive, activeNotes.size, controlTarget, params.release]);
 

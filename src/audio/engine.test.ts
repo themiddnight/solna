@@ -314,3 +314,68 @@ describe('drum bus filter', () => {
     expect((engine as any).drumFilterType).toBe('highpass');
   });
 });
+
+describe('releaseSoundingVoices', () => {
+  test('a voice the clock scheduled ahead keeps its envelope', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    // The arpeggiator schedules the next note on a future 16th and pairs it
+    // with its own note-off, so the voice already ends by itself.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0 + 0.5, 'synth');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.6, 'synth');
+
+    // The key comes up before that note sounds.
+    engine.releaseSoundingVoices('synth', 0.1);
+
+    // Cancelling at t0 would wipe the scheduled attack and the note would
+    // never be heard — only its own release at t0 + 0.6 may touch it.
+    const scheduledVoiceGain = ctx._gains[0].gain;
+    expect(scheduledVoiceGain.cancels).not.toContain(t0);
+    expect(scheduledVoiceGain.cancels).toContain(t0 + 0.6);
+  });
+
+  test('a voice that is already sounding is released', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0, 'synth');
+    engine.releaseSoundingVoices('synth', 0.1);
+
+    const soundingVoiceGain = ctx._gains[0].gain;
+    expect(soundingVoiceGain.cancels).toContain(t0);
+  });
+
+  test('a future voice with no release of its own is still released', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    // No paired note-off: nothing would ever end this voice, so it must not
+    // be skipped or it would drone forever.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0 + 0.5, 'synth');
+    engine.releaseSoundingVoices('synth', 0.1);
+
+    expect(ctx._gains[0].gain.cancels).toContain(t0);
+  });
+
+  test('voices of other sources are left alone', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0, 'synth');
+    engine.releaseSoundingVoices('chord', 0.1);
+
+    expect(ctx._gains[0].gain.cancels).not.toContain(t0);
+  });
+
+  test('stopSource still kills a scheduled voice, so pattern previews stop dead', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0 + 0.5, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.6, 'chord');
+    engine.stopSource('chord', 0.1);
+
+    expect(ctx._gains[0].gain.cancels).toContain(t0);
+  });
+});

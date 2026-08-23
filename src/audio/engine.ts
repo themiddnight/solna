@@ -539,6 +539,26 @@ class AudioEngine {
     }
   }
 
+  /**
+   * Releases only the voices of a source that have actually started. Unlike
+   * stopSource this leaves future-scheduled hits alone, so releasing a held
+   * key in arp mode no longer cancels the envelopes of notes the clock has
+   * already scheduled (which cancelled their attack and made them inaudible).
+   * A future voice without a release of its own is still released, otherwise
+   * it would drone forever.
+   */
+  releaseSoundingVoices(source: string, releaseTime = 0.1): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const voices = this.sourceVoices.get(source);
+    if (!voices) return;
+    for (const voice of Array.from(voices)) {
+      if (voice.startTime > now && voice.releaseScheduledAt !== undefined) continue;
+      voice.releaseScheduledAt = now;
+      this.releaseVoice(voice, releaseTime, now);
+    }
+  }
+
   // Lazily create (and cache) the gain bus for a source, wired like the old
   // per-voice routing: dry + conditionally delay/reverb/distortion.
   private getSourceBus(source: string): GainNode {

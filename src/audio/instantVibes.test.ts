@@ -2,6 +2,8 @@ import { describe, test, expect } from 'bun:test';
 import { INSTANT_VIBES, applyInstantVibeToStore } from './instantVibes';
 import { RHYTHM_PATTERNS } from './rhythmPatterns';
 import { BASS_PATTERNS } from './bassPatterns';
+import { FACTORY_PRESETS } from './synthPresets';
+import { FACTORY_BASS_PRESETS } from './bassPresets';
 import { useAppStore } from '../store/store';
 
 describe('Instant Vibes Mode', () => {
@@ -75,5 +77,31 @@ describe('Instant Vibes Mode', () => {
     expect(state.bassFeel < 0.2).toBe(true); // tight feel
     expect(state.synthParams.arpActive).toBe(true);
     expect(state.synthParams.arpMode).toBe('updown');
+  });
+});
+
+describe('vibe preset name resolution', () => {
+  const factoryNames = new Set(FACTORY_PRESETS.map((p) => p.name));
+  const factoryBassNames = new Set(FACTORY_BASS_PRESETS.map((p) => p.name));
+
+  test('every vibe synth and chord preset name resolves to a factory preset', () => {
+    for (const vibe of INSTANT_VIBES) {
+      expect(factoryNames.has(vibe.synthPresetName)).toBe(true);
+      expect(factoryNames.has(vibe.chordPresetName)).toBe(true);
+    }
+  });
+
+  test('every vibe bass preset name resolves to a factory bass preset', () => {
+    for (const vibe of INSTANT_VIBES) {
+      expect(factoryBassNames.has(vibe.bassPresetName)).toBe(true);
+    }
+  });
+
+  test('loading a vibe leaves the preset select pointing at a real preset', () => {
+    const synthwave = INSTANT_VIBES.find((v) => v.id === 'synthwave-80s');
+    applyInstantVibeToStore(synthwave!);
+    const state = useAppStore.getState();
+    expect(factoryNames.has(state.synthParams.preset)).toBe(true);
+    expect(factoryNames.has(state.chordSynthParams.preset)).toBe(true);
   });
 });

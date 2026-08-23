@@ -256,3 +256,8 @@ export const RHYTHM_STYLE_GROUPS: { style: string; patterns: RhythmPattern[] }[]
 export function feelToHoldScale(feel: number): number {
   return 2 ** (2 * (feel - 0.5));
 }
+
+/** Full-bar hold duration, capped so a held chord never spills past its own length. */
+export function fullHoldDuration(totalBars: number, barDur: number, holdScale: number): number {
+  return Math.min(totalBars * barDur * holdScale, totalBars * barDur);
+}
