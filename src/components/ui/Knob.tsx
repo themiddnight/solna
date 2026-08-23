@@ -222,16 +222,6 @@ export const Knob = ({
             strokeWidth="10"
           />
         )}
-        {/* Static indicator notch at 3 o'clock, per the Figma border reference. */}
-        <line
-          x1="82"
-          y1="51"
-          x2="94"
-          y2="51"
-          stroke="#252B48"
-          strokeWidth="3"
-          strokeLinecap="round"
-        />
         {/* Detent tick — short radial line on the ring at the detent angle;
             drawn only when the detent is inside [min, max]; visual only. */}
         {detentAngleDeg !== null && (

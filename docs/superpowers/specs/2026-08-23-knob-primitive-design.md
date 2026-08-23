@@ -85,12 +85,13 @@ export interface KnobProps {
 
 ## 5. Rendering
 
-- `<svg viewBox="0 0 100 100">` ต่อ knob: วงแหวน border + notch + **progress arc** + needle group + จุดกลาง
+- `<svg viewBox="0 0 100 100">` ต่อ knob: วงแหวน border + **progress arc** + needle group + จุดกลาง
 - **Invariant: เข็มกับปลาย progress arc ใช้ `angleForT` ตัวเดียวกัน** — คำนวณจากค่า `value` เดียว
   ปลาย arc ชี้ตรงกับเข็มและค่าที่แสดงเสมอ (มี test ครอบ) ความหนา stroke ของ arc เท่ากับ border
 - Progress arc = ส่วนโค้งจากตำแหน่ง min (−135°) กวาดตามเข็มนาฬิกาถึงมุมปัจจุบัน สีเดียวกับเข็ม;
   แสดงตาม `indicator`: `'progress'` (default) / `'none'` (ไม่วาด) / `'full'` (วงหนาเต็มวง static)
-- Detent notch: ขีดสั้นบนวงแหวนที่มุม `angleForT(valueToT(detent, ...))` — ข้ามเมื่อ detent นอก [min, max]
+- Detent notch: ขีดสั้นบนวงแหวนที่มุม `angleForT(valueToT(detent, ...))` — ข้ามเมื่อ detent นอก [min, max];
+  เป็นขีดเดียวของ component (ไม่มี static notch ใน render ปกติ)
 - Needle หมุนด้วย CSS `transform: rotate()` + `transform-origin` กลาง; สี `fill="currentColor"`
   default `text-[#877dca]` (จาก design) override ได้ผ่าน `className`
 - ขนาดตาม Figma: xs 22 / sm 36 / md 48 (default) / lg 60 / xl 72 px; สัดส่วนเข็ม/จุดกลาง scale ตาม
