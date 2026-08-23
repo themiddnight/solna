@@ -88,26 +88,26 @@ export const TransportBar: React.FC = React.memo(() => {
         : "TAB";
 
   return (
-    <div className="bg-[#12152A] border-t border-[#252B48] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
+    <div className="bg-[#12152A] border-t border-[#252B48] px-3 py-2 flex items-center justify-between gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
       {/* Left Transport Actions: Play All + Tab Play + Tempo */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-1.5 shrink-0">
         {/* Play All Button */}
         <button
           id="btn-bottom-play-all"
           onClick={onTogglePlayAll}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer shadow-sm ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer shadow-xs ${
             isPlayingAll
               ? "bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/20"
               : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20"
           }`}
-          title="Play/Stop all modules simultaneously (Sequencer + Chords + Bass)"
+          title="Play/Stop All"
         >
           {isPlayingAll ? (
             <Square className="w-3.5 h-3.5 fill-current" />
           ) : (
             <Play className="w-3.5 h-3.5 fill-current" />
           )}
-          <span>{isPlayingAll ? "STOP ALL" : "PLAY ALL"}</span>
+          <span className="hidden sm:inline">{isPlayingAll ? "Stop All" : "Play All"}</span>
         </button>
 
         {/* Tab Specific Play Button */}
@@ -115,34 +115,26 @@ export const TransportBar: React.FC = React.memo(() => {
           id="btn-bottom-play"
           onClick={onTogglePlay}
           disabled={isPlayDisabled}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
             isPlayDisabled
               ? "bg-slate-800/60 text-slate-500 border border-[#252B48] cursor-not-allowed opacity-50"
               : isPlaying
-                ? "bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md shadow-amber-500/20"
-                : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
+                ? "bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs"
+                : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs"
           }`}
-          title={`Play/Stop only the current module (${currentTabLabel})`}
+          title={`Play/Stop ${currentTabLabel}`}
         >
           {isPlaying ? (
             <Square className="w-3.5 h-3.5 fill-current" />
           ) : (
             <Play className="w-3.5 h-3.5 fill-current" />
           )}
-          <span>
-            {isPlayDisabled
-              ? "PLAY"
-              : isPlaying
-                ? `STOP ${currentTabLabel}`
-                : `PLAY ${currentTabLabel}`}
-          </span>
+          <span>{currentTabLabel}</span>
         </button>
 
-        <div className="w-px h-7 bg-[#252B48] mx-0.5 hidden sm:block" />
-
         {/* Tempo BPM Control */}
-        <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#252B48] px-2 py-1 rounded-lg">
-          <span className="text-[10px] text-slate-400 font-mono">BPM</span>
+        <div className="flex items-center gap-0.5 bg-[#0B0D19] border border-[#252B48] px-1.5 py-1 rounded-lg">
+          <span className="text-[10px] text-slate-500 font-mono hidden xs:inline">BPM</span>
           <button
             onClick={() => setBpm(Math.max(40, bpm - 1))}
             className="p-0.5 text-slate-400 hover:text-white rounded hover:bg-[#1C213E] cursor-pointer"
@@ -157,7 +149,7 @@ export const TransportBar: React.FC = React.memo(() => {
             max={240}
             value={bpm}
             onChange={(e) => setBpm(Number(e.target.value))}
-            className="w-10 bg-transparent text-center font-mono font-bold text-indigo-300 focus:outline-none focus:text-white text-xs"
+            className="w-8 bg-transparent text-center font-mono font-bold text-indigo-300 focus:outline-none focus:text-white text-xs"
           />
           <button
             onClick={() => setBpm(Math.min(240, bpm + 1))}
@@ -172,24 +164,24 @@ export const TransportBar: React.FC = React.memo(() => {
         <button
           id="btn-transport-metronome"
           onClick={handleToggleMetronome}
-          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors ${
+          className={`flex items-center gap-1 p-1.5 sm:px-2 sm:py-1 rounded-lg border text-xs cursor-pointer transition-colors ${
             metronomeActive
               ? "bg-indigo-600 border-indigo-500 text-white shadow-xs"
               : "bg-[#0B0D19] border-[#252B48] text-slate-400 hover:text-slate-200"
           }`}
-          title="Toggle Metronome Click"
+          title="Metronome"
         >
           <Clock className="w-3.5 h-3.5" />
-          <span className="hidden md:inline text-[11px] font-medium">Click</span>
+          <span className="hidden lg:inline text-[11px]">Click</span>
         </button>
       </div>
 
-      {/* Middle Harmony & Audio Spectrum Wave */}
-      <div className="flex-1 max-w-xs md:max-w-md hidden sm:flex items-center gap-3">
+      {/* Middle Audio Spectrum Wave (Desktop & Tablet) */}
+      <div className="flex-1 max-w-xs hidden md:flex items-center gap-2">
         <div className="flex-1 bg-[#0B0D19] border border-[#252B48] rounded-lg p-1 flex items-center relative overflow-hidden shadow-inner group">
           <AudioVisualizer
             mode={vizMode}
-            height={30}
+            height={24}
             className="w-full rounded"
             colorTheme="indigo"
             showControls={false}
@@ -200,25 +192,23 @@ export const TransportBar: React.FC = React.memo(() => {
               const nextIndex = (modes.indexOf(vizMode) + 1) % modes.length;
               setVizMode(modes[nextIndex]);
             }}
-            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-[#161B36]/80 hover:bg-indigo-600 text-slate-300 hover:text-white p-1 rounded text-[10px] flex items-center gap-1 border border-[#252B48] cursor-pointer"
-            title="Click to switch Visualizer Mode (Wave / Bars / Oscilloscope)"
+            className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-[#161B36]/90 text-slate-300 hover:text-white px-1 py-0.5 rounded text-[9px] flex items-center gap-0.5 border border-[#252B48] cursor-pointer"
+            title="Switch Visualizer Mode"
           >
             <Waves className="w-2.5 h-2.5" />
-            <span className="capitalize text-[8px]">{vizMode}</span>
           </button>
         </div>
       </div>
 
       {/* Right Meter & Master Gain */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2 shrink-0">
         {/* Real-time Stereo VU Meter */}
-        <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#252B48] p-1.5 rounded-lg">
-          <span className="text-[9px] font-mono text-slate-500 pr-1">VU</span>
-          <div className="w-20 h-2.5 bg-[#161B36] rounded-xs overflow-hidden flex gap-0.5 p-0.5">
-            {Array.from({ length: 12 }).map((_, i) => {
-              const active = vuLevel * 12 > i;
-              const isRed = i >= 10;
-              const isYellow = i >= 8 && i < 10;
+        <div className="hidden sm:flex items-center gap-1 bg-[#0B0D19] border border-[#252B48] p-1.5 rounded-lg">
+          <div className="w-14 h-2 bg-[#161B36] rounded-xs overflow-hidden flex gap-0.5 p-0.5">
+            {Array.from({ length: 10 }).map((_, i) => {
+              const active = vuLevel * 10 > i;
+              const isRed = i >= 8;
+              const isYellow = i >= 6 && i < 8;
 
               return (
                 <div
@@ -239,7 +229,7 @@ export const TransportBar: React.FC = React.memo(() => {
         </div>
 
         {/* Master Output Fader */}
-        <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#252B48] px-2.5 py-1.5 rounded-lg">
+        <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#252B48] px-2 py-1 rounded-lg">
           <Volume2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           <input
             id="slider-transport-master"
@@ -249,11 +239,11 @@ export const TransportBar: React.FC = React.memo(() => {
             step={0.01}
             value={masterVolume}
             onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
-            className="w-16 sm:w-20 h-1.5 bg-[#252B48] rounded cursor-pointer accent-indigo-500"
-            title={`Master Gain: ${(masterVolume * 100).toFixed(0)}%`}
+            className="w-14 sm:w-16 h-1.5 bg-[#252B48] rounded cursor-pointer accent-indigo-500"
+            title={`Master: ${(masterVolume * 100).toFixed(0)}%`}
           />
-          <span className="font-mono text-[10px] text-slate-300 w-7 text-right">
-            {(masterVolume * 100).toFixed(0)}%
+          <span className="font-mono text-[10px] text-slate-400 w-6 text-right">
+            {(masterVolume * 100).toFixed(0)}
           </span>
         </div>
       </div>

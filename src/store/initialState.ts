@@ -23,6 +23,10 @@ export const INITIAL_SYNTH_PARAMS: SynthParams = {
   lfoDepth: 0.2,
   lfoTarget: 'cutoff',
   octave: 0,
+  arpActive: false,
+  arpMode: 'up',
+  arpRate: '16n',
+  arpOctaves: 1,
   preset: 'Cosmic Lead',
 };
 

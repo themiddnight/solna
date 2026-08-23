@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { Header } from './components/Header';
+import { InstantVibesBar } from './components/InstantVibesBar';
 import { SynthView } from './components/SynthView';
 import { SequencerView } from './components/SequencerView';
 import { ChordView } from './components/ChordView';
@@ -108,6 +109,9 @@ export function App() {
 
       {/* Navigation Header */}
       <Header />
+
+      {/* 1-Click Instant Vibes Quick Starter Bar */}
+      <InstantVibesBar />
 
       {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity */}
       <main className="flex-1 min-h-0 relative overflow-y-auto">

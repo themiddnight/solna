@@ -467,12 +467,14 @@ type PreviewEngine = Pick<
 
 // Held chord preview: strike every note of the chord now and let the synth
 // envelope sustain — no note-off is scheduled. The caller releases with
-// stopSource('chord') on mouse-up.
+// stopSource('chord') on mouse-up. Existing voices on the chord bus are silenced
+// first so successive chords never overlap or pile up into dissonant clusters.
 export function playChordLegato(
   chord: ChordItem,
   params: SynthParams,
   engine: PreviewEngine,
 ): void {
+  engine.stopSource('chord', 0.05);
   for (const note of chord.notes) {
     engine.triggerSynthNoteOn(note, params, 0.8, 0, 'chord');
   }
@@ -564,7 +566,8 @@ export const ChordView: React.FC = React.memo(() => {
   );
 
   // Schedule a whole chord across its bars using the selected rhythm pattern:
-  // block hits strike every note at once, strums cascade note-by-note.
+  // For sustained/legato full-bar chords, hold seamlessly across all bars without per-bar re-strikes.
+  // For rhythmic grooves, schedule bar-invariant hits across each bar.
   const playChordWithRhythm = useCallback(
     (chord: ChordItem, startTime: number, pattern: RhythmPattern) => {
       audioEngine.init();
@@ -576,9 +579,37 @@ export const ChordView: React.FC = React.memo(() => {
       );
       const stepDur = sixteenthNoteMs(bpm) / 1000;
       const totalBars = chord.bars || 1;
+      const barDur = stepDur * STEPS_PER_BAR;
+      const holdScale = feelToHoldScale(chordFeel);
+
+      const isFullHoldPattern =
+        pattern.id === "sustained" ||
+        (pattern.hits.length === 1 &&
+          pattern.hits[0].step === 0 &&
+          (pattern.hits[0].holdSteps ?? 1) >= 16);
+
+      if (isFullHoldPattern) {
+        // Sustained/Legato full-bar chords: hold continuously across all totalBars without per-bar re-strikes
+        const fullChordHold = totalBars * barDur * holdScale;
+        for (const n of notes) {
+          audioEngine.triggerSynthNoteOn(
+            n,
+            chordSynthParams,
+            0.8,
+            startTime,
+            "chord",
+          );
+          audioEngine.triggerSynthNoteOff(
+            n,
+            chordSynthParams.release,
+            startTime + fullChordHold,
+            "chord",
+          );
+        }
+        return;
+      }
 
       // Precompute the pattern's events once per chord trigger (bar-invariant)
-      const holdScale = feelToHoldScale(chordFeel);
       const events = pattern.hits.flatMap((hit) => {
         const offset = hit.step * stepDur;
         const hold = Math.max(0.05, (hit.holdSteps ?? 1) * stepDur * holdScale);
@@ -604,7 +635,6 @@ export const ChordView: React.FC = React.memo(() => {
         });
       });
 
-      const barDur = stepDur * STEPS_PER_BAR;
       scheduleBarInvariantEvents(
         events,
         chordSynthParams,
@@ -627,6 +657,48 @@ export const ChordView: React.FC = React.memo(() => {
       audioEngine.init();
       const context = chordContext ?? chords;
       const chordIdx = Math.max(0, context.indexOf(chord));
+      const stepDur = sixteenthNoteMs(bpm) / 1000;
+      const barDur = stepDur * STEPS_PER_BAR;
+      const totalBars = chord.bars || 1;
+
+      const isFullHoldPattern =
+        pattern.id === "whole-note-root" ||
+        (pattern.steps.length === 1 &&
+          pattern.steps[0].step === 0 &&
+          (pattern.steps[0].holdSteps ?? 1) >= 16);
+
+      if (isFullHoldPattern) {
+        // Sustained whole-note bass root: hold continuously across all totalBars
+        const fullBassHold = totalBars * barDur * feelToHoldScale(bassFeel);
+        const resolved = resolveBassSteps(
+          pattern,
+          context,
+          chordIdx,
+          bassOctave,
+          scaleRoot,
+          scaleType,
+          bpm,
+          1,
+        );
+        const rootEvent = resolved[0];
+        if (rootEvent) {
+          audioEngine.triggerSynthNoteOn(
+            rootEvent.noteName,
+            bassSynthParams,
+            rootEvent.velocity,
+            startTime,
+            "bass",
+          );
+          audioEngine.triggerSynthNoteOff(
+            rootEvent.noteName,
+            bassSynthParams.release,
+            startTime + fullBassHold,
+            "bass",
+          );
+        }
+        return;
+      }
+
       // Events are bar-invariant (the clock advances by barDur per bar); schedule
       // the resolved set at each bar's start. Approach tokens lead into the NEXT
       // chord, so they only play on the last bar.
@@ -646,9 +718,7 @@ export const ChordView: React.FC = React.memo(() => {
         hold: ev.holdSec,
         lastBarOnly: isApproachToken(ev.token),
       }));
-      const stepDur = sixteenthNoteMs(bpm) / 1000;
-      const barDur = stepDur * STEPS_PER_BAR;
-      const totalBars = chord.bars || 1;
+
       scheduleBarInvariantEvents(
         events,
         bassSynthParams,
@@ -1051,57 +1121,55 @@ export const ChordView: React.FC = React.memo(() => {
     CHORD_PROGRESSION_TEMPLATES.length + customProgressions.length;
 
   return (
-    <div className="p-4 max-w-7xl mx-auto space-y-4">
-      {/* Scale & Music Theory Header */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-lg relative">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
-            <Music className="w-5 h-5" />
+    <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
+      {/* Scale & Chord Studio Header */}
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-2.5 shadow-md relative">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
+            <Music className="w-4 h-4" />
           </div>
-          <div>
-            <h2 className="font-bold text-base text-slate-100 flex items-center gap-2">
-              Music Theory & Chord Studio
-            </h2>
-          </div>
+          <h2 className="font-bold text-sm sm:text-base text-slate-100">
+            Chord Studio & Harmony
+          </h2>
         </div>
 
-        {/* Action Controls & Independent Chords Play */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Per-layer mute toggles (engine source buses — tails cut instantly) */}
+        {/* Action Controls & Layer Mutes */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Per-layer mute toggles */}
           <button
             id="btn-mute-chord"
             onClick={toggleChordMuted}
-            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
+            className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border transition-all cursor-pointer ${
               chordMuted
                 ? "bg-rose-600/30 border-rose-500/50 text-rose-200"
-                : "bg-[#0B0D19] border-[#2D355A] text-slate-400"
+                : "bg-[#0B0D19] border-[#2D355A] text-slate-400 hover:text-slate-200"
             }`}
-            title="Mute the chord layer on its engine bus (instant, includes tails)"
+            title="Mute Chord Layer"
           >
             {chordMuted ? (
               <VolumeX className="w-3.5 h-3.5 text-rose-300" />
             ) : (
               <Volume2 className="w-3.5 h-3.5 text-indigo-300" />
             )}
-            <span>Chord: {chordMuted ? "OFF" : "ON"}</span>
+            <span>Chord {chordMuted ? "Off" : "On"}</span>
           </button>
 
           <button
             id="btn-mute-bass"
             onClick={toggleBassMuted}
-            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
+            className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border transition-all cursor-pointer ${
               bassMuted
                 ? "bg-rose-600/30 border-rose-500/50 text-rose-200"
-                : "bg-[#0B0D19] border-[#2D355A] text-slate-400"
+                : "bg-[#0B0D19] border-[#2D355A] text-slate-400 hover:text-slate-200"
             }`}
-            title="Mute the bass layer on its engine bus (instant, includes tails)"
+            title="Mute Bass Layer"
           >
             {bassMuted ? (
               <VolumeX className="w-3.5 h-3.5 text-rose-300" />
             ) : (
               <Volume2 className="w-3.5 h-3.5 text-emerald-300" />
             )}
-            <span>Bass: {bassMuted ? "OFF" : "ON"}</span>
+            <span>Bass {bassMuted ? "Off" : "On"}</span>
           </button>
 
           {/* Quick Save Current Progression */}
@@ -1111,8 +1179,8 @@ export const ChordView: React.FC = React.memo(() => {
               setQuickSaveName(`Progression in ${scaleRoot}`);
               setIsQuickSaving(true);
             }}
-            className="flex items-center gap-1.5 bg-[#171B36] hover:bg-[#22284C] text-slate-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[#2D355A] transition-colors cursor-pointer shadow-xs"
-            title="Save current chord progression to LocalStorage"
+            className="flex items-center gap-1 bg-[#171B36] hover:bg-[#22284C] text-slate-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[#2D355A] transition-colors cursor-pointer shadow-xs"
+            title="Save chord progression"
           >
             <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
             <span className="hidden sm:inline">Save</span>
@@ -1122,12 +1190,12 @@ export const ChordView: React.FC = React.memo(() => {
           <button
             id="btn-open-chord-presets-library"
             onClick={() => setIsLibraryOpen(true)}
-            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-md transition-colors cursor-pointer"
-            title="Open Chord Progression Library Drawer (Categorized, search, audition, export/import)"
+            className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg shadow-sm transition-colors cursor-pointer"
+            title="Progression Library"
           >
             <Library className="w-3.5 h-3.5" />
-            <span>Progressions Library</span>
-            <span className="bg-indigo-700/80 text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+            <span>Library</span>
+            <span className="bg-indigo-700/80 text-[10px] px-1 py-0.2 rounded font-mono hidden sm:inline">
               {totalProgressionsCount}
             </span>
           </button>

@@ -35,9 +35,10 @@ const SYNTH: SynthParams = {
 };
 
 describe('legato chord preview', () => {
-  test('triggers every chord note once immediately and schedules no note-offs', () => {
+  test('triggers every chord note once immediately, silences prior voices, and schedules no note-offs', () => {
     const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
+    const stopSpy = spyOn(audioEngine, 'stopSource');
 
     playChordLegato(
       { root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] } as ChordItem,
@@ -45,6 +46,7 @@ describe('legato chord preview', () => {
       audioEngine,
     );
 
+    expect(stopSpy).toHaveBeenCalledWith('chord', 0.05);
     expect(onSpy).toHaveBeenCalledTimes(3);
     expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, 0.8, 0, 'chord');
     expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, 0.8, 0, 'chord');
@@ -54,6 +56,7 @@ describe('legato chord preview', () => {
 
     onSpy.mockRestore();
     offSpy.mockRestore();
+    stopSpy.mockRestore();
   });
 });
 

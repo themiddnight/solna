@@ -171,6 +171,42 @@ export const BASS_PATTERNS: BassPattern[] = [
     ],
   },
   {
+    id: 'dilla-sub',
+    name: 'Dilla Sub Groove',
+    style: 'Grooves',
+    description: 'Swung, deep sub notes hitting on 1, the and-of-2, and beat 3',
+    steps: [
+      { step: 0, note: 'root', holdSteps: 4 },
+      { step: 6, note: 'fifth', holdSteps: 2 },
+      { step: 8, note: 'root', holdSteps: 3 },
+      { step: 12, note: 'octave', holdSteps: 2 },
+    ],
+  },
+  {
+    id: 'offbeat-sub',
+    name: 'Offbeat EDM Sub',
+    style: 'Grooves',
+    description: 'Offbeat sub pulses locking with synth stabs',
+    steps: [
+      { step: 2, note: 'root', holdSteps: 2 },
+      { step: 6, note: 'root', holdSteps: 2 },
+      { step: 10, note: 'root', holdSteps: 2 },
+      { step: 14, note: 'root', holdSteps: 2 },
+    ],
+  },
+  {
+    id: 'walking-groove',
+    name: 'Soulful Walking Bass',
+    style: 'Walking',
+    description: 'Walking bassline moving through root, 3rd, 5th and chromatic approaches',
+    steps: [
+      { step: 0, note: 'root', holdSteps: 3 },
+      { step: 4, note: 'third', holdSteps: 3 },
+      { step: 8, note: 'fifth', holdSteps: 3 },
+      { step: 12, note: 'approachChromaticAbove', holdSteps: 3, alternate: true },
+    ],
+  },
+  {
     id: 'driving-eighths',
     name: 'Driving 8ths',
     style: 'Grooves',

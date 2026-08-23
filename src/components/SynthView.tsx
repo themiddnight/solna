@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Note, transpose } from "tonal";
 import {
   Sliders,
   Activity,
@@ -28,8 +29,9 @@ import {
   getCategoryMeta,
 } from "../audio/synthPresets";
 import { SynthPresetLibrary } from "./SynthPresetLibrary";
+import { SimpleSynthPanel } from "./SimpleSynthPanel";
 import { Knob } from "./ui/Knob";
-import { isNoteInScale, getScaleNotes, ROOTS } from "../utils/musicTheory";
+import { isNoteInScale, getScaleNotes, ROOTS, sixteenthNoteMs } from "../utils/musicTheory";
 import { isTypingTarget, shortcutLabel } from "../utils/keyboard";
 import { resolveSynthControlChannel } from "../utils/synthControl";
 import type { SynthControlTarget } from "../utils/synthControl";
@@ -84,6 +86,7 @@ export const SynthView = () => {
   const onChangeBassSynthParams = useAppStore((s) => s.setBassSynthParams);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
+  const bpm = useAppStore((s) => s.bpm);
 
   // Route the control panel (knobs, preset selects) to the selected
   // destination; the keyboard always plays the main synth (see handleNoteOn)
@@ -115,6 +118,22 @@ export const SynthView = () => {
   >("scale-locked");
   // Keyboard display octave — independent from synth pitch octave (params.octave)
   const [keyboardOctave, setKeyboardOctave] = useState<number>(0);
+
+  // Simple vs Pro UI Mode toggle with localStorage persistence
+  const [synthViewMode, setSynthViewMode] = useState<"simple" | "pro">(() => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const stored = localStorage.getItem("murva_synth_view_mode");
+      if (stored === "simple" || stored === "pro") return stored;
+    }
+    return "simple";
+  });
+
+  const handleToggleSynthViewMode = (mode: "simple" | "pro") => {
+    setSynthViewMode(mode);
+    try {
+      localStorage.setItem("murva_synth_view_mode", mode);
+    } catch {}
+  };
 
   // Sync custom presets from local storage
   const reloadPresets = useCallback(() => {
@@ -174,39 +193,167 @@ export const SynthView = () => {
     handleSelectPreset(selectablePresets[nextIndex]);
   };
 
+  // Keep latest params and activeNotes in a ref so the clock listener reads live state
+  // without re-subscribing or stopping voices on every keystroke/parameter tweak
+  const arpStateRef = useRef({
+    activeNotes,
+    params,
+    controlTarget,
+    bpm,
+  });
+  useEffect(() => {
+    arpStateRef.current = {
+      activeNotes,
+      params,
+      controlTarget,
+      bpm,
+    };
+  });
+
   // The keyboard auditions the currently selected control target (Synth, Chord, or Bass)
   // so the sound designer can hear the immediate adjustments.
   const handleNoteOn = useCallback(
     (note: string) => {
       audioEngine.init();
-      audioEngine.triggerSynthNoteOn(
-        note,
-        params,
-        1.0,
-        undefined,
-        controlTarget,
-      );
+      if (!params.arpActive) {
+        audioEngine.triggerSynthNoteOn(
+          note,
+          params,
+          1.0,
+          undefined,
+          controlTarget,
+        );
+      }
       setActiveNotes((prev) => new Set(prev).add(note));
     },
-    [params, controlTarget],
+    [params.arpActive, params, controlTarget],
   );
 
   const handleNoteOff = useCallback(
     (note: string) => {
-      audioEngine.triggerSynthNoteOff(
-        note,
-        params.release,
-        undefined,
-        controlTarget,
-      );
+      if (!params.arpActive) {
+        audioEngine.triggerSynthNoteOff(
+          note,
+          params.release,
+          undefined,
+          controlTarget,
+        );
+      }
       setActiveNotes((prev) => {
         const next = new Set(prev);
         next.delete(note);
         return next;
       });
     },
-    [params.release, controlTarget],
+    [params.arpActive, params.release, controlTarget],
   );
+
+  // Arpeggiator Clock Subscriber: active only when params.arpActive is enabled
+  useEffect(() => {
+    if (!params.arpActive) {
+      return;
+    }
+
+    const unsubscribe = audioEngine.subscribeClock((step, _beat, time) => {
+      const {
+        activeNotes: currentNotes,
+        params: currentParams,
+        controlTarget: currentTarget,
+        bpm: currentBpm,
+      } = arpStateRef.current;
+
+      if (!currentParams.arpActive) return;
+      if (currentNotes.size === 0) return;
+
+      const notesArray = Array.from(currentNotes).sort((a, b) => {
+        const midiA = Note.midi(a) ?? 0;
+        const midiB = Note.midi(b) ?? 0;
+        return midiA - midiB;
+      });
+      if (notesArray.length === 0) return;
+
+      const octCount = Math.max(1, currentParams.arpOctaves ?? 1);
+      const expandedNotes: string[] = [];
+      for (let oct = 0; oct < octCount; oct++) {
+        for (const noteStr of notesArray) {
+          const transposed = transpose(noteStr, `${oct} oct`);
+          if (transposed) expandedNotes.push(transposed);
+        }
+      }
+      if (expandedNotes.length === 0) return;
+
+      let sequence: string[] = [];
+      const mode = currentParams.arpMode ?? "up";
+      if (mode === "up") {
+        sequence = [...expandedNotes];
+      } else if (mode === "down") {
+        sequence = [...expandedNotes].reverse();
+      } else if (mode === "updown") {
+        const rev = [...expandedNotes].reverse();
+        if (expandedNotes.length > 2) {
+          rev.shift();
+          rev.pop();
+        }
+        sequence = [...expandedNotes, ...rev];
+      } else if (mode === "random") {
+        sequence = [...expandedNotes].sort(() => Math.random() - 0.5);
+      }
+      if (sequence.length === 0) return;
+
+      const stepDuration16th = sixteenthNoteMs(currentBpm) / 1000;
+
+      if (currentParams.arpRate === "4n") {
+        // 1 note every 4 sixteenth steps (quarter note)
+        if (step % 4 !== 0) return;
+        const index = Math.floor(step / 4) % sequence.length;
+        const noteToPlay = sequence[index];
+        const stepDurSec = stepDuration16th * 4;
+        const holdSec = Math.max(0.04, stepDurSec * 0.85);
+        audioEngine.triggerSynthNoteOn(noteToPlay, currentParams, 0.9, time, currentTarget);
+        audioEngine.triggerSynthNoteOff(noteToPlay, currentParams.release, time + holdSec, currentTarget);
+      } else if (currentParams.arpRate === "8n") {
+        // 1 note every 2 sixteenth steps (eighth note)
+        if (step % 2 !== 0) return;
+        const index = Math.floor(step / 2) % sequence.length;
+        const noteToPlay = sequence[index];
+        const stepDurSec = stepDuration16th * 2;
+        const holdSec = Math.max(0.04, stepDurSec * 0.85);
+        audioEngine.triggerSynthNoteOn(noteToPlay, currentParams, 0.9, time, currentTarget);
+        audioEngine.triggerSynthNoteOff(noteToPlay, currentParams.release, time + holdSec, currentTarget);
+      } else if (currentParams.arpRate === "32n") {
+        // 2 notes per sixteenth step (32nd note)
+        const subDurSec = stepDuration16th / 2;
+        const holdSec = Math.max(0.03, subDurSec * 0.85);
+        const note1 = sequence[(step * 2) % sequence.length];
+        const note2 = sequence[(step * 2 + 1) % sequence.length];
+        audioEngine.triggerSynthNoteOn(note1, currentParams, 0.9, time, currentTarget);
+        audioEngine.triggerSynthNoteOff(note1, currentParams.release, time + holdSec, currentTarget);
+        audioEngine.triggerSynthNoteOn(note2, currentParams, 0.9, time + subDurSec, currentTarget);
+        audioEngine.triggerSynthNoteOff(note2, currentParams.release, time + subDurSec + holdSec, currentTarget);
+      } else {
+        // Default 16n: 1 note every 1 sixteenth step
+        const index = step % sequence.length;
+        const noteToPlay = sequence[index];
+        const holdSec = Math.max(0.04, stepDuration16th * 0.85);
+        audioEngine.triggerSynthNoteOn(noteToPlay, currentParams, 0.9, time, currentTarget);
+        audioEngine.triggerSynthNoteOff(noteToPlay, currentParams.release, time + holdSec, currentTarget);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      if (audioEngine.getAudioContext()) {
+        audioEngine.stopSource(controlTarget, params.release);
+      }
+    };
+  }, [params.arpActive, controlTarget, params.release]);
+
+  // Silence lingering arp voices when all keys are released in arp mode
+  useEffect(() => {
+    if (params.arpActive && activeNotes.size === 0 && audioEngine.getAudioContext()) {
+      audioEngine.stopSource(controlTarget, params.release);
+    }
+  }, [params.arpActive, activeNotes.size, controlTarget, params.release]);
 
   // QWERTY Computer Keyboard mapping — uses keyboardOctave, NOT params.octave
   useEffect(() => {
@@ -281,26 +428,15 @@ export const SynthView = () => {
   const totalPresetsCount = allPresets.length;
 
   return (
-    <div className="p-4 max-w-7xl mx-auto space-y-4">
+    <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Top Synth Header & Presets */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 flex flex-col gap-3.5 shadow-lg relative">
-        {/* Row 1: Brand & Control Target + Save & Library Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
-              <Zap className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="font-bold text-base text-slate-100 flex items-center gap-2">
-                Analog Polyphonic Synthesizer
-              </h2>
-            </div>
-          </div>
-
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 sm:p-4 flex flex-col gap-3 shadow-md relative">
+        {/* Row 1: Target Selector + Mode Switcher + Presets */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
           {/* Control Destination Selector */}
           <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#2D355A] rounded-lg p-1">
-            <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold pl-1.5 pr-1">
-              Control
+            <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold pl-1 pr-1 hidden xs:inline">
+              Target:
             </span>
             {(
               [
@@ -323,8 +459,38 @@ export const SynthView = () => {
             ))}
           </div>
 
-          {/* Actions: Save Current & Full Presets Library */}
-          <div className="flex items-center gap-2">
+          {/* Actions: Mode Switcher + Save Current & Full Presets Library */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Mode Switcher: Simple vs Pro */}
+            <div className="flex items-center bg-[#0B0D19] border border-[#2D355A] rounded-lg p-0.5">
+              <button
+                id="btn-mode-simple"
+                onClick={() => handleToggleSynthViewMode("simple")}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                  synthViewMode === "simple"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+                title="Simple Mode"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Simple</span>
+              </button>
+              <button
+                id="btn-mode-pro"
+                onClick={() => handleToggleSynthViewMode("pro")}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                  synthViewMode === "pro"
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+                title="Pro Mode"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>Pro</span>
+              </button>
+            </div>
+
             <button
               id="btn-quick-save-preset"
               onClick={() => {
@@ -336,8 +502,8 @@ export const SynthView = () => {
                 setQuickSaveCategory(activePresetItem?.category ?? "User");
                 setIsQuickSaving(true);
               }}
-              className="flex items-center gap-1.5 bg-[#171B36] hover:bg-[#22284C] text-slate-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[#2D355A] transition-colors shadow-xs cursor-pointer"
-              title="Save current synth sound to LocalStorage"
+              className="flex items-center gap-1 bg-[#171B36] hover:bg-[#22284C] text-slate-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[#2D355A] transition-colors shadow-xs cursor-pointer"
+              title="Save preset"
             >
               <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
               <span className="hidden sm:inline">Save</span>
@@ -346,146 +512,148 @@ export const SynthView = () => {
             <button
               id="btn-open-presets-library"
               onClick={() => setIsLibraryOpen(true)}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-md transition-colors cursor-pointer"
-              title="Open Presets Library (Search, audition, export/import)"
+              className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg shadow-sm transition-colors cursor-pointer"
+              title="Presets Library"
             >
               <Library className="w-3.5 h-3.5" />
-              <span>Presets Library</span>
-              <span className="bg-indigo-700/80 text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+              <span>Presets</span>
+              <span className="bg-indigo-700/80 text-[10px] px-1 py-0.2 rounded font-mono hidden sm:inline">
                 {totalPresetsCount}
               </span>
             </button>
           </div>
         </div>
 
-        {/* Row 2: Categorized Preset Selection Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 bg-[#0B0D19] border border-[#252B48] p-2 rounded-xl">
-          {/* Category Filter Tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[11px]">
-            <span className="text-[10px] uppercase font-bold text-slate-500 px-1 font-mono">
-              Category:
-            </span>
-            {[
-              { id: "All", label: "All" },
-              { id: "Bass", label: "Bass" },
-              { id: "Lead", label: "Lead" },
-              { id: "Pad", label: "Pad" },
-              { id: "Keys", label: "Keys" },
-              { id: "Pluck", label: "Pluck" },
-              { id: "Brass", label: "Brass" },
-              { id: "FX", label: "FX" },
-              { id: "User", label: "Custom" },
-            ].map((cat) => {
-              const isSelected = selectedCategoryFilter === cat.id;
-              const count =
-                cat.id === "All"
-                  ? allPresets.length
-                  : cat.id === "User"
-                    ? allPresets.filter(
-                        (p) => !p.isFactory || p.category === "User",
-                      ).length
-                    : allPresets.filter((p) => p.category === cat.id).length;
+        {/* Pro Mode: Row 2 Categorized Preset Selection Bar */}
+        {synthViewMode === "pro" && (
+          <div className="flex flex-wrap items-center justify-between gap-2.5 bg-[#0B0D19] border border-[#252B48] p-2 rounded-xl">
+            {/* Category Filter Tabs */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[11px]">
+              <span className="text-[10px] uppercase font-bold text-slate-500 px-1 font-mono">
+                Category:
+              </span>
+              {[
+                { id: "All", label: "All" },
+                { id: "Bass", label: "Bass" },
+                { id: "Lead", label: "Lead" },
+                { id: "Pad", label: "Pad" },
+                { id: "Keys", label: "Keys" },
+                { id: "Pluck", label: "Pluck" },
+                { id: "Brass", label: "Brass" },
+                { id: "FX", label: "FX" },
+                { id: "User", label: "Custom" },
+              ].map((cat) => {
+                const isSelected = selectedCategoryFilter === cat.id;
+                const count =
+                  cat.id === "All"
+                    ? allPresets.length
+                    : cat.id === "User"
+                      ? allPresets.filter(
+                          (p) => !p.isFactory || p.category === "User",
+                        ).length
+                      : allPresets.filter((p) => p.category === cat.id).length;
 
-              return (
-                <button
-                  key={cat.id}
-                  id={`filter-category-${cat.id.toLowerCase()}`}
-                  onClick={() => handleCategoryFilterClick(cat.id)}
-                  className={`px-2 py-1 rounded-md font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1 text-xs ${
-                    isSelected
-                      ? "bg-indigo-600 text-white shadow-xs"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/80"
-                  }`}
-                >
-                  <span>{cat.label}</span>
-                  <span
-                    className={`text-[9px] px-1 rounded-full font-mono ${
+                return (
+                  <button
+                    key={cat.id}
+                    id={`filter-category-${cat.id.toLowerCase()}`}
+                    onClick={() => handleCategoryFilterClick(cat.id)}
+                    className={`px-2 py-1 rounded-md font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1 text-xs ${
                       isSelected
-                        ? "bg-indigo-700 text-white"
-                        : "bg-[#161B36] text-slate-400"
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/80"
                     }`}
                   >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Categorized Dropdown + Step Navigation + Active Category Tag */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Active Category Pill Tag */}
-            {activeCategoryMeta && (
-              <span
-                className={`text-[10px] font-mono px-2 py-0.5 rounded border font-semibold ${activeCategoryMeta.badgeClass}`}
-                title={`Category: ${activeCategoryMeta.label} - ${activeCategoryMeta.description}`}
-              >
-                {activeCategoryMeta.shortLabel}
-              </span>
-            )}
-
-            {/* Step Previous Preset Button */}
-            <button
-              id="btn-prev-synth-preset"
-              onClick={() => handleStepPreset(-1)}
-              className="p-1.5 rounded-lg bg-[#12152A] hover:bg-[#1C213E] text-slate-300 hover:text-white border border-[#2D355A] cursor-pointer transition-colors"
-              title="Previous Preset"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Categorized Dropdown with Optgroups */}
-            <div className="flex items-center gap-1.5 bg-[#12152A] border border-[#2D355A] rounded-lg px-2.5 py-1">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-              <select
-                id="select-synth-preset"
-                value={params.preset}
-                onChange={(e) => handleDropdownChange(e.target.value)}
-                className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer pr-2 font-medium max-w-[180px] sm:max-w-[240px] truncate"
-              >
-                {categoryGroups
-                  .filter((g) =>
-                    selectedCategoryFilter === "All"
-                      ? true
-                      : selectedCategoryFilter === "User"
-                        ? g.category === "User"
-                        : g.category === selectedCategoryFilter,
-                  )
-                  .map((group) => (
-                    <optgroup
-                      key={group.category}
-                      label={group.label}
-                      className="bg-[#12152A] text-indigo-300 font-bold"
+                    <span>{cat.label}</span>
+                    <span
+                      className={`text-[9px] px-1 rounded-full font-mono ${
+                        isSelected
+                          ? "bg-indigo-700 text-white"
+                          : "bg-[#161B36] text-slate-400"
+                      }`}
                     >
-                      {group.presets.map((p) => (
-                        <option
-                          key={p.id}
-                          value={p.name}
-                          className={
-                            p.isFactory
-                              ? "bg-[#0B0D19] text-slate-200 font-normal"
-                              : "bg-[#0B0D19] text-purple-300 font-normal"
-                          }
-                        >
-                          {!p.isFactory ? `★ ${p.name}` : p.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-              </select>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Step Next Preset Button */}
-            <button
-              id="btn-next-synth-preset"
-              onClick={() => handleStepPreset(1)}
-              className="p-1.5 rounded-lg bg-[#12152A] hover:bg-[#1C213E] text-slate-300 hover:text-white border border-[#2D355A] cursor-pointer transition-colors"
-              title="Next Preset"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+            {/* Categorized Dropdown + Step Navigation + Active Category Tag */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Active Category Pill Tag */}
+              {activeCategoryMeta && (
+                <span
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded border font-semibold ${activeCategoryMeta.badgeClass}`}
+                  title={`Category: ${activeCategoryMeta.label} - ${activeCategoryMeta.description}`}
+                >
+                  {activeCategoryMeta.shortLabel}
+                </span>
+              )}
+
+              {/* Step Previous Preset Button */}
+              <button
+                id="btn-prev-synth-preset"
+                onClick={() => handleStepPreset(-1)}
+                className="p-1.5 rounded-lg bg-[#12152A] hover:bg-[#1C213E] text-slate-300 hover:text-white border border-[#2D355A] cursor-pointer transition-colors"
+                title="Previous Preset"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Categorized Dropdown with Optgroups */}
+              <div className="flex items-center gap-1.5 bg-[#12152A] border border-[#2D355A] rounded-lg px-2.5 py-1">
+                <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <select
+                  id="select-synth-preset"
+                  value={params.preset}
+                  onChange={(e) => handleDropdownChange(e.target.value)}
+                  className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer pr-2 font-medium max-w-[180px] sm:max-w-[240px] truncate"
+                >
+                  {categoryGroups
+                    .filter((g) =>
+                      selectedCategoryFilter === "All"
+                        ? true
+                        : selectedCategoryFilter === "User"
+                          ? g.category === "User"
+                          : g.category === selectedCategoryFilter,
+                    )
+                    .map((group) => (
+                      <optgroup
+                        key={group.category}
+                        label={group.label}
+                        className="bg-[#12152A] text-indigo-300 font-bold"
+                      >
+                        {group.presets.map((p) => (
+                          <option
+                            key={p.id}
+                            value={p.name}
+                            className={
+                              p.isFactory
+                                ? "bg-[#0B0D19] text-slate-200 font-normal"
+                                : "bg-[#0B0D19] text-purple-300 font-normal"
+                            }
+                          >
+                            {!p.isFactory ? `★ ${p.name}` : p.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                </select>
+              </div>
+
+              {/* Step Next Preset Button */}
+              <button
+                id="btn-next-synth-preset"
+                onClick={() => handleStepPreset(1)}
+                className="p-1.5 rounded-lg bg-[#12152A] hover:bg-[#1C213E] text-slate-300 hover:text-white border border-[#2D355A] cursor-pointer transition-colors"
+                title="Next Preset"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Floating Save Toast */}
         {saveToast && (
@@ -546,8 +714,49 @@ export const SynthView = () => {
         </div>
       )}
 
-      {/* Control Panels Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Simple Mode vs Pro Mode Body Panels */}
+      {synthViewMode === "simple" ? (
+        <>
+          <SimpleSynthPanel
+            params={params}
+            onChangeParams={onChangeParams}
+            controlTarget={controlTarget}
+            activePresetItem={activePresetItem}
+            allPresets={allPresets}
+            selectedCategoryFilter={selectedCategoryFilter}
+            onSelectCategoryFilter={handleCategoryFilterClick}
+            onSelectPreset={handleSelectPreset}
+            onStepPreset={handleStepPreset}
+            onOpenLibrary={() => setIsLibraryOpen(true)}
+            onQuickSave={() => {
+              setQuickSaveName(
+                params.preset ? `${params.preset} (Custom)` : "My Synth Patch",
+              );
+              setQuickSaveCategory(activePresetItem?.category ?? "User");
+              setIsQuickSaving(true);
+            }}
+          />
+
+          {/* Friendly Pro Mode Hint */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 bg-[#12152A]/70 border border-[#252B48] px-4 py-2.5 rounded-xl text-xs text-slate-300">
+            <div className="flex items-center gap-2 text-slate-400">
+              <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <span>
+                Want deep modular control over 5 oscillators, ADSR envelopes, filters & LFO modulation?
+              </span>
+            </div>
+            <button
+              id="btn-switch-pro-hint"
+              onClick={() => handleToggleSynthViewMode("pro")}
+              className="text-purple-400 hover:text-purple-300 font-bold whitespace-nowrap cursor-pointer transition-colors"
+            >
+              Switch to Pro Mode →
+            </button>
+          </div>
+        </>
+      ) : (
+        /* Pro Mode: Control Panels Grid */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {/* 1. Oscillators Section */}
         <div
           className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
@@ -919,7 +1128,105 @@ export const SynthView = () => {
             </div>
           </div>
         </div>
+
+        {/* 5. Arpeggiator */}
+        <div
+          className={`bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
+        >
+          <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
+            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              5. Arpeggiator
+            </span>
+            <button
+              id="btn-toggle-arp"
+              onClick={() => {
+                audioEngine.init();
+                onChangeParams({
+                  ...params,
+                  arpActive: !params.arpActive,
+                });
+              }}
+              className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                params.arpActive
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-500/30"
+                  : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+              }`}
+            >
+              {params.arpActive ? "Active" : "Bypass"}
+            </button>
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-400 block mb-1.5 font-medium">
+              Arp Mode
+            </label>
+            <div className="grid grid-cols-4 gap-1">
+              {(["up", "down", "updown", "random"] as const).map((m) => (
+                <button
+                  key={m}
+                  id={`btn-arp-mode-${m}`}
+                  onClick={() => onChangeParams({ ...params, arpMode: m })}
+                  className={`py-1 text-[10px] rounded font-semibold capitalize transition-all cursor-pointer ${
+                    (params.arpMode ?? "up") === m
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                  }`}
+                >
+                  {m === "updown" ? "Up/Dn" : m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <label className="text-[11px] text-slate-400 block mb-1 font-medium">
+                Rate
+              </label>
+              <div className="flex gap-1">
+                {(["16n", "8n", "32n"] as const).map((r) => (
+                  <button
+                    key={r}
+                    id={`btn-arp-rate-${r}`}
+                    onClick={() => onChangeParams({ ...params, arpRate: r })}
+                    className={`px-2 py-1 text-[11px] font-mono rounded font-semibold transition-all cursor-pointer ${
+                      (params.arpRate ?? "16n") === r
+                        ? "bg-purple-600 text-white"
+                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                    }`}
+                  >
+                    {r === "16n" ? "1/16" : r === "8n" ? "1/8" : "1/32"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] text-slate-400 block mb-1 font-medium">
+                Octaves
+              </label>
+              <div className="flex gap-1">
+                {[1, 2, 3].map((oct) => (
+                  <button
+                    key={oct}
+                    id={`btn-arp-octave-${oct}`}
+                    onClick={() => onChangeParams({ ...params, arpOctaves: oct })}
+                    className={`w-7 py-1 text-xs font-mono font-bold rounded transition-all cursor-pointer ${
+                      (params.arpOctaves ?? 1) === oct
+                        ? "bg-purple-600 text-white"
+                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                    }`}
+                  >
+                    +{oct}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+      )}
 
       {/* Interactive Piano Keyboard */}
       <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-xl">
@@ -999,6 +1306,26 @@ export const SynthView = () => {
             </button>
           </div>
         </div>
+
+        {/* Friendly Play Guide when in Simple Mode */}
+        {synthViewMode === "simple" && (
+          <div className="mb-3 px-3 py-1.5 rounded-lg bg-[#0B0D19] border border-[#252B48] flex items-center justify-between text-xs text-slate-300 flex-wrap gap-2">
+            <span className="flex items-center gap-1.5 text-[11px] text-slate-400 flex-wrap">
+              <span>🎹 Click keys below, or use computer keyboard:</span>
+              {(['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'] as const).map((k) => (
+                <kbd
+                  key={k}
+                  className="px-1.5 py-0.2 rounded bg-[#161B36] border border-[#2D355A] font-mono text-[10px] text-indigo-300 font-bold"
+                >
+                  {k}
+                </kbd>
+              ))}
+            </span>
+            <span className="text-[11px] text-emerald-400 font-medium hidden sm:inline">
+              ✓ Smart Key Lock ({scaleRoot} {scaleType})
+            </span>
+          </div>
+        )}
 
         {/* Keyboard Keys Layout — uses keyboardOctave for display range */}
         <div className="relative h-[130px] flex select-none bg-[#0B0D19] p-2 rounded-lg border border-[#252B48] overflow-x-auto">

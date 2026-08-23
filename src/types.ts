@@ -28,6 +28,10 @@ export interface SynthParams {
   lfoTarget: 'cutoff' | 'pitch' | 'volume';
   octave: number;
   portamento?: number;
+  arpActive?: boolean;
+  arpMode?: 'up' | 'down' | 'updown' | 'random';
+  arpRate?: '4n' | '8n' | '16n' | '32n';
+  arpOctaves?: number;
   preset: string;
 }
 

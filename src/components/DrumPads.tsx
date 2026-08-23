@@ -45,63 +45,57 @@ export const DrumPads: React.FC = React.memo(() => {
   const groups = useMemo(() => [pads.slice(0, 4), pads.slice(4)], [pads]);
 
   return (
-    <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-xl">
-      {/* Single row, two groups of four */}
-      <div className="flex gap-4">
-        {groups.map((group, groupIndex) => (
-          <React.Fragment key={groupIndex}>
-            {groupIndex > 0 && <div className="w-px self-stretch bg-[#252B48]" />}
-            <div className="flex-1 grid grid-cols-4 gap-2.5">
-              {group.map((pad) => {
-                const isActive = activePadId === pad.id;
-                return (
-                  <div
-                    key={pad.id}
-                    id={`drum-pad-card-${pad.id}`}
-                    className="flex flex-col gap-1.5"
-                  >
-                    {/* Trigger Button Pad */}
-                    <button
-                      id={`btn-pad-${pad.id}`}
-                      onClick={() => triggerPad(pad)}
-                      className={`relative w-full h-16 rounded-lg bg-gradient-to-br ${pad.color} p-2 flex flex-col justify-between items-start text-white shadow-md cursor-pointer transition-all duration-75 ${
-                        isActive
-                          ? 'ring-4 ring-white brightness-125 scale-95 shadow-white/30'
-                          : 'hover:brightness-110'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <span className="text-[11px] font-bold uppercase tracking-wider truncate">{pad.name}</span>
-                        <span className="w-5 h-5 rounded-md bg-black/30 border border-white/20 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
-                          {shortcutLabel(pad.shortcut)}
-                        </span>
-                      </div>
-                    </button>
+    <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 sm:p-4 shadow-md">
+      <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-2.5">
+        {pads.map((pad) => {
+          const isActive = activePadId === pad.id;
+          return (
+            <div
+              key={pad.id}
+              id={`drum-pad-card-${pad.id}`}
+              className="flex flex-col gap-1"
+            >
+              {/* Trigger Button Pad */}
+              <button
+                id={`btn-pad-${pad.id}`}
+                onClick={() => triggerPad(pad)}
+                className={`relative w-full h-14 sm:h-16 rounded-lg bg-gradient-to-br ${pad.color} p-1.5 sm:p-2 flex flex-col justify-between items-start text-white shadow-sm cursor-pointer transition-all duration-75 ${
+                  isActive
+                    ? 'ring-4 ring-white brightness-125 scale-95 shadow-white/30'
+                    : 'hover:brightness-110 active:scale-95'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider truncate">
+                    {pad.name.replace(' Drum', '').replace(' Snap', '').replace(' Cymbal', '')}
+                  </span>
+                  <span className="w-4 h-4 sm:w-5 sm:h-5 rounded bg-black/30 border border-white/20 text-[9px] sm:text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                    {shortcutLabel(pad.shortcut)}
+                  </span>
+                </div>
+              </button>
 
-                    {/* Volume Slider */}
-                    <div className="flex items-center gap-1.5 px-0.5">
-                      <Volume2 className="w-3 h-3 text-slate-500 shrink-0" />
-                      <input
-                        id={`slider-pad-vol-${pad.id}`}
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        value={pad.volume}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value);
-                          setPads((prev) => prev.map((p) => (p.id === pad.id ? { ...p, volume: val } : p)));
-                        }}
-                        className="w-full h-1 bg-[#0B0D19] rounded-lg cursor-pointer"
-                        title={`${pad.name} Volume`}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+              {/* Volume Slider */}
+              <div className="flex items-center gap-1 px-0.5">
+                <Volume2 className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                <input
+                  id={`slider-pad-vol-${pad.id}`}
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={pad.volume}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setPads((prev) => prev.map((p) => (p.id === pad.id ? { ...p, volume: val } : p)));
+                  }}
+                  className="w-full h-1 bg-[#0B0D19] rounded cursor-pointer"
+                  title={`${pad.name} Volume`}
+                />
+              </div>
             </div>
-          </React.Fragment>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

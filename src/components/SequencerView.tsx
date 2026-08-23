@@ -1711,25 +1711,23 @@ export const SequencerView = () => {
   };
 
   return (
-    <div className="p-4 max-w-7xl mx-auto space-y-4">
+    <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Top Header & Preset Bar */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-emerald-600/20 border border-emerald-500/30 text-emerald-400">
-            <Grid className="w-5 h-5" />
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-2.5 shadow-md">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/30 text-emerald-400">
+            <Grid className="w-4 h-4" />
           </div>
-          <div>
-            <h2 className="font-bold text-base text-slate-100 flex items-center gap-2">
-              16-Step Beat Matrix Sequencer
-            </h2>
-          </div>
+          <h2 className="font-bold text-sm sm:text-base text-slate-100">
+            Drum Sequencer (16-Step)
+          </h2>
         </div>
 
         {/* Preset & Action Buttons */}
         <div className="flex items-center flex-wrap gap-2">
           {/* Master Volume */}
-          <div className="flex items-center gap-2 mr-4">
-            <Volume2 className="w-4 h-4 text-emerald-400" />
+          <div className="flex items-center gap-1.5 mr-2">
+            <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
             <input
               type="range"
               min={0}
@@ -1739,16 +1737,14 @@ export const SequencerView = () => {
               onChange={(e) =>
                 setMasterSequencerVolume(parseFloat(e.target.value))
               }
-              className="w-24 h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-emerald-500"
+              className="w-16 sm:w-20 h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-emerald-500"
+              title="Drums Master Volume"
             />
           </div>
 
           {/* Genre selector */}
-          <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#2D355A] px-2.5 py-1 rounded-lg">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="text-[10px] text-slate-400 font-mono">
-              Pattern:
-            </span>
+          <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#2D355A] px-2 py-1 rounded-lg">
+            <Sparkles className="w-3 h-3 text-indigo-400" />
             <select
               id="select-sequencer-genre"
               value={selectedGenre}
@@ -1757,16 +1753,15 @@ export const SequencerView = () => {
             >
               {Object.keys(GENRE_PRESETS).map((g) => (
                 <option key={g} value={g} className="bg-[#12152A]">
-                  {g} Groove
+                  {g}
                 </option>
               ))}
             </select>
           </div>
 
           {/* Sound kit selector */}
-          <div className="flex items-center gap-1.5 bg-[#0B0D19] border border-[#2D355A] px-2.5 py-1 rounded-lg">
-            <Disc3 className="w-3.5 h-3.5 text-pink-400" />
-            <span className="text-[10px] text-slate-400 font-mono">Sound:</span>
+          <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#2D355A] px-2 py-1 rounded-lg">
+            <Disc3 className="w-3 h-3 text-pink-400" />
             <select
               id="select-sequencer-sound-kit"
               value={soundKit}
@@ -1781,65 +1776,66 @@ export const SequencerView = () => {
             </select>
           </div>
 
-          <button
-            id="btn-shift-left"
-            onClick={() => shiftSteps("left")}
-            className="p-1.5 rounded-lg bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white transition-colors cursor-pointer"
-            title="Shift Pattern Left"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              id="btn-shift-left"
+              onClick={() => shiftSteps("left")}
+              className="p-1.5 rounded-lg bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white transition-colors cursor-pointer"
+              title="Shift Pattern Left"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
 
-          <button
-            id="btn-shift-right"
-            onClick={() => shiftSteps("right")}
-            className="p-1.5 rounded-lg bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white transition-colors cursor-pointer"
-            title="Shift Pattern Right"
-          >
-            <ArrowRight className="w-4 h-4" />
-          </button>
+            <button
+              id="btn-shift-right"
+              onClick={() => shiftSteps("right")}
+              className="p-1.5 rounded-lg bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white transition-colors cursor-pointer"
+              title="Shift Pattern Right"
+            >
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
 
-          <button
-            id="btn-randomize-grid"
-            onClick={randomizeSteps}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <Shuffle className="w-3.5 h-3.5" />
-            <span>Randomize</span>
-          </button>
+            <button
+              id="btn-randomize-grid"
+              onClick={randomizeSteps}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              title="Randomize Steps"
+            >
+              <Shuffle className="w-3 h-3" />
+              <span className="hidden sm:inline">Random</span>
+            </button>
 
-          <button
-            id="btn-clear-grid"
-            onClick={clearAllSteps}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Clear</span>
-          </button>
+            <button
+              id="btn-clear-grid"
+              onClick={clearAllSteps}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#1C213E] border border-[#2D355A] text-slate-300 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              title="Clear Steps"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span className="hidden sm:inline">Clear</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Drum Filter — global lowpass/bandpass/highpass on the drum bus */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-xl">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 sm:p-4 shadow-md">
+        <div className="flex items-center justify-between flex-wrap gap-2.5">
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-pink-400" />
+            <Filter className="w-3.5 h-3.5 text-pink-400" />
             <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
               Drum Filter
             </span>
-            <span className="text-[10px] text-slate-500 font-mono">
-              lowpass · bandpass · highpass
-            </span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="grid grid-cols-3 gap-1 w-36">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="grid grid-cols-3 gap-1 w-32">
               {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
                 <button
                   key={t}
                   id={`btn-drum-filter-${t}`}
                   onClick={() => setDrumFilterType(t)}
-                  className={`py-1 text-[11px] rounded font-semibold uppercase transition-all cursor-pointer ${
+                  className={`py-1 text-[10px] rounded font-semibold uppercase transition-all cursor-pointer ${
                     drumFilterType === t
                       ? "bg-pink-600 text-white shadow-sm"
                       : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
@@ -1866,7 +1862,7 @@ export const SequencerView = () => {
 
             <Knob
               id="knob-drum-filter-resonance"
-              label="Resonance"
+              label="Res"
               color="text-pink-400"
               layout="horizontal"
               value={drumFilterResonance}
@@ -1882,7 +1878,7 @@ export const SequencerView = () => {
       </div>
 
       {/* Sequencer Grid */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 overflow-x-auto shadow-xl">
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 sm:p-4 overflow-x-auto shadow-md">
         {/* Step Indicator Header (1-16) */}
         <div className="flex items-center gap-2 mb-2 pl-44 min-w-[700px]">
           {Array.from({ length: 16 }).map((_, i) => {

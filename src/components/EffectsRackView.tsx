@@ -14,30 +14,24 @@ export const EffectsRackView: React.FC = React.memo(() => {
   };
 
   return (
-    <div className="p-4 max-w-7xl mx-auto space-y-4">
+    <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Top Header */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-400">
-            <Sliders className="w-5 h-5" />
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 sm:p-4 flex items-center justify-between shadow-md">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-400">
+            <Sliders className="w-4 h-4" />
           </div>
-          <div>
-            <h2 className="font-bold text-base text-slate-100 flex items-center gap-2">
-              Studio Master Effects Rack
-            </h2>
-            <p className="text-xs text-slate-400">
-              Master bus processing with per-unit bypass and real-time DSP
-              routing
-            </p>
-          </div>
+          <h2 className="font-bold text-sm sm:text-base text-slate-100">
+            Master Effects Rack
+          </h2>
         </div>
       </div>
 
       {/* Rack Units Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Algorithmic Reverb Unit */}
         <div
-          className={`bg-[#12152A] border rounded-xl p-4 space-y-3.5 shadow-md transition-all ${
+          className={`bg-[#12152A] border rounded-xl p-3 sm:p-4 space-y-3 shadow-md transition-all ${
             effects.reverbBypass
               ? "border-[#252B48] opacity-60"
               : "border-cyan-500/40 ring-1 ring-cyan-500/20"
@@ -66,7 +60,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
           <div className="flex items-start justify-around gap-2">
             <Knob
               id="slider-reverb-wet"
-              label="Wet / Dry Mix"
+              label="Mix"
               color="text-cyan-400"
               value={effects.reverbWet}
               min={0}
@@ -78,7 +72,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             />
             <Knob
               id="slider-reverb-decay"
-              label="Decay Time"
+              label="Decay"
               color="text-cyan-400"
               value={effects.reverbDecay}
               min={0.5}
@@ -93,7 +87,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
 
         {/* 2. Stereo Delay Unit */}
         <div
-          className={`bg-[#12152A] border rounded-xl p-4 space-y-3.5 shadow-md transition-all ${
+          className={`bg-[#12152A] border rounded-xl p-3 sm:p-4 space-y-3 shadow-md transition-all ${
             effects.delayBypass
               ? "border-[#252B48] opacity-60"
               : "border-indigo-500/40 ring-1 ring-indigo-500/20"
@@ -102,7 +96,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
           <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5 text-indigo-400" />
-              2. Stereo Echo Delay
+              2. Stereo Echo
             </span>
             <button
               id="btn-bypass-delay"
@@ -122,7 +116,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
           <div className="flex items-start justify-around gap-2">
             <Knob
               id="slider-delay-wet"
-              label="Wet / Dry Mix"
+              label="Mix"
               color="text-indigo-400"
               value={effects.delayWet}
               min={0}
@@ -134,7 +128,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             />
             <Knob
               id="slider-delay-feedback"
-              label="Feedback Repeats"
+              label="Feedback"
               color="text-indigo-400"
               value={effects.delayFeedback}
               min={0}
@@ -149,7 +143,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
 
         {/* 3. Wave Distortion / Warmth Unit */}
         <div
-          className={`bg-[#12152A] border rounded-xl p-4 space-y-3.5 shadow-md transition-all ${
+          className={`bg-[#12152A] border rounded-xl p-3 sm:p-4 space-y-3 shadow-md transition-all ${
             effects.distortionBypass
               ? "border-[#252B48] opacity-60"
               : "border-amber-500/40 ring-1 ring-amber-500/20"
@@ -158,7 +152,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
           <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              3. Tube Saturation
+              3. Distortion
             </span>
             <button
               id="btn-bypass-distortion"
@@ -170,7 +164,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
                   ? "bg-slate-800 text-slate-400 border border-slate-700"
                   : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
               }`}
-              title="Toggle Tube Saturation Bypass"
+              title="Toggle Distortion Bypass"
             >
               <Power className="w-2.5 h-2.5" />
               {effects.distortionBypass ? "BYPASS" : "ON"}
@@ -193,7 +187,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
 
         {/* 4. 3-Band Equalizer */}
         <div
-          className={`bg-[#12152A] border rounded-xl p-4 space-y-3.5 shadow-md transition-all ${
+          className={`bg-[#12152A] border rounded-xl p-3 sm:p-4 space-y-3 shadow-md transition-all ${
             effects.eqBypass
               ? "border-[#252B48] opacity-60"
               : "border-emerald-500/40 ring-1 ring-emerald-500/20"
@@ -202,7 +196,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
           <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
               <Sliders className="w-3.5 h-3.5 text-emerald-400" />
-              4. 3-Band Studio EQ
+              4. 3-Band EQ
             </span>
             <button
               id="btn-bypass-eq"

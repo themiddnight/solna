@@ -82,17 +82,20 @@ class AudioEngine {
   private drumKit: DrumKit = mergeDrumKit();
 
   async init(): Promise<void> {
-    if (this.isInitialized && this.ctx && this.ctx.state === 'running') return;
-
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    this.ctx = new AudioContextClass();
-
-    if (this.ctx.state === 'suspended') {
-      await this.ctx.resume();
+    if (!this.ctx) {
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      this.ctx = new AudioContextClass();
+      this.setupMasterChain();
+      this.createClickBuffers();
     }
 
-    this.setupMasterChain();
-    this.createClickBuffers();
+    if (this.ctx.state === 'suspended') {
+      try {
+        await this.ctx.resume();
+      } catch {
+        // browser autoplay policy requires user gesture
+      }
+    }
     this.isInitialized = true;
   }
 
@@ -158,8 +161,8 @@ class AudioEngine {
 
   private clockTick(): void {
     if (!this.ctx) return;
-    // Resync after long stalls (tab slept, context created late) instead of bursting missed steps
-    if (this.clockNextStepTime < this.ctx.currentTime - 0.5) {
+    // Resync after stalls or initial start instead of bursting missed steps
+    if (this.clockNextStepTime < this.ctx.currentTime - 0.05) {
       this.clockNextStepTime = this.ctx.currentTime + AudioEngine.CLOCK_REANCHOR_DELAY;
     }
     const stepDuration = sixteenthNoteMs(this.clockBpm) / 1000;
