@@ -1657,8 +1657,8 @@ function SortableChordCard({
       </button>
 
       {/* Edit Controls */}
-      <div className="grid grid-cols-3 gap-2 pt-1 border-t border-[#252B48]/60">
-        <div>
+      <div className="flex gap-2 pt-1 border-t border-[#252B48]/60">
+        <div className="shrink min-w-0">
           <label className="text-[10px] text-slate-500 block mb-0.5">
             Root
           </label>
@@ -1678,7 +1678,7 @@ function SortableChordCard({
           </select>
         </div>
 
-        <div>
+        <div className="flex-1 min-w-0">
           <label className="text-[10px] text-slate-500 block mb-0.5">
             Quality
           </label>
@@ -1717,7 +1717,7 @@ function SortableChordCard({
           </select>
         </div>
 
-        <div>
+        <div className="shrink min-w-0">
           <label className="text-[10px] text-slate-500 block mb-0.5">
             Duration (Bars)
           </label>
