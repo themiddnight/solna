@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Sparkles, Wand2, Music, Grid, Zap, Check, Loader2 } from 'lucide-react';
 import { ChordItem, SequencerTrack, SynthParams } from '../types';
-import { generateBlockChordNotes } from '../utils/musicTheory';
+import { generateBlockChordNotes, formatChordLabel } from '../utils/musicTheory';
 
 interface AiCompanionModalProps {
   isOpen: boolean;
@@ -242,7 +242,7 @@ export const AiCompanionModal: React.FC<AiCompanionModalProps> = React.memo(({
                 <div className="flex items-center gap-2 flex-wrap">
                   {result.progression.map((c: any, i: number) => (
                     <div key={i} className="px-3 py-2 rounded-lg bg-[#181C35] border border-purple-500/30 text-center">
-                      <span className="text-sm font-black text-white">{c.root}{c.quality}</span>
+                      <span className="text-sm font-black text-white">{formatChordLabel(c.root, c.quality)}</span>
                       <span className="text-[9px] text-slate-400 block font-mono">{c.bars || 1} bar</span>
                     </div>
                   ))}

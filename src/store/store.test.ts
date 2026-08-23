@@ -165,6 +165,9 @@ describe('store defaults', () => {
     expect(s.projectTitle).toBe('Cosmic Horizon Jam');
     expect(s.soundKit).toBe('Retro Drive');
     expect(s.masterSequencerVolume).toBe(0.8);
+    expect(s.drumFilterCutoff).toBe(12000);
+    expect(s.drumFilterResonance).toBe(0.7);
+    expect(s.drumFilterType).toBe('lowpass');
     expect(s.chordRhythmId).toBe('sustained');
     expect(s.chordFeel).toBe(0.5);
     expect(s.chordOctave).toBe(4);
@@ -407,6 +410,9 @@ describe('persist partialize', () => {
       'sequencerTracks',
       'soundKit',
       'masterSequencerVolume',
+      'drumFilterCutoff',
+      'drumFilterResonance',
+      'drumFilterType',
       'effects',
       'customSynthPresets',
       'customChordProgressions',
@@ -561,6 +567,9 @@ describe('persisted payload sanitization', () => {
       projectTitle: 'Cosmic Horizon Jam',
       chordRhythmId: 'sustained',
       bassPatternId: BASS_PATTERNS[0].id,
+      drumFilterCutoff: 12000,
+      drumFilterResonance: 0.7,
+      drumFilterType: 'lowpass',
     });
     const chordsBefore = useAppStore.getState().chords;
     const tracksBefore = useAppStore.getState().sequencerTracks;
@@ -578,6 +587,9 @@ describe('persisted payload sanitization', () => {
           chordVolume: -5,
           bassVolume: 2,
           masterSequencerVolume: null,
+          drumFilterCutoff: 'dark',
+          drumFilterResonance: null,
+          drumFilterType: 42,
           metronomeActive: 'yes',
           chordMuted: 1,
           bassMuted: null,
@@ -603,6 +615,9 @@ describe('persisted payload sanitization', () => {
     expect(s.chordVolume).toBe(0); // clamped into [0, 1]
     expect(s.bassVolume).toBe(1); // clamped into [0, 1]
     expect(s.masterSequencerVolume).toBe(0.8);
+    expect(s.drumFilterCutoff).toBe(12000);
+    expect(s.drumFilterResonance).toBe(0.7);
+    expect(s.drumFilterType).toBe('lowpass');
     expect(s.metronomeActive).toBe(false);
     expect(s.chordMuted).toBe(false);
     expect(s.bassMuted).toBe(false);
@@ -656,6 +671,9 @@ describe('persisted payload sanitization', () => {
           chordVolume: -1,
           bassVolume: 0.5,
           masterSequencerVolume: 0.1,
+          drumFilterCutoff: 99999,
+          drumFilterResonance: -1,
+          drumFilterType: 'highpass',
           metronomeActive: true,
           chordMuted: true,
           bassMuted: true,
@@ -681,6 +699,9 @@ describe('persisted payload sanitization', () => {
     expect(s.chordVolume).toBe(0); // clamped into [0, 1]
     expect(s.bassVolume).toBe(0.5);
     expect(s.masterSequencerVolume).toBe(0.1);
+    expect(s.drumFilterCutoff).toBe(12000); // clamped into [50, 12000]
+    expect(s.drumFilterResonance).toBe(0.1); // clamped into [0.1, 20]
+    expect(s.drumFilterType).toBe('highpass');
     expect(s.metronomeActive).toBe(true);
     expect(s.chordMuted).toBe(true);
     expect(s.bassMuted).toBe(true);

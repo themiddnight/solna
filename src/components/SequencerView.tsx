@@ -11,12 +11,14 @@ import {
   VolumeX,
   Sparkles,
   Disc3,
+  Filter,
 } from "lucide-react";
 import { audioEngine, STEPS_PER_BAR } from "../audio/engine";
 import { useAppStore } from "../store/store";
 import { sixteenthNoteMs } from "../utils/musicTheory";
 import { DRUM_KITS, GENRE_TO_KIT } from "../audio/drumKits";
 import { DrumPads } from "./DrumPads";
+import { Knob } from "./ui/Knob";
 
 const GENRE_PRESETS: Record<string, Record<string, boolean[]>> = {
   Synthwave: {
@@ -1569,6 +1571,17 @@ export const SequencerView = () => {
   const onChangeSoundKit = useAppStore((s) => s.setSoundKit);
   const masterSequencerVolume = useAppStore((s) => s.masterSequencerVolume);
   const setMasterSequencerVolume = useAppStore((s) => s.setMasterSequencerVolume);
+  const drumFilterCutoff = useAppStore((s) => s.drumFilterCutoff);
+  const drumFilterResonance = useAppStore((s) => s.drumFilterResonance);
+  const drumFilterType = useAppStore((s) => s.drumFilterType);
+  const setDrumFilterCutoff = useAppStore((s) => s.setDrumFilterCutoff);
+  const setDrumFilterResonance = useAppStore((s) => s.setDrumFilterResonance);
+  const setDrumFilterType = useAppStore((s) => s.setDrumFilterType);
+
+  // Keep the drum bus filter in the audio graph in sync with the card knobs.
+  useEffect(() => {
+    audioEngine.setDrumFilter(drumFilterCutoff, drumFilterResonance, drumFilterType);
+  }, [drumFilterCutoff, drumFilterResonance, drumFilterType]);
 
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [selectedGenre, setSelectedGenre] = useState<string>("Synthwave");
@@ -1806,6 +1819,68 @@ export const SequencerView = () => {
         </div>
       </div>
 
+      {/* Drum Filter — global lowpass/bandpass/highpass on the drum bus */}
+      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-xl">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-pink-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+              Drum Filter
+            </span>
+            <span className="text-[10px] text-slate-500 font-mono">
+              lowpass · bandpass · highpass
+            </span>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="grid grid-cols-3 gap-1 w-36">
+              {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
+                <button
+                  key={t}
+                  id={`btn-drum-filter-${t}`}
+                  onClick={() => setDrumFilterType(t)}
+                  className={`py-1 text-[11px] rounded font-semibold uppercase transition-all cursor-pointer ${
+                    drumFilterType === t
+                      ? "bg-pink-600 text-white shadow-sm"
+                      : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                  }`}
+                >
+                  {t === "lowpass" ? "LPF" : t === "bandpass" ? "BPF" : "HPF"}
+                </button>
+              ))}
+            </div>
+
+            <Knob
+              id="knob-drum-filter-cutoff"
+              label="Cutoff"
+              color="text-pink-400"
+              layout="horizontal"
+              value={drumFilterCutoff}
+              min={50}
+              max={12000}
+              step={10}
+              scale="log"
+              format={(v) => `${Math.round(v)} Hz`}
+              onChange={setDrumFilterCutoff}
+            />
+
+            <Knob
+              id="knob-drum-filter-resonance"
+              label="Resonance"
+              color="text-pink-400"
+              layout="horizontal"
+              value={drumFilterResonance}
+              min={0.1}
+              max={20}
+              step={0.1}
+              scale="linear"
+              format={(v) => v.toFixed(1)}
+              onChange={setDrumFilterResonance}
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Sequencer Grid */}
       <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 overflow-x-auto shadow-xl">
         {/* Step Indicator Header (1-16) */}
@@ -1921,7 +1996,7 @@ export const SequencerView = () => {
       </div>
 
       {/* Live Performance Drum Pads */}
-      <DrumPads soundKit={soundKit} onChangeSoundKit={onChangeSoundKit} />
+      <DrumPads />
     </div>
   );
 };

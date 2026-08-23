@@ -35,7 +35,10 @@ import { resolveSynthControlChannel } from "../utils/synthControl";
 import type { SynthControlTarget } from "../utils/synthControl";
 
 // Shared per-destination accent styling for the card tint and selector buttons
-const TARGET_STYLES: Record<SynthControlTarget, { tint: string; activeBtn: string }> = {
+const TARGET_STYLES: Record<
+  SynthControlTarget,
+  { tint: string; activeBtn: string }
+> = {
   synth: { tint: "", activeBtn: "bg-slate-600 text-white shadow-xs" },
   chord: {
     tint: "ring-1 ring-indigo-400/40 bg-gradient-to-br from-indigo-500/10 to-transparent",
@@ -96,9 +99,14 @@ export const SynthView = () => {
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [customPresets, setCustomPresets] = useState<SynthPresetItem[]>([]);
-  const allPresets = useMemo(() => getAllSynthPresets(customPresets), [customPresets]);
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
-  const [quickSaveCategory, setQuickSaveCategory] = useState<SynthPresetCategory>("User");
+  const allPresets = useMemo(
+    () => getAllSynthPresets(customPresets),
+    [customPresets],
+  );
+  const [selectedCategoryFilter, setSelectedCategoryFilter] =
+    useState<string>("All");
+  const [quickSaveCategory, setQuickSaveCategory] =
+    useState<SynthPresetCategory>("User");
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [quickSaveName, setQuickSaveName] = useState<string>("");
   const [saveToast, setSaveToast] = useState<string | null>(null);
@@ -119,12 +127,12 @@ export const SynthView = () => {
 
   const categoryGroups = useMemo(
     () => getPresetsGroupedByCategory(allPresets),
-    [allPresets]
+    [allPresets],
   );
 
   const activePresetItem = useMemo(
     () => findPresetByName(params.preset, allPresets),
-    [params.preset, allPresets]
+    [params.preset, allPresets],
   );
 
   const activeCategoryMeta = useMemo(() => {
@@ -158,7 +166,7 @@ export const SynthView = () => {
   const handleStepPreset = (direction: -1 | 1) => {
     if (selectablePresets.length === 0) return;
     const currentIndex = selectablePresets.findIndex(
-      (p) => p.name === params.preset
+      (p) => p.name === params.preset,
     );
     let nextIndex = currentIndex + direction;
     if (nextIndex < 0) nextIndex = selectablePresets.length - 1;
@@ -171,7 +179,13 @@ export const SynthView = () => {
   const handleNoteOn = useCallback(
     (note: string) => {
       audioEngine.init();
-      audioEngine.triggerSynthNoteOn(note, params, 1.0, undefined, controlTarget);
+      audioEngine.triggerSynthNoteOn(
+        note,
+        params,
+        1.0,
+        undefined,
+        controlTarget,
+      );
       setActiveNotes((prev) => new Set(prev).add(note));
     },
     [params, controlTarget],
@@ -179,7 +193,12 @@ export const SynthView = () => {
 
   const handleNoteOff = useCallback(
     (note: string) => {
-      audioEngine.triggerSynthNoteOff(note, params.release, undefined, controlTarget);
+      audioEngine.triggerSynthNoteOff(
+        note,
+        params.release,
+        undefined,
+        controlTarget,
+      );
       setActiveNotes((prev) => {
         const next = new Set(prev);
         next.delete(note);
@@ -310,7 +329,9 @@ export const SynthView = () => {
               id="btn-quick-save-preset"
               onClick={() => {
                 setQuickSaveName(
-                  params.preset ? `${params.preset} (Custom)` : "My Synth Patch",
+                  params.preset
+                    ? `${params.preset} (Custom)`
+                    : "My Synth Patch",
                 );
                 setQuickSaveCategory(activePresetItem?.category ?? "User");
                 setIsQuickSaving(true);
@@ -360,7 +381,9 @@ export const SynthView = () => {
                 cat.id === "All"
                   ? allPresets.length
                   : cat.id === "User"
-                    ? allPresets.filter((p) => !p.isFactory || p.category === "User").length
+                    ? allPresets.filter(
+                        (p) => !p.isFactory || p.category === "User",
+                      ).length
                     : allPresets.filter((p) => p.category === cat.id).length;
 
               return (
@@ -426,7 +449,7 @@ export const SynthView = () => {
                       ? true
                       : selectedCategoryFilter === "User"
                         ? g.category === "User"
-                        : g.category === selectedCategoryFilter
+                        : g.category === selectedCategoryFilter,
                   )
                   .map((group) => (
                     <optgroup
@@ -495,7 +518,9 @@ export const SynthView = () => {
             />
             <select
               value={quickSaveCategory}
-              onChange={(e) => setQuickSaveCategory(e.target.value as SynthPresetCategory)}
+              onChange={(e) =>
+                setQuickSaveCategory(e.target.value as SynthPresetCategory)
+              }
               className="bg-[#0B0D19] border border-[#2D355A] rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
               {SYNTH_CATEGORIES.map((c) => (
@@ -531,9 +556,6 @@ export const SynthView = () => {
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5 text-indigo-400" />
               1. Oscillators
-            </span>
-            <span className="text-[10px] text-slate-400 font-mono">
-              OSC 1 + SUB
             </span>
           </div>
 
@@ -608,9 +630,6 @@ export const SynthView = () => {
               <Sliders className="w-3.5 h-3.5 text-pink-400" />
               2. VCF Filter
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">
-              24dB/OCT
-            </span>
           </div>
 
           <div>
@@ -659,7 +678,9 @@ export const SynthView = () => {
               step={0.1}
               scale="linear"
               format={(v) => v.toFixed(1)}
-              onChange={(v) => onChangeParams({ ...params, filterResonance: v })}
+              onChange={(v) =>
+                onChangeParams({ ...params, filterResonance: v })
+              }
             />
 
             <Knob
@@ -672,7 +693,9 @@ export const SynthView = () => {
               step={50}
               scale="linear"
               format={(v) => `+${Math.round(v)} Hz`}
-              onChange={(v) => onChangeParams({ ...params, filterEnvAmount: v })}
+              onChange={(v) =>
+                onChangeParams({ ...params, filterEnvAmount: v })
+              }
             />
           </div>
         </div>
@@ -684,9 +707,6 @@ export const SynthView = () => {
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
               <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
               3. ADSR Envelope
-            </span>
-            <span className="text-[10px] text-slate-400 font-mono">
-              AMP + FILTER
             </span>
           </div>
 
@@ -754,7 +774,7 @@ export const SynthView = () => {
           </div>
 
           {/* FILTER / VCF */}
-          <div className="border-t border-[#252B48] pt-2.5">
+          <div className="pt-2.5">
             <div className="flex items-center gap-2 mb-1.5">
               <span className="text-[10px] font-mono text-pink-400 uppercase tracking-wider">
                 FILTER / VCF
@@ -798,7 +818,9 @@ export const SynthView = () => {
                 max={1.0}
                 step={0.01}
                 format={(v) => `${(v * 100).toFixed(0)}%`}
-                onChange={(v) => onChangeParams({ ...params, filterSustain: v })}
+                onChange={(v) =>
+                  onChangeParams({ ...params, filterSustain: v })
+                }
               />
 
               {/* Filter Release */}
@@ -811,7 +833,9 @@ export const SynthView = () => {
                 max={3.0}
                 step={0.01}
                 format={(v) => `${v.toFixed(2)}s`}
-                onChange={(v) => onChangeParams({ ...params, filterRelease: v })}
+                onChange={(v) =>
+                  onChangeParams({ ...params, filterRelease: v })
+                }
               />
             </div>
           </div>
@@ -824,9 +848,6 @@ export const SynthView = () => {
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5 text-cyan-400" />
               4. LFO & Octave
-            </span>
-            <span className="text-[10px] text-slate-400 font-mono">
-              MODULATION
             </span>
           </div>
 
@@ -852,7 +873,7 @@ export const SynthView = () => {
             </div>
           </div>
 
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start justify-around gap-2">
             <Knob
               id="slider-lfo-rate"
               label="LFO Rate"
@@ -917,7 +938,12 @@ export const SynthView = () => {
               }`}
               title="Current audition sound engine"
             >
-              Audition: {controlTarget === "synth" ? "Main Synth" : controlTarget === "chord" ? "Chord Synth" : "Bass Synth"}
+              Audition:{" "}
+              {controlTarget === "synth"
+                ? "Main Synth"
+                : controlTarget === "chord"
+                  ? "Chord Synth"
+                  : "Bass Synth"}
             </span>
             <button
               onClick={() =>

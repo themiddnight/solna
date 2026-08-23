@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
   SCALES,
+  formatChordLabel,
+  formatChordQuality,
   generateBlockChordNotes,
   getBorrowedChords,
   getDiatonicChordForDegree,
@@ -79,5 +81,41 @@ describe('getBorrowedChords catalog', () => {
         .map((d) => `${scaleType}: ${d.root}${d.quality}`);
       expect(duplicates).toEqual([]);
     }
+  });
+});
+
+describe('formatChordLabel', () => {
+  test('renders standard chord shorthand for every quality token', () => {
+    expect(formatChordLabel('C', 'maj')).toBe('C');
+    expect(formatChordLabel('C', 'min')).toBe('Cm');
+    expect(formatChordLabel('C', 'maj7')).toBe('Cmaj7');
+    expect(formatChordLabel('C', 'min7')).toBe('Cm7');
+    expect(formatChordLabel('C', '7')).toBe('C7');
+    expect(formatChordLabel('C', 'm7b5')).toBe('Cm7b5');
+    expect(formatChordLabel('C', 'dim')).toBe('Cdim');
+    expect(formatChordLabel('C', 'dim7')).toBe('Cdim7');
+    expect(formatChordLabel('C', 'aug')).toBe('Caug');
+    expect(formatChordLabel('C', 'sus2')).toBe('Csus2');
+    expect(formatChordLabel('C', 'sus4')).toBe('Csus4');
+    expect(formatChordLabel('C', '7sus4')).toBe('C7sus4');
+    expect(formatChordLabel('C', '9')).toBe('C9');
+    expect(formatChordLabel('C', 'maj9')).toBe('Cmaj9');
+    expect(formatChordLabel('C', 'min9')).toBe('Cm9');
+    expect(formatChordLabel('C', 'add9')).toBe('Cadd9');
+    expect(formatChordLabel('C', '6')).toBe('C6');
+    expect(formatChordLabel('C', 'min6')).toBe('Cm6');
+    expect(formatChordLabel('C', 'minMaj7')).toBe('CmM7');
+    expect(formatChordLabel('C', 'maj7#5')).toBe('Cmaj7#5');
+    expect(formatChordLabel('F#', 'min7')).toBe('F#m7');
+  });
+
+  test('falls back to the raw quality for unknown tokens', () => {
+    expect(formatChordLabel('C', 'unknown')).toBe('Cunknown');
+  });
+
+  test('formatChordQuality returns just the suffix', () => {
+    expect(formatChordQuality('maj')).toBe('');
+    expect(formatChordQuality('min7')).toBe('m7');
+    expect(formatChordQuality('minMaj7')).toBe('mM7');
   });
 });

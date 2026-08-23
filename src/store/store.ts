@@ -84,6 +84,9 @@ export function partializeAppState(state: AppStore): PersistedState {
     sequencerTracks: state.sequencerTracks,
     soundKit: state.soundKit,
     masterSequencerVolume: state.masterSequencerVolume,
+    drumFilterCutoff: state.drumFilterCutoff,
+    drumFilterResonance: state.drumFilterResonance,
+    drumFilterType: state.drumFilterType,
     effects: state.effects,
     customSynthPresets: state.customSynthPresets,
     customChordProgressions: state.customChordProgressions,
@@ -115,6 +118,14 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   sanitized.chordVolume = clampFinite(sanitized.chordVolume, 0, 1, 1.0);
   sanitized.bassVolume = clampFinite(sanitized.bassVolume, 0, 1, 1.0);
   sanitized.masterSequencerVolume = clampFinite(sanitized.masterSequencerVolume, 0, 1, 0.8);
+  sanitized.drumFilterCutoff = clampFinite(sanitized.drumFilterCutoff, 50, 12000, 12000);
+  sanitized.drumFilterResonance = clampFinite(sanitized.drumFilterResonance, 0.1, 20, 0.7);
+  sanitized.drumFilterType =
+    sanitized.drumFilterType === 'lowpass' ||
+    sanitized.drumFilterType === 'highpass' ||
+    sanitized.drumFilterType === 'bandpass'
+      ? sanitized.drumFilterType
+      : 'lowpass';
   sanitized.metronomeActive = asBoolean(sanitized.metronomeActive);
   sanitized.chordMuted = asBoolean(sanitized.chordMuted);
   sanitized.bassMuted = asBoolean(sanitized.bassMuted);

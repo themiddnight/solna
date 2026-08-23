@@ -4,12 +4,14 @@ export type ViewMode =
   | 'chords'
   | 'effects';
 
+export type FilterType = 'lowpass' | 'highpass' | 'bandpass';
+
 export interface SynthParams {
   oscType: 'sawtooth' | 'square' | 'sine' | 'triangle';
   subOscVolume: number;
   noiseVolume: number;
   detune: number;
-  filterType: 'lowpass' | 'highpass' | 'bandpass';
+  filterType: FilterType;
   filterCutoff: number;
   filterResonance: number;
   filterEnvAmount: number;

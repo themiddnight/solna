@@ -307,6 +307,42 @@ const TONAL_CHORD_ALIASES: Record<string, string> = {
   minmaj7: 'mMaj7',
 };
 
+// Standard display labels for chord quality tokens (keys lowercase; lookups use toLowerCase()).
+// Internal tokens stored in ChordItem.quality stay unchanged everywhere else.
+const CHORD_QUALITY_LABELS: Record<string, string> = {
+  maj: '',
+  min: 'm',
+  maj7: 'maj7',
+  min7: 'm7',
+  '7': '7',
+  m7b5: 'm7b5',
+  dim: 'dim',
+  dim7: 'dim7',
+  aug: 'aug',
+  sus2: 'sus2',
+  sus4: 'sus4',
+  '7sus4': '7sus4',
+  '9': '9',
+  maj9: 'maj9',
+  min9: 'm9',
+  add9: 'add9',
+  '6': '6',
+  min6: 'm6',
+  minmaj7: 'mM7',
+  'maj7#5': 'maj7#5',
+};
+
+/** Display suffix for a chord quality token, e.g. 'maj' → '', 'min7' → 'm7', 'minMaj7' → 'mM7'. */
+export function formatChordQuality(quality: string): string {
+  const label = CHORD_QUALITY_LABELS[quality.toLowerCase()];
+  return label === undefined ? quality : label;
+}
+
+/** Standard display name for a chord, e.g. ('C', 'maj') → 'C', ('A', 'min7') → 'Am7'. */
+export function formatChordLabel(root: string, quality: string): string {
+  return root + formatChordQuality(quality);
+}
+
 export function generateBlockChordNotes(chord: string, root = 'C', octave = 4): string[] {
   const tonalType = TONAL_CHORD_ALIASES[chord.toLowerCase()] || chord.toLowerCase();
   const chordData = Chord.getChord(tonalType, root);

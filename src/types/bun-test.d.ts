@@ -16,6 +16,7 @@ declare module 'bun:test' {
     };
     mockClear(): Mock<T>;
     mockImplementation(fn: (...args: Parameters<T>) => ReturnType<T>): Mock<T>;
+    mockRestore(): void;
   }
 
   export function spyOn<O extends object, M extends (...args: never[]) => unknown>(

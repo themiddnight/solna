@@ -75,6 +75,8 @@ import {
   ROOTS,
   getDiatonicChordForDegree,
   getBorrowedChords,
+  formatChordLabel,
+  formatChordQuality,
 } from "../utils/musicTheory";
 import {
   ChordPresetLibrary,
@@ -85,6 +87,7 @@ import {
 
 const SELECT_BASE =
   "bg-[#171B36] border border-[#2D355A] rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-200";
+const LABEL_BASE = "text-[10px] text-slate-500 block mb-1";
 
 export interface ProgressionTemplate {
   name: string;
@@ -453,6 +456,69 @@ function scheduleBarInvariantEvents(
     }
   }
 }
+
+// --- Chord preview helpers (tested in ChordView.test.ts) ---
+
+/** Minimal engine surface the preview helpers depend on. */
+type PreviewEngine = Pick<
+  typeof audioEngine,
+  'triggerSynthNoteOn' | 'triggerSynthNoteOff' | 'stopSource'
+>;
+
+// Held chord preview: strike every note of the chord now and let the synth
+// envelope sustain — no note-off is scheduled. The caller releases with
+// stopSource('chord') on mouse-up.
+export function playChordLegato(
+  chord: ChordItem,
+  params: SynthParams,
+  engine: PreviewEngine,
+): void {
+  for (const note of chord.notes) {
+    engine.triggerSynthNoteOn(note, params, 0.8, 0, 'chord');
+  }
+}
+
+// Looping pattern preview: plays immediately, then re-schedules itself one
+// bar later until stop() is called. `getNow` returns audio-clock seconds;
+// setTimeout/clearTimeout are read off globalThis so tests can swap them.
+export function startPatternLoop(
+  play: (time: number) => void,
+  barSeconds: number,
+  getNow: () => number,
+): () => void {
+  let timerId: ReturnType<typeof setTimeout> | undefined;
+
+  const tick = () => {
+    play(getNow());
+    timerId = globalThis.setTimeout(tick, barSeconds * 1000);
+  };
+  tick();
+
+  return () => {
+    if (timerId !== undefined) globalThis.clearTimeout(timerId);
+    timerId = undefined;
+  };
+}
+
+// The sound source for pattern previews: the I triad of the active scale,
+// independent of the 7th-chords quick-add toggle.
+export function previewChordForScale(
+  scaleRoot: string,
+  scaleType: string,
+  octave = 4,
+): ChordItem {
+  const tonic = getDiatonicChordForDegree(0, scaleRoot, scaleType, false);
+  return deriveChordNotes(
+    { id: 'preview', root: tonic.root, quality: tonic.quality, bars: 1, notes: [] },
+    octave,
+  );
+}
+
+/** Duration of one 16-step bar at the given bpm, in seconds. */
+export function previewBarSeconds(bpm: number): number {
+  return (sixteenthNoteMs(bpm) / 1000) * STEPS_PER_BAR;
+}
+
 export const ChordView: React.FC = React.memo(() => {
   // ChordView reads the store directly (Task 5): every value below replaces
   // one of the ~34 props it used to receive from App.tsx.
@@ -539,21 +605,34 @@ export const ChordView: React.FC = React.memo(() => {
       });
 
       const barDur = stepDur * STEPS_PER_BAR;
-      scheduleBarInvariantEvents(events, chordSynthParams, "chord", startTime, barDur, totalBars);
+      scheduleBarInvariantEvents(
+        events,
+        chordSynthParams,
+        "chord",
+        startTime,
+        barDur,
+        totalBars,
+      );
     },
     [bpm, chordSynthParams, chordOctave, chordFeel],
   );
 
   const playBassWithPattern = useCallback(
-    (chord: ChordItem, startTime: number, pattern: BassPattern) => {
+    (
+      chord: ChordItem,
+      startTime: number,
+      pattern: BassPattern,
+      chordContext?: ChordItem[],
+    ) => {
       audioEngine.init();
-      const chordIdx = Math.max(0, chords.indexOf(chord));
+      const context = chordContext ?? chords;
+      const chordIdx = Math.max(0, context.indexOf(chord));
       // Events are bar-invariant (the clock advances by barDur per bar); schedule
       // the resolved set at each bar's start. Approach tokens lead into the NEXT
       // chord, so they only play on the last bar.
       const events = resolveBassSteps(
         pattern,
-        chords,
+        context,
         chordIdx,
         bassOctave,
         scaleRoot,
@@ -570,7 +649,14 @@ export const ChordView: React.FC = React.memo(() => {
       const stepDur = sixteenthNoteMs(bpm) / 1000;
       const barDur = stepDur * STEPS_PER_BAR;
       const totalBars = chord.bars || 1;
-      scheduleBarInvariantEvents(events, bassSynthParams, "bass", startTime, barDur, totalBars);
+      scheduleBarInvariantEvents(
+        events,
+        bassSynthParams,
+        "bass",
+        startTime,
+        barDur,
+        totalBars,
+      );
     },
     [chords, bassOctave, scaleRoot, scaleType, bpm, bassSynthParams, bassFeel],
   );
@@ -597,7 +683,7 @@ export const ChordView: React.FC = React.memo(() => {
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -756,7 +842,7 @@ export const ChordView: React.FC = React.memo(() => {
       chords,
       "User",
       "Saved from Chord View",
-      chords.map((c) => `${c.root}${c.quality}`).join(" → "),
+      chords.map((c) => formatChordLabel(c.root, c.quality)).join(" → "),
     );
 
     setCustomProgressions(getCustomChordProgressions());
@@ -814,9 +900,27 @@ export const ChordView: React.FC = React.memo(() => {
     setChords([...chords, newChord]);
   };
 
-  const activePreviewTimeoutsRef = useRef<number[]>([]);
+  const chordPatternPreviewStopRef = useRef<(() => void) | null>(null);
+  const bassPatternPreviewStopRef = useRef<(() => void) | null>(null);
 
-  const handlePreviewMouseDown = (e: React.MouseEvent | React.TouchEvent, root: string, quality: string) => {
+  // Stop a held pattern preview if the view unmounts mid-preview.
+  useEffect(
+    () => () => {
+      chordPatternPreviewStopRef.current?.();
+      chordPatternPreviewStopRef.current = null;
+      bassPatternPreviewStopRef.current?.();
+      bassPatternPreviewStopRef.current = null;
+    },
+    [],
+  );
+
+  // Held chord previews (catalog palette + progression cards): all notes
+  // strike at once and sustain — no rhythm pattern, no scheduled note-offs.
+  const handlePreviewMouseDown = (
+    e: React.MouseEvent | React.TouchEvent,
+    root: string,
+    quality: string,
+  ) => {
     e.stopPropagation();
     e.preventDefault();
     audioEngine.init();
@@ -827,52 +931,107 @@ export const ChordView: React.FC = React.memo(() => {
       bars: 1,
       notes: [],
     };
-    const derived = deriveChordNotes(tempChord, chordOctave);
-    const now = audioEngine.getAudioContext()?.currentTime ?? 0;
-    
-    // Play with rhythm pattern
-    playChordWithRhythm(derived, now, rhythmPattern);
-    
-    // Also trigger bass preview if desired or chord rhythm
-    const stepDur = sixteenthNoteMs(bpm) / 1000;
-    const totalDurationMs = rhythmPattern.hits.reduce((max, h) => Math.max(max, (h.step + (h.holdSteps || 1)) * stepDur * 1000), 500);
-
-    const tid = window.setTimeout(() => {
-      // auto cleanup if held beyond pattern loop
-    }, totalDurationMs);
-    activePreviewTimeoutsRef.current.push(tid);
+    playChordLegato(
+      deriveChordNotes(tempChord, chordOctave),
+      chordSynthParams,
+      audioEngine,
+    );
   };
 
-  const handlePreviewMouseUp = (e: React.MouseEvent | React.TouchEvent, root: string, quality: string) => {
+  const handlePreviewMouseUp = (
+    e: React.MouseEvent | React.TouchEvent,
+    _root: string,
+    _quality: string,
+  ) => {
     e.stopPropagation();
     e.preventDefault();
     if (!audioEngine.getAudioContext()) return;
 
-    // Stop all active chord and bass notes immediately on release
-    activePreviewTimeoutsRef.current.forEach(clearTimeout);
-    activePreviewTimeoutsRef.current = [];
-
-    // Cuts the whole scheduled pattern, not just notes sounding right now.
-    audioEngine.stopSource('chord', 0.15);
+    audioEngine.stopSource("chord", 0.15);
   };
 
-  const handleCardPreviewMouseDown = (e: React.MouseEvent | React.TouchEvent, chord: ChordItem) => {
+  const handleCardPreviewMouseDown = (
+    e: React.MouseEvent | React.TouchEvent,
+    chord: ChordItem,
+  ) => {
     e.stopPropagation();
     audioEngine.init();
-    const now = audioEngine.getAudioContext()?.currentTime ?? 0;
-    playChordWithRhythm(chord, now, rhythmPattern);
-    playBassWithPattern(chord, now, bassPattern);
+    playChordLegato(chord, chordSynthParams, audioEngine);
     setActiveChordId(chord.id);
   };
 
-  const handleCardPreviewMouseUp = (e: React.MouseEvent | React.TouchEvent, chord: ChordItem) => {
+  const handleCardPreviewMouseUp = (
+    e: React.MouseEvent | React.TouchEvent,
+    chord: ChordItem,
+  ) => {
     e.stopPropagation();
     if (!audioEngine.getAudioContext()) return;
     setActiveChordId(null);
 
-    // Cuts the whole scheduled pattern (chord + bass), future hits included.
-    audioEngine.stopSource('chord', 0.15);
-    audioEngine.stopSource('bass', 0.15);
+    audioEngine.stopSource("chord", 0.15);
+  };
+
+  // Pattern previews are per-module: the chord button loops the chord pattern
+  // only, the bass button loops the bass pattern only. Both use the scale's
+  // I triad as their sound source until the mouse is released.
+  const handleChordPatternPreviewMouseDown = (
+    e: React.MouseEvent | React.TouchEvent,
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    audioEngine.init();
+
+    const previewChord = previewChordForScale(scaleRoot, scaleType, chordOctave);
+    const barSeconds = previewBarSeconds(bpm) * (previewChord.bars || 1);
+
+    chordPatternPreviewStopRef.current?.();
+    chordPatternPreviewStopRef.current = startPatternLoop(
+      (time) => playChordWithRhythm(previewChord, time, rhythmPattern),
+      barSeconds,
+      () => audioEngine.getAudioContext()?.currentTime ?? 0,
+    );
+  };
+
+  const handleChordPatternPreviewMouseUp = (
+    e: React.MouseEvent | React.TouchEvent,
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!audioEngine.getAudioContext()) return;
+
+    chordPatternPreviewStopRef.current?.();
+    chordPatternPreviewStopRef.current = null;
+    audioEngine.stopSource("chord", 0.15);
+  };
+
+  const handleBassPatternPreviewMouseDown = (
+    e: React.MouseEvent | React.TouchEvent,
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    audioEngine.init();
+
+    const previewChord = previewChordForScale(scaleRoot, scaleType, chordOctave);
+    const barSeconds = previewBarSeconds(bpm) * (previewChord.bars || 1);
+
+    bassPatternPreviewStopRef.current?.();
+    bassPatternPreviewStopRef.current = startPatternLoop(
+      (time) => playBassWithPattern(previewChord, time, bassPattern, [previewChord]),
+      barSeconds,
+      () => audioEngine.getAudioContext()?.currentTime ?? 0,
+    );
+  };
+
+  const handleBassPatternPreviewMouseUp = (
+    e: React.MouseEvent | React.TouchEvent,
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!audioEngine.getAudioContext()) return;
+
+    bassPatternPreviewStopRef.current?.();
+    bassPatternPreviewStopRef.current = null;
+    audioEngine.stopSource("bass", 0.15);
   };
 
   const removeChord = (id: string) => {
@@ -1053,120 +1212,158 @@ export const ChordView: React.FC = React.memo(() => {
           </button>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex flex-row flex-wrap items-end gap-3">
           {/* Chord Sound Preset Select */}
-          <select
-            id="select-chord-sound-preset"
-            value={chordSynthParams.preset ?? ""}
-            onChange={(e) => {
-              const preset = findPresetByName(
-                e.target.value,
+          <div>
+            <label className={LABEL_BASE}>Chord Preset</label>
+            <select
+              id="select-chord-sound-preset"
+              value={chordSynthParams.preset ?? ""}
+              onChange={(e) => {
+                const preset = findPresetByName(
+                  e.target.value,
+                  getAllSynthPresets(customPresets),
+                );
+                if (!preset) return;
+                setChordSynthParams({
+                  ...chordSynthParams,
+                  ...preset.params,
+                  preset: preset.name,
+                });
+              }}
+              className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+              title="Chord sound preset — factory and saved presets, synced with the synth page"
+            >
+              <option value="">Chord Preset…</option>
+              {getPresetsGroupedByCategory(
                 getAllSynthPresets(customPresets),
-              );
-              if (!preset) return;
-              setChordSynthParams({
-                ...chordSynthParams,
-                ...preset.params,
-                preset: preset.name,
-              });
-            }}
-            className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
-            title="Chord sound preset — factory and saved presets, synced with the synth page"
-          >
-            <option value="">Chord Preset…</option>
-            {getPresetsGroupedByCategory(getAllSynthPresets(customPresets)).map((group) => (
-              <optgroup
-                key={group.category}
-                label={group.label}
-                className="bg-[#12152A] text-indigo-300 font-bold"
-              >
-                {group.presets.map((p) => (
-                  <option
-                    key={p.id}
-                    value={p.name}
-                    className={
-                      p.isFactory
-                        ? "bg-[#0B0D19] text-slate-200 font-normal"
-                        : "bg-[#0B0D19] text-purple-300 font-normal"
-                    }
-                  >
-                    {!p.isFactory ? `★ ${p.name}` : p.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+              ).map((group) => (
+                <optgroup
+                  key={group.category}
+                  label={group.label}
+                  className="bg-[#12152A] text-indigo-300 font-bold"
+                >
+                  {group.presets.map((p) => (
+                    <option
+                      key={p.id}
+                      value={p.name}
+                      className={
+                        p.isFactory
+                          ? "bg-[#0B0D19] text-slate-200 font-normal"
+                          : "bg-[#0B0D19] text-purple-300 font-normal"
+                      }
+                    >
+                      {!p.isFactory ? `★ ${p.name}` : p.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
 
           {/* Chord Octave Select */}
-          <select
-            id="select-chord-octave"
-            value={chordOctave}
-            onChange={(e) => setChordOctave(parseInt(e.target.value, 10))}
-            className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
-            title="Octave for chord playback"
-          >
-            {[2, 3, 4, 5, 6].map((o) => (
-              <option key={o} value={o}>
-                Oct {o}
-              </option>
-            ))}
-          </select>
+          <div>
+            <label className={LABEL_BASE}>Chord Octave</label>
+            <select
+              id="select-chord-octave"
+              value={chordOctave}
+              onChange={(e) => setChordOctave(parseInt(e.target.value, 10))}
+              className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+              title="Octave for chord playback"
+            >
+              {[2, 3, 4, 5, 6].map((o) => (
+                <option key={o} value={o}>
+                  Oct {o}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Chord Rhythm Pattern Select */}
-          <select
-            id="select-chord-rhythm-pattern"
-            value={rhythmId}
-            onChange={(e) => setChordRhythmId(e.target.value)}
-            className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
-            title="Rhythm pattern for chord playback"
-          >
-            {RHYTHM_STYLE_GROUPS.map((group) => (
-              <optgroup key={group.style} label={group.style}>
-                {group.patterns.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
+          <div>
+            <label className={LABEL_BASE}>Chord Pattern</label>
+            <div className="flex items-center gap-1.5">
+              <select
+                id="select-chord-rhythm-pattern"
+                value={rhythmId}
+                onChange={(e) => setChordRhythmId(e.target.value)}
+                className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+                title="Rhythm pattern for chord playback"
+              >
+                {RHYTHM_STYLE_GROUPS.map((group) => (
+                  <optgroup key={group.style} label={group.style}>
+                    {group.patterns.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
-              </optgroup>
-            ))}
-          </select>
+              </select>
+              <button
+                id="btn-preview-chord-pattern"
+                type="button"
+                onMouseDown={handleChordPatternPreviewMouseDown}
+                onMouseUp={handleChordPatternPreviewMouseUp}
+                onMouseLeave={handleChordPatternPreviewMouseUp}
+                onTouchStart={handleChordPatternPreviewMouseDown}
+                onTouchEnd={handleChordPatternPreviewMouseUp}
+                className="p-1.5 rounded-lg border border-[#2D355A] bg-[#171B36] hover:bg-[#22284C] text-indigo-400 transition-colors cursor-pointer select-none"
+                title="Hold to Preview Chord Pattern Loop"
+              >
+                <Volume2 className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
 
           {/* Chord Feel Slider (tight ↔ loose) */}
-          <div className="flex items-center gap-1.5 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
-            <span className="text-[10px] text-slate-400 font-mono shrink-0">Feel</span>
-            <span className="text-[9px] text-slate-500 font-mono shrink-0">tight</span>
-            <input
-              id="slider-chord-feel"
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={chordFeel}
-              onChange={(e) => setChordFeel(parseFloat(e.target.value))}
-              className="w-20 h-1 bg-[#0B0D19] rounded cursor-pointer accent-indigo-500"
-              title="Chord note length: tight (short holds) ↔ loose (long holds)"
-            />
-            <span className="text-[9px] text-slate-500 font-mono shrink-0">loose</span>
+          <div>
+            <label className={LABEL_BASE}>Chord Feel</label>
+            <div className="flex items-center gap-1.5 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
+              <span className="text-[9px] text-slate-500 font-mono shrink-0">
+                tight
+              </span>
+              <input
+                id="slider-chord-feel"
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={chordFeel}
+                onChange={(e) => setChordFeel(parseFloat(e.target.value))}
+                className="w-20 h-1 bg-[#0B0D19] rounded cursor-pointer accent-indigo-500"
+                title="Chord note length: tight (short holds) ↔ loose (long holds)"
+              />
+              <span className="text-[9px] text-slate-500 font-mono shrink-0">
+                loose
+              </span>
+            </div>
           </div>
 
           {/* Chord Layer Volume Slider */}
-          <div className="flex items-center gap-2 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
-            <Volume2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-            <span className="text-[10px] text-slate-400 font-mono">Vol</span>
-            <input
-              id="slider-chord-layer-volume"
-              type="range"
-              min={0}
-              max={1.5}
-              step={0.05}
-              value={chordVolume}
-              onChange={(e) => handleChordVolumeChange(parseFloat(e.target.value))}
-              className="w-16 h-1 bg-[#0B0D19] rounded cursor-pointer accent-indigo-500"
-              title={`Chord Layer Gain: ${(chordVolume * 100).toFixed(0)}%`}
-            />
-            <span className="text-[10px] text-indigo-300 font-mono min-w-8 text-right">
-              {(chordVolume * 100).toFixed(0)}%
-            </span>
+          <div className="min-w-[160px]">
+            <label className={LABEL_BASE}>
+              Chord Level ({Math.round(chordVolume * 100)}%)
+            </label>
+            <div className="flex items-center gap-2 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
+              <Volume2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <input
+                id="slider-chord-layer-volume"
+                type="range"
+                min={0}
+                max={1.5}
+                step={0.05}
+                value={chordVolume}
+                onChange={(e) =>
+                  handleChordVolumeChange(parseFloat(e.target.value))
+                }
+                className="w-full h-1 bg-[#0B0D19] rounded cursor-pointer accent-indigo-500"
+                title={`Chord Layer Gain: ${(chordVolume * 100).toFixed(0)}%`}
+              />
+              <span className="text-[10px] text-indigo-300 font-mono min-w-8 text-right">
+                {(chordVolume * 100).toFixed(0)}%
+              </span>
+            </div>
           </div>
           {/* Option B Re-harmonize Button */}
           <button
@@ -1189,7 +1386,7 @@ export const ChordView: React.FC = React.memo(() => {
             title="Option B: Diatonically snap current chord progression to active key and scale"
           >
             <Sparkles className="w-3.5 h-3.5 text-purple-200" />
-            <span>Re-harmonize (Option B)</span>
+            <span>Re-harmonize</span>
           </button>
 
           {/* Auto-Reharmonize Toggle */}
@@ -1230,10 +1427,14 @@ export const ChordView: React.FC = React.memo(() => {
           <div className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-1.5 text-indigo-300 font-medium">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              <span>In-Scale Chords ({scaleRoot} {scaleType}):</span>
+              <span>
+                In-Scale Chords ({scaleRoot} {scaleType}):
+              </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-400">Click to append, 🔊 to preview:</span>
+              <span className="text-[10px] text-slate-400">
+                Click to append, 🔊 to preview:
+              </span>
               <button
                 type="button"
                 onClick={() => setUse7thsInQuickAdd(!use7thsInQuickAdd)}
@@ -1248,33 +1449,50 @@ export const ChordView: React.FC = React.memo(() => {
             </div>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
-            {Array.from({ length: SCALES[scaleType]?.intervals.length || 7 }).map((_, i) => {
-              const diatonic = getDiatonicChordForDegree(i, scaleRoot, scaleType, use7thsInQuickAdd);
+            {Array.from({
+              length: SCALES[scaleType]?.intervals.length || 7,
+            }).map((_, i) => {
+              const diatonic = getDiatonicChordForDegree(
+                i,
+                scaleRoot,
+                scaleType,
+                use7thsInQuickAdd,
+              );
               return (
                 <div
                   key={i}
                   onClick={() => addDiatonicChord(i)}
-                  className="group flex items-center gap-1.5 bg-[#12152A] hover:bg-indigo-600/30 border border-[#2D355A] hover:border-indigo-500/50 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer shadow-sm"
-                  title={`Click to add ${diatonic.root} ${diatonic.quality} (${diatonic.degreeName})`}
+                  className="group flex items-center gap-1.5 bg-[#12152A] hover:bg-indigo-600/30 border border-[#2D355A] hover:border-indigo-500/50 text-slate-200 p-1 rounded-lg text-xs transition-all cursor-pointer shadow-sm"
+                  title={`Click to add ${formatChordLabel(diatonic.root, diatonic.quality)} (${diatonic.degreeName})`}
                 >
                   <span className="font-mono text-[10px] text-indigo-400 font-bold group-hover:text-indigo-300 bg-[#1C213E] px-1.5 py-0.5 rounded">
                     {diatonic.degreeName}
                   </span>
                   <span className="font-semibold">
-                    {diatonic.root} {diatonic.quality}
+                    {formatChordLabel(diatonic.root, diatonic.quality)}
                   </span>
                   <button
                     type="button"
-                    onMouseDown={(e) => handlePreviewMouseDown(e, diatonic.root, diatonic.quality)}
-                    onMouseUp={(e) => handlePreviewMouseUp(e, diatonic.root, diatonic.quality)}
-                    onMouseLeave={(e) => handlePreviewMouseUp(e, diatonic.root, diatonic.quality)}
-                    onTouchStart={(e) => handlePreviewMouseDown(e, diatonic.root, diatonic.quality)}
-                    onTouchEnd={(e) => handlePreviewMouseUp(e, diatonic.root, diatonic.quality)}
+                    onMouseDown={(e) =>
+                      handlePreviewMouseDown(e, diatonic.root, diatonic.quality)
+                    }
+                    onMouseUp={(e) =>
+                      handlePreviewMouseUp(e, diatonic.root, diatonic.quality)
+                    }
+                    onMouseLeave={(e) =>
+                      handlePreviewMouseUp(e, diatonic.root, diatonic.quality)
+                    }
+                    onTouchStart={(e) =>
+                      handlePreviewMouseDown(e, diatonic.root, diatonic.quality)
+                    }
+                    onTouchEnd={(e) =>
+                      handlePreviewMouseUp(e, diatonic.root, diatonic.quality)
+                    }
                     onClick={(e) => e.stopPropagation()}
                     className="p-1 text-slate-400 hover:text-indigo-300 transition-colors ml-0.5 rounded hover:bg-[#252B48] cursor-pointer select-none"
                     title="Hold to Preview Chord Audio"
                   >
-                    <Volume2 className="w-3.5 h-3.5" />
+                    <Volume2 className="w-2.5 h-2.5" />
                   </button>
                 </div>
               );
@@ -1288,34 +1506,48 @@ export const ChordView: React.FC = React.memo(() => {
                 <Music className="w-3.5 h-3.5 text-purple-400" />
                 <span>Borrowed Chords (Modal Interchange):</span>
               </div>
-              <span className="text-[10px] text-slate-400">Add colorful non-diatonic flavor:</span>
+              <span className="text-[10px] text-slate-400">
+                Add colorful non-diatonic flavor:
+              </span>
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
               {getBorrowedChords(scaleRoot, scaleType).map((borrowed, i) => (
                 <div
                   key={i}
-                  onClick={() => addBorrowedChord(borrowed.root, borrowed.quality)}
-                  className="group flex items-center gap-1.5 bg-[#12152A] hover:bg-purple-600/30 border border-[#2D355A] hover:border-purple-500/50 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer shadow-sm"
-                  title={`Click to add ${borrowed.label}: ${borrowed.root} ${borrowed.quality}`}
+                  onClick={() =>
+                    addBorrowedChord(borrowed.root, borrowed.quality)
+                  }
+                  className="group flex items-center gap-1.5 bg-[#12152A] hover:bg-purple-600/30 border border-[#2D355A] hover:border-purple-500/50 text-slate-200 p-1 rounded-lg text-xs transition-all cursor-pointer shadow-sm"
+                  title={`Click to add ${borrowed.label}: ${formatChordLabel(borrowed.root, borrowed.quality)}`}
                 >
                   <span className="font-mono text-[10px] text-purple-300 font-bold group-hover:text-purple-200 bg-[#1C213E] px-1.5 py-0.5 rounded">
                     {borrowed.label}
                   </span>
                   <span className="font-semibold">
-                    {borrowed.root} {borrowed.quality}
+                    {formatChordLabel(borrowed.root, borrowed.quality)}
                   </span>
                   <button
                     type="button"
-                    onMouseDown={(e) => handlePreviewMouseDown(e, borrowed.root, borrowed.quality)}
-                    onMouseUp={(e) => handlePreviewMouseUp(e, borrowed.root, borrowed.quality)}
-                    onMouseLeave={(e) => handlePreviewMouseUp(e, borrowed.root, borrowed.quality)}
-                    onTouchStart={(e) => handlePreviewMouseDown(e, borrowed.root, borrowed.quality)}
-                    onTouchEnd={(e) => handlePreviewMouseUp(e, borrowed.root, borrowed.quality)}
+                    onMouseDown={(e) =>
+                      handlePreviewMouseDown(e, borrowed.root, borrowed.quality)
+                    }
+                    onMouseUp={(e) =>
+                      handlePreviewMouseUp(e, borrowed.root, borrowed.quality)
+                    }
+                    onMouseLeave={(e) =>
+                      handlePreviewMouseUp(e, borrowed.root, borrowed.quality)
+                    }
+                    onTouchStart={(e) =>
+                      handlePreviewMouseDown(e, borrowed.root, borrowed.quality)
+                    }
+                    onTouchEnd={(e) =>
+                      handlePreviewMouseUp(e, borrowed.root, borrowed.quality)
+                    }
                     onClick={(e) => e.stopPropagation()}
                     className="p-1 text-slate-400 hover:text-purple-300 transition-colors ml-0.5 rounded hover:bg-[#252B48] cursor-pointer select-none"
                     title="Hold to Preview Chord Audio"
                   >
-                    <Volume2 className="w-3.5 h-3.5" />
+                    <Volume2 className="w-2.5 h-2.5" />
                   </button>
                 </div>
               ))}
@@ -1337,7 +1569,8 @@ export const ChordView: React.FC = React.memo(() => {
                 const startBar = chords
                   .slice(0, idx)
                   .reduce((sum, c) => sum + (c.bars || 1), 1);
-                const isActive = playingIndex === idx || activeChordId === chord.id;
+                const isActive =
+                  playingIndex === idx || activeChordId === chord.id;
                 return (
                   <SortableChordCard
                     key={chord.id}
@@ -1352,8 +1585,6 @@ export const ChordView: React.FC = React.memo(() => {
                     updateChord={updateChord}
                     removeChord={removeChord}
                     handleMoveChord={handleMoveChord}
-                    playChordWithRhythm={playChordWithRhythm}
-                    playBassWithPattern={playBassWithPattern}
                     setActiveChordId={setActiveChordId}
                     chordOctave={chordOctave}
                     handleCardPreviewMouseDown={handleCardPreviewMouseDown}
@@ -1377,9 +1608,7 @@ export const ChordView: React.FC = React.memo(() => {
         </div>
         <div className="flex flex-row flex-wrap items-end gap-3">
           <div>
-            <label className="text-[10px] text-slate-500 block mb-1">
-              Bass Preset
-            </label>
+            <label className={LABEL_BASE}>Bass Preset</label>
             <select
               id="select-bass-sound-preset"
               value={bassSynthParams.preset ?? ""}
@@ -1399,7 +1628,9 @@ export const ChordView: React.FC = React.memo(() => {
               title="Bass sound preset — any factory, bass, or saved preset, synced with the synth page"
             >
               <option value="">Bass Preset…</option>
-              {getPresetsGroupedByCategory(getAllSynthPresets(customPresets)).map((group) => (
+              {getPresetsGroupedByCategory(
+                getAllSynthPresets(customPresets),
+              ).map((group) => (
                 <optgroup
                   key={group.category}
                   label={group.label}
@@ -1424,9 +1655,7 @@ export const ChordView: React.FC = React.memo(() => {
           </div>
 
           <div>
-            <label className="text-[10px] text-slate-500 block mb-1">
-              Bass Octave
-            </label>
+            <label className={LABEL_BASE}>Bass Octave</label>
             <select
               id="select-bass-octave"
               value={bassOctave}
@@ -1443,48 +1672,67 @@ export const ChordView: React.FC = React.memo(() => {
           </div>
 
           <div>
-            <label className="text-[10px] text-slate-500 block mb-1">
-              Bass Pattern
-            </label>
-            <select
-              id="select-bass-rhythm-pattern"
-              value={bassPatternId}
-              onChange={(e) => setBassPatternId(e.target.value)}
-              className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
-              title="Bass pattern (16th-note grid, deterministic)"
-            >
-              {BASS_STYLE_GROUPS.map((group) => (
-                <optgroup key={group.style} label={group.style}>
-                  {group.patterns.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+            <label className={LABEL_BASE}>Bass Pattern</label>
+            <div className="flex items-center gap-1.5">
+              <select
+                id="select-bass-rhythm-pattern"
+                value={bassPatternId}
+                onChange={(e) => setBassPatternId(e.target.value)}
+                className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+                title="Bass pattern (16th-note grid, deterministic)"
+              >
+                {BASS_STYLE_GROUPS.map((group) => (
+                  <optgroup key={group.style} label={group.style}>
+                    {group.patterns.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <button
+                id="btn-preview-bass-pattern"
+                type="button"
+                onMouseDown={handleBassPatternPreviewMouseDown}
+                onMouseUp={handleBassPatternPreviewMouseUp}
+                onMouseLeave={handleBassPatternPreviewMouseUp}
+                onTouchStart={handleBassPatternPreviewMouseDown}
+                onTouchEnd={handleBassPatternPreviewMouseUp}
+                className="p-1.5 rounded-lg border border-[#2D355A] bg-[#171B36] hover:bg-[#22284C] text-emerald-400 transition-colors cursor-pointer select-none"
+                title="Hold to Preview Bass Pattern Loop"
+              >
+                <Volume2 className="w-3 h-3" />
+              </button>
+            </div>
           </div>
 
           {/* Bass Feel Slider (tight ↔ loose) */}
-          <div className="flex items-center gap-1.5 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
-            <span className="text-[10px] text-slate-400 font-mono shrink-0">Feel</span>
-            <span className="text-[9px] text-slate-500 font-mono shrink-0">tight</span>
-            <input
-              id="slider-bass-feel"
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={bassFeel}
-              onChange={(e) => setBassFeel(parseFloat(e.target.value))}
-              className="w-20 h-1 bg-[#0B0D19] rounded cursor-pointer accent-emerald-500"
-              title="Bass note length: tight (short holds) ↔ loose (long holds)"
-            />
-            <span className="text-[9px] text-slate-500 font-mono shrink-0">loose</span>
+          <div>
+            <label className={LABEL_BASE}>Bass Feel</label>
+            <div className="flex items-center gap-1.5 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
+              <span className="text-[9px] text-slate-500 font-mono shrink-0">
+                tight
+              </span>
+              <input
+                id="slider-bass-feel"
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={bassFeel}
+                onChange={(e) => setBassFeel(parseFloat(e.target.value))}
+                className="w-20 h-1 bg-[#0B0D19] rounded cursor-pointer accent-emerald-500"
+                title="Bass note length: tight (short holds) ↔ loose (long holds)"
+              />
+              <span className="text-[9px] text-slate-500 font-mono shrink-0">
+                loose
+              </span>
+            </div>
           </div>
 
           <div className="min-w-[160px]">
-            <label className="text-[10px] text-slate-500 block mb-1">
+            <label className={LABEL_BASE}>
               Bass Level ({Math.round(bassVolume * 100)}%)
             </label>
             <div className="flex items-center gap-2 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
@@ -1496,7 +1744,9 @@ export const ChordView: React.FC = React.memo(() => {
                 max={1.5}
                 step={0.05}
                 value={bassVolume}
-                onChange={(e) => handleBassVolumeChange(parseFloat(e.target.value))}
+                onChange={(e) =>
+                  handleBassVolumeChange(parseFloat(e.target.value))
+                }
                 className="w-full h-1 bg-[#0B0D19] rounded cursor-pointer accent-emerald-500"
                 title={`Bass Layer Gain: ${(bassVolume * 100).toFixed(0)}%`}
               />
@@ -1532,12 +1782,16 @@ interface SortableChordCardProps {
   updateChord: (id: string, updates: Partial<ChordItem>) => void;
   removeChord: (id: string) => void;
   handleMoveChord: (index: number, direction: -1 | 1) => void;
-  playChordWithRhythm: (chord: ChordItem, startTime: number, pattern: RhythmPattern) => void;
-  playBassWithPattern: (chord: ChordItem, startTime: number, pattern: BassPattern) => void;
   setActiveChordId: (id: string | null) => void;
   chordOctave: number;
-  handleCardPreviewMouseDown: (e: React.MouseEvent | React.TouchEvent, chord: ChordItem) => void;
-  handleCardPreviewMouseUp: (e: React.MouseEvent | React.TouchEvent, chord: ChordItem) => void;
+  handleCardPreviewMouseDown: (
+    e: React.MouseEvent | React.TouchEvent,
+    chord: ChordItem,
+  ) => void;
+  handleCardPreviewMouseUp: (
+    e: React.MouseEvent | React.TouchEvent,
+    chord: ChordItem,
+  ) => void;
 }
 
 function SortableChordCard({
@@ -1552,8 +1806,6 @@ function SortableChordCard({
   updateChord,
   removeChord,
   handleMoveChord,
-  playChordWithRhythm,
-  playBassWithPattern,
   setActiveChordId,
   chordOctave,
   handleCardPreviewMouseDown,
@@ -1643,12 +1895,12 @@ function SortableChordCard({
             ? "bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-lg scale-98"
             : "bg-[#181C35] hover:bg-[#22274A] text-slate-100"
         }`}
-        title="Hold to Preview Chord & Bass Pattern"
+        title="Hold to Preview Chord"
       >
         <span className="text-2xl font-black tracking-tight flex items-baseline gap-1">
           {chord.root}
           <span className="text-sm font-semibold text-indigo-400">
-            {chord.quality}
+            {formatChordQuality(chord.quality)}
           </span>
         </span>
         <span className="text-[10px] text-slate-400 font-mono mt-1">
@@ -1665,9 +1917,7 @@ function SortableChordCard({
           <select
             id={`select-chord-root-${chord.id}`}
             value={chord.root}
-            onChange={(e) =>
-              updateChord(chord.id, { root: e.target.value })
-            }
+            onChange={(e) => updateChord(chord.id, { root: e.target.value })}
             className="w-full bg-[#12152A] border border-[#2D355A] text-slate-200 text-xs rounded p-1"
           >
             {ROOTS.map((r) => (
@@ -1685,9 +1935,7 @@ function SortableChordCard({
           <select
             id={`select-chord-quality-${chord.id}`}
             value={chord.quality}
-            onChange={(e) =>
-              updateChord(chord.id, { quality: e.target.value })
-            }
+            onChange={(e) => updateChord(chord.id, { quality: e.target.value })}
             className="w-full bg-[#12152A] border border-[#2D355A] text-slate-200 text-xs rounded p-1"
           >
             <optgroup label="Triads">

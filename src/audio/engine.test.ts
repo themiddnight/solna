@@ -249,3 +249,68 @@ describe('source stop (preview release)', () => {
     }
   });
 });
+
+describe('drum bus filter', () => {
+  test('drum voices route through the drum bus filter instead of dryGain', () => {
+    const { engine, ctx } = freshEngine();
+    const filter = fakeNode();
+    (engine as any).drumBusFilter = filter;
+
+    // Record the connect TARGET of every gain node the drum synth creates:
+    // connect is invoked on the source node, so the source is what we spy.
+    const connectTargets: unknown[] = [];
+    (ctx as any).createGain = () => {
+      const g = fakeNode();
+      (g.connect as unknown as (target: unknown) => void) = (n: unknown) => {
+        connectTargets.push(n);
+      };
+      return g;
+    };
+
+    engine.triggerDrum('kick', 0.8, ctx.currentTime);
+    engine.triggerDrum('tom', 0.8, ctx.currentTime);
+
+    // kick = osc gain (+ click gain if the kit defines one); tom = 1 gain.
+    expect(connectTargets.length >= 2).toBe(true);
+    for (const target of connectTargets) expect(target).toBe(filter);
+  });
+
+  test('setDrumFilter applies cutoff, resonance and type with smoothing', () => {
+    const { engine } = freshEngine();
+    const freqTargets: number[] = [];
+    const qTargets: number[] = [];
+    const filter = fakeNode();
+    filter.frequency.setTargetAtTime = (v: number) => {
+      freqTargets.push(v);
+    };
+    filter.Q.setTargetAtTime = (v: number) => {
+      qTargets.push(v);
+    };
+    (engine as any).drumBusFilter = filter;
+
+    engine.setDrumFilter(400, 8, 'bandpass');
+
+    expect(freqTargets).toContain(400);
+    expect(qTargets).toContain(8);
+    expect(filter.type).toBe('bandpass');
+  });
+
+  test('setDrumFilter before the drum bus filter exists is a safe no-op', () => {
+    const { engine } = freshEngine();
+    let threw = false;
+    try {
+      engine.setDrumFilter(400, 8, 'lowpass');
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(false);
+  });
+
+  test('setDrumFilter before init stores the values for the chain built later', () => {
+    const { engine } = freshEngine();
+    engine.setDrumFilter(400, 8, 'highpass');
+    expect((engine as any).drumFilterCutoff).toBe(400);
+    expect((engine as any).drumFilterResonance).toBe(8);
+    expect((engine as any).drumFilterType).toBe('highpass');
+  });
+});

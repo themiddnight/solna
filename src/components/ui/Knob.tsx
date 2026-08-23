@@ -33,6 +33,8 @@ export interface KnobProps {
   disabled?: boolean;
   id?: string;
   className?: string;
+  /** 'horizontal' = compact row: col[label, value] left of the knob. */
+  layout?: 'vertical' | 'horizontal';
 }
 
 /** Per-gesture drag state (a ref — survives re-renders mid-drag). */
@@ -68,6 +70,7 @@ export const Knob = ({
   disabled = false,
   id,
   className,
+  layout = 'vertical',
 }: KnobProps) => {
   const gestureRef = useRef<GestureState | null>(null);
   const pixelSize = SIZE_PX[size];
@@ -142,8 +145,20 @@ export const Knob = ({
   };
 
   return (
-    <div className={`flex flex-col items-center gap-1 ${color ?? 'text-[#877dca]'} ${className ?? ''}`}>
-      {label !== undefined && (
+    <div className={`flex ${layout === 'horizontal' ? 'flex-row items-center gap-2' : 'flex-col items-center gap-1'} ${color ?? 'text-[#877dca]'} ${className ?? ''}`}>
+      {layout === 'horizontal' && (
+        <div className="flex flex-col items-end shrink-0">
+          {label !== undefined && (
+            <span className="text-[10px] text-slate-400 block font-mono">
+              {label}
+            </span>
+          )}
+          <span className="text-[10px] font-mono text-current block">
+            {display}
+          </span>
+        </div>
+      )}
+      {layout === 'vertical' && label !== undefined && (
         <span className="text-[10px] text-slate-400 block font-mono text-center">
           {label}
         </span>
@@ -244,9 +259,11 @@ export const Knob = ({
           <circle cx="50" cy="50" r="10" fill="currentColor" />
         </g>
       </svg>
-      <span className="text-[10px] font-mono text-current block text-center">
-        {display}
-      </span>
+      {layout === 'vertical' && (
+        <span className="text-[10px] font-mono text-current block text-center">
+          {display}
+        </span>
+      )}
     </div>
   );
 };

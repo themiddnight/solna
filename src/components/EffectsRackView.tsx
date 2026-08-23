@@ -26,7 +26,8 @@ export const EffectsRackView: React.FC = React.memo(() => {
               Studio Master Effects Rack
             </h2>
             <p className="text-xs text-slate-400">
-              Master bus processing with per-unit bypass and real-time DSP routing
+              Master bus processing with per-unit bypass and real-time DSP
+              routing
             </p>
           </div>
         </div>
@@ -62,7 +63,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             </button>
           </div>
 
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start justify-around gap-2">
             <Knob
               id="slider-reverb-wet"
               label="Wet / Dry Mix"
@@ -118,7 +119,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             </button>
           </div>
 
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start justify-around gap-2">
             <Knob
               id="slider-delay-wet"
               label="Wet / Dry Mix"
@@ -218,7 +219,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             </button>
           </div>
 
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start justify-around gap-2">
             <Knob
               id="slider-eq-low"
               label="LOW"

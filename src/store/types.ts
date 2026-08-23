@@ -5,6 +5,7 @@ import type {
   MasterEffects,
   ViewMode,
   CustomChordProgressionItem,
+  FilterType,
 } from '../types';
 import type { SynthControlTarget } from '../utils/synthControl';
 import type { SynthPresetItem, SynthPresetCategory } from '../audio/synthPresets';
@@ -79,10 +80,16 @@ export interface SequencerSlice {
   sequencerTracks: SequencerTrack[];
   soundKit: string;
   masterSequencerVolume: number;
+  drumFilterCutoff: number;
+  drumFilterResonance: number;
+  drumFilterType: FilterType;
   applyDrumPattern: (pattern: Record<string, boolean[]>) => void;
   setSequencerTracks: (tracks: SequencerTrack[]) => void;
   setSoundKit: (kit: string) => void;
   setMasterSequencerVolume: (volume: number) => void;
+  setDrumFilterCutoff: (cutoff: number) => void;
+  setDrumFilterResonance: (resonance: number) => void;
+  setDrumFilterType: (type: FilterType) => void;
 }
 
 export interface EffectsSlice {
@@ -160,6 +167,9 @@ export interface PersistedState {
   sequencerTracks: SequencerTrack[];
   soundKit: string;
   masterSequencerVolume: number;
+  drumFilterCutoff: number;
+  drumFilterResonance: number;
+  drumFilterType: FilterType;
   effects: MasterEffects;
   customSynthPresets: SynthPresetItem[];
   customChordProgressions: CustomChordProgressionItem[];

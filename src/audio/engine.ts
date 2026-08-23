@@ -1,4 +1,4 @@
-import { SynthParams, MasterEffects } from '../types';
+import { SynthParams, MasterEffects, FilterType } from '../types';
 import { sixteenthNoteMs, noteFrequency } from '../utils/musicTheory';
 import { mergeDrumKit, type DrumKit } from './drumKits';
 
@@ -39,6 +39,14 @@ class AudioEngine {
   private eqMidNode: BiquadFilterNode | null = null;
   private eqHighNode: BiquadFilterNode | null = null;
   private dryGain: GainNode | null = null;
+  // Drum bus filter: all drum voices route through this single filter
+  // (SequencerView "Drum Filter" card controls cutoff/resonance/type). The
+  // param fields survive the AudioContext chain being (re)built, so values
+  // set before init() apply to the filter node created later.
+  private drumBusFilter: BiquadFilterNode | null = null;
+  private drumFilterCutoff = 12000;
+  private drumFilterResonance = 0.7;
+  private drumFilterType: FilterType = 'lowpass';
 
   // Active voices tracking. activeVoices keys `${source}:${noteName}` and only
   // keeps the LATEST voice per key; sourceVoices keeps every live or still-
@@ -211,6 +219,13 @@ class AudioEngine {
     // Dry bus
     this.dryGain = this.ctx.createGain();
     this.dryGain.gain.value = 1.0;
+
+    // Drum bus filter — open by default (12 kHz reads as bypass for drum content)
+    this.drumBusFilter = this.ctx.createBiquadFilter();
+    this.drumBusFilter.type = this.drumFilterType;
+    this.drumBusFilter.frequency.value = this.drumFilterCutoff;
+    this.drumBusFilter.Q.value = this.drumFilterResonance;
+    this.drumBusFilter.connect(this.dryGain);
 
     // Delay
     this.delayNode = this.ctx.createDelay(2.0);
@@ -665,9 +680,21 @@ class AudioEngine {
     this.drumKit = mergeDrumKit(kit);
   }
 
+  /** Live drum-bus filter control (SequencerView "Drum Filter" card). */
+  setDrumFilter(cutoff: number, resonance: number, type: FilterType): void {
+    this.drumFilterCutoff = cutoff;
+    this.drumFilterResonance = resonance;
+    this.drumFilterType = type;
+    if (!this.ctx || !this.drumBusFilter) return;
+    const now = this.ctx.currentTime;
+    this.drumBusFilter.frequency.setTargetAtTime(cutoff, now, 0.03);
+    this.drumBusFilter.Q.setTargetAtTime(resonance, now, 0.03);
+    this.drumBusFilter.type = type;
+  }
+
   // Drum Synthesizer Trigger
   triggerDrum(type: string, velocity = 0.8, time?: number): void {
-    if (!this.ctx || !this.dryGain) return;
+    if (!this.ctx || !this.dryGain || !this.drumBusFilter) return;
     const now = time ?? this.ctx.currentTime;
     const k = this.drumKit;
 
@@ -681,7 +708,7 @@ class AudioEngine {
         gain.gain.exponentialRampToValueAtTime(0.0001, now + k.kick.decay);
 
         osc.connect(gain);
-        gain.connect(this.dryGain);
+        gain.connect(this.drumBusFilter);
         osc.start(now);
         osc.stop(now + k.kick.decay + 0.02);
 
@@ -692,7 +719,7 @@ class AudioEngine {
           clickGain.gain.setValueAtTime(velocity * k.kick.clickLevel, now);
           clickGain.gain.exponentialRampToValueAtTime(0.0001, now + (k.kick.clickDecay ?? 0.01));
           clickOsc.connect(clickGain);
-          clickGain.connect(this.dryGain);
+          clickGain.connect(this.drumBusFilter);
           clickOsc.start(now);
           clickOsc.stop(now + k.kick.decay + 0.02);
         }
@@ -709,7 +736,7 @@ class AudioEngine {
         oscGain.gain.setValueAtTime(velocity * s.bodyGain, now);
         oscGain.gain.exponentialRampToValueAtTime(0.001, now + s.bodyDecay);
         osc.connect(oscGain);
-        oscGain.connect(this.dryGain);
+        oscGain.connect(this.drumBusFilter);
 
         // Noise snap
         const noise = this.createNoiseNode();
@@ -722,7 +749,7 @@ class AudioEngine {
 
         noise.connect(filter);
         filter.connect(noiseGain);
-        noiseGain.connect(this.dryGain);
+        noiseGain.connect(this.drumBusFilter);
         if (this.reverbNode && s.reverbSend > 0) noiseGain.connect(this.reverbNode);
 
         osc.start(now);
@@ -744,7 +771,7 @@ class AudioEngine {
 
         noise.connect(filter);
         filter.connect(gain);
-        gain.connect(this.dryGain);
+        gain.connect(this.drumBusFilter);
         noise.start(now);
         noise.stop(now + h.decay + 0.01);
         break;
@@ -761,7 +788,7 @@ class AudioEngine {
 
         noise.connect(filter);
         filter.connect(gain);
-        gain.connect(this.dryGain);
+        gain.connect(this.drumBusFilter);
         if (this.delayNode) gain.connect(this.delayNode);
         noise.start(now);
         noise.stop(now + h.decay + 0.01);
@@ -784,7 +811,7 @@ class AudioEngine {
 
         noise.connect(filter);
         filter.connect(gain);
-        gain.connect(this.dryGain);
+        gain.connect(this.drumBusFilter);
         if (this.reverbNode && c.reverbSend > 0) gain.connect(this.reverbNode);
         noise.start(now);
         noise.stop(now + c.decay + 0.02);
@@ -800,7 +827,7 @@ class AudioEngine {
         gain.gain.setValueAtTime(velocity * t.gain, now);
         gain.gain.exponentialRampToValueAtTime(0.0001, now + t.decay);
         osc.connect(gain);
-        gain.connect(this.dryGain);
+        gain.connect(this.drumBusFilter);
         osc.start(now);
         osc.stop(now + t.decay + 0.02);
         break;
@@ -818,7 +845,7 @@ class AudioEngine {
         gain.gain.exponentialRampToValueAtTime(0.0001, now + cr.decay);
         noise.connect(filter);
         filter.connect(gain);
-        gain.connect(this.dryGain);
+        gain.connect(this.drumBusFilter);
         if (this.reverbNode && cr.reverbSend > 0) gain.connect(this.reverbNode);
         noise.start(now);
         noise.stop(now + cr.decay + 0.1);

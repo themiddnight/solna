@@ -22,7 +22,7 @@ import {
   CHORD_PROGRESSION_TEMPLATES,
 } from './ChordView';
 import { audioEngine } from '../audio/engine';
-import { generateBlockChordNotes, reharmonizeProgressionToScale, rootSemitone, ROOTS } from '../utils/musicTheory';
+import { generateBlockChordNotes, reharmonizeProgressionToScale, rootSemitone, ROOTS, formatChordLabel } from '../utils/musicTheory';
 
 export type { CustomChordProgressionItem };
 
@@ -158,7 +158,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     e.preventDefault();
     if (!newProgName.trim() || currentChords.length === 0) return;
 
-    const romanSummary = currentChords.map((c) => `${c.root}${c.quality}`).join(' → ');
+    const romanSummary = currentChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
     const saved = saveCustomChordProgression(
       newProgName.trim(),
       currentChords,
@@ -357,7 +357,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
               <div className="space-y-2">
                 {filteredCustom.map((item) => {
                   const resolvedCustom = resolveCustomChords(item.chords);
-                  const previewNames = resolvedCustom.map((c) => `${c.root}${c.quality}`).join(' → ');
+                  const previewNames = resolvedCustom.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
 
                   return (
                     <div
@@ -454,7 +454,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
               <div className="space-y-2">
                 {filteredTemplates.map((tpl) => {
                   const resolvedChords = resolveTemplateChords(tpl);
-                  const previewNames = resolvedChords.map((c) => `${c.root}${c.quality}`).join(' → ');
+                  const previewNames = resolvedChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
 
                   return (
                     <div
@@ -614,7 +614,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
                   Chords ({currentChords.length}):
                 </span>
                 <span className="font-semibold text-slate-200">
-                  {currentChords.map((c) => `${c.root}${c.quality}`).join(' → ')}
+                  {currentChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ')}
                 </span>
               </div>
 
