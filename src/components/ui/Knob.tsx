@@ -140,12 +140,11 @@ export const Knob = ({
   };
 
   return (
-    <div className={className}>
+    <div className={`flex flex-col items-center gap-1 ${className ?? ''}`}>
       {label !== undefined && (
-        <div className="flex justify-between text-xs mb-1">
-          <span className="text-slate-400 font-medium">{label}</span>
-          <span className="font-mono text-indigo-300">{display}</span>
-        </div>
+        <span className="text-[10px] text-slate-400 block font-mono text-center">
+          {label}
+        </span>
       )}
       <svg
         id={id}
@@ -243,6 +242,9 @@ export const Knob = ({
           <circle cx="50" cy="50" r="10" fill="currentColor" />
         </g>
       </svg>
+      <span className="text-[10px] font-mono text-indigo-300 block text-center">
+        {display}
+      </span>
     </div>
   );
 };

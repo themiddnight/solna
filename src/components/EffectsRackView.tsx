@@ -2,6 +2,7 @@ import React from "react";
 import { Sliders, Waves, Activity, Sparkles, Power } from "lucide-react";
 import { MasterEffects } from "../types";
 import { useAppStore } from "../store/store";
+import { Knob } from "./ui/Knob";
 
 export const EffectsRackView: React.FC = React.memo(() => {
   const effects = useAppStore((s) => s.effects);
@@ -61,47 +62,28 @@ export const EffectsRackView: React.FC = React.memo(() => {
             </button>
           </div>
 
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">Wet / Dry Mix</span>
-              <span className="font-mono text-cyan-300">
-                {(effects.reverbWet * 100).toFixed(0)}%
-              </span>
-            </div>
-            <input
+          <div className="flex items-start justify-between gap-2">
+            <Knob
               id="slider-reverb-wet"
-              type="range"
+              label="Wet / Dry Mix"
+              value={effects.reverbWet}
               min={0}
               max={1}
               step={0.01}
-              value={effects.reverbWet}
               disabled={effects.reverbBypass}
-              onChange={(e) =>
-                updateFx({ reverbWet: parseFloat(e.target.value) })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-cyan-500 disabled:opacity-40"
+              format={(v) => `${(v * 100).toFixed(0)}%`}
+              onChange={(v) => updateFx({ reverbWet: v })}
             />
-          </div>
-
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">Decay Time</span>
-              <span className="font-mono text-cyan-300">
-                {effects.reverbDecay.toFixed(1)}s
-              </span>
-            </div>
-            <input
+            <Knob
               id="slider-reverb-decay"
-              type="range"
+              label="Decay Time"
+              value={effects.reverbDecay}
               min={0.5}
               max={6.0}
               step={0.1}
-              value={effects.reverbDecay}
               disabled={effects.reverbBypass}
-              onChange={(e) =>
-                updateFx({ reverbDecay: parseFloat(e.target.value) })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-cyan-500 disabled:opacity-40"
+              format={(v) => `${v.toFixed(1)}s`}
+              onChange={(v) => updateFx({ reverbDecay: v })}
             />
           </div>
         </div>
@@ -134,47 +116,28 @@ export const EffectsRackView: React.FC = React.memo(() => {
             </button>
           </div>
 
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">Wet / Dry Mix</span>
-              <span className="font-mono text-indigo-300">
-                {(effects.delayWet * 100).toFixed(0)}%
-              </span>
-            </div>
-            <input
+          <div className="flex items-start justify-between gap-2">
+            <Knob
               id="slider-delay-wet"
-              type="range"
+              label="Wet / Dry Mix"
+              value={effects.delayWet}
               min={0}
               max={1}
               step={0.01}
-              value={effects.delayWet}
               disabled={effects.delayBypass}
-              onChange={(e) =>
-                updateFx({ delayWet: parseFloat(e.target.value) })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-indigo-500 disabled:opacity-40"
+              format={(v) => `${(v * 100).toFixed(0)}%`}
+              onChange={(v) => updateFx({ delayWet: v })}
             />
-          </div>
-
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">Feedback Repeats</span>
-              <span className="font-mono text-indigo-300">
-                {(effects.delayFeedback * 100).toFixed(0)}%
-              </span>
-            </div>
-            <input
+            <Knob
               id="slider-delay-feedback"
-              type="range"
+              label="Feedback Repeats"
+              value={effects.delayFeedback}
               min={0}
               max={0.9}
               step={0.01}
-              value={effects.delayFeedback}
               disabled={effects.delayBypass}
-              onChange={(e) =>
-                updateFx({ delayFeedback: parseFloat(e.target.value) })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-indigo-500 disabled:opacity-40"
+              format={(v) => `${(v * 100).toFixed(0)}%`}
+              onChange={(v) => updateFx({ delayFeedback: v })}
             />
           </div>
         </div>
@@ -209,27 +172,17 @@ export const EffectsRackView: React.FC = React.memo(() => {
             </button>
           </div>
 
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">Drive / Crunch</span>
-              <span className="font-mono text-amber-300">
-                {(effects.distortionWet * 100).toFixed(0)}%
-              </span>
-            </div>
-            <input
-              id="slider-distortion-wet"
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={effects.distortionWet}
-              disabled={effects.distortionBypass}
-              onChange={(e) =>
-                updateFx({ distortionWet: parseFloat(e.target.value) })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-amber-500 disabled:opacity-40"
-            />
-          </div>
+          <Knob
+            id="slider-distortion-wet"
+            label="Drive / Crunch"
+            value={effects.distortionWet}
+            min={0}
+            max={1}
+            step={0.01}
+            disabled={effects.distortionBypass}
+            format={(v) => `${(v * 100).toFixed(0)}%`}
+            onChange={(v) => updateFx({ distortionWet: v })}
+          />
         </div>
 
         {/* 4. 3-Band Equalizer */}
@@ -260,69 +213,45 @@ export const EffectsRackView: React.FC = React.memo(() => {
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div>
-              <span className="text-[10px] text-slate-400 block font-mono">
-                LOW
-              </span>
-              <input
-                id="slider-eq-low"
-                type="range"
-                min={-15}
-                max={15}
-                value={effects.eqLow}
-                disabled={effects.eqBypass}
-                onChange={(e) =>
-                  updateFx({ eqLow: parseInt(e.target.value, 10) })
-                }
-                className="h-20 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 disabled:opacity-40"
-              />
-              <span className="text-[10px] font-mono text-emerald-300 block">
-                {effects.eqLow > 0 ? `+${effects.eqLow}` : effects.eqLow}dB
-              </span>
-            </div>
+          <div className="flex items-start justify-between gap-2">
+            <Knob
+              id="slider-eq-low"
+              label="LOW"
+              value={effects.eqLow}
+              min={-15}
+              max={15}
+              step={1}
+              detent={0}
+              disabled={effects.eqBypass}
+              format={(v) => `${v > 0 ? `+${v}` : v}dB`}
+              onChange={(v) => updateFx({ eqLow: v })}
+            />
 
-            <div>
-              <span className="text-[10px] text-slate-400 block font-mono">
-                MID
-              </span>
-              <input
-                id="slider-eq-mid"
-                type="range"
-                min={-15}
-                max={15}
-                value={effects.eqMid}
-                disabled={effects.eqBypass}
-                onChange={(e) =>
-                  updateFx({ eqMid: parseInt(e.target.value, 10) })
-                }
-                className="h-20 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 disabled:opacity-40"
-              />
-              <span className="text-[10px] font-mono text-emerald-300 block">
-                {effects.eqMid > 0 ? `+${effects.eqMid}` : effects.eqMid}dB
-              </span>
-            </div>
+            <Knob
+              id="slider-eq-mid"
+              label="MID"
+              value={effects.eqMid}
+              min={-15}
+              max={15}
+              step={1}
+              detent={0}
+              disabled={effects.eqBypass}
+              format={(v) => `${v > 0 ? `+${v}` : v}dB`}
+              onChange={(v) => updateFx({ eqMid: v })}
+            />
 
-            <div>
-              <span className="text-[10px] text-slate-400 block font-mono">
-                HIGH
-              </span>
-              <input
-                id="slider-eq-high"
-                type="range"
-                min={-15}
-                max={15}
-                value={effects.eqHigh}
-                disabled={effects.eqBypass}
-                onChange={(e) =>
-                  updateFx({ eqHigh: parseInt(e.target.value, 10) })
-                }
-                className="h-20 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 disabled:opacity-40"
-              />
-              <span className="text-[10px] font-mono text-emerald-300 block">
-                {effects.eqHigh > 0 ? `+${effects.eqHigh}` : effects.eqHigh}dB
-              </span>
-            </div>
+            <Knob
+              id="slider-eq-high"
+              label="HIGH"
+              value={effects.eqHigh}
+              min={-15}
+              max={15}
+              step={1}
+              detent={0}
+              disabled={effects.eqBypass}
+              format={(v) => `${v > 0 ? `+${v}` : v}dB`}
+              onChange={(v) => updateFx({ eqHigh: v })}
+            />
           </div>
         </div>
       </div>

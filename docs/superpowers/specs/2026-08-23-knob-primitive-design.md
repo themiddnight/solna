@@ -95,8 +95,8 @@ export interface KnobProps {
 - Needle หมุนด้วย CSS `transform: rotate()` + `transform-origin` กลาง; สี `fill="currentColor"`
   default `text-[#877dca]` (จาก design) override ได้ผ่าน `className`
 - ขนาดตาม Figma: xs 22 / sm 36 / md 48 (default) / lg 60 / xl 72 px; สัดส่วนเข็ม/จุดกลาง scale ตาม
-- Label + ค่า: แถว label (ซ้าย) + ค่า (ขวา, `font-mono text-indigo-300`) เหนือ knob — layout เดียวกับ
-  slider เดิมใน `SynthView` (migrate แล้ว panel ไม่เสียทรง)
+- Label + ค่า: flex column กึ่งกลาง — label บน, knob กลาง, ค่าล่าง (`text-[10px]` mono, ค่า
+  `text-indigo-300`) — layout แบบ ADSR; แต่ละชุด knob เรียงเป็น flex row ในแต่ละ panel
 - ไม่ใช้ motion library — CSS transition พอ
 
 ## 6. Testing
@@ -109,9 +109,10 @@ export interface KnobProps {
   - `detentAngle`: ค่าใน range → มุมถูกต้อง; ค่านอก [min, max] → null (ไม่วาดขีด)
 - Component ไม่มี test infra (repo ไม่มี @testing-library) — `tsc --noEmit` + เช็คในเบราว์เซอร์
 
-## 7. Migration (เฟสแรก)
+## 7. Migration
 
-- Ship `Knob` primitive + migrate **แผง Filter ใน `SynthView` (3 sliders)**:
-  - `filter-cutoff` → `scale="log"` (min > 0) เป็น demo log
-  - `filter-resonance`, `filter-env` → linear
-- แผงที่เหลือ (Oscillators / Envelope / EffectsRack) เป็นงานแยกภายหลัง
+- Ship `Knob` primitive + migrate **ทุก synth panel เป็น Knob (layout แบบ ADSR)**:
+  - `SynthView`: Oscillators (sub/detune/noise), Filter (cutoff `scale="log"`, resonance, env),
+    Envelope ADSR (attack/decay/sustain/release ทั้ง AMP + FILTER), LFO (rate/depth)
+  - `EffectsRackView`: reverb (wet/decay), delay (wet/feedback), distortion (wet),
+    EQ (low/mid/high — `detent={0}` ชี้ตำแหน่ง 0dB ของ range ±15)

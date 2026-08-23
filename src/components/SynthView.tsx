@@ -561,75 +561,39 @@ export const SynthView = () => {
             </div>
           </div>
 
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">Sub-Osc Volume</span>
-              <span className="font-mono text-indigo-300">
-                {(params.subOscVolume * 100).toFixed(0)}%
-              </span>
-            </div>
-            <input
+          <div className="flex items-start justify-between gap-2">
+            <Knob
               id="slider-sub-osc"
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={params.subOscVolume}
-              onChange={(e) =>
-                onChangeParams({
-                  ...params,
-                  subOscVolume: parseFloat(e.target.value),
-                })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer"
-            />
-          </div>
+            label="Sub-Osc Volume"
+            value={params.subOscVolume}
+            min={0}
+            max={1}
+            step={0.01}
+            format={(v) => `${(v * 100).toFixed(0)}%`}
+            onChange={(v) => onChangeParams({ ...params, subOscVolume: v })}
+          />
 
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">Detune Spread</span>
-              <span className="font-mono text-indigo-300">
-                {params.detune} ct
-              </span>
-            </div>
-            <input
-              id="slider-detune"
-              type="range"
-              min={0}
-              max={50}
-              value={params.detune}
-              onChange={(e) =>
-                onChangeParams({
-                  ...params,
-                  detune: parseInt(e.target.value, 10),
-                })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer"
-            />
-          </div>
+          <Knob
+            id="slider-detune"
+            label="Detune Spread"
+            value={params.detune}
+            min={0}
+            max={50}
+            step={1}
+            format={(v) => `${v} ct`}
+            onChange={(v) => onChangeParams({ ...params, detune: v })}
+          />
 
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">Noise Generator</span>
-              <span className="font-mono text-indigo-300">
-                {(params.noiseVolume * 100).toFixed(0)}%
-              </span>
-            </div>
-            <input
-              id="slider-noise"
-              type="range"
-              min={0}
-              max={0.5}
-              step={0.01}
-              value={params.noiseVolume}
-              onChange={(e) =>
-                onChangeParams({
-                  ...params,
-                  noiseVolume: parseFloat(e.target.value),
-                })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer"
-            />
+          <Knob
+            id="slider-noise"
+            label="Noise Generator"
+            value={params.noiseVolume}
+            min={0}
+            max={0.5}
+            step={0.01}
+            format={(v) => `${(v * 100).toFixed(0)}%`}
+            onChange={(v) => onChangeParams({ ...params, noiseVolume: v })}
+          />
           </div>
         </div>
         {/* 2. Filter Section */}
@@ -668,8 +632,9 @@ export const SynthView = () => {
             </div>
           </div>
 
-          <Knob
-            id="slider-filter-cutoff"
+          <div className="flex items-start justify-between gap-2">
+            <Knob
+              id="slider-filter-cutoff"
             label="Cutoff Frequency"
             value={params.filterCutoff}
             min={50}
@@ -703,6 +668,7 @@ export const SynthView = () => {
             format={(v) => `+${Math.round(v)} Hz`}
             onChange={(v) => onChangeParams({ ...params, filterEnvAmount: v })}
           />
+          </div>
         </div>
         {/* 3. Envelope ADSR */}
         <div
@@ -726,106 +692,54 @@ export const SynthView = () => {
               </span>
               <span className="flex-1 h-px bg-[#252B48]" />
             </div>
-            <div className="grid grid-cols-4 gap-2 text-center">
+            <div className="flex items-start justify-between gap-2">
               {/* Attack */}
-              <div>
-                <span className="text-[10px] text-slate-400 block font-mono">
-                  ATT
-                </span>
-                <input
-                  id="slider-env-attack"
-                  type="range"
-                  min={0.005}
-                  max={2.0}
-                  step={0.01}
-                  value={params.attack}
-                  onChange={(e) =>
-                    onChangeParams({
-                      ...params,
-                      attack: parseFloat(e.target.value),
-                    })
-                  }
-                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-emerald-500"
-                />
-                <span className="text-[10px] font-mono text-emerald-300 block">
-                  {params.attack.toFixed(2)}s
-                </span>
-              </div>
+              <Knob
+                id="slider-env-attack"
+                label="ATT"
+                value={params.attack}
+                min={0.005}
+                max={2.0}
+                step={0.01}
+                format={(v) => `${v.toFixed(2)}s`}
+                onChange={(v) => onChangeParams({ ...params, attack: v })}
+              />
 
               {/* Decay */}
-              <div>
-                <span className="text-[10px] text-slate-400 block font-mono">
-                  DEC
-                </span>
-                <input
-                  id="slider-env-decay"
-                  type="range"
-                  min={0.01}
-                  max={2.0}
-                  step={0.01}
-                  value={params.decay}
-                  onChange={(e) =>
-                    onChangeParams({
-                      ...params,
-                      decay: parseFloat(e.target.value),
-                    })
-                  }
-                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-emerald-500"
-                />
-                <span className="text-[10px] font-mono text-emerald-300 block">
-                  {params.decay.toFixed(2)}s
-                </span>
-              </div>
+              <Knob
+                id="slider-env-decay"
+                label="DEC"
+                value={params.decay}
+                min={0.01}
+                max={2.0}
+                step={0.01}
+                format={(v) => `${v.toFixed(2)}s`}
+                onChange={(v) => onChangeParams({ ...params, decay: v })}
+              />
 
               {/* Sustain */}
-              <div>
-                <span className="text-[10px] text-slate-400 block font-mono">
-                  SUS
-                </span>
-                <input
-                  id="slider-env-sustain"
-                  type="range"
-                  min={0}
-                  max={1.0}
-                  step={0.01}
-                  value={params.sustain}
-                  onChange={(e) =>
-                    onChangeParams({
-                      ...params,
-                      sustain: parseFloat(e.target.value),
-                    })
-                  }
-                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-emerald-500"
-                />
-                <span className="text-[10px] font-mono text-emerald-300 block">
-                  {(params.sustain * 100).toFixed(0)}%
-                </span>
-              </div>
+              <Knob
+                id="slider-env-sustain"
+                label="SUS"
+                value={params.sustain}
+                min={0}
+                max={1.0}
+                step={0.01}
+                format={(v) => `${(v * 100).toFixed(0)}%`}
+                onChange={(v) => onChangeParams({ ...params, sustain: v })}
+              />
 
               {/* Release */}
-              <div>
-                <span className="text-[10px] text-slate-400 block font-mono">
-                  REL
-                </span>
-                <input
-                  id="slider-env-release"
-                  type="range"
-                  min={0.01}
-                  max={3.0}
-                  step={0.01}
-                  value={params.release}
-                  onChange={(e) =>
-                    onChangeParams({
-                      ...params,
-                      release: parseFloat(e.target.value),
-                    })
-                  }
-                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-emerald-500"
-                />
-                <span className="text-[10px] font-mono text-emerald-300 block">
-                  {params.release.toFixed(2)}s
-                </span>
-              </div>
+              <Knob
+                id="slider-env-release"
+                label="REL"
+                value={params.release}
+                min={0.01}
+                max={3.0}
+                step={0.01}
+                format={(v) => `${v.toFixed(2)}s`}
+                onChange={(v) => onChangeParams({ ...params, release: v })}
+              />
             </div>
           </div>
 
@@ -837,106 +751,54 @@ export const SynthView = () => {
               </span>
               <span className="flex-1 h-px bg-[#252B48]" />
             </div>
-            <div className="grid grid-cols-4 gap-2 text-center">
+            <div className="flex items-start justify-between gap-2">
               {/* Filter Attack */}
-              <div>
-                <span className="text-[10px] text-slate-400 block font-mono">
-                  ATT
-                </span>
-                <input
-                  id="slider-env-filter-attack"
-                  type="range"
-                  min={0.005}
-                  max={2.0}
-                  step={0.01}
-                  value={params.filterAttack}
-                  onChange={(e) =>
-                    onChangeParams({
-                      ...params,
-                      filterAttack: parseFloat(e.target.value),
-                    })
-                  }
-                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-pink-500"
-                />
-                <span className="text-[10px] font-mono text-pink-300 block">
-                  {params.filterAttack.toFixed(2)}s
-                </span>
-              </div>
+              <Knob
+                id="slider-env-filter-attack"
+                label="ATT"
+                value={params.filterAttack}
+                min={0.005}
+                max={2.0}
+                step={0.01}
+                format={(v) => `${v.toFixed(2)}s`}
+                onChange={(v) => onChangeParams({ ...params, filterAttack: v })}
+              />
 
               {/* Filter Decay */}
-              <div>
-                <span className="text-[10px] text-slate-400 block font-mono">
-                  DEC
-                </span>
-                <input
-                  id="slider-env-filter-decay"
-                  type="range"
-                  min={0.01}
-                  max={2.0}
-                  step={0.01}
-                  value={params.filterDecay}
-                  onChange={(e) =>
-                    onChangeParams({
-                      ...params,
-                      filterDecay: parseFloat(e.target.value),
-                    })
-                  }
-                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-pink-500"
-                />
-                <span className="text-[10px] font-mono text-pink-300 block">
-                  {params.filterDecay.toFixed(2)}s
-                </span>
-              </div>
+              <Knob
+                id="slider-env-filter-decay"
+                label="DEC"
+                value={params.filterDecay}
+                min={0.01}
+                max={2.0}
+                step={0.01}
+                format={(v) => `${v.toFixed(2)}s`}
+                onChange={(v) => onChangeParams({ ...params, filterDecay: v })}
+              />
 
               {/* Filter Sustain */}
-              <div>
-                <span className="text-[10px] text-slate-400 block font-mono">
-                  SUS
-                </span>
-                <input
-                  id="slider-env-filter-sustain"
-                  type="range"
-                  min={0}
-                  max={1.0}
-                  step={0.01}
-                  value={params.filterSustain}
-                  onChange={(e) =>
-                    onChangeParams({
-                      ...params,
-                      filterSustain: parseFloat(e.target.value),
-                    })
-                  }
-                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-pink-500"
-                />
-                <span className="text-[10px] font-mono text-pink-300 block">
-                  {(params.filterSustain * 100).toFixed(0)}%
-                </span>
-              </div>
+              <Knob
+                id="slider-env-filter-sustain"
+                label="SUS"
+                value={params.filterSustain}
+                min={0}
+                max={1.0}
+                step={0.01}
+                format={(v) => `${(v * 100).toFixed(0)}%`}
+                onChange={(v) => onChangeParams({ ...params, filterSustain: v })}
+              />
 
               {/* Filter Release */}
-              <div>
-                <span className="text-[10px] text-slate-400 block font-mono">
-                  REL
-                </span>
-                <input
-                  id="slider-env-filter-release"
-                  type="range"
-                  min={0.01}
-                  max={3.0}
-                  step={0.01}
-                  value={params.filterRelease}
-                  onChange={(e) =>
-                    onChangeParams({
-                      ...params,
-                      filterRelease: parseFloat(e.target.value),
-                    })
-                  }
-                  className="h-12 w-full bg-[#0B0D19] rounded-lg cursor-pointer [writing-mode:vertical-lr] [direction:rtl] my-1 accent-pink-500"
-                />
-                <span className="text-[10px] font-mono text-pink-300 block">
-                  {params.filterRelease.toFixed(2)}s
-                </span>
-              </div>
+              <Knob
+                id="slider-env-filter-release"
+                label="REL"
+                value={params.filterRelease}
+                min={0.01}
+                max={3.0}
+                step={0.01}
+                format={(v) => `${v.toFixed(2)}s`}
+                onChange={(v) => onChangeParams({ ...params, filterRelease: v })}
+              />
             </div>
           </div>
         </div>{" "}
@@ -976,52 +838,28 @@ export const SynthView = () => {
             </div>
           </div>
 
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">LFO Rate</span>
-              <span className="font-mono text-cyan-300">
-                {params.lfoRate.toFixed(1)} Hz
-              </span>
-            </div>
-            <input
+          <div className="flex items-start justify-between gap-2">
+            <Knob
               id="slider-lfo-rate"
-              type="range"
-              min={0.1}
-              max={20}
-              step={0.1}
-              value={params.lfoRate}
-              onChange={(e) =>
-                onChangeParams({
-                  ...params,
-                  lfoRate: parseFloat(e.target.value),
-                })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-cyan-500"
-            />
-          </div>
+            label="LFO Rate"
+            value={params.lfoRate}
+            min={0.1}
+            max={20}
+            step={0.1}
+            format={(v) => `${v.toFixed(1)} Hz`}
+            onChange={(v) => onChangeParams({ ...params, lfoRate: v })}
+          />
 
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-slate-400">LFO Depth</span>
-              <span className="font-mono text-cyan-300">
-                {(params.lfoDepth * 100).toFixed(0)}%
-              </span>
-            </div>
-            <input
-              id="slider-lfo-depth"
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={params.lfoDepth}
-              onChange={(e) =>
-                onChangeParams({
-                  ...params,
-                  lfoDepth: parseFloat(e.target.value),
-                })
-              }
-              className="w-full h-1.5 bg-[#0B0D19] rounded-lg cursor-pointer accent-cyan-500"
-            />
+          <Knob
+            id="slider-lfo-depth"
+            label="LFO Depth"
+            value={params.lfoDepth}
+            min={0}
+            max={1}
+            step={0.01}
+            format={(v) => `${(v * 100).toFixed(0)}%`}
+            onChange={(v) => onChangeParams({ ...params, lfoDepth: v })}
+          />
           </div>
 
           <div className="pt-1 flex items-center justify-between">
