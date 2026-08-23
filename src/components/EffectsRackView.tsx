@@ -66,6 +66,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-reverb-wet"
               label="Wet / Dry Mix"
+              color="text-cyan-400"
               value={effects.reverbWet}
               min={0}
               max={1}
@@ -77,6 +78,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-reverb-decay"
               label="Decay Time"
+              color="text-cyan-400"
               value={effects.reverbDecay}
               min={0.5}
               max={6.0}
@@ -120,6 +122,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-delay-wet"
               label="Wet / Dry Mix"
+              color="text-indigo-400"
               value={effects.delayWet}
               min={0}
               max={1}
@@ -131,6 +134,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-delay-feedback"
               label="Feedback Repeats"
+              color="text-indigo-400"
               value={effects.delayFeedback}
               min={0}
               max={0.9}
@@ -175,6 +179,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
           <Knob
             id="slider-distortion-wet"
             label="Drive / Crunch"
+            color="text-amber-400"
             value={effects.distortionWet}
             min={0}
             max={1}
@@ -217,6 +222,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-eq-low"
               label="LOW"
+              color="text-emerald-400"
               value={effects.eqLow}
               min={-15}
               max={15}
@@ -230,6 +236,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-eq-mid"
               label="MID"
+              color="text-emerald-400"
               value={effects.eqMid}
               min={-15}
               max={15}
@@ -243,6 +250,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-eq-high"
               label="HIGH"
+              color="text-emerald-400"
               value={effects.eqHigh}
               min={-15}
               max={15}

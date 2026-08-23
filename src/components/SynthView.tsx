@@ -564,36 +564,39 @@ export const SynthView = () => {
           <div className="flex items-start justify-between gap-2">
             <Knob
               id="slider-sub-osc"
-            label="Sub-Osc Volume"
-            value={params.subOscVolume}
-            min={0}
-            max={1}
-            step={0.01}
-            format={(v) => `${(v * 100).toFixed(0)}%`}
-            onChange={(v) => onChangeParams({ ...params, subOscVolume: v })}
-          />
+              label="Sub-Osc Volume"
+              color="text-indigo-400"
+              value={params.subOscVolume}
+              min={0}
+              max={1}
+              step={0.01}
+              format={(v) => `${(v * 100).toFixed(0)}%`}
+              onChange={(v) => onChangeParams({ ...params, subOscVolume: v })}
+            />
 
-          <Knob
-            id="slider-detune"
-            label="Detune Spread"
-            value={params.detune}
-            min={0}
-            max={50}
-            step={1}
-            format={(v) => `${v} ct`}
-            onChange={(v) => onChangeParams({ ...params, detune: v })}
-          />
+            <Knob
+              id="slider-detune"
+              label="Detune Spread"
+              color="text-indigo-400"
+              value={params.detune}
+              min={0}
+              max={50}
+              step={1}
+              format={(v) => `${v} ct`}
+              onChange={(v) => onChangeParams({ ...params, detune: v })}
+            />
 
-          <Knob
-            id="slider-noise"
-            label="Noise Generator"
-            value={params.noiseVolume}
-            min={0}
-            max={0.5}
-            step={0.01}
-            format={(v) => `${(v * 100).toFixed(0)}%`}
-            onChange={(v) => onChangeParams({ ...params, noiseVolume: v })}
-          />
+            <Knob
+              id="slider-noise"
+              label="Noise Generator"
+              color="text-indigo-400"
+              value={params.noiseVolume}
+              min={0}
+              max={0.5}
+              step={0.01}
+              format={(v) => `${(v * 100).toFixed(0)}%`}
+              onChange={(v) => onChangeParams({ ...params, noiseVolume: v })}
+            />
           </div>
         </div>
         {/* 2. Filter Section */}
@@ -635,39 +638,42 @@ export const SynthView = () => {
           <div className="flex items-start justify-between gap-2">
             <Knob
               id="slider-filter-cutoff"
-            label="Cutoff Frequency"
-            value={params.filterCutoff}
-            min={50}
-            max={12000}
-            step={10}
-            scale="log"
-            format={(v) => `${Math.round(v)} Hz`}
-            onChange={(v) => onChangeParams({ ...params, filterCutoff: v })}
-          />
+              label="Cutoff Frequency"
+              color="text-pink-400"
+              value={params.filterCutoff}
+              min={50}
+              max={12000}
+              step={10}
+              scale="log"
+              format={(v) => `${Math.round(v)} Hz`}
+              onChange={(v) => onChangeParams({ ...params, filterCutoff: v })}
+            />
 
-          <Knob
-            id="slider-filter-resonance"
-            label="Resonance (Q)"
-            value={params.filterResonance}
-            min={0.1}
-            max={20}
-            step={0.1}
-            scale="linear"
-            format={(v) => v.toFixed(1)}
-            onChange={(v) => onChangeParams({ ...params, filterResonance: v })}
-          />
+            <Knob
+              id="slider-filter-resonance"
+              label="Resonance (Q)"
+              color="text-pink-400"
+              value={params.filterResonance}
+              min={0.1}
+              max={20}
+              step={0.1}
+              scale="linear"
+              format={(v) => v.toFixed(1)}
+              onChange={(v) => onChangeParams({ ...params, filterResonance: v })}
+            />
 
-          <Knob
-            id="slider-filter-env"
-            label="Env Mod Depth"
-            value={params.filterEnvAmount}
-            min={0}
-            max={6000}
-            step={50}
-            scale="linear"
-            format={(v) => `+${Math.round(v)} Hz`}
-            onChange={(v) => onChangeParams({ ...params, filterEnvAmount: v })}
-          />
+            <Knob
+              id="slider-filter-env"
+              label="Env Mod Depth"
+              color="text-pink-400"
+              value={params.filterEnvAmount}
+              min={0}
+              max={6000}
+              step={50}
+              scale="linear"
+              format={(v) => `+${Math.round(v)} Hz`}
+              onChange={(v) => onChangeParams({ ...params, filterEnvAmount: v })}
+            />
           </div>
         </div>
         {/* 3. Envelope ADSR */}
@@ -697,6 +703,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-env-attack"
                 label="ATT"
+                color="text-emerald-400"
                 value={params.attack}
                 min={0.005}
                 max={2.0}
@@ -709,6 +716,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-env-decay"
                 label="DEC"
+                color="text-emerald-400"
                 value={params.decay}
                 min={0.01}
                 max={2.0}
@@ -721,6 +729,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-env-sustain"
                 label="SUS"
+                color="text-emerald-400"
                 value={params.sustain}
                 min={0}
                 max={1.0}
@@ -733,6 +742,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-env-release"
                 label="REL"
+                color="text-emerald-400"
                 value={params.release}
                 min={0.01}
                 max={3.0}
@@ -756,6 +766,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-env-filter-attack"
                 label="ATT"
+                color="text-pink-400"
                 value={params.filterAttack}
                 min={0.005}
                 max={2.0}
@@ -768,6 +779,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-env-filter-decay"
                 label="DEC"
+                color="text-pink-400"
                 value={params.filterDecay}
                 min={0.01}
                 max={2.0}
@@ -780,6 +792,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-env-filter-sustain"
                 label="SUS"
+                color="text-pink-400"
                 value={params.filterSustain}
                 min={0}
                 max={1.0}
@@ -792,6 +805,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-env-filter-release"
                 label="REL"
+                color="text-pink-400"
                 value={params.filterRelease}
                 min={0.01}
                 max={3.0}
@@ -841,25 +855,27 @@ export const SynthView = () => {
           <div className="flex items-start justify-between gap-2">
             <Knob
               id="slider-lfo-rate"
-            label="LFO Rate"
-            value={params.lfoRate}
-            min={0.1}
-            max={20}
-            step={0.1}
-            format={(v) => `${v.toFixed(1)} Hz`}
-            onChange={(v) => onChangeParams({ ...params, lfoRate: v })}
-          />
+              label="LFO Rate"
+              color="text-cyan-400"
+              value={params.lfoRate}
+              min={0.1}
+              max={20}
+              step={0.1}
+              format={(v) => `${v.toFixed(1)} Hz`}
+              onChange={(v) => onChangeParams({ ...params, lfoRate: v })}
+            />
 
-          <Knob
-            id="slider-lfo-depth"
-            label="LFO Depth"
-            value={params.lfoDepth}
-            min={0}
-            max={1}
-            step={0.01}
-            format={(v) => `${(v * 100).toFixed(0)}%`}
-            onChange={(v) => onChangeParams({ ...params, lfoDepth: v })}
-          />
+            <Knob
+              id="slider-lfo-depth"
+              label="LFO Depth"
+              color="text-cyan-400"
+              value={params.lfoDepth}
+              min={0}
+              max={1}
+              step={0.01}
+              format={(v) => `${(v * 100).toFixed(0)}%`}
+              onChange={(v) => onChangeParams({ ...params, lfoDepth: v })}
+            />
           </div>
 
           <div className="pt-1 flex items-center justify-between">

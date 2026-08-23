@@ -26,6 +26,7 @@ export interface KnobProps {
   scale?: KnobScale;
   size?: KnobSize;
   label?: string;
+  color?: string;  // Tailwind text-* class สีเข็ม + progress arc + ค่า (default text-[#877dca])
   format?: (v: number) => string;
   indicator?: KnobIndicator;
   detent?: number;
@@ -60,6 +61,7 @@ export const Knob = ({
   scale = 'linear',
   size = 'md',
   label,
+  color,
   format = String,
   indicator = 'progress',
   detent,
@@ -140,7 +142,7 @@ export const Knob = ({
   };
 
   return (
-    <div className={`flex flex-col items-center gap-1 ${className ?? ''}`}>
+    <div className={`flex flex-col items-center gap-1 ${color ?? 'text-[#877dca]'} ${className ?? ''}`}>
       {label !== undefined && (
         <span className="text-[10px] text-slate-400 block font-mono text-center">
           {label}
@@ -159,7 +161,7 @@ export const Knob = ({
         width={pixelSize}
         height={pixelSize}
         viewBox="0 0 100 100"
-        className={`block text-[#877dca] touch-none select-none rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-400/70 ${
+        className={`block touch-none select-none rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-400/70 ${
           disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
         }`}
         onPointerDown={handlePointerDown}
@@ -242,7 +244,7 @@ export const Knob = ({
           <circle cx="50" cy="50" r="10" fill="currentColor" />
         </g>
       </svg>
-      <span className="text-[10px] font-mono text-indigo-300 block text-center">
+      <span className="text-[10px] font-mono text-current block text-center">
         {display}
       </span>
     </div>

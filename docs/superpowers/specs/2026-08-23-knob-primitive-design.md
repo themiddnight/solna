@@ -40,6 +40,7 @@ export interface KnobProps {
   scale?: KnobScale;       // default 'linear'
   size?: KnobSize;         // default 'md'
   label?: string;
+  color?: string;  // Tailwind text-* class (เข็ม/arc/ค่าล่าง) — สีตามกลุ่ม อิง icon header; default text-[#877dca]
   format?: (v: number) => string;  // default: String(v)
   indicator?: KnobIndicator; // default 'progress' — วงแหวนแสดงความคืบหน้าตามเข็ม
   detent?: number;           // ค่าที่วาดขีด notch; undefined = ไม่มี (visual only ไม่ snap)
@@ -95,7 +96,8 @@ export interface KnobProps {
 - Detent notch: ขีดสั้นบนวงแหวนที่มุม `angleForT(valueToT(detent, ...))` — ข้ามเมื่อ detent นอก [min, max];
   เป็นขีดเดียวของ component (ไม่มี static notch ใน render ปกติ)
 - Needle หมุนด้วย CSS `transform: rotate()` + `transform-origin` กลาง; สี `fill="currentColor"`
-  default `text-[#877dca]` (จาก design) override ได้ผ่าน `className`
+  default `text-[#877dca]` (จาก design) override ได้ผ่าน prop `color` — เข็ม/arc/ค่าล่างสีเดียวกัน
+  ตามกลุ่ม (อิงสี icon ของ card header เช่น `text-pink-400`)
 - ขนาดตาม Figma: xs 22 / sm 36 / md 48 (default) / lg 60 / xl 72 px; สัดส่วนเข็ม/จุดกลาง scale ตาม
 - Label + ค่า: flex column กึ่งกลาง — label บน, knob กลาง, ค่าล่าง (`text-[10px]` mono, ค่า
   `text-indigo-300`) — layout แบบ ADSR; แต่ละชุด knob เรียงเป็น flex row ในแต่ละ panel
