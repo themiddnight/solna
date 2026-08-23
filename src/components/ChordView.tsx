@@ -1657,7 +1657,7 @@ function SortableChordCard({
       </button>
 
       {/* Edit Controls */}
-      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#252B48]/60">
+      <div className="grid grid-cols-3 gap-2 pt-1 border-t border-[#252B48]/60">
         <div>
           <label className="text-[10px] text-slate-500 block mb-0.5">
             Root
@@ -1717,7 +1717,7 @@ function SortableChordCard({
           </select>
         </div>
 
-        <div className="col-span-2">
+        <div>
           <label className="text-[10px] text-slate-500 block mb-0.5">
             Duration (Bars)
           </label>
