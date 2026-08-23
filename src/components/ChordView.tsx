@@ -1132,7 +1132,7 @@ export const ChordView: React.FC = React.memo(() => {
           </select>
 
           {/* Chord Feel Slider (tight ↔ loose) */}
-          <div className="flex items-center gap-1.5 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs">
+          <div className="flex items-center gap-1.5 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
             <span className="text-[10px] text-slate-400 font-mono shrink-0">Feel</span>
             <span className="text-[9px] text-slate-500 font-mono shrink-0">tight</span>
             <input
@@ -1150,7 +1150,7 @@ export const ChordView: React.FC = React.memo(() => {
           </div>
 
           {/* Chord Layer Volume Slider */}
-          <div className="flex items-center gap-2 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs">
+          <div className="flex items-center gap-2 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
             <Volume2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
             <span className="text-[10px] text-slate-400 font-mono">Vol</span>
             <input
@@ -1466,7 +1466,7 @@ export const ChordView: React.FC = React.memo(() => {
           </div>
 
           {/* Bass Feel Slider (tight ↔ loose) */}
-          <div className="flex items-center gap-1.5 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs">
+          <div className="flex items-center gap-1.5 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
             <span className="text-[10px] text-slate-400 font-mono shrink-0">Feel</span>
             <span className="text-[9px] text-slate-500 font-mono shrink-0">tight</span>
             <input
