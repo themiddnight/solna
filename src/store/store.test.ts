@@ -317,14 +317,14 @@ describe('chords initial octave', () => {
     // Persist custom chords (the persist middleware writes on every setState)
     // and capture the exact payload it wrote.
     useAppStore.setState({ chords: customChords });
-    const persistedPayload = fakeLocalStorage.getItem('murva_project_state_v1');
+    const persistedPayload = fakeLocalStorage.getItem('musibox_project_state_v1');
     expect(persistedPayload).toContain('chord-x');
 
     // Reset the in-memory chords to the initial derived set (simulating a
     // fresh session), then put the captured payload back into storage
     // directly — bypassing the store, whose next setState would overwrite it.
     useAppStore.setState({ chords: INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)) });
-    fakeLocalStorage.setItem('murva_project_state_v1', persistedPayload!);
+    fakeLocalStorage.setItem('musibox_project_state_v1', persistedPayload!);
 
     // Hydration merges the stored value: chords come back as stored, not re-derived
     await useAppStore.persist.rehydrate();
@@ -452,7 +452,7 @@ describe('legacy preset migration', () => {
     expect(fakeLocalStorage.getItem('murva_synth_custom_presets_v1')).toBeNull();
     expect(fakeLocalStorage.getItem('murva_chord_custom_progressions_v1')).toBeNull();
     // And the new persist key now owns the presets
-    expect(fakeLocalStorage.getItem('murva_project_state_v1')).not.toBeNull();
+    expect(fakeLocalStorage.getItem('musibox_project_state_v1')).not.toBeNull();
   });
 
   test('already-persisted presets win over legacy keys (merge only when empty)', async () => {
@@ -529,7 +529,7 @@ describe('persisted payload sanitization', () => {
 
     // Parseable but wrong-typed payload: JSON.parse accepts all of this.
     fakeLocalStorage.setItem(
-      'murva_project_state_v1',
+      'musibox_project_state_v1',
       JSON.stringify({
         version: 1,
         state: {
@@ -613,7 +613,7 @@ describe('persisted payload sanitization', () => {
     });
 
     fakeLocalStorage.setItem(
-      'murva_project_state_v1',
+      'musibox_project_state_v1',
       JSON.stringify({
         version: 1,
         state: {
@@ -685,14 +685,14 @@ describe('persisted payload sanitization', () => {
     expect(useAppStore.getState().customSynthPresets).toEqual([]);
     expect(useAppStore.getState().customChordProgressions).toEqual([]);
     // Rehydration still ran to completion and wrote the merged state back.
-    expect(fakeLocalStorage.getItem('murva_project_state_v1')).not.toBeNull();
+    expect(fakeLocalStorage.getItem('musibox_project_state_v1')).not.toBeNull();
   });
 
   test('sanitize clamps reverbDecay and compressorThreshold on rehydrate', async () => {
     const { useAppStore } = await getStore();
 
     fakeLocalStorage.setItem(
-      'murva_project_state_v1',
+      'musibox_project_state_v1',
       JSON.stringify({
         version: 2,
         state: {
@@ -722,7 +722,7 @@ describe('arp migration off stale persisted state', () => {
     useAppStore.persist.clearStorage();
 
     fakeLocalStorage.setItem(
-      'murva_project_state_v1',
+      'musibox_project_state_v1',
       JSON.stringify({
         version: 1,
         state: {
@@ -745,7 +745,7 @@ describe('arp migration off stale persisted state', () => {
     useAppStore.persist.clearStorage();
 
     fakeLocalStorage.setItem(
-      'murva_project_state_v1',
+      'musibox_project_state_v1',
       JSON.stringify({
         version: 1,
         state: {
@@ -772,7 +772,7 @@ describe('arp migration off stale persisted state', () => {
     useAppStore.persist.clearStorage();
 
     fakeLocalStorage.setItem(
-      'murva_project_state_v1',
+      'musibox_project_state_v1',
       JSON.stringify({
         version: 2,
         state: {
@@ -793,7 +793,7 @@ describe('synth param payload sanitization', () => {
     useAppStore.setState({ synthParams: INITIAL_SYNTH_PARAMS });
 
     fakeLocalStorage.setItem(
-      'murva_project_state_v1',
+      'musibox_project_state_v1',
       JSON.stringify({ version: 2, state: { synthParams: 'not-an-object' } })
     );
 
@@ -807,7 +807,7 @@ describe('synth param payload sanitization', () => {
     useAppStore.setState({ synthParams: INITIAL_SYNTH_PARAMS });
 
     fakeLocalStorage.setItem(
-      'murva_project_state_v1',
+      'musibox_project_state_v1',
       JSON.stringify({
         version: 2,
         state: {
@@ -835,7 +835,7 @@ describe('synth param payload sanitization', () => {
     useAppStore.persist.clearStorage();
 
     fakeLocalStorage.setItem(
-      'murva_project_state_v1',
+      'musibox_project_state_v1',
       JSON.stringify({
         version: 2,
         state: { synthParams: { ...INITIAL_SYNTH_PARAMS, arpMode: 'sideways', arpOctaves: 'two' } },

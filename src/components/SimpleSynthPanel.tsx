@@ -51,8 +51,8 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
         {/* 2. Four Friendly Macro Dials + 1-Click Arp */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {/* Macro 1: Tone (Brightness) */}
-          <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 flex flex-col items-center justify-between text-center shadow-md">
-            <div className="flex items-center gap-1 text-xs font-bold text-slate-200">
+          <div className="bg-base-100 border border-base-300 rounded-xl p-3 flex flex-col items-center justify-between text-center shadow-md">
+            <div className="flex items-center gap-1 text-xs font-bold text-base-content">
               <Sun className="w-3.5 h-3.5 text-amber-400" />
               <span>Tone</span>
             </div>
@@ -71,15 +71,15 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
               />
             </div>
 
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 dark:text-amber-300 border border-amber-500/20">
               {toneLabel}
             </span>
           </div>
 
           {/* Macro 2: Space (Release & Tail) */}
-          <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 flex flex-col items-center justify-between text-center shadow-md">
-            <div className="flex items-center gap-1 text-xs font-bold text-slate-200">
-              <Compass className="w-3.5 h-3.5 text-cyan-400" />
+          <div className="bg-base-100 border border-base-300 rounded-xl p-3 flex flex-col items-center justify-between text-center shadow-md">
+            <div className="flex items-center gap-1 text-xs font-bold text-base-content">
+              <Compass className="w-3.5 h-3.5 text-cyan-500" />
               <span>Space</span>
             </div>
 
@@ -87,7 +87,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
               <Knob
                 id="simple-macro-space"
                 label=""
-                color="text-cyan-400"
+                color="text-cyan-500"
                 value={releaseValue}
                 min={0.05}
                 max={2.5}
@@ -103,15 +103,15 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
               />
             </div>
 
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border border-cyan-500/20">
               {spaceLabel}
             </span>
           </div>
 
           {/* Macro 3: Vibe (Movement & Detune) */}
-          <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 flex flex-col items-center justify-between text-center shadow-md">
-            <div className="flex items-center gap-1 text-xs font-bold text-slate-200">
-              <Waves className="w-3.5 h-3.5 text-pink-400" />
+          <div className="bg-base-100 border border-base-300 rounded-xl p-3 flex flex-col items-center justify-between text-center shadow-md">
+            <div className="flex items-center gap-1 text-xs font-bold text-base-content">
+              <Waves className="w-3.5 h-3.5 text-pink-500" />
               <span>Vibe</span>
             </div>
 
@@ -119,7 +119,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
               <Knob
                 id="simple-macro-vibe"
                 label=""
-                color="text-pink-400"
+                color="text-pink-500"
                 value={detuneValue}
                 min={0}
                 max={50}
@@ -135,15 +135,15 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
               />
             </div>
 
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-pink-500/10 text-pink-300 border border-pink-500/20">
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-pink-500/10 text-pink-600 dark:text-pink-300 border border-pink-500/20">
               {vibeLabel}
             </span>
           </div>
 
           {/* Macro 4: Punch (Sub & Power) */}
-          <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 flex flex-col items-center justify-between text-center shadow-md">
-            <div className="flex items-center gap-1 text-xs font-bold text-slate-200">
-              <Flame className="w-3.5 h-3.5 text-emerald-400" />
+          <div className="bg-base-100 border border-base-300 rounded-xl p-3 flex flex-col items-center justify-between text-center shadow-md">
+            <div className="flex items-center gap-1 text-xs font-bold text-base-content">
+              <Flame className="w-3.5 h-3.5 text-emerald-500" />
               <span>Punch</span>
             </div>
 
@@ -151,7 +151,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
               <Knob
                 id="simple-macro-punch"
                 label=""
-                color="text-emerald-400"
+                color="text-emerald-500"
                 value={subValue}
                 min={0}
                 max={1}
@@ -167,16 +167,16 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
               />
             </div>
 
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border border-emerald-500/20">
               {punchLabel}
             </span>
           </div>
 
           {/* 1-Click Easy Arpeggiator Card */}
-          <div className="col-span-2 sm:col-span-1 lg:col-span-1 bg-[#12152A] border border-purple-500/30 rounded-xl p-3 flex flex-col justify-between shadow-md">
-            <div className="flex items-center justify-between border-b border-[#252B48] pb-1.5">
-              <span className="text-xs font-bold text-purple-300 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+          <div className="col-span-2 sm:col-span-1 lg:col-span-1 bg-base-100 border border-purple-500/30 rounded-xl p-3 flex flex-col justify-between shadow-md">
+            <div className="flex items-center justify-between border-b border-base-300 pb-1.5">
+              <span className="text-xs font-bold text-purple-600 dark:text-purple-300 flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-purple-500" />
                 Auto-Arp
               </span>
               <button
@@ -190,7 +190,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase transition-all cursor-pointer ${
                   params.arpActive
                     ? "bg-purple-600 text-white shadow-xs"
-                    : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                    : "bg-base-200 text-base-content/70 hover:text-base-content border border-base-300"
                 }`}
               >
                 {params.arpActive ? "ON" : "OFF"}
@@ -199,9 +199,9 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
 
             {/* Arp Speed Selector */}
             <div className="space-y-1 my-1.5">
-              <div className="flex items-center justify-between text-[10px] text-slate-400">
+              <div className="flex items-center justify-between text-[10px] text-base-content/60">
                 <span>Speed:</span>
-                <span className="font-mono text-purple-300 font-bold">
+                <span className="font-mono text-purple-600 dark:text-purple-300 font-bold">
                   {params.arpRate === "8n"
                     ? "1/8"
                     : params.arpRate === "32n"
@@ -217,7 +217,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                     className={`py-0.5 text-[10px] font-semibold rounded transition-all cursor-pointer ${
                       (params.arpRate ?? "16n") === r
                         ? "bg-purple-600 text-white shadow-xs"
-                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                        : "bg-base-200 text-base-content/70 hover:text-base-content border border-base-300"
                     }`}
                   >
                     {r === "8n" ? "1/8" : r === "16n" ? "1/16" : "1/32"}
@@ -228,9 +228,9 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
 
             {/* Arp Style Selector */}
             <div className="space-y-1">
-              <div className="flex items-center justify-between text-[10px] text-slate-400">
+              <div className="flex items-center justify-between text-[10px] text-base-content/60">
                 <span>Mode:</span>
-                <span className="capitalize font-mono text-purple-300 font-bold">
+                <span className="capitalize font-mono text-purple-600 dark:text-purple-300 font-bold">
                   {params.arpMode ?? "up"}
                 </span>
               </div>
@@ -242,7 +242,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                     className={`py-0.5 text-[10px] font-semibold rounded transition-all cursor-pointer ${
                       (params.arpMode ?? "up") === m
                         ? "bg-purple-600 text-white shadow-xs"
-                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                        : "bg-base-200 text-base-content/70 hover:text-base-content border border-base-300"
                     }`}
                     title={`Mode: ${m}`}
                   >

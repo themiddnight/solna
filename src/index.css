@@ -1,4 +1,41 @@
 @import "tailwindcss";
+@plugin "daisyui" {
+  themes: solva-dark --default, solva-light;
+}
+
+@plugin "daisyui/theme" {
+  name: "solva-dark";
+  default: true;
+  --color-base-100: #1C1924;
+  --color-base-200: #14121B;
+  --color-base-300: #2C2738;
+  --color-base-content: #F5EFEB;
+  --color-primary: #F59E0B;
+  --color-primary-content: #14121B;
+  --color-secondary: #FB7185;
+  --color-secondary-content: #14121B;
+  --color-accent: #2DD4BF;
+  --color-accent-content: #14121B;
+  --color-neutral: #24202E;
+  --color-neutral-content: #F5EFEB;
+}
+
+@plugin "daisyui/theme" {
+  name: "solva-light";
+  default: false;
+  --color-base-100: #FFFFFF;
+  --color-base-200: #F7F4EF;
+  --color-base-300: #E8E2D8;
+  --color-base-content: #241E19;
+  --color-primary: #D97706;
+  --color-primary-content: #FFFFFF;
+  --color-secondary: #E11D48;
+  --color-secondary-content: #FFFFFF;
+  --color-accent: #0D9488;
+  --color-accent-content: #FFFFFF;
+  --color-neutral: #3D352E;
+  --color-neutral-content: #FFFFFF;
+}
 
 @layer base {
   body {
@@ -17,19 +54,20 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #0B0D19;
+  background: #14121B;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #252B48;
+  background: #2C2738;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3B4371;
+  background: #4A405D;
 }
 
 /* Range input styling for synth and mixer faders */
 input[type="range"] {
-  accent-color: #6366F1;
+  accent-color: #F59E0B;
 }
+

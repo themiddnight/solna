@@ -6,6 +6,7 @@ import type { CustomChordProgressionItem } from '../types';
 // - chord progressions: src/components/ChordPresetLibrary.tsx
 export const LEGACY_SYNTH_PRESETS_KEY = 'murva_synth_custom_presets_v1';
 export const LEGACY_CHORD_PROGRESSIONS_KEY = 'murva_chord_custom_progressions_v1';
+export const LEGACY_PERSIST_KEY = 'murva_project_state_v1';
 
 export interface LegacyPresetsState {
   customSynthPresets?: SynthPresetItem[];
@@ -72,6 +73,11 @@ export function removeLegacyKeys(): void {
   }
   try {
     localStorage.removeItem(LEGACY_CHORD_PROGRESSIONS_KEY);
+  } catch {
+    // ignore
+  }
+  try {
+    localStorage.removeItem(LEGACY_PERSIST_KEY);
   } catch {
     // ignore
   }

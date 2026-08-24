@@ -33,7 +33,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = React.memo(({
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(project, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `${title.replace(/\s+/g, '_')}_murva_project.json`);
+    downloadAnchor.setAttribute('download', `${title.replace(/\s+/g, '_')}_musibox_project.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();

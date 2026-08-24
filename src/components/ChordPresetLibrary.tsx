@@ -216,7 +216,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     downloadAnchor.setAttribute('href', dataStr);
     downloadAnchor.setAttribute(
       'download',
-      `murva-chord-progressions-${new Date().toISOString().slice(0, 10)}.json`
+      `musibox-chord-progressions-${new Date().toISOString().slice(0, 10)}.json`
     );
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();

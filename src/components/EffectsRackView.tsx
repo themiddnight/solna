@@ -16,12 +16,12 @@ export const EffectsRackView: React.FC = React.memo(() => {
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Top Header */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 sm:p-4 flex items-center justify-between shadow-md">
+      <div className="bg-base-100 border border-base-300 rounded-xl p-3 sm:p-4 flex items-center justify-between shadow-md">
         <div className="flex items-center gap-2.5">
-          <div className="p-1.5 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-400">
+          <div className="p-1.5 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-600 dark:text-purple-400">
             <Sliders className="w-4 h-4" />
           </div>
-          <h2 className="font-bold text-sm sm:text-base text-slate-100">
+          <h2 className="font-bold text-sm sm:text-base text-base-content">
             Master Effects Rack
           </h2>
         </div>
@@ -31,15 +31,15 @@ export const EffectsRackView: React.FC = React.memo(() => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Algorithmic Reverb Unit */}
         <div
-          className={`bg-[#12152A] border rounded-xl p-3 sm:p-4 space-y-3 shadow-md transition-all ${
+          className={`bg-base-100 border rounded-xl p-3 sm:p-4 space-y-3 shadow-md transition-all ${
             effects.reverbBypass
-              ? "border-[#252B48] opacity-60"
+              ? "border-base-300 opacity-60"
               : "border-cyan-500/40 ring-1 ring-cyan-500/20"
           }`}
         >
-          <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Waves className="w-3.5 h-3.5 text-cyan-400" />
+          <div className="flex items-center justify-between border-b border-base-300 pb-2">
+            <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+              <Waves className="w-3.5 h-3.5 text-cyan-500" />
               1. Space Reverb
             </span>
             <button
@@ -47,8 +47,8 @@ export const EffectsRackView: React.FC = React.memo(() => {
               onClick={() => updateFx({ reverbBypass: !effects.reverbBypass })}
               className={`flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded cursor-pointer transition-colors ${
                 effects.reverbBypass
-                  ? "bg-slate-800 text-slate-400 border border-slate-700"
-                  : "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                  ? "bg-base-200 text-base-content/50 border border-base-300"
+                  : "bg-cyan-500/20 text-cyan-600 dark:text-cyan-300 border border-cyan-500/40"
               }`}
               title="Toggle Reverb Bypass"
             >
@@ -61,7 +61,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-reverb-wet"
               label="Mix"
-              color="text-cyan-400"
+              color="text-cyan-500"
               value={effects.reverbWet}
               min={0}
               max={1}
@@ -73,7 +73,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-reverb-decay"
               label="Decay"
-              color="text-cyan-400"
+              color="text-cyan-500"
               value={effects.reverbDecay}
               min={0.5}
               max={6.0}
@@ -87,15 +87,15 @@ export const EffectsRackView: React.FC = React.memo(() => {
 
         {/* 2. Stereo Delay Unit */}
         <div
-          className={`bg-[#12152A] border rounded-xl p-3 sm:p-4 space-y-3 shadow-md transition-all ${
+          className={`bg-base-100 border rounded-xl p-3 sm:p-4 space-y-3 shadow-md transition-all ${
             effects.delayBypass
-              ? "border-[#252B48] opacity-60"
+              ? "border-base-300 opacity-60"
               : "border-indigo-500/40 ring-1 ring-indigo-500/20"
           }`}
         >
-          <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5 text-indigo-400" />
+          <div className="flex items-center justify-between border-b border-base-300 pb-2">
+            <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-indigo-500" />
               2. Stereo Echo
             </span>
             <button
@@ -103,8 +103,8 @@ export const EffectsRackView: React.FC = React.memo(() => {
               onClick={() => updateFx({ delayBypass: !effects.delayBypass })}
               className={`flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded cursor-pointer transition-colors ${
                 effects.delayBypass
-                  ? "bg-slate-800 text-slate-400 border border-slate-700"
-                  : "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
+                  ? "bg-base-200 text-base-content/50 border border-base-300"
+                  : "bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/40"
               }`}
               title="Toggle Delay Bypass"
             >
@@ -117,7 +117,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-delay-wet"
               label="Mix"
-              color="text-indigo-400"
+              color="text-indigo-500"
               value={effects.delayWet}
               min={0}
               max={1}
@@ -129,7 +129,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-delay-feedback"
               label="Feedback"
-              color="text-indigo-400"
+              color="text-indigo-500"
               value={effects.delayFeedback}
               min={0}
               max={0.9}
@@ -143,15 +143,15 @@ export const EffectsRackView: React.FC = React.memo(() => {
 
         {/* 3. Wave Distortion / Warmth Unit */}
         <div
-          className={`bg-[#12152A] border rounded-xl p-3 sm:p-4 space-y-3 shadow-md transition-all ${
+          className={`bg-base-100 border rounded-xl p-3 sm:p-4 space-y-3 shadow-md transition-all ${
             effects.distortionBypass
-              ? "border-[#252B48] opacity-60"
+              ? "border-base-300 opacity-60"
               : "border-amber-500/40 ring-1 ring-amber-500/20"
           }`}
         >
-          <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+          <div className="flex items-center justify-between border-b border-base-300 pb-2">
+            <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               3. Distortion
             </span>
             <button
@@ -161,8 +161,8 @@ export const EffectsRackView: React.FC = React.memo(() => {
               }
               className={`flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded cursor-pointer transition-colors ${
                 effects.distortionBypass
-                  ? "bg-slate-800 text-slate-400 border border-slate-700"
-                  : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                  ? "bg-base-200 text-base-content/50 border border-base-300"
+                  : "bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40"
               }`}
               title="Toggle Distortion Bypass"
             >
@@ -174,7 +174,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
           <Knob
             id="slider-distortion-wet"
             label="Drive / Crunch"
-            color="text-amber-400"
+            color="text-amber-500"
             value={effects.distortionWet}
             min={0}
             max={1}
@@ -187,15 +187,15 @@ export const EffectsRackView: React.FC = React.memo(() => {
 
         {/* 4. 3-Band Equalizer */}
         <div
-          className={`bg-[#12152A] border rounded-xl p-3 sm:p-4 space-y-3 shadow-md transition-all ${
+          className={`bg-base-100 border rounded-xl p-3 sm:p-4 space-y-3 shadow-md transition-all ${
             effects.eqBypass
-              ? "border-[#252B48] opacity-60"
+              ? "border-base-300 opacity-60"
               : "border-emerald-500/40 ring-1 ring-emerald-500/20"
           }`}
         >
-          <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+          <div className="flex items-center justify-between border-b border-base-300 pb-2">
+            <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-emerald-500" />
               4. 3-Band EQ
             </span>
             <button
@@ -203,8 +203,8 @@ export const EffectsRackView: React.FC = React.memo(() => {
               onClick={() => updateFx({ eqBypass: !effects.eqBypass })}
               className={`flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded cursor-pointer transition-colors ${
                 effects.eqBypass
-                  ? "bg-slate-800 text-slate-400 border border-slate-700"
-                  : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                  ? "bg-base-200 text-base-content/50 border border-base-300"
+                  : "bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40"
               }`}
               title="Toggle Equalizer Bypass"
             >
@@ -217,7 +217,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-eq-low"
               label="LOW"
-              color="text-emerald-400"
+              color="text-emerald-500"
               value={effects.eqLow}
               min={-15}
               max={15}
@@ -231,7 +231,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-eq-mid"
               label="MID"
-              color="text-emerald-400"
+              color="text-emerald-500"
               value={effects.eqMid}
               min={-15}
               max={15}
@@ -245,7 +245,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
             <Knob
               id="slider-eq-high"
               label="HIGH"
-              color="text-emerald-400"
+              color="text-emerald-500"
               value={effects.eqHigh}
               min={-15}
               max={15}

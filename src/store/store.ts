@@ -13,10 +13,10 @@ import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
 import type { SynthParams } from '../types';
 import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
-import { migrateLegacyPresets, removeLegacyKeys } from './migrate';
+import { migrateLegacyPresets, removeLegacyKeys, LEGACY_PERSIST_KEY } from './migrate';
 import type { AppStore, PersistedState } from './types';
 
-export const PERSIST_KEY = 'murva_project_state_v1';
+export const PERSIST_KEY = 'musibox_project_state_v1';
 
 // Fallback when localStorage is unavailable (SSR, tests, restricted
 // contexts): an in-memory stub keeps the persist middleware functional so the
@@ -24,7 +24,7 @@ export const PERSIST_KEY = 'murva_project_state_v1';
 const memoryStorage: StateStorage = (() => {
   const store = new Map<string, string>();
   return {
-    getItem: (name) => store.get(name) ?? null,
+    getItem: (name) => store.get(name) ?? (name === PERSIST_KEY ? (store.get(LEGACY_PERSIST_KEY) ?? null) : null),
     setItem: (name, value) => {
       store.set(name, value);
     },
@@ -35,21 +35,51 @@ const memoryStorage: StateStorage = (() => {
 })();
 
 function resolveStorage(): StateStorage | null {
-  try {
-    if (typeof localStorage !== 'undefined' && localStorage) {
-      return localStorage;
+  const getRawStorage = (): Storage | null => {
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage) return localStorage;
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
-  }
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      return window.localStorage;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) return window.localStorage;
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
-  }
-  return null;
+    return null;
+  };
+
+  const raw = getRawStorage();
+  if (!raw) return null;
+
+  return {
+    getItem: (name: string) => {
+      try {
+        const val = raw.getItem(name);
+        if (val !== null) return val;
+        if (name === PERSIST_KEY) {
+          return raw.getItem(LEGACY_PERSIST_KEY);
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    },
+    setItem: (name: string, value: string) => {
+      try {
+        raw.setItem(name, value);
+      } catch {
+        // ignore
+      }
+    },
+    removeItem: (name: string) => {
+      try {
+        raw.removeItem(name);
+      } catch {
+        // ignore
+      }
+    },
+  };
 }
 
 // Captured during store creation so the persist onRehydrateStorage callback

@@ -1,6 +1,6 @@
 {
-  "name": "Murva Music Studio",
-  "description": "Full-stack interactive music creation studio with synthesizer, sequencer, chord builder, drum machine, and real-time collaboration.",
+  "name": "Solva",
+  "description": "Dawn solo loop and idea music studio featuring a step sequencer, smart chord progression builder, dual-mode synthesizer, and warm acoustic-analog workflows.",
   "requestFramePermissions": [
     "microphone"
   ],
@@ -8,3 +8,4 @@
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }
+

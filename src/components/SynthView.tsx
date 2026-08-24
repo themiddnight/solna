@@ -118,7 +118,7 @@ export const SynthView = () => {
   // Simple vs Pro UI Mode toggle with localStorage persistence
   const [synthViewMode, setSynthViewMode] = useState<"simple" | "pro">(() => {
     if (typeof window !== "undefined" && window.localStorage) {
-      const stored = localStorage.getItem("murva_synth_view_mode");
+      const stored = localStorage.getItem("musibox_synth_view_mode") || localStorage.getItem("murva_synth_view_mode");
       if (stored === "simple" || stored === "pro") return stored;
     }
     return "simple";
@@ -127,7 +127,7 @@ export const SynthView = () => {
   const handleToggleSynthViewMode = (mode: "simple" | "pro") => {
     setSynthViewMode(mode);
     try {
-      localStorage.setItem("murva_synth_view_mode", mode);
+      localStorage.setItem("musibox_synth_view_mode", mode);
     } catch {
       // best-effort: ignore localStorage failures (e.g. private mode)
     }

@@ -78,7 +78,7 @@ export function App() {
   const currentProject = useProjectState();
 
   return (
-    <div className="h-dvh bg-[#0A0C17] text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white relative overflow-hidden">
+    <div className="h-dvh bg-base-200 text-base-content flex flex-col font-sans selection:bg-primary selection:text-primary-content relative overflow-hidden">
       {/* Real-time Atmospheric Background Frequency Wave Visualizer */}
       <div className="absolute inset-0 pointer-events-none z-0 opacity-25 overflow-hidden">
         <AudioVisualizer

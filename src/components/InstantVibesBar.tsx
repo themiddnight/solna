@@ -27,12 +27,12 @@ export const InstantVibesBar: React.FC = React.memo(() => {
   };
 
   return (
-    <div className="bg-[#0E1122] border-b border-[#252B48] px-3 py-1.5 select-none relative z-30 transition-all">
+    <div className="bg-base-100 border-b border-base-300 px-3 py-1.5 select-none relative z-30 transition-all">
       <div className="flex items-center justify-between gap-2 max-w-full">
         {/* Left Label */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-          <span className="text-[11px] font-bold tracking-wide uppercase text-slate-300">
+          <Sparkles className="w-3.5 h-3.5 text-primary" />
+          <span className="text-[11px] font-bold tracking-wide uppercase text-base-content/80">
             Vibes
           </span>
         </div>
@@ -51,8 +51,8 @@ export const InstantVibesBar: React.FC = React.memo(() => {
                   title={`${vibe.name} (${vibe.bpm} BPM · ${vibe.scaleRoot} ${vibe.scaleType})`}
                   className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border cursor-pointer shrink-0 ${
                     isSelected
-                      ? `bg-gradient-to-r ${vibe.bgGradient} ${vibe.borderColor} ${vibe.textColor} shadow-sm ring-1 ring-white/10`
-                      : 'bg-[#14182E] border-[#252B48] text-slate-300 hover:text-white hover:bg-[#1C213E]'
+                      ? `bg-primary text-primary-content border-primary shadow-sm`
+                      : 'bg-base-200 border-base-300 text-base-content/80 hover:text-base-content hover:bg-base-300'
                   }`}
                 >
                   <span className="text-xs leading-none">{vibe.emoji}</span>
@@ -69,8 +69,8 @@ export const InstantVibesBar: React.FC = React.memo(() => {
         {/* Collapse toggle & Feedback banner */}
         <div className="flex items-center gap-1.5 shrink-0">
           {feedbackToast && (
-            <div className="flex items-center gap-1 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[10px] px-2 py-0.5 rounded-md animate-in fade-in">
-              <Check className="w-3 h-3 text-emerald-400" />
+            <div className="flex items-center gap-1 bg-success/20 border border-success/40 text-success text-[10px] px-2 py-0.5 rounded-md animate-in fade-in">
+              <Check className="w-3 h-3 text-success" />
               <span className="hidden md:inline">{feedbackToast}</span>
               <span className="md:hidden">Loaded</span>
             </div>
@@ -78,7 +78,7 @@ export const InstantVibesBar: React.FC = React.memo(() => {
 
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-[#1C213E] transition-colors cursor-pointer"
+            className="p-1 rounded text-base-content/70 hover:text-base-content hover:bg-base-300 transition-colors cursor-pointer"
             title={isCollapsed ? 'Show Vibes' : 'Hide Vibes'}
           >
             {isCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}

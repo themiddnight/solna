@@ -85,7 +85,7 @@ export const TransportBar: React.FC = React.memo(() => {
         : "TAB";
 
   return (
-    <div className="bg-[#12152A] border-t border-[#252B48] px-3 py-2 flex items-center justify-between gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
+    <div className="bg-base-100 border-t border-base-300 px-3 py-2 flex items-center justify-between gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
       {/* Left Transport Actions: Play All + Tab Play + Tempo */}
       <div className="flex items-center gap-1.5 shrink-0">
         {/* Play All Button */}
@@ -94,8 +94,8 @@ export const TransportBar: React.FC = React.memo(() => {
           onClick={onTogglePlayAll}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer shadow-xs ${
             isPlayingAll
-              ? "bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/20"
-              : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20"
+              ? "bg-warning text-warning-content shadow-warning/20"
+              : "bg-success text-success-content shadow-success/20"
           }`}
           title="Play/Stop All"
         >
@@ -114,10 +114,10 @@ export const TransportBar: React.FC = React.memo(() => {
           disabled={isPlayDisabled}
           className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
             isPlayDisabled
-              ? "bg-slate-800/60 text-slate-500 border border-[#252B48] cursor-not-allowed opacity-50"
+              ? "bg-base-300/50 text-base-content/40 border border-base-300 cursor-not-allowed opacity-50"
               : isPlaying
-                ? "bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs"
-                : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs"
+                ? "bg-warning text-warning-content shadow-xs"
+                : "bg-primary text-primary-content shadow-xs"
           }`}
           title={`Play/Stop ${currentTabLabel}`}
         >
@@ -130,11 +130,11 @@ export const TransportBar: React.FC = React.memo(() => {
         </button>
 
         {/* Tempo BPM Control */}
-        <div className="flex items-center gap-0.5 bg-[#0B0D19] border border-[#252B48] px-1.5 py-1 rounded-lg">
-          <span className="text-[10px] text-slate-500 font-mono hidden xs:inline">BPM</span>
+        <div className="flex items-center gap-0.5 bg-base-200 border border-base-300 px-1.5 py-1 rounded-lg">
+          <span className="text-[10px] text-base-content/50 font-mono hidden xs:inline">BPM</span>
           <button
             onClick={() => setBpm(Math.max(40, bpm - 1))}
-            className="p-0.5 text-slate-400 hover:text-white rounded hover:bg-[#1C213E] cursor-pointer"
+            className="p-0.5 text-base-content/70 hover:text-base-content rounded hover:bg-base-300 cursor-pointer"
             title="Decrease BPM"
           >
             <Minus className="w-3 h-3" />
@@ -146,11 +146,11 @@ export const TransportBar: React.FC = React.memo(() => {
             max={240}
             value={bpm}
             onChange={(e) => setBpm(Number(e.target.value))}
-            className="w-8 bg-transparent text-center font-mono font-bold text-indigo-300 focus:outline-none focus:text-white text-xs"
+            className="w-8 bg-transparent text-center font-mono font-bold text-primary focus:outline-none focus:text-base-content text-xs"
           />
           <button
             onClick={() => setBpm(Math.min(240, bpm + 1))}
-            className="p-0.5 text-slate-400 hover:text-white rounded hover:bg-[#1C213E] cursor-pointer"
+            className="p-0.5 text-base-content/70 hover:text-base-content rounded hover:bg-base-300 cursor-pointer"
             title="Increase BPM"
           >
             <Plus className="w-3 h-3" />
@@ -163,8 +163,8 @@ export const TransportBar: React.FC = React.memo(() => {
           onClick={handleToggleMetronome}
           className={`flex items-center gap-1 p-1.5 sm:px-2 sm:py-1 rounded-lg border text-xs cursor-pointer transition-colors ${
             metronomeActive
-              ? "bg-indigo-600 border-indigo-500 text-white shadow-xs"
-              : "bg-[#0B0D19] border-[#252B48] text-slate-400 hover:text-slate-200"
+              ? "bg-primary border-primary text-primary-content shadow-xs"
+              : "bg-base-200 border-base-300 text-base-content/70 hover:text-base-content"
           }`}
           title="Metronome"
         >
@@ -175,12 +175,12 @@ export const TransportBar: React.FC = React.memo(() => {
 
       {/* Middle Audio Spectrum Wave (Desktop & Tablet) */}
       <div className="flex-1 max-w-xs hidden md:flex items-center gap-2">
-        <div className="flex-1 bg-[#0B0D19] border border-[#252B48] rounded-lg p-1 flex items-center relative overflow-hidden shadow-inner group">
+        <div className="flex-1 bg-base-200 border border-base-300 rounded-lg p-1 flex items-center relative overflow-hidden shadow-inner group">
           <AudioVisualizer
             mode={vizMode}
             height={24}
             className="w-full rounded"
-            colorTheme="indigo"
+            colorTheme="amber"
             showControls={false}
           />
           <button
@@ -189,7 +189,7 @@ export const TransportBar: React.FC = React.memo(() => {
               const nextIndex = (modes.indexOf(vizMode) + 1) % modes.length;
               setVizMode(modes[nextIndex]);
             }}
-            className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-[#161B36]/90 text-slate-300 hover:text-white px-1 py-0.5 rounded text-[9px] flex items-center gap-0.5 border border-[#252B48] cursor-pointer"
+            className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-base-300/90 text-base-content hover:text-base-content px-1 py-0.5 rounded text-[9px] flex items-center gap-0.5 border border-base-300 cursor-pointer"
             title="Switch Visualizer Mode"
           >
             <Waves className="w-2.5 h-2.5" />
@@ -200,8 +200,8 @@ export const TransportBar: React.FC = React.memo(() => {
       {/* Right Meter & Master Gain */}
       <div className="flex items-center gap-2 shrink-0">
         {/* Real-time Stereo VU Meter */}
-        <div className="hidden sm:flex items-center gap-1 bg-[#0B0D19] border border-[#252B48] p-1.5 rounded-lg">
-          <div className="w-14 h-2 bg-[#161B36] rounded-xs overflow-hidden flex gap-0.5 p-0.5">
+        <div className="hidden sm:flex items-center gap-1 bg-base-200 border border-base-300 p-1.5 rounded-lg">
+          <div className="w-14 h-2 bg-base-300 rounded-xs overflow-hidden flex gap-0.5 p-0.5">
             {Array.from({ length: 10 }).map((_, i) => {
               const active = vuLevel * 10 > i;
               const isRed = i >= 8;
@@ -213,11 +213,11 @@ export const TransportBar: React.FC = React.memo(() => {
                   className={`flex-1 rounded-xs transition-colors duration-75 ${
                     active
                       ? isRed
-                        ? "bg-rose-500"
+                        ? "bg-error"
                         : isYellow
-                          ? "bg-amber-400"
-                          : "bg-emerald-400"
-                      : "bg-[#22284C]"
+                          ? "bg-warning"
+                          : "bg-success"
+                      : "bg-base-300/50"
                   }`}
                 />
               );
@@ -226,8 +226,8 @@ export const TransportBar: React.FC = React.memo(() => {
         </div>
 
         {/* Master Output Fader */}
-        <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#252B48] px-2 py-1 rounded-lg">
-          <Volume2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+        <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-lg">
+          <Volume2 className="w-3.5 h-3.5 text-base-content/60 shrink-0" />
           <Slider
             id="slider-transport-master"
             min={0}
@@ -235,10 +235,10 @@ export const TransportBar: React.FC = React.memo(() => {
             step={0.01}
             value={masterVolume}
             onChange={setMasterVolume}
-            className="w-14 sm:w-16 h-1.5 bg-[#252B48] rounded cursor-pointer accent-indigo-500"
+            className="w-14 sm:w-16 h-1.5 bg-base-300 rounded cursor-pointer accent-primary"
             title={`Master: ${(masterVolume * 100).toFixed(0)}%`}
           />
-          <span className="font-mono text-[10px] text-slate-400 w-6 text-right">
+          <span className="font-mono text-[10px] text-base-content/60 w-6 text-right">
             {(masterVolume * 100).toFixed(0)}
           </span>
         </div>
