@@ -50,7 +50,7 @@ describe('DrumPads theming and key-binding contract', () => {
 
     expect(html).toContain('card bg-base-100 border border-base-300');
     expect(html).toContain('card-body');
-    expect(html).toContain('kbd kbd-xs');
+    expect(html).toContain('kbd-key');
     expect(html).toContain('range range-xs range-primary');
     expect(html).toContain('text-base-content/50');
     // `ring-primary` only renders when a pad is active (activePadId is null

@@ -42,8 +42,9 @@ describe('Keyboard tokens and semantics', () => {
     expect(active).not.toContain('indigo');
   });
 
-  test('shortcut hints and borders use tokens', () => {
-    expect(idle).toContain('text-primary');
+  test('shortcut hints are kbd-key keycaps and borders use tokens', () => {
+    expect(idle).toContain('<kbd');
+    expect(idle).toContain('kbd-key');
     expect(idle).toContain('border-base-300');
   });
 

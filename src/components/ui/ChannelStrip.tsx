@@ -33,11 +33,11 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
   // "Chord Layer Gain: X%" / "Bass Layer Gain: X%".
   const layerName = idPrefix.charAt(0).toUpperCase() + idPrefix.slice(1);
   return (
-    <div className="min-w-[160px]">
+    <div className="min-w-40">
       <label className={LABEL_BASE}>
         {label} <span className="font-mono">({Math.round(volume * 100)}%)</span>
       </label>
-      <div className="flex items-center gap-2 bg-base-200 border border-base-300 rounded-lg px-2.5 py-1 text-xs h-[30px]">
+      <div className="flex items-center gap-2 bg-base-200 border border-base-300 rounded-box px-2.5 py-1 text-xs h-7.5">
         <Volume2 className={`w-3.5 h-3.5 ${accentClass} shrink-0`} />
         <Slider
           id={`slider-${idPrefix}-layer-volume`}
@@ -50,7 +50,7 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
           title={`${layerName} Layer Gain: ${(volume * 100).toFixed(0)}%`}
         />
         {showReadout && (
-          <span className="text-[10px] text-accent font-mono min-w-8 text-right">
+          <span className="text-[10px] font-mono min-w-8 text-right">
             {(volume * 100).toFixed(0)}%
           </span>
         )}

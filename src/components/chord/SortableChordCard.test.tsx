@@ -37,10 +37,10 @@ describe('SortableChordCard theming', () => {
     expect(html).not.toContain('#12152A');
   });
 
-  test('the active state rings primary', () => {
+  test('the active state rings the chord module colour', () => {
     const html = render(true);
-    expect(html).toContain('border-primary ring-2 ring-primary/50 bg-base-200');
-    expect(html).toContain('from-primary to-secondary text-primary-content');
+    expect(html).toContain('border-module-chord ring-2 ring-module-chord/50 bg-base-200');
+    expect(html).toContain('from-module-chord to-secondary text-module-chord-content');
   });
 
   test('bar counter and note readout are mono badges/text', () => {

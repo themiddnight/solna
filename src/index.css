@@ -27,6 +27,10 @@
   --color-error-content: #14121B;
   --color-info: #79A6E0;
   --color-info-content: #14121B;
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+  --border: 1px;
 }
 
 @plugin "daisyui/theme" {
@@ -53,6 +57,10 @@
   --color-error-content: #FFFFFF;
   --color-info: #2C6FA8;
   --color-info-content: #FFFFFF;
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+  --border: 1px;
 }
 
 /* Piano keys are physical objects: white stays white and black stays black in
@@ -79,6 +87,108 @@
   --key-white-content: #241E19;
   --key-black: #2A241F;
   --key-black-content: #F7F4EF;
+}
+
+/* Module identity colours: Chord, Bass and the synth's own signal stages get
+   their own tint, independent of daisyUI's primary/secondary/accent/success/
+   info roles, so none collides with an unrelated semantic meaning (e.g.
+   success's "saved" toast) elsewhere in the app. Same indirection pattern as
+   the piano-key colours above.
+
+   The synth's six signal stages must stay distinguishable side by side — the
+   two ADSR halves share one card, so they are the pair that has to contrast
+   hardest. Hues are taken from Tailwind's palette (400 for dark, 600 for
+   light) and spaced so no two neighbours land in the same family; every
+   adjacent pair is at least ~50° apart on the colour wheel:
+
+     osc amber 43° · filter rose 350° · env-vca emerald 160° ·
+     env-vcf fuchsia 292° · lfo sky 199° · arp violet 255°
+
+   The blue 210-215° band is deliberately left to module-bass, whose chip sits
+   on this same page. */
+@theme {
+  --color-module-chord: var(--module-chord);
+  --color-module-chord-content: var(--module-chord-content);
+  --color-module-bass: var(--module-bass);
+  --color-module-bass-content: var(--module-bass-content);
+  --color-module-osc: var(--module-osc);
+  --color-module-osc-content: var(--module-osc-content);
+  --color-module-filter: var(--module-filter);
+  --color-module-filter-content: var(--module-filter-content);
+  --color-module-env-vca: var(--module-env-vca);
+  --color-module-env-vca-content: var(--module-env-vca-content);
+  --color-module-env-vcf: var(--module-env-vcf);
+  --color-module-env-vcf-content: var(--module-env-vcf-content);
+  --color-module-lfo: var(--module-lfo);
+  --color-module-lfo-content: var(--module-lfo-content);
+  --color-module-arp: var(--module-arp);
+  --color-module-arp-content: var(--module-arp-content);
+}
+
+:root,
+[data-theme="solva-dark"] {
+  --module-chord: #9CB86B;
+  --module-chord-content: #14121B;
+  --module-bass: #6C93C7;
+  --module-bass-content: #14121B;
+  /* Tailwind *-400 — bright enough to read on the espresso base. */
+  --module-osc: #FBBF24;          /* amber-400 */
+  --module-osc-content: #14121B;
+  --module-filter: #FB7185;       /* rose-400 */
+  --module-filter-content: #14121B;
+  --module-env-vca: #34D399;      /* emerald-400 */
+  --module-env-vca-content: #14121B;
+  --module-env-vcf: #E879F9;      /* fuchsia-400 */
+  --module-env-vcf-content: #14121B;
+  --module-lfo: #38BDF8;          /* sky-400 */
+  --module-lfo-content: #14121B;
+  --module-arp: #A78BFA;          /* violet-400 */
+  --module-arp-content: #14121B;
+
+  /* Canvas gradient — see the bg-canvas utility below. */
+  --canvas-dawn: color-mix(in oklab, var(--color-primary) 14%, transparent);
+  --canvas-sky: color-mix(in oklab, var(--color-secondary) 9%, transparent);
+}
+
+[data-theme="solva-light"] {
+  --module-chord: #6B8E4E;
+  --module-chord-content: #FFFFFF;
+  --module-bass: #3E6BA6;
+  --module-bass-content: #FFFFFF;
+  /* Tailwind *-600 — the 400s wash out on warm paper. */
+  --module-osc: #D97706;          /* amber-600 */
+  --module-osc-content: #FFFFFF;
+  --module-filter: #E11D48;       /* rose-600 */
+  --module-filter-content: #FFFFFF;
+  --module-env-vca: #059669;      /* emerald-600 */
+  --module-env-vca-content: #FFFFFF;
+  --module-env-vcf: #C026D3;      /* fuchsia-600 */
+  --module-env-vcf-content: #FFFFFF;
+  --module-lfo: #0284C7;          /* sky-600 */
+  --module-lfo-content: #FFFFFF;
+  --module-arp: #7C3AED;          /* violet-600 */
+  --module-arp-content: #FFFFFF;
+
+  /* Warm paper takes far less tint before it reads as a stain. */
+  --canvas-dawn: color-mix(in oklab, var(--color-primary) 8%, transparent);
+  --canvas-sky: color-mix(in oklab, var(--color-secondary) 5%, transparent);
+}
+
+/* The app canvas: base-200 with two soft glows — a sunrise rising from the
+   bottom edge and a cooler dawn-sky wash in the top-right corner. Both are
+   mixed from the live theme tokens, so the gradient re-tints itself when the
+   theme flips instead of needing a second hand-written palette.
+
+   Declared as a utility (not on `body`) because the app shell is a full-height
+   flex column that paints over the body; App.tsx wears `bg-canvas` in place of
+   `bg-base-200`. Nothing here reacts to audio — the old audio-driven ambient
+   wash was removed deliberately. */
+@utility bg-canvas {
+  background-color: var(--color-base-200);
+  background-image:
+    radial-gradient(120% 65% at 50% 100%, var(--canvas-dawn) 0%, transparent 72%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 @layer base {
@@ -129,6 +239,30 @@ input[type="range"] {
   }
 }
 
+/* Keycap chip for any control that has a keyboard binding (piano keys, drum
+   pads). daisyUI's own .kbd is filled and pill-ish; these keycaps sit on top
+   of coloured keys and pads, so they are outline-only and take their colour
+   from the parent via currentColor — that keeps them legible on a white key,
+   a black key and an active primary key alike. One utility, so the piano and
+   the pads cannot drift apart. Applied to a real <kbd> element. */
+@utility kbd-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  padding: 0;
+  border: var(--border) solid color-mix(in oklab, currentColor 45%, transparent);
+  border-radius: var(--radius-selector);
+  background-color: transparent;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 /* tailwindcss-animate is not a dependency; these two hand-written utilities
    replace the animate-in/fade-in/slide-in-from-right classes the preset
    library used to reference (which emitted nothing). */
@@ -148,15 +282,4 @@ input[type="range"] {
 
 @utility animate-slide-in-right {
   animation: solva-slide-in-right 200ms ease-out;
-}
-
-/* Ambient background visualizer wash. The old flat `opacity-25` was tuned for
-   the espresso backdrop and reads as a dirty smudge on solva-light's #F7F4EF
-   paper, so the light theme gets a much weaker wash. */
-.ambient-wash {
-  opacity: 0.25;
-}
-
-[data-theme="solva-light"] .ambient-wash {
-  opacity: 0.07;
 }

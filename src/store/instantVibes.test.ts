@@ -20,9 +20,9 @@ describe('Instant Vibes Mode', () => {
       // Drum Beat & Kit
       expect(Boolean(vibe.soundKit)).toBe(true);
       expect(Boolean(vibe.drumPattern)).toBe(true);
-      expect(Boolean(vibe.drumPattern.Kick)).toBe(true);
-      expect(Boolean(vibe.drumPattern.Snare)).toBe(true);
-      expect(Boolean(vibe.drumPattern.HiHat)).toBe(true);
+      expect(Boolean(vibe.drumPattern.kick)).toBe(true);
+      expect(Boolean(vibe.drumPattern.snare)).toBe(true);
+      expect(Boolean(vibe.drumPattern.hihat)).toBe(true);
 
       // Chords & Feel
       expect(vibe.chords.length).toBe(4);
@@ -65,6 +65,18 @@ describe('Instant Vibes Mode', () => {
     expect(state.bassFeel).toBe(lofiVibe.bassFeel);
     expect(state.bassSynthParams.preset).toBe(lofiVibe.bassPresetName);
     expect(state.synthParams.preset).toBe(lofiVibe.synthPresetName);
+  });
+
+  test('applyInstantVibeToStore actually rewrites the sequencer track steps to match the vibe drum pattern', () => {
+    const synthwave = INSTANT_VIBES.find((v) => v.id === 'synthwave-80s')!;
+    applyInstantVibeToStore(synthwave);
+
+    const tracks = useAppStore.getState().sequencerTracks;
+    for (const track of tracks) {
+      const vibeSteps = synthwave.drumPattern[track.instrument];
+      expect(Boolean(vibeSteps)).toBe(true);
+      expect(track.steps).toEqual(vibeSteps.map((v) => v === 1));
+    }
   });
 
   test('applies synthwave vibe with tight feel and active arpeggiator', () => {

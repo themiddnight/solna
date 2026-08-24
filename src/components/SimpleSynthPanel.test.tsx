@@ -18,21 +18,45 @@ const params = {
 describe('SimpleSynthPanel theming', () => {
   const html = renderToString(<SimpleSynthPanel params={params} onChangeParams={() => {}} />);
 
-  test('macro cards use card/card-body and semantic accents', () => {
+  test('macro cards use card/card-body and badge components', () => {
     expect(html).toContain('card bg-base-100');
     expect(html).toContain('card-body');
-    expect(html).toContain('text-primary');
-    expect(html).toContain('text-accent');
-    expect(html).toContain('text-secondary');
-    expect(html).toContain('text-success');
     expect(html).toContain('badge badge-sm');
   });
 
-  test('arp controls are daisyUI join groups on the accent token', () => {
+  /**
+   * Each macro is coloured by the Pro-Mode stage it actually writes to, so a
+   * knob keeps its identity when the user switches modes. Tone→filterCutoff,
+   * Space→release/sustain, Vibe→detune+lfoDepth, Punch→subOscVolume+attack.
+   */
+  test('every macro wears its Pro-Mode stage colour', () => {
+    expect(html).toContain('text-module-filter');
+    expect(html).toContain('text-module-env-vca');
+    expect(html).toContain('text-module-lfo');
+    expect(html).toContain('text-module-osc');
+  });
+
+  test('no macro borrows a daisyUI semantic role', () => {
+    for (const semantic of [
+      'text-primary',
+      'text-secondary',
+      'text-accent',
+      'text-success',
+      'badge-primary',
+      'badge-secondary',
+      'badge-accent',
+      'badge-success',
+    ]) {
+      expect(html).not.toContain(semantic);
+    }
+  });
+
+  test('arp controls are daisyUI join groups on the arp module token', () => {
     expect(html).toContain('join');
     expect(html).toContain('btn join-item');
-    expect(html).toContain('btn-accent');
-    expect(html).toContain('text-accent-content');
+    expect(html).toContain('--btn-color:var(--color-module-arp)');
+    expect(html).toContain('--btn-fg:var(--color-module-arp-content)');
+    expect(html).toContain('text-module-arp');
   });
 
   test('no dark: variants survive — they key off the OS, not data-theme', () => {

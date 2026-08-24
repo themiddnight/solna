@@ -42,7 +42,7 @@ export const QuickSavePopover: React.FC<QuickSavePopoverProps> = ({
 }) => {
   if (!open) return null;
   return (
-    <div className="card bg-base-100 border border-primary/40 rounded-xl p-3.5 flex flex-row flex-wrap items-center justify-between gap-3 shadow-xl animate-fade-in">
+    <div className="card bg-base-100 border border-primary/40 rounded-box p-3.5 flex flex-row flex-wrap items-center justify-between gap-3 shadow-xl animate-fade-in">
       <div className="flex items-center gap-2 text-xs font-semibold text-base-content">
         <Bookmark className="w-4 h-4 text-primary" />
         <span>{heading}</span>

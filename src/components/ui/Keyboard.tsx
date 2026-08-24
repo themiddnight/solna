@@ -159,16 +159,16 @@ export function ScaleLockedKey({
         e.preventDefault();
         onNoteOff(k.note);
       }}
-      className={`w-12 h-full rounded-b-md border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
+      className={`w-12 h-full rounded-b-field border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
         isActive
           ? "bg-primary text-primary-content shadow-inner scale-[0.99]"
           : "bg-key-white text-key-white-content hover:brightness-105"
       }`}
     >
       <span className="text-[10px] font-mono font-bold">{k.label}</span>
-      <span className="text-[9px] font-mono text-primary uppercase font-semibold">
+      <kbd className="kbd-key">
         {shortcutLabel(k.key)}
-      </span>
+      </kbd>
     </button>
   );
 }
@@ -188,7 +188,7 @@ export function ScaleLockedKeyboard({
 }) {
   return (
     <>
-      <div className="flex flex-1 w-full gap-0.5 [justify-content:safe_center]">
+      <div className="flex flex-1 w-full gap-0.5 justify-center-safe">
         {rows.topRow.map((k) => (
           <ScaleLockedKey
             key={k.note}
@@ -199,7 +199,7 @@ export function ScaleLockedKeyboard({
           />
         ))}
       </div>
-      <div className="flex flex-1 w-full gap-0.5 [justify-content:safe_center]">
+      <div className="flex flex-1 w-full gap-0.5 justify-center-safe">
         {rows.homeRow.map((k) => (
           <ScaleLockedKey
             key={k.note}
@@ -260,7 +260,7 @@ export function ChromaticKeyboard({
                 e.preventDefault();
                 onNoteOff(k.note);
               }}
-              className={`absolute z-10 w-9 h-[100px] rounded-b-md border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
+              className={`absolute z-10 w-9 h-25 rounded-b-field border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
                 isActive
                   ? "bg-primary text-primary-content shadow-lg shadow-primary/50 scale-[0.98]"
                   : "bg-key-black text-key-black-content hover:brightness-125"
@@ -272,9 +272,9 @@ export function ChromaticKeyboard({
               <span className="text-[9px] font-mono font-bold text-key-black-content">
                 {k.label}
               </span>
-              <span className="text-[8px] font-mono text-primary uppercase">
+              <kbd className="kbd-key">
                 {shortcutLabel(k.key)}
-              </span>
+              </kbd>
             </button>
           );
         }
@@ -309,7 +309,7 @@ export function ChromaticKeyboard({
               e.preventDefault();
               onNoteOff(k.note);
             }}
-            className={`w-16 h-full rounded-b-md border border-base-300 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
+            className={`w-16 h-full rounded-b-field border border-base-300 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
               isActive
                 ? "bg-primary text-primary-content shadow-inner scale-[0.99]"
                 : "bg-key-white text-key-white-content hover:brightness-105"
@@ -318,9 +318,9 @@ export function ChromaticKeyboard({
             <span className="text-[10px] font-mono font-bold">
               {k.label}
             </span>
-            <span className="text-[9px] font-mono text-primary uppercase font-semibold">
+            <kbd className="kbd-key">
               {shortcutLabel(k.key)}
-            </span>
+            </kbd>
           </button>
         );
       })}

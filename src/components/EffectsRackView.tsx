@@ -19,7 +19,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
       <div className="card bg-base-100 border border-base-300 shadow-md">
         <div className="card-body p-3 sm:p-4 flex-row items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-primary/20 border border-primary/30 text-primary">
+            <div className="p-1.5 rounded-selector bg-primary/20 border border-primary/30 text-primary">
               <Sliders className="w-4 h-4" />
             </div>
             <h2 className="font-bold text-sm sm:text-base text-base-content">

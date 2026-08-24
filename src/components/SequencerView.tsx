@@ -123,7 +123,7 @@ export const SequencerView = () => {
       <div className="card bg-base-100 border border-base-300 shadow-md">
         <div className="card-body p-3 sm:p-4 flex-row flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-primary/20 border border-primary/30 text-primary">
+          <div className="p-1.5 rounded-selector bg-primary/20 border border-primary/30 text-primary">
             <Grid className="w-4 h-4" />
           </div>
           <h2 className="font-bold text-sm sm:text-base text-base-content">
@@ -148,7 +148,7 @@ export const SequencerView = () => {
           </div>
 
           {/* Genre selector */}
-          <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-lg">
+          <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-field">
             <Sparkles className="w-3 h-3 text-accent" />
             <select
               id="select-sequencer-genre"
@@ -165,7 +165,7 @@ export const SequencerView = () => {
           </div>
 
           {/* Sound kit selector */}
-          <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-lg">
+          <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-field">
             <Disc3 className="w-3 h-3 text-secondary" />
             <select
               id="select-sequencer-sound-kit"
@@ -314,7 +314,7 @@ export const SequencerView = () => {
             <div
               key={track.id}
               id={`sequencer-row-${track.id}`}
-              className="flex items-center gap-2 bg-base-200 p-2 rounded-lg border border-base-300 hover:border-primary/40 transition-colors"
+              className="flex items-center gap-2 bg-base-200 p-2 rounded-box border border-base-300 hover:border-primary/40 transition-colors"
             >
               {/* Track Info & Mute */}
               <div className="w-40 flex items-center justify-between pr-2 border-r border-base-300">
@@ -371,7 +371,7 @@ export const SequencerView = () => {
                       key={stepIdx}
                       id={`step-${track.id}-${stepIdx}`}
                       onClick={() => toggleStep(track.id, stepIdx)}
-                      className={`flex-1 h-9 rounded-md transition-all cursor-pointer relative ${
+                      className={`flex-1 h-9 rounded-field transition-all cursor-pointer relative ${
                         isActive
                           ? `${track.color} shadow-md shadow-primary/20 scale-[0.96]`
                           : isBeatGroup
@@ -380,7 +380,7 @@ export const SequencerView = () => {
                       } ${isCurrent ? "ring-2 ring-primary brightness-125" : ""}`}
                     >
                       {isActive && (
-                        <div className="absolute inset-0 bg-base-content/10 rounded-md animate-pulse" />
+                        <div className="absolute inset-0 bg-base-content/10 rounded-field animate-pulse" />
                       )}
                     </button>
                   );

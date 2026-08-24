@@ -67,7 +67,7 @@ export const DrumPads: React.FC = React.memo(() => {
               <button
                 id={`btn-pad-${pad.id}`}
                 onClick={() => triggerPad(pad)}
-                className={`btn relative w-full h-14 sm:h-16 border-0 rounded-lg bg-gradient-to-br ${pad.color} p-1.5 sm:p-2 flex flex-col justify-between items-start shadow-sm transition-all duration-75 ${
+                className={`btn relative w-full h-14 sm:h-16 border-0 rounded-field bg-gradient-to-br ${pad.color} p-1.5 sm:p-2 flex flex-col justify-between items-start shadow-sm transition-all duration-75 ${
                   isActive
                     ? 'ring-4 ring-primary brightness-125 scale-95 shadow-primary/30'
                     : 'hover:brightness-110 active:scale-95'
@@ -77,9 +77,9 @@ export const DrumPads: React.FC = React.memo(() => {
                   <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider truncate">
                     {pad.name.replace(' Drum', '').replace(' Snap', '').replace(' Cymbal', '')}
                   </span>
-                  <span className="kbd kbd-xs w-4 h-4 sm:w-5 sm:h-5 min-h-0 px-0 text-[9px] sm:text-[10px] font-mono font-bold shrink-0">
+                  <kbd className="kbd-key">
                     {shortcutLabel(pad.shortcut)}
-                  </span>
+                  </kbd>
                 </div>
               </button>
 

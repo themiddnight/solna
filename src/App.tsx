@@ -7,7 +7,6 @@ import { ChordView } from './components/ChordView';
 import { EffectsRackView } from './components/EffectsRackView';
 import { TransportBar } from './components/TransportBar';
 import { ProjectModal } from './components/ProjectModal';
-import { AudioVisualizer } from './components/AudioVisualizer';
 import { audioEngine } from './audio/engine';
 import type { ProjectState } from './types';
 import { useAppStore } from './store/store';
@@ -78,18 +77,7 @@ export function App() {
   const currentProject = useProjectState();
 
   return (
-    <div className="h-dvh bg-base-200 text-base-content flex flex-col font-sans selection:bg-primary selection:text-primary-content relative overflow-hidden">
-      {/* Real-time Atmospheric Background Frequency Wave Visualizer */}
-      <div className="ambient-wash absolute inset-0 pointer-events-none z-0 overflow-hidden">
-        <AudioVisualizer
-          mode="ambient-bg"
-          height="100%"
-          className="w-full h-full"
-          colorTheme="primary"
-          ambientOpacity={0.2}
-        />
-      </div>
-
+    <div className="h-dvh bg-canvas text-base-content flex flex-col font-sans selection:bg-primary selection:text-primary-content relative overflow-hidden">
       {/* Navigation Header */}
       <Header />
 

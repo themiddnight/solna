@@ -285,7 +285,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
         header: (
           <div className="flex items-center justify-between text-[11px] font-bold text-base-content/60 uppercase tracking-wider px-1">
             <span>Standard Library Templates ({filteredTemplates.length})</span>
-            <span className="text-[10px] font-normal font-mono text-primary">
+            <span className="text-[10px] font-normal font-mono text-module-chord">
               Key: {scaleRoot}
             </span>
           </div>
@@ -314,14 +314,14 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     const previewNames = resolvedChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
 
     return (
-      <div className="card bg-base-200 border border-base-300 hover:border-primary/50 p-3 rounded-xl transition-all flex flex-col gap-2 group relative shadow-xs">
+      <div className="card bg-base-200 border border-base-300 hover:border-module-chord/50 p-3 rounded-box transition-all flex flex-col gap-2 group relative shadow-xs">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-bold text-xs text-base-content group-hover:text-primary transition-colors truncate">
+              <span className="font-bold text-xs text-base-content group-hover:text-module-chord transition-colors truncate">
                 {tpl.name}
               </span>
-              <span className="badge badge-sm bg-base-300 text-primary font-mono py-0.5 shrink-0">
+              <span className="badge badge-sm bg-base-300 text-module-chord font-mono py-0.5 shrink-0">
                 {tpl.category}
               </span>
               {autoReharmonize && (
@@ -347,8 +347,8 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
               onClick={() => handleAudition(resolvedChords, tpl.name)}
               className={`btn btn-xs ${
                 auditioningName === tpl.name
-                  ? 'btn-primary animate-pulse'
-                  : 'btn-ghost text-primary'
+                  ? '[--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)] animate-pulse'
+                  : 'btn-ghost text-module-chord'
               }`}
               title="Audition Sound"
             >
@@ -361,7 +361,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
                 onApplyChords(resolvedChords);
                 onClose();
               }}
-              className="btn btn-xs btn-primary gap-1"
+              className="btn btn-xs gap-1 [--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]"
             >
               <span>Load</span>
             </button>
@@ -380,7 +380,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     const previewNames = resolvedCustom.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
 
     return (
-      <div className="card bg-base-200 border border-base-300 hover:border-secondary/50 p-3 rounded-xl transition-all flex flex-col gap-2 group relative shadow-xs">
+      <div className="card bg-base-200 border border-base-300 hover:border-secondary/50 p-3 rounded-box transition-all flex flex-col gap-2 group relative shadow-xs">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -396,7 +396,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
                 </span>
               )}
             </div>
-            <div className="text-[11px] font-mono text-primary font-semibold mt-0.5">
+            <div className="text-[11px] font-mono text-module-chord font-semibold mt-0.5">
               {e.roman}
             </div>
             {e.description && (
@@ -429,7 +429,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
                 onApplyChords(resolvedCustom);
                 onClose();
               }}
-              className="btn btn-xs btn-primary gap-1"
+              className="btn btn-xs gap-1 [--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]"
             >
               <span>Load</span>
             </button>

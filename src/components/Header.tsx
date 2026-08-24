@@ -130,14 +130,14 @@ export const Header: React.FC = React.memo(() => {
     <header className="navbar min-h-0 bg-base-100 border-b border-base-300 px-3 py-2 flex items-center justify-between gap-2 text-sm select-none sticky top-0 z-40">
       {/* Brand & Project Info */}
       <div className="flex items-center gap-2.5 shrink-0">
-        <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-primary to-secondary flex items-center justify-center shadow-md shadow-primary/20">
+        <div className="w-7 h-7 rounded-selector bg-linear-to-tr from-primary to-secondary flex items-center justify-center shadow-md shadow-primary/20">
           <Radio className="w-3.5 h-3.5 text-primary-content" />
         </div>
         <div className="flex items-center gap-1.5">
           <span className="font-extrabold text-sm tracking-tight text-base-content">
             Solva
           </span>
-          <span className="hidden sm:inline-block text-[11px] text-base-content/60 font-medium truncate max-w-[120px] md:max-w-[160px]">
+          <span className="hidden sm:inline-block text-[11px] text-base-content/60 font-medium truncate max-w-30 md:max-w-40">
             · {projectTitle}
           </span>
         </div>
@@ -145,7 +145,7 @@ export const Header: React.FC = React.memo(() => {
 
       {/* Primary Navigation Tabs */}
       <nav className="flex items-center gap-2">
-        <div role="tablist" className="tabs tabs-box tabs-xs bg-base-200 border border-base-300 p-0.5 overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-0.5 shrink-0">
+        <div role="tablist" className="tabs tabs-box tabs-sm bg-base-200 border border-base-300 p-1 overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-1 shrink-0">
           {NAV_TABS.map((tab, index) => {
             if (tab === "divider") {
               return (
@@ -169,11 +169,11 @@ export const Header: React.FC = React.memo(() => {
                 id={`tab-${tab.view}`}
                 role="tab"
                 onClick={() => setActiveTab(tab.view)}
-                className={`tab gap-1 text-xs font-semibold whitespace-nowrap relative ${
-                  activeTab === tab.view ? "tab-active" : ""
+                className={`tab gap-1.5 text-xs font-bold whitespace-nowrap relative ${
+                  activeTab === tab.view ? "tab-active bg-primary text-primary-content" : ""
                 }`}
               >
-                <tab.icon className="w-3.5 h-3.5 shrink-0" />
+                <tab.icon className="w-4 h-4 shrink-0" />
                 <span className="hidden md:inline">{tab.label}</span>
                 {isTabPlaying && (
                   <span
@@ -189,7 +189,7 @@ export const Header: React.FC = React.memo(() => {
           })}
         </div>
 
-        <div role="tablist" className="tabs tabs-box tabs-xs bg-base-200 border border-base-300 p-0.5 overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-0.5 shrink-0">
+        <div role="tablist" className="tabs tabs-box tabs-sm bg-base-200 border border-base-300 p-1 overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-1 shrink-0">
           {MASTER_TABS.map((tab) => {
             return (
               <button
@@ -197,11 +197,11 @@ export const Header: React.FC = React.memo(() => {
                 id={`tab-${tab.view}`}
                 role="tab"
                 onClick={() => setActiveTab(tab.view)}
-                className={`tab gap-1 text-xs font-semibold whitespace-nowrap relative ${
-                  activeTab === tab.view ? "tab-active" : ""
+                className={`tab gap-1.5 text-xs font-bold whitespace-nowrap relative ${
+                  activeTab === tab.view ? "tab-active bg-primary text-primary-content" : ""
                 }`}
               >
-                <tab.icon className="w-3.5 h-3.5 shrink-0" />
+                <tab.icon className="w-4 h-4 shrink-0" />
                 <span className="hidden md:inline">{tab.label}</span>
               </button>
             );
@@ -212,12 +212,12 @@ export const Header: React.FC = React.memo(() => {
       {/* Key, Scale & Global Actions */}
       <div className="flex items-center gap-1.5 shrink-0">
         {/* Scale Picker Compact */}
-        <div className="hidden sm:flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-lg">
+        <div className="hidden sm:flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-field">
           <select
             id="select-master-scale-root"
             value={scaleRoot}
             onChange={(e) => setScaleRoot(e.target.value)}
-            className="select select-xs select-ghost font-bold text-primary"
+            className="select select-sm select-ghost font-bold text-primary max-w-14"
             title="Root Note"
           >
             {ROOTS.map((r) => (
@@ -230,7 +230,7 @@ export const Header: React.FC = React.memo(() => {
             id="select-master-scale-type"
             value={scaleType}
             onChange={(e) => setScaleType(e.target.value)}
-            className="select select-xs select-ghost font-bold text-base-content/80 max-w-[90px]"
+            className="select select-sm select-ghost font-bold text-base-content/80 min-w-48"
             title="Scale Type"
           >
             {Object.keys(SCALES).map((s) => (

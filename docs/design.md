@@ -44,6 +44,8 @@ Designed for morning and daytime sketching, simulating warm parchment paper with
 * **Error (`error`):** `#C2321F`
 * **Info (`info`):** `#2C6FA8`
 
+> **The canvas is a gradient, not a flat fill.** `src/index.css` defines a `bg-canvas` utility — `base-200` under two soft radial glows: a sunrise rising from the bottom edge (`--canvas-dawn`, mixed from `primary`) and a cooler dawn-sky wash in the top-right (`--canvas-sky`, mixed from `secondary`). Both are `color-mix`ed from the live theme tokens, so the gradient re-tints itself on a theme flip rather than needing a second hand-written palette; only the mix percentages differ per theme (warm paper stains at far lower opacity than the espresso base). The app shell in `src/App.tsx` wears `bg-canvas` instead of `bg-base-200` — it is a full-height flex column that would otherwise paint over anything set on `body`. It is **static**: the audio-reactive ambient wash that used to live here was removed deliberately.
+
 > Both themes are declared CSS-first in `src/index.css` via `@plugin "daisyui/theme" { … }`. There is no `tailwind.config.*` file in this repository and none may be added. The active theme is read from `document.documentElement.dataset.theme` and persisted to `localStorage` under `solva_theme`; `index.html` sets the attribute in a blocking `<head>` script so light-theme users never see a dark first paint.
 
 ---
@@ -165,7 +167,7 @@ Legacy Murva-era colours and their permanent replacements. When you touch old co
 | segmented control | `tabs tabs-box`, or `join` + `btn join-item` |
 | pill / tag `<span>` | `badge badge-sm` (+ `badge-primary` / `badge-outline` / …) |
 | toast `<div>` | `toast` container + `alert alert-success` |
-| keycap chip | `kbd kbd-xs` |
+| keycap chip | `<kbd className="kbd-key">` — the custom utility in `src/index.css`, not daisyUI's filled `kbd`. Every control with a keyboard binding (piano keys, drum pads) shows its shortcut this way: an outline-only square keycap that inherits its colour from the parent through `currentColor`, so it stays legible on white keys, black keys and active tinted keys alike. |
 
 ### 6.3 The guard
 
@@ -181,3 +183,51 @@ Legacy Murva-era colours and their permanent replacements. When you touch old co
 | `invalid-utility` | classes that silently do nothing: `py-0.2`, `scale-102`, `z-60`, `xs:` |
 
 It is enforced by `scripts/themeTokenGuard.test.ts` under `bun test`, and its `ALLOWLIST` is currently **empty**. Re-populating it cannot make a build pass: every `src/` file is token-clean, so any path re-added to the allowlist fails the hygiene test that forbids already-clean entries, and the shrink test keeps the list trending to zero. Canvas code, which cannot use classes at all, resolves colours at runtime through `src/utils/themeColor.ts`.
+
+### 6.4 Shape tokens
+
+Solva's `--radius-*` values are set explicitly in both `@plugin "daisyui/theme"` blocks in `src/index.css`, matching Murva's shape language (colours are unaffected — Solva keeps its own palette from §2/§6.1):
+
+| token | value | role |
+|---|---|---|
+| `--radius-selector` | `0.5rem` | small interactive/decorative elements: checkbox, radio, toggle, badge, icon chip |
+| `--radius-field` | `0.5rem` | controls the user operates: button, input, select, tab, a clickable pad/step |
+| `--radius-box` | `0.75rem` | containers/surfaces: card, modal, alert, bordered panel |
+| `--border` | `1px` | default border width |
+
+Components must use the semantic classes (`rounded-box`, `rounded-field`, `rounded-selector`, and their directional variants like `rounded-b-field`) instead of raw `rounded-lg`/`rounded-xl`/`rounded-md`/etc., picking the token that matches the element's *role* per the table above — not its current pixel size. `rounded-full` stays literal for circles and pills (avatars, dots, pill toggles); it isn't part of this 3-tier scale. A handful of small decorative accents (e.g. tiny VU-meter LED segments) are left on Tailwind's literal scale (`rounded-xs`) where none of the three roles fit — don't force those onto a semantic token just for uniformity.
+
+### 6.5 Module identity colours
+
+daisyUI's semantic roles are about *meaning* (`success` = saved, `error` = destructive), so a module cannot borrow one just because the hue looks nice — a green "AMP / VCA" label reads as a status. Modules that need a persistent identity tint therefore get their own token pair, registered in `@theme` and indirected through per-theme custom properties exactly like the piano-key colours:
+
+| token | hue | used by |
+|---|---|---|
+| `module-chord` / `-content` | olive green | Chord cards, chord audition, the Chord target in `SynthView`'s toggle |
+| `module-bass` / `-content` | steel blue | Bass module, the Bass target in `SynthView`'s toggle |
+| `module-osc` / `-content` | amber `amber-400/600` | `SynthView` panel 1 — Oscillators |
+| `module-filter` / `-content` | rose `rose-400/600` | `SynthView` panel 2 — VCF Filter |
+| `module-env-vca` / `-content` | emerald `emerald-400/600` | `SynthView` panel 3 — ADSR's AMP / VCA half |
+| `module-env-vcf` / `-content` | fuchsia `fuchsia-400/600` | `SynthView` panel 3 — ADSR's FILTER / VCF half |
+| `module-lfo` / `-content` | sky `sky-400/600` | `SynthView` panel 4 — LFO & Octave |
+| `module-arp` / `-content` | violet `violet-400/600` | `SynthView` panel 5 — Arpeggiator |
+
+The synth's **six signal stages each own a hue** — the two ADSR halves share one card, so they are the pair that has to contrast hardest. Values come straight from Tailwind's palette (the `400` step on the espresso base, the `600` step on warm paper, where the `400`s wash out) and are ordered so no two neighbours land in the same family, with every adjacent pair ~50°+ apart on the wheel:
+
+> 1 Oscillators amber 43° → 2 VCF rose 350° → 3 ADSR emerald 160° + fuchsia 292° → 4 LFO sky 199° → 5 Arp violet 255°
+
+**Simple Mode wears the same colours.** Each macro dial is coloured by the Pro-Mode stage it actually writes to, so a control keeps its identity when the user switches modes — the colour is the thread between the friendly view and the modular one:
+
+| macro | writes | colour |
+|---|---|---|
+| Tone | `filterCutoff` | `module-filter` |
+| Space | `release` + `sustain` | `module-env-vca` |
+| Vibe | `detune` + `lfoDepth` | `module-lfo` — the only macro that touches modulation; Punch already owns the oscillator identity |
+| Punch | `subOscVolume` + `attack` | `module-osc` |
+| 1-Click Arp card | arp params | `module-arp` |
+
+`module-env-vcf` has no Simple-Mode counterpart because Simple Mode exposes no filter envelope. Chrome that is *not* a signal stage — the Simple/Pro switcher, preset picker, category filters, keyboard octave — stays on `primary`, which now unambiguously means "the thing you picked".
+
+The blue 210–215° band is deliberately left to `module-bass`, whose chip sits on this same page. No synth panel rides a daisyUI semantic any more, which keeps `primary` free to mean "the thing you picked" everywhere else. Because daisyUI components are variable-driven, a module colour fills a control through arbitrary-value overrides (`btn` + `[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]`), a badge through `[--badge-color:…]`, and a range through `text-module-*` + `[--range-thumb:…]` (ranges read `color`, not a variable).
+
+`Knob`'s `color` prop is a closed union, so adding a module colour means adding `text-module-*` to that union in `src/components/ui/Knob.tsx` — deliberately, so the set of legal knob colours stays reviewable.

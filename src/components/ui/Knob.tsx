@@ -23,7 +23,15 @@ export type KnobColor =
   | 'text-secondary'
   | 'text-accent'
   | 'text-success'
-  | 'text-error';
+  | 'text-error'
+  | 'text-module-chord'
+  | 'text-module-bass'
+  | 'text-module-osc'
+  | 'text-module-filter'
+  | 'text-module-env-vca'
+  | 'text-module-env-vcf'
+  | 'text-module-lfo'
+  | 'text-module-arp';
 
 export interface KnobProps {
   value: number;

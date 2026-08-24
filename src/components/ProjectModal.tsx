@@ -52,7 +52,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = React.memo(({
         {/* Header */}
         <div className="bg-base-200 p-4 border-b border-base-300 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-primary/20 border border-primary/30 text-primary">
+            <div className="p-2 rounded-selector bg-primary/20 border border-primary/30 text-primary">
               <FolderOpen className="w-5 h-5" />
             </div>
             <div>

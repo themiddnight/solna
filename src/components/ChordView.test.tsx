@@ -25,8 +25,8 @@ describe('ChordView theming', () => {
 
   test('panels are daisyUI cards on base tokens', () => {
     expect(html).toContain('card bg-base-100 border border-base-300');
-    expect(html).toContain('border-primary/30');
-    expect(html).toContain('border-accent/30');
+    expect(html).toContain('border-module-chord/30');
+    expect(html).toContain('border-module-bass/30');
   });
 
   test('every select is a bordered daisyUI select', () => {
@@ -34,7 +34,7 @@ describe('ChordView theming', () => {
   });
 
   test('the library counter badge uses a valid padding step', () => {
-    expect(html).toContain('badge badge-sm badge-primary font-mono');
+    expect(html).toContain('badge badge-sm badge-outline font-mono');
     expect(html).not.toContain('py-0.2');
   });
 

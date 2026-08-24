@@ -124,7 +124,7 @@ export const TransportBar: React.FC = React.memo(() => {
         </button>
 
         {/* Tempo BPM Control */}
-        <div className="flex items-center gap-0.5 bg-base-200 border border-base-300 px-1.5 py-1 rounded-lg">
+        <div className="flex items-center gap-0.5 bg-base-200 border border-base-300 px-1.5 py-1 rounded-box">
           <span className="text-[10px] text-base-content/50 font-mono hidden sm:inline">BPM</span>
           <button
             onClick={() => setBpm(Math.max(40, bpm - 1))}
@@ -167,7 +167,7 @@ export const TransportBar: React.FC = React.memo(() => {
 
       {/* Middle Audio Spectrum Wave (Desktop & Tablet) */}
       <div className="flex-1 max-w-xs hidden md:flex items-center gap-2">
-        <div className="flex-1 bg-base-200 border border-base-300 rounded-lg p-1 flex items-center relative overflow-hidden shadow-inner group">
+        <div className="flex-1 bg-base-200 border border-base-300 rounded-box p-1 flex items-center relative overflow-hidden shadow-inner group">
           <AudioVisualizer
             mode={vizMode}
             height={24}
@@ -192,7 +192,7 @@ export const TransportBar: React.FC = React.memo(() => {
       {/* Right Meter & Master Gain */}
       <div className="flex items-center gap-2 shrink-0">
         {/* Real-time Stereo VU Meter */}
-        <div className="hidden sm:flex items-center gap-1 bg-base-200 border border-base-300 p-1.5 rounded-lg">
+        <div className="hidden sm:flex items-center gap-1 bg-base-200 border border-base-300 p-1.5 rounded-box">
           <div className="w-14 h-2 bg-base-300 rounded-xs overflow-hidden flex gap-0.5 p-0.5">
             {Array.from({ length: 10 }).map((_, i) => {
               const active = vuLevel * 10 > i;
@@ -218,7 +218,7 @@ export const TransportBar: React.FC = React.memo(() => {
         </div>
 
         {/* Master Output Fader */}
-        <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-lg">
+        <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-box">
           <Volume2 className="w-3.5 h-3.5 text-base-content/60 shrink-0" />
           <Slider
             id="slider-transport-master"

@@ -54,7 +54,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
           <div className="card bg-base-100 border border-base-300 shadow-md">
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
-                <Sun className="w-3.5 h-3.5 text-primary" />
+                <Sun className="w-3.5 h-3.5 text-module-filter" />
                 <span>Tone</span>
               </div>
 
@@ -62,7 +62,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 <Knob
                   id="simple-macro-tone"
                   label=""
-                  color="text-primary"
+                  color="text-module-filter"
                   value={cutoffValue}
                   min={300}
                   max={12000}
@@ -72,7 +72,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 />
               </div>
 
-              <span className="badge badge-sm badge-primary badge-soft text-[10px] font-semibold">
+              <span className="badge badge-sm badge-soft [--badge-color:var(--color-module-filter)] text-[10px] font-semibold">
                 {toneLabel}
               </span>
             </div>
@@ -82,7 +82,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
           <div className="card bg-base-100 border border-base-300 shadow-md">
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
-                <Compass className="w-3.5 h-3.5 text-accent" />
+                <Compass className="w-3.5 h-3.5 text-module-env-vca" />
                 <span>Space</span>
               </div>
 
@@ -90,7 +90,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 <Knob
                   id="simple-macro-space"
                   label=""
-                  color="text-accent"
+                  color="text-module-env-vca"
                   value={releaseValue}
                   min={0.05}
                   max={2.5}
@@ -106,7 +106,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 />
               </div>
 
-              <span className="badge badge-sm badge-accent badge-soft text-[10px] font-semibold">
+              <span className="badge badge-sm badge-soft [--badge-color:var(--color-module-env-vca)] text-[10px] font-semibold">
                 {spaceLabel}
               </span>
             </div>
@@ -116,7 +116,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
           <div className="card bg-base-100 border border-base-300 shadow-md">
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
-                <Waves className="w-3.5 h-3.5 text-secondary" />
+                <Waves className="w-3.5 h-3.5 text-module-lfo" />
                 <span>Vibe</span>
               </div>
 
@@ -124,7 +124,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 <Knob
                   id="simple-macro-vibe"
                   label=""
-                  color="text-secondary"
+                  color="text-module-lfo"
                   value={detuneValue}
                   min={0}
                   max={50}
@@ -140,7 +140,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 />
               </div>
 
-              <span className="badge badge-sm badge-secondary badge-soft text-[10px] font-semibold">
+              <span className="badge badge-sm badge-soft [--badge-color:var(--color-module-lfo)] text-[10px] font-semibold">
                 {vibeLabel}
               </span>
             </div>
@@ -150,7 +150,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
           <div className="card bg-base-100 border border-base-300 shadow-md">
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
-                <Flame className="w-3.5 h-3.5 text-success" />
+                <Flame className="w-3.5 h-3.5 text-module-osc" />
                 <span>Punch</span>
               </div>
 
@@ -158,7 +158,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 <Knob
                   id="simple-macro-punch"
                   label=""
-                  color="text-success"
+                  color="text-module-osc"
                   value={subValue}
                   min={0}
                   max={1}
@@ -174,18 +174,18 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 />
               </div>
 
-              <span className="badge badge-sm badge-success badge-soft text-[10px] font-semibold">
+              <span className="badge badge-sm badge-soft [--badge-color:var(--color-module-osc)] text-[10px] font-semibold">
                 {punchLabel}
               </span>
             </div>
           </div>
 
           {/* 1-Click Easy Arpeggiator Card */}
-          <div className="col-span-2 sm:col-span-1 lg:col-span-1 card bg-base-100 border border-accent/30 shadow-md">
+          <div className="col-span-2 sm:col-span-1 lg:col-span-1 card bg-base-100 border border-module-arp/30 shadow-md">
             <div className="card-body p-3 flex flex-col justify-between">
               <div className="flex items-center justify-between border-b border-base-300 pb-1.5">
-                <span className="text-xs font-bold text-accent flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-accent" />
+                <span className="text-xs font-bold text-module-arp flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-module-arp" />
                   Auto-Arp
                 </span>
                 <button
@@ -197,7 +197,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                     });
                   }}
                   className={`btn btn-xs rounded-full text-[10px] font-bold uppercase ${
-                    params.arpActive ? "btn-accent text-accent-content" : "btn-outline"
+                    params.arpActive ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]" : "btn-outline"
                   }`}
                 >
                   {params.arpActive ? "ON" : "OFF"}
@@ -208,7 +208,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
               <div className="space-y-1 my-1.5">
                 <div className="flex items-center justify-between text-[10px] text-base-content/60">
                   <span>Speed:</span>
-                  <span className="font-mono text-accent font-bold">
+                  <span className="font-mono text-module-arp font-bold">
                     {params.arpRate === "8n"
                       ? "1/8"
                       : params.arpRate === "32n"
@@ -223,7 +223,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                       onClick={() => onChangeParams({ ...params, arpRate: r })}
                       className={`btn join-item btn-xs flex-1 text-[10px] font-semibold ${
                         (params.arpRate ?? "16n") === r
-                          ? "btn-accent text-accent-content"
+                          ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
                           : "btn-outline"
                       }`}
                     >
@@ -237,7 +237,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-[10px] text-base-content/60">
                   <span>Mode:</span>
-                  <span className="capitalize font-mono text-accent font-bold">
+                  <span className="capitalize font-mono text-module-arp font-bold">
                     {params.arpMode ?? "up"}
                   </span>
                 </div>
@@ -248,7 +248,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                       onClick={() => onChangeParams({ ...params, arpMode: m })}
                       className={`btn join-item btn-xs flex-1 text-[10px] font-semibold ${
                         (params.arpMode ?? "up") === m
-                          ? "btn-accent text-accent-content"
+                          ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
                           : "btn-outline"
                       }`}
                       title={`Mode: ${m}`}

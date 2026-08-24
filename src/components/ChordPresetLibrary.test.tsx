@@ -23,7 +23,7 @@ const html = renderToString(
 describe('ChordPresetLibrary theming', () => {
   test('template and custom cards are daisyUI cards on base tokens', () => {
     expect(html).toContain('card bg-base-200 border border-base-300');
-    expect(html).toContain('hover:border-primary/50');
+    expect(html).toContain('hover:border-module-chord/50');
     // The custom card's hover:border-secondary/50 cannot be asserted here:
     // under renderToString, zustand's useStore takes getInitialState() as the
     // React server snapshot, which is frozen at store creation, and the custom
@@ -38,7 +38,7 @@ describe('ChordPresetLibrary theming', () => {
 
   test('card actions are daisyUI buttons', () => {
     expect(html).toContain('btn btn-xs btn-ghost');
-    expect(html).toContain('btn btn-xs btn-primary');
+    expect(html).toContain('[--btn-color:var(--color-module-chord)]');
     // hover:btn-error (the custom-card delete button) is unreachable under
     // renderToString for the same frozen-server-snapshot reason as above.
   });

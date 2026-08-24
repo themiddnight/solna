@@ -170,7 +170,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
           {/* Drawer Header */}
           <div className="p-4 border-b border-base-300 flex items-center justify-between bg-base-200">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-lg bg-primary/20 border border-primary/30 text-primary">
+              <div className="p-2 rounded-selector bg-primary/20 border border-primary/30 text-primary">
                 <Sparkles className="w-4 h-4" />
               </div>
               <div>
@@ -452,7 +452,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
               )}
 
               {save.chordsSummary && (
-                <div className="p-2.5 rounded-lg bg-base-200 border border-base-300 text-[11px] text-base-content/60">
+                <div className="p-2.5 rounded-box bg-base-200 border border-base-300 text-[11px] text-base-content/60">
                   <span className="font-mono text-primary block mb-0.5">
                     Chords ({save.chordsSummary.count}):
                   </span>

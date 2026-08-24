@@ -55,11 +55,11 @@ export function SortableChordCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`card bg-base-100 border border-base-300 rounded-xl p-4 flex flex-col justify-between space-y-3 transition-colors ${
+      className={`card bg-base-100 border border-base-300 rounded-box p-4 flex flex-col justify-between space-y-3 transition-colors ${
         isActive
-          ? "border-primary ring-2 ring-primary/50 bg-base-200"
+          ? "border-module-chord ring-2 ring-module-chord/50 bg-base-200"
           : "border-base-300 hover:border-base-content/30"
-      } ${isDragging ? "shadow-2xl ring-2 ring-primary bg-base-200/95 scale-105" : ""}`}
+      } ${isDragging ? "shadow-2xl ring-2 ring-module-chord bg-base-200/95 scale-105" : ""}`}
     >
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -115,20 +115,20 @@ export function SortableChordCard({
         onMouseLeave={(e) => handleCardPreviewMouseUp(e, chord)}
         onTouchStart={(e) => handleCardPreviewMouseDown(e, chord)}
         onTouchEnd={(e) => handleCardPreviewMouseUp(e, chord)}
-        className={`w-full py-4 rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
+        className={`w-full py-4 rounded-field flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
           isActive
-            ? "bg-gradient-to-tr from-primary to-secondary text-primary-content shadow-lg scale-95"
+            ? "bg-module-chord from-module-chord to-secondary text-module-chord-content shadow-lg scale-95"
             : "bg-base-200 hover:bg-base-300 text-base-content"
         }`}
         title="Hold to Preview Chord"
       >
         <span className="text-2xl font-mono font-black tracking-tight flex items-baseline gap-1">
           {chord.root}
-          <span className="text-sm font-semibold text-secondary">
+          <span className="text-sm font-semibold opacity-70">
             {formatChordQuality(chord.quality)}
           </span>
         </span>
-        <span className="text-[10px] text-base-content/60 font-mono mt-1">
+        <span className="text-[10px] opacity-70 font-mono mt-1">
           {chord.notes.join(" • ")}
         </span>
       </button>

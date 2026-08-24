@@ -9,7 +9,7 @@ import {
   type ThemeToken,
 } from '../utils/themeColor';
 
-export type VisualizerMode = 'wave' | 'bars' | 'oscilloscope' | 'ambient-bg';
+export type VisualizerMode = 'wave' | 'bars' | 'oscilloscope';
 
 interface AudioVisualizerProps {
   mode?: VisualizerMode;
@@ -19,7 +19,6 @@ interface AudioVisualizerProps {
   /** Semantic role the visualizer paints in. Resolved at runtime from the
    *  active daisyUI theme by src/utils/themeColor.ts. */
   colorTheme?: 'primary' | 'secondary' | 'accent';
-  ambientOpacity?: number;
 }
 
 export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
@@ -28,7 +27,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
   height = 40,
   showControls = false,
   colorTheme = 'primary',
-  ambientOpacity = 0.15,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -141,8 +139,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
         renderBars(ctx, width, height, freqData, bufferLength, isSounding);
       } else if (mode === 'oscilloscope') {
         renderOscilloscope(ctx, width, height, timeData, bufferLength, isSounding);
-      } else if (mode === 'ambient-bg') {
-        renderAmbientBg(ctx, width, height, freqData, bufferLength, ambientOpacity, isSounding);
       } else {
         // 'wave' spectrum wave
         renderSpectrumWave(ctx, width, height, freqData, bufferLength, isSounding);
@@ -451,49 +447,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       c.shadowBlur = 0;
     };
 
-    // Helper: Ambient Background Visualizer (Logarithmic frequency response)
-    const renderAmbientBg = (
-      c: CanvasRenderingContext2D,
-      w: number,
-      h: number,
-      data: Uint8Array,
-      len: number,
-      alpha: number,
-      isSounding: boolean
-    ) => {
-      const time = Date.now() * 0.0015;
-      const numWaves = 3;
-      const logData = getLogFrequencyData(data, 32, len);
-
-      for (let waveIdx = 0; waveIdx < numWaves; waveIdx++) {
-        c.beginPath();
-        const baseOffset = (waveIdx / numWaves) * Math.PI;
-        c.moveTo(0, h);
-
-        for (let x = 0; x <= w; x += 15) {
-          const binIdx = Math.min(31, Math.floor((x / w) * 32));
-          const freqMag = isSounding ? (logData[binIdx] || 0) / 255 : 0.05;
-          const sine1 = Math.sin(time + x * 0.005 + baseOffset) * 20;
-          const sine2 = Math.cos(time * 0.8 + x * 0.008) * 15;
-          const y = h * 0.65 - (freqMag * h * 0.45 + sine1 + sine2) * (1 - waveIdx * 0.2);
-
-          c.lineTo(x, y);
-        }
-
-        c.lineTo(w, h);
-        c.closePath();
-
-        const grad = c.createLinearGradient(0, 0, 0, h);
-        const waveAlpha = alpha * (1 - waveIdx * 0.25);
-
-        grad.addColorStop(0, roleColor(waveAlpha));
-        grad.addColorStop(1, tokenColor('--color-base-content', 0.01));
-
-        c.fillStyle = grad;
-        c.fill();
-      }
-    };
-
     // Resize handling with devicePixelRatio for sharp rendering
     const handleResize = () => {
       if (!containerRef.current || !canvas) return;
@@ -516,7 +469,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       cancelAnimationFrame(animationId);
       resizeObserver.disconnect();
     };
-  }, [mode, colorTheme, ambientOpacity]);
+  }, [mode, colorTheme]);
 
   return (
     <div
@@ -539,7 +492,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
 
       {/* Optional Mode Switch Buttons */}
       {showControls && (
-        <div className="join absolute top-1.5 right-1.5 flex items-center gap-1 bg-base-100/80 backdrop-blur-xs p-1 rounded-md border border-base-300 z-10">
+        <div className="join absolute top-1.5 right-1.5 flex items-center gap-1 bg-base-100/80 backdrop-blur-xs p-1 rounded-box border border-base-300 z-10">
           <button
             onClick={() => setMode('wave')}
             className={`btn btn-xs join-item btn-square ${

@@ -66,12 +66,12 @@ const TARGET_STYLES: Record<
 > = {
   synth: { tint: "", activeBtn: "btn-active" },
   chord: {
-    tint: "ring-1 ring-primary/40 bg-gradient-to-br from-primary/10 to-transparent",
-    activeBtn: "btn-primary",
+    tint: "ring-1 ring-module-chord/40 bg-gradient-to-br from-module-chord/10 to-transparent",
+    activeBtn: "[--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]",
   },
   bass: {
-    tint: "ring-1 ring-accent/40 bg-gradient-to-br from-accent/10 to-transparent",
-    activeBtn: "btn-accent",
+    tint: "ring-1 ring-module-bass/40 bg-gradient-to-br from-module-bass/10 to-transparent",
+    activeBtn: "[--btn-color:var(--color-module-bass)] [--btn-fg:var(--color-module-bass-content)]",
   },
 };
 
@@ -380,7 +380,7 @@ export const SynthView = () => {
         {/* Row 1: Target Selector + Mode Switcher + Presets */}
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           {/* Control Destination Selector */}
-          <div className="join flex items-center gap-1 bg-base-200 border border-base-300 rounded-lg p-1">
+          <div className="join flex items-center gap-1 bg-base-200 border border-base-300 rounded-box p-1">
             <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold pl-1 pr-1 hidden sm:inline">
               Target:
             </span>
@@ -408,7 +408,7 @@ export const SynthView = () => {
           {/* Actions: Mode Switcher + Save Current & Full Presets Library */}
           <div className="flex items-center gap-1.5 flex-wrap">
             {/* Mode Switcher: Simple vs Pro */}
-            <div className="join flex items-center bg-base-200 border border-base-300 rounded-lg p-0.5">
+            <div className="join flex items-center bg-base-200 border border-base-300 rounded-box p-0.5">
               <button
                 id="btn-mode-simple"
                 onClick={() => handleToggleSynthViewMode("simple")}
@@ -427,7 +427,7 @@ export const SynthView = () => {
                 onClick={() => handleToggleSynthViewMode("pro")}
                 className={`btn btn-xs join-item gap-1 text-xs font-semibold ${
                   synthViewMode === "pro"
-                    ? "btn-accent"
+                    ? "btn-primary"
                     : "btn-ghost text-base-content/60"
                 }`}
                 title="Pro Mode"
@@ -463,7 +463,7 @@ export const SynthView = () => {
             >
               <Library className="w-3.5 h-3.5" />
               <span>Presets</span>
-              <span className="badge badge-xs badge-primary badge-outline text-[10px] font-mono hidden sm:inline">
+              <span className="badge badge-xs badge-outline [--badge-color:currentColor] text-[10px] font-mono hidden sm:inline">
                 {totalPresetsCount}
               </span>
             </button>
@@ -472,7 +472,7 @@ export const SynthView = () => {
 
         {/* Pro Mode: Row 2 Categorized Preset Selection Bar */}
         {synthViewMode === "pro" && (
-          <div className="flex flex-wrap items-center justify-between gap-2.5 bg-base-300 border border-base-300 p-2 rounded-xl">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 bg-base-300 border border-base-300 p-2 rounded-box">
             {/* Category Filter Tabs */}
             <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[11px]">
               <span className="text-[10px] uppercase font-bold text-base-content/50 px-1 font-mono">
@@ -514,7 +514,7 @@ export const SynthView = () => {
                     <span
                       className={`badge badge-xs text-[9px] font-mono ${
                         isSelected
-                          ? "badge-primary badge-outline"
+                          ? "badge-outline [--badge-color:currentColor]"
                           : "badge-ghost text-base-content/60"
                       }`}
                     >
@@ -548,13 +548,13 @@ export const SynthView = () => {
               </button>
 
               {/* Categorized Dropdown with Optgroups */}
-              <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-lg px-2.5 py-1">
+              <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-field px-2 min-w-50 max-w-60">
                 <Sparkles className="w-3.5 h-3.5 text-accent shrink-0" />
                 <select
                   id="select-synth-preset"
                   value={params.preset}
                   onChange={(e) => handleDropdownChange(e.target.value)}
-                  className="select select-sm select-ghost bg-transparent border-0 text-base-content text-xs focus:outline-none pr-2 font-medium max-w-[180px] sm:max-w-[240px] truncate"
+                  className="select select-sm select-ghost bg-transparent border-0 text-base-content text-xs focus:outline-none pr-2 font-medium max-w-60 truncate"
                 >
                   {categoryGroups
                     .filter((g) =>
@@ -612,7 +612,7 @@ export const SynthView = () => {
               </div>
 
               {/* Preset Stepper & Selector */}
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
                 <button
                   id="btn-simple-prev-preset"
                   onClick={() => handleStepPreset(-1)}
@@ -631,7 +631,7 @@ export const SynthView = () => {
                     );
                     if (found) handleSelectPreset(found);
                   }}
-                  className="select select-sm select-bordered text-xs font-semibold max-w-[200px] truncate"
+                  className="select select-sm select-bordered text-xs font-semibold max-w-50 truncate"
                 >
                   {allPresets.map((p) => (
                     <option key={p.id} value={p.name}>
@@ -720,7 +720,7 @@ export const SynthView = () => {
           <SimpleSynthPanel params={params} onChangeParams={onChangeParams} />
 
           {/* Friendly Pro Mode Hint */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 bg-base-100/70 border border-base-300 px-4 py-2.5 rounded-xl text-xs text-base-content">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 bg-base-100/70 border border-base-300 px-4 py-2.5 rounded-box text-xs text-base-content">
             <div className="flex items-center gap-2 text-base-content/60">
               <Sparkles className="w-3.5 h-3.5 text-accent shrink-0" />
               <span>
@@ -747,7 +747,7 @@ export const SynthView = () => {
             <div className="card-body p-4 space-y-3.5">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
               <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-primary" />
+                <Activity className="w-3.5 h-3.5 text-module-osc" />
                 1. Oscillators
               </span>
             </div>
@@ -765,7 +765,7 @@ export const SynthView = () => {
                       onClick={() => onChangeParams({ ...params, oscType: w })}
                       className={`btn btn-xs text-[11px] font-semibold capitalize ${
                         params.oscType === w
-                          ? "btn-primary"
+                          ? "[--btn-color:var(--color-module-osc)] [--btn-fg:var(--color-module-osc-content)]"
                           : "btn-ghost border border-base-300 text-base-content/60"
                       }`}
                     >
@@ -780,7 +780,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-sub-osc"
                 label="Sub-Osc"
-                color="text-primary"
+                color="text-module-osc"
                 value={params.subOscVolume}
                 min={0}
                 max={1}
@@ -792,7 +792,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-detune"
                 label="Detune"
-                color="text-primary"
+                color="text-module-osc"
                 value={params.detune}
                 min={0}
                 max={50}
@@ -804,7 +804,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-noise"
                 label="Noise"
-                color="text-primary"
+                color="text-module-osc"
                 value={params.noiseVolume}
                 min={0}
                 max={0.5}
@@ -822,7 +822,7 @@ export const SynthView = () => {
             <div className="card-body p-4 space-y-3.5">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
               <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-secondary" />
+                <Sliders className="w-3.5 h-3.5 text-module-filter" />
                 2. VCF Filter
               </span>
             </div>
@@ -839,7 +839,7 @@ export const SynthView = () => {
                     onClick={() => onChangeParams({ ...params, filterType: t })}
                     className={`btn btn-xs text-[11px] font-semibold uppercase ${
                       params.filterType === t
-                        ? "btn-secondary"
+                        ? "[--btn-color:var(--color-module-filter)] [--btn-fg:var(--color-module-filter-content)]"
                         : "btn-ghost border border-base-300 text-base-content/60"
                     }`}
                   >
@@ -853,7 +853,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-filter-cutoff"
                 label="Cutoff"
-                color="text-secondary"
+                color="text-module-filter"
                 value={params.filterCutoff}
                 min={50}
                 max={12000}
@@ -866,7 +866,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-filter-resonance"
                 label="Resonance"
-                color="text-secondary"
+                color="text-module-filter"
                 value={params.filterResonance}
                 min={0.1}
                 max={20}
@@ -881,7 +881,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-filter-env"
                 label="Env Mod"
-                color="text-secondary"
+                color="text-module-filter"
                 value={params.filterEnvAmount}
                 min={0}
                 max={6000}
@@ -902,7 +902,7 @@ export const SynthView = () => {
             <div className="card-body p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
               <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
-                <Volume2 className="w-3.5 h-3.5 text-success" />
+                <Volume2 className="w-3.5 h-3.5 text-module-env-vca" />
                 3. ADSR Envelope
               </span>
             </div>
@@ -910,7 +910,7 @@ export const SynthView = () => {
             {/* AMP / VCA */}
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] font-mono text-success uppercase tracking-wider">
+                <span className="text-[10px] font-mono text-module-env-vca uppercase tracking-wider">
                   AMP / VCA
                 </span>
                 <span className="flex-1 h-px bg-base-300" />
@@ -920,7 +920,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-attack"
                   label="ATT"
-                  color="text-success"
+                  color="text-module-env-vca"
                   value={params.attack}
                   min={0.005}
                   max={2.0}
@@ -933,7 +933,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-decay"
                   label="DEC"
-                  color="text-success"
+                  color="text-module-env-vca"
                   value={params.decay}
                   min={0.01}
                   max={2.0}
@@ -946,7 +946,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-sustain"
                   label="SUS"
-                  color="text-success"
+                  color="text-module-env-vca"
                   value={params.sustain}
                   min={0}
                   max={1.0}
@@ -959,7 +959,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-release"
                   label="REL"
-                  color="text-success"
+                  color="text-module-env-vca"
                   value={params.release}
                   min={0.01}
                   max={3.0}
@@ -973,7 +973,7 @@ export const SynthView = () => {
             {/* FILTER / VCF */}
             <div className="pt-2.5">
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] font-mono text-secondary uppercase tracking-wider">
+                <span className="text-[10px] font-mono text-module-env-vcf uppercase tracking-wider">
                   FILTER / VCF
                 </span>
                 <span className="flex-1 h-px bg-base-300" />
@@ -983,7 +983,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-filter-attack"
                   label="ATT"
-                  color="text-secondary"
+                  color="text-module-env-vcf"
                   value={params.filterAttack}
                   min={0.005}
                   max={2.0}
@@ -998,7 +998,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-filter-decay"
                   label="DEC"
-                  color="text-secondary"
+                  color="text-module-env-vcf"
                   value={params.filterDecay}
                   min={0.01}
                   max={2.0}
@@ -1013,7 +1013,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-filter-sustain"
                   label="SUS"
-                  color="text-secondary"
+                  color="text-module-env-vcf"
                   value={params.filterSustain}
                   min={0}
                   max={1.0}
@@ -1028,7 +1028,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-filter-release"
                   label="REL"
-                  color="text-secondary"
+                  color="text-module-env-vcf"
                   value={params.filterRelease}
                   min={0.01}
                   max={3.0}
@@ -1049,7 +1049,7 @@ export const SynthView = () => {
             <div className="card-body p-4 space-y-3.5">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
               <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-accent" />
+                <Activity className="w-3.5 h-3.5 text-module-lfo" />
                 4. LFO & Octave
               </span>
             </div>
@@ -1066,7 +1066,7 @@ export const SynthView = () => {
                     onClick={() => onChangeParams({ ...params, lfoTarget: t })}
                     className={`btn btn-xs text-[11px] font-semibold capitalize ${
                       params.lfoTarget === t
-                        ? "btn-accent"
+                        ? "[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]"
                         : "btn-ghost border border-base-300 text-base-content/60"
                     }`}
                   >
@@ -1080,7 +1080,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-lfo-rate"
                 label="LFO Rate"
-                color="text-accent"
+                color="text-module-lfo"
                 value={params.lfoRate}
                 min={0.1}
                 max={20}
@@ -1092,7 +1092,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-lfo-depth"
                 label="LFO Depth"
-                color="text-accent"
+                color="text-module-lfo"
                 value={params.lfoDepth}
                 min={0}
                 max={1}
@@ -1112,7 +1112,7 @@ export const SynthView = () => {
                     onClick={() => onChangeParams({ ...params, octave: oct })}
                     className={`btn btn-xs btn-square w-6 h-6 min-h-0 text-xs font-mono font-bold ${
                       params.octave === oct
-                        ? "btn-primary"
+                        ? "[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]"
                         : "btn-ghost border border-base-300 text-base-content/60 hover:text-base-content"
                     }`}
                   >
@@ -1130,7 +1130,7 @@ export const SynthView = () => {
             <div className="card-body p-4 space-y-3.5">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
               <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-accent" />
+                <Sparkles className="w-3.5 h-3.5 text-module-arp" />
                 5. Arpeggiator
               </span>
               <button
@@ -1144,7 +1144,7 @@ export const SynthView = () => {
                 }}
                 className={`btn btn-xs text-[10px] font-bold uppercase tracking-wider ${
                   params.arpActive
-                    ? "btn-accent shadow-md shadow-accent/30"
+                    ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)] shadow-md shadow-module-arp/30"
                     : "btn-ghost border border-base-300 text-base-content/60"
                 }`}
               >
@@ -1164,7 +1164,7 @@ export const SynthView = () => {
                     onClick={() => onChangeParams({ ...params, arpMode: m })}
                     className={`btn btn-xs text-[10px] font-semibold capitalize ${
                       (params.arpMode ?? "up") === m
-                        ? "btn-accent"
+                        ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
                         : "btn-ghost border border-base-300 text-base-content/60"
                     }`}
                   >
@@ -1187,7 +1187,7 @@ export const SynthView = () => {
                       onClick={() => onChangeParams({ ...params, arpRate: r })}
                       className={`btn btn-xs text-[11px] font-mono font-semibold ${
                         (params.arpRate ?? "16n") === r
-                          ? "btn-accent"
+                          ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
                           : "btn-ghost border border-base-300 text-base-content/60"
                       }`}
                     >
@@ -1211,7 +1211,7 @@ export const SynthView = () => {
                       }
                       className={`btn btn-xs w-7 min-h-0 text-xs font-mono font-bold ${
                         (params.arpOctaves ?? 1) === oct
-                          ? "btn-accent"
+                          ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
                           : "btn-ghost border border-base-300 text-base-content/60"
                       }`}
                     >
@@ -1237,10 +1237,10 @@ export const SynthView = () => {
             <span
               className={`badge badge-sm badge-outline text-[10px] font-semibold ${
                 controlTarget === "synth"
-                  ? "badge-neutral"
+                  ? "badge-base-content/60"
                   : controlTarget === "chord"
-                    ? "badge-primary"
-                    : "badge-accent"
+                    ? "[--badge-color:var(--color-module-chord)] [--badge-fg:var(--color-module-chord-content)]"
+                    : "[--badge-color:var(--color-module-bass)] [--badge-fg:var(--color-module-bass-content)]"
               }`}
               title="Current audition sound engine"
             >
@@ -1288,7 +1288,7 @@ export const SynthView = () => {
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <div className="badge badge-primary badge-outline min-w-[52px] h-7 px-2">
+            <div className="badge badge-primary badge-outline min-w-13 h-7 px-2">
               <span className="text-xs font-mono font-bold">
                 {keyboardOctave >= 0 ? `+${keyboardOctave}` : keyboardOctave}{" "}
                 Oct
@@ -1308,7 +1308,7 @@ export const SynthView = () => {
 
         {/* Keyboard Keys Layout — uses keyboardOctave for display range */}
         <div
-          className={`flex justify-center relative h-[180px] select-none bg-base-300 p-2 rounded-lg border border-base-300 overflow-x-auto ${
+          className={`flex justify-center relative h-45 select-none bg-base-300 p-2 rounded-box border border-base-300 overflow-x-auto ${
             keyboardMode === "scale-locked" ? "flex-col gap-1.5" : ""
           }`}
         >

@@ -5,29 +5,38 @@ import { useAppStore } from '../store/store';
 
 export function selectVibe(
   vibe: InstantVibe,
-  deps: { onSelect: (id: string) => void; onToast: (text: string) => void }
+  deps: { onToast: (text: string) => void }
 ): void {
   applyInstantVibeToStore(vibe);
-  deps.onSelect(vibe.id);
   deps.onToast(`Loaded ${vibe.name} (${vibe.bpm} BPM · Key ${vibe.scaleRoot} ${vibe.scaleType})`);
+}
+
+/**
+ * The selected vibe is derived from the project title alone. Loading a vibe
+ * always writes its `projectTitle` into the store, so that one value is the
+ * single source of truth: it survives a reload, and — because vibe project
+ * titles are unique — it can never mark two vibes at once.
+ */
+export function resolveSelectedVibeId(projectTitle: string): string | null {
+  return INSTANT_VIBES.find((v) => v.projectTitle === projectTitle)?.id ?? null;
 }
 
 export const InstantVibesBar: React.FC = React.memo(() => {
   const projectTitle = useAppStore((s) => s.projectTitle);
+  const selectedVibeId = resolveSelectedVibeId(projectTitle);
 
-  const [activeVibeId, setActiveVibeId] = useState<string | null>('synthwave-80s');
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
 
   const handleSelectVibe = (vibe: InstantVibe) => {
-    selectVibe(vibe, { onSelect: setActiveVibeId, onToast: setFeedbackToast });
+    selectVibe(vibe, { onToast: setFeedbackToast });
     setTimeout(() => {
       setFeedbackToast(null);
     }, 3000);
   };
 
   return (
-    <div className="bg-base-100 border-b border-base-300 px-3 py-1.5 select-none relative z-30 transition-all">
+    <div className="bg-base-300 border-b border-base-300 px-3 py-1.5 select-none relative z-30 transition-all">
       <div className="flex items-center justify-between gap-2 max-w-full">
         {/* Left Label */}
         <div className="flex items-center gap-1.5 shrink-0">
@@ -41,7 +50,7 @@ export const InstantVibesBar: React.FC = React.memo(() => {
         {!isCollapsed && (
           <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 px-1 no-scrollbar scroll-smooth flex-1 max-w-full">
             {INSTANT_VIBES.map((vibe) => {
-              const isSelected = activeVibeId === vibe.id || projectTitle === vibe.projectTitle;
+              const isSelected = selectedVibeId === vibe.id;
 
               return (
                 <button
@@ -50,7 +59,7 @@ export const InstantVibesBar: React.FC = React.memo(() => {
                   onClick={() => handleSelectVibe(vibe)}
                   title={`${vibe.name} (${vibe.bpm} BPM · ${vibe.scaleRoot} ${vibe.scaleType})`}
                   className={`btn btn-xs group gap-1.5 font-semibold whitespace-nowrap shrink-0 normal-case ${
-                    isSelected ? 'btn-primary' : 'btn-outline'
+                    isSelected ? 'btn-primary' : 'btn-soft'
                   }`}
                 >
                   <span className="text-xs leading-none">{vibe.emoji}</span>
