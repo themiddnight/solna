@@ -6,6 +6,7 @@
 @plugin "daisyui/theme" {
   name: "solva-dark";
   default: true;
+  color-scheme: dark;
   --color-base-100: #1C1924;
   --color-base-200: #14121B;
   --color-base-300: #2C2738;
@@ -18,11 +19,20 @@
   --color-accent-content: #14121B;
   --color-neutral: #24202E;
   --color-neutral-content: #F5EFEB;
+  --color-success: #5FD08B;
+  --color-success-content: #14121B;
+  --color-warning: #FACC15;
+  --color-warning-content: #14121B;
+  --color-error: #F05545;
+  --color-error-content: #14121B;
+  --color-info: #79A6E0;
+  --color-info-content: #14121B;
 }
 
 @plugin "daisyui/theme" {
   name: "solva-light";
   default: false;
+  color-scheme: light;
   --color-base-100: #FFFFFF;
   --color-base-200: #F7F4EF;
   --color-base-300: #E8E2D8;
@@ -35,39 +45,118 @@
   --color-accent-content: #FFFFFF;
   --color-neutral: #3D352E;
   --color-neutral-content: #FFFFFF;
+  --color-success: #2F8F5B;
+  --color-success-content: #FFFFFF;
+  --color-warning: #A16207;
+  --color-warning-content: #FFFFFF;
+  --color-error: #C2321F;
+  --color-error-content: #FFFFFF;
+  --color-info: #2C6FA8;
+  --color-info-content: #FFFFFF;
+}
+
+/* Piano keys are physical objects: white stays white and black stays black in
+   both themes, so they cannot ride on base-100/base-content. Registered in
+   @theme so Tailwind emits bg-key-white / text-key-black-content utilities,
+   with the values indirected through per-theme custom properties. */
+@theme {
+  --color-key-white: var(--key-white);
+  --color-key-white-content: var(--key-white-content);
+  --color-key-black: var(--key-black);
+  --color-key-black-content: var(--key-black-content);
+}
+
+:root,
+[data-theme="solva-dark"] {
+  --key-white: #EDE7E1;
+  --key-white-content: #14121B;
+  --key-black: #241F2E;
+  --key-black-content: #EDE7E1;
+}
+
+[data-theme="solva-light"] {
+  --key-white: #FFFFFF;
+  --key-white-content: #241E19;
+  --key-black: #2A241F;
+  --key-black-content: #F7F4EF;
 }
 
 @layer base {
   body {
     font-family: 'Figtree', system-ui, -apple-system, sans-serif;
   }
-  
+
   code, pre, .font-mono {
     font-family: 'JetBrains Mono', monospace;
   }
 }
 
-/* Custom scrollbars */
+/* Custom scrollbars — theme-driven, so solva-light gets light chrome */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #14121B;
+  background: var(--color-base-200);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2C2738;
+  background: var(--color-base-300);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4A405D;
+  background: color-mix(in oklch, var(--color-base-content) 30%, transparent);
 }
 
 /* Range input styling for synth and mixer faders */
 input[type="range"] {
-  accent-color: #F59E0B;
+  accent-color: var(--color-primary);
 }
 
+/* Hide scrollbars on horizontally-scrolling toolbars (Header tab strips,
+   SynthView preset row, InstantVibesBar). Used as `class="no-scrollbar"`;
+   Tailwind v4 declares custom utilities with @utility, not @layer utilities. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
+/* tailwindcss-animate is not a dependency; these two hand-written utilities
+   replace the animate-in/fade-in/slide-in-from-right classes the preset
+   library used to reference (which emitted nothing). */
+@keyframes solva-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes solva-slide-in-right {
+  from { opacity: 0; transform: translateX(1.5rem); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@utility animate-fade-in {
+  animation: solva-fade-in 150ms ease-out;
+}
+
+@utility animate-slide-in-right {
+  animation: solva-slide-in-right 200ms ease-out;
+}
+
+/* Ambient background visualizer wash. The old flat `opacity-25` was tuned for
+   the espresso backdrop and reads as a dirty smudge on solva-light's #F7F4EF
+   paper, so the light theme gets a much weaker wash. */
+.ambient-wash {
+  opacity: 0.25;
+}
+
+[data-theme="solva-light"] .ambient-wash {
+  opacity: 0.07;
+}
