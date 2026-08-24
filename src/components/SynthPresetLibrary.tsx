@@ -74,7 +74,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   // the original 'Custom / User' wording.
   const categories = useMemo<PresetCategory[]>(
     () => [
-      { id: 'All', label: 'All', badgeClass: 'bg-indigo-600 text-white', description: '', count: String(allPresets.length) },
+      { id: 'All', label: 'All', badgeClass: 'badge badge-primary', description: '', count: String(allPresets.length) },
       ...SYNTH_CATEGORIES.map((meta) => {
         const count =
           meta.id === 'User'
@@ -84,7 +84,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
           id: meta.id,
           label: meta.shortLabel,
           selectLabel: meta.label,
-          badgeClass: 'bg-indigo-600 text-white',
+          badgeClass: 'badge badge-primary',
           description: meta.description,
           count: String(count),
         };
@@ -197,15 +197,15 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
       key: group.category,
       className: 'space-y-2',
       header: (
-        <div className="flex items-center justify-between px-1 pt-2 pb-1 border-b border-[#1E2344]">
+        <div className="flex items-center justify-between px-1 pt-2 pb-1 border-b border-base-300">
           <div className="flex items-center gap-2">
-            <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-semibold ${group.badgeClass}`}>
+            <span className={`${group.badgeClass} badge-sm font-mono font-semibold`}>
               {group.category}
             </span>
-            <span className="text-xs font-bold text-slate-200">{group.label}</span>
+            <span className="text-xs font-bold text-base-content">{group.label}</span>
           </div>
           {group.description && (
-            <span className="text-[10px] text-slate-500 truncate max-w-[160px]">
+            <span className="text-[10px] text-base-content/50 truncate max-w-40">
               {group.description}
             </span>
           )}
@@ -226,11 +226,11 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   // presets found for ..." text, and the "Save your first custom preset now"
   // link (opens the save form) when the User category is empty.
   const emptyState = (query: string, category: string, openSave: () => void) => (
-    <div className="text-center py-12 text-slate-500 text-xs space-y-2">
-      <FolderOpen className="w-8 h-8 mx-auto opacity-40 text-indigo-400" />
+    <div className="text-center py-12 text-base-content/50 text-xs space-y-2">
+      <FolderOpen className="w-8 h-8 mx-auto opacity-40 text-primary" />
       <p>No presets found for "{query || category}"</p>
       {category === 'User' && (
-        <button onClick={openSave} className="text-indigo-400 hover:underline text-xs">
+        <button onClick={openSave} className="link link-primary text-xs">
           Save your first custom preset now
         </button>
       )}
@@ -250,76 +250,75 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
 
     return (
       <div
-        onClick={() => onSelectPreset(preset)}
-        className={`p-3 rounded-xl border transition-all cursor-pointer group relative ${
+        className={`card p-0 border transition-all group relative ${
           isCurrent
-            ? 'bg-indigo-950/40 border-indigo-500/80 shadow-md ring-1 ring-indigo-500/50'
-            : 'bg-[#0B0D19] border-[#252B48] hover:border-indigo-500/50 hover:bg-[#151933]'
+            ? 'bg-primary/10 border-primary shadow-md ring-1 ring-primary/50'
+            : 'bg-base-200 border-base-300 hover:border-primary/50 hover:bg-base-300'
         }`}
       >
+        <button
+          type="button"
+          onClick={() => onSelectPreset(preset)}
+          className="w-full text-left p-3 cursor-pointer"
+        >
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <h4 className="font-semibold text-xs text-slate-100 truncate group-hover:text-indigo-300 transition-colors">
+              <h4 className="font-semibold text-xs text-base-content truncate group-hover:text-primary transition-colors">
                 {preset.name}
               </h4>
               {isCurrent && (
-                <span className="text-[9px] bg-indigo-500 text-white px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">
+                <span className="badge badge-xs badge-primary py-0.5 font-bold uppercase tracking-wider">
                   Active
                 </span>
               )}
               <span
-                className={`text-[9px] px-1.5 py-0.2 rounded border font-mono ${meta.badgeClass}`}
+                className={`${meta.badgeClass} badge-xs py-0.5 font-mono`}
               >
                 {preset.category}
               </span>
             </div>
 
             {preset.description && (
-              <p className="text-[11px] text-slate-400 line-clamp-1 mb-2">
+              <p className="text-[11px] text-base-content/60 line-clamp-1 mb-2">
                 {preset.description}
               </p>
             )}
 
             {/* Sound Badge Attributes */}
-            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
-              <span className="bg-[#12152A] px-1.5 py-0.5 rounded border border-[#252B48] flex items-center gap-1">
-                <Activity className="w-2.5 h-2.5 text-indigo-400" />
+            <div className="flex items-center gap-1.5 text-[10px] text-base-content/60 font-mono">
+              <span className="badge badge-sm badge-ghost font-mono gap-1">
+                <Activity className="w-2.5 h-2.5 text-primary" />
                 {oscType}
               </span>
-              <span className="bg-[#12152A] px-1.5 py-0.5 rounded border border-[#252B48] flex items-center gap-1">
-                <Sliders className="w-2.5 h-2.5 text-pink-400" />
+              <span className="badge badge-sm badge-ghost font-mono gap-1">
+                <Sliders className="w-2.5 h-2.5 text-accent" />
                 {filterType === 'lowpass' ? 'LPF' : filterType === 'highpass' ? 'HPF' : 'BPF'} {Math.round(cutoff)}Hz
               </span>
             </div>
           </div>
+        </div>
+        </button>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-1 shrink-0">
+        {/* Action buttons */}
+        <div className="absolute top-3 right-3 flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => handleAudition(preset)}
+            className="btn btn-xs btn-ghost btn-square hover:btn-primary"
+            title="Audition Sound (Play Note)"
+          >
+            <Volume2 className="w-3.5 h-3.5" />
+          </button>
+
+          {!preset.isFactory && (
             <button
-              onClick={(ev) => {
-                ev.stopPropagation();
-                handleAudition(preset);
-              }}
-              className="p-1.5 rounded-lg bg-[#161B36] hover:bg-indigo-600 text-slate-300 hover:text-white transition-colors border border-[#252B48] cursor-pointer"
-              title="Audition Sound (Play Note)"
+              onClick={() => handleDelete(preset.id, preset.name)}
+              className="btn btn-xs btn-ghost btn-square hover:btn-error"
+              title="Delete Custom Preset"
             >
-              <Volume2 className="w-3.5 h-3.5" />
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
-
-            {!preset.isFactory && (
-              <button
-                onClick={(ev) => {
-                  ev.stopPropagation();
-                  handleDelete(preset.id, preset.name);
-                }}
-                className="p-1.5 rounded-lg bg-[#161B36] hover:bg-red-600 text-slate-400 hover:text-white transition-colors border border-[#252B48] cursor-pointer"
-                title="Delete Custom Preset"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
     );
@@ -333,14 +332,14 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
       <button
         onClick={handleExport}
         disabled={customPresets.length === 0}
-        className="px-2.5 py-2 bg-[#0B0D19] hover:bg-[#1A1F3A] disabled:opacity-40 text-slate-300 text-xs rounded-lg border border-[#252B48] transition-colors flex items-center gap-1 cursor-pointer"
+        className="btn btn-sm btn-ghost btn-square disabled:opacity-40"
         title="Export User Presets to JSON"
       >
         <Download className="w-3.5 h-3.5" />
       </button>
 
       <label
-        className="px-2.5 py-2 bg-[#0B0D19] hover:bg-[#1A1F3A] text-slate-300 text-xs rounded-lg border border-[#252B48] transition-colors flex items-center gap-1 cursor-pointer"
+        className="btn btn-sm btn-ghost btn-square disabled:opacity-40"
         title="Import Presets from JSON"
       >
         <Upload className="w-3.5 h-3.5" />
@@ -352,11 +351,11 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   // PORT of the original footer (original lines ~418-427): LocalStorage note +
   // Done button.
   const footer = (
-    <div className="p-3 border-t border-[#252B48] bg-[#0E1022] flex items-center justify-between text-[11px] text-slate-400">
+    <div className="p-3 border-t border-base-300 bg-base-200 flex items-center justify-between text-[11px] text-base-content/60">
       <span>Storage: Browser LocalStorage</span>
       <button
         onClick={onClose}
-        className="px-3 py-1 bg-[#1A1F3A] hover:bg-[#252B48] text-slate-200 rounded-lg text-xs transition-colors cursor-pointer font-medium"
+        className="btn btn-sm btn-ghost font-medium"
       >
         Done
       </button>

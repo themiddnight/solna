@@ -10,6 +10,11 @@ interface ProjectModalProps {
   onLoadTemplate: (templateName: string) => void;
 }
 
+/** Download filename for the JSON project export. Pure: no DOM, unit-testable. */
+export function projectFileName(title: string): string {
+  return `${title.replace(/\s+/g, '_')}_solva_project.json`;
+}
+
 export const ProjectModal: React.FC<ProjectModalProps> = React.memo(({
   isOpen,
   onClose,
@@ -33,7 +38,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = React.memo(({
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(project, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `${title.replace(/\s+/g, '_')}_musibox_project.json`);
+    downloadAnchor.setAttribute('download', projectFileName(title));
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -42,24 +47,24 @@ export const ProjectModal: React.FC<ProjectModalProps> = React.memo(({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#12152A] border border-[#2D355A] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <dialog className="modal modal-open" aria-label="Project Management and Export">
+      <div className="modal-box bg-base-100 border border-base-300 p-0 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="bg-[#0B0D19] p-4 border-b border-[#252B48] flex items-center justify-between">
+        <div className="bg-base-200 p-4 border-b border-base-300 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
+            <div className="p-2 rounded-xl bg-primary/20 border border-primary/30 text-primary">
               <FolderOpen className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-100">Project Management & Export</h3>
-              <p className="text-xs text-slate-400">Save your session, load templates, and export audio/MIDI</p>
+              <h3 className="font-bold text-base text-base-content">Project Management & Export</h3>
+              <p className="text-xs text-base-content/60">Save your session, load templates, and export audio/MIDI</p>
             </div>
           </div>
 
           <button
             id="btn-close-project-modal"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
+            className="btn btn-sm btn-circle btn-ghost"
           >
             <X className="w-5 h-5" />
           </button>
@@ -68,8 +73,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = React.memo(({
         {/* Content */}
         <div className="p-5 space-y-4 overflow-y-auto">
           {/* Project Title & Save */}
-          <div className="bg-[#0B0D19] border border-[#252B48] rounded-xl p-4 space-y-3">
-            <label className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
+          <div className="card bg-base-200 border border-base-300 p-4 space-y-3">
+            <label className="text-xs font-bold text-base-content uppercase tracking-wider block">
               Project Title
             </label>
             <div className="flex gap-2">
@@ -78,23 +83,23 @@ export const ProjectModal: React.FC<ProjectModalProps> = React.memo(({
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="flex-1 bg-[#12152A] border border-[#2D355A] text-slate-100 text-xs rounded-lg p-2.5 focus:outline-none focus:border-indigo-500"
+                className="input input-sm input-bordered w-full flex-1 text-xs"
               />
               <button
                 id="btn-save-project-action"
                 onClick={handleSave}
-                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer shadow-md"
+                className="btn btn-sm btn-primary gap-1.5 text-xs"
               >
-                {saved ? <Check className="w-4 h-4 text-emerald-300" /> : <Save className="w-4 h-4" />}
+                {saved ? <Check className="w-4 h-4 text-success" /> : <Save className="w-4 h-4" />}
                 <span>{saved ? 'Saved!' : 'Save'}</span>
               </button>
             </div>
           </div>
 
           {/* Quick Starter Templates */}
-          <div className="bg-[#0B0D19] border border-[#252B48] rounded-xl p-4 space-y-2.5">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+          <div className="card bg-base-200 border border-base-300 p-4 space-y-2.5">
+            <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-secondary" />
               Load Production Template
             </span>
 
@@ -112,28 +117,30 @@ export const ProjectModal: React.FC<ProjectModalProps> = React.memo(({
                     onLoadTemplate(t.name);
                     onClose();
                   }}
-                  className="p-2.5 rounded-lg bg-[#12152A] hover:bg-[#1C213E] border border-[#252B48] text-left transition-all cursor-pointer"
+                  className="btn btn-ghost h-auto justify-start bg-base-100 border-base-300 hover:bg-base-300 p-2.5 text-left normal-case"
                 >
-                  <div className="text-xs font-bold text-slate-200">{t.name}</div>
-                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">{t.bpm} BPM • {t.key}</div>
+                  <div>
+                    <div className="text-xs font-bold text-base-content">{t.name}</div>
+                    <div className="text-[10px] text-base-content/60 font-mono mt-0.5">{t.bpm} BPM • {t.key}</div>
+                  </div>
                 </button>
               ))}
             </div>
           </div>
 
           {/* Export Actions */}
-          <div className="bg-[#0B0D19] border border-[#252B48] rounded-xl p-4 space-y-2">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
+          <div className="card bg-base-200 border border-base-300 p-4 space-y-2">
+            <span className="text-xs font-bold text-base-content uppercase tracking-wider block">
               Export Track Stems & Data
             </span>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="modal-action mt-0 grid grid-cols-2 gap-2">
               <button
                 id="btn-export-json"
                 onClick={handleExportJSON}
-                className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-[#12152A] hover:bg-[#1C213E] border border-[#252B48] text-slate-200 text-xs font-semibold transition-all cursor-pointer"
+                className="btn btn-sm btn-outline gap-2 text-xs"
               >
-                <FileText className="w-4 h-4 text-indigo-400" />
+                <FileText className="w-4 h-4 text-primary" />
                 <span>{exported ? 'Exported JSON!' : 'Export JSON'}</span>
               </button>
 
@@ -142,15 +149,18 @@ export const ProjectModal: React.FC<ProjectModalProps> = React.memo(({
                 onClick={() => {
                   alert('Audio Stems mixdown generated! Exporting project package...');
                 }}
-                className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-[#12152A] hover:bg-[#1C213E] border border-[#252B48] text-slate-200 text-xs font-semibold transition-all cursor-pointer"
+                className="btn btn-sm btn-outline gap-2 text-xs"
               >
-                <Download className="w-4 h-4 text-emerald-400" />
+                <Download className="w-4 h-4 text-success" />
                 <span>Export Mixdown</span>
               </button>
             </div>
           </div>
         </div>
       </div>
-    </div>
+      <form method="dialog" className="modal-backdrop">
+        <button onClick={onClose}>close</button>
+      </form>
+    </dialog>
   );
 });

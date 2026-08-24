@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { renderToString } from 'react-dom/server';
 import { INSTANT_VIBES } from '../store/instantVibes';
 import { audioEngine } from '../audio/engine';
 import { useAppStore } from '../store/store';
-import { selectVibe } from './InstantVibesBar';
+import { selectVibe, InstantVibesBar } from './InstantVibesBar';
 
 const noop = { onSelect: () => {}, onToast: () => {} };
 
@@ -32,5 +33,19 @@ describe('selectVibe', () => {
     const state = useAppStore.getState();
     expect(state.isSequencerPlaying).toBe(true);
     expect(state.isChordsPlaying).toBe(true);
+  });
+});
+
+describe('InstantVibesBar markup', () => {
+  test('preset buttons are daisyUI buttons and the dead animate-in classes are gone', () => {
+    const html = renderToString(<InstantVibesBar />);
+
+    expect(html).toContain('btn btn-xs');
+    expect(html).toContain('btn-primary');
+    expect(html).toContain('btn-outline');
+    expect(html).toContain('btn btn-xs btn-ghost btn-square');
+    // tailwindcss-animate is not installed, so these class names generate no CSS.
+    expect(html).not.toContain('animate-in');
+    expect(html).not.toContain('fade-in ');
   });
 });

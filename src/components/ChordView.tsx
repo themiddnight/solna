@@ -72,9 +72,8 @@ import { SortableChordCard } from "./chord/SortableChordCard";
 
 import { CHORD_PROGRESSION_TEMPLATES } from "../audio/data/chordProgressions";
 
-const SELECT_BASE =
-  "bg-[#171B36] border border-[#2D355A] rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-200";
-const LABEL_BASE = "text-[10px] text-slate-500 block mb-1";
+const SELECT_BASE = "select select-sm select-bordered font-semibold";
+const LABEL_BASE = "label-text text-[10px] text-base-content/60 block mb-1";
 
 export const ChordView: React.FC = React.memo(() => {
   // ChordView reads the store directly (Task 5): every value below replaces
@@ -433,12 +432,13 @@ export const ChordView: React.FC = React.memo(() => {
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Scale & Chord Studio Header */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-2.5 shadow-md relative">
+      <div className="card bg-base-100 border border-base-300 shadow-md relative">
+        <div className="card-body p-3 sm:p-4 flex-row flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
+          <div className="p-1.5 rounded-lg bg-primary/20 border border-primary/30 text-primary">
             <Music className="w-4 h-4" />
           </div>
-          <h2 className="font-bold text-sm sm:text-base text-slate-100">
+          <h2 className="font-bold text-sm sm:text-base text-base-content">
             Chord Studio & Harmony
           </h2>
         </div>
@@ -449,17 +449,15 @@ export const ChordView: React.FC = React.memo(() => {
           <button
             id="btn-mute-chord"
             onClick={toggleChordMuted}
-            className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border transition-all cursor-pointer ${
-              chordMuted
-                ? "bg-rose-600/30 border-rose-500/50 text-rose-200"
-                : "bg-[#0B0D19] border-[#2D355A] text-slate-400 hover:text-slate-200"
+            className={`btn btn-sm gap-1 text-xs font-semibold ${
+              chordMuted ? "btn-error btn-outline" : "btn-ghost"
             }`}
             title="Mute Chord Layer"
           >
             {chordMuted ? (
-              <VolumeX className="w-3.5 h-3.5 text-rose-300" />
+              <VolumeX className="w-3.5 h-3.5 text-error" />
             ) : (
-              <Volume2 className="w-3.5 h-3.5 text-indigo-300" />
+              <Volume2 className="w-3.5 h-3.5 text-primary" />
             )}
             <span>Chord {chordMuted ? "Off" : "On"}</span>
           </button>
@@ -467,17 +465,15 @@ export const ChordView: React.FC = React.memo(() => {
           <button
             id="btn-mute-bass"
             onClick={toggleBassMuted}
-            className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border transition-all cursor-pointer ${
-              bassMuted
-                ? "bg-rose-600/30 border-rose-500/50 text-rose-200"
-                : "bg-[#0B0D19] border-[#2D355A] text-slate-400 hover:text-slate-200"
+            className={`btn btn-sm gap-1 text-xs font-semibold ${
+              bassMuted ? "btn-error btn-outline" : "btn-ghost"
             }`}
             title="Mute Bass Layer"
           >
             {bassMuted ? (
-              <VolumeX className="w-3.5 h-3.5 text-rose-300" />
+              <VolumeX className="w-3.5 h-3.5 text-error" />
             ) : (
-              <Volume2 className="w-3.5 h-3.5 text-emerald-300" />
+              <Volume2 className="w-3.5 h-3.5 text-accent" />
             )}
             <span>Bass {bassMuted ? "Off" : "On"}</span>
           </button>
@@ -489,10 +485,10 @@ export const ChordView: React.FC = React.memo(() => {
               setQuickSaveName(`Progression in ${scaleRoot}`);
               setIsQuickSaving(true);
             }}
-            className="flex items-center gap-1 bg-[#171B36] hover:bg-[#22284C] text-slate-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[#2D355A] transition-colors cursor-pointer shadow-xs"
+            className="btn btn-sm btn-ghost gap-1"
             title="Save chord progression"
           >
-            <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
+            <Bookmark className="w-3.5 h-3.5 text-primary" />
             <span className="hidden sm:inline">Save</span>
           </button>
 
@@ -500,12 +496,12 @@ export const ChordView: React.FC = React.memo(() => {
           <button
             id="btn-open-chord-presets-library"
             onClick={() => setIsLibraryOpen(true)}
-            className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg shadow-sm transition-colors cursor-pointer"
+            className="btn btn-sm btn-primary gap-1"
             title="Progression Library"
           >
             <Library className="w-3.5 h-3.5" />
             <span>Library</span>
-            <span className="bg-indigo-700/80 text-[10px] px-1 py-0.2 rounded font-mono hidden sm:inline">
+            <span className="badge badge-sm badge-primary font-mono py-0.5 hidden sm:inline">
               {totalProgressionsCount}
             </span>
           </button>
@@ -513,11 +509,12 @@ export const ChordView: React.FC = React.memo(() => {
 
         {/* Floating Save Toast */}
         {saveToast && (
-          <div className="absolute top-full right-4 mt-2 z-20 bg-emerald-950 border border-emerald-500/50 text-emerald-300 text-xs px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1">
-            <Check className="w-3.5 h-3.5 text-emerald-400" />
+          <div className="alert alert-success absolute top-full right-4 mt-2 z-20 w-auto py-1.5 px-3 text-xs shadow-lg animate-fade-in">
+            <Check className="w-3.5 h-3.5" />
             <span>{saveToast}</span>
           </div>
         )}
+        </div>
       </div>
 
       {/* Quick Save Modal Popover */}
@@ -533,19 +530,19 @@ export const ChordView: React.FC = React.memo(() => {
       />
 
       {/* Active Progression Blocks & Playable Chord Pads */}
-      <div className="bg-[#12152A] border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 to-transparent rounded-xl p-4 shadow-xl space-y-3">
-        <div className="flex items-center justify-between border-b border-[#252B48] pb-2 flex-wrap gap-2">
+      <div className="card bg-base-100 border border-primary/30 bg-gradient-to-br from-primary/10 to-transparent rounded-xl p-4 shadow-xl space-y-3">
+        <div className="flex items-center justify-between border-b border-base-300 pb-2 flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+            <span className="text-xs font-bold text-base-content uppercase tracking-wider">
               Active Chord Progression Loop ({chords.length} Chords)
             </span>
             {isAutoReharmonizedIndicator && (
               <span
-                className="flex items-center gap-1 bg-purple-500/20 border border-purple-500/40 text-purple-300 text-[10px] font-semibold px-2 py-0.5 rounded-full animate-in fade-in"
+                className="badge badge-sm badge-secondary badge-outline gap-1 animate-fade-in"
                 title="Automatically reharmonized to active scale"
               >
-                <Sparkles className="w-3 h-3 text-purple-400" />
-                <span>
+                <Sparkles className="w-3 h-3 text-secondary" />
+                <span className="font-mono">
                   Auto-Reharmonized to {scaleRoot} {scaleType}
                 </span>
               </span>
@@ -554,7 +551,7 @@ export const ChordView: React.FC = React.memo(() => {
           <button
             id="btn-add-chord"
             onClick={addChord}
-            className="flex items-center gap-1 px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer shadow-sm"
+            className="btn btn-xs btn-primary gap-1"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Chord</span>
@@ -580,27 +577,19 @@ export const ChordView: React.FC = React.memo(() => {
                   preset: preset.name,
                 });
               }}
-              className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+              className={SELECT_BASE}
               title="Chord sound preset — factory and saved presets, synced with the synth page"
             >
               <option value="">Chord Preset…</option>
               {getPresetsGroupedByCategory(
                 getAllSynthPresets(customPresets),
               ).map((group) => (
-                <optgroup
-                  key={group.category}
-                  label={group.label}
-                  className="bg-[#12152A] text-indigo-300 font-bold"
-                >
+                <optgroup key={group.category} label={group.label} className="font-bold">
                   {group.presets.map((p) => (
                     <option
                       key={p.id}
                       value={p.name}
-                      className={
-                        p.isFactory
-                          ? "bg-[#0B0D19] text-slate-200 font-normal"
-                          : "bg-[#0B0D19] text-purple-300 font-normal"
-                      }
+                      className={p.isFactory ? "" : "text-secondary"}
                     >
                       {!p.isFactory ? `★ ${p.name}` : p.name}
                     </option>
@@ -617,7 +606,7 @@ export const ChordView: React.FC = React.memo(() => {
               id="select-chord-octave"
               value={chordOctave}
               onChange={(e) => setChordOctave(parseInt(e.target.value, 10))}
-              className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+              className={SELECT_BASE}
               title="Octave for chord playback"
             >
               {[2, 3, 4, 5, 6].map((o) => (
@@ -636,7 +625,7 @@ export const ChordView: React.FC = React.memo(() => {
                 id="select-chord-rhythm-pattern"
                 value={rhythmId}
                 onChange={(e) => setChordRhythmId(e.target.value)}
-                className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+                className={SELECT_BASE}
                 title="Rhythm pattern for chord playback"
               >
                 {RHYTHM_STYLE_GROUPS.map((group) => (
@@ -657,7 +646,7 @@ export const ChordView: React.FC = React.memo(() => {
                 onMouseLeave={handleChordPatternPreviewMouseUp}
                 onTouchStart={handleChordPatternPreviewMouseDown}
                 onTouchEnd={handleChordPatternPreviewMouseUp}
-                className="p-1.5 rounded-lg border border-[#2D355A] bg-[#171B36] hover:bg-[#22284C] text-indigo-400 transition-colors cursor-pointer select-none"
+                className="btn btn-xs btn-ghost btn-square text-primary select-none"
                 title="Hold to Preview Chord Pattern Loop"
               >
                 <Volume2 className="w-3 h-3" />
@@ -668,8 +657,8 @@ export const ChordView: React.FC = React.memo(() => {
           {/* Chord Feel Slider (tight ↔ loose) */}
           <div>
             <label className={LABEL_BASE}>Chord Feel</label>
-            <div className="flex items-center gap-1.5 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
-              <span className="text-[9px] text-slate-500 font-mono shrink-0">
+            <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-lg px-2.5 py-1 text-xs h-8">
+              <span className="text-[9px] text-base-content/60 font-mono shrink-0">
                 tight
               </span>
               <Slider
@@ -679,10 +668,10 @@ export const ChordView: React.FC = React.memo(() => {
                 step={0.01}
                 value={chordFeel}
                 onChange={setChordFeel}
-                className="w-20 h-1 bg-[#0B0D19] rounded cursor-pointer accent-indigo-500"
+                className="range range-xs range-primary w-20"
                 title="Chord note length: tight (short holds) ↔ loose (long holds)"
               />
-              <span className="text-[9px] text-slate-500 font-mono shrink-0">
+              <span className="text-[9px] text-base-content/60 font-mono shrink-0">
                 loose
               </span>
             </div>
@@ -693,7 +682,8 @@ export const ChordView: React.FC = React.memo(() => {
             idPrefix="chord"
             label="Chord Level"
             volume={chordVolume}
-            accentClass="text-indigo-400"
+            accentClass="text-primary"
+            sliderClassName="range range-xs range-primary"
             onVolumeChange={handleChordVolumeChange}
           />
           {/* Option B Re-harmonize Button */}
@@ -713,10 +703,10 @@ export const ChordView: React.FC = React.memo(() => {
               );
               setTimeout(() => setSaveToast(null), 3000);
             }}
-            className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-md transition-colors cursor-pointer"
+            className="btn btn-sm btn-secondary gap-1.5"
             title="Option B: Diatonically snap current chord progression to active key and scale"
           >
-            <Sparkles className="w-3.5 h-3.5 text-purple-200" />
+            <Sparkles className="w-3.5 h-3.5" />
             <span>Re-harmonize</span>
           </button>
 
@@ -739,40 +729,36 @@ export const ChordView: React.FC = React.memo(() => {
                 setIsAutoReharmonizedIndicator(false);
               }
             }}
-            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
-              autoReharmonize
-                ? "bg-purple-600/30 border-purple-500/50 text-purple-200"
-                : "bg-[#0B0D19] border-[#2D355A] text-slate-400"
+            className={`btn btn-sm gap-1.5 text-xs font-semibold ${
+              autoReharmonize ? "btn-secondary btn-outline" : "btn-ghost"
             }`}
             title="Toggle automatic re-harmonization when loading presets or changing scales"
           >
             <Sparkles
-              className={`w-3.5 h-3.5 ${autoReharmonize ? "text-purple-300" : "text-slate-500"}`}
+              className={`w-3.5 h-3.5 ${autoReharmonize ? "text-secondary" : "text-base-content/50"}`}
             />
             <span>Auto-Reharmonize: {autoReharmonize ? "ON" : "OFF"}</span>
           </button>
         </div>
 
         {/* In-Scale & Borrowed Quick Add Palette */}
-        <div className="bg-[#171B36] border border-[#252B48] rounded-lg p-3 space-y-3">
+        <div className="bg-base-100 border border-base-300 rounded-lg p-3 space-y-3">
           <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5 text-indigo-300 font-medium">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <div className="flex items-center gap-1.5 text-primary font-medium">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
               <span>
                 In-Scale Chords ({scaleRoot} {scaleType}):
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-400">
+              <span className="text-[10px] text-base-content/60">
                 Click to append, 🔊 to preview:
               </span>
               <button
                 type="button"
                 onClick={() => setUse7thsInQuickAdd(!use7thsInQuickAdd)}
-                className={`text-[10px] font-semibold px-2 py-0.5 rounded transition-colors cursor-pointer ${
-                  use7thsInQuickAdd
-                    ? "bg-indigo-600 text-white"
-                    : "bg-[#12152A] text-slate-400 hover:text-slate-200 border border-[#2D355A]"
+                className={`btn btn-xs text-[10px] font-semibold ${
+                  use7thsInQuickAdd ? "btn-primary" : "btn-ghost"
                 }`}
               >
                 {use7thsInQuickAdd ? "7th Chords" : "Triads"}
@@ -790,20 +776,22 @@ export const ChordView: React.FC = React.memo(() => {
                 use7thsInQuickAdd,
               );
               return (
-                <div
+                <button
                   key={i}
+                  type="button"
                   onClick={() => addDiatonicChord(i)}
-                  className="group flex items-center gap-1.5 bg-[#12152A] hover:bg-indigo-600/30 border border-[#2D355A] hover:border-indigo-500/50 text-slate-200 p-1 rounded-lg text-xs transition-all cursor-pointer shadow-sm"
+                  className="btn btn-xs btn-outline group gap-1.5 h-auto py-1 normal-case"
                   title={`Click to add ${formatChordLabel(diatonic.root, diatonic.quality)} (${diatonic.degreeName})`}
                 >
-                  <span className="font-mono text-[10px] text-indigo-400 font-bold group-hover:text-indigo-300 bg-[#1C213E] px-1.5 py-0.5 rounded">
+                  <span className="font-mono text-[10px] text-primary font-bold bg-base-300 px-1.5 py-0.5 rounded">
                     {diatonic.degreeName}
                   </span>
-                  <span className="font-semibold">
+                  <span className="font-mono font-semibold">
                     {formatChordLabel(diatonic.root, diatonic.quality)}
                   </span>
-                  <button
-                    type="button"
+                  <span
+                    role="button"
+                    tabIndex={0}
                     onMouseDown={(e) =>
                       handlePreviewMouseDown(e, diatonic.root, diatonic.quality)
                     }
@@ -820,45 +808,47 @@ export const ChordView: React.FC = React.memo(() => {
                       handlePreviewMouseUp(e)
                     }
                     onClick={(e) => e.stopPropagation()}
-                    className="p-1 text-slate-400 hover:text-indigo-300 transition-colors ml-0.5 rounded hover:bg-[#252B48] cursor-pointer select-none"
+                    className="p-1 text-base-content/60 hover:text-primary transition-colors ml-0.5 rounded hover:bg-base-300 cursor-pointer select-none"
                     title="Hold to Preview Chord Audio"
                   >
                     <Volume2 className="w-2.5 h-2.5" />
-                  </button>
-                </div>
+                  </span>
+                </button>
               );
             })}
           </div>
 
           {/* Borrowed Chords (Modal Interchange) */}
-          <div className="pt-2 border-t border-[#252B48]/80">
+          <div className="pt-2 border-t border-base-300/80">
             <div className="flex items-center justify-between text-xs mb-2">
-              <div className="flex items-center gap-1.5 text-purple-300 font-medium">
-                <Music className="w-3.5 h-3.5 text-purple-400" />
+              <div className="flex items-center gap-1.5 text-secondary font-medium">
+                <Music className="w-3.5 h-3.5 text-secondary" />
                 <span>Borrowed Chords (Modal Interchange):</span>
               </div>
-              <span className="text-[10px] text-slate-400">
+              <span className="text-[10px] text-base-content/60">
                 Add colorful non-diatonic flavor:
               </span>
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
               {getBorrowedChords(scaleRoot, scaleType).map((borrowed, i) => (
-                <div
+                <button
                   key={i}
+                  type="button"
                   onClick={() =>
                     addBorrowedChord(borrowed.root, borrowed.quality)
                   }
-                  className="group flex items-center gap-1.5 bg-[#12152A] hover:bg-purple-600/30 border border-[#2D355A] hover:border-purple-500/50 text-slate-200 p-1 rounded-lg text-xs transition-all cursor-pointer shadow-sm"
+                  className="btn btn-xs btn-outline btn-secondary group gap-1.5 h-auto py-1 normal-case"
                   title={`Click to add ${borrowed.label}: ${formatChordLabel(borrowed.root, borrowed.quality)}`}
                 >
-                  <span className="font-mono text-[10px] text-purple-300 font-bold group-hover:text-purple-200 bg-[#1C213E] px-1.5 py-0.5 rounded">
+                  <span className="font-mono text-[10px] text-secondary font-bold bg-base-300 px-1.5 py-0.5 rounded">
                     {borrowed.label}
                   </span>
-                  <span className="font-semibold">
+                  <span className="font-mono font-semibold">
                     {formatChordLabel(borrowed.root, borrowed.quality)}
                   </span>
-                  <button
-                    type="button"
+                  <span
+                    role="button"
+                    tabIndex={0}
                     onMouseDown={(e) =>
                       handlePreviewMouseDown(e, borrowed.root, borrowed.quality)
                     }
@@ -875,12 +865,12 @@ export const ChordView: React.FC = React.memo(() => {
                       handlePreviewMouseUp(e)
                     }
                     onClick={(e) => e.stopPropagation()}
-                    className="p-1 text-slate-400 hover:text-purple-300 transition-colors ml-0.5 rounded hover:bg-[#252B48] cursor-pointer select-none"
+                    className="p-1 text-base-content/60 hover:text-secondary transition-colors ml-0.5 rounded hover:bg-base-300 cursor-pointer select-none"
                     title="Hold to Preview Chord Audio"
                   >
                     <Volume2 className="w-2.5 h-2.5" />
-                  </button>
-                </div>
+                  </span>
+                </button>
               ))}
             </div>
           </div>
@@ -924,10 +914,10 @@ export const ChordView: React.FC = React.memo(() => {
       </div>
 
       {/* Bass Module Panel */}
-      <div className="mt-4 bg-[#12152A] border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-xl p-4">
+      <div className="mt-4 card bg-base-100 border border-accent/30 bg-gradient-to-br from-accent/10 to-transparent rounded-xl p-4">
         <div className="mb-3">
-          <h3 className="text-sm font-bold text-emerald-300">Bass Module</h3>
-          <p className="text-[10px] text-slate-500">
+          <h3 className="text-sm font-bold text-accent">Bass Module</h3>
+          <p className="text-[10px] text-base-content/60">
             Bass line follows the same chord progression loop; pattern steps are
             16th notes.
           </p>
@@ -950,27 +940,19 @@ export const ChordView: React.FC = React.memo(() => {
                   preset: preset.name,
                 });
               }}
-              className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+              className={SELECT_BASE}
               title="Bass sound preset — any factory, bass, or saved preset, synced with the synth page"
             >
               <option value="">Bass Preset…</option>
               {getPresetsGroupedByCategory(
                 getAllSynthPresets(customPresets),
               ).map((group) => (
-                <optgroup
-                  key={group.category}
-                  label={group.label}
-                  className="bg-[#12152A] text-indigo-300 font-bold"
-                >
+                <optgroup key={group.category} label={group.label} className="font-bold">
                   {group.presets.map((p) => (
                     <option
                       key={p.id}
                       value={p.name}
-                      className={
-                        p.isFactory
-                          ? "bg-[#0B0D19] text-slate-200 font-normal"
-                          : "bg-[#0B0D19] text-purple-300 font-normal"
-                      }
+                      className={p.isFactory ? "" : "text-secondary"}
                     >
                       {!p.isFactory ? `★ ${p.name}` : p.name}
                     </option>
@@ -986,7 +968,7 @@ export const ChordView: React.FC = React.memo(() => {
               id="select-bass-octave"
               value={bassOctave}
               onChange={(e) => setBassOctave(parseInt(e.target.value, 10))}
-              className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+              className={SELECT_BASE}
               title="Register for the bass line (embedded in the note names)"
             >
               {[1, 2, 3, 4].map((o) => (
@@ -1004,7 +986,7 @@ export const ChordView: React.FC = React.memo(() => {
                 id="select-bass-rhythm-pattern"
                 value={bassPatternId}
                 onChange={(e) => setBassPatternId(e.target.value)}
-                className={`${SELECT_BASE} cursor-pointer hover:bg-[#22284C]`}
+                className={SELECT_BASE}
                 title="Bass pattern (16th-note grid, deterministic)"
               >
                 {BASS_STYLE_GROUPS.map((group) => (
@@ -1025,7 +1007,7 @@ export const ChordView: React.FC = React.memo(() => {
                 onMouseLeave={handleBassPatternPreviewMouseUp}
                 onTouchStart={handleBassPatternPreviewMouseDown}
                 onTouchEnd={handleBassPatternPreviewMouseUp}
-                className="p-1.5 rounded-lg border border-[#2D355A] bg-[#171B36] hover:bg-[#22284C] text-emerald-400 transition-colors cursor-pointer select-none"
+                className="btn btn-xs btn-ghost btn-square text-accent select-none"
                 title="Hold to Preview Bass Pattern Loop"
               >
                 <Volume2 className="w-3 h-3" />
@@ -1036,8 +1018,8 @@ export const ChordView: React.FC = React.memo(() => {
           {/* Bass Feel Slider (tight ↔ loose) */}
           <div>
             <label className={LABEL_BASE}>Bass Feel</label>
-            <div className="flex items-center gap-1.5 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
-              <span className="text-[9px] text-slate-500 font-mono shrink-0">
+            <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-lg px-2.5 py-1 text-xs h-8">
+              <span className="text-[9px] text-base-content/60 font-mono shrink-0">
                 tight
               </span>
               <Slider
@@ -1047,10 +1029,10 @@ export const ChordView: React.FC = React.memo(() => {
                 step={0.01}
                 value={bassFeel}
                 onChange={setBassFeel}
-                className="w-20 h-1 bg-[#0B0D19] rounded cursor-pointer accent-emerald-500"
+                className="range range-xs range-accent w-20"
                 title="Bass note length: tight (short holds) ↔ loose (long holds)"
               />
-              <span className="text-[9px] text-slate-500 font-mono shrink-0">
+              <span className="text-[9px] text-base-content/60 font-mono shrink-0">
                 loose
               </span>
             </div>
@@ -1060,10 +1042,10 @@ export const ChordView: React.FC = React.memo(() => {
             idPrefix="bass"
             label="Bass Level"
             volume={bassVolume}
-            accentClass="text-emerald-400"
+            accentClass="text-accent"
             onVolumeChange={handleBassVolumeChange}
             showReadout={false}
-            sliderClassName="w-full h-1 bg-[#0B0D19] rounded cursor-pointer accent-emerald-500"
+            sliderClassName="range range-xs range-accent"
           />
         </div>
       </div>

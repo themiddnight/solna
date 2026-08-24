@@ -49,23 +49,29 @@ import {
   ScaleLockedKeyboard,
   ChromaticKeyboard,
 } from "./ui/Keyboard";
+
+// Re-exported for scripts/check-key-bindings.ts, which asserts that the synth
+// key bindings never collide with the drum-pad shortcuts. The table itself
+// lives in ui/Keyboard.tsx; this is the historical import path.
+export { KEYBOARD_NOTES } from "./ui/Keyboard";
 import { isTypingTarget } from "../utils/keyboard";
 import { resolveSynthControlChannel } from "../utils/synthControl";
 import type { SynthControlTarget } from "../utils/synthControl";
 
-// Shared per-destination accent styling for the card tint and selector buttons
+// Shared per-destination accent styling for the card tint and selector buttons.
+// synth = neutral (no tint), chord = primary (amber), bass = accent (teal).
 const TARGET_STYLES: Record<
   SynthControlTarget,
   { tint: string; activeBtn: string }
 > = {
-  synth: { tint: "", activeBtn: "bg-slate-600 text-white shadow-xs" },
+  synth: { tint: "", activeBtn: "btn-active" },
   chord: {
-    tint: "ring-1 ring-indigo-400/40 bg-gradient-to-br from-indigo-500/10 to-transparent",
-    activeBtn: "bg-indigo-600 text-white shadow-xs",
+    tint: "ring-1 ring-primary/40 bg-gradient-to-br from-primary/10 to-transparent",
+    activeBtn: "btn-primary",
   },
   bass: {
-    tint: "ring-1 ring-emerald-400/40 bg-gradient-to-br from-emerald-500/10 to-transparent",
-    activeBtn: "bg-emerald-600 text-white shadow-xs",
+    tint: "ring-1 ring-accent/40 bg-gradient-to-br from-accent/10 to-transparent",
+    activeBtn: "btn-accent",
   },
 };
 
@@ -369,12 +375,13 @@ export const SynthView = () => {
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Top Synth Header & Presets */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 sm:p-4 flex flex-col gap-3 shadow-md relative">
+      <div className="card bg-base-100 border border-base-300 shadow-md relative">
+        <div className="card-body p-3 sm:p-4 flex flex-col gap-3">
         {/* Row 1: Target Selector + Mode Switcher + Presets */}
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           {/* Control Destination Selector */}
-          <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#2D355A] rounded-lg p-1">
-            <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold pl-1 pr-1 hidden xs:inline">
+          <div className="join flex items-center gap-1 bg-base-200 border border-base-300 rounded-lg p-1">
+            <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold pl-1 pr-1 hidden sm:inline">
               Target:
             </span>
             {(
@@ -387,10 +394,10 @@ export const SynthView = () => {
               <button
                 key={target}
                 onClick={() => onChangeControlTarget(target)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
+                className={`btn btn-xs join-item text-[11px] font-semibold ${
                   controlTarget === target
                     ? TARGET_STYLES[target].activeBtn
-                    : "text-slate-400 hover:text-slate-200"
+                    : "btn-ghost text-base-content/60"
                 }`}
               >
                 {label}
@@ -401,14 +408,14 @@ export const SynthView = () => {
           {/* Actions: Mode Switcher + Save Current & Full Presets Library */}
           <div className="flex items-center gap-1.5 flex-wrap">
             {/* Mode Switcher: Simple vs Pro */}
-            <div className="flex items-center bg-[#0B0D19] border border-[#2D355A] rounded-lg p-0.5">
+            <div className="join flex items-center bg-base-200 border border-base-300 rounded-lg p-0.5">
               <button
                 id="btn-mode-simple"
                 onClick={() => handleToggleSynthViewMode("simple")}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                className={`btn btn-xs join-item gap-1 text-xs font-semibold ${
                   synthViewMode === "simple"
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "btn-primary"
+                    : "btn-ghost text-base-content/60"
                 }`}
                 title="Simple Mode"
               >
@@ -418,10 +425,10 @@ export const SynthView = () => {
               <button
                 id="btn-mode-pro"
                 onClick={() => handleToggleSynthViewMode("pro")}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                className={`btn btn-xs join-item gap-1 text-xs font-semibold ${
                   synthViewMode === "pro"
-                    ? "bg-purple-600 text-white shadow-xs"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "btn-accent"
+                    : "btn-ghost text-base-content/60"
                 }`}
                 title="Pro Mode"
               >
@@ -441,22 +448,22 @@ export const SynthView = () => {
                 setQuickSaveCategory(activePresetItem?.category ?? "User");
                 setIsQuickSaving(true);
               }}
-              className="flex items-center gap-1 bg-[#171B36] hover:bg-[#22284C] text-slate-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[#2D355A] transition-colors shadow-xs cursor-pointer"
+              className="btn btn-xs btn-ghost gap-1 border border-base-300 text-xs font-semibold"
               title="Save preset"
             >
-              <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
+              <Bookmark className="w-3.5 h-3.5 text-primary" />
               <span className="hidden sm:inline">Save</span>
             </button>
 
             <button
               id="btn-open-presets-library"
               onClick={() => setIsLibraryOpen(true)}
-              className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg shadow-sm transition-colors cursor-pointer"
+              className="btn btn-xs btn-primary gap-1 text-xs font-semibold"
               title="Presets Library"
             >
               <Library className="w-3.5 h-3.5" />
               <span>Presets</span>
-              <span className="bg-indigo-700/80 text-[10px] px-1 py-0.2 rounded font-mono hidden sm:inline">
+              <span className="badge badge-xs badge-primary badge-outline text-[10px] font-mono hidden sm:inline">
                 {totalPresetsCount}
               </span>
             </button>
@@ -465,10 +472,10 @@ export const SynthView = () => {
 
         {/* Pro Mode: Row 2 Categorized Preset Selection Bar */}
         {synthViewMode === "pro" && (
-          <div className="flex flex-wrap items-center justify-between gap-2.5 bg-[#0B0D19] border border-[#252B48] p-2 rounded-xl">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 bg-base-300 border border-base-300 p-2 rounded-xl">
             {/* Category Filter Tabs */}
             <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[11px]">
-              <span className="text-[10px] uppercase font-bold text-slate-500 px-1 font-mono">
+              <span className="text-[10px] uppercase font-bold text-base-content/50 px-1 font-mono">
                 Category:
               </span>
               {[
@@ -497,18 +504,18 @@ export const SynthView = () => {
                     key={cat.id}
                     id={`filter-category-${cat.id.toLowerCase()}`}
                     onClick={() => handleCategoryFilterClick(cat.id)}
-                    className={`px-2 py-1 rounded-md font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1 text-xs ${
+                    className={`btn btn-xs gap-1 font-semibold whitespace-nowrap text-xs ${
                       isSelected
-                        ? "bg-indigo-600 text-white shadow-xs"
-                        : "text-slate-400 hover:text-slate-200 hover:bg-[#1C213E]/80"
+                        ? "btn-primary"
+                        : "btn-ghost text-base-content/60 hover:bg-base-300"
                     }`}
                   >
                     <span>{cat.label}</span>
                     <span
-                      className={`text-[9px] px-1 rounded-full font-mono ${
+                      className={`badge badge-xs text-[9px] font-mono ${
                         isSelected
-                          ? "bg-indigo-700 text-white"
-                          : "bg-[#161B36] text-slate-400"
+                          ? "badge-primary badge-outline"
+                          : "badge-ghost text-base-content/60"
                       }`}
                     >
                       {count}
@@ -523,7 +530,7 @@ export const SynthView = () => {
               {/* Active Category Pill Tag */}
               {activeCategoryMeta && (
                 <span
-                  className={`text-[10px] font-mono px-2 py-0.5 rounded border font-semibold ${activeCategoryMeta.badgeClass}`}
+                  className={`badge badge-sm badge-outline text-[10px] font-mono font-semibold ${activeCategoryMeta.badgeClass}`}
                   title={`Category: ${activeCategoryMeta.label} - ${activeCategoryMeta.description}`}
                 >
                   {activeCategoryMeta.shortLabel}
@@ -534,20 +541,20 @@ export const SynthView = () => {
               <button
                 id="btn-prev-synth-preset"
                 onClick={() => handleStepPreset(-1)}
-                className="p-1.5 rounded-lg bg-[#12152A] hover:bg-[#1C213E] text-slate-300 hover:text-white border border-[#2D355A] cursor-pointer transition-colors"
+                className="btn btn-xs btn-square btn-ghost border border-base-300"
                 title="Previous Preset"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
 
               {/* Categorized Dropdown with Optgroups */}
-              <div className="flex items-center gap-1.5 bg-[#12152A] border border-[#2D355A] rounded-lg px-2.5 py-1">
-                <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-lg px-2.5 py-1">
+                <Sparkles className="w-3.5 h-3.5 text-accent shrink-0" />
                 <select
                   id="select-synth-preset"
                   value={params.preset}
                   onChange={(e) => handleDropdownChange(e.target.value)}
-                  className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer pr-2 font-medium max-w-[180px] sm:max-w-[240px] truncate"
+                  className="select select-sm select-ghost bg-transparent border-0 text-base-content text-xs focus:outline-none pr-2 font-medium max-w-[180px] sm:max-w-[240px] truncate"
                 >
                   {categoryGroups
                     .filter((g) =>
@@ -561,18 +568,10 @@ export const SynthView = () => {
                       <optgroup
                         key={group.category}
                         label={group.label}
-                        className="bg-[#12152A] text-indigo-300 font-bold"
+                        className="font-bold"
                       >
                         {group.presets.map((p) => (
-                          <option
-                            key={p.id}
-                            value={p.name}
-                            className={
-                              p.isFactory
-                                ? "bg-[#0B0D19] text-slate-200 font-normal"
-                                : "bg-[#0B0D19] text-purple-300 font-normal"
-                            }
-                          >
+                          <option key={p.id} value={p.name}>
                             {!p.isFactory ? `★ ${p.name}` : p.name}
                           </option>
                         ))}
@@ -585,7 +584,7 @@ export const SynthView = () => {
               <button
                 id="btn-next-synth-preset"
                 onClick={() => handleStepPreset(1)}
-                className="p-1.5 rounded-lg bg-[#12152A] hover:bg-[#1C213E] text-slate-300 hover:text-white border border-[#2D355A] cursor-pointer transition-colors"
+                className="btn btn-xs btn-square btn-ghost border border-base-300"
                 title="Next Preset"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -596,18 +595,18 @@ export const SynthView = () => {
 
         {/* Simple Mode: Preset Selector & Category Chips merged into the header card */}
         {synthViewMode === "simple" && (
-          <div className="pt-3 border-t border-[#252B48] space-y-3">
+          <div className="pt-3 border-t border-base-300 space-y-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-0">
               {/* Preset Title & Category Badge */}
               <div className="flex items-center gap-2 flex-wrap min-w-0">
                 {activeCategoryMeta && (
                   <span
-                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold ${activeCategoryMeta.badgeClass}`}
+                    className={`badge badge-sm text-[10px] font-mono font-bold ${activeCategoryMeta.badgeClass}`}
                   >
                     {activeCategoryMeta.label}
                   </span>
                 )}
-                <p className="text-2xl leading-6 font-extrabold text-white tracking-tight truncate">
+                <p className="text-2xl leading-6 font-extrabold text-base-content tracking-tight truncate">
                   {params.preset || "Default Sound"}
                 </p>
               </div>
@@ -617,7 +616,7 @@ export const SynthView = () => {
                 <button
                   id="btn-simple-prev-preset"
                   onClick={() => handleStepPreset(-1)}
-                  className="p-2.5 rounded-xl bg-[#0B0D19] hover:bg-[#1C213E] text-slate-300 hover:text-white border border-[#2D355A] cursor-pointer transition-colors"
+                  className="btn btn-sm btn-square btn-ghost border border-base-300"
                   title="Previous Sound"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -632,10 +631,10 @@ export const SynthView = () => {
                     );
                     if (found) handleSelectPreset(found);
                   }}
-                  className="bg-[#0B0D19] border border-[#2D355A] text-slate-100 text-xs font-semibold rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-500 cursor-pointer max-w-[200px] truncate"
+                  className="select select-sm select-bordered text-xs font-semibold max-w-[200px] truncate"
                 >
                   {allPresets.map((p) => (
-                    <option key={p.id} value={p.name} className="bg-[#12152A]">
+                    <option key={p.id} value={p.name}>
                       {p.category}: {p.name}
                     </option>
                   ))}
@@ -644,7 +643,7 @@ export const SynthView = () => {
                 <button
                   id="btn-simple-next-preset"
                   onClick={() => handleStepPreset(1)}
-                  className="p-2.5 rounded-xl bg-[#0B0D19] hover:bg-[#1C213E] text-slate-300 hover:text-white border border-[#2D355A] cursor-pointer transition-colors"
+                  className="btn btn-sm btn-square btn-ghost border border-base-300"
                   title="Next Sound"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -654,7 +653,7 @@ export const SynthView = () => {
 
             {/* Category Quick Filter Chips */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-0 no-scrollbar">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-sans mr-1">
+              <span className="text-[11px] font-bold text-base-content/60 uppercase tracking-wider font-sans mr-1">
                 Sound Style:
               </span>
               {[
@@ -672,10 +671,10 @@ export const SynthView = () => {
                   <button
                     key={cat.id}
                     onClick={() => handleCategoryFilterClick(cat.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+                    className={`btn btn-xs gap-1.5 text-xs font-medium whitespace-nowrap ${
                       isSelected
-                        ? "bg-indigo-600 text-white shadow-sm font-semibold"
-                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                        ? "btn-primary font-semibold"
+                        : "btn-ghost border border-base-300 text-base-content/60"
                     }`}
                   >
                     <span>{cat.emoji}</span>
@@ -689,11 +688,14 @@ export const SynthView = () => {
 
         {/* Floating Save Toast */}
         {saveToast && (
-          <div className="absolute top-full right-4 mt-2 z-20 bg-emerald-950 border border-emerald-500/50 text-emerald-300 text-xs px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1">
-            <Check className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{saveToast}</span>
+          <div className="toast toast-top toast-end absolute top-full right-4 mt-2 z-20">
+            <div className="alert alert-success text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-lg">
+              <Check className="w-3.5 h-3.5" />
+              <span>{saveToast}</span>
+            </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Quick Save Modal Popover with Category selection */}
@@ -710,8 +712,6 @@ export const SynthView = () => {
         onCategoryChange={(v) => setQuickSaveCategory(v as SynthPresetCategory)}
         onSubmit={handleQuickSaveSubmit}
         formClassName="flex items-center gap-2 flex-1 max-w-xl flex-wrap sm:flex-nowrap"
-        inputClassName="flex-1 min-w-[140px] bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-        buttonClassName=" cursor-pointer"
       />
 
       {/* Simple Mode vs Pro Mode Body Panels */}
@@ -720,9 +720,9 @@ export const SynthView = () => {
           <SimpleSynthPanel params={params} onChangeParams={onChangeParams} />
 
           {/* Friendly Pro Mode Hint */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 bg-[#12152A]/70 border border-[#252B48] px-4 py-2.5 rounded-xl text-xs text-slate-300">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 bg-base-100/70 border border-base-300 px-4 py-2.5 rounded-xl text-xs text-base-content">
+            <div className="flex items-center gap-2 text-base-content/60">
+              <Sparkles className="w-3.5 h-3.5 text-accent shrink-0" />
               <span>
                 Want deep modular control over 5 oscillators, ADSR envelopes,
                 filters & LFO modulation?
@@ -731,7 +731,7 @@ export const SynthView = () => {
             <button
               id="btn-switch-pro-hint"
               onClick={() => handleToggleSynthViewMode("pro")}
-              className="text-purple-400 hover:text-purple-300 font-bold whitespace-nowrap cursor-pointer transition-colors"
+              className="btn btn-xs btn-link text-accent font-bold whitespace-nowrap no-underline"
             >
               Switch to Pro Mode →
             </button>
@@ -742,17 +742,18 @@ export const SynthView = () => {
         <div className="w-full flex flex-wrap gap-3">
           {/* 1. Oscillators Section */}
           <div
-            className={`flex-1 bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
+            className={`card flex-1 bg-base-100 border border-base-300 shadow-md ${tintClass}`}
           >
-            <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-indigo-400" />
+            <div className="card-body p-4 space-y-3.5">
+            <div className="flex items-center justify-between border-b border-base-300 pb-2">
+              <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-primary" />
                 1. Oscillators
               </span>
             </div>
 
             <div>
-              <label className="text-xs text-slate-400 block mb-1.5 font-medium">
+              <label className="text-xs text-base-content/60 block mb-1.5 font-medium">
                 Waveform
               </label>
               <div className="grid grid-cols-4 gap-1">
@@ -762,10 +763,10 @@ export const SynthView = () => {
                       key={w}
                       id={`btn-wave-${w}`}
                       onClick={() => onChangeParams({ ...params, oscType: w })}
-                      className={`py-1 text-[11px] rounded font-semibold capitalize transition-all cursor-pointer ${
+                      className={`btn btn-xs text-[11px] font-semibold capitalize ${
                         params.oscType === w
-                          ? "bg-indigo-600 text-white shadow-sm"
-                          : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                          ? "btn-primary"
+                          : "btn-ghost border border-base-300 text-base-content/60"
                       }`}
                     >
                       {w.slice(0, 4)}
@@ -779,7 +780,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-sub-osc"
                 label="Sub-Osc"
-                color="text-indigo-400"
+                color="text-primary"
                 value={params.subOscVolume}
                 min={0}
                 max={1}
@@ -791,7 +792,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-detune"
                 label="Detune"
-                color="text-indigo-400"
+                color="text-primary"
                 value={params.detune}
                 min={0}
                 max={50}
@@ -803,7 +804,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-noise"
                 label="Noise"
-                color="text-indigo-400"
+                color="text-primary"
                 value={params.noiseVolume}
                 min={0}
                 max={0.5}
@@ -812,20 +813,22 @@ export const SynthView = () => {
                 onChange={(v) => onChangeParams({ ...params, noiseVolume: v })}
               />
             </div>
+            </div>
           </div>
           {/* 2. Filter Section */}
           <div
-            className={`flex-1 bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
+            className={`card flex-1 bg-base-100 border border-base-300 shadow-md ${tintClass}`}
           >
-            <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-pink-400" />
+            <div className="card-body p-4 space-y-3.5">
+            <div className="flex items-center justify-between border-b border-base-300 pb-2">
+              <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-secondary" />
                 2. VCF Filter
               </span>
             </div>
 
             <div>
-              <label className="text-xs text-slate-400 block mb-1.5 font-medium">
+              <label className="text-xs text-base-content/60 block mb-1.5 font-medium">
                 Filter Type
               </label>
               <div className="grid grid-cols-3 gap-1">
@@ -834,10 +837,10 @@ export const SynthView = () => {
                     key={t}
                     id={`btn-filter-${t}`}
                     onClick={() => onChangeParams({ ...params, filterType: t })}
-                    className={`py-1 text-[11px] rounded font-semibold uppercase transition-all cursor-pointer ${
+                    className={`btn btn-xs text-[11px] font-semibold uppercase ${
                       params.filterType === t
-                        ? "bg-pink-600 text-white shadow-sm"
-                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                        ? "btn-secondary"
+                        : "btn-ghost border border-base-300 text-base-content/60"
                     }`}
                   >
                     {t === "lowpass" ? "LPF" : t === "bandpass" ? "BPF" : "HPF"}
@@ -850,7 +853,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-filter-cutoff"
                 label="Cutoff"
-                color="text-pink-400"
+                color="text-secondary"
                 value={params.filterCutoff}
                 min={50}
                 max={12000}
@@ -863,7 +866,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-filter-resonance"
                 label="Resonance"
-                color="text-pink-400"
+                color="text-secondary"
                 value={params.filterResonance}
                 min={0.1}
                 max={20}
@@ -878,7 +881,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-filter-env"
                 label="Env Mod"
-                color="text-pink-400"
+                color="text-secondary"
                 value={params.filterEnvAmount}
                 min={0}
                 max={6000}
@@ -890,14 +893,16 @@ export const SynthView = () => {
                 }
               />
             </div>
+            </div>
           </div>
           {/* 3. Envelope ADSR */}
           <div
-            className={`flex-1 bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3 shadow-md ${tintClass}`}
+            className={`card flex-1 bg-base-100 border border-base-300 shadow-md ${tintClass}`}
           >
-            <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+            <div className="card-body p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-base-300 pb-2">
+              <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+                <Volume2 className="w-3.5 h-3.5 text-success" />
                 3. ADSR Envelope
               </span>
             </div>
@@ -905,17 +910,17 @@ export const SynthView = () => {
             {/* AMP / VCA */}
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
+                <span className="text-[10px] font-mono text-success uppercase tracking-wider">
                   AMP / VCA
                 </span>
-                <span className="flex-1 h-px bg-[#252B48]" />
+                <span className="flex-1 h-px bg-base-300" />
               </div>
               <div className="flex items-start justify-around gap-2">
                 {/* Attack */}
                 <Knob
                   id="slider-env-attack"
                   label="ATT"
-                  color="text-emerald-400"
+                  color="text-success"
                   value={params.attack}
                   min={0.005}
                   max={2.0}
@@ -928,7 +933,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-decay"
                   label="DEC"
-                  color="text-emerald-400"
+                  color="text-success"
                   value={params.decay}
                   min={0.01}
                   max={2.0}
@@ -941,7 +946,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-sustain"
                   label="SUS"
-                  color="text-emerald-400"
+                  color="text-success"
                   value={params.sustain}
                   min={0}
                   max={1.0}
@@ -954,7 +959,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-release"
                   label="REL"
-                  color="text-emerald-400"
+                  color="text-success"
                   value={params.release}
                   min={0.01}
                   max={3.0}
@@ -968,17 +973,17 @@ export const SynthView = () => {
             {/* FILTER / VCF */}
             <div className="pt-2.5">
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] font-mono text-pink-400 uppercase tracking-wider">
+                <span className="text-[10px] font-mono text-secondary uppercase tracking-wider">
                   FILTER / VCF
                 </span>
-                <span className="flex-1 h-px bg-[#252B48]" />
+                <span className="flex-1 h-px bg-base-300" />
               </div>
               <div className="flex items-start justify-around">
                 {/* Filter Attack */}
                 <Knob
                   id="slider-env-filter-attack"
                   label="ATT"
-                  color="text-pink-400"
+                  color="text-secondary"
                   value={params.filterAttack}
                   min={0.005}
                   max={2.0}
@@ -993,7 +998,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-filter-decay"
                   label="DEC"
-                  color="text-pink-400"
+                  color="text-secondary"
                   value={params.filterDecay}
                   min={0.01}
                   max={2.0}
@@ -1008,7 +1013,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-filter-sustain"
                   label="SUS"
-                  color="text-pink-400"
+                  color="text-secondary"
                   value={params.filterSustain}
                   min={0}
                   max={1.0}
@@ -1023,7 +1028,7 @@ export const SynthView = () => {
                 <Knob
                   id="slider-env-filter-release"
                   label="REL"
-                  color="text-pink-400"
+                  color="text-secondary"
                   value={params.filterRelease}
                   min={0.01}
                   max={3.0}
@@ -1035,20 +1040,22 @@ export const SynthView = () => {
                 />
               </div>
             </div>
+            </div>
           </div>{" "}
           {/* 4. LFO & Master Pitch */}
           <div
-            className={`flex-1 bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
+            className={`card flex-1 bg-base-100 border border-base-300 shadow-md ${tintClass}`}
           >
-            <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-cyan-400" />
+            <div className="card-body p-4 space-y-3.5">
+            <div className="flex items-center justify-between border-b border-base-300 pb-2">
+              <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-accent" />
                 4. LFO & Octave
               </span>
             </div>
 
             <div>
-              <label className="text-xs text-slate-400 block mb-1.5 font-medium">
+              <label className="text-xs text-base-content/60 block mb-1.5 font-medium">
                 LFO Destination
               </label>
               <div className="grid grid-cols-3 gap-1">
@@ -1057,10 +1064,10 @@ export const SynthView = () => {
                     key={t}
                     id={`btn-lfo-target-${t}`}
                     onClick={() => onChangeParams({ ...params, lfoTarget: t })}
-                    className={`py-1 text-[11px] rounded font-semibold capitalize transition-all cursor-pointer ${
+                    className={`btn btn-xs text-[11px] font-semibold capitalize ${
                       params.lfoTarget === t
-                        ? "bg-cyan-600 text-white shadow-sm"
-                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                        ? "btn-accent"
+                        : "btn-ghost border border-base-300 text-base-content/60"
                     }`}
                   >
                     {t}
@@ -1073,7 +1080,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-lfo-rate"
                 label="LFO Rate"
-                color="text-cyan-400"
+                color="text-accent"
                 value={params.lfoRate}
                 min={0.1}
                 max={20}
@@ -1085,7 +1092,7 @@ export const SynthView = () => {
               <Knob
                 id="slider-lfo-depth"
                 label="LFO Depth"
-                color="text-cyan-400"
+                color="text-accent"
                 value={params.lfoDepth}
                 min={0}
                 max={1}
@@ -1096,17 +1103,17 @@ export const SynthView = () => {
             </div>
 
             <div className="pt-1 flex items-center justify-between">
-              <span className="text-xs text-slate-400">Octave Pitch</span>
+              <span className="text-xs text-base-content/60">Octave Pitch</span>
               <div className="flex items-center gap-1">
                 {([-2, -1, 0, 1, 2] as const).map((oct) => (
                   <button
                     key={oct}
                     id={`btn-octave-${oct}`}
                     onClick={() => onChangeParams({ ...params, octave: oct })}
-                    className={`w-6 h-6 rounded text-xs font-mono font-bold flex items-center justify-center transition-colors cursor-pointer ${
+                    className={`btn btn-xs btn-square w-6 h-6 min-h-0 text-xs font-mono font-bold ${
                       params.octave === oct
-                        ? "bg-indigo-600 text-white"
-                        : "bg-[#0B0D19] text-slate-400 hover:text-white border border-[#252B48]"
+                        ? "btn-primary"
+                        : "btn-ghost border border-base-300 text-base-content/60 hover:text-base-content"
                     }`}
                   >
                     {oct > 0 ? `+${oct}` : oct}
@@ -1114,14 +1121,16 @@ export const SynthView = () => {
                 ))}
               </div>
             </div>
+            </div>
           </div>
           {/* 5. Arpeggiator */}
           <div
-            className={`flex-1 bg-[#12152A] border border-[#252B48] rounded-xl p-4 space-y-3.5 shadow-md ${tintClass}`}
+            className={`card flex-1 bg-base-100 border border-base-300 shadow-md ${tintClass}`}
           >
-            <div className="flex items-center justify-between border-b border-[#252B48] pb-2">
-              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <div className="card-body p-4 space-y-3.5">
+            <div className="flex items-center justify-between border-b border-base-300 pb-2">
+              <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-accent" />
                 5. Arpeggiator
               </span>
               <button
@@ -1133,10 +1142,10 @@ export const SynthView = () => {
                     arpActive: !params.arpActive,
                   });
                 }}
-                className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                className={`btn btn-xs text-[10px] font-bold uppercase tracking-wider ${
                   params.arpActive
-                    ? "bg-purple-600 text-white shadow-md shadow-purple-500/30"
-                    : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                    ? "btn-accent shadow-md shadow-accent/30"
+                    : "btn-ghost border border-base-300 text-base-content/60"
                 }`}
               >
                 {params.arpActive ? "Active" : "Bypass"}
@@ -1144,7 +1153,7 @@ export const SynthView = () => {
             </div>
 
             <div>
-              <label className="text-xs text-slate-400 block mb-1.5 font-medium">
+              <label className="text-xs text-base-content/60 block mb-1.5 font-medium">
                 Arp Mode
               </label>
               <div className="grid grid-cols-4 gap-1">
@@ -1153,10 +1162,10 @@ export const SynthView = () => {
                     key={m}
                     id={`btn-arp-mode-${m}`}
                     onClick={() => onChangeParams({ ...params, arpMode: m })}
-                    className={`py-1 text-[10px] rounded font-semibold capitalize transition-all cursor-pointer ${
+                    className={`btn btn-xs text-[10px] font-semibold capitalize ${
                       (params.arpMode ?? "up") === m
-                        ? "bg-purple-600 text-white shadow-sm"
-                        : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                        ? "btn-accent"
+                        : "btn-ghost border border-base-300 text-base-content/60"
                     }`}
                   >
                     {m === "updown" ? "Up/Dn" : m}
@@ -1167,7 +1176,7 @@ export const SynthView = () => {
 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1 font-medium">
+                <label className="text-[11px] text-base-content/60 block mb-1 font-medium">
                   Rate
                 </label>
                 <div className="flex gap-1">
@@ -1176,10 +1185,10 @@ export const SynthView = () => {
                       key={r}
                       id={`btn-arp-rate-${r}`}
                       onClick={() => onChangeParams({ ...params, arpRate: r })}
-                      className={`px-2 py-1 text-[11px] font-mono rounded font-semibold transition-all cursor-pointer ${
+                      className={`btn btn-xs text-[11px] font-mono font-semibold ${
                         (params.arpRate ?? "16n") === r
-                          ? "bg-purple-600 text-white"
-                          : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                          ? "btn-accent"
+                          : "btn-ghost border border-base-300 text-base-content/60"
                       }`}
                     >
                       {r === "16n" ? "1/16" : r === "8n" ? "1/8" : "1/32"}
@@ -1189,7 +1198,7 @@ export const SynthView = () => {
               </div>
 
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1 font-medium">
+                <label className="text-[11px] text-base-content/60 block mb-1 font-medium">
                   Octaves
                 </label>
                 <div className="flex gap-1">
@@ -1200,10 +1209,10 @@ export const SynthView = () => {
                       onClick={() =>
                         onChangeParams({ ...params, arpOctaves: oct })
                       }
-                      className={`w-7 py-1 text-xs font-mono font-bold rounded transition-all cursor-pointer ${
+                      className={`btn btn-xs w-7 min-h-0 text-xs font-mono font-bold ${
                         (params.arpOctaves ?? 1) === oct
-                          ? "bg-purple-600 text-white"
-                          : "bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]"
+                          ? "btn-accent"
+                          : "btn-ghost border border-base-300 text-base-content/60"
                       }`}
                     >
                       +{oct}
@@ -1212,24 +1221,26 @@ export const SynthView = () => {
                 </div>
               </div>
             </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* Interactive Piano Keyboard */}
-      <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-4 shadow-xl">
+      <div className="card bg-base-100 border border-base-300 shadow-xl">
+        <div className="card-body p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+            <span className="text-xs font-bold uppercase tracking-wider text-base-content">
               Interactive Keyboard
             </span>
             <span
-              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+              className={`badge badge-sm badge-outline text-[10px] font-semibold ${
                 controlTarget === "synth"
-                  ? "bg-slate-700/50 border-slate-600 text-slate-200"
+                  ? "badge-neutral"
                   : controlTarget === "chord"
-                    ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300"
-                    : "bg-emerald-600/20 border-emerald-500/40 text-emerald-300"
+                    ? "badge-primary"
+                    : "badge-accent"
               }`}
               title="Current audition sound engine"
             >
@@ -1246,10 +1257,10 @@ export const SynthView = () => {
                   keyboardMode === "chromatic" ? "scale-locked" : "chromatic",
                 )
               }
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer border ${
+              className={`btn btn-xs text-[11px] font-semibold ${
                 keyboardMode === "scale-locked"
-                  ? "bg-indigo-600 border-indigo-500 text-white shadow-xs"
-                  : "bg-[#0B0D19] border-[#252B48] text-slate-400 hover:text-slate-200"
+                  ? "btn-primary"
+                  : "btn-ghost border border-base-300 text-base-content/60"
               }`}
               title="Toggle Scale Locked Mode (cuts notes outside active scale)"
             >
@@ -1261,24 +1272,24 @@ export const SynthView = () => {
 
           {/* Keyboard Octave Pagination — independent from synth pitch octave */}
           <div className="flex items-center gap-1.5">
-            <div className="text-[11px] font-mono text-slate-500 mr-2">
+            <div className="text-[11px] font-mono text-base-content/50 mr-2">
               {Array.from(activeNotes).join(", ") || "No note"}
             </div>
 
-            <span className="text-[11px] text-slate-500 font-mono mr-1">
+            <span className="text-[11px] text-base-content/50 font-mono mr-1">
               KB OCT
             </span>
             <button
               id="btn-keyboard-octave-down"
               onClick={() => setKeyboardOctave((o) => Math.max(-2, o - 1))}
               disabled={keyboardOctave <= -2}
-              className="w-7 h-7 flex items-center justify-center rounded-md bg-[#0B0D19] border border-[#252B48] text-slate-400 hover:text-white hover:border-indigo-500 hover:bg-indigo-600/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+              className="btn btn-xs btn-square btn-ghost w-7 h-7 min-h-0 border border-base-300 text-base-content/60 hover:text-base-content hover:border-primary hover:bg-primary/20 disabled:opacity-30"
               title="Keyboard Octave Down"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <div className="min-w-[52px] h-7 flex items-center justify-center rounded-md bg-indigo-600/15 border border-indigo-500/40 px-2">
-              <span className="text-xs font-mono font-bold text-indigo-300">
+            <div className="badge badge-primary badge-outline min-w-[52px] h-7 px-2">
+              <span className="text-xs font-mono font-bold">
                 {keyboardOctave >= 0 ? `+${keyboardOctave}` : keyboardOctave}{" "}
                 Oct
               </span>
@@ -1287,7 +1298,7 @@ export const SynthView = () => {
               id="btn-keyboard-octave-up"
               onClick={() => setKeyboardOctave((o) => Math.min(2, o + 1))}
               disabled={keyboardOctave >= 2}
-              className="w-7 h-7 flex items-center justify-center rounded-md bg-[#0B0D19] border border-[#252B48] text-slate-400 hover:text-white hover:border-indigo-500 hover:bg-indigo-600/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+              className="btn btn-xs btn-square btn-ghost w-7 h-7 min-h-0 border border-base-300 text-base-content/60 hover:text-base-content hover:border-primary hover:bg-primary/20 disabled:opacity-30"
               title="Keyboard Octave Up"
             >
               <ChevronRight className="w-4 h-4" />
@@ -1297,7 +1308,7 @@ export const SynthView = () => {
 
         {/* Keyboard Keys Layout — uses keyboardOctave for display range */}
         <div
-          className={`flex justify-center relative h-[180px] select-none bg-[#0B0D19] p-2 rounded-lg border border-[#252B48] overflow-x-auto ${
+          className={`flex justify-center relative h-[180px] select-none bg-base-300 p-2 rounded-lg border border-base-300 overflow-x-auto ${
             keyboardMode === "scale-locked" ? "flex-col gap-1.5" : ""
           }`}
         >
@@ -1320,6 +1331,7 @@ export const SynthView = () => {
               onNoteOff={handleNoteOff}
             />
           )}
+        </div>
         </div>
       </div>
 

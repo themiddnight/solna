@@ -49,10 +49,8 @@ export const InstantVibesBar: React.FC = React.memo(() => {
                   id={`btn-vibe-${vibe.id}`}
                   onClick={() => handleSelectVibe(vibe)}
                   title={`${vibe.name} (${vibe.bpm} BPM · ${vibe.scaleRoot} ${vibe.scaleType})`}
-                  className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border cursor-pointer shrink-0 ${
-                    isSelected
-                      ? `bg-primary text-primary-content border-primary shadow-sm`
-                      : 'bg-base-200 border-base-300 text-base-content/80 hover:text-base-content hover:bg-base-300'
+                  className={`btn btn-xs group gap-1.5 font-semibold whitespace-nowrap shrink-0 normal-case ${
+                    isSelected ? 'btn-primary' : 'btn-outline'
                   }`}
                 >
                   <span className="text-xs leading-none">{vibe.emoji}</span>
@@ -69,16 +67,18 @@ export const InstantVibesBar: React.FC = React.memo(() => {
         {/* Collapse toggle & Feedback banner */}
         <div className="flex items-center gap-1.5 shrink-0">
           {feedbackToast && (
-            <div className="flex items-center gap-1 bg-success/20 border border-success/40 text-success text-[10px] px-2 py-0.5 rounded-md animate-in fade-in">
-              <Check className="w-3 h-3 text-success" />
-              <span className="hidden md:inline">{feedbackToast}</span>
-              <span className="md:hidden">Loaded</span>
+            <div className="toast toast-top toast-end animate-fade-in">
+              <div className="alert alert-success alert-soft py-1 px-2 text-[10px] gap-1">
+                <Check className="w-3 h-3" />
+                <span className="hidden md:inline">{feedbackToast}</span>
+                <span className="md:hidden">Loaded</span>
+              </div>
             </div>
           )}
 
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1 rounded text-base-content/70 hover:text-base-content hover:bg-base-300 transition-colors cursor-pointer"
+            className="btn btn-xs btn-ghost btn-square"
             title={isCollapsed ? 'Show Vibes' : 'Hide Vibes'}
           >
             {isCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}

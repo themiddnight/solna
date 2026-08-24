@@ -92,11 +92,9 @@ export const TransportBar: React.FC = React.memo(() => {
         <button
           id="btn-bottom-play-all"
           onClick={onTogglePlayAll}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer shadow-xs ${
-            isPlayingAll
-              ? "bg-warning text-warning-content shadow-warning/20"
-              : "bg-success text-success-content shadow-success/20"
-          }`}
+          className={`btn btn-sm ${
+            isPlayingAll ? "btn-warning" : "btn-success"
+          } gap-1.5 font-bold text-xs`}
           title="Play/Stop All"
         >
           {isPlayingAll ? (
@@ -112,13 +110,9 @@ export const TransportBar: React.FC = React.memo(() => {
           id="btn-bottom-play"
           onClick={onTogglePlay}
           disabled={isPlayDisabled}
-          className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-            isPlayDisabled
-              ? "bg-base-300/50 text-base-content/40 border border-base-300 cursor-not-allowed opacity-50"
-              : isPlaying
-                ? "bg-warning text-warning-content shadow-xs"
-                : "bg-primary text-primary-content shadow-xs"
-          }`}
+          className={`btn btn-sm ${
+            isPlaying ? "btn-warning" : "btn-primary"
+          } gap-1.5 font-bold text-xs`}
           title={`Play/Stop ${currentTabLabel}`}
         >
           {isPlaying ? (
@@ -131,10 +125,10 @@ export const TransportBar: React.FC = React.memo(() => {
 
         {/* Tempo BPM Control */}
         <div className="flex items-center gap-0.5 bg-base-200 border border-base-300 px-1.5 py-1 rounded-lg">
-          <span className="text-[10px] text-base-content/50 font-mono hidden xs:inline">BPM</span>
+          <span className="text-[10px] text-base-content/50 font-mono hidden sm:inline">BPM</span>
           <button
             onClick={() => setBpm(Math.max(40, bpm - 1))}
-            className="p-0.5 text-base-content/70 hover:text-base-content rounded hover:bg-base-300 cursor-pointer"
+            className="btn btn-xs btn-square btn-ghost"
             title="Decrease BPM"
           >
             <Minus className="w-3 h-3" />
@@ -146,11 +140,11 @@ export const TransportBar: React.FC = React.memo(() => {
             max={240}
             value={bpm}
             onChange={(e) => setBpm(Number(e.target.value))}
-            className="w-8 bg-transparent text-center font-mono font-bold text-primary focus:outline-none focus:text-base-content text-xs"
+            className="input input-xs input-ghost w-12 px-0 text-center font-mono font-bold text-primary text-xs"
           />
           <button
             onClick={() => setBpm(Math.min(240, bpm + 1))}
-            className="p-0.5 text-base-content/70 hover:text-base-content rounded hover:bg-base-300 cursor-pointer"
+            className="btn btn-xs btn-square btn-ghost"
             title="Increase BPM"
           >
             <Plus className="w-3 h-3" />
@@ -161,10 +155,8 @@ export const TransportBar: React.FC = React.memo(() => {
         <button
           id="btn-transport-metronome"
           onClick={handleToggleMetronome}
-          className={`flex items-center gap-1 p-1.5 sm:px-2 sm:py-1 rounded-lg border text-xs cursor-pointer transition-colors ${
-            metronomeActive
-              ? "bg-primary border-primary text-primary-content shadow-xs"
-              : "bg-base-200 border-base-300 text-base-content/70 hover:text-base-content"
+          className={`btn btn-sm gap-1 text-xs ${
+            metronomeActive ? "btn-primary" : "btn-ghost"
           }`}
           title="Metronome"
         >
@@ -180,7 +172,7 @@ export const TransportBar: React.FC = React.memo(() => {
             mode={vizMode}
             height={24}
             className="w-full rounded"
-            colorTheme="amber"
+            colorTheme="primary"
             showControls={false}
           />
           <button
@@ -189,7 +181,7 @@ export const TransportBar: React.FC = React.memo(() => {
               const nextIndex = (modes.indexOf(vizMode) + 1) % modes.length;
               setVizMode(modes[nextIndex]);
             }}
-            className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-base-300/90 text-base-content hover:text-base-content px-1 py-0.5 rounded text-[9px] flex items-center gap-0.5 border border-base-300 cursor-pointer"
+            className="btn btn-xs btn-square btn-ghost absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
             title="Switch Visualizer Mode"
           >
             <Waves className="w-2.5 h-2.5" />
@@ -235,7 +227,7 @@ export const TransportBar: React.FC = React.memo(() => {
             step={0.01}
             value={masterVolume}
             onChange={setMasterVolume}
-            className="w-14 sm:w-16 h-1.5 bg-base-300 rounded cursor-pointer accent-primary"
+            className="range range-xs range-primary w-14 sm:w-16"
             title={`Master: ${(masterVolume * 100).toFixed(0)}%`}
           />
           <span className="font-mono text-[10px] text-base-content/60 w-6 text-right">

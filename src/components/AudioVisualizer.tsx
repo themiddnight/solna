@@ -1,6 +1,13 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { audioEngine } from '../audio/engine';
 import { Activity, BarChart2, Waves } from 'lucide-react';
+import {
+  createThemePalette,
+  rgbToCss,
+  subscribeToThemeChange,
+  type Rgb,
+  type ThemeToken,
+} from '../utils/themeColor';
 
 export type VisualizerMode = 'wave' | 'bars' | 'oscilloscope' | 'ambient-bg';
 
@@ -9,7 +16,9 @@ interface AudioVisualizerProps {
   className?: string;
   height?: number | string;
   showControls?: boolean;
-  colorTheme?: 'indigo' | 'emerald' | 'amber' | 'cyberpunk';
+  /** Semantic role the visualizer paints in. Resolved at runtime from the
+   *  active daisyUI theme by src/utils/themeColor.ts. */
+  colorTheme?: 'primary' | 'secondary' | 'accent';
   ambientOpacity?: number;
 }
 
@@ -18,7 +27,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
   className = '',
   height = 40,
   showControls = false,
-  colorTheme = 'indigo',
+  colorTheme = 'primary',
   ambientOpacity = 0.15,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -31,6 +40,21 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
   // Peak hold data for spectrum bars
   const peaksRef = useRef<number[]>([]);
   const prevDataRef = useRef<number[]>([]);
+
+  // Resolved theme colours, cached across frames. The rAF loop runs 60x/sec,
+  // and getComputedStyle is a layout-flushing call, so it must never be in it.
+  const paletteRef = useRef<Record<ThemeToken, Rgb> | null>(null);
+  if (paletteRef.current === null) {
+    paletteRef.current = createThemePalette();
+  }
+
+  useEffect(() => {
+    const refresh = () => {
+      paletteRef.current = createThemePalette();
+    };
+    refresh();
+    return subscribeToThemeChange(refresh);
+  }, []);
 
   useEffect(() => {
     setMode(initialMode);
@@ -45,6 +69,24 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
 
     let animationId: number;
 
+    const ROLE_TOKEN: Record<'primary' | 'secondary' | 'accent', ThemeToken> = {
+      primary: '--color-primary',
+      secondary: '--color-secondary',
+      accent: '--color-accent',
+    };
+
+    /** Theme colour for the active role, optionally alpha-composited. */
+    const roleColor = (alpha?: number): string => {
+      const palette = paletteRef.current ?? createThemePalette();
+      return rgbToCss(palette[ROLE_TOKEN[colorTheme]], alpha);
+    };
+
+    /** Any theme token, optionally alpha-composited. */
+    const tokenColor = (token: ThemeToken, alpha?: number): string => {
+      const palette = paletteRef.current ?? createThemePalette();
+      return rgbToCss(palette[token], alpha);
+    };
+
     const render = () => {
       const analyser = audioEngine.getAnalyser();
       const width = canvas.width;
@@ -56,7 +98,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       if (!analyser) {
         // Idle placeholder line
         ctx.beginPath();
-        ctx.strokeStyle = 'rgba(99, 102, 241, 0.2)';
+        ctx.strokeStyle = tokenColor('--color-base-content', 0.35);
         ctx.lineWidth = 1.5;
         ctx.moveTo(0, height / 2);
         ctx.lineTo(width, height / 2);
@@ -91,19 +133,19 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       if (indicator && indicator.dataset.sounding !== String(isSounding)) {
         indicator.dataset.sounding = String(isSounding);
         indicator.className = isSounding
-          ? 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping'
-          : 'w-1.5 h-1.5 rounded-full bg-slate-600';
+          ? 'w-1.5 h-1.5 rounded-full bg-success animate-ping'
+          : 'w-1.5 h-1.5 rounded-full bg-base-content/30';
       }
 
       if (mode === 'bars') {
-        renderBars(ctx, width, height, freqData, bufferLength, colorTheme, isSounding);
+        renderBars(ctx, width, height, freqData, bufferLength, isSounding);
       } else if (mode === 'oscilloscope') {
-        renderOscilloscope(ctx, width, height, timeData, bufferLength, colorTheme, isSounding);
+        renderOscilloscope(ctx, width, height, timeData, bufferLength, isSounding);
       } else if (mode === 'ambient-bg') {
-        renderAmbientBg(ctx, width, height, freqData, bufferLength, colorTheme, ambientOpacity, isSounding);
+        renderAmbientBg(ctx, width, height, freqData, bufferLength, ambientOpacity, isSounding);
       } else {
         // 'wave' spectrum wave
-        renderSpectrumWave(ctx, width, height, freqData, bufferLength, colorTheme, isSounding);
+        renderSpectrumWave(ctx, width, height, freqData, bufferLength, isSounding);
       }
 
       animationId = requestAnimationFrame(render);
@@ -164,7 +206,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       h: number,
       data: Uint8Array,
       len: number,
-      theme: string,
       isSounding: boolean
     ) => {
       const barCount = Math.min(36, Math.max(12, Math.floor(w / 5)));
@@ -193,24 +234,9 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
         if (barHeight > 0) {
           // Gradient for bars
           const grad = c.createLinearGradient(0, h, 0, 0);
-          if (theme === 'emerald') {
-            grad.addColorStop(0, '#059669');
-            grad.addColorStop(0.7, '#10b981');
-            grad.addColorStop(1, '#6ee7b7');
-          } else if (theme === 'amber') {
-            grad.addColorStop(0, '#d97706');
-            grad.addColorStop(0.7, '#f59e0b');
-            grad.addColorStop(1, '#fde68a');
-          } else if (theme === 'cyberpunk') {
-            grad.addColorStop(0, '#ec4899');
-            grad.addColorStop(0.5, '#a855f7');
-            grad.addColorStop(1, '#38bdf8');
-          } else {
-            // Default Indigo
-            grad.addColorStop(0, '#4338ca');
-            grad.addColorStop(0.6, '#6366f1');
-            grad.addColorStop(1, '#a5b4fc');
-          }
+          grad.addColorStop(0, roleColor(0.55));
+          grad.addColorStop(0.7, roleColor(0.9));
+          grad.addColorStop(1, roleColor(1));
 
           c.fillStyle = grad;
           c.beginPath();
@@ -225,7 +251,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
         // Peak line
         if (peaksRef.current[i] > 1) {
           const peakY = h - peaksRef.current[i] - 1;
-          c.fillStyle = theme === 'cyberpunk' ? '#f43f5e' : '#e0e7ff';
+          c.fillStyle = tokenColor('--color-base-content', 0.85);
           c.fillRect(x, Math.max(0, peakY), barWidth, 1.5);
         }
       }
@@ -238,7 +264,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       h: number,
       data: Uint8Array,
       len: number,
-      theme: string,
       isSounding: boolean
     ) => {
       const samplePoints = 56;
@@ -269,24 +294,9 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       if (isSounding) {
         // Draw Gradient Area Fill
         const grad = c.createLinearGradient(0, 0, 0, h);
-        if (theme === 'emerald') {
-          grad.addColorStop(0, 'rgba(16, 185, 129, 0.45)');
-          grad.addColorStop(0.5, 'rgba(5, 150, 105, 0.2)');
-          grad.addColorStop(1, 'rgba(4, 120, 87, 0.0)');
-        } else if (theme === 'amber') {
-          grad.addColorStop(0, 'rgba(245, 158, 11, 0.45)');
-          grad.addColorStop(0.5, 'rgba(217, 119, 6, 0.2)');
-          grad.addColorStop(1, 'rgba(180, 83, 9, 0.0)');
-        } else if (theme === 'cyberpunk') {
-          grad.addColorStop(0, 'rgba(236, 72, 153, 0.5)');
-          grad.addColorStop(0.5, 'rgba(168, 85, 247, 0.25)');
-          grad.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
-        } else {
-          // Indigo
-          grad.addColorStop(0, 'rgba(99, 102, 241, 0.45)');
-          grad.addColorStop(0.5, 'rgba(79, 70, 229, 0.2)');
-          grad.addColorStop(1, 'rgba(49, 46, 129, 0.0)');
-        }
+        grad.addColorStop(0, roleColor(0.45));
+        grad.addColorStop(0.5, roleColor(0.2));
+        grad.addColorStop(1, roleColor(0));
 
         c.beginPath();
         c.moveTo(points[0].x, h);
@@ -319,23 +329,10 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       c.lineTo(points[points.length - 1].x, points[points.length - 1].y);
 
       c.shadowBlur = isSounding ? 10 : 0;
-      c.shadowColor =
-        theme === 'emerald'
-          ? '#34d399'
-          : theme === 'amber'
-          ? '#fbbf24'
-          : theme === 'cyberpunk'
-          ? '#f472b6'
-          : '#818cf8';
+      c.shadowColor = roleColor();
       c.strokeStyle = isSounding
-        ? (theme === 'emerald'
-          ? '#6ee7b7'
-          : theme === 'amber'
-          ? '#fde68a'
-          : theme === 'cyberpunk'
-          ? '#f9a8d4'
-          : '#c7d2fe')
-        : 'rgba(99, 102, 241, 0.25)';
+        ? roleColor()
+        : tokenColor('--color-base-content', 0.35);
       c.lineWidth = isSounding ? 2 : 1;
       c.stroke();
       c.shadowBlur = 0; // reset
@@ -348,7 +345,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       h: number,
       data: Uint8Array,
       len: number,
-      theme: string,
       isSounding: boolean
     ) => {
       const centerY = h / 2;
@@ -356,7 +352,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
 
       // 1. Draw Axis Reference Grid Lines (+1 Top, 0 Center, -1 Bottom)
       c.beginPath();
-      c.strokeStyle = 'rgba(99, 102, 241, 0.2)';
+      c.strokeStyle = tokenColor('--color-base-content', 0.25);
       c.lineWidth = 1;
       c.setLineDash([3, 3]);
       
@@ -375,8 +371,8 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       c.setLineDash([]); // Reset dash
 
       // 2. Axis Scale Labels (+1 at Top, 0 at Center, -1 at Bottom)
-      c.fillStyle = 'rgba(148, 163, 184, 0.45)';
-      c.font = '8px monospace';
+      c.fillStyle = tokenColor('--color-base-content', 0.6);
+      c.font = "8px 'JetBrains Mono', monospace";
       c.fillText('+1', 3, 9);
       c.fillText(' 0', 3, centerY + 3);
       c.fillText('-1', 3, h - 5);
@@ -413,14 +409,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
 
       if (points.length === 0) return;
 
-      const themeColor =
-        theme === 'emerald'
-          ? '#10b981'
-          : theme === 'amber'
-          ? '#f59e0b'
-          : theme === 'cyberpunk'
-          ? '#38bdf8'
-          : '#6366f1';
+      const beamColor = roleColor();
 
       // 3. Draw subtle dual-sided center glow fill when sounding
       if (isSounding) {
@@ -431,12 +420,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
         }
         c.lineTo(points[points.length - 1].x, centerY);
         c.closePath();
-        c.fillStyle =
-          theme === 'cyberpunk'
-            ? 'rgba(56, 189, 248, 0.14)'
-            : theme === 'emerald'
-            ? 'rgba(16, 185, 129, 0.14)'
-            : 'rgba(99, 102, 241, 0.14)';
+        c.fillStyle = roleColor(0.14);
         c.fill();
       }
 
@@ -458,16 +442,10 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       }
 
       c.shadowBlur = isSounding ? 10 : 0;
-      c.shadowColor = themeColor;
+      c.shadowColor = beamColor;
       c.strokeStyle = isSounding
-        ? (theme === 'emerald'
-          ? '#6ee7b7'
-          : theme === 'amber'
-          ? '#fde68a'
-          : theme === 'cyberpunk'
-          ? '#7dd3fc'
-          : '#c7d2fe')
-        : 'rgba(99, 102, 241, 0.35)';
+        ? beamColor
+        : tokenColor('--color-base-content', 0.4);
       c.lineWidth = isSounding ? 2.2 : 1.2;
       c.stroke();
       c.shadowBlur = 0;
@@ -480,7 +458,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       h: number,
       data: Uint8Array,
       len: number,
-      theme: string,
       alpha: number,
       isSounding: boolean
     ) => {
@@ -509,16 +486,8 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
         const grad = c.createLinearGradient(0, 0, 0, h);
         const waveAlpha = alpha * (1 - waveIdx * 0.25);
 
-        if (theme === 'cyberpunk') {
-          grad.addColorStop(0, `rgba(236, 72, 153, ${waveAlpha})`);
-          grad.addColorStop(1, `rgba(56, 189, 248, 0.01)`);
-        } else if (theme === 'emerald') {
-          grad.addColorStop(0, `rgba(16, 185, 129, ${waveAlpha})`);
-          grad.addColorStop(1, `rgba(6, 78, 59, 0.01)`);
-        } else {
-          grad.addColorStop(0, `rgba(99, 102, 241, ${waveAlpha})`);
-          grad.addColorStop(1, `rgba(30, 27, 75, 0.01)`);
-        }
+        grad.addColorStop(0, roleColor(waveAlpha));
+        grad.addColorStop(1, tokenColor('--color-base-content', 0.01));
 
         c.fillStyle = grad;
         c.fill();
@@ -570,13 +539,13 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
 
       {/* Optional Mode Switch Buttons */}
       {showControls && (
-        <div className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-[#0B0D19]/80 backdrop-blur-xs p-1 rounded-md border border-[#252B48] z-10">
+        <div className="join absolute top-1.5 right-1.5 flex items-center gap-1 bg-base-100/80 backdrop-blur-xs p-1 rounded-md border border-base-300 z-10">
           <button
             onClick={() => setMode('wave')}
-            className={`p-1 rounded text-xs transition-colors ${
+            className={`btn btn-xs join-item btn-square ${
               mode === 'wave'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'btn-active bg-accent text-accent-content'
+                : 'btn-ghost text-base-content/60'
             }`}
             title="Frequency Spectrum Wave"
           >
@@ -584,10 +553,10 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
           </button>
           <button
             onClick={() => setMode('bars')}
-            className={`p-1 rounded text-xs transition-colors ${
+            className={`btn btn-xs join-item btn-square ${
               mode === 'bars'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'btn-active bg-accent text-accent-content'
+                : 'btn-ghost text-base-content/60'
             }`}
             title="Spectrum Bars"
           >
@@ -595,10 +564,10 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
           </button>
           <button
             onClick={() => setMode('oscilloscope')}
-            className={`p-1 rounded text-xs transition-colors ${
+            className={`btn btn-xs join-item btn-square ${
               mode === 'oscilloscope'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'btn-active bg-accent text-accent-content'
+                : 'btn-ghost text-base-content/60'
             }`}
             title="Oscilloscope Waveform"
           >
@@ -611,9 +580,9 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       <div className="absolute bottom-1 left-2 flex items-center gap-1 pointer-events-none opacity-60">
         <span
           ref={indicatorRef}
-          className="w-1.5 h-1.5 rounded-full bg-slate-600"
+          className="w-1.5 h-1.5 rounded-full bg-base-content/30"
         />
-        <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">
+        <span className="text-[9px] font-mono text-base-content/60 uppercase tracking-wider">
           {mode === 'wave' ? 'Spectrum Wave' : mode === 'bars' ? 'Spectrum Bars' : 'Waveform'}
         </span>
       </div>

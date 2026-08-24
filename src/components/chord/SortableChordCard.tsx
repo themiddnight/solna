@@ -55,11 +55,11 @@ export function SortableChordCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-[#0B0D19] border rounded-xl p-4 flex flex-col justify-between space-y-3 transition-colors ${
+      className={`card bg-base-100 border border-base-300 rounded-xl p-4 flex flex-col justify-between space-y-3 transition-colors ${
         isActive
-          ? "border-indigo-400 ring-2 ring-indigo-500/50 bg-[#161B36]"
-          : "border-[#252B48] hover:border-[#3B4371]"
-      } ${isDragging ? "shadow-2xl ring-2 ring-indigo-500 bg-[#161B36]/95 scale-102" : ""}`}
+          ? "border-primary ring-2 ring-primary/50 bg-base-200"
+          : "border-base-300 hover:border-base-content/30"
+      } ${isDragging ? "shadow-2xl ring-2 ring-primary bg-base-200/95 scale-105" : ""}`}
     >
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -68,12 +68,12 @@ export function SortableChordCard({
             type="button"
             {...attributes}
             {...listeners}
-            className="cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 p-0.5 focus:outline-none"
+            className="btn btn-ghost btn-xs btn-square cursor-grab active:cursor-grabbing text-base-content/50 hover:text-base-content focus:outline-none"
             title="Drag to reorder"
           >
             <GripVertical className="w-3.5 h-3.5" />
           </button>
-          <span className="text-[10px] font-mono font-bold text-slate-400 bg-[#1C213E] px-2 py-0.5 rounded">
+          <span className="badge badge-sm badge-ghost font-mono font-bold">
             Bar {startBar}
           </span>
         </div>
@@ -82,7 +82,7 @@ export function SortableChordCard({
             type="button"
             disabled={idx === 0}
             onClick={() => handleMoveChord(idx, -1)}
-            className="p-1 text-slate-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
+            className="btn btn-ghost btn-xs btn-square disabled:opacity-30"
             title="Move Left"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
@@ -91,7 +91,7 @@ export function SortableChordCard({
             type="button"
             disabled={idx === totalChords - 1}
             onClick={() => handleMoveChord(idx, 1)}
-            className="p-1 text-slate-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
+            className="btn btn-ghost btn-xs btn-square disabled:opacity-30"
             title="Move Right"
           >
             <ChevronRight className="w-3.5 h-3.5" />
@@ -99,7 +99,7 @@ export function SortableChordCard({
           <button
             id={`btn-remove-chord-${chord.id}`}
             onClick={() => removeChord(chord.id)}
-            className="text-slate-500 hover:text-rose-400 transition-colors p-1 cursor-pointer ml-1"
+            className="btn btn-ghost btn-xs btn-square hover:text-error ml-1"
             title="Delete Chord"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -117,33 +117,33 @@ export function SortableChordCard({
         onTouchEnd={(e) => handleCardPreviewMouseUp(e, chord)}
         className={`w-full py-4 rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
           isActive
-            ? "bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-lg scale-98"
-            : "bg-[#181C35] hover:bg-[#22274A] text-slate-100"
+            ? "bg-gradient-to-tr from-primary to-secondary text-primary-content shadow-lg scale-95"
+            : "bg-base-200 hover:bg-base-300 text-base-content"
         }`}
         title="Hold to Preview Chord"
       >
-        <span className="text-2xl font-black tracking-tight flex items-baseline gap-1">
+        <span className="text-2xl font-mono font-black tracking-tight flex items-baseline gap-1">
           {chord.root}
-          <span className="text-sm font-semibold text-indigo-400">
+          <span className="text-sm font-semibold text-secondary">
             {formatChordQuality(chord.quality)}
           </span>
         </span>
-        <span className="text-[10px] text-slate-400 font-mono mt-1">
+        <span className="text-[10px] text-base-content/60 font-mono mt-1">
           {chord.notes.join(" • ")}
         </span>
       </button>
 
       {/* Edit Controls */}
-      <div className="flex gap-2 pt-1 border-t border-[#252B48]/60">
+      <div className="flex gap-2 pt-1 border-t border-base-300/60">
         <div className="shrink min-w-0">
-          <label className="text-[10px] text-slate-500 block mb-0.5">
+          <label className="label-text text-[10px] text-base-content/60 block mb-0.5">
             Root
           </label>
           <select
             id={`select-chord-root-${chord.id}`}
             value={chord.root}
             onChange={(e) => updateChord(chord.id, { root: e.target.value })}
-            className="w-full bg-[#12152A] border border-[#2D355A] text-slate-200 text-xs rounded p-1"
+            className="select select-xs select-bordered w-full"
           >
             {ROOTS.map((r) => (
               <option key={r} value={r}>
@@ -154,14 +154,14 @@ export function SortableChordCard({
         </div>
 
         <div className="flex-1 min-w-0">
-          <label className="text-[10px] text-slate-500 block mb-0.5">
+          <label className="label-text text-[10px] text-base-content/60 block mb-0.5">
             Quality
           </label>
           <select
             id={`select-chord-quality-${chord.id}`}
             value={chord.quality}
             onChange={(e) => updateChord(chord.id, { quality: e.target.value })}
-            className="w-full bg-[#12152A] border border-[#2D355A] text-slate-200 text-xs rounded p-1"
+            className="select select-xs select-bordered w-full"
           >
             <optgroup label="Triads">
               <option value="maj">Major (maj)</option>
@@ -191,7 +191,7 @@ export function SortableChordCard({
         </div>
 
         <div className="shrink min-w-0">
-          <label className="text-[10px] text-slate-500 block mb-0.5">
+          <label className="label-text text-[10px] text-base-content/60 block mb-0.5">
             Duration (Bars)
           </label>
           <select
@@ -200,7 +200,7 @@ export function SortableChordCard({
             onChange={(e) =>
               updateChord(chord.id, { bars: parseInt(e.target.value, 10) })
             }
-            className="w-full bg-[#12152A] border border-[#2D355A] text-slate-200 text-xs rounded p-1"
+            className="select select-xs select-bordered w-full"
           >
             <option value={1}>1 Bar</option>
             <option value={2}>2 Bars</option>

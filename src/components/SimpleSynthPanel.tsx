@@ -51,210 +51,218 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
         {/* 2. Four Friendly Macro Dials + 1-Click Arp */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {/* Macro 1: Tone (Brightness) */}
-          <div className="bg-base-100 border border-base-300 rounded-xl p-3 flex flex-col items-center justify-between text-center shadow-md">
-            <div className="flex items-center gap-1 text-xs font-bold text-base-content">
-              <Sun className="w-3.5 h-3.5 text-amber-400" />
-              <span>Tone</span>
-            </div>
+          <div className="card bg-base-100 border border-base-300 shadow-md">
+            <div className="card-body p-3 flex flex-col items-center justify-between text-center">
+              <div className="flex items-center gap-1 text-xs font-bold text-base-content">
+                <Sun className="w-3.5 h-3.5 text-primary" />
+                <span>Tone</span>
+              </div>
 
-            <div className="my-1.5">
-              <Knob
-                id="simple-macro-tone"
-                label=""
-                color="text-amber-400"
-                value={cutoffValue}
-                min={300}
-                max={12000}
-                step={50}
-                format={(v) => `${(v / 1000).toFixed(1)}k`}
-                onChange={(v) => onChangeParams({ ...params, filterCutoff: v })}
-              />
-            </div>
+              <div className="my-1.5">
+                <Knob
+                  id="simple-macro-tone"
+                  label=""
+                  color="text-primary"
+                  value={cutoffValue}
+                  min={300}
+                  max={12000}
+                  step={50}
+                  format={(v) => `${(v / 1000).toFixed(1)}k`}
+                  onChange={(v) => onChangeParams({ ...params, filterCutoff: v })}
+                />
+              </div>
 
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 dark:text-amber-300 border border-amber-500/20">
-              {toneLabel}
-            </span>
+              <span className="badge badge-sm badge-primary badge-soft text-[10px] font-semibold">
+                {toneLabel}
+              </span>
+            </div>
           </div>
 
           {/* Macro 2: Space (Release & Tail) */}
-          <div className="bg-base-100 border border-base-300 rounded-xl p-3 flex flex-col items-center justify-between text-center shadow-md">
-            <div className="flex items-center gap-1 text-xs font-bold text-base-content">
-              <Compass className="w-3.5 h-3.5 text-cyan-500" />
-              <span>Space</span>
-            </div>
+          <div className="card bg-base-100 border border-base-300 shadow-md">
+            <div className="card-body p-3 flex flex-col items-center justify-between text-center">
+              <div className="flex items-center gap-1 text-xs font-bold text-base-content">
+                <Compass className="w-3.5 h-3.5 text-accent" />
+                <span>Space</span>
+              </div>
 
-            <div className="my-1.5">
-              <Knob
-                id="simple-macro-space"
-                label=""
-                color="text-cyan-500"
-                value={releaseValue}
-                min={0.05}
-                max={2.5}
-                step={0.05}
-                format={(v) => `${v.toFixed(2)}s`}
-                onChange={(v) =>
-                  onChangeParams({
-                    ...params,
-                    release: v,
-                    sustain: Math.min(1.0, Math.max(0.2, v * 0.4 + 0.3)),
-                  })
-                }
-              />
-            </div>
+              <div className="my-1.5">
+                <Knob
+                  id="simple-macro-space"
+                  label=""
+                  color="text-accent"
+                  value={releaseValue}
+                  min={0.05}
+                  max={2.5}
+                  step={0.05}
+                  format={(v) => `${v.toFixed(2)}s`}
+                  onChange={(v) =>
+                    onChangeParams({
+                      ...params,
+                      release: v,
+                      sustain: Math.min(1.0, Math.max(0.2, v * 0.4 + 0.3)),
+                    })
+                  }
+                />
+              </div>
 
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border border-cyan-500/20">
-              {spaceLabel}
-            </span>
+              <span className="badge badge-sm badge-accent badge-soft text-[10px] font-semibold">
+                {spaceLabel}
+              </span>
+            </div>
           </div>
 
           {/* Macro 3: Vibe (Movement & Detune) */}
-          <div className="bg-base-100 border border-base-300 rounded-xl p-3 flex flex-col items-center justify-between text-center shadow-md">
-            <div className="flex items-center gap-1 text-xs font-bold text-base-content">
-              <Waves className="w-3.5 h-3.5 text-pink-500" />
-              <span>Vibe</span>
-            </div>
+          <div className="card bg-base-100 border border-base-300 shadow-md">
+            <div className="card-body p-3 flex flex-col items-center justify-between text-center">
+              <div className="flex items-center gap-1 text-xs font-bold text-base-content">
+                <Waves className="w-3.5 h-3.5 text-secondary" />
+                <span>Vibe</span>
+              </div>
 
-            <div className="my-1.5">
-              <Knob
-                id="simple-macro-vibe"
-                label=""
-                color="text-pink-500"
-                value={detuneValue}
-                min={0}
-                max={50}
-                step={1}
-                format={(v) => `${v} ct`}
-                onChange={(v) =>
-                  onChangeParams({
-                    ...params,
-                    detune: v,
-                    lfoDepth: v > 15 ? 0.2 : 0.05,
-                  })
-                }
-              />
-            </div>
+              <div className="my-1.5">
+                <Knob
+                  id="simple-macro-vibe"
+                  label=""
+                  color="text-secondary"
+                  value={detuneValue}
+                  min={0}
+                  max={50}
+                  step={1}
+                  format={(v) => `${v} ct`}
+                  onChange={(v) =>
+                    onChangeParams({
+                      ...params,
+                      detune: v,
+                      lfoDepth: v > 15 ? 0.2 : 0.05,
+                    })
+                  }
+                />
+              </div>
 
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-pink-500/10 text-pink-600 dark:text-pink-300 border border-pink-500/20">
-              {vibeLabel}
-            </span>
+              <span className="badge badge-sm badge-secondary badge-soft text-[10px] font-semibold">
+                {vibeLabel}
+              </span>
+            </div>
           </div>
 
           {/* Macro 4: Punch (Sub & Power) */}
-          <div className="bg-base-100 border border-base-300 rounded-xl p-3 flex flex-col items-center justify-between text-center shadow-md">
-            <div className="flex items-center gap-1 text-xs font-bold text-base-content">
-              <Flame className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Punch</span>
-            </div>
+          <div className="card bg-base-100 border border-base-300 shadow-md">
+            <div className="card-body p-3 flex flex-col items-center justify-between text-center">
+              <div className="flex items-center gap-1 text-xs font-bold text-base-content">
+                <Flame className="w-3.5 h-3.5 text-success" />
+                <span>Punch</span>
+              </div>
 
-            <div className="my-1.5">
-              <Knob
-                id="simple-macro-punch"
-                label=""
-                color="text-emerald-500"
-                value={subValue}
-                min={0}
-                max={1}
-                step={0.02}
-                format={(v) => `${(v * 100).toFixed(0)}%`}
-                onChange={(v) =>
-                  onChangeParams({
-                    ...params,
-                    subOscVolume: v,
-                    attack: v > 0.4 ? 0.01 : Math.max(0.01, params.attack),
-                  })
-                }
-              />
-            </div>
+              <div className="my-1.5">
+                <Knob
+                  id="simple-macro-punch"
+                  label=""
+                  color="text-success"
+                  value={subValue}
+                  min={0}
+                  max={1}
+                  step={0.02}
+                  format={(v) => `${(v * 100).toFixed(0)}%`}
+                  onChange={(v) =>
+                    onChangeParams({
+                      ...params,
+                      subOscVolume: v,
+                      attack: v > 0.4 ? 0.01 : Math.max(0.01, params.attack),
+                    })
+                  }
+                />
+              </div>
 
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border border-emerald-500/20">
-              {punchLabel}
-            </span>
+              <span className="badge badge-sm badge-success badge-soft text-[10px] font-semibold">
+                {punchLabel}
+              </span>
+            </div>
           </div>
 
           {/* 1-Click Easy Arpeggiator Card */}
-          <div className="col-span-2 sm:col-span-1 lg:col-span-1 bg-base-100 border border-purple-500/30 rounded-xl p-3 flex flex-col justify-between shadow-md">
-            <div className="flex items-center justify-between border-b border-base-300 pb-1.5">
-              <span className="text-xs font-bold text-purple-600 dark:text-purple-300 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-purple-500" />
-                Auto-Arp
-              </span>
-              <button
-                id="btn-simple-toggle-arp"
-                onClick={() => {
-                  onChangeParams({
-                    ...params,
-                    arpActive: !params.arpActive,
-                  });
-                }}
-                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase transition-all cursor-pointer ${
-                  params.arpActive
-                    ? "bg-purple-600 text-white shadow-xs"
-                    : "bg-base-200 text-base-content/70 hover:text-base-content border border-base-300"
-                }`}
-              >
-                {params.arpActive ? "ON" : "OFF"}
-              </button>
-            </div>
-
-            {/* Arp Speed Selector */}
-            <div className="space-y-1 my-1.5">
-              <div className="flex items-center justify-between text-[10px] text-base-content/60">
-                <span>Speed:</span>
-                <span className="font-mono text-purple-600 dark:text-purple-300 font-bold">
-                  {params.arpRate === "8n"
-                    ? "1/8"
-                    : params.arpRate === "32n"
-                      ? "1/32"
-                      : "1/16"}
+          <div className="col-span-2 sm:col-span-1 lg:col-span-1 card bg-base-100 border border-accent/30 shadow-md">
+            <div className="card-body p-3 flex flex-col justify-between">
+              <div className="flex items-center justify-between border-b border-base-300 pb-1.5">
+                <span className="text-xs font-bold text-accent flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-accent" />
+                  Auto-Arp
                 </span>
+                <button
+                  id="btn-simple-toggle-arp"
+                  onClick={() => {
+                    onChangeParams({
+                      ...params,
+                      arpActive: !params.arpActive,
+                    });
+                  }}
+                  className={`btn btn-xs rounded-full text-[10px] font-bold uppercase ${
+                    params.arpActive ? "btn-accent text-accent-content" : "btn-outline"
+                  }`}
+                >
+                  {params.arpActive ? "ON" : "OFF"}
+                </button>
               </div>
-              <div className="grid grid-cols-3 gap-1">
-                {(["8n", "16n", "32n"] as const).map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => onChangeParams({ ...params, arpRate: r })}
-                    className={`py-0.5 text-[10px] font-semibold rounded transition-all cursor-pointer ${
-                      (params.arpRate ?? "16n") === r
-                        ? "bg-purple-600 text-white shadow-xs"
-                        : "bg-base-200 text-base-content/70 hover:text-base-content border border-base-300"
-                    }`}
-                  >
-                    {r === "8n" ? "1/8" : r === "16n" ? "1/16" : "1/32"}
-                  </button>
-                ))}
-              </div>
-            </div>
 
-            {/* Arp Style Selector */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[10px] text-base-content/60">
-                <span>Mode:</span>
-                <span className="capitalize font-mono text-purple-600 dark:text-purple-300 font-bold">
-                  {params.arpMode ?? "up"}
-                </span>
+              {/* Arp Speed Selector */}
+              <div className="space-y-1 my-1.5">
+                <div className="flex items-center justify-between text-[10px] text-base-content/60">
+                  <span>Speed:</span>
+                  <span className="font-mono text-accent font-bold">
+                    {params.arpRate === "8n"
+                      ? "1/8"
+                      : params.arpRate === "32n"
+                        ? "1/32"
+                        : "1/16"}
+                  </span>
+                </div>
+                <div className="join w-full">
+                  {(["8n", "16n", "32n"] as const).map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => onChangeParams({ ...params, arpRate: r })}
+                      className={`btn join-item btn-xs flex-1 text-[10px] font-semibold ${
+                        (params.arpRate ?? "16n") === r
+                          ? "btn-accent text-accent-content"
+                          : "btn-outline"
+                      }`}
+                    >
+                      {r === "8n" ? "1/8" : r === "16n" ? "1/16" : "1/32"}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-4 gap-1">
-                {(["up", "down", "updown", "random"] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => onChangeParams({ ...params, arpMode: m })}
-                    className={`py-0.5 text-[10px] font-semibold rounded transition-all cursor-pointer ${
-                      (params.arpMode ?? "up") === m
-                        ? "bg-purple-600 text-white shadow-xs"
-                        : "bg-base-200 text-base-content/70 hover:text-base-content border border-base-300"
-                    }`}
-                    title={`Mode: ${m}`}
-                  >
-                    {m === "up"
-                      ? "↑"
-                      : m === "down"
-                        ? "↓"
-                        : m === "updown"
-                          ? "⇅"
-                          : "🎲"}
-                  </button>
-                ))}
+
+              {/* Arp Style Selector */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10px] text-base-content/60">
+                  <span>Mode:</span>
+                  <span className="capitalize font-mono text-accent font-bold">
+                    {params.arpMode ?? "up"}
+                  </span>
+                </div>
+                <div className="join w-full">
+                  {(["up", "down", "updown", "random"] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => onChangeParams({ ...params, arpMode: m })}
+                      className={`btn join-item btn-xs flex-1 text-[10px] font-semibold ${
+                        (params.arpMode ?? "up") === m
+                          ? "btn-accent text-accent-content"
+                          : "btn-outline"
+                      }`}
+                      title={`Mode: ${m}`}
+                    >
+                      {m === "up"
+                        ? "↑"
+                        : m === "down"
+                          ? "↓"
+                          : m === "updown"
+                            ? "⇅"
+                            : "🎲"}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

@@ -80,12 +80,12 @@ export function App() {
   return (
     <div className="h-dvh bg-base-200 text-base-content flex flex-col font-sans selection:bg-primary selection:text-primary-content relative overflow-hidden">
       {/* Real-time Atmospheric Background Frequency Wave Visualizer */}
-      <div className="absolute inset-0 pointer-events-none z-0 opacity-25 overflow-hidden">
+      <div className="ambient-wash absolute inset-0 pointer-events-none z-0 overflow-hidden">
         <AudioVisualizer
           mode="ambient-bg"
           height="100%"
           className="w-full h-full"
-          colorTheme="indigo"
+          colorTheme="primary"
           ambientOpacity={0.2}
         />
       </div>

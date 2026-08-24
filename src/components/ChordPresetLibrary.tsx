@@ -40,15 +40,15 @@ interface ChordPresetLibraryProps {
 // original included 'All' as the first chip). The User chip's count badge is
 // carried in `count` and rendered by the generic like the original's.
 const BASE_CHORD_CATEGORIES: PresetCategory[] = [
-  { id: 'All', label: 'All', badgeClass: 'bg-indigo-600 text-white', description: '' },
-  { id: 'User', label: 'User', badgeClass: 'bg-indigo-600 text-white', description: '' },
-  { id: 'Pop & EDM', label: 'Pop & EDM', badgeClass: 'bg-indigo-600 text-white', description: '' },
-  { id: 'Jazz & Neo-Soul', label: 'Jazz & Neo-Soul', badgeClass: 'bg-indigo-600 text-white', description: '' },
-  { id: 'Lofi & R&B', label: 'Lofi & R&B', badgeClass: 'bg-indigo-600 text-white', description: '' },
-  { id: 'Anime & J-Pop', label: 'Anime & J-Pop', badgeClass: 'bg-indigo-600 text-white', description: '' },
-  { id: 'Rock & Blues', label: 'Rock & Blues', badgeClass: 'bg-indigo-600 text-white', description: '' },
-  { id: 'Cinematic & Modal', label: 'Cinematic & Modal', badgeClass: 'bg-indigo-600 text-white', description: '' },
-  { id: 'Classical & Baroque', label: 'Classical & Baroque', badgeClass: 'bg-indigo-600 text-white', description: '' },
+  { id: 'All', label: 'All', badgeClass: 'badge badge-primary', description: '' },
+  { id: 'User', label: 'User', badgeClass: 'badge badge-primary', description: '' },
+  { id: 'Pop & EDM', label: 'Pop & EDM', badgeClass: 'badge badge-primary', description: '' },
+  { id: 'Jazz & Neo-Soul', label: 'Jazz & Neo-Soul', badgeClass: 'badge badge-primary', description: '' },
+  { id: 'Lofi & R&B', label: 'Lofi & R&B', badgeClass: 'badge badge-primary', description: '' },
+  { id: 'Anime & J-Pop', label: 'Anime & J-Pop', badgeClass: 'badge badge-primary', description: '' },
+  { id: 'Rock & Blues', label: 'Rock & Blues', badgeClass: 'badge badge-primary', description: '' },
+  { id: 'Cinematic & Modal', label: 'Cinematic & Modal', badgeClass: 'badge badge-primary', description: '' },
+  { id: 'Classical & Baroque', label: 'Classical & Baroque', badgeClass: 'badge badge-primary', description: '' },
 ];
 
 export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
@@ -270,7 +270,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
         key: 'custom',
         className: 'space-y-2 pb-2',
         header: (
-          <div className="flex items-center justify-between text-[11px] font-bold text-purple-400 uppercase tracking-wider px-1">
+          <div className="flex items-center justify-between text-[11px] font-bold text-secondary uppercase tracking-wider px-1">
             <span>My Custom Progressions ({filteredCustom.length})</span>
           </div>
         ),
@@ -283,9 +283,9 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
         key: 'templates',
         className: 'space-y-2 pt-2',
         header: (
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1">
+          <div className="flex items-center justify-between text-[11px] font-bold text-base-content/60 uppercase tracking-wider px-1">
             <span>Standard Library Templates ({filteredTemplates.length})</span>
-            <span className="text-[10px] font-normal font-mono text-indigo-400">
+            <span className="text-[10px] font-normal font-mono text-primary">
               Key: {scaleRoot}
             </span>
           </div>
@@ -299,8 +299,8 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
 
   // PORT of the original empty state (original lines ~428-432).
   const emptyState = () => (
-    <div className="p-8 text-center text-slate-500 space-y-2">
-      <Music className="w-8 h-8 mx-auto opacity-40 text-slate-400" />
+    <div className="p-8 text-center text-base-content/50 space-y-2">
+      <Music className="w-8 h-8 mx-auto opacity-40 text-base-content/60" />
       <p className="text-xs">No chord progressions found matching your filter.</p>
     </div>
   );
@@ -314,30 +314,30 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     const previewNames = resolvedChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
 
     return (
-      <div className="p-3 rounded-xl bg-[#0B0D19] border border-[#252B48] hover:border-indigo-500/50 transition-all flex flex-col gap-2 group relative shadow-xs">
+      <div className="card bg-base-200 border border-base-300 hover:border-primary/50 p-3 rounded-xl transition-all flex flex-col gap-2 group relative shadow-xs">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-bold text-xs text-slate-200 group-hover:text-indigo-300 transition-colors truncate">
+              <span className="font-bold text-xs text-base-content group-hover:text-primary transition-colors truncate">
                 {tpl.name}
               </span>
-              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#1C213E] text-indigo-300 shrink-0">
+              <span className="badge badge-sm bg-base-300 text-primary font-mono py-0.5 shrink-0">
                 {tpl.category}
               </span>
               {autoReharmonize && (
-                <span className="text-[9px] font-semibold text-purple-300 bg-purple-500/20 px-1.5 py-0.2 rounded border border-purple-500/30 flex items-center gap-0.5">
-                  <Sparkles className="w-2.5 h-2.5 text-purple-400" /> Auto
+                <span className="badge badge-sm badge-secondary badge-outline py-0.5 gap-0.5">
+                  <Sparkles className="w-2.5 h-2.5 text-secondary" /> Auto
                 </span>
               )}
             </div>
-            <div className="text-[11px] font-mono text-purple-400 font-semibold mt-0.5">
+            <div className="text-[11px] font-mono text-secondary font-semibold mt-0.5">
               {tpl.roman}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">
+            <p className="text-[11px] text-base-content/60 mt-1 line-clamp-2">
               {tpl.description}
             </p>
-            <div className="text-[10px] font-mono text-slate-500 mt-1">
-              In {scaleRoot}: <span className="text-slate-300 font-semibold">{previewNames}</span>
+            <div className="text-[10px] font-mono text-base-content/50 mt-1">
+              In {scaleRoot}: <span className="text-base-content font-semibold">{previewNames}</span>
             </div>
           </div>
 
@@ -345,10 +345,10 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
             {/* Audition Play Button */}
             <button
               onClick={() => handleAudition(resolvedChords, tpl.name)}
-              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+              className={`btn btn-xs ${
                 auditioningName === tpl.name
-                  ? 'bg-indigo-600 border-indigo-400 text-white animate-pulse'
-                  : 'bg-[#171B36] hover:bg-[#20264A] text-indigo-400 border-[#2D355A]'
+                  ? 'btn-primary animate-pulse'
+                  : 'btn-ghost text-primary'
               }`}
               title="Audition Sound"
             >
@@ -361,7 +361,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
                 onApplyChords(resolvedChords);
                 onClose();
               }}
-              className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1"
+              className="btn btn-xs btn-primary gap-1"
             >
               <span>Load</span>
             </button>
@@ -380,32 +380,32 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     const previewNames = resolvedCustom.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
 
     return (
-      <div className="p-3 rounded-xl bg-[#0B0D19] border border-[#2D355A] hover:border-purple-500/50 transition-all flex flex-col gap-2 group relative shadow-xs">
+      <div className="card bg-base-200 border border-base-300 hover:border-secondary/50 p-3 rounded-xl transition-all flex flex-col gap-2 group relative shadow-xs">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-xs text-slate-200 truncate">
+              <span className="font-bold text-xs text-base-content truncate">
                 {e.name}
               </span>
-              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-purple-950/80 border border-purple-800 text-purple-300">
+              <span className="badge badge-sm badge-secondary badge-outline font-mono py-0.5">
                 Custom
               </span>
               {autoReharmonize && (
-                <span className="text-[9px] font-semibold text-purple-300 bg-purple-500/20 px-1.5 py-0.2 rounded border border-purple-500/30 flex items-center gap-0.5">
-                  <Sparkles className="w-2.5 h-2.5 text-purple-400" /> Auto
+                <span className="badge badge-sm badge-secondary badge-outline py-0.5 gap-0.5">
+                  <Sparkles className="w-2.5 h-2.5 text-secondary" /> Auto
                 </span>
               )}
             </div>
-            <div className="text-[11px] font-mono text-indigo-400 font-semibold mt-0.5">
+            <div className="text-[11px] font-mono text-primary font-semibold mt-0.5">
               {e.roman}
             </div>
             {e.description && (
-              <p className="text-[10px] text-slate-400 mt-1 line-clamp-1">
+              <p className="text-[10px] text-base-content/60 mt-1 line-clamp-1">
                 {e.description}
               </p>
             )}
-            <div className="text-[10px] font-mono text-slate-500 mt-1">
-              In {scaleRoot} {scaleType}: <span className="text-slate-300 font-semibold">{previewNames}</span>
+            <div className="text-[10px] font-mono text-base-content/50 mt-1">
+              In {scaleRoot} {scaleType}: <span className="text-base-content font-semibold">{previewNames}</span>
             </div>
           </div>
 
@@ -413,10 +413,10 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
             {/* Play/Audition Button */}
             <button
               onClick={() => handleAudition(resolvedCustom, e.name)}
-              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+              className={`btn btn-xs ${
                 auditioningName === e.name
-                  ? 'bg-purple-600 border-purple-400 text-white animate-pulse'
-                  : 'bg-[#171B36] hover:bg-[#20264A] text-purple-400 border-[#2D355A]'
+                  ? 'btn-secondary animate-pulse'
+                  : 'btn-ghost text-secondary'
               }`}
               title="Audition Progression Sound"
             >
@@ -429,7 +429,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
                 onApplyChords(resolvedCustom);
                 onClose();
               }}
-              className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1"
+              className="btn btn-xs btn-primary gap-1"
             >
               <span>Load</span>
             </button>
@@ -437,7 +437,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
             {/* Delete Button */}
             <button
               onClick={() => handleDeleteCustom(e.id, e.name)}
-              className="p-1.5 rounded-lg bg-[#171B36] hover:bg-red-950/80 text-slate-400 hover:text-red-400 border border-[#2D355A] hover:border-red-800/50 transition-colors cursor-pointer"
+              className="btn btn-xs btn-ghost hover:btn-error"
               title="Delete Custom Progression"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -456,12 +456,12 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   // PORT of the original footer (original lines ~504-530): labeled Export/Import
   // buttons + "{N} custom saved" counter.
   const footer = (
-    <div className="p-3 border-t border-[#252B48] bg-[#0E1022] flex items-center justify-between gap-2">
+    <div className="p-3 border-t border-base-300 bg-base-200 flex items-center justify-between gap-2">
       <div className="flex items-center gap-2">
         <button
           onClick={handleExport}
           disabled={customProgressions.length === 0}
-          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1A1F3B] hover:bg-[#252B48] disabled:opacity-40 text-slate-300 hover:text-white text-xs font-medium border border-[#2D355A] transition-colors cursor-pointer"
+          className="btn btn-sm btn-ghost gap-1 hover:text-base-content disabled:opacity-40"
           title="Export user chord progressions as JSON"
         >
           <Download className="w-3.5 h-3.5" />
@@ -469,7 +469,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
         </button>
 
         <label
-          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1A1F3B] hover:bg-[#252B48] text-slate-300 hover:text-white text-xs font-medium border border-[#2D355A] transition-colors cursor-pointer"
+          className="btn btn-sm btn-ghost gap-1 hover:text-base-content disabled:opacity-40"
           title="Import chord progressions from JSON"
         >
           <Upload className="w-3.5 h-3.5" />
@@ -478,7 +478,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
         </label>
       </div>
 
-      <span className="text-[10px] text-slate-500 font-mono">
+      <span className="text-[10px] text-base-content/50 font-mono">
         {customProgressions.length} custom saved
       </span>
     </div>
@@ -497,7 +497,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
       searchPlaceholder="Search by name, Roman numerals (ii-V-I, vi-IV-I-V)..."
       entries={entries}
       categories={categories}
-      listContainerClass="flex-1 overflow-y-auto p-3.5 space-y-2.5 divide-y divide-[#1C213E]/60"
+      listContainerClass="flex-1 overflow-y-auto p-3.5 space-y-2.5 divide-y divide-base-300/60"
       groupEntries={groupEntries}
       renderEntry={renderEntry}
       emptyState={emptyState}

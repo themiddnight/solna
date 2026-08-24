@@ -38,6 +38,51 @@ const MASTER_TABS: Array<{
   icon: LucideIcon;
 }> = [{ view: "effects", label: "Master FX", icon: Sliders }];
 
+export type SolvaTheme = 'solva-dark' | 'solva-light';
+
+const THEME_STORAGE_KEY = 'solva_theme';
+
+/**
+ * Pure theme resolution — no DOM, no localStorage access, unit-testable.
+ * Mirrors exactly what the bootstrap <script> in index.html does, so the two
+ * can never disagree.
+ */
+export function resolveInitialTheme(stored: string | null, prefersLight: boolean): SolvaTheme {
+  if (stored === 'solva-dark' || stored === 'solva-light') return stored;
+  return prefersLight ? 'solva-light' : 'solva-dark';
+}
+
+/**
+ * Reads the persisted theme choice, degrading to `null` (i.e. "no stored
+ * preference") if storage access throws. Safari private browsing, "block
+ * all cookies" and some embedded webviews throw on the *property access*
+ * itself, not just on read failure, so a bare `localStorage.getItem(...)`
+ * call is unsafe. Mirrors the try/catch the index.html bootstrap script
+ * already performs around the identical read.
+ */
+export function readStoredTheme(storage?: Pick<Storage, 'getItem'>): string | null {
+  try {
+    const s = storage ?? localStorage;
+    return s.getItem(THEME_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Best-effort persistence: swallows a throwing `setItem` so the toggle still
+ * updates the in-memory theme and the DOM attribute for the session — only
+ * cross-session persistence is lost when storage is blocked.
+ */
+export function persistTheme(theme: SolvaTheme, storage?: Pick<Storage, 'setItem'>): void {
+  try {
+    (storage ?? localStorage).setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // Blocked storage (private mode, cookies disabled, some webviews): the
+    // session still works, it just won't remember the choice next visit.
+  }
+}
+
 export const Header: React.FC = React.memo(() => {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
@@ -50,31 +95,43 @@ export const Header: React.FC = React.memo(() => {
   const scaleType = useAppStore((s) => s.scaleType);
   const setScaleType = useAppStore((s) => s.setScaleType);
 
-  const [currentTheme, setCurrentTheme] = React.useState<"solva-dark" | "solva-light">(() => {
-    return (document.documentElement.getAttribute("data-theme") as "solva-dark" | "solva-light") || "solva-dark";
-  });
+  const [currentTheme, setCurrentTheme] = React.useState<SolvaTheme>(() =>
+    resolveInitialTheme(
+      document.documentElement.getAttribute("data-theme"),
+      typeof window !== "undefined" &&
+        window.matchMedia("(prefers-color-scheme: light)").matches,
+    ),
+  );
 
   const toggleTheme = () => {
-    const next = currentTheme === "solva-dark" ? "solva-light" : "solva-dark";
+    const next: SolvaTheme = currentTheme === "solva-dark" ? "solva-light" : "solva-dark";
     setCurrentTheme(next);
     document.documentElement.setAttribute("data-theme", next);
-    localStorage.setItem("solva_theme", next);
+    persistTheme(next);
   };
 
+  // The <head> bootstrap script in index.html has already resolved and applied
+  // the theme before React mounted (that's what prevents the FOUC). This effect
+  // only re-syncs when the DOM and React state disagree — e.g. another tab wrote
+  // localStorage, or the OS preference flipped on a first visit with no stored
+  // value. It never clobbers an attribute that already matches.
   React.useEffect(() => {
-    const saved = localStorage.getItem("solva_theme") as "solva-dark" | "solva-light";
-    if (saved) {
-      setCurrentTheme(saved);
-      document.documentElement.setAttribute("data-theme", saved);
+    const resolved = resolveInitialTheme(
+      readStoredTheme(),
+      window.matchMedia("(prefers-color-scheme: light)").matches,
+    );
+    if (document.documentElement.getAttribute("data-theme") !== resolved) {
+      document.documentElement.setAttribute("data-theme", resolved);
     }
+    setCurrentTheme((prev) => (prev === resolved ? prev : resolved));
   }, []);
 
   return (
-    <header className="bg-base-100 border-b border-base-300 px-3 py-2 flex items-center justify-between gap-2 text-sm select-none sticky top-0 z-40">
+    <header className="navbar min-h-0 bg-base-100 border-b border-base-300 px-3 py-2 flex items-center justify-between gap-2 text-sm select-none sticky top-0 z-40">
       {/* Brand & Project Info */}
       <div className="flex items-center gap-2.5 shrink-0">
-        <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center shadow-md shadow-amber-500/20">
-          <Radio className="w-3.5 h-3.5 text-white" />
+        <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-primary to-secondary flex items-center justify-center shadow-md shadow-primary/20">
+          <Radio className="w-3.5 h-3.5 text-primary-content" />
         </div>
         <div className="flex items-center gap-1.5">
           <span className="font-extrabold text-sm tracking-tight text-base-content">
@@ -88,7 +145,7 @@ export const Header: React.FC = React.memo(() => {
 
       {/* Primary Navigation Tabs */}
       <nav className="flex items-center gap-2">
-        <div className="flex items-center p-0.5 rounded-lg bg-base-200 border border-base-300 overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-0.5 shrink-0">
+        <div role="tablist" className="tabs tabs-box tabs-xs bg-base-200 border border-base-300 p-0.5 overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-0.5 shrink-0">
           {NAV_TABS.map((tab, index) => {
             if (tab === "divider") {
               return (
@@ -110,11 +167,10 @@ export const Header: React.FC = React.memo(() => {
               <button
                 key={tab.view}
                 id={`tab-${tab.view}`}
+                role="tab"
                 onClick={() => setActiveTab(tab.view)}
-                className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap relative ${
-                  activeTab === tab.view
-                    ? "bg-primary text-primary-content shadow-xs"
-                    : "text-base-content/70 hover:text-base-content hover:bg-base-300/60"
+                className={`tab gap-1 text-xs font-semibold whitespace-nowrap relative ${
+                  activeTab === tab.view ? "tab-active" : ""
                 }`}
               >
                 <tab.icon className="w-3.5 h-3.5 shrink-0" />
@@ -124,8 +180,8 @@ export const Header: React.FC = React.memo(() => {
                     className="flex h-1.5 w-1.5 relative ml-0.5"
                     title="Playing"
                   >
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success" />
                   </span>
                 )}
               </button>
@@ -133,17 +189,16 @@ export const Header: React.FC = React.memo(() => {
           })}
         </div>
 
-        <div className="flex items-center p-0.5 rounded-lg bg-base-200 border border-base-300 overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-0.5 shrink-0">
+        <div role="tablist" className="tabs tabs-box tabs-xs bg-base-200 border border-base-300 p-0.5 overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-0.5 shrink-0">
           {MASTER_TABS.map((tab) => {
             return (
               <button
                 key={tab.view}
                 id={`tab-${tab.view}`}
+                role="tab"
                 onClick={() => setActiveTab(tab.view)}
-                className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap relative ${
-                  activeTab === tab.view
-                    ? "bg-primary text-primary-content shadow-xs"
-                    : "text-base-content/70 hover:text-base-content hover:bg-base-300/60"
+                className={`tab gap-1 text-xs font-semibold whitespace-nowrap relative ${
+                  activeTab === tab.view ? "tab-active" : ""
                 }`}
               >
                 <tab.icon className="w-3.5 h-3.5 shrink-0" />
@@ -162,11 +217,11 @@ export const Header: React.FC = React.memo(() => {
             id="select-master-scale-root"
             value={scaleRoot}
             onChange={(e) => setScaleRoot(e.target.value)}
-            className="bg-transparent text-xs font-bold text-primary focus:outline-none cursor-pointer"
+            className="select select-xs select-ghost font-bold text-primary"
             title="Root Note"
           >
             {ROOTS.map((r) => (
-              <option key={r} value={r} className="bg-base-100 text-base-content">
+              <option key={r} value={r}>
                 {r}
               </option>
             ))}
@@ -175,11 +230,11 @@ export const Header: React.FC = React.memo(() => {
             id="select-master-scale-type"
             value={scaleType}
             onChange={(e) => setScaleType(e.target.value)}
-            className="bg-transparent text-xs font-bold text-base-content/80 focus:outline-none cursor-pointer max-w-[90px] truncate"
+            className="select select-xs select-ghost font-bold text-base-content/80 max-w-[90px]"
             title="Scale Type"
           >
             {Object.keys(SCALES).map((s) => (
-              <option key={s} value={s} className="bg-base-100 text-base-content">
+              <option key={s} value={s}>
                 {SCALES[s].name}
               </option>
             ))}
@@ -190,7 +245,7 @@ export const Header: React.FC = React.memo(() => {
         <button
           id="btn-open-projects"
           onClick={openProjectsModal}
-          className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-base-200 border border-base-300 text-base-content hover:bg-base-300 transition-colors cursor-pointer text-xs font-medium"
+          className="btn btn-sm btn-ghost gap-1 text-xs font-medium"
           title="Projects (Save / Export)"
         >
           <FolderOpen className="w-3.5 h-3.5" />
@@ -201,13 +256,13 @@ export const Header: React.FC = React.memo(() => {
         <button
           id="btn-toggle-theme"
           onClick={toggleTheme}
-          className="flex items-center justify-center p-1.5 rounded-lg bg-base-200 border border-base-300 text-base-content hover:bg-base-300 transition-colors cursor-pointer"
+          className="btn btn-sm btn-square btn-ghost"
           title={`Switch to ${currentTheme === 'solva-dark' ? 'Light' : 'Dark'} Theme`}
         >
           {currentTheme === 'solva-dark' ? (
-            <Sun className="w-4 h-4 text-amber-400" />
+            <Sun className="w-4 h-4 text-primary" />
           ) : (
-            <Moon className="w-4 h-4 text-amber-600" />
+            <Moon className="w-4 h-4 text-primary" />
           )}
         </button>
       </div>
