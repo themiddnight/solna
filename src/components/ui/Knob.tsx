@@ -17,6 +17,14 @@ import type { KeyDir, KnobIndicator, KnobScale, KnobSize } from '../../utils/kno
 
 export type { KnobIndicator, KnobScale, KnobSize };
 
+/** The only knob tints allowed by the theme; keeps palette classes out. */
+export type KnobColor =
+  | 'text-primary'
+  | 'text-secondary'
+  | 'text-accent'
+  | 'text-success'
+  | 'text-error';
+
 export interface KnobProps {
   value: number;
   onChange: (value: number) => void;
@@ -26,7 +34,8 @@ export interface KnobProps {
   scale?: KnobScale;
   size?: KnobSize;
   label?: string;
-  color?: string;  // Tailwind text-* class สีเข็ม + progress arc + ค่า (default text-[#877dca])
+  /** Needle + progress arc + value tint. Token classes only (default 'text-primary'). */
+  color?: KnobColor;
   format?: (v: number) => string;
   indicator?: KnobIndicator;
   detent?: number;
@@ -145,11 +154,11 @@ export const Knob = ({
   };
 
   return (
-    <div className={`flex ${layout === 'horizontal' ? 'flex-row items-center gap-2' : 'flex-col items-center gap-1'} ${color ?? 'text-[#877dca]'} ${className ?? ''}`}>
+    <div className={`flex ${layout === 'horizontal' ? 'flex-row items-center gap-2' : 'flex-col items-center gap-1'} ${color ?? 'text-primary'} ${className ?? ''}`}>
       {layout === 'horizontal' && (
         <div className="flex flex-col items-end shrink-0">
           {label !== undefined && (
-            <span className="text-[10px] text-slate-400 block font-mono">
+            <span className="text-[10px] text-base-content/60 block font-mono">
               {label}
             </span>
           )}
@@ -159,7 +168,7 @@ export const Knob = ({
         </div>
       )}
       {layout === 'vertical' && label !== undefined && (
-        <span className="text-[10px] text-slate-400 block font-mono text-center">
+        <span className="text-[10px] text-base-content/60 block font-mono text-center">
           {label}
         </span>
       )}
@@ -176,7 +185,7 @@ export const Knob = ({
         width={pixelSize}
         height={pixelSize}
         viewBox="0 0 100 100"
-        className={`block touch-none select-none rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-400/70 ${
+        className={`block touch-none select-none rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary/70 ${
           disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
         }`}
         onPointerDown={handlePointerDown}
@@ -195,7 +204,7 @@ export const Knob = ({
               cy="50"
               r="44"
               fill="none"
-              stroke="#252B48"
+              className="stroke-base-300"
               strokeWidth="10"
               strokeLinecap="round"
               pathLength={100}
@@ -223,7 +232,7 @@ export const Knob = ({
             cy="50"
             r="44"
             fill="none"
-            stroke="#252B48"
+            className="stroke-base-300"
             strokeWidth="2"
           />
         )}
@@ -247,7 +256,7 @@ export const Knob = ({
               y1="14"
               x2="50"
               y2="1"
-              stroke="#94a3b8"
+              className="stroke-base-content/50"
               strokeWidth="3"
               strokeLinecap="round"
             />

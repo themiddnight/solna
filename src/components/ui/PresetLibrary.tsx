@@ -120,84 +120,100 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
     }
   };
 
-  // -- the two originals' chrome variants --
+  // -- the two variants' chrome; colour now comes entirely from daisyUI --
   const toolbarClass = isChord
-    ? 'p-3.5 border-b border-[#252B48] space-y-2.5 bg-[#0F1226]'
-    : 'p-3 border-b border-[#252B48] space-y-2 bg-[#12152A]';
+    ? 'p-3.5 border-b border-base-300 space-y-2.5 bg-base-200'
+    : 'p-3 border-b border-base-300 space-y-2 bg-base-200';
+  // Vertical centering uses inset-y-0/my-auto rather than top-1/2 + -translate-y-1/2:
+  // the latter's utility name embeds the substring "slate", which the guard's
+  // palette-color rule (and this file's own regression test) treats as a hit.
   const searchIconClass = isChord
-    ? 'w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none'
-    : 'w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5';
+    ? 'w-3.5 h-3.5 text-base-content/60 absolute left-3 inset-y-0 my-auto pointer-events-none z-10'
+    : 'w-3.5 h-3.5 text-base-content/60 absolute left-2.5 top-2.5 z-10';
   const clearBtnClass = isChord
-    ? 'absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-xs'
-    : 'absolute right-2.5 top-2 text-slate-400 hover:text-slate-200';
+    ? 'btn btn-xs btn-ghost btn-circle absolute right-1.5 inset-y-0 my-auto'
+    : 'btn btn-xs btn-ghost btn-circle absolute right-1.5 top-1';
   const chipsRowClass = isChord
-    ? 'flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none'
-    : 'flex gap-1 overflow-x-auto pb-1 scrollbar-none text-[11px]';
-  const chipBaseClass = isChord
-    ? 'px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer'
-    : 'px-2 py-1 rounded-md font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1 text-xs';
+    ? 'flex items-center gap-1.5 overflow-x-auto pb-1'
+    : 'flex gap-1 overflow-x-auto pb-1 text-[11px]';
+  const chipBaseClass =
+    'badge badge-sm gap-1 whitespace-nowrap cursor-pointer transition-colors';
   const countClass = (selected: boolean) =>
-    isChord
-      ? 'ml-1 px-1.5 py-0.2 rounded-full bg-indigo-900/80 text-[10px]'
-      : `text-[9px] px-1 rounded-full font-mono ${selected ? 'bg-indigo-700 text-white' : 'bg-[#161B36] text-slate-400'}`;
-  const closeBtnClass = isChord
-    ? 'p-1.5 rounded-lg bg-[#1A1F3B] hover:bg-[#252B48] text-slate-400 hover:text-slate-200 transition-colors cursor-pointer'
-    : 'p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-[#1C213E] transition-colors cursor-pointer';
+    `ml-1 px-1.5 py-0.5 rounded-full font-mono text-[10px] ${
+      selected ? 'bg-primary-content/20' : 'bg-base-300 text-base-content/60'
+    }`;
+  const closeBtnClass = 'btn btn-xs btn-ghost btn-circle';
   const saveButtonClass = saveButton?.className ?? (isChord
-    ? 'p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-xs'
-    : 'flex-1 flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 px-3 rounded-lg shadow-md transition-colors cursor-pointer');
+    ? 'btn btn-xs btn-primary gap-1'
+    : 'btn btn-sm btn-primary flex-1 gap-1.5');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-      {/* Sidebar Drawer */}
-      <div className="w-full max-w-md h-full bg-[#12152A] border-l border-[#252B48] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right duration-200">
-        {/* Drawer Header */}
-        <div className="p-4 border-b border-[#252B48] flex items-center justify-between bg-[#0E1022]">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
-              <Sparkles className="w-4 h-4" />
+    <div className="drawer drawer-end fixed inset-0 z-50">
+      <input
+        type="checkbox"
+        className="drawer-toggle"
+        checked
+        readOnly
+        aria-hidden="true"
+        tabIndex={-1}
+      />
+      {/* The panel is fixed, so the content column must not eat backdrop clicks. */}
+      <div className="drawer-content pointer-events-none" />
+      <div className="drawer-side z-50">
+        <label
+          className="drawer-overlay"
+          aria-label="Close preset library"
+          onClick={onClose}
+        />
+        {/* Sidebar Drawer */}
+        <aside className="w-full max-w-md h-full bg-base-100 border-l border-base-300 flex flex-col shadow-2xl overflow-hidden animate-slide-in-right">
+          {/* Drawer Header */}
+          <div className="p-4 border-b border-base-300 flex items-center justify-between bg-base-200">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-primary/20 border border-primary/30 text-primary">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-base-content flex items-center gap-2">
+                  {title}
+                  {headerBadge && (
+                    <span className="badge badge-sm badge-primary badge-outline font-mono">
+                      {headerBadge}
+                    </span>
+                  )}
+                </h3>
+                {headerSubtitle && <p className="text-[11px] text-base-content/60">{headerSubtitle}</p>}
+              </div>
             </div>
-            <div>
-              <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-                {title}
-                {headerBadge && (
-                  <span className="text-[10px] font-mono bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/30">
-                    {headerBadge}
-                  </span>
-                )}
-              </h3>
-              {headerSubtitle && <p className="text-[11px] text-slate-400">{headerSubtitle}</p>}
-            </div>
-          </div>
 
-          <div className="flex items-center gap-1.5">
-            {saveButton && !saveButton.inToolbar && (
-              <button
-                onClick={openSave}
-                className={saveButtonClass}
-                title={saveButton.title}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{saveButton.label}</span>
+            <div className="flex items-center gap-1.5">
+              {saveButton && !saveButton.inToolbar && (
+                <button
+                  onClick={openSave}
+                  className={saveButtonClass}
+                  title={saveButton.title}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{saveButton.label}</span>
+                </button>
+              )}
+              {renderHeaderActions}
+              <button onClick={onClose} className={closeBtnClass}>
+                <X className="w-4 h-4" />
               </button>
-            )}
-            {renderHeaderActions}
-            <button onClick={onClose} className={closeBtnClass}>
-              <X className="w-4 h-4" />
-            </button>
+            </div>
           </div>
-        </div>
 
-        {/* Save Success Toast */}
-        {toastPlacement === 'top' && toast && (
-          <div className="mx-4 mt-3 p-2 bg-emerald-950/80 border border-emerald-500/40 rounded-lg text-xs text-emerald-300 flex items-center gap-2 animate-in fade-in">
-            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>{toast}</span>
-          </div>
-        )}
+          {/* Save Success Toast */}
+          {toastPlacement === 'top' && toast && (
+            <div className="alert alert-success mx-4 mt-3 py-2 text-xs animate-fade-in">
+              <Check className="w-3.5 h-3.5 shrink-0" />
+              <span>{toast}</span>
+            </div>
+          )}
 
-        {/* Search & Filter Toolbar */}
-        <div className={toolbarClass}>
+          {/* Search & Filter Toolbar */}
+          <div className={toolbarClass}>
           {(saveButton?.inToolbar || toolbarActions) && (
             <div className="flex gap-2">
               {saveButton?.inToolbar && (
@@ -217,7 +233,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
               placeholder={searchPlaceholder ?? 'Search...'}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="w-full bg-[#0B0D19] border border-[#252B48] rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+              className="input input-sm input-bordered w-full pl-8 pr-8 text-xs"
             />
             {query && (
               <button onClick={() => setQuery('')} className={clearBtnClass}>
@@ -235,7 +251,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                 className={`${chipBaseClass} ${
                   category === c.id
                     ? c.badgeClass
-                    : 'bg-[#0B0D19] hover:bg-[#1A1F3B] text-slate-400 hover:text-slate-200 border border-[#252B48]'
+                    : 'badge-ghost text-base-content/60 hover:text-base-content'
                 }`}
               >
                 <span>{c.label}</span>
@@ -245,8 +261,8 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
           </div>
 
           {toastPlacement === 'toolbar' && toast && (
-            <div className="bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 animate-in fade-in">
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
+            <div className="alert alert-success py-1.5 text-xs animate-fade-in">
+              <Check className="w-3.5 h-3.5" />
               <span>{toast}</span>
             </div>
           )}
@@ -254,37 +270,37 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
 
         {/* Inline Save Form (synth original) */}
         {showSave && save.variant === 'inline' && (
-          <form onSubmit={handleSubmitSave} className="p-3 bg-[#1A1E38] border-b border-indigo-500/30 space-y-2.5 animate-in fade-in">
+          <form onSubmit={handleSubmitSave} className="p-3 bg-base-200 border-b border-primary/30 space-y-2.5 animate-fade-in">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
+                <Bookmark className="w-3.5 h-3.5 text-primary" />
                 {save.heading}
               </span>
-              <button type="button" onClick={() => setShowSave(false)} className="text-slate-400 hover:text-slate-200">
+              <button type="button" onClick={() => setShowSave(false)} className="btn btn-xs btn-ghost btn-circle">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
             <div>
-              <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Preset Name</label>
+              <label className="text-[10px] uppercase font-bold text-base-content/60 block mb-1">Preset Name</label>
               <input
                 type="text"
                 required
                 placeholder="e.g. Hyper Saw Lead"
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                className="w-full bg-[#0B0D19] border border-[#252B48] rounded-md px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                className="input input-sm input-bordered w-full text-xs"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               {save.withCategory && (
                 <div>
-                  <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Category</label>
+                  <label className="text-[10px] uppercase font-bold text-base-content/60 block mb-1">Category</label>
                   <select
                     value={draft.category}
                     onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-                    className="w-full bg-[#0B0D19] border border-[#252B48] rounded-md px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="select select-sm select-bordered w-full text-xs"
                   >
                     {categories.filter((c) => c.id !== 'All').map((c) => (
                       <option key={c.id} value={c.id}>{c.selectLabel ?? c.label}</option>
@@ -294,23 +310,23 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
               )}
               {save.withDescription && (
                 <div>
-                  <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Description (Optional)</label>
+                  <label className="text-[10px] uppercase font-bold text-base-content/60 block mb-1">Description (Optional)</label>
                   <input
                     type="text"
                     placeholder="e.g. Heavy punchy lead tone"
                     value={draft.description}
                     onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                    className="w-full bg-[#0B0D19] border border-[#252B48] rounded-md px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="input input-sm input-bordered w-full text-xs"
                   />
                 </div>
               )}
             </div>
 
             <div className="flex justify-end gap-2 pt-1">
-              <button type="button" onClick={() => setShowSave(false)} className="px-3 py-1 bg-[#0B0D19] text-slate-400 hover:text-slate-200 text-xs rounded-md border border-[#252B48] cursor-pointer">
+              <button type="button" onClick={() => setShowSave(false)} className="btn btn-xs btn-ghost">
                 Cancel
               </button>
-              <button type="submit" className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-md shadow-xs cursor-pointer">
+              <button type="submit" className="btn btn-xs btn-primary">
                 {save.buttonLabel}
               </button>
             </div>
@@ -323,7 +339,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
             emptyState ? (
               emptyState(query, category, openSave)
             ) : (
-              <p className="text-xs text-slate-500 py-6 text-center">No presets match.</p>
+              <p className="text-xs text-base-content/50 py-6 text-center">No presets match.</p>
             )
           ) : (
             groups.map((group) => (
@@ -335,20 +351,20 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                       {renderEntry ? (
                         renderEntry(entry)
                       ) : (
-                        <div className="flex items-center gap-2 bg-[#171B36] border border-[#2D355A] rounded-lg px-3 py-2">
+                        <div className="card card-compact bg-base-100 border border-base-300 flex-row items-center gap-2 px-3 py-2">
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs font-semibold text-slate-200 truncate">{entry.name}</div>
-                            <div className="text-[10px] text-slate-500 truncate">{subtitle ? subtitle(entry) : entry.description}</div>
+                            <div className="text-xs font-semibold text-base-content truncate">{entry.name}</div>
+                            <div className="text-[10px] text-base-content/50 truncate">{subtitle ? subtitle(entry) : entry.description}</div>
                           </div>
                           {renderEntryActions?.(entry)}
                           <button
                             onClick={() => onSelect(entry)}
-                            className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-semibold px-2.5 py-1 rounded-md cursor-pointer"
+                            className="btn btn-xs btn-primary gap-1"
                           >
                             <Check className="w-3 h-3" /> Select
                           </button>
                           {!entry.isFactory && onDelete && (
-                            <button onClick={() => onDelete(entry.id)} className="text-slate-400 hover:text-red-400 cursor-pointer">
+                            <button onClick={() => onDelete(entry.id)} className="btn btn-xs btn-ghost btn-circle text-base-content/60 hover:text-error">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
@@ -362,44 +378,45 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
           )}
         </div>
 
-        {/* Footer */}
-        {footer}
+          {/* Footer */}
+          {footer}
+        </aside>
       </div>
 
-      {/* Save Progression Modal Dialog (chord original) */}
+      {/* Save Progression Modal Dialog (chord variant) */}
       {showSave && save.variant === 'modal' && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm bg-[#171B38] border border-indigo-500/40 rounded-xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95">
+        <dialog className="modal modal-open">
+          <div className="modal-box max-w-sm bg-base-100 border border-primary/40 space-y-4">
             <div className="flex items-center justify-between">
-              <h4 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-                <Bookmark className="w-4 h-4 text-indigo-400" />
+              <h4 className="font-bold text-sm text-base-content flex items-center gap-2">
+                <Bookmark className="w-4 h-4 text-primary" />
                 {save.heading}
               </h4>
-              <button onClick={() => setShowSave(false)} className="text-slate-400 hover:text-slate-200">
+              <button onClick={() => setShowSave(false)} className="btn btn-xs btn-ghost btn-circle">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSubmitSave} className="space-y-3">
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1">Progression Name</label>
+                <label className="text-[11px] text-base-content/60 block mb-1">Progression Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. My Epic Verse Flow"
                   value={draft.name}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  className="w-full bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                  className="input input-sm input-bordered w-full text-xs"
                 />
               </div>
 
               {save.withCategory && (
                 <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">Category</label>
+                  <label className="text-[11px] text-base-content/60 block mb-1">Category</label>
                   <select
                     value={draft.category}
                     onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-                    className="w-full bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                    className="select select-sm select-bordered w-full text-xs"
                   >
                     {categories.filter((c) => c.id !== 'All').map((c) => (
                       <option key={c.id} value={c.id}>{c.selectLabel ?? c.label}</option>
@@ -410,59 +427,59 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
 
               {save.withRoman && (
                 <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">Roman numerals (optional)</label>
+                  <label className="text-[11px] text-base-content/60 block mb-1">Roman numerals (optional)</label>
                   <input
                     type="text"
                     placeholder="e.g. I – V – vi – IV"
                     value={draft.roman ?? ''}
                     onChange={(e) => setDraft({ ...draft, roman: e.target.value })}
-                    className="w-full bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                    className="input input-sm input-bordered w-full text-xs font-mono"
                   />
                 </div>
               )}
 
               {save.withDescription && (
                 <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">Description (Optional)</label>
+                  <label className="text-[11px] text-base-content/60 block mb-1">Description (Optional)</label>
                   <input
                     type="text"
                     placeholder="Notes about groove, tempo, or feel..."
                     value={draft.description}
                     onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                    className="w-full bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                    className="input input-sm input-bordered w-full text-xs"
                   />
                 </div>
               )}
 
               {save.chordsSummary && (
-                <div className="p-2.5 rounded-lg bg-[#0B0D19] border border-[#252B48] text-[11px] text-slate-400">
-                  <span className="font-mono text-indigo-300 block mb-0.5">
+                <div className="p-2.5 rounded-lg bg-base-200 border border-base-300 text-[11px] text-base-content/60">
+                  <span className="font-mono text-primary block mb-0.5">
                     Chords ({save.chordsSummary.count}):
                   </span>
-                  <span className="font-semibold text-slate-200">
+                  <span className="font-mono font-semibold text-base-content">
                     {save.chordsSummary.text}
                   </span>
                 </div>
               )}
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="modal-action">
                 <button
                   type="button"
                   onClick={() => setShowSave(false)}
-                  className="px-3 py-1.5 rounded-lg bg-[#0B0D19] text-slate-400 hover:text-slate-200 text-xs border border-[#252B48]"
+                  className="btn btn-sm btn-ghost"
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs"
-                >
+                <button type="submit" className="btn btn-sm btn-primary">
                   {save.buttonLabel}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+          <form method="dialog" className="modal-backdrop">
+            <button type="button" onClick={() => setShowSave(false)}>close</button>
+          </form>
+        </dialog>
       )}
     </div>
   );

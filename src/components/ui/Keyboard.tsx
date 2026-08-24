@@ -98,7 +98,7 @@ export function getScaleLockedKeyboardNotesFlat(
   return [...homeRow, ...topRow];
 }
 
-const KEYBOARD_NOTES = [
+export const KEYBOARD_NOTES = [
   { note: "C3", label: "C3", key: "KeyA", isBlack: false },
   { note: "C#3", label: "C#", key: "KeyW", isBlack: true },
   { note: "D3", label: "D3", key: "KeyS", isBlack: false },
@@ -131,11 +131,26 @@ export function ScaleLockedKey({
   onNoteOff: (note: string) => void;
 }) {
   return (
-    <div
+    <button
+      type="button"
       id={`key-${k.note}`}
+      aria-label={k.note}
+      aria-pressed={isActive}
       onMouseDown={() => onNoteOn(k.note)}
       onMouseUp={() => onNoteOff(k.note)}
       onMouseLeave={() => isActive && onNoteOff(k.note)}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          onNoteOn(k.note);
+        }
+      }}
+      onKeyUp={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          onNoteOff(k.note);
+        }
+      }}
       onTouchStart={(e) => {
         e.preventDefault();
         onNoteOn(k.note);
@@ -144,17 +159,17 @@ export function ScaleLockedKey({
         e.preventDefault();
         onNoteOff(k.note);
       }}
-      className={`w-12 h-full rounded-b-md border border-slate-700 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
+      className={`w-12 h-full rounded-b-md border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
         isActive
-          ? "bg-gradient-to-b from-indigo-200 to-indigo-400 text-slate-950 shadow-inner scale-[0.99]"
-          : "bg-gradient-to-b from-slate-100 to-slate-200 text-slate-800 hover:from-white hover:to-slate-100"
+          ? "bg-primary text-primary-content shadow-inner scale-[0.99]"
+          : "bg-key-white text-key-white-content hover:brightness-105"
       }`}
     >
       <span className="text-[10px] font-mono font-bold">{k.label}</span>
-      <span className="text-[9px] font-mono text-indigo-600 uppercase font-semibold">
+      <span className="text-[9px] font-mono text-primary uppercase font-semibold">
         {shortcutLabel(k.key)}
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -216,12 +231,27 @@ export function ChromaticKeyboard({
         const isActive = activeNotes.has(k.note);
         if (k.isBlack) {
           return (
-            <div
+            <button
+              type="button"
               key={k.note}
               id={`key-${k.note}`}
+              aria-label={k.note}
+              aria-pressed={isActive}
               onMouseDown={() => onNoteOn(k.note)}
               onMouseUp={() => onNoteOff(k.note)}
               onMouseLeave={() => isActive && onNoteOff(k.note)}
+              onKeyDown={(e) => {
+                if (e.key === " " || e.key === "Enter") {
+                  e.preventDefault();
+                  onNoteOn(k.note);
+                }
+              }}
+              onKeyUp={(e) => {
+                if (e.key === " " || e.key === "Enter") {
+                  e.preventDefault();
+                  onNoteOff(k.note);
+                }
+              }}
               onTouchStart={(e) => {
                 e.preventDefault();
                 onNoteOn(k.note);
@@ -230,32 +260,47 @@ export function ChromaticKeyboard({
                 e.preventDefault();
                 onNoteOff(k.note);
               }}
-              className={`absolute z-10 w-9 h-[100px] rounded-b-md border border-slate-900 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
+              className={`absolute z-10 w-9 h-[100px] rounded-b-md border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
                 isActive
-                  ? "bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-lg shadow-indigo-500/50 scale-[0.98]"
-                  : "bg-gradient-to-b from-slate-800 to-slate-950 hover:bg-slate-800"
+                  ? "bg-primary text-primary-content shadow-lg shadow-primary/50 scale-[0.98]"
+                  : "bg-key-black text-key-black-content hover:brightness-125"
               }`}
               style={{
                 left: `${getBlackKeyLeftPx(noteIndex)}px`,
               }}
             >
-              <span className="text-[9px] font-mono font-bold text-slate-300">
+              <span className="text-[9px] font-mono font-bold text-key-black-content">
                 {k.label}
               </span>
-              <span className="text-[8px] font-mono text-indigo-400 uppercase">
+              <span className="text-[8px] font-mono text-primary uppercase">
                 {shortcutLabel(k.key)}
               </span>
-            </div>
+            </button>
           );
         }
 
         return (
-          <div
+          <button
+            type="button"
             key={k.note}
             id={`key-${k.note}`}
+            aria-label={k.note}
+            aria-pressed={isActive}
             onMouseDown={() => onNoteOn(k.note)}
             onMouseUp={() => onNoteOff(k.note)}
             onMouseLeave={() => isActive && onNoteOff(k.note)}
+            onKeyDown={(e) => {
+              if (e.key === " " || e.key === "Enter") {
+                e.preventDefault();
+                onNoteOn(k.note);
+              }
+            }}
+            onKeyUp={(e) => {
+              if (e.key === " " || e.key === "Enter") {
+                e.preventDefault();
+                onNoteOff(k.note);
+              }
+            }}
             onTouchStart={(e) => {
               e.preventDefault();
               onNoteOn(k.note);
@@ -264,19 +309,19 @@ export function ChromaticKeyboard({
               e.preventDefault();
               onNoteOff(k.note);
             }}
-            className={`w-16 h-full rounded-b-md border border-slate-700 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
+            className={`w-16 h-full rounded-b-md border border-base-300 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
               isActive
-                ? "bg-gradient-to-b from-indigo-200 to-indigo-400 text-slate-950 shadow-inner scale-[0.99]"
-                : "bg-gradient-to-b from-slate-100 to-slate-200 text-slate-800 hover:from-white hover:to-slate-100"
+                ? "bg-primary text-primary-content shadow-inner scale-[0.99]"
+                : "bg-key-white text-key-white-content hover:brightness-105"
             }`}
           >
             <span className="text-[10px] font-mono font-bold">
               {k.label}
             </span>
-            <span className="text-[9px] font-mono text-indigo-600 uppercase font-semibold">
+            <span className="text-[9px] font-mono text-primary uppercase font-semibold">
               {shortcutLabel(k.key)}
             </span>
-          </div>
+          </button>
         );
       })}
     </div>

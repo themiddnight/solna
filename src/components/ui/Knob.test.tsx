@@ -42,3 +42,42 @@ describe('Knob layout variants', () => {
     expect(html).toContain('flex-row');
   });
 });
+
+describe('Knob theme tokens', () => {
+  const html = renderToString(
+    <Knob
+      value={0.5}
+      onChange={() => {}}
+      label="Cutoff"
+      detent={0.5}
+      format={(v) => `${v}`}
+    />,
+  );
+
+  test('uses primary as the default needle tint', () => {
+    expect(html).toContain('text-primary');
+    expect(html).not.toContain('#877dca');
+  });
+
+  test('paints the ring and detent tick with token stroke utilities', () => {
+    expect(html).toContain('stroke-base-300');
+    expect(html).toContain('stroke-base-content/50');
+    expect(html).not.toContain('#252B48');
+    expect(html).not.toContain('#94a3b8');
+  });
+
+  test('labels and the focus ring use semantic tokens', () => {
+    expect(html).toContain('text-base-content/60');
+    expect(html).toContain('focus-visible:outline-primary/70');
+    expect(html).not.toContain('text-slate-400');
+    expect(html).not.toContain('outline-indigo-400');
+  });
+
+  test('an explicit token color overrides the default', () => {
+    const accent = renderToString(
+      <Knob value={0.5} onChange={() => {}} color="text-accent" label="LFO" />,
+    );
+    expect(accent).toContain('text-accent');
+    expect(accent).not.toContain('text-primary');
+  });
+});

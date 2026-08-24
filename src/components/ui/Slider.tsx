@@ -5,11 +5,26 @@ interface SliderProps {
   max: number;
   step?: number;
   onChange: (value: number) => void;
+  /**
+   * Full class list for the <input type="range">. Defaults to
+   * 'range range-primary range-xs w-full'. Callers that need another accent
+   * pass the whole daisyUI class list, e.g.
+   * 'range range-accent range-xs w-16'.
+   */
   className?: string;
   title?: string;
 }
 
-export function Slider({ id, value, min, max, step = 1, onChange, className = 'w-full h-1 bg-[#0B0D19] rounded cursor-pointer accent-indigo-500', title }: SliderProps) {
+export function Slider({
+  id,
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+  className = 'range range-primary range-xs w-full',
+  title,
+}: SliderProps) {
   return (
     <input
       id={id}
