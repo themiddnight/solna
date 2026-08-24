@@ -81,6 +81,10 @@ export interface MasterEffects {
   delayWet: number;
   delayFeedback: number;
   delayBypass?: boolean;
+  delayTime?: string | number;
+  chorusWet?: number;
+  chorusRate?: number;
+  chorusDepth?: number;
   distortionWet: number;
   distortionBypass?: boolean;
   eqLow: number;

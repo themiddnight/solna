@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "tsc --noEmit",
-    "eslint": "eslint .",
-    "test": "bun test"
+    "eslint": "eslint ."
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
