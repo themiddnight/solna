@@ -3,7 +3,7 @@ import {
   clampKeyboardOctave,
   getScaleLockedKeyboardNotes,
   getScaleLockedKeyboardNotesFlat,
-} from './keyboard';
+} from './Keyboard';
 
 const byKey = (rows: ReturnType<typeof getScaleLockedKeyboardNotes>) =>
   Object.fromEntries(

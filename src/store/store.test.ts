@@ -106,7 +106,7 @@ class FakeAudioContext {
     return { buffer: null, connect() {} };
   }
 
-  createBuffer(_channels: number, length: number, _sampleRate: number) {
+  createBuffer(_channels: number, length: number) {
     return { getChannelData: () => new Float32Array(length) };
   }
 }
@@ -142,12 +142,6 @@ afterEach(() => {
 function getStore(): Promise<typeof import('./store')> {
   storeModule ??= import('./store');
   return storeModule;
-}
-
-// bun's spyOn keeps ONE mock per method and accumulates call counts across
-// tests — clear the count right after creating each spy.
-function freshResetClockSpy() {
-  return spyOn(audioEngine, 'resetClock').mockClear();
 }
 
 const getState = async (): Promise<AppStore> => (await getStore()).useAppStore.getState();
@@ -193,74 +187,39 @@ describe('store defaults', () => {
 });
 
 describe('transport semantics', () => {
+  // Engine side-effects (init/resetClock on the fully-stopped -> playing
+  // transition) moved to engineSync's transport-flags subscription (see
+  // engineSync.test.ts); these tests cover pure state transitions only.
   test('toggleMasterPlay starts both views from stopped and stops both when playing', async () => {
     const { useAppStore } = await getStore();
-    const resetClock = freshResetClockSpy();
-    const init = spyOn(audioEngine, 'init').mockClear();
 
     useAppStore.getState().toggleMasterPlay();
     expect(useAppStore.getState().isSequencerPlaying).toBe(true);
     expect(useAppStore.getState().isChordsPlaying).toBe(true);
-    expect(init).toHaveBeenCalled();
-    expect(resetClock).toHaveBeenCalledTimes(1);
 
     useAppStore.getState().toggleMasterPlay();
     expect(useAppStore.getState().isSequencerPlaying).toBe(false);
     expect(useAppStore.getState().isChordsPlaying).toBe(false);
-    // Stopping never restarts the clock
-    expect(resetClock).toHaveBeenCalledTimes(1);
   });
 
-  test('toggleSequencerPlay / toggleChordsPlay flip only their own flag and reset the clock only when nothing plays', async () => {
+  test('toggleSequencerPlay / toggleChordsPlay flip only their own flag', async () => {
     const { useAppStore } = await getStore();
-    const resetClock = freshResetClockSpy();
 
-    // Start the chords view: clock resets (nothing was playing)
     useAppStore.getState().toggleChordsPlay();
     expect(useAppStore.getState().isChordsPlaying).toBe(true);
     expect(useAppStore.getState().isSequencerPlaying).toBe(false);
-    expect(resetClock).toHaveBeenCalledTimes(1);
 
-    // Start the sequencer while chords are still playing: no clock reset
     useAppStore.getState().toggleSequencerPlay();
     expect(useAppStore.getState().isSequencerPlaying).toBe(true);
     expect(useAppStore.getState().isChordsPlaying).toBe(true);
-    expect(resetClock).toHaveBeenCalledTimes(1);
 
-    // Stop both, then start the sequencer again: clock resets once more
     useAppStore.getState().toggleSequencerPlay();
     useAppStore.getState().toggleChordsPlay();
     expect(useAppStore.getState().isSequencerPlaying).toBe(false);
     expect(useAppStore.getState().isChordsPlaying).toBe(false);
-    expect(resetClock).toHaveBeenCalledTimes(1);
 
     useAppStore.getState().toggleSequencerPlay();
     expect(useAppStore.getState().isSequencerPlaying).toBe(true);
-    expect(resetClock).toHaveBeenCalledTimes(2);
-  });
-
-  test('resetClockIfStopped resets the engine clock only when both views are stopped', async () => {
-    const { useAppStore } = await getStore();
-    const resetClock = freshResetClockSpy();
-    const count = () => resetClock.mock.calls.length;
-
-    useAppStore.getState().resetClockIfStopped();
-    expect(count()).toBe(1);
-
-    useAppStore.getState().setBpm(140);
-    useAppStore.getState().resetClockIfStopped();
-    expect(count()).toBe(2);
-
-    // Starting a view from a fully stopped state resets the clock once
-    // (inside toggleSequencerPlay)...
-    useAppStore.getState().toggleSequencerPlay();
-    expect(count()).toBe(3);
-    // ...but while any view is playing, neither the toggle nor a direct call
-    // may reset it
-    useAppStore.getState().resetClockIfStopped();
-    useAppStore.getState().toggleChordsPlay();
-    useAppStore.getState().resetClockIfStopped();
-    expect(count()).toBe(3);
   });
 });
 
@@ -340,8 +299,7 @@ describe('chords initial octave', () => {
   // cannot be assumed pristine.
   test('initial chords are derived at octave 4 (matches the old App mount effect)', () => {
     const slice = createChordsSlice(
-      (() => {}) as unknown as StoreApi<AppStore>['setState'],
-      (() => ({})) as unknown as StoreApi<AppStore>['getState']
+      (() => {}) as unknown as StoreApi<AppStore>['setState']
     );
     // The old App ran deriveChordNotes(c, chordOctave) on mount with octave 4
     expect(slice.chords).toEqual(INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)));
@@ -431,9 +389,7 @@ describe('persist partialize', () => {
       'toggleSequencerPlay',
       'toggleChordsPlay',
       'toggleMasterPlay',
-      'resetClockIfStopped',
       'applyTemplate',
-      'applySynthPreset',
       'setChordOctave',
       'applyDrumPattern',
       'setEffects',
@@ -441,7 +397,6 @@ describe('persist partialize', () => {
       'openProjectsModal',
       'closeProjectsModal',
       'saveCustomPreset',
-      'updateCustomPreset',
       'deleteCustomPreset',
       'saveCustomChordProgression',
       'deleteCustomChordProgression',
@@ -702,7 +657,10 @@ describe('persisted payload sanitization', () => {
     expect(s.chordMuted).toBe(true);
     expect(s.bassMuted).toBe(true);
     expect(s.soundKit).toBe('Deep Dub');
-    expect(s.effects).toEqual(partialEffects);
+    // Task 14: the live-knob clamps fill the two new fields on a partial
+    // persisted effects object (missing values must never reach the engine
+    // as undefined), so the canonical result carries the clamp fallbacks.
+    expect(s.effects).toEqual({ ...partialEffects, reverbDecay: 2.0, compressorThreshold: -12 });
     expect(s.chords).toEqual([{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] }]);
     expect(s.sequencerTracks).toEqual([]);
     expect(s.customSynthPresets).toEqual([]);
@@ -728,6 +686,30 @@ describe('persisted payload sanitization', () => {
     expect(useAppStore.getState().customChordProgressions).toEqual([]);
     // Rehydration still ran to completion and wrote the merged state back.
     expect(fakeLocalStorage.getItem('murva_project_state_v1')).not.toBeNull();
+  });
+
+  test('sanitize clamps reverbDecay and compressorThreshold on rehydrate', async () => {
+    const { useAppStore } = await getStore();
+
+    fakeLocalStorage.setItem(
+      'murva_project_state_v1',
+      JSON.stringify({
+        version: 2,
+        state: {
+          bpm: 120,
+          masterVolume: 0.85,
+          // Both values out of range: -70 sits below the [-60, 0] floor (the
+          // brief's -0.5 seed is already inside the range, so it could not
+          // demonstrate the clamp).
+          effects: { ...INITIAL_EFFECTS, reverbDecay: 99, compressorThreshold: -70 },
+        },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const fx = useAppStore.getState().effects;
+    expect(fx.reverbDecay).toBe(6.0);
+    expect(fx.compressorThreshold).toBe(-60);
   });
 });
 

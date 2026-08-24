@@ -27,7 +27,6 @@ export interface SynthParams {
   lfoDepth: number;
   lfoTarget: 'cutoff' | 'pitch' | 'volume';
   octave: number;
-  portamento?: number;
   arpActive?: boolean;
   arpMode?: 'up' | 'down' | 'updown' | 'random';
   arpRate?: '4n' | '8n' | '16n' | '32n';
@@ -53,9 +52,7 @@ export interface SequencerTrack {
   color: string;
   volume: number;
   muted: boolean;
-  solo?: boolean;
   steps: boolean[];
-  velocities?: number[];
 }
 
 export interface ChordItem {
@@ -82,22 +79,15 @@ export interface MasterEffects {
   reverbDecay: number;
   reverbBypass?: boolean;
   delayWet: number;
-  delayTime: string;
   delayFeedback: number;
   delayBypass?: boolean;
-  distortionDrive?: number;
   distortionWet: number;
   distortionBypass?: boolean;
-  chorusRate?: number;
-  chorusDepth?: number;
-  chorusWet?: number;
   eqLow: number;
   eqMid: number;
   eqHigh: number;
   eqBypass?: boolean;
   compressorThreshold: number;
-  compressorRatio?: number;
-  compressorBypass?: boolean;
 }
 
 

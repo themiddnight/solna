@@ -85,15 +85,18 @@ export const INITIAL_CHORDS: ChordItem[] = [
   { id: 'chord-4', root: 'G', quality: '7', bars: 1, notes: ['G3', 'B3', 'D4', 'F4'] },
 ];
 
+// NOTE: reverbDecay (2.0) and compressorThreshold (-12) deliberately equal the
+// engine's setupMasterChain hardcodes so the default sound is unchanged now
+// that these knobs are live (Task 14). Persisted values from older sessions
+// take effect and are clamped in sanitizePersistedState.
 export const INITIAL_EFFECTS: MasterEffects = {
   reverbWet: 0.25,
-  reverbDecay: 2.4,
+  reverbDecay: 2.0,
   delayWet: 0.2,
-  delayTime: '8n',
   delayFeedback: 0.35,
   distortionWet: 0.1,
   eqLow: 2,
   eqMid: 0,
   eqHigh: 3,
-  compressorThreshold: -16,
+  compressorThreshold: -12,
 };

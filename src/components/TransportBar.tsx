@@ -3,6 +3,7 @@ import { Play, Square, Volume2, Clock, Waves, Plus, Minus } from "lucide-react";
 import { audioEngine } from "../audio/engine";
 import { AudioVisualizer, VisualizerMode } from "./AudioVisualizer";
 import { useAppStore } from "../store/store";
+import { Slider } from "./ui/Slider";
 
 export const TransportBar: React.FC = React.memo(() => {
   // UI slice
@@ -18,10 +19,6 @@ export const TransportBar: React.FC = React.memo(() => {
   const metronomeActive = useAppStore((s) => s.metronomeActive);
   const toggleMetronome = useAppStore((s) => s.toggleMetronome);
   const toggleMasterPlay = useAppStore((s) => s.toggleMasterPlay);
-
-  // Music context slice (read-only)
-  const scaleRoot = useAppStore((s) => s.scaleRoot);
-  const scaleType = useAppStore((s) => s.scaleType);
 
   // Local visualizer state
   const [vuLevel, setVuLevel] = useState(0);
@@ -231,14 +228,13 @@ export const TransportBar: React.FC = React.memo(() => {
         {/* Master Output Fader */}
         <div className="flex items-center gap-1 bg-[#0B0D19] border border-[#252B48] px-2 py-1 rounded-lg">
           <Volume2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-          <input
+          <Slider
             id="slider-transport-master"
-            type="range"
             min={0}
             max={1}
             step={0.01}
             value={masterVolume}
-            onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
+            onChange={setMasterVolume}
             className="w-14 sm:w-16 h-1.5 bg-[#252B48] rounded cursor-pointer accent-indigo-500"
             title={`Master: ${(masterVolume * 100).toFixed(0)}%`}
           />

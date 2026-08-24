@@ -2,7 +2,6 @@ import type { StoreApi } from 'zustand';
 import type { AppStore, MusicContextSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
-type Get = StoreApi<AppStore>['getState'];
 
 const TEMPLATES: Record<
   string,
@@ -19,7 +18,7 @@ const TEMPLATES: Record<
  * App.tsx: one atomic `set()` per template that also crosses into the
  * transport slice (bpm).
  */
-export function createMusicContextSlice(set: Set, _get: Get): MusicContextSlice {
+export function createMusicContextSlice(set: Set): MusicContextSlice {
   return {
     scaleRoot: 'A',
     scaleType: 'Natural Minor',

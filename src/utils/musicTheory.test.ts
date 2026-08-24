@@ -6,7 +6,6 @@ import {
   generateBlockChordNotes,
   getBorrowedChords,
   getDiatonicChordForDegree,
-  isChordDiatonic,
   isNoteInScale,
 } from './musicTheory';
 
@@ -33,24 +32,6 @@ function strictlyDiatonic(
   const notes = generateBlockChordNotes(quality, chordRoot);
   return notes.length > 0 && notes.every((n) => isNoteInScale(n, root, scaleType));
 }
-
-describe('isChordDiatonic', () => {
-  test('Dmin7 is diatonic in C Major', () => {
-    expect(isChordDiatonic('D', 'min7', 'C', 'Major')).toBe(true);
-  });
-
-  test('Fmin is not diatonic in C Major', () => {
-    expect(isChordDiatonic('F', 'min', 'C', 'Major')).toBe(false);
-  });
-
-  test('A# major is diatonic in C Mixolydian', () => {
-    expect(isChordDiatonic('A#', 'maj', 'C', 'Mixolydian')).toBe(true);
-  });
-
-  test('Dm7b5 is not diatonic in C Major', () => {
-    expect(isChordDiatonic('D', 'm7b5', 'C', 'Major')).toBe(false);
-  });
-});
 
 describe('getBorrowedChords catalog', () => {
   test('major branch returns the standard set with corrected iiø7 (m7b5) quality', () => {

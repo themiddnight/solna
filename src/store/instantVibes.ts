@@ -1,8 +1,7 @@
 import { SynthParams, MasterEffects, ChordItem, FilterType } from '../types';
-import { useAppStore } from '../store/store';
+import { useAppStore } from './store';
 import { deriveChordNotes } from '../utils/musicTheory';
-import { audioEngine } from './engine';
-import { INITIAL_SYNTH_PARAMS } from '../store/initialState';
+import { INITIAL_SYNTH_PARAMS } from './initialState';
 
 export interface InstantVibe {
   id: string;
@@ -113,22 +112,6 @@ export function applyInstantVibeToStore(vibe: InstantVibe) {
     ...store.effects,
     ...vibe.effects,
   });
-
-  // 7. Audio Engine initialization & clock sync (in browser environment)
-  if (typeof window !== 'undefined') {
-    audioEngine.init();
-    audioEngine.setClockBpm(vibe.bpm);
-    audioEngine.updateSynthParams(finalSynthParams, 'synth');
-    audioEngine.updateSynthParams(finalChordSynthParams, 'chord');
-    audioEngine.updateSynthParams(finalBassSynthParams, 'bass');
-    if (vibe.drumFilterCutoff !== undefined) {
-      audioEngine.setDrumFilter(
-        vibe.drumFilterCutoff,
-        vibe.drumFilterResonance ?? 1.0,
-        vibe.drumFilterType ?? 'lowpass'
-      );
-    }
-  }
 }
 
 export const INSTANT_VIBES: InstantVibe[] = [
@@ -231,11 +214,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
       reverbWet: 0.35,
       reverbDecay: 2.4,
       delayWet: 0.22,
-      delayTime: '8n',
       delayFeedback: 0.28,
-      chorusWet: 0.35,
-      chorusRate: 1.2,
-      chorusDepth: 0.4,
       compressorThreshold: -18,
       eqLow: 3,
       eqMid: 1,
@@ -344,11 +323,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
       reverbWet: 0.48,
       reverbDecay: 3.6,
       delayWet: 0.28,
-      delayTime: '8n',
       delayFeedback: 0.35,
-      chorusWet: 0.45,
-      chorusRate: 1.5,
-      chorusDepth: 0.55,
       distortionWet: 0.18,
       compressorThreshold: -15,
       eqLow: 2,
@@ -451,7 +426,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
       reverbWet: 0.36,
       reverbDecay: 2.8,
       delayWet: 0.32,
-      delayTime: '16n',
       delayFeedback: 0.42,
       distortionWet: 0.22,
       compressorThreshold: -14,
@@ -554,11 +528,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
       reverbWet: 0.68,
       reverbDecay: 5.8,
       delayWet: 0.48,
-      delayTime: '4n',
       delayFeedback: 0.58,
-      chorusWet: 0.55,
-      chorusRate: 0.6,
-      chorusDepth: 0.65,
       compressorThreshold: -20,
       eqLow: 2,
       eqMid: -1,
@@ -660,7 +630,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
       reverbWet: 0.30,
       reverbDecay: 2.0,
       delayWet: 0.20,
-      delayTime: '8n',
       delayFeedback: 0.22,
       compressorThreshold: -16,
       eqLow: 3,
@@ -760,11 +729,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
       reverbWet: 0.58,
       reverbDecay: 4.4,
       delayWet: 0.42,
-      delayTime: '4n',
       delayFeedback: 0.46,
-      chorusWet: 0.35,
-      chorusRate: 0.8,
-      chorusDepth: 0.45,
       compressorThreshold: -18,
       eqLow: 1,
       eqMid: 0,

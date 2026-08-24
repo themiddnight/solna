@@ -115,7 +115,7 @@ export const Knob = ({
 
   const handleKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {
     if (disabled) return;
-    let dir: KeyDir | null = null;
+    let dir: KeyDir | null;
     switch (e.key) {
       case 'ArrowUp':
       case 'ArrowRight':

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, FolderOpen, Save, Download, FileText, Music, Sparkles, Check } from 'lucide-react';
+import { X, FolderOpen, Save, Download, FileText, Sparkles, Check } from 'lucide-react';
 import { ProjectState } from '../types';
 
 interface ProjectModalProps {

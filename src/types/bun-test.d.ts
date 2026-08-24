@@ -34,11 +34,16 @@ declare module 'bun:test' {
     toBeTruthy(): void;
     toBeNull(): void;
     toBeDefined(): void;
+    toBeUndefined(): void;
+    toBeGreaterThan(expected: number): void;
+    toBeGreaterThanOrEqual(expected: number): void;
+    toBeLessThan(expected: number): void;
     toHaveProperty(key: string): void;
     toHaveBeenCalled(): void;
     toHaveBeenCalledTimes(expected: number): void;
     toHaveBeenCalledWith(...expected: unknown[]): void;
+    toHaveBeenLastCalledWith(...expected: unknown[]): void;
   }
 
-  export function expect<T>(actual: T): Matchers<T>;
+  export function expect<T>(actual: T, message?: string): Matchers<T>;
 }

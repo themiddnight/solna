@@ -113,7 +113,7 @@ export const Header: React.FC = React.memo(() => {
         </div>
 
         <div className="flex items-center p-0.5 rounded-lg bg-[#0B0D19] border border-[#252B48] overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-0.5 shrink-0">
-          {MASTER_TABS.map((tab, index) => {
+          {MASTER_TABS.map((tab) => {
             return (
               <button
                 key={tab.view}

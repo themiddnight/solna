@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Sparkles, Play, Check, Zap, Music, Volume2, ChevronDown, ChevronUp } from 'lucide-react';
-import { INSTANT_VIBES, InstantVibe, applyInstantVibeToStore } from '../audio/instantVibes';
+import { Sparkles, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { INSTANT_VIBES, InstantVibe, applyInstantVibeToStore } from '../store/instantVibes';
 import { useAppStore } from '../store/store';
 
 export function selectVibe(

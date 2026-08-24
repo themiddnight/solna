@@ -1,10 +1,10 @@
 import { describe, test, expect } from 'bun:test';
 import { INSTANT_VIBES, applyInstantVibeToStore } from './instantVibes';
-import { RHYTHM_PATTERNS } from './rhythmPatterns';
-import { BASS_PATTERNS } from './bassPatterns';
-import { FACTORY_PRESETS } from './synthPresets';
-import { FACTORY_BASS_PRESETS } from './bassPresets';
-import { useAppStore } from '../store/store';
+import { RHYTHM_PATTERNS } from '../audio/rhythmPatterns';
+import { BASS_PATTERNS } from '../audio/bassPatterns';
+import { FACTORY_PRESETS } from '../audio/synthPresets';
+import { FACTORY_BASS_PRESETS } from '../audio/bassPresets';
+import { useAppStore } from './store';
 
 describe('Instant Vibes Mode', () => {
   test('contains all 6 curated genre vibes with complete presets and feel settings', () => {

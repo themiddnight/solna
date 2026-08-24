@@ -3,13 +3,12 @@ import { INITIAL_SEQUENCER_TRACKS } from './initialState';
 import type { AppStore, SequencerSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
-type Get = StoreApi<AppStore>['getState'];
 
 /**
  * Sequencer slice. `applyDrumPattern` maps the drum-pattern hits onto the
  * matching tracks by instrument, mirroring handleApplyDrumPattern in App.tsx.
  */
-export function createSequencerSlice(set: Set, _get: Get): SequencerSlice {
+export function createSequencerSlice(set: Set): SequencerSlice {
   return {
     sequencerTracks: INITIAL_SEQUENCER_TRACKS,
     soundKit: 'Retro Drive',

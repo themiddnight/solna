@@ -108,19 +108,6 @@ export function isNoteInScale(noteWithOrWithoutOctave: string, root: string, sca
   return scale.intervals.includes(interval);
 }
 
-// A chord belongs to the scale when every pitch class of its notes is in it.
-export function isChordDiatonic(
-  chordRoot: string,
-  quality: string,
-  root: string,
-  scaleType: string,
-): boolean {
-  const notes = generateBlockChordNotes(quality, chordRoot);
-  return (
-    notes.length > 0 && notes.every((n) => isNoteInScale(n, root, scaleType))
-  );
-}
-
 // True when the in-scale palette (triads or 7ths) renders the same root+quality.
 function isInScalePaletteChord(
   chordRoot: string,
@@ -211,10 +198,12 @@ export function getBorrowedChords(root: string, scaleType: string): BorrowedChor
   // Borrowed chords must stay chromatic: drop anything the active scale
   // already contains (strictly diatonic) or that the in-scale palette
   // renders with the same root and quality.
+  const isDiatonic = (chordRoot: string, quality: string): boolean => {
+    const notes = generateBlockChordNotes(quality, chordRoot);
+    return notes.length > 0 && notes.every((n) => isNoteInScale(n, root, scaleType));
+  };
   return candidates.filter(
-    (c) =>
-      !isChordDiatonic(c.root, c.quality, root, scaleType) &&
-      !isInScalePaletteChord(c.root, c.quality, root, scaleType),
+    (c) => !isDiatonic(c.root, c.quality) && !isInScalePaletteChord(c.root, c.quality, root, scaleType),
   );
 }
 
@@ -274,17 +263,13 @@ export function deriveChordNotes(chord: ChordItem, octave: number): ChordItem {
   return { ...chord, notes: generateBlockChordNotes(chord.quality, chord.root, octave) };
 }
 
-export function quarterNoteMs(bpm: number): number {
-  return (60 / Math.max(1, bpm)) * 1000;
-}
-
 export function rootSemitone(root: string): number {
   const n = Note.get(root);
   return n.empty ? 0 : n.chroma;
 }
 
 export function sixteenthNoteMs(bpm: number): number {
-  return quarterNoteMs(bpm) / 4;
+  return ((60 / Math.max(1, bpm)) * 1000) / 4;
 }
 
 export function noteFrequency(note: string, octaveOffset = 0): number {

@@ -2,7 +2,6 @@ import React from "react";
 import { Sparkles, Sun, Flame, Waves, Compass } from "lucide-react";
 import { SynthParams } from "../types";
 import { Knob } from "./ui/Knob";
-import { audioEngine } from "../audio/engine";
 
 interface SimpleSynthPanelProps {
   params: SynthParams;
@@ -183,7 +182,6 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
               <button
                 id="btn-simple-toggle-arp"
                 onClick={() => {
-                  audioEngine.init();
                   onChangeParams({
                     ...params,
                     arpActive: !params.arpActive,

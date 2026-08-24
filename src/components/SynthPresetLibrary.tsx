@@ -1,40 +1,39 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Sparkles,
-  Bookmark,
-  Plus,
-  Trash2,
-  Search,
-  Check,
-  X,
-  Sliders,
   Activity,
-  FolderOpen,
   Download,
+  FolderOpen,
+  Sliders,
+  Trash2,
   Upload,
   Volume2,
-  Tag,
 } from 'lucide-react';
-import { SynthParams } from '../types';
+import type { SynthParams } from '../types';
 import {
   getAllSynthPresets,
   SynthPresetItem,
   SynthPresetCategory,
   SYNTH_CATEGORIES,
-  saveCustomPreset,
-  deleteCustomPreset,
   getCategoryMeta,
   getPresetsGroupedByCategory,
 } from '../audio/synthPresets';
 import { useAppStore } from '../store/store';
 import { INITIAL_SYNTH_PARAMS } from '../store/initialState';
-import { audioEngine } from '../audio/engine';
+import { PresetLibrary } from './ui/PresetLibrary';
+import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from './ui/PresetLibrary';
+import { previewSynthPreset } from '../audio/playback/presetPreview';
 
 interface SynthPresetLibraryProps {
   currentParams: SynthParams;
   onSelectPreset: (preset: SynthPresetItem) => void;
   isOpen: boolean;
   onClose: () => void;
+}
+
+// Wrapper entries: one per SynthPresetItem (custom first via getAllSynthPresets);
+// the underlying preset is what onSelect hands to onSelectPreset.
+interface SynthLibraryEntry extends PresetLibraryEntry {
+  preset: SynthPresetItem;
 }
 
 export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
@@ -44,88 +43,99 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   onClose,
 }) => {
   const customPresets = useAppStore((s) => s.customSynthPresets);
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [showSaveModal, setShowSaveModal] = useState<boolean>(false);
-  const [newPresetName, setNewPresetName] = useState<string>('');
-  const [newPresetCategory, setNewPresetCategory] = useState<SynthPresetCategory>('Lead');
-  const [newPresetDesc, setNewPresetDesc] = useState<string>('');
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const savePreset = useAppStore((s) => s.saveCustomPreset);
+  const deletePreset = useAppStore((s) => s.deleteCustomPreset);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    window.setTimeout(() => setToastMsg(null), 3000);
+  };
 
   const allPresets = useMemo(() => getAllSynthPresets(customPresets), [customPresets]);
 
-  const categoryChips = [
-    { id: 'All', label: 'All' },
-    { id: 'Bass', label: 'Bass' },
-    { id: 'Lead', label: 'Lead' },
-    { id: 'Pad', label: 'Pad' },
-    { id: 'Keys', label: 'Keys' },
-    { id: 'Pluck', label: 'Pluck' },
-    { id: 'Brass', label: 'Brass' },
-    { id: 'FX', label: 'FX' },
-    { id: 'User', label: 'Custom' },
-  ];
-
-  const categoryGroups = useMemo(
-    () => getPresetsGroupedByCategory(allPresets),
+  const entries = useMemo<SynthLibraryEntry[]>(
+    () =>
+      allPresets.map((p) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        description: p.description ?? '',
+        isFactory: p.isFactory,
+        preset: p,
+      })),
     [allPresets]
   );
 
-  const filteredPresets = useMemo(() => {
-    return allPresets.filter((item) => {
-      const matchesCategory =
-        selectedCategory === 'All'
-          ? true
-          : selectedCategory === 'User'
-          ? !item.isFactory || item.category === 'User'
-          : item.category.toLowerCase() === selectedCategory.toLowerCase();
+  // PORT of the original category chips (original lines ~57-67, ~257-289):
+  // 'All' first with the total count, then the eight categories in
+  // SYNTH_CATEGORIES order; chip labels are the original's ('Custom' for User)
+  // and counts live in `count`; the save-form select uses selectLabel to keep
+  // the original 'Custom / User' wording.
+  const categories = useMemo<PresetCategory[]>(
+    () => [
+      { id: 'All', label: 'All', badgeClass: 'bg-indigo-600 text-white', description: '', count: String(allPresets.length) },
+      ...SYNTH_CATEGORIES.map((meta) => {
+        const count =
+          meta.id === 'User'
+            ? allPresets.filter((p) => !p.isFactory || p.category === 'User').length
+            : allPresets.filter((p) => p.category === meta.id).length;
+        return {
+          id: meta.id,
+          label: meta.shortLabel,
+          selectLabel: meta.label,
+          badgeClass: 'bg-indigo-600 text-white',
+          description: meta.description,
+          count: String(count),
+        };
+      }),
+    ],
+    [allPresets]
+  );
 
-      const matchesSearch =
-        searchQuery.trim() === '' ||
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+  // PORT of the original filteredPresets predicate: the 'User' chip matches
+  // every custom entry regardless of its saved category (plus any factory entry
+  // stored under 'User'); search covers name + description.
+  const filterEntries = (e: SynthLibraryEntry, query: string, categoryId: string) => {
+    const matchesCategory =
+      categoryId === 'All'
+        ? true
+        : categoryId === 'User'
+        ? !e.isFactory || e.category === 'User'
+        : e.category.toLowerCase() === categoryId.toLowerCase();
 
-      return matchesCategory && matchesSearch;
-    });
-  }, [allPresets, selectedCategory, searchQuery]);
+    const matchesSearch =
+      query.trim() === '' ||
+      e.name.toLowerCase().includes(query.toLowerCase()) ||
+      (e.description && e.description.toLowerCase().includes(query.toLowerCase()));
 
-  const handleSavePreset = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPresetName.trim()) return;
-
-    const created = saveCustomPreset(
-      newPresetName,
-      currentParams,
-      newPresetCategory,
-      newPresetDesc
-    );
-    setShowSaveModal(false);
-    setNewPresetName('');
-    setNewPresetDesc('');
-    setSaveSuccessMsg(`Preset "${created.name}" saved to [${created.category}]!`);
-    setTimeout(() => setSaveSuccessMsg(null), 3000);
-    onSelectPreset(created);
+    return matchesCategory && matchesSearch;
   };
 
-  const handleDelete = (id: string, name: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  // PORT of the original save handler: save the current params (the store
+  // action strips the `preset` label and trims name/description internally),
+  // toast the original message, then select the created preset. Always returns
+  // true — there is no guard, so the generic always closes on submit.
+  const handleSave = (draft: PresetSaveDraft): boolean => {
+    const created = savePreset(
+      draft.name,
+      currentParams,
+      draft.category as SynthPresetCategory,
+      draft.description
+    );
+    showToast(`Preset "${created.name}" saved to [${created.category}]!`);
+    onSelectPreset(created);
+    return true;
+  };
+
+  const handleDelete = (id: string, name: string) => {
     if (confirm(`Are you sure you want to delete preset "${name}"?`)) {
-      deleteCustomPreset(id);
+      deletePreset(id);
     }
   };
 
-  const handleAudition = (preset: SynthPresetItem, e: React.MouseEvent) => {
-    e.stopPropagation();
-    audioEngine.init();
-    const testParams: SynthParams = {
-      ...currentParams,
-      ...preset.params,
-      preset: preset.name,
-    };
-    audioEngine.triggerSynthNoteOn('C4', testParams, 0.85);
-    setTimeout(() => {
-      audioEngine.triggerSynthNoteOff('C4', testParams.release || 0.4);
-    }, 450);
+  const handleAudition = (preset: SynthPresetItem) => {
+    previewSynthPreset(preset, currentParams);
   };
 
   const handleExport = () => {
@@ -152,7 +162,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
           [...imported]
             .reverse()
             .forEach((item: SynthPresetItem) => {
-              saveCustomPreset(
+              savePreset(
                 item.name,
                 // Imported params may be partial; save the full shape so the
                 // stored preset stands on its own (all saved presets do).
@@ -161,275 +171,77 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
                 item.description
               );
             });
-          setSaveSuccessMsg(`Imported ${imported.length} presets!`);
-          setTimeout(() => setSaveSuccessMsg(null), 3000);
+          showToast(`Imported ${imported.length} presets!`);
         }
-      } catch (err) {
+      } catch {
         alert('Invalid JSON preset file');
       }
     };
     reader.readAsText(file);
   };
 
-  if (!isOpen) return null;
+  // PORT of the original list organization (original lines ~375-416): grouped
+  // category sections when viewing All without a search, flat list otherwise.
+  const groupEntries = (
+    filtered: SynthLibraryEntry[],
+    query: string,
+    category: string
+  ): PresetLibraryGroup<SynthLibraryEntry>[] => {
+    if (category !== 'All' || query.trim()) {
+      return [
+        { key: 'flat', className: 'space-y-3', innerClassName: 'space-y-3', entries: filtered },
+      ];
+    }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-      {/* Sidebar Drawer */}
-      <div className="w-full max-w-md h-full bg-[#12152A] border-l border-[#252B48] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right duration-200">
-        {/* Drawer Header */}
-        <div className="p-4 border-b border-[#252B48] flex items-center justify-between bg-[#0E1022]">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-                Synth Presets Library
-                <span className="text-[10px] font-mono bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/30">
-                  {allPresets.length} Total
-                </span>
-              </h3>
-              <p className="text-[11px] text-slate-400">Categorized factory sounds & custom user patches</p>
-            </div>
+    return getPresetsGroupedByCategory(filtered.map((e) => e.preset)).map((group) => ({
+      key: group.category,
+      className: 'space-y-2',
+      header: (
+        <div className="flex items-center justify-between px-1 pt-2 pb-1 border-b border-[#1E2344]">
+          <div className="flex items-center gap-2">
+            <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-semibold ${group.badgeClass}`}>
+              {group.category}
+            </span>
+            <span className="text-xs font-bold text-slate-200">{group.label}</span>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-[#1C213E] transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Action Toolbar */}
-        <div className="p-3 border-b border-[#252B48] space-y-2 bg-[#12152A]">
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setNewPresetName(currentParams.preset ? `${currentParams.preset} (Custom)` : 'My Synth Patch');
-                setShowSaveModal(true);
-              }}
-              className="flex-1 flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 px-3 rounded-lg shadow-md transition-colors cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Save Current Sound
-            </button>
-
-            <button
-              onClick={handleExport}
-              disabled={customPresets.length === 0}
-              className="px-2.5 py-2 bg-[#0B0D19] hover:bg-[#1A1F3A] disabled:opacity-40 text-slate-300 text-xs rounded-lg border border-[#252B48] transition-colors flex items-center gap-1 cursor-pointer"
-              title="Export User Presets to JSON"
-            >
-              <Download className="w-3.5 h-3.5" />
-            </button>
-
-            <label
-              className="px-2.5 py-2 bg-[#0B0D19] hover:bg-[#1A1F3A] text-slate-300 text-xs rounded-lg border border-[#252B48] transition-colors flex items-center gap-1 cursor-pointer"
-              title="Import Presets from JSON"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-            </label>
-          </div>
-
-          {/* Search Box */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-            <input
-              type="text"
-              placeholder="Search presets by name or tone..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#0B0D19] border border-[#252B48] rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-200"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-
-          {/* Category Filter Chips */}
-          <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none text-[11px]">
-            {categoryChips.map((cat) => {
-              const count =
-                cat.id === 'All'
-                  ? allPresets.length
-                  : cat.id === 'User'
-                  ? allPresets.filter((p) => !p.isFactory || p.category === 'User').length
-                  : allPresets.filter((p) => p.category === cat.id).length;
-
-              const isSelected = selectedCategory === cat.id;
-
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-2 py-1 rounded-md font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1 text-xs ${
-                    isSelected
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'bg-[#0B0D19] text-slate-400 hover:text-slate-200 border border-[#252B48]'
-                  }`}
-                >
-                  <span>{cat.label}</span>
-                  <span
-                    className={`text-[9px] px-1 rounded-full font-mono ${
-                      isSelected ? 'bg-indigo-700 text-white' : 'bg-[#161B36] text-slate-400'
-                    }`}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {saveSuccessMsg && (
-            <div className="bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 animate-in fade-in">
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{saveSuccessMsg}</span>
-            </div>
+          {group.description && (
+            <span className="text-[10px] text-slate-500 truncate max-w-[160px]">
+              {group.description}
+            </span>
           )}
         </div>
+      ),
+      entries: group.presets.map((p) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        description: p.description ?? '',
+        isFactory: p.isFactory,
+        preset: p,
+      })),
+    }));
+  };
 
-        {/* Save Preset Inline Modal / Popover */}
-        {showSaveModal && (
-          <form onSubmit={handleSavePreset} className="p-3 bg-[#1A1E38] border-b border-indigo-500/30 space-y-2.5 animate-in fade-in">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
-                Save New Preset to LocalStorage
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowSaveModal(false)}
-                className="text-slate-400 hover:text-slate-200"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div>
-              <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Preset Name</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Hyper Saw Lead"
-                value={newPresetName}
-                onChange={(e) => setNewPresetName(e.target.value)}
-                className="w-full bg-[#0B0D19] border border-[#252B48] rounded-md px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Category</label>
-                <select
-                  value={newPresetCategory}
-                  onChange={(e) => setNewPresetCategory(e.target.value as SynthPresetCategory)}
-                  className="w-full bg-[#0B0D19] border border-[#252B48] rounded-md px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-                >
-                  {SYNTH_CATEGORIES.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Description (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Heavy punchy lead tone"
-                  value={newPresetDesc}
-                  onChange={(e) => setNewPresetDesc(e.target.value)}
-                  className="w-full bg-[#0B0D19] border border-[#252B48] rounded-md px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setShowSaveModal(false)}
-                className="px-3 py-1 bg-[#0B0D19] text-slate-400 hover:text-slate-200 text-xs rounded-md border border-[#252B48] cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-md shadow-xs cursor-pointer"
-              >
-                Save Preset
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Preset Cards List */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {filteredPresets.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-xs space-y-2">
-              <FolderOpen className="w-8 h-8 mx-auto opacity-40 text-indigo-400" />
-              <p>No presets found for "{searchQuery || selectedCategory}"</p>
-              {selectedCategory === 'User' && (
-                <button
-                  onClick={() => setShowSaveModal(true)}
-                  className="text-indigo-400 hover:underline text-xs"
-                >
-                  Save your first custom preset now
-                </button>
-              )}
-            </div>
-          ) : selectedCategory === 'All' && !searchQuery.trim() ? (
-            /* Organized Category Sections when viewing All without search */
-            categoryGroups.map((group) => (
-              <div key={group.category} className="space-y-2">
-                <div className="flex items-center justify-between px-1 pt-2 pb-1 border-b border-[#1E2344]">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-semibold ${group.badgeClass}`}>
-                      {group.category}
-                    </span>
-                    <span className="text-xs font-bold text-slate-200">{group.label}</span>
-                  </div>
-                  {group.description && (
-                    <span className="text-[10px] text-slate-500 truncate max-w-[160px]">
-                      {group.description}
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  {group.presets.map((preset) => renderPresetCard(preset))}
-                </div>
-              </div>
-            ))
-          ) : (
-            /* Filtered flat list */
-            filteredPresets.map((preset) => renderPresetCard(preset))
-          )}
-        </div>
-
-        {/* Footer info */}
-        <div className="p-3 border-t border-[#252B48] bg-[#0E1022] flex items-center justify-between text-[11px] text-slate-400">
-          <span>Storage: Browser LocalStorage</span>
-          <button
-            onClick={onClose}
-            className="px-3 py-1 bg-[#1A1F3A] hover:bg-[#252B48] text-slate-200 rounded-lg text-xs transition-colors cursor-pointer font-medium"
-          >
-            Done
-          </button>
-        </div>
-      </div>
+  // PORT of the original empty state (original lines ~376-388): icon, "No
+  // presets found for ..." text, and the "Save your first custom preset now"
+  // link (opens the save form) when the User category is empty.
+  const emptyState = (query: string, category: string, openSave: () => void) => (
+    <div className="text-center py-12 text-slate-500 text-xs space-y-2">
+      <FolderOpen className="w-8 h-8 mx-auto opacity-40 text-indigo-400" />
+      <p>No presets found for "{query || category}"</p>
+      {category === 'User' && (
+        <button onClick={openSave} className="text-indigo-400 hover:underline text-xs">
+          Save your first custom preset now
+        </button>
+      )}
     </div>
   );
 
-  function renderPresetCard(preset: SynthPresetItem) {
+  // PORT of the original preset card (original lines ~432-509): whole-card
+  // select, Active badge + category badge, description, sound badges
+  // (osc type + filter label/cutoff), audition + delete buttons.
+  const renderEntry = (e: SynthLibraryEntry) => {
+    const preset = e.preset;
     const isCurrent = currentParams.preset === preset.name;
     const oscType = preset.params.oscType || 'sawtooth';
     const filterType = preset.params.filterType || 'lowpass';
@@ -438,7 +250,6 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
 
     return (
       <div
-        key={preset.id}
         onClick={() => onSelectPreset(preset)}
         className={`p-3 rounded-xl border transition-all cursor-pointer group relative ${
           isCurrent
@@ -486,7 +297,10 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
           {/* Action buttons */}
           <div className="flex items-center gap-1 shrink-0">
             <button
-              onClick={(e) => handleAudition(preset, e)}
+              onClick={(ev) => {
+                ev.stopPropagation();
+                handleAudition(preset);
+              }}
               className="p-1.5 rounded-lg bg-[#161B36] hover:bg-indigo-600 text-slate-300 hover:text-white transition-colors border border-[#252B48] cursor-pointer"
               title="Audition Sound (Play Note)"
             >
@@ -495,7 +309,10 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
 
             {!preset.isFactory && (
               <button
-                onClick={(e) => handleDelete(preset.id, preset.name, e)}
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  handleDelete(preset.id, preset.name);
+                }}
                 className="p-1.5 rounded-lg bg-[#161B36] hover:bg-red-600 text-slate-400 hover:text-white transition-colors border border-[#252B48] cursor-pointer"
                 title="Delete Custom Preset"
               >
@@ -506,6 +323,85 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
         </div>
       </div>
     );
-  }
-};
+  };
 
+  // PORT of the original toolbar action row (original lines ~206-234): the
+  // Save Current Sound button is the generic's saveButton; the icon-only
+  // Export/Import buttons follow it in the same flex row.
+  const toolbarActions = (
+    <>
+      <button
+        onClick={handleExport}
+        disabled={customPresets.length === 0}
+        className="px-2.5 py-2 bg-[#0B0D19] hover:bg-[#1A1F3A] disabled:opacity-40 text-slate-300 text-xs rounded-lg border border-[#252B48] transition-colors flex items-center gap-1 cursor-pointer"
+        title="Export User Presets to JSON"
+      >
+        <Download className="w-3.5 h-3.5" />
+      </button>
+
+      <label
+        className="px-2.5 py-2 bg-[#0B0D19] hover:bg-[#1A1F3A] text-slate-300 text-xs rounded-lg border border-[#252B48] transition-colors flex items-center gap-1 cursor-pointer"
+        title="Import Presets from JSON"
+      >
+        <Upload className="w-3.5 h-3.5" />
+        <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+      </label>
+    </>
+  );
+
+  // PORT of the original footer (original lines ~418-427): LocalStorage note +
+  // Done button.
+  const footer = (
+    <div className="p-3 border-t border-[#252B48] bg-[#0E1022] flex items-center justify-between text-[11px] text-slate-400">
+      <span>Storage: Browser LocalStorage</span>
+      <button
+        onClick={onClose}
+        className="px-3 py-1 bg-[#1A1F3A] hover:bg-[#252B48] text-slate-200 rounded-lg text-xs transition-colors cursor-pointer font-medium"
+      >
+        Done
+      </button>
+    </div>
+  );
+
+  return (
+    <PresetLibrary
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Synth Presets Library"
+      headerBadge={`${allPresets.length} Total`}
+      headerSubtitle="Categorized factory sounds & custom user patches"
+      saveButton={{ label: 'Save Current Sound', inToolbar: true }}
+      toolbarActions={toolbarActions}
+      toast={toastMsg}
+      toastPlacement="toolbar"
+      variant="synth"
+      searchPlaceholder="Search presets by name or tone..."
+      entries={entries}
+      categories={categories}
+      listContainerClass="flex-1 overflow-y-auto p-3 space-y-3"
+      groupEntries={groupEntries}
+      renderEntry={renderEntry}
+      emptyState={emptyState}
+      filterEntries={filterEntries}
+      footer={footer}
+      save={{
+        heading: 'Save New Preset to LocalStorage',
+        buttonLabel: 'Save Preset',
+        withCategory: true,
+        withDescription: true,
+        withRoman: false,
+        defaultCategory: 'Lead',
+        variant: 'inline',
+        initialName: currentParams.preset ? `${currentParams.preset} (Custom)` : 'My Synth Patch',
+      }}
+      onSelect={(entry) => onSelectPreset(entry.preset)}
+      onDelete={(id) => {
+        const entry = entries.find((en) => en.id === id);
+        if (entry && confirm(`Are you sure you want to delete preset "${entry.name}"?`)) {
+          deletePreset(id);
+        }
+      }}
+      onSave={handleSave}
+    />
+  );
+};

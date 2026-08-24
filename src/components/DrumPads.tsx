@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Volume2 } from 'lucide-react';
-import { audioEngine } from '../audio/engine';
+import { triggerPad as triggerDrumPad } from "../audio/playback/drumPlayback";
 import { isTypingTarget, shortcutLabel } from '../utils/keyboard';
 import { DrumPad } from '../types';
+import { Slider } from './ui/Slider';
 
-export const DEFAULT_PADS: DrumPad[] = [
+const PADS: DrumPad[] = [
   { id: 'kick', name: 'Kick Drum', note: 'kick', color: 'from-rose-500 to-red-600', shortcut: 'KeyZ', volume: 0.9, pitch: 0, decay: 0.3 },
   { id: 'snare', name: 'Snare Snap', note: 'snare', color: 'from-amber-500 to-orange-600', shortcut: 'KeyX', volume: 0.85, pitch: 0, decay: 0.2 },
   { id: 'hihat', name: 'Closed Hat', note: 'hihat', color: 'from-emerald-500 to-teal-600', shortcut: 'KeyC', volume: 0.75, pitch: 0, decay: 0.05 },
@@ -16,12 +17,11 @@ export const DEFAULT_PADS: DrumPad[] = [
 ];
 
 export const DrumPads: React.FC = React.memo(() => {
-  const [pads, setPads] = useState<DrumPad[]>(DEFAULT_PADS);
+  const [pads, setPads] = useState<DrumPad[]>(PADS);
   const [activePadId, setActivePadId] = useState<string | null>(null);
 
   const triggerPad = useCallback((pad: DrumPad) => {
-    audioEngine.init();
-    audioEngine.triggerDrum(pad.note, pad.volume);
+    triggerDrumPad(pad.note, pad.volume);
     setActivePadId(pad.id);
     setTimeout(() => setActivePadId(null), 150);
   }, []);
@@ -40,9 +40,6 @@ export const DrumPads: React.FC = React.memo(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [pads, triggerPad]);
-
-  // Two groups of four, arranged in one row
-  const groups = useMemo(() => [pads.slice(0, 4), pads.slice(4)], [pads]);
 
   return (
     <div className="bg-[#12152A] border border-[#252B48] rounded-xl p-3 sm:p-4 shadow-md">
@@ -78,15 +75,13 @@ export const DrumPads: React.FC = React.memo(() => {
               {/* Volume Slider */}
               <div className="flex items-center gap-1 px-0.5">
                 <Volume2 className="w-2.5 h-2.5 text-slate-500 shrink-0" />
-                <input
+                <Slider
                   id={`slider-pad-vol-${pad.id}`}
-                  type="range"
                   min={0}
                   max={1}
                   step={0.01}
                   value={pad.volume}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
+                  onChange={(val) => {
                     setPads((prev) => prev.map((p) => (p.id === pad.id ? { ...p, volume: val } : p)));
                   }}
                   className="w-full h-1 bg-[#0B0D19] rounded cursor-pointer"

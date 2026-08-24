@@ -32,6 +32,9 @@ class AudioEngine {
   // Effect nodes
   private reverbNode: ConvolverNode | null = null;
   private reverbGain: GainNode | null = null;
+  // Last decay applied to the convolver impulse; guards against re-randomizing
+  // the reverb tail on every updateEffects call.
+  private reverbDecay = 2.0;
   private delayNode: DelayNode | null = null;
   private delayFeedbackGain: GainNode | null = null;
   private delayGain: GainNode | null = null;
@@ -259,7 +262,7 @@ class AudioEngine {
 
     // Distortion
     this.distortionNode = this.ctx.createWaveShaper();
-    (this.distortionNode as any).curve = this.makeDistortionCurve(20);
+    this.distortionNode.curve = this.makeDistortionCurve(20);
     this.distortionNode.oversample = '4x';
     this.distortionGain = this.ctx.createGain();
     this.distortionGain.gain.value = 0.0;
@@ -289,7 +292,7 @@ class AudioEngine {
     this.analyser.connect(this.ctx.destination);
   }
 
-  private makeDistortionCurve(amount = 20): Float32Array {
+  private makeDistortionCurve(amount = 20): Float32Array<ArrayBuffer> {
     const k = typeof amount === 'number' ? amount : 50;
     const nSamples = 44100;
     const curve = new Float32Array(nSamples);
@@ -944,6 +947,14 @@ class AudioEngine {
     const eqMid = fx.eqBypass ? 0 : fx.eqMid;
     const eqHigh = fx.eqBypass ? 0 : fx.eqHigh;
 
+    if (this.reverbNode && fx.reverbDecay !== this.reverbDecay) {
+      this.reverbNode.buffer = this.buildImpulseResponse(2.0, fx.reverbDecay);
+      this.reverbDecay = fx.reverbDecay;
+    }
+    if (this.compressor) {
+      this.compressor.threshold.setTargetAtTime(fx.compressorThreshold, this.ctx.currentTime, 0.05);
+    }
+
     if (this.reverbGain) this.reverbGain.gain.setTargetAtTime(reverbWet, this.ctx.currentTime, 0.05);
     if (this.delayGain) this.delayGain.gain.setTargetAtTime(delayWet, this.ctx.currentTime, 0.05);
     if (this.delayFeedbackGain) this.delayFeedbackGain.gain.setTargetAtTime(delayFeedback, this.ctx.currentTime, 0.05);
@@ -967,15 +978,15 @@ class AudioEngine {
     return this.analyser;
   }
 
-  getByteFrequencyData(array: Uint8Array): void {
+  getByteFrequencyData(array: Uint8Array<ArrayBuffer>): void {
     if (this.analyser) {
-      this.analyser.getByteFrequencyData(array as any);
+      this.analyser.getByteFrequencyData(array);
     }
   }
 
-  getByteTimeDomainData(array: Uint8Array): void {
+  getByteTimeDomainData(array: Uint8Array<ArrayBuffer>): void {
     if (this.analyser) {
-      this.analyser.getByteTimeDomainData(array as any);
+      this.analyser.getByteTimeDomainData(array);
     }
   }
 

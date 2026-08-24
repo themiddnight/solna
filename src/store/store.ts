@@ -137,10 +137,6 @@ function sanitizeSynthParams(value: unknown): SynthParams {
   if (!LFO_TARGETS.has(out.lfoTarget as string)) out.lfoTarget = fallback.lfoTarget;
   if (!ARP_MODES.has(out.arpMode as string)) out.arpMode = fallback.arpMode;
   if (!ARP_RATES.has(out.arpRate as string)) out.arpRate = fallback.arpRate;
-  // `portamento` is optional, so it has no factory default to key off above.
-  if (typeof raw.portamento === 'number' && Number.isFinite(raw.portamento)) {
-    out.portamento = raw.portamento;
-  }
 
   return out as unknown as SynthParams;
 }
@@ -183,6 +179,27 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
       ? sanitized.effects
       : INITIAL_EFFECTS;
 
+  // Task 14: reverbDecay and compressorThreshold are live knobs now, so clamp
+  // persisted values to their ranges. The ternary above can hand back the
+  // SHARED INITIAL_EFFECTS constant — clone before writing so the module
+  // constant is never mutated.
+  const fxClamped = sanitized.effects as Record<string, unknown> | undefined;
+  if (fxClamped && typeof fxClamped === 'object') {
+    if (sanitized.effects === INITIAL_EFFECTS) sanitized.effects = { ...INITIAL_EFFECTS };
+    const fxWritable = sanitized.effects as Record<string, unknown>;
+    fxWritable.reverbDecay = clampFinite(fxWritable.reverbDecay, 0.5, 6.0, 2.0);
+    fxWritable.compressorThreshold = clampFinite(fxWritable.compressorThreshold, -60, 0, -12);
+  }
+
+  // Fields removed from MasterEffects (Task 4) must not resurrect from old
+  // persisted payloads.
+  const fx = sanitized.effects as Record<string, unknown> | undefined;
+  if (fx && typeof fx === 'object') {
+    for (const key of ['chorusRate', 'chorusDepth', 'chorusWet', 'compressorRatio', 'compressorBypass', 'delayTime', 'distortionDrive']) {
+      delete fx[key];
+    }
+  }
+
   // Arrays and free-form strings: drop invalid values so the currentState
   // defaults win in the merge spread below.
   for (const key of ['chords', 'sequencerTracks', 'customSynthPresets', 'customChordProgressions']) {
@@ -207,14 +224,14 @@ export const useAppStore = create<AppStore>()(
       storeApi = api;
       return {
         ...createTransportSlice(set, get),
-        ...createMusicContextSlice(set, get),
-        ...createSynthSlice(set, get),
-        ...createChordsSlice(set, get),
-        ...createBassSlice(set, get),
-        ...createSequencerSlice(set, get),
-        ...createEffectsSlice(set, get),
-        ...createUiSlice(set, get),
-        ...createPresetsSlice(set, get),
+        ...createMusicContextSlice(set),
+        ...createSynthSlice(set),
+        ...createChordsSlice(set),
+        ...createBassSlice(set),
+        ...createSequencerSlice(set),
+        ...createEffectsSlice(set),
+        ...createUiSlice(set),
+        ...createPresetsSlice(set),
       };
     }),
     {

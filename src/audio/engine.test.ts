@@ -1,7 +1,11 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from './engine';
+import { INITIAL_EFFECTS } from '../store/initialState';
 import type { SynthParams } from '../types';
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- the engine exports no
+   internals; tests deliberately reach private fields (ctx, buses,
+   activeVoices) and the unexported constructor via casts. */
 // The engine class isn't exported (singleton pattern), so fresh test
 // instances are created from the singleton's constructor.
 type EngineInstance = typeof audioEngine;
@@ -16,13 +20,13 @@ function fakeParam() {
     value: 1,
     cancels: [] as number[],
     targets: [] as { v: number; t: number; tc: number }[],
-    setValueAtTime(v: number, _t: number) {
+    setValueAtTime(v: number) {
       this.value = v;
     },
     cancelScheduledValues(t: number) {
       this.cancels.push(t);
     },
-    exponentialRampToValueAtTime(_v: number, _t: number) {},
+    exponentialRampToValueAtTime() {},
     setTargetAtTime(v: number, t: number, tc: number) {
       this.targets.push({ v, t, tc });
     },
@@ -507,5 +511,39 @@ describe('live polyphony equal-power scaling', () => {
 
     const c4 = (engine as any).activeVoices.get('synth:C4');
     expect(c4.gains[0].gain.targets).toHaveLength(0);
+  });
+});
+
+describe('live effect knobs', () => {
+  test('updateEffects rebuilds the convolver impulse only when reverbDecay changes', () => {
+    const { engine } = freshEngine();
+    // freshEngine leaves reverbNode unset; the guard block needs it present.
+    (engine as any).reverbNode = fakeNode();
+
+    // The fake ctx has no createBuffer/sampleRate, so the real impulse
+    // builder would throw if called through — stub the spy (same pattern as
+    // the applyEngineSnapshot test in store.test.ts).
+    const buildSpy = spyOn(
+      engine as unknown as { buildImpulseResponse: () => AudioBuffer },
+      'buildImpulseResponse',
+    ).mockImplementation(() => ({}) as AudioBuffer);
+
+    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 2.0 });
+    expect(buildSpy).not.toHaveBeenCalled(); // default == the impulse built at setupMasterChain
+    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 4.5 });
+    expect(buildSpy).toHaveBeenCalledWith(2.0, 4.5);
+    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 4.5 });
+    expect(buildSpy).toHaveBeenCalledTimes(1); // unchanged decay -> no rebuild
+  });
+
+  test('updateEffects sets the compressor threshold from the effects value', () => {
+    const { engine, ctx } = freshEngine();
+    // fakeParam records setTargetAtTime targets, so assert the recorded target.
+    const threshold = fakeParam();
+    (engine as any).compressor = { threshold };
+
+    engine.updateEffects({ ...INITIAL_EFFECTS, compressorThreshold: -20 });
+
+    expect(threshold.targets).toEqual([{ v: -20, t: ctx.currentTime, tc: 0.05 }]);
   });
 });

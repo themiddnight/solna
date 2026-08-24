@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { INSTANT_VIBES } from '../audio/instantVibes';
+import { INSTANT_VIBES } from '../store/instantVibes';
 import { audioEngine } from '../audio/engine';
 import { useAppStore } from '../store/store';
 import { selectVibe } from './InstantVibesBar';

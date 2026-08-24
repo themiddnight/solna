@@ -1,5 +1,4 @@
 import { SynthParams } from '../types';
-import { useAppStore } from '../store/store';
 import { FACTORY_BASS_PRESETS } from './bassPresets';
 
 export type SynthPresetCategory =
@@ -730,30 +729,6 @@ export const FACTORY_PRESETS: SynthPresetItem[] = [
     },
   },
 ];
-
-export function getCustomPresets(): SynthPresetItem[] {
-  return useAppStore.getState().customSynthPresets;
-}
-
-export function saveCustomPreset(
-  name: string,
-  params: SynthParams,
-  category: SynthPresetCategory = 'User',
-  description = ''
-): SynthPresetItem {
-  return useAppStore.getState().saveCustomPreset(name, params, category, description);
-}
-
-export function updateCustomPreset(
-  id: string,
-  updates: Partial<SynthPresetItem>
-): SynthPresetItem[] {
-  return useAppStore.getState().updateCustomPreset(id, updates);
-}
-
-export function deleteCustomPreset(id: string): SynthPresetItem[] {
-  return useAppStore.getState().deleteCustomPreset(id);
-}
 
 export const ALL_FACTORY_PRESETS: SynthPresetItem[] = [
   ...FACTORY_PRESETS,

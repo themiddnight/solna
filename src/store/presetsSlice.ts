@@ -1,6 +1,5 @@
 import type { StoreApi } from 'zustand';
-import type { SynthPresetItem, SynthPresetCategory } from '../audio/synthPresets';
-import type { ChordItem } from '../types';
+import type { SynthPresetItem } from '../audio/synthPresets';
 import type { AppStore, PresetsSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -11,17 +10,18 @@ type Get = StoreApi<AppStore>['getState'];
  * persisted in the main project state (replacing the old per-key localStorage
  * writes — see migrate.ts for the one-time adoption of those legacy keys).
  *
- * Action signatures mirror the wrappers in src/audio/synthPresets.ts and
- * src/components/ChordPresetLibrary.tsx so the UI layer can swap to the store
- * without changing its call sites.
+ * These actions are called directly by the UI layer (the thin store-wrapper
+ * helpers in src/audio/synthPresets.ts and src/components/ChordPresetLibrary.tsx
+ * were deleted; components call the slice actions themselves).
  */
-export function createPresetsSlice(set: Set, _get: Get): PresetsSlice {
+export function createPresetsSlice(set: Set): PresetsSlice {
   return {
     customSynthPresets: [],
     customChordProgressions: [],
 
     saveCustomPreset: (name, params, category = 'User', description = '') => {
       // Extract pure sound params (drop the preset label)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- preset is intentionally dropped from the spread
       const { preset, ...pureParams } = params;
       const newPreset: SynthPresetItem = {
         id: `user-preset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -34,15 +34,6 @@ export function createPresetsSlice(set: Set, _get: Get): PresetsSlice {
       };
       set((state) => ({ customSynthPresets: [newPreset, ...state.customSynthPresets] }));
       return newPreset;
-    },
-
-    updateCustomPreset: (id, updates) => {
-      let updated: SynthPresetItem[] = [];
-      set((state) => {
-        updated = state.customSynthPresets.map((p) => (p.id === id ? { ...p, ...updates } : p));
-        return { customSynthPresets: updated };
-      });
-      return updated;
     },
 
     deleteCustomPreset: (id) => {

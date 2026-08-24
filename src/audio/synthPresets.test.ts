@@ -5,21 +5,11 @@ import {
   getAllSynthPresets,
   findPresetByName,
   getPresetsGroupedByCategory,
-  SYNTH_CATEGORIES,
-  getCustomPresets,
-  saveCustomPreset,
-  updateCustomPreset,
-  deleteCustomPreset,
 } from './synthPresets';
 import type { SynthPresetItem } from './synthPresets';
 import type { ChordItem } from '../types';
 import { INITIAL_SYNTH_PARAMS } from '../store/initialState';
 import { useAppStore } from '../store/store';
-import {
-  getCustomChordProgressions,
-  saveCustomChordProgression,
-  deleteCustomChordProgression,
-} from '../components/ChordPresetLibrary';
 
 const custom: SynthPresetItem = {
   id: 'custom-1',
@@ -85,43 +75,22 @@ describe('getPresetsGroupedByCategory', () => {
   });
 });
 
-describe('custom preset helpers (store-backed wrappers)', () => {
+describe('custom preset store actions', () => {
   beforeEach(() => {
     useAppStore.setState({ customSynthPresets: [], customChordProgressions: [] });
   });
 
-  test('getCustomPresets reads the custom presets from the store', () => {
-    expect(getCustomPresets()).toEqual([]);
-    useAppStore.setState({ customSynthPresets: [custom] });
-    expect(getCustomPresets()).toEqual([custom]);
-  });
-
   test('saveCustomPreset writes through the store and strips the preset label', () => {
-    const saved = saveCustomPreset(
-      'My Patch',
-      { ...INITIAL_SYNTH_PARAMS, preset: 'Cosmic Lead' },
-      'Lead',
-      'a punchy lead'
-    );
-    const inStore = useAppStore.getState().customSynthPresets;
-    expect(inStore).toHaveLength(1);
-    expect(inStore[0]).toEqual(saved);
+    const saved = useAppStore.getState().saveCustomPreset('My Patch', INITIAL_SYNTH_PARAMS, 'Lead');
     expect(saved.name).toBe('My Patch');
-    expect(saved.category).toBe('Lead');
-    expect(saved.description).toBe('a punchy lead');
-    expect(saved.isFactory).toBe(false);
-    expect(saved.params).not.toHaveProperty('preset');
+    expect(saved.params.preset).toBeUndefined();
+    expect(useAppStore.getState().customSynthPresets[0].id).toBe(saved.id);
   });
 
-  test('updateCustomPreset and deleteCustomPreset mutate the store and return the new list', () => {
-    const saved = saveCustomPreset('My Patch', INITIAL_SYNTH_PARAMS);
-    const updated = updateCustomPreset(saved.id, { name: 'Renamed Patch' });
-    expect(updated).toHaveLength(1);
-    expect(updated[0].name).toBe('Renamed Patch');
-    expect(getCustomPresets()[0].name).toBe('Renamed Patch');
-
-    expect(deleteCustomPreset(saved.id)).toEqual([]);
-    expect(getCustomPresets()).toEqual([]);
+  test('deleteCustomPreset removes the preset and returns the new list', () => {
+    const saved = useAppStore.getState().saveCustomPreset('My Patch', INITIAL_SYNTH_PARAMS);
+    expect(useAppStore.getState().deleteCustomPreset(saved.id)).toEqual([]);
+    expect(useAppStore.getState().customSynthPresets).toEqual([]);
   });
 });
 
@@ -131,7 +100,7 @@ describe('custom chord progression helpers (store-backed wrappers)', () => {
   });
 
   test('save/get/delete route through the store', () => {
-    expect(getCustomChordProgressions()).toEqual([]);
+    expect(useAppStore.getState().customChordProgressions).toEqual([]);
     const chord: ChordItem = {
       id: 'c1',
       root: 'C',
@@ -139,15 +108,17 @@ describe('custom chord progression helpers (store-backed wrappers)', () => {
       bars: 1,
       notes: ['C4', 'E4', 'G4', 'B4'],
     };
-    const saved = saveCustomChordProgression('My Prog', [chord], 'User', 'desc', 'I - IV');
+    const saved = useAppStore
+      .getState()
+      .saveCustomChordProgression('My Prog', [chord], 'User', 'desc', 'I - IV');
     expect(saved.roman).toBe('I - IV');
 
     const inStore = useAppStore.getState().customChordProgressions;
     expect(inStore).toHaveLength(1);
     expect(inStore[0]).toEqual(saved);
 
-    expect(deleteCustomChordProgression(saved.id)).toEqual([]);
-    expect(getCustomChordProgressions()).toEqual([]);
+    expect(useAppStore.getState().deleteCustomChordProgression(saved.id)).toEqual([]);
+    expect(useAppStore.getState().customChordProgressions).toEqual([]);
   });
 
   test('importing multiple progressions yields distinct ids and delete-one-leaves-one', () => {
@@ -166,7 +137,9 @@ describe('custom chord progression helpers (store-backed wrappers)', () => {
     [...imported]
       .reverse()
       .forEach((item) => {
-        saveCustomChordProgression(item.name, item.chords, item.category, item.description, item.roman);
+        useAppStore
+          .getState()
+          .saveCustomChordProgression(item.name, item.chords, item.category, item.description, item.roman);
       });
 
     const inStore = useAppStore.getState().customChordProgressions;
@@ -174,7 +147,7 @@ describe('custom chord progression helpers (store-backed wrappers)', () => {
     const ids = inStore.map((c) => c.id);
     expect(new Set(ids).size).toBe(2);
 
-    deleteCustomChordProgression(inStore[0].id);
-    expect(getCustomChordProgressions()).toHaveLength(1);
+    useAppStore.getState().deleteCustomChordProgression(inStore[0].id);
+    expect(useAppStore.getState().customChordProgressions).toHaveLength(1);
   });
 });

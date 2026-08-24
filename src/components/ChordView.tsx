@@ -1,28 +1,19 @@
 import React, {
   useState,
-  useCallback,
   useEffect,
   useRef,
   useMemo,
 } from "react";
 import {
   Music,
-  Play,
-  Square,
   Sparkles,
   Plus,
-  Trash2,
-  ArrowRight,
   Library,
   Bookmark,
   Check,
   Volume2,
   VolumeX,
-  GripVertical,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
-import { motion } from "motion/react";
 import {
   DndContext,
   closestCenter,
@@ -37,14 +28,22 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   rectSortingStrategy,
-  useSortable,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { ChordItem, SynthParams } from "../types";
+import { ChordItem, CustomChordProgressionItem } from "../types";
 import { useAppStore } from "../store/store";
-import { audioEngine, STEPS_PER_BAR } from "../audio/engine";
+import { useChordPlayback } from "./chord/useChordPlayback";
 import {
-  getCustomPresets,
+  ensurePreviewEngine,
+  hasPreviewEngine,
+  playChordLegatoWithEngine,
+  previewBarSeconds,
+  previewChordForScale,
+  previewEngineTime,
+  startPatternLoop,
+  stopBassPreviewSource,
+  stopChordPreviewSource,
+} from "../audio/playback/chordPlayback";
+import {
   getAllSynthPresets,
   findPresetByName,
   getPresetsGroupedByCategory,
@@ -52,548 +51,30 @@ import {
 import {
   RHYTHM_PATTERNS,
   RHYTHM_STYLE_GROUPS,
-  RhythmPattern,
-  equalPowerVelocityScale,
-  feelToHoldScale,
-  fullHoldDuration,
 } from "../audio/rhythmPatterns";
-import { FACTORY_BASS_PRESETS } from "../audio/bassPresets";
 import {
   BASS_PATTERNS,
   BASS_STYLE_GROUPS,
-  BassPattern,
-  isApproachToken,
-  resolveBassSteps,
 } from "../audio/bassPatterns";
 import {
   deriveChordNotes,
   reharmonizeProgressionToScale,
-  generateBlockChordNotes,
-  quarterNoteMs,
-  sixteenthNoteMs,
-  rootSemitone,
-  shiftNoteOctave,
   SCALES,
-  ROOTS,
   getDiatonicChordForDegree,
   getBorrowedChords,
   formatChordLabel,
-  formatChordQuality,
 } from "../utils/musicTheory";
-import {
-  ChordPresetLibrary,
-  getCustomChordProgressions,
-  saveCustomChordProgression,
-  CustomChordProgressionItem,
-} from "./ChordPresetLibrary";
+import { ChordPresetLibrary } from "./ChordPresetLibrary";
+import { ChannelStrip } from "./ui/ChannelStrip";
+import { QuickSavePopover } from "./ui/QuickSavePopover";
+import { Slider } from "./ui/Slider";
+import { SortableChordCard } from "./chord/SortableChordCard";
+
+import { CHORD_PROGRESSION_TEMPLATES } from "../audio/data/chordProgressions";
 
 const SELECT_BASE =
   "bg-[#171B36] border border-[#2D355A] rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-200";
 const LABEL_BASE = "text-[10px] text-slate-500 block mb-1";
-
-export interface ProgressionTemplate {
-  name: string;
-  category:
-    | "Pop & EDM"
-    | "Jazz & Neo-Soul"
-    | "Lofi & R&B"
-    | "Rock & Blues"
-    | "Anime & J-Pop"
-    | "Cinematic & Modal"
-    | "Classical & Baroque";
-  roman: string;
-  description: string;
-  // Semitone intervals relative to the chosen key's root (0 = Key root)
-  // along with chord quality for key transposition
-  relativeChords: Array<{ interval: number; quality: string; bars: number }>;
-}
-
-export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
-  // Pop & EDM
-  {
-    name: "Classic 4-Chord Pop Anthem",
-    category: "Pop & EDM",
-    roman: "I – V – vi – IV",
-    description:
-      "The definitive major-scale pop progression creating an instantly uplifting and catchy flow.",
-    relativeChords: [
-      { interval: 0, quality: "maj", bars: 1 }, // I
-      { interval: 7, quality: "maj", bars: 1 }, // V
-      { interval: 9, quality: "min", bars: 1 }, // vi
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-    ],
-  },
-  {
-    name: "Emotional Minor Synthwave",
-    category: "Pop & EDM",
-    roman: "vi – IV – I – V",
-    description:
-      "Moody, heroic, and emotional minor opening used widely in synthwave, EDM, and cinematic anthems.",
-    relativeChords: [
-      { interval: 9, quality: "min", bars: 1 }, // vi
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-      { interval: 0, quality: "maj", bars: 1 }, // I
-      { interval: 7, quality: "maj", bars: 1 }, // V
-    ],
-  },
-  {
-    name: "Classic 50s Doo-Wop Cadence",
-    category: "Pop & EDM",
-    roman: "I – vi – IV – V",
-    description:
-      "Timeless vintage progression with warm, romantic, and circular harmonic resolution.",
-    relativeChords: [
-      { interval: 0, quality: "maj", bars: 1 }, // I
-      { interval: 9, quality: "min", bars: 1 }, // vi
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-      { interval: 7, quality: "maj", bars: 1 }, // V
-    ],
-  },
-  {
-    name: "Future Bass / Euphoric EDM Lift",
-    category: "Pop & EDM",
-    roman: "IVmaj7 – V7 – iiim7 – vim7",
-    description:
-      "Lush 7th chord cadence creating unstoppable momentum and euphoric drops.",
-    relativeChords: [
-      { interval: 5, quality: "maj7", bars: 1 }, // IVmaj7
-      { interval: 7, quality: "7", bars: 1 }, // V7
-      { interval: 4, quality: "min7", bars: 1 }, // iiim7
-      { interval: 9, quality: "min7", bars: 1 }, // vim7
-    ],
-  },
-  {
-    name: "Club Dance & House Groove",
-    category: "Pop & EDM",
-    roman: "i – VI – VII – v",
-    description:
-      "Driving natural minor cadence standard in modern deep house and electronic dance music.",
-    relativeChords: [
-      { interval: 0, quality: "min7", bars: 1 }, // i
-      { interval: 8, quality: "maj7", bars: 1 }, // VI
-      { interval: 10, quality: "7", bars: 1 }, // VII
-      { interval: 7, quality: "min7", bars: 1 }, // v
-    ],
-  },
-
-  // Jazz & Neo-Soul
-  {
-    name: "Jazz ii-V-I-VI Turnaround",
-    category: "Jazz & Neo-Soul",
-    roman: "ii7 – V7 – Imaj7 – VI7",
-    description:
-      "The quintessential jazz standard backbone featuring a secondary dominant turnaround.",
-    relativeChords: [
-      { interval: 2, quality: "min7", bars: 1 }, // ii7
-      { interval: 7, quality: "7", bars: 1 }, // V7
-      { interval: 0, quality: "maj7", bars: 1 }, // Imaj7
-      { interval: 9, quality: "7", bars: 1 }, // VI7
-    ],
-  },
-  {
-    name: "Neo-Soul Butter Flow",
-    category: "Jazz & Neo-Soul",
-    roman: "Imaj9 – viim7b5 – III7 – vim9",
-    description:
-      "Complex soulful harmony with half-diminished 7b5 leading into a dominant resolution.",
-    relativeChords: [
-      { interval: 0, quality: "maj9", bars: 1 }, // Imaj9
-      { interval: 11, quality: "m7b5", bars: 1 }, // viim7b5
-      { interval: 4, quality: "7", bars: 1 }, // III7
-      { interval: 9, quality: "min9", bars: 1 }, // vim9
-    ],
-  },
-  {
-    name: "Chromatic Mediants / Giant Step Cycle",
-    category: "Jazz & Neo-Soul",
-    roman: "Imaj7 – bVImaj7 – bIImaj7 – V7",
-    description:
-      "Chromatic third root movements providing a vibrant, otherworldly modal jazz coloration.",
-    relativeChords: [
-      { interval: 0, quality: "maj7", bars: 1 }, // Imaj7
-      { interval: 8, quality: "maj7", bars: 1 }, // bVImaj7
-      { interval: 1, quality: "maj7", bars: 1 }, // bIImaj7
-      { interval: 7, quality: "7sus4", bars: 1 }, // V7sus4
-    ],
-  },
-
-  // Lofi & R&B
-  {
-    name: "Lofi Extended 9th Coffeehouse",
-    category: "Lofi & R&B",
-    roman: "ii9 – V13 – Imaj9 – IVmaj7",
-    description:
-      "Warm, relaxed extended 9th and 13th chords tailored for mellow beats and study sessions.",
-    relativeChords: [
-      { interval: 2, quality: "min9", bars: 1 }, // ii9
-      { interval: 7, quality: "7", bars: 1 }, // V7
-      { interval: 0, quality: "maj9", bars: 1 }, // Imaj9
-      { interval: 5, quality: "maj7", bars: 1 }, // IVmaj7
-    ],
-  },
-  {
-    name: "Contemporary R&B / Trap-Soul Flow",
-    category: "Lofi & R&B",
-    roman: "i9 – iv7 – VII9 – IIImaj7",
-    description:
-      "Sultry, atmospheric minor progression standard in contemporary R&B and downtempo production.",
-    relativeChords: [
-      { interval: 0, quality: "min9", bars: 1 }, // i9
-      { interval: 5, quality: "min7", bars: 1 }, // iv7
-      { interval: 10, quality: "9", bars: 1 }, // VII9
-      { interval: 3, quality: "maj7", bars: 1 }, // IIImaj7
-    ],
-  },
-  {
-    name: "Melancholy Bedroom Pop",
-    category: "Lofi & R&B",
-    roman: "Imaj7 – IVmaj7 – ii7 – V7",
-    description:
-      "Intimate, nostalgic daydream feel with soft major-7th oscillations and tender resolutions.",
-    relativeChords: [
-      { interval: 0, quality: "maj7", bars: 1 }, // Imaj7
-      { interval: 5, quality: "maj7", bars: 1 }, // IVmaj7
-      { interval: 2, quality: "min7", bars: 1 }, // ii7
-      { interval: 7, quality: "7", bars: 1 }, // V7
-    ],
-  },
-
-  // Anime & J-Pop
-  {
-    name: "Royal Road / Oudo Cadence (王道進行)",
-    category: "Anime & J-Pop",
-    roman: "IVmaj7 – V7 – iiim7 – vim7",
-    description:
-      "The golden standard harmonic sequence of Asian pop and modern dynamic anime theme tracks.",
-    relativeChords: [
-      { interval: 5, quality: "maj7", bars: 1 }, // IVmaj7
-      { interval: 7, quality: "7", bars: 1 }, // V7
-      { interval: 4, quality: "min7", bars: 1 }, // iiim7
-      { interval: 9, quality: "min7", bars: 1 }, // vim7
-    ],
-  },
-  {
-    name: "City Pop / Marusa Groove (丸サ進行)",
-    category: "Anime & J-Pop",
-    roman: "IVmaj7 – III7 – vim7 – I7",
-    description:
-      "Infectious groove with secondary dominant transition standard in vintage City Pop and Funk.",
-    relativeChords: [
-      { interval: 5, quality: "maj7", bars: 1 }, // IVmaj7
-      { interval: 4, quality: "7", bars: 1 }, // III7 (secondary dominant)
-      { interval: 9, quality: "min7", bars: 1 }, // vim7
-      { interval: 0, quality: "7", bars: 1 }, // I7
-    ],
-  },
-  {
-    name: "Heroic Anthem / J-Rock Drive",
-    category: "Anime & J-Pop",
-    roman: "vi – IV – V – I",
-    description:
-      "High-energy, heroic minor-to-major resolution celebrating triumph and determination.",
-    relativeChords: [
-      { interval: 9, quality: "min", bars: 1 }, // vi
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-      { interval: 7, quality: "maj", bars: 1 }, // V
-      { interval: 0, quality: "maj", bars: 1 }, // I
-    ],
-  },
-
-  // Rock & Blues
-  {
-    name: "12-Bar Blues Standard",
-    category: "Rock & Blues",
-    roman: "I7 – IV7 – I7 – V7 – IV7 – I7",
-    description:
-      "The foundational public domain 12-bar blues form loaded with dominant 7th grit.",
-    relativeChords: [
-      { interval: 0, quality: "7", bars: 2 }, // I7
-      { interval: 5, quality: "7", bars: 1 }, // IV7
-      { interval: 0, quality: "7", bars: 1 }, // I7
-      { interval: 7, quality: "7", bars: 1 }, // V7
-      { interval: 5, quality: "7", bars: 1 }, // IV7
-      { interval: 0, quality: "7", bars: 2 }, // I7
-    ],
-  },
-  {
-    name: "Mixolydian Rock Anthem",
-    category: "Rock & Blues",
-    roman: "I – bVII – IV – I",
-    description:
-      "Modal rock swagger featuring the flattened seventh chord for a gritty, driving feel.",
-    relativeChords: [
-      { interval: 0, quality: "maj", bars: 1 }, // I
-      { interval: 10, quality: "maj", bars: 1 }, // bVII
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-      { interval: 0, quality: "maj", bars: 1 }, // I
-    ],
-  },
-  {
-    name: "Andalusian / Flamenco Descent",
-    category: "Rock & Blues",
-    roman: "i – bVII – bVI – V",
-    description:
-      "Dramatic descending Phrygian bassline cadence rooted in historic Spanish folk and acoustic rock.",
-    relativeChords: [
-      { interval: 0, quality: "min", bars: 1 }, // i
-      { interval: 10, quality: "maj", bars: 1 }, // bVII
-      { interval: 8, quality: "maj", bars: 1 }, // bVI
-      { interval: 7, quality: "7", bars: 1 }, // V7
-    ],
-  },
-
-  // Cinematic & Modal
-  {
-    name: "Epic Cinematic Ostinato",
-    category: "Cinematic & Modal",
-    roman: "i – bVI – III – bVII",
-    description:
-      "Monumental cinematic progression built for soaring blockbuster film scores and orchestral trailers.",
-    relativeChords: [
-      { interval: 0, quality: "min", bars: 1 }, // i
-      { interval: 8, quality: "maj", bars: 1 }, // bVI
-      { interval: 3, quality: "maj", bars: 1 }, // III
-      { interval: 10, quality: "maj", bars: 1 }, // bVII
-    ],
-  },
-  {
-    name: "Dorian Space Voyage",
-    category: "Cinematic & Modal",
-    roman: "i7 – IV7 – i7 – IV7",
-    description:
-      "Floating, futuristic vamp utilizing natural 6th modal harmonization for electronic soundscapes.",
-    relativeChords: [
-      { interval: 0, quality: "min7", bars: 1 }, // i7
-      { interval: 5, quality: "7", bars: 1 }, // IV7 (Major IV in Dorian)
-      { interval: 0, quality: "min7", bars: 1 }, // i7
-      { interval: 5, quality: "7", bars: 1 }, // IV7
-    ],
-  },
-  {
-    name: "Lydian Dreamscape",
-    category: "Cinematic & Modal",
-    roman: "Imaj7 – II – Imaj7 – II",
-    description:
-      "Magical raised-4th harmony evoking wonder, airborne flight, and majestic adventure.",
-    relativeChords: [
-      { interval: 0, quality: "maj7", bars: 1 }, // Imaj7
-      { interval: 2, quality: "maj", bars: 1 }, // II (Major 2 in Lydian)
-      { interval: 0, quality: "maj7", bars: 1 }, // Imaj7
-      { interval: 2, quality: "maj", bars: 1 }, // II
-    ],
-  },
-
-  // Classical & Baroque
-  {
-    name: "Baroque Canon Cadence",
-    category: "Classical & Baroque",
-    roman: "I – V – vi – iii – IV – I – IV – V",
-    description:
-      "The golden traditional baroque harmonic sequence celebrated across 300 years of music history.",
-    relativeChords: [
-      { interval: 0, quality: "maj", bars: 1 }, // I
-      { interval: 7, quality: "maj", bars: 1 }, // V
-      { interval: 9, quality: "min", bars: 1 }, // vi
-      { interval: 4, quality: "min", bars: 1 }, // iii
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-      { interval: 0, quality: "maj", bars: 1 }, // I
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-      { interval: 7, quality: "maj", bars: 1 }, // V
-    ],
-  },
-  {
-    name: "Passacaglia / Circle of Fifths Descent",
-    category: "Classical & Baroque",
-    roman: "i – iv – VII – III – VI – iio – V – i",
-    description:
-      "Hypnotic circular resolution driving classical drama, emotional tension, and resolve.",
-    relativeChords: [
-      { interval: 0, quality: "min", bars: 1 }, // i
-      { interval: 5, quality: "min", bars: 1 }, // iv
-      { interval: 10, quality: "maj", bars: 1 }, // VII
-      { interval: 3, quality: "maj", bars: 1 }, // III
-      { interval: 8, quality: "maj", bars: 1 }, // VI
-      { interval: 2, quality: "dim", bars: 1 }, // iio
-      { interval: 7, quality: "7", bars: 1 }, // V7
-      { interval: 0, quality: "min", bars: 1 }, // i
-    ],
-  },
-];
-
-type BarInvariantEvent = {
-  noteName: string;
-  velocity: number;
-  timeOffset: number;
-  hold: number;
-  lastBarOnly?: boolean;
-};
-
-// Precomputes one chord trigger's bar-invariant events from a rhythm pattern.
-export function buildChordEvents(
-  pattern: RhythmPattern,
-  notes: string[],
-  stepDur: number,
-  holdScale: number,
-): BarInvariantEvent[] {
-  return pattern.hits.flatMap((hit) => {
-    const offset = hit.step * stepDur;
-    const hold = Math.max(0.05, (hit.holdSteps ?? 1) * stepDur * holdScale);
-    const baseVelocity =
-      (hit.velocity ?? 0.8) * equalPowerVelocityScale(notes.length);
-    const hitNotes = hit.note !== undefined ? [notes[hit.note]] : notes;
-    const isStrum = hit.type === "strum";
-    const orderedNotes =
-      isStrum && hit.direction === "up" ? [...hitNotes].reverse() : hitNotes;
-    const spreadMs = hit.spreadMs ?? 30;
-
-    return orderedNotes.flatMap((n, i) => {
-      if (!n) return [];
-      const noteName = hit.octaveShift
-        ? shiftNoteOctave(n, hit.octaveShift)
-        : n;
-      const timeOffset = offset + (isStrum ? (i * spreadMs) / 1000 : 0);
-      const velocity = isStrum
-        ? Math.max(0.1, baseVelocity * (1 - i * 0.08))
-        : baseVelocity;
-      return [{ noteName, velocity, timeOffset, hold }];
-    });
-  });
-}
-
-// Held full-bar chord: strike every note together and release them together.
-export function playFullHoldChord(
-  notes: string[],
-  params: SynthParams,
-  startTime: number,
-  holdSec: number,
-): void {
-  for (const n of notes) {
-    audioEngine.triggerSynthNoteOn(
-      n,
-      params,
-      0.8 * equalPowerVelocityScale(notes.length),
-      startTime,
-      "chord",
-    );
-    audioEngine.triggerSynthNoteOff(
-      n,
-      params.release,
-      startTime + holdSec,
-      "chord",
-    );
-  }
-}
-
-// Schedules one precomputed, bar-invariant event set at the start of each bar
-export function scheduleBarInvariantEvents(
-  events: BarInvariantEvent[],
-  params: SynthParams,
-  source: string,
-  startTime: number,
-  barDur: number,
-  totalBars: number,
-): void {
-  const chordEnd = startTime + totalBars * barDur;
-  for (let bar = 0; bar < totalBars; bar++) {
-    const barStart = startTime + bar * barDur;
-    const isLastBar = bar === totalBars - 1;
-    for (const ev of events) {
-      if (!isLastBar && ev.lastBarOnly) continue;
-      audioEngine.triggerSynthNoteOn(
-        ev.noteName,
-        params,
-        ev.velocity,
-        barStart + ev.timeOffset,
-        source,
-      );
-      // Clamp the note-off to the chord end so a long feel hold never
-      // overlaps the next chord; earlier bars may still drag across the
-      // bar boundary within the same chord.
-      audioEngine.triggerSynthNoteOff(
-        ev.noteName,
-        params.release,
-        Math.min(barStart + ev.timeOffset + ev.hold, chordEnd),
-        source,
-      );
-    }
-  }
-}
-
-// --- Chord preview helpers (tested in ChordView.test.ts) ---
-
-/** Minimal engine surface the preview helpers depend on. */
-type PreviewEngine = Pick<
-  typeof audioEngine,
-  "triggerSynthNoteOn" | "triggerSynthNoteOff" | "stopSource"
->;
-
-// Held chord preview: strike every note of the chord now and let the synth
-// envelope sustain — no note-off is scheduled. The caller releases with
-// stopSource('chord') on mouse-up. Existing voices on the chord bus are silenced
-// first so successive chords never overlap or pile up into dissonant clusters.
-export function playChordLegato(
-  chord: ChordItem,
-  params: SynthParams,
-  engine: PreviewEngine,
-): void {
-  engine.stopSource("chord", 0.05);
-  for (const note of chord.notes) {
-    engine.triggerSynthNoteOn(
-      note,
-      params,
-      0.8 * equalPowerVelocityScale(chord.notes.length),
-      0,
-      "chord",
-    );
-  }
-}
-
-// Looping pattern preview: plays immediately, then re-schedules itself one
-// bar later until stop() is called. `getNow` returns audio-clock seconds;
-// setTimeout/clearTimeout are read off globalThis so tests can swap them.
-export function startPatternLoop(
-  play: (time: number) => void,
-  barSeconds: number,
-  getNow: () => number,
-): () => void {
-  let timerId: ReturnType<typeof setTimeout> | undefined;
-
-  const tick = () => {
-    play(getNow());
-    timerId = globalThis.setTimeout(tick, barSeconds * 1000);
-  };
-  tick();
-
-  return () => {
-    if (timerId !== undefined) globalThis.clearTimeout(timerId);
-    timerId = undefined;
-  };
-}
-
-// The sound source for pattern previews: the I triad of the active scale,
-// independent of the 7th-chords quick-add toggle.
-export function previewChordForScale(
-  scaleRoot: string,
-  scaleType: string,
-  octave = 4,
-): ChordItem {
-  const tonic = getDiatonicChordForDegree(0, scaleRoot, scaleType, false);
-  return deriveChordNotes(
-    {
-      id: "preview",
-      root: tonic.root,
-      quality: tonic.quality,
-      bars: 1,
-      notes: [],
-    },
-    octave,
-  );
-}
-
-/** Duration of one 16-step bar at the given bpm, in seconds. */
-export function previewBarSeconds(bpm: number): number {
-  return (sixteenthNoteMs(bpm) / 1000) * STEPS_PER_BAR;
-}
 
 export const ChordView: React.FC = React.memo(() => {
   // ChordView reads the store directly (Task 5): every value below replaces
@@ -624,152 +105,17 @@ export const ChordView: React.FC = React.memo(() => {
   const bassMuted = useAppStore((s) => s.bassMuted);
   const toggleBassMuted = useAppStore((s) => s.toggleBassMuted);
   const bpm = useAppStore((s) => s.bpm);
-  const isPlaying = useAppStore((s) => s.isChordsPlaying);
   const chordVolume = useAppStore((s) => s.chordVolume);
   const setChordVolume = useAppStore((s) => s.setChordVolume);
   const bassVolume = useAppStore((s) => s.bassVolume);
   const setBassVolume = useAppStore((s) => s.setBassVolume);
-  const [activeChordId, setActiveChordId] = useState<string | null>(null);
-  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  const { playChordWithRhythm, playBassWithPattern, playingIndex, activeChordId, setActiveChordId } = useChordPlayback();
   // Chord sound presets: factory presets plus presets saved from the synth view
-  const customPresets = getCustomPresets();
+  const customPresets = useAppStore((s) => s.customSynthPresets);
 
   const rhythmPattern = useMemo(
     () => RHYTHM_PATTERNS.find((p) => p.id === rhythmId) ?? RHYTHM_PATTERNS[0],
     [rhythmId],
-  );
-
-  // Schedule a whole chord across its bars using the selected rhythm pattern:
-  // For sustained/legato full-bar chords, hold seamlessly across all bars without per-bar re-strikes.
-  // For rhythmic grooves, schedule bar-invariant hits across each bar.
-  const playChordWithRhythm = useCallback(
-    (chord: ChordItem, startTime: number, pattern: RhythmPattern) => {
-      audioEngine.init();
-
-      const notes = generateBlockChordNotes(
-        chord.quality,
-        chord.root,
-        chordOctave,
-      );
-      const stepDur = sixteenthNoteMs(bpm) / 1000;
-      const totalBars = chord.bars || 1;
-      const barDur = stepDur * STEPS_PER_BAR;
-      const holdScale = feelToHoldScale(chordFeel);
-
-      const isFullHoldPattern =
-        pattern.id === "sustained" ||
-        (pattern.hits.length === 1 &&
-          pattern.hits[0].step === 0 &&
-          (pattern.hits[0].holdSteps ?? 1) >= 16);
-
-      if (isFullHoldPattern) {
-        // Sustained/Legato full-bar chords: hold continuously across all totalBars without per-bar re-strikes
-        const fullChordHold = fullHoldDuration(totalBars, barDur, holdScale);
-        playFullHoldChord(notes, chordSynthParams, startTime, fullChordHold);
-        return;
-      }
-
-      // Precompute the pattern's events once per chord trigger (bar-invariant)
-      const events = buildChordEvents(pattern, notes, stepDur, holdScale);
-
-      scheduleBarInvariantEvents(
-        events,
-        chordSynthParams,
-        "chord",
-        startTime,
-        barDur,
-        totalBars,
-      );
-    },
-    [bpm, chordSynthParams, chordOctave, chordFeel],
-  );
-
-  const playBassWithPattern = useCallback(
-    (
-      chord: ChordItem,
-      startTime: number,
-      pattern: BassPattern,
-      chordContext?: ChordItem[],
-    ) => {
-      audioEngine.init();
-      const context = chordContext ?? chords;
-      const chordIdx = Math.max(0, context.indexOf(chord));
-      const stepDur = sixteenthNoteMs(bpm) / 1000;
-      const barDur = stepDur * STEPS_PER_BAR;
-      const totalBars = chord.bars || 1;
-
-      const isFullHoldPattern =
-        pattern.id === "whole-note-root" ||
-        (pattern.steps.length === 1 &&
-          pattern.steps[0].step === 0 &&
-          (pattern.steps[0].holdSteps ?? 1) >= 16);
-
-      if (isFullHoldPattern) {
-        // Sustained whole-note bass root: hold continuously across all totalBars
-        const fullBassHold = fullHoldDuration(
-          totalBars,
-          barDur,
-          feelToHoldScale(bassFeel),
-        );
-        const resolved = resolveBassSteps(
-          pattern,
-          context,
-          chordIdx,
-          bassOctave,
-          scaleRoot,
-          scaleType,
-          bpm,
-          1,
-        );
-        const rootEvent = resolved[0];
-        if (rootEvent) {
-          audioEngine.triggerSynthNoteOn(
-            rootEvent.noteName,
-            bassSynthParams,
-            rootEvent.velocity,
-            startTime,
-            "bass",
-          );
-          audioEngine.triggerSynthNoteOff(
-            rootEvent.noteName,
-            bassSynthParams.release,
-            startTime + fullBassHold,
-            "bass",
-          );
-        }
-        return;
-      }
-
-      // Events are bar-invariant (the clock advances by barDur per bar); schedule
-      // the resolved set at each bar's start. Approach tokens lead into the NEXT
-      // chord, so they only play on the last bar.
-      const events = resolveBassSteps(
-        pattern,
-        context,
-        chordIdx,
-        bassOctave,
-        scaleRoot,
-        scaleType,
-        bpm,
-        feelToHoldScale(bassFeel),
-      ).map((ev) => ({
-        noteName: ev.noteName,
-        velocity: ev.velocity,
-        timeOffset: ev.timeOffsetSec,
-        hold: ev.holdSec,
-        lastBarOnly: isApproachToken(ev.token),
-      }));
-
-      scheduleBarInvariantEvents(
-        events,
-        bassSynthParams,
-        "bass",
-        startTime,
-        barDur,
-        totalBars,
-      );
-    },
-    [chords, bassOctave, scaleRoot, scaleType, bpm, bassSynthParams, bassFeel],
   );
 
   // Master Playback Loop — driven by the shared audio-clock scheduler
@@ -783,7 +129,6 @@ export const ChordView: React.FC = React.memo(() => {
   const [autoReharmonize, setAutoReharmonize] = useState<boolean>(true);
   const [isAutoReharmonizedIndicator, setIsAutoReharmonizedIndicator] =
     useState<boolean>(false);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [use7thsInQuickAdd, setUse7thsInQuickAdd] = useState<boolean>(false);
 
   const sensors = useSensors(
@@ -829,45 +174,6 @@ export const ChordView: React.FC = React.memo(() => {
   const handleBassVolumeChange = (vol: number) => {
     setBassVolume(vol);
   };
-  const armedRef = useRef(false);
-  const chordIndexRef = useRef(0);
-  const nextBarStepRef = useRef(0);
-
-  // Latest callbacks via ref so param slides (which re-create these callbacks
-  // every tick) never resubscribe the clock. Resubscribing on every slider
-  // event stops/restarts the shared clock interval faster than it can fire —
-  // the scheduler stalls and the next chord arrives late.
-  const playFnsRef = useRef({ playChordWithRhythm, playBassWithPattern });
-  useEffect(() => {
-    playFnsRef.current = { playChordWithRhythm, playBassWithPattern };
-  });
-
-  useEffect(() => {
-    if (!isPlaying || chords.length === 0) {
-      armedRef.current = false;
-      setPlayingIndex(null);
-      setActiveChordId(null);
-      return;
-    }
-
-    return audioEngine.subscribeClock((step, _beat, time) => {
-      // Start aligned to the next bar boundary so chord changes land on beat 1
-      if (!armedRef.current) {
-        if (step % STEPS_PER_BAR !== 0) return;
-        armedRef.current = true;
-        chordIndexRef.current = 0;
-        nextBarStepRef.current = step;
-      }
-      if (step < nextBarStepRef.current) return;
-      const chord = chords[chordIndexRef.current % chords.length];
-      playFnsRef.current.playChordWithRhythm(chord, time, rhythmPattern);
-      playFnsRef.current.playBassWithPattern(chord, time, bassPattern);
-      setPlayingIndex(chordIndexRef.current % chords.length);
-      setActiveChordId(chord.id);
-      nextBarStepRef.current = step + (chord.bars || 1) * STEPS_PER_BAR;
-      chordIndexRef.current++;
-    });
-  }, [isPlaying, chords, rhythmPattern, bassPattern]);
 
   // Auto-reharmonize current chords when scale/root changes if autoReharmonize is enabled
   useEffect(() => {
@@ -882,44 +188,6 @@ export const ChordView: React.FC = React.memo(() => {
       setIsAutoReharmonizedIndicator(true);
     }
   }, [scaleRoot, scaleType]);
-
-  // Calculate notes in selected scale
-  const rootIdx = rootSemitone(scaleRoot);
-  const intervals = SCALES[scaleType]?.intervals || [0, 2, 4, 5, 7, 9, 11];
-  const scaleNotes = intervals.map((int) => ROOTS[(rootIdx + int) % 12]);
-
-  // Transpose the template's relative intervals cleanly to the current selected Key Root and optionally auto-reharmonize
-  const applyProgressionTemplate = (template: ProgressionTemplate) => {
-    const baseRootIndex = rootSemitone(scaleRoot);
-
-    let newChords: ChordItem[] = template.relativeChords.map((c, i) => {
-      const transposedRoot = ROOTS[(baseRootIndex + c.interval) % 12];
-      return deriveChordNotes(
-        {
-          id: `chord-${Date.now()}-${i}`,
-          root: transposedRoot,
-          quality: c.quality,
-          bars: c.bars,
-          notes: [],
-        },
-        chordOctave,
-      );
-    });
-
-    if (autoReharmonize) {
-      newChords = reharmonizeProgressionToScale(
-        newChords,
-        scaleRoot,
-        scaleType,
-        chordOctave,
-      );
-      setIsAutoReharmonizedIndicator(true);
-    } else {
-      setIsAutoReharmonizedIndicator(false);
-    }
-
-    setChords(newChords);
-  };
 
   const handleApplyLibraryChords = (libraryChords: ChordItem[]) => {
     let finalChords = libraryChords.map((c, i) =>
@@ -948,7 +216,7 @@ export const ChordView: React.FC = React.memo(() => {
     e.preventDefault();
     if (!quickSaveName.trim() || chords.length === 0) return;
 
-    const saved = saveCustomChordProgression(
+    const saved = useAppStore.getState().saveCustomChordProgression(
       quickSaveName.trim(),
       chords,
       "User",
@@ -956,7 +224,7 @@ export const ChordView: React.FC = React.memo(() => {
       chords.map((c) => formatChordLabel(c.root, c.quality)).join(" → "),
     );
 
-    setCustomProgressions(getCustomChordProgressions());
+    setCustomProgressions(useAppStore.getState().customChordProgressions);
     setIsQuickSaving(false);
     setQuickSaveName("");
     setSaveToast(`Saved progression "${saved.name}"!`);
@@ -1034,7 +302,7 @@ export const ChordView: React.FC = React.memo(() => {
   ) => {
     e.stopPropagation();
     e.preventDefault();
-    audioEngine.init();
+    ensurePreviewEngine();
     const tempChord: ChordItem = {
       id: "preview",
       root,
@@ -1042,23 +310,18 @@ export const ChordView: React.FC = React.memo(() => {
       bars: 1,
       notes: [],
     };
-    playChordLegato(
+    playChordLegatoWithEngine(
       deriveChordNotes(tempChord, chordOctave),
       chordSynthParams,
-      audioEngine,
     );
   };
 
-  const handlePreviewMouseUp = (
-    e: React.MouseEvent | React.TouchEvent,
-    _root: string,
-    _quality: string,
-  ) => {
+  const handlePreviewMouseUp = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    if (!audioEngine.getAudioContext()) return;
+    if (!hasPreviewEngine()) return;
 
-    audioEngine.stopSource("chord", 0.15);
+    stopChordPreviewSource(0.15);
   };
 
   const handleCardPreviewMouseDown = (
@@ -1066,20 +329,17 @@ export const ChordView: React.FC = React.memo(() => {
     chord: ChordItem,
   ) => {
     e.stopPropagation();
-    audioEngine.init();
-    playChordLegato(chord, chordSynthParams, audioEngine);
+    ensurePreviewEngine();
+    playChordLegatoWithEngine(chord, chordSynthParams);
     setActiveChordId(chord.id);
   };
 
-  const handleCardPreviewMouseUp = (
-    e: React.MouseEvent | React.TouchEvent,
-    chord: ChordItem,
-  ) => {
+  const handleCardPreviewMouseUp = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
-    if (!audioEngine.getAudioContext()) return;
+    if (!hasPreviewEngine()) return;
     setActiveChordId(null);
 
-    audioEngine.stopSource("chord", 0.15);
+    stopChordPreviewSource(0.15);
   };
 
   // Pattern previews are per-module: the chord button loops the chord pattern
@@ -1090,7 +350,7 @@ export const ChordView: React.FC = React.memo(() => {
   ) => {
     e.stopPropagation();
     e.preventDefault();
-    audioEngine.init();
+    ensurePreviewEngine();
 
     const previewChord = previewChordForScale(
       scaleRoot,
@@ -1103,7 +363,7 @@ export const ChordView: React.FC = React.memo(() => {
     chordPatternPreviewStopRef.current = startPatternLoop(
       (time) => playChordWithRhythm(previewChord, time, rhythmPattern),
       barSeconds,
-      () => audioEngine.getAudioContext()?.currentTime ?? 0,
+      previewEngineTime,
     );
   };
 
@@ -1112,11 +372,11 @@ export const ChordView: React.FC = React.memo(() => {
   ) => {
     e.stopPropagation();
     e.preventDefault();
-    if (!audioEngine.getAudioContext()) return;
+    if (!hasPreviewEngine()) return;
 
     chordPatternPreviewStopRef.current?.();
     chordPatternPreviewStopRef.current = null;
-    audioEngine.stopSource("chord", 0.15);
+    stopChordPreviewSource(0.15);
   };
 
   const handleBassPatternPreviewMouseDown = (
@@ -1124,7 +384,7 @@ export const ChordView: React.FC = React.memo(() => {
   ) => {
     e.stopPropagation();
     e.preventDefault();
-    audioEngine.init();
+    ensurePreviewEngine();
 
     const previewChord = previewChordForScale(
       scaleRoot,
@@ -1138,7 +398,7 @@ export const ChordView: React.FC = React.memo(() => {
       (time) =>
         playBassWithPattern(previewChord, time, bassPattern, [previewChord]),
       barSeconds,
-      () => audioEngine.getAudioContext()?.currentTime ?? 0,
+      previewEngineTime,
     );
   };
 
@@ -1147,11 +407,11 @@ export const ChordView: React.FC = React.memo(() => {
   ) => {
     e.stopPropagation();
     e.preventDefault();
-    if (!audioEngine.getAudioContext()) return;
+    if (!hasPreviewEngine()) return;
 
     bassPatternPreviewStopRef.current?.();
     bassPatternPreviewStopRef.current = null;
-    audioEngine.stopSource("bass", 0.15);
+    stopBassPreviewSource(0.15);
   };
 
   const removeChord = (id: string) => {
@@ -1261,45 +521,16 @@ export const ChordView: React.FC = React.memo(() => {
       </div>
 
       {/* Quick Save Modal Popover */}
-      {isQuickSaving && (
-        <div className="bg-[#171B38] border border-indigo-500/40 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xl animate-in fade-in">
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
-            <Bookmark className="w-4 h-4 text-indigo-400" />
-            <span>Save Custom Chord Progression to Browser:</span>
-          </div>
-          <form
-            onSubmit={handleQuickSaveSubmit}
-            className="flex items-center gap-2 flex-1 max-w-md"
-          >
-            <input
-              type="text"
-              required
-              autoFocus
-              placeholder="Progression Name..."
-              value={quickSaveName}
-              onChange={(e) => setQuickSaveName(e.target.value)}
-              className="flex-1 bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-            />
-            <button
-              type="submit"
-              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-xs transition-colors shrink-0"
-            >
-              Save Progression
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsQuickSaving(false)}
-              className="bg-[#0B0D19] hover:bg-[#1A1F3A] text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-[#252B48] transition-colors shrink-0"
-            >
-              Cancel
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* Visual Scale Degrees Strip (DELETED) */}
-
-      {/* Quick Access Top Progression Presets Strip (DELETED) */}
+      <QuickSavePopover
+        open={isQuickSaving}
+        onClose={() => setIsQuickSaving(false)}
+        heading="Save Custom Chord Progression to Browser:"
+        placeholder="Progression Name..."
+        saveLabel="Save Progression"
+        name={quickSaveName}
+        onNameChange={setQuickSaveName}
+        onSubmit={handleQuickSaveSubmit}
+      />
 
       {/* Active Progression Blocks & Playable Chord Pads */}
       <div className="bg-[#12152A] border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 to-transparent rounded-xl p-4 shadow-xl space-y-3">
@@ -1441,14 +672,13 @@ export const ChordView: React.FC = React.memo(() => {
               <span className="text-[9px] text-slate-500 font-mono shrink-0">
                 tight
               </span>
-              <input
+              <Slider
                 id="slider-chord-feel"
-                type="range"
                 min={0}
                 max={1}
                 step={0.01}
                 value={chordFeel}
-                onChange={(e) => setChordFeel(parseFloat(e.target.value))}
+                onChange={setChordFeel}
                 className="w-20 h-1 bg-[#0B0D19] rounded cursor-pointer accent-indigo-500"
                 title="Chord note length: tight (short holds) ↔ loose (long holds)"
               />
@@ -1459,30 +689,13 @@ export const ChordView: React.FC = React.memo(() => {
           </div>
 
           {/* Chord Layer Volume Slider */}
-          <div className="min-w-[160px]">
-            <label className={LABEL_BASE}>
-              Chord Level ({Math.round(chordVolume * 100)}%)
-            </label>
-            <div className="flex items-center gap-2 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
-              <Volume2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <input
-                id="slider-chord-layer-volume"
-                type="range"
-                min={0}
-                max={1.5}
-                step={0.05}
-                value={chordVolume}
-                onChange={(e) =>
-                  handleChordVolumeChange(parseFloat(e.target.value))
-                }
-                className="w-full h-1 bg-[#0B0D19] rounded cursor-pointer accent-indigo-500"
-                title={`Chord Layer Gain: ${(chordVolume * 100).toFixed(0)}%`}
-              />
-              <span className="text-[10px] text-indigo-300 font-mono min-w-8 text-right">
-                {(chordVolume * 100).toFixed(0)}%
-              </span>
-            </div>
-          </div>
+          <ChannelStrip
+            idPrefix="chord"
+            label="Chord Level"
+            volume={chordVolume}
+            accentClass="text-indigo-400"
+            onVolumeChange={handleChordVolumeChange}
+          />
           {/* Option B Re-harmonize Button */}
           <button
             id="btn-reharmonize-chord-progression"
@@ -1595,16 +808,16 @@ export const ChordView: React.FC = React.memo(() => {
                       handlePreviewMouseDown(e, diatonic.root, diatonic.quality)
                     }
                     onMouseUp={(e) =>
-                      handlePreviewMouseUp(e, diatonic.root, diatonic.quality)
+                      handlePreviewMouseUp(e)
                     }
                     onMouseLeave={(e) =>
-                      handlePreviewMouseUp(e, diatonic.root, diatonic.quality)
+                      handlePreviewMouseUp(e)
                     }
                     onTouchStart={(e) =>
                       handlePreviewMouseDown(e, diatonic.root, diatonic.quality)
                     }
                     onTouchEnd={(e) =>
-                      handlePreviewMouseUp(e, diatonic.root, diatonic.quality)
+                      handlePreviewMouseUp(e)
                     }
                     onClick={(e) => e.stopPropagation()}
                     className="p-1 text-slate-400 hover:text-indigo-300 transition-colors ml-0.5 rounded hover:bg-[#252B48] cursor-pointer select-none"
@@ -1650,16 +863,16 @@ export const ChordView: React.FC = React.memo(() => {
                       handlePreviewMouseDown(e, borrowed.root, borrowed.quality)
                     }
                     onMouseUp={(e) =>
-                      handlePreviewMouseUp(e, borrowed.root, borrowed.quality)
+                      handlePreviewMouseUp(e)
                     }
                     onMouseLeave={(e) =>
-                      handlePreviewMouseUp(e, borrowed.root, borrowed.quality)
+                      handlePreviewMouseUp(e)
                     }
                     onTouchStart={(e) =>
                       handlePreviewMouseDown(e, borrowed.root, borrowed.quality)
                     }
                     onTouchEnd={(e) =>
-                      handlePreviewMouseUp(e, borrowed.root, borrowed.quality)
+                      handlePreviewMouseUp(e)
                     }
                     onClick={(e) => e.stopPropagation()}
                     className="p-1 text-slate-400 hover:text-purple-300 transition-colors ml-0.5 rounded hover:bg-[#252B48] cursor-pointer select-none"
@@ -1697,14 +910,9 @@ export const ChordView: React.FC = React.memo(() => {
                     totalChords={chords.length}
                     startBar={startBar}
                     isActive={isActive}
-                    rhythmPattern={rhythmPattern}
-                    bassPattern={bassPattern}
-                    bpm={bpm}
                     updateChord={updateChord}
                     removeChord={removeChord}
                     handleMoveChord={handleMoveChord}
-                    setActiveChordId={setActiveChordId}
-                    chordOctave={chordOctave}
                     handleCardPreviewMouseDown={handleCardPreviewMouseDown}
                     handleCardPreviewMouseUp={handleCardPreviewMouseUp}
                   />
@@ -1832,14 +1040,13 @@ export const ChordView: React.FC = React.memo(() => {
               <span className="text-[9px] text-slate-500 font-mono shrink-0">
                 tight
               </span>
-              <input
+              <Slider
                 id="slider-bass-feel"
-                type="range"
                 min={0}
                 max={1}
                 step={0.01}
                 value={bassFeel}
-                onChange={(e) => setBassFeel(parseFloat(e.target.value))}
+                onChange={setBassFeel}
                 className="w-20 h-1 bg-[#0B0D19] rounded cursor-pointer accent-emerald-500"
                 title="Bass note length: tight (short holds) ↔ loose (long holds)"
               />
@@ -1849,27 +1056,15 @@ export const ChordView: React.FC = React.memo(() => {
             </div>
           </div>
 
-          <div className="min-w-[160px]">
-            <label className={LABEL_BASE}>
-              Bass Level ({Math.round(bassVolume * 100)}%)
-            </label>
-            <div className="flex items-center gap-2 bg-[#171B36] border border-[#2D355A] rounded-lg px-2.5 py-1 text-xs h-[30px]">
-              <Volume2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <input
-                id="slider-bass-layer-volume"
-                type="range"
-                min={0}
-                max={1.5}
-                step={0.05}
-                value={bassVolume}
-                onChange={(e) =>
-                  handleBassVolumeChange(parseFloat(e.target.value))
-                }
-                className="w-full h-1 bg-[#0B0D19] rounded cursor-pointer accent-emerald-500"
-                title={`Bass Layer Gain: ${(bassVolume * 100).toFixed(0)}%`}
-              />
-            </div>
-          </div>
+          <ChannelStrip
+            idPrefix="bass"
+            label="Bass Level"
+            volume={bassVolume}
+            accentClass="text-emerald-400"
+            onVolumeChange={handleBassVolumeChange}
+            showReadout={false}
+            sliderClassName="w-full h-1 bg-[#0B0D19] rounded cursor-pointer accent-emerald-500"
+          />
         </div>
       </div>
 
@@ -1887,220 +1082,3 @@ export const ChordView: React.FC = React.memo(() => {
     </div>
   );
 });
-
-interface SortableChordCardProps {
-  chord: ChordItem;
-  idx: number;
-  totalChords: number;
-  startBar: number;
-  isActive: boolean;
-  rhythmPattern: RhythmPattern;
-  bassPattern: BassPattern;
-  bpm: number;
-  updateChord: (id: string, updates: Partial<ChordItem>) => void;
-  removeChord: (id: string) => void;
-  handleMoveChord: (index: number, direction: -1 | 1) => void;
-  setActiveChordId: (id: string | null) => void;
-  chordOctave: number;
-  handleCardPreviewMouseDown: (
-    e: React.MouseEvent | React.TouchEvent,
-    chord: ChordItem,
-  ) => void;
-  handleCardPreviewMouseUp: (
-    e: React.MouseEvent | React.TouchEvent,
-    chord: ChordItem,
-  ) => void;
-}
-
-function SortableChordCard({
-  chord,
-  idx,
-  totalChords,
-  startBar,
-  isActive,
-  rhythmPattern,
-  bassPattern,
-  bpm,
-  updateChord,
-  removeChord,
-  handleMoveChord,
-  setActiveChordId,
-  chordOctave,
-  handleCardPreviewMouseDown,
-  handleCardPreviewMouseUp,
-}: SortableChordCardProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: chord.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : 1,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`bg-[#0B0D19] border rounded-xl p-4 flex flex-col justify-between space-y-3 transition-colors ${
-        isActive
-          ? "border-indigo-400 ring-2 ring-indigo-500/50 bg-[#161B36]"
-          : "border-[#252B48] hover:border-[#3B4371]"
-      } ${isDragging ? "shadow-2xl ring-2 ring-indigo-500 bg-[#161B36]/95 scale-102" : ""}`}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            {...attributes}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 p-0.5 focus:outline-none"
-            title="Drag to reorder"
-          >
-            <GripVertical className="w-3.5 h-3.5" />
-          </button>
-          <span className="text-[10px] font-mono font-bold text-slate-400 bg-[#1C213E] px-2 py-0.5 rounded">
-            Bar {startBar}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            disabled={idx === 0}
-            onClick={() => handleMoveChord(idx, -1)}
-            className="p-1 text-slate-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
-            title="Move Left"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            disabled={idx === totalChords - 1}
-            onClick={() => handleMoveChord(idx, 1)}
-            className="p-1 text-slate-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
-            title="Move Right"
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-          <button
-            id={`btn-remove-chord-${chord.id}`}
-            onClick={() => removeChord(chord.id)}
-            className="text-slate-500 hover:text-rose-400 transition-colors p-1 cursor-pointer ml-1"
-            title="Delete Chord"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Big Interactive Chord Trigger Pad */}
-      <button
-        id={`btn-play-chord-${chord.id}`}
-        onMouseDown={(e) => handleCardPreviewMouseDown(e, chord)}
-        onMouseUp={(e) => handleCardPreviewMouseUp(e, chord)}
-        onMouseLeave={(e) => handleCardPreviewMouseUp(e, chord)}
-        onTouchStart={(e) => handleCardPreviewMouseDown(e, chord)}
-        onTouchEnd={(e) => handleCardPreviewMouseUp(e, chord)}
-        className={`w-full py-4 rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
-          isActive
-            ? "bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-lg scale-98"
-            : "bg-[#181C35] hover:bg-[#22274A] text-slate-100"
-        }`}
-        title="Hold to Preview Chord"
-      >
-        <span className="text-2xl font-black tracking-tight flex items-baseline gap-1">
-          {chord.root}
-          <span className="text-sm font-semibold text-indigo-400">
-            {formatChordQuality(chord.quality)}
-          </span>
-        </span>
-        <span className="text-[10px] text-slate-400 font-mono mt-1">
-          {chord.notes.join(" • ")}
-        </span>
-      </button>
-
-      {/* Edit Controls */}
-      <div className="flex gap-2 pt-1 border-t border-[#252B48]/60">
-        <div className="shrink min-w-0">
-          <label className="text-[10px] text-slate-500 block mb-0.5">
-            Root
-          </label>
-          <select
-            id={`select-chord-root-${chord.id}`}
-            value={chord.root}
-            onChange={(e) => updateChord(chord.id, { root: e.target.value })}
-            className="w-full bg-[#12152A] border border-[#2D355A] text-slate-200 text-xs rounded p-1"
-          >
-            {ROOTS.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <label className="text-[10px] text-slate-500 block mb-0.5">
-            Quality
-          </label>
-          <select
-            id={`select-chord-quality-${chord.id}`}
-            value={chord.quality}
-            onChange={(e) => updateChord(chord.id, { quality: e.target.value })}
-            className="w-full bg-[#12152A] border border-[#2D355A] text-slate-200 text-xs rounded p-1"
-          >
-            <optgroup label="Triads">
-              <option value="maj">Major (maj)</option>
-              <option value="min">Minor (min)</option>
-              <option value="dim">Diminished (dim)</option>
-              <option value="aug">Augmented (aug)</option>
-              <option value="sus2">Sus 2</option>
-              <option value="sus4">Sus 4</option>
-            </optgroup>
-            <optgroup label="7th Chords">
-              <option value="maj7">Major 7th (maj7)</option>
-              <option value="min7">Minor 7th (min7)</option>
-              <option value="7">Dominant 7th (7)</option>
-              <option value="m7b5">Half-Dim (m7b5)</option>
-              <option value="dim7">Diminished 7th (dim7)</option>
-              <option value="7sus4">7 Sus 4</option>
-            </optgroup>
-            <optgroup label="Extensions & Additions">
-              <option value="9">Dominant 9th (9)</option>
-              <option value="maj9">Major 9th (maj9)</option>
-              <option value="min9">Minor 9th (min9)</option>
-              <option value="add9">Add 9</option>
-              <option value="6">Major 6th (6)</option>
-              <option value="min6">Minor 6th (min6)</option>
-            </optgroup>
-          </select>
-        </div>
-
-        <div className="shrink min-w-0">
-          <label className="text-[10px] text-slate-500 block mb-0.5">
-            Duration (Bars)
-          </label>
-          <select
-            id={`select-chord-bars-${chord.id}`}
-            value={chord.bars || 1}
-            onChange={(e) =>
-              updateChord(chord.id, { bars: parseInt(e.target.value, 10) })
-            }
-            className="w-full bg-[#12152A] border border-[#2D355A] text-slate-200 text-xs rounded p-1"
-          >
-            <option value={1}>1 Bar</option>
-            <option value={2}>2 Bars</option>
-            <option value={4}>4 Bars</option>
-          </select>
-        </div>
-      </div>
-    </div>
-  );
-}

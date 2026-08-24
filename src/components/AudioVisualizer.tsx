@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { audioEngine } from '../audio/engine';
-import { Activity, BarChart2, Waves, Sparkles } from 'lucide-react';
+import { Activity, BarChart2, Waves } from 'lucide-react';
 
 export type VisualizerMode = 'wave' | 'bars' | 'oscilloscope' | 'ambient-bg';
 
@@ -214,7 +214,11 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
 
           c.fillStyle = grad;
           c.beginPath();
-          c.roundRect ? c.roundRect(x, y, barWidth, barHeight, [2, 2, 0, 0]) : c.rect(x, y, barWidth, barHeight);
+          if (c.roundRect) {
+            c.roundRect(x, y, barWidth, barHeight, [2, 2, 0, 0]);
+          } else {
+            c.rect(x, y, barWidth, barHeight);
+          }
           c.fill();
         }
 

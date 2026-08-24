@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { ChromaticKeyboard, getBlackKeyLeftPx, SynthView } from './SynthView';
+import { ChromaticKeyboard, getBlackKeyLeftPx } from './ui/Keyboard';
+import { SynthView } from './SynthView';
 
 // White key: w-16 (64px) + mx-0.5 (4px total) = 68px stride.
 // Black key: w-9 = 36px wide, centered on the boundary between white keys.

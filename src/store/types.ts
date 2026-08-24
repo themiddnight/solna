@@ -23,7 +23,6 @@ export interface TransportSlice {
   toggleSequencerPlay: () => void;
   toggleChordsPlay: () => void;
   toggleMasterPlay: () => void;
-  resetClockIfStopped: () => void;
 }
 
 export interface MusicContextSlice {
@@ -41,7 +40,6 @@ export interface SynthSlice {
   chordSynthParams: SynthParams;
   bassSynthParams: SynthParams;
   controlTarget: SynthControlTarget;
-  applySynthPreset: (preset: Partial<SynthParams>) => void;
   setSynthParams: (params: SynthParams) => void;
   setChordSynthParams: (params: SynthParams) => void;
   setBassSynthParams: (params: SynthParams) => void;
@@ -115,7 +113,6 @@ export interface PresetsSlice {
     category?: SynthPresetCategory,
     description?: string
   ) => SynthPresetItem;
-  updateCustomPreset: (id: string, updates: Partial<SynthPresetItem>) => SynthPresetItem[];
   deleteCustomPreset: (id: string) => SynthPresetItem[];
   saveCustomChordProgression: (
     name: string,

@@ -12,40 +12,44 @@ import {
   Volume2,
   Sparkles,
   Bookmark,
-  Plus,
   Library,
-  FolderOpen,
   Check,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { audioEngine } from "../audio/engine";
 import { equalPowerVelocityScale } from "../audio/rhythmPatterns";
-import { buildArpSequence } from "../audio/arpeggiator";
+import { useArpPlayback } from "../audio/playback/arpPlayback";
+import {
+  applySynthPlaybackVelocityScale,
+  hasSynthPlaybackContext,
+  initSynthPlayback,
+  releaseSynthPlaybackVoices,
+  synthPlaybackNoteOff,
+  synthPlaybackNoteOn,
+} from "../audio/playback/synthPlayback";
 import { useAppStore } from "../store/store";
 import {
-  ALL_FACTORY_PRESETS,
   SynthPresetItem,
   SynthPresetCategory,
   SYNTH_CATEGORIES,
   findPresetByName,
   getAllSynthPresets,
-  getCustomPresets,
-  saveCustomPreset,
   getPresetsGroupedByCategory,
   getCategoryMeta,
 } from "../audio/synthPresets";
 import { SynthPresetLibrary } from "./SynthPresetLibrary";
 import { SimpleSynthPanel } from "./SimpleSynthPanel";
 import { Knob } from "./ui/Knob";
-import { isNoteInScale, sixteenthNoteMs } from "../utils/musicTheory";
+import { QuickSavePopover } from "./ui/QuickSavePopover";
 import {
   clampKeyboardOctave,
   getScaleLockedKeyboardNotes,
   getScaleLockedKeyboardNotesFlat,
-  type ScaleKeyboardNote,
-} from "../utils/keyboard";
-import { isTypingTarget, shortcutLabel } from "../utils/keyboard";
+  getChromaticKeyboardNotes,
+  ScaleLockedKeyboard,
+  ChromaticKeyboard,
+} from "./ui/Keyboard";
+import { isTypingTarget } from "../utils/keyboard";
 import { resolveSynthControlChannel } from "../utils/synthControl";
 import type { SynthControlTarget } from "../utils/synthControl";
 
@@ -64,27 +68,6 @@ const TARGET_STYLES: Record<
     activeBtn: "bg-emerald-600 text-white shadow-xs",
   },
 };
-
-export const KEYBOARD_NOTES = [
-  { note: "C3", label: "C3", key: "KeyA", isBlack: false },
-  { note: "C#3", label: "C#", key: "KeyW", isBlack: true },
-  { note: "D3", label: "D3", key: "KeyS", isBlack: false },
-  { note: "D#3", label: "D#", key: "KeyE", isBlack: true },
-  { note: "E3", label: "E3", key: "KeyD", isBlack: false },
-  { note: "F3", label: "F3", key: "KeyF", isBlack: false },
-  { note: "F#3", label: "F#", key: "KeyT", isBlack: true },
-  { note: "G3", label: "G3", key: "KeyG", isBlack: false },
-  { note: "G#3", label: "G#", key: "KeyY", isBlack: true },
-  { note: "A3", label: "A3", key: "KeyH", isBlack: false },
-  { note: "A#3", label: "A#", key: "KeyU", isBlack: true },
-  { note: "B3", label: "B3", key: "KeyJ", isBlack: false },
-  { note: "C4", label: "C4", key: "KeyK", isBlack: false },
-  { note: "C#4", label: "C#", key: "KeyO", isBlack: true },
-  { note: "D4", label: "D4", key: "KeyL", isBlack: false },
-  { note: "D#4", label: "D#", key: "KeyP", isBlack: true },
-  { note: "E4", label: "E4", key: "Semicolon", isBlack: false },
-  { note: "F4", label: "F4", key: "Quote", isBlack: false },
-];
 
 export const SynthView = () => {
   // Synth slice state + setters (named after the old props so the rest of the
@@ -145,12 +128,14 @@ export const SynthView = () => {
     setSynthViewMode(mode);
     try {
       localStorage.setItem("murva_synth_view_mode", mode);
-    } catch {}
+    } catch {
+      // best-effort: ignore localStorage failures (e.g. private mode)
+    }
   };
 
   // Sync custom presets from local storage
   const reloadPresets = useCallback(() => {
-    setCustomPresets(getCustomPresets());
+    setCustomPresets(useAppStore.getState().customSynthPresets);
   }, []);
 
   useEffect(() => {
@@ -227,7 +212,7 @@ export const SynthView = () => {
   // so the sound designer can hear the immediate adjustments.
   const handleNoteOn = useCallback(
     (note: string) => {
-      audioEngine.init();
+      initSynthPlayback();
       if (!params.arpActive) {
         // Equal-power polyphony: a new note lowers every held voice so the
         // total level stays flat as keys are added. The ref mirrors
@@ -237,9 +222,9 @@ export const SynthView = () => {
         held.add(note);
         const scale = equalPowerVelocityScale(held.size);
         if (isNewNote) {
-          audioEngine.applySynthVelocityScale(scale);
+          applySynthPlaybackVelocityScale(scale);
         }
-        audioEngine.triggerSynthNoteOn(
+        synthPlaybackNoteOn(
           note,
           params,
           1.0,
@@ -260,13 +245,13 @@ export const SynthView = () => {
       if (wasHeld && !params.arpActive) {
         // Release first (marks the voice so re-scaling skips it), then let
         // the remaining held voices rise back toward full level.
-        audioEngine.triggerSynthNoteOff(
+        synthPlaybackNoteOff(
           note,
           params.release,
           undefined,
           controlTarget,
         );
-        audioEngine.applySynthVelocityScale(equalPowerVelocityScale(held.size));
+        applySynthPlaybackVelocityScale(equalPowerVelocityScale(held.size));
       }
       setActiveNotes((prev) => {
         const next = new Set(prev);
@@ -277,141 +262,19 @@ export const SynthView = () => {
     [params.arpActive, params.release, controlTarget],
   );
 
-  // Arpeggiator Clock Subscriber: active only when params.arpActive is enabled
-  useEffect(() => {
-    if (!params.arpActive) {
-      return;
-    }
-
-    const unsubscribe = audioEngine.subscribeClock((step, _beat, time) => {
-      const {
-        activeNotes: currentNotes,
-        params: currentParams,
-        controlTarget: currentTarget,
-        bpm: currentBpm,
-      } = arpStateRef.current;
-
-      if (!currentParams.arpActive) return;
-      if (currentNotes.size === 0) return;
-
-      const sequence = buildArpSequence(
-        currentNotes,
-        currentParams.arpMode ?? "up",
-        currentParams.arpOctaves ?? 1,
-      );
-      if (sequence.length === 0) return;
-
-      const stepDuration16th = sixteenthNoteMs(currentBpm) / 1000;
-
-      if (currentParams.arpRate === "4n") {
-        // 1 note every 4 sixteenth steps (quarter note)
-        if (step % 4 !== 0) return;
-        const index = Math.floor(step / 4) % sequence.length;
-        const noteToPlay = sequence[index];
-        const stepDurSec = stepDuration16th * 4;
-        const holdSec = Math.max(0.04, stepDurSec * 0.85);
-        audioEngine.triggerSynthNoteOn(
-          noteToPlay,
-          currentParams,
-          0.9,
-          time,
-          currentTarget,
-        );
-        audioEngine.triggerSynthNoteOff(
-          noteToPlay,
-          currentParams.release,
-          time + holdSec,
-          currentTarget,
-        );
-      } else if (currentParams.arpRate === "8n") {
-        // 1 note every 2 sixteenth steps (eighth note)
-        if (step % 2 !== 0) return;
-        const index = Math.floor(step / 2) % sequence.length;
-        const noteToPlay = sequence[index];
-        const stepDurSec = stepDuration16th * 2;
-        const holdSec = Math.max(0.04, stepDurSec * 0.85);
-        audioEngine.triggerSynthNoteOn(
-          noteToPlay,
-          currentParams,
-          0.9,
-          time,
-          currentTarget,
-        );
-        audioEngine.triggerSynthNoteOff(
-          noteToPlay,
-          currentParams.release,
-          time + holdSec,
-          currentTarget,
-        );
-      } else if (currentParams.arpRate === "32n") {
-        // 2 notes per sixteenth step (32nd note)
-        const subDurSec = stepDuration16th / 2;
-        const holdSec = Math.max(0.03, subDurSec * 0.85);
-        const note1 = sequence[(step * 2) % sequence.length];
-        const note2 = sequence[(step * 2 + 1) % sequence.length];
-        audioEngine.triggerSynthNoteOn(
-          note1,
-          currentParams,
-          0.9,
-          time,
-          currentTarget,
-        );
-        audioEngine.triggerSynthNoteOff(
-          note1,
-          currentParams.release,
-          time + holdSec,
-          currentTarget,
-        );
-        audioEngine.triggerSynthNoteOn(
-          note2,
-          currentParams,
-          0.9,
-          time + subDurSec,
-          currentTarget,
-        );
-        audioEngine.triggerSynthNoteOff(
-          note2,
-          currentParams.release,
-          time + subDurSec + holdSec,
-          currentTarget,
-        );
-      } else {
-        // Default 16n: 1 note every 1 sixteenth step
-        const index = step % sequence.length;
-        const noteToPlay = sequence[index];
-        const holdSec = Math.max(0.04, stepDuration16th * 0.85);
-        audioEngine.triggerSynthNoteOn(
-          noteToPlay,
-          currentParams,
-          0.9,
-          time,
-          currentTarget,
-        );
-        audioEngine.triggerSynthNoteOff(
-          noteToPlay,
-          currentParams.release,
-          time + holdSec,
-          currentTarget,
-        );
-      }
-    });
-
-    return () => {
-      unsubscribe();
-      if (audioEngine.getAudioContext()) {
-        audioEngine.releaseSoundingVoices(controlTarget, params.release);
-      }
-    };
-  }, [params.arpActive, controlTarget, params.release]);
+  // Arpeggiator playback: parameterized clock subscriber (the 4 rate branches
+  // collapsed into computeArpTriggers, proven equivalent by the exhaustive
+  // sweep in src/audio/playback/arpPlayback.test.ts)
+  useArpPlayback(arpStateRef, params.arpActive ?? false, params.release, controlTarget);
 
   // Silence lingering arp voices when all keys are released in arp mode
   useEffect(() => {
     if (
       params.arpActive &&
       activeNotes.size === 0 &&
-      audioEngine.getAudioContext()
+      hasSynthPlaybackContext()
     ) {
-      audioEngine.releaseSoundingVoices(controlTarget, params.release);
+      releaseSynthPlaybackVoices(controlTarget, params.release);
     }
   }, [params.arpActive, activeNotes.size, controlTarget, params.release]);
 
@@ -492,7 +355,7 @@ export const SynthView = () => {
     e.preventDefault();
     if (!quickSaveName.trim()) return;
 
-    const saved = saveCustomPreset(quickSaveName, params, quickSaveCategory);
+    const saved = useAppStore.getState().saveCustomPreset(quickSaveName, params, quickSaveCategory);
     reloadPresets();
     setIsQuickSaving(false);
     setQuickSaveName("");
@@ -834,54 +697,22 @@ export const SynthView = () => {
       </div>
 
       {/* Quick Save Modal Popover with Category selection */}
-      {isQuickSaving && (
-        <div className="bg-[#171B38] border border-indigo-500/40 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xl animate-in fade-in">
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
-            <Bookmark className="w-4 h-4 text-indigo-400" />
-            <span>Save Custom Preset to LocalStorage:</span>
-          </div>
-          <form
-            onSubmit={handleQuickSaveSubmit}
-            className="flex items-center gap-2 flex-1 max-w-xl flex-wrap sm:flex-nowrap"
-          >
-            <input
-              type="text"
-              required
-              autoFocus
-              placeholder="Preset Name..."
-              value={quickSaveName}
-              onChange={(e) => setQuickSaveName(e.target.value)}
-              className="flex-1 min-w-[140px] bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-            />
-            <select
-              value={quickSaveCategory}
-              onChange={(e) =>
-                setQuickSaveCategory(e.target.value as SynthPresetCategory)
-              }
-              className="bg-[#0B0D19] border border-[#2D355A] rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
-            >
-              {SYNTH_CATEGORIES.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-xs transition-colors shrink-0 cursor-pointer"
-            >
-              Save Patch
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsQuickSaving(false)}
-              className="bg-[#0B0D19] hover:bg-[#1A1F3A] text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-[#252B48] transition-colors shrink-0 cursor-pointer"
-            >
-              Cancel
-            </button>
-          </form>
-        </div>
-      )}
+      <QuickSavePopover
+        open={isQuickSaving}
+        onClose={() => setIsQuickSaving(false)}
+        heading="Save Custom Preset to LocalStorage:"
+        placeholder="Preset Name..."
+        saveLabel="Save Patch"
+        name={quickSaveName}
+        onNameChange={setQuickSaveName}
+        categories={SYNTH_CATEGORIES.map((c) => ({ id: c.id, label: c.label }))}
+        category={quickSaveCategory}
+        onCategoryChange={(v) => setQuickSaveCategory(v as SynthPresetCategory)}
+        onSubmit={handleQuickSaveSubmit}
+        formClassName="flex items-center gap-2 flex-1 max-w-xl flex-wrap sm:flex-nowrap"
+        inputClassName="flex-1 min-w-[140px] bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+        buttonClassName=" cursor-pointer"
+      />
 
       {/* Simple Mode vs Pro Mode Body Panels */}
       {synthViewMode === "simple" ? (
@@ -1296,7 +1127,7 @@ export const SynthView = () => {
               <button
                 id="btn-toggle-arp"
                 onClick={() => {
-                  audioEngine.init();
+                  initSynthPlayback();
                   onChangeParams({
                     ...params,
                     arpActive: !params.arpActive,
@@ -1505,199 +1336,3 @@ export const SynthView = () => {
     </div>
   );
 };
-
-function ScaleLockedKey({
-  k,
-  isActive,
-  onNoteOn,
-  onNoteOff,
-}: {
-  k: ScaleKeyboardNote;
-  isActive: boolean;
-  onNoteOn: (note: string) => void;
-  onNoteOff: (note: string) => void;
-}) {
-  return (
-    <div
-      id={`key-${k.note}`}
-      onMouseDown={() => onNoteOn(k.note)}
-      onMouseUp={() => onNoteOff(k.note)}
-      onMouseLeave={() => isActive && onNoteOff(k.note)}
-      onTouchStart={(e) => {
-        e.preventDefault();
-        onNoteOn(k.note);
-      }}
-      onTouchEnd={(e) => {
-        e.preventDefault();
-        onNoteOff(k.note);
-      }}
-      className={`w-12 h-full rounded-b-md border border-slate-700 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
-        isActive
-          ? "bg-gradient-to-b from-indigo-200 to-indigo-400 text-slate-950 shadow-inner scale-[0.99]"
-          : "bg-gradient-to-b from-slate-100 to-slate-200 text-slate-800 hover:from-white hover:to-slate-100"
-      }`}
-    >
-      <span className="text-[10px] font-mono font-bold">{k.label}</span>
-      <span className="text-[9px] font-mono text-indigo-600 uppercase font-semibold">
-        {shortcutLabel(k.key)}
-      </span>
-    </div>
-  );
-}
-
-// Two QWERTY rows for scale-locked mode: top row (Q..]) above the home row
-// (A..'), staggered like a physical keyboard.
-function ScaleLockedKeyboard({
-  rows,
-  activeNotes,
-  onNoteOn,
-  onNoteOff,
-}: {
-  rows: { homeRow: ScaleKeyboardNote[]; topRow: ScaleKeyboardNote[] };
-  activeNotes: Set<string>;
-  onNoteOn: (note: string) => void;
-  onNoteOff: (note: string) => void;
-}) {
-  return (
-    <>
-      <div className="flex flex-1 w-full gap-0.5 [justify-content:safe_center]">
-        {rows.topRow.map((k) => (
-          <ScaleLockedKey
-            key={k.note}
-            k={k}
-            isActive={activeNotes.has(k.note)}
-            onNoteOn={onNoteOn}
-            onNoteOff={onNoteOff}
-          />
-        ))}
-      </div>
-      <div className="flex flex-1 w-full gap-0.5 [justify-content:safe_center]">
-        {rows.homeRow.map((k) => (
-          <ScaleLockedKey
-            key={k.note}
-            k={k}
-            isActive={activeNotes.has(k.note)}
-            onNoteOn={onNoteOn}
-            onNoteOff={onNoteOff}
-          />
-        ))}
-      </div>
-    </>
-  );
-}
-
-export function ChromaticKeyboard({
-  octaveOffset,
-  activeNotes,
-  onNoteOn,
-  onNoteOff,
-}: {
-  octaveOffset: number;
-  activeNotes: Set<string>;
-  onNoteOn: (note: string) => void;
-  onNoteOff: (note: string) => void;
-}) {
-  return (
-    <div className="relative flex">
-      {getChromaticKeyboardNotes(octaveOffset).map((k, noteIndex) => {
-        const isActive = activeNotes.has(k.note);
-        if (k.isBlack) {
-          return (
-            <div
-              key={k.note}
-              id={`key-${k.note}`}
-              onMouseDown={() => onNoteOn(k.note)}
-              onMouseUp={() => onNoteOff(k.note)}
-              onMouseLeave={() => isActive && onNoteOff(k.note)}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                onNoteOn(k.note);
-              }}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                onNoteOff(k.note);
-              }}
-              className={`absolute z-10 w-9 h-[100px] rounded-b-md border border-slate-900 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
-                isActive
-                  ? "bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-lg shadow-indigo-500/50 scale-[0.98]"
-                  : "bg-gradient-to-b from-slate-800 to-slate-950 hover:bg-slate-800"
-              }`}
-              style={{
-                left: `${getBlackKeyLeftPx(noteIndex)}px`,
-              }}
-            >
-              <span className="text-[9px] font-mono font-bold text-slate-300">
-                {k.label}
-              </span>
-              <span className="text-[8px] font-mono text-indigo-400 uppercase">
-                {shortcutLabel(k.key)}
-              </span>
-            </div>
-          );
-        }
-
-        return (
-          <div
-            key={k.note}
-            id={`key-${k.note}`}
-            onMouseDown={() => onNoteOn(k.note)}
-            onMouseUp={() => onNoteOff(k.note)}
-            onMouseLeave={() => isActive && onNoteOff(k.note)}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              onNoteOn(k.note);
-            }}
-            onTouchEnd={(e) => {
-              e.preventDefault();
-              onNoteOff(k.note);
-            }}
-            className={`w-16 h-full rounded-b-md border border-slate-700 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all ${
-              isActive
-                ? "bg-gradient-to-b from-indigo-200 to-indigo-400 text-slate-950 shadow-inner scale-[0.99]"
-                : "bg-gradient-to-b from-slate-100 to-slate-200 text-slate-800 hover:from-white hover:to-slate-100"
-            }`}
-          >
-            <span className="text-[10px] font-mono font-bold">
-              {k.label}
-            </span>
-            <span className="text-[9px] font-mono text-indigo-600 uppercase font-semibold">
-              {shortcutLabel(k.key)}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// White key: w-16 (64px) + mx-0.5 (4px total) = 68px stride; black key: w-9 = 36px.
-// Positions are derived from white-key boundaries, so they hold at any octave
-// offset and container width.
-const WHITE_KEY_STRIDE_PX = 68;
-const BLACK_KEY_WIDTH_PX = 36;
-
-export function getBlackKeyLeftPx(noteIndex: number): number {
-  const whiteKeysBefore = KEYBOARD_NOTES.slice(0, noteIndex).filter(
-    (k) => !k.isBlack,
-  ).length;
-  return whiteKeysBefore * WHITE_KEY_STRIDE_PX - BLACK_KEY_WIDTH_PX / 2;
-}
-
-// Chromatic keyboard always starts from C — octaveOffset shifts the range up/down
-// Not affected by master key/scale; regex supports any octave number
-function getChromaticKeyboardNotes(octaveOffset: number) {
-  return KEYBOARD_NOTES.map((k) => {
-    const match = k.note.match(/^([A-G][#b]?)(-?\d+)/);
-    if (match) {
-      const noteName = match[1];
-      const origOct = parseInt(match[2], 10);
-      const targetOct = origOct + octaveOffset;
-      return {
-        ...k,
-        note: `${noteName}${targetOct}`,
-        label: k.isBlack ? noteName : `${noteName}${targetOct}`,
-      };
-    }
-    return k;
-  });
-}

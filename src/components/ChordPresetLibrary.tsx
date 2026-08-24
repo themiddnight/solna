@@ -1,49 +1,28 @@
-import React, { useState } from 'react';
-import {
-  Sparkles,
-  Bookmark,
-  Plus,
-  Trash2,
-  Search,
-  Check,
-  X,
-  FolderOpen,
-  Download,
-  Upload,
-  Play,
-  Music,
-  Layers,
-} from 'lucide-react';
-import { ChordItem, SynthParams } from '../types';
-import type { CustomChordProgressionItem } from '../types';
+import React, { useMemo, useState } from 'react';
+import { Download, Music, Play, Sparkles, Trash2, Upload } from 'lucide-react';
+import type { ChordItem, SynthParams, CustomChordProgressionItem } from '../types';
 import { useAppStore } from '../store/store';
+import { CHORD_PROGRESSION_TEMPLATES } from '../audio/data/chordProgressions';
+import type { ProgressionTemplate } from '../audio/data/chordProgressions';
+import { PresetLibrary } from './ui/PresetLibrary';
+import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from './ui/PresetLibrary';
+import { previewChordProgression } from '../audio/playback/presetPreview';
 import {
-  ProgressionTemplate,
-  CHORD_PROGRESSION_TEMPLATES,
-} from './ChordView';
-import { audioEngine } from '../audio/engine';
-import { generateBlockChordNotes, reharmonizeProgressionToScale, rootSemitone, ROOTS, formatChordLabel } from '../utils/musicTheory';
+  generateBlockChordNotes,
+  reharmonizeProgressionToScale,
+  rootSemitone,
+  ROOTS,
+  formatChordLabel,
+} from '../utils/musicTheory';
 
 export type { CustomChordProgressionItem };
 
-export function getCustomChordProgressions(): CustomChordProgressionItem[] {
-  return useAppStore.getState().customChordProgressions;
-}
-
-export function saveCustomChordProgression(
-  name: string,
-  chords: ChordItem[],
-  category = 'User',
-  description = '',
-  roman = ''
-): CustomChordProgressionItem {
-  return useAppStore
-    .getState()
-    .saveCustomChordProgression(name, chords, category, description, roman);
-}
-
-export function deleteCustomChordProgression(id: string): CustomChordProgressionItem[] {
-  return useAppStore.getState().deleteCustomChordProgression(id);
+// Wrapper entries: factory templates and custom progressions both render through
+// the generic; the template pointer is what the onSelect handler transposes.
+interface ChordLibraryEntry extends PresetLibraryEntry {
+  template?: ProgressionTemplate; // factory templates carry their source
+  chords?: ChordItem[];           // custom progressions carry their chords
+  roman?: string;                 // custom progressions carry their roman summary (searchable)
 }
 
 interface ChordPresetLibraryProps {
@@ -57,6 +36,21 @@ interface ChordPresetLibraryProps {
   onClose: () => void;
 }
 
+// The original file's category chip list, rebuilt as PresetCategory[] (the
+// original included 'All' as the first chip). The User chip's count badge is
+// carried in `count` and rendered by the generic like the original's.
+const BASE_CHORD_CATEGORIES: PresetCategory[] = [
+  { id: 'All', label: 'All', badgeClass: 'bg-indigo-600 text-white', description: '' },
+  { id: 'User', label: 'User', badgeClass: 'bg-indigo-600 text-white', description: '' },
+  { id: 'Pop & EDM', label: 'Pop & EDM', badgeClass: 'bg-indigo-600 text-white', description: '' },
+  { id: 'Jazz & Neo-Soul', label: 'Jazz & Neo-Soul', badgeClass: 'bg-indigo-600 text-white', description: '' },
+  { id: 'Lofi & R&B', label: 'Lofi & R&B', badgeClass: 'bg-indigo-600 text-white', description: '' },
+  { id: 'Anime & J-Pop', label: 'Anime & J-Pop', badgeClass: 'bg-indigo-600 text-white', description: '' },
+  { id: 'Rock & Blues', label: 'Rock & Blues', badgeClass: 'bg-indigo-600 text-white', description: '' },
+  { id: 'Cinematic & Modal', label: 'Cinematic & Modal', badgeClass: 'bg-indigo-600 text-white', description: '' },
+  { id: 'Classical & Baroque', label: 'Classical & Baroque', badgeClass: 'bg-indigo-600 text-white', description: '' },
+];
+
 export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   currentChords,
   scaleRoot,
@@ -68,26 +62,68 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   onClose,
 }) => {
   const customProgressions = useAppStore((s) => s.customChordProgressions);
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [showSaveModal, setShowSaveModal] = useState<boolean>(false);
-  const [newProgName, setNewProgName] = useState<string>('');
-  const [newProgCategory, setNewProgCategory] = useState<string>('User');
-  const [newProgDesc, setNewProgDesc] = useState<string>('');
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const saveProgression = useAppStore((s) => s.saveCustomChordProgression);
+  const deleteProgression = useAppStore((s) => s.deleteCustomChordProgression);
   const [auditioningName, setAuditioningName] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const categories = [
-    'All',
-    'User',
-    'Pop & EDM',
-    'Jazz & Neo-Soul',
-    'Lofi & R&B',
-    'Anime & J-Pop',
-    'Rock & Blues',
-    'Cinematic & Modal',
-    'Classical & Baroque',
-  ];
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    window.setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const entries = useMemo<ChordLibraryEntry[]>(
+    () => [
+      ...customProgressions.map((p) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        description: p.description,
+        isFactory: false,
+        chords: p.chords,
+        roman: p.roman,
+      })),
+      ...CHORD_PROGRESSION_TEMPLATES.map((t) => ({
+        id: `factory-${t.name}`,
+        name: t.name,
+        category: t.category,
+        description: t.description,
+        isFactory: true,
+        template: t,
+      })),
+    ],
+    [customProgressions],
+  );
+
+  const categories = useMemo<PresetCategory[]>(
+    () =>
+      BASE_CHORD_CATEGORIES.map((c) =>
+        c.id === 'User' && customProgressions.length > 0
+          ? { ...c, count: String(customProgressions.length) }
+          : c
+      ),
+    [customProgressions]
+  );
+
+  // PORT of the original filteredTemplates + filteredCustom predicates: the
+  // 'User' chip shows every custom progression regardless of its saved category
+  // and hides factory templates; search covers name, roman, and description.
+  const filterEntries = (e: ChordLibraryEntry, query: string, categoryId: string) => {
+    const matchesCategory =
+      categoryId === 'All'
+        ? true
+        : categoryId === 'User'
+        ? !e.isFactory
+        : e.category === categoryId;
+
+    const matchesSearch =
+      query.trim() === '' ||
+      e.name.toLowerCase().includes(query.toLowerCase()) ||
+      (e.template ? e.template.roman : e.roman ?? '').toLowerCase().includes(query.toLowerCase()) ||
+      e.description.toLowerCase().includes(query.toLowerCase());
+
+    return matchesCategory && matchesSearch;
+  };
 
   // Helper to convert template into chords transposed to scaleRoot and optionally auto-reharmonized
   const resolveTemplateChords = (template: ProgressionTemplate): ChordItem[] => {
@@ -122,89 +158,54 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     return chords;
   };
 
-  // Filter Factory Templates
-  const filteredTemplates = CHORD_PROGRESSION_TEMPLATES.filter((tpl) => {
-    const matchesCategory =
-      selectedCategory === 'All'
-        ? true
-        : selectedCategory === 'User'
-        ? false
-        : tpl.category === selectedCategory;
-
-    const matchesSearch =
-      searchQuery.trim() === '' ||
-      tpl.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tpl.roman.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tpl.description.toLowerCase().includes(searchQuery.toLowerCase());
-
-    return matchesCategory && matchesSearch;
-  });
-
-  // Filter User Progressions
-  const filteredCustom = customProgressions.filter((item) => {
-    const matchesCategory =
-      selectedCategory === 'All' || selectedCategory === 'User' || item.category === selectedCategory;
-
-    const matchesSearch =
-      searchQuery.trim() === '' ||
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.roman.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchQuery.toLowerCase());
-
-    return matchesCategory && matchesSearch;
-  });
-
-  const handleSaveCurrentProgression = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProgName.trim() || currentChords.length === 0) return;
-
-    const romanSummary = currentChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
-    const saved = saveCustomChordProgression(
-      newProgName.trim(),
-      currentChords,
-      newProgCategory,
-      newProgDesc.trim(),
-      romanSummary
-    );
-
-    setShowSaveModal(false);
-    setNewProgName('');
-    setNewProgDesc('');
-    setSaveSuccessMsg(`Progression "${saved.name}" saved!`);
-    setTimeout(() => setSaveSuccessMsg(null), 3000);
-  };
-
-  const handleDeleteCustom = (id: string, name: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm(`Delete custom progression "${name}"?`)) {
-      deleteCustomChordProgression(id);
+  // PORT of the original Apply handlers: resolve (transpose/reharmonize), apply, and close.
+  const applyEntry = (entry: ChordLibraryEntry) => {
+    if (entry.template) {
+      const resolved = resolveTemplateChords(entry.template);
+      onApplyChords(resolved);
+      onClose();
+    } else if (entry.chords) {
+      const resolved = resolveCustomChords(entry.chords);
+      onApplyChords(resolved);
+      onClose();
     }
   };
 
-  const handleAudition = (chordsToPlay: ChordItem[], progName: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    audioEngine.init();
+  // PORT of the original handleAudition: engine trigger moved to
+  // presetPreview.ts; the auditioning-name pulse state stays here.
+  const handleAudition = (chordsToPlay: ChordItem[], progName: string) => {
+    previewChordProgression(chordsToPlay, synthParams);
     setAuditioningName(progName);
-
-    // Play quick arpeggiated strum of all chords in sequence
-    const chordDurationMs = 500;
-    chordsToPlay.forEach((chord, chordIdx) => {
-      setTimeout(() => {
-        chord.notes.forEach((n) => {
-          audioEngine.triggerSynthNoteOn(n, synthParams, 0.75);
-        });
-
-        setTimeout(() => {
-          chord.notes.forEach((n) => {
-            audioEngine.triggerSynthNoteOff(n, 0.3);
-          });
-        }, chordDurationMs * 0.85);
-      }, chordIdx * chordDurationMs);
-    });
-
-    setTimeout(() => {
+    window.setTimeout(() => {
       setAuditioningName(null);
-    }, chordsToPlay.length * chordDurationMs + 200);
+    }, chordsToPlay.length * 500 + 200);
+  };
+
+  const handleDeleteCustom = (id: string, name: string) => {
+    if (confirm(`Delete custom progression "${name}"?`)) {
+      deleteProgression(id);
+    }
+  };
+
+  // PORT of the original save handler: the roman default is the original's
+  // romanSummary computed from currentChords; the user's typed roman (a field
+  // the plan's generic adds) wins when provided.
+  const handleSave = (draft: PresetSaveDraft): boolean => {
+    // Original guard: refuse to save when nothing is on the grid. Returning
+    // false keeps the save modal open (the generic only closes on true).
+    if (currentChords.length === 0) return false;
+    const saved = saveProgression(
+      draft.name.trim(),
+      currentChords,
+      draft.category,
+      draft.description.trim(),
+      draft.roman?.trim()
+        ? draft.roman
+        : currentChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ')
+    );
+    // saved.name is the trimmed name passed above, so the toast shows it trimmed.
+    showToast(`Progression "${saved.name}" saved!`);
+    return true;
   };
 
   const handleExport = () => {
@@ -236,7 +237,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
           [...imported]
             .reverse()
             .forEach((item: CustomChordProgressionItem) => {
-              saveCustomChordProgression(
+              useAppStore.getState().saveCustomChordProgression(
                 item.name,
                 item.chords,
                 item.category,
@@ -244,399 +245,285 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
                 item.roman
               );
             });
-          setSaveSuccessMsg(`Imported ${imported.length} chord progressions!`);
-          setTimeout(() => setSaveSuccessMsg(null), 3000);
+          showToast(`Imported ${imported.length} chord progressions!`);
         }
-      } catch (err) {
+      } catch {
         alert('Invalid JSON chord progression file');
       }
     };
     reader.readAsText(file);
   };
 
-  if (!isOpen) return null;
+  // PORT of the original two-section list (original lines ~330-501):
+  // custom section with purple header, template section with "Key: {scaleRoot}".
+  const groupEntries = (
+    filtered: ChordLibraryEntry[],
+    _query: string,
+    category: string
+  ): PresetLibraryGroup<ChordLibraryEntry>[] => {
+    const groups: PresetLibraryGroup<ChordLibraryEntry>[] = [];
+    const filteredCustom = filtered.filter((e) => !e.isFactory);
+    const filteredTemplates = filtered.filter((e) => !!e.isFactory);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-      {/* Sidebar Drawer */}
-      <div className="w-full max-w-md h-full bg-[#12152A] border-l border-[#252B48] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right duration-200">
-        {/* Drawer Header */}
-        <div className="p-4 border-b border-[#252B48] flex items-center justify-between bg-[#0E1022]">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-                Chord Progression Manager
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Key of {scaleRoot} • {CHORD_PROGRESSION_TEMPLATES.length + customProgressions.length} Total Progressions
-              </p>
-            </div>
+    if (filteredCustom.length > 0) {
+      groups.push({
+        key: 'custom',
+        className: 'space-y-2 pb-2',
+        header: (
+          <div className="flex items-center justify-between text-[11px] font-bold text-purple-400 uppercase tracking-wider px-1">
+            <span>My Custom Progressions ({filteredCustom.length})</span>
           </div>
+        ),
+        entries: filteredCustom,
+      });
+    }
 
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setShowSaveModal(true)}
-              className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
-              title="Save current chord progression"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Save Current</span>
-            </button>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg bg-[#1A1F3B] hover:bg-[#252B48] text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
+    if (filteredTemplates.length > 0 && category !== 'User') {
+      groups.push({
+        key: 'templates',
+        className: 'space-y-2 pt-2',
+        header: (
+          <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1">
+            <span>Standard Library Templates ({filteredTemplates.length})</span>
+            <span className="text-[10px] font-normal font-mono text-indigo-400">
+              Key: {scaleRoot}
+            </span>
           </div>
-        </div>
+        ),
+        entries: filteredTemplates,
+      });
+    }
 
-        {/* Save Success Toast */}
-        {saveSuccessMsg && (
-          <div className="mx-4 mt-3 p-2 bg-emerald-950/80 border border-emerald-500/40 rounded-lg text-xs text-emerald-300 flex items-center gap-2 animate-in fade-in">
-            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>{saveSuccessMsg}</span>
-          </div>
-        )}
+    return groups;
+  };
 
-        {/* Search & Filter Toolbar */}
-        <div className="p-3.5 border-b border-[#252B48] space-y-2.5 bg-[#0F1226]">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search by name, Roman numerals (ii-V-I, vi-IV-I-V)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#0B0D19] border border-[#252B48] rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-xs"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
+  // PORT of the original empty state (original lines ~428-432).
+  const emptyState = () => (
+    <div className="p-8 text-center text-slate-500 space-y-2">
+      <Music className="w-8 h-8 mx-auto opacity-40 text-slate-400" />
+      <p className="text-xs">No chord progressions found matching your filter.</p>
+    </div>
+  );
 
-          {/* Category Filter Badges */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
-                  selectedCategory === cat
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-[#0B0D19] hover:bg-[#1A1F3B] text-slate-400 hover:text-slate-200 border border-[#252B48]'
-                }`}
-              >
-                {cat}
-                {cat === 'User' && customProgressions.length > 0 && (
-                  <span className="ml-1 px-1.5 py-0.2 rounded-full bg-indigo-900/80 text-[10px]">
-                    {customProgressions.length}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
+  // PORT of the original template card (original lines ~435-499): name row with
+  // category tag + Auto badge, roman line, description, "In {scaleRoot}:" preview
+  // line, audition (indigo pulse) + Load buttons.
+  const renderTemplateCard = (e: ChordLibraryEntry) => {
+    const tpl = e.template!;
+    const resolvedChords = resolveTemplateChords(tpl);
+    const previewNames = resolvedChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
 
-        {/* Progression List Content */}
-        <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5 divide-y divide-[#1C213E]/60">
-          {/* User Custom Progressions Section */}
-          {filteredCustom.length > 0 && (
-            <div className="space-y-2 pb-2">
-              <div className="flex items-center justify-between text-[11px] font-bold text-purple-400 uppercase tracking-wider px-1">
-                <span>My Custom Progressions ({filteredCustom.length})</span>
-              </div>
-              <div className="space-y-2">
-                {filteredCustom.map((item) => {
-                  const resolvedCustom = resolveCustomChords(item.chords);
-                  const previewNames = resolvedCustom.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="p-3 rounded-xl bg-[#0B0D19] border border-[#2D355A] hover:border-purple-500/50 transition-all flex flex-col gap-2 group relative shadow-xs"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-xs text-slate-200 truncate">
-                              {item.name}
-                            </span>
-                            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-purple-950/80 border border-purple-800 text-purple-300">
-                              Custom
-                            </span>
-                            {autoReharmonize && (
-                              <span className="text-[9px] font-semibold text-purple-300 bg-purple-500/20 px-1.5 py-0.2 rounded border border-purple-500/30 flex items-center gap-0.5">
-                                <Sparkles className="w-2.5 h-2.5 text-purple-400" /> Auto
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] font-mono text-indigo-400 font-semibold mt-0.5">
-                            {item.roman}
-                          </div>
-                          {item.description && (
-                            <p className="text-[10px] text-slate-400 mt-1 line-clamp-1">
-                              {item.description}
-                            </p>
-                          )}
-                          <div className="text-[10px] font-mono text-slate-500 mt-1">
-                            In {scaleRoot} {scaleType}: <span className="text-slate-300 font-semibold">{previewNames}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1 shrink-0 pt-0.5">
-                          {/* Play/Audition Button */}
-                          <button
-                            onClick={(e) => handleAudition(resolvedCustom, item.name, e)}
-                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                              auditioningName === item.name
-                                ? 'bg-purple-600 border-purple-400 text-white animate-pulse'
-                                : 'bg-[#171B36] hover:bg-[#20264A] text-purple-400 border-[#2D355A]'
-                            }`}
-                            title="Audition Progression Sound"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-current" />
-                          </button>
-
-                          {/* Apply Button */}
-                          <button
-                            onClick={() => {
-                              onApplyChords(resolvedCustom);
-                              onClose();
-                            }}
-                            className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1"
-                          >
-                            <span>Load</span>
-                          </button>
-
-                          {/* Delete Button */}
-                          <button
-                            onClick={(e) => handleDeleteCustom(item.id, item.name, e)}
-                            className="p-1.5 rounded-lg bg-[#171B36] hover:bg-red-950/80 text-slate-400 hover:text-red-400 border border-[#2D355A] hover:border-red-800/50 transition-colors cursor-pointer"
-                            title="Delete Custom Progression"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Standard Progression Templates Section */}
-          <div className="space-y-2 pt-2">
-            {selectedCategory !== 'User' && (
-              <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1">
-                <span>Standard Library Templates ({filteredTemplates.length})</span>
-                <span className="text-[10px] font-normal font-mono text-indigo-400">
-                  Key: {scaleRoot}
+    return (
+      <div className="p-3 rounded-xl bg-[#0B0D19] border border-[#252B48] hover:border-indigo-500/50 transition-all flex flex-col gap-2 group relative shadow-xs">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-bold text-xs text-slate-200 group-hover:text-indigo-300 transition-colors truncate">
+                {tpl.name}
+              </span>
+              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#1C213E] text-indigo-300 shrink-0">
+                {tpl.category}
+              </span>
+              {autoReharmonize && (
+                <span className="text-[9px] font-semibold text-purple-300 bg-purple-500/20 px-1.5 py-0.2 rounded border border-purple-500/30 flex items-center gap-0.5">
+                  <Sparkles className="w-2.5 h-2.5 text-purple-400" /> Auto
                 </span>
-              </div>
-            )}
-
-            {filteredTemplates.length === 0 && filteredCustom.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 space-y-2">
-                <Music className="w-8 h-8 mx-auto opacity-40 text-slate-400" />
-                <p className="text-xs">No chord progressions found matching your filter.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {filteredTemplates.map((tpl) => {
-                  const resolvedChords = resolveTemplateChords(tpl);
-                  const previewNames = resolvedChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
-
-                  return (
-                    <div
-                      key={tpl.name}
-                      className="p-3 rounded-xl bg-[#0B0D19] border border-[#252B48] hover:border-indigo-500/50 transition-all flex flex-col gap-2 group shadow-xs"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-xs text-slate-200 group-hover:text-indigo-300 transition-colors truncate">
-                              {tpl.name}
-                            </span>
-                            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#1C213E] text-indigo-300 shrink-0">
-                              {tpl.category}
-                            </span>
-                            {autoReharmonize && (
-                              <span className="text-[9px] font-semibold text-purple-300 bg-purple-500/20 px-1.5 py-0.2 rounded border border-purple-500/30 flex items-center gap-0.5">
-                                <Sparkles className="w-2.5 h-2.5 text-purple-400" /> Auto
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] font-mono text-purple-400 font-semibold mt-0.5">
-                            {tpl.roman}
-                          </div>
-                          <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">
-                            {tpl.description}
-                          </p>
-                          <div className="text-[10px] font-mono text-slate-500 mt-1">
-                            In {scaleRoot}: <span className="text-slate-300 font-semibold">{previewNames}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-                          {/* Audition Play Button */}
-                          <button
-                            onClick={(e) => handleAudition(resolvedChords, tpl.name, e)}
-                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                              auditioningName === tpl.name
-                                ? 'bg-indigo-600 border-indigo-400 text-white animate-pulse'
-                                : 'bg-[#171B36] hover:bg-[#20264A] text-indigo-400 border-[#2D355A]'
-                            }`}
-                            title="Audition Sound"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-current" />
-                          </button>
-
-                          {/* Apply Button */}
-                          <button
-                            onClick={() => {
-                              onApplyChords(resolvedChords);
-                              onClose();
-                            }}
-                            className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1"
-                          >
-                            <span>Load</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+              )}
+            </div>
+            <div className="text-[11px] font-mono text-purple-400 font-semibold mt-0.5">
+              {tpl.roman}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">
+              {tpl.description}
+            </p>
+            <div className="text-[10px] font-mono text-slate-500 mt-1">
+              In {scaleRoot}: <span className="text-slate-300 font-semibold">{previewNames}</span>
+            </div>
           </div>
-        </div>
 
-        {/* Drawer Footer: Import / Export */}
-        <div className="p-3 border-t border-[#252B48] bg-[#0E1022] flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+            {/* Audition Play Button */}
             <button
-              onClick={handleExport}
-              disabled={customProgressions.length === 0}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1A1F3B] hover:bg-[#252B48] disabled:opacity-40 text-slate-300 hover:text-white text-xs font-medium border border-[#2D355A] transition-colors cursor-pointer"
-              title="Export user chord progressions as JSON"
+              onClick={() => handleAudition(resolvedChords, tpl.name)}
+              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                auditioningName === tpl.name
+                  ? 'bg-indigo-600 border-indigo-400 text-white animate-pulse'
+                  : 'bg-[#171B36] hover:bg-[#20264A] text-indigo-400 border-[#2D355A]'
+              }`}
+              title="Audition Sound"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export</span>
+              <Play className="w-3.5 h-3.5 fill-current" />
             </button>
 
-            <label
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1A1F3B] hover:bg-[#252B48] text-slate-300 hover:text-white text-xs font-medium border border-[#2D355A] transition-colors cursor-pointer"
-              title="Import chord progressions from JSON"
+            {/* Apply Button */}
+            <button
+              onClick={() => {
+                onApplyChords(resolvedChords);
+                onClose();
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1"
             >
-              <Upload className="w-3.5 h-3.5" />
-              <span>Import</span>
-              <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-            </label>
+              <span>Load</span>
+            </button>
           </div>
-
-          <span className="text-[10px] text-slate-500 font-mono">
-            {customProgressions.length} custom saved
-          </span>
         </div>
       </div>
+    );
+  };
 
-      {/* Save Progression Modal Dialog */}
-      {showSaveModal && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm bg-[#171B38] border border-indigo-500/40 rounded-xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95">
-            <div className="flex items-center justify-between">
-              <h4 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-                <Bookmark className="w-4 h-4 text-indigo-400" />
-                Save Progression Preset
-              </h4>
-              <button
-                onClick={() => setShowSaveModal(false)}
-                className="text-slate-400 hover:text-slate-200"
-              >
-                <X className="w-4 h-4" />
-              </button>
+  // PORT of the original custom card (original lines ~338-411): name row with
+  // Custom tag + Auto badge, roman line, description, "In {scaleRoot} {scaleType}:"
+  // preview line, audition (purple pulse) + Load + Delete buttons.
+  const renderCustomCard = (e: ChordLibraryEntry) => {
+    const chords = e.chords!;
+    const resolvedCustom = resolveCustomChords(chords);
+    const previewNames = resolvedCustom.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
+
+    return (
+      <div className="p-3 rounded-xl bg-[#0B0D19] border border-[#2D355A] hover:border-purple-500/50 transition-all flex flex-col gap-2 group relative shadow-xs">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-xs text-slate-200 truncate">
+                {e.name}
+              </span>
+              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-purple-950/80 border border-purple-800 text-purple-300">
+                Custom
+              </span>
+              {autoReharmonize && (
+                <span className="text-[9px] font-semibold text-purple-300 bg-purple-500/20 px-1.5 py-0.2 rounded border border-purple-500/30 flex items-center gap-0.5">
+                  <Sparkles className="w-2.5 h-2.5 text-purple-400" /> Auto
+                </span>
+              )}
             </div>
+            <div className="text-[11px] font-mono text-indigo-400 font-semibold mt-0.5">
+              {e.roman}
+            </div>
+            {e.description && (
+              <p className="text-[10px] text-slate-400 mt-1 line-clamp-1">
+                {e.description}
+              </p>
+            )}
+            <div className="text-[10px] font-mono text-slate-500 mt-1">
+              In {scaleRoot} {scaleType}: <span className="text-slate-300 font-semibold">{previewNames}</span>
+            </div>
+          </div>
 
-            <form onSubmit={handleSaveCurrentProgression} className="space-y-3">
-              <div>
-                <label className="text-[11px] text-slate-400 block mb-1">Progression Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. My Epic Verse Flow"
-                  value={newProgName}
-                  onChange={(e) => setNewProgName(e.target.value)}
-                  className="w-full bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
+          <div className="flex items-center gap-1 shrink-0 pt-0.5">
+            {/* Play/Audition Button */}
+            <button
+              onClick={() => handleAudition(resolvedCustom, e.name)}
+              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                auditioningName === e.name
+                  ? 'bg-purple-600 border-purple-400 text-white animate-pulse'
+                  : 'bg-[#171B36] hover:bg-[#20264A] text-purple-400 border-[#2D355A]'
+              }`}
+              title="Audition Progression Sound"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+            </button>
 
-              <div>
-                <label className="text-[11px] text-slate-400 block mb-1">Category</label>
-                <select
-                  value={newProgCategory}
-                  onChange={(e) => setNewProgCategory(e.target.value)}
-                  className="w-full bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="User">User</option>
-                  <option value="Pop & EDM">Pop & EDM</option>
-                  <option value="Jazz & Neo-Soul">Jazz & Neo-Soul</option>
-                  <option value="Lofi & R&B">Lofi & R&B</option>
-                  <option value="Anime & J-Pop">Anime & J-Pop</option>
-                  <option value="Rock & Blues">Rock & Blues</option>
-                  <option value="Cinematic & Modal">Cinematic & Modal</option>
-                  <option value="Classical & Baroque">Classical & Baroque</option>
-                </select>
-              </div>
+            {/* Apply Button */}
+            <button
+              onClick={() => {
+                onApplyChords(resolvedCustom);
+                onClose();
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <span>Load</span>
+            </button>
 
-              <div>
-                <label className="text-[11px] text-slate-400 block mb-1">Description (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="Notes about groove, tempo, or feel..."
-                  value={newProgDesc}
-                  onChange={(e) => setNewProgDesc(e.target.value)}
-                  className="w-full bg-[#0B0D19] border border-[#2D355A] rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-[#0B0D19] border border-[#252B48] text-[11px] text-slate-400">
-                <span className="font-mono text-indigo-300 block mb-0.5">
-                  Chords ({currentChords.length}):
-                </span>
-                <span className="font-semibold text-slate-200">
-                  {currentChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ')}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowSaveModal(false)}
-                  className="px-3 py-1.5 rounded-lg bg-[#0B0D19] text-slate-400 hover:text-slate-200 text-xs border border-[#252B48]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs"
-                >
-                  Save Progression
-                </button>
-              </div>
-            </form>
+            {/* Delete Button */}
+            <button
+              onClick={() => handleDeleteCustom(e.id, e.name)}
+              className="p-1.5 rounded-lg bg-[#171B36] hover:bg-red-950/80 text-slate-400 hover:text-red-400 border border-[#2D355A] hover:border-red-800/50 transition-colors cursor-pointer"
+              title="Delete Custom Progression"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
-      )}
+      </div>
+    );
+  };
+
+  const renderEntry = (e: ChordLibraryEntry) => {
+    if (e.template) return renderTemplateCard(e);
+    return renderCustomCard(e);
+  };
+
+  // PORT of the original footer (original lines ~504-530): labeled Export/Import
+  // buttons + "{N} custom saved" counter.
+  const footer = (
+    <div className="p-3 border-t border-[#252B48] bg-[#0E1022] flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleExport}
+          disabled={customProgressions.length === 0}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1A1F3B] hover:bg-[#252B48] disabled:opacity-40 text-slate-300 hover:text-white text-xs font-medium border border-[#2D355A] transition-colors cursor-pointer"
+          title="Export user chord progressions as JSON"
+        >
+          <Download className="w-3.5 h-3.5" />
+          <span>Export</span>
+        </button>
+
+        <label
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1A1F3B] hover:bg-[#252B48] text-slate-300 hover:text-white text-xs font-medium border border-[#2D355A] transition-colors cursor-pointer"
+          title="Import chord progressions from JSON"
+        >
+          <Upload className="w-3.5 h-3.5" />
+          <span>Import</span>
+          <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+        </label>
+      </div>
+
+      <span className="text-[10px] text-slate-500 font-mono">
+        {customProgressions.length} custom saved
+      </span>
     </div>
+  );
+
+  return (
+    <PresetLibrary
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Chord Progression Manager"
+      headerSubtitle={`Key of ${scaleRoot} • ${CHORD_PROGRESSION_TEMPLATES.length + customProgressions.length} Total Progressions`}
+      saveButton={{ label: 'Save Current', title: 'Save current chord progression' }}
+      toast={toastMsg}
+      toastPlacement="top"
+      variant="chord"
+      searchPlaceholder="Search by name, Roman numerals (ii-V-I, vi-IV-I-V)..."
+      entries={entries}
+      categories={categories}
+      listContainerClass="flex-1 overflow-y-auto p-3.5 space-y-2.5 divide-y divide-[#1C213E]/60"
+      groupEntries={groupEntries}
+      renderEntry={renderEntry}
+      emptyState={emptyState}
+      filterEntries={filterEntries}
+      footer={footer}
+      save={{
+        heading: 'Save Progression Preset',
+        buttonLabel: 'Save Progression',
+        withCategory: true,
+        withDescription: true,
+        withRoman: true,
+        defaultCategory: 'User',
+        variant: 'modal',
+        chordsSummary: {
+          count: currentChords.length,
+          text: currentChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → '),
+        },
+      }}
+      onSelect={applyEntry}
+      onDelete={(id) => {
+        const entry = entries.find((en) => en.id === id);
+        if (entry && confirm(`Delete custom progression "${entry.name}"?`)) {
+          deleteProgression(id);
+        }
+      }}
+      onSave={handleSave}
+    />
   );
 };

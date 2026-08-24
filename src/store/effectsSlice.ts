@@ -3,10 +3,9 @@ import { INITIAL_EFFECTS } from './initialState';
 import type { AppStore, EffectsSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
-type Get = StoreApi<AppStore>['getState'];
 
 /** Master effects chain slice. */
-export function createEffectsSlice(set: Set, _get: Get): EffectsSlice {
+export function createEffectsSlice(set: Set): EffectsSlice {
   return {
     effects: INITIAL_EFFECTS,
 
