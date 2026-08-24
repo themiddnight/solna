@@ -105,3 +105,12 @@ describe('vibe preset name resolution', () => {
     expect(factoryNames.has(state.chordSynthParams.preset)).toBe(true);
   });
 });
+
+test('InstantVibe presets carry no presentational fields', () => {
+  const FORBIDDEN = ['color', 'bgGradient', 'borderColor', 'textColor'];
+  for (const vibe of INSTANT_VIBES) {
+    for (const key of FORBIDDEN) {
+      expect(Object.prototype.hasOwnProperty.call(vibe, key)).toBe(false);
+    }
+  }
+});

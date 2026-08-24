@@ -13,7 +13,12 @@ import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
 import type { SynthParams } from '../types';
 import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
-import { migrateLegacyPresets, removeLegacyKeys, LEGACY_PERSIST_KEY } from './migrate';
+import {
+  migrateLegacyPresets,
+  migrateTrackColors,
+  removeLegacyKeys,
+  LEGACY_PERSIST_KEY,
+} from './migrate';
 import type { AppStore, PersistedState } from './types';
 
 export const PERSIST_KEY = 'musibox_project_state_v1';
@@ -266,7 +271,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: PERSIST_KEY,
-      version: 2,
+      version: 3,
       storage: createJSONStorage<PersistedState>(() => resolveStorage() ?? memoryStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
@@ -275,12 +280,15 @@ export const useAppStore = create<AppStore>()(
         const migrated = migrateLegacyPresets(
           (persisted ?? {}) as Partial<PersistedState>
         ) as PersistedState;
-        if (version >= 2) return migrated;
+        // v2 → v3: raw Tailwind track colours become daisyUI semantic tokens.
+        const recoloured =
+          version >= 3 ? migrated : (migrateTrackColors(migrated) as PersistedState);
+        if (version >= 2) return recoloured;
         // v1 persisted `arpActive: true` from an arpeggiator that never
         // produced a note, while that same flag gated the keyboard's direct
         // trigger — so those sessions came back with a silent keyboard. Clear
         // the flag once on the way to v2; the arp can be switched back on.
-        const next = { ...migrated } as Record<string, unknown>;
+        const next = { ...recoloured } as Record<string, unknown>;
         for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams']) {
           const params = next[key];
           if (params && typeof params === 'object' && !Array.isArray(params)) {

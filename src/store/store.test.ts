@@ -786,6 +786,71 @@ describe('arp migration off stale persisted state', () => {
   });
 });
 
+describe('sequencer track colour migration wiring (v2 -> v3)', () => {
+  // The map (migrateTrackColors) is unit-tested in migrate.test.ts. These
+  // tests drive the store's actual `migrate` callback end-to-end, so a
+  // future refactor that inverts the `version >= 3` / `version >= 2`
+  // ordering (store.ts) breaks a test here, not just in production.
+  test('a version-2 payload with legacy palette track colours rehydrates with daisyUI tokens', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.persist.clearStorage();
+
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 2,
+        state: {
+          sequencerTracks: [
+            { ...INITIAL_SEQUENCER_TRACKS[0], color: 'bg-rose-500' },
+            { ...INITIAL_SEQUENCER_TRACKS[1], color: 'bg-amber-500' },
+            { ...INITIAL_SEQUENCER_TRACKS[2], color: 'bg-emerald-500' },
+            { ...INITIAL_SEQUENCER_TRACKS[3], color: 'bg-cyan-500' },
+            { ...INITIAL_SEQUENCER_TRACKS[4], color: 'bg-purple-500' },
+          ],
+        },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const colors = useAppStore.getState().sequencerTracks.map((t) => t.color);
+    expect(colors).toEqual([
+      'bg-error',
+      'bg-warning',
+      'bg-success',
+      'bg-accent',
+      'bg-secondary',
+    ]);
+    // steps are the user's actual musical content — must survive untouched.
+    expect(useAppStore.getState().sequencerTracks[0].steps).toEqual(
+      INITIAL_SEQUENCER_TRACKS[0].steps
+    );
+  });
+
+  test('a version-3 payload passes through untouched (no double-remap, no clobber)', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.persist.clearStorage();
+
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 3,
+        state: {
+          sequencerTracks: [
+            { ...INITIAL_SEQUENCER_TRACKS[0], color: 'bg-error' },
+            // An already-current-version payload should never be rewritten,
+            // even if it holds a colour outside the legacy map's keys.
+            { ...INITIAL_SEQUENCER_TRACKS[1], color: 'bg-custom-brand' },
+          ],
+        },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const colors = useAppStore.getState().sequencerTracks.map((t) => t.color);
+    expect(colors).toEqual(['bg-error', 'bg-custom-brand']);
+  });
+});
+
 describe('synth param payload sanitization', () => {
   test('a non-object synthParams payload falls back to the factory defaults', async () => {
     const { useAppStore } = await getStore();

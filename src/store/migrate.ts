@@ -82,3 +82,34 @@ export function removeLegacyKeys(): void {
     // ignore
   }
 }
+
+/**
+ * v2 → v3: sequencer track colours were raw Tailwind palette classes
+ * (`bg-rose-500`, …) baked into persisted state, so a saved project kept
+ * dark-theme-only colours after the daisyUI token migration. Remap them onto
+ * the semantic ramps; unknown values are left untouched.
+ */
+export const LEGACY_TRACK_COLOR_MAP: Record<string, string> = {
+  'bg-rose-500': 'bg-error', // theme-guard-ignore: persisted legacy user data lookup key, not a className
+  'bg-amber-500': 'bg-warning', // theme-guard-ignore: persisted legacy user data lookup key, not a className
+  'bg-emerald-500': 'bg-success', // theme-guard-ignore: persisted legacy user data lookup key, not a className
+  'bg-cyan-500': 'bg-accent', // theme-guard-ignore: persisted legacy user data lookup key, not a className
+  'bg-purple-500': 'bg-secondary', // theme-guard-ignore: persisted legacy user data lookup key, not a className
+};
+
+export function migrateTrackColors<T extends object>(state: T): T {
+  const tracks = (state as { sequencerTracks?: unknown }).sequencerTracks;
+  if (!Array.isArray(tracks)) return state;
+
+  return {
+    ...state,
+    sequencerTracks: tracks.map((t) => {
+      if (!t || typeof t !== 'object') return t;
+      const color = (t as { color?: unknown }).color;
+      if (typeof color !== 'string') return t;
+      if (!Object.hasOwn(LEGACY_TRACK_COLOR_MAP, color)) return t;
+      const next = LEGACY_TRACK_COLOR_MAP[color];
+      return next ? { ...(t as object), color: next } : t;
+    }),
+  };
+}

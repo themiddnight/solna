@@ -9,10 +9,6 @@ export interface InstantVibe {
   name: string;
   tagline: string;
   emoji: string;
-  color: string;
-  bgGradient: string;
-  borderColor: string;
-  textColor: string;
   bpm: number;
   scaleRoot: string;
   scaleType: string;
@@ -137,10 +133,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     name: 'Lo-Fi Chill',
     tagline: 'Warm dusty beats & relaxing jazz chords',
     emoji: '☕',
-    color: '#F59E0B',
-    bgGradient: 'from-amber-950/40 via-stone-900/40 to-amber-950/20',
-    borderColor: 'border-amber-500/40',
-    textColor: 'text-amber-300',
     bpm: 84,
     scaleRoot: 'C',
     scaleType: 'Major',
@@ -247,10 +239,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     name: 'Synthwave 80s',
     tagline: 'Neon night driving with retro analog synth & pumping bass',
     emoji: '🏎️',
-    color: '#EC4899',
-    bgGradient: 'from-pink-950/40 via-purple-950/40 to-cyan-950/20',
-    borderColor: 'border-pink-500/40',
-    textColor: 'text-pink-300',
     bpm: 118,
     scaleRoot: 'A',
     scaleType: 'Natural Minor',
@@ -361,10 +349,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     name: 'Cyber EDM',
     tagline: 'High-energy 128 BPM festival drop with punchy kicks & arps',
     emoji: '⚡',
-    color: '#06B6D4',
-    bgGradient: 'from-cyan-950/40 via-blue-950/40 to-purple-950/20',
-    borderColor: 'border-cyan-500/40',
-    textColor: 'text-cyan-300',
     bpm: 128,
     scaleRoot: 'F',
     scaleType: 'Natural Minor',
@@ -465,10 +449,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     name: 'Deep Ambient',
     tagline: 'Floating ethereal pads, lush reverbs & meditative chords',
     emoji: '🌌',
-    color: '#A855F7',
-    bgGradient: 'from-purple-950/40 via-indigo-950/40 to-slate-950/20',
-    borderColor: 'border-purple-500/40',
-    textColor: 'text-purple-300',
     bpm: 72,
     scaleRoot: 'D',
     scaleType: 'Lydian',
@@ -570,10 +550,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     name: 'Boom Bap',
     tagline: 'Crisp swing drums, soulful minor keys & groovy bass',
     emoji: '🎙️',
-    color: '#10B981',
-    bgGradient: 'from-emerald-950/40 via-zinc-900/40 to-emerald-950/20',
-    borderColor: 'border-emerald-500/40',
-    textColor: 'text-emerald-300',
     bpm: 92,
     scaleRoot: 'E',
     scaleType: 'Dorian',
@@ -673,10 +649,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     name: 'Zen Garden',
     tagline: 'Peaceful pentatonic bells, bamboo flute sounds & soothing flow',
     emoji: '🎋',
-    color: '#38BDF8',
-    bgGradient: 'from-sky-950/40 via-teal-950/40 to-slate-950/20',
-    borderColor: 'border-sky-500/40',
-    textColor: 'text-sky-300',
     bpm: 78,
     scaleRoot: 'G',
     scaleType: 'Pentatonic Major',

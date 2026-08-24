@@ -38,7 +38,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     steps: [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false],
     volume: 0.9,
     muted: false,
-    color: 'bg-rose-500',
+    color: 'bg-error',
   },
   {
     id: 'track-snare',
@@ -47,7 +47,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     steps: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false],
     volume: 0.85,
     muted: false,
-    color: 'bg-amber-500',
+    color: 'bg-warning',
   },
   {
     id: 'track-hihat',
@@ -56,7 +56,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     steps: [true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false],
     volume: 0.75,
     muted: false,
-    color: 'bg-emerald-500',
+    color: 'bg-success',
   },
   {
     id: 'track-openhat',
@@ -65,7 +65,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     steps: [false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false],
     volume: 0.8,
     muted: false,
-    color: 'bg-cyan-500',
+    color: 'bg-accent',
   },
   {
     id: 'track-clap',
@@ -74,7 +74,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     steps: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false],
     volume: 0.85,
     muted: false,
-    color: 'bg-purple-500',
+    color: 'bg-secondary',
   },
 ];
 

@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { FACTORY_BASS_PRESETS } from './bassPresets';
 import {
   FACTORY_PRESETS,
+  SYNTH_CATEGORIES,
   getAllSynthPresets,
   findPresetByName,
+  getCategoryMeta,
   getPresetsGroupedByCategory,
 } from './synthPresets';
 import type { SynthPresetItem } from './synthPresets';
@@ -149,5 +151,41 @@ describe('custom chord progression helpers (store-backed wrappers)', () => {
 
     useAppStore.getState().deleteCustomChordProgression(inStore[0].id);
     expect(useAppStore.getState().customChordProgressions).toHaveLength(1);
+  });
+});
+
+const PALETTE =
+  /\b(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/;
+
+describe('SYNTH_CATEGORIES badge classes', () => {
+  test('no category carries a raw Tailwind palette colour', () => {
+    for (const meta of SYNTH_CATEGORIES) {
+      expect(meta.badgeClass).not.toMatch(PALETTE);
+    }
+  });
+
+  test('every badgeClass is a complete daisyUI badge class list', () => {
+    for (const meta of SYNTH_CATEGORIES) {
+      expect(meta.badgeClass.startsWith('badge ')).toBe(true);
+    }
+  });
+
+  test('the eight categories map onto the documented tokens', () => {
+    expect(
+      Object.fromEntries(SYNTH_CATEGORIES.map((m) => [m.id, m.badgeClass]))
+    ).toEqual({
+      Bass: 'badge badge-accent',
+      Lead: 'badge badge-secondary',
+      Pad: 'badge badge-primary',
+      Keys: 'badge badge-accent badge-outline',
+      Pluck: 'badge badge-primary badge-outline',
+      Brass: 'badge badge-primary badge-soft',
+      FX: 'badge badge-secondary badge-soft',
+      User: 'badge badge-success badge-outline',
+    });
+  });
+
+  test('the unknown-category fallback is a neutral badge', () => {
+    expect(getCategoryMeta('Nope' as never).badgeClass).toBe('badge badge-ghost');
   });
 });
