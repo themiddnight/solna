@@ -597,7 +597,7 @@ export const SynthView = () => {
         {/* Simple Mode: Preset Selector & Category Chips merged into the header card */}
         {synthViewMode === "simple" && (
           <div className="pt-3 border-t border-[#252B48] space-y-3">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-0">
               {/* Preset Title & Category Badge */}
               <div className="flex items-center gap-2 flex-wrap min-w-0">
                 {activeCategoryMeta && (
@@ -607,7 +607,7 @@ export const SynthView = () => {
                     {activeCategoryMeta.label}
                   </span>
                 )}
-                <p className="font-extrabold text-white tracking-tight truncate">
+                <p className="text-2xl leading-6 font-extrabold text-white tracking-tight truncate">
                   {params.preset || "Default Sound"}
                 </p>
               </div>
@@ -653,8 +653,8 @@ export const SynthView = () => {
             </div>
 
             {/* Category Quick Filter Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono mr-1">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0 no-scrollbar">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-sans mr-1">
                 Sound Style:
               </span>
               {[
