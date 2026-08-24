@@ -35,14 +35,17 @@ declare module 'bun:test' {
     toBeNull(): void;
     toBeDefined(): void;
     toBeUndefined(): void;
+    toMatch(expected: string | RegExp): void;
     toBeGreaterThan(expected: number): void;
     toBeGreaterThanOrEqual(expected: number): void;
     toBeLessThan(expected: number): void;
+    toBeLessThanOrEqual(expected: number): void;
     toHaveProperty(key: string): void;
     toHaveBeenCalled(): void;
     toHaveBeenCalledTimes(expected: number): void;
     toHaveBeenCalledWith(...expected: unknown[]): void;
     toHaveBeenLastCalledWith(...expected: unknown[]): void;
+    toThrow(expected?: string | RegExp | Error): void;
   }
 
   export function expect<T>(actual: T, message?: string): Matchers<T>;
