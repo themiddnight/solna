@@ -70,7 +70,7 @@ describe('SSR / no-DOM safety', () => {
     expect(palette['--color-error']).toBeDefined();
   });
 
-  test('state-token fallbacks mirror the solva-dark palette in src/index.css', () => {
+  test('state-token fallbacks mirror the solna-dark palette in src/index.css', () => {
     // #5FD08B, #FACC15, #F05545, #79A6E0 — value-specific so a wrong hex fails.
     expect(resolveThemeRgb('--color-success')).toEqual({ r: 95, g: 208, b: 139 });
     expect(resolveThemeRgb('--color-warning')).toEqual({ r: 250, g: 204, b: 21 });

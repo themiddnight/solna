@@ -3,19 +3,19 @@ import { persistTheme, readStoredTheme, resolveInitialTheme } from './Header';
 
 describe('resolveInitialTheme', () => {
   test('a stored theme always wins over the OS preference', () => {
-    expect(resolveInitialTheme('solva-light', false)).toBe('solva-light');
-    expect(resolveInitialTheme('solva-dark', true)).toBe('solva-dark');
+    expect(resolveInitialTheme('solna-light', false)).toBe('solna-light');
+    expect(resolveInitialTheme('solna-dark', true)).toBe('solna-dark');
   });
 
   test('first visit follows the OS preference', () => {
-    expect(resolveInitialTheme(null, true)).toBe('solva-light');
-    expect(resolveInitialTheme(null, false)).toBe('solva-dark');
+    expect(resolveInitialTheme(null, true)).toBe('solna-light');
+    expect(resolveInitialTheme(null, false)).toBe('solna-dark');
   });
 
   test('a corrupt or legacy stored value falls back to the OS preference', () => {
-    expect(resolveInitialTheme('murva-dark', true)).toBe('solva-light');
-    expect(resolveInitialTheme('', false)).toBe('solva-dark');
-    expect(resolveInitialTheme('null', false)).toBe('solva-dark');
+    expect(resolveInitialTheme('murva-dark', true)).toBe('solna-light');
+    expect(resolveInitialTheme('', false)).toBe('solna-dark');
+    expect(resolveInitialTheme('null', false)).toBe('solna-dark');
   });
 });
 
@@ -36,8 +36,8 @@ const throwingSetStorage = {
 
 describe('readStoredTheme', () => {
   test('returns the stored value when storage works normally', () => {
-    const storage = { getItem: () => 'solva-light' };
-    expect(readStoredTheme(storage)).toBe('solva-light');
+    const storage = { getItem: () => 'solna-light' };
+    expect(readStoredTheme(storage)).toBe('solna-light');
   });
 
   test('degrades to null when storage access throws, instead of propagating', () => {
@@ -60,17 +60,17 @@ describe('persistTheme', () => {
         calls.push([key, value]);
       },
     };
-    persistTheme('solva-light', storage);
-    expect(calls).toEqual([['solva_theme', 'solva-light']]);
+    persistTheme('solna-light', storage);
+    expect(calls).toEqual([['solna_theme', 'solna-light']]);
   });
 
   test('does not throw when storage access throws (best-effort persistence)', () => {
-    expect(() => persistTheme('solva-dark', throwingSetStorage)).not.toThrow();
+    expect(() => persistTheme('solna-dark', throwingSetStorage)).not.toThrow();
   });
 
   test('does not throw with no storage injected and no global (bun test has no localStorage)', () => {
     // Same regression as readStoredTheme: the default parameter must not
     // evaluate localStorage outside the try/catch.
-    expect(() => persistTheme('solva-light')).not.toThrow();
+    expect(() => persistTheme('solna-light')).not.toThrow();
   });
 });

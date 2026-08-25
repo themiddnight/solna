@@ -8,7 +8,7 @@
  * element and read back the computed `color`, which every engine normalises
  * to an `rgb()` / `rgba()` string.
  *
- * All DOM-touching functions degrade to the solva-dark defaults when there is
+ * All DOM-touching functions degrade to the solna-dark defaults when there is
  * no document (Bun's test runner and any SSR render), so this module is safe
  * to import from anywhere.
  */
@@ -49,7 +49,7 @@ export const THEME_TOKENS: readonly ThemeToken[] = [
 ];
 
 /**
- * solva-dark values, mirroring src/index.css. Used when there is no document
+ * solna-dark values, mirroring src/index.css. Used when there is no document
  * (bun test / SSR) and when a token resolves to something unparseable.
  */
 const FALLBACKS: Record<ThemeToken, Rgb> = {

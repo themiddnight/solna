@@ -38,18 +38,18 @@ const MASTER_TABS: Array<{
   icon: LucideIcon;
 }> = [{ view: "effects", label: "Master FX", icon: Sliders }];
 
-export type SolvaTheme = 'solva-dark' | 'solva-light';
+export type SolnaTheme = 'solna-dark' | 'solna-light';
 
-const THEME_STORAGE_KEY = 'solva_theme';
+const THEME_STORAGE_KEY = 'solna_theme';
 
 /**
  * Pure theme resolution — no DOM, no localStorage access, unit-testable.
  * Mirrors exactly what the bootstrap <script> in index.html does, so the two
  * can never disagree.
  */
-export function resolveInitialTheme(stored: string | null, prefersLight: boolean): SolvaTheme {
-  if (stored === 'solva-dark' || stored === 'solva-light') return stored;
-  return prefersLight ? 'solva-light' : 'solva-dark';
+export function resolveInitialTheme(stored: string | null, prefersLight: boolean): SolnaTheme {
+  if (stored === 'solna-dark' || stored === 'solna-light') return stored;
+  return prefersLight ? 'solna-light' : 'solna-dark';
 }
 
 /**
@@ -74,7 +74,7 @@ export function readStoredTheme(storage?: Pick<Storage, 'getItem'>): string | nu
  * updates the in-memory theme and the DOM attribute for the session — only
  * cross-session persistence is lost when storage is blocked.
  */
-export function persistTheme(theme: SolvaTheme, storage?: Pick<Storage, 'setItem'>): void {
+export function persistTheme(theme: SolnaTheme, storage?: Pick<Storage, 'setItem'>): void {
   try {
     (storage ?? localStorage).setItem(THEME_STORAGE_KEY, theme);
   } catch {
@@ -95,7 +95,7 @@ export const Header: React.FC = React.memo(() => {
   const scaleType = useAppStore((s) => s.scaleType);
   const setScaleType = useAppStore((s) => s.setScaleType);
 
-  const [currentTheme, setCurrentTheme] = React.useState<SolvaTheme>(() =>
+  const [currentTheme, setCurrentTheme] = React.useState<SolnaTheme>(() =>
     resolveInitialTheme(
       document.documentElement.getAttribute("data-theme"),
       typeof window !== "undefined" &&
@@ -104,7 +104,7 @@ export const Header: React.FC = React.memo(() => {
   );
 
   const toggleTheme = () => {
-    const next: SolvaTheme = currentTheme === "solva-dark" ? "solva-light" : "solva-dark";
+    const next: SolnaTheme = currentTheme === "solna-dark" ? "solna-light" : "solna-dark";
     setCurrentTheme(next);
     document.documentElement.setAttribute("data-theme", next);
     persistTheme(next);
@@ -135,7 +135,7 @@ export const Header: React.FC = React.memo(() => {
         </div>
         <div className="flex items-center gap-1.5">
           <span className="font-extrabold text-sm tracking-tight text-base-content">
-            Solva
+            Solna
           </span>
           <span className="hidden sm:inline-block text-[11px] text-base-content/60 font-medium truncate max-w-30 md:max-w-40">
             · {projectTitle}
@@ -257,9 +257,9 @@ export const Header: React.FC = React.memo(() => {
           id="btn-toggle-theme"
           onClick={toggleTheme}
           className="btn btn-sm btn-square btn-ghost"
-          title={`Switch to ${currentTheme === 'solva-dark' ? 'Light' : 'Dark'} Theme`}
+          title={`Switch to ${currentTheme === 'solna-dark' ? 'Light' : 'Dark'} Theme`}
         >
-          {currentTheme === 'solva-dark' ? (
+          {currentTheme === 'solna-dark' ? (
             <Sun className="w-4 h-4 text-primary" />
           ) : (
             <Moon className="w-4 h-4 text-primary" />

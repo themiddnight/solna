@@ -1,11 +1,11 @@
 ---
 name: dsp-audio
-description: Use when touching anything under src/audio/ in solva — the audioEngine singleton, the master effect rack or signal routing, AudioContext lifecycle/first-click init, synth voice allocation, drum kits, the shared 16th clock, or when new audio state must reach the engine from the store. Also use when audio is silent, clicks, drones, or a knob has no audible effect.
+description: Use when touching anything under src/audio/ in solna — the audioEngine singleton, the master effect rack or signal routing, AudioContext lifecycle/first-click init, synth voice allocation, drum kits, the shared 16th clock, or when new audio state must reach the engine from the store. Also use when audio is silent, clicks, drones, or a knob has no audible effect.
 ---
 
-# Solva DSP & Audio Routing
+# Solna DSP & Audio Routing
 
-Solva's audio is **raw Web Audio API**. There is no Tone.js — `tonal` is a music-theory
+Solna's audio is **raw Web Audio API**. There is no Tone.js — `tonal` is a music-theory
 dependency only, never used for audio.
 
 Everything lives in one singleton: `src/audio/engine.ts` → `export const audioEngine = new AudioEngine()`.

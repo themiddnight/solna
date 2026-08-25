@@ -1,18 +1,18 @@
-# Solva — Design System & Architecture Specification
+# Solna — Design System & Architecture Specification
 
 ## 1. Introduction & Conceptual Vision
 
-**Solva** is a dawn-inspired, single-user solo music creation and idea-sketching workspace. 
-- **The Narrative**: Solva represents the quiet, focused morning hours (*Dawn*) where a musician explores chords, tests melodies, and sequences loops in solitude. Later, these ideas can be brought into **Murva** (*Dusk*) for multiplayer collaborative jamming.
+**Solna** is a dawn-inspired, single-user solo music creation and idea-sketching workspace. 
+- **The Narrative**: Solna represents the quiet, focused morning hours (*Dawn*) where a musician explores chords, tests melodies, and sequences loops in solitude. Later, these ideas can be brought into **Murva** (*Dusk*) for multiplayer collaborative jamming.
 - **Design Objective**: Deliver a cozy, low-pressure, highly tactile audio workstation experience that blends professional DAW capabilities with warm, inviting analog-hardware aesthetics.
 
 ---
 
 ## 2. Color System & Theme Architecture
 
-Solva is built using Tailwind CSS and DaisyUI, featuring two custom-crafted warm-tinted themes designed to reduce eye strain during extended creative sessions while maintaining high contrast.
+Solna is built using Tailwind CSS and DaisyUI, featuring two custom-crafted warm-tinted themes designed to reduce eye strain during extended creative sessions while maintaining high contrast.
 
-### ☕ Solva-Dark (`solva-dark`) — Espresso & Sunrise Glow
+### ☕ Solna-Dark (`solna-dark`) — Espresso & Sunrise Glow
 Designed for deep night-owl or twilight composition sessions with warm charcoal undertones instead of cold blue-blacks.
 
 * **Canvas & App Background (`base-200`):** `#14121B` (Deep Espresso Charcoal)
@@ -28,7 +28,7 @@ Designed for deep night-owl or twilight composition sessions with warm charcoal 
 * **Error (`error`):** `#F05545` — destructive actions, VU clip segments, mute-on
 * **Info (`info`):** `#79A6E0` — neutral informational hints
 
-### 📜 Solva-Light (`solva-light`) — Sunlight Alabaster & Warm Paper
+### 📜 Solna-Light (`solna-light`) — Sunlight Alabaster & Warm Paper
 Designed for morning and daytime sketching, simulating warm parchment paper without clinical stark white glare.
 
 * **Canvas & App Background (`base-200`):** `#F7F4EF` (Warm Alabaster Linen)
@@ -46,13 +46,13 @@ Designed for morning and daytime sketching, simulating warm parchment paper with
 
 > **The canvas is a gradient, not a flat fill.** `src/index.css` defines a `bg-canvas` utility — `base-200` under two soft radial glows: a sunrise rising from the bottom edge (`--canvas-dawn`, mixed from `primary`) and a cooler dawn-sky wash in the top-right (`--canvas-sky`, mixed from `secondary`). Both are `color-mix`ed from the live theme tokens, so the gradient re-tints itself on a theme flip rather than needing a second hand-written palette; only the mix percentages differ per theme (warm paper stains at far lower opacity than the espresso base). The app shell in `src/App.tsx` wears `bg-canvas` instead of `bg-base-200` — it is a full-height flex column that would otherwise paint over anything set on `body`. It is **static**: the audio-reactive ambient wash that used to live here was removed deliberately.
 
-> Both themes are declared CSS-first in `src/index.css` via `@plugin "daisyui/theme" { … }`. There is no `tailwind.config.*` file in this repository and none may be added. The active theme is read from `document.documentElement.dataset.theme` and persisted to `localStorage` under `solva_theme`; `index.html` sets the attribute in a blocking `<head>` script so light-theme users never see a dark first paint.
+> Both themes are declared CSS-first in `src/index.css` via `@plugin "daisyui/theme" { … }`. There is no `tailwind.config.*` file in this repository and none may be added. The active theme is read from `document.documentElement.dataset.theme` and persisted to `localStorage` under `solna_theme`; `index.html` sets the attribute in a blocking `<head>` script so light-theme users never see a dark first paint.
 
 ---
 
 ## 3. Typography & Hierarchy
 
-Solva uses clean, highly readable font stacks optimized for precision controls and musical notation.
+Solna uses clean, highly readable font stacks optimized for precision controls and musical notation.
 
 * **Headings & Titles:** **Figtree** (variable, 300-900, loaded from Google Fonts in `index.html`) falling back to `system-ui, -apple-system, sans-serif`, with `tracking-tight` for compact musical labels. Applied to `body` in `src/index.css`.
 * **Musical Values & BPM:** **JetBrains Mono** (weights 400/500/600/700), bound in `src/index.css` to `code, pre, .font-mono`. Every numeric readout carries `font-mono`: BPM, filter cutoff in Hz, gain in dB, percentages, octave offsets, arp step timing (`1/16`, `1/8`, `1/32`), and the oscilloscope's canvas axis labels, which set `8px 'JetBrains Mono', monospace` directly on the 2D context.
@@ -65,9 +65,9 @@ Solva uses clean, highly readable font stacks optimized for precision controls a
 
 ## 4. Component Architecture
 
-Solva is structured into modular, single-responsibility React components:
+Solna is structured into modular, single-responsibility React components:
 
-1. **`Header.tsx`**: Top navigation bar containing the Solva brand logo, project title, primary view tabs (`Synth`, `Step Matrix`, `Chords`, `Master FX`), global Key/Scale selector, Project modal trigger, and the **Theme Toggle** button.
+1. **`Header.tsx`**: Top navigation bar containing the Solna brand logo, project title, primary view tabs (`Synth`, `Step Matrix`, `Chords`, `Master FX`), global Key/Scale selector, Project modal trigger, and the **Theme Toggle** button.
 2. **`InstantVibesBar.tsx`**: Quick-start genre and mood presets (`Lo-Fi Chill`, `Synthwave 80s`, `Cyber EDM`, `Deep Ambient`, `Boom Bap`, `Zen Garden`) allowing instant loading of complete harmonic and rhythmic templates.
 
    > **Ids drift from display names — do not "fix" this.** Four vibe ids predate their current labels. Project files persist the id, so renaming an id silently breaks every saved project that references it.
@@ -131,7 +131,7 @@ the theme-token migration.
 
 ## 6. Token Discipline & Enforcement
 
-Solva has exactly two themes, and every surface must work in both. That is only achievable if **no component names a colour**. Components name *roles*; `src/index.css` maps roles to colours; daisyUI swaps the mapping when `data-theme` changes.
+Solna has exactly two themes, and every surface must work in both. That is only achievable if **no component names a colour**. Components name *roles*; `src/index.css` maps roles to colours; daisyUI swaps the mapping when `data-theme` changes.
 
 ### 6.1 Canonical role map
 
@@ -186,7 +186,7 @@ It is enforced by `scripts/themeTokenGuard.test.ts` under `bun test`, and its `A
 
 ### 6.4 Shape tokens
 
-Solva's `--radius-*` values are set explicitly in both `@plugin "daisyui/theme"` blocks in `src/index.css`, matching Murva's shape language (colours are unaffected — Solva keeps its own palette from §2/§6.1):
+Solna's `--radius-*` values are set explicitly in both `@plugin "daisyui/theme"` blocks in `src/index.css`, matching Murva's shape language (colours are unaffected — Solna keeps its own palette from §2/§6.1):
 
 | token | value | role |
 |---|---|---|

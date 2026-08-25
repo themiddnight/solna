@@ -2,7 +2,7 @@
  * Theme token guard.
  *
  * Scans the app source for legacy murva-palette leftovers that break the
- * `solva-light` daisyUI theme: raw hex literals, raw Tailwind palette colors,
+ * `solna-light` daisyUI theme: raw hex literals, raw Tailwind palette colors,
  * absolute black/white, `dark:` variants, rgb()/rgba() literals, and a handful
  * of utilities that do not exist in Tailwind v4 (so they silently no-op).
  *

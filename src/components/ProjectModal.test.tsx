@@ -16,13 +16,13 @@ const project: ProjectState = {
 };
 
 describe('projectFileName', () => {
-  test('uses the solva brand suffix, not the retired musibox one', () => {
-    expect(projectFileName('Midnight Drive')).toBe('Midnight_Drive_solva_project.json');
+  test('uses the solna brand suffix, not the retired musibox one', () => {
+    expect(projectFileName('Midnight Drive')).toBe('Midnight_Drive_solna_project.json');
     expect(projectFileName('Midnight Drive')).not.toContain('musibox');
   });
 
   test('collapses every run of whitespace into single underscores', () => {
-    expect(projectFileName('  Lo   Fi  Chill ')).toBe('_Lo_Fi_Chill__solva_project.json');
+    expect(projectFileName('  Lo   Fi  Chill ')).toBe('_Lo_Fi_Chill__solna_project.json');
   });
 });
 

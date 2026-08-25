@@ -12,7 +12,7 @@ interface ProjectModalProps {
 
 /** Download filename for the JSON project export. Pure: no DOM, unit-testable. */
 export function projectFileName(title: string): string {
-  return `${title.replace(/\s+/g, '_')}_solva_project.json`;
+  return `${title.replace(/\s+/g, '_')}_solna_project.json`;
 }
 
 export const ProjectModal: React.FC<ProjectModalProps> = React.memo(({

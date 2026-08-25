@@ -1,10 +1,10 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes: solva-dark --default, solva-light;
+  themes: solna-dark --default, solna-light;
 }
 
 @plugin "daisyui/theme" {
-  name: "solva-dark";
+  name: "solna-dark";
   default: true;
   color-scheme: dark;
   --color-base-100: #1C1924;
@@ -34,7 +34,7 @@
 }
 
 @plugin "daisyui/theme" {
-  name: "solva-light";
+  name: "solna-light";
   default: false;
   color-scheme: light;
   --color-base-100: #FFFFFF;
@@ -75,14 +75,14 @@
 }
 
 :root,
-[data-theme="solva-dark"] {
+[data-theme="solna-dark"] {
   --key-white: #EDE7E1;
   --key-white-content: #14121B;
   --key-black: #241F2E;
   --key-black-content: #EDE7E1;
 }
 
-[data-theme="solva-light"] {
+[data-theme="solna-light"] {
   --key-white: #FFFFFF;
   --key-white-content: #241E19;
   --key-black: #2A241F;
@@ -126,7 +126,7 @@
 }
 
 :root,
-[data-theme="solva-dark"] {
+[data-theme="solna-dark"] {
   --module-chord: #9CB86B;
   --module-chord-content: #14121B;
   --module-bass: #6C93C7;
@@ -150,7 +150,7 @@
   --canvas-sky: color-mix(in oklab, var(--color-secondary) 9%, transparent);
 }
 
-[data-theme="solva-light"] {
+[data-theme="solna-light"] {
   --module-chord: #6B8E4E;
   --module-chord-content: #FFFFFF;
   --module-bass: #3E6BA6;
@@ -201,7 +201,7 @@
   }
 }
 
-/* Custom scrollbars — theme-driven, so solva-light gets light chrome */
+/* Custom scrollbars — theme-driven, so solna-light gets light chrome */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -266,20 +266,20 @@ input[type="range"] {
 /* tailwindcss-animate is not a dependency; these two hand-written utilities
    replace the animate-in/fade-in/slide-in-from-right classes the preset
    library used to reference (which emitted nothing). */
-@keyframes solva-fade-in {
+@keyframes solna-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-@keyframes solva-slide-in-right {
+@keyframes solna-slide-in-right {
   from { opacity: 0; transform: translateX(1.5rem); }
   to { opacity: 1; transform: translateX(0); }
 }
 
 @utility animate-fade-in {
-  animation: solva-fade-in 150ms ease-out;
+  animation: solna-fade-in 150ms ease-out;
 }
 
 @utility animate-slide-in-right {
-  animation: solva-slide-in-right 200ms ease-out;
+  animation: solna-slide-in-right 200ms ease-out;
 }

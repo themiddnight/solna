@@ -24,7 +24,7 @@ bun run verify         # test + lint + check:keys + check:drums + build (the gat
 
 ## Architecture
 
-Single-page audio workstation ("Solva"): four tab views (Synth, Sequencer, Chords, Effects) that stay mounted simultaneously (`activeTab` toggles `block`/`hidden` in `App.tsx`) so audio never stops when switching tabs.
+Single-page audio workstation ("Solna"): four tab views (Synth, Sequencer, Chords, Effects) that stay mounted simultaneously (`activeTab` toggles `block`/`hidden` in `App.tsx`) so audio never stops when switching tabs.
 
 **Three layers, enforced by eslint `no-restricted-imports`:**
 
@@ -38,7 +38,7 @@ Single-page audio workstation ("Solva"): four tab views (Synth, Sequencer, Chord
 
 ## Theming — the hard rule
 
-Two daisyUI themes (`solva-dark`, `solva-light`) declared CSS-first in `src/index.css` via `@plugin "daisyui/theme"`. **There is no `tailwind.config.*` and none may be added.** `index.html` sets `data-theme` in a blocking head script; it persists to `localStorage` under `solva_theme`.
+Two daisyUI themes (`solna-dark`, `solna-light`) declared CSS-first in `src/index.css` via `@plugin "daisyui/theme"`. **There is no `tailwind.config.*` and none may be added.** `index.html` sets `data-theme` in a blocking head script; it persists to `localStorage` under `solna_theme`.
 
 Components name **roles**, never colours. `scripts/themeTokenGuard.ts` scans `src/**/*.{ts,tsx}` and fails the build on: raw hex, Tailwind palette classes (`indigo-*`, `slate-*`, `purple-*`, `emerald-*`, `pink-*`, `cyan-*`, `rose-*`), `text-white`/`bg-black`/etc., the `dark:` variant, `rgb()`/`rgba()` literals, and silently-dead utilities (`py-0.2`, `scale-102`, `z-60`, `xs:`). Its `ALLOWLIST` is empty and the suite has hygiene + shrink tests that make re-populating it fail — fix the code, not the allowlist. Canvas code (which cannot use classes) resolves live theme colours at runtime through `src/utils/themeColor.ts`.
 

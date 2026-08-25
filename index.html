@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en" data-theme="solva-dark">
+<html lang="en" data-theme="solna-dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Solva — Dawn Solo Idea Music Studio</title>
+    <title>Solna — Dawn Solo Idea Music Studio</title>
     <meta name="description" content="Dawn solo loop and idea music studio featuring a step sequencer, smart chord progression builder, dual-mode synthesizer, and warm acoustic-analog workflows." />
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -11,23 +11,23 @@
     <link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <script>
       // Pre-paint theme bootstrap. Must stay inline and blocking (no defer/async)
-      // so data-theme is correct before the first paint — otherwise solva-light
+      // so data-theme is correct before the first paint — otherwise solna-light
       // users get a dark flash. Header.tsx reads this attribute for its initial
       // React state, so this is also the single source of truth on first render.
       (function () {
         var theme = null;
         try {
-          theme = localStorage.getItem('solva_theme');
+          theme = localStorage.getItem('solna_theme');
         } catch (e) {
           // Private mode / blocked storage: fall through to the media query.
           theme = null;
         }
-        if (theme !== 'solva-dark' && theme !== 'solva-light') {
+        if (theme !== 'solna-dark' && theme !== 'solna-light') {
           theme =
             window.matchMedia &&
             window.matchMedia('(prefers-color-scheme: light)').matches
-              ? 'solva-light'
-              : 'solva-dark';
+              ? 'solna-light'
+              : 'solna-dark';
         }
         document.documentElement.dataset.theme = theme;
       })();

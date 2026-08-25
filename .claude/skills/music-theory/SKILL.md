@@ -1,9 +1,9 @@
 ---
 name: music-theory
-description: Use when touching notes, scales, keys, chord generation, bass/rhythm patterns, the arpeggiator, the QWERTY keyboard map, or the drum-pad shortcuts in solva — or when `bun run check:keys` fails.
+description: Use when touching notes, scales, keys, chord generation, bass/rhythm patterns, the arpeggiator, the QWERTY keyboard map, or the drum-pad shortcuts in solna — or when `bun run check:keys` fails.
 ---
 
-# Music Theory (solva)
+# Music Theory (solna)
 
 Everything theory-related lives in **`src/utils/musicTheory.ts`** (pure, no store/engine imports).
 `src/audio/` and `src/components/` both import from it; it imports neither.
