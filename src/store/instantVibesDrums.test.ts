@@ -3,7 +3,7 @@ import { INSTANT_VIBES } from './instantVibes';
 import { ORIGINAL_VIBE_DRUM_PATTERNS } from './instantVibesDrumsFixture';
 import { drumPatternById } from '../audio/data/vibeDrumPatterns';
 
-const VIBE_IDS = ['lofi-chill', 'synthwave-80s', 'cyber-dance', 'ambient-chill', 'hiphop-groove', 'asian-zen'];
+const VIBE_IDS = INSTANT_VIBES.map((v) => v.id);
 
 const ROWS = ['kick', 'snare', 'hihat', 'openhat', 'clap', 'tom', 'crash'];
 

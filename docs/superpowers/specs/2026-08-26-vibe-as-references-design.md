@@ -202,6 +202,28 @@ export interface InstantVibe {
 }
 ```
 
+> **2026-08-26 — what actually shipped.** Two departures from this section, recorded
+> after the fact rather than by rewriting the sketch above:
+>
+> 1. **`InstantVibe` keeps all three resolved-output caches, not just `chords`.** The
+>    shipped type also carries `drumPattern: Record<string, number[]>` beside
+>    `drumPatternId`, and `effects: Partial<MasterEffects>` beside `effectChainId` —
+>    the same reference-plus-cached-resolution shape this section describes only for
+>    `chords`/`progressionId`. The reason is `applyInstantVibeToStore`: keeping
+>    `drumPattern` and `effects` as fields on the vibe literal let that function's body
+>    stay byte-identical across phases 3 and 4 (it already read `vibe.drumPattern` and
+>    `vibe.effects`), rather than requiring it to call two different resolvers at apply
+>    time. The original reasoning above for caching `chords` — "the same way the
+>    variation engine's resolver already produces a concrete `chords` array" — turned
+>    out to apply equally to the other two library references, so it was extended to
+>    them instead of being `chords`-only.
+> 2. **The apply-time `resolveEffectChain(vibe.effectChainId)` mechanism sketched below
+>    was not adopted.** Phase 4 resolves `effects` in the vibe literal (via
+>    `effectChainById`/`requireEffectChain` at module load, next to `chords:
+>    resolveProgression(...)`), matching how phases 1 and 3 already resolve `chords` and
+>    `drumPattern` in the literal rather than at `applyInstantVibeToStore` call time.
+>    `applyInstantVibeToStore` keeps reading `vibe.effects` directly, unchanged.
+
 **Field naming is `*Id`, not `*Name`.** The existing fields are `synthPresetName` /
 `chordPresetName` / `bassPresetName`, matched against `SynthPresetItem.name` only for
 display, never resolved back into the library — `buildSynthParams` never used them to
@@ -301,7 +323,8 @@ into a new library keyed by id (`effectChainId`). `applyInstantVibeToStore`'s
 `store.setEffects({ ...store.effects, ...vibe.effects })` spread becomes `...
 store.effects, ...resolveEffectChain(vibe.effectChainId)` (mechanism only; no code in
 this spec) — every effect chain remains a **partial** `MasterEffects`, since not every
-vibe sets `distortionWet` today and that must not change.
+vibe sets `distortionWet` today and that must not change. (This apply-time mechanism was
+not what shipped — see the 2026-08-26 note in "Target shape" above.)
 
 ## Invariants to enforce with tests
 

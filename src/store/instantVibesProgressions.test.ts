@@ -3,7 +3,7 @@ import { INSTANT_VIBES } from './instantVibes';
 import { ORIGINAL_VIBE_CHORDS } from './instantVibesChordsFixture';
 import { progressionById, resolveProgression } from '../audio/data/chordProgressions';
 
-const VIBE_IDS = ['lofi-chill', 'synthwave-80s', 'cyber-dance', 'ambient-chill', 'hiphop-groove', 'asian-zen'];
+const VIBE_IDS = INSTANT_VIBES.map((v) => v.id);
 
 // Root/quality/bars/notes only — resolveProgression ids are
 // `${progressionId}-${i}`, which never matches the fixture's hand-authored

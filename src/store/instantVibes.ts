@@ -5,6 +5,7 @@ import { useAppStore } from './store';
 import { INITIAL_SYNTH_PARAMS } from './initialState';
 import { progressionById, resolveProgression } from '../audio/data/chordProgressions';
 import { drumPatternById } from '../audio/data/vibeDrumPatterns';
+import { requireEffectChain } from '../audio/data/vibeEffectChains';
 
 /**
  * Resolve one of a vibe's three synth voices from a library preset id.
@@ -159,16 +160,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
     // Main Synth: Warm Keys / Whistle
     synthPresetId: 'factory-dream-keys',
 
-    effects: {
-      reverbWet: 0.35,
-      reverbDecay: 2.4,
-      delayWet: 0.22,
-      delayFeedback: 0.28,
-      compressorThreshold: -18,
-      eqLow: 3,
-      eqMid: 1,
-      eqHigh: -2,
-    },
+    effectChainId: 'lofi-tape-room',
+    effects: requireEffectChain('lofi-tape-room'),
 
     // lofi-chill
     variation: {
@@ -227,17 +220,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
     // Main Synth: Hyper Saw Lead
     synthPresetId: 'factory-hyper-saw-lead',
 
-    effects: {
-      reverbWet: 0.48,
-      reverbDecay: 3.6,
-      delayWet: 0.28,
-      delayFeedback: 0.35,
-      distortionWet: 0.18,
-      compressorThreshold: -15,
-      eqLow: 2,
-      eqMid: 1,
-      eqHigh: 4,
-    },
+    effectChainId: 'synthwave-neon-hall',
+    effects: requireEffectChain('synthwave-neon-hall'),
 
     // synthwave-80s
     variation: {
@@ -298,17 +282,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
     // Main Synth: Cyber Pluck Lead
     synthPresetId: 'factory-pluck',
 
-    effects: {
-      reverbWet: 0.36,
-      reverbDecay: 2.8,
-      delayWet: 0.32,
-      delayFeedback: 0.42,
-      distortionWet: 0.22,
-      compressorThreshold: -14,
-      eqLow: 3,
-      eqMid: 0,
-      eqHigh: 4,
-    },
+    effectChainId: 'edm-club-drive',
+    effects: requireEffectChain('edm-club-drive'),
 
     // cyber-dance
     variation: {
@@ -366,16 +341,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
     // Main Synth: Ethereal Bell Pad
     synthPresetId: 'factory-celestial-shimmer',
 
-    effects: {
-      reverbWet: 0.68,
-      reverbDecay: 5.8,
-      delayWet: 0.48,
-      delayFeedback: 0.58,
-      compressorThreshold: -20,
-      eqLow: 2,
-      eqMid: -1,
-      eqHigh: 2,
-    },
+    effectChainId: 'ambient-cathedral-wash',
+    effects: requireEffectChain('ambient-cathedral-wash'),
 
     // ambient-chill
     variation: {
@@ -433,16 +400,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
     // Main Synth: Mellow E-Piano Solo
     synthPresetId: 'factory-mellow-epiano',
 
-    effects: {
-      reverbWet: 0.30,
-      reverbDecay: 2.0,
-      delayWet: 0.20,
-      delayFeedback: 0.22,
-      compressorThreshold: -16,
-      eqLow: 3,
-      eqMid: 1,
-      eqHigh: 0,
-    },
+    effectChainId: 'boombap-dry-room',
+    effects: requireEffectChain('boombap-dry-room'),
 
     // hiphop-groove
     variation: {
@@ -506,16 +465,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
     // Main Synth: Pentatonic Bell Lead
     synthPresetId: 'factory-glocken-bell',
 
-    effects: {
-      reverbWet: 0.58,
-      reverbDecay: 4.4,
-      delayWet: 0.42,
-      delayFeedback: 0.46,
-      compressorThreshold: -18,
-      eqLow: 1,
-      eqMid: 0,
-      eqHigh: 3,
-    },
+    effectChainId: 'zen-temple-air',
+    effects: requireEffectChain('zen-temple-air'),
 
     // asian-zen
     variation: {

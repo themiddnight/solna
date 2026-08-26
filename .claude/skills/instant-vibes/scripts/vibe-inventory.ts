@@ -13,6 +13,7 @@ import { ALL_FACTORY_PRESETS } from '../../../../src/audio/synthPresets';
 import { RHYTHM_PATTERNS } from '../../../../src/audio/rhythmPatterns';
 import { BASS_PATTERNS } from '../../../../src/audio/bassPatterns';
 import { VIBE_DRUM_PATTERNS } from '../../../../src/audio/data/vibeDrumPatterns';
+import { VIBE_EFFECT_CHAINS } from '../../../../src/audio/data/vibeEffectChains';
 import { INSTANT_VIBES } from '../../../../src/store/instantVibes';
 import { SCALES } from '../../../../src/utils/musicTheory';
 import type { VibeGenre } from '../../../../src/types';
@@ -90,3 +91,8 @@ console.log(`\nCOMP RHYTHMS  ${JSON.stringify(RHYTHM_PATTERNS.map((r) => r.id))}
 console.log(`BASS PATTERNS ${JSON.stringify(BASS_PATTERNS.map((b) => b.id))}`);
 console.log(`DRUM PATTERNS ${JSON.stringify(Object.keys(VIBE_DRUM_PATTERNS))}`);
 console.log('  (a vibe\'s drumPatternId resolves here — separate from GENRE_PRESETS, which is the sequencer\'s)');
+console.log(`EFFECT CHAINS ${JSON.stringify(Object.keys(VIBE_EFFECT_CHAINS))}`);
+for (const [id, chain] of Object.entries(VIBE_EFFECT_CHAINS)) {
+  console.log(`  ${id.padEnd(24)} ${JSON.stringify(chain)}`);
+}
+console.log('  (a Partial<MasterEffects> — an omitted key inherits the current value, so omissions are deliberate)');

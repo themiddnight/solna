@@ -2,14 +2,24 @@ import type { ChordItem } from '../types';
 import { deriveChordNotes } from '../utils/musicTheory';
 
 /**
- * A verbatim snapshot of every Instant Vibe's `chords` array, captured before
- * Task 6 of the vibe-chords-from-progressions plan replaced each vibe's
- * inline chords with `progressionId` + `resolveProgression`. Deliberately
- * duplicates the id/root/quality/bars/octave literals that used to live in
- * `instantVibes.ts` (via a local `snapshotChord`, not an import of anything
- * from that file) so this fixture cannot silently track a later change to
- * the vibes it is meant to be checked against — it is a snapshot, not a
- * re-derivation.
+ * A golden snapshot of every Instant Vibe's `chords` array, originally
+ * captured before Task 6 of the vibe-chords-from-progressions plan replaced
+ * each vibe's inline chords with `progressionId` + `resolveProgression`. That
+ * migration is long done; this fixture's ongoing job is to pin the resolved
+ * output so `instantVibesProgressions.test.ts` fails loudly if a library
+ * entry (CHORD_PROGRESSIONS) or a vibe's `progressionId`/key/scale/octave
+ * changes the sound. Deliberately duplicates the id/root/quality/bars/octave
+ * literals that used to live in `instantVibes.ts` (via a local
+ * `snapshotChord`, not an import of anything from that file or the library)
+ * so this fixture cannot silently track a later change to the vibes or the
+ * library it is meant to be checked against — it is a snapshot, not a
+ * re-derivation, and that independence is the whole proof.
+ *
+ * If the test goes red: figure out whether the library/vibe edit was
+ * intentional. If yes — the sound was meant to change — update this fixture
+ * to match the new output. If no — someone changed a shared library entry
+ * (or a vibe's reference into it) without meaning to change this vibe's
+ * chords — revert the library/vibe change instead.
  */
 function snapshotChord(id: string, root: string, quality: string, bars: number, octave: number): ChordItem {
   return deriveChordNotes({ id, root, quality, bars, notes: [] }, octave);

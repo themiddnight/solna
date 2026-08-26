@@ -1,15 +1,26 @@
 /**
- * A verbatim snapshot of every Instant Vibe's `drumPattern`, captured before
- * task 3 of the vibe-drums-from-library plan replaced each vibe's inline rows
- * with `drumPatternId` + `drumPatternById`. Deliberately duplicates the step
- * literals that used to live in `instantVibes.ts` and imports nothing from
- * that file — or from the new library — so this fixture cannot silently track
- * a later change to the data it is meant to be checked against. It is a
- * snapshot, not a re-derivation, and that independence is the whole proof.
+ * A golden snapshot of every Instant Vibe's `drumPattern`, originally
+ * captured before task 3 of the vibe-drums-from-library plan replaced each
+ * vibe's inline rows with `drumPatternId` + `drumPatternById`. That migration
+ * is long done; this fixture's ongoing job is to pin all 6×7×16 authored
+ * cells so `instantVibesDrums.test.ts` fails loudly if a VIBE_DRUM_PATTERNS
+ * entry, or a vibe's `drumPatternId`, changes what actually plays — it is the
+ * only thing in the repo pinning that much authored drum data. Deliberately
+ * duplicates the step literals that used to live in `instantVibes.ts` and
+ * imports nothing from that file — or from the library — so this fixture
+ * cannot silently track a later change to the data it is meant to be checked
+ * against. It is a snapshot, not a re-derivation, and that independence is
+ * the whole proof.
  *
  * Keyed by vibe id, not by library pattern id: the point of comparison is
  * "what this vibe sounded like before", so the library's own naming must not
  * leak in here.
+ *
+ * If the test goes red: figure out whether the library edit was intentional.
+ * If yes — the sound was meant to change — update this fixture's rows to
+ * match. If no — someone edited a shared pattern (or a vibe's
+ * `drumPatternId`) without meaning to change this vibe's beat — revert the
+ * library/vibe change instead.
  */
 export const ORIGINAL_VIBE_DRUM_PATTERNS: Record<string, Record<string, number[]>> = {
   'lofi-chill': {

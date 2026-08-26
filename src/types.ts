@@ -176,7 +176,14 @@ export interface InstantVibe {
   // Beat & Drum Kit
   soundKit: string;
   drumPattern: Record<string, number[]>;
-  /** Library reference into VIBE_DRUM_PATTERNS. `drumPattern` is its resolved output. */
+  /**
+   * Library reference into VIBE_DRUM_PATTERNS naming the authored base
+   * pattern. Unlike `progressionId`, a reroll does NOT repoint this: the dice
+   * decorates the authored pattern in place, overwriting only `drumPattern`'s
+   * `hihat`/`openhat`/`tom`/`crash` rows (see `rollDecoration` in
+   * store/vibeVariation.ts), so `drumPatternId` and `drumPattern` can
+   * legitimately disagree after a reroll.
+   */
   drumPatternId: string;
   drumFilterCutoff?: number;
   drumFilterResonance?: number;
@@ -205,6 +212,8 @@ export interface InstantVibe {
 
   // Master Effects
   effects: Partial<MasterEffects>;
+  /** Library reference into VIBE_EFFECT_CHAINS. `effects` is its resolved output. */
+  effectChainId: string;
 
   /**
    * Vibe Variation rule for the dice button. Optional, so a vibe without one

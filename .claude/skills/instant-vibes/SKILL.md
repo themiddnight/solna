@@ -1,6 +1,6 @@
 ---
 name: instant-vibes
-description: Add, remove, retune or debug an Instant Vibe in solna — the genre chips in the top bar (Lo-Fi Chill, Synthwave 80s, Cyber EDM, Deep Ambient, Boom Bap, Zen Garden) and the dice that rerolls them. Carries a survey-first workflow, the seven library ids a vibe resolves, the computed dice-pool rule, and the invariant tests that pin exact counts and id sets — three of which fail silently. Also covers changing a vibe's chords, synth voices, drum decoration, key pool or BPM range, and failures in instantVibes / vibeVariation / instantVibesProgressions tests.
+description: Add, remove, retune or debug an Instant Vibe in solna — the genre chips in the top bar (Lo-Fi Chill, Synthwave 80s, Cyber EDM, Deep Ambient, Boom Bap, Zen Garden) and the dice that rerolls them. Carries a survey-first workflow, the eight library ids a vibe resolves, the computed dice-pool rule, and the invariant tests that pin exact counts and id sets — and the three golden fixtures behind them. Also covers changing a vibe's chords, synth voices, drum decoration, key pool or BPM range, and failures in instantVibes / vibeVariation / instantVibesProgressions tests.
 ---
 
 # Instant Vibes (solna)
@@ -44,11 +44,11 @@ something that does not exist yet.
 
 ## What a vibe is now
 
-Chords, synth voices and drums are **references into shared libraries**, not authored
-data. Effects are still authored inline — that migration is planned but unbuilt
-(`docs/superpowers/specs/2026-08-26-vibe-as-references-design.md`, phase 4). So a vibe
-today is: identity fields, seven library ids, a few scalars, one inline effects block,
-one `variation` rule.
+Every part of a vibe's sound is now a **reference into a shared library** — chords,
+synth voices, drums and effects. The four-phase migration in
+`docs/superpowers/specs/2026-08-26-vibe-as-references-design.md` is complete. So a vibe
+today is: identity fields, eight library ids, a few scalars, one `variation` rule, and
+nothing hand-authored that the libraries could hold instead.
 
 | field | resolves through | hard constraint |
 |---|---|---|
@@ -59,6 +59,7 @@ one `variation` rule.
 | `chordRhythmId` | `RHYTHM_PATTERNS` | — |
 | `bassPatternId` | `BASS_PATTERNS` | — |
 | `drumPatternId` | `drumPatternById` → `VIBE_DRUM_PATTERNS` | rows must be the **7 keys**, 16 steps, 0/1 |
+| `effectChainId` | `requireEffectChain` → `VIBE_EFFECT_CHAINS` | stays a **`Partial`** — an omitted key means "inherit" |
 
 Bass is a hard category constraint because register is physics, not taste. Lead and
 comp are judged by ear against the genre — there are deliberately **no genre tags on
@@ -69,7 +70,12 @@ presets**, and adding one is a rejected design (see the spec's settled decision 
 ```ts
 chords: resolveProgression(progressionById('lofi-morning-turnaround')!, 'C', 'Major', 4),
 drumPattern: drumPatternById('lofi-half-time-brush')!,
+effects: requireEffectChain('lofi-tape-room'),
 ```
+
+`requireEffectChain` throws on an unknown id; the other two use `!`. Effects needs the
+louder resolver because `applyInstantVibeToStore` spreads the chain over
+`store.effects`, and spreading `undefined` is a silent no-op rather than a crash.
 
 Each sits beside the id it resolves, and the id is written twice on purpose — a typo in
 the second makes `!` hand back `undefined` and `Object.entries(vibe.drumPattern)` throws
@@ -158,23 +164,25 @@ Two kinds, and the difference matters more than the list.
 | `src/store/instantVibes.test.ts:11` | `INSTANT_VIBES.length` is 6 |
 | `src/store/instantVibes.test.ts:112` | the 6×3 preset matrix, id by id |
 
-**These fail silently — the real hazard.** They iterate their own hard-coded
-`VIBE_IDS` list rather than `INSTANT_VIBES`, so a seventh vibe passes the whole gate
-while being covered by none of them:
+**Three golden fixtures now fail loudly too — but only about the right thing.**
+`instantVibesChordsFixture.ts`, `instantVibesDrumsFixture.ts` and
+`instantVibesEffectsFixture.ts` each hold a hand-copied snapshot of what the six vibes
+ship, and each is checked by a test that derives `VIBE_IDS` from `INSTANT_VIBES`. So a
+seventh vibe **does** fail them — with a key-set mismatch naming your vibe id. That is
+the reminder, and it used to be absent: before the id lists were derived, a seventh
+vibe passed all 568 tests uncovered.
 
-| file | what silently stops covering your vibe |
+| fixture | what it pins |
 |---|---|
-| `src/store/instantVibesProgressions.test.ts:6` | that `progressionId` resolves, and that `chords` really is its resolved output |
-| `src/store/instantVibesChordsFixture.ts` | the independent chord snapshot behind that proof |
-| `src/store/instantVibesDrumsFixture.ts` | the independent drum snapshot; its test's `VIBE_IDS` is hard-coded the same way |
+| `src/store/instantVibesChordsFixture.ts` | every vibe's resolved chords |
+| `src/store/instantVibesDrumsFixture.ts` | every vibe's 7 × 16 authored drum cells |
+| `src/store/instantVibesEffectsFixture.ts` | every vibe's effect chain, including which keys it omits |
 
-Add your vibe's id to `VIBE_IDS`, its chords to the chord fixture, and its drum rows to the drum fixture. A green gate is not
-evidence you did — verified by adding a seventh vibe without touching either: 568
-tests, 0 failures, and the new vibe unproven.
-
-The fixture deliberately imports nothing from `instantVibes.ts` — that independence
-is what makes it a proof rather than a tautology. Extend it by hand; never make it
-read the vibe table.
+Add your vibe's entry to all three by hand. They deliberately import nothing from
+`instantVibes.ts` or from the libraries — that independence is what makes them proofs
+rather than tautologies, so never make one read the vibe table. When a fixture test
+goes red on an *existing* vibe, that is not a fixture to update: it means someone
+changed a library entry, and the question is whether that sound change was intended.
 
 One more that *may* fire: `'the filter removes exactly one candidate across all
 authored data'` in `vibeVariation.test.ts` is a global count across every vibe. It
@@ -217,10 +225,11 @@ a tested pool.
 1. Survey (`scripts/vibe-inventory.ts`) and decide what, if anything, is missing
 2. Author only the genuinely missing library entries, with their tests —
    see `references/authoring-libraries.md`
-3. The vibe literal, with `chords` resolved from `progressionId`
+3. The vibe literal — every sound field resolved from an id, nothing hand-authored
 4. `variation`, with `progressionIds` computed by the snippet above
-5. Update the loud tests, then the silent ones — `VIBE_IDS` and the chord fixture
-   are the two the gate will never remind you about
+5. Update `instantVibes.test.ts`'s count and preset matrix, then add your entry to
+   all three golden fixtures. Every one of these fails loudly, so the gate will walk
+   you through them — but it reports them one at a time, so expect several passes
 6. `bun run verify`, then `bun run eslint` separately
 
 ## Gate
