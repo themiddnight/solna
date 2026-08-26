@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { audioEngine } from '../engine';
 import { buildArpSequence } from '../arpeggiator';
 import { computeArpTriggers } from '../arpSchedule';
-import { sixteenthNoteMs } from '../../utils/musicTheory';
+import { stepDurationSec } from '../../utils/musicTheory';
 import type { SynthParams } from '../../types';
 import type { SynthControlTarget } from '../../utils/synthControl';
 
@@ -38,7 +38,7 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean, release: 
       );
       if (sequence.length === 0) return;
 
-      const stepDur16 = sixteenthNoteMs(bpm) / 1000;
+      const stepDur16 = stepDurationSec(bpm);
       for (const t of computeArpTriggers(step, sequence.length, params.arpRate ?? '16n', stepDur16)) {
         const note = sequence[t.noteIndex];
         audioEngine.triggerSynthNoteOn(note, params, 0.9, time + t.timeOffsetSec, target);

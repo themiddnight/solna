@@ -9,8 +9,9 @@ import {
   deriveChordNotes,
   getDiatonicChordForDegree,
   shiftNoteOctave,
-  sixteenthNoteMs,
+  barDurationSec,
 } from "../../utils/musicTheory";
+import { DEFAULT_VELOCITY } from "../constants";
 import type { ChordItem, SynthParams } from "../../types";
 
 /**
@@ -41,7 +42,7 @@ export function buildChordEvents(
   return pattern.hits.flatMap((hit) => {
     const hold = Math.max(0.05, (hit.holdSteps ?? 1) * stepDur * holdScale);
     const baseVelocity =
-      (hit.velocity ?? 0.8) * equalPowerVelocityScale(notes.length);
+      (hit.velocity ?? DEFAULT_VELOCITY) * equalPowerVelocityScale(notes.length);
     const hitNotes = hit.note !== undefined ? [notes[hit.note]] : notes;
     const isStrum = hit.type === "strum";
     const orderedNotes =
@@ -206,7 +207,7 @@ export function playFullHoldChord(
     audioEngine.triggerSynthNoteOn(
       n,
       params,
-      0.8 * equalPowerVelocityScale(notes.length),
+      DEFAULT_VELOCITY * equalPowerVelocityScale(notes.length),
       startTime,
       "chord",
     );
@@ -241,7 +242,7 @@ export function playChordLegato(
     engine.triggerSynthNoteOn(
       note,
       params,
-      0.8 * equalPowerVelocityScale(chord.notes.length),
+      DEFAULT_VELOCITY * equalPowerVelocityScale(chord.notes.length),
       0,
       "chord",
     );
@@ -292,7 +293,7 @@ export function previewChordForScale(
 
 /** Duration of one 16-step bar at the given bpm, in seconds. */
 export function previewBarSeconds(bpm: number): number {
-  return (sixteenthNoteMs(bpm) / 1000) * STEPS_PER_BAR;
+  return barDurationSec(bpm);
 }
 
 // --- Component preview bridge (layering rule 3) ---

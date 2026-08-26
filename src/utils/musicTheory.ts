@@ -335,6 +335,39 @@ export function sixteenthNoteMs(bpm: number): number {
   return ((60 / Math.max(1, bpm)) * 1000) / 4;
 }
 
+
+/**
+ * The shared grid resolution. Declared here rather than in audio/engine.ts so
+ * barDurationSec can use it without a cycle — engine.ts already imports this
+ * module. engine.ts re-exports it, so every existing `from '../engine'` import
+ * of STEPS_PER_BAR keeps working.
+ */
+export const STEPS_PER_BAR = 16;
+
+/** Transport tempo bounds. The engine clock and the store clamp to the same pair. */
+export const MIN_BPM = 20;
+export const MAX_BPM = 300;
+
+/**
+ * A bpm the clock can actually use. The BPM input is `type="number"`, so an
+ * empty field yields 0 — an unclamped 0 makes every listener compute a step
+ * duration from a 1-bpm floor and land its note-offs minutes away (stuck notes).
+ */
+export function clampBpm(bpm: number): number {
+  if (Number.isNaN(bpm)) return 120;
+  return Math.min(MAX_BPM, Math.max(MIN_BPM, bpm));
+}
+
+/** One 16th-note step, in seconds. */
+export function stepDurationSec(bpm: number): number {
+  return sixteenthNoteMs(bpm) / 1000;
+}
+
+/** One STEPS_PER_BAR bar, in seconds. */
+export function barDurationSec(bpm: number): number {
+  return stepDurationSec(bpm) * STEPS_PER_BAR;
+}
+
 export function noteFrequency(note: string, octaveOffset = 0): number {
   const midi = Note.midi(note);
   if (midi == null) return 440;

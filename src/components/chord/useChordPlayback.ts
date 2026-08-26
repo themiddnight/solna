@@ -24,7 +24,8 @@ import {
 } from "../../audio/bassPatterns";
 import {
   generateBlockChordNotes,
-  sixteenthNoteMs,
+  stepDurationSec,
+  barDurationSec,
 } from "../../utils/musicTheory";
 import {
   STEPS_PER_BAR,
@@ -127,8 +128,8 @@ function resolveBassPattern(id: string): BassPattern {
 function startChordPlan(chord: ChordItem, startStep: number, time: number): ChordPlan {
   initPlaybackEngine();
   const s = useAppStore.getState();
-  const stepDur = sixteenthNoteMs(s.bpm) / 1000;
-  const barDur = stepDur * STEPS_PER_BAR;
+  const stepDur = stepDurationSec(s.bpm);
+  const barDur = barDurationSec(s.bpm);
   const totalBars = chord.bars || 1;
 
   const chordNotes = generateBlockChordNotes(chord.quality, chord.root, s.chordOctave);
@@ -207,7 +208,7 @@ function emitChordPlanStep(
   time: number,
 ): void {
   const s = useAppStore.getState();
-  const stepDur = sixteenthNoteMs(s.bpm) / 1000;
+  const stepDur = stepDurationSec(s.bpm);
   const chordEnd = time + pos.stepsRemaining * stepDur;
 
   emitStepEvents(
@@ -301,12 +302,12 @@ export function useChordPlayback() {
         chord.root,
         chordOctave,
       );
-      const stepDur = sixteenthNoteMs(bpm) / 1000;
+      const stepDur = stepDurationSec(bpm);
       const totalBars = chord.bars || 1;
       const holdScale = feelToHoldScale(chordFeel);
 
       if (isFullHoldRhythm(pattern)) {
-        const barDur = stepDur * STEPS_PER_BAR;
+        const barDur = barDurationSec(bpm);
         playFullHoldChord(
           notes,
           chordSynthParams,
@@ -338,7 +339,7 @@ export function useChordPlayback() {
       initPlaybackEngine();
       const context = chordContext ?? chords;
       const chordIdx = Math.max(0, context.indexOf(chord));
-      const stepDur = sixteenthNoteMs(bpm) / 1000;
+      const stepDur = stepDurationSec(bpm);
       const totalBars = chord.bars || 1;
       const resolveWithHold = (holdScale: number) =>
         resolveBassSteps(
@@ -353,7 +354,7 @@ export function useChordPlayback() {
         );
 
       if (isFullHoldBass(pattern)) {
-        const barDur = stepDur * STEPS_PER_BAR;
+        const barDur = barDurationSec(bpm);
         const rootEvent = resolveWithHold(1)[0];
         if (rootEvent) {
           playbackNoteOn(

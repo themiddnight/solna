@@ -1,5 +1,6 @@
 import { SynthParams, MasterEffects, FilterType } from '../types';
-import { sixteenthNoteMs, noteFrequency } from '../utils/musicTheory';
+import { noteFrequency, stepDurationSec, STEPS_PER_BAR } from '../utils/musicTheory';
+import { DEFAULT_VELOCITY } from './constants';
 import { mergeDrumKit, type DrumKit } from './drumKits';
 
 type SynthVoice = {
@@ -188,7 +189,7 @@ class AudioEngine {
     if (this.clockNextStepTime < this.ctx.currentTime - 0.05) {
       this.clockNextStepTime = this.ctx.currentTime + AudioEngine.CLOCK_REANCHOR_DELAY;
     }
-    const stepDuration = sixteenthNoteMs(this.clockBpm) / 1000;
+    const stepDuration = stepDurationSec(this.clockBpm);
     while (this.clockNextStepTime < this.ctx.currentTime + AudioEngine.CLOCK_LOOKAHEAD) {
       const time = this.clockNextStepTime;
       const step = this.clockStepIndex;
@@ -378,7 +379,7 @@ class AudioEngine {
   }
 
   // Synthesizer Note On
-  triggerSynthNoteOn(noteName: string, params: SynthParams, velocity = 0.8, time?: number, source = 'synth', scaleFactor = 1): void {
+  triggerSynthNoteOn(noteName: string, params: SynthParams, velocity = DEFAULT_VELOCITY, time?: number, source = 'synth', scaleFactor = 1): void {
     if (!this.ctx || !this.dryGain) return;
     const freq = noteFrequency(noteName, params.octave);
     const now = time ?? this.ctx.currentTime;
@@ -871,7 +872,7 @@ class AudioEngine {
   }
 
   // Drum Synthesizer Trigger
-  triggerDrum(type: string, velocity = 0.8, time?: number): void {
+  triggerDrum(type: string, velocity = DEFAULT_VELOCITY, time?: number): void {
     if (!this.ctx || !this.dryGain || !this.drumBusFilter) return;
     const now = time ?? this.ctx.currentTime;
     const k = this.drumKit;
@@ -1158,6 +1159,8 @@ class AudioEngine {
 
 }
 
-export const STEPS_PER_BAR = 16;
+// Re-exported from utils/musicTheory so the grid constant has one definition
+// while every `import { STEPS_PER_BAR } from '../engine'` keeps resolving.
+export { STEPS_PER_BAR };
 
 export const audioEngine = new AudioEngine();

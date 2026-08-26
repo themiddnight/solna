@@ -1,9 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { Chord } from 'tonal';
 import {
+  MAX_BPM,
+  MIN_BPM,
   ROOTS,
   SCALES,
+  STEPS_PER_BAR,
   TONAL_CHORD_ALIASES,
+  barDurationSec,
+  clampBpm,
   deriveChordNotes,
   formatChordLabel,
   formatChordQuality,
@@ -13,7 +18,9 @@ import {
   getScaleNotes,
   isNoteInScale,
   rootSemitone,
+  sixteenthNoteMs,
   snapProgressionToScale,
+  stepDurationSec,
   transposeProgression,
 } from './musicTheory';
 import type { ChordItem } from '../types';
@@ -297,5 +304,31 @@ describe('snapProgressionToScale', () => {
         }
       }
     }
+  });
+});
+
+describe('tempo helpers', () => {
+  test('stepDurationSec is sixteenthNoteMs in seconds', () => {
+    for (const bpm of [20, 90, 120, 174, 300]) {
+      expect(stepDurationSec(bpm)).toBeCloseTo(sixteenthNoteMs(bpm) / 1000, 12);
+    }
+  });
+
+  test('barDurationSec is one 16-step bar', () => {
+    expect(barDurationSec(120)).toBeCloseTo(stepDurationSec(120) * STEPS_PER_BAR, 12);
+    expect(barDurationSec(120)).toBeCloseTo(2, 12); // 4 beats at 120 bpm
+  });
+
+  test('STEPS_PER_BAR is 16 and is the value engine.ts re-exports', () => {
+    expect(STEPS_PER_BAR).toBe(16);
+  });
+
+  test('clampBpm holds the transport range and rejects non-finite input', () => {
+    expect(clampBpm(0)).toBe(MIN_BPM);
+    expect(clampBpm(19.9)).toBe(MIN_BPM);
+    expect(clampBpm(301)).toBe(MAX_BPM);
+    expect(clampBpm(128)).toBe(128);
+    expect(clampBpm(Number.NaN)).toBe(120);
+    expect(clampBpm(Number.POSITIVE_INFINITY)).toBe(MAX_BPM);
   });
 });

@@ -1,6 +1,7 @@
 import { Note } from 'tonal';
 import type { ChordItem } from '../types';
-import { SCALES, rootSemitone, sixteenthNoteMs } from '../utils/musicTheory';
+import { SCALES, rootSemitone, stepDurationSec } from '../utils/musicTheory';
+import { DEFAULT_VELOCITY } from './constants';
 
 export type BassNoteToken =
   | 'root' | 'third' | 'fifth' | 'seventh' | 'octave'
@@ -68,7 +69,7 @@ export function resolveBassSteps(
   const bassRootMidi = midiAtOctave(pitchClass(chord.bassNote ?? chord.root), octave);
   const nextRootMidi = midiAtOctave(pitchClass(nextChord.bassNote ?? nextChord.root), octave);
 
-  const stepDur = sixteenthNoteMs(bpm) / 1000;
+  const stepDur = stepDurationSec(bpm);
 
   // Fallback: seventh → fifth → third → root
   const toneMidi = (token: 'third' | 'fifth' | 'seventh'): number => {
@@ -124,7 +125,7 @@ export function resolveBassSteps(
       step: step.step,
       timeOffsetSec: step.step * stepDur,
       holdSec,
-      velocity: 0.8 * (step.velocity ?? 1), // mirror the engine's default velocity
+      velocity: DEFAULT_VELOCITY * (step.velocity ?? 1),
       token,
     });
   }
