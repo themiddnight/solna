@@ -177,12 +177,12 @@ export function arpEventsForStep(
 ): StepEvent[] {
   const sequence = buildArpSequence(
     notes,
-    params.arpMode ?? "up",
-    params.arpOctaves ?? 1,
+    params.arpMode,
+    params.arpOctaves,
   );
   if (sequence.length === 0) return [];
 
-  return computeArpTriggers(step, sequence.length, params.arpRate ?? "16n", stepDur).map(
+  return computeArpTriggers(step, sequence.length, params.arpRate, stepDur).map(
     (t) => ({
       noteName: sequence[t.noteIndex],
       velocity: ARP_VELOCITY,

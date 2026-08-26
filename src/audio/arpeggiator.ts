@@ -1,6 +1,7 @@
 import { Note, transpose } from 'tonal';
 
-export type ArpMode = 'up' | 'down' | 'updown' | 'random';
+export type { ArpMode } from '../types';
+import type { ArpMode } from '../types';
 
 /**
  * Expand the currently held notes into the note order the arpeggiator plays.

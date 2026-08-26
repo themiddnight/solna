@@ -222,7 +222,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                       key={r}
                       onClick={() => onChangeParams({ ...params, arpRate: r })}
                       className={`btn join-item btn-xs flex-1 text-[10px] font-semibold ${
-                        (params.arpRate ?? "16n") === r
+                        params.arpRate === r
                           ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
                           : "btn-outline"
                       }`}
@@ -238,7 +238,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 <div className="flex items-center justify-between text-[10px] text-base-content/60">
                   <span>Mode:</span>
                   <span className="capitalize text-module-arp font-bold">
-                    {params.arpMode ?? "up"}
+                    {params.arpMode}
                   </span>
                 </div>
                 <div className="join w-full">
@@ -247,7 +247,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                       key={m}
                       onClick={() => onChangeParams({ ...params, arpMode: m })}
                       className={`btn join-item btn-xs flex-1 text-[10px] font-semibold ${
-                        (params.arpMode ?? "up") === m
+                        params.arpMode === m
                           ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
                           : "btn-outline"
                       }`}

@@ -24,6 +24,10 @@ const baseParams: SynthParams = {
   lfoDepth: 0,
   lfoTarget: 'volume',
   octave: 0,
+  arpActive: false,
+  arpMode: 'up',
+  arpRate: '16n',
+  arpOctaves: 1,
   preset: '',
 };
 

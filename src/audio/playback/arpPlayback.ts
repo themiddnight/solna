@@ -38,13 +38,13 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
 
       const sequence = buildArpSequence(
         activeNotes,
-        params.arpMode ?? 'up',
-        params.arpOctaves ?? 1,
+        params.arpMode,
+        params.arpOctaves,
       );
       if (sequence.length === 0) return;
 
       const stepDur16 = stepDurationSec(bpm);
-      for (const t of computeArpTriggers(step, sequence.length, params.arpRate ?? '16n', stepDur16)) {
+      for (const t of computeArpTriggers(step, sequence.length, params.arpRate, stepDur16)) {
         const note = sequence[t.noteIndex];
         audioEngine.triggerSynthNoteOn(note, params, 0.9, time + t.timeOffsetSec, target);
         audioEngine.triggerSynthNoteOff(note, params.release, time + t.timeOffsetSec + t.holdSec, target);

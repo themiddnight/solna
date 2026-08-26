@@ -312,7 +312,7 @@ export const SynthView = () => {
   // Arpeggiator playback: parameterized clock subscriber (the 4 rate branches
   // collapsed into computeArpTriggers, proven equivalent by the exhaustive
   // sweep in src/audio/playback/arpPlayback.test.ts)
-  useArpPlayback(arpStateRef, keyboardParams.arpActive ?? false);
+  useArpPlayback(arpStateRef, keyboardParams.arpActive);
 
   // Kept fresh every render so the mode-change release effect below always
   // calls the latest handleNoteOff without needing it in its dependency array
@@ -1259,7 +1259,7 @@ export const SynthView = () => {
                     id={`btn-arp-mode-${m}`}
                     onClick={() => onChangeParams({ ...params, arpMode: m })}
                     className={`btn btn-xs text-[10px] font-semibold capitalize ${
-                      (params.arpMode ?? "up") === m
+                      params.arpMode === m
                         ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
                         : "btn-ghost border border-base-300 text-base-content/60"
                     }`}
@@ -1282,7 +1282,7 @@ export const SynthView = () => {
                       id={`btn-arp-rate-${r}`}
                       onClick={() => onChangeParams({ ...params, arpRate: r })}
                       className={`btn btn-xs text-[11px] font-mono font-semibold ${
-                        (params.arpRate ?? "16n") === r
+                        params.arpRate === r
                           ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
                           : "btn-ghost border border-base-300 text-base-content/60"
                       }`}
@@ -1306,7 +1306,7 @@ export const SynthView = () => {
                         onChangeParams({ ...params, arpOctaves: oct })
                       }
                       className={`btn btn-xs w-7 min-h-0 text-xs tabular-nums font-bold ${
-                        (params.arpOctaves ?? 1) === oct
+                        params.arpOctaves === oct
                           ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
                           : "btn-ghost border border-base-300 text-base-content/60"
                       }`}

@@ -11,8 +11,8 @@ import {
   presetById,
 } from './synthPresets';
 import type { SynthPresetItem } from './synthPresets';
-import type { ChordItem } from '../types';
-import { INITIAL_SYNTH_PARAMS } from '../store/initialState';
+import type { ChordItem, ArpMode, ArpRate } from '../types';
+import { INITIAL_SYNTH_PARAMS, INITIAL_EFFECTS } from '../store/initialState';
 import { useAppStore } from '../store/store';
 
 const custom: SynthPresetItem = {
@@ -312,5 +312,41 @@ describe('factory-koto-pluck', () => {
 
   test('does not transpose, so the comp stays in its authored register', () => {
     expect(presetById('factory-koto-pluck')!.params.octave).toBe(0);
+  });
+});
+
+describe('SynthParams arp contract', () => {
+  test('every arp field is present on the factory defaults', () => {
+    // The fields are declared required, so nothing downstream may need a `??`.
+    expect(typeof INITIAL_SYNTH_PARAMS.arpActive).toBe('boolean');
+    expect(typeof INITIAL_SYNTH_PARAMS.arpMode).toBe('string');
+    expect(typeof INITIAL_SYNTH_PARAMS.arpRate).toBe('string');
+    expect(typeof INITIAL_SYNTH_PARAMS.arpOctaves).toBe('number');
+  });
+
+  test('ArpMode and ArpRate have exactly one definition, re-exported by the audio modules', async () => {
+    const arpeggiator = await import('./arpeggiator');
+    const arpSchedule = await import('./arpSchedule');
+    // Types erase at runtime, so this pins the RE-EXPORT surface instead: both
+    // modules must still expose the names the rest of the app imports.
+    expect(Object.keys(arpeggiator)).toContain('buildArpSequence');
+    expect(Object.keys(arpSchedule)).toContain('computeArpTriggers');
+    const mode: ArpMode = 'updown';
+    const rate: ArpRate = '32n';
+    // 'updown' with 2 held notes plays both endpoints on the way up and both
+    // again on the way down (only interior notes are deduped), so length is 4.
+    expect(arpeggiator.buildArpSequence(['C4', 'E4'], mode, 1).length).toBe(4);
+    expect(arpSchedule.computeArpTriggers(0, 2, rate, 0.25).length).toBe(2);
+  });
+});
+
+describe('MasterEffects has no unimplemented fields', () => {
+  test('the factory effects object is exactly the implemented set', () => {
+    // A declared-but-unimplemented field is an invitation to wire UI to it;
+    // store.ts's migrate already strips these from old payloads.
+    expect(Object.keys(INITIAL_EFFECTS).sort()).toEqual([
+      'compressorThreshold', 'delayFeedback', 'delayWet', 'distortionWet',
+      'eqHigh', 'eqLow', 'eqMid', 'reverbDecay', 'reverbWet',
+    ]);
   });
 });

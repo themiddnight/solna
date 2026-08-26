@@ -1,4 +1,5 @@
-export type ArpRate = '4n' | '8n' | '16n' | '32n';
+export type { ArpRate } from '../types';
+import type { ArpRate } from '../types';
 
 export interface ArpTrigger {
   noteIndex: number;

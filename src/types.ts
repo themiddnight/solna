@@ -18,6 +18,16 @@ export type FilterType = 'lowpass' | 'highpass' | 'bandpass';
 /** The synth keyboard's input mode: how key presses are mapped to notes. */
 export type KeyboardMode = 'chromatic' | 'scale-locked' | 'chord';
 
+/**
+ * Arpeggiator order and rate. Declared here rather than in audio/arpeggiator.ts
+ * and audio/arpSchedule.ts because SynthParams needs them and this file imports
+ * nothing (it must stay a leaf). Both audio modules re-export them, so their
+ * existing import paths keep working — the point is that there is one definition
+ * instead of an inline copy here and a named copy there that could drift.
+ */
+export type ArpMode = 'up' | 'down' | 'updown' | 'random';
+export type ArpRate = '4n' | '8n' | '16n' | '32n';
+
 export interface SynthParams {
   oscType: 'sawtooth' | 'square' | 'sine' | 'triangle';
   subOscVolume: number;
@@ -39,10 +49,14 @@ export interface SynthParams {
   lfoDepth: number;
   lfoTarget: 'cutoff' | 'pitch' | 'volume';
   octave: number;
-  arpActive?: boolean;
-  arpMode?: 'up' | 'down' | 'updown' | 'random';
-  arpRate?: '4n' | '8n' | '16n' | '32n';
-  arpOctaves?: number;
+  // Required, not optional: INITIAL_SYNTH_PARAMS always sets all four and
+  // sanitizeSynthParams always restores them, so the `?? 'up'` / `?? '16n'` /
+  // `?? 1` / `?? false` that used to sit at 13 read sites were dead defaults
+  // hiding the real contract.
+  arpActive: boolean;
+  arpMode: ArpMode;
+  arpRate: ArpRate;
+  arpOctaves: number;
   preset: string;
 }
 
@@ -93,10 +107,6 @@ export interface MasterEffects {
   delayWet: number;
   delayFeedback: number;
   delayBypass?: boolean;
-  delayTime?: string | number;
-  chorusWet?: number;
-  chorusRate?: number;
-  chorusDepth?: number;
   distortionWet: number;
   distortionBypass?: boolean;
   eqLow: number;
