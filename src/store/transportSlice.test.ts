@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import type { StoreApi } from 'zustand';
 import {
   aggregatePlayerState,
@@ -124,6 +124,14 @@ describe('derived transport helpers', () => {
 });
 
 describe('setBpm clamping', () => {
+  // useAppStore is the real, shared singleton (not a fresh instance like
+  // makeSlice above), so every mutation here must be undone regardless of
+  // which assertion fails — an in-test reset only ran when the test reached
+  // its last line, leaking a clamped bpm into whichever test ran next.
+  afterEach(() => {
+    useAppStore.getState().setBpm(120);
+  });
+
   test('an empty BPM input (0) cannot reach the store', () => {
     // The BPM field is `type="number"`; clearing it yields 0. Unclamped, every
     // playback hook derives its step duration from the raw store bpm and
@@ -139,6 +147,5 @@ describe('setBpm clamping', () => {
     expect(useAppStore.getState().bpm).toBe(128);
     useAppStore.getState().setBpm(Number.NaN);
     expect(useAppStore.getState().bpm).toBe(120);
-    useAppStore.getState().setBpm(120);
   });
 });

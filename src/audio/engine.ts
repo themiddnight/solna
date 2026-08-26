@@ -102,13 +102,12 @@ class AudioEngine {
   private static readonly CLOCK_LOOKAHEAD = 0.1; // schedule events this far ahead
   private static readonly CLOCK_REANCHOR_DELAY = 0.05; // gap used to re-anchor the schedule after resets and stalls
   private static readonly CLOCK_UPDATE_MS = 25;
-  // A genuine stall (backgrounded tab, GC pause) is orders of magnitude
-  // larger than routine setInterval jitter around CLOCK_UPDATE_MS. Anything
-  // under this is caught up normally by the while loop below instead of
-  // being thrown away and re-anchored, so the grid stays bpm-accurate
-  // through minor scheduling delays instead of drifting toward wall-clock
-  // pacing.
-  private static readonly CLOCK_STALL_THRESHOLD = 1; // seconds
+  // A stall is any gap bigger than the CLOCK_UPDATE_MS cadence itself: under
+  // normal ticking, clockNextStepTime never falls behind currentTime by more
+  // than the lookahead window, so a lag past one interval means a tick was
+  // missed (backgrounded tab, GC pause) and the schedule should re-anchor
+  // rather than let the while loop below burst every step it missed.
+  private static readonly CLOCK_STALL_THRESHOLD = 0.05; // seconds
 
   private drumKit: DrumKit = mergeDrumKit();
 
