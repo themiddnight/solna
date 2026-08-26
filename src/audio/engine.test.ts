@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { INITIAL_EFFECTS } from '../store/initialState';
 import type { SynthParams } from '../types';
+import { DRUM_ALIASES } from './engine';
 import { fakeNode, fakeParam, freshEngine, makeEngine } from './testFakes';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- tests deliberately
@@ -1434,5 +1435,173 @@ describe('LFO teardown at depth zero', () => {
     await new Promise((r) => setTimeout(r, 220));
 
     expect(voice.lfo).toBe(lfo);
+  });
+});
+
+describe('drum reverb sends', () => {
+  function drumEngine() {
+    const { engine, ctx } = freshEngine();
+    const reverbNode = fakeNode();
+    (engine as any).reverbNode = reverbNode;
+    return { engine, ctx, reverbNode, sendFilter: (engine as any).drumSendFilter };
+  }
+
+  test('the kit reverbSend is a real level, not a boolean', () => {
+    const { engine, ctx } = drumEngine();
+    engine.setDrumKit({ snare: { ...(engine as any).drumKit.snare, reverbSend: 0.15 } });
+    const before = ctx._gains.length;
+
+    engine.triggerDrum('snare', 1.0);
+
+    // drumKits authors 0.15..0.5 across kits; sending at full voice level makes
+    // that 3.3x spread inaudible.
+    const sends = ctx._gains.slice(before).filter((g) => g.gain.value === 0.15);
+    expect(sends).toHaveLength(1);
+  });
+
+  test('sends are filtered: they feed drumSendFilter, never the convolver directly', () => {
+    const { engine, ctx, reverbNode, sendFilter } = drumEngine();
+    const before = ctx._gains.length;
+
+    engine.triggerDrum('clap', 1.0);
+
+    const created = ctx._gains.slice(before);
+    expect(created.some((g) => g.connectedTo.includes(sendFilter))).toBe(true);
+    expect(created.some((g) => g.connectedTo.includes(reverbNode))).toBe(false);
+  });
+
+  test('a kit with reverbSend 0 creates no send node at all', () => {
+    const { engine, ctx } = drumEngine();
+    engine.setDrumKit({ clap: { ...(engine as any).drumKit.clap, reverbSend: 0 } });
+    const before = ctx._gains.length;
+
+    engine.triggerDrum('clap', 1.0);
+
+    expect(ctx._gains.slice(before)).toHaveLength(1); // the envelope only
+  });
+
+  test('setDrumFilter keeps the send filter in lockstep with the drum bus filter', () => {
+    const { engine } = drumEngine();
+    engine.setDrumFilter(800, 4, 'highpass');
+
+    const bus = (engine as any).drumBusFilter;
+    const send = (engine as any).drumSendFilter;
+    expect(send.frequency.targets.at(-1)).toEqual(bus.frequency.targets.at(-1));
+    expect(send.Q.targets.at(-1)).toEqual(bus.Q.targets.at(-1));
+    expect(send.type).toBe('highpass');
+  });
+});
+
+describe('drum voice details', () => {
+  test('every drum envelope floors at the same 0.0001', () => {
+    const { engine, ctx } = freshEngine();
+    for (const type of ['kick', 'snare', 'hihat', 'openhat', 'clap', 'tom', 'crash']) {
+      const before = ctx._gains.length;
+      engine.triggerDrum(type, 1.0);
+      for (const g of ctx._gains.slice(before)) {
+        for (const ramp of g.gain.ramps) expect(ramp.v).toBe(0.0001);
+      }
+    }
+  });
+
+  test('the clap ghost burst scales with velocity', () => {
+    const { engine, ctx } = freshEngine();
+    const gain = (engine as any).drumKit.clap.gain;
+
+    let before = ctx._gains.length;
+    engine.triggerDrum('clap', 1.0);
+    const loud = ctx._gains[before].gain.events.map((e: any) => e.v);
+
+    before = ctx._gains.length;
+    engine.triggerDrum('clap', 0.2);
+    const soft = ctx._gains[before].gain.events.map((e: any) => e.v);
+
+    // Every scheduled level must scale with velocity; the ghost used to be a
+    // hardcoded 0.1, which at velocity 0.2 is LOUDER than the hit itself.
+    expect(loud[0]).toBeCloseTo(1.0 * gain, 9);
+    expect(soft[0]).toBeCloseTo(0.2 * gain, 9);
+    for (let i = 0; i < soft.length - 1; i++) {
+      expect(soft[i]).toBeLessThan(loud[i]);
+    }
+  });
+
+  test('the open hat does not tap the delay', () => {
+    const { engine, ctx } = freshEngine();
+    const delayNode = fakeNode();
+    (engine as any).delayNode = delayNode;
+    const before = ctx._gains.length;
+
+    engine.triggerDrum('openhat', 1.0);
+
+    // Drums bypass delay and distortion entirely (dsp-audio SKILL.md).
+    for (const g of ctx._gains.slice(before)) {
+      expect(g.connectedTo).not.toContain(delayNode);
+    }
+  });
+
+  test('drum noise is looped and starts at a random offset', () => {
+    const { engine, ctx } = freshEngine();
+    const offsets: number[] = [];
+    const before = ctx._bufferSources.length;
+    for (let i = 0; i < 8; i++) engine.triggerDrum('hihat', 1.0);
+
+    for (const src of ctx._bufferSources.slice(before)) {
+      expect(src.loop).toBe(true);
+      offsets.push((src as any)._startArgs?.[1] ?? 0);
+    }
+    // Identical offsets mean every hat reads the same bytes of the one shared
+    // buffer, so simultaneous hits sum coherently (+6 dB instead of +3).
+    expect(new Set(offsets).size).toBeGreaterThan(1);
+  });
+
+  test('velocity is clamped to 0..1', () => {
+    const { engine, ctx } = freshEngine();
+    const gain = (engine as any).drumKit.kick.gain;
+
+    let before = ctx._gains.length;
+    engine.triggerDrum('kick', 5);
+    expect(ctx._gains[before].gain.events[0].v).toBeCloseTo(gain, 9);
+
+    before = ctx._gains.length;
+    engine.triggerDrum('kick', -2);
+    expect(ctx._gains[before].gain.events[0].v).toBe(0.0001);
+  });
+});
+
+describe('drum aliases and unknown types', () => {
+  test('closedhat, lowtom and ride resolve to their canonical voices', () => {
+    const { engine, ctx } = freshEngine();
+    const counts: Record<string, number> = {};
+    for (const type of ['hihat', 'closedhat', 'tom', 'lowtom', 'crash', 'ride']) {
+      const before = ctx._gains.length;
+      engine.triggerDrum(type, 1.0);
+      counts[type] = ctx._gains.length - before;
+    }
+    expect(counts.closedhat).toBe(counts.hihat);
+    expect(counts.lowtom).toBe(counts.tom);
+    expect(counts.ride).toBe(counts.crash);
+  });
+
+  test('the type is case-insensitive', () => {
+    const { engine, ctx } = freshEngine();
+    const before = ctx._gains.length;
+    engine.triggerDrum('KICK', 1.0);
+    expect(ctx._gains.length).toBeGreaterThan(before);
+  });
+
+  test('an unknown type is a silent no-op, not a throw', () => {
+    const { engine, ctx } = freshEngine();
+    const before = ctx._gains.length;
+    expect(() => engine.triggerDrum('cowbell', 1.0)).not.toThrow();
+    expect(ctx._gains.length).toBe(before);
+  });
+
+  test('every DRUM_ALIASES target is a real drum type', () => {
+    const { engine, ctx } = freshEngine();
+    for (const target of Object.values(DRUM_ALIASES)) {
+      const before = ctx._gains.length;
+      engine.triggerDrum(target, 1.0);
+      expect(ctx._gains.length).toBeGreaterThan(before);
+    }
   });
 });

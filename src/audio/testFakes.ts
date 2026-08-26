@@ -126,7 +126,18 @@ export function fakeNode(opts: FakeOpts = {}) {
 // recorded so a test can prove the noise is looped (createNoiseNode's buffer is
 // 2 s, shorter than a long pad release).
 export function fakeBufferSource(opts: FakeOpts = {}) {
-  return { ...fakeNode(opts), buffer: null as unknown, loop: false };
+  const node = {
+    ...fakeNode(opts),
+    buffer: null as unknown,
+    loop: false,
+    // Records the args passed to start() so a test can read the noise read
+    // offset (noiseStartOffset) without re-deriving it.
+    _startArgs: [] as number[],
+  };
+  node.start = (...args: number[]) => {
+    node._startArgs = args;
+  };
+  return node;
 }
 
 export function fakeCtx(opts: FakeOpts = {}) {
@@ -147,6 +158,9 @@ export function fakeCtx(opts: FakeOpts = {}) {
     createBiquadFilter: () => fakeNode(opts),
     createBuffer: (_channels: number, length: number, sampleRate: number) => ({
       sampleRate,
+      // Real AudioBuffers expose duration; noiseStartOffset reads it to pick a
+      // random start, so the fake must too or every offset would be 0.
+      duration: length / sampleRate,
       getChannelData: () => new Float32Array(length),
     }),
     createBufferSource: () => {
@@ -165,6 +179,8 @@ export function freshEngine(opts: FakeOpts = {}) {
   const ctx = fakeCtx(opts);
   (engine as any).ctx = ctx;
   (engine as any).dryGain = fakeNode(opts);
+  (engine as any).drumBusFilter = fakeNode(opts);
+  (engine as any).drumSendFilter = fakeNode(opts);
   (engine as any).delayNode = undefined;
   (engine as any).reverbNode = undefined;
   (engine as any).distortionNode = undefined;

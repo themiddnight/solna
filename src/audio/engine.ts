@@ -1,6 +1,6 @@
 import { SynthParams, MasterEffects, FilterType } from '../types';
 import { noteFrequency, clampBpm, stepDurationSec, STEPS_PER_BAR } from '../utils/musicTheory';
-import { DEFAULT_VELOCITY, ENV_FLOOR, SILENCE, clampCutoff } from './constants';
+import { DEFAULT_VELOCITY, ENV_FLOOR, SILENCE, clampCutoff, clampVelocity } from './constants';
 import { mergeDrumKit, type DrumKit } from './drumKits';
 import { clampEffects } from './effectLimits';
 
@@ -53,6 +53,16 @@ type SynthVoice = {
   teardownTimer?: ReturnType<typeof setTimeout>;
 };
 
+/**
+ * Names callers use that map onto one of the 7 authored drum types. Exported
+ * so a test can prove every target is real.
+ */
+export const DRUM_ALIASES: Record<string, string> = {
+  closedhat: 'hihat',
+  lowtom: 'tom',
+  ride: 'crash',
+};
+
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private isInitialized = false;
@@ -97,6 +107,13 @@ class AudioEngine {
   // param fields survive the AudioContext chain being (re)built, so values
   // set before init() apply to the filter node created later.
   private drumBusFilter: BiquadFilterNode | null = null;
+  // A mirror of drumBusFilter used only for the drum reverb sends. The dry
+  // path and the send path must be filtered identically, but drumBusFilter is
+  // ONE shared node, so a per-voice send cannot be tapped downstream of it
+  // without a per-voice filter copy — which would lose the live filter sweeps
+  // on ringing tails that the shared node exists to provide. A second shared
+  // filter fed by the per-voice send gains gets both.
+  private drumSendFilter: BiquadFilterNode | null = null;
   private drumFilterCutoff = 12000;
   private drumFilterResonance = 0.7;
   private drumFilterType: FilterType = 'lowpass';
@@ -335,6 +352,12 @@ class AudioEngine {
     this.drumBusFilter.Q.value = this.drumFilterResonance;
     this.drumBusFilter.connect(this.dryGain);
 
+    // Same settings, wired to the reverb send only.
+    this.drumSendFilter = this.ctx.createBiquadFilter();
+    this.drumSendFilter.type = this.drumFilterType;
+    this.drumSendFilter.frequency.value = this.drumFilterCutoff;
+    this.drumSendFilter.Q.value = this.drumFilterResonance;
+
     // Delay
     this.delayNode = this.ctx.createDelay(2.0);
     this.delayNode.delayTime.value = 0.25;
@@ -363,6 +386,7 @@ class AudioEngine {
     this.reverbGain.gain.value = 0.25;
 
     this.reverbNode.connect(this.reverbGain);
+    if (this.drumSendFilter) this.drumSendFilter.connect(this.reverbNode);
 
     // Connect effects back to EQ chain
     this.dryGain.connect(this.eqLowNode);
@@ -1119,170 +1143,193 @@ class AudioEngine {
     this.drumFilterCutoff = cutoff;
     this.drumFilterResonance = resonance;
     this.drumFilterType = type;
-    if (!this.ctx || !this.drumBusFilter) return;
+    if (!this.ctx) return;
     const now = this.ctx.currentTime;
-    this.drumBusFilter.frequency.setTargetAtTime(cutoff, now, 0.03);
-    this.drumBusFilter.Q.setTargetAtTime(resonance, now, 0.03);
-    this.drumBusFilter.type = type;
+    for (const node of [this.drumBusFilter, this.drumSendFilter]) {
+      if (!node) continue;
+      node.frequency.setTargetAtTime(cutoff, now, 0.03);
+      node.Q.setTargetAtTime(resonance, now, 0.03);
+      node.type = type;
+    }
+  }
+
+  /** One drum envelope: peak at `t`, exponential to the shared floor by `t + decay`. */
+  /**
+   * One drum envelope: peak at `t`, an optional shape hook for extra levels
+   * (the clap's micro-bursts) scheduled BEFORE the closing ramp so callers
+   * that read back the automation in call order see it in chronological
+   * order too, then exponential decay to the shared floor by `t + decay`.
+   */
+  private drumEnv(peak: number, decay: number, t: number, shape?: (gain: AudioParam) => void): GainNode {
+    const gain = this.ctx!.createGain();
+    gain.gain.setValueAtTime(Math.max(ENV_FLOOR, peak), t);
+    shape?.(gain.gain);
+    gain.gain.exponentialRampToValueAtTime(ENV_FLOOR, t + Math.max(0.01, decay));
+    return gain;
+  }
+
+  /**
+   * Dry through drumBusFilter, wet through a per-voice send gain into
+   * drumSendFilter. `reverbSend` is the kit's authored LEVEL (0.15..0.5 across
+   * kits); it used to be tested as a boolean and the send ran at full voice
+   * level, so the whole spread was inaudible.
+   */
+  private wireDrumVoice(env: GainNode, reverbSend = 0): void {
+    env.connect(this.drumBusFilter!);
+    if (reverbSend <= 0 || !this.drumSendFilter) return;
+    const send = this.ctx!.createGain();
+    send.gain.value = reverbSend;
+    env.connect(send);
+    send.connect(this.drumSendFilter);
+  }
+
+  /** A pitched drum component (kick body, kick click, snare body, tom). */
+  private drumTone(o: {
+    type?: OscillatorType;
+    freq: number;
+    freqEnd?: number;
+    pitchTime?: number;
+    peak: number;
+    decay: number;
+    t: number;
+    stopAt?: number;
+    reverbSend?: number;
+  }): void {
+    const osc = this.ctx!.createOscillator();
+    if (o.type) osc.type = o.type;
+    osc.frequency.setValueAtTime(o.freq, o.t);
+    if (o.freqEnd !== undefined) {
+      osc.frequency.exponentialRampToValueAtTime(o.freqEnd, o.t + (o.pitchTime ?? 0.05));
+    }
+    const env = this.drumEnv(o.peak, o.decay, o.t);
+    osc.connect(env);
+    this.wireDrumVoice(env, o.reverbSend);
+    osc.start(o.t);
+    osc.stop(o.stopAt ?? o.t + o.decay + 0.02);
+  }
+
+  /** A filtered noise drum component (hats, snare snap, clap, crash). */
+  /** A filtered noise drum component (hats, snare snap, clap, crash). */
+  private drumNoiseBurst(o: {
+    filterType: BiquadFilterType;
+    freq: number;
+    q?: number;
+    peak: number;
+    decay: number;
+    t: number;
+    stopPad?: number;
+    reverbSend?: number;
+    shape?: (gain: AudioParam) => void;
+  }): void {
+    const noise = this.createNoiseNode();
+    const filter = this.ctx!.createBiquadFilter();
+    filter.type = o.filterType;
+    filter.frequency.value = o.freq;
+    if (o.q !== undefined) filter.Q.value = o.q;
+
+    // Extra levels between the peak and the floor (the clap's micro-bursts)
+    // are scheduled by drumEnv itself, before the closing ramp.
+    const env = this.drumEnv(o.peak, o.decay, o.t, o.shape);
+
+    noise.connect(filter);
+    filter.connect(env);
+    this.wireDrumVoice(env, o.reverbSend);
+    noise.start(o.t, this.noiseStartOffset());
+    noise.stop(o.t + o.decay + (o.stopPad ?? 0.01));
+  }
+
+  /**
+   * A random read position in the one shared noise buffer. Without it every
+   * hat, snare and clap plays byte-identical noise, so hits landing on the same
+   * step are perfectly correlated and sum at +6 dB instead of +3.
+   */
+  private noiseStartOffset(): number {
+    return Math.random() * (this.noiseBuffer?.duration ?? 0);
   }
 
   // Drum Synthesizer Trigger
   triggerDrum(type: string, velocity = DEFAULT_VELOCITY, time?: number): void {
     if (!this.ctx || !this.dryGain || !this.drumBusFilter) return;
     const now = time ?? this.ctx.currentTime;
+    const v = clampVelocity(velocity);
     const k = this.drumKit;
+    const name = type.toLowerCase();
 
-    switch (type.toLowerCase()) {
+    switch (DRUM_ALIASES[name] ?? name) {
       case 'kick': {
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.frequency.setValueAtTime(k.kick.freqStart, now);
-        osc.frequency.exponentialRampToValueAtTime(k.kick.freqEnd, now + k.kick.pitchTime);
-        gain.gain.setValueAtTime(velocity * k.kick.gain, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + k.kick.decay);
-
-        osc.connect(gain);
-        gain.connect(this.drumBusFilter);
-        osc.start(now);
-        osc.stop(now + k.kick.decay + 0.02);
-
-        if (k.kick.clickFreq && k.kick.clickLevel) {
-          const clickOsc = this.ctx.createOscillator();
-          const clickGain = this.ctx.createGain();
-          clickOsc.frequency.setValueAtTime(k.kick.clickFreq, now);
-          clickGain.gain.setValueAtTime(velocity * k.kick.clickLevel, now);
-          clickGain.gain.exponentialRampToValueAtTime(0.0001, now + (k.kick.clickDecay ?? 0.01));
-          clickOsc.connect(clickGain);
-          clickGain.connect(this.drumBusFilter);
-          clickOsc.start(now);
-          clickOsc.stop(now + k.kick.decay + 0.02);
+        const d = k.kick;
+        this.drumTone({
+          freq: d.freqStart, freqEnd: d.freqEnd, pitchTime: d.pitchTime,
+          peak: v * d.gain, decay: d.decay, t: now,
+        });
+        if (d.clickFreq && d.clickLevel) {
+          this.drumTone({
+            freq: d.clickFreq, peak: v * d.clickLevel, decay: d.clickDecay ?? 0.01,
+            t: now, stopAt: now + d.decay + 0.02,
+          });
         }
         break;
       }
       case 'snare': {
         const s = k.snare;
-        // Body
-        const osc = this.ctx.createOscillator();
-        const oscGain = this.ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(s.bodyFreqStart, now);
-        osc.frequency.exponentialRampToValueAtTime(s.bodyFreqEnd, now + s.bodyTime);
-        oscGain.gain.setValueAtTime(velocity * s.bodyGain, now);
-        oscGain.gain.exponentialRampToValueAtTime(0.001, now + s.bodyDecay);
-        osc.connect(oscGain);
-        oscGain.connect(this.drumBusFilter);
-
-        // Noise snap
-        const noise = this.createNoiseNode();
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'highpass';
-        filter.frequency.value = s.noiseFilter;
-        const noiseGain = this.ctx.createGain();
-        noiseGain.gain.setValueAtTime(velocity * s.noiseGain, now);
-        noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + s.noiseDecay);
-
-        noise.connect(filter);
-        filter.connect(noiseGain);
-        noiseGain.connect(this.drumBusFilter);
-        if (this.reverbNode && s.reverbSend > 0) noiseGain.connect(this.reverbNode);
-
-        osc.start(now);
-        noise.start(now);
-        osc.stop(now + s.bodyDecay + 0.05);
-        noise.stop(now + s.noiseDecay + 0.03);
+        this.drumTone({
+          type: 'triangle', freq: s.bodyFreqStart, freqEnd: s.bodyFreqEnd,
+          pitchTime: s.bodyTime, peak: v * s.bodyGain, decay: s.bodyDecay,
+          t: now, stopAt: now + s.bodyDecay + 0.05,
+        });
+        this.drumNoiseBurst({
+          filterType: 'highpass', freq: s.noiseFilter, peak: v * s.noiseGain,
+          decay: s.noiseDecay, t: now, stopPad: 0.03, reverbSend: s.reverbSend,
+        });
         break;
       }
-      case 'hihat':
-      case 'closedhat': {
+      case 'hihat': {
         const h = k.hihat;
-        const noise = this.createNoiseNode();
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'highpass';
-        filter.frequency.value = h.filter;
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(velocity * h.gain, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + h.decay);
-
-        noise.connect(filter);
-        filter.connect(gain);
-        gain.connect(this.drumBusFilter);
-        noise.start(now);
-        noise.stop(now + h.decay + 0.01);
+        this.drumNoiseBurst({
+          filterType: 'highpass', freq: h.filter, peak: v * h.gain, decay: h.decay, t: now,
+        });
         break;
       }
       case 'openhat': {
+        // No delay tap: drums bypass delay and distortion entirely. The old
+        // unconditional gain.connect(delayNode) here was a stray with no kit
+        // parameter behind it.
         const h = k.openhat;
-        const noise = this.createNoiseNode();
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'highpass';
-        filter.frequency.value = h.filter;
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(velocity * h.gain, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + h.decay);
-
-        noise.connect(filter);
-        filter.connect(gain);
-        gain.connect(this.drumBusFilter);
-        if (this.delayNode) gain.connect(this.delayNode);
-        noise.start(now);
-        noise.stop(now + h.decay + 0.01);
+        this.drumNoiseBurst({
+          filterType: 'highpass', freq: h.filter, peak: v * h.gain, decay: h.decay, t: now,
+        });
         break;
       }
       case 'clap': {
         const c = k.clap;
-        const noise = this.createNoiseNode();
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'bandpass';
-        filter.frequency.value = c.filter;
-        filter.Q.value = 1.5;
-        const gain = this.ctx.createGain();
-
-        // 3 quick micro-bursts for realistic clap texture
-        gain.gain.setValueAtTime(velocity * c.gain, now);
-        gain.gain.setValueAtTime(0.1, now + 0.012);
-        gain.gain.setValueAtTime(velocity * c.gain * 1.1, now + 0.024);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + c.decay);
-
-        noise.connect(filter);
-        filter.connect(gain);
-        gain.connect(this.drumBusFilter);
-        if (this.reverbNode && c.reverbSend > 0) gain.connect(this.reverbNode);
-        noise.start(now);
-        noise.stop(now + c.decay + 0.02);
+        const peak = v * c.gain;
+        this.drumNoiseBurst({
+          filterType: 'bandpass', freq: c.filter, q: 1.5, peak, decay: c.decay,
+          t: now, stopPad: 0.02, reverbSend: c.reverbSend,
+          // 3 quick micro-bursts for realistic clap texture. Both scale with
+          // velocity: the second used to be a hardcoded 0.1, which at low
+          // velocity made the ghost louder than the hit.
+          shape: (gain) => {
+            gain.setValueAtTime(peak * 0.25, now + 0.012);
+            gain.setValueAtTime(peak * 1.1, now + 0.024);
+          },
+        });
         break;
       }
-      case 'tom':
-      case 'lowtom': {
+      case 'tom': {
         const t = k.tom;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.frequency.setValueAtTime(t.freqStart, now);
-        osc.frequency.exponentialRampToValueAtTime(t.freqEnd, now + t.pitchTime);
-        gain.gain.setValueAtTime(velocity * t.gain, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + t.decay);
-        osc.connect(gain);
-        gain.connect(this.drumBusFilter);
-        osc.start(now);
-        osc.stop(now + t.decay + 0.02);
+        this.drumTone({
+          freq: t.freqStart, freqEnd: t.freqEnd, pitchTime: t.pitchTime,
+          peak: v * t.gain, decay: t.decay, t: now,
+        });
         break;
       }
-      case 'crash':
-      case 'ride': {
+      case 'crash': {
         const cr = k.crash;
-        const noise = this.createNoiseNode();
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'bandpass';
-        filter.frequency.value = cr.filter;
-        filter.Q.value = 0.8;
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(velocity * cr.gain, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + cr.decay);
-        noise.connect(filter);
-        filter.connect(gain);
-        gain.connect(this.drumBusFilter);
-        if (this.reverbNode && cr.reverbSend > 0) gain.connect(this.reverbNode);
-        noise.start(now);
-        noise.stop(now + cr.decay + 0.1);
+        this.drumNoiseBurst({
+          filterType: 'bandpass', freq: cr.filter, q: 0.8, peak: v * cr.gain,
+          decay: cr.decay, t: now, stopPad: 0.1, reverbSend: cr.reverbSend,
+        });
         break;
       }
       default:
@@ -1304,8 +1351,8 @@ class AudioEngine {
     initialLevel: number = level,
   ): Pick<SynthVoice, 'noise' | 'noiseGain'> {
     if (!this.ctx || level <= 0) return {};
+    // createNoiseNode always returns a looped source now.
     const noise = this.createNoiseNode();
-    noise.loop = true;
     const noiseGain = this.ctx.createGain();
     noiseGain.gain.value = initialLevel;
     noise.connect(noiseGain);
@@ -1349,6 +1396,10 @@ class AudioEngine {
     }
     const noise = this.ctx.createBufferSource();
     noise.buffer = this.noiseBuffer;
+    // Always looped. The buffer is 2 s; a pad's release runs longer, and now
+    // that drum voices start at a RANDOM offset a one-shot could reach the end
+    // mid-decay (the crash already used 1.8 s of the 2 s from offset 0).
+    noise.loop = true;
     return noise;
   }
 

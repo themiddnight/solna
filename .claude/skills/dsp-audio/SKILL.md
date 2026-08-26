@@ -47,8 +47,9 @@ synth/chord/bass voice: osc1 + subOsc (+ noise) -> BiquadFilter (VCF) -> GainNod
                           |      |       |     \
                         dry   delay   reverb  distortion
                                  |       |         |
-drums: osc/noise -> drumBusFilter -> dryGain       |
-       (snare/clap/crash also tap reverbNode directly when reverbSend > 0)
+drums: osc/noise -> drumEnv -> drumBusFilter -> dryGain
+                            \_ (snare/clap/crash only) send gain (kit's
+                               reverbSend LEVEL) -> drumSendFilter -> reverbNode
                                  |       |         |
    delayNode <-> delayFeedbackGain, delayNode -> delayGain
    reverbNode(Convolver) -> reverbGain
@@ -69,7 +70,10 @@ Key consequences:
   send gain (`reverbGain`/`delayGain`/`distortionGain`).
 - EQ → compressor → masterGain → limiter → analyser is **serial and fixed**. The analyser is
   post-limiter, so `getAudioLevel()` reflects final output.
-- Drums bypass delay and distortion entirely — they hit `drumBusFilter → dryGain` only.
+- Drums bypass delay and distortion entirely — the dry path hits `drumBusFilter → dryGain` only.
+  The snare/clap/crash reverb send is a per-voice gain (the kit's authored `reverbSend` LEVEL,
+  not a boolean) that feeds a second shared `drumSendFilter` — a mirror of `drumBusFilter` kept in
+  lockstep by `setDrumFilter` — so the wet path is filtered too, then on to `reverbNode`.
 - `masterGain` is the user's master trim only (`setMasterVolume()`, clamped 0..1, seeded at unity). Headroom is the compressor (-12 dB, 4:1) and the limiter (-3 dB, 20:1); there is no separate staging gain.
 - Bypass flags are applied in `updateEffects()` by forcing the wet/gain value to 0, not by
   rewiring. `reverbDecay` is the impulse **duration in seconds** (the curve exponent is a fixed
