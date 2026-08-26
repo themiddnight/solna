@@ -1,5 +1,5 @@
 import { SynthParams, MasterEffects, FilterType } from '../types';
-import { noteFrequency, stepDurationSec, STEPS_PER_BAR } from '../utils/musicTheory';
+import { noteFrequency, clampBpm, stepDurationSec, STEPS_PER_BAR } from '../utils/musicTheory';
 import { DEFAULT_VELOCITY } from './constants';
 import { mergeDrumKit, type DrumKit } from './drumKits';
 
@@ -102,6 +102,13 @@ class AudioEngine {
   private static readonly CLOCK_LOOKAHEAD = 0.1; // schedule events this far ahead
   private static readonly CLOCK_REANCHOR_DELAY = 0.05; // gap used to re-anchor the schedule after resets and stalls
   private static readonly CLOCK_UPDATE_MS = 25;
+  // A genuine stall (backgrounded tab, GC pause) is orders of magnitude
+  // larger than routine setInterval jitter around CLOCK_UPDATE_MS. Anything
+  // under this is caught up normally by the while loop below instead of
+  // being thrown away and re-anchored, so the grid stays bpm-accurate
+  // through minor scheduling delays instead of drifting toward wall-clock
+  // pacing.
+  private static readonly CLOCK_STALL_THRESHOLD = 1; // seconds
 
   private drumKit: DrumKit = mergeDrumKit();
 
@@ -154,7 +161,7 @@ class AudioEngine {
   }
 
   setClockBpm(bpm: number): void {
-    this.clockBpm = Math.max(20, Math.min(300, bpm));
+    this.clockBpm = clampBpm(bpm);
   }
 
   /**
@@ -186,19 +193,32 @@ class AudioEngine {
   private clockTick(): void {
     if (!this.ctx) return;
     // Resync after stalls or initial start instead of bursting missed steps
-    if (this.clockNextStepTime < this.ctx.currentTime - 0.05) {
+    if (this.clockNextStepTime < this.ctx.currentTime - AudioEngine.CLOCK_STALL_THRESHOLD) {
       this.clockNextStepTime = this.ctx.currentTime + AudioEngine.CLOCK_REANCHOR_DELAY;
     }
     const stepDuration = stepDurationSec(this.clockBpm);
     while (this.clockNextStepTime < this.ctx.currentTime + AudioEngine.CLOCK_LOOKAHEAD) {
       const time = this.clockNextStepTime;
       const step = this.clockStepIndex;
-      if (this.metronomeEnabled && step % 4 === 0) {
-        this.playMetronomeClick(step % 16 === 0, time);
-      }
-      this.clockListeners.forEach((fn) => fn(step, Math.floor(step / 4), time));
+      // Advance BEFORE dispatching. A listener that throws must not leave the
+      // grid parked on the step it threw on — the 25 ms interval would then
+      // re-dispatch and re-throw the same step forever and the whole transport
+      // would be frozen, not just the broken listener.
       this.clockNextStepTime += stepDuration;
       this.clockStepIndex++;
+
+      if (this.metronomeEnabled && step % 4 === 0) {
+        this.playMetronomeClick(step % STEPS_PER_BAR === 0, time);
+      }
+      // One listener's failure is isolated: every other subscriber still gets
+      // this step. Logged rather than swallowed so the fault is findable.
+      this.clockListeners.forEach((fn) => {
+        try {
+          fn(step, Math.floor(step / 4), time);
+        } catch (err) {
+          console.error('[audioEngine] clock listener threw; continuing', err);
+        }
+      });
     }
   }
 

@@ -1,4 +1,5 @@
 import type { StoreApi } from 'zustand';
+import { clampBpm } from '../utils/musicTheory';
 import type { AppStore, PlayerModule, PlayerState, TransportSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -85,7 +86,11 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
     setPlayheadChord: (playheadChordIndex, startBeat = 0) =>
       set({ playheadChordIndex, playheadChordStartBeat: playheadChordIndex === null ? 0 : startBeat }),
 
-    setBpm: (bpm) => set({ bpm }),
+    // Clamped with the same bounds engine.setClockBpm uses. The store is the
+    // value every playback hook reads for its own step math, so an unclamped 0
+    // from a cleared number input would drone notes even though the engine
+    // clock itself is safe.
+    setBpm: (bpm) => set({ bpm: clampBpm(bpm) }),
     setMasterVolume: (masterVolume) => set({ masterVolume }),
 
     toggleMetronome: () => set((state) => ({ metronomeActive: !state.metronomeActive })),

@@ -6,6 +6,8 @@ import {
   isHardStopEnabled,
   isPlayerActive,
 } from './transportSlice';
+import { useAppStore } from './store';
+import { MAX_BPM, MIN_BPM } from '../utils/musicTheory';
 import type { AppStore, PlayerState, TransportSlice } from './types';
 
 // Minimal harness: createTransportSlice takes zustand's (set, get). We back
@@ -118,5 +120,25 @@ describe('derived transport helpers', () => {
     expect(isHardStopEnabled('stopping', 'stopped')).toBe(true);
     expect(isHardStopEnabled('stopped', 'playing')).toBe(true);
     expect(isHardStopEnabled('stopping', 'stopping')).toBe(true);
+  });
+});
+
+describe('setBpm clamping', () => {
+  test('an empty BPM input (0) cannot reach the store', () => {
+    // The BPM field is `type="number"`; clearing it yields 0. Unclamped, every
+    // playback hook derives its step duration from the raw store bpm and
+    // schedules note-offs minutes away — the note-drone bug.
+    useAppStore.getState().setBpm(0);
+    expect(useAppStore.getState().bpm).toBe(MIN_BPM);
+  });
+
+  test('clamps to the same range the engine clock uses', () => {
+    useAppStore.getState().setBpm(9999);
+    expect(useAppStore.getState().bpm).toBe(MAX_BPM);
+    useAppStore.getState().setBpm(128);
+    expect(useAppStore.getState().bpm).toBe(128);
+    useAppStore.getState().setBpm(Number.NaN);
+    expect(useAppStore.getState().bpm).toBe(120);
+    useAppStore.getState().setBpm(120);
   });
 });
