@@ -8,7 +8,7 @@ import {
   playbackNoteOn,
   subscribePlaybackClock,
 } from "../audio/playback/playbackEngine";
-import { isSoftStopBoundary } from "./playerStop";
+import { armOnBarLine, isSoftStopBoundary } from "./playerStop";
 import type { PlayerState } from "../store/types";
 
 /** Whether the stepper has caught a bar line and started running. */
@@ -36,10 +36,7 @@ export function sequencerStepAction(
 ): SequencerStepAction {
   if (state === "stopped") return "idle";
   if (isSoftStopBoundary(state, step, stepsPerBar)) return "soft-stop";
-  if (!arming.armed) {
-    if (step % stepsPerBar !== 0) return "idle";
-    arming.armed = true;
-  }
+  if (!armOnBarLine(arming, step, stepsPerBar)) return "idle";
   return "play";
 }
 

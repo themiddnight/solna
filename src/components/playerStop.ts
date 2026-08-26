@@ -31,3 +31,19 @@ export function isSoftStopBoundary(
 ): boolean {
   return state === 'stopping' && step % stepsPerBar === 0;
 }
+
+/**
+ * Arms `arming` (mutating it) on the first bar line seen, so a stepper always
+ * enters on beat 1. Returns whether the caller is armed — and may proceed —
+ * after this call; once armed, stays armed until the caller resets it.
+ */
+export function armOnBarLine(
+  arming: { armed: boolean },
+  step: number,
+  stepsPerBar: number,
+): boolean {
+  if (arming.armed) return true;
+  if (step % stepsPerBar !== 0) return false;
+  arming.armed = true;
+  return true;
+}

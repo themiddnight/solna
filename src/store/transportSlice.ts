@@ -50,6 +50,18 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
       return target === current ? {} : ({ [field]: target } as Partial<AppStore>);
     });
 
+  const transitionAll = (next: (current: PlayerState) => PlayerState) =>
+    set((state) => {
+      const patch: Partial<AppStore> = {};
+      (Object.keys(FIELD) as PlayerModule[]).forEach((module) => {
+        const field = FIELD[module];
+        const current = state[field];
+        const target = next(current);
+        if (target !== current) patch[field] = target;
+      });
+      return patch;
+    });
+
   const play = (module: PlayerModule) =>
     transition(module, (current) => (current === 'stopped' ? 'playing' : current));
 
@@ -74,17 +86,8 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
     softStop,
     hardStop,
 
-    playAll: () => {
-      play('sequencer');
-      play('chords');
-    },
-    softStopAll: () => {
-      softStop('sequencer');
-      softStop('chords');
-    },
-    hardStopAll: () => {
-      hardStop('sequencer');
-      hardStop('chords');
-    },
+    playAll: () => transitionAll((current) => (current === 'stopped' ? 'playing' : current)),
+    softStopAll: () => transitionAll((current) => (current === 'playing' ? 'stopping' : current)),
+    hardStopAll: () => transitionAll(() => 'stopped'),
   };
 }

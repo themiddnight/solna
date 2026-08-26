@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { INSTANT_VIBES } from './instantVibes';
+import { INSTANT_VIBES, VIBE_IDS } from './instantVibes';
 import { ORIGINAL_VIBE_DRUM_PATTERNS } from './instantVibesDrumsFixture';
 import { drumPatternById } from '../audio/data/vibeDrumPatterns';
-
-const VIBE_IDS = INSTANT_VIBES.map((v) => v.id);
 
 const ROWS = ['kick', 'snare', 'hihat', 'openhat', 'clap', 'tom', 'crash'];
 

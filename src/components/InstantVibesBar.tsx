@@ -55,6 +55,16 @@ export function resolveSelectedVibeId(projectTitle: string): string | null {
   return INSTANT_VIBES.find((v) => v.projectTitle === projectTitle)?.id ?? null;
 }
 
+/** Cancels whatever this ref has pending, then schedules `fn` to replace it. */
+function scheduleTimeout(
+  ref: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+  fn: () => void,
+  ms: number,
+): void {
+  if (ref.current) clearTimeout(ref.current);
+  ref.current = setTimeout(fn, ms);
+}
+
 export const InstantVibesBar: React.FC = React.memo(() => {
   const projectTitle = useAppStore((s) => s.projectTitle);
   const selectedVibeId = resolveSelectedVibeId(projectTitle);
@@ -84,10 +94,8 @@ export const InstantVibesBar: React.FC = React.memo(() => {
     };
   }, []);
 
-  const scheduleToastClear = (ms: number) => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToast(null), ms);
-  };
+  const scheduleToastClear = (ms: number) =>
+    scheduleTimeout(toastTimerRef, () => setToast(null), ms);
 
   const handleSelectVibe = (vibe: InstantVibe) => {
     selectVibe(vibe, { onToast: (text) => setToast({ kind: 'load', text }) });
@@ -96,7 +104,6 @@ export const InstantVibesBar: React.FC = React.memo(() => {
 
   const handleReroll = (vibe: InstantVibe) => {
     setRollingVibeId(vibe.id);
-    if (spinTimerRef.current) clearTimeout(spinTimerRef.current);
     try {
       rerollVibe(vibe, { onToast: (t) => setToast({ kind: 'reroll', ...t }) });
       // 400 ms of spin, then the icon settles; the toast holds longer because
@@ -105,7 +112,7 @@ export const InstantVibesBar: React.FC = React.memo(() => {
     } finally {
       // Robust to rerollVibe throwing: the spin must stop either way, or the
       // dice would spin forever.
-      spinTimerRef.current = setTimeout(() => setRollingVibeId(null), 400);
+      scheduleTimeout(spinTimerRef, () => setRollingVibeId(null), 400);
     }
   };
 

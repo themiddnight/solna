@@ -1,4 +1,5 @@
 import type { VibeDraw } from './vibeVariation';
+import { eligibleFor } from './vibeVariation';
 
 /**
  * Deterministic VibeDraw implementations for tests. They live in their own
@@ -13,7 +14,7 @@ export const firstDraw: VibeDraw = {
     return items[0];
   },
   pickDistinct: <T,>(items: T[], current: T): T => {
-    const eligible = items.filter((item) => item !== current);
+    const eligible = eligibleFor(items, current);
     return eligible.length === 0 ? current : eligible[0];
   },
   int: (min: number): number => min,
@@ -26,7 +27,7 @@ export const lastDraw: VibeDraw = {
     return items[items.length - 1];
   },
   pickDistinct: <T,>(items: T[], current: T): T => {
-    const eligible = items.filter((item) => item !== current);
+    const eligible = eligibleFor(items, current);
     return eligible.length === 0 ? current : eligible[eligible.length - 1];
   },
   int: (_min: number, max: number): number => max,
@@ -61,7 +62,7 @@ export function scriptedDraw(indices: number[]): VibeDraw {
       return items[next(items.length)];
     },
     pickDistinct: <T,>(items: T[], current: T): T => {
-      const eligible = items.filter((item) => item !== current);
+      const eligible = eligibleFor(items, current);
       return eligible.length === 0 ? current : eligible[next(eligible.length)];
     },
     int: (min: number, max: number): number => min + next(max - min + 1),

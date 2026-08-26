@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { ViewMode } from "../types";
 import { ROOTS, SCALES } from "../utils/musicTheory";
+import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/storage";
 import { useAppStore } from "../store/store";
 import type { PlayerModule } from "../store/types";
 import { PlayerTransport } from "./ui/PlayerTransport";
@@ -82,19 +83,11 @@ export function resolveInitialTheme(stored: string | null, prefersLight: boolean
 
 /**
  * Reads the persisted theme choice, degrading to `null` (i.e. "no stored
- * preference") if storage access throws. Safari private browsing, "block
- * all cookies" and some embedded webviews throw on the *property access*
- * itself, not just on read failure, so a bare `localStorage.getItem(...)`
- * call is unsafe. Mirrors the try/catch the index.html bootstrap script
- * already performs around the identical read.
+ * preference") if storage access throws. Mirrors the try/catch the
+ * index.html bootstrap script already performs around the identical read.
  */
 export function readStoredTheme(storage?: Pick<Storage, 'getItem'>): string | null {
-  try {
-    const s = storage ?? localStorage;
-    return s.getItem(THEME_STORAGE_KEY);
-  } catch {
-    return null;
-  }
+  return readGuardedStorageValue(THEME_STORAGE_KEY, storage);
 }
 
 /**
@@ -103,12 +96,7 @@ export function readStoredTheme(storage?: Pick<Storage, 'getItem'>): string | nu
  * cross-session persistence is lost when storage is blocked.
  */
 export function persistTheme(theme: SolnaTheme, storage?: Pick<Storage, 'setItem'>): void {
-  try {
-    (storage ?? localStorage).setItem(THEME_STORAGE_KEY, theme);
-  } catch {
-    // Blocked storage (private mode, cookies disabled, some webviews): the
-    // session still works, it just won't remember the choice next visit.
-  }
+  persistGuardedStorageValue(THEME_STORAGE_KEY, theme, storage);
 }
 
 export const Header: React.FC = React.memo(() => {

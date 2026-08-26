@@ -354,6 +354,11 @@ export const SynthView = () => {
     }
   }, [keyboardParams.arpActive, activeNotes.size, keyboardParams.release]);
 
+  const chordKeyboardRows = useMemo(
+    () => getChordKeyboardRows(scaleRoot, scaleType, keyboardOctave),
+    [scaleRoot, scaleType, keyboardOctave],
+  );
+
   // QWERTY Computer Keyboard mapping — uses keyboardOctave, NOT params.octave
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -368,7 +373,7 @@ export const SynthView = () => {
         return;
       }
       if (keyboardMode === "chord") {
-        const rows = getChordKeyboardRows(scaleRoot, scaleType, keyboardOctave);
+        const rows = chordKeyboardRows;
         const btn = [...rows.triadRow, ...rows.melodyRow].find(
           (b) => b.key === e.code,
         );
@@ -429,6 +434,7 @@ export const SynthView = () => {
     scaleRoot,
     scaleType,
     keyboardOctave,
+    chordKeyboardRows,
   ]);
 
   const handleSelectPreset = (preset: SynthPresetItem) => {
@@ -1410,7 +1416,7 @@ export const SynthView = () => {
         >
           {keyboardMode === "chord" ? (
             <ChordKeyboard
-              rows={getChordKeyboardRows(scaleRoot, scaleType, keyboardOctave)}
+              rows={chordKeyboardRows}
               activeNotes={activeNotes}
               onNoteOn={handleNoteOn}
               onNoteOff={handleNoteOff}

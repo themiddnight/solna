@@ -29,7 +29,7 @@ import {
   playbackStopSource,
   subscribePlaybackClock,
 } from "../../audio/playback/playbackEngine";
-import { isSoftStopBoundary, shouldHardStopNow } from "../playerStop";
+import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "../playerStop";
 import type { PlayerState } from "../../store/types";
 import type { ChordItem } from "../../types";
 
@@ -85,9 +85,9 @@ export function chordStepAction(
 ): ChordStepAction {
   if (state === 'stopped') return 'idle';
   if (isSoftStopBoundary(state, step, stepsPerBar)) return 'soft-stop';
-  if (!arming.armed) {
-    if (step % stepsPerBar !== 0) return 'idle';
-    arming.armed = true;
+  const wasArmed = arming.armed;
+  if (!armOnBarLine(arming, step, stepsPerBar)) return 'idle';
+  if (!wasArmed) {
     arming.chordIndex = 0;
     arming.nextBarStep = step;
   }

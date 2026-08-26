@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { INSTANT_VIBES } from './instantVibes';
+import { INSTANT_VIBES, VIBE_IDS } from './instantVibes';
 import { ORIGINAL_VIBE_EFFECTS } from './instantVibesEffectsFixture';
 import { effectChainById } from '../audio/data/vibeEffectChains';
-
-const VIBE_IDS = INSTANT_VIBES.map((v) => v.id);
 
 describe('ORIGINAL_VIBE_EFFECTS fixture', () => {
   test('captures exactly the six vibes', () => {

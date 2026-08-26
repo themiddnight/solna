@@ -89,6 +89,14 @@ function collidesWithKick(row: number[], kick: number[]): boolean {
 }
 
 /**
+ * `items` minus `current` — the candidate pool every `VibeDraw.pickDistinct`
+ * implementation chooses from once it has excluded the current value.
+ */
+export function eligibleFor<T>(items: T[], current: T): T[] {
+  return items.filter((item) => item !== current);
+}
+
+/**
  * The candidates a layer may actually be drawn from. Can never return an empty
  * list for a well-authored vibe: `off` is a member of every filtered pool and
  * collides with nothing. An invariant test pins that for all six vibes.
@@ -241,7 +249,7 @@ export function createDraw(random: () => number): VibeDraw {
   return {
     pick,
     pickDistinct: <T,>(items: T[], current: T): T => {
-      const eligible = items.filter((item) => item !== current);
+      const eligible = eligibleFor(items, current);
       return eligible.length === 0 ? current : pick(eligible);
     },
     int: (min: number, max: number): number =>

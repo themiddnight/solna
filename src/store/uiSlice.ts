@@ -1,6 +1,7 @@
 import type { StoreApi } from 'zustand';
 import type { KeyboardMode } from '../types';
 import type { AppStore, UiSlice } from './types';
+import { readValidatedStorageValue, persistGuardedStorageValue } from '../utils/storage';
 
 type Set = StoreApi<AppStore>['setState'];
 
@@ -16,18 +17,10 @@ function isKeyboardMode(value: string | null): value is KeyboardMode {
  * Reads the persisted keyboard-mode choice, degrading to `null` (i.e. "no
  * stored preference, or garbage") if storage access throws or the stored
  * value isn't one of the three known modes. Mirrors `readStoredTheme` in
- * Header.tsx: `storage ?? localStorage` is resolved *inside* the try because
- * Safari private browsing, "block all cookies" and some embedded webviews
- * throw on the property access itself, not just on read failure.
+ * Header.tsx via the shared guarded-storage helpers.
  */
 export function readStoredKeyboardMode(storage?: Pick<Storage, 'getItem'>): KeyboardMode | null {
-  try {
-    const s = storage ?? localStorage;
-    const stored = s.getItem(KEYBOARD_MODE_STORAGE_KEY);
-    return isKeyboardMode(stored) ? stored : null;
-  } catch {
-    return null;
-  }
+  return readValidatedStorageValue(KEYBOARD_MODE_STORAGE_KEY, isKeyboardMode, storage);
 }
 
 /**
@@ -36,12 +29,7 @@ export function readStoredKeyboardMode(storage?: Pick<Storage, 'getItem'>): Keyb
  * lost when storage is blocked.
  */
 export function persistKeyboardMode(mode: KeyboardMode, storage?: Pick<Storage, 'setItem'>): void {
-  try {
-    (storage ?? localStorage).setItem(KEYBOARD_MODE_STORAGE_KEY, mode);
-  } catch {
-    // Blocked storage (private mode, cookies disabled, some webviews): the
-    // session still works, it just won't remember the choice next visit.
-  }
+  persistGuardedStorageValue(KEYBOARD_MODE_STORAGE_KEY, mode, storage);
 }
 
 /**

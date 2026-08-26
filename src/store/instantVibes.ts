@@ -493,3 +493,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     },
   },
 ];
+
+/** Every vibe's id, in table order — the identity set the invariant tests pin against. */
+export const VIBE_IDS: string[] = INSTANT_VIBES.map((v) => v.id);
