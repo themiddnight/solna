@@ -13,6 +13,15 @@ type SynthVoice = {
   lfo?: OscillatorNode;
   lfoGain?: GainNode;
   lfoTarget?: SynthParams['lfoTarget'];
+  // A unity gain in SERIES between the VCA and the source bus, existing purely
+  // so a 'volume' LFO can multiply the amp envelope instead of summing into it.
+  // Always created: a connected node's signal is added to a param's automation,
+  // so wiring the LFO straight to gains[0].gain made the release never reach
+  // silence and inverted phase on the downswing. Kept out of `gains` because
+  // gains[0]/gains[1] are positional (main VCA / sub level).
+  tremoloGain: GainNode;
+  // Pending teardown for an LFO whose depth just went to zero.
+  lfoTeardownTimer?: ReturnType<typeof setTimeout>;
   // Third source alongside osc1/oscSub, created only when noiseVolume > 0.
   // Tracked separately from `oscs` because an AudioBufferSourceNode is not an
   // OscillatorNode, and separately from `gains` because gains[0]/gains[1] are
@@ -129,6 +138,17 @@ class AudioEngine {
   // rather than let the while loop below burst every step it missed.
   private static readonly CLOCK_STALL_THRESHOLD = 0.05; // seconds
   private static readonly REVERB_CURVE = 2.0; // impulse envelope exponent; not user-facing
+
+  /**
+   * LFO amount per target, in the target param's own units: Hz for cutoff,
+   * cents for pitch, and a unitless 0..1 multiplier deviation for tremolo.
+   * 0.2 keeps the tremolo VCA in 0.8..1.2 so it never goes negative.
+   */
+  private static lfoDepthFor(params: SynthParams): number {
+    if (params.lfoTarget === 'cutoff') return params.lfoDepth * 1500;
+    if (params.lfoTarget === 'pitch') return params.lfoDepth * 50;
+    return Math.min(1, params.lfoDepth) * 0.2;
+  }
   private static readonly IMPULSE_CACHE_MAX = 8; // LRU cap; real use revisits a handful of decays
 
   private drumKit: DrumKit = mergeDrumKit();
@@ -538,6 +558,11 @@ class AudioEngine {
     gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain), now + attack);
     gainNode.gain.exponentialRampToValueAtTime(Math.max(ENV_FLOOR, peakGain * params.sustain), now + attack + params.decay);
 
+    // Tremolo VCA: envelope -> tremoloGain -> bus. The LFO drives THIS node's
+    // gain, so amp envelope and tremolo multiply. Unity when unused.
+    const tremoloGain = this.ctx.createGain();
+    tremoloGain.gain.value = 1;
+
     // LFO
     let lfo: OscillatorNode | undefined;
     let lfoGain: GainNode | undefined;
@@ -545,19 +570,15 @@ class AudioEngine {
       lfo = this.ctx.createOscillator();
       lfo.frequency.value = params.lfoRate;
       lfoGain = this.ctx.createGain();
+      lfoGain.gain.value = AudioEngine.lfoDepthFor(params);
+      lfo.connect(lfoGain);
 
       if (params.lfoTarget === 'cutoff') {
-        lfoGain.gain.value = params.lfoDepth * 1500;
-        lfo.connect(lfoGain);
         lfoGain.connect(filter.frequency);
       } else if (params.lfoTarget === 'pitch') {
-        lfoGain.gain.value = params.lfoDepth * 50;
-        lfo.connect(lfoGain);
         lfoGain.connect(osc1.detune);
       } else {
-        lfoGain.gain.value = params.lfoDepth * 0.2;
-        lfo.connect(lfoGain);
-        lfoGain.connect(gainNode.gain);
+        lfoGain.connect(tremoloGain.gain);
       }
       lfo.start(now);
     }
@@ -575,9 +596,10 @@ class AudioEngine {
     subGain.connect(filter);
 
     filter.connect(gainNode);
+    gainNode.connect(tremoloGain);
 
     // Route through the per-source bus (lazily created) to dry/effects
-    gainNode.connect(this.getSourceBus(source));
+    tremoloGain.connect(this.getSourceBus(source));
 
     osc1.start(now);
     oscSub.start(now);
@@ -592,6 +614,7 @@ class AudioEngine {
       lfo,
       lfoGain,
       lfoTarget: params.lfoTarget,
+      tremoloGain,
       sustainLevel: peakGain * params.sustain,
       peakGain,
       ampEnvEndsAt: now + attack + params.decay,
@@ -632,6 +655,46 @@ class AudioEngine {
 
   // Silences one voice: cancels its envelopes, ramps amp/filter down, and
   // tears the nodes down after the release tail.
+  // Shared node-teardown sequence for a voice that is being fully torn down —
+  // used both by releaseVoice's delayed timeout (nodes stopped with no time
+  // argument, since the release tail has already finished by the time it
+  // fires) and by the hard-silence paths (stopSource/releaseSoundingVoices on
+  // a future voice, and a live stopSource) which stop everything AT `when`.
+  // Each node is wrapped in its own try/catch so one already-stopped node
+  // can't prevent the rest of the voice from being torn down.
+  private teardownVoiceNodes(voice: SynthVoice, when?: number): void {
+    if (voice.lfoTeardownTimer !== undefined) clearTimeout(voice.lfoTeardownTimer);
+    voice.oscs.forEach((osc) => {
+      try {
+        if (when !== undefined) osc.stop(when); else osc.stop();
+        osc.disconnect();
+      } catch { /* ignore */ }
+    });
+    voice.gains.forEach((g) => {
+      try { g.disconnect(); } catch { /* ignore */ }
+    });
+    try { voice.filter.disconnect(); } catch { /* ignore */ }
+    try { voice.tremoloGain.disconnect(); } catch { /* ignore */ }
+    if (voice.lfo) {
+      try {
+        if (when !== undefined) voice.lfo.stop(when); else voice.lfo.stop();
+        voice.lfo.disconnect();
+      } catch { /* ignore */ }
+    }
+    if (voice.lfoGain) {
+      try { voice.lfoGain.disconnect(); } catch { /* ignore */ }
+    }
+    if (voice.noise) {
+      try {
+        if (when !== undefined) voice.noise.stop(when); else voice.noise.stop();
+        voice.noise.disconnect();
+      } catch { /* ignore */ }
+    }
+    if (voice.noiseGain) {
+      try { voice.noiseGain.disconnect(); } catch { /* ignore */ }
+    }
+  }
+
   private releaseVoice(voice: SynthVoice, releaseTime: number, now: number): void {
     if (!this.ctx) return;
     const mainGain = voice.gains[0];
@@ -683,25 +746,7 @@ class AudioEngine {
           this.activeVoices.delete(voiceKey);
         }
         this.sourceVoices.get(voice.source)?.delete(voice);
-        voice.oscs.forEach((osc) => {
-          try { osc.stop(); osc.disconnect(); } catch { /* ignore */ }
-        });
-        voice.gains.forEach((g) => {
-          try { g.disconnect(); } catch { /* ignore */ }
-        });
-        try { voice.filter.disconnect(); } catch { /* ignore */ }
-        if (voice.lfo) {
-          try { voice.lfo.stop(); voice.lfo.disconnect(); } catch { /* ignore */ }
-        }
-        if (voice.lfoGain) {
-          try { voice.lfoGain.disconnect(); } catch { /* ignore */ }
-        }
-        if (voice.noise) {
-          try { voice.noise.stop(); voice.noise.disconnect(); } catch { /* ignore */ }
-        }
-        if (voice.noiseGain) {
-          try { voice.noiseGain.disconnect(); } catch { /* ignore */ }
-        }
+        this.teardownVoiceNodes(voice);
       }, (Math.max(releaseTime, filterRelease) + Math.max(0, now - this.ctx.currentTime) + 0.1) * 1000);
     } catch {
       // ignore
@@ -726,17 +771,7 @@ class AudioEngine {
     } catch { /* ignore */ }
     if (this.activeVoices.get(voiceKey) === voice) this.activeVoices.delete(voiceKey);
     this.sourceVoices.get(voice.source)?.delete(voice);
-    voice.oscs.forEach((osc) => {
-      try { osc.stop(now); osc.disconnect(); } catch { /* ignore */ }
-    });
-    voice.gains.forEach((g) => {
-      try { g.disconnect(); } catch { /* ignore */ }
-    });
-    try { voice.filter.disconnect(); } catch { /* ignore */ }
-    if (voice.lfo) { try { voice.lfo.stop(now); voice.lfo.disconnect(); } catch { /* ignore */ } }
-    if (voice.lfoGain) { try { voice.lfoGain.disconnect(); } catch { /* ignore */ } }
-    if (voice.noise) { try { voice.noise.stop(now); voice.noise.disconnect(); } catch { /* ignore */ } }
-    if (voice.noiseGain) { try { voice.noiseGain.disconnect(); } catch { /* ignore */ } }
+    this.teardownVoiceNodes(voice, now);
   }
 
   // Immediately silences every voice of a source — sounding ones and hits
@@ -922,52 +957,74 @@ class AudioEngine {
     return out;
   }
 
+  // Points a voice's (already-created) LFO gain at the given target,
+  // disconnecting it from wherever it was previously wired.
+  private connectLfoTo(voice: SynthVoice, target: SynthParams['lfoTarget']): void {
+    if (!voice.lfoGain) return;
+    try { voice.lfoGain.disconnect(); } catch { /* ignore */ }
+    if (target === 'cutoff') {
+      voice.lfoGain.connect(voice.filter.frequency);
+    } else if (target === 'pitch') {
+      voice.lfoGain.connect(voice.oscs[0].detune);
+    } else {
+      voice.lfoGain.connect(voice.tremoloGain.gain);
+    }
+    voice.lfoTarget = target;
+  }
+
+  /**
+   * Removes an LFO whose depth has gone to zero, once the fade is inaudible.
+   * setTargetAtTime is asymptotic — it never reaches exactly 0 — so without
+   * this a "switched off" LFO keeps a running oscillator and a residual
+   * modulation for the rest of the voice's life.
+   */
+  private teardownVoiceLfo(voice: SynthVoice, now: number, tc: number): void {
+    if (!voice.lfoGain || voice.lfoTeardownTimer !== undefined) return;
+    this.cancelAndHold(voice.lfoGain.gain, now);
+    voice.lfoGain.gain.setTargetAtTime(0, now, tc);
+    voice.lfoTeardownTimer = setTimeout(() => {
+      voice.lfoTeardownTimer = undefined;
+      if (voice.lfo) { try { voice.lfo.stop(); voice.lfo.disconnect(); } catch { /* ignore */ } }
+      if (voice.lfoGain) { try { voice.lfoGain.disconnect(); } catch { /* ignore */ } }
+      voice.lfo = undefined;
+      voice.lfoGain = undefined;
+      voice.lfoTarget = undefined;
+    }, tc * 5 * 1000); // 5 time constants ~= -43 dB
+  }
+
   // Re-points a live voice's LFO at the current params, creating the LFO nodes
   // on the spot if the depth knob has just come up off zero.
   private updateVoiceLfo(voice: SynthVoice, params: SynthParams, now: number, tc: number): void {
     if (!this.ctx) return;
     if (params.lfoDepth <= 0) {
-      voice.lfoGain?.gain.setTargetAtTime(0, now, tc);
+      this.teardownVoiceLfo(voice, now, tc);
       return;
     }
 
-    let lfo = voice.lfo;
-    let lfoGain = voice.lfoGain;
-    if (!lfo || !lfoGain) {
-      lfo = this.ctx.createOscillator();
+    // The knob came back up before the teardown landed: keep the same nodes.
+    if (voice.lfoTeardownTimer !== undefined) {
+      clearTimeout(voice.lfoTeardownTimer);
+      voice.lfoTeardownTimer = undefined;
+    }
+
+    if (!voice.lfo || !voice.lfoGain) {
+      const lfo = this.ctx.createOscillator();
       lfo.frequency.value = params.lfoRate;
-      lfoGain = this.ctx.createGain();
+      const lfoGain = this.ctx.createGain();
       lfoGain.gain.value = 0;
       lfo.connect(lfoGain);
       lfo.start(now);
       voice.lfo = lfo;
       voice.lfoGain = lfoGain;
+      voice.lfoTarget = undefined; // force the connect below
     }
 
     if (voice.lfoTarget !== params.lfoTarget) {
-      try {
-        lfoGain.disconnect();
-      } catch {
-        // ignore
-      }
-      if (params.lfoTarget === 'cutoff') {
-        lfoGain.connect(voice.filter.frequency);
-      } else if (params.lfoTarget === 'pitch') {
-        lfoGain.connect(voice.oscs[0].detune);
-      } else {
-        lfoGain.connect(voice.gains[0].gain);
-      }
-      voice.lfoTarget = params.lfoTarget;
+      this.connectLfoTo(voice, params.lfoTarget);
     }
 
-    lfo.frequency.setTargetAtTime(params.lfoRate, now, tc);
-    const depth =
-      params.lfoTarget === 'cutoff'
-        ? params.lfoDepth * 1500
-        : params.lfoTarget === 'pitch'
-          ? params.lfoDepth * 50
-          : params.lfoDepth * 0.2;
-    lfoGain.gain.setTargetAtTime(depth, now, tc);
+    voice.lfo.frequency.setTargetAtTime(params.lfoRate, now, tc);
+    voice.lfoGain.gain.setTargetAtTime(AudioEngine.lfoDepthFor(params), now, tc);
   }
 
   // Live-update every sounding voice so knob tweaks are audible immediately

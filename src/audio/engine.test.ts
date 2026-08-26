@@ -1265,6 +1265,7 @@ describe('re-planning a pending release', () => {
     // Re-arming from params.release would stretch the kill to 2 s and let the
     // "stopped" note ring under the new one — bass monophony leaks.
     const ramp = first.gains[0].gain.ramps.at(-1);
+    expect(ramp).toBeTruthy();
     if (ramp) expect(ramp.t).toBeCloseTo(t0 + 1 + 0.05, 9);
   });
 
@@ -1282,5 +1283,113 @@ describe('re-planning a pending release', () => {
     // The pre-existing behaviour (engine.test.ts:275) must survive: a note-off
     // taken from params.release tracks the knob.
     expect(vca.ramps.at(-1)).toEqual({ v: 0.00001, t: t0 + 4 + 2 });
+  });
+});
+
+describe('LFO routing', () => {
+  const TREM: SynthParams = { ...SYNTH, lfoDepth: 0.4, lfoRate: 5, lfoTarget: 'volume' };
+
+  test('a volume LFO modulates a SERIES gain, never the VCA param itself', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', TREM, 0.8, undefined, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+
+    // Connecting the LFO to gainNode.gain SUMS with the envelope: the release
+    // ramp never reaches silence and the sum inverts phase on the downswing.
+    expect(voice.lfoGain.connectedTo).not.toContain(voice.gains[0].gain);
+    expect(voice.lfoGain.connectedTo).toContain(voice.tremoloGain.gain);
+  });
+
+  test('the tremolo gain sits between the VCA and the source bus', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', TREM, 0.8, undefined, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    const bus = (engine as any).sourceBuses.get('synth');
+
+    expect(voice.gains[0].connectedTo).toEqual([voice.tremoloGain]);
+    expect(voice.tremoloGain.connectedTo).toContain(bus);
+    // Unity so the envelope passes through untouched when depth is 0.
+    expect(voice.tremoloGain.gain.value).toBe(1);
+  });
+
+  test('a voice with no LFO still routes through the tremolo gain', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+
+    // Always present, so switching a live voice onto tremolo is a reconnect of
+    // the LFO alone and never a rewire of the voice's own output.
+    expect(voice.tremoloGain).toBeTruthy();
+    expect(voice.tremoloGain.gain.value).toBe(1);
+  });
+
+  test('cutoff and pitch targets are unchanged', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth');
+    const cut = (engine as any).activeVoices.get('synth:C4');
+    expect(cut.lfoGain.connectedTo).toContain(cut.filter.frequency);
+    expect(cut.lfoGain.gain.value).toBeCloseTo(0.5 * 1500, 9);
+
+    engine.triggerSynthNoteOn('E4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'pitch' }, 0.8, undefined, 'synth');
+    const pit = (engine as any).activeVoices.get('synth:E4');
+    expect(pit.lfoGain.connectedTo).toContain(pit.oscs[0].detune);
+    expect(pit.lfoGain.gain.value).toBeCloseTo(0.5 * 50, 9);
+  });
+
+  test('switching a live voice from cutoff to volume moves the LFO to the tremolo gain', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+
+    engine.updateSynthParams({ ...SYNTH, lfoDepth: 0.5, lfoTarget: 'volume' }, 'synth');
+
+    expect(voice.lfoTarget).toBe('volume');
+    expect(voice.lfoGain.connectedTo).toEqual([voice.tremoloGain.gain]);
+  });
+
+  test('an LFO added to a live voice that started without one is wired, not dropped', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth'); // lfoDepth 0
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    expect(voice.lfo).toBeUndefined();
+
+    engine.updateSynthParams({ ...SYNTH, lfoDepth: 0.3, lfoTarget: 'volume' }, 'synth');
+
+    expect(voice.lfo).toBeTruthy();
+    expect(voice.lfoGain.connectedTo).toContain(voice.tremoloGain.gain);
+  });
+});
+
+describe('LFO teardown at depth zero', () => {
+  test('dropping depth to zero stops and disconnects the oscillator', async () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    const lfo = voice.lfo;
+    const lfoGain = voice.lfoGain;
+    expect(lfo).toBeTruthy();
+
+    engine.updateSynthParams({ ...SYNTH, lfoDepth: 0 }, 'synth');
+
+    // setTargetAtTime is asymptotic and never reaches exactly 0, so the node
+    // must actually be removed once the ramp is inaudible (~5 time constants).
+    expect(lfoGain.gain.targets.at(-1)!.v).toBe(0);
+    await new Promise((r) => setTimeout(r, 220));
+    expect(voice.lfo).toBeUndefined();
+    expect(voice.lfoGain).toBeUndefined();
+    expect(lfoGain.connectedTo).toHaveLength(0);
+  });
+
+  test('depth back up before the teardown lands keeps the same oscillator', async () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    const lfo = voice.lfo;
+
+    engine.updateSynthParams({ ...SYNTH, lfoDepth: 0 }, 'synth');
+    engine.updateSynthParams({ ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 'synth');
+    await new Promise((r) => setTimeout(r, 220));
+
+    expect(voice.lfo).toBe(lfo);
   });
 });

@@ -40,7 +40,9 @@ instance and read when nodes are later created.
 ## Signal graph (from `setupMasterChain()`)
 
 ```
-synth/chord/bass voice: osc1 + subOsc -> BiquadFilter (VCF) -> GainNode (VCA)
+synth/chord/bass voice: osc1 + subOsc (+ noise) -> BiquadFilter (VCF) -> GainNode (VCA)
+                                                      -> tremoloGain (unity; a 'volume' LFO
+                                                         drives THIS gain, never the VCA param)
                                  |
                                  v
                         per-source GainNode bus   (lazy, one per source string)
@@ -93,6 +95,10 @@ Key consequences:
 - `updateSynthParams(params, source?)` re-shapes only voices that are already sounding; voices
   scheduled in the future and voices already in their release tail are skipped on purpose —
   re-targeting them cancels their scheduled ramps and makes them silent.
+- The LFO's `'volume'` target drives a **series** `tremoloGain` between the VCA and the bus.
+  Connecting a node to `gains[0].gain` would SUM with the amp envelope: the release would never
+  reach silence and the sum would invert phase on the downswing. Depth 0 stops and disconnects
+  the LFO after ~5 time constants; `setTargetAtTime(0, …)` alone never reaches zero.
 
 ## Shared clock
 
