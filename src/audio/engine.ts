@@ -728,7 +728,14 @@ class AudioEngine {
   private releaseVoice(voice: SynthVoice, releaseTime: number, now: number): void {
     if (!this.ctx) return;
     const mainGain = voice.gains[0];
-    if (voice.teardownTimer !== undefined) clearTimeout(voice.teardownTimer);
+    // Computed up front (outside the try below) because a throw partway
+    // through AudioParam scheduling must never leave the voice without a
+    // teardown timer — these values are pure arithmetic and cannot throw,
+    // so the `finally` block can always use them to schedule teardown.
+    const filterRelease = Math.max(0.01, voice.filterRelease);
+    const voiceKey = `${voice.source}:${voice.noteName}`;
+    const teardownDelayMs =
+      (Math.max(releaseTime, filterRelease) + Math.max(0, now - this.ctx.currentTime) + 0.1) * 1000;
 
     try {
       // The release has to begin at the value the envelope ACTUALLY has at
@@ -760,14 +767,21 @@ class AudioEngine {
       mainGain.gain.exponentialRampToValueAtTime(SILENCE, now + Math.max(0.01, releaseTime));
 
       // VCF envelope release: ramp filter back to base cutoff
-      const filterRelease = Math.max(0.01, voice.filterRelease);
       this.cancelAndHold(voice.filter.frequency, now, clampCutoff(voice.filter.frequency.value));
       if (now >= voice.filterEnvEndsAt) {
         voice.filter.frequency.setValueAtTime(clampCutoff(voice.filterSustainCutoff), now);
       }
       voice.filter.frequency.exponentialRampToValueAtTime(clampCutoff(voice.filterCutoff), now + filterRelease);
-
-      const voiceKey = `${voice.source}:${voice.noteName}`;
+    } catch {
+      // ignore — scheduling failed partway through, but the voice still gets
+      // torn down below via the `finally` so it can never hang forever.
+    } finally {
+      // The old timer is cleared and the replacement is scheduled together,
+      // right here, so a throw above can never leave the voice with no
+      // teardown timer at all (it would otherwise stay in `activeVoices`/
+      // `sourceVoices` forever and the same-note dedup at the top of
+      // `triggerSynthNoteOn` would refuse to release it again).
+      if (voice.teardownTimer !== undefined) clearTimeout(voice.teardownTimer);
       voice.teardownTimer = setTimeout(() => {
         // Only delete the map entry if this voice is still the current one —
         // a same-note retrigger overwrites the entry before this timeout
@@ -777,9 +791,7 @@ class AudioEngine {
         }
         this.sourceVoices.get(voice.source)?.delete(voice);
         this.teardownVoiceNodes(voice);
-      }, (Math.max(releaseTime, filterRelease) + Math.max(0, now - this.ctx.currentTime) + 0.1) * 1000);
-    } catch {
-      // ignore
+      }, teardownDelayMs);
     }
   }
 

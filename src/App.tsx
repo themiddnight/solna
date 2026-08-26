@@ -12,6 +12,41 @@ import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
 import { useTabRouting } from './routing/useTabRouting';
 import { usePlayheadSync } from './components/usePlayheadSync';
 
+/** Minimal event-target shape `registerFirstGesture` needs — satisfied by
+ * `window` in the app and by a fake target in tests (no DOM required). */
+type GestureEventTarget = Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
+
+/** Any one of these counts as the user's "first gesture": SynthView and
+ * DrumPads can both start audio purely from the keyboard, so `click` alone
+ * missed those paths (see App.test.tsx for the regression this covers). */
+const FIRST_GESTURE_EVENTS = ['click', 'keydown', 'pointerdown'] as const;
+
+/**
+ * Registers a one-shot handler across click / keydown / pointerdown: the
+ * first of the three to fire runs `onFirstGesture` exactly once, and every
+ * listener is removed at that point (whether or not a gesture ever arrives —
+ * the returned cleanup function removes them all too, for React's effect
+ * teardown on unmount).
+ *
+ * Exported as a pure, DOM-injectable helper — same pattern as
+ * `resolveInitialTheme` in `components/Header.tsx` — so it is unit-testable
+ * without a real DOM or testing-library.
+ */
+export function registerFirstGesture(
+  target: GestureEventTarget,
+  onFirstGesture: () => void,
+): () => void {
+  function cleanup() {
+    FIRST_GESTURE_EVENTS.forEach((event) => target.removeEventListener(event, handleGesture));
+  }
+  function handleGesture() {
+    cleanup();
+    onFirstGesture();
+  }
+  FIRST_GESTURE_EVENTS.forEach((event) => target.addEventListener(event, handleGesture));
+  return cleanup;
+}
+
 export function App() {
   // One-way bridge: store state -> audioEngine singleton (replaces the
   // engine-sync useEffect blocks that used to live here).
@@ -26,18 +61,17 @@ export function App() {
   // UI slice
   const activeTab = useAppStore((s) => s.activeTab);
 
-  // Initialize audio engine on first user interaction
+  // Initialize audio engine on first user interaction (click, keydown, or
+  // pointerdown — SynthView's and DrumPads' keyboard shortcuts can start
+  // audio before any click ever happens).
   useEffect(() => {
-    const handleFirstClick = () => {
+    return registerFirstGesture(window, () => {
       audioEngine.init();
       // setMasterVolume / updateEffects were no-ops before the engine existed
       // (engine.ts guards on this.ctx), so re-apply the persisted audio
       // snapshot now that the engine is live.
       applyEngineSnapshot();
-      window.removeEventListener('click', handleFirstClick);
-    };
-    window.addEventListener('click', handleFirstClick);
-    return () => window.removeEventListener('click', handleFirstClick);
+    });
   }, []);
 
   return (
