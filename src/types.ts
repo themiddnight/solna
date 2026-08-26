@@ -182,6 +182,8 @@ export interface InstantVibe {
 
   // Chords
   chords: ChordItem[];
+  /** Library reference into CHORD_PROGRESSIONS. `chords` is its resolved output. */
+  progressionId: string;
   chordRhythmId: string;
   chordFeel: number; // 0.0 (tight) to 1.0 (loose/swung)
   chordOctave: number;

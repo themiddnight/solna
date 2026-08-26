@@ -98,6 +98,7 @@ describe('genre tagging', () => {
       'lofi-bedroom-pop',
       'lofi-rainy-window',
       'lofi-tape-loop',
+      'lofi-morning-turnaround',
     ]);
     expect(idsFor('synthwave')).toEqual([
       'pop-club-house',
@@ -110,18 +111,21 @@ describe('genre tagging', () => {
       'edm-cyber-drop',
       'edm-neon-rise',
       'edm-arena-sweep',
+      'edm-cyber-vamp',
     ]);
     expect(idsFor('ambient')).toEqual([
       'ambient-still-water',
       'ambient-lydian-drift',
       'ambient-open-fourths',
       'ambient-glass-horizon',
+      'ambient-lydian-halo',
     ]);
     expect(idsFor('boombap')).toEqual([
       'cine-dorian-voyage',
       'boombap-dusty-ii-v',
       'boombap-crate-dig',
       'boombap-head-nod',
+      'boombap-soul-piano',
     ]);
     expect(idsFor('zen')).toEqual([
       'zen-bamboo-vamp',
@@ -133,9 +137,10 @@ describe('genre tagging', () => {
 });
 
 describe('genre conventions from the research', () => {
-  test('edm entries hold every chord for the same number of bars, and three of the four are 2-bar', () => {
+  test('edm entries hold every chord for the same number of bars, and at least three of the five are 2-bar', () => {
     // Not "always 2": pop-club-house is cross-tagged from the migrated set and
-    // its bars are fixed at 1 by the migration proof.
+    // its bars are fixed at 1 by the migration proof, and edm-cyber-vamp is
+    // deliberately 1-bar too — it reproduces cyber-dance's original sound.
     const edm = CHORD_PROGRESSIONS.filter((p) => p.genres.includes('edm'));
     const uniform = edm.map((p) => new Set(p.steps.map((s) => s.bars)));
     for (const bars of uniform) expect(bars.size).toBe(1);
@@ -214,5 +219,41 @@ describe('resolveProgression', () => {
     expect(chords[0].notes).toEqual(
       deriveChordNotes({ id: 'x', root: 'C', quality: 'maj', bars: 1, notes: [] }, 3).notes,
     );
+  });
+});
+
+describe('the four Phase 1 vibe-chord progressions', () => {
+  test('lofi-morning-turnaround resolves to Cmaj7 Amin7 Dmin7 G7 in C Major', () => {
+    const p = progressionById('lofi-morning-turnaround')!;
+    expect(p).toBeDefined();
+    expect(resolveProgression(p, 'C', 'Major', 4).map((c) => `${c.root}${c.quality}`)).toEqual([
+      'Cmaj7', 'Amin7', 'Dmin7', 'G7',
+    ]);
+  });
+
+  test('edm-cyber-vamp resolves to Fmin D#maj C#maj Cmin in F Natural Minor', () => {
+    const p = progressionById('edm-cyber-vamp')!;
+    expect(p).toBeDefined();
+    expect(resolveProgression(p, 'F', 'Natural Minor', 4).map((c) => `${c.root}${c.quality}`)).toEqual([
+      'Fmin', 'D#maj', 'C#maj', 'Cmin',
+    ]);
+  });
+
+  test('ambient-lydian-halo resolves to Dmaj7 Emaj F#min7 G#m7b5 in D Lydian, 4 bars each', () => {
+    const p = progressionById('ambient-lydian-halo')!;
+    expect(p).toBeDefined();
+    const chords = resolveProgression(p, 'D', 'Lydian', 4);
+    expect(chords.map((c) => `${c.root}${c.quality}`)).toEqual([
+      'Dmaj7', 'Emaj', 'F#min7', 'G#m7b5',
+    ]);
+    expect(chords.map((c) => c.bars)).toEqual([4, 4, 4, 4]);
+  });
+
+  test('boombap-soul-piano resolves to Emin7 A7 Dmaj7 Gmaj7 in E Dorian', () => {
+    const p = progressionById('boombap-soul-piano')!;
+    expect(p).toBeDefined();
+    expect(resolveProgression(p, 'E', 'Dorian', 4).map((c) => `${c.root}${c.quality}`)).toEqual([
+      'Emin7', 'A7', 'Dmaj7', 'Gmaj7',
+    ]);
   });
 });

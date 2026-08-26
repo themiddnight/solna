@@ -1,12 +1,8 @@
-import { SynthParams, ChordItem, InstantVibe } from '../types';
+import { SynthParams, InstantVibe } from '../types';
 import { audioEngine } from '../audio/engine';
 import { useAppStore } from './store';
-import { deriveChordNotes } from '../utils/musicTheory';
 import { INITIAL_SYNTH_PARAMS } from './initialState';
-
-function makeVibeChord(id: string, root: string, quality: string, bars = 1, octave = 4): ChordItem {
-  return deriveChordNotes({ id, root, quality, bars, notes: [] }, octave);
-}
+import { progressionById, resolveProgression } from '../audio/data/chordProgressions';
 
 function buildSynthParams(presetName: string, overrides?: Partial<SynthParams>): SynthParams {
   return {
@@ -114,6 +110,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     scaleRoot: 'C',
     scaleType: 'Major',
     projectTitle: 'Lo-Fi Midnight Coffee',
+    progressionId: 'lofi-morning-turnaround',
 
     // Beat: 808 Vintage with warm lowpass filter
     soundKit: '808 Vintage',
@@ -131,12 +128,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     },
 
     // Chords: Dream Keys, relaxed swung feel
-    chords: [
-      makeVibeChord('c1', 'C', 'maj7', 1, 4),
-      makeVibeChord('c2', 'A', 'min7', 1, 4),
-      makeVibeChord('c3', 'D', 'min7', 1, 4),
-      makeVibeChord('c4', 'G', '7', 1, 4),
-    ],
+    chords: resolveProgression(progressionById('lofi-morning-turnaround')!, 'C', 'Major', 4),
     chordRhythmId: 'lofiSwing',
     chordFeel: 0.78, // Loose swing
     chordOctave: 4,
@@ -215,7 +207,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
       // the genre's texture rather than a fault.
       keyPool: ['C', 'D', 'D#', 'F', 'G', 'A'],
       bpmRange: [78, 88],
-      progressionIds: ['jazz-ii-v-i-vi', 'jazz-neosoul-butter', 'lofi-coffeehouse', 'lofi-bedroom-pop', 'lofi-rainy-window', 'lofi-tape-loop'],
+      progressionIds: ['jazz-ii-v-i-vi', 'jazz-neosoul-butter', 'lofi-coffeehouse', 'lofi-bedroom-pop', 'lofi-rainy-window', 'lofi-tape-loop', 'lofi-morning-turnaround'],
       rhythmIds: ['lofiSwing', 'syncopatedPush', 'bassPlusStrum'],
       bassPatternIds: ['dilla-sub', 'walking-groove', 'half-time-legato'],
       drumDecoration: {
@@ -238,6 +230,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     scaleRoot: 'A',
     scaleType: 'Natural Minor',
     projectTitle: 'Neon Highway 1984',
+    progressionId: 'cine-epic-ostinato',
 
     // Beat: Retro Drive, tight 80s gate
     soundKit: 'Retro Drive',
@@ -255,12 +248,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     },
 
     // Chords: Neon Polysynth, grid-tight 8th pads
-    chords: [
-      makeVibeChord('sw1', 'A', 'min', 1, 4),
-      makeVibeChord('sw2', 'F', 'maj', 1, 4),
-      makeVibeChord('sw3', 'C', 'maj', 1, 4),
-      makeVibeChord('sw4', 'G', 'maj', 1, 4),
-    ],
+    chords: resolveProgression(progressionById('cine-epic-ostinato')!, 'A', 'Natural Minor', 4),
     chordRhythmId: 'eighthPads',
     chordFeel: 0.12, // Strict tight sequencer grid
     chordOctave: 4,
@@ -366,6 +354,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     scaleRoot: 'F',
     scaleType: 'Natural Minor',
     projectTitle: 'Cyberpunk Odyssey',
+    progressionId: 'edm-cyber-vamp',
 
     // Beat: Hyperpop 2000 club drums
     soundKit: 'Hyperpop 2000',
@@ -383,12 +372,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     },
 
     // Chords: Upbeat EDM stabs, laser-tight
-    chords: [
-      makeVibeChord('cy1', 'F', 'min', 1, 4),
-      makeVibeChord('cy2', 'D#', 'maj', 1, 4),
-      makeVibeChord('cy3', 'C#', 'maj', 1, 4),
-      makeVibeChord('cy4', 'C', 'min', 1, 4),
-    ],
+    chords: resolveProgression(progressionById('edm-cyber-vamp')!, 'F', 'Natural Minor', 4),
     chordRhythmId: 'offbeatStabs',
     chordFeel: 0.05, // Laser tight
     chordOctave: 4,
@@ -463,7 +447,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
       // the Punchy Square carries more sub weight (0.7).
       keyPool: ['D#', 'E', 'F', 'F#', 'G', 'A'],
       bpmRange: [126, 130],
-      progressionIds: ['pop-club-house', 'edm-cyber-drop', 'edm-neon-rise', 'edm-arena-sweep'],
+      progressionIds: ['pop-club-house', 'edm-cyber-drop', 'edm-neon-rise', 'edm-arena-sweep', 'edm-cyber-vamp'],
       rhythmIds: ['offbeatStabs', 'fourOnFloor', 'eighthPads'],
       bassPatternIds: ['offbeat-sub', 'driving-eighths', 'funk-octaves'],
       drumDecoration: {
@@ -486,6 +470,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     scaleRoot: 'D',
     scaleType: 'Lydian',
     projectTitle: 'Cosmic Floating',
+    progressionId: 'ambient-lydian-halo',
 
     // Beat: Minimal Glitch, soft and spacious
     soundKit: 'Minimal Glitch',
@@ -503,12 +488,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     },
 
     // Chords: Celestial Shimmer, very loose and floating
-    chords: [
-      makeVibeChord('am1', 'D', 'maj7', 2, 4),
-      makeVibeChord('am2', 'E', 'maj', 2, 4),
-      makeVibeChord('am3', 'F#', 'min7', 2, 4),
-      makeVibeChord('am4', 'G#', 'm7b5', 2, 4),
-    ],
+    chords: resolveProgression(progressionById('ambient-lydian-halo')!, 'D', 'Lydian', 4),
     chordRhythmId: 'sustained',
     chordFeel: 0.88, // Very loose, floating
     chordOctave: 4,
@@ -581,7 +561,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
       // reverb tail keeps a pitched fundamental above ~73 Hz.
       keyPool: ['D', 'E', 'F', 'F#', 'G', 'A'],
       bpmRange: [62, 80],
-      progressionIds: ['ambient-still-water', 'ambient-lydian-drift', 'ambient-open-fourths', 'ambient-glass-horizon'],
+      progressionIds: ['ambient-still-water', 'ambient-lydian-drift', 'ambient-open-fourths', 'ambient-glass-horizon', 'ambient-lydian-halo'],
       rhythmIds: ['sustained', 'arpRollUp', 'arpDownEighths'],
       bassPatternIds: ['whole-note-root', 'half-time-legato'],
       drumDecoration: {
@@ -604,6 +584,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     scaleRoot: 'E',
     scaleType: 'Dorian',
     projectTitle: 'Soulful Golden Era',
+    progressionId: 'boombap-soul-piano',
 
     // Beat: 808 Vintage / Boom bap swing
     soundKit: '808 Vintage',
@@ -621,12 +602,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     },
 
     // Chords: Mellow E-Piano with syncopated push
-    chords: [
-      makeVibeChord('bb1', 'E', 'min7', 1, 4),
-      makeVibeChord('bb2', 'A', '7', 1, 4),
-      makeVibeChord('bb3', 'D', 'maj7', 1, 4),
-      makeVibeChord('bb4', 'G', 'maj7', 1, 4),
-    ],
+    chords: resolveProgression(progressionById('boombap-soul-piano')!, 'E', 'Dorian', 4),
     chordRhythmId: 'syncopatedPush',
     chordFeel: 0.76, // Loose swing pocket
     chordOctave: 4,
@@ -700,7 +676,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
       // where the Round Pluck's 420 Hz cutoff still shapes them.
       keyPool: ['C', 'D', 'D#', 'E', 'F', 'G'],
       bpmRange: [85, 95],
-      progressionIds: ['cine-dorian-voyage', 'boombap-dusty-ii-v', 'boombap-crate-dig', 'boombap-head-nod'],
+      progressionIds: ['cine-dorian-voyage', 'boombap-dusty-ii-v', 'boombap-crate-dig', 'boombap-head-nod', 'boombap-soul-piano'],
       rhythmIds: ['syncopatedPush', 'lofiSwing', 'funkSyncopation'],
       bassPatternIds: ['walking-groove', 'dilla-sub', 'classic-walk'],
       drumDecoration: {
@@ -726,6 +702,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     scaleRoot: 'G',
     scaleType: 'Hirajoshi',
     projectTitle: 'Bamboo Garden Serenade',
+    progressionId: 'zen-bamboo-vamp',
 
     // Beat: Minimal Glitch bamboo acoustic clicks
     soundKit: 'Minimal Glitch',
@@ -746,12 +723,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     // zen-bamboo-vamp resolved in G Hirajoshi: i - IV - i - V, two bars each.
     // Uses only degrees 0, 3 and 4, so every note is inside the five-note
     // scale. Same 8-bar length as the progression this replaces.
-    chords: [
-      makeVibeChord('zn1', 'G', 'min', 2, 4),
-      makeVibeChord('zn2', 'D', 'sus4', 2, 4),
-      makeVibeChord('zn3', 'G', 'min', 2, 4),
-      makeVibeChord('zn4', 'D#', 'maj', 2, 4),
-    ],
+    chords: resolveProgression(progressionById('zen-bamboo-vamp')!, 'G', 'Hirajoshi', 4),
     chordRhythmId: 'sustained',
     chordFeel: 0.65, // Peaceful organic breath
     chordOctave: 4,

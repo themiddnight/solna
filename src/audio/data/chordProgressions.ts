@@ -587,6 +587,54 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
     minScaleLength: 5,
     steps: [step(0, 2), step(2, 2), step(4, 2), step(3, 2)],
   },
+  {
+    id: 'lofi-morning-turnaround',
+    name: 'Morning Brew Turnaround',
+    roman: 'Imaj7 – vim7 – iim7 – V7',
+    description:
+      'Warm extended-seventh turnaround built for lo-fi\'s laid-back morning loop, closing the fourth bar on a dominant seventh that resets cleanly into the top.',
+    category: 'Lofi & R&B',
+    referenceScale: 'Major',
+    genres: ['lofi'],
+    minScaleLength: 7,
+    steps: [step(0, 1, 'maj7'), step(5, 1, 'min7'), step(1, 1, 'min7'), step(4, 1, '7')],
+  },
+  {
+    id: 'edm-cyber-vamp',
+    name: 'Cyber Vamp',
+    roman: 'i – VII – VI – v',
+    description:
+      'A minor tonic rocking between its two flat neighbours before dipping to the minor v, one bar per chord for a tight festival-drop loop.',
+    category: 'Pop & EDM',
+    referenceScale: 'Natural Minor',
+    genres: ['edm'],
+    minScaleLength: 7,
+    steps: [step(0), step(6), step(5), step(4)],
+  },
+  {
+    id: 'ambient-lydian-halo',
+    name: 'Lydian Halo',
+    roman: 'Imaj7 – II – iiim7 – #ivm7b5',
+    description:
+      'A Lydian float that lifts through the major II before settling on the raised-4th half-diminished, four bars per chord for a slow-breathing pad loop.',
+    category: 'Ambient & Zen',
+    referenceScale: 'Lydian',
+    genres: ['ambient'],
+    minScaleLength: 7,
+    steps: [step(0, 4, 'maj7'), step(1, 4), step(2, 4, 'min7'), step(3, 4, 'm7b5')],
+  },
+  {
+    id: 'boombap-soul-piano',
+    name: 'Soul Piano Loop',
+    roman: 'im7 – IV7 – VIImaj7 – IIImaj7',
+    description:
+      'A Dorian loop built for a mellow keys sample: minor seventh tonic, dominant modal IV, then two major sevenths on the way back home.',
+    category: 'Lofi & R&B',
+    referenceScale: 'Dorian',
+    genres: ['boombap'],
+    minScaleLength: 7,
+    steps: [step(0, 1, 'min7'), step(3, 1, '7'), step(6, 1, 'maj7'), step(2, 1, 'maj7')],
+  },
 ];
 
 const PROGRESSIONS_BY_ID = new Map(CHORD_PROGRESSIONS.map((p) => [p.id, p]));

@@ -174,7 +174,16 @@ export function resolveVibeVariation(
   const { drumPattern, drums } = rollDecoration(vibe.drumPattern, rule.drumDecoration, draw);
 
   return {
-    vibe: { ...vibe, scaleRoot, bpm, chordRhythmId, bassPatternId, chords, drumPattern },
+    vibe: {
+      ...vibe,
+      scaleRoot,
+      bpm,
+      chordRhythmId,
+      bassPatternId,
+      progressionId: progression.id,
+      chords,
+      drumPattern,
+    },
     summary: {
       vibeName: vibe.name,
       scaleRoot,

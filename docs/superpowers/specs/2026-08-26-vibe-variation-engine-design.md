@@ -272,8 +272,8 @@ That was re-measured directly against the source rather than accepted:
 
 | row | value | authored row it must equal |
 | --- | --- | --- |
-| `lofi16ths` | `[1,0,1,0, 1,0,1,1, 1,0,1,0, 1,0,1,1]` | `lofi-chill.drumPattern.hihat` (`instantVibes.ts:166`) |
-| `swung16ths` | `[1,0,1,1, 1,0,1,0, 1,0,1,1, 1,0,1,0]` | `hiphop-groove.drumPattern.hihat` (`instantVibes.ts:570`) |
+| `lofi16ths` | `[1,0,1,0, 1,0,1,1, 1,0,1,0, 1,0,1,1]` | `lofi-chill.drumPattern.hihat` (`instantVibes.ts:126`) |
+| `swung16ths` | `[1,0,1,1, 1,0,1,0, 1,0,1,1, 1,0,1,0]` | `hiphop-groove.drumPattern.hihat` (`instantVibes.ts:616`) |
 
 Both matched exactly; the rows above are **correct as written and are not
 changed**. I4 was a false positive. Because the risk it named is real —

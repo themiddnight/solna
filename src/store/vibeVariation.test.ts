@@ -498,6 +498,14 @@ describe('resolveVibeVariation', () => {
     expect(out.drumPattern.hihat).not.toBe(DRUM_DENSITIES.lofi16ths);
   });
 
+  test('the returned vibe\'s progressionId always names the progression its chords came from', () => {
+    for (const v of INSTANT_VIBES) {
+      for (const { vibe: out, summary } of allDraws(v)) {
+        expect(out.progressionId).toBe(summary.progressionId);
+      }
+    }
+  });
+
   test('a vibe with no variation rule throws rather than silently doing nothing', () => {
     const bare = { ...INSTANT_VIBES[0], variation: undefined };
     expect(() => resolveVibeVariation(bare, authoredCurrent(bare), firstDraw)).toThrow();
