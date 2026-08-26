@@ -4,14 +4,19 @@ import type { ChordItem, SynthParams } from '../../types';
 import { equalPowerVelocityScale } from '../../audio/rhythmPatterns';
 import type { RhythmPattern } from '../../audio/rhythmPatterns';
 import {
+  arpEventsForStep,
   buildChordEvents,
+  chordPlanPosition,
+  emitStepEvents,
+  eventsForStep,
   playChordLegato,
   playFullHoldChord,
-  scheduleBarInvariantEvents,
+  scheduleWholeChord,
   startPatternLoop,
   previewChordForScale,
   previewBarSeconds,
 } from './chordPlayback';
+import type { BarInvariantEvent } from './chordPlayback';
 
 const SYNTH: SynthParams = {
   oscType: 'sawtooth',
@@ -156,20 +161,37 @@ describe('pattern preview chord & timing', () => {
   });
 });
 
-describe('scheduleBarInvariantEvents note-off clamping', () => {
-  // One bar = 2 s. A hit at 1.5 s holding 1.5 s would end at 3 s — past the
-  // chord end at 2 s — so its note-off must be clamped to the chord boundary.
-  test('clamps a last-bar note-off to the chord end', () => {
+describe('eventsForStep', () => {
+  const EVENTS: BarInvariantEvent[] = [
+    { step: 0, noteName: 'C4', velocity: 0.8, timeOffset: 0, hold: 0.25 },
+    { step: 4, noteName: 'E4', velocity: 0.7, timeOffset: 0.03, hold: 0.25 },
+    { step: 12, noteName: 'G4', velocity: 0.6, timeOffset: 0, hold: 0.25, lastBarOnly: true },
+  ];
+
+  test('returns only the events landing on the given step', () => {
+    expect(eventsForStep(EVENTS, 4, false).map((e) => e.noteName)).toEqual(['E4']);
+    expect(eventsForStep(EVENTS, 1, false)).toEqual([]);
+  });
+
+  test('withholds a lastBarOnly event until the final bar', () => {
+    expect(eventsForStep(EVENTS, 12, false)).toEqual([]);
+    expect(eventsForStep(EVENTS, 12, true).map((e) => e.noteName)).toEqual(['G4']);
+  });
+});
+
+describe('emitStepEvents note-off clamping', () => {
+  // The step lands at t=11.5 and the hit holds 1.5 s, so it would ring to 13 —
+  // past a chord that ends at 12. The note-off must be clamped to the end.
+  test('clamps a note-off to the chord end', () => {
     const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
 
-    scheduleBarInvariantEvents(
-      [{ noteName: 'C4', velocity: 0.8, timeOffset: 1.5, hold: 1.5 }],
+    emitStepEvents(
+      [{ noteName: 'C4', velocity: 0.8, timeOffset: 0, hold: 1.5 }],
       SYNTH,
       'chord',
-      10,
-      2,
-      1,
+      11.5,
+      12,
     );
 
     expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, 0.8, 11.5, 'chord');
@@ -179,44 +201,151 @@ describe('scheduleBarInvariantEvents note-off clamping', () => {
     offSpy.mockRestore();
   });
 
-  test('leaves an in-bounds hold untouched', () => {
+  test('lets an in-bounds hold ring past the bar it started in', () => {
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
 
-    scheduleBarInvariantEvents(
-      [{ noteName: 'C4', velocity: 0.8, timeOffset: 0.5, hold: 0.5 }],
+    // Bar 0 of a two-bar chord: the hold drags over the bar line at 12 but
+    // stays inside the chord, which ends at 14.
+    emitStepEvents(
+      [{ noteName: 'C4', velocity: 0.8, timeOffset: 0, hold: 1.5 }],
       SYNTH,
       'chord',
-      10,
-      2,
-      1,
+      11.5,
+      14,
     );
 
-    expect(offSpy).toHaveBeenCalledWith('C4', SYNTH.release, 11, 'chord');
+    expect(offSpy).toHaveBeenCalledWith('C4', SYNTH.release, 13, 'chord');
 
     offSpy.mockRestore();
   });
 
-  test('only clamps against the chord end, not the bar boundary', () => {
+  test('offsets a strum voice by its spread before clamping', () => {
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
 
-    // Two bars: bar 0 spans [10, 12], bar 1 spans [12, 14]. The same hit on
-    // bar 0 may drag across the bar boundary (same chord), but bar 1's copy
-    // is clamped to the chord end at 14.
-    scheduleBarInvariantEvents(
-      [{ noteName: 'C4', velocity: 0.8, timeOffset: 1.5, hold: 1.5 }],
+    emitStepEvents(
+      [{ noteName: 'E4', velocity: 0.7, timeOffset: 0.03, hold: 0.25 }],
+      SYNTH,
+      'chord',
+      11.5,
+      14,
+    );
+
+    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, 0.7, 11.53, 'chord');
+    expect(offSpy).toHaveBeenCalledWith('E4', SYNTH.release, 11.78, 'chord');
+
+    onSpy.mockRestore();
+    offSpy.mockRestore();
+  });
+});
+
+describe('scheduleWholeChord', () => {
+  // The pattern previews are driven by a bar timer, not the shared clock, so
+  // they still lay the whole chord down in one burst. 16th = 0.125 s.
+  test('lays every bar of the chord down from one call', () => {
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+
+    scheduleWholeChord(
+      [{ step: 0, noteName: 'C4', velocity: 0.8, timeOffset: 0, hold: 0.25 }],
       SYNTH,
       'chord',
       10,
-      2,
+      0.125,
       2,
     );
 
+    expect(onSpy.mock.calls.map((c) => c[3])).toEqual([10, 12]);
+
+    onSpy.mockRestore();
+  });
+
+  test('clamps the final hold to the chord end and holds back approach notes', () => {
+    const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
+
+    scheduleWholeChord(
+      [
+        { step: 12, noteName: 'C4', velocity: 0.8, timeOffset: 0, hold: 1.5 },
+        { step: 14, noteName: 'B3', velocity: 0.8, timeOffset: 0, hold: 0.25, lastBarOnly: true },
+      ],
+      SYNTH,
+      'chord',
+      10,
+      0.125,
+      2,
+    );
+
+    // Bar 0's C4 may ring over the bar line at 12; bar 1's is cut at the chord
+    // end (14). The approach note fires only on the last bar.
     expect(offSpy.mock.calls).toEqual([
       ['C4', SYNTH.release, 13, 'chord'],
       ['C4', SYNTH.release, 14, 'chord'],
+      ['B3', SYNTH.release, 14, 'chord'],
     ]);
 
     offSpy.mockRestore();
+  });
+});
+
+describe('chordPlanPosition', () => {
+  // A two-bar chord armed on absolute step 32 spans steps 32..63.
+  const PLAN = { startStep: 32, totalBars: 2 };
+
+  test('maps an absolute step to its bar-local step', () => {
+    expect(chordPlanPosition(PLAN, 32)).toEqual({ stepInBar: 0, isLastBar: false, stepsRemaining: 32 });
+    expect(chordPlanPosition(PLAN, 36)).toEqual({ stepInBar: 4, isLastBar: false, stepsRemaining: 28 });
+  });
+
+  test('flags the final bar so approach notes fire only there', () => {
+    expect(chordPlanPosition(PLAN, 48)).toEqual({ stepInBar: 0, isLastBar: true, stepsRemaining: 16 });
+    expect(chordPlanPosition(PLAN, 63)).toEqual({ stepInBar: 15, isLastBar: true, stepsRemaining: 1 });
+  });
+
+  test('returns null outside the chord span', () => {
+    expect(chordPlanPosition(PLAN, 31)).toBeNull();
+    expect(chordPlanPosition(PLAN, 64)).toBeNull();
+  });
+});
+
+describe('arpEventsForStep', () => {
+  const ARP: SynthParams = { ...SYNTH, arpActive: true, arpMode: 'up', arpOctaves: 1, arpRate: '16n' };
+  const NOTES = ['C4', 'E4', 'G4'];
+
+  test('walks the chord tones in arp order, one per sixteenth step', () => {
+    expect(arpEventsForStep(NOTES, ARP, 0, 0.125, 1).map((e) => e.noteName)).toEqual(['C4']);
+    expect(arpEventsForStep(NOTES, ARP, 1, 0.125, 1).map((e) => e.noteName)).toEqual(['E4']);
+    expect(arpEventsForStep(NOTES, ARP, 2, 0.125, 1).map((e) => e.noteName)).toEqual(['G4']);
+    // The sequence wraps, so the arp keeps running across bars and chords.
+    expect(arpEventsForStep(NOTES, ARP, 3, 0.125, 1).map((e) => e.noteName)).toEqual(['C4']);
+  });
+
+  test('honours arpRate by staying silent on steps the rate skips', () => {
+    const eighths = { ...ARP, arpRate: '8n' as const };
+    expect(arpEventsForStep(NOTES, eighths, 0, 0.125, 1).map((e) => e.noteName)).toEqual(['C4']);
+    expect(arpEventsForStep(NOTES, eighths, 1, 0.125, 1)).toEqual([]);
+    expect(arpEventsForStep(NOTES, eighths, 2, 0.125, 1).map((e) => e.noteName)).toEqual(['E4']);
+  });
+
+  test('stacks octaves and follows arpMode', () => {
+    const down = { ...ARP, arpMode: 'down' as const, arpOctaves: 2 };
+    // up-order across 2 octaves is C4 E4 G4 C5 E5 G5, so down starts at G5.
+    expect(arpEventsForStep(NOTES, down, 0, 0.125, 1).map((e) => e.noteName)).toEqual(['G5']);
+  });
+
+  test('feel tightens an arp note but never stretches it past its own step', () => {
+    const [plain] = arpEventsForStep(NOTES, ARP, 0, 0.125, 1);
+    const [tight] = arpEventsForStep(NOTES, ARP, 0, 0.125, 0.5);
+    const [loose] = arpEventsForStep(NOTES, ARP, 0, 0.125, 2);
+
+    expect(tight.hold).toBeCloseTo(plain.hold * 0.5, 9);
+    // A gate longer than the interval between triggers just guarantees the
+    // notes overlap. On the monophonic bass that means every note is
+    // voice-stolen while still above its sustain level and chopped off.
+    expect(loose.hold).toBe(plain.hold);
+    expect(plain.hold).toBeLessThan(0.125);
+  });
+
+  test('returns nothing when there are no notes to arpeggiate', () => {
+    expect(arpEventsForStep([], ARP, 0, 0.125, 1)).toEqual([]);
   });
 });
 
@@ -256,6 +385,9 @@ describe('buildChordEvents', () => {
     const scaled = 0.8 * equalPowerVelocityScale(4);
     for (const ev of events) {
       expect(ev.velocity).toBe(scaled);
+      // The hit's grid position is carried as a step, not baked into a time
+      // offset: the scheduler emits each event on the clock tick that matches.
+      expect(ev.step).toBe(0);
       expect(ev.timeOffset).toBe(0);
       expect(ev.hold).toBeCloseTo(0.25, 6);
     }
@@ -277,8 +409,11 @@ describe('buildChordEvents', () => {
     // Up-strum = high to low.
     expect(events.map((e) => e.noteName)).toEqual(['G4', 'E4', 'C4']);
     const base = 0.9 * equalPowerVelocityScale(3);
-    expect(events[0].timeOffset).toBeCloseTo(4 * 0.125, 9);
-    expect(events[1].timeOffset).toBeCloseTo(4 * 0.125 + 0.03, 9);
+    // All three land on step 4; only the strum spread stays a time offset.
+    expect(events.map((e) => e.step)).toEqual([4, 4, 4]);
+    expect(events[0].timeOffset).toBeCloseTo(0, 9);
+    expect(events[1].timeOffset).toBeCloseTo(0.03, 9);
+    expect(events[2].timeOffset).toBeCloseTo(0.06, 9);
     expect(events[0].velocity).toBeCloseTo(Math.max(0.1, base * (1 - 0 * 0.08)), 12);
     expect(events[1].velocity).toBeCloseTo(Math.max(0.1, base * (1 - 1 * 0.08)), 12);
     expect(events[2].velocity).toBeCloseTo(Math.max(0.1, base * (1 - 2 * 0.08)), 12);

@@ -81,6 +81,10 @@ describe('timing, hold, staccato, velocity, rest, octaveShift (bpm 120 → 16th 
     const ev = resolveBassSteps(byId('driving-eighths'), [Cmaj7], 0, 2, 'A', 'Natural Minor', 120);
     expect(ev.map((e) => e.timeOffsetSec)).toEqual([0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75]);
   });
+  test('carries the originating grid step so the scheduler can fire it on the matching tick', () => {
+    const ev = resolveBassSteps(byId('driving-eighths'), [Cmaj7], 0, 2, 'A', 'Natural Minor', 120);
+    expect(ev.map((e) => e.step)).toEqual([0, 2, 4, 6, 8, 10, 12, 14]);
+  });
   test('holdSec = holdSteps * 16th duration', () => {
     const ev = resolveBassSteps(byId('driving-eighths'), [Cmaj7], 0, 2, 'A', 'Natural Minor', 120);
     expect(ev[0].holdSec).toBe(0.25);

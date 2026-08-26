@@ -18,11 +18,23 @@ type SynthVoice = {
   noise?: AudioBufferSourceNode;
   noiseGain?: GainNode;
   sustainLevel: number;
+  // The amp envelope's peak, kept so a live Sustain change can recompute the
+  // sustain level (sustainLevel alone can't be divided back out).
+  peakGain: number;
+  // When each envelope reaches its sustain segment. Past these points the
+  // value is exactly sustainLevel / filterSustainCutoff, which is what lets
+  // releaseVoice anchor a release that lands beyond all scheduled automation.
+  ampEnvEndsAt: number;
+  filterEnvEndsAt: number;
+  filterSustainCutoff: number;
   envelopeScale: number;
   source: string;
   noteName: string;
   startTime: number;
   releaseScheduledAt?: number;
+  // Node teardown is a timer sized to the release tail. Re-planning a release
+  // that has not started must replace that timer, not add a second one.
+  teardownTimer?: ReturnType<typeof setTimeout>;
 };
 
 class AudioEngine {
@@ -480,6 +492,10 @@ class AudioEngine {
       lfoGain,
       lfoTarget: params.lfoTarget,
       sustainLevel: peakGain * params.sustain,
+      peakGain,
+      ampEnvEndsAt: now + params.attack + params.decay,
+      filterEnvEndsAt: now + params.filterAttack + params.filterDecay,
+      filterSustainCutoff: filterSustainLevel,
       envelopeScale: scaleFactor,
       source,
       noteName,
@@ -514,25 +530,47 @@ class AudioEngine {
   private releaseVoice(voice: SynthVoice, releaseTime: number, now: number): void {
     if (!this.ctx) return;
     const mainGain = voice.gains[0];
+    if (voice.teardownTimer !== undefined) clearTimeout(voice.teardownTimer);
 
     try {
-      mainGain.gain.cancelScheduledValues(now);
-      // A release scheduled in the future can't read `.value` (the voice hasn't
-      // sounded yet); fall back to the stored sustain level for a smooth tail.
-      const releaseFrom = now > this.ctx.currentTime + 0.01
+      // The release has to begin at the value the envelope ACTUALLY has at
+      // `now`. cancelAndHoldAtTime truncates the running attack/decay ramp
+      // there and keeps its interpolated value, so the fade continues from
+      // where the note was. Naming a start value instead makes the param jump
+      // in a single sample — and every pattern hit is released while still
+      // decaying (a 16th at 120 bpm lasts 0.125 s against a 0.4 s decay), so
+      // that jump was ~4 dB on the amp and 1.5x on the cutoff: an audible
+      // click on every note. The fallback values below keep the old
+      // approximation for engines without cancelAndHoldAtTime.
+      // Fallbacks reproduce the pre-cancelAndHold approximation exactly: a
+      // release scheduled ahead can't read `.value` (it reports the value at
+      // currentTime, still the envelope floor), so it estimates the sustain
+      // level; an immediate release reads the live value.
+      const ampFallback = now > this.ctx.currentTime + 0.01
         ? Math.max(0.0001, voice.sustainLevel)
         : Math.max(0.0001, mainGain.gain.value);
-      mainGain.gain.setValueAtTime(releaseFrom, now);
+      this.cancelAndHold(mainGain.gain, now, ampFallback);
+      // cancelAndHoldAtTime inserts NO hold point when nothing is scheduled at
+      // or after `now` — verified against an OfflineAudioContext render. The
+      // ramp below would then start from the end of the DECAY instead of from
+      // `now`, fading a held chord out across its whole length. Past the decay
+      // the value is exactly the sustain level, so anchor it there; inside the
+      // envelope cancelAndHold already left an exact hold point.
+      if (now >= voice.ampEnvEndsAt) {
+        mainGain.gain.setValueAtTime(Math.max(0.0001, voice.sustainLevel), now);
+      }
       mainGain.gain.exponentialRampToValueAtTime(0.00001, now + Math.max(0.01, releaseTime));
 
       // VCF envelope release: ramp filter back to base cutoff
       const filterRelease = Math.max(0.01, voice.filterRelease);
-      voice.filter.frequency.cancelScheduledValues(now);
-      voice.filter.frequency.setValueAtTime(Math.max(20, voice.filter.frequency.value), now);
+      this.cancelAndHold(voice.filter.frequency, now, Math.max(20, voice.filter.frequency.value));
+      if (now >= voice.filterEnvEndsAt) {
+        voice.filter.frequency.setValueAtTime(Math.max(20, voice.filterSustainCutoff), now);
+      }
       voice.filter.frequency.exponentialRampToValueAtTime(Math.max(20, voice.filterCutoff), now + filterRelease);
 
       const voiceKey = `${voice.source}:${voice.noteName}`;
-      setTimeout(() => {
+      voice.teardownTimer = setTimeout(() => {
         // Only delete the map entry if this voice is still the current one —
         // a same-note retrigger overwrites the entry before this timeout
         // fires. The voice's own nodes are always torn down regardless.
@@ -601,6 +639,9 @@ class AudioEngine {
 
       voice.envelopeScale = scale;
       voice.sustainLevel *= factor;
+      // peakGain must track the rebalance too: updateSynthParams recomputes
+      // the sustain level from it, and an unscaled peak would undo this.
+      voice.peakGain *= factor;
       const gain = voice.gains[0].gain;
       gain.cancelScheduledValues(now);
       gain.setValueAtTime(Math.max(0.0001, gain.value), now);
@@ -669,13 +710,69 @@ class AudioEngine {
     bus.gain.setTargetAtTime(isMuted ? 0 : Math.max(0, Math.min(1.5, volume)), now, 0.01);
   }
 
-  private cancelAndHold(param: AudioParam, now: number): void {
+  /**
+   * Truncate `param`'s automation at `now`, keeping the value the curve has
+   * there so the next ramp starts without a step.
+   *
+   * `fallbackValue` is for engines with no cancelAndHoldAtTime: `param.value`
+   * reads the value at *currentTime*, which is simply wrong when `now` is in
+   * the future, so a caller scheduling ahead passes its best estimate.
+   */
+  private cancelAndHold(param: AudioParam, now: number, fallbackValue?: number): void {
     try {
       param.cancelAndHoldAtTime(now);
     } catch {
       param.cancelScheduledValues(now);
-      param.setValueAtTime(param.value, now);
+      param.setValueAtTime(fallbackValue ?? param.value, now);
     }
+  }
+
+  // Re-points a live voice's LFO at the current params, creating the LFO nodes
+  // on the spot if the depth knob has just come up off zero.
+  private updateVoiceLfo(voice: SynthVoice, params: SynthParams, now: number, tc: number): void {
+    if (!this.ctx) return;
+    if (params.lfoDepth <= 0) {
+      voice.lfoGain?.gain.setTargetAtTime(0, now, tc);
+      return;
+    }
+
+    let lfo = voice.lfo;
+    let lfoGain = voice.lfoGain;
+    if (!lfo || !lfoGain) {
+      lfo = this.ctx.createOscillator();
+      lfo.frequency.value = params.lfoRate;
+      lfoGain = this.ctx.createGain();
+      lfoGain.gain.value = 0;
+      lfo.connect(lfoGain);
+      lfo.start(now);
+      voice.lfo = lfo;
+      voice.lfoGain = lfoGain;
+    }
+
+    if (voice.lfoTarget !== params.lfoTarget) {
+      try {
+        lfoGain.disconnect();
+      } catch {
+        // ignore
+      }
+      if (params.lfoTarget === 'cutoff') {
+        lfoGain.connect(voice.filter.frequency);
+      } else if (params.lfoTarget === 'pitch') {
+        lfoGain.connect(voice.oscs[0].detune);
+      } else {
+        lfoGain.connect(voice.gains[0].gain);
+      }
+      voice.lfoTarget = params.lfoTarget;
+    }
+
+    lfo.frequency.setTargetAtTime(params.lfoRate, now, tc);
+    const depth =
+      params.lfoTarget === 'cutoff'
+        ? params.lfoDepth * 1500
+        : params.lfoTarget === 'pitch'
+          ? params.lfoDepth * 50
+          : params.lfoDepth * 0.2;
+    lfoGain.gain.setTargetAtTime(depth, now, tc);
   }
 
   // Live-update every sounding voice so knob tweaks are audible immediately
@@ -727,45 +824,32 @@ class AudioEngine {
       // Keep the note-off filter release ramp in sync with the new cutoff
       voice.filterCutoff = params.filterCutoff;
       voice.filterRelease = params.filterRelease;
+      // The setTargetAtTime above drives the cutoff to sustainCutoff from here
+      // on, so that is what a later release must anchor to.
+      voice.filterSustainCutoff = sustainCutoff;
+      voice.filterEnvEndsAt = Math.min(voice.filterEnvEndsAt, now);
 
-      if (params.lfoDepth > 0) {
-        let lfo = voice.lfo;
-        let lfoGain = voice.lfoGain;
-        if (!lfo || !lfoGain) {
-          lfo = this.ctx.createOscillator();
-          lfo.frequency.value = params.lfoRate;
-          lfoGain = this.ctx.createGain();
-          lfoGain.gain.value = 0;
-          lfo.connect(lfoGain);
-          lfo.start(now);
-          voice.lfo = lfo;
-          voice.lfoGain = lfoGain;
-        }
-        if (voice.lfoTarget !== params.lfoTarget) {
-          try {
-            lfoGain.disconnect();
-          } catch {
-            // ignore
-          }
-          if (params.lfoTarget === 'cutoff') {
-            lfoGain.connect(voice.filter.frequency);
-          } else if (params.lfoTarget === 'pitch') {
-            lfoGain.connect(osc.detune);
-          } else {
-            lfoGain.connect(voice.gains[0].gain);
-          }
-          voice.lfoTarget = params.lfoTarget;
-        }
-        lfo.frequency.setTargetAtTime(params.lfoRate, now, tc);
-        const depth =
-          params.lfoTarget === 'cutoff'
-            ? params.lfoDepth * 1500
-            : params.lfoTarget === 'pitch'
-              ? params.lfoDepth * 50
-              : params.lfoDepth * 0.2;
-        lfoGain.gain.setTargetAtTime(depth, now, tc);
-      } else if (voice.lfoGain) {
-        voice.lfoGain.gain.setTargetAtTime(0, now, tc);
+      this.updateVoiceLfo(voice, params, now, tc);
+
+      // Amp Sustain is a LEVEL, not a time: on a held pad the next note is
+      // bars away, so applying it only at note-on makes the knob read as
+      // dead. Retarget only when it actually moved — gliding the amp on every
+      // cutoff tweak would cut short the attack of a percussive stab.
+      const nextSustain = voice.peakGain * params.sustain;
+      if (Math.abs(nextSustain - voice.sustainLevel) > 1e-6) {
+        voice.sustainLevel = nextSustain;
+        this.cancelAndHold(voice.gains[0].gain, now);
+        voice.gains[0].gain.setTargetAtTime(Math.max(0.0001, nextSustain), now, tc);
+      }
+
+      // A voice sounding now whose note-off sits ahead on the clock (a
+      // sustained chord, a whole-note bass) has its release ramp already
+      // planned with the OLD release time and cutoff — and the cancelAndHold
+      // above just wiped the filter half of it. Re-plan it: nothing has faded
+      // yet, so re-arming is silent, and the Release knob reaches the note
+      // that is ringing instead of only the next one.
+      if (voice.releaseScheduledAt !== undefined && voice.releaseScheduledAt > now) {
+        this.releaseVoice(voice, params.release, voice.releaseScheduledAt);
       }
     }
   }

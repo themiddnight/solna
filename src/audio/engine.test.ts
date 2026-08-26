@@ -15,25 +15,95 @@ const makeEngine = () => new (audioEngine.constructor as any)() as EngineInstanc
 // time, so a test can prove that scheduling a future note never cancels the
 // envelope of a voice that is already fully scheduled (the chord-rhythm
 // regression: all but the last hit of a multi-hit pattern were silenced).
-function fakeParam() {
-  return {
+/** `cancelAndHold: false` stands in for Firefox, which has no cancelAndHoldAtTime. */
+type FakeOpts = { cancelAndHold?: boolean };
+
+function fakeParam(opts: FakeOpts = {}) {
+  const param = {
     value: 1,
     cancels: [] as number[],
     targets: [] as { v: number; t: number; tc: number }[],
-    setValueAtTime(v: number) {
+    // Ramps are recorded so a test can prove a release ramp that has not
+    // started yet is re-armed with a newly turned Release knob.
+    ramps: [] as { v: number; t: number }[],
+    // The automation timeline in call order, so valueAt() can evaluate the
+    // curve the engine actually scheduled instead of a test re-deriving it.
+    events: [] as { kind: 'set' | 'exp' | 'target'; v: number; t: number; tc?: number }[],
+    setValueAtTime(v: number, t: number) {
       this.value = v;
+      this.events.push({ kind: 'set', v, t });
     },
     cancelScheduledValues(t: number) {
       this.cancels.push(t);
+      this.events = this.events.filter((e) => e.t < t);
     },
-    exponentialRampToValueAtTime() {},
+    /**
+     * Per spec this keeps the curve BEFORE `t` intact: a ramp straddling `t`
+     * is truncated to end there at its interpolated value, it is not deleted.
+     * Modelling it as a plain drop would fake a discontinuity that the real
+     * API does not produce. `cancels` records it alongside
+     * cancelScheduledValues — both mean "automation was cut at this time".
+     */
+    cancelAndHoldAtTime(t: number) {
+      this.cancels.push(t);
+      const sorted = [...this.events].sort((a, b) => a.t - b.t);
+      // Verified against an OfflineAudioContext render in Chrome: with nothing
+      // scheduled at or after `t` there is nothing to cancel and NO hold point
+      // is inserted, so the next ramp starts from the last event rather than
+      // from `t`. Modelling this as an unconditional hold hid a real bug.
+      if (!sorted.some((e) => e.t >= t)) return;
+      const held = this.valueAt(t);
+      const straddling = sorted.find((e) => e.t > t);
+      this.events = sorted.filter((e) => e.t < t);
+      this.events.push({ kind: straddling?.kind === 'exp' ? 'exp' : 'set', v: held, t });
+    },
+    exponentialRampToValueAtTime(v: number, t: number) {
+      this.ramps.push({ v, t });
+      this.events.push({ kind: 'exp', v, t });
+    },
     setTargetAtTime(v: number, t: number, tc: number) {
       this.targets.push({ v, t, tc });
+      this.events.push({ kind: 'target', v, t, tc });
+    },
+    /**
+     * Web Audio's value-at-time for the automation the envelope path uses:
+     * setValueAtTime holds, exponentialRampToValueAtTime interpolates
+     * geometrically from the previous event. setTargetAtTime never ends, so
+     * every later event's start value would depend on it — rather than model
+     * that approximately and have tests quietly trust a wrong number, this
+     * refuses to evaluate a timeline containing one.
+     */
+    valueAt(t: number): number {
+      const evs = [...this.events].sort((a, b) => a.t - b.t);
+      if (evs.some((e) => e.kind === 'target')) {
+        throw new Error('valueAt does not model setTargetAtTime');
+      }
+      if (evs.length === 0) return this.value;
+      if (t <= evs[0].t) return evs[0].v;
+
+      let cur = evs[0].v;
+      let curT = evs[0].t;
+      for (let i = 1; i < evs.length; i++) {
+        const e = evs[i];
+        if (e.t <= t) {
+          cur = e.v;
+          curT = e.t;
+          continue;
+        }
+        if (e.kind !== 'exp') return cur;
+        const span = e.t - curT;
+        return span <= 0 ? e.v : cur * Math.pow(e.v / cur, (t - curT) / span);
+      }
+      return cur;
     },
   };
+  if (opts.cancelAndHold === false) {
+    delete (param as Partial<typeof param>).cancelAndHoldAtTime;
+  }
+  return param;
 }
 
-function fakeNode() {
+function fakeNode(opts: FakeOpts = {}) {
   return {
     type: '',
     // Connections are recorded so a test can assert routing, not just levels:
@@ -47,21 +117,21 @@ function fakeNode() {
     },
     start() {},
     stop() {},
-    gain: fakeParam(),
-    frequency: fakeParam(),
-    detune: fakeParam(),
-    Q: fakeParam(),
+    gain: fakeParam(opts),
+    frequency: fakeParam(opts),
+    detune: fakeParam(opts),
+    Q: fakeParam(opts),
   };
 }
 
 // A buffer source stands in for the noise generator: `loop` and `buffer` are
 // recorded so a test can prove the noise is looped (createNoiseNode's buffer is
 // 2 s, shorter than a long pad release).
-function fakeBufferSource() {
-  return { ...fakeNode(), buffer: null as unknown, loop: false };
+function fakeBufferSource(opts: FakeOpts = {}) {
+  return { ...fakeNode(opts), buffer: null as unknown, loop: false };
 }
 
-function fakeCtx() {
+function fakeCtx(opts: FakeOpts = {}) {
   const gains: ReturnType<typeof fakeNode>[] = [];
   const bufferSources: ReturnType<typeof fakeBufferSource>[] = [];
   return {
@@ -70,19 +140,19 @@ function fakeCtx() {
     // Math.random(), and the real 44_100 would make every test that touches
     // noise fill 88_200 floats for no added coverage.
     sampleRate: 64,
-    createOscillator: () => fakeNode(),
+    createOscillator: () => fakeNode(opts),
     createGain: () => {
-      const g = fakeNode();
+      const g = fakeNode(opts);
       gains.push(g);
       return g;
     },
-    createBiquadFilter: () => fakeNode(),
+    createBiquadFilter: () => fakeNode(opts),
     createBuffer: (_channels: number, length: number, sampleRate: number) => ({
       sampleRate,
       getChannelData: () => new Float32Array(length),
     }),
     createBufferSource: () => {
-      const s = fakeBufferSource();
+      const s = fakeBufferSource(opts);
       bufferSources.push(s);
       return s;
     },
@@ -116,11 +186,11 @@ const SYNTH: SynthParams = {
   preset: 'Test',
 };
 
-function freshEngine() {
+function freshEngine(opts: FakeOpts = {}) {
   const engine = makeEngine();
-  const ctx = fakeCtx();
+  const ctx = fakeCtx(opts);
   (engine as any).ctx = ctx;
-  (engine as any).dryGain = fakeNode();
+  (engine as any).dryGain = fakeNode(opts);
   (engine as any).delayNode = undefined;
   (engine as any).reverbNode = undefined;
   (engine as any).distortionNode = undefined;
@@ -195,6 +265,62 @@ describe('live param updates', () => {
     // it must keep the params it was scheduled with.
     expect(voice.oscs[0].type).toBe('sawtooth');
     expect(voice.filter.frequency.cancels).not.toContain(t0);
+  });
+});
+
+describe('pending release re-arming', () => {
+  // A sustained chord is one long voice whose note-off sits seconds ahead on
+  // the audio clock. Its release ramp is planned at note-on time, so turning
+  // the Release knob mid-chord only reaches it if the pending ramp is re-armed.
+  test('re-arms a release ramp that has not started with the new release time', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 4, 'chord');
+
+    const vca = ctx._gains[0].gain;
+    vca.ramps.length = 0;
+
+    engine.updateSynthParams({ ...SYNTH, release: 2 }, 'chord');
+
+    expect(vca.ramps.at(-1)).toEqual({ v: 0.00001, t: t0 + 4 + 2 });
+  });
+
+  test('restores the filter release ramp a live timbre update would otherwise cancel', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 4, 'chord');
+
+    const voice = (engine as any).activeVoices.get('chord:C4');
+    voice.filter.frequency.ramps.length = 0;
+
+    engine.updateSynthParams({ ...SYNTH, filterCutoff: 800 }, 'chord');
+
+    // cancelAndHold at currentTime wipes the planned filter release; the
+    // re-arm puts it back, now targeting the newly set cutoff.
+    expect(voice.filter.frequency.ramps.at(-1)).toEqual({
+      v: 800,
+      t: t0 + 4 + SYNTH.filterRelease,
+    });
+  });
+
+  test('leaves a release that has already started alone', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 2, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 - 1, 'chord');
+
+    const vca = ctx._gains[0].gain;
+    vca.ramps.length = 0;
+
+    engine.updateSynthParams({ ...SYNTH, release: 2 }, 'chord');
+
+    // Re-targeting a fade already in flight would make it jump.
+    expect(vca.ramps).toEqual([]);
   });
 
   test('a live param update reaches the sounding voice even when a later same-note hit replaced it in the dedup map', () => {
@@ -729,5 +855,221 @@ describe('noise source', () => {
     // A looping buffer source that is never stopped keeps running forever.
     expect(stopped).toHaveBeenCalled();
     expect(disconnected).toHaveBeenCalled();
+  });
+});
+
+describe('release discontinuity', () => {
+  // A 16th at 120 bpm rings for 0.125 s, well inside SYNTH's 0.4 s decay — so
+  // when the release starts, the envelope has NOT reached its sustain level
+  // yet. Every chord and bass pattern hit is scheduled this way, which makes
+  // this the app's most common note-off by far.
+  const HELD = 0.125;
+
+  /**
+   * How far the curve jumps across `t`, as a ratio >= 1. Exactly 1 means the
+   * automation is continuous there; anything above it is a step the DAC has to
+   * render in a single sample.
+   */
+  function stepRatio(param: { valueAt(t: number): number }, t: number): number {
+    const before = param.valueAt(t - 1e-6);
+    const after = param.valueAt(t + 1e-6);
+    return Math.max(after / before, before / after);
+  }
+
+  test('a pre-scheduled amp release starts from the level the envelope actually has', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    const releaseAt = t0 + HELD;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, releaseAt, 'chord');
+
+    // A step here is a click: the amp jumps in a single sample.
+    expect(stepRatio(ctx._gains[0].gain, releaseAt)).toBeLessThan(1.02);
+  });
+
+  test('a pre-scheduled filter release starts from the cutoff the envelope actually has', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    const releaseAt = t0 + HELD;
+
+    // filterEnvAmount 1200 over a 0.4 s filter decay: the cutoff is still
+    // falling from its 3600 Hz peak when the release begins.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, releaseAt, 'chord');
+
+    const voice = (engine as any).activeVoices.get('chord:C4');
+    expect(stepRatio(voice.filter.frequency, releaseAt)).toBeLessThan(1.02);
+  });
+
+  // Regression: a full-bar Sustained chord. Its note-off sits SECONDS past the
+  // end of the decay, so cancelAndHoldAtTime has nothing to cancel and leaves
+  // no anchor — the release ramp then starts back at the decay's end and fades
+  // the chord out across its whole length instead of holding it.
+  test('a release scheduled past the decay holds the sustain level until it starts', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    const HELD_CHORD: SynthParams = { ...SYNTH, attack: 0.005, decay: 0.01, sustain: 1, release: 0.01 };
+    const peak = 0.8 * 0.4;
+
+    engine.triggerSynthNoteOn('C4', HELD_CHORD, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', HELD_CHORD.release, t0 + 2.7, 'chord');
+
+    const vca = ctx._gains[0].gain;
+    expect(vca.valueAt(t0 + 0.5)).toBeCloseTo(peak, 4);
+    expect(vca.valueAt(t0 + 2.6)).toBeCloseTo(peak, 4);
+    expect(vca.valueAt(t0 + 2.72)).toBeLessThan(0.001);
+  });
+
+  test('an immediate release is continuous too', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    // Note-off with no time: the release starts at currentTime, mid-attack.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, undefined, 'chord');
+
+    expect(stepRatio(ctx._gains[0].gain, t0)).toBeLessThan(1.02);
+  });
+});
+
+describe('release without cancelAndHoldAtTime (Firefox)', () => {
+  // Firefox implements no cancelAndHoldAtTime, so the engine falls back to
+  // naming a start value. These pin the fallback estimates, which are the
+  // pre-fix behaviour: the fix must not make this path worse than it was.
+  test('a release scheduled ahead falls back to the stored sustain level', () => {
+    const { engine, ctx } = freshEngine({ cancelAndHold: false });
+    const t0 = ctx.currentTime;
+    const releaseAt = t0 + 0.125;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, releaseAt, 'chord');
+
+    // gain.value reports the value at currentTime — still the 0.0001 envelope
+    // floor — so reading it here would cut the note dead instead of fading it.
+    const vca = ctx._gains[0].gain;
+    expect(vca.valueAt(releaseAt)).toBeCloseTo(0.8 * 0.4 * SYNTH.sustain, 5);
+  });
+
+  test('a release inside the envelope falls back to the live value', () => {
+    const { engine, ctx } = freshEngine({ cancelAndHold: false });
+    const t0 = ctx.currentTime;
+
+    // Released 0.1 s in, while the 0.42 s attack+decay is still running: the
+    // exact value is unknowable without cancelAndHoldAtTime, so `.value` is
+    // the best estimate available.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 0.1, 'chord');
+    const vca = ctx._gains[0].gain;
+    vca.value = 0.05;
+
+    engine.triggerSynthNoteOff('C4', SYNTH.release, undefined, 'chord');
+
+    expect(vca.valueAt(t0)).toBeCloseTo(0.05, 5);
+  });
+
+  test('a release past the decay anchors at the exact sustain level, browser or not', () => {
+    const { engine, ctx } = freshEngine({ cancelAndHold: false });
+    const t0 = ctx.currentTime;
+
+    // Past attack+decay the value IS the sustain level, so no estimate is
+    // needed and Firefox gets the same exact anchor as everyone else.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 1, 'chord');
+    const vca = ctx._gains[0].gain;
+    vca.value = 0.05;
+
+    engine.triggerSynthNoteOff('C4', SYNTH.release, undefined, 'chord');
+
+    expect(vca.valueAt(t0)).toBeCloseTo(0.8 * 0.4 * SYNTH.sustain, 5);
+  });
+
+  test('the filter release falls back to the live cutoff', () => {
+    const { engine, ctx } = freshEngine({ cancelAndHold: false });
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    const voice = (engine as any).activeVoices.get('chord:C4');
+    voice.filter.frequency.value = 3000;
+
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.125, 'chord');
+
+    expect(voice.filter.frequency.valueAt(t0 + 0.125)).toBeCloseTo(3000, 5);
+  });
+});
+
+describe('live Sustain', () => {
+  // A held pad is the case where this matters: the note rings for bars, so
+  // "next note" is seconds away and the knob reads as dead.
+  const PAD: SynthParams = { ...SYNTH, attack: 0.01, decay: 0.05, sustain: 0.5, release: 1.2 };
+  const peak = 0.8 * 0.4;
+
+  test('turning Sustain up lifts a note that is already ringing', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', PAD.release, t0 + 4, 'chord');
+
+    const vca = ctx._gains[0].gain;
+    engine.updateSynthParams({ ...PAD, sustain: 1 }, 'chord');
+
+    expect(vca.targets.at(-1)?.v).toBeCloseTo(peak, 5);
+  });
+
+  test('turning Sustain down lowers it, and the stored level follows', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', PAD.release, t0 + 4, 'chord');
+
+    const vca = ctx._gains[0].gain;
+    engine.updateSynthParams({ ...PAD, sustain: 0.25 }, 'chord');
+
+    expect(vca.targets.at(-1)?.v).toBeCloseTo(peak * 0.25, 5);
+    // releaseVoice reads sustainLevel for its fallback, and
+    // applySynthVelocityScale rebalances against it.
+    const voice = (engine as any).activeVoices.get('chord:C4');
+    expect(voice.sustainLevel).toBeCloseTo(peak * 0.25, 5);
+  });
+
+  test('a param change that leaves Sustain alone never touches the amp', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', PAD.release, t0 + 4, 'chord');
+
+    const vca = ctx._gains[0].gain;
+    engine.updateSynthParams({ ...PAD, filterCutoff: 800 }, 'chord');
+
+    // Gliding the amp on every cutoff tweak would cut short the attack of a
+    // percussive stab.
+    expect(vca.targets).toEqual([]);
+  });
+
+  test('an equal-power velocity rebalance survives a later param change', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    // A held key, so applySynthVelocityScale's equal-power rebalance applies
+    // (it skips voices with a planned release).
+    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'synth');
+    engine.applySynthVelocityScale(0.5);
+
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    const rebalanced = voice.sustainLevel;
+    engine.updateSynthParams(PAD, 'synth');
+
+    // Recomputing sustain from an unscaled peak would undo the rebalance and
+    // make every held note jump back to full level on any knob move.
+    expect(voice.sustainLevel).toBeCloseTo(rebalanced, 6);
+  });
+
+  test('a voice already fading keeps its release', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0 - 2, 'chord');
+    engine.triggerSynthNoteOff('C4', PAD.release, t0 - 1, 'chord');
+
+    const vca = ctx._gains[0].gain;
+    engine.updateSynthParams({ ...PAD, sustain: 1 }, 'chord');
+
+    expect(vca.targets).toEqual([]);
   });
 });

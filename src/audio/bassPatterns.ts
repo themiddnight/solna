@@ -28,6 +28,7 @@ export interface BassPattern {
 
 export interface ResolvedBassEvent {
   noteName: string;        // 'C2' style, octave embedded
+  step: number;            // originating 16th step in the bar (0-15)
   timeOffsetSec: number;
   holdSec: number;
   velocity: number;
@@ -120,6 +121,7 @@ export function resolveBassSteps(
     const holdSec = (step.holdSteps ?? 1) * stepDur * (step.staccato ? 0.5 : 1) * holdScale;
     events.push({
       noteName: Note.fromMidiSharps(midi) ?? 'C2',
+      step: step.step,
       timeOffsetSec: step.step * stepDur,
       holdSec,
       velocity: 0.8 * (step.velocity ?? 1), // mirror the engine's default velocity
