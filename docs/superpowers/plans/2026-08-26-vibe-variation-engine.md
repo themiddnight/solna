@@ -1830,7 +1830,7 @@ bun run dev
 3. Click the dice: the icon spins briefly, an `alert-info` toast shows two lines, and the chip's readout changes to the new key and BPM. The chip stays highlighted.
 4. Press Play on both players, then press the dice repeatedly: audio swaps cleanly on every press with no overlapping chords or bass, and both players re-enter together on a bar line.
 5. Press the dice ten times on Cyber EDM: the key, comp rhythm and bass pattern change every single time. BPM may repeat — that is accepted.
-6. Click the chip again: the authored vibe returns exactly (`D# · 128` for Cyber EDM), discarding every reroll.
+6. Click the chip again: the authored vibe returns exactly (`F · 128` for Cyber EDM), discarding every reroll.
 7. Switch to another vibe: the dice moves to the newly loaded chip and disappears from the old one.
 8. Narrow the window below `md`: the toast collapses to `🎲 Rerolled`.
 

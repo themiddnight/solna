@@ -1,48 +1,8 @@
-import { SynthParams, MasterEffects, ChordItem, FilterType } from '../types';
+import { SynthParams, ChordItem, InstantVibe } from '../types';
 import { audioEngine } from '../audio/engine';
 import { useAppStore } from './store';
 import { deriveChordNotes } from '../utils/musicTheory';
 import { INITIAL_SYNTH_PARAMS } from './initialState';
-
-export interface InstantVibe {
-  id: string;
-  name: string;
-  tagline: string;
-  emoji: string;
-  bpm: number;
-  scaleRoot: string;
-  scaleType: string;
-  projectTitle: string;
-
-  // Beat & Drum Kit
-  soundKit: string;
-  drumPattern: Record<string, number[]>;
-  drumFilterCutoff?: number;
-  drumFilterResonance?: number;
-  drumFilterType?: FilterType;
-
-  // Chords
-  chords: ChordItem[];
-  chordRhythmId: string;
-  chordFeel: number; // 0.0 (tight) to 1.0 (loose/swung)
-  chordOctave: number;
-  chordPresetName: string;
-  chordSynthParams?: Partial<SynthParams>;
-
-  // Bass
-  bassPatternId: string;
-  bassFeel: number; // 0.0 (tight) to 1.0 (loose/swung)
-  bassOctave: number;
-  bassPresetName: string;
-  bassSynthParams?: Partial<SynthParams>;
-
-  // Lead / Melody Synthesizer (with Arpeggiator setup)
-  synthPresetName: string;
-  synthParams?: Partial<SynthParams>;
-
-  // Master Effects
-  effects: Partial<MasterEffects>;
-}
 
 function makeVibeChord(id: string, root: string, quality: string, bars = 1, octave = 4): ChordItem {
   return deriveChordNotes({ id, root, quality, bars, notes: [] }, octave);
@@ -246,6 +206,28 @@ export const INSTANT_VIBES: InstantVibe[] = [
       eqMid: 1,
       eqHigh: -2,
     },
+
+    // lofi-chill
+    variation: {
+      genre: 'lofi',
+      // The jazz/soul record keys lo-fi samples from. Full lower-to-middle
+      // span: its bass is filtered at 260 Hz, so a deep half-audible sub is
+      // the genre's texture rather than a fault.
+      keyPool: ['C', 'D', 'D#', 'F', 'G', 'A'],
+      bpmRange: [78, 88],
+      progressionIds: ['jazz-ii-v-i-vi', 'jazz-neosoul-butter', 'lofi-coffeehouse', 'lofi-bedroom-pop', 'lofi-rainy-window', 'lofi-tape-loop'],
+      rhythmIds: ['lofiSwing', 'syncopatedPush', 'bassPlusStrum'],
+      bassPatternIds: ['dilla-sub', 'walking-groove', 'half-time-legato'],
+      drumDecoration: {
+        layers: ['hihat', 'openhat', 'tom', 'crash'],
+        densities: {
+          hihat: ['lofi16ths', 'eighths', 'swung16ths'],
+          openhat: ['off', 'and2and4', 'pickup'],
+          tom: ['off', 'pickup', 'fillTail'],
+          crash: ['off', 'downbeat'],
+        },
+      },
+    },
   },
   {
     id: 'synthwave-80s',
@@ -352,6 +334,28 @@ export const INSTANT_VIBES: InstantVibe[] = [
       eqMid: 1,
       eqHigh: 4,
     },
+
+    // synthwave-80s
+    variation: {
+      genre: 'synthwave',
+      // Starts at D so the Saw Growl sub-osc (0.6, one octave down) stays above
+      // ~37 Hz; stops at A so the Neon Pluck stack at octave 4 keeps headroom
+      // under the arp's two octaves.
+      keyPool: ['D', 'E', 'F', 'F#', 'G', 'A'],
+      bpmRange: [108, 118],
+      progressionIds: ['pop-club-house', 'cine-epic-ostinato', 'synthwave-midnight-drive', 'synthwave-neon-horizon'],
+      rhythmIds: ['eighthPads', 'fourOnFloor', 'popBallad8ths'],
+      bassPatternIds: ['driving-eighths', 'offbeat-sub', 'root-fifth-walk'],
+      drumDecoration: {
+        layers: ['hihat', 'openhat', 'tom', 'crash'],
+        densities: {
+          hihat: ['sixteenths', 'eighths', 'offbeat8ths'],
+          openhat: ['off', 'offbeat8ths', 'pickup'],
+          tom: ['off', 'fillTail', 'lateFill'],
+          crash: ['off', 'downbeat'],
+        },
+      },
+    },
   },
   {
     id: 'cyber-dance',
@@ -451,6 +455,27 @@ export const INSTANT_VIBES: InstantVibe[] = [
       eqMid: 0,
       eqHigh: 4,
     },
+
+    // cyber-dance
+    variation: {
+      genre: 'edm',
+      // The club-minor band. Starts at D#, one step above synthwave, because
+      // the Punchy Square carries more sub weight (0.7).
+      keyPool: ['D#', 'E', 'F', 'F#', 'G', 'A'],
+      bpmRange: [126, 130],
+      progressionIds: ['pop-club-house', 'edm-cyber-drop', 'edm-neon-rise', 'edm-arena-sweep'],
+      rhythmIds: ['offbeatStabs', 'fourOnFloor', 'eighthPads'],
+      bassPatternIds: ['offbeat-sub', 'driving-eighths', 'funk-octaves'],
+      drumDecoration: {
+        layers: ['hihat', 'openhat', 'tom', 'crash'],
+        densities: {
+          hihat: ['offbeat8ths', 'sixteenths', 'eighths'],
+          openhat: ['off', 'offbeat8ths', 'pickup'],
+          tom: ['off', 'lateFill', 'fillTail'],
+          crash: ['off', 'downbeat'],
+        },
+      },
+    },
   },
   {
     id: 'ambient-chill',
@@ -547,6 +572,27 @@ export const INSTANT_VIBES: InstantVibe[] = [
       eqLow: 2,
       eqMid: -1,
       eqHigh: 2,
+    },
+
+    // ambient-chill
+    variation: {
+      genre: 'ambient',
+      // Avoids C, C# and D# entirely so a multi-bar drone through a 5.8 s
+      // reverb tail keeps a pitched fundamental above ~73 Hz.
+      keyPool: ['D', 'E', 'F', 'F#', 'G', 'A'],
+      bpmRange: [62, 80],
+      progressionIds: ['ambient-still-water', 'ambient-lydian-drift', 'ambient-open-fourths', 'ambient-glass-horizon'],
+      rhythmIds: ['sustained', 'arpRollUp', 'arpDownEighths'],
+      bassPatternIds: ['whole-note-root', 'half-time-legato'],
+      drumDecoration: {
+        layers: ['hihat', 'openhat', 'tom', 'crash'],
+        densities: {
+          hihat: ['off', 'backbeat', 'halves'],
+          openhat: ['off', 'pickup', 'midBar'],
+          tom: ['off', 'midBar'],
+          crash: ['off', 'downbeat'],
+        },
+      },
     },
   },
   {
@@ -646,6 +692,30 @@ export const INSTANT_VIBES: InstantVibe[] = [
       eqMid: 1,
       eqHigh: 0,
     },
+
+    // hiphop-groove
+    variation: {
+      genre: 'boombap',
+      // Lower half only, so the walking line's upper notes stay under ~200 Hz
+      // where the Round Pluck's 420 Hz cutoff still shapes them.
+      keyPool: ['C', 'D', 'D#', 'E', 'F', 'G'],
+      bpmRange: [85, 95],
+      progressionIds: ['cine-dorian-voyage', 'boombap-dusty-ii-v', 'boombap-crate-dig', 'boombap-head-nod'],
+      rhythmIds: ['syncopatedPush', 'lofiSwing', 'funkSyncopation'],
+      bassPatternIds: ['walking-groove', 'dilla-sub', 'classic-walk'],
+      drumDecoration: {
+        layers: ['hihat', 'openhat', 'tom', 'crash'],
+        densities: {
+          hihat: ['swung16ths', 'eighths', 'lofi16ths'],
+          // `and2and4` is authored here because the research calls for open
+          // hats on the "and", but this kick hits step 6 and the collision
+          // filter drops it at draw time, leaving `off` and `pickup`.
+          openhat: ['off', 'pickup', 'and2and4'],
+          tom: ['off', 'fillTail', 'pickup'],
+          crash: ['off', 'downbeat'],
+        },
+      },
+    },
   },
   {
     id: 'asian-zen',
@@ -743,6 +813,30 @@ export const INSTANT_VIBES: InstantVibe[] = [
       eqLow: 1,
       eqMid: 0,
       eqHigh: 3,
+    },
+
+    // asian-zen
+    variation: {
+      genre: 'zen',
+      // Koto-register roots — the instrument is conventionally tuned from
+      // around D. Avoids the chromatic extremes where the Glocken Bell
+      // partials either muddy or thin out.
+      keyPool: ['D', 'E', 'F#', 'G', 'A'],
+      // The one unsourced range: no production guide gave a tempo band for the
+      // genre, so it is the authored 78 +/- 6.
+      bpmRange: [70, 84],
+      progressionIds: ['zen-bamboo-vamp', 'zen-moonlit-koto', 'zen-still-pond', 'zen-temple-bell'],
+      rhythmIds: ['sustained', 'arpRollUp', 'arpDownEighths'],
+      bassPatternIds: ['whole-note-root', 'half-time-legato'],
+      drumDecoration: {
+        layers: ['hihat', 'openhat', 'tom', 'crash'],
+        densities: {
+          hihat: ['quarters', 'eighths', 'halves'],
+          openhat: ['off', 'pickup', 'midBar'],
+          tom: ['off', 'midBar', 'pickup'],
+          crash: ['off', 'downbeat'],
+        },
+      },
     },
   },
 ];

@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { INSTANT_VIBES } from '../store/instantVibes';
+import { INSTANT_VIBES, applyInstantVibeToStore } from '../store/instantVibes';
 import { audioEngine } from '../audio/engine';
 import { useAppStore } from '../store/store';
-import { selectVibe, InstantVibesBar, resolveSelectedVibeId } from './InstantVibesBar';
+import { startEngineSync, stopEngineSync } from '../store/engineSync';
+import { selectVibe, InstantVibesBar, resolveSelectedVibeId, rerollVibe } from './InstantVibesBar';
 
 const noop = { onToast: () => {} };
 
@@ -78,5 +79,93 @@ describe('InstantVibesBar markup', () => {
     // tailwindcss-animate is not installed, so these class names generate no CSS.
     expect(html).not.toContain('animate-in');
     expect(html).not.toContain('fade-in ');
+  });
+});
+
+const swallow = { onToast: () => {} };
+
+describe('rerollVibe', () => {
+  test('a reroll changes the music but never the genre anchor', () => {
+    const vibe = INSTANT_VIBES[0];
+    applyInstantVibeToStore(vibe);
+    const before = useAppStore.getState();
+    const authored = {
+      scaleRoot: before.scaleRoot,
+      chordRhythmId: before.chordRhythmId,
+      bassPatternId: before.bassPatternId,
+    };
+
+    rerollVibe(vibe, swallow);
+
+    const after = useAppStore.getState();
+    expect(after.scaleType).toBe(vibe.scaleType);
+    expect(after.scaleRoot).not.toBe(authored.scaleRoot);
+    expect(after.chordRhythmId).not.toBe(authored.chordRhythmId);
+    expect(after.bassPatternId).not.toBe(authored.bassPatternId);
+    expect(after.chords.length).toBeGreaterThan(0);
+    expect(after.projectTitle).toBe(vibe.projectTitle);
+  });
+
+  test('the toast carries both lines', () => {
+    let received: { headline: string; detail: string } | null = null;
+    rerollVibe(INSTANT_VIBES[0], { onToast: (t) => { received = t; } });
+    expect(received).not.toBeNull();
+    expect(received!.headline.startsWith('🎲 ')).toBe(true);
+    expect(received!.detail.includes(' · drums: ')).toBe(true);
+  });
+
+  // Non-regression: the atomic-swap fix lives in applyInstantVibeToStore and a
+  // reroll must inherit it rather than re-implement it.
+  test('a reroll cuts the chord and bass sources synchronously', () => {
+    const stopSource = spyOn(audioEngine, 'stopSource').mockImplementation(() => {}).mockClear();
+    useAppStore.setState({ sequencerPlayer: 'playing', chordsPlayer: 'playing' });
+
+    rerollVibe(INSTANT_VIBES[0], swallow);
+
+    expect(stopSource).toHaveBeenCalledWith('chord', 0.02);
+    expect(stopSource).toHaveBeenCalledWith('bass', 0.02);
+    const after = useAppStore.getState();
+    expect(after.sequencerPlayer).toBe('playing');
+    expect(after.chordsPlayer).toBe('playing');
+    stopSource.mockRestore();
+  });
+
+  test('a reroll while stopped leaves both players stopped', () => {
+    useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped' });
+    rerollVibe(INSTANT_VIBES[0], swallow);
+    const after = useAppStore.getState();
+    expect(after.sequencerPlayer).toBe('stopped');
+    expect(after.chordsPlayer).toBe('stopped');
+  });
+
+  /**
+   * A reroll rewinds the shared bar grid, and that is INTENDED.
+   *
+   * applyInstantVibeToStore calls hardStopAll(), which takes engineSync's
+   * transport flags to 0, then restarts the players that were running, which
+   * takes them back up — and zustand's subscription is synchronous and not
+   * React-batched, so the `flags !== 0 && prevFlags === 0` branch really runs.
+   * The user tested this on the chip click and reported it as good ("every
+   * press starts playing anew, the old sound doesn't hang over"). A reroll is
+   * the same gesture. Pinned here so a refactor cannot silently drop it.
+   */
+  test('a reroll rewinds the shared bar grid — intended, not a regression', () => {
+    spyOn(audioEngine, 'init').mockImplementation(() => {});
+    useAppStore.setState({ sequencerPlayer: 'playing', chordsPlayer: 'playing' });
+    startEngineSync();
+    const resetClock = spyOn(audioEngine, 'resetClock').mockImplementation(() => {}).mockClear();
+
+    rerollVibe(INSTANT_VIBES[0], swallow);
+
+    // Tear the subscription down BEFORE asserting: a failing expect would
+    // otherwise leak a live engineSync into every later test in the file.
+    const calls = resetClock.mock.calls.length;
+    stopEngineSync();
+    expect(calls).toBe(1);
+  });
+
+  test('the chip stays highlighted after a reroll', () => {
+    rerollVibe(INSTANT_VIBES[0], swallow);
+    expect(resolveSelectedVibeId(useAppStore.getState().projectTitle)).toBe(INSTANT_VIBES[0].id);
   });
 });

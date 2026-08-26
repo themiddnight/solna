@@ -1,7 +1,14 @@
-import React, { useState } from 'react';
-import { Sparkles, Check, ChevronDown, ChevronUp } from 'lucide-react';
-import { INSTANT_VIBES, InstantVibe, applyInstantVibeToStore } from '../store/instantVibes';
+import React, { useEffect, useRef, useState } from 'react';
+import { Sparkles, Check, ChevronDown, ChevronUp, Dices } from 'lucide-react';
+import { INSTANT_VIBES, applyInstantVibeToStore } from '../store/instantVibes';
+import type { InstantVibe } from '../types';
 import { useAppStore } from '../store/store';
+import {
+  createDraw,
+  formatVariationSummary,
+  resolveVibeVariation,
+  type RerollToast,
+} from '../store/vibeVariation';
 
 export function selectVibe(
   vibe: InstantVibe,
@@ -9,6 +16,33 @@ export function selectVibe(
 ): void {
   applyInstantVibeToStore(vibe);
   deps.onToast(`Loaded ${vibe.name} (${vibe.bpm} BPM · Key ${vibe.scaleRoot} ${vibe.scaleType})`);
+}
+
+/**
+ * Rerolls the loaded vibe into a different piece of music in the same genre.
+ *
+ * The ONLY place this feature calls Math.random: everything below
+ * resolveVibeVariation takes the VibeDraw this creates, which is what makes the
+ * draw policy testable by enumeration.
+ *
+ * Applies through the same applyInstantVibeToStore a chip click uses. That is
+ * deliberate and load-bearing: the synchronous
+ * audioEngine.stopSource('chord'|'bass', 0.02) cut, the selective restart and
+ * the bar-grid rewind all live in there, and a second apply path would have to
+ * keep them in sync. This function makes no engine call of its own.
+ */
+export function rerollVibe(
+  vibe: InstantVibe,
+  deps: { onToast: (toast: RerollToast) => void }
+): void {
+  const { scaleRoot, chordRhythmId, bassPatternId } = useAppStore.getState();
+  const result = resolveVibeVariation(
+    vibe,
+    { scaleRoot, chordRhythmId, bassPatternId },
+    createDraw(Math.random),
+  );
+  applyInstantVibeToStore(result.vibe);
+  deps.onToast(formatVariationSummary(result.summary));
 }
 
 /**
@@ -25,14 +59,54 @@ export const InstantVibesBar: React.FC = React.memo(() => {
   const projectTitle = useAppStore((s) => s.projectTitle);
   const selectedVibeId = resolveSelectedVibeId(projectTitle);
 
-  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+  type VibeToast =
+    | { kind: 'load'; text: string }
+    | { kind: 'reroll'; headline: string; detail: string };
+
+  const [toast, setToast] = useState<VibeToast | null>(null);
+  const [rollingVibeId, setRollingVibeId] = useState<string | null>(null);
+  const bpm = useAppStore((s) => s.bpm);
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
 
+  // Only one toast and one spin can be pending at a time. Without tracking
+  // these, clicking a chip and then its dice within the chip's 3s toast
+  // window lets the chip's older timer fire and dismiss the reroll toast
+  // early; and a timer left running past unmount would call setState on an
+  // unmounted component.
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const spinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (spinTimerRef.current) clearTimeout(spinTimerRef.current);
+    };
+  }, []);
+
+  const scheduleToastClear = (ms: number) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), ms);
+  };
+
   const handleSelectVibe = (vibe: InstantVibe) => {
-    selectVibe(vibe, { onToast: setFeedbackToast });
-    setTimeout(() => {
-      setFeedbackToast(null);
-    }, 3000);
+    selectVibe(vibe, { onToast: (text) => setToast({ kind: 'load', text }) });
+    scheduleToastClear(3000);
+  };
+
+  const handleReroll = (vibe: InstantVibe) => {
+    setRollingVibeId(vibe.id);
+    if (spinTimerRef.current) clearTimeout(spinTimerRef.current);
+    try {
+      rerollVibe(vibe, { onToast: (t) => setToast({ kind: 'reroll', ...t }) });
+      // 400 ms of spin, then the icon settles; the toast holds longer because
+      // its second line has more to read than the load toast's one.
+      scheduleToastClear(4000);
+    } finally {
+      // Robust to rerollVibe throwing: the spin must stop either way, or the
+      // dice would spin forever.
+      spinTimerRef.current = setTimeout(() => setRollingVibeId(null), 400);
+    }
   };
 
   return (
@@ -52,22 +126,49 @@ export const InstantVibesBar: React.FC = React.memo(() => {
             {INSTANT_VIBES.map((vibe) => {
               const isSelected = selectedVibeId === vibe.id;
 
-              return (
+              const chip = (
                 <button
-                  key={vibe.id}
                   id={`btn-vibe-${vibe.id}`}
                   onClick={() => handleSelectVibe(vibe)}
                   title={`${vibe.name} (${vibe.bpm} BPM · ${vibe.scaleRoot} ${vibe.scaleType})`}
                   className={`btn btn-xs group gap-1.5 font-semibold whitespace-nowrap shrink-0 normal-case ${
-                    isSelected ? 'btn-primary' : 'btn-soft'
+                    isSelected
+                      ? `${vibe.variation ? 'join-item ' : ''}btn-primary`
+                      : 'btn-soft'
                   }`}
                 >
                   <span className="text-xs leading-none">{vibe.emoji}</span>
                   <span className="font-medium">{vibe.name}</span>
                   <span className="text-[9px] font-mono opacity-70">
-                    {vibe.bpm}
+                    {/* The loaded chip is the always-visible readout of what is
+                        actually loaded: after a reroll the authored BPM is no
+                        longer true, and there is no undo to fall back on. */}
+                    {isSelected ? `${scaleRoot} · ${bpm}` : vibe.bpm}
                   </span>
                 </button>
+              );
+
+              if (!isSelected || !vibe.variation) {
+                return <React.Fragment key={vibe.id}>{chip}</React.Fragment>;
+              }
+
+              return (
+                <div key={vibe.id} className="join shrink-0">
+                  {chip}
+                  <button
+                    id={`btn-vibe-reroll-${vibe.id}`}
+                    onClick={() => handleReroll(vibe)}
+                    title={`Reroll ${vibe.name}`}
+                    aria-label={`Reroll ${vibe.name}`}
+                    className="join-item btn btn-xs btn-primary btn-square"
+                  >
+                    <Dices
+                      className={`w-3.5 h-3.5 ${
+                        rollingVibeId === vibe.id ? 'animate-spin motion-reduce:animate-none' : ''
+                      }`}
+                    />
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -75,13 +176,25 @@ export const InstantVibesBar: React.FC = React.memo(() => {
 
         {/* Collapse toggle & Feedback banner */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {feedbackToast && (
+          {toast && (
             <div className="toast toast-top toast-end animate-fade-in">
-              <div className="alert alert-success alert-soft py-1 px-2 text-[10px] gap-1">
-                <Check className="w-3 h-3" />
-                <span className="hidden md:inline">{feedbackToast}</span>
-                <span className="md:hidden">Loaded</span>
-              </div>
+              {toast.kind === 'load' ? (
+                <div className="alert alert-success alert-soft py-1 px-2 text-[10px] gap-1">
+                  <Check className="w-3 h-3" />
+                  <span className="hidden md:inline">{toast.text}</span>
+                  <span className="md:hidden">Loaded</span>
+                </div>
+              ) : (
+                // A different colour role from the load toast, so a reroll and
+                // a load are visually distinct at a glance.
+                <div className="alert alert-info alert-soft py-1 px-2 text-[10px] gap-1">
+                  <div className="hidden md:flex flex-col items-start gap-0.5">
+                    <span className="font-semibold">{toast.headline}</span>
+                    <span className="opacity-80">{toast.detail}</span>
+                  </div>
+                  <span className="md:hidden">🎲 Rerolled</span>
+                </div>
+              )}
             </div>
           )}
 

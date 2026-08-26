@@ -117,3 +117,94 @@ export interface ProjectState {
   effects: MasterEffects;
   masterVolume?: number;
 }
+
+/**
+ * Drum layers the Vibe Variation dice may rewrite. `kick`, `snare` and `clap`
+ * are the genre's skeleton and are deliberately not assignable here, so no
+ * draw can move the pulse or the backbeat.
+ */
+export type DecorationLayer = 'hihat' | 'openhat' | 'tom' | 'crash';
+
+/** A named row in DRUM_DENSITIES. Named, not generated: the UI reports it. */
+export type DensityName =
+  | 'off' | 'downbeat' | 'halves' | 'backbeat' | 'quarters'
+  | 'offbeat8ths' | 'and2and4' | 'eighths' | 'swung16ths' | 'lofi16ths'
+  | 'sixteenths' | 'pickup' | 'lateFill' | 'fillTail' | 'midBar';
+
+export interface DrumDecorationRule {
+  /**
+   * Layers the dice may rewrite. Authoritative: a layer absent here is never
+   * rewritten even if `densities` has an entry for it. `kick`, `snare` and
+   * `clap` are not assignable to DecorationLayer, so they can never be listed.
+   */
+  layers: DecorationLayer[];
+  /**
+   * Named density choices the dice picks between, per layer. Must contain an
+   * entry for every layer in `layers` and no others — which is why this is
+   * Partial: the total form would demand an entry for a layer the vibe
+   * deliberately leaves out. The exact-match half is an invariant test.
+   */
+  densities: Partial<Record<DecorationLayer, DensityName[]>>;
+}
+
+export interface VibeVariation {
+  /** Which progressions in CHORD_PROGRESSIONS this vibe may draw. */
+  genre: VibeGenre;
+  /** Roots that suit the genre. The dice picks one. Always contains the vibe's own. */
+  keyPool: string[];
+  /** Inclusive [min, max] integer BPM. Always contains the vibe's own. */
+  bpmRange: [number, number];
+  /** Ids into CHORD_PROGRESSIONS. */
+  progressionIds: string[];
+  /** Ids into RHYTHM_PATTERNS. Always contains the vibe's own chordRhythmId. */
+  rhythmIds: string[];
+  /** Ids into BASS_PATTERNS. Always contains the vibe's own bassPatternId. */
+  bassPatternIds: string[];
+  drumDecoration: DrumDecorationRule;
+}
+
+export interface InstantVibe {
+  id: string;
+  name: string;
+  tagline: string;
+  emoji: string;
+  bpm: number;
+  scaleRoot: string;
+  scaleType: string;
+  projectTitle: string;
+
+  // Beat & Drum Kit
+  soundKit: string;
+  drumPattern: Record<string, number[]>;
+  drumFilterCutoff?: number;
+  drumFilterResonance?: number;
+  drumFilterType?: FilterType;
+
+  // Chords
+  chords: ChordItem[];
+  chordRhythmId: string;
+  chordFeel: number; // 0.0 (tight) to 1.0 (loose/swung)
+  chordOctave: number;
+  chordPresetName: string;
+  chordSynthParams?: Partial<SynthParams>;
+
+  // Bass
+  bassPatternId: string;
+  bassFeel: number; // 0.0 (tight) to 1.0 (loose/swung)
+  bassOctave: number;
+  bassPresetName: string;
+  bassSynthParams?: Partial<SynthParams>;
+
+  // Lead / Melody Synthesizer (with Arpeggiator setup)
+  synthPresetName: string;
+  synthParams?: Partial<SynthParams>;
+
+  // Master Effects
+  effects: Partial<MasterEffects>;
+
+  /**
+   * Vibe Variation rule for the dice button. Optional, so a vibe without one
+   * simply has no dice — but all six ship one, which an invariant test pins.
+   */
+  variation?: VibeVariation;
+}
