@@ -584,6 +584,10 @@ describe('live effect knobs', () => {
     engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 2.0 });
     expect(buildSpy).not.toHaveBeenCalled(); // equals the impulse setupMasterChain built
     engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 4.5 });
+    // Asserting the args (not just the count) is what actually discriminates
+    // the duration-vs-exponent fix: the pre-Task-4 engine would have called
+    // this with (2.0, 4.5), which also passes a count-only assertion.
+    expect(buildSpy).toHaveBeenCalledWith(4.5, 2.0);
     engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 4.5 });
     expect(buildSpy).toHaveBeenCalledTimes(1);
   });
@@ -618,6 +622,31 @@ describe('live effect knobs', () => {
     expect(buildSpy).toHaveBeenCalledWith(0.1, 2.0);
     engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 900 });
     expect(buildSpy).toHaveBeenLastCalledWith(10, 2.0);
+  });
+
+  test('the impulse cache evicts least-recently-used entries past its cap', () => {
+    const { engine } = freshEngine();
+    (engine as any).reverbNode = fakeNode();
+    spyOn(
+      engine as unknown as { buildImpulseResponse: () => AudioBuffer },
+      'buildImpulseResponse',
+    ).mockImplementation(() => ({}) as AudioBuffer);
+
+    // Cap is 8: fill it exactly, then touch the oldest entry to refresh its
+    // recency before pushing two more distinct decays past the cap.
+    for (const d of [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7]) {
+      engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: d });
+    }
+    const cache = (engine as any).impulseCache as Map<number, AudioBuffer>;
+    expect(cache.size).toBe(8);
+
+    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 1.0 }); // refresh recency
+    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 1.8 });
+    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 1.9 });
+
+    expect(cache.size).toBe(8); // never exceeds the cap
+    expect(cache.has(1.0)).toBe(true); // refreshed, survives eviction
+    expect(cache.has(1.1)).toBe(false); // least-recently-used, evicted first
   });
 
   test('updateEffects sets the compressor threshold from the effects value', () => {

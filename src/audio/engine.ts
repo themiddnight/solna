@@ -2,7 +2,7 @@ import { SynthParams, MasterEffects, FilterType } from '../types';
 import { noteFrequency, clampBpm, stepDurationSec, STEPS_PER_BAR } from '../utils/musicTheory';
 import { DEFAULT_VELOCITY } from './constants';
 import { mergeDrumKit, type DrumKit } from './drumKits';
-import { EFFECT_LIMITS, clampEffects } from './effectLimits';
+import { clampEffects } from './effectLimits';
 
 type SynthVoice = {
   oscs: OscillatorNode[];
@@ -55,11 +55,19 @@ class AudioEngine {
   // Last decay applied to the convolver, already quantised. Guards against
   // re-randomizing the reverb tail on every updateEffects call.
   private reverbDecay = 2.0;
-  // Impulse responses keyed by quantised decay. Building one is
-  // sampleRate * decay * 2 channels of Math.random() + Math.pow() on the main
-  // thread; a single knob drag emits ~55 distinct values, so without this a
-  // drag drops frames AND swaps convolver.buffer mid-tail (audible clicks).
-  // Cleared in setupMasterChain: an AudioBuffer belongs to its context.
+  // Impulse responses keyed by quantised decay, bounded to
+  // IMPULSE_CACHE_MAX entries (LRU eviction): the 0.1 s quantum over the
+  // 0.1-10 s clamp range is up to 100 distinct decays, and a 10 s stereo
+  // buffer at 44.1 kHz is ~3.5 MB, so an unbounded cache could pin ~350 MB
+  // of AudioBuffer for the AudioContext's lifetime after a full-range sweep.
+  // Building one is sampleRate * decay * 2 channels of Math.random() +
+  // Math.pow() on the main thread; a single knob drag emits ~55 distinct
+  // values, so this cache skips the rebuild once a value has been seen.
+  // Swap and rebuild share one gate (nextDecay !== this.reverbDecay in
+  // updateEffects), so a monotonic sweep still swaps convolver.buffer once
+  // per 0.1 s step crossed — this cache skips the expensive rebuild, not the
+  // swap itself. Cleared in setupMasterChain: an AudioBuffer belongs to its
+  // context.
   private impulseCache = new Map<number, AudioBuffer>();
   private delayNode: DelayNode | null = null;
   private delayFeedbackGain: GainNode | null = null;
@@ -116,6 +124,7 @@ class AudioEngine {
   // rather than let the while loop below burst every step it missed.
   private static readonly CLOCK_STALL_THRESHOLD = 0.05; // seconds
   private static readonly REVERB_CURVE = 2.0; // impulse envelope exponent; not user-facing
+  private static readonly IMPULSE_CACHE_MAX = 8; // LRU cap; real use revisits a handful of decays
 
   private drumKit: DrumKit = mergeDrumKit();
 
@@ -384,18 +393,39 @@ class AudioEngine {
   }
 
   /** The knob's own resolution (EffectsRackView's Decay step is 0.1). */
+  /**
+   * The knob's own resolution (EffectsRackView's Decay step is 0.1).
+   *
+   * Only caller is updateEffects, which already ran `fx` through
+   * clampEffects — so `decay` here is always finite and within
+   * EFFECT_LIMITS.reverbDecay. Re-clamping here would be a second source of
+   * truth for the same bound; this only quantises.
+   */
   private quantiseDecay(decay: number): number {
-    const { min, max } = EFFECT_LIMITS.reverbDecay;
-    const clamped = Number.isFinite(decay) ? Math.min(max, Math.max(min, decay)) : 2.0;
-    return Math.round(clamped * 10) / 10;
+    return Math.round(decay * 10) / 10;
   }
 
   /** Cached impulse for a quantised decay, built on first use. */
+  /**
+   * Cached impulse for a quantised decay, built on first use. Bounded to
+   * IMPULSE_CACHE_MAX entries with LRU eviction — see the field comment on
+   * `impulseCache` for why an unbounded cache is not acceptable here.
+   */
   private getImpulseResponse(quantisedDecay: number): AudioBuffer {
     const cached = this.impulseCache.get(quantisedDecay);
-    if (cached) return cached;
+    if (cached) {
+      // Re-inserting moves the key to the end of the Map's iteration order,
+      // which this cache uses as its LRU recency order.
+      this.impulseCache.delete(quantisedDecay);
+      this.impulseCache.set(quantisedDecay, cached);
+      return cached;
+    }
     const built = this.buildImpulseResponse(quantisedDecay, AudioEngine.REVERB_CURVE);
     this.impulseCache.set(quantisedDecay, built);
+    if (this.impulseCache.size > AudioEngine.IMPULSE_CACHE_MAX) {
+      const oldestKey = this.impulseCache.keys().next().value;
+      if (oldestKey !== undefined) this.impulseCache.delete(oldestKey);
+    }
     return built;
   }
 
