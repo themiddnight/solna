@@ -40,11 +40,9 @@ instance and read when nodes are later created.
 ## Signal graph (from `setupMasterChain()`)
 
 ```
-synth/chord/bass voice: osc1 + subOsc (+ noise) -> BiquadFilter (VCF) -> GainNode (VCA)
-                                                      -> tremoloGain (unity; a 'volume' LFO
-                                                         drives THIS gain, never the VCA param)
-                                 |
-                                 v
+synth/chord/bass voice: osc1 + subOsc (+ noise) -> BiquadFilter (VCF) -> GainNode (VCA) -> tremoloGain (unity)
+                                                                                           |
+                                                                                           v
                         per-source GainNode bus   (lazy, one per source string)
                           |      |       |     \
                         dry   delay   reverb  distortion

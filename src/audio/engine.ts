@@ -653,8 +653,6 @@ class AudioEngine {
     this.releaseVoice(voice, releaseTime, now);
   }
 
-  // Silences one voice: cancels its envelopes, ramps amp/filter down, and
-  // tears the nodes down after the release tail.
   // Shared node-teardown sequence for a voice that is being fully torn down —
   // used both by releaseVoice's delayed timeout (nodes stopped with no time
   // argument, since the release tail has already finished by the time it
@@ -695,6 +693,8 @@ class AudioEngine {
     }
   }
 
+  // Silences one voice: cancels its envelopes, ramps amp/filter down, and
+  // tears the nodes down after the release tail.
   private releaseVoice(voice: SynthVoice, releaseTime: number, now: number): void {
     if (!this.ctx) return;
     const mainGain = voice.gains[0];
@@ -957,11 +957,22 @@ class AudioEngine {
     return out;
   }
 
-  // Points a voice's (already-created) LFO gain at the given target,
-  // disconnecting it from wherever it was previously wired.
-  private connectLfoTo(voice: SynthVoice, target: SynthParams['lfoTarget']): void {
+  // Points a voice's (already-created) LFO gain at the given target and
+  // scale, disconnecting it from wherever it was previously wired. The scale
+  // is set with setValueAtTime, landing INSTANTLY rather than gliding: at the
+  // moment of the switch `lfoGain.gain` still holds the OLD target's
+  // magnitude (e.g. 750 for cutoff, 25 for pitch), and a setTargetAtTime
+  // glide into the new scale would modulate the NEW target at that stale
+  // magnitude for ~5 time constants — a gain blast (and the very phase
+  // inversion this task removes) on a switch into 'volume', and an audible
+  // blip on a switch into 'cutoff'/'pitch'.
+  private connectLfoTo(voice: SynthVoice, target: SynthParams['lfoTarget'], scale: number, now: number): void {
     if (!voice.lfoGain) return;
     try { voice.lfoGain.disconnect(); } catch { /* ignore */ }
+    try {
+      voice.lfoGain.gain.cancelScheduledValues(now);
+      voice.lfoGain.gain.setValueAtTime(scale, now);
+    } catch { /* ignore */ }
     if (target === 'cutoff') {
       voice.lfoGain.connect(voice.filter.frequency);
     } else if (target === 'pitch') {
@@ -1019,12 +1030,17 @@ class AudioEngine {
       voice.lfoTarget = undefined; // force the connect below
     }
 
+    const depth = AudioEngine.lfoDepthFor(params);
     if (voice.lfoTarget !== params.lfoTarget) {
-      this.connectLfoTo(voice, params.lfoTarget);
+      // Target switch: land at the new scale instantly (see connectLfoTo).
+      this.connectLfoTo(voice, params.lfoTarget, depth, now);
+    } else {
+      // Same target, only the depth knob moved: a glide is musically right
+      // here, and an instant jump would click.
+      voice.lfoGain.gain.setTargetAtTime(depth, now, tc);
     }
 
     voice.lfo.frequency.setTargetAtTime(params.lfoRate, now, tc);
-    voice.lfoGain.gain.setTargetAtTime(AudioEngine.lfoDepthFor(params), now, tc);
   }
 
   // Live-update every sounding voice so knob tweaks are audible immediately

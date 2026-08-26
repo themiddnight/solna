@@ -1266,7 +1266,7 @@ describe('re-planning a pending release', () => {
     // "stopped" note ring under the new one — bass monophony leaks.
     const ramp = first.gains[0].gain.ramps.at(-1);
     expect(ramp).toBeTruthy();
-    if (ramp) expect(ramp.t).toBeCloseTo(t0 + 1 + 0.05, 9);
+    expect(ramp!.t).toBeCloseTo(t0 + 1 + 0.05, 9);
   });
 
   test('a note released with the patch release re-arms with the NEW patch release', () => {
@@ -1340,11 +1340,54 @@ describe('LFO routing', () => {
     const { engine } = freshEngine();
     engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth');
     const voice = (engine as any).activeVoices.get('synth:C4');
+    expect(voice.lfoGain.gain.value).toBeCloseTo(0.5 * 1500, 9);
 
     engine.updateSynthParams({ ...SYNTH, lfoDepth: 0.5, lfoTarget: 'volume' }, 'synth');
 
     expect(voice.lfoTarget).toBe('volume');
     expect(voice.lfoGain.connectedTo).toEqual([voice.tremoloGain.gain]);
+    // Pinned at the moment of the switch, not after a settle: a
+    // setTargetAtTime glide here would modulate tremoloGain.gain by the
+    // STALE cutoff scale (750) for ~5 time constants — a gain blast and
+    // exactly the phase inversion this task exists to remove.
+    expect(voice.lfoGain.gain.value).toBeCloseTo(0.5 * 0.2, 9);
+  });
+
+  test('switching a live voice from pitch to volume also lands at the tremolo scale instantly', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'pitch' }, 0.8, undefined, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    expect(voice.lfoGain.gain.value).toBeCloseTo(0.5 * 50, 9);
+
+    engine.updateSynthParams({ ...SYNTH, lfoDepth: 0.5, lfoTarget: 'volume' }, 'synth');
+
+    expect(voice.lfoTarget).toBe('volume');
+    expect(voice.lfoGain.connectedTo).toEqual([voice.tremoloGain.gain]);
+    expect(voice.lfoGain.gain.value).toBeCloseTo(0.5 * 0.2, 9);
+  });
+
+  test('a depth change with the target UNCHANGED still glides, not jumps', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+
+    engine.updateSynthParams({ ...SYNTH, lfoDepth: 0.2, lfoTarget: 'cutoff' }, 'synth');
+
+    // Same target: an instant jump here would click, so this path must keep
+    // using setTargetAtTime rather than connectLfoTo's instant setValueAtTime.
+    expect(voice.lfoGain.gain.targets.at(-1)!.v).toBeCloseTo(0.2 * 1500, 9);
+  });
+
+  test('depth above 1 still clamps the tremolo scale so the trough stays positive', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 3, lfoTarget: 'volume' }, 0.8, undefined, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+
+    // Math.min(1, params.lfoDepth) clamps the MULTIPLIER to 1 before scaling
+    // by 0.2, so a depth of 3 (or any out-of-range value > 1) still yields
+    // exactly 0.2 — never more. That keeps the tremolo gain's trough at
+    // 1 - 0.2 = 0.8, always positive, however large the depth gets.
+    expect(voice.lfoGain.gain.value).toBe(0.2);
   });
 
   test('an LFO added to a live voice that started without one is wired, not dropped', () => {
