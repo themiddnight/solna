@@ -63,6 +63,7 @@ export interface PlayerTransportProps {
    * component inside another `.join` (e.g. Header's tab+transport groups).
    */
   unwrapped?: boolean;
+  showLabel?: boolean;
 }
 
 export const PlayerTransport: React.FC<PlayerTransportProps> = ({
@@ -76,6 +77,7 @@ export const PlayerTransport: React.FC<PlayerTransportProps> = ({
   compact = false,
   id,
   unwrapped = false,
+  showLabel = false,
 }) => {
   const buttons = resolveTransportButtons(state);
   const MainIcon = buttons.main.icon === 'play' ? Play : Square;
@@ -91,12 +93,14 @@ export const PlayerTransport: React.FC<PlayerTransportProps> = ({
         className={`btn ${sizeClass} join-item gap-1.5 font-bold text-xs ${buttons.main.className}`}
       >
         <MainIcon className="w-3.5 h-3.5 fill-current shrink-0" />
-        <span className={compact ? 'hidden lg:inline' : 'hidden sm:inline'}>
-          {buttons.main.label}
-        </span>
+        {showLabel && (
+          <span className={compact ? 'hidden lg:inline' : 'hidden sm:inline'}>
+            {buttons.main.label}
+          </span>
+        )}
       </button>
 
-      {showHardStop && (
+      {showLabel && showHardStop && (
         <button
           id={id ? `${id}-hard` : undefined}
           type="button"

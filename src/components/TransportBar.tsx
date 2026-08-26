@@ -73,6 +73,7 @@ export const TransportBar: React.FC = React.memo(() => {
           onPlay={playAll}
           onSoftStop={softStopAll}
           onHardStop={hardStopAll}
+          showLabel
         />
 
         {/* Tempo BPM Control */}

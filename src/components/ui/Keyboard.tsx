@@ -417,7 +417,7 @@ export function ChordKeyboard({
   const homeMelody = rows.melodyRow.slice(0, 4);
 
   return (
-    <div className="flex items-center justify-around gap-4">
+    <div className="flex items-center justify-center gap-14">
       <div className="flex flex-col items-center gap-1">
         <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold">
           Chords

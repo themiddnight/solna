@@ -1321,20 +1321,49 @@ export const SynthView = () => {
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-base-content">
-              Interactive Keyboard
+              Keyboard
             </span>
             <span
-              className={`badge badge-sm badge-outline text-[10px] font-semibold ${
-                controlTarget === "synth"
-                  ? "badge-base-content/60"
-                  : controlTarget === "chord"
-                    ? "[--badge-color:var(--color-module-chord)] [--badge-fg:var(--color-module-chord-content)]"
-                    : "[--badge-color:var(--color-module-bass)] [--badge-fg:var(--color-module-bass-content)]"
-              }`}
-              title="The keyboard always plays the Main Synth; this tint only shows which panel Target is being edited"
+              className="badge badge-sm badge-outline text-[10px] font-semibold badge-base-content/60"
+              title="Active key and scale"
             >
-              Keyboard plays: Main Synth
+              {`${scaleRoot} ${scaleType}`}
             </span>
+          </div>
+
+          {/* Keyboard Octave Pagination — independent from synth pitch octave */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-base-content/50 mr-1">
+              KB OCT
+            </span>
+
+            {/* Keyboard Octave Controls */}
+            <button
+              id="btn-keyboard-octave-down"
+              onClick={() => setKeyboardOctave((o) => Math.max(-2, o - 1))}
+              disabled={keyboardOctave <= -2}
+              className="btn btn-xs btn-square btn-ghost w-7 h-7 min-h-0 border border-base-300 text-base-content/60 hover:text-base-content hover:border-primary hover:bg-primary/20 disabled:opacity-30"
+              title="Keyboard Octave Down"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="badge badge-primary badge-outline min-w-13 h-7 px-2">
+              <span className="text-xs font-mono font-bold">
+                {keyboardOctave >= 0 ? `+${keyboardOctave}` : keyboardOctave}{" "}
+                Oct
+              </span>
+            </div>
+            <button
+              id="btn-keyboard-octave-up"
+              onClick={() => setKeyboardOctave((o) => Math.min(2, o + 1))}
+              disabled={keyboardOctave >= 2}
+              className="btn btn-xs btn-square btn-ghost w-7 h-7 min-h-0 border border-base-300 text-base-content/60 hover:text-base-content hover:border-primary hover:bg-primary/20 disabled:opacity-30"
+              title="Keyboard Octave Up"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {/* Keyboard Input Mode Toggle */}
             <div
               className="join"
               role="radiogroup"
@@ -1368,47 +1397,6 @@ export const SynthView = () => {
                 </button>
               ))}
             </div>
-            <span
-              className="badge badge-sm badge-outline text-[10px] font-semibold badge-base-content/60"
-              title="Active key and scale"
-            >
-              {`${scaleRoot} ${scaleType}`}
-            </span>
-          </div>
-
-          {/* Keyboard Octave Pagination — independent from synth pitch octave */}
-          <div className="flex items-center gap-1.5">
-            <div className="text-[11px] font-mono text-base-content/50 mr-2">
-              {Array.from(activeNotes).join(", ") || "No note"}
-            </div>
-
-            <span className="text-[11px] text-base-content/50 mr-1">
-              KB OCT
-            </span>
-            <button
-              id="btn-keyboard-octave-down"
-              onClick={() => setKeyboardOctave((o) => Math.max(-2, o - 1))}
-              disabled={keyboardOctave <= -2}
-              className="btn btn-xs btn-square btn-ghost w-7 h-7 min-h-0 border border-base-300 text-base-content/60 hover:text-base-content hover:border-primary hover:bg-primary/20 disabled:opacity-30"
-              title="Keyboard Octave Down"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <div className="badge badge-primary badge-outline min-w-13 h-7 px-2">
-              <span className="text-xs font-mono font-bold">
-                {keyboardOctave >= 0 ? `+${keyboardOctave}` : keyboardOctave}{" "}
-                Oct
-              </span>
-            </div>
-            <button
-              id="btn-keyboard-octave-up"
-              onClick={() => setKeyboardOctave((o) => Math.min(2, o + 1))}
-              disabled={keyboardOctave >= 2}
-              className="btn btn-xs btn-square btn-ghost w-7 h-7 min-h-0 border border-base-300 text-base-content/60 hover:text-base-content hover:border-primary hover:bg-primary/20 disabled:opacity-30"
-              title="Keyboard Octave Up"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
           </div>
         </div>
 

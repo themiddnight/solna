@@ -23,7 +23,7 @@ interface NavTab {
 
 /** The two automation players. Each gets its own play / soft-stop button. */
 export const AUTOMATION_TABS: Array<NavTab & { module: PlayerModule }> = [
-  { view: 'sequencer', label: 'Step Matrix', icon: Grid, module: 'sequencer' },
+  { view: 'sequencer', label: 'Beat Step', icon: Grid, module: 'sequencer' },
   { view: 'chords', label: 'Chords', icon: Music, module: 'chords' },
 ];
 
@@ -180,6 +180,8 @@ export const Header: React.FC = React.memo(() => {
           <TabButton tab={SOLO_TABS[0]} activeTab={activeTab} onSelect={setActiveTab} />
         </div>
 
+        <div className='divider divider-horizontal m-0' />
+
         {/* The automation players: view button and transport side by side, all
             of them direct join-item children of one join. A <button> must
             never nest inside another <button>. */}
@@ -203,6 +205,8 @@ export const Header: React.FC = React.memo(() => {
             );
           })}
         </div>
+
+        <div className='divider divider-horizontal m-0' />
 
         <div className={NAV_GROUP_CLASS}>
           <TabButton tab={SOLO_TABS[1]} activeTab={activeTab} onSelect={setActiveTab} />
