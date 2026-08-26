@@ -4,6 +4,7 @@ import { presetById } from '../audio/synthPresets';
 import { useAppStore } from './store';
 import { INITIAL_SYNTH_PARAMS } from './initialState';
 import { progressionById, resolveProgression } from '../audio/data/chordProgressions';
+import { drumPatternById } from '../audio/data/vibeDrumPatterns';
 
 /**
  * Resolve one of a vibe's three synth voices from a library preset id.
@@ -139,15 +140,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
     drumFilterCutoff: 6200,
     drumFilterResonance: 1.0,
     drumFilterType: 'lowpass',
-    drumPattern: {
-      kick:  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-      snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      hihat: [1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1],
-      openhat: [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0],
-      clap:  [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      tom:   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-      crash: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    },
+    drumPatternId: 'lofi-half-time-brush',
+    drumPattern: drumPatternById('lofi-half-time-brush')!,
 
     // Chords: Dream Keys, relaxed swung feel
     chords: resolveProgression(progressionById('lofi-morning-turnaround')!, 'C', 'Major', 4),
@@ -214,15 +208,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
     drumFilterCutoff: 12000,
     drumFilterResonance: 1.0,
     drumFilterType: 'lowpass',
-    drumPattern: {
-      kick:  [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
-      snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      hihat: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-      openhat: [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0],
-      clap:  [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      tom:   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],
-      crash: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    },
+    drumPatternId: 'synthwave-four-on-floor',
+    drumPattern: drumPatternById('synthwave-four-on-floor')!,
 
     // Chords: Neon Polysynth, grid-tight 8th pads
     chords: resolveProgression(progressionById('cine-epic-ostinato')!, 'A', 'Natural Minor', 4),
@@ -292,15 +279,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
     drumFilterCutoff: 14000,
     drumFilterResonance: 1.0,
     drumFilterType: 'lowpass',
-    drumPattern: {
-      kick:  [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
-      snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      hihat: [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0],
-      openhat: [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0],
-      clap:  [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      tom:   [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0],
-      crash: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    },
+    drumPatternId: 'edm-offbeat-pump',
+    drumPattern: drumPatternById('edm-offbeat-pump')!,
 
     // Chords: Upbeat EDM stabs, laser-tight
     chords: resolveProgression(progressionById('edm-cyber-vamp')!, 'F', 'Natural Minor', 4),
@@ -367,15 +347,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
     drumFilterCutoff: 4800,
     drumFilterResonance: 1.0,
     drumFilterType: 'lowpass',
-    drumPattern: {
-      kick:  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      snare: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      hihat: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      openhat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-      clap:  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      tom:   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      crash: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    },
+    drumPatternId: 'ambient-sparse-drift',
+    drumPattern: drumPatternById('ambient-sparse-drift')!,
 
     // Chords: Celestial Shimmer, very loose and floating
     chords: resolveProgression(progressionById('ambient-lydian-halo')!, 'D', 'Lydian', 4),
@@ -441,15 +414,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
     drumFilterCutoff: 7800,
     drumFilterResonance: 1.0,
     drumFilterType: 'lowpass',
-    drumPattern: {
-      kick:  [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-      snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      hihat: [1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0],
-      openhat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
-      clap:  [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      tom:   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-      crash: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    },
+    drumPatternId: 'boombap-swung-break',
+    drumPattern: drumPatternById('boombap-swung-break')!,
 
     // Chords: Mellow E-Piano with syncopated push
     chords: resolveProgression(progressionById('boombap-soul-piano')!, 'E', 'Dorian', 4),
@@ -518,15 +484,8 @@ export const INSTANT_VIBES: InstantVibe[] = [
     drumFilterCutoff: 6500,
     drumFilterResonance: 1.0,
     drumFilterType: 'lowpass',
-    drumPattern: {
-      kick:  [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-      snare: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      hihat: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0],
-      openhat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
-      clap:  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      tom:   [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      crash: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    },
+    drumPatternId: 'zen-bamboo-pulse',
+    drumPattern: drumPatternById('zen-bamboo-pulse')!,
 
     // Chords: Glocken Bell & peaceful sustained pads
     // zen-bamboo-vamp resolved in G Hirajoshi: i - IV - i - V, two bars each.

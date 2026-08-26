@@ -176,6 +176,8 @@ export interface InstantVibe {
   // Beat & Drum Kit
   soundKit: string;
   drumPattern: Record<string, number[]>;
+  /** Library reference into VIBE_DRUM_PATTERNS. `drumPattern` is its resolved output. */
+  drumPatternId: string;
   drumFilterCutoff?: number;
   drumFilterResonance?: number;
   drumFilterType?: FilterType;

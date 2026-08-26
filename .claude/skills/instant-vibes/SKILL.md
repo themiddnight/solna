@@ -1,6 +1,6 @@
 ---
 name: instant-vibes
-description: Add, remove, retune or debug an Instant Vibe in solna — the genre chips in the top bar (Lo-Fi Chill, Synthwave 80s, Cyber EDM, Deep Ambient, Boom Bap, Zen Garden) and the dice that rerolls them. Carries a survey-first workflow, the six library ids a vibe resolves, the computed dice-pool rule, and the invariant tests that pin exact counts and id sets — two of which fail silently. Also covers changing a vibe's chords, synth voices, drum decoration, key pool or BPM range, and failures in instantVibes / vibeVariation / instantVibesProgressions tests.
+description: Add, remove, retune or debug an Instant Vibe in solna — the genre chips in the top bar (Lo-Fi Chill, Synthwave 80s, Cyber EDM, Deep Ambient, Boom Bap, Zen Garden) and the dice that rerolls them. Carries a survey-first workflow, the seven library ids a vibe resolves, the computed dice-pool rule, and the invariant tests that pin exact counts and id sets — three of which fail silently. Also covers changing a vibe's chords, synth voices, drum decoration, key pool or BPM range, and failures in instantVibes / vibeVariation / instantVibesProgressions tests.
 ---
 
 # Instant Vibes (solna)
@@ -44,11 +44,11 @@ something that does not exist yet.
 
 ## What a vibe is now
 
-Chords and synth voices are **references into shared libraries**, not authored data.
-Drums and effects are still authored inline — those library migrations are planned
-but unbuilt (`docs/superpowers/specs/2026-08-26-vibe-as-references-design.md`,
-phases 3-4). So a vibe today is: identity fields, six library ids, a few scalars,
-one inline drum pattern, one inline effects block, one `variation` rule.
+Chords, synth voices and drums are **references into shared libraries**, not authored
+data. Effects are still authored inline — that migration is planned but unbuilt
+(`docs/superpowers/specs/2026-08-26-vibe-as-references-design.md`, phase 4). So a vibe
+today is: identity fields, seven library ids, a few scalars, one inline effects block,
+one `variation` rule.
 
 | field | resolves through | hard constraint |
 |---|---|---|
@@ -58,16 +58,22 @@ one inline drum pattern, one inline effects block, one `variation` rule.
 | `bassPresetId` | `presetById` | **`category === 'Bass'`** |
 | `chordRhythmId` | `RHYTHM_PATTERNS` | — |
 | `bassPatternId` | `BASS_PATTERNS` | — |
+| `drumPatternId` | `drumPatternById` → `VIBE_DRUM_PATTERNS` | rows must be the **7 keys**, 16 steps, 0/1 |
 
 Bass is a hard category constraint because register is physics, not taste. Lead and
 comp are judged by ear against the genre — there are deliberately **no genre tags on
 presets**, and adding one is a rejected design (see the spec's settled decision 3).
 
-`chords` is a *computed* field, never typed out:
+`chords` and `drumPattern` are *computed* fields, never typed out:
 
 ```ts
 chords: resolveProgression(progressionById('lofi-morning-turnaround')!, 'C', 'Major', 4),
+drumPattern: drumPatternById('lofi-half-time-brush')!,
 ```
+
+Each sits beside the id it resolves, and the id is written twice on purpose — a typo in
+the second makes `!` hand back `undefined` and `Object.entries(vibe.drumPattern)` throws
+at apply time, so check the pair matches.
 
 The three arguments must equal the vibe's own `scaleRoot`, `scaleType` and
 `chordOctave`. They are written as plain literals rather than sibling references
@@ -128,9 +134,12 @@ member, so that layer silently stops rerolling. Today's authored minimum is 2
 (`DecorationLayer`) — `kick`, `snare` and `clap` are the genre skeleton and are not
 assignable to the type, so they can never be rerolled. Four rules bite:
 
-1. **All seven rows must be authored** on `drumPattern`, each exactly 16 numeric
-   0/1 steps. Re-clicking a chip restores the authored pattern only because a
-   reroll merges over a complete row set.
+1. **All seven rows must exist** in the `VIBE_DRUM_PATTERNS` entry the vibe points at,
+   each exactly 16 numeric 0/1 steps. Re-clicking a chip restores the authored pattern
+   only because a reroll merges over a complete row set. `VIBE_DRUM_PATTERNS` lives in
+   `src/audio/data/vibeDrumPatterns.ts` and is deliberately **separate from
+   `GENRE_PRESETS`** — measured, no vibe's pattern matches its own sequencer genre best
+   (`synthwave-80s` is closer to Trap than to Synthwave), so the two never merged.
 2. `densities` keys must equal `layers` **exactly** — no extras, no omissions.
 3. Every `openhat` and `tom` candidate that shares a step with this vibe's `kick`
    is dropped by the collision filter, and at least one must survive. Cross-check
@@ -157,8 +166,9 @@ while being covered by none of them:
 |---|---|
 | `src/store/instantVibesProgressions.test.ts:6` | that `progressionId` resolves, and that `chords` really is its resolved output |
 | `src/store/instantVibesChordsFixture.ts` | the independent chord snapshot behind that proof |
+| `src/store/instantVibesDrumsFixture.ts` | the independent drum snapshot; its test's `VIBE_IDS` is hard-coded the same way |
 
-Add your vibe's id to `VIBE_IDS` and its chords to the fixture. A green gate is not
+Add your vibe's id to `VIBE_IDS`, its chords to the chord fixture, and its drum rows to the drum fixture. A green gate is not
 evidence you did — verified by adding a seventh vibe without touching either: 568
 tests, 0 failures, and the new vibe unproven.
 

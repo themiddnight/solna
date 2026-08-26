@@ -12,6 +12,7 @@ import { CHORD_PROGRESSIONS, VIBE_GENRE_SCALES } from '../../../../src/audio/dat
 import { ALL_FACTORY_PRESETS } from '../../../../src/audio/synthPresets';
 import { RHYTHM_PATTERNS } from '../../../../src/audio/rhythmPatterns';
 import { BASS_PATTERNS } from '../../../../src/audio/bassPatterns';
+import { VIBE_DRUM_PATTERNS } from '../../../../src/audio/data/vibeDrumPatterns';
 import { INSTANT_VIBES } from '../../../../src/store/instantVibes';
 import { SCALES } from '../../../../src/utils/musicTheory';
 import type { VibeGenre } from '../../../../src/types';
@@ -87,3 +88,5 @@ console.log('  (* = same genre as the one you asked about)');
 
 console.log(`\nCOMP RHYTHMS  ${JSON.stringify(RHYTHM_PATTERNS.map((r) => r.id))}`);
 console.log(`BASS PATTERNS ${JSON.stringify(BASS_PATTERNS.map((b) => b.id))}`);
+console.log(`DRUM PATTERNS ${JSON.stringify(Object.keys(VIBE_DRUM_PATTERNS))}`);
+console.log('  (a vibe\'s drumPatternId resolves here — separate from GENRE_PRESETS, which is the sequencer\'s)');
