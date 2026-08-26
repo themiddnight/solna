@@ -4,6 +4,8 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChordItem } from "../../types";
 import { ROOTS, formatChordQuality } from "../../utils/musicTheory";
+import { BEATS_PER_BAR } from "../../utils/playhead";
+import { BeatDots } from "../ui/BeatDots";
 
 export interface SortableChordCardProps {
   chord: ChordItem;
@@ -11,6 +13,8 @@ export interface SortableChordCardProps {
   totalChords: number;
   startBar: number;
   isActive: boolean;
+  /** Beat sounding within this chord, 0-based; null when it is not playing. */
+  activeBeat?: number | null;
   updateChord: (id: string, updates: Partial<ChordItem>) => void;
   removeChord: (id: string) => void;
   handleMoveChord: (index: number, direction: -1 | 1) => void;
@@ -30,6 +34,7 @@ export function SortableChordCard({
   totalChords,
   startBar,
   isActive,
+  activeBeat = null,
   updateChord,
   removeChord,
   handleMoveChord,
@@ -131,6 +136,13 @@ export function SortableChordCard({
         <span className="text-[10px] opacity-70 font-mono mt-1">
           {chord.notes.join(" • ")}
         </span>
+        <BeatDots
+          size="sm"
+          tone={isActive ? "contrast" : "chord"}
+          totalBeats={Math.max(1, chord.bars || 1) * BEATS_PER_BAR}
+          activeBeat={activeBeat}
+          className="mt-2"
+        />
       </button>
 
       {/* Edit Controls */}

@@ -10,6 +10,7 @@ import { audioEngine } from './audio/engine';
 import { useAppStore } from './store/store';
 import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
 import { useTabRouting } from './routing/useTabRouting';
+import { usePlayheadSync } from './components/usePlayheadSync';
 
 export function App() {
   // One-way bridge: store state -> audioEngine singleton (replaces the
@@ -18,6 +19,9 @@ export function App() {
 
   // Two-way sync: URL ?tab= <-> uiSlice.activeTab (called exactly once).
   useTabRouting();
+
+  // Shared clock -> store playhead, so every tab can show the beat position.
+  usePlayheadSync();
 
   // UI slice
   const activeTab = useAppStore((s) => s.activeTab);

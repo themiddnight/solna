@@ -23,6 +23,15 @@ export interface TransportSlice {
   // Transient (not persisted): mirrors the live transport state.
   sequencerPlayer: PlayerState;
   chordsPlayer: PlayerState;
+  // Transient playhead (not persisted): `playheadBeat` is the absolute beat
+  // index since the shared clock was reset, so every consumer measures from the
+  // same origin; the chord fields say which chord the Chords player is sounding
+  // and the beat it began on.
+  playheadBeat: number | null;
+  playheadChordIndex: number | null;
+  playheadChordStartBeat: number;
+  setPlayheadBeat: (beat: number | null) => void;
+  setPlayheadChord: (chordIndex: number | null, startBeat?: number) => void;
   setBpm: (bpm: number) => void;
   setMasterVolume: (volume: number) => void;
   toggleMetronome: () => void;

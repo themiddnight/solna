@@ -70,6 +70,7 @@ import { ChannelStrip } from "./ui/ChannelStrip";
 import { QuickSavePopover } from "./ui/QuickSavePopover";
 import { Slider } from "./ui/Slider";
 import { SortableChordCard } from "./chord/SortableChordCard";
+import { resolveBeatCounter } from "../utils/playhead";
 
 import { CHORD_PROGRESSIONS } from "../audio/data/chordProgressions";
 
@@ -135,6 +136,9 @@ export const ChordView: React.FC = React.memo(() => {
   // one of the ~34 props it used to receive from App.tsx.
   const chords = useAppStore((s) => s.chords);
   const setChords = useAppStore((s) => s.setChords);
+  const playheadBeat = useAppStore((s) => s.playheadBeat);
+  const playheadChordIndex = useAppStore((s) => s.playheadChordIndex);
+  const playheadChordStartBeat = useAppStore((s) => s.playheadChordStartBeat);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
   const synthParams = useAppStore((s) => s.synthParams);
@@ -980,6 +984,14 @@ export const ChordView: React.FC = React.memo(() => {
                   .reduce((sum, c) => sum + (c.bars || 1), 1);
                 const isActive =
                   playingIndex === idx || activeChordId === chord.id;
+                const activeBeat =
+                  playheadChordIndex === idx
+                    ? resolveBeatCounter({
+                        playheadBeat,
+                        chordStartBeat: playheadChordStartBeat,
+                        bars: chord.bars,
+                      }).activeBeat
+                    : null;
                 return (
                   <SortableChordCard
                     key={chord.id}
@@ -988,6 +1000,7 @@ export const ChordView: React.FC = React.memo(() => {
                     totalChords={chords.length}
                     startBar={startBar}
                     isActive={isActive}
+                    activeBeat={activeBeat}
                     updateChord={updateChord}
                     removeChord={removeChord}
                     handleMoveChord={handleMoveChord}

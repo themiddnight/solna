@@ -39,6 +39,7 @@ import {
 } from "../audio/synthPresets";
 import { SynthPresetLibrary } from "./SynthPresetLibrary";
 import { SimpleSynthPanel } from "./SimpleSynthPanel";
+import { PlayheadReadout } from "./PlayheadReadout";
 import { Knob } from "./ui/Knob";
 import { QuickSavePopover } from "./ui/QuickSavePopover";
 import {
@@ -473,7 +474,7 @@ export const SynthView = () => {
       <div className="card bg-panel border border-base-300 shadow-md relative">
         <div className="card-body p-3 sm:p-4 flex flex-col gap-3">
         {/* Row 1: Target Selector + Mode Switcher + Presets */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="relative flex flex-wrap items-center justify-between gap-2.5">
           {/* Control Destination Selector */}
           <div className="join flex items-center gap-1 bg-base-200 border border-base-300 rounded-box p-1">
             <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold pl-1 pr-1 hidden sm:inline">
@@ -499,6 +500,11 @@ export const SynthView = () => {
               </button>
             ))}
           </div>
+
+          {/* Live chord + beat position */}
+          {/* Taken out of the flex flow at sm+ so a longer chord label cannot
+              shift the target selector or the preset actions around it. */}
+          <PlayheadReadout className="order-last w-full sm:order-none sm:absolute sm:left-1/2 sm:top-1/2 sm:w-auto sm:-translate-x-1/2 sm:-translate-y-1/2" />
 
           {/* Actions: Mode Switcher + Save Current & Full Presets Library */}
           <div className="flex items-center gap-1.5 flex-wrap">

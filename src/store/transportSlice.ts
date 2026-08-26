@@ -33,8 +33,9 @@ export function isHardStopEnabled(a: PlayerState, b: PlayerState): boolean {
 }
 
 /**
- * Transport slice. `sequencerPlayer` / `chordsPlayer` are transient (excluded
- * from `partializeAppState`); everything else persists.
+ * Transport slice. `sequencerPlayer` / `chordsPlayer` and the `playhead*`
+ * fields are transient (excluded from `partializeAppState`); everything else
+ * persists.
  *
  * Engine side-effects (init/resetClock on the fully-stopped -> playing
  * transition) are handled by engineSync's transport subscription; the actual
@@ -76,6 +77,13 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
     metronomeActive: false,
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
+    playheadBeat: null,
+    playheadChordIndex: null,
+    playheadChordStartBeat: 0,
+
+    setPlayheadBeat: (playheadBeat) => set({ playheadBeat }),
+    setPlayheadChord: (playheadChordIndex, startBeat = 0) =>
+      set({ playheadChordIndex, playheadChordStartBeat: playheadChordIndex === null ? 0 : startBeat }),
 
     setBpm: (bpm) => set({ bpm }),
     setMasterVolume: (masterVolume) => set({ masterVolume }),

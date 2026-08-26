@@ -318,6 +318,7 @@ export function useChordPlayback() {
             resetChordArming(armingRef.current);
             setPlayingIndex(null);
             setActiveChordId(null);
+            useAppStore.getState().setPlayheadChord(null);
           }
           if (!shouldHardStopNow(prev, next, softStopPendingRef.current)) {
             // Only 'stopping' means a soft stop is still pending its bar-line
@@ -348,10 +349,11 @@ export function useChordPlayback() {
       resetChordArming(armingRef.current);
       setPlayingIndex(null);
       setActiveChordId(null);
+      useAppStore.getState().setPlayheadChord(null);
       return;
     }
 
-    return subscribePlaybackClock((step, _beat, time) => {
+    return subscribePlaybackClock((step, beat, time) => {
       const arming = armingRef.current;
       // Live store read, not a ref: see chordStepAction's doc comment.
       const action = chordStepAction(
@@ -378,6 +380,9 @@ export function useChordPlayback() {
       playFnsRef.current.playBassWithPattern(chord, time, bassPattern);
       setPlayingIndex(index);
       setActiveChordId(chord.id);
+      // The beat the chord was triggered on is what every beat counter measures
+      // its progress from — a multi-bar chord spans several bar lines.
+      useAppStore.getState().setPlayheadChord(index, beat);
       arming.nextBarStep = step + (chord.bars || 1) * STEPS_PER_BAR;
       arming.chordIndex++;
     });
