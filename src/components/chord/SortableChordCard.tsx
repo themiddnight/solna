@@ -55,7 +55,7 @@ export function SortableChordCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`card bg-base-100 border border-base-300 rounded-box p-4 flex flex-col justify-between space-y-3 transition-colors ${
+      className={`card bg-panel border border-base-300 rounded-box p-4 flex flex-col justify-between space-y-3 transition-colors ${
         isActive
           ? "border-module-chord ring-2 ring-module-chord/50 bg-base-200"
           : "border-base-300 hover:border-base-content/30"
@@ -117,7 +117,7 @@ export function SortableChordCard({
         onTouchEnd={(e) => handleCardPreviewMouseUp(e, chord)}
         className={`w-full py-4 rounded-field flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
           isActive
-            ? "bg-module-chord from-module-chord to-secondary text-module-chord-content shadow-lg scale-95"
+            ? "bg-module-chord text-module-chord-content shadow-lg scale-95"
             : "bg-base-200 hover:bg-base-300 text-base-content"
         }`}
         title="Hold to Preview Chord"

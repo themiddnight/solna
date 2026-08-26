@@ -12,47 +12,61 @@
 
 Solna is built using Tailwind CSS and DaisyUI, featuring two custom-crafted warm-tinted themes designed to reduce eye strain during extended creative sessions while maintaining high contrast.
 
-### 🔥 Solna-Dark (`solna-dark`) — Ember & Solar Flare
-The hour before sunrise. A warm near-black ground (hue ~55° in OKLCH, not the cold blue-blacks or
-the violet-tinted charcoal this theme used to carry — that band belongs to Murva's dusk) with the
-first full-strength gold breaking over it.
+### 🌌 Solna-Dark (`solna-dark`) — Plum Shadow & Rising Gold
+The hour before sunrise, with some of the night still in the shadows. A warm
+plum-brown ground rather than the cold blue-black or the violet-tinted charcoal
+this theme used to carry, and the first gold breaking over it. The violet accent
+is deliberate: it is the one place solna and murva touch, so the two read as one
+family across opposite ends of the same day.
 
-* **Canvas & App Background (`base-200`):** `#110B07` (Pre-Dawn Ember)
-* **Panels & Cards (`base-100`):** `#1B130C` (Warm Ember Panel)
-* **Borders & Insets (`base-300`):** `#2C1F14` (Burnt Umber Inset)
-* **Primary Accent (`primary`):** `#FFB000` (Solar Gold — Playhead, Active Steps, Key Controls)
-* **Secondary Accent (`secondary`):** `#FF6B45` (Horizon Orange — Chords & Harmony highlights)
-* **Visual Accent (`accent`):** `#35C9BA` (Retreating Teal — Synth & Modulation; the cold counterweight that keeps the theme from reading as one continuous orange wash)
-* **Base Content (Text):** `#FBF0E2` (Warm Cream Off-White)
-* **Neutral (`neutral`):** `#231910` / content `#FBF0E2` (chrome that must not read as an accent — inactive audition pills, muted chips)
-* **Success (`success`):** `#63CE8A` — "saved", "envelope OK", live-signal indicator
-* **Warning (`warning`):** `#FFD24A` — VU meter upper-mid segments
-* **Error (`error`):** `#F5533A` — destructive actions, VU clip segments, mute-on
-* **Info (`info`):** `#6FA2D8` — neutral informational hints
+* **Canvas & App Background (`base-200`):** `#17100F` (Plum Shadow)
+* **Panels & Cards (`base-100`):** `#221921` (Warm Plum Panel) — rendered at 80% via `bg-panel`, see below
+* **Borders & Insets (`base-300`):** `#33232D` (Plum Inset)
+* **Primary Accent (`primary`):** `#FFB347` (Rising Gold — Playhead, Active Steps, Key Controls)
+* **Secondary Accent (`secondary`):** `#F2657E` (Dawn Rose — Chords & Harmony highlights)
+* **Visual Accent (`accent`):** `#8C7BE0` (Handshake Violet — Synth & Modulation; murva's own hue, and the cool counterweight that keeps the theme from reading as one continuous warm wash)
+* **Base Content (Text):** `#F6E9E4` (Warm Cream Off-White)
+* **Neutral (`neutral`):** `#2A1F27` / content `#F6E9E4` (chrome that must not read as an accent — inactive audition pills, muted chips)
+* **Success (`success`):** `#5FD08B` — "saved", "envelope OK", live-signal indicator
+* **Warning (`warning`):** `#F0C244` — VU meter upper-mid segments
+* **Error (`error`):** `#F0604B` — destructive actions, VU clip segments, mute-on
+* **Info (`info`):** `#7C9EE8` — neutral informational hints
 
 ### 📜 Solna-Light (`solna-light`) — First Light on Paper
-Designed for morning and daytime sketching, simulating warm parchment paper without clinical stark
-white glare.
+Designed for morning and daytime sketching, simulating warm parchment paper
+without clinical stark white glare.
 
-* **Canvas & App Background (`base-200`):** `#FDF4E4` (First-Light Paper)
-* **Panels & Cards (`base-100`):** `#FFFDF8` (Warm White)
-* **Borders & Insets (`base-300`):** `#F0DFBF` (Soft Sand Border)
-* **Primary Accent (`primary`):** `#B06200` (Deep Solar Gold)
-* **Secondary Accent (`secondary`):** `#D14421` (Ember Terracotta)
-* **Visual Accent (`accent`):** `#0C8F86` (Deep Morning Teal)
-* **Base Content (Text):** `#1F1408` (Roasted Coffee Charcoal)
-* **Neutral (`neutral`):** `#35250F` / content `#FFFFFF`
+* **Canvas & App Background (`base-200`):** `#F9F0EC` (First-Light Paper)
+* **Panels & Cards (`base-100`):** `#FFFCFA` (Warm White)
+* **Borders & Insets (`base-300`):** `#E9D8D6` (Soft Rose-Grey Border)
+* **Primary Accent (`primary`):** `#B65F00` (Deep Rising Gold)
+* **Secondary Accent (`secondary`):** `#C43356` (Rose Madder)
+* **Visual Accent (`accent`):** `#6A4FD1` (Handshake Violet)
+* **Base Content (Text):** `#2A1A20` (Roasted Plum Charcoal)
+* **Neutral (`neutral`):** `#3E2B33` / content `#FFFFFF`
 * **Success (`success`):** `#238652`
-* **Warning (`warning`):** `#9A6100`
+* **Warning (`warning`):** `#A16207`
 * **Error (`error`):** `#C2321F`
-* **Info (`info`):** `#2C6FA8`
+* **Info (`info`):** `#4B46C0`
 
 > **Every `·-content` value is contrast-derived, not chosen by eye.** Each one is whichever of the
 > theme's ink or paper wins WCAG contrast against its own token, and all eight semantic pairs clear
 > 4.5:1 in both themes. The previous palette did not: white on `solna-light`'s `primary` was 3.19:1
 > and on its `accent` 3.74:1. Re-tint a token and its content value has to be re-derived with it.
 
-> **The canvas is a gradient, not a flat fill.** `src/index.css` defines a `bg-canvas` utility — `base-200` under two soft radial glows: a sunrise rising from the bottom edge (`--canvas-dawn`, mixed from `primary`) and a cooler dawn-sky wash in the top-right (`--canvas-sky`, mixed from `secondary`). Both are `color-mix`ed from the live theme tokens, so the gradient re-tints itself on a theme flip rather than needing a second hand-written palette; only the mix percentages differ per theme (warm paper stains at far lower opacity than the espresso base). The app shell in `src/App.tsx` wears `bg-canvas` instead of `bg-base-200` — it is a full-height flex column that would otherwise paint over anything set on `body`. It is **static**: the audio-reactive ambient wash that used to live here was removed deliberately.
+> **The canvas is a sky, not a tint.** `src/index.css` defines a `bg-canvas` utility: an opaque three-stop `linear-gradient(to bottom in oklch, …)` — `--canvas-sky` `#011019` at the top, `--canvas-cross` `#120914` at 54%, `--canvas-ground` `#120600` at the bottom — with the sunrise (`--canvas-dawn`, mixed from `primary` at 15%) as a radial glow layered over it. `App.tsx` wears `bg-canvas` instead of `bg-base-200`; it is a full-height flex column that would otherwise paint over anything set on `body`. It is **static** — the audio-reactive ambient wash that used to live here was removed deliberately.
+>
+> The structure mirrors murva's `--murva-dusk-canvas` (see `murva-brand/tokens.css`): cool top, chromatic crossing, warm ground. **murva crosses through plum, solna crosses through rose** — that is the whole difference between dusk and dawn, and the jump sizes are asymmetric on purpose: dusk puts its crossing near the cool end because violet owns the upper sky once the sun has gone, dawn puts it near the warm end because the light is arriving from below. The crossing also does real work; a straight blue→amber interpolation passes through the grey axis and goes muddy, which is why the rose stop and the `in oklch` hint are both load-bearing. `background-color: var(--color-base-200)` stays as a fallback, because a browser that cannot parse `in oklch` drops the whole gradient.
+>
+> Why it exists at all: Solar's ground, primary and text all sit between hue 57° and 76° — a 19° window — so a flat `base-200` canvas read as gold rather than as dawn. The gradient travels about 190° as rendered.
+
+> **The canvas must stay darker than the panels.** The dark stops are the full-brightness values halved in sRGB. Before that they were not: the sky stop sat at L 0.232 against the 80% panel's 0.225, so at the top of the screen the canvas was *lighter* than the cards on it and at the bottom it was darker — the figure/ground order inverted halfway down and cards read as holes. Halved, every stop sits 0.050–0.071 below its own panel and stays there. Halving in sRGB rather than OKLCH lightness is deliberate: sRGB scaling preserves hue by construction, where halving OKLCH `L` pushed the ground stop out of gamut and rendered it grey. The sunrise gains too — it now lifts the bottom centre 0.128 over the bare ground, where before the ground was already warm and the glow did almost nothing. Chroma now sits near the sRGB ceiling for these lightnesses (~0.030) and cannot be raised without raising lightness with it, which would reintroduce the inversion.
+>
+> **The light stops are not halved.** On paper the panels are already 0.037–0.043 lighter than every point of the gradient, so the order never inverted there, and darkening would only turn the canvas grey.
+
+> **Panels are opaque; the canvas reads around them.** The panel layer uses `bg-panel` (an `@utility` in `src/index.css`), which is plain `base-100`. It was 80% for a while so the sky showed through the UI, and the page read washed — the panels never settled into a surface of their own. The utility stays rather than folding back into `bg-base-100`: it names the role, it is the single place to revisit that ratio, and the module tints composite over it. **Overlays do not use it** — a modal, drawer or popover covers other UI rather than the canvas, so `modal-box`, the preset drawer `aside`, its inner `card-compact` and `QuickSavePopover` keep plain `bg-base-100`, as do nested wells inside a card and the `Header`/`TransportBar` frame chrome.
+>
+> **Module tints are flat, and they need a surface under them.** `tint-chord` and `tint-bass` paint a 10% module colour as a single-colour image layer over `bg-panel`, for the Chord and Bass target cards in `SynthView` and the progression and Bass Module cards in `ChordView`. They are image layers rather than background-colours because those cards already carry `bg-panel`, and two background-colour utilities on one element is a coin toss decided by Tailwind's sort order. The `ChordView` pair used to be `bg-module-chord/10` and `bg-module-bass/10` with no surface beneath — 10% opaque directly on the canvas, so the sky gradient read straight through the cards and they appeared to be gradients themselves. Any tinted card needs `bg-panel` under the tint for the same reason.
 
 > Both themes are declared CSS-first in `src/index.css` via `@plugin "daisyui/theme" { … }`. There is no `tailwind.config.*` file in this repository and none may be added. The active theme is read from `document.documentElement.dataset.theme` and persisted to `localStorage` under `solna_theme`; `index.html` sets the attribute in a blocking `<head>` script so light-theme users never see a dark first paint.
 

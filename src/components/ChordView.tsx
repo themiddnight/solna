@@ -432,7 +432,7 @@ export const ChordView: React.FC = React.memo(() => {
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Scale & Chord Studio Header */}
-      <div className="card bg-base-100 border border-base-300 shadow-md relative">
+      <div className="card bg-panel border border-base-300 shadow-md relative">
         <div className="card-body p-3 sm:p-4 flex-row flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-selector bg-module-chord/20 border border-module-chord/30 text-module-chord">
@@ -532,7 +532,7 @@ export const ChordView: React.FC = React.memo(() => {
       />
 
       {/* Active Progression Blocks & Playable Chord Pads */}
-      <div className="card bg-module-chord/10 border border-module-chord/30 rounded-box p-4 shadow-xl space-y-3">
+      <div className="card bg-panel tint-chord border border-module-chord/30 rounded-box p-4 shadow-xl space-y-3">
         <div className="flex items-center justify-between border-b border-base-300 pb-2 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-base-content uppercase tracking-wider">
@@ -918,7 +918,7 @@ export const ChordView: React.FC = React.memo(() => {
       </div>
 
       {/* Bass Module Panel */}
-      <div className="mt-4 card bg-module-bass/10 border border-module-bass/30 rounded-box p-4">
+      <div className="mt-4 card bg-panel tint-bass border border-module-bass/30 rounded-box p-4">
         <div className="mb-3">
           <h3 className="text-sm font-bold text-module-bass">Bass Module</h3>
           <p className="text-[10px] text-base-content/60">

@@ -1,4 +1,13 @@
-@import "tailwindcss";
+/* Scan src/ and index.html only. Tailwind v4 auto-detects sources from the
+   project root, which pulled class names out of the historical plan documents in
+   docs/superpowers/ and emitted CSS for every one — including the legacy violet
+   hexes and Tailwind palette utilities those plans quote as the *before* state,
+   the exact classes scripts/themeTokenGuard.ts exists to keep out of the app.
+   That was 301 dead rules and 50 KB, a quarter of the stylesheet.
+   index.html is listed explicitly because it is outside src/ and its <body>
+   carries real utilities. */
+@import "tailwindcss" source("./");
+@source "../index.html";
 @plugin "daisyui" {
   themes: solna-dark --default, solna-light;
 }
@@ -7,26 +16,26 @@
   name: "solna-dark";
   default: true;
   color-scheme: dark;
-  --color-base-100: #1B130C;
-  --color-base-200: #110B07;
-  --color-base-300: #2C1F14;
-  --color-base-content: #FBF0E2;
-  --color-primary: #FFB000;
-  --color-primary-content: #110B07;
-  --color-secondary: #FF6B45;
-  --color-secondary-content: #110B07;
-  --color-accent: #35C9BA;
-  --color-accent-content: #110B07;
-  --color-neutral: #231910;
-  --color-neutral-content: #FBF0E2;
-  --color-success: #63CE8A;
-  --color-success-content: #110B07;
-  --color-warning: #FFD24A;
-  --color-warning-content: #110B07;
-  --color-error: #F5533A;
-  --color-error-content: #110B07;
-  --color-info: #6FA2D8;
-  --color-info-content: #110B07;
+  --color-base-100: #221921;
+  --color-base-200: #17100F;
+  --color-base-300: #33232D;
+  --color-base-content: #F6E9E4;
+  --color-primary: #FFB347;
+  --color-primary-content: #17100F;
+  --color-secondary: #F2657E;
+  --color-secondary-content: #17100F;
+  --color-accent: #8C7BE0;
+  --color-accent-content: #17100F;
+  --color-neutral: #2A1F27;
+  --color-neutral-content: #F6E9E4;
+  --color-success: #5FD08B;
+  --color-success-content: #17100F;
+  --color-warning: #F0C244;
+  --color-warning-content: #17100F;
+  --color-error: #F0604B;
+  --color-error-content: #17100F;
+  --color-info: #7C9EE8;
+  --color-info-content: #17100F;
   --radius-selector: 0.5rem;
   --radius-field: 0.5rem;
   --radius-box: 0.75rem;
@@ -37,25 +46,25 @@
   name: "solna-light";
   default: false;
   color-scheme: light;
-  --color-base-100: #FFFDF8;
-  --color-base-200: #FDF4E4;
-  --color-base-300: #F0DFBF;
-  --color-base-content: #1F1408;
-  --color-primary: #B06200;
+  --color-base-100: #FFFCFA;
+  --color-base-200: #F9F0EC;
+  --color-base-300: #E9D8D6;
+  --color-base-content: #2A1A20;
+  --color-primary: #B65F00;
   --color-primary-content: #FFFFFF;
-  --color-secondary: #D14421;
+  --color-secondary: #C43356;
   --color-secondary-content: #FFFFFF;
-  --color-accent: #0C8F86;
-  --color-accent-content: #1F1408;
-  --color-neutral: #35250F;
+  --color-accent: #6A4FD1;
+  --color-accent-content: #FFFFFF;
+  --color-neutral: #3E2B33;
   --color-neutral-content: #FFFFFF;
   --color-success: #238652;
   --color-success-content: #FFFFFF;
-  --color-warning: #9A6100;
+  --color-warning: #A16207;
   --color-warning-content: #FFFFFF;
   --color-error: #C2321F;
   --color-error-content: #FFFFFF;
-  --color-info: #2C6FA8;
+  --color-info: #4B46C0;
   --color-info-content: #FFFFFF;
   --radius-selector: 0.5rem;
   --radius-field: 0.5rem;
@@ -87,16 +96,16 @@
 
 :root,
 [data-theme="solna-dark"] {
-  --key-white: #F2E7D6;
-  --key-white-content: #110B07;
-  --key-black: #221810;
-  --key-black-content: #FBF0E2;
+  --key-white: #EFE3DE;
+  --key-white-content: #17100F;
+  --key-black: #271C24;
+  --key-black-content: #F6E9E4;
 }
 
 [data-theme="solna-light"] {
   --key-white: #FFFFFF;
-  --key-white-content: #1F1408;
-  --key-black: #26190C;
+  --key-white-content: #2A1A20;
+  --key-black: #2C2027;
   --key-black-content: #FFFFFF;
 }
 
@@ -143,39 +152,61 @@
 [data-theme="solna-dark"] {
   /* L ~0.75 in OKLCH — bright enough to read on the near-black ember base. */
   --module-osc: #F7D584;          /* butter gold 87° */
-  --module-osc-content: #110B07;
+  --module-osc-content: #17100F;
   --module-chord: #A9C96D;        /* olive 125° */
-  --module-chord-content: #110B07;
+  --module-chord-content: #17100F;
+  --module-chord-tint: #A9C96D1A; /* the same olive at 10% — see tint-chord */
   --module-env-vca: #4FD69E;      /* emerald 162° */
-  --module-env-vca-content: #110B07;
+  --module-env-vca-content: #17100F;
   --module-lfo: #47C6DE;          /* cyan 213° */
-  --module-lfo-content: #110B07;
+  --module-lfo-content: #17100F;
   --module-bass: #74A6E8;         /* steel blue 256° */
-  --module-bass-content: #110B07;
+  --module-bass-content: #17100F;
+  --module-bass-tint: #74A6E81A;  /* the same blue at 10% — see tint-bass */
   --module-env-vcf: #AE96F5;      /* violet 294° */
-  --module-env-vcf-content: #110B07;
+  --module-env-vcf-content: #17100F;
   --module-arp: #DC8EE8;          /* orchid 322° */
-  --module-arp-content: #110B07;
+  --module-arp-content: #17100F;
   --module-filter: #F181AE;       /* rose 356° */
-  --module-filter-content: #110B07;
+  --module-filter-content: #17100F;
 
-  /* Canvas gradient — see the bg-canvas utility below. */
-  --canvas-dawn: color-mix(in oklab, var(--color-primary) 14%, transparent);
-  --canvas-sky: color-mix(in oklab, var(--color-secondary) 9%, transparent);
+  /* Canvas gradient — see the bg-canvas utility below. The three stops are
+     literal, not mixed from the semantic roles: a sky has to be able to hold a
+     hue no role owns.
+
+     They are deliberately darker than base-100. At full brightness the sky
+     stop landed at L 0.232 against the 80% panel's 0.225 — the canvas was
+     *lighter* than the panels sitting on it at the top of the screen and
+     darker at the bottom, so the figure/ground relationship inverted halfway
+     down and cards read as holes rather than as panels. Halved in sRGB (which
+     preserves hue by construction, where halving OKLCH lightness would have
+     driven the ground stop out of gamut and grey), every stop now sits
+     0.050-0.071 below its own panel and stays there. The sunrise glow gains
+     from it too: it lifts the bottom centre 0.128 over the bare ground now,
+     where before the ground was already warm and the glow did almost nothing.
+
+     Chroma sits near the sRGB ceiling for these lightnesses (~0.030); there is
+     no headroom to push it back up without lifting lightness with it. */
+  --canvas-sky: #011019;
+  --canvas-cross: #120914;
+  --canvas-ground: #120600;
+  --canvas-dawn: color-mix(in oklab, var(--color-primary) 15%, transparent);
 }
 
 [data-theme="solna-light"] {
   /* L ~0.57 — the dark set's lightness washes out on warm paper. */
   --module-osc: #B0790C;          /* butter gold 87° */
-  --module-osc-content: #1F1408;
+  --module-osc-content: #2A1A20;
   --module-chord: #6D8F45;        /* olive 125° */
-  --module-chord-content: #1F1408;
+  --module-chord-content: #2A1A20;
+  --module-chord-tint: #6D8F451A; /* the same olive at 10% — see tint-chord */
   --module-env-vca: #099268;      /* emerald 162° */
-  --module-env-vca-content: #1F1408;
+  --module-env-vca-content: #2A1A20;
   --module-lfo: #0C7F97;          /* cyan 213° */
   --module-lfo-content: #FFFFFF;
   --module-bass: #3D6FBF;         /* steel blue 256° */
   --module-bass-content: #FFFFFF;
+  --module-bass-tint: #3D6FBF1A;  /* the same blue at 10% — see tint-bass */
   --module-env-vcf: #7C56D6;      /* violet 294° */
   --module-env-vcf-content: #FFFFFF;
   --module-arp: #A93FB0;          /* orchid 322° */
@@ -183,15 +214,35 @@
   --module-filter: #C13B70;       /* rose 356° */
   --module-filter-content: #FFFFFF;
 
-  /* Warm paper takes far less tint before it reads as a stain. */
+  /* Same three hues and the same crossing height; only the lightness flips and
+     the chroma comes down, because warm paper stains far sooner than ember.
+     These are NOT halved the way the dark stops are: on paper the panels are
+     already 0.037-0.043 lighter than every point of the gradient, so the
+     figure/ground order never inverted here and darkening would only turn the
+     canvas grey. */
+  --canvas-sky: #E2F0FA;
+  --canvas-cross: #F4E9F6;
+  --canvas-ground: #F6E8DF;
   --canvas-dawn: color-mix(in oklab, var(--color-primary) 8%, transparent);
-  --canvas-sky: color-mix(in oklab, var(--color-secondary) 5%, transparent);
 }
 
-/* The app canvas: base-200 with two soft glows — a sunrise rising from the
-   bottom edge and a cooler dawn-sky wash in the top-right corner. Both are
-   mixed from the live theme tokens, so the gradient re-tints itself when the
-   theme flips instead of needing a second hand-written palette.
+/* The app canvas is a sky, not a tint.
+
+   Solar's ground, primary and text all sit between hue 57 and 76 — a 19-degree
+   window, which is why a flat base-200 canvas read as gold rather than as dawn.
+   This is the same structure murva uses for --murva-dusk-canvas, mirrored: a
+   cool top, a chromatic crossing, a warm ground. murva crosses through plum and
+   solna crosses through rose, and that is the whole difference between dusk and
+   dawn. The crossing also does real work — a straight blue-to-amber interpolation
+   passes through the grey axis and goes muddy; the rose stop keeps it out of
+   there. Interpolating `in oklch` is required for the same reason.
+
+   The jump sizes are deliberately asymmetric with murva's. Dusk puts its
+   crossing near the cool end (violet owns the upper sky once the sun has gone);
+   dawn puts it near the warm end, because the light is arriving from below.
+
+   background-color stays as a fallback: a browser that cannot parse the
+   `in oklch` hint drops the whole gradient and would otherwise paint nothing.
 
    Declared as a utility (not on `body`) because the app shell is a full-height
    flex column that paints over the body; App.tsx wears `bg-canvas` in place of
@@ -200,9 +251,50 @@
 @utility bg-canvas {
   background-color: var(--color-base-200);
   background-image:
-    radial-gradient(120% 65% at 50% 100%, var(--canvas-dawn) 0%, transparent 72%);
+    radial-gradient(140% 40% at 50% 100%, var(--canvas-dawn) 0%, transparent 72%),
+    linear-gradient(to bottom in oklch,
+      var(--canvas-sky) 0%,
+      var(--canvas-cross) 54%,
+      var(--canvas-ground) 100%);
   background-repeat: no-repeat;
   background-attachment: fixed;
+}
+
+/* The panel layer. Opaque: the canvas reads in the gaps between cards and around
+   them, not through them. This was 80% for a while so the sky showed behind the
+   UI, and it made the whole page feel washed — the panels never settled into a
+   surface of their own. The utility stays rather than folding back into
+   `bg-base-100` because it names the role, it is the one place to change the
+   ratio if that is ever revisited, and the module tints below composite over it.
+
+   Not for overlays. A modal, drawer or popover covers other UI rather than the
+   canvas, and showing that UI through it is a bug, not a style — those keep
+   plain `bg-base-100`. */
+@utility bg-panel {
+  background-color: var(--color-base-100);
+}
+
+/* Module tint for the Chord and Bass target cards. Flat, not a gradient: these
+   read as one identity-coloured surface, and a fade to transparent left the
+   bottom-right corner of every card indistinguishable from an untinted one.
+
+   Written as a single-colour image layer rather than a background-color because
+   the cards already wear `bg-panel`. Two background-color utilities on one
+   element is a coin toss decided by Tailwind's internal sort order, and if the
+   tint won, the card would lose its 80% panel and sit at 10% over the canvas.
+   An image layer composites over the panel colour instead of replacing it.
+
+   The 10% is baked into --module-*-tint as an 8-digit hex rather than mixed at
+   use time. color-mix would work, but the fallback a non-supporting browser gets
+   is the module colour at full strength — an opaque olive card, which is a far
+   worse degradation than the one bg-panel falls back to. Keep each tint next to
+   the module colour it is derived from; nothing recomputes it. */
+@utility tint-chord {
+  background-image: linear-gradient(var(--module-chord-tint), var(--module-chord-tint));
+}
+
+@utility tint-bass {
+  background-image: linear-gradient(var(--module-bass-tint), var(--module-bass-tint));
 }
 
 @layer base {

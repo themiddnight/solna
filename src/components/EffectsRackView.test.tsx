@@ -6,7 +6,7 @@ describe('EffectsRackView theming', () => {
   const html = renderToString(<EffectsRackView />);
 
   test('rack units are daisyUI cards on semantic tokens', () => {
-    expect(html).toContain('card bg-base-100');
+    expect(html).toContain('card bg-panel');
     expect(html).toContain('card-body');
     expect(html).toContain('text-primary');
     expect(html).toContain('text-accent');

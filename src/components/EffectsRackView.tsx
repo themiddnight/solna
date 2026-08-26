@@ -16,7 +16,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Top Header */}
-      <div className="card bg-base-100 border border-base-300 shadow-md">
+      <div className="card bg-panel border border-base-300 shadow-md">
         <div className="card-body p-3 sm:p-4 flex-row items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 rounded-selector bg-primary/20 border border-primary/30 text-primary">
@@ -33,7 +33,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Algorithmic Reverb Unit */}
         <div
-          className={`card bg-base-100 border shadow-md transition-all ${
+          className={`card bg-panel border shadow-md transition-all ${
             effects.reverbBypass
               ? "border-base-300 opacity-60"
               : "border-accent/40 ring-1 ring-accent/20"
@@ -89,7 +89,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
 
         {/* 2. Stereo Delay Unit */}
         <div
-          className={`card bg-base-100 border shadow-md transition-all ${
+          className={`card bg-panel border shadow-md transition-all ${
             effects.delayBypass
               ? "border-base-300 opacity-60"
               : "border-accent/40 ring-1 ring-accent/20"
@@ -145,7 +145,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
 
         {/* 3. Wave Distortion / Warmth Unit */}
         <div
-          className={`card bg-base-100 border shadow-md transition-all ${
+          className={`card bg-panel border shadow-md transition-all ${
             effects.distortionBypass
               ? "border-base-300 opacity-60"
               : "border-primary/40 ring-1 ring-primary/20"
@@ -189,7 +189,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
 
         {/* 4. 3-Band Equalizer */}
         <div
-          className={`card bg-base-100 border shadow-md transition-all ${
+          className={`card bg-panel border shadow-md transition-all ${
             effects.eqBypass
               ? "border-base-300 opacity-60"
               : "border-secondary/40 ring-1 ring-secondary/20"

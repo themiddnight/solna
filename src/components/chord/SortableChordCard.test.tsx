@@ -31,7 +31,7 @@ const render = (isActive: boolean) =>
 describe('SortableChordCard theming', () => {
   test('the card shell is a daisyUI card on base tokens', () => {
     const html = render(false);
-    expect(html).toContain('card bg-base-100 border border-base-300');
+    expect(html).toContain('card bg-panel border border-base-300');
     expect(html).not.toContain('#0B0D19');
     expect(html).not.toContain('#252B48');
     expect(html).not.toContain('#12152A');
@@ -40,7 +40,12 @@ describe('SortableChordCard theming', () => {
   test('the active state rings the chord module colour', () => {
     const html = render(true);
     expect(html).toContain('border-module-chord ring-2 ring-module-chord/50 bg-base-200');
-    expect(html).toContain('from-module-chord to-secondary text-module-chord-content');
+    // The active fill is solid. It used to carry two gradient-stop utilities
+    // between these two classes, but with no direction utility alongside them
+    // they emitted nothing — dead classes the assertion was locking in. The
+    // contiguous match below is what proves they are gone; naming them here
+    // would put them back into the CSS bundle, since Tailwind scans this file.
+    expect(html).toContain('bg-module-chord text-module-chord-content');
   });
 
   test('bar counter and note readout are mono badges/text', () => {

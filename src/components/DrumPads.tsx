@@ -52,7 +52,7 @@ export const DrumPads: React.FC = React.memo(() => {
   }, [pads, triggerPad]);
 
   return (
-    <div className="card bg-base-100 border border-base-300 shadow-md">
+    <div className="card bg-panel border border-base-300 shadow-md">
       <div className="card-body p-3 sm:p-4">
         <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-2.5">
         {pads.map((pad) => {

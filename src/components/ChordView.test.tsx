@@ -24,9 +24,20 @@ describe('ChordView theming', () => {
   const html = renderToString(<ChordView />);
 
   test('panels are daisyUI cards on base tokens', () => {
-    expect(html).toContain('card bg-base-100 border border-base-300');
+    expect(html).toContain('card bg-panel border border-base-300');
     expect(html).toContain('border-module-chord/30');
     expect(html).toContain('border-module-bass/30');
+  });
+
+  test('the chord and bass module cards are opaque panels with a flat tint', () => {
+    // Both used to be a 10% module colour with no surface under them, so on the
+    // gradient canvas the sky read straight through and the cards themselves
+    // looked like gradients. A tinted card needs bg-panel beneath the tint.
+    expect(html).toContain('card bg-panel tint-chord');
+    expect(html).toContain('card bg-panel tint-bass');
+    // Nothing on this page paints a gradient of its own.
+    expect(html).not.toContain('bg-gradient');
+    expect(html).not.toContain('bg-linear');
   });
 
   test('every select is a bordered daisyUI select', () => {

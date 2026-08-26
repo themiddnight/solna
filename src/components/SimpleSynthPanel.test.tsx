@@ -19,7 +19,7 @@ describe('SimpleSynthPanel theming', () => {
   const html = renderToString(<SimpleSynthPanel params={params} onChangeParams={() => {}} />);
 
   test('macro cards use card/card-body and badge components', () => {
-    expect(html).toContain('card bg-base-100');
+    expect(html).toContain('card bg-panel');
     expect(html).toContain('card-body');
     expect(html).toContain('badge badge-sm');
   });

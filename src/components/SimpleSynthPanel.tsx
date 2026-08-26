@@ -51,7 +51,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
         {/* 2. Four Friendly Macro Dials + 1-Click Arp */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {/* Macro 1: Tone (Brightness) */}
-          <div className="card bg-base-100 border border-base-300 shadow-md">
+          <div className="card bg-panel border border-base-300 shadow-md">
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
                 <Sun className="w-3.5 h-3.5 text-module-filter" />
@@ -79,7 +79,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
           </div>
 
           {/* Macro 2: Space (Release & Tail) */}
-          <div className="card bg-base-100 border border-base-300 shadow-md">
+          <div className="card bg-panel border border-base-300 shadow-md">
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
                 <Compass className="w-3.5 h-3.5 text-module-env-vca" />
@@ -113,7 +113,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
           </div>
 
           {/* Macro 3: Vibe (Movement & Detune) */}
-          <div className="card bg-base-100 border border-base-300 shadow-md">
+          <div className="card bg-panel border border-base-300 shadow-md">
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
                 <Waves className="w-3.5 h-3.5 text-module-lfo" />
@@ -147,7 +147,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
           </div>
 
           {/* Macro 4: Punch (Sub & Power) */}
-          <div className="card bg-base-100 border border-base-300 shadow-md">
+          <div className="card bg-panel border border-base-300 shadow-md">
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
                 <Flame className="w-3.5 h-3.5 text-module-osc" />
@@ -181,7 +181,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
           </div>
 
           {/* 1-Click Easy Arpeggiator Card */}
-          <div className="col-span-2 sm:col-span-1 lg:col-span-1 card bg-base-100 border border-module-arp/30 shadow-md">
+          <div className="col-span-2 sm:col-span-1 lg:col-span-1 card bg-panel border border-module-arp/30 shadow-md">
             <div className="card-body p-3 flex flex-col justify-between">
               <div className="flex items-center justify-between border-b border-base-300 pb-1.5">
                 <span className="text-xs font-bold text-module-arp flex items-center gap-1">

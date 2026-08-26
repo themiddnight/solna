@@ -59,18 +59,21 @@ import { resolveSynthControlChannel } from "../utils/synthControl";
 import type { SynthControlTarget } from "../utils/synthControl";
 
 // Shared per-destination accent styling for the card tint and selector buttons.
-// synth = neutral (no tint), chord = primary (amber), bass = accent (teal).
+// synth = neutral (no tint), chord = module-chord (olive), bass = module-bass
+// (steel blue) — module identity colours, not daisyUI semantics. The tints are
+// flat `@utility` image layers declared in index.css; see the note there for why
+// they are not background-colours.
 const TARGET_STYLES: Record<
   SynthControlTarget,
   { tint: string; activeBtn: string }
 > = {
   synth: { tint: "", activeBtn: "btn-active" },
   chord: {
-    tint: "ring-1 ring-module-chord/40 bg-gradient-to-br from-module-chord/10 to-transparent",
+    tint: "ring-1 ring-module-chord/40 tint-chord",
     activeBtn: "[--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]",
   },
   bass: {
-    tint: "ring-1 ring-module-bass/40 bg-gradient-to-br from-module-bass/10 to-transparent",
+    tint: "ring-1 ring-module-bass/40 tint-bass",
     activeBtn: "[--btn-color:var(--color-module-bass)] [--btn-fg:var(--color-module-bass-content)]",
   },
 };
@@ -375,7 +378,7 @@ export const SynthView = () => {
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Top Synth Header & Presets */}
-      <div className="card bg-base-100 border border-base-300 shadow-md relative">
+      <div className="card bg-panel border border-base-300 shadow-md relative">
         <div className="card-body p-3 sm:p-4 flex flex-col gap-3">
         {/* Row 1: Target Selector + Mode Switcher + Presets */}
         <div className="flex flex-wrap items-center justify-between gap-2.5">
@@ -742,7 +745,7 @@ export const SynthView = () => {
         <div className="w-full flex flex-wrap gap-3">
           {/* 1. Oscillators Section */}
           <div
-            className={`card flex-1 bg-base-100 border border-base-300 shadow-md ${tintClass}`}
+            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
           >
             <div className="card-body p-4 space-y-3.5">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
@@ -817,7 +820,7 @@ export const SynthView = () => {
           </div>
           {/* 2. Filter Section */}
           <div
-            className={`card flex-1 bg-base-100 border border-base-300 shadow-md ${tintClass}`}
+            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
           >
             <div className="card-body p-4 space-y-3.5">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
@@ -897,7 +900,7 @@ export const SynthView = () => {
           </div>
           {/* 3. Envelope ADSR */}
           <div
-            className={`card flex-1 bg-base-100 border border-base-300 shadow-md ${tintClass}`}
+            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
           >
             <div className="card-body p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
@@ -1044,7 +1047,7 @@ export const SynthView = () => {
           </div>{" "}
           {/* 4. LFO & Master Pitch */}
           <div
-            className={`card flex-1 bg-base-100 border border-base-300 shadow-md ${tintClass}`}
+            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
           >
             <div className="card-body p-4 space-y-3.5">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
@@ -1125,7 +1128,7 @@ export const SynthView = () => {
           </div>
           {/* 5. Arpeggiator */}
           <div
-            className={`card flex-1 bg-base-100 border border-base-300 shadow-md ${tintClass}`}
+            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
           >
             <div className="card-body p-4 space-y-3.5">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
@@ -1227,7 +1230,7 @@ export const SynthView = () => {
       )}
 
       {/* Interactive Piano Keyboard */}
-      <div className="card bg-base-100 border border-base-300 shadow-xl">
+      <div className="card bg-panel border border-base-300 shadow-xl">
         <div className="card-body p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">

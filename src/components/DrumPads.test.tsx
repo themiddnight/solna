@@ -48,7 +48,7 @@ describe('DrumPads theming and key-binding contract', () => {
   test('the pad grid renders on daisyUI components and semantic tokens', () => {
     const html = renderToString(<DrumPads />);
 
-    expect(html).toContain('card bg-base-100 border border-base-300');
+    expect(html).toContain('card bg-panel border border-base-300');
     expect(html).toContain('card-body');
     expect(html).toContain('kbd-key');
     expect(html).toContain('range range-xs range-primary');

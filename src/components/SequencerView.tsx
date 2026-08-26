@@ -120,7 +120,7 @@ export const SequencerView = () => {
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Top Header & Preset Bar */}
-      <div className="card bg-base-100 border border-base-300 shadow-md">
+      <div className="card bg-panel border border-base-300 shadow-md">
         <div className="card-body p-3 sm:p-4 flex-row flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-selector bg-primary/20 border border-primary/30 text-primary">
@@ -225,7 +225,7 @@ export const SequencerView = () => {
       </div>
 
       {/* Drum Filter — global lowpass/bandpass/highpass on the drum bus */}
-      <div className="card bg-base-100 border border-base-300 shadow-md">
+      <div className="card bg-panel border border-base-300 shadow-md">
         <div className="card-body p-3 sm:p-4">
         <div className="flex items-center justify-between flex-wrap gap-2.5">
           <div className="flex items-center gap-2">
@@ -284,7 +284,7 @@ export const SequencerView = () => {
       </div>
 
       {/* Sequencer Grid */}
-      <div className="card bg-base-100 border border-base-300 shadow-md">
+      <div className="card bg-panel border border-base-300 shadow-md">
         <div className="card-body p-3 sm:p-4 overflow-x-auto">
         {/* Step Indicator Header (1-16) */}
         <div className="flex items-center gap-2 mb-2 pl-44 min-w-[700px]">

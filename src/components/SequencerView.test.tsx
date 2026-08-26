@@ -6,7 +6,7 @@ describe('SequencerView theming', () => {
   const html = renderToString(<SequencerView />);
 
   test('panels are daisyUI cards on base tokens', () => {
-    expect(html).toContain('card bg-base-100 border border-base-300');
+    expect(html).toContain('card bg-panel border border-base-300');
     expect(html).not.toContain('#12152A');
     expect(html).not.toContain('#252B48');
     expect(html).not.toContain('#0B0D19');
