@@ -83,6 +83,23 @@ export const SCALES: Record<string, ScaleDefinition> = {
     triadQualities: ['min', 'maj', 'dim', 'dim', 'min', 'maj'],
     seventhQualities: ['7', 'maj7', 'dim7', 'dim7', '7', '7'],
   },
+  'Hirajoshi': {
+    name: 'Hirajoshi (Japanese)',
+    category: 'World & Exotic',
+    // 1, 2, b3, 5, b6 — step pattern 2-1-4-1-4, two half-steps and two major
+    // thirds. Burrows/Wikipedia spelling, the one the koto references use.
+    intervals: [0, 2, 3, 7, 8],
+    // Stacking scale-steps on a scale with two major-third gaps does not give
+    // tertian chords (degree 0 would be {0,3,8}). The repo's pentatonics solve
+    // this by inheriting the parent 7-note scale's qualities; Hirajoshi is
+    // natural minor at degrees 1, 2, 3, 5, 6 -> i, ii°, bIII, v, bVI.
+    // One deliberate deviation: degree 3 is sus4/7sus4, not min/min7. The
+    // parent's minor third reaches a semitone Hirajoshi does not contain,
+    // while root-4th-5th (degrees 3, 4, 0) is entirely inside the five notes
+    // and is the canonical open-fourth koto sound.
+    triadQualities: ['min', 'dim', 'maj', 'sus4', 'maj'],
+    seventhQualities: ['min7', 'm7b5', 'maj7', '7sus4', 'maj7'],
+  },
 };
 
 /**
@@ -209,17 +226,63 @@ export function getBorrowedChords(root: string, scaleType: string): BorrowedChor
 
 
 /**
- * Re-harmonizes / snaps an existing chord progression to the nearest diatonic degrees of a new Key/Scale.
- * Option B: Diatonic Re-harmonization
+ * Moves a progression from one key to another. Every chord shifts by the same
+ * interval, so scale degrees are preserved by construction and the tonic stays
+ * where the user put it. `id`, `quality` and `bars` are untouched.
+ *
+ * This is the operation a ROOT change needs. It is not the operation a SCALE
+ * change needs — see snapProgressionToScale.
  */
-export function reharmonizeProgressionToScale(
+export function transposeProgression(
+  chords: ChordItem[],
+  fromRoot: string,
+  toRoot: string,
+  octave = 4,
+): ChordItem[] {
+  const shift = (rootSemitone(toRoot) - rootSemitone(fromRoot) + 12) % 12;
+  return chords.map((chord) =>
+    deriveChordNotes(
+      {
+        ...chord,
+        root: ROOTS[(rootSemitone(chord.root) + shift) % 12],
+        ...(chord.bassNote ? { bassNote: transposePitchClass(chord.bassNote, shift) } : {}),
+      },
+      octave,
+    ),
+  );
+}
+
+/**
+ * Shifts a note's pitch class and keeps its written octave, so a slash bass
+ * never jumps a register on a key change — and a transpose round trip is exact.
+ * Returns the input unchanged when it is not a note name.
+ */
+function transposePitchClass(note: string, shift: number): string {
+  const match = note.match(/^([A-Ga-g][#b]?)(-?\d+)?$/);
+  if (!match) return note;
+  const shifted = ROOTS[(rootSemitone(match[1]) + shift) % 12];
+  return match[2] === undefined ? shifted : `${shifted}${match[2]}`;
+}
+
+/**
+ * Snaps each chord to the nearest diatonic degree of the given key/scale.
+ * Body carried over verbatim from reharmonizeProgressionToScale, including the
+ * maj9 / min9 / 7sus4 / sus4 quality-preservation clause.
+ *
+ * This is the operation a SCALE change needs. It measures the chords against
+ * `root`, so it is only correct when they are already in that key — feeding it
+ * chords from another key is the bug this split exists to remove. Two chords a
+ * scale cannot distinguish still collapse onto one degree; that is inherent to
+ * snapping and is why five-note scales lose the most.
+ */
+export function snapProgressionToScale(
   currentChords: ChordItem[],
-  newRoot: string,
-  newScaleType: string,
+  root: string,
+  scaleType: string,
   octave = 4
 ): ChordItem[] {
-  const newRootIndex = rootSemitone(newRoot);
-  const scale = SCALES[newScaleType] || SCALES['Major'];
+  const newRootIndex = rootSemitone(root);
+  const scale = SCALES[scaleType] || SCALES['Major'];
 
   return currentChords.map((chord, idx) => {
     // Find semitone distance of chord from previous context, or snap to nearest scale degree
@@ -240,8 +303,8 @@ export function reharmonizeProgressionToScale(
       }
     });
 
-    const diatonic = getDiatonicChordForDegree(bestDegree, newRoot, newScaleType, chord.quality.includes('7') || chord.quality.includes('9'));
-    
+    const diatonic = getDiatonicChordForDegree(bestDegree, root, scaleType, chord.quality.includes('7') || chord.quality.includes('9'));
+
     // Preserve custom qualities if user intentionally used extended qualities like maj9, 7sus4, otherwise use diatonic
     let targetQuality = diatonic.quality;
     if (chord.quality === 'maj9' || chord.quality === 'min9' || chord.quality === '7sus4' || chord.quality === 'sus4') {
@@ -285,8 +348,11 @@ export function shiftNoteOctave(note: string, octaves: number): string {
   return shifted || note;
 }
 
-// App quality names that differ from tonal's chord-type tokens (keys are lowercase — lookups use toLowerCase())
-const TONAL_CHORD_ALIASES: Record<string, string> = {
+// App quality names that differ from tonal's chord-type tokens (keys are lowercase — lookups use toLowerCase()).
+// Exported so authored chord data can be validated against tonal in tests:
+// generateBlockChordNotes falls back to `maj` on an unknown token, so a typo
+// in a progression's quality is inaudible unless something checks it.
+export const TONAL_CHORD_ALIASES: Record<string, string> = {
   min9: 'm9',
   min6: 'm6',
   minmaj7: 'mMaj7',

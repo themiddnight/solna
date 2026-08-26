@@ -1,13 +1,22 @@
 import { describe, expect, test } from 'bun:test';
+import { Chord } from 'tonal';
 import {
+  ROOTS,
   SCALES,
+  TONAL_CHORD_ALIASES,
+  deriveChordNotes,
   formatChordLabel,
   formatChordQuality,
   generateBlockChordNotes,
   getBorrowedChords,
   getDiatonicChordForDegree,
+  getScaleNotes,
   isNoteInScale,
+  rootSemitone,
+  snapProgressionToScale,
+  transposeProgression,
 } from './musicTheory';
+import type { ChordItem } from '../types';
 
 const SCALE_KEYS = Object.keys(SCALES);
 
@@ -98,5 +107,195 @@ describe('formatChordLabel', () => {
     expect(formatChordQuality('maj')).toBe('');
     expect(formatChordQuality('min7')).toBe('m7');
     expect(formatChordQuality('minMaj7')).toBe('mM7');
+  });
+});
+
+describe('Hirajoshi', () => {
+  test('is a five-degree World & Exotic scale on [0, 2, 3, 7, 8]', () => {
+    const scale = SCALES['Hirajoshi'];
+    expect(scale).toBeDefined();
+    expect(scale.category).toBe('World & Exotic');
+    expect(scale.intervals).toEqual([0, 2, 3, 7, 8]);
+    expect(scale.triadQualities).toHaveLength(5);
+    expect(scale.seventhQualities).toHaveLength(5);
+  });
+
+  test('is a strict subset of natural minor, at degrees 1, 2, 3, 5, 6', () => {
+    // This is why the qualities are inherited from the parent 7-note scale,
+    // exactly as Major/Minor Pentatonic already do.
+    const parent = SCALES['Natural Minor'].intervals;
+    for (const interval of SCALES['Hirajoshi'].intervals) {
+      expect(parent).toContain(interval);
+    }
+  });
+
+  test('getScaleNotes in G is G A A# D D#', () => {
+    expect(getScaleNotes('G', 'Hirajoshi')).toEqual(['G', 'A', 'A#', 'D', 'D#']);
+  });
+
+  test('getDiatonicChordForDegree returns the authored table in C', () => {
+    const rows = [
+      { root: 'C', triad: 'min', seventh: 'min7', degreeName: 'i' },
+      { root: 'D', triad: 'dim', seventh: 'm7b5', degreeName: 'ii' },
+      { root: 'D#', triad: 'maj', seventh: 'maj7', degreeName: 'III' },
+      { root: 'G', triad: 'sus4', seventh: '7sus4', degreeName: 'IV' },
+      { root: 'G#', triad: 'maj', seventh: 'maj7', degreeName: 'V' },
+    ];
+    rows.forEach((row, degree) => {
+      const triad = getDiatonicChordForDegree(degree, 'C', 'Hirajoshi', false);
+      expect(triad).toEqual({ root: row.root, quality: row.triad, degreeName: row.degreeName });
+      const seventh = getDiatonicChordForDegree(degree, 'C', 'Hirajoshi', true);
+      expect(seventh.root).toBe(row.root);
+      expect(seventh.quality).toBe(row.seventh);
+    });
+  });
+
+  test('degrees 0, 3 and 4 are fully in-scale triads, and every other chord adds exactly one outside tone', () => {
+    // Pinned as counts so a future re-authoring that makes them worse fails.
+    const expectedTriadOutsiders = [0, 1, 1, 0, 0];
+    const expectedSeventhOutsiders = [1, 1, 1, 1, 0];
+    for (let degree = 0; degree < 5; degree++) {
+      for (const [use7ths, expected] of [
+        [false, expectedTriadOutsiders[degree]],
+        [true, expectedSeventhOutsiders[degree]],
+      ] as const) {
+        const chord = getDiatonicChordForDegree(degree, 'C', 'Hirajoshi', use7ths);
+        const outside = generateBlockChordNotes(chord.quality, chord.root, 4).filter(
+          (note) => !isNoteInScale(note, 'C', 'Hirajoshi'),
+        );
+        expect(outside).toHaveLength(expected);
+      }
+    }
+  });
+});
+
+describe('TONAL_CHORD_ALIASES', () => {
+  test('is exported and every alias resolves to a chord tonal knows', () => {
+    expect(TONAL_CHORD_ALIASES.min9).toBe('m9');
+    for (const [app, tonalType] of Object.entries(TONAL_CHORD_ALIASES)) {
+      expect(Chord.getChord(tonalType, 'C').empty).toBe(false);
+      // The app token itself is the one tonal does NOT know — that is why the
+      // alias exists, and why authored-quality validation must go through it.
+      expect(app).not.toBe(tonalType);
+    }
+  });
+});
+
+const chord = (id: string, root: string, quality: string, bars = 1): ChordItem =>
+  deriveChordNotes({ id, root, quality, bars, notes: [] }, 4);
+
+// A Natural Minor, i - VI - III - VII. The progression the spec measured.
+const A_MINOR_PROGRESSION: ChordItem[] = [
+  chord('c1', 'A', 'min'),
+  chord('c2', 'F', 'maj'),
+  chord('c3', 'C', 'maj'),
+  chord('c4', 'G', 'maj'),
+];
+
+const names = (chords: ChordItem[]) => chords.map((c) => `${c.root}${c.quality}`);
+
+describe('transposeProgression', () => {
+  test('the measured case: A to C keeps the tonic first', () => {
+    // Today's reharmonize turns this into G#maj - Fmin - Cmin - Gmin, moving
+    // the tonic from position 1 to position 3. Transposition must not.
+    expect(names(transposeProgression(A_MINOR_PROGRESSION, 'A', 'C', 4))).toEqual([
+      'Cmin', 'G#maj', 'D#maj', 'A#maj',
+    ]);
+  });
+
+  test('quality, bars and id are preserved verbatim', () => {
+    const source = [chord('x1', 'D', 'min9', 2), chord('x2', 'G', '7sus4', 4)];
+    const moved = transposeProgression(source, 'C', 'F#', 4);
+    expect(moved.map((c) => c.id)).toEqual(['x1', 'x2']);
+    expect(moved.map((c) => c.quality)).toEqual(['min9', '7sus4']);
+    expect(moved.map((c) => c.bars)).toEqual([2, 4]);
+  });
+
+  test('every adjacent interval is preserved, for all 144 root pairs', () => {
+    const gaps = (chords: ChordItem[]) =>
+      chords.slice(1).map((c, i) => (rootSemitone(c.root) - rootSemitone(chords[i].root) + 12) % 12);
+    for (const from of ROOTS) {
+      for (const to of ROOTS) {
+        expect(gaps(transposeProgression(A_MINOR_PROGRESSION, from, to, 4))).toEqual(
+          gaps(A_MINOR_PROGRESSION),
+        );
+      }
+    }
+  });
+
+  test('each chord keeps its scale degree in the new key', () => {
+    const degreeOf = (chordRoot: string, keyRoot: string) =>
+      SCALES['Natural Minor'].intervals.indexOf(
+        (rootSemitone(chordRoot) - rootSemitone(keyRoot) + 12) % 12,
+      );
+    const moved = transposeProgression(A_MINOR_PROGRESSION, 'A', 'F#', 4);
+    expect(moved.map((c) => degreeOf(c.root, 'F#'))).toEqual(
+      A_MINOR_PROGRESSION.map((c) => degreeOf(c.root, 'A')),
+    );
+  });
+
+  test('a slash bass moves with the chord and keeps its written octave', () => {
+    // Pitch class only: a bass note that jumped a register on a key change
+    // would leave the bass line, and it is what makes the round trip exact.
+    const source = [{ ...chord('s1', 'C', 'maj'), bassNote: 'E4' }];
+    expect(transposeProgression(source, 'C', 'D#', 4)[0].bassNote).toBe('G4');
+    const nulled = [{ ...chord('s2', 'C', 'maj'), bassNote: null }];
+    expect(transposeProgression(nulled, 'C', 'D', 4)[0].bassNote).toBeNull();
+  });
+
+  test('notes are re-derived at the requested octave', () => {
+    const moved = transposeProgression(A_MINOR_PROGRESSION, 'A', 'C', 3);
+    expect(moved[0].notes).toEqual(generateBlockChordNotes('min', 'C', 3));
+  });
+
+  test('round trips exactly for all 144 ordered root pairs', () => {
+    for (const a of ROOTS) {
+      for (const b of ROOTS) {
+        expect(
+          transposeProgression(transposeProgression(A_MINOR_PROGRESSION, a, b, 4), b, a, 4),
+        ).toEqual(A_MINOR_PROGRESSION);
+      }
+    }
+  });
+});
+
+describe('snapProgressionToScale', () => {
+  // Golden values captured from reharmonizeProgressionToScale before the
+  // rename: this proves the rename changed nothing, including the behaviour
+  // that is wrong for a key change and correct for a scale change.
+  const EXTENDED = [
+    chord('e1', 'D', 'min9'),
+    chord('e2', 'G', '7'),
+    chord('e3', 'C', 'maj9'),
+    chord('e4', 'F', 'maj7'),
+  ];
+
+  test('chords already in the target key and scale come back unchanged', () => {
+    expect(names(snapProgressionToScale(EXTENDED, 'C', 'Major', 4))).toEqual([
+      'Dmin9', 'G7', 'Cmaj9', 'Fmaj7',
+    ]);
+  });
+
+  test('maj9 / min9 / 7sus4 / sus4 survive a snap into a five-note scale', () => {
+    expect(names(snapProgressionToScale(EXTENDED, 'G', 'Major Pentatonic', 4))).toEqual([
+      'Dmin9', 'Gmaj7', 'Bmaj9', 'Emin7',
+    ]);
+  });
+
+  test('the old key-change behaviour is preserved verbatim under the new name', () => {
+    expect(names(snapProgressionToScale(A_MINOR_PROGRESSION, 'C', 'Natural Minor', 4))).toEqual([
+      'G#maj', 'Fmin', 'Cmin', 'Gmin',
+    ]);
+  });
+
+  test('every output root is a degree of the target scale', () => {
+    for (const root of ROOTS) {
+      for (const scaleType of Object.keys(SCALES)) {
+        const snapped = snapProgressionToScale(A_MINOR_PROGRESSION, root, scaleType, 4);
+        for (const c of snapped) {
+          expect(getScaleNotes(root, scaleType)).toContain(c.root);
+        }
+      }
+    }
   });
 });

@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { ChordPresetLibrary } from './ChordPresetLibrary';
+import { ChordPresetLibrary, isProgressionAvailable } from './ChordPresetLibrary';
 import { INITIAL_SYNTH_PARAMS } from '../store/initialState';
+import { CHORD_PROGRESSIONS, progressionById } from '../audio/data/chordProgressions';
+import { SCALES } from '../utils/musicTheory';
 
 const noop = () => {};
 
@@ -13,7 +15,7 @@ const html = renderToString(
       { id: 'chord-1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] },
     ]}
     scaleRoot="C"
-    scaleType="major"
+    scaleType="Major"
     autoReharmonize
     synthParams={INITIAL_SYNTH_PARAMS}
     onApplyChords={noop}
@@ -66,5 +68,43 @@ describe('ChordPresetLibrary theming', () => {
     ]) {
       expect(html).not.toContain(s);
     }
+  });
+});
+
+describe('isProgressionAvailable', () => {
+  const sevenNote = progressionById('pop-i-v-vi-iv')!;
+  const fiveNote = progressionById('zen-bamboo-vamp')!;
+
+  test('a seven-degree progression is hidden in every short scale', () => {
+    for (const scaleType of ['Hirajoshi', 'Major Pentatonic', 'Minor Pentatonic', 'Blues']) {
+      expect(isProgressionAvailable(sevenNote, scaleType)).toBe(false);
+    }
+  });
+
+  test('a seven-degree progression is available in every seven-degree scale', () => {
+    for (const [scaleType, scale] of Object.entries(SCALES)) {
+      if (scale.intervals.length !== 7) continue;
+      expect(isProgressionAvailable(sevenNote, scaleType)).toBe(true);
+    }
+  });
+
+  test('a five-degree progression is available everywhere', () => {
+    for (const scaleType of Object.keys(SCALES)) {
+      expect(isProgressionAvailable(fiveNote, scaleType)).toBe(true);
+    }
+  });
+
+  test('an unknown scale type is treated as seven degrees, matching SCALES own fallback', () => {
+    expect(isProgressionAvailable(sevenNote, 'Pentatonic Major')).toBe(true);
+  });
+
+  test('a five-note scale leaves exactly the four zen entries', () => {
+    const visible = CHORD_PROGRESSIONS.filter((p) => isProgressionAvailable(p, 'Hirajoshi'));
+    expect(visible.map((p) => p.id)).toEqual([
+      'zen-bamboo-vamp',
+      'zen-moonlit-koto',
+      'zen-still-pond',
+      'zen-temple-bell',
+    ]);
   });
 });

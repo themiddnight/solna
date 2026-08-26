@@ -2,17 +2,16 @@ import React, { useMemo, useState } from 'react';
 import { Download, Music, Play, Sparkles, Trash2, Upload } from 'lucide-react';
 import type { ChordItem, SynthParams, CustomChordProgressionItem } from '../types';
 import { useAppStore } from '../store/store';
-import { CHORD_PROGRESSION_TEMPLATES } from '../audio/data/chordProgressions';
-import type { ProgressionTemplate } from '../audio/data/chordProgressions';
+import { CHORD_PROGRESSIONS, resolveProgression } from '../audio/data/chordProgressions';
+import type { ChordProgression } from '../audio/data/chordProgressions';
 import { PresetLibrary } from './ui/PresetLibrary';
 import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from './ui/PresetLibrary';
 import { previewChordProgression } from '../audio/playback/presetPreview';
 import {
   generateBlockChordNotes,
-  reharmonizeProgressionToScale,
-  rootSemitone,
-  ROOTS,
+  snapProgressionToScale,
   formatChordLabel,
+  SCALES,
 } from '../utils/musicTheory';
 
 export type { CustomChordProgressionItem };
@@ -20,7 +19,7 @@ export type { CustomChordProgressionItem };
 // Wrapper entries: factory templates and custom progressions both render through
 // the generic; the template pointer is what the onSelect handler transposes.
 interface ChordLibraryEntry extends PresetLibraryEntry {
-  template?: ProgressionTemplate; // factory templates carry their source
+  progression?: ChordProgression; // factory entries carry their library entry
   chords?: ChordItem[];           // custom progressions carry their chords
   roman?: string;                 // custom progressions carry their roman summary (searchable)
 }
@@ -49,7 +48,19 @@ const BASE_CHORD_CATEGORIES: PresetCategory[] = [
   { id: 'Rock & Blues', label: 'Rock & Blues', badgeClass: 'badge badge-primary', description: '' },
   { id: 'Cinematic & Modal', label: 'Cinematic & Modal', badgeClass: 'badge badge-primary', description: '' },
   { id: 'Classical & Baroque', label: 'Classical & Baroque', badgeClass: 'badge badge-primary', description: '' },
+  { id: 'Ambient & Zen', label: 'Ambient & Zen', badgeClass: 'badge badge-primary', description: '' },
 ];
+
+/**
+ * A progression is only offered in a scale that has at least as many degrees as
+ * it was authored against. Entries that fail are hidden rather than resolved
+ * with wrapped degrees, which would silently produce a different progression.
+ * An unknown scaleType is treated as seven degrees, matching SCALES' own
+ * `|| SCALES['Major']` fallback.
+ */
+export function isProgressionAvailable(p: ChordProgression, scaleType: string): boolean {
+  return (SCALES[scaleType]?.intervals.length ?? 7) >= p.minScaleLength;
+}
 
 export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   currentChords,
@@ -83,16 +94,16 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
         chords: p.chords,
         roman: p.roman,
       })),
-      ...CHORD_PROGRESSION_TEMPLATES.map((t) => ({
-        id: `factory-${t.name}`,
-        name: t.name,
-        category: t.category,
-        description: t.description,
+      ...CHORD_PROGRESSIONS.filter((p) => isProgressionAvailable(p, scaleType)).map((p) => ({
+        id: `factory-${p.id}`,
+        name: p.name,
+        category: p.category,
+        description: p.description,
         isFactory: true,
-        template: t,
+        progression: p,
       })),
     ],
-    [customProgressions],
+    [customProgressions, scaleType],
   );
 
   const categories = useMemo<PresetCategory[]>(
@@ -119,31 +130,17 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     const matchesSearch =
       query.trim() === '' ||
       e.name.toLowerCase().includes(query.toLowerCase()) ||
-      (e.template ? e.template.roman : e.roman ?? '').toLowerCase().includes(query.toLowerCase()) ||
+      (e.progression ? e.progression.roman : e.roman ?? '').toLowerCase().includes(query.toLowerCase()) ||
       e.description.toLowerCase().includes(query.toLowerCase());
 
     return matchesCategory && matchesSearch;
   };
 
-  // Helper to convert template into chords transposed to scaleRoot and optionally auto-reharmonized
-  const resolveTemplateChords = (template: ProgressionTemplate): ChordItem[] => {
-    const baseRootIndex = rootSemitone(scaleRoot);
-    let chords: ChordItem[] = template.relativeChords.map((rc, i) => {
-      const transposedRoot = ROOTS[(baseRootIndex + rc.interval) % 12];
-      return {
-        id: `tpl-chord-${Date.now()}-${i}`,
-        root: transposedRoot,
-        quality: rc.quality,
-        bars: rc.bars,
-        notes: generateBlockChordNotes(rc.quality, transposedRoot, 4),
-      };
-    });
-
-    if (autoReharmonize) {
-      chords = reharmonizeProgressionToScale(chords, scaleRoot, scaleType);
-    }
-    return chords;
-  };
+  // Degree form has no other resolution: the result is in the active key and
+  // scale by construction, so this is NOT gated on autoReharmonize any more
+  // (and factory cards no longer show the "Auto" badge).
+  const resolveFactoryChords = (progression: ChordProgression): ChordItem[] =>
+    resolveProgression(progression, scaleRoot, scaleType, 4);
 
   const resolveCustomChords = (customChords: ChordItem[]): ChordItem[] => {
     let chords = customChords.map((c, i) => ({
@@ -153,15 +150,15 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     }));
 
     if (autoReharmonize) {
-      chords = reharmonizeProgressionToScale(chords, scaleRoot, scaleType);
+      chords = snapProgressionToScale(chords, scaleRoot, scaleType);
     }
     return chords;
   };
 
   // PORT of the original Apply handlers: resolve (transpose/reharmonize), apply, and close.
   const applyEntry = (entry: ChordLibraryEntry) => {
-    if (entry.template) {
-      const resolved = resolveTemplateChords(entry.template);
+    if (entry.progression) {
+      const resolved = resolveFactoryChords(entry.progression);
       onApplyChords(resolved);
       onClose();
     } else if (entry.chords) {
@@ -309,8 +306,8 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   // category tag + Auto badge, roman line, description, "In {scaleRoot}:" preview
   // line, audition (indigo pulse) + Load buttons.
   const renderTemplateCard = (e: ChordLibraryEntry) => {
-    const tpl = e.template!;
-    const resolvedChords = resolveTemplateChords(tpl);
+    const progression = e.progression!;
+    const resolvedChords = resolveFactoryChords(progression);
     const previewNames = resolvedChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
 
     return (
@@ -319,22 +316,17 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="font-bold text-xs text-base-content group-hover:text-module-chord transition-colors truncate">
-                {tpl.name}
+                {progression.name}
               </span>
               <span className="badge badge-sm bg-base-300 text-module-chord py-0.5 shrink-0">
-                {tpl.category}
+                {progression.category}
               </span>
-              {autoReharmonize && (
-                <span className="badge badge-sm badge-secondary badge-outline py-0.5 gap-0.5">
-                  <Sparkles className="w-2.5 h-2.5 text-secondary" /> Auto
-                </span>
-              )}
             </div>
             <div className="text-[11px] font-mono text-secondary font-semibold mt-0.5">
-              {tpl.roman}
+              {progression.roman}
             </div>
             <p className="text-[11px] text-base-content/60 mt-1 line-clamp-2">
-              {tpl.description}
+              {progression.description}
             </p>
             <div className="text-[10px] font-mono text-base-content/50 mt-1">
               In {scaleRoot}: <span className="text-base-content font-semibold">{previewNames}</span>
@@ -344,9 +336,9 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
           <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
             {/* Audition Play Button */}
             <button
-              onClick={() => handleAudition(resolvedChords, tpl.name)}
+              onClick={() => handleAudition(resolvedChords, progression.name)}
               className={`btn btn-xs ${
-                auditioningName === tpl.name
+                auditioningName === progression.name
                   ? '[--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)] animate-pulse'
                   : 'btn-ghost text-module-chord'
               }`}
@@ -449,7 +441,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   };
 
   const renderEntry = (e: ChordLibraryEntry) => {
-    if (e.template) return renderTemplateCard(e);
+    if (e.progression) return renderTemplateCard(e);
     return renderCustomCard(e);
   };
 
@@ -489,7 +481,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Chord Progression Manager"
-      headerSubtitle={`Key of ${scaleRoot} • ${CHORD_PROGRESSION_TEMPLATES.length + customProgressions.length} Total Progressions`}
+      headerSubtitle={`Key of ${scaleRoot} • ${entries.length} Total Progressions`}
       saveButton={{ label: 'Save Current', title: 'Save current chord progression' }}
       toast={toastMsg}
       toastPlacement="top"

@@ -58,22 +58,77 @@ import {
 } from "../audio/bassPatterns";
 import {
   deriveChordNotes,
-  reharmonizeProgressionToScale,
+  snapProgressionToScale,
+  transposeProgression,
   SCALES,
   getDiatonicChordForDegree,
   getBorrowedChords,
   formatChordLabel,
 } from "../utils/musicTheory";
-import { ChordPresetLibrary } from "./ChordPresetLibrary";
+import { ChordPresetLibrary, isProgressionAvailable } from "./ChordPresetLibrary";
 import { ChannelStrip } from "./ui/ChannelStrip";
 import { QuickSavePopover } from "./ui/QuickSavePopover";
 import { Slider } from "./ui/Slider";
 import { SortableChordCard } from "./chord/SortableChordCard";
 
-import { CHORD_PROGRESSION_TEMPLATES } from "../audio/data/chordProgressions";
+import { CHORD_PROGRESSIONS } from "../audio/data/chordProgressions";
 
 const SELECT_BASE = "select select-sm font-semibold";
 const LABEL_BASE = "text-[10px] text-base-content/60 block mb-1";
+
+/**
+ * The whole auto-harmonize decision, as one pure function so it is testable
+ * without a DOM (repo convention: components export their testable helpers).
+ *
+ * `chordsReplaced` means "this render's chord array is not the one the last run
+ * saw" — an Instant Vibe, a library preset or a template just wrote it. Those
+ * chords were built in the key that arrived with them, so no key delta this
+ * effect can observe is a delta they need. It is checked first for that reason.
+ *
+ * Transpose-then-snap is the only correct order for a combined change: snapping
+ * first would measure the chords against a root they are not yet in.
+ */
+/**
+ * Whether a run of the auto-harmonize effect should clear a stale "Auto-
+ * Reharmonized" badge left over from an earlier run.
+ *
+ * `chordsReplaced` alone is not enough: it is also true for the Re-harmonize
+ * button and for manual chord edits (add / delete / reorder), both of which
+ * replace the `chords` array reference but leave the key untouched — clearing
+ * on `chordsReplaced` alone wipes the badge those actions just set. An
+ * Instant Vibe swap sets root, scale and chords together, so requiring the
+ * key to have actually changed is what distinguishes it from those cases.
+ *
+ * Known residual (not a regression, not chased here): a vibe whose key
+ * happens to equal the current key still leaves a stale badge, because there
+ * is no key delta to observe.
+ */
+export function shouldClearReharmonizeIndicator(
+  from: { root: string; scaleType: string },
+  to: { root: string; scaleType: string },
+  chordsReplaced: boolean,
+): boolean {
+  return chordsReplaced && (from.root !== to.root || from.scaleType !== to.scaleType);
+}
+
+export function applyKeyScaleChange(
+  chords: ChordItem[],
+  from: { root: string; scaleType: string },
+  to: { root: string; scaleType: string },
+  octave: number,
+  chordsReplaced: boolean,
+): ChordItem[] | null {
+  if (chordsReplaced || chords.length === 0) return null;
+
+  const rootChanged = from.root !== to.root;
+  const scaleChanged = from.scaleType !== to.scaleType;
+  if (!rootChanged && !scaleChanged) return null;
+
+  let next = chords;
+  if (rootChanged) next = transposeProgression(next, from.root, to.root, octave);
+  if (scaleChanged) next = snapProgressionToScale(next, to.root, to.scaleType, octave);
+  return next;
+}
 
 export const ChordView: React.FC = React.memo(() => {
   // ChordView reads the store directly (Task 5): every value below replaces
@@ -174,41 +229,67 @@ export const ChordView: React.FC = React.memo(() => {
     setBassVolume(vol);
   };
 
-  // Auto-reharmonize current chords when scale/root changes if autoReharmonize is enabled
+  // Auto-harmonize refs. The effect must not re-run when the toggle or the
+  // octave changes — only when the key or the chords do — so those two are read
+  // through refs kept fresh by an effect declared above it (effects run in
+  // declaration order, so these are current by the time the next one runs).
+  const keyRef = useRef({ root: scaleRoot, scaleType });
+  const chordsRef = useRef(chords);
+  const autoReharmonizeRef = useRef(autoReharmonize);
+  const chordOctaveRef = useRef(chordOctave);
+
   useEffect(() => {
-    if (autoReharmonize && chords.length > 0) {
-      const updated = reharmonizeProgressionToScale(
-        chords,
-        scaleRoot,
-        scaleType,
-        chordOctave,
-      );
-      setChords(updated);
-      setIsAutoReharmonizedIndicator(true);
-    }
-  }, [scaleRoot, scaleType]);
+    autoReharmonizeRef.current = autoReharmonize;
+    chordOctaveRef.current = chordOctave;
+  });
 
-  const handleApplyLibraryChords = (libraryChords: ChordItem[]) => {
-    let finalChords = libraryChords.map((c, i) =>
-      deriveChordNotes(
-        { ...c, id: `lib-chord-${Date.now()}-${i}` },
-        chordOctave,
-      ),
-    );
+  useEffect(() => {
+    const previousKey = keyRef.current;
+    const chordsReplaced = chordsRef.current !== chords;
+    chordsRef.current = chords;
+    keyRef.current = { root: scaleRoot, scaleType };
 
-    if (autoReharmonize) {
-      finalChords = reharmonizeProgressionToScale(
-        finalChords,
-        scaleRoot,
-        scaleType,
-        chordOctave,
-      );
-      setIsAutoReharmonizedIndicator(true);
-    } else {
+    // A wholesale replacement that also changes the key (Instant Vibe swap)
+    // does not go through handleApplyLibraryChords, so a badge left over from
+    // an earlier real harmonization would otherwise stay on screen and wrongly
+    // claim the new chords were reharmonized. Re-harmonize and manual chord
+    // edits also replace the array but leave the key alone, so they must not
+    // trip this — see shouldClearReharmonizeIndicator's doc comment. This
+    // can't be retriggered by the effect's own setChords below:
+    // chordsRef.current is assigned before that call, so the follow-up run
+    // sees chordsReplaced === false.
+    if (shouldClearReharmonizeIndicator(previousKey, keyRef.current, chordsReplaced)) {
       setIsAutoReharmonizedIndicator(false);
     }
 
-    setChords(finalChords);
+    if (!autoReharmonizeRef.current) return;
+
+    const next = applyKeyScaleChange(
+      chords,
+      previousKey,
+      keyRef.current,
+      chordOctaveRef.current,
+      chordsReplaced,
+    );
+    if (!next) return;
+
+    // Remember what we wrote, so the run this setChords triggers sees the
+    // chords as unreplaced rather than harmonizing its own output.
+    chordsRef.current = next;
+    setChords(next);
+    setIsAutoReharmonizedIndicator(true);
+  }, [scaleRoot, scaleType, chords, setChords]);
+
+  const handleApplyLibraryChords = (libraryChords: ChordItem[]) => {
+    // ChordPresetLibrary hands over chords already resolved in the active key
+    // and scale (factory entries from their degrees, custom ones snapped), so
+    // there is nothing left to harmonize here. Re-id and re-derive only.
+    setChords(
+      libraryChords.map((c, i) =>
+        deriveChordNotes({ ...c, id: `lib-chord-${Date.now()}-${i}` }, chordOctave),
+      ),
+    );
+    setIsAutoReharmonizedIndicator(false);
   };
 
   const handleQuickSaveSubmit = (e: React.FormEvent) => {
@@ -427,7 +508,8 @@ export const ChordView: React.FC = React.memo(() => {
   };
 
   const totalProgressionsCount =
-    CHORD_PROGRESSION_TEMPLATES.length + customProgressions.length;
+    CHORD_PROGRESSIONS.filter((p) => isProgressionAvailable(p, scaleType)).length +
+    customProgressions.length;
 
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
@@ -692,7 +774,7 @@ export const ChordView: React.FC = React.memo(() => {
           <button
             id="btn-reharmonize-chord-progression"
             onClick={() => {
-              const updated = reharmonizeProgressionToScale(
+              const updated = snapProgressionToScale(
                 chords,
                 scaleRoot,
                 scaleType,
@@ -716,18 +798,17 @@ export const ChordView: React.FC = React.memo(() => {
           <button
             id="btn-toggle-auto-reharmonize"
             onClick={() => {
+              // Turning this ON must not rewrite the current chords: a snap here
+              // would reproduce the exact scramble this feature exists to
+              // remove (e.g. key change made while OFF, then toggled back ON
+              // would snap chords still sitting in the old key). Flipping the
+              // flag only starts applying `applyKeyScaleChange` to *future*
+              // key/scale changes; it is not itself a harmonize action. The
+              // explicit "Re-harmonize" button above is the deliberate,
+              // user-requested snap — leave that one alone.
               const nextVal = !autoReharmonize;
               setAutoReharmonize(nextVal);
-              if (nextVal && chords.length > 0) {
-                const updated = reharmonizeProgressionToScale(
-                  chords,
-                  scaleRoot,
-                  scaleType,
-                  chordOctave,
-                );
-                setChords(updated);
-                setIsAutoReharmonizedIndicator(true);
-              } else {
+              if (!nextVal) {
                 setIsAutoReharmonizedIndicator(false);
               }
             }}

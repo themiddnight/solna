@@ -1,332 +1,627 @@
-// Chord progression templates + their type. Moved verbatim from ChordView.tsx
-// (was lines 94–421). Lives in audio/data so ChordView and ChordPresetLibrary
-// can both import it without the ChordView <-> ChordPresetLibrary cycle.
+// The shared chord-progression library, in degree form. ChordPresetLibrary and
+// (from project B2) the vibe dice both read CHORD_PROGRESSIONS; nothing stores
+// a progression as absolute semitones any more.
+//
+// Layering: this file is under src/audio/, which eslint restricts only from
+// store/ and components/. Importing utils/musicTheory.ts and types.ts is
+// allowed and deliberate — deriveChordNotes is the single source of truth for
+// ChordItem.notes and must not be re-implemented here.
 
-export interface ProgressionTemplate {
-  name: string;
-  category:
-    | "Pop & EDM"
-    | "Jazz & Neo-Soul"
-    | "Lofi & R&B"
-    | "Rock & Blues"
-    | "Anime & J-Pop"
-    | "Cinematic & Modal"
-    | "Classical & Baroque";
-  roman: string;
-  description: string;
-  // Semitone intervals relative to the chosen key's root (0 = Key root)
-  // along with chord quality for key transposition
-  relativeChords: Array<{ interval: number; quality: string; bars: number }>;
+import type { ChordItem } from '../../types';
+import { deriveChordNotes, getDiatonicChordForDegree } from '../../utils/musicTheory';
+
+// Declared in src/types.ts, re-exported here so this stays the import site the
+// shared B1/B2 interface pins.
+export type { VibeGenre } from '../../types';
+import type { VibeGenre } from '../../types';
+
+export type ProgressionCategory =
+  | 'Pop & EDM'
+  | 'Jazz & Neo-Soul'
+  | 'Lofi & R&B'
+  | 'Rock & Blues'
+  | 'Anime & J-Pop'
+  | 'Cinematic & Modal'
+  | 'Classical & Baroque'
+  | 'Ambient & Zen';
+
+export interface ProgressionStep {
+  /** 0-based scale degree; wraps modulo the scale's own length. */
+  degree: number;
+  /**
+   * Overrides the diatonic quality. **Omitted means the scale's own TRIAD for
+   * that degree**, never the seventh — ProgressionStep has no use7ths flag, and
+   * the two readings are silently different music. Genres whose identity is
+   * extended harmony (lo-fi, boom bap) write their qualities out.
+   */
+  quality?: string;
+  /** Bars this chord is held. 1 for lofi/boom bap, 2 for EDM, 4+ for ambient. */
+  bars: number;
 }
 
-export const CHORD_PROGRESSION_TEMPLATES: ProgressionTemplate[] = [
-  // Pop & EDM
+export interface ChordProgression {
+  /** Stable identifier. Referenced by VibeVariation.progressionIds in B2. */
+  id: string;
+  name: string;
+  /** Display-ready roman-numeral summary; true in `referenceScale`. B2 prints
+   *  this verbatim in its reroll toast, so it must match the steps. */
+  roman: string;
+  description: string;
+  /** Library chip in ChordPresetLibrary. */
+  category: ProgressionCategory;
+  /** The key of SCALES the degrees and qualities were authored against. */
+  referenceScale: string;
+  /** Which vibes may draw this progression. Empty = library-only. A tag is
+   *  only valid when referenceScale === VIBE_GENRE_SCALES[tag]. */
+  genres: VibeGenre[];
+  /** Shortest scale this is valid in: SCALES[referenceScale].intervals.length.
+   *  5 works in pentatonic and Hirajoshi; 7 needs a full diatonic scale. */
+  minScaleLength: number;
+  steps: ProgressionStep[];
+}
+
+/** Each genre's anchor scale. Scale type is genre identity and never varies. */
+export const VIBE_GENRE_SCALES: Record<VibeGenre, string> = {
+  lofi: 'Major',
+  synthwave: 'Natural Minor',
+  edm: 'Natural Minor',
+  ambient: 'Lydian',
+  boombap: 'Dorian',
+  zen: 'Hirajoshi',
+};
+
+const step = (degree: number, bars = 1, quality?: string): ProgressionStep =>
+  quality === undefined ? { degree, bars } : { degree, quality, bars };
+
+export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
-    name: "Classic 4-Chord Pop Anthem",
-    category: "Pop & EDM",
-    roman: "I – V – vi – IV",
+    id: 'pop-i-v-vi-iv',
+    name: 'Classic 4-Chord Pop Anthem',
+    roman: 'I – V – vi – IV',
     description:
-      "The definitive major-scale pop progression creating an instantly uplifting and catchy flow.",
-    relativeChords: [
-      { interval: 0, quality: "maj", bars: 1 }, // I
-      { interval: 7, quality: "maj", bars: 1 }, // V
-      { interval: 9, quality: "min", bars: 1 }, // vi
-      { interval: 5, quality: "maj", bars: 1 }, // IV
+      'The definitive major-scale pop progression creating an instantly uplifting and catchy flow.',
+    category: 'Pop & EDM',
+    referenceScale: 'Major',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(0), step(4), step(5), step(3)],
+  },
+  {
+    id: 'pop-vi-iv-i-v',
+    name: 'Emotional Minor Synthwave',
+    roman: 'vi – IV – I – V',
+    description:
+      'Moody, heroic, and emotional minor opening used widely in synthwave, EDM, and cinematic anthems.',
+    category: 'Pop & EDM',
+    referenceScale: 'Major',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(5), step(3), step(0), step(4)],
+  },
+  {
+    id: 'pop-doowop',
+    name: 'Classic 50s Doo-Wop Cadence',
+    roman: 'I – vi – IV – V',
+    description:
+      'Timeless vintage progression with warm, romantic, and circular harmonic resolution.',
+    category: 'Pop & EDM',
+    referenceScale: 'Major',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(0), step(5), step(3), step(4)],
+  },
+  {
+    id: 'pop-future-bass',
+    name: 'Future Bass / Euphoric EDM Lift',
+    roman: 'IVmaj7 – V7 – iiim7 – vim7',
+    description:
+      'Lush 7th chord cadence creating unstoppable momentum and euphoric drops.',
+    category: 'Pop & EDM',
+    referenceScale: 'Major',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(3, 1, 'maj7'), step(4, 1, '7'), step(2, 1, 'min7'), step(5, 1, 'min7')],
+  },
+  {
+    id: 'pop-club-house',
+    name: 'Club Dance & House Groove',
+    roman: 'i – VI – VII – v',
+    description:
+      'Driving natural minor cadence standard in modern deep house and electronic dance music.',
+    category: 'Pop & EDM',
+    referenceScale: 'Natural Minor',
+    // Both synthwave and edm anchor on Natural Minor, so this entry is legal in
+    // both pools, and it is the fourth edm progression the dice needs. Its bars
+    // stay 1 because the migration proof compares them verbatim — which is why
+    // the edm convention test asks for uniform bars rather than always-2.
+    genres: ['synthwave', 'edm'],
+    minScaleLength: 7,
+    steps: [step(0, 1, 'min7'), step(5, 1, 'maj7'), step(6, 1, '7'), step(4, 1, 'min7')],
+  },
+  {
+    id: 'jazz-ii-v-i-vi',
+    name: 'Jazz ii-V-I-VI Turnaround',
+    roman: 'ii7 – V7 – Imaj7 – VI7',
+    description:
+      'The quintessential jazz standard backbone featuring a secondary dominant turnaround.',
+    category: 'Jazz & Neo-Soul',
+    referenceScale: 'Major',
+    genres: ['lofi'],
+    minScaleLength: 7,
+    steps: [step(1, 1, 'min7'), step(4, 1, '7'), step(0, 1, 'maj7'), step(5, 1, '7')],
+  },
+  {
+    id: 'jazz-neosoul-butter',
+    name: 'Neo-Soul Butter Flow',
+    roman: 'Imaj9 – viim7b5 – III7 – vim9',
+    description:
+      'Complex soulful harmony with half-diminished 7b5 leading into a dominant resolution.',
+    category: 'Jazz & Neo-Soul',
+    referenceScale: 'Major',
+    genres: ['lofi'],
+    minScaleLength: 7,
+    steps: [step(0, 1, 'maj9'), step(6, 1, 'm7b5'), step(2, 1, '7'), step(5, 1, 'min9')],
+  },
+  {
+    id: 'jazz-chromatic-mediants',
+    name: 'Chromatic Mediants / Giant Step Cycle',
+    roman: 'Imaj7 – bVImaj7 – bIImaj7 – V7',
+    description:
+      'Chromatic third root movements providing a vibrant, otherworldly modal jazz coloration.',
+    category: 'Jazz & Neo-Soul',
+    referenceScale: 'Phrygian',
+    genres: [],
+    minScaleLength: 7,
+    steps: [
+      step(0, 1, 'maj7'),
+      step(5, 1, 'maj7'),
+      step(1, 1, 'maj7'),
+      step(4, 1, '7sus4'),
     ],
   },
   {
-    name: "Emotional Minor Synthwave",
-    category: "Pop & EDM",
-    roman: "vi – IV – I – V",
+    id: 'lofi-coffeehouse',
+    name: 'Lofi Extended 9th Coffeehouse',
+    roman: 'ii9 – V13 – Imaj9 – IVmaj7',
     description:
-      "Moody, heroic, and emotional minor opening used widely in synthwave, EDM, and cinematic anthems.",
-    relativeChords: [
-      { interval: 9, quality: "min", bars: 1 }, // vi
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-      { interval: 0, quality: "maj", bars: 1 }, // I
-      { interval: 7, quality: "maj", bars: 1 }, // V
+      'Warm, relaxed extended 9th and 13th chords tailored for mellow beats and study sessions.',
+    category: 'Lofi & R&B',
+    referenceScale: 'Major',
+    genres: ['lofi'],
+    minScaleLength: 7,
+    steps: [step(1, 1, 'min9'), step(4, 1, '7'), step(0, 1, 'maj9'), step(3, 1, 'maj7')],
+  },
+  {
+    id: 'lofi-trapsoul',
+    name: 'Contemporary R&B / Trap-Soul Flow',
+    roman: 'i9 – iv7 – VII9 – IIImaj7',
+    description:
+      'Sultry, atmospheric minor progression standard in contemporary R&B and downtempo production.',
+    category: 'Lofi & R&B',
+    referenceScale: 'Natural Minor',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(0, 1, 'min9'), step(3, 1, 'min7'), step(6, 1, '9'), step(2, 1, 'maj7')],
+  },
+  {
+    id: 'lofi-bedroom-pop',
+    name: 'Melancholy Bedroom Pop',
+    roman: 'Imaj7 – IVmaj7 – ii7 – V7',
+    description:
+      'Intimate, nostalgic daydream feel with soft major-7th oscillations and tender resolutions.',
+    category: 'Lofi & R&B',
+    referenceScale: 'Major',
+    genres: ['lofi'],
+    minScaleLength: 7,
+    steps: [step(0, 1, 'maj7'), step(3, 1, 'maj7'), step(1, 1, 'min7'), step(4, 1, '7')],
+  },
+  {
+    id: 'jpop-royal-road',
+    name: 'Royal Road / Oudo Cadence (王道進行)',
+    roman: 'IVmaj7 – V7 – iiim7 – vim7',
+    description:
+      'The golden standard harmonic sequence of Asian pop and modern dynamic anime theme tracks.',
+    category: 'Anime & J-Pop',
+    referenceScale: 'Major',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(3, 1, 'maj7'), step(4, 1, '7'), step(2, 1, 'min7'), step(5, 1, 'min7')],
+  },
+  {
+    id: 'jpop-marusa',
+    name: 'City Pop / Marusa Groove (丸サ進行)',
+    roman: 'IVmaj7 – III7 – vim7 – I7',
+    description:
+      'Infectious groove with secondary dominant transition standard in vintage City Pop and Funk.',
+    category: 'Anime & J-Pop',
+    referenceScale: 'Major',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(3, 1, 'maj7'), step(2, 1, '7'), step(5, 1, 'min7'), step(0, 1, '7')],
+  },
+  {
+    id: 'jpop-heroic',
+    name: 'Heroic Anthem / J-Rock Drive',
+    roman: 'vi – IV – V – I',
+    description:
+      'High-energy, heroic minor-to-major resolution celebrating triumph and determination.',
+    category: 'Anime & J-Pop',
+    referenceScale: 'Major',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(5), step(3), step(4), step(0)],
+  },
+  {
+    id: 'blues-12bar',
+    name: '12-Bar Blues Standard',
+    roman: 'I7 – IV7 – I7 – V7 – IV7 – I7',
+    description:
+      'The foundational public domain 12-bar blues form loaded with dominant 7th grit.',
+    category: 'Rock & Blues',
+    referenceScale: 'Major',
+    genres: [],
+    minScaleLength: 7,
+    steps: [
+      step(0, 2, '7'),
+      step(3, 1, '7'),
+      step(0, 1, '7'),
+      step(4, 1, '7'),
+      step(3, 1, '7'),
+      step(0, 2, '7'),
     ],
   },
   {
-    name: "Classic 50s Doo-Wop Cadence",
-    category: "Pop & EDM",
-    roman: "I – vi – IV – V",
+    id: 'rock-mixolydian',
+    name: 'Mixolydian Rock Anthem',
+    roman: 'I – bVII – IV – I',
     description:
-      "Timeless vintage progression with warm, romantic, and circular harmonic resolution.",
-    relativeChords: [
-      { interval: 0, quality: "maj", bars: 1 }, // I
-      { interval: 9, quality: "min", bars: 1 }, // vi
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-      { interval: 7, quality: "maj", bars: 1 }, // V
-    ],
+      'Modal rock swagger featuring the flattened seventh chord for a gritty, driving feel.',
+    category: 'Rock & Blues',
+    referenceScale: 'Mixolydian',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(0), step(6), step(3), step(0)],
   },
   {
-    name: "Future Bass / Euphoric EDM Lift",
-    category: "Pop & EDM",
-    roman: "IVmaj7 – V7 – iiim7 – vim7",
+    id: 'rock-andalusian',
+    name: 'Andalusian / Flamenco Descent',
+    roman: 'i – bVII – bVI – V',
     description:
-      "Lush 7th chord cadence creating unstoppable momentum and euphoric drops.",
-    relativeChords: [
-      { interval: 5, quality: "maj7", bars: 1 }, // IVmaj7
-      { interval: 7, quality: "7", bars: 1 }, // V7
-      { interval: 4, quality: "min7", bars: 1 }, // iiim7
-      { interval: 9, quality: "min7", bars: 1 }, // vim7
-    ],
+      'Dramatic descending Phrygian bassline cadence rooted in historic Spanish folk and acoustic rock.',
+    category: 'Rock & Blues',
+    referenceScale: 'Natural Minor',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(0), step(6), step(5), step(4, 1, '7')],
   },
   {
-    name: "Club Dance & House Groove",
-    category: "Pop & EDM",
-    roman: "i – VI – VII – v",
+    id: 'cine-epic-ostinato',
+    name: 'Epic Cinematic Ostinato',
+    roman: 'i – bVI – III – bVII',
     description:
-      "Driving natural minor cadence standard in modern deep house and electronic dance music.",
-    relativeChords: [
-      { interval: 0, quality: "min7", bars: 1 }, // i
-      { interval: 8, quality: "maj7", bars: 1 }, // VI
-      { interval: 10, quality: "7", bars: 1 }, // VII
-      { interval: 7, quality: "min7", bars: 1 }, // v
-    ],
+      'Monumental cinematic progression built for soaring blockbuster film scores and orchestral trailers.',
+    category: 'Cinematic & Modal',
+    referenceScale: 'Natural Minor',
+    genres: ['synthwave'],
+    minScaleLength: 7,
+    steps: [step(0), step(5), step(2), step(6)],
+  },
+  {
+    id: 'cine-dorian-voyage',
+    name: 'Dorian Space Voyage',
+    roman: 'i7 – IV7 – i7 – IV7',
+    description:
+      'Floating, futuristic vamp utilizing natural 6th modal harmonization for electronic soundscapes.',
+    category: 'Cinematic & Modal',
+    referenceScale: 'Dorian',
+    genres: ['boombap'],
+    minScaleLength: 7,
+    steps: [step(0, 1, 'min7'), step(3, 1, '7'), step(0, 1, 'min7'), step(3, 1, '7')],
+  },
+  {
+    id: 'cine-lydian-dream',
+    name: 'Lydian Dreamscape',
+    roman: 'Imaj7 – II – Imaj7 – II',
+    description:
+      'Magical raised-4th harmony evoking wonder, airborne flight, and majestic adventure.',
+    category: 'Cinematic & Modal',
+    referenceScale: 'Lydian',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(0, 1, 'maj7'), step(1), step(0, 1, 'maj7'), step(1)],
+  },
+  {
+    id: 'baroque-canon',
+    name: 'Baroque Canon Cadence',
+    roman: 'I – V – vi – iii – IV – I – IV – V',
+    description:
+      'The golden traditional baroque harmonic sequence celebrated across 300 years of music history.',
+    category: 'Classical & Baroque',
+    referenceScale: 'Major',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(0), step(4), step(5), step(2), step(3), step(0), step(3), step(4)],
+  },
+  {
+    id: 'baroque-passacaglia',
+    name: 'Passacaglia / Circle of Fifths Descent',
+    roman: 'i – iv – VII – III – VI – iio – V – i',
+    description:
+      'Hypnotic circular resolution driving classical drama, emotional tension, and resolve.',
+    category: 'Classical & Baroque',
+    referenceScale: 'Natural Minor',
+    genres: [],
+    minScaleLength: 7,
+    steps: [step(0), step(3), step(6), step(2), step(5), step(1), step(4, 1, '7'), step(0)],
   },
 
-  // Jazz & Neo-Soul
+  // --- Ambient: Lydian is the signature ambient scale. Modal vamps, pedal
+  // tones, 4-32 bars per chord, and no V-I cadence anywhere — including across
+  // the loop point, which is why none of these contains degree 4 at all.
   {
-    name: "Jazz ii-V-I-VI Turnaround",
-    category: "Jazz & Neo-Soul",
-    roman: "ii7 – V7 – Imaj7 – VI7",
+    id: 'ambient-still-water',
+    name: 'Still Water Pedal',
+    roman: 'Imaj7 – vim7',
     description:
-      "The quintessential jazz standard backbone featuring a secondary dominant turnaround.",
-    relativeChords: [
-      { interval: 2, quality: "min7", bars: 1 }, // ii7
-      { interval: 7, quality: "7", bars: 1 }, // V7
-      { interval: 0, quality: "maj7", bars: 1 }, // Imaj7
-      { interval: 9, quality: "7", bars: 1 }, // VI7
-    ],
+      'Two chords over eight bars each: a tonic pedal that breathes rather than moves.',
+    category: 'Ambient & Zen',
+    referenceScale: 'Lydian',
+    genres: ['ambient'],
+    minScaleLength: 7,
+    steps: [step(0, 8, 'maj7'), step(5, 8, 'min7')],
   },
   {
-    name: "Neo-Soul Butter Flow",
-    category: "Jazz & Neo-Soul",
-    roman: "Imaj9 – viim7b5 – III7 – vim9",
+    id: 'ambient-lydian-drift',
+    name: 'Lydian Drift',
+    roman: 'Imaj7 – II – iiim7 – II',
     description:
-      "Complex soulful harmony with half-diminished 7b5 leading into a dominant resolution.",
-    relativeChords: [
-      { interval: 0, quality: "maj9", bars: 1 }, // Imaj9
-      { interval: 11, quality: "m7b5", bars: 1 }, // viim7b5
-      { interval: 4, quality: "7", bars: 1 }, // III7
-      { interval: 9, quality: "min9", bars: 1 }, // vim9
-    ],
+      'The raised fourth heard as a major II chord, drifting back and forth without ever resolving.',
+    category: 'Ambient & Zen',
+    referenceScale: 'Lydian',
+    genres: ['ambient'],
+    minScaleLength: 7,
+    steps: [step(0, 4, 'maj7'), step(1, 4), step(2, 4, 'min7'), step(1, 4)],
   },
   {
-    name: "Chromatic Mediants / Giant Step Cycle",
-    category: "Jazz & Neo-Soul",
-    roman: "Imaj7 – bVImaj7 – bIImaj7 – V7",
+    id: 'ambient-open-fourths',
+    name: 'Open-Fourth Vamp',
+    roman: 'Isus2 – IIsus2',
     description:
-      "Chromatic third root movements providing a vibrant, otherworldly modal jazz coloration.",
-    relativeChords: [
-      { interval: 0, quality: "maj7", bars: 1 }, // Imaj7
-      { interval: 8, quality: "maj7", bars: 1 }, // bVImaj7
-      { interval: 1, quality: "maj7", bars: 1 }, // bIImaj7
-      { interval: 7, quality: "7sus4", bars: 1 }, // V7sus4
-    ],
-  },
-
-  // Lofi & R&B
-  {
-    name: "Lofi Extended 9th Coffeehouse",
-    category: "Lofi & R&B",
-    roman: "ii9 – V13 – Imaj9 – IVmaj7",
-    description:
-      "Warm, relaxed extended 9th and 13th chords tailored for mellow beats and study sessions.",
-    relativeChords: [
-      { interval: 2, quality: "min9", bars: 1 }, // ii9
-      { interval: 7, quality: "7", bars: 1 }, // V7
-      { interval: 0, quality: "maj9", bars: 1 }, // Imaj9
-      { interval: 5, quality: "maj7", bars: 1 }, // IVmaj7
-    ],
+      'Suspended, thirdless voicings that leave the mode ambiguous and the texture wide open.',
+    category: 'Ambient & Zen',
+    referenceScale: 'Lydian',
+    genres: ['ambient'],
+    minScaleLength: 7,
+    steps: [step(0, 4, 'sus2'), step(1, 4, 'sus2')],
   },
   {
-    name: "Contemporary R&B / Trap-Soul Flow",
-    category: "Lofi & R&B",
-    roman: "i9 – iv7 – VII9 – IIImaj7",
+    id: 'ambient-glass-horizon',
+    name: 'Glass Horizon',
+    roman: 'vim7 – Imaj7 – iiim7 – IIsus2',
     description:
-      "Sultry, atmospheric minor progression standard in contemporary R&B and downtempo production.",
-    relativeChords: [
-      { interval: 0, quality: "min9", bars: 1 }, // i9
-      { interval: 5, quality: "min7", bars: 1 }, // iv7
-      { interval: 10, quality: "9", bars: 1 }, // VII9
-      { interval: 3, quality: "maj7", bars: 1 }, // IIImaj7
-    ],
-  },
-  {
-    name: "Melancholy Bedroom Pop",
-    category: "Lofi & R&B",
-    roman: "Imaj7 – IVmaj7 – ii7 – V7",
-    description:
-      "Intimate, nostalgic daydream feel with soft major-7th oscillations and tender resolutions.",
-    relativeChords: [
-      { interval: 0, quality: "maj7", bars: 1 }, // Imaj7
-      { interval: 5, quality: "maj7", bars: 1 }, // IVmaj7
-      { interval: 2, quality: "min7", bars: 1 }, // ii7
-      { interval: 7, quality: "7", bars: 1 }, // V7
-    ],
+      'Opens away from the tonic, so the key arrives late and the loop never settles on a downbeat.',
+    category: 'Ambient & Zen',
+    referenceScale: 'Lydian',
+    genres: ['ambient'],
+    minScaleLength: 7,
+    steps: [step(5, 4, 'min7'), step(0, 4, 'maj7'), step(2, 4, 'min7'), step(1, 4, 'sus2')],
   },
 
-  // Anime & J-Pop
+  // --- EDM: the three shapes the research names for 126-130 BPM, all two bars
+  // per chord so the drop has room to breathe.
   {
-    name: "Royal Road / Oudo Cadence (王道進行)",
-    category: "Anime & J-Pop",
-    roman: "IVmaj7 – V7 – iiim7 – vim7",
+    id: 'edm-cyber-drop',
+    name: 'Cyber Drop Loop',
+    roman: 'i – VII – VI – VII',
     description:
-      "The golden standard harmonic sequence of Asian pop and modern dynamic anime theme tracks.",
-    relativeChords: [
-      { interval: 5, quality: "maj7", bars: 1 }, // IVmaj7
-      { interval: 7, quality: "7", bars: 1 }, // V7
-      { interval: 4, quality: "min7", bars: 1 }, // iiim7
-      { interval: 9, quality: "min7", bars: 1 }, // vim7
-    ],
+      'The workhorse main-stage loop: a minor tonic rocking between its two flat neighbours.',
+    category: 'Pop & EDM',
+    referenceScale: 'Natural Minor',
+    genres: ['edm'],
+    minScaleLength: 7,
+    steps: [step(0, 2), step(6, 2), step(5, 2), step(6, 2)],
   },
   {
-    name: "City Pop / Marusa Groove (丸サ進行)",
-    category: "Anime & J-Pop",
-    roman: "IVmaj7 – III7 – vim7 – I7",
+    id: 'edm-neon-rise',
+    name: 'Neon Rise',
+    roman: 'i – VI – III – VII',
     description:
-      "Infectious groove with secondary dominant transition standard in vintage City Pop and Funk.",
-    relativeChords: [
-      { interval: 5, quality: "maj7", bars: 1 }, // IVmaj7
-      { interval: 4, quality: "7", bars: 1 }, // III7 (secondary dominant)
-      { interval: 9, quality: "min7", bars: 1 }, // vim7
-      { interval: 0, quality: "7", bars: 1 }, // I7
-    ],
+      'Descending-then-lifting minor cycle that carries a build without needing a key change.',
+    category: 'Pop & EDM',
+    referenceScale: 'Natural Minor',
+    genres: ['edm'],
+    minScaleLength: 7,
+    steps: [step(0, 2), step(5, 2), step(2, 2), step(6, 2)],
   },
   {
-    name: "Heroic Anthem / J-Rock Drive",
-    category: "Anime & J-Pop",
-    roman: "vi – IV – V – I",
+    id: 'edm-arena-sweep',
+    name: 'Arena Sweep',
+    roman: 'i – III – VII – VI',
     description:
-      "High-energy, heroic minor-to-major resolution celebrating triumph and determination.",
-    relativeChords: [
-      { interval: 9, quality: "min", bars: 1 }, // vi
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-      { interval: 7, quality: "maj", bars: 1 }, // V
-      { interval: 0, quality: "maj", bars: 1 }, // I
-    ],
+      'Bright relative-major lift on the second chord, then a long fall back to the tonic.',
+    category: 'Pop & EDM',
+    referenceScale: 'Natural Minor',
+    genres: ['edm'],
+    minScaleLength: 7,
+    steps: [step(0, 2), step(2, 2), step(6, 2), step(5, 2)],
   },
 
-  // Rock & Blues
+  // --- Synthwave: almost exclusively minor, with occasional modal borrowing
+  // for brightness.
   {
-    name: "12-Bar Blues Standard",
-    category: "Rock & Blues",
-    roman: "I7 – IV7 – I7 – V7 – IV7 – I7",
+    id: 'synthwave-midnight-drive',
+    name: 'Midnight Drive',
+    roman: 'i – iv – VI – V',
     description:
-      "The foundational public domain 12-bar blues form loaded with dominant 7th grit.",
-    relativeChords: [
-      { interval: 0, quality: "7", bars: 2 }, // I7
-      { interval: 5, quality: "7", bars: 1 }, // IV7
-      { interval: 0, quality: "7", bars: 1 }, // I7
-      { interval: 7, quality: "7", bars: 1 }, // V7
-      { interval: 5, quality: "7", bars: 1 }, // IV7
-      { interval: 0, quality: "7", bars: 2 }, // I7
-    ],
+      'A major V borrowed over the natural-minor scale — the one bright chord in an otherwise dark loop.',
+    category: 'Pop & EDM',
+    referenceScale: 'Natural Minor',
+    genres: ['synthwave'],
+    minScaleLength: 7,
+    steps: [step(0), step(3), step(5), step(4, 1, 'maj')],
   },
   {
-    name: "Mixolydian Rock Anthem",
-    category: "Rock & Blues",
-    roman: "I – bVII – IV – I",
+    id: 'synthwave-neon-horizon',
+    name: 'Neon Horizon',
+    roman: 'i – VII – III – VI',
     description:
-      "Modal rock swagger featuring the flattened seventh chord for a gritty, driving feel.",
-    relativeChords: [
-      { interval: 0, quality: "maj", bars: 1 }, // I
-      { interval: 10, quality: "maj", bars: 1 }, // bVII
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-      { interval: 0, quality: "maj", bars: 1 }, // I
-    ],
-  },
-  {
-    name: "Andalusian / Flamenco Descent",
-    category: "Rock & Blues",
-    roman: "i – bVII – bVI – V",
-    description:
-      "Dramatic descending Phrygian bassline cadence rooted in historic Spanish folk and acoustic rock.",
-    relativeChords: [
-      { interval: 0, quality: "min", bars: 1 }, // i
-      { interval: 10, quality: "maj", bars: 1 }, // bVII
-      { interval: 8, quality: "maj", bars: 1 }, // bVI
-      { interval: 7, quality: "7", bars: 1 }, // V7
-    ],
+      'Strictly diatonic minor cycle with a chord per bar, built for arpeggiated pads.',
+    category: 'Pop & EDM',
+    referenceScale: 'Natural Minor',
+    genres: ['synthwave'],
+    minScaleLength: 7,
+    steps: [step(0), step(6), step(2), step(5)],
   },
 
-  // Cinematic & Modal
+  // --- Lo-Fi: sevenths and ninths are the default, not decoration.
   {
-    name: "Epic Cinematic Ostinato",
-    category: "Cinematic & Modal",
-    roman: "i – bVI – III – bVII",
+    id: 'lofi-rainy-window',
+    name: 'Rainy Window',
+    roman: 'vim9 – IVmaj7 – ii9 – V7',
     description:
-      "Monumental cinematic progression built for soaring blockbuster film scores and orchestral trailers.",
-    relativeChords: [
-      { interval: 0, quality: "min", bars: 1 }, // i
-      { interval: 8, quality: "maj", bars: 1 }, // bVI
-      { interval: 3, quality: "maj", bars: 1 }, // III
-      { interval: 10, quality: "maj", bars: 1 }, // bVII
-    ],
+      'Starts on the relative minor ninth and walks a soft ii-V home; smooth voice leading throughout.',
+    category: 'Lofi & R&B',
+    referenceScale: 'Major',
+    genres: ['lofi'],
+    minScaleLength: 7,
+    steps: [step(5, 1, 'min9'), step(3, 1, 'maj7'), step(1, 1, 'min9'), step(4, 1, '7')],
   },
   {
-    name: "Dorian Space Voyage",
-    category: "Cinematic & Modal",
-    roman: "i7 – IV7 – i7 – IV7",
+    id: 'lofi-tape-loop',
+    name: 'Tape Loop',
+    roman: 'Imaj9 – vim7 – ii9 – V9',
     description:
-      "Floating, futuristic vamp utilizing natural 6th modal harmonization for electronic soundscapes.",
-    relativeChords: [
-      { interval: 0, quality: "min7", bars: 1 }, // i7
-      { interval: 5, quality: "7", bars: 1 }, // IV7 (Major IV in Dorian)
-      { interval: 0, quality: "min7", bars: 1 }, // i7
-      { interval: 5, quality: "7", bars: 1 }, // IV7
-    ],
-  },
-  {
-    name: "Lydian Dreamscape",
-    category: "Cinematic & Modal",
-    roman: "Imaj7 – II – Imaj7 – II",
-    description:
-      "Magical raised-4th harmony evoking wonder, airborne flight, and majestic adventure.",
-    relativeChords: [
-      { interval: 0, quality: "maj7", bars: 1 }, // Imaj7
-      { interval: 2, quality: "maj", bars: 1 }, // II (Major 2 in Lydian)
-      { interval: 0, quality: "maj7", bars: 1 }, // Imaj7
-      { interval: 2, quality: "maj", bars: 1 }, // II
-    ],
+      'A turnaround that closes on a dominant ninth, so the loop point never quite resolves.',
+    category: 'Lofi & R&B',
+    referenceScale: 'Major',
+    genres: ['lofi'],
+    minScaleLength: 7,
+    steps: [step(0, 1, 'maj9'), step(5, 1, 'min7'), step(1, 1, 'min9'), step(4, 1, '9')],
   },
 
-  // Classical & Baroque
+  // --- Boom Bap: Dorian, min7 / maj7 and 9/11/13 extensions, ii-V-i.
   {
-    name: "Baroque Canon Cadence",
-    category: "Classical & Baroque",
-    roman: "I – V – vi – iii – IV – I – IV – V",
+    id: 'boombap-dusty-ii-v',
+    name: 'Dusty ii–V–i',
+    roman: 'iim7 – V7 – im9',
     description:
-      "The golden traditional baroque harmonic sequence celebrated across 300 years of music history.",
-    relativeChords: [
-      { interval: 0, quality: "maj", bars: 1 }, // I
-      { interval: 7, quality: "maj", bars: 1 }, // V
-      { interval: 9, quality: "min", bars: 1 }, // vi
-      { interval: 4, quality: "min", bars: 1 }, // iii
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-      { interval: 0, quality: "maj", bars: 1 }, // I
-      { interval: 5, quality: "maj", bars: 1 }, // IV
-      { interval: 7, quality: "maj", bars: 1 }, // V
-    ],
+      'A three-chord ii-V-i that lands on a two-bar minor ninth — room for the sample to sit.',
+    category: 'Lofi & R&B',
+    referenceScale: 'Dorian',
+    genres: ['boombap'],
+    minScaleLength: 7,
+    steps: [step(1, 1, 'min7'), step(4, 1, '7'), step(0, 2, 'min9')],
   },
   {
-    name: "Passacaglia / Circle of Fifths Descent",
-    category: "Classical & Baroque",
-    roman: "i – iv – VII – III – VI – iio – V – i",
+    id: 'boombap-crate-dig',
+    name: 'Crate Dig',
+    roman: 'im9 – VIImaj7 – IIImaj7 – IV7',
     description:
-      "Hypnotic circular resolution driving classical drama, emotional tension, and resolve.",
-    relativeChords: [
-      { interval: 0, quality: "min", bars: 1 }, // i
-      { interval: 5, quality: "min", bars: 1 }, // iv
-      { interval: 10, quality: "maj", bars: 1 }, // VII
-      { interval: 3, quality: "maj", bars: 1 }, // III
-      { interval: 8, quality: "maj", bars: 1 }, // VI
-      { interval: 2, quality: "dim", bars: 1 }, // iio
-      { interval: 7, quality: "7", bars: 1 }, // V7
-      { interval: 0, quality: "min", bars: 1 }, // i
-    ],
+      'Two major sevenths lifted out of the mode, then the Dorian major IV that gives the style its colour.',
+    category: 'Lofi & R&B',
+    referenceScale: 'Dorian',
+    genres: ['boombap'],
+    minScaleLength: 7,
+    steps: [step(0, 1, 'min9'), step(6, 1, 'maj7'), step(2, 1, 'maj7'), step(3, 1, '7')],
+  },
+  {
+    id: 'boombap-head-nod',
+    name: 'Head Nod',
+    roman: 'im7 – IV7 – im7 – iim7',
+    description:
+      'Two-chord vamp with a turn onto the ii, the flattest, most loopable shape in the style.',
+    category: 'Lofi & R&B',
+    referenceScale: 'Dorian',
+    genres: ['boombap'],
+    minScaleLength: 7,
+    steps: [step(0, 1, 'min7'), step(3, 1, '7'), step(0, 1, 'min7'), step(1, 1, 'min7')],
+  },
+
+  // --- Zen: Hirajoshi. Only degrees 0, 3 and 4 give triads that stay entirely
+  // inside the five notes, so the vamp below is built from exactly those.
+  {
+    id: 'zen-bamboo-vamp',
+    name: 'Bamboo Vamp',
+    roman: 'i – IV – i – V',
+    description:
+      'Open-fourth koto sound over a minor tonic; every note it plays is inside the scale.',
+    category: 'Ambient & Zen',
+    referenceScale: 'Hirajoshi',
+    genres: ['zen'],
+    minScaleLength: 5,
+    steps: [step(0, 2), step(3, 2), step(0, 2), step(4, 2)],
+  },
+  {
+    id: 'zen-moonlit-koto',
+    name: 'Moonlit Koto',
+    roman: 'i – V – IV – III',
+    description:
+      'Descends through the half-step that gives Hirajoshi its melancholy, ending on the bright III.',
+    category: 'Ambient & Zen',
+    referenceScale: 'Hirajoshi',
+    genres: ['zen'],
+    minScaleLength: 5,
+    steps: [step(0, 2), step(4, 2), step(3, 2), step(2, 2)],
+  },
+  {
+    id: 'zen-still-pond',
+    name: 'Still Pond',
+    roman: 'im7 – Vmaj7',
+    description:
+      'Two four-bar chords, held long enough for the decay to become the arrangement.',
+    category: 'Ambient & Zen',
+    referenceScale: 'Hirajoshi',
+    genres: ['zen'],
+    minScaleLength: 5,
+    steps: [step(0, 4, 'min7'), step(4, 4, 'maj7')],
+  },
+  {
+    id: 'zen-temple-bell',
+    name: 'Temple Bell',
+    roman: 'i – III – V – IV',
+    description:
+      'Rises through both major thirds before the open fourth settles it — not a rotation of the vamp.',
+    category: 'Ambient & Zen',
+    referenceScale: 'Hirajoshi',
+    genres: ['zen'],
+    minScaleLength: 5,
+    steps: [step(0, 2), step(2, 2), step(4, 2), step(3, 2)],
   },
 ];
+
+const PROGRESSIONS_BY_ID = new Map(CHORD_PROGRESSIONS.map((p) => [p.id, p]));
+
+export function progressionById(id: string): ChordProgression | undefined {
+  return PROGRESSIONS_BY_ID.get(id);
+}
+
+/**
+ * Degrees -> concrete chords in a key. An omitted step quality takes the
+ * scale's triad; deriveChordNotes owns `notes`. Returns exactly one chord per
+ * step, with ids unique within the returned array.
+ *
+ * Deliberately does NOT enforce minScaleLength: degrees wrap, per the field's
+ * documented semantics, so filtering is the caller's job
+ * (ChordPresetLibrary.isProgressionAvailable, and B2's dice pools).
+ */
+export function resolveProgression(
+  progression: ChordProgression,
+  scaleRoot: string,
+  scaleType: string,
+  octave = 4,
+): ChordItem[] {
+  return progression.steps.map((progressionStep, i) => {
+    const diatonic = getDiatonicChordForDegree(progressionStep.degree, scaleRoot, scaleType, false);
+    const quality = progressionStep.quality ?? diatonic.quality;
+    return deriveChordNotes(
+      {
+        id: `${progression.id}-${i}`,
+        root: diatonic.root,
+        quality,
+        bars: progressionStep.bars,
+        notes: [],
+      },
+      octave,
+    );
+  });
+}

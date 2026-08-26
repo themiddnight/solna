@@ -1,4 +1,13 @@
-export type ViewMode = 
+/**
+ * The six Instant Vibe genres. Declared here rather than in
+ * audio/data/chordProgressions.ts (which re-exports it) because
+ * `VibeVariation` in this file needs it while chordProgressions.ts already
+ * imports `ChordItem` from here — declaring it there would make the two files
+ * import each other. This file imports nothing and must stay a leaf.
+ */
+export type VibeGenre = 'lofi' | 'synthwave' | 'edm' | 'ambient' | 'boombap' | 'zen';
+
+export type ViewMode =
   | 'synth'
   | 'sequencer'
   | 'chords'

@@ -296,3 +296,35 @@ describe('applyInstantVibeToStore audible cut', () => {
     stopSource.mockRestore();
   });
 });
+
+import { SCALES, isNoteInScale } from '../utils/musicTheory';
+import { progressionById, resolveProgression } from '../audio/data/chordProgressions';
+
+describe('vibe scales', () => {
+  test('every vibe scaleType is a real key of SCALES', () => {
+    // This alone would have caught 'Pentatonic Major', which fell through to
+    // Major for the whole life of the vibe.
+    for (const vibe of INSTANT_VIBES) {
+      expect(SCALES[vibe.scaleType]).toBeDefined();
+    }
+  });
+
+  test('Zen Garden is G Hirajoshi and plays the bamboo vamp', () => {
+    const zen = INSTANT_VIBES.find((v) => v.id === 'asian-zen')!;
+    expect(zen.scaleRoot).toBe('G');
+    expect(zen.scaleType).toBe('Hirajoshi');
+
+    const resolved = resolveProgression(progressionById('zen-bamboo-vamp')!, 'G', 'Hirajoshi', 4);
+    expect(zen.chords.map((c) => ({ root: c.root, quality: c.quality, bars: c.bars, notes: c.notes })))
+      .toEqual(resolved.map((c) => ({ root: c.root, quality: c.quality, bars: c.bars, notes: c.notes })));
+  });
+
+  test('every note Zen Garden plays is inside G Hirajoshi', () => {
+    const zen = INSTANT_VIBES.find((v) => v.id === 'asian-zen')!;
+    for (const chord of zen.chords) {
+      for (const note of chord.notes) {
+        expect(isNoteInScale(note, 'G', 'Hirajoshi')).toBe(true);
+      }
+    }
+  });
+});

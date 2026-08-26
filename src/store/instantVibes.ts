@@ -654,7 +654,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     emoji: '🎋',
     bpm: 78,
     scaleRoot: 'G',
-    scaleType: 'Pentatonic Major',
+    scaleType: 'Hirajoshi',
     projectTitle: 'Bamboo Garden Serenade',
 
     // Beat: Minimal Glitch bamboo acoustic clicks
@@ -673,11 +673,14 @@ export const INSTANT_VIBES: InstantVibe[] = [
     },
 
     // Chords: Glocken Bell & peaceful sustained pads
+    // zen-bamboo-vamp resolved in G Hirajoshi: i - IV - i - V, two bars each.
+    // Uses only degrees 0, 3 and 4, so every note is inside the five-note
+    // scale. Same 8-bar length as the progression this replaces.
     chords: [
-      makeVibeChord('zn1', 'G', 'maj', 2, 4),
-      makeVibeChord('zn2', 'C', 'maj', 2, 4),
-      makeVibeChord('zn3', 'D', 'maj', 2, 4),
-      makeVibeChord('zn4', 'E', 'min', 2, 4),
+      makeVibeChord('zn1', 'G', 'min', 2, 4),
+      makeVibeChord('zn2', 'D', 'sus4', 2, 4),
+      makeVibeChord('zn3', 'G', 'min', 2, 4),
+      makeVibeChord('zn4', 'D#', 'maj', 2, 4),
     ],
     chordRhythmId: 'sustained',
     chordFeel: 0.65, // Peaceful organic breath

@@ -85,3 +85,94 @@ describe('ChordView theming', () => {
     }
   });
 });
+
+import { applyKeyScaleChange, shouldClearReharmonizeIndicator } from './ChordView';
+import { deriveChordNotes } from '../utils/musicTheory';
+import type { ChordItem } from '../types';
+
+const chord = (id: string, root: string, quality: string): ChordItem =>
+  deriveChordNotes({ id, root, quality, bars: 1, notes: [] }, 4);
+
+// A Natural Minor, i - VI - III - VII.
+const PROGRESSION: ChordItem[] = [
+  chord('c1', 'A', 'min'),
+  chord('c2', 'F', 'maj'),
+  chord('c3', 'C', 'maj'),
+  chord('c4', 'G', 'maj'),
+];
+
+const names = (chords: ChordItem[] | null) =>
+  chords === null ? null : chords.map((c) => `${c.root}${c.quality}`);
+
+const A_MINOR = { root: 'A', scaleType: 'Natural Minor' };
+
+describe('applyKeyScaleChange', () => {
+  test('a root-only change transposes and does not snap', () => {
+    // The case the chordsReplaced guard could wrongly skip (ruling R1): the
+    // chords array is the same object across the render, only the key moved.
+    expect(
+      names(applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR, root: 'C' }, 4, false)),
+    ).toEqual(['Cmin', 'G#maj', 'D#maj', 'A#maj']);
+  });
+
+  test('a scale-only change snaps and does not transpose', () => {
+    expect(
+      names(applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR, scaleType: 'Major' }, 4, false)),
+    ).toEqual(['Amaj', 'Emaj', 'Bmin', 'F#min']);
+  });
+
+  test('both changed transposes first, then snaps — the order is pinned', () => {
+    const both = applyKeyScaleChange(
+      PROGRESSION,
+      A_MINOR,
+      { root: 'C', scaleType: 'Major' },
+      4,
+      false,
+    );
+    expect(names(both)).toEqual(['Cmaj', 'Gmaj', 'Dmin', 'Amin']);
+    // Snapping first would measure the chords against a root they are not yet
+    // in — today's bug. It produces a visibly different progression:
+    expect(names(both)).not.toEqual(['Cmin', 'G#maj', 'D#maj', 'A#maj']);
+  });
+
+  test('replaced chords are never touched, whatever else changed', () => {
+    // An Instant Vibe writes scaleRoot, scaleType and chords in one batch. Its
+    // chords were authored correct in its own key; harmonizing them is the bug.
+    expect(
+      applyKeyScaleChange(PROGRESSION, A_MINOR, { root: 'C', scaleType: 'Major' }, 4, true),
+    ).toBeNull();
+    expect(applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR, root: 'C' }, 4, true)).toBeNull();
+  });
+
+  test('an unchanged key and an empty chord list both return null', () => {
+    expect(applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR }, 4, false)).toBeNull();
+    expect(applyKeyScaleChange([], A_MINOR, { root: 'C', scaleType: 'Major' }, 4, false)).toBeNull();
+  });
+
+  test('the octave is honoured', () => {
+    const moved = applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR, root: 'C' }, 3, false);
+    expect(moved?.[0].notes).toEqual(deriveChordNotes(chord('c1', 'C', 'min'), 3).notes);
+  });
+});
+
+describe('shouldClearReharmonizeIndicator', () => {
+  test('an Instant Vibe swap (chords replaced and key changed) clears the badge', () => {
+    expect(
+      shouldClearReharmonizeIndicator(A_MINOR, { root: 'C', scaleType: 'Major' }, true),
+    ).toBe(true);
+    expect(shouldClearReharmonizeIndicator(A_MINOR, { ...A_MINOR, root: 'C' }, true)).toBe(true);
+    expect(
+      shouldClearReharmonizeIndicator(A_MINOR, { ...A_MINOR, scaleType: 'Major' }, true),
+    ).toBe(true);
+  });
+
+  test('Re-harmonize and manual chord edits (replaced, key unchanged) do not clear it', () => {
+    // This is the regression case: setChords + setIsAutoReharmonizedIndicator(true)
+    // batched together must not have their own effect run wipe the badge back off.
+    expect(shouldClearReharmonizeIndicator(A_MINOR, { ...A_MINOR }, true)).toBe(false);
+  });
+
+  test('a key change with the same chords array does not clear it', () => {
+    expect(shouldClearReharmonizeIndicator(A_MINOR, { ...A_MINOR, root: 'C' }, false)).toBe(false);
+  });
+});

@@ -30,10 +30,16 @@ through `tonal`.
 
 `ROOTS` is 12 sharp-spelled pitch classes (`C … B`); every generated note name is sharp-spelled.
 
-`SCALES` keys are the values persisted as `scaleType`, so **renaming a key breaks saved projects**:
+`SCALES` keys are the values persisted as `scaleType`, so **renaming a key breaks saved projects**
+(exported project JSON carries the string verbatim). The progression-library-degrees project only got
+to correct one bad value (`'Pentatonic Major'` → `'Major Pentatonic'`) in place because this app has
+no users yet — don't take that as license to rename a key casually once it does.
 `Major`, `Natural Minor`, `Harmonic Minor`, `Dorian`, `Mixolydian`, `Lydian`, `Phrygian`,
-`Minor Pentatonic`, `Major Pentatonic`, `Blues`. Pentatonic/Blues have 5–6 degrees, so never assume 7 —
-loop `SCALES[scaleType].intervals.length` (unknown key falls back to `Major`).
+`Minor Pentatonic`, `Major Pentatonic`, `Blues`, `Hirajoshi`. Pentatonic/Blues/Hirajoshi have 5–6
+degrees, so never assume 7 — loop `SCALES[scaleType].intervals.length` (unknown key falls back to
+`Major`, which is how `'Pentatonic Major'` ran as Major for months without anyone hearing it).
+`Hirajoshi` is `[0, 2, 3, 7, 8]` with hand-authored qualities inherited from natural minor, except
+degree 3 which is `sus4` / `7sus4` — the open-fourth koto sound, and entirely inside the five notes.
 
 Helpers: `getScaleNotes(root, scaleType)`, `isNoteInScale(note, root, scaleType)` (accepts `'C#4'` or `'A'`).
 
@@ -51,8 +57,16 @@ scale-aware; only the chord tools, the bass engine and the scale-locked keyboard
 - `getBorrowedChords(root, scaleType)` → curated modal-interchange list, then **filtered** so nothing
   fully diatonic or already reachable from the in-scale triad/7th palette survives. Tests in
   `src/utils/musicTheory.test.ts` enforce that filter — add candidates, don't loosen it.
-- `reharmonizeProgressionToScale(chords, newRoot, newScaleType, octave)` snaps each chord to the nearest
-  scale degree; only `maj9 / min9 / 7sus4 / sus4` keep their user-chosen quality.
+- `transposeProgression(chords, fromRoot, toRoot, octave)` moves a whole progression to a new key:
+  every chord shifts by the same interval, so scale degrees and the tonic's position survive. This is
+  what a **root** change needs.
+- `snapProgressionToScale(chords, root, scaleType, octave)` snaps each chord to the nearest degree of
+  the given scale; only `maj9 / min9 / 7sus4 / sus4` keep their user-chosen quality. This is what a
+  **scale** change needs, and it is only correct on chords already in `root` — feeding it chords from
+  another key collapses distinct chords onto one degree. `reharmonizeProgressionToScale` was the two
+  operations conflated and is gone.
+- `ChordView.applyKeyScaleChange(chords, from, to, octave, chordsReplaced)` picks between them:
+  transpose, snap, or transpose-then-snap, and does nothing at all when the chords were just replaced.
 - `deriveChordNotes(chord, octave)` wrapping `generateBlockChordNotes(quality, root, octave)` is the
   **single source of truth for `ChordItem.notes`**. Never build a `notes` array by hand: `chordsSlice`
   re-derives on `setChordOctave` inside the same `set()`, so octave and notes can't drift.
@@ -62,8 +76,29 @@ scale-aware; only the chord tools, the bass engine and the scale-locked keyboard
   `ChordItem.quality` tokens stay untouched.
 
 `ChordView.tsx` composes these: a per-degree quick-add row (`Triads` / `7th Chords` toggle), a borrowed-chord
-row, and an `autoReharmonize` effect that re-snaps the whole progression when `scaleRoot`/`scaleType` change.
+row, and an `autoReharmonize` effect (`applyKeyScaleChange`) that transposes on a root change, snaps on a
+scale change, and does nothing when the chords were just replaced wholesale. Turning the `autoReharmonize`
+toggle ON does not itself rewrite the chords — it only starts applying that effect to *future* key/scale
+changes, so it can't reproduce the old scramble. The explicit "Re-harmonize" button is the only path that
+snaps on demand; that is its deliberate, user-requested job.
 `ChordItem.bassNote` is an optional slash-bass override consumed by the bass engine.
+
+## The progression library
+
+`src/audio/data/chordProgressions.ts` holds `CHORD_PROGRESSIONS` — 40 progressions as **scale
+degrees**, never semitones. A step is `{ degree, quality?, bars }`; an omitted `quality` means the
+scale's **triad** for that degree, never the seventh. `resolveProgression(p, root, scaleType, octave)`
+is the only way to turn one into `ChordItem`s.
+
+Each entry declares the `referenceScale` its degrees were authored in, `minScaleLength` (that scale's
+degree count), and `genres` — a tag is only legal when `referenceScale === VIBE_GENRE_SCALES[tag]`.
+Callers must filter on `minScaleLength` themselves; `resolveProgression` wraps degrees and will not
+stop you.
+
+`chordProgressions.migration.test.ts` carries the 22 original interval-form progressions as a fixture
+and proves the degree form reproduces them in all 12 roots. **Changing a degree without changing that
+fixture is how you silently rewrite a progression** — if the proof fails, the degree is wrong, not the
+fixture.
 
 ## Bass and rhythm patterns
 
