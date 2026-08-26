@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { Header } from './components/Header';
 import { InstantVibesBar } from './components/InstantVibesBar';
 import { SynthView } from './components/SynthView';
@@ -6,42 +6,10 @@ import { SequencerView } from './components/SequencerView';
 import { ChordView } from './components/ChordView';
 import { EffectsRackView } from './components/EffectsRackView';
 import { TransportBar } from './components/TransportBar';
-import { ProjectModal } from './components/ProjectModal';
 import { audioEngine } from './audio/engine';
-import type { ProjectState } from './types';
 import { useAppStore } from './store/store';
 import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
 import { useTabRouting } from './routing/useTabRouting';
-
-/**
- * The currently-open project, composed from store selectors (replaces the old
- * `currentProject` useMemo in App). The object is memoized over the same eight
- * values so the memoized ProjectModal keeps its old referential stability.
- */
-function useProjectState(): ProjectState {
-  const projectTitle = useAppStore((s) => s.projectTitle);
-  const bpm = useAppStore((s) => s.bpm);
-  const scaleRoot = useAppStore((s) => s.scaleRoot);
-  const scaleType = useAppStore((s) => s.scaleType);
-  const synthParams = useAppStore((s) => s.synthParams);
-  const sequencerTracks = useAppStore((s) => s.sequencerTracks);
-  const chords = useAppStore((s) => s.chords);
-  const effects = useAppStore((s) => s.effects);
-  return useMemo(
-    () => ({
-      id: 'proj-active',
-      title: projectTitle,
-      bpm,
-      scaleRoot,
-      scaleType,
-      synthParams,
-      sequencerTracks,
-      chords,
-      effects,
-    }),
-    [projectTitle, bpm, scaleRoot, scaleType, synthParams, sequencerTracks, chords, effects]
-  );
-}
 
 export function App() {
   // One-way bridge: store state -> audioEngine singleton (replaces the
@@ -53,12 +21,6 @@ export function App() {
 
   // UI slice
   const activeTab = useAppStore((s) => s.activeTab);
-  const isProjectModalOpen = useAppStore((s) => s.isProjectModalOpen);
-  const closeProjectsModal = useAppStore((s) => s.closeProjectsModal);
-
-  // Music context slice
-  const setProjectTitle = useAppStore((s) => s.setProjectTitle);
-  const applyTemplate = useAppStore((s) => s.applyTemplate);
 
   // Initialize audio engine on first user interaction
   useEffect(() => {
@@ -73,8 +35,6 @@ export function App() {
     window.addEventListener('click', handleFirstClick);
     return () => window.removeEventListener('click', handleFirstClick);
   }, []);
-
-  const currentProject = useProjectState();
 
   return (
     <div className="h-dvh bg-canvas text-base-content flex flex-col font-sans selection:bg-primary selection:text-primary-content relative overflow-hidden">
@@ -102,15 +62,6 @@ export function App() {
 
       {/* Persistent Transport Bar at bottom */}
       <TransportBar />
-
-      {/* Modals */}
-      <ProjectModal
-        isOpen={isProjectModalOpen}
-        onClose={closeProjectsModal}
-        project={currentProject}
-        onSaveProject={setProjectTitle}
-        onLoadTemplate={applyTemplate}
-      />
     </div>
   );
 }

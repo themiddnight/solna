@@ -4,14 +4,18 @@ import { INSTANT_VIBES, applyInstantVibeToStore } from '../store/instantVibes';
 import { audioEngine } from '../audio/engine';
 import { useAppStore } from '../store/store';
 import { startEngineSync, stopEngineSync } from '../store/engineSync';
-import { selectVibe, InstantVibesBar, resolveSelectedVibeId, rerollVibe } from './InstantVibesBar';
+import { selectVibe, InstantVibesBar, rerollVibe } from './InstantVibesBar';
 
 const noop = { onToast: () => {} };
 
 beforeEach(() => {
   spyOn(audioEngine, 'init').mockImplementation(() => Promise.resolve());
   spyOn(audioEngine, 'resetClock').mockClear();
-  useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped' });
+  useAppStore.setState({
+    sequencerPlayer: 'stopped',
+    chordsPlayer: 'stopped',
+    selectedVibeId: null,
+  });
 });
 
 describe('selectVibe', () => {
@@ -23,7 +27,7 @@ describe('selectVibe', () => {
     const state = useAppStore.getState();
     expect(state.sequencerPlayer).toBe('stopped');
     expect(state.chordsPlayer).toBe('stopped');
-    expect(state.projectTitle).toBe(INSTANT_VIBES[0].projectTitle);
+    expect(state.selectedVibeId).toBe(INSTANT_VIBES[0].id);
   });
 
   test('does not stop playback when transport is playing', () => {
@@ -37,30 +41,25 @@ describe('selectVibe', () => {
   });
 });
 
-describe('resolveSelectedVibeId', () => {
-  test('a persisted vibe project title selects exactly that one vibe', () => {
-    // A reload restores the project title of a previously loaded vibe, so the
-    // selection has to follow it rather than a separate, hardcoded default.
+describe('selectedVibeId', () => {
+  test('loading any vibe selects exactly that one vibe', () => {
+    // The id is persisted, so a reload restores the highlight of whichever
+    // vibe was loaded rather than a separate, hardcoded default.
     for (const vibe of INSTANT_VIBES) {
-      expect(resolveSelectedVibeId(vibe.projectTitle)).toBe(vibe.id);
+      selectVibe(vibe, noop);
+      expect(useAppStore.getState().selectedVibeId).toBe(vibe.id);
     }
   });
 
-  test('a project title matching no vibe selects none', () => {
-    expect(resolveSelectedVibeId('Cosmic Horizon Jam')).toBe(null);
-    expect(resolveSelectedVibeId('')).toBe(null);
-  });
-
-  test('vibe project titles are unique, so at most one can ever match', () => {
-    const titles = INSTANT_VIBES.map((v) => v.projectTitle);
-    expect(new Set(titles).size).toBe(titles.length);
+  test('vibe ids are unique, so at most one chip can ever match', () => {
+    const ids = INSTANT_VIBES.map((v) => v.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
 
 describe('vibe selection highlight', () => {
-  test('renders no highlight when the project title matches no vibe', () => {
-    // The store's default projectTitle ('Cosmic Horizon Jam') is not a vibe
-    // title, and renderToString reads that initial snapshot.
+  test('renders no highlight when no vibe is selected', () => {
+    useAppStore.setState({ selectedVibeId: null });
     const html = renderToString(<InstantVibesBar />);
 
     expect(html).not.toContain('btn-primary');
@@ -103,7 +102,7 @@ describe('rerollVibe', () => {
     expect(after.chordRhythmId).not.toBe(authored.chordRhythmId);
     expect(after.bassPatternId).not.toBe(authored.bassPatternId);
     expect(after.chords.length).toBeGreaterThan(0);
-    expect(after.projectTitle).toBe(vibe.projectTitle);
+    expect(after.selectedVibeId).toBe(vibe.id);
   });
 
   test('the toast carries both lines', () => {
@@ -166,6 +165,6 @@ describe('rerollVibe', () => {
 
   test('the chip stays highlighted after a reroll', () => {
     rerollVibe(INSTANT_VIBES[0], swallow);
-    expect(resolveSelectedVibeId(useAppStore.getState().projectTitle)).toBe(INSTANT_VIBES[0].id);
+    expect(useAppStore.getState().selectedVibeId).toBe(INSTANT_VIBES[0].id);
   });
 });

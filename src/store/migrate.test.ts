@@ -1,5 +1,40 @@
 import { describe, expect, test } from 'bun:test';
-import { migrateTrackColors, LEGACY_TRACK_COLOR_MAP } from './migrate';
+import {
+  migrateProjectTitleToVibeId,
+  migrateTrackColors,
+  LEGACY_TRACK_COLOR_MAP,
+} from './migrate';
+
+describe('migrateProjectTitleToVibeId', () => {
+  test('drops the legacy projectTitle and seeds a null selectedVibeId', () => {
+    const migrated = migrateProjectTitleToVibeId({
+      projectTitle: 'Neon Highway 1984',
+      bpm: 118,
+    } as never) as { projectTitle?: string; selectedVibeId: string | null; bpm: number };
+
+    expect('projectTitle' in migrated).toBe(false);
+    expect(migrated.selectedVibeId).toBe(null);
+    expect(migrated.bpm).toBe(118);
+  });
+
+  test('keeps an already-migrated selectedVibeId, including an explicit null', () => {
+    const withId = migrateProjectTitleToVibeId({
+      selectedVibeId: 'lofi-chill',
+    } as never) as { selectedVibeId: string | null };
+    expect(withId.selectedVibeId).toBe('lofi-chill');
+
+    const withNull = migrateProjectTitleToVibeId({
+      selectedVibeId: null,
+    } as never) as { selectedVibeId: string | null };
+    expect(withNull.selectedVibeId).toBe(null);
+  });
+
+  test('does not mutate the payload it was given', () => {
+    const input = { projectTitle: 'Cosmic Floating' };
+    migrateProjectTitleToVibeId(input as never);
+    expect(input).toEqual({ projectTitle: 'Cosmic Floating' });
+  });
+});
 
 describe('migrateTrackColors', () => {
   test('rewrites every legacy palette track colour to a semantic token', () => {

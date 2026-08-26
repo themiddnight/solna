@@ -37,11 +37,10 @@ export interface TransportSlice {
 export interface MusicContextSlice {
   scaleRoot: string;
   scaleType: string;
-  projectTitle: string;
+  selectedVibeId: string | null;
   setScaleRoot: (root: string) => void;
   setScaleType: (type: string) => void;
-  setProjectTitle: (title: string) => void;
-  applyTemplate: (templateName: string) => void;
+  setSelectedVibeId: (id: string | null) => void;
 }
 
 export interface SynthSlice {
@@ -107,14 +106,11 @@ export interface EffectsSlice {
 export interface UiSlice {
   // All ui state is transient (not persisted); the active tab comes from the URL query.
   activeTab: ViewMode;
-  isProjectModalOpen: boolean;
   // The synth keyboard's input mode. Transient by design: an input
   // preference, not composition data, so it does not travel with saved
   // projects (see partializeAppState in store.ts).
   keyboardMode: KeyboardMode;
   setActiveTab: (tab: ViewMode) => void;
-  openProjectsModal: () => void;
-  closeProjectsModal: () => void;
   setKeyboardMode: (mode: KeyboardMode) => void;
 }
 
@@ -156,7 +152,7 @@ export interface PersistedState {
   metronomeActive: boolean;
   scaleRoot: string;
   scaleType: string;
-  projectTitle: string;
+  selectedVibeId: string | null;
   synthParams: SynthParams;
   chordSynthParams: SynthParams;
   bassSynthParams: SynthParams;

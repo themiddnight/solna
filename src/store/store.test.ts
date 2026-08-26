@@ -156,7 +156,7 @@ describe('store defaults', () => {
     expect(s.chordsPlayer).toBe('stopped');
     expect(s.scaleRoot).toBe('A');
     expect(s.scaleType).toBe('Natural Minor');
-    expect(s.projectTitle).toBe('Cosmic Horizon Jam');
+    expect(s.selectedVibeId).toBe(null);
     expect(s.soundKit).toBe('Retro Drive');
     expect(s.masterSequencerVolume).toBe(0.8);
     expect(s.drumFilterCutoff).toBe(12000);
@@ -174,7 +174,6 @@ describe('store defaults', () => {
     expect(s.bassVolume).toBe(1.0);
     expect(s.controlTarget).toBe('synth');
     expect(s.activeTab).toBe('synth');
-    expect(s.isProjectModalOpen).toBe(false);
     expect(s.keyboardMode).toBe('scale-locked');
     expect(s.synthParams).toEqual(INITIAL_SYNTH_PARAMS);
     expect(s.chordSynthParams).toEqual(INITIAL_SYNTH_PARAMS);
@@ -221,34 +220,6 @@ describe('transport semantics', () => {
 
     useAppStore.getState().play('sequencer');
     expect(useAppStore.getState().sequencerPlayer).toBe('playing');
-  });
-});
-
-describe('applyTemplate', () => {
-  test('applies every template with the exact values (bpm crosses into the transport slice)', async () => {
-    const { useAppStore } = await getStore();
-    const templates = [
-      { name: 'Synthwave Odyssey', bpm: 120, scaleRoot: 'A', scaleType: 'Natural Minor', projectTitle: 'Synthwave Odyssey' },
-      { name: 'Lo-Fi Chill Hop', bpm: 85, scaleRoot: 'C', scaleType: 'Major', projectTitle: 'Lo-Fi Chill Hop' },
-      { name: 'Cyber Electro Club', bpm: 128, scaleRoot: 'D', scaleType: 'Dorian', projectTitle: 'Cyber Electro Club' },
-      { name: 'Funky Neo-Soul', bpm: 95, scaleRoot: 'F', scaleType: 'Major', projectTitle: 'Funky Neo-Soul' },
-    ];
-
-    for (const t of templates) {
-      useAppStore.getState().applyTemplate(t.name);
-      const s = useAppStore.getState();
-      expect(s.bpm).toBe(t.bpm);
-      expect(s.scaleRoot).toBe(t.scaleRoot);
-      expect(s.scaleType).toBe(t.scaleType);
-      expect(s.projectTitle).toBe(t.projectTitle);
-    }
-
-    // Unknown template names are ignored
-    const before = useAppStore.getState();
-    useAppStore.getState().applyTemplate('Not A Template');
-    const after = useAppStore.getState();
-    expect(after.bpm).toBe(before.bpm);
-    expect(after.scaleRoot).toBe(before.scaleRoot);
   });
 });
 
@@ -362,7 +333,7 @@ describe('persist partialize', () => {
       'metronomeActive',
       'scaleRoot',
       'scaleType',
-      'projectTitle',
+      'selectedVibeId',
       'synthParams',
       'chordSynthParams',
       'bassSynthParams',
@@ -394,7 +365,6 @@ describe('persist partialize', () => {
 
     const excludedKeys = [
       'activeTab',
-      'isProjectModalOpen',
       'keyboardMode',
       'sequencerPlayer',
       'chordsPlayer',
@@ -407,13 +377,11 @@ describe('persist partialize', () => {
       'playAll',
       'softStopAll',
       'hardStopAll',
-      'applyTemplate',
+      'setSelectedVibeId',
       'setChordOctave',
       'applyDrumPattern',
       'setEffects',
       'setActiveTab',
-      'openProjectsModal',
-      'closeProjectsModal',
       'setKeyboardMode',
       'saveCustomPreset',
       'deleteCustomPreset',
@@ -534,7 +502,7 @@ describe('persisted payload sanitization', () => {
       effects: INITIAL_EFFECTS,
       scaleRoot: 'A',
       scaleType: 'Natural Minor',
-      projectTitle: 'Cosmic Horizon Jam',
+      selectedVibeId: null,
       chordRhythmId: 'sustained',
       bassPatternId: BASS_PATTERNS[0].id,
       drumFilterCutoff: 12000,
@@ -571,7 +539,7 @@ describe('persisted payload sanitization', () => {
           customChordProgressions: 'nope',
           scaleRoot: 42,
           scaleType: true,
-          projectTitle: null,
+          selectedVibeId: 42,
           chordRhythmId: 0,
           bassPatternId: {},
         },
@@ -595,7 +563,7 @@ describe('persisted payload sanitization', () => {
     expect(s.effects).toEqual(INITIAL_EFFECTS);
     expect(s.scaleRoot).toBe('A');
     expect(s.scaleType).toBe('Natural Minor');
-    expect(s.projectTitle).toBe('Cosmic Horizon Jam');
+    expect(s.selectedVibeId).toBe(null);
     expect(s.chordRhythmId).toBe('sustained');
     expect(s.bassPatternId).toBe(BASS_PATTERNS[0].id);
     // Invalid arrays are dropped, leaving the pre-hydration state untouched.
@@ -622,7 +590,7 @@ describe('persisted payload sanitization', () => {
       effects: INITIAL_EFFECTS,
       scaleRoot: 'A',
       scaleType: 'Natural Minor',
-      projectTitle: 'Cosmic Horizon Jam',
+      selectedVibeId: null,
       chordRhythmId: 'sustained',
       bassPatternId: BASS_PATTERNS[0].id,
       chords: [],
@@ -655,7 +623,7 @@ describe('persisted payload sanitization', () => {
           customChordProgressions: [],
           scaleRoot: 'D',
           scaleType: 'Major',
-          projectTitle: 'My Project',
+          selectedVibeId: 'lofi-chill',
           chordRhythmId: 'stabs',
           bassPatternId: 'bass-1',
         },
@@ -686,7 +654,7 @@ describe('persisted payload sanitization', () => {
     expect(s.customChordProgressions).toEqual([]);
     expect(s.scaleRoot).toBe('D');
     expect(s.scaleType).toBe('Major');
-    expect(s.projectTitle).toBe('My Project');
+    expect(s.selectedVibeId).toBe('lofi-chill');
     expect(s.chordRhythmId).toBe('stabs');
     expect(s.bassPatternId).toBe('bass-1');
   });

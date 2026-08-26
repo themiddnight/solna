@@ -97,6 +97,20 @@ export const LEGACY_TRACK_COLOR_MAP: Record<string, string> = {
   'bg-purple-500': 'bg-secondary', // theme-guard-ignore: persisted legacy user data lookup key, not a className
 };
 
+/**
+ * v3 → v4: the project concept (title, modal, templates) is gone, and the
+ * Instant Vibes bar's highlight — which used to be derived by string-matching
+ * the persisted `projectTitle` against each vibe's own title — is now real
+ * state. Old titles are deliberately NOT mapped back to vibe ids: the
+ * highlight simply clears once and self-heals on the next vibe click.
+ */
+export function migrateProjectTitleToVibeId<T extends object>(state: T): T {
+  const next = { ...(state as Record<string, unknown>) };
+  delete next.projectTitle;
+  if (!('selectedVibeId' in next)) next.selectedVibeId = null;
+  return next as unknown as T;
+}
+
 export function migrateTrackColors<T extends object>(state: T): T {
   const tracks = (state as { sequencerTracks?: unknown }).sequencerTracks;
   if (!Array.isArray(tracks)) return state;

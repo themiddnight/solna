@@ -58,7 +58,11 @@ export const TransportBar: React.FC = React.memo(() => {
   };
 
   return (
-    <div className="bg-base-100 border-t border-base-300 px-3 py-2 flex items-center justify-between gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
+    // Side columns are `minmax(max-content, 1fr)`: equal (so the visualizer sits
+    // dead-centre in the viewport) whenever there is room, and floored at their
+    // own content width when there isn't — which degrades to an off-centre
+    // visualizer instead of side groups overlapping or overflowing the bar.
+    <div className="bg-base-100 border-t border-base-300 px-3 py-2 flex md:grid md:grid-cols-[minmax(max-content,1fr)_minmax(0,20rem)_minmax(max-content,1fr)] items-center justify-between gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
       {/* Left Transport Actions: Play All + Tab Play + Tempo */}
       <div className="flex items-center gap-1.5 shrink-0">
         {/* Master transport: drives both automation players together. The
@@ -143,7 +147,7 @@ export const TransportBar: React.FC = React.memo(() => {
       </div>
 
       {/* Right Meter & Master Gain */}
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2 shrink-0 md:justify-self-end">
         {/* Real-time Stereo VU Meter */}
         <div className="hidden sm:flex items-center gap-1 bg-base-200 border border-base-300 p-1.5 rounded-box">
           <div className="w-14 h-2 bg-base-300 rounded-xs overflow-hidden flex gap-0.5 p-0.5">

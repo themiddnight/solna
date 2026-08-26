@@ -33,21 +33,18 @@ export function persistKeyboardMode(mode: KeyboardMode, storage?: Pick<Storage, 
 }
 
 /**
- * UI slice: active tab + modal visibility + keyboard input mode. None of
- * this rides in the project persist blob (partializeAppState) — the active
- * tab lives in the URL query (?tab=...) instead, and the keyboard mode is
- * persisted separately to its own localStorage key (like the theme), since
- * an input mode has no business travelling with a saved/exported song.
+ * UI slice: active tab + keyboard input mode. Neither rides in the project
+ * persist blob (partializeAppState) — the active tab lives in the URL query
+ * (?tab=...) instead, and the keyboard mode is persisted separately to its
+ * own localStorage key (like the theme), since an input mode has no business
+ * travelling with a saved/exported song.
  */
 export function createUiSlice(set: Set): UiSlice {
   return {
     activeTab: 'synth',
-    isProjectModalOpen: false,
     keyboardMode: readStoredKeyboardMode() ?? 'scale-locked',
 
     setActiveTab: (activeTab) => set({ activeTab }),
-    openProjectsModal: () => set({ isProjectModalOpen: true }),
-    closeProjectsModal: () => set({ isProjectModalOpen: false }),
     setKeyboardMode: (keyboardMode) => {
       persistKeyboardMode(keyboardMode);
       set({ keyboardMode });

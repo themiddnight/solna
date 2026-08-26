@@ -3,35 +3,20 @@ import type { AppStore, MusicContextSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
 
-const TEMPLATES: Record<
-  string,
-  { bpm: number; scaleRoot: string; scaleType: string; projectTitle: string }
-> = {
-  'Synthwave Odyssey': { bpm: 120, scaleRoot: 'A', scaleType: 'Natural Minor', projectTitle: 'Synthwave Odyssey' },
-  'Lo-Fi Chill Hop': { bpm: 85, scaleRoot: 'C', scaleType: 'Major', projectTitle: 'Lo-Fi Chill Hop' },
-  'Cyber Electro Club': { bpm: 128, scaleRoot: 'D', scaleType: 'Dorian', projectTitle: 'Cyber Electro Club' },
-  'Funky Neo-Soul': { bpm: 95, scaleRoot: 'F', scaleType: 'Major', projectTitle: 'Funky Neo-Soul' },
-};
-
 /**
- * Music context slice. `applyTemplate` replaces `handleLoadTemplate` from
- * App.tsx: one atomic `set()` per template that also crosses into the
- * transport slice (bpm).
+ * Music context slice: the global key/scale plus the id of the Instant Vibe
+ * that was last loaded. `selectedVibeId` is persisted so the vibe bar's
+ * highlight survives a reload; it is written by applyInstantVibeToStore, not
+ * by the key/scale setters, so editing the key by hand does not clear it.
  */
 export function createMusicContextSlice(set: Set): MusicContextSlice {
   return {
     scaleRoot: 'A',
     scaleType: 'Natural Minor',
-    projectTitle: 'Cosmic Horizon Jam',
+    selectedVibeId: null,
 
     setScaleRoot: (scaleRoot) => set({ scaleRoot }),
     setScaleType: (scaleType) => set({ scaleType }),
-    setProjectTitle: (projectTitle) => set({ projectTitle }),
-
-    applyTemplate: (templateName) => {
-      const template = TEMPLATES[templateName];
-      if (!template) return;
-      set(template);
-    },
+    setSelectedVibeId: (selectedVibeId) => set({ selectedVibeId }),
   };
 }

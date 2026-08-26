@@ -2,10 +2,10 @@ import React from "react";
 import {
   Sliders,
   Grid,
-  FolderOpen,
   Music,
   Sun,
   Moon,
+  ChevronDown,
   type LucideIcon,
 } from "lucide-react";
 import { ViewMode } from "../types";
@@ -58,8 +58,58 @@ const TabButton: React.FC<{
       }`}
     >
       <tab.icon className="w-4 h-4 shrink-0" />
-      <span className="hidden md:inline">{tab.label}</span>
+      <span className="hidden xl:inline">{tab.label}</span>
     </button>
+  );
+};
+
+/**
+ * The two master scale selects. They render twice — inline from `md` up, and
+ * inside a dropdown below it — so each instance takes its own id prefix rather
+ * than duplicating ids into the DOM (the hidden copy is still rendered).
+ */
+const ScaleSelects: React.FC<{ idPrefix: string; stacked?: boolean }> = ({
+  idPrefix,
+  stacked,
+}) => {
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const setScaleRoot = useAppStore((s) => s.setScaleRoot);
+  const scaleType = useAppStore((s) => s.scaleType);
+  const setScaleType = useAppStore((s) => s.setScaleType);
+
+  return (
+    <>
+      <select
+        id={`${idPrefix}-root`}
+        value={scaleRoot}
+        onChange={(e) => setScaleRoot(e.target.value)}
+        className={`select select-sm select-ghost font-bold text-primary ${
+          stacked ? 'w-full' : 'max-w-14'
+        }`}
+        title="Root Note"
+      >
+        {ROOTS.map((r) => (
+          <option key={r} value={r}>
+            {r}
+          </option>
+        ))}
+      </select>
+      <select
+        id={`${idPrefix}-type`}
+        value={scaleType}
+        onChange={(e) => setScaleType(e.target.value)}
+        className={`select select-sm select-ghost font-bold text-base-content/80 ${
+          stacked ? 'w-full' : 'min-w-36'
+        }`}
+        title="Scale Type"
+      >
+        {Object.keys(SCALES).map((s) => (
+          <option key={s} value={s}>
+            {SCALES[s].name}
+          </option>
+        ))}
+      </select>
+    </>
   );
 };
 
@@ -106,12 +156,8 @@ export const Header: React.FC = React.memo(() => {
   const chordsPlayer = useAppStore((s) => s.chordsPlayer);
   const play = useAppStore((s) => s.play);
   const softStop = useAppStore((s) => s.softStop);
-  const openProjectsModal = useAppStore((s) => s.openProjectsModal);
-  const projectTitle = useAppStore((s) => s.projectTitle);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
-  const setScaleRoot = useAppStore((s) => s.setScaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
-  const setScaleType = useAppStore((s) => s.setScaleType);
 
   const [currentTheme, setCurrentTheme] = React.useState<SolnaTheme>(() =>
     resolveInitialTheme(
@@ -145,17 +191,22 @@ export const Header: React.FC = React.memo(() => {
   }, []);
 
   return (
-    <header className="navbar min-h-0 bg-base-100 border-b border-base-300 px-3 py-2 flex items-center justify-between gap-2 text-sm select-none sticky top-0 z-40">
-      {/* Brand & Project Info */}
+    // Side columns are `minmax(max-content, 1fr)`: equal (so the nav sits dead-
+    // centre in the viewport) whenever there is room, and floored at their own
+    // content width when there isn't — which degrades to an off-centre nav
+    // instead of the side groups overlapping or overflowing the header.
+    <header className="navbar min-h-0 bg-base-100 border-b border-base-300 px-3 py-2 flex xl:grid xl:grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)] items-center justify-between gap-2 text-sm select-none sticky top-0 z-40">
+      {/* Brand */}
       <div className="flex items-center gap-2.5 shrink-0">
         <Wordmark />
-        <span className="hidden sm:inline-block text-[11px] text-base-content/60 font-medium truncate max-w-30 md:max-w-40">
-          · {projectTitle}
-        </span>
       </div>
 
-      {/* Primary navigation: three join groups of view-switch buttons. */}
-      <nav className="flex items-center gap-2">
+      {/* Primary navigation: three join groups of view-switch buttons. It owns
+          the header's only overflow scroller, so a nav too wide for the viewport
+          scrolls within its own column instead of pushing the right-hand group
+          off-screen (the app shell is `overflow-hidden`, so pushed-out controls
+          are unreachable, not merely off-layout). */}
+      <nav className="flex items-center gap-2 min-w-0 overflow-x-auto no-scrollbar">
         {/* Synth stands alone, mirroring Master FX on the right. */}
         <div className={NAV_GROUP_CLASS}>
           <TabButton tab={SOLO_TABS[0]} activeTab={activeTab} onSelect={setActiveTab} />
@@ -166,7 +217,7 @@ export const Header: React.FC = React.memo(() => {
         {/* The automation players: view button and transport side by side, all
             of them direct join-item children of one join. A <button> must
             never nest inside another <button>. */}
-        <div className="flex items-center gap-1.5 overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           {AUTOMATION_TABS.map((tab) => {
             const state = tab.module === 'sequencer' ? sequencerPlayer : chordsPlayer;
             return (
@@ -195,47 +246,27 @@ export const Header: React.FC = React.memo(() => {
       </nav>
 
       {/* Key, Scale & Global Actions */}
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0 xl:justify-self-end">
         {/* Scale Picker Compact */}
-        <div className="hidden sm:flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-field">
-          <select
-            id="select-master-scale-root"
-            value={scaleRoot}
-            onChange={(e) => setScaleRoot(e.target.value)}
-            className="select select-sm select-ghost font-bold text-primary max-w-14"
-            title="Root Note"
-          >
-            {ROOTS.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-          <select
-            id="select-master-scale-type"
-            value={scaleType}
-            onChange={(e) => setScaleType(e.target.value)}
-            className="select select-sm select-ghost font-bold text-base-content/80 min-w-48"
-            title="Scale Type"
-          >
-            {Object.keys(SCALES).map((s) => (
-              <option key={s} value={s}>
-                {SCALES[s].name}
-              </option>
-            ))}
-          </select>
+        <div className="hidden md:flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-field">
+          <ScaleSelects idPrefix="select-master-scale" />
         </div>
 
-        {/* Projects Action */}
-        <button
-          id="btn-open-projects"
-          onClick={openProjectsModal}
-          className="btn btn-sm btn-ghost gap-1 text-xs font-medium"
-          title="Projects (Save / Export)"
-        >
-          <FolderOpen className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">Projects</span>
-        </button>
+        {/* Below `md` the inline picker would leave the nav about 20px of room,
+            so the same two selects move behind a root-note pill instead. */}
+        <details className="dropdown dropdown-end md:hidden">
+          <summary
+            id="btn-scale-dropdown"
+            className="btn btn-sm btn-ghost gap-1 text-xs font-bold list-none"
+            title={`Key & Scale — ${scaleRoot} ${SCALES[scaleType]?.name ?? scaleType}`}
+          >
+            <span className="text-primary">{scaleRoot}</span>
+            <ChevronDown className="w-3 h-3 opacity-60" />
+          </summary>
+          <div className="dropdown-content z-50 mt-1 w-56 p-2 flex flex-col gap-2 bg-base-100 border border-base-300 rounded-box shadow-xl">
+            <ScaleSelects idPrefix="select-master-scale-compact" stacked />
+          </div>
+        </details>
 
         {/* Theme Toggle Button */}
         <button

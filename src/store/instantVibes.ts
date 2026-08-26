@@ -75,7 +75,7 @@ export function applyInstantVibeToStore(vibe: InstantVibe) {
   store.setBpm(vibe.bpm);
   store.setScaleRoot(vibe.scaleRoot);
   store.setScaleType(vibe.scaleType);
-  store.setProjectTitle(vibe.projectTitle);
+  store.setSelectedVibeId(vibe.id);
 
   // 2. Drums & Sequencer (Pattern + Sound Kit + Drum Filter)
   store.setSoundKit(vibe.soundKit);
@@ -133,7 +133,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     bpm: 84,
     scaleRoot: 'C',
     scaleType: 'Major',
-    projectTitle: 'Lo-Fi Midnight Coffee',
     progressionId: 'lofi-morning-turnaround',
 
     // Beat: 808 Vintage with warm lowpass filter
@@ -193,7 +192,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     bpm: 118,
     scaleRoot: 'A',
     scaleType: 'Natural Minor',
-    projectTitle: 'Neon Highway 1984',
     progressionId: 'cine-epic-ostinato',
 
     // Beat: Retro Drive, tight 80s gate
@@ -255,7 +253,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     bpm: 128,
     scaleRoot: 'F',
     scaleType: 'Natural Minor',
-    projectTitle: 'Cyberpunk Odyssey',
     progressionId: 'edm-cyber-vamp',
 
     // Beat: Hyperpop 2000 club drums
@@ -314,7 +311,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     bpm: 72,
     scaleRoot: 'D',
     scaleType: 'Lydian',
-    projectTitle: 'Cosmic Floating',
     progressionId: 'ambient-lydian-halo',
 
     // Beat: Minimal Glitch, soft and spacious
@@ -373,7 +369,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     bpm: 92,
     scaleRoot: 'E',
     scaleType: 'Dorian',
-    projectTitle: 'Soulful Golden Era',
     progressionId: 'boombap-soul-piano',
 
     // Beat: 808 Vintage / Boom bap swing
@@ -435,7 +430,6 @@ export const INSTANT_VIBES: InstantVibe[] = [
     bpm: 78,
     scaleRoot: 'G',
     scaleType: 'Hirajoshi',
-    projectTitle: 'Bamboo Garden Serenade',
     progressionId: 'zen-bamboo-vamp',
 
     // Beat: Minimal Glitch bamboo acoustic clicks

@@ -344,7 +344,6 @@ describe('resolveVibeVariation', () => {
         expect(out.name).toBe(v.name);
         expect(out.emoji).toBe(v.emoji);
         expect(out.tagline).toBe(v.tagline);
-        expect(out.projectTitle).toBe(v.projectTitle);
         expect(out.chordOctave).toBe(v.chordOctave);
         expect(out.bassOctave).toBe(v.bassOctave);
         expect(out.chordFeel).toBe(v.chordFeel);

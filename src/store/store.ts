@@ -15,6 +15,7 @@ import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
 import {
   migrateLegacyPresets,
+  migrateProjectTitleToVibeId,
   migrateTrackColors,
   removeLegacyKeys,
   LEGACY_PERSIST_KEY,
@@ -101,7 +102,7 @@ export function partializeAppState(state: AppStore): PersistedState {
     metronomeActive: state.metronomeActive,
     scaleRoot: state.scaleRoot,
     scaleType: state.scaleType,
-    projectTitle: state.projectTitle,
+    selectedVibeId: state.selectedVibeId,
     synthParams: state.synthParams,
     chordSynthParams: state.chordSynthParams,
     bassSynthParams: state.bassSynthParams,
@@ -240,8 +241,11 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   for (const key of ['chords', 'sequencerTracks', 'customSynthPresets', 'customChordProgressions']) {
     if (!Array.isArray(sanitized[key])) delete sanitized[key];
   }
-  for (const key of ['scaleRoot', 'scaleType', 'projectTitle', 'chordRhythmId', 'bassPatternId']) {
+  for (const key of ['scaleRoot', 'scaleType', 'chordRhythmId', 'bassPatternId']) {
     if (typeof sanitized[key] !== 'string') delete sanitized[key];
+  }
+  if (typeof sanitized.selectedVibeId !== 'string' && sanitized.selectedVibeId !== null) {
+    delete sanitized.selectedVibeId;
   }
 
   // Only rewrite the synth param objects that were actually stored; an absent
@@ -271,7 +275,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: PERSIST_KEY,
-      version: 3,
+      version: 4,
       storage: createJSONStorage<PersistedState>(() => resolveStorage() ?? memoryStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
@@ -280,9 +284,13 @@ export const useAppStore = create<AppStore>()(
         const migrated = migrateLegacyPresets(
           (persisted ?? {}) as Partial<PersistedState>
         ) as PersistedState;
+        // v3 → v4: the project concept is gone; the vibe bar's highlight is
+        // its own persisted field now.
+        const deprojected =
+          version >= 4 ? migrated : (migrateProjectTitleToVibeId(migrated) as PersistedState);
         // v2 → v3: raw Tailwind track colours become daisyUI semantic tokens.
         const recoloured =
-          version >= 3 ? migrated : (migrateTrackColors(migrated) as PersistedState);
+          version >= 3 ? deprojected : (migrateTrackColors(deprojected) as PersistedState);
         if (version >= 2) return recoloured;
         // v1 persisted `arpActive: true` from an arpeggiator that never
         // produced a note, while that same flag gated the keyboard's direct

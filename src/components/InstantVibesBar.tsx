@@ -45,16 +45,6 @@ export function rerollVibe(
   deps.onToast(formatVariationSummary(result.summary));
 }
 
-/**
- * The selected vibe is derived from the project title alone. Loading a vibe
- * always writes its `projectTitle` into the store, so that one value is the
- * single source of truth: it survives a reload, and — because vibe project
- * titles are unique — it can never mark two vibes at once.
- */
-export function resolveSelectedVibeId(projectTitle: string): string | null {
-  return INSTANT_VIBES.find((v) => v.projectTitle === projectTitle)?.id ?? null;
-}
-
 /** Cancels whatever this ref has pending, then schedules `fn` to replace it. */
 function scheduleTimeout(
   ref: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
@@ -66,8 +56,7 @@ function scheduleTimeout(
 }
 
 export const InstantVibesBar: React.FC = React.memo(() => {
-  const projectTitle = useAppStore((s) => s.projectTitle);
-  const selectedVibeId = resolveSelectedVibeId(projectTitle);
+  const selectedVibeId = useAppStore((s) => s.selectedVibeId);
 
   type VibeToast =
     | { kind: 'load'; text: string }

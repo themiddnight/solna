@@ -108,19 +108,6 @@ export interface MasterEffects {
 
 
 
-export interface ProjectState {
-  id: string;
-  title: string;
-  bpm: number;
-  scaleRoot: string;
-  scaleType: string;
-  synthParams?: SynthParams;
-  sequencerTracks: SequencerTrack[];
-  chords: ChordItem[];
-  effects: MasterEffects;
-  masterVolume?: number;
-}
-
 /**
  * Drum layers the Vibe Variation dice may rewrite. `kick`, `snare` and `clap`
  * are the genre's skeleton and are deliberately not assignable here, so no
@@ -174,7 +161,6 @@ export interface InstantVibe {
   bpm: number;
   scaleRoot: string;
   scaleType: string;
-  projectTitle: string;
 
   // Beat & Drum Kit
   soundKit: string;

@@ -1335,6 +1335,12 @@ export const SynthView = () => {
             >
               {`${scaleRoot} ${scaleType}`}
             </span>
+            <span
+              className="badge badge-sm badge-outline text-[10px] font-semibold badge-base-content/60"
+              title="The keyboard always auditions the Main Synth, whichever destination the Target selector is editing"
+            >
+              Keyboard plays: Main Synth
+            </span>
           </div>
 
           {/* Keyboard Octave Pagination — independent from synth pitch octave */}
