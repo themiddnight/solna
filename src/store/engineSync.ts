@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { audioEngine } from '../audio/engine';
 import { DRUM_KITS } from '../audio/drumKits';
 import { useAppStore } from './store';
+import { isPlayerActive } from './transportSlice';
 import type { FilterType } from '../types';
 
 /**
@@ -76,17 +77,22 @@ export function startEngineSync(): Stop {
   subs.push(useAppStore.subscribe((s) => s.chordSynthParams, (p) => audioEngine.updateSynthParams(p, 'chord'), { fireImmediately: true }));
   subs.push(useAppStore.subscribe((s) => s.bassSynthParams, (p) => audioEngine.updateSynthParams(p, 'bass'), { fireImmediately: true }));
 
-  // Transport play flags: init on EVERY transition — the old toggle actions
+  // Transport player states: init on EVERY transition — the old toggle actions
   // called audioEngine.init() unconditionally, and init()'s resume path is
   // load-bearing (the browser suspends the AudioContext when the tab is
   // backgrounded, so returning with chords playing and starting the sequencer
   // must resume audio). resetClock stays restricted to the fully-stopped ->
-  // playing transition (init is idempotent; resetClock would restart the grid
-  // mid-session). Encoded 1/2/3 so the subscription fires only on real
+  // active transition, which keeps both players counting the SAME bars: a
+  // player joining while the other runs must not restart the grid.
+  //
+  // "Fully stopped" means BOTH players are 'stopped'. A 'stopping' player is
+  // still active — otherwise a soft stop followed by a restart would reset the
+  // grid mid-flight. Encoded 1/2/3 so the subscription fires only on real
   // transitions.
   subs.push(
     useAppStore.subscribe(
-      (s) => (s.isSequencerPlaying ? 1 : 0) + (s.isChordsPlaying ? 2 : 0),
+      (s) =>
+        (isPlayerActive(s.sequencerPlayer) ? 1 : 0) + (isPlayerActive(s.chordsPlayer) ? 2 : 0),
       (flags, prevFlags) => {
         audioEngine.init();
         if (flags !== 0 && prevFlags === 0) {

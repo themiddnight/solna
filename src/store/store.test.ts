@@ -130,9 +130,9 @@ beforeAll(() => {
 
 beforeEach(async () => {
   fakeLocalStorage.clear();
-  // Reset the transient transport flags so tests are order-independent.
+  // Reset the transient transport player states so tests are order-independent.
   const { useAppStore } = await getStore();
-  useAppStore.setState({ isSequencerPlaying: false, isChordsPlaying: false });
+  useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped' });
 });
 
 afterEach(() => {
@@ -152,8 +152,8 @@ describe('store defaults', () => {
     expect(s.bpm).toBe(120);
     expect(s.masterVolume).toBe(0.85);
     expect(s.metronomeActive).toBe(false);
-    expect(s.isSequencerPlaying).toBe(false);
-    expect(s.isChordsPlaying).toBe(false);
+    expect(s.sequencerPlayer).toBe('stopped');
+    expect(s.chordsPlayer).toBe('stopped');
     expect(s.scaleRoot).toBe('A');
     expect(s.scaleType).toBe('Natural Minor');
     expect(s.projectTitle).toBe('Cosmic Horizon Jam');
@@ -190,36 +190,36 @@ describe('transport semantics', () => {
   // Engine side-effects (init/resetClock on the fully-stopped -> playing
   // transition) moved to engineSync's transport-flags subscription (see
   // engineSync.test.ts); these tests cover pure state transitions only.
-  test('toggleMasterPlay starts both views from stopped and stops both when playing', async () => {
+  test('playAll starts both players from stopped, hardStopAll stops both when playing', async () => {
     const { useAppStore } = await getStore();
 
-    useAppStore.getState().toggleMasterPlay();
-    expect(useAppStore.getState().isSequencerPlaying).toBe(true);
-    expect(useAppStore.getState().isChordsPlaying).toBe(true);
+    useAppStore.getState().playAll();
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+    expect(useAppStore.getState().chordsPlayer).toBe('playing');
 
-    useAppStore.getState().toggleMasterPlay();
-    expect(useAppStore.getState().isSequencerPlaying).toBe(false);
-    expect(useAppStore.getState().isChordsPlaying).toBe(false);
+    useAppStore.getState().hardStopAll();
+    expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
+    expect(useAppStore.getState().chordsPlayer).toBe('stopped');
   });
 
-  test('toggleSequencerPlay / toggleChordsPlay flip only their own flag', async () => {
+  test('play/hardStop("sequencer"/"chords") address only their own player', async () => {
     const { useAppStore } = await getStore();
 
-    useAppStore.getState().toggleChordsPlay();
-    expect(useAppStore.getState().isChordsPlaying).toBe(true);
-    expect(useAppStore.getState().isSequencerPlaying).toBe(false);
+    useAppStore.getState().play('chords');
+    expect(useAppStore.getState().chordsPlayer).toBe('playing');
+    expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
 
-    useAppStore.getState().toggleSequencerPlay();
-    expect(useAppStore.getState().isSequencerPlaying).toBe(true);
-    expect(useAppStore.getState().isChordsPlaying).toBe(true);
+    useAppStore.getState().play('sequencer');
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+    expect(useAppStore.getState().chordsPlayer).toBe('playing');
 
-    useAppStore.getState().toggleSequencerPlay();
-    useAppStore.getState().toggleChordsPlay();
-    expect(useAppStore.getState().isSequencerPlaying).toBe(false);
-    expect(useAppStore.getState().isChordsPlaying).toBe(false);
+    useAppStore.getState().hardStop('sequencer');
+    useAppStore.getState().hardStop('chords');
+    expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
+    expect(useAppStore.getState().chordsPlayer).toBe('stopped');
 
-    useAppStore.getState().toggleSequencerPlay();
-    expect(useAppStore.getState().isSequencerPlaying).toBe(true);
+    useAppStore.getState().play('sequencer');
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
   });
 });
 
@@ -381,14 +381,17 @@ describe('persist partialize', () => {
     const excludedKeys = [
       'activeTab',
       'isProjectModalOpen',
-      'isSequencerPlaying',
-      'isChordsPlaying',
+      'sequencerPlayer',
+      'chordsPlayer',
       'setBpm',
       'setMasterVolume',
       'toggleMetronome',
-      'toggleSequencerPlay',
-      'toggleChordsPlay',
-      'toggleMasterPlay',
+      'play',
+      'softStop',
+      'hardStop',
+      'playAll',
+      'softStopAll',
+      'hardStopAll',
       'applyTemplate',
       'setChordOctave',
       'applyDrumPattern',

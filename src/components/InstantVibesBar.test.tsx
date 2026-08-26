@@ -10,29 +10,29 @@ const noop = { onToast: () => {} };
 beforeEach(() => {
   spyOn(audioEngine, 'init').mockImplementation(() => Promise.resolve());
   spyOn(audioEngine, 'resetClock').mockClear();
-  useAppStore.setState({ isSequencerPlaying: false, isChordsPlaying: false });
+  useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped' });
 });
 
 describe('selectVibe', () => {
   test('does not start playback when transport is stopped', () => {
-    useAppStore.setState({ isSequencerPlaying: false, isChordsPlaying: false });
+    useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped' });
 
     selectVibe(INSTANT_VIBES[0], noop);
 
     const state = useAppStore.getState();
-    expect(state.isSequencerPlaying).toBe(false);
-    expect(state.isChordsPlaying).toBe(false);
+    expect(state.sequencerPlayer).toBe('stopped');
+    expect(state.chordsPlayer).toBe('stopped');
     expect(state.projectTitle).toBe(INSTANT_VIBES[0].projectTitle);
   });
 
   test('does not stop playback when transport is playing', () => {
-    useAppStore.setState({ isSequencerPlaying: true, isChordsPlaying: true });
+    useAppStore.setState({ sequencerPlayer: 'playing', chordsPlayer: 'playing' });
 
     selectVibe(INSTANT_VIBES[0], noop);
 
     const state = useAppStore.getState();
-    expect(state.isSequencerPlaying).toBe(true);
-    expect(state.isChordsPlaying).toBe(true);
+    expect(state.sequencerPlayer).toBe('playing');
+    expect(state.chordsPlayer).toBe('playing');
   });
 });
 

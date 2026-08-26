@@ -28,7 +28,7 @@ export const SequencerView = () => {
   // rest of the component body is unchanged).
   const tracks = useAppStore((s) => s.sequencerTracks);
   const onChangeTracks = useAppStore((s) => s.setSequencerTracks);
-  const isPlaying = useAppStore((s) => s.isSequencerPlaying);
+  const isPlaying = useAppStore((s) => s.sequencerPlayer !== 'stopped');
   const synthParams = useAppStore((s) => s.synthParams);
   const soundKit = useAppStore((s) => s.soundKit);
   const onChangeSoundKit = useAppStore((s) => s.setSoundKit);

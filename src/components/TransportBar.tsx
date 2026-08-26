@@ -1,60 +1,40 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Play, Square, Volume2, Clock, Waves, Plus, Minus } from "lucide-react";
+import { Volume2, Clock, Waves, Plus, Minus } from "lucide-react";
 import { audioEngine } from "../audio/engine";
 import { AudioVisualizer, VisualizerMode } from "./AudioVisualizer";
 import { useAppStore } from "../store/store";
 import { Slider } from "./ui/Slider";
+import { PlayerTransport } from "./ui/PlayerTransport";
+import { aggregatePlayerState, isHardStopEnabled } from "../store/transportSlice";
 
 export const TransportBar: React.FC = React.memo(() => {
-  // UI slice
-  const activeTab = useAppStore((s) => s.activeTab);
-
   // Transport slice
-  const isSequencerPlaying = useAppStore((s) => s.isSequencerPlaying);
-  const isChordsPlaying = useAppStore((s) => s.isChordsPlaying);
+  const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
+  const chordsPlayer = useAppStore((s) => s.chordsPlayer);
+  const playAll = useAppStore((s) => s.playAll);
+  const softStopAll = useAppStore((s) => s.softStopAll);
+  const hardStopAll = useAppStore((s) => s.hardStopAll);
   const bpm = useAppStore((s) => s.bpm);
   const setBpm = useAppStore((s) => s.setBpm);
   const masterVolume = useAppStore((s) => s.masterVolume);
   const setMasterVolume = useAppStore((s) => s.setMasterVolume);
   const metronomeActive = useAppStore((s) => s.metronomeActive);
   const toggleMetronome = useAppStore((s) => s.toggleMetronome);
-  const toggleMasterPlay = useAppStore((s) => s.toggleMasterPlay);
 
   // Local visualizer state
   const [vuLevel, setVuLevel] = useState(0);
   const [vizMode, setVizMode] = useState<VisualizerMode>("wave");
 
-  // Derived transport state (same logic that used to live in App.tsx)
-  const isPlaying =
-    activeTab === "sequencer"
-      ? isSequencerPlaying
-      : activeTab === "chords"
-        ? isChordsPlaying
-        : false;
-  const isPlayingAll = isSequencerPlaying || isChordsPlaying;
-  const isPlayDisabled = !["sequencer", "chords"].includes(activeTab);
-
-  // Toggle whichever engine is attached to the current tab (same semantics as
-  // the old toggleCurrentTabPlay handler in App.tsx)
-  const onTogglePlay = () => {
-    const {
-      activeTab: tab,
-      toggleSequencerPlay,
-      toggleChordsPlay,
-    } = useAppStore.getState();
-    if (tab === "sequencer") {
-      toggleSequencerPlay();
-    } else if (tab === "chords") {
-      toggleChordsPlay();
-    }
-  };
-  const onTogglePlayAll = toggleMasterPlay;
+  const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer);
+  const hardStopDisabled = !isHardStopEnabled(sequencerPlayer, chordsPlayer);
+  // The meter loop only needs to know whether anything is sounding.
+  const isPlaying = aggregate !== 'stopped';
 
   // Meter polling loop — runs only while playing, and only commits state when
   // the level moved enough to change a VU segment (avoids 60 re-renders/sec)
   const vuLevelRef = useRef(0);
   useEffect(() => {
-    if (!isPlaying && !isPlayingAll) {
+    if (!isPlaying) {
       setVuLevel(0);
       vuLevelRef.current = 0;
       return;
@@ -70,58 +50,30 @@ export const TransportBar: React.FC = React.memo(() => {
     };
     animId = requestAnimationFrame(updateMeter);
     return () => cancelAnimationFrame(animId);
-  }, [isPlaying, isPlayingAll]);
+  }, [isPlaying]);
 
   const handleToggleMetronome = () => {
     // Engine mirror happens via useEngineSync (one render later)
     toggleMetronome();
   };
 
-  const currentTabLabel =
-    activeTab === "sequencer"
-      ? "MATRIX"
-      : activeTab === "chords"
-        ? "CHORDS"
-        : "TAB";
-
   return (
     <div className="bg-base-100 border-t border-base-300 px-3 py-2 flex items-center justify-between gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
       {/* Left Transport Actions: Play All + Tab Play + Tempo */}
       <div className="flex items-center gap-1.5 shrink-0">
-        {/* Play All Button */}
-        <button
-          id="btn-bottom-play-all"
-          onClick={onTogglePlayAll}
-          className={`btn btn-sm ${
-            isPlayingAll ? "btn-warning" : "btn-success"
-          } gap-1.5 font-bold text-xs`}
-          title="Play/Stop All"
-        >
-          {isPlayingAll ? (
-            <Square className="w-3.5 h-3.5 fill-current" />
-          ) : (
-            <Play className="w-3.5 h-3.5 fill-current" />
-          )}
-          <span className="hidden sm:inline">{isPlayingAll ? "Stop All" : "Play All"}</span>
-        </button>
-
-        {/* Tab Specific Play Button */}
-        <button
-          id="btn-bottom-play"
-          onClick={onTogglePlay}
-          disabled={isPlayDisabled}
-          className={`btn btn-sm ${
-            isPlaying ? "btn-warning" : "btn-primary"
-          } gap-1.5 font-bold text-xs`}
-          title={`Play/Stop ${currentTabLabel}`}
-        >
-          {isPlaying ? (
-            <Square className="w-3.5 h-3.5 fill-current" />
-          ) : (
-            <Play className="w-3.5 h-3.5 fill-current" />
-          )}
-          <span>{currentTabLabel}</span>
-        </button>
+        {/* Master transport: drives both automation players together. The
+            hard stop stays live whenever anything is still scheduled, even
+            when the aggregate reads `stopping`. */}
+        <PlayerTransport
+          id="btn-bottom-transport"
+          state={aggregate}
+          size="sm"
+          showHardStop
+          hardStopDisabled={hardStopDisabled}
+          onPlay={playAll}
+          onSoftStop={softStopAll}
+          onHardStop={hardStopAll}
+        />
 
         {/* Tempo BPM Control */}
         <div className="flex items-center gap-0.5 bg-base-200 border border-base-300 px-1.5 py-1 rounded-box">

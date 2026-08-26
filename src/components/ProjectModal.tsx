@@ -83,7 +83,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = React.memo(({
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="input input-sm input-bordered w-full flex-1 text-xs"
+                className="input input-sm w-full flex-1 text-xs"
               />
               <button
                 id="btn-save-project-action"

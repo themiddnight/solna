@@ -7,7 +7,7 @@ import { startEngineSync, stopEngineSync } from './engineSync';
 // files, so transport state can leak in from earlier files — normalize what
 // these tests depend on.
 beforeEach(() => {
-  useAppStore.setState({ isSequencerPlaying: false, isChordsPlaying: false });
+  useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped' });
 });
 
 afterEach(() => {
@@ -42,7 +42,7 @@ describe('engineSync', () => {
     const resetClock = spyOn(audioEngine, 'resetClock').mockClear();
     startEngineSync();
     // stopped -> sequencer playing: init + clock reset
-    useAppStore.getState().toggleSequencerPlay();
+    useAppStore.getState().play('sequencer');
     expect(init).toHaveBeenCalled();
     expect(resetClock).toHaveBeenCalled();
     init.mockClear();
@@ -50,31 +50,53 @@ describe('engineSync', () => {
     // playing -> stopped: init called again (old toggles inited on every
     // transition; init()'s resume path restores a browser-suspended context),
     // but the clock never resets
-    useAppStore.getState().toggleSequencerPlay();
+    useAppStore.getState().hardStopAll();
     expect(init).toHaveBeenCalled();
     expect(resetClock).not.toHaveBeenCalled();
     // start sequencer while chords already playing: init, no reset
-    useAppStore.getState().toggleChordsPlay();
+    useAppStore.getState().play('chords');
     init.mockClear();
     resetClock.mockClear();
-    useAppStore.getState().toggleSequencerPlay();
+    useAppStore.getState().play('sequencer');
     expect(init).toHaveBeenCalled();
     expect(resetClock).not.toHaveBeenCalled();
   });
 
-  test('toggleMasterPlay from fully-stopped inits and resets the clock (0 -> 3)', () => {
+  test('playAll from fully-stopped inits and resets the clock (0 -> 3)', () => {
     const init = spyOn(audioEngine, 'init').mockImplementation(() => {}).mockClear();
     const resetClock = spyOn(audioEngine, 'resetClock').mockClear();
     startEngineSync();
-    // Play All from stopped: both views start, engine inits, grid restarts
-    useAppStore.getState().toggleMasterPlay();
+    // Play All from stopped: both players start, engine inits, grid restarts
+    useAppStore.getState().playAll();
     expect(init).toHaveBeenCalled();
     expect(resetClock).toHaveBeenCalled();
     // Stopping both: init still called (every transition), clock never resets
     init.mockClear();
     resetClock.mockClear();
-    useAppStore.getState().toggleMasterPlay();
+    useAppStore.getState().hardStopAll();
     expect(init).toHaveBeenCalled();
     expect(resetClock).not.toHaveBeenCalled();
+  });
+
+  test('a stopping player still counts as active, so the bar grid is never reset mid-flight', () => {
+    const init = spyOn(audioEngine, 'init').mockImplementation(() => {}).mockClear();
+    const resetClock = spyOn(audioEngine, 'resetClock').mockClear();
+    startEngineSync();
+
+    useAppStore.getState().play('chords');
+    expect(resetClock).toHaveBeenCalledTimes(1); // stopped -> active
+
+    resetClock.mockClear();
+    useAppStore.getState().softStop('chords');
+    useAppStore.getState().play('sequencer');
+    // Chords was 'stopping', i.e. still active, so this is NOT a
+    // fully-stopped -> active transition and the grid must survive.
+    expect(resetClock).not.toHaveBeenCalled();
+    expect(init).toHaveBeenCalled();
+
+    useAppStore.getState().hardStopAll();
+    resetClock.mockClear();
+    useAppStore.getState().play('chords');
+    expect(resetClock).toHaveBeenCalledTimes(1); // genuinely fully stopped
   });
 });

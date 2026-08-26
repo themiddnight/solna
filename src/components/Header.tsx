@@ -12,31 +12,59 @@ import {
 import { ViewMode } from "../types";
 import { ROOTS, SCALES } from "../utils/musicTheory";
 import { useAppStore } from "../store/store";
+import type { PlayerModule } from "../store/types";
+import { PlayerTransport } from "./ui/PlayerTransport";
 
-const NAV_TABS: Array<
-  | {
-      view: ViewMode;
-      label: string;
-      icon: LucideIcon;
-      playingKey?: "sequencer" | "chords";
-    }
-  | "divider"
-> = [
-  { view: "synth", label: "Synth", icon: Sliders },
-  {
-    view: "sequencer",
-    label: "Step Matrix",
-    icon: Grid,
-    playingKey: "sequencer",
-  },
-  { view: "chords", label: "Chords", icon: Music, playingKey: "chords" },
-];
-
-const MASTER_TABS: Array<{
+interface NavTab {
   view: ViewMode;
   label: string;
   icon: LucideIcon;
-}> = [{ view: "effects", label: "Master FX", icon: Sliders }];
+}
+
+/** The two automation players. Each gets its own play / soft-stop button. */
+export const AUTOMATION_TABS: Array<NavTab & { module: PlayerModule }> = [
+  { view: 'sequencer', label: 'Step Matrix', icon: Grid, module: 'sequencer' },
+  { view: 'chords', label: 'Chords', icon: Music, module: 'chords' },
+];
+
+/** Views with nothing to play: the instrument and the master rack. */
+export const SOLO_TABS: NavTab[] = [
+  { view: 'synth', label: 'Synth', icon: Sliders },
+  { view: 'effects', label: 'Master FX', icon: Sliders },
+];
+
+/**
+ * One view-switch button. Deliberately NOT daisyUI's `tab` component: an
+ * automation group joins this button to a transport control, and daisyUI's
+ * tabs expect a `role="tablist"` holding only `role="tab"` children. This is
+ * the documented join + btn + btn-active segmented-control pattern instead,
+ * so every group is one `join` whose direct children all carry `join-item`.
+ */
+const TabButton: React.FC<{
+  tab: { view: ViewMode; label: string; icon: LucideIcon };
+  activeTab: ViewMode;
+  onSelect: (view: ViewMode) => void;
+}> = ({ tab, activeTab, onSelect }) => {
+  const isActive = activeTab === tab.view;
+  return (
+    <button
+      id={`tab-${tab.view}`}
+      type="button"
+      aria-current={isActive ? 'page' : undefined}
+      onClick={() => onSelect(tab.view)}
+      className={`btn btn-sm join-item gap-1.5 text-xs font-bold whitespace-nowrap ${
+        isActive ? 'btn-active btn-primary' : 'btn-ghost'
+      }`}
+    >
+      <tab.icon className="w-4 h-4 shrink-0" />
+      <span className="hidden md:inline">{tab.label}</span>
+    </button>
+  );
+};
+
+/** Shared shell for every header group: the daisyUI join plus this app's chrome. */
+const NAV_GROUP_CLASS =
+  'join bg-base-200 border border-base-300 rounded-box p-1 shrink-0';
 
 export type SolnaTheme = 'solna-dark' | 'solna-light';
 
@@ -86,8 +114,10 @@ export function persistTheme(theme: SolnaTheme, storage?: Pick<Storage, 'setItem
 export const Header: React.FC = React.memo(() => {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
-  const isSequencerPlaying = useAppStore((s) => s.isSequencerPlaying);
-  const isChordsPlaying = useAppStore((s) => s.isChordsPlaying);
+  const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
+  const chordsPlayer = useAppStore((s) => s.chordsPlayer);
+  const play = useAppStore((s) => s.play);
+  const softStop = useAppStore((s) => s.softStop);
   const openProjectsModal = useAppStore((s) => s.openProjectsModal);
   const projectTitle = useAppStore((s) => s.projectTitle);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
@@ -143,69 +173,39 @@ export const Header: React.FC = React.memo(() => {
         </div>
       </div>
 
-      {/* Primary Navigation Tabs */}
+      {/* Primary navigation: three join groups of view-switch buttons. */}
       <nav className="flex items-center gap-2">
-        <div role="tablist" className="tabs tabs-box tabs-sm bg-base-200 border border-base-300 p-1 overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-1 shrink-0">
-          {NAV_TABS.map((tab, index) => {
-            if (tab === "divider") {
-              return (
-                <div
-                  key={`divider-${index}`}
-                  className="w-px h-4 bg-base-300 mx-0.5 shrink-0 hidden sm:block"
-                />
-              );
-            }
+        {/* Synth stands alone, mirroring Master FX on the right. */}
+        <div className={NAV_GROUP_CLASS}>
+          <TabButton tab={SOLO_TABS[0]} activeTab={activeTab} onSelect={setActiveTab} />
+        </div>
 
-            const isTabPlaying =
-              tab.playingKey === "sequencer"
-                ? isSequencerPlaying
-                : tab.playingKey === "chords"
-                  ? isChordsPlaying
-                  : false;
-
+        {/* The automation players: view button and transport side by side, all
+            of them direct join-item children of one join. A <button> must
+            never nest inside another <button>. */}
+        <div className="flex items-center gap-1.5 overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar shrink-0">
+          {AUTOMATION_TABS.map((tab) => {
+            const state = tab.module === 'sequencer' ? sequencerPlayer : chordsPlayer;
             return (
-              <button
-                key={tab.view}
-                id={`tab-${tab.view}`}
-                role="tab"
-                onClick={() => setActiveTab(tab.view)}
-                className={`tab gap-1.5 text-xs font-bold whitespace-nowrap relative ${
-                  activeTab === tab.view ? "tab-active bg-primary text-primary-content" : ""
-                }`}
-              >
-                <tab.icon className="w-4 h-4 shrink-0" />
-                <span className="hidden md:inline">{tab.label}</span>
-                {isTabPlaying && (
-                  <span
-                    className="flex h-1.5 w-1.5 relative ml-0.5"
-                    title="Playing"
-                  >
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success" />
-                  </span>
-                )}
-              </button>
+              <div key={tab.view} className={NAV_GROUP_CLASS}>
+                <TabButton tab={tab} activeTab={activeTab} onSelect={setActiveTab} />
+                <PlayerTransport
+                  id={`btn-header-play-${tab.module}`}
+                  state={state}
+                  // Matches TabButton's own btn-sm so the joined pair is flush.
+                  size="sm"
+                  compact
+                  unwrapped
+                  onPlay={() => play(tab.module)}
+                  onSoftStop={() => softStop(tab.module)}
+                />
+              </div>
             );
           })}
         </div>
 
-        <div role="tablist" className="tabs tabs-box tabs-sm bg-base-200 border border-base-300 p-1 overflow-x-auto max-w-[50vw] sm:max-w-none no-scrollbar gap-1 shrink-0">
-          {MASTER_TABS.map((tab) => {
-            return (
-              <button
-                key={tab.view}
-                id={`tab-${tab.view}`}
-                role="tab"
-                onClick={() => setActiveTab(tab.view)}
-                className={`tab gap-1.5 text-xs font-bold whitespace-nowrap relative ${
-                  activeTab === tab.view ? "tab-active bg-primary text-primary-content" : ""
-                }`}
-              >
-                <tab.icon className="w-4 h-4 shrink-0" />
-                <span className="hidden md:inline">{tab.label}</span>
-              </button>
-            );
-          })}
+        <div className={NAV_GROUP_CLASS}>
+          <TabButton tab={SOLO_TABS[1]} activeTab={activeTab} onSelect={setActiveTab} />
         </div>
       </nav>
 

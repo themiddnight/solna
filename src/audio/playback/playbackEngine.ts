@@ -36,3 +36,16 @@ export function subscribePlaybackClock(
 ): () => void {
   return audioEngine.subscribeClock(listener);
 }
+
+/**
+ * Silences a whole playback source — sounding voices AND hits already
+ * scheduled ahead of the transport. `time` anchors the release on the audio
+ * clock so a soft stop lands exactly on a bar line.
+ */
+export function playbackStopSource(
+  source: string,
+  releaseTime = 0.1,
+  time?: number,
+): void {
+  audioEngine.stopSource(source, releaseTime, time);
+}

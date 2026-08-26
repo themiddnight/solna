@@ -43,7 +43,7 @@ describe('ProjectModal theming', () => {
     expect(html).toContain('modal-backdrop');
     expect(html).toContain('modal-action');
     expect(html).toContain('btn btn-sm btn-circle btn-ghost');
-    expect(html).toContain('input input-sm input-bordered');
+    expect(html).toContain('input input-sm');
     expect(html).toContain('btn btn-sm btn-primary');
     expect(html).toContain('text-base-content/60');
 

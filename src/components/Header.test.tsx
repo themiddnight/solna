@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { persistTheme, readStoredTheme, resolveInitialTheme } from './Header';
+import { AUTOMATION_TABS, persistTheme, readStoredTheme, resolveInitialTheme, SOLO_TABS } from './Header';
 
 describe('resolveInitialTheme', () => {
   test('a stored theme always wins over the OS preference', () => {
@@ -72,5 +72,21 @@ describe('persistTheme', () => {
     // Same regression as readStoredTheme: the default parameter must not
     // evaluate localStorage outside the try/catch.
     expect(() => persistTheme('solna-light')).not.toThrow();
+  });
+});
+
+describe('header tab grouping', () => {
+  test('only the two automation players carry a transport', () => {
+    expect(AUTOMATION_TABS.map((t) => t.view)).toEqual(['sequencer', 'chords']);
+    expect(AUTOMATION_TABS.every((t) => t.module !== undefined)).toBe(true);
+  });
+
+  test('synth and master fx stand alone, with no transport', () => {
+    expect(SOLO_TABS.map((t) => t.view)).toEqual(['synth', 'effects']);
+  });
+
+  test('every tab view is still reachable', () => {
+    const views = [...SOLO_TABS, ...AUTOMATION_TABS].map((t) => t.view).sort();
+    expect(views).toEqual(['chords', 'effects', 'sequencer', 'synth']);
   });
 });

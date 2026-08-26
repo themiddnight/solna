@@ -314,7 +314,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     const previewNames = resolvedChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
 
     return (
-      <div className="card bg-base-200 border border-base-300 hover:border-module-chord/50 p-3 rounded-box transition-all flex flex-col gap-2 group relative shadow-xs">
+      <div className="card bg-base-200 border border-base-300 hover:border-module-chord/50 p-3 transition-all flex flex-col gap-2 group relative shadow-xs">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -380,7 +380,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     const previewNames = resolvedCustom.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
 
     return (
-      <div className="card bg-base-200 border border-base-300 hover:border-secondary/50 p-3 rounded-box transition-all flex flex-col gap-2 group relative shadow-xs">
+      <div className="card bg-base-200 border border-base-300 hover:border-secondary/50 p-3 transition-all flex flex-col gap-2 group relative shadow-xs">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">

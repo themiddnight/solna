@@ -1,4 +1,5 @@
 import { SynthParams, MasterEffects, ChordItem, FilterType } from '../types';
+import { audioEngine } from '../audio/engine';
 import { useAppStore } from './store';
 import { deriveChordNotes } from '../utils/musicTheory';
 import { INITIAL_SYNTH_PARAMS } from './initialState';
@@ -55,8 +56,35 @@ function buildSynthParams(presetName: string, overrides?: Partial<SynthParams>):
   };
 }
 
+/** Same instant-but-clickless release the hard-stop button uses. */
+const VIBE_SWAP_RELEASE = 0.02;
+
 export function applyInstantVibeToStore(vibe: InstantVibe) {
   const store = useAppStore.getState();
+
+  // 0. Atomic swap: cut everything still scheduled BEFORE writing the new
+  //    chords and patterns, otherwise the old progression's queued voices
+  //    ring on top of the new one. A player that was mid-soft-stop counts as
+  //    active and comes back — the user changed vibe, they did not cancel.
+  const wasActive = {
+    sequencer: store.sequencerPlayer !== 'stopped',
+    chords: store.chordsPlayer !== 'stopped',
+  };
+  store.hardStopAll();
+  // The transport transition alone does NOT silence anything: the whole swap
+  // runs inside one onClick, React 18 batches it, and the rendered player
+  // state goes 'playing' -> 'playing' — so a React effect keyed on it never
+  // runs and the queued chord/bass voices sing on over the new vibe.
+  // (Measured: React logged a single 'playing' render while the zustand
+  // subscription saw 'stopped' then 'playing'.) So cut the sources here,
+  // synchronously, where the swap actually happens. store/ -> audio/ is the
+  // allowed direction; engineSync.ts reaches the engine the same way.
+  // Unconditional: a mid-soft-stop player still has a release pending on the
+  // audio clock, and a stopped player may still be ringing out a preview.
+  // Drums are fire-and-forget one-shots with no tracked voices — one already
+  // scheduled hit can still land, which the spec accepts.
+  audioEngine.stopSource('chord', VIBE_SWAP_RELEASE);
+  audioEngine.stopSource('bass', VIBE_SWAP_RELEASE);
 
   // 1. Context & BPM
   store.setBpm(vibe.bpm);
@@ -108,6 +136,12 @@ export function applyInstantVibeToStore(vibe: InstantVibe) {
     ...store.effects,
     ...vibe.effects,
   });
+
+  // Restart only what was running. Both playback hooks arm on
+  // `step % STEPS_PER_BAR === 0`, so the restart lands on the next bar by
+  // construction — no alignment code needed here.
+  if (wasActive.sequencer) store.play('sequencer');
+  if (wasActive.chords) store.play('chords');
 }
 
 export const INSTANT_VIBES: InstantVibe[] = [

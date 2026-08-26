@@ -55,7 +55,7 @@ export function SortableChordCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`card bg-panel border border-base-300 rounded-box p-4 flex flex-col justify-between space-y-3 transition-colors ${
+      className={`card bg-panel border border-base-300 p-4 flex flex-col justify-between space-y-3 transition-colors ${
         isActive
           ? "border-module-chord ring-2 ring-module-chord/50 bg-base-200"
           : "border-base-300 hover:border-base-content/30"
@@ -136,14 +136,14 @@ export function SortableChordCard({
       {/* Edit Controls */}
       <div className="flex gap-2 pt-1 border-t border-base-300/60">
         <div className="shrink min-w-0">
-          <label className="label-text text-[10px] text-base-content/60 block mb-0.5">
+          <label className="text-[10px] text-base-content/60 block mb-0.5">
             Root
           </label>
           <select
             id={`select-chord-root-${chord.id}`}
             value={chord.root}
             onChange={(e) => updateChord(chord.id, { root: e.target.value })}
-            className="select select-xs select-bordered w-full"
+            className="select select-xs w-full"
           >
             {ROOTS.map((r) => (
               <option key={r} value={r}>
@@ -154,14 +154,14 @@ export function SortableChordCard({
         </div>
 
         <div className="flex-1 min-w-0">
-          <label className="label-text text-[10px] text-base-content/60 block mb-0.5">
+          <label className="text-[10px] text-base-content/60 block mb-0.5">
             Quality
           </label>
           <select
             id={`select-chord-quality-${chord.id}`}
             value={chord.quality}
             onChange={(e) => updateChord(chord.id, { quality: e.target.value })}
-            className="select select-xs select-bordered w-full"
+            className="select select-xs w-full"
           >
             <optgroup label="Triads">
               <option value="maj">Major (maj)</option>
@@ -191,7 +191,7 @@ export function SortableChordCard({
         </div>
 
         <div className="shrink min-w-0">
-          <label className="label-text text-[10px] text-base-content/60 block mb-0.5">
+          <label className="text-[10px] text-base-content/60 block mb-0.5">
             Duration (Bars)
           </label>
           <select
@@ -200,7 +200,7 @@ export function SortableChordCard({
             onChange={(e) =>
               updateChord(chord.id, { bars: parseInt(e.target.value, 10) })
             }
-            className="select select-xs select-bordered w-full"
+            className="select select-xs w-full"
           >
             <option value={1}>1 Bar</option>
             <option value={2}>2 Bars</option>

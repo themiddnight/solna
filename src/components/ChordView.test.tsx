@@ -41,7 +41,7 @@ describe('ChordView theming', () => {
   });
 
   test('every select is a bordered daisyUI select', () => {
-    expect(html).toContain('select select-sm select-bordered');
+    expect(html).toContain('select select-sm');
   });
 
   test('the library counter badge uses a valid padding step', () => {

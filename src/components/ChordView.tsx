@@ -72,8 +72,8 @@ import { SortableChordCard } from "./chord/SortableChordCard";
 
 import { CHORD_PROGRESSION_TEMPLATES } from "../audio/data/chordProgressions";
 
-const SELECT_BASE = "select select-sm select-bordered font-semibold";
-const LABEL_BASE = "label-text text-[10px] text-base-content/60 block mb-1";
+const SELECT_BASE = "select select-sm font-semibold";
+const LABEL_BASE = "text-[10px] text-base-content/60 block mb-1";
 
 export const ChordView: React.FC = React.memo(() => {
   // ChordView reads the store directly (Task 5): every value below replaces
@@ -532,7 +532,7 @@ export const ChordView: React.FC = React.memo(() => {
       />
 
       {/* Active Progression Blocks & Playable Chord Pads */}
-      <div className="card bg-panel tint-chord border border-module-chord/30 rounded-box p-4 shadow-xl space-y-3">
+      <div className="card bg-panel tint-chord border border-module-chord/30 p-4 shadow-xl space-y-3">
         <div className="flex items-center justify-between border-b border-base-300 pb-2 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-base-content uppercase tracking-wider">
@@ -918,7 +918,7 @@ export const ChordView: React.FC = React.memo(() => {
       </div>
 
       {/* Bass Module Panel */}
-      <div className="mt-4 card bg-panel tint-bass border border-module-bass/30 rounded-box p-4">
+      <div className="mt-4 card bg-panel tint-bass border border-module-bass/30 p-4">
         <div className="mb-3">
           <h3 className="text-sm font-bold text-module-bass">Bass Module</h3>
           <p className="text-[10px] text-base-content/60">

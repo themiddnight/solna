@@ -62,7 +62,7 @@ describe('SortableChordCard theming', () => {
 
   test('the three edit selects are bordered daisyUI selects', () => {
     const html = render(false);
-    expect(html).toContain('select select-xs select-bordered w-full');
+    expect(html).toContain('select select-xs w-full');
   });
 
   test('no legacy palette utilities survive', () => {

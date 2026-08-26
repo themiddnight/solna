@@ -10,19 +10,27 @@ import type {
 import type { SynthControlTarget } from '../utils/synthControl';
 import type { SynthPresetItem, SynthPresetCategory } from '../audio/synthPresets';
 
+/** A player is `stopping` between a soft stop and the bar line that ends it. */
+export type PlayerState = 'stopped' | 'playing' | 'stopping';
+
+export type PlayerModule = 'sequencer' | 'chords';
+
 export interface TransportSlice {
   bpm: number;
   masterVolume: number;
   metronomeActive: boolean;
   // Transient (not persisted): mirrors the live transport state.
-  isSequencerPlaying: boolean;
-  isChordsPlaying: boolean;
+  sequencerPlayer: PlayerState;
+  chordsPlayer: PlayerState;
   setBpm: (bpm: number) => void;
   setMasterVolume: (volume: number) => void;
   toggleMetronome: () => void;
-  toggleSequencerPlay: () => void;
-  toggleChordsPlay: () => void;
-  toggleMasterPlay: () => void;
+  play: (module: PlayerModule) => void;
+  softStop: (module: PlayerModule) => void;
+  hardStop: (module: PlayerModule) => void;
+  playAll: () => void;
+  softStopAll: () => void;
+  hardStopAll: () => void;
 }
 
 export interface MusicContextSlice {

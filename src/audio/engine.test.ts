@@ -257,6 +257,44 @@ describe('source stop (preview release)', () => {
   });
 });
 
+describe('scheduled source stop (soft stop on a bar line)', () => {
+  test('a future time anchors the release there, not at currentTime', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime; // 10
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'chord');
+
+    // Schedule the stop a bar ahead, the way a soft stop does.
+    const stopAt = t0 + 2;
+    engine.stopSource('chord', 0.4, stopAt);
+
+    const voices = Array.from(
+      (engine as any).sourceVoices.get('chord') as Set<{
+        releaseScheduledAt: number;
+        gains: { gain: { cancels: number[] } }[];
+      }>,
+    );
+    expect(voices).toHaveLength(1);
+    expect(voices[0].releaseScheduledAt).toBe(stopAt);
+    // releaseVoice cancels the envelope at the SAME anchor it ramps from.
+    expect(voices[0].gains[0].gain.cancels).toContain(stopAt);
+    expect(voices[0].gains[0].gain.cancels).not.toContain(t0);
+  });
+
+  test('omitting time keeps the existing immediate behaviour', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.stopSource('chord', 0.02);
+
+    const voices = Array.from(
+      (engine as any).sourceVoices.get('chord') as Set<{ releaseScheduledAt: number }>,
+    );
+    expect(voices[0].releaseScheduledAt).toBe(t0);
+  });
+});
+
 describe('drum bus filter', () => {
   test('drum voices route through the drum bus filter instead of dryGain', () => {
     const { engine, ctx } = freshEngine();

@@ -1,4 +1,5 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, spyOn } from 'bun:test';
+import { audioEngine } from '../audio/engine';
 import { INSTANT_VIBES, applyInstantVibeToStore } from './instantVibes';
 import { RHYTHM_PATTERNS } from '../audio/rhythmPatterns';
 import { BASS_PATTERNS } from '../audio/bassPatterns';
@@ -118,6 +119,126 @@ describe('vibe preset name resolution', () => {
   });
 });
 
+describe('applyInstantVibeToStore transport handling', () => {
+  // Wrap the store's own action functions in place (via `setState`, not a
+  // fresh mock store) so applyInstantVibeToStore's internal
+  // `useAppStore.getState()` resolves to these wrapped references. Every
+  // wrapper calls through to the real implementation captured just before
+  // wrapping, so state still mutates normally; each wrapper just pushes a
+  // label into `order` first so the *sequence* of calls — not just the end
+  // state — is observable. That sequence is exactly what would break if
+  // hardStopAll were removed or moved after the vibe-state writes.
+  //
+  // `setState` (rather than mutating the snapshot object returned by
+  // `getState()` directly) is required here: zustand rebuilds the state
+  // object on every `set()` call inside the transport actions, so a
+  // property replaced in place on one snapshot would be silently dropped
+  // the moment any action fires. Routing both the install and the restore
+  // through `setState` keeps every generation of the state object wrapped
+  // until we explicitly restore, and the restore always lands on the
+  // current (not a stale) object.
+  function withOrderTracking<T>(order: string[], playCalls: string[], run: () => T): T {
+    const originals = {
+      hardStopAll: useAppStore.getState().hardStopAll,
+      setBpm: useAppStore.getState().setBpm,
+      setEffects: useAppStore.getState().setEffects,
+      play: useAppStore.getState().play,
+    };
+
+    useAppStore.setState({
+      hardStopAll: () => {
+        order.push('hardStopAll');
+        originals.hardStopAll();
+      },
+      // First vibe-state write in the function body (step 1).
+      setBpm: (bpm) => {
+        order.push('setBpm');
+        originals.setBpm(bpm);
+      },
+      // Last vibe-state write in the function body (step 6, right before
+      // the restart calls).
+      setEffects: (effects) => {
+        order.push('setEffects');
+        originals.setEffects(effects);
+      },
+      play: (module) => {
+        order.push(`play:${module}`);
+        playCalls.push(module);
+        originals.play(module);
+      },
+    });
+
+    try {
+      return run();
+    } finally {
+      useAppStore.setState({
+        hardStopAll: originals.hardStopAll,
+        setBpm: originals.setBpm,
+        setEffects: originals.setEffects,
+        play: originals.play,
+      });
+    }
+  }
+
+  test('cuts everything before writing new vibe state, and restarts only the players that were active', () => {
+    // Real (unwrapped) call: get chords running before we start recording order.
+    useAppStore.getState().play('chords');
+    expect(useAppStore.getState().chordsPlayer).toBe('playing');
+    expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
+
+    const order: string[] = [];
+    const playCalls: string[] = [];
+
+    withOrderTracking(order, playCalls, () => applyInstantVibeToStore(INSTANT_VIBES[1]));
+
+    // The hard stop must be the very first thing that happens — before any
+    // vibe-state write — and every restart must come after the last write.
+    // This is the assertion that would fail if the swap applied the new
+    // vibe first and cut audio afterward (or not at all).
+    expect(order[0]).toBe('hardStopAll');
+    const hardStopIndex = order.indexOf('hardStopAll');
+    const setBpmIndex = order.indexOf('setBpm');
+    const setEffectsIndex = order.indexOf('setEffects');
+    const playIndex = order.indexOf('play:chords');
+    expect(hardStopIndex).toBeLessThan(setBpmIndex);
+    expect(setEffectsIndex).toBeLessThan(playIndex);
+
+    // Chords was active, so it comes back; the Beat was not, so it stays put
+    // — and play() was never even called for it.
+    expect(useAppStore.getState().chordsPlayer).toBe('playing');
+    expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
+    expect(playCalls).not.toContain('sequencer');
+  });
+
+  test('a player that was stopping restarts rather than staying half-stopped', () => {
+    useAppStore.getState().play('chords');
+    useAppStore.getState().softStop('chords');
+    expect(useAppStore.getState().chordsPlayer).toBe('stopping');
+
+    applyInstantVibeToStore(INSTANT_VIBES[0]);
+
+    expect(useAppStore.getState().chordsPlayer).toBe('playing');
+  });
+
+  test('a swap while nothing plays leaves both players stopped and never calls play', () => {
+    useAppStore.getState().hardStopAll();
+
+    const order: string[] = [];
+    const playCalls: string[] = [];
+
+    withOrderTracking(order, playCalls, () => applyInstantVibeToStore(INSTANT_VIBES[0]));
+
+    // The weak form (end state reads 'stopped') would also pass an
+    // implementation that started and immediately re-stopped the players.
+    // Asserting play was never invoked rules that out.
+    expect(playCalls).toEqual([]);
+    expect(order[0]).toBe('hardStopAll');
+
+    expect(useAppStore.getState().chordsPlayer).toBe('stopped');
+    expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
+  });
+});
+
 test('InstantVibe presets carry no presentational fields', () => {
   const FORBIDDEN = ['color', 'bgGradient', 'borderColor', 'textColor'];
   for (const vibe of INSTANT_VIBES) {
@@ -125,4 +246,53 @@ test('InstantVibe presets carry no presentational fields', () => {
       expect(Object.prototype.hasOwnProperty.call(vibe, key)).toBe(false);
     }
   }
+});
+
+describe('applyInstantVibeToStore audible cut', () => {
+  // The regression this pins: the swap used to delegate the actual silencing
+  // to a React effect keyed on the rendered player state. The whole swap runs
+  // inside one onClick, React 18 batches it, and that state goes
+  // 'playing' -> 'playing' — so the effect never re-ran and the old vibe's
+  // queued chord and bass voices kept sounding over the new one. Asserting
+  // the ORDER of store actions (the suite above) cannot see that: only an
+  // assertion that the sources were actually silenced can.
+  test('silences the chord and bass buses, at the hard-stop release', () => {
+    const stopSource = spyOn(audioEngine, 'stopSource').mockImplementation(() => {});
+    stopSource.mockClear();
+
+    useAppStore.getState().play('chords');
+    applyInstantVibeToStore(INSTANT_VIBES[1]);
+
+    const silenced = stopSource.mock.calls.map((c) => c[0]);
+    expect(silenced).toContain('chord');
+    expect(silenced).toContain('bass');
+    for (const call of stopSource.mock.calls) expect(call[1]).toBe(0.02);
+
+    useAppStore.getState().hardStopAll();
+    stopSource.mockRestore();
+  });
+
+  test('cuts BEFORE the new vibe state is written, so nothing of the old vibe is left queued', () => {
+    // Load a vibe so the store holds a known progression, then record what
+    // `chords` looked like at the moment each cut happened. A cut that
+    // landed after `setChords` would see the NEW ids — i.e. the old vibe's
+    // voices were still queued while the new progression was already live.
+    applyInstantVibeToStore(INSTANT_VIBES[0]);
+    const oldIds = useAppStore.getState().chords.map((c) => c.id);
+
+    const chordIdsAtCut: string[][] = [];
+    const stopSource = spyOn(audioEngine, 'stopSource').mockImplementation(() => {
+      chordIdsAtCut.push(useAppStore.getState().chords.map((c) => c.id));
+    });
+    stopSource.mockClear();
+
+    useAppStore.getState().play('chords');
+    applyInstantVibeToStore(INSTANT_VIBES[1]);
+
+    expect(chordIdsAtCut.length > 0).toBe(true);
+    for (const ids of chordIdsAtCut) expect(ids).toEqual(oldIds);
+
+    useAppStore.getState().hardStopAll();
+    stopSource.mockRestore();
+  });
 });

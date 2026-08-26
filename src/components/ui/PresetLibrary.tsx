@@ -233,7 +233,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
               placeholder={searchPlaceholder ?? 'Search...'}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="input input-sm input-bordered w-full pl-8 pr-8 text-xs"
+              className="input input-sm w-full pl-8 pr-8 text-xs"
             />
             {query && (
               <button onClick={() => setQuery('')} className={clearBtnClass}>
@@ -289,7 +289,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                 placeholder="e.g. Hyper Saw Lead"
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                className="input input-sm input-bordered w-full text-xs"
+                className="input input-sm w-full text-xs"
               />
             </div>
 
@@ -300,7 +300,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                   <select
                     value={draft.category}
                     onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-                    className="select select-sm select-bordered w-full text-xs"
+                    className="select select-sm w-full text-xs"
                   >
                     {categories.filter((c) => c.id !== 'All').map((c) => (
                       <option key={c.id} value={c.id}>{c.selectLabel ?? c.label}</option>
@@ -316,7 +316,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                     placeholder="e.g. Heavy punchy lead tone"
                     value={draft.description}
                     onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                    className="input input-sm input-bordered w-full text-xs"
+                    className="input input-sm w-full text-xs"
                   />
                 </div>
               )}
@@ -351,7 +351,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                       {renderEntry ? (
                         renderEntry(entry)
                       ) : (
-                        <div className="card card-compact bg-base-100 border border-base-300 flex-row items-center gap-2 px-3 py-2">
+                        <div className="card bg-base-100 border border-base-300 flex-row items-center gap-2 px-3 py-2">
                           <div className="flex-1 min-w-0">
                             <div className="text-xs font-semibold text-base-content truncate">{entry.name}</div>
                             <div className="text-[10px] text-base-content/50 truncate">{subtitle ? subtitle(entry) : entry.description}</div>
@@ -406,7 +406,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                   placeholder="e.g. My Epic Verse Flow"
                   value={draft.name}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  className="input input-sm input-bordered w-full text-xs"
+                  className="input input-sm w-full text-xs"
                 />
               </div>
 
@@ -416,7 +416,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                   <select
                     value={draft.category}
                     onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-                    className="select select-sm select-bordered w-full text-xs"
+                    className="select select-sm w-full text-xs"
                   >
                     {categories.filter((c) => c.id !== 'All').map((c) => (
                       <option key={c.id} value={c.id}>{c.selectLabel ?? c.label}</option>
@@ -433,7 +433,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                     placeholder="e.g. I – V – vi – IV"
                     value={draft.roman ?? ''}
                     onChange={(e) => setDraft({ ...draft, roman: e.target.value })}
-                    className="input input-sm input-bordered w-full text-xs"
+                    className="input input-sm w-full text-xs"
                   />
                 </div>
               )}
@@ -446,7 +446,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                     placeholder="Notes about groove, tempo, or feel..."
                     value={draft.description}
                     onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                    className="input input-sm input-bordered w-full text-xs"
+                    className="input input-sm w-full text-xs"
                   />
                 </div>
               )}

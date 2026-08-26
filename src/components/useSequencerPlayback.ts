@@ -8,6 +8,40 @@ import {
   playbackNoteOn,
   subscribePlaybackClock,
 } from "../audio/playback/playbackEngine";
+import { isSoftStopBoundary } from "./playerStop";
+import type { PlayerState } from "../store/types";
+
+/** Whether the stepper has caught a bar line and started running. */
+export interface SequencerArming {
+  armed: boolean;
+}
+
+export type SequencerStepAction = "idle" | "soft-stop" | "play";
+
+/**
+ * What the clock callback should do for `step`. Arms (mutating `arming`) on
+ * the first bar line it sees, so the 16-step loop lands on beat 1.
+ *
+ * `state` must be read LIVE from the store, never from a React ref: the stop
+ * is fired from inside this callback and the clock subscription stays live
+ * until React commits, while one `clockTick` dispatches several steps
+ * synchronously — a stale 'stopping' lets an extra drum step through after
+ * the cut.
+ */
+export function sequencerStepAction(
+  state: PlayerState,
+  step: number,
+  arming: SequencerArming,
+  stepsPerBar: number = STEPS_PER_BAR,
+): SequencerStepAction {
+  if (state === "stopped") return "idle";
+  if (isSoftStopBoundary(state, step, stepsPerBar)) return "soft-stop";
+  if (!arming.armed) {
+    if (step % stepsPerBar !== 0) return "idle";
+    arming.armed = true;
+  }
+  return "play";
+}
 
 // Real-time sequencer stepper hook. Moved here from
 // audio/playback/sequencerPlayback.ts (layering rule 1: audio/ must not import
@@ -22,12 +56,29 @@ export function useSequencerPlayback(): {
   const synthParams = useAppStore((s) => s.synthParams);
   const masterSequencerVolume = useAppStore((s) => s.masterSequencerVolume);
   const bpm = useAppStore((s) => s.bpm);
-  const isPlaying = useAppStore((s) => s.isSequencerPlaying);
+  const playerState = useAppStore((s) => s.sequencerPlayer);
+  const hardStop = useAppStore((s) => s.hardStop);
+  const isPlaying = playerState !== 'stopped';
 
   const [currentStep, setCurrentStep] = useState<number>(0);
 
   // Real-time playback stepper — driven by the shared audio-clock scheduler
-  const armedRef = useRef(false);
+  const armingRef = useRef<SequencerArming>({ armed: false });
+
+  // Disarm on every transition to 'stopped', straight off the store: React
+  // does not necessarily render the stop (the Instant Vibe swap hard-stops
+  // and restarts inside one batched click), and zustand notifies
+  // synchronously, so this sees the transitions the render never shows.
+  useEffect(
+    () =>
+      useAppStore.subscribe(
+        (s) => s.sequencerPlayer,
+        (next) => {
+          if (next === "stopped") armingRef.current.armed = false;
+        },
+      ),
+    [],
+  );
   const stepDurationMs = sixteenthNoteMs(bpm);
 
   const playStepSounds = useCallback(
@@ -59,17 +110,27 @@ export function useSequencerPlayback(): {
 
   useEffect(() => {
     if (!isPlaying) {
-      armedRef.current = false;
+      armingRef.current.armed = false;
       setCurrentStep(0);
       return;
     }
 
     return subscribePlaybackClock((step, _beat, time) => {
-      // Start aligned to the next bar boundary so the 16-step loop lands on beat 1
-      if (!armedRef.current) {
-        if (step % STEPS_PER_BAR !== 0) return;
-        armedRef.current = true;
+      const action = sequencerStepAction(
+        useAppStore.getState().sequencerPlayer,
+        step,
+        armingRef.current,
+      );
+      if (action === "idle") return;
+      // Soft stop: the Beat player owns no sustained voices — drums are
+      // fire-and-forget one-shots — so stopping means stopping the schedule.
+      // At most one already-scheduled hit can still sound, no later than
+      // CLOCK_LOOKAHEAD (0.1s) after the press. Accepted; see the spec.
+      if (action === "soft-stop") {
+        hardStop('sequencer');
+        return;
       }
+
       const stepInLoop = step % STEPS_PER_BAR;
       setCurrentStep(stepInLoop);
       playStepSounds(stepInLoop, time);

@@ -548,9 +548,16 @@ class AudioEngine {
   // Immediately silences every voice of a source — sounding ones and hits
   // still scheduled in the future. Releasing a held preview stops the whole
   // pattern, not just the last scheduled hit.
-  stopSource(source: string, releaseTime = 0.1): void {
+  // Immediately silences every voice of a source — sounding ones and hits
+  // still scheduled in the future. Releasing a held preview stops the whole
+  // pattern, not just the last scheduled hit.
+  //
+  // `time` anchors the release in the AudioContext's timeline so a soft stop
+  // can be scheduled exactly on a bar line instead of relying on a timer.
+  // releaseVoice already handles a `now` in the future.
+  stopSource(source: string, releaseTime = 0.1, time?: number): void {
     if (!this.ctx) return;
-    const now = this.ctx.currentTime;
+    const now = time ?? this.ctx.currentTime;
     const voices = this.sourceVoices.get(source);
     if (!voices) return;
     for (const voice of Array.from(voices)) {

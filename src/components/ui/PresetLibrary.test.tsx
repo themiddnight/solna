@@ -63,7 +63,7 @@ describe('PresetLibrary chrome', () => {
   });
 
   test('search is a daisyUI input and chips are daisyUI badges/buttons', () => {
-    expect(chord).toContain('input input-sm input-bordered');
+    expect(chord).toContain('input input-sm');
     expect(chord).toContain('btn btn-xs');
     expect(chord).toContain('badge badge-sm');
   });

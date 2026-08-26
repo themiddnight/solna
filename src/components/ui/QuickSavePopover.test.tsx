@@ -35,7 +35,7 @@ describe('QuickSavePopover', () => {
   test('defaults use daisyUI card/input/button tokens', () => {
     const html = renderToString(<QuickSavePopover {...base} />);
     expect(html).toContain('card bg-base-100 border border-primary/40');
-    expect(html).toContain('input input-sm input-bordered');
+    expect(html).toContain('input input-sm');
     expect(html).toContain('btn btn-sm btn-primary');
     expect(html).toContain('btn btn-sm btn-ghost');
     expect(html).toContain('text-base-content');
@@ -57,7 +57,7 @@ describe('QuickSavePopover', () => {
         onCategoryChange={() => {}}
       />,
     );
-    expect(html).toContain('select select-sm select-bordered');
+    expect(html).toContain('select select-sm');
     expect(html).toContain('Lead');
   });
 
@@ -65,7 +65,7 @@ describe('QuickSavePopover', () => {
     const html = renderToString(
       <QuickSavePopover
         {...base}
-        inputClassName="input input-sm input-bordered flex-1 min-w-[140px]"
+        inputClassName="input input-sm flex-1 min-w-[140px]"
       />,
     );
     expect(html).toContain('min-w-[140px]');

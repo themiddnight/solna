@@ -634,7 +634,7 @@ export const SynthView = () => {
                     );
                     if (found) handleSelectPreset(found);
                   }}
-                  className="select select-sm select-bordered text-xs font-semibold max-w-50 truncate"
+                  className="select select-sm text-xs font-semibold max-w-50 truncate"
                 >
                   {allPresets.map((p) => (
                     <option key={p.id} value={p.name}>
