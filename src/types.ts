@@ -187,19 +187,19 @@ export interface InstantVibe {
   chordRhythmId: string;
   chordFeel: number; // 0.0 (tight) to 1.0 (loose/swung)
   chordOctave: number;
-  chordPresetName: string;
-  chordSynthParams?: Partial<SynthParams>;
+  /** Library reference into ALL_FACTORY_PRESETS for the comp voice. */
+  chordPresetId: string;
 
   // Bass
   bassPatternId: string;
   bassFeel: number; // 0.0 (tight) to 1.0 (loose/swung)
   bassOctave: number;
-  bassPresetName: string;
-  bassSynthParams?: Partial<SynthParams>;
+  /** Library reference into ALL_FACTORY_PRESETS; must resolve to category 'Bass'. */
+  bassPresetId: string;
 
-  // Lead / Melody Synthesizer (with Arpeggiator setup)
-  synthPresetName: string;
-  synthParams?: Partial<SynthParams>;
+  // Lead / Melody Synthesizer (preset reference only — arp is the user's, not the vibe's)
+  /** Library reference into ALL_FACTORY_PRESETS for the lead voice. */
+  synthPresetId: string;
 
   // Master Effects
   effects: Partial<MasterEffects>;

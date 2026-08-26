@@ -1,14 +1,33 @@
 import { SynthParams, InstantVibe } from '../types';
 import { audioEngine } from '../audio/engine';
+import { presetById } from '../audio/synthPresets';
 import { useAppStore } from './store';
 import { INITIAL_SYNTH_PARAMS } from './initialState';
 import { progressionById, resolveProgression } from '../audio/data/chordProgressions';
 
-function buildSynthParams(presetName: string, overrides?: Partial<SynthParams>): SynthParams {
+/**
+ * Resolve one of a vibe's three synth voices from a library preset id.
+ *
+ * The preset supplies the whole sound, and the `preset` display field is
+ * stamped from the resolved entry's own name, so the preset select in
+ * ChordView points at what is actually playing.
+ *
+ * Merge order is load-bearing: INITIAL_SYNTH_PARAMS fills the fields presets
+ * omit (the four arp fields; `preset` is set here too but immediately
+ * overwritten below with the resolved entry's own name), then the preset
+ * overrides the 20 timbre fields. No arp field is ever written here — arp is a performance
+ * setting the user drives from the UI, and INITIAL_SYNTH_PARAMS.arpActive is
+ * already false, so a vibe never switches it on behind the user's back.
+ */
+export function resolveVibeSynthParams(presetId: string): SynthParams {
+  const preset = presetById(presetId);
+  if (!preset) {
+    throw new Error(`InstantVibe references unknown synth preset id: ${presetId}`);
+  }
   return {
     ...INITIAL_SYNTH_PARAMS,
-    ...overrides,
-    preset: presetName,
+    ...preset.params,
+    preset: preset.name,
   };
 }
 
@@ -17,6 +36,14 @@ const VIBE_SWAP_RELEASE = 0.02;
 
 export function applyInstantVibeToStore(vibe: InstantVibe) {
   const store = useAppStore.getState();
+
+  // Resolve all three preset ids first: resolveVibeSynthParams throws on an
+  // unknown id, and doing that before any state is touched keeps a typo'd
+  // preset id from throwing mid-swap and leaving the transport stopped with
+  // the store holding a mix of two vibes.
+  const finalChordSynthParams = resolveVibeSynthParams(vibe.chordPresetId);
+  const finalBassSynthParams = resolveVibeSynthParams(vibe.bassPresetId);
+  const finalSynthParams = resolveVibeSynthParams(vibe.synthPresetId);
 
   // 0. Atomic swap: cut everything still scheduled BEFORE writing the new
   //    chords and patterns, otherwise the old progression's queued voices
@@ -71,20 +98,15 @@ export function applyInstantVibeToStore(vibe: InstantVibe) {
   store.setChordRhythmId(vibe.chordRhythmId);
   store.setChordFeel(vibe.chordFeel);
   store.setChordOctave(vibe.chordOctave);
-
-  const finalChordSynthParams = buildSynthParams(vibe.chordPresetName, vibe.chordSynthParams);
   store.setChordSynthParams(finalChordSynthParams);
 
   // 4. Bass Pattern & Feel (Tight/Loose) & Sound Preset
   store.setBassPatternId(vibe.bassPatternId);
   store.setBassFeel(vibe.bassFeel);
   store.setBassOctave(vibe.bassOctave);
-
-  const finalBassSynthParams = buildSynthParams(vibe.bassPresetName, vibe.bassSynthParams);
   store.setBassSynthParams(finalBassSynthParams);
 
-  // 5. Main Synth Sound Preset & Arpeggiator
-  const finalSynthParams = buildSynthParams(vibe.synthPresetName, vibe.synthParams);
+  // 5. Main Synth Sound Preset
   store.setSynthParams(finalSynthParams);
 
   // 6. Master Effects
@@ -132,61 +154,16 @@ export const INSTANT_VIBES: InstantVibe[] = [
     chordRhythmId: 'lofiSwing',
     chordFeel: 0.78, // Loose swing
     chordOctave: 4,
-    chordPresetName: 'Dream Keys',
-    chordSynthParams: {
-      oscType: 'sine',
-      subOscVolume: 0.2,
-      noiseVolume: 0.03,
-      detune: 8,
-      filterType: 'lowpass',
-      filterCutoff: 2200,
-      filterResonance: 1.2,
-      filterEnvAmount: 400,
-      attack: 0.04,
-      decay: 0.8,
-      sustain: 0.6,
-      release: 0.7,
-      lfoDepth: 0.15,
-      lfoRate: 1.5,
-      lfoTarget: 'pitch',
-      arpActive: false,
-    },
+    chordPresetId: 'factory-mellow-epiano',
 
     // Bass: Deep sub with Dilla loose swing
     bassPatternId: 'dilla-sub',
     bassFeel: 0.75, // Loose pocket
     bassOctave: 2,
-    bassPresetName: 'Deep Sine Sub',
-    bassSynthParams: {
-      oscType: 'sine',
-      subOscVolume: 0.9,
-      noiseVolume: 0,
-      detune: 0,
-      filterType: 'lowpass',
-      filterCutoff: 260,
-      filterResonance: 1.1,
-      attack: 0.01,
-      decay: 0.35,
-      sustain: 0.85,
-      release: 0.6,
-    },
+    bassPresetId: 'bass-deep-sine',
 
     // Main Synth: Warm Keys / Whistle
-    synthPresetName: 'Dream Keys',
-    synthParams: {
-      oscType: 'sine',
-      subOscVolume: 0.15,
-      filterCutoff: 2600,
-      filterResonance: 1.3,
-      attack: 0.05,
-      decay: 0.8,
-      sustain: 0.6,
-      release: 0.7,
-      detune: 8,
-      lfoDepth: 0.18,
-      lfoRate: 2.0,
-      arpActive: false,
-    },
+    synthPresetId: 'factory-dream-keys',
 
     effects: {
       reverbWet: 0.35,
@@ -252,64 +229,16 @@ export const INSTANT_VIBES: InstantVibe[] = [
     chordRhythmId: 'eighthPads',
     chordFeel: 0.12, // Strict tight sequencer grid
     chordOctave: 4,
-    chordPresetName: 'Neon Pluck',
-    chordSynthParams: {
-      oscType: 'sawtooth',
-      subOscVolume: 0.3,
-      detune: 14,
-      filterType: 'lowpass',
-      filterCutoff: 3400,
-      filterResonance: 2.2,
-      filterEnvAmount: 900,
-      attack: 0.02,
-      decay: 0.5,
-      sustain: 0.7,
-      release: 0.45,
-      filterAttack: 0.02,
-      filterDecay: 0.4,
-      filterSustain: 0.3,
-      filterRelease: 0.4,
-      arpActive: false,
-    },
+    chordPresetId: 'factory-neon-poly-saw',
 
     // Bass: Saw Growl / Motorik driving 8ths
     bassPatternId: 'driving-eighths',
     bassFeel: 0.10, // Grid tight
     bassOctave: 2,
-    bassPresetName: 'Saw Growl',
-    bassSynthParams: {
-      oscType: 'sawtooth',
-      subOscVolume: 0.6,
-      detune: 2,
-      filterType: 'lowpass',
-      filterCutoff: 650,
-      filterResonance: 5.0,
-      filterEnvAmount: 600,
-      attack: 0.005,
-      decay: 0.18,
-      sustain: 0.55,
-      release: 0.25,
-    },
+    bassPresetId: 'bass-saw-growl',
 
-    // Main Synth: Arpeggiator active
-    synthPresetName: 'Neon Pluck',
-    synthParams: {
-      oscType: 'sawtooth',
-      filterCutoff: 4200,
-      filterResonance: 2.8,
-      attack: 0.015,
-      decay: 0.4,
-      sustain: 0.7,
-      release: 0.35,
-      detune: 16,
-      lfoDepth: 0.2,
-      lfoRate: 4.0,
-      lfoTarget: 'cutoff',
-      arpActive: true,
-      arpMode: 'updown',
-      arpRate: '16n',
-      arpOctaves: 2,
-    },
+    // Main Synth: Hyper Saw Lead
+    synthPresetId: 'factory-hyper-saw-lead',
 
     effects: {
       reverbWet: 0.48,
@@ -326,9 +255,11 @@ export const INSTANT_VIBES: InstantVibe[] = [
     // synthwave-80s
     variation: {
       genre: 'synthwave',
-      // Starts at D so the Saw Growl sub-osc (0.6, one octave down) stays above
-      // ~37 Hz; stops at A so the Neon Pluck stack at octave 4 keeps headroom
-      // under the arp's two octaves.
+      // Starts at D so the Saw Growl sub-osc (0.5, one octave down) stays above
+      // ~37 Hz. The upper bound is a taste call, not an acoustic one: the pool
+      // stops at A to keep every draw inside the darker half of the synthwave
+      // key range. (It used to be justified by the lead arp's two octaves of
+      // headroom; the arp is gone, and the bound was kept exactly as authored.)
       keyPool: ['D', 'E', 'F', 'F#', 'G', 'A'],
       bpmRange: [108, 118],
       progressionIds: ['pop-club-house', 'cine-epic-ostinato', 'synthwave-midnight-drive', 'synthwave-neon-horizon'],
@@ -348,7 +279,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
   {
     id: 'cyber-dance',
     name: 'Cyber EDM',
-    tagline: 'High-energy 128 BPM festival drop with punchy kicks & arps',
+    tagline: 'High-energy 128 BPM festival drop with punchy kicks & stabs',
     emoji: '⚡',
     bpm: 128,
     scaleRoot: 'F',
@@ -376,57 +307,16 @@ export const INSTANT_VIBES: InstantVibe[] = [
     chordRhythmId: 'offbeatStabs',
     chordFeel: 0.05, // Laser tight
     chordOctave: 4,
-    chordPresetName: 'Hyper Saw Lead',
-    chordSynthParams: {
-      oscType: 'sawtooth',
-      subOscVolume: 0.25,
-      detune: 18,
-      filterType: 'lowpass',
-      filterCutoff: 4800,
-      filterResonance: 3.0,
-      filterEnvAmount: 1400,
-      attack: 0.005,
-      decay: 0.25,
-      sustain: 0.35,
-      release: 0.2,
-      arpActive: false,
-    },
+    chordPresetId: 'factory-trance-pluck',
 
     // Bass: Punchy Square / Offbeat pumping sub
     bassPatternId: 'offbeat-sub',
     bassFeel: 0.05, // Grid locked
     bassOctave: 2,
-    bassPresetName: 'Punchy Square',
-    bassSynthParams: {
-      oscType: 'square',
-      subOscVolume: 0.7,
-      detune: 0,
-      filterType: 'lowpass',
-      filterCutoff: 520,
-      filterResonance: 2.5,
-      filterEnvAmount: 450,
-      attack: 0.005,
-      decay: 0.16,
-      sustain: 0.45,
-      release: 0.15,
-    },
+    bassPresetId: 'bass-punchy-square',
 
-    // Main Synth: Cyber Pluck Arp
-    synthPresetName: 'Cyber Drone',
-    synthParams: {
-      oscType: 'square',
-      filterCutoff: 5000,
-      filterResonance: 3.5,
-      attack: 0.005,
-      decay: 0.28,
-      sustain: 0.2,
-      release: 0.2,
-      detune: 12,
-      arpActive: true,
-      arpMode: 'up',
-      arpRate: '16n',
-      arpOctaves: 2,
-    },
+    // Main Synth: Cyber Pluck Lead
+    synthPresetId: 'factory-pluck',
 
     effects: {
       reverbWet: 0.36,
@@ -492,56 +382,16 @@ export const INSTANT_VIBES: InstantVibe[] = [
     chordRhythmId: 'sustained',
     chordFeel: 0.88, // Very loose, floating
     chordOctave: 4,
-    chordPresetName: 'Celestial Shimmer',
-    chordSynthParams: {
-      oscType: 'sine',
-      subOscVolume: 0.3,
-      detune: 8,
-      filterType: 'lowpass',
-      filterCutoff: 1900,
-      filterResonance: 0.9,
-      attack: 0.7,
-      decay: 1.6,
-      sustain: 0.9,
-      release: 2.8,
-      lfoDepth: 0.25,
-      lfoRate: 0.4,
-      lfoTarget: 'cutoff',
-      arpActive: false,
-    },
+    chordPresetId: 'factory-warm-polypad',
 
     // Bass: Drone sub, organic long sustain
     bassPatternId: 'whole-note-root',
     bassFeel: 0.85,
     bassOctave: 2,
-    bassPresetName: 'Deep Sine Sub',
-    bassSynthParams: {
-      oscType: 'sine',
-      subOscVolume: 0.8,
-      filterType: 'lowpass',
-      filterCutoff: 210,
-      filterResonance: 1.0,
-      attack: 0.15,
-      decay: 0.8,
-      sustain: 0.9,
-      release: 1.8,
-    },
+    bassPresetId: 'bass-deep-sine',
 
     // Main Synth: Ethereal Bell Pad
-    synthPresetName: 'Celestial Shimmer',
-    synthParams: {
-      oscType: 'sine',
-      filterCutoff: 2200,
-      filterResonance: 0.9,
-      attack: 0.6,
-      decay: 1.4,
-      sustain: 0.9,
-      release: 2.6,
-      detune: 7,
-      lfoDepth: 0.25,
-      lfoRate: 0.3,
-      arpActive: false,
-    },
+    synthPresetId: 'factory-celestial-shimmer',
 
     effects: {
       reverbWet: 0.68,
@@ -606,57 +456,16 @@ export const INSTANT_VIBES: InstantVibe[] = [
     chordRhythmId: 'syncopatedPush',
     chordFeel: 0.76, // Loose swing pocket
     chordOctave: 4,
-    chordPresetName: 'Mellow E-Piano',
-    chordSynthParams: {
-      oscType: 'triangle',
-      subOscVolume: 0.3,
-      detune: 10,
-      filterType: 'lowpass',
-      filterCutoff: 3000,
-      filterResonance: 1.6,
-      filterEnvAmount: 600,
-      attack: 0.02,
-      decay: 0.7,
-      sustain: 0.5,
-      release: 0.55,
-      lfoDepth: 0.15,
-      lfoRate: 3.5,
-      lfoTarget: 'volume',
-      arpActive: false,
-    },
+    chordPresetId: 'factory-fm-tine-piano',
 
     // Bass: Round Pluck walking bassline
     bassPatternId: 'walking-groove',
     bassFeel: 0.72, // Swung walking feel
     bassOctave: 2,
-    bassPresetName: 'Round Pluck',
-    bassSynthParams: {
-      oscType: 'triangle',
-      subOscVolume: 0.5,
-      detune: 4,
-      filterType: 'lowpass',
-      filterCutoff: 420,
-      filterResonance: 3.5,
-      filterEnvAmount: 750,
-      attack: 0.005,
-      decay: 0.28,
-      sustain: 0.45,
-      release: 0.28,
-    },
+    bassPresetId: 'bass-round-pluck',
 
     // Main Synth: Mellow E-Piano Solo
-    synthPresetName: 'Mellow E-Piano',
-    synthParams: {
-      oscType: 'triangle',
-      filterCutoff: 3200,
-      filterResonance: 1.5,
-      attack: 0.02,
-      decay: 0.6,
-      sustain: 0.5,
-      release: 0.5,
-      detune: 10,
-      arpActive: false,
-    },
+    synthPresetId: 'factory-mellow-epiano',
 
     effects: {
       reverbWet: 0.30,
@@ -727,54 +536,16 @@ export const INSTANT_VIBES: InstantVibe[] = [
     chordRhythmId: 'sustained',
     chordFeel: 0.65, // Peaceful organic breath
     chordOctave: 4,
-    chordPresetName: 'Glocken Bell',
-    chordSynthParams: {
-      oscType: 'triangle',
-      subOscVolume: 0.2,
-      detune: 6,
-      filterType: 'lowpass',
-      filterCutoff: 3400,
-      filterResonance: 2.0,
-      attack: 0.02,
-      decay: 1.4,
-      sustain: 0.4,
-      release: 1.6,
-      arpActive: false,
-    },
+    chordPresetId: 'factory-koto-pluck',
 
     // Bass: Warm Triangle drone
     bassPatternId: 'whole-note-root',
     bassFeel: 0.60,
     bassOctave: 2,
-    bassPresetName: 'Warm Triangle',
-    bassSynthParams: {
-      oscType: 'triangle',
-      subOscVolume: 0.4,
-      filterType: 'lowpass',
-      filterCutoff: 380,
-      filterResonance: 1.2,
-      attack: 0.04,
-      decay: 0.5,
-      sustain: 0.8,
-      release: 0.8,
-    },
+    bassPresetId: 'bass-warm-tri',
 
-    // Main Synth: Pentatonic Bell Arp
-    synthPresetName: 'Glocken Bell',
-    synthParams: {
-      oscType: 'triangle',
-      filterCutoff: 3800,
-      filterResonance: 2.2,
-      attack: 0.01,
-      decay: 1.1,
-      sustain: 0.35,
-      release: 1.4,
-      detune: 6,
-      arpActive: true,
-      arpMode: 'up',
-      arpRate: '8n',
-      arpOctaves: 2,
-    },
+    // Main Synth: Pentatonic Bell Lead
+    synthPresetId: 'factory-glocken-bell',
 
     effects: {
       reverbWet: 0.58,

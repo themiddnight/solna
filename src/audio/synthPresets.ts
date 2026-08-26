@@ -728,6 +728,64 @@ export const FACTORY_PRESETS: SynthPresetItem[] = [
       octave: 0,
     },
   },
+  {
+    id: 'factory-neon-poly-saw',
+    name: 'Neon Poly Saw',
+    category: 'Pad',
+    isFactory: true,
+    description: 'Juno-style detuned saw polysynth for 80s chord beds and 8th-note stabs',
+    params: {
+      oscType: 'sawtooth',
+      subOscVolume: 0.3,
+      noiseVolume: 0.02,
+      detune: 15,
+      filterType: 'lowpass',
+      filterCutoff: 2600,
+      filterResonance: 2.4,
+      filterEnvAmount: 1200,
+      attack: 0.02,
+      decay: 0.5,
+      sustain: 0.65,
+      release: 0.5,
+      filterAttack: 0.02,
+      filterDecay: 0.45,
+      filterSustain: 0.35,
+      filterRelease: 0.5,
+      lfoRate: 0.9,
+      lfoDepth: 0.12,
+      lfoTarget: 'cutoff',
+      octave: 0,
+    },
+  },
+  {
+    id: 'factory-koto-pluck',
+    name: 'Koto Pluck',
+    category: 'Pluck',
+    isFactory: true,
+    description: 'Soft plucked silk-string tone: a fast triangle attack with sub reinforcement and a long ring',
+    params: {
+      oscType: 'triangle',
+      subOscVolume: 0.15,
+      noiseVolume: 0.04,
+      detune: 6,
+      filterType: 'lowpass',
+      filterCutoff: 3200,
+      filterResonance: 2.0,
+      filterEnvAmount: 2200,
+      attack: 0.004,
+      decay: 1.3,
+      sustain: 0.35,
+      release: 1.5,
+      filterAttack: 0.004,
+      filterDecay: 0.5,
+      filterSustain: 0.12,
+      filterRelease: 1.5,
+      lfoRate: 0.8,
+      lfoDepth: 0.05,
+      lfoTarget: 'pitch',
+      octave: 0,
+    },
+  },
 ];
 
 export const ALL_FACTORY_PRESETS: SynthPresetItem[] = [
@@ -737,6 +795,16 @@ export const ALL_FACTORY_PRESETS: SynthPresetItem[] = [
 
 export function getAllSynthPresets(custom: SynthPresetItem[]): SynthPresetItem[] {
   return [...custom, ...ALL_FACTORY_PRESETS];
+}
+
+/**
+ * Library reference resolution: id -> preset. Ids are stable and persisted in
+ * project files; names are display strings and may be edited. Anything that
+ * needs to survive a rename (Instant Vibes, saved projects) resolves by id.
+ */
+export function presetById(id: string): SynthPresetItem | undefined {
+  if (!id) return undefined;
+  return ALL_FACTORY_PRESETS.find((p) => p.id === id);
 }
 
 export function findPresetByName(name: string, presets: SynthPresetItem[]): SynthPresetItem | undefined {

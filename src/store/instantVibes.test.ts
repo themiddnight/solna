@@ -3,8 +3,7 @@ import { audioEngine } from '../audio/engine';
 import { INSTANT_VIBES, applyInstantVibeToStore } from './instantVibes';
 import { RHYTHM_PATTERNS } from '../audio/rhythmPatterns';
 import { BASS_PATTERNS } from '../audio/bassPatterns';
-import { FACTORY_PRESETS } from '../audio/synthPresets';
-import { FACTORY_BASS_PRESETS } from '../audio/bassPresets';
+import { presetById } from '../audio/synthPresets';
 import { useAppStore } from './store';
 
 describe('Instant Vibes Mode', () => {
@@ -33,7 +32,7 @@ describe('Instant Vibes Mode', () => {
       expect(rhythmExists).toBe(true);
 
       expect(vibe.chordFeel >= 0 && vibe.chordFeel <= 1).toBe(true);
-      expect(Boolean(vibe.chordPresetName)).toBe(true);
+      expect(Boolean(vibe.chordPresetId)).toBe(true);
 
       // Bass & Feel
       expect(Boolean(vibe.bassPatternId)).toBe(true);
@@ -42,10 +41,10 @@ describe('Instant Vibes Mode', () => {
       expect(bassExists).toBe(true);
 
       expect(vibe.bassFeel >= 0 && vibe.bassFeel <= 1).toBe(true);
-      expect(Boolean(vibe.bassPresetName)).toBe(true);
+      expect(Boolean(vibe.bassPresetId)).toBe(true);
 
       // Synth Preset & Master Effects
-      expect(Boolean(vibe.synthPresetName)).toBe(true);
+      expect(Boolean(vibe.synthPresetId)).toBe(true);
       expect(Boolean(vibe.effects)).toBe(true);
     }
   });
@@ -61,11 +60,11 @@ describe('Instant Vibes Mode', () => {
     expect(state.soundKit).toBe(lofiVibe.soundKit);
     expect(state.chordRhythmId).toBe(lofiVibe.chordRhythmId);
     expect(state.chordFeel).toBe(lofiVibe.chordFeel);
-    expect(state.chordSynthParams.preset).toBe(lofiVibe.chordPresetName);
+    expect(state.chordSynthParams.preset).toBe(presetById(lofiVibe.chordPresetId)!.name);
     expect(state.bassPatternId).toBe(lofiVibe.bassPatternId);
     expect(state.bassFeel).toBe(lofiVibe.bassFeel);
-    expect(state.bassSynthParams.preset).toBe(lofiVibe.bassPresetName);
-    expect(state.synthParams.preset).toBe(lofiVibe.synthPresetName);
+    expect(state.bassSynthParams.preset).toBe(presetById(lofiVibe.bassPresetId)!.name);
+    expect(state.synthParams.preset).toBe(presetById(lofiVibe.synthPresetId)!.name);
   });
 
   test('applyInstantVibeToStore actually rewrites the sequencer track steps to match the vibe drum pattern', () => {
@@ -80,7 +79,7 @@ describe('Instant Vibes Mode', () => {
     }
   });
 
-  test('applies synthwave vibe with tight feel and active arpeggiator', () => {
+  test('applies synthwave vibe with tight feel and no arpeggiator', () => {
     const synthwave = INSTANT_VIBES.find((v) => v.id === 'synthwave-80s')!;
     applyInstantVibeToStore(synthwave);
 
@@ -88,34 +87,73 @@ describe('Instant Vibes Mode', () => {
     expect(state.bpm).toBe(118);
     expect(state.chordFeel < 0.2).toBe(true); // tight feel
     expect(state.bassFeel < 0.2).toBe(true); // tight feel
-    expect(state.synthParams.arpActive).toBe(true);
-    expect(state.synthParams.arpMode).toBe('updown');
+    // No vibe turns the arpeggiator on: it is a performance setting the user
+    // drives from the UI, and INITIAL_SYNTH_PARAMS.arpActive is already false.
+    expect(state.synthParams.arpActive).toBe(false);
   });
 });
 
-describe('vibe preset name resolution', () => {
-  const factoryNames = new Set(FACTORY_PRESETS.map((p) => p.name));
-  const factoryBassNames = new Set(FACTORY_BASS_PRESETS.map((p) => p.name));
-
-  test('every vibe synth and chord preset name resolves to a factory preset', () => {
+describe('vibe preset id resolution', () => {
+  test('every vibe lead and comp preset id resolves in the factory library', () => {
     for (const vibe of INSTANT_VIBES) {
-      expect(factoryNames.has(vibe.synthPresetName)).toBe(true);
-      expect(factoryNames.has(vibe.chordPresetName)).toBe(true);
+      expect(`${vibe.id}.synthPresetId=${presetById(vibe.synthPresetId)?.id}`)
+        .toBe(`${vibe.id}.synthPresetId=${vibe.synthPresetId}`);
+      expect(`${vibe.id}.chordPresetId=${presetById(vibe.chordPresetId)?.id}`)
+        .toBe(`${vibe.id}.chordPresetId=${vibe.chordPresetId}`);
     }
   });
 
-  test('every vibe bass preset name resolves to a factory bass preset', () => {
+  test('every vibe bass preset id resolves to a Bass-category preset', () => {
     for (const vibe of INSTANT_VIBES) {
-      expect(factoryBassNames.has(vibe.bassPresetName)).toBe(true);
+      expect(`${vibe.id}=${presetById(vibe.bassPresetId)?.category}`).toBe(`${vibe.id}=Bass`);
     }
   });
 
-  test('loading a vibe leaves the preset select pointing at a real preset', () => {
-    const synthwave = INSTANT_VIBES.find((v) => v.id === 'synthwave-80s');
-    applyInstantVibeToStore(synthwave!);
+  test('the 6x3 preset matrix is pinned exactly', () => {
+    expect(INSTANT_VIBES.map((v) => ({
+      id: v.id,
+      synthPresetId: v.synthPresetId,
+      chordPresetId: v.chordPresetId,
+      bassPresetId: v.bassPresetId,
+    }))).toEqual([
+      { id: 'lofi-chill', synthPresetId: 'factory-dream-keys', chordPresetId: 'factory-mellow-epiano', bassPresetId: 'bass-deep-sine' },
+      { id: 'synthwave-80s', synthPresetId: 'factory-hyper-saw-lead', chordPresetId: 'factory-neon-poly-saw', bassPresetId: 'bass-saw-growl' },
+      { id: 'cyber-dance', synthPresetId: 'factory-pluck', chordPresetId: 'factory-trance-pluck', bassPresetId: 'bass-punchy-square' },
+      { id: 'ambient-chill', synthPresetId: 'factory-celestial-shimmer', chordPresetId: 'factory-warm-polypad', bassPresetId: 'bass-deep-sine' },
+      { id: 'hiphop-groove', synthPresetId: 'factory-mellow-epiano', chordPresetId: 'factory-fm-tine-piano', bassPresetId: 'bass-round-pluck' },
+      { id: 'asian-zen', synthPresetId: 'factory-glocken-bell', chordPresetId: 'factory-koto-pluck', bassPresetId: 'bass-warm-tri' },
+    ]);
+  });
+
+  test('no vibe carries arp data of any kind', () => {
+    const ARP_FIELDS = ['synthArp', 'chordArp', 'bassArp', 'arpActive', 'arpMode', 'arpRate', 'arpOctaves'];
+    for (const vibe of INSTANT_VIBES) {
+      for (const field of ARP_FIELDS) {
+        expect(`${vibe.id}.${field}=${Object.prototype.hasOwnProperty.call(vibe, field)}`)
+          .toBe(`${vibe.id}.${field}=false`);
+      }
+    }
+  });
+
+  test('applying any vibe leaves all three voices with the arpeggiator off', () => {
+    for (const vibe of INSTANT_VIBES) {
+      applyInstantVibeToStore(vibe);
+      const s = useAppStore.getState();
+      expect(`${vibe.id}.synth=${s.synthParams.arpActive}`).toBe(`${vibe.id}.synth=false`);
+      expect(`${vibe.id}.chord=${s.chordSynthParams.arpActive}`).toBe(`${vibe.id}.chord=false`);
+      expect(`${vibe.id}.bass=${s.bassSynthParams.arpActive}`).toBe(`${vibe.id}.bass=false`);
+    }
+    useAppStore.getState().hardStopAll();
+  });
+
+  test('loading a vibe leaves every preset select pointing at the preset that produced the sound', () => {
+    const synthwave = INSTANT_VIBES.find((v) => v.id === 'synthwave-80s')!;
+    applyInstantVibeToStore(synthwave);
     const state = useAppStore.getState();
-    expect(factoryNames.has(state.synthParams.preset)).toBe(true);
-    expect(factoryNames.has(state.chordSynthParams.preset)).toBe(true);
+    expect(state.synthParams.preset).toBe(presetById(synthwave.synthPresetId)!.name);
+    expect(state.chordSynthParams.preset).toBe(presetById(synthwave.chordPresetId)!.name);
+    expect(state.bassSynthParams.preset).toBe(presetById(synthwave.bassPresetId)!.name);
+    useAppStore.getState().hardStopAll();
   });
 });
 

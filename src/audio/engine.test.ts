@@ -36,8 +36,15 @@ function fakeParam() {
 function fakeNode() {
   return {
     type: '',
-    connect() {},
-    disconnect() {},
+    // Connections are recorded so a test can assert routing, not just levels:
+    // a source wired past the filter still produces the right gain value.
+    connectedTo: [] as unknown[],
+    connect(target: unknown) {
+      this.connectedTo.push(target);
+    },
+    disconnect() {
+      this.connectedTo.length = 0;
+    },
     start() {},
     stop() {},
     gain: fakeParam(),
@@ -47,10 +54,22 @@ function fakeNode() {
   };
 }
 
+// A buffer source stands in for the noise generator: `loop` and `buffer` are
+// recorded so a test can prove the noise is looped (createNoiseNode's buffer is
+// 2 s, shorter than a long pad release).
+function fakeBufferSource() {
+  return { ...fakeNode(), buffer: null as unknown, loop: false };
+}
+
 function fakeCtx() {
   const gains: ReturnType<typeof fakeNode>[] = [];
+  const bufferSources: ReturnType<typeof fakeBufferSource>[] = [];
   return {
     currentTime: 10,
+    // Deliberately tiny: createNoiseNode fills sampleRate * 2 samples with
+    // Math.random(), and the real 44_100 would make every test that touches
+    // noise fill 88_200 floats for no added coverage.
+    sampleRate: 64,
     createOscillator: () => fakeNode(),
     createGain: () => {
       const g = fakeNode();
@@ -58,8 +77,18 @@ function fakeCtx() {
       return g;
     },
     createBiquadFilter: () => fakeNode(),
+    createBuffer: (_channels: number, length: number, sampleRate: number) => ({
+      sampleRate,
+      getChannelData: () => new Float32Array(length),
+    }),
+    createBufferSource: () => {
+      const s = fakeBufferSource();
+      bufferSources.push(s);
+      return s;
+    },
     resume: async () => {},
     _gains: gains,
+    _bufferSources: bufferSources,
   };
 }
 
@@ -583,5 +612,122 @@ describe('live effect knobs', () => {
     engine.updateEffects({ ...INITIAL_EFFECTS, compressorThreshold: -20 });
 
     expect(threshold.targets).toEqual([{ v: -20, t: ctx.currentTime, tc: 0.05 }]);
+  });
+});
+
+describe('noise source', () => {
+  const NOISY: SynthParams = { ...SYNTH, noiseVolume: 0.25 };
+
+  test('a preset with noiseVolume 0 creates no noise source at all', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+
+    expect(ctx._bufferSources).toHaveLength(0);
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    expect(voice.noise).toBeUndefined();
+    expect(voice.noiseGain).toBeUndefined();
+  });
+
+  test('a preset with noiseVolume > 0 gets a looped noise source at that level', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerSynthNoteOn('C4', NOISY, 0.8, ctx.currentTime, 'synth');
+
+    expect(ctx._bufferSources).toHaveLength(1);
+    // Without loop the noise would run out mid-note: the buffer is 2 s while
+    // this preset's decay + release already exceed that.
+    expect(ctx._bufferSources[0].loop).toBe(true);
+
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    expect(voice.noiseGain.gain.value).toBe(0.25);
+  });
+
+  test('the noise level scales with noiseVolume rather than being a fixed amount', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, noiseVolume: 0.4 }, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('E4', { ...SYNTH, noiseVolume: 0.02 }, 0.8, ctx.currentTime, 'synth');
+
+    const loud = (engine as any).activeVoices.get('synth:C4');
+    const quiet = (engine as any).activeVoices.get('synth:E4');
+    expect(loud.noiseGain.gain.value).toBe(0.4);
+    expect(quiet.noiseGain.gain.value).toBe(0.02);
+  });
+
+  test('noise runs into the filter, not past it, so the VCF envelope shapes it', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerSynthNoteOn('C4', NOISY, 0.8, ctx.currentTime, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+
+    // Noise is a third source alongside osc1/oscSub, so it belongs upstream of
+    // the filter. Wired to the VCA instead it would still have the right level
+    // but would ignore filterCutoff, filterEnvAmount and the filter envelope
+    // entirely — a permanently open hiss layer on every noisy preset.
+    expect(voice.noise.connectedTo).toEqual([voice.noiseGain]);
+    expect(voice.noiseGain.connectedTo).toEqual([voice.filter]);
+    expect(voice.oscs[0].connectedTo).toEqual([voice.filter]);
+  });
+
+  test('a noise source added live is wired into the filter too', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+
+    engine.updateSynthParams({ ...SYNTH, noiseVolume: 0.3 }, 'synth');
+
+    expect(voice.noiseGain.connectedTo).toEqual([voice.filter]);
+  });
+
+  test('gains[0] and gains[1] stay the main and sub gains when noise is present', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerSynthNoteOn('C4', NOISY, 0.8, ctx.currentTime, 'synth');
+
+    // Positional: releaseVoice ramps gains[0] and updateSynthParams writes
+    // subOscVolume into gains[1]. Creating the noise gain must not shift them.
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    expect(voice.gains[0]).toBe(ctx._gains[0]);
+    expect(voice.gains[1]).toBe(ctx._gains[1]);
+    expect(voice.gains[1].gain.value).toBe(SYNTH.subOscVolume);
+    expect(voice.noiseGain).not.toBe(voice.gains[0]);
+    expect(voice.noiseGain).not.toBe(voice.gains[1]);
+  });
+
+  test('turning the noise knob up reaches a sounding voice that started silent', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    expect(voice.noise).toBeUndefined();
+
+    engine.updateSynthParams({ ...SYNTH, noiseVolume: 0.3 }, 'synth');
+
+    expect(voice.noise).toBeDefined();
+    expect(voice.noise.loop).toBe(true);
+    expect(voice.noiseGain.gain.targets.at(-1)?.v).toBe(0.3);
+  });
+
+  test('turning the noise knob down to zero silences it on a sounding voice', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerSynthNoteOn('C4', NOISY, 0.8, ctx.currentTime, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+
+    engine.updateSynthParams({ ...NOISY, noiseVolume: 0 }, 'synth');
+
+    expect(voice.noiseGain.gain.targets.at(-1)?.v).toBe(0);
+  });
+
+  test('releasing a noisy voice stops and disconnects its noise source', async () => {
+    const { engine, ctx } = freshEngine();
+    // Tiny filterRelease as well as a tiny release: the teardown timeout waits
+    // max(releaseTime, filterRelease) + 0.1 s, and SYNTH's 0.5 s filter release
+    // would outlast the test.
+    engine.triggerSynthNoteOn('C4', { ...NOISY, filterRelease: 0.01 }, 0.8, ctx.currentTime, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    const stopped = spyOn(voice.noise, 'stop');
+    const disconnected = spyOn(voice.noise, 'disconnect');
+
+    engine.triggerSynthNoteOff('C4', 0.01, undefined, 'synth');
+    await new Promise((r) => setTimeout(r, 200));
+
+    // A looping buffer source that is never stopped keeps running forever.
+    expect(stopped).toHaveBeenCalled();
+    expect(disconnected).toHaveBeenCalled();
   });
 });

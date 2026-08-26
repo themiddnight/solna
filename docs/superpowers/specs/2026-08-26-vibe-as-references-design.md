@@ -448,3 +448,199 @@ its display name is deliberate and protected by CLAUDE.md. The four drift pairs,
 verbatim: `cyber-dance` -> "Cyber EDM", `ambient-chill` -> "Deep Ambient",
 `hiphop-groove` -> "Boom Bap", `asian-zen` -> "Zen Garden". `lofi-chill` and
 `synthwave-80s` have no drift — their ids match their display names.
+
+---
+
+## Phase 2 settled — the preset matrix, the arp removal, and the resolved `InstantVibe` shape
+
+Appended 2026-08-26, after Phase 1 landed. The "Inventory" section above deferred the
+preset set ("The exact preset set is phase 2 work, not decided here"). This section
+records what Phase 2's research and review settled, so the deferral is closed. Nothing
+above is retracted except the one correction marked in "Target shape".
+
+### The 18 role slots, resolved
+
+16 of the 18 slots resolve to a preset that already exists in the 27-entry library.
+Two do not, and two new presets are authored for them. No preset is authored per vibe;
+each new preset exists because a specific slot has no adequate candidate.
+
+| vibe | lead — `synthPresetId` | comp — `chordPresetId` | bass — `bassPresetId` |
+| --- | --- | --- | --- |
+| `lofi-chill` | `factory-dream-keys` (Keys) | `factory-mellow-epiano` (Keys) | `bass-deep-sine` (Bass) |
+| `synthwave-80s` | `factory-hyper-saw-lead` (Lead) | `factory-neon-poly-saw` (Pad, **new**) | `bass-saw-growl` (Bass) |
+| `cyber-dance` | `factory-pluck` (Pluck) | `factory-trance-pluck` (Pluck) | `bass-punchy-square` (Bass) |
+| `ambient-chill` | `factory-celestial-shimmer` (Pad) | `factory-warm-polypad` (Pad) | `bass-deep-sine` (Bass) |
+| `hiphop-groove` | `factory-mellow-epiano` (Keys) | `factory-fm-tine-piano` (Keys) | `bass-round-pluck` (Bass) |
+| `asian-zen` | `factory-glocken-bell` (Keys) | `factory-koto-pluck` (Pluck, **new**) | `bass-warm-tri` (Bass) |
+
+All six bass slots resolve to `category === 'Bass'`, which is the one hard category
+constraint the "Target shape" section names. The lead and comp slots draw from Keys,
+Lead, Pad and Pluck; no slot needs Brass or FX.
+
+Two presets serve two slots each. `factory-mellow-epiano` is `lofi-chill`'s comp and
+`hiphop-groove`'s lead — both Rhodes-comping genres, and the two slots differ in role,
+register and rhythm. `bass-deep-sine` is `lofi-chill`'s bass and `ambient-chill`'s bass.
+Reuse is intended, not a shortfall: the inventory requirement is one suitable preset per
+role slot, not one preset per slot.
+
+### The two new presets, and why each gap is real
+
+**`factory-neon-poly-saw` (Pad) — `synthwave-80s` comp.** No existing preset covers a
+detuned-saw poly bed that survives 8th-note stabs at 118 BPM. `factory-string-ensemble`
+has the right oscillator and detune but `attack: 0.35`, longer than the 0.25 s eighth
+note it would have to articulate. `factory-vintage-brass` is the right family but its
+`lfoTarget: 'volume'` tremolo at 5 Hz beats against a grid-tight (`chordFeel: 0.12`)
+pattern. `factory-hyper-saw-lead` is the vibe's own lead and its 3800 Hz cutoff would put
+the comp on top of it. `factory-warm-polypad` is triangle at cutoff 1400 — wrong
+oscillator, far too dark. The new preset is a Juno-style saw at `detune: 15` with
+brightness supplied by `filterEnvAmount: 1200` over `filterCutoff: 2600`, so the comp
+opens per note and stays under the lead between attacks, and `release: 0.5` (longer than
+the 0.25 s note gap) glues consecutive stabs into a bed.
+
+**`factory-koto-pluck` (Pluck) — `asian-zen` comp.** The slot needs a mid-register
+plucked string that rings for roughly a bar (~3.1 s at 78 BPM). The two existing Pluck
+presets die far too fast (`factory-pluck` `decay: 0.15` / `sustain: 0.05`;
+`factory-trance-pluck` `decay: 0.18` / `sustain: 0.02`). `factory-glocken-bell` has the
+decay length but is a bell at `octave: +1`, and it is already this vibe's lead.
+`factory-dream-keys` is a held key with no attack transient. The new preset combines a
+near-instant `attack: 0.004` with `noiseVolume: 0.04` for the pick contact, a large
+`filterEnvAmount: 2200` collapsing to `filterSustain: 0.12` for the fast partial damping
+of a plucked string, and `decay: 1.3` / `sustain: 0.35` / `release: 1.5` for the residual
+ring the existing plucks lack.
+
+Both are authored with `octave: 0` and neither carries any arp field.
+
+### `bass-drone-sub` was proposed and rejected
+
+Phase 2 research proposed a third new preset, `bass-drone-sub`, for `ambient-chill`'s
+bass, on the grounds that `bass-deep-sine`'s `release: 0.6` leaves a gap between
+whole-note drone roots at 68 BPM. It is not adopted. `ambient-chill` runs
+`reverbDecay: 5.8` and `delayFeedback: 0.58`, which manufacture the tail the release was
+meant to supply; on a pure sine sub there are no harmonics for a 0.01 s attack to click
+with. `ambient-chill`'s bass slot resolves to `bass-deep-sine`, the same preset
+`lofi-chill` uses. Adding a preset to close a gap the effect rack already closes is
+inventory for its own sake.
+
+### Four slots are deliberate redesigns
+
+The remaining fourteen slots land within earshot of today's hand-authored voice.
+Four are a changed instrument, accepted under settled decision 2 ("the sound may
+change, provided what lands in the libraries is researched, principled data"):
+
+- **`lofi-chill` comp → `factory-mellow-epiano`.** Today's voice is a sine with a 1.5 Hz
+  pitch vibrato — a tape wow. The genre's actual comping instrument is a Rhodes with
+  amplitude tremolo, which is what `factory-mellow-epiano` is (4.5 Hz on `volume`). The
+  wow moves to the lead, where a melody line is where it is audible; the vibe's own
+  `eqHigh: -2` supplies the cassette roll-off the old 2200 Hz cutoff did by hand.
+- **`cyber-dance` comp → `factory-trance-pluck`.** Today's supersaw stab holds
+  `sustain: 0.35` on `offbeatStabs`, so each offbeat bleeds into the next kick.
+  A plucked offbeat chord (`sustain: 0.02`, `filterEnvAmount: 3000`) clears the
+  downbeat, which is why the genre uses one. This is the most audible single change in
+  Phase 2.
+- **`ambient-chill` comp → `factory-warm-polypad`.** Today the comp and the lead are the
+  same patch — the clearest symptom of the half-override problem. Moving the shimmer up
+  to the lead (`factory-celestial-shimmer`, `octave: +1`) leaves the comp needing a warm
+  mid-register bed, which `factory-warm-polypad` is. Its shorter `release: 1.2` is
+  covered by the vibe's own reverb and delay.
+- **`asian-zen` lead → `factory-glocken-bell`.** Today's lead is a keyed triangle
+  (`sustain: 0.35`, `decay: 1.1`) sitting in the same register as the comp. A struck
+  bell is the instrument class the genre and the vibe's own comment ("Pentatonic Bell
+  Arp") always named, and `factory-glocken-bell`'s `octave: +1` separates the lead from
+  the new koto comp at `octave: 0` — which matters more now that the comp is a plucked
+  string rather than a keyed tone. Its `sustain: 0.05` means a held note rings out and
+  dies instead of droning, which is what a sparse pentatonic melody over a slow bed
+  wants.
+
+No fallback is retained for any of the four. Each row is decided, not offered.
+
+### Arp is removed from Instant Vibes entirely
+
+No preset in `synthPresets.ts` or `bassPresets.ts` sets `arpActive`, `arpMode`, `arpRate`
+or `arpOctaves` — zero occurrences across all 27 entries. Three vibes turn the
+arpeggiator on today, and in every case it is on the **lead** voice (`synthParams`, which
+`applyInstantVibeToStore` writes through `store.setSynthParams`), never the comp or the
+bass: `synthwave-80s` (`updown`, `16n`, 2 octaves), `cyber-dance` (`up`, `16n`, 2),
+`asian-zen` (`up`, `8n`, 2). Every other voice in every vibe sets `arpActive: false`
+explicitly, which is identical to the `INITIAL_SYNTH_PARAMS` default.
+
+Phase 2 drops all of it. Arp is a performance setting the user drives from the UI —
+`src/audio/playback/arpPlayback.ts` reads `params.arpActive` off whichever voice the
+user's `controlTarget` selects and arpeggiates notes the user is physically holding on
+the QWERTY keyboard; nothing in the chord or bass players consults it. A vibe should not
+switch that on behind the user's back, and baking it into a preset would be worse still,
+dragging the setting along every time the preset was reused for another role.
+
+So **`InstantVibe` carries no arp data at all**: no `synthArp` field, no arp members
+inside any voice. `INITIAL_SYNTH_PARAMS.arpActive` is already `false`
+(`src/store/initialState.ts:26`), and the resolver's merge begins from
+`INITIAL_SYNTH_PARAMS`, so a vibe that sets no arp fields leaves the arp off. No explicit
+`arpActive: false` is needed anywhere in the vibe table.
+
+`synthwave-80s`, `cyber-dance` and `asian-zen` therefore lose the arpeggio they turn on
+today. That is intended, and is a sanctioned sound change under settled decision 2.
+Two pieces of authored copy assert the old behaviour and become false with it, so Phase 2
+corrects both: `cyber-dance`'s tagline ("…punchy kicks & arps") and the comment above
+`synthwave-80s`'s `variation.keyPool`, which justifies the pool's upper bound by the
+arp's octave range. The `keyPool` data itself is `variation` data and is not touched —
+only the comment that explains it.
+
+### "Target shape" needs no correction
+
+The `InstantVibe` block in the "Target shape" section above already reflects Phase 2
+exactly: it lists `synthPresetId`, `chordPresetId` and `bassPresetId`, and it lists no
+`synthParams` / `chordSynthParams` / `bassSynthParams` and no arp field. Phase 2 adds
+nothing to that block and removes nothing from it. The three `*PresetName` fields and the
+three `*SynthParams` fields that exist in today's `InstantVibe` are deleted outright.
+
+### `buildSynthParams` after Phase 2
+
+`buildSynthParams(presetName, overrides)` today stamps a display string into `preset`
+while the literal override object beside it supplies the whole sound. It is replaced by a
+resolver that takes a preset id and nothing else:
+
+```ts
+function resolveVibeSynthParams(presetId: string): SynthParams
+```
+
+which merges `INITIAL_SYNTH_PARAMS`, then the resolved preset's `params`, then
+`preset: presetItem.name`. The arp block falls through from `INITIAL_SYNTH_PARAMS` in
+every case, so every voice of every vibe loads with `arpActive: false`. The three call
+sites in `applyInstantVibeToStore` stay exactly where they are, so the ordered audio cut
+and selective restart the function performs is untouched (settled decision 6); only the
+arguments change shape.
+
+`preset: presetItem.name` is deliberate and load-bearing: `ChordView.tsx`'s preset
+selects bind to `params.preset`, so after Phase 2 a loaded vibe leaves those selects
+pointing at the preset that actually produced the sound — which is exactly what
+`buildSynthParams` never did.
+
+Lookup needs a by-id accessor, which the library does not currently export
+(`findPresetByName` is name-keyed). Phase 2 adds `presetById(id)` to
+`src/audio/synthPresets.ts`, searching `ALL_FACTORY_PRESETS`.
+
+### Phase 2 invariants to enforce with tests
+
+Pure-logic `bun:test`, no DOM, no testing-library — the same convention the
+"Invariants to enforce with tests" section above states.
+
+1. Every `synthPresetId` and every `chordPresetId` on every vibe resolves to an entry in
+   `ALL_FACTORY_PRESETS`.
+2. Every `bassPresetId` resolves to an entry whose `category === 'Bass'`.
+3. All preset ids in `ALL_FACTORY_PRESETS` are unique — a duplicate id would make
+   `presetById` silently return the wrong sound.
+4. No preset's `params` sets `arpActive`, `arpMode`, `arpRate` or `arpOctaves`, in either
+   `FACTORY_PRESETS` or `FACTORY_BASS_PRESETS`. This invariant stands unchanged and is
+   still worth pinning: it is what keeps arp a performance setting rather than timbre
+   data, and it stays true as users author their own presets.
+5. Applying any vibe leaves all three voices with `arpActive === false` — no vibe turns
+   the arpeggiator on. Asserted over `synthParams`, `chordSynthParams` and
+   `bassSynthParams` for all six vibes.
+6. `applyInstantVibeToStore`'s cut-and-restart behaviour is unchanged — the existing
+   non-regression tests (`stopSource('chord', 0.02)` / `stopSource('bass', 0.02)` before
+   the first vibe-state write, restart-what-was-playing, chip stays highlighted) re-run
+   unmodified against the referencing version of `INSTANT_VIBES`.
+
+Invariants 1-3 hold for user-created presets too as the library grows, which is why they
+are stated over `ALL_FACTORY_PRESETS` and `category`, never over any genre concept —
+settled decision 3 is unaffected by anything in this section. Neither new preset carries
+a genre tag; `category` remains a timbre role.

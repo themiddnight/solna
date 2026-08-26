@@ -350,9 +350,9 @@ describe('resolveVibeVariation', () => {
         expect(out.chordFeel).toBe(v.chordFeel);
         expect(out.bassFeel).toBe(v.bassFeel);
         expect(out.soundKit).toBe(v.soundKit);
-        expect(out.synthParams).toEqual(v.synthParams);
-        expect(out.chordSynthParams).toEqual(v.chordSynthParams);
-        expect(out.bassSynthParams).toEqual(v.bassSynthParams);
+        expect(out.synthPresetId).toBe(v.synthPresetId);
+        expect(out.chordPresetId).toBe(v.chordPresetId);
+        expect(out.bassPresetId).toBe(v.bassPresetId);
         expect(out.effects).toEqual(v.effects);
       }
     }

@@ -11,6 +11,12 @@ type SynthVoice = {
   lfo?: OscillatorNode;
   lfoGain?: GainNode;
   lfoTarget?: SynthParams['lfoTarget'];
+  // Third source alongside osc1/oscSub, created only when noiseVolume > 0.
+  // Tracked separately from `oscs` because an AudioBufferSourceNode is not an
+  // OscillatorNode, and separately from `gains` because gains[0]/gains[1] are
+  // positional (main VCA / sub level).
+  noise?: AudioBufferSourceNode;
+  noiseGain?: GainNode;
   sustainLevel: number;
   envelopeScale: number;
   source: string;
@@ -443,6 +449,13 @@ class AudioEngine {
       lfo.start(now);
     }
 
+    // Noise source — a third source alongside osc1/oscSub, feeding the same VCF
+    // and VCA so the filter and amp envelopes shape it like any other source.
+    // Created only when the preset asks for it (same lazy pattern as the LFO;
+    // updateSynthParams adds one to a live voice if the knob comes up), and
+    // created after the amp envelope so gains[0]/gains[1] stay main/sub.
+    const noiseNodes = this.createNoiseNodes(params.noiseVolume, filter, now);
+
     // Connect nodes
     osc1.connect(filter);
     oscSub.connect(subGain);
@@ -457,6 +470,7 @@ class AudioEngine {
     oscSub.start(now);
 
     const voice: SynthVoice = {
+      ...noiseNodes,
       oscs: [osc1, oscSub],
       gains: [gainNode, subGain],
       filter,
@@ -538,6 +552,12 @@ class AudioEngine {
         }
         if (voice.lfoGain) {
           try { voice.lfoGain.disconnect(); } catch { /* ignore */ }
+        }
+        if (voice.noise) {
+          try { voice.noise.stop(); voice.noise.disconnect(); } catch { /* ignore */ }
+        }
+        if (voice.noiseGain) {
+          try { voice.noiseGain.disconnect(); } catch { /* ignore */ }
         }
       }, (Math.max(releaseTime, filterRelease) + Math.max(0, now - this.ctx.currentTime) + 0.1) * 1000);
     } catch {
@@ -701,6 +721,8 @@ class AudioEngine {
       const subGain = voice.gains[1];
       this.cancelAndHold(subGain.gain, now);
       subGain.gain.setTargetAtTime(params.subOscVolume, now, tc);
+
+      this.updateVoiceNoise(voice, params.noiseVolume, now, tc);
 
       // Keep the note-off filter release ramp in sync with the new cutoff
       voice.filterCutoff = params.filterCutoff;
@@ -926,6 +948,44 @@ class AudioEngine {
       default:
         break;
     }
+  }
+
+  // Builds, wires and starts the noise source used by both the note-on path and
+  // the live knob path, returning the fields to merge into the voice — or an
+  // empty object when the preset asks for no noise, so callers branch on nothing.
+  // `target` is the voice's filter: noise is a source alongside osc1/oscSub, so
+  // the VCF and its envelope shape it like any other source.
+  // `loop` matters: createNoiseNode's buffer is 2 s and a pad's release runs
+  // longer, so an unlooped source would fall silent mid-note.
+  private createNoiseNodes(level: number, target: AudioNode, startAt: number): Pick<SynthVoice, 'noise' | 'noiseGain'> {
+    if (!this.ctx || level <= 0) return {};
+    const noise = this.createNoiseNode();
+    noise.loop = true;
+    const noiseGain = this.ctx.createGain();
+    noiseGain.gain.value = level;
+    noise.connect(noiseGain);
+    noiseGain.connect(target);
+    noise.start(startAt);
+    return { noise, noiseGain };
+  }
+
+  // Tracks the noise knob on a voice that is already sounding, adding the
+  // source to a voice that started silent — the same lazy shape the LFO uses,
+  // so turning the knob up is audible on the current note, not only the next.
+  private updateVoiceNoise(voice: SynthVoice, level: number, now: number, tc: number): void {
+    if (level <= 0) {
+      if (!voice.noiseGain) return;
+      this.cancelAndHold(voice.noiseGain.gain, now);
+      voice.noiseGain.gain.setTargetAtTime(0, now, tc);
+      return;
+    }
+    if (!voice.noiseGain) {
+      // Ramp up from silence so adding the source mid-note doesn't click.
+      Object.assign(voice, this.createNoiseNodes(Number.MIN_VALUE, voice.filter, now));
+      if (!voice.noiseGain) return;
+    }
+    this.cancelAndHold(voice.noiseGain.gain, now);
+    voice.noiseGain.gain.setTargetAtTime(level, now, tc);
   }
 
   private createNoiseNode(): AudioBufferSourceNode {
