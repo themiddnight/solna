@@ -1,7 +1,7 @@
 import { audioEngine } from '../engine';
 import { DEFAULT_VELOCITY } from '../constants';
 import type { SynthParams, ChordItem } from '../../types';
-import type { SynthPresetItem } from '../synthPresets';
+import { applyPreset, type SynthPresetItem } from '../synthPresets';
 
 /**
  * One-shot previews for library entries (synth patches, chord templates,
@@ -76,12 +76,7 @@ export function previewSynthPreset(
   const ctx = audioEngine.getAudioContext();
   if (!ctx) return NOOP;
 
-  // TODO(Task 11): swap for the shared `applyPreset` helper once it lands.
-  const testParams: SynthParams = {
-    ...currentParams,
-    ...preset.params,
-    preset: preset.name,
-  };
+  const testParams = applyPreset(currentParams, preset);
   const handle = beginPreview();
   const start = ctx.currentTime;
   audioEngine.triggerSynthNoteOn('C4', testParams, 0.85, start, PREVIEW_SOURCE);

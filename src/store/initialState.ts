@@ -85,6 +85,11 @@ export const INITIAL_CHORDS: ChordItem[] = [
   { id: 'chord-4', root: 'G', quality: '7', bars: 1, notes: ['G3', 'B3', 'D4', 'F4'] },
 ];
 
+// The ONLY source of truth for the audible effect defaults. setupMasterChain()
+// seeds every wet send and EQ gain at zero; these values reach the graph via
+// applyEngineSnapshot() on the first user click and are clamped through
+// audio/effectLimits.ts on the way in.
+//
 // NOTE: reverbDecay (2.0) and compressorThreshold (-12) deliberately equal the
 // engine's setupMasterChain hardcodes so the default sound is unchanged now
 // that these knobs are live (Task 14). Persisted values from older sessions

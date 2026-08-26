@@ -1,6 +1,6 @@
 import { SynthParams, InstantVibe } from '../types';
 import { audioEngine } from '../audio/engine';
-import { presetById } from '../audio/synthPresets';
+import { applyPreset, presetById } from '../audio/synthPresets';
 import { useAppStore } from './store';
 import { INITIAL_SYNTH_PARAMS } from './initialState';
 import { progressionById, resolveProgression } from '../audio/data/chordProgressions';
@@ -26,11 +26,7 @@ export function resolveVibeSynthParams(presetId: string): SynthParams {
   if (!preset) {
     throw new Error(`InstantVibe references unknown synth preset id: ${presetId}`);
   }
-  return {
-    ...INITIAL_SYNTH_PARAMS,
-    ...preset.params,
-    preset: preset.name,
-  };
+  return applyPreset(INITIAL_SYNTH_PARAMS, preset);
 }
 
 /** Same instant-but-clickless release the hard-stop button uses. */

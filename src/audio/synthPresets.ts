@@ -84,9 +84,24 @@ export interface SynthPresetItem {
   category: SynthPresetCategory;
   params: Partial<SynthParams>;
   isFactory?: boolean;
+  /**
+   * Written by presetsSlice on save. Nothing in src/ reads it today, but it is
+   * persisted user data inside `customSynthPresets` — dropping the write would
+   * silently strip the only chronology existing saved presets have, for the
+   * cost of one number. Kept deliberately.
+   */
   createdAt?: number;
-  author?: string;
   description?: string;
+}
+
+/**
+ * Load a preset over a base patch. The three call sites (SynthView's preset
+ * picker, the audition preview, and instantVibes' library resolver) all wrote
+ * this same three-line spread, and all three overwrite `params.preset` with the
+ * preset's name — which is why no preset needs to carry its own name in params.
+ */
+export function applyPreset(base: SynthParams, preset: SynthPresetItem): SynthParams {
+  return { ...base, ...preset.params, preset: preset.name };
 }
 
 export const FACTORY_PRESETS: SynthPresetItem[] = [

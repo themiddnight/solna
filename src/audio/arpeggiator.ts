@@ -21,7 +21,9 @@ export function buildArpSequence(
     return midiA - midiB;
   });
 
-  const octCount = Math.max(1, octaves ?? 1);
+  // `octaves` is a required number (SynthParams.arpOctaves); only the clamp is
+  // load-bearing — a 0 or negative value would produce an empty sequence.
+  const octCount = Math.max(1, octaves);
   const expanded: string[] = [];
   for (let oct = 0; oct < octCount; oct++) {
     // tonal takes interval notation, not "N oct": one octave up is a perfect

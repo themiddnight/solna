@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../store/store";
 import { ensureDrumEngine, triggerPad } from "../audio/playback/drumPlayback";
-import { sixteenthNoteMs } from "../utils/musicTheory";
+import { stepDurationSec } from "../utils/musicTheory";
 import {
   STEPS_PER_BAR,
   playbackNoteOff,
@@ -76,8 +76,6 @@ export function useSequencerPlayback(): {
       ),
     [],
   );
-  const stepDurationMs = sixteenthNoteMs(bpm);
-
   const playStepSounds = useCallback(
     (stepIndex: number, time: number) => {
       tracks.forEach((track) => {
@@ -94,7 +92,7 @@ export function useSequencerPlayback(): {
             playbackNoteOff(
               note,
               synthParams.release,
-              time + (stepDurationMs / 1000) * 0.8,
+              time + stepDurationSec(bpm) * 0.8,
             );
           } else {
             triggerPad(track.instrument, masterSequencerVolume, time);
@@ -102,7 +100,7 @@ export function useSequencerPlayback(): {
         }
       });
     },
-    [tracks, synthParams, masterSequencerVolume, stepDurationMs],
+    [tracks, synthParams, masterSequencerVolume, bpm],
   );
 
   useEffect(() => {

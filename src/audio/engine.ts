@@ -57,11 +57,11 @@ type SynthVoice = {
  * Names callers use that map onto one of the 7 authored drum types. Exported
  * so a test can prove every target is real.
  */
-export const DRUM_ALIASES: Record<string, string> = {
+export const DRUM_ALIASES: Record<string, string> = Object.assign(Object.create(null), {
   closedhat: 'hihat',
   lowtom: 'tom',
   ride: 'crash',
-};
+});
 
 class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -358,13 +358,19 @@ class AudioEngine {
     this.drumSendFilter.frequency.value = this.drumFilterCutoff;
     this.drumSendFilter.Q.value = this.drumFilterResonance;
 
+    // Every wet send and EQ gain is seeded at ZERO. The audible defaults are
+    // INITIAL_EFFECTS and arrive through applyEngineSnapshot() on the first
+    // user click; seeding a second set here was a second source of truth that
+    // already disagreed with initialState.ts (distortionWet 0.1 vs 0.0, eqLow
+    // 2 vs 0, eqHigh 3 vs 0) and was silently overwritten anyway.
+
     // Delay
     this.delayNode = this.ctx.createDelay(2.0);
     this.delayNode.delayTime.value = 0.25;
     this.delayFeedbackGain = this.ctx.createGain();
     this.delayFeedbackGain.gain.value = 0.35;
     this.delayGain = this.ctx.createGain();
-    this.delayGain.gain.value = 0.2;
+    this.delayGain.gain.value = 0;
 
     this.delayNode.connect(this.delayFeedbackGain);
     this.delayFeedbackGain.connect(this.delayNode);
@@ -383,10 +389,10 @@ class AudioEngine {
     this.reverbNode = this.ctx.createConvolver();
     this.reverbNode.buffer = this.getImpulseResponse(2.0);
     this.reverbGain = this.ctx.createGain();
-    this.reverbGain.gain.value = 0.25;
+    this.reverbGain.gain.value = 0;
 
     this.reverbNode.connect(this.reverbGain);
-    if (this.drumSendFilter) this.drumSendFilter.connect(this.reverbNode);
+    this.drumSendFilter.connect(this.reverbNode);
 
     // Connect effects back to EQ chain
     this.dryGain.connect(this.eqLowNode);
@@ -1153,7 +1159,6 @@ class AudioEngine {
     }
   }
 
-  /** One drum envelope: peak at `t`, exponential to the shared floor by `t + decay`. */
   /**
    * One drum envelope: peak at `t`, an optional shape hook for extra levels
    * (the clap's micro-bursts) scheduled BEFORE the closing ramp so callers
@@ -1193,7 +1198,6 @@ class AudioEngine {
     decay: number;
     t: number;
     stopAt?: number;
-    reverbSend?: number;
   }): void {
     const osc = this.ctx!.createOscillator();
     if (o.type) osc.type = o.type;
@@ -1203,12 +1207,11 @@ class AudioEngine {
     }
     const env = this.drumEnv(o.peak, o.decay, o.t);
     osc.connect(env);
-    this.wireDrumVoice(env, o.reverbSend);
+    this.wireDrumVoice(env);
     osc.start(o.t);
     osc.stop(o.stopAt ?? o.t + o.decay + 0.02);
   }
 
-  /** A filtered noise drum component (hats, snare snap, clap, crash). */
   /** A filtered noise drum component (hats, snare snap, clap, crash). */
   private drumNoiseBurst(o: {
     filterType: BiquadFilterType;

@@ -32,6 +32,7 @@ import {
   SynthPresetItem,
   SynthPresetCategory,
   SYNTH_CATEGORIES,
+  applyPreset,
   findPresetByName,
   getAllSynthPresets,
   getPresetsGroupedByCategory,
@@ -434,11 +435,7 @@ export const SynthView = () => {
   ]);
 
   const handleSelectPreset = (preset: SynthPresetItem) => {
-    onChangeParams({
-      ...params,
-      ...preset.params,
-      preset: preset.name,
-    });
+    onChangeParams(applyPreset(params, preset));
     setSaveToast(`Loaded [${preset.category}] "${preset.name}"`);
     setTimeout(() => setSaveToast(null), 2500);
   };

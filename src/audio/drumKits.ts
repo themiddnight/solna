@@ -178,7 +178,7 @@ export const DRUM_KITS: Record<string, Partial<DrumKit>> = {
     tom: { freqStart: 120, freqEnd: 70, pitchTime: 0.2, decay: 0.3, gain: 0.55 },
     crash: { filter: 4500, decay: 1.0, gain: 0.45, reverbSend: 0.3 },
   },
-};;
+};
 
 export const GENRE_TO_KIT: Record<string, string> = {
   'Synthwave': 'Retro Drive',

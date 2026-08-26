@@ -2,10 +2,55 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { INITIAL_EFFECTS } from '../store/initialState';
 import type { SynthParams } from '../types';
 import { DRUM_ALIASES } from './engine';
+import { DEFAULT_DRUM_KIT } from './drumKits';
 import { fakeNode, fakeParam, freshEngine, makeEngine } from './testFakes';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- tests deliberately
    reach private fields (ctx, buses, activeVoices) via casts. */
+
+// Full-fidelity fake context for setupMasterChain: every node records its
+// connect() targets so a test can prove the exact wiring order.
+function masterChainCtx() {
+  const mk = (type: string) => {
+    const n = fakeNode();
+    (n as any)._connectTargets = [] as unknown[];
+    (n as any).connect = (target: unknown) => {
+      (n as any)._connectTargets.push(target);
+    };
+    (n as any)._type = type;
+    return n;
+  };
+  return {
+    currentTime: 10,
+    sampleRate: 44100,
+    destination: {},
+    createOscillator: () => mk('osc'),
+    createGain: () => mk('gain'),
+    createBiquadFilter: () => mk('biquad'),
+    createDynamicsCompressor: () => {
+      const n: any = mk('compressor');
+      n.threshold = fakeParam();
+      n.knee = fakeParam();
+      n.ratio = fakeParam();
+      n.attack = fakeParam();
+      n.release = fakeParam();
+      return n;
+    },
+    createAnalyser: () => mk('analyser'),
+    createConvolver: () => mk('convolver'),
+    createWaveShaper: () => mk('waveshaper'),
+    createDelay: () => {
+      const n: any = mk('delay');
+      n.delayTime = fakeParam();
+      return n;
+    },
+    createBuffer: () => ({
+      length: 1024,
+      getChannelData: () => new Float32Array(1024),
+    }),
+    resume: async () => {},
+  };
+}
 
 const SYNTH: SynthParams = {
   oscType: 'sawtooth',
@@ -435,50 +480,6 @@ describe('releaseSoundingVoices', () => {
 });
 
 describe('master chain', () => {
-  // Full-fidelity fake context for setupMasterChain: every node records its
-  // connect() targets so the test can prove the exact wiring order.
-  function masterChainCtx() {
-    const mk = (type: string) => {
-      const n = fakeNode();
-      (n as any)._connectTargets = [] as unknown[];
-      (n as any).connect = (target: unknown) => {
-        (n as any)._connectTargets.push(target);
-      };
-      (n as any)._type = type;
-      return n;
-    };
-    return {
-      currentTime: 10,
-      sampleRate: 44100,
-      destination: {},
-      createOscillator: () => mk('osc'),
-      createGain: () => mk('gain'),
-      createBiquadFilter: () => mk('biquad'),
-      createDynamicsCompressor: () => {
-        const n: any = mk('compressor');
-        n.threshold = fakeParam();
-        n.knee = fakeParam();
-        n.ratio = fakeParam();
-        n.attack = fakeParam();
-        n.release = fakeParam();
-        return n;
-      },
-      createAnalyser: () => mk('analyser'),
-      createConvolver: () => mk('convolver'),
-      createWaveShaper: () => mk('waveshaper'),
-      createDelay: () => {
-        const n: any = mk('delay');
-        n.delayTime = fakeParam();
-        return n;
-      },
-      createBuffer: () => ({
-        length: 1024,
-        getChannelData: () => new Float32Array(1024),
-      }),
-      resume: async () => {},
-    };
-  }
-
   test('seeds masterGain at unity and inserts a ratio-20 limiter between masterGain and the analyser', () => {
     const engine = makeEngine();
     const ctx = masterChainCtx();
@@ -522,6 +523,21 @@ describe('master chain', () => {
     // An AudioBuffer belongs to the context that created it; reusing one from
     // the previous context is the same class of bug sourceBuses.clear() prevents.
     expect((engine as any).impulseCache.has(9.9)).toBe(false);
+  });
+
+  test('drumBusFilter and drumSendFilter start in lockstep', () => {
+    // Only the LIVE setDrumFilter path had a test; this pins the initial
+    // parity too, since the two nodes are six hand-written assignments with
+    // no shared construction helper.
+    const engine = makeEngine();
+    (engine as any).ctx = masterChainCtx();
+    (engine as any).setupMasterChain();
+
+    const bus = (engine as any).drumBusFilter;
+    const send = (engine as any).drumSendFilter;
+    expect(send.type).toBe(bus.type);
+    expect(send.frequency.value).toBe(bus.frequency.value);
+    expect(send.Q.value).toBe(bus.Q.value);
   });
 });
 
@@ -1586,6 +1602,38 @@ describe('drum aliases and unknown types', () => {
     expect(counts.ride).toBe(counts.crash);
   });
 
+  // The counts-only test above would still pass if closedhat silently
+  // misrouted to another single-envelope voice (e.g. tom), so these assert a
+  // KIT PARAMETER that differs between the alias's real target and the most
+  // plausible wrong one.
+  test('closedhat resolves to hihat specifically, not openhat', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerDrum('closedhat', 1.0);
+    const env = ctx._gains.at(-1)!;
+    expect(env.gain.value).toBeCloseTo(DEFAULT_DRUM_KIT.hihat.gain, 9);
+    expect(env.gain.value).not.toBeCloseTo(DEFAULT_DRUM_KIT.openhat.gain, 9);
+  });
+
+  test('lowtom resolves to tom specifically, not kick', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerDrum('lowtom', 1.0);
+    const env = ctx._gains.at(-1)!;
+    expect(env.gain.value).toBeCloseTo(DEFAULT_DRUM_KIT.tom.gain, 9);
+    expect(env.gain.value).not.toBeCloseTo(DEFAULT_DRUM_KIT.kick.gain, 9);
+  });
+
+  test('ride resolves to crash specifically, not clap', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerDrum('ride', 1.0);
+    // crash and clap both send to reverb, so the send gain (created right
+    // after the envelope) carries the kit's per-drum reverbSend LEVEL — the
+    // one field that tells the two voices apart when their headline `gain`
+    // values happen to coincide (both 0.5 in DEFAULT_DRUM_KIT).
+    const send = ctx._gains.at(-1)!;
+    expect(send.gain.value).toBeCloseTo(DEFAULT_DRUM_KIT.crash.reverbSend, 9);
+    expect(send.gain.value).not.toBeCloseTo(DEFAULT_DRUM_KIT.clap.reverbSend, 9);
+  });
+
   test('the type is case-insensitive', () => {
     const { engine, ctx } = freshEngine();
     const before = ctx._gains.length;
@@ -1606,6 +1654,81 @@ describe('drum aliases and unknown types', () => {
       const before = ctx._gains.length;
       engine.triggerDrum(target, 1.0);
       expect(ctx._gains.length).toBeGreaterThan(before);
+    }
+  });
+});
+
+describe('source bus level control', () => {
+  test('setSourceGain ramps instead of stepping, and clamps to 0..1.5', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'chord');
+    const bus = (engine as any).sourceBuses.get('chord');
+
+    engine.setSourceGain('chord', 0.4);
+    expect(bus.gain.targets.at(-1)).toEqual({ v: 0.4, t: ctx.currentTime, tc: 0.01 });
+
+    engine.setSourceGain('chord', 99);
+    expect(bus.gain.targets.at(-1)!.v).toBe(1.5);
+    engine.setSourceGain('chord', -5);
+    expect(bus.gain.targets.at(-1)!.v).toBe(0);
+  });
+
+  test('setSourceMuted ramps to 0 and back to the stored gain', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'bass');
+    const bus = (engine as any).sourceBuses.get('bass');
+    engine.setSourceGain('bass', 0.6);
+
+    engine.setSourceMuted('bass', true);
+    expect(bus.gain.targets.at(-1)!.v).toBe(0);
+    expect(bus.gain.targets.at(-1)!.tc).toBe(0.01); // click-free
+
+    engine.setSourceMuted('bass', false);
+    expect(bus.gain.targets.at(-1)!.v).toBe(0.6);
+  });
+
+  test('a gain set while muted does not un-mute the bus', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'bass');
+    const bus = (engine as any).sourceBuses.get('bass');
+
+    engine.setSourceMuted('bass', true);
+    engine.setSourceGain('bass', 0.9);
+
+    expect(bus.gain.targets.at(-1)!.v).toBe(0);
+  });
+});
+
+describe('master volume', () => {
+  test('clamps to 0..1', () => {
+    const { engine, ctx } = freshEngine();
+    const masterGain = fakeNode();
+    (engine as any).masterGain = masterGain;
+
+    engine.setMasterVolume(2);
+    expect(masterGain.gain.targets.at(-1)).toEqual({ v: 1, t: ctx.currentTime, tc: 0.05 });
+    engine.setMasterVolume(-1);
+    expect(masterGain.gain.targets.at(-1)!.v).toBe(0);
+    engine.setMasterVolume(0.7);
+    expect(masterGain.gain.targets.at(-1)!.v).toBe(0.7);
+  });
+});
+
+describe('master chain effect defaults', () => {
+  test('every wet send and EQ gain is seeded at zero', () => {
+    const engine = makeEngine();
+    (engine as any).ctx = masterChainCtx();
+    (engine as any).setupMasterChain();
+
+    // The audible defaults live in INITIAL_EFFECTS and arrive via
+    // applyEngineSnapshot on the first click; seeding anything else here is a
+    // second source of truth that already disagreed (distortionWet 0.1 vs 0.0,
+    // eqLow 2 vs 0, eqHigh 3 vs 0).
+    for (const field of ['reverbGain', 'delayGain', 'distortionGain']) {
+      expect((engine as any)[field].gain.value, field).toBe(0);
+    }
+    for (const field of ['eqLowNode', 'eqMidNode', 'eqHighNode']) {
+      expect((engine as any)[field].gain.value, field).toBe(0);
     }
   });
 });

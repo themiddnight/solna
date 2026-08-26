@@ -2,6 +2,8 @@
 // Patterns are one bar long (16 sixteenth-note steps) and loop per bar for
 // multi-bar chords. Hits are scheduled against the shared engine clock.
 
+import { groupByStyle } from './groupByStyle';
+
 export type RhythmHitType = 'block' | 'strum';
 
 export interface RhythmHit {
@@ -236,18 +238,11 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
       { step: 0, type: 'block', note: 0, octaveShift: -1, velocity: 0.9, holdSteps: 8 },
       strum(8, 'up', 0.85, 2, 35),
     ],
-  },];
+  },
+];
 
 // Patterns grouped by style, computed once at module load for the style-grouped select UI.
-export const RHYTHM_STYLE_GROUPS: { style: string; patterns: RhythmPattern[] }[] = (() => {
-  const byStyle = new Map<string, RhythmPattern[]>();
-  for (const p of RHYTHM_PATTERNS) {
-    const list = byStyle.get(p.style);
-    if (list) list.push(p);
-    else byStyle.set(p.style, [p]);
-  }
-  return Array.from(byStyle, ([style, patterns]) => ({ style, patterns }));
-})();
+export const RHYTHM_STYLE_GROUPS = groupByStyle(RHYTHM_PATTERNS);
 /**
  * Maps the 0–1 "feel" slider to a hold-duration multiplier.
  * 0.5 (center) = x1 neutral; 0 = x0.5 tight; 1 = x2 loose.

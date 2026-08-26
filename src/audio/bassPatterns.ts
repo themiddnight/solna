@@ -2,6 +2,7 @@ import { Note } from 'tonal';
 import type { ChordItem } from '../types';
 import { SCALES, rootSemitone, stepDurationSec } from '../utils/musicTheory';
 import { DEFAULT_VELOCITY } from './constants';
+import { groupByStyle } from './groupByStyle';
 
 export type BassNoteToken =
   | 'root' | 'third' | 'fifth' | 'seventh' | 'octave'
@@ -273,12 +274,4 @@ export const BASS_PATTERNS: BassPattern[] = [
   },
 ];
 
-export const BASS_STYLE_GROUPS: { style: string; patterns: BassPattern[] }[] = (() => {
-  const byStyle = new Map<string, BassPattern[]>();
-  for (const p of BASS_PATTERNS) {
-    const list = byStyle.get(p.style);
-    if (list) list.push(p);
-    else byStyle.set(p.style, [p]);
-  }
-  return Array.from(byStyle, ([style, patterns]) => ({ style, patterns }));
-})();
+export const BASS_STYLE_GROUPS = groupByStyle(BASS_PATTERNS);
