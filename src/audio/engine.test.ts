@@ -458,7 +458,7 @@ describe('master chain', () => {
     };
   }
 
-  test('stages masterGain at 0.6 and inserts a ratio-20 limiter between masterGain and the analyser', () => {
+  test('seeds masterGain at unity and inserts a ratio-20 limiter between masterGain and the analyser', () => {
     const engine = makeEngine();
     const ctx = masterChainCtx();
     (engine as any).ctx = ctx;
@@ -469,7 +469,10 @@ describe('master chain', () => {
     const analyser = (engine as any).analyser;
     const compressor = (engine as any).compressor;
 
-    expect(masterGain.gain.value).toBe(0.6);
+    // masterGain is the user's master trim and nothing else: engineSync pushes
+    // masterVolume with fireImmediately, so any "staging" value seeded here is
+    // overwritten before the first frame. The -3 dB limiter is the real ceiling.
+    expect(masterGain.gain.value).toBe(1);
     expect(limiter).toBeDefined();
     if (!limiter) return;
 
@@ -571,6 +574,54 @@ describe('live effect knobs', () => {
     engine.updateEffects({ ...INITIAL_EFFECTS, compressorThreshold: -20 });
 
     expect(threshold.targets).toEqual([{ v: -20, t: ctx.currentTime, tc: 0.05 }]);
+  });
+
+  test('updateEffects clamps every numeric field before it reaches an AudioParam', () => {
+    const { engine, ctx } = freshEngine();
+    const delayFeedbackGain = fakeNode();
+    const delayGain = fakeNode();
+    const reverbGain = fakeNode();
+    const eqLowNode = fakeNode();
+    (engine as any).delayFeedbackGain = delayFeedbackGain;
+    (engine as any).delayGain = delayGain;
+    (engine as any).reverbGain = reverbGain;
+    (engine as any).eqLowNode = eqLowNode;
+
+    engine.updateEffects({
+      ...INITIAL_EFFECTS,
+      // A persisted or imported project can carry anything.
+      delayFeedback: 1.4,   // >= 1 is a runaway feedback loop
+      reverbWet: 12,
+      delayWet: -3,
+      eqLow: 400,
+    });
+
+    expect(delayFeedbackGain.gain.targets.at(-1)!.v).toBe(0.95);
+    expect(reverbGain.gain.targets.at(-1)!.v).toBe(1);
+    expect(delayGain.gain.targets.at(-1)!.v).toBe(0);
+    expect(eqLowNode.gain.targets.at(-1)!.v).toBe(24);
+    expect(ctx.currentTime).toBe(10);
+  });
+
+  test('a non-finite persisted value falls back instead of writing NaN to a param', () => {
+    const { engine } = freshEngine();
+    const reverbGain = fakeNode();
+    (engine as any).reverbGain = reverbGain;
+
+    engine.updateEffects({ ...INITIAL_EFFECTS, reverbWet: Number.NaN });
+
+    expect(Number.isFinite(reverbGain.gain.targets.at(-1)!.v)).toBe(true);
+    expect(reverbGain.gain.targets.at(-1)!.v).toBe(0.25);
+  });
+
+  test('bypass still wins over the clamped value', () => {
+    const { engine } = freshEngine();
+    const reverbGain = fakeNode();
+    (engine as any).reverbGain = reverbGain;
+
+    engine.updateEffects({ ...INITIAL_EFFECTS, reverbWet: 12, reverbBypass: true });
+
+    expect(reverbGain.gain.targets.at(-1)!.v).toBe(0);
   });
 });
 

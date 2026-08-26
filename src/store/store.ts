@@ -10,6 +10,7 @@ import { createBassSlice } from './bassSlice';
 import { createSequencerSlice } from './sequencerSlice';
 import { createEffectsSlice } from './effectsSlice';
 import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
+import { EFFECT_LIMITS, clampEffectValue, type EffectNumericKey } from '../audio/effectLimits';
 import type { SynthParams } from '../types';
 import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
@@ -215,16 +216,19 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
       ? sanitized.effects
       : INITIAL_EFFECTS;
 
-  // Task 14: reverbDecay and compressorThreshold are live knobs now, so clamp
-  // persisted values to their ranges. The ternary above can hand back the
-  // SHARED INITIAL_EFFECTS constant — clone before writing so the module
-  // constant is never mutated.
+  // Every numeric MasterEffects field is clamped through the SAME table the
+  // engine uses (audio/effectLimits.ts), so the two can no longer drift — the
+  // old code clamped only reverbDecay and compressorThreshold and let a
+  // persisted delayFeedback of 1.2 through to a runaway feedback loop.
+  // The ternary above can hand back the SHARED INITIAL_EFFECTS constant —
+  // clone before writing so the module constant is never mutated.
   const fxClamped = sanitized.effects as Record<string, unknown> | undefined;
   if (fxClamped && typeof fxClamped === 'object') {
     if (sanitized.effects === INITIAL_EFFECTS) sanitized.effects = { ...INITIAL_EFFECTS };
     const fxWritable = sanitized.effects as Record<string, unknown>;
-    fxWritable.reverbDecay = clampFinite(fxWritable.reverbDecay, 0.5, 6.0, 2.0);
-    fxWritable.compressorThreshold = clampFinite(fxWritable.compressorThreshold, -60, 0, -12);
+    for (const key of Object.keys(EFFECT_LIMITS) as EffectNumericKey[]) {
+      fxWritable[key] = clampEffectValue(key, fxWritable[key]);
+    }
   }
 
   // Fields removed from MasterEffects (Task 4) must not resurrect from old

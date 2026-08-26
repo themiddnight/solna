@@ -58,7 +58,7 @@ drums: osc/noise -> drumBusFilter -> dryGain       |
                               -> eqMid(peaking 1.5kHz Q1)
                                  -> eqHigh(highshelf 4kHz)
                                     -> compressor (-12dB, 4:1, knee 30)
-                                       -> masterGain (0.6 staging ceiling)
+                                       -> masterGain (user master trim, setMasterVolume)
                                           -> limiter (-3dB, 20:1, knee 0)
                                              -> analyser (fftSize 256)
                                                 -> ctx.destination
@@ -70,10 +70,11 @@ Key consequences:
 - EQ → compressor → masterGain → limiter → analyser is **serial and fixed**. The analyser is
   post-limiter, so `getAudioLevel()` reflects final output.
 - Drums bypass delay and distortion entirely — they hit `drumBusFilter → dryGain` only.
-- `masterGain = 0.6` is deliberate headroom; `setMasterVolume()` clamps to 0..1.
+- `masterGain` is the user's master trim only (`setMasterVolume()`, clamped 0..1, seeded at unity). Headroom is the compressor (-12 dB, 4:1) and the limiter (-3 dB, 20:1); there is no separate staging gain.
 - Bypass flags are applied in `updateEffects()` by forcing the wet/gain value to 0, not by
   rewiring. `reverbDecay` change rebuilds the convolver impulse (`buildImpulseResponse`) and is
   guarded by a cached `this.reverbDecay` so the noise tail is not re-randomized every update.
+- Every numeric `MasterEffects` value is clamped by `src/audio/effectLimits.ts` in BOTH `updateEffects()` and `store.sanitizePersistedState`. Add a new effect's range there, not inline.
 
 ## Voices and per-source buses
 
@@ -104,6 +105,7 @@ The grid keeps position across stop/start so mid-playback re-renders don't glitc
 Follow how distortion is wired — it is the smallest complete example.
 
 1. `src/types.ts`: add fields to `MasterEffects` (e.g. `fooWet: number; fooBypass?: boolean`).
+1b. `src/audio/effectLimits.ts`: add the field's `{ min, max, fallback }` to `EFFECT_LIMITS`.
 2. `src/audio/engine.ts`:
    - add private node fields (`fooNode`, `fooGain`);
    - create them in `setupMasterChain()`, set `fooGain.gain.value` to a default, and

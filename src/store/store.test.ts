@@ -649,10 +649,12 @@ describe('persisted payload sanitization', () => {
     expect(s.chordMuted).toBe(true);
     expect(s.bassMuted).toBe(true);
     expect(s.soundKit).toBe('Deep Dub');
-    // Task 14: the live-knob clamps fill the two new fields on a partial
-    // persisted effects object (missing values must never reach the engine
-    // as undefined), so the canonical result carries the clamp fallbacks.
-    expect(s.effects).toEqual({ ...partialEffects, reverbDecay: 2.0, compressorThreshold: -12 });
+    // Task 3: every numeric MasterEffects field is now clamped through the
+    // shared EFFECT_LIMITS table (audio/effectLimits.ts), not just the two
+    // former "live knob" fields — a partial persisted effects object has
+    // every missing field backfilled with its EFFECT_LIMITS fallback (which
+    // equals INITIAL_EFFECTS), so it must never reach the engine as undefined.
+    expect(s.effects).toEqual({ ...INITIAL_EFFECTS, ...partialEffects });
     expect(s.chords).toEqual([{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] }]);
     expect(s.sequencerTracks).toEqual([]);
     expect(s.customSynthPresets).toEqual([]);
@@ -690,9 +692,10 @@ describe('persisted payload sanitization', () => {
         state: {
           bpm: 120,
           masterVolume: 0.85,
-          // Both values out of range: -70 sits below the [-60, 0] floor (the
-          // brief's -0.5 seed is already inside the range, so it could not
-          // demonstrate the clamp).
+          // Both values out of range: -70 sits below the [-60, 0] floor, and
+          // 99 sits above reverbDecay's [0.1, 10] ceiling (Task 3: the range
+          // moved from [0.5, 6.0] once decay became a post-Task-4 duration in
+          // seconds rather than a curve exponent).
           effects: { ...INITIAL_EFFECTS, reverbDecay: 99, compressorThreshold: -70 },
         },
       })
@@ -700,7 +703,7 @@ describe('persisted payload sanitization', () => {
 
     await useAppStore.persist.rehydrate();
     const fx = useAppStore.getState().effects;
-    expect(fx.reverbDecay).toBe(6.0);
+    expect(fx.reverbDecay).toBe(10);
     expect(fx.compressorThreshold).toBe(-60);
   });
 });

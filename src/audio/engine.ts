@@ -2,6 +2,7 @@ import { SynthParams, MasterEffects, FilterType } from '../types';
 import { noteFrequency, clampBpm, stepDurationSec, STEPS_PER_BAR } from '../utils/musicTheory';
 import { DEFAULT_VELOCITY } from './constants';
 import { mergeDrumKit, type DrumKit } from './drumKits';
+import { clampEffects } from './effectLimits';
 
 type SynthVoice = {
   oscs: OscillatorNode[];
@@ -229,11 +230,13 @@ class AudioEngine {
     // drop them — they are lazily recreated against the new context on demand.
     this.sourceBuses.clear();
 
-    // Master Output & Analyser. 0.6 = deliberate −4.4 dB staging ceiling so
-    // the densest voicings peak around −6 dBFS before the compressor instead
-    // of clipping the destination.
+    // Master output & analyser. masterGain is the USER's master trim and
+    // nothing else: engineSync subscribes masterVolume with fireImmediately,
+    // so it is overwritten before the first frame — a "staging ceiling" seeded
+    // here would be a comment describing a value that never applies. Headroom
+    // is owned by the compressor (-12 dB, 4:1) and the limiter (-3 dB, 20:1).
     this.masterGain = this.ctx.createGain();
-    this.masterGain.gain.value = 0.6;
+    this.masterGain.gain.value = 1.0;
 
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 256;
@@ -1108,8 +1111,12 @@ class AudioEngine {
     return noise;
   }
 
-  updateEffects(fx: MasterEffects): void {
+  updateEffects(raw: MasterEffects): void {
     if (!this.ctx) return;
+    // Clamp before anything touches an AudioParam. A persisted or imported
+    // project is untrusted input: delayFeedback >= 1 is a runaway loop and a
+    // non-finite value writes NaN into the graph, which silences it permanently.
+    const fx = clampEffects(raw);
     const reverbWet = fx.reverbBypass ? 0 : fx.reverbWet;
     const delayWet = fx.delayBypass ? 0 : fx.delayWet;
     const delayFeedback = fx.delayBypass ? 0 : fx.delayFeedback;
