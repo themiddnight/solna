@@ -94,6 +94,11 @@ Key consequences:
   `setupMasterChain()` clears `sourceBuses` because old buses point at dead nodes.
 - `stopSource()` kills everything including future-scheduled hits; `releaseSoundingVoices()`
   leaves future hits alone (used for arp key-release). Pick deliberately.
+- Library auditions (`src/audio/playback/presetPreview.ts`) run on their own `'preview'` source
+  bus, not `'synth'`/`'chord'`/`'bass'` — deliberately, so a preview's disposer can call
+  `stopSource('preview', …)` without also cutting the user's own held notes. One consequence:
+  previews are NOT affected by the synth/chord/bass bus mute or gain (`setSourceMuted`/
+  `setSourceGain`) — muting the chord bus does not silence a chord-progression audition.
 - `updateSynthParams(params, source?)` re-shapes only voices that are already sounding; voices
   scheduled in the future and voices already in their release tail are skipped on purpose —
   re-targeting them cancels their scheduled ramps and makes them silent.

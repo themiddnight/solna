@@ -177,14 +177,40 @@ describe('startPatternLoop grid alignment', () => {
 
       // Scheduling at 11 while the clock reads 40 would fire the whole bar at once.
       expect(plays.at(-1)!).toBeGreaterThanOrEqual(30);
+      expect(plays.at(-1)!).toBe(40);
 
       // Re-firing the very next due timer (simulating the runtime catching up
       // on an overdue callback) must land on the NEXT bar, not replay the same
       // instant: a fix that re-anchors nextTime but keeps calling getNow() for
       // playback (rather than the corrected nextTime) would fire 40 twice.
-      const stalledPlay = plays.at(-1)!;
       timers.fire();
-      expect(plays.at(-1)!).not.toBe(stalledPlay);
+      expect(plays.at(-1)!).toBe(41);
+      stop();
+    } finally {
+      timers.restore();
+    }
+  });
+
+  test('a timer late by most (but not all) of a bar still re-anchors, not just a whole-bar stall', () => {
+    const timers = withFakeTimers();
+    try {
+      let now = 10;
+      const plays: number[] = [];
+      // 2 s bar: the first tick plays at 10 and arms nextTime at 12.
+      const stop = startPatternLoop((time) => plays.push(time), 2.0, () => now);
+
+      // The timer meant to fire at (about) 12 actually fires 1.9 s late, at
+      // 13.9 — 0.95 of the bar, comfortably under a WHOLE bar of lateness. A
+      // fix that only re-anchors past a full-bar threshold would leave
+      // nextTime stuck at 12 here and play() would run with the clock already
+      // reading 13.9: 15 of the bar's 16 steps replayed as one burst on the
+      // NEXT tick. The correct fix re-anchors on a small fixed slop instead,
+      // so this tick plays at (about) the real current time, not the stale
+      // grid position.
+      now += 3.9;
+      timers.fire();
+
+      expect(plays.at(-1)!).toBeCloseTo(13.9, 9);
       stop();
     } finally {
       timers.restore();

@@ -56,9 +56,19 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
       // Read release/controlTarget off the ref, NOT from props: having them in
       // the dependency array made every Release-knob pointer move tear the
       // subscription down and run this cleanup, cutting every held arp note
-      // mid-drag. Reading here (at cleanup time, not effect-setup time) also
-      // means switching controlTarget mid-hold releases the target the
-      // subscription was ACTUALLY driving, not a stale one captured at mount.
+      // mid-drag. Reading here at cleanup time (rather than capturing them at
+      // effect-setup time) matches the clock callback above, which also
+      // re-reads controlTarget fresh from the ref on every tick — so both
+      // agree on "whichever target is current as of the last tick that ran".
+      //
+      // Known limitation: if controlTarget changes AFTER the last tick but
+      // BEFORE this cleanup runs (no clock tick in between), the voices still
+      // sounding were triggered under the PRE-switch target, but this reads
+      // the POST-switch one and releases the wrong bus — the old target's
+      // voices are never released here. Unreachable today because the only
+      // caller (SynthView) pins controlTarget to a constant
+      // (KEYBOARD_AUDITION_TARGET) for the lifetime of the hook; a future
+      // caller that varies controlTarget mid-hold would need to close this gap.
       if (audioEngine.getAudioContext()) {
         const { controlTarget, params } = stateRef.current;
         audioEngine.releaseSoundingVoices(controlTarget, params.release);

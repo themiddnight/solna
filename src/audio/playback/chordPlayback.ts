@@ -259,6 +259,14 @@ export function startPatternLoop(
   getNow: () => number,
 ): () => void {
   let timerId: ReturnType<typeof setTimeout> | undefined;
+  // Matches the engine's own scheduling lookahead (AudioEngine.CLOCK_LOOKAHEAD
+  // in engine.ts, currently 0.1s) — a small, FIXED slop, not a fraction of the
+  // bar. A bar-scaled threshold (e.g. "> barSeconds") was tried first and is
+  // wrong: a timer merely late by most of a bar (1.9s of a 2s bar) would still
+  // clear that check without re-anchoring, so play() would run with a stale
+  // nextTime while the clock has already moved nearly a whole bar past it —
+  // collapsing most of the bar's steps into a single burst on the next tick.
+  const RESYNC_SLOP_SEC = 0.1;
   // The next bar's position on the AUDIO clock. Re-arming the timer from the
   // wall clock alone lets every late callback shift the loop permanently off
   // the grid; correcting the sleep against this keeps it anchored.
@@ -266,14 +274,18 @@ export function startPatternLoop(
 
   const tick = () => {
     const now = getNow();
-    // Ordinary timer slop (a few ms/tens of ms late) must NOT nudge nextTime
-    // forward — that would re-introduce the exact drift this fix removes.
-    // Only a stall of a whole bar or more (backgrounded tab) re-anchors to
-    // "now"; anything less keeps playing on the original grid position.
-    if (now - nextTime > barSeconds) nextTime = now;
+    // Ordinary timer slop (a few/tens of ms late, within RESYNC_SLOP_SEC)
+    // must NOT nudge nextTime forward — that would re-introduce the exact
+    // drift this fix removes. Only a stall past the slop (backgrounded tab,
+    // GC pause) re-anchors to "now"; anything smaller keeps playing on the
+    // original grid position.
+    if (now - nextTime > RESYNC_SLOP_SEC) nextTime = now;
     play(nextTime);
     nextTime += barSeconds;
-    timerId = globalThis.setTimeout(tick, Math.max(0, (nextTime - getNow()) * 1000));
+    // Arm roughly one slop EARLY relative to nextTime, so ordinary timer
+    // jitter still fires with nextTime ahead of the real clock — play() must
+    // never be handed a time the audio clock has already passed.
+    timerId = globalThis.setTimeout(tick, Math.max(0, (nextTime - getNow() - RESYNC_SLOP_SEC) * 1000));
   };
   tick();
 

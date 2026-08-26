@@ -20,8 +20,27 @@ export type PreviewHandle = () => void;
 
 const NOOP: PreviewHandle = () => undefined;
 
-function stopPreview(): void {
+function stopAllPreviews(): void {
   audioEngine.stopSource(PREVIEW_SOURCE, 0.05);
+}
+
+// All three preview functions share one 'preview' bus, so a bare
+// `stopAllPreviews` handle would let ANY caller's disposer cut every other
+// audition in flight — e.g. React unmounting a stale ChordPresetLibrary
+// disposer while SynthPresetLibrary's audition is still ringing. Each call to
+// beginPreview() bumps the generation and stops whatever came before it (the
+// existing "starting a new preview cuts the previous one" behaviour); the
+// returned handle only acts if IT is still the most recent preview, so an
+// old, already-superseded handle is a no-op instead of cutting a newer one.
+let currentGeneration = 0;
+
+function beginPreview(): PreviewHandle {
+  currentGeneration += 1;
+  const generation = currentGeneration;
+  stopAllPreviews();
+  return () => {
+    if (generation === currentGeneration) stopAllPreviews();
+  };
 }
 
 /**
@@ -37,7 +56,7 @@ export function previewChordProgression(chords: ChordItem[], params: SynthParams
   if (!ctx) return NOOP;
 
   const chordDuration = 0.5;
-  stopPreview();
+  const handle = beginPreview();
   chords.forEach((chord, chordIdx) => {
     const start = ctx.currentTime + chordIdx * chordDuration;
     for (const n of chord.notes) {
@@ -45,7 +64,7 @@ export function previewChordProgression(chords: ChordItem[], params: SynthParams
       audioEngine.triggerSynthNoteOff(n, 0.3, start + chordDuration * 0.85, PREVIEW_SOURCE);
     }
   });
-  return stopPreview;
+  return handle;
 }
 
 /** Synth preset audition: C4 with the preset merged over the current params. */
@@ -63,11 +82,11 @@ export function previewSynthPreset(
     ...preset.params,
     preset: preset.name,
   };
-  stopPreview();
+  const handle = beginPreview();
   const start = ctx.currentTime;
   audioEngine.triggerSynthNoteOn('C4', testParams, 0.85, start, PREVIEW_SOURCE);
   audioEngine.triggerSynthNoteOff('C4', testParams.release || 0.4, start + 0.45, PREVIEW_SOURCE);
-  return stopPreview;
+  return handle;
 }
 
 /** Sequencer track audition (synth/bass rows): one note with a 0.5 s gate. */
@@ -80,9 +99,9 @@ export function previewSequencerNote(
   const ctx = audioEngine.getAudioContext();
   if (!ctx) return NOOP;
 
-  stopPreview();
+  const handle = beginPreview();
   const start = ctx.currentTime;
   audioEngine.triggerSynthNoteOn(note, params, velocity, start, PREVIEW_SOURCE);
   audioEngine.triggerSynthNoteOff(note, 0.3, start + 0.5, PREVIEW_SOURCE);
-  return stopPreview;
+  return handle;
 }
