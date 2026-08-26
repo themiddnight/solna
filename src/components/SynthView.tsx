@@ -46,8 +46,10 @@ import {
   getScaleLockedKeyboardNotes,
   getScaleLockedKeyboardNotesFlat,
   getChromaticKeyboardNotes,
+  getChordKeyboardRows,
   ScaleLockedKeyboard,
   ChromaticKeyboard,
+  ChordKeyboard,
 } from "./ui/Keyboard";
 
 // Re-exported for scripts/check-key-bindings.ts, which asserts that the synth
@@ -78,6 +80,27 @@ const TARGET_STYLES: Record<
   },
 };
 
+// The interactive keyboard always plays the main synth, regardless of which
+// destination the "Target" selector is currently editing — pinning it here
+// (instead of routing through `controlTarget`) keeps every audio call site
+// (note-on, note-off, arp playback, voice release) agreeing on one engine, so
+// a mode/target switch can never strand voices on an engine nothing points at
+// anymore.
+const KEYBOARD_AUDITION_TARGET: SynthControlTarget = "synth";
+
+// Decide which notes must be force-released when the keyboard mode changes.
+// Always releases from the snapshot of what is actually sounding right now
+// (activeNotes) rather than recomputing under the new mode/key/scale/octave —
+// a mode switch mid-hold can make a held key code mean a completely different
+// note (or nothing) under the new mode, so recomputing would miss voices and
+// leave them hanging forever. Exported so this decision is testable as pure
+// logic, without rendering.
+export function notesToReleaseOnKeyboardModeChange(
+  currentlyHeldNotes: Iterable<string>,
+): string[] {
+  return Array.from(new Set(currentlyHeldNotes));
+}
+
 export const SynthView = () => {
   // Synth slice state + setters (named after the old props so the rest of the
   // component body is unchanged).
@@ -94,14 +117,23 @@ export const SynthView = () => {
   const bpm = useAppStore((s) => s.bpm);
 
   // Route the control panel (knobs, preset selects) to the selected
-  // destination; the keyboard always plays the main synth (see handleNoteOn)
-  const channel = resolveSynthControlChannel(controlTarget, {
+  // destination; the keyboard always plays the main synth (see handleNoteOn).
+  const channels = {
     synth: { params: synthParams, setParams: onChangeSynthParams },
     chord: { params: chordSynthParams, setParams: onChangeChordSynthParams },
     bass: { params: bassSynthParams, setParams: onChangeBassSynthParams },
-  });
+  };
+  const channel = resolveSynthControlChannel(controlTarget, channels);
   const params = channel.params;
   const onChangeParams = channel.setParams;
+
+  // The keyboard's own channel is always the main synth, independent of the
+  // panel's target selector above (see KEYBOARD_AUDITION_TARGET).
+  const keyboardChannel = resolveSynthControlChannel(
+    KEYBOARD_AUDITION_TARGET,
+    channels,
+  );
+  const keyboardParams = keyboardChannel.params;
 
   const tintClass = TARGET_STYLES[controlTarget].tint;
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
@@ -118,9 +150,12 @@ export const SynthView = () => {
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [quickSaveName, setQuickSaveName] = useState<string>("");
   const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [keyboardMode, setKeyboardMode] = useState<
-    "chromatic" | "scale-locked"
-  >("scale-locked");
+  const keyboardMode = useAppStore((s) => s.keyboardMode);
+  const setKeyboardMode = useAppStore((s) => s.setKeyboardMode);
+  // Chord mode: maps a held KeyboardEvent.code to the exact notes it played,
+  // so key-up releases those notes even if key/scale/octave changed while
+  // the key was held — never recompute the chord at release time.
+  const chordKeyNotesRef = useRef<Map<string, string[]>>(new Map());
   // Keyboard display octave — independent from synth pitch octave (params.octave)
   const [keyboardOctave, setKeyboardOctave] = useState<number>(0);
 
@@ -201,28 +236,30 @@ export const SynthView = () => {
   };
 
   // Keep latest params and activeNotes in a ref so the clock listener reads live state
-  // without re-subscribing or stopping voices on every keystroke/parameter tweak
+  // without re-subscribing or stopping voices on every keystroke/parameter tweak.
+  // params/controlTarget here are always the keyboard's own (main synth) channel,
+  // never the panel's currently-edited target — see KEYBOARD_AUDITION_TARGET.
   const arpStateRef = useRef({
     activeNotes,
-    params,
-    controlTarget,
+    params: keyboardParams,
+    controlTarget: KEYBOARD_AUDITION_TARGET,
     bpm,
   });
   useEffect(() => {
     arpStateRef.current = {
       activeNotes,
-      params,
-      controlTarget,
+      params: keyboardParams,
+      controlTarget: KEYBOARD_AUDITION_TARGET,
       bpm,
     };
   });
 
-  // The keyboard auditions the currently selected control target (Synth, Chord, or Bass)
-  // so the sound designer can hear the immediate adjustments.
+  // The keyboard always auditions the main synth (KEYBOARD_AUDITION_TARGET),
+  // regardless of which destination the Target selector is currently editing.
   const handleNoteOn = useCallback(
     (note: string) => {
       initSynthPlayback();
-      if (!params.arpActive) {
+      if (!keyboardParams.arpActive) {
         // Equal-power polyphony: a new note lowers every held voice so the
         // total level stays flat as keys are added. The ref mirrors
         // activeNotes synchronously so rapid presses see each other.
@@ -235,30 +272,30 @@ export const SynthView = () => {
         }
         synthPlaybackNoteOn(
           note,
-          params,
+          keyboardParams,
           1.0,
           undefined,
-          controlTarget,
+          KEYBOARD_AUDITION_TARGET,
           scale,
         );
       }
       setActiveNotes((prev) => new Set(prev).add(note));
     },
-    [params.arpActive, params, controlTarget],
+    [keyboardParams.arpActive, keyboardParams],
   );
 
   const handleNoteOff = useCallback(
     (note: string) => {
       const held = arpStateRef.current.activeNotes;
       const wasHeld = held.delete(note);
-      if (wasHeld && !params.arpActive) {
+      if (wasHeld && !keyboardParams.arpActive) {
         // Release first (marks the voice so re-scaling skips it), then let
         // the remaining held voices rise back toward full level.
         synthPlaybackNoteOff(
           note,
-          params.release,
+          keyboardParams.release,
           undefined,
-          controlTarget,
+          KEYBOARD_AUDITION_TARGET,
         );
         applySynthPlaybackVelocityScale(equalPowerVelocityScale(held.size));
       }
@@ -268,24 +305,54 @@ export const SynthView = () => {
         return next;
       });
     },
-    [params.arpActive, params.release, controlTarget],
+    [keyboardParams.arpActive, keyboardParams.release],
   );
 
   // Arpeggiator playback: parameterized clock subscriber (the 4 rate branches
   // collapsed into computeArpTriggers, proven equivalent by the exhaustive
   // sweep in src/audio/playback/arpPlayback.test.ts)
-  useArpPlayback(arpStateRef, params.arpActive ?? false, params.release, controlTarget);
+  useArpPlayback(
+    arpStateRef,
+    keyboardParams.arpActive ?? false,
+    keyboardParams.release,
+    KEYBOARD_AUDITION_TARGET,
+  );
 
-  // Silence lingering arp voices when all keys are released in arp mode
+  // Kept fresh every render so the mode-change release effect below always
+  // calls the latest handleNoteOff without needing it in its dependency array
+  // (which would fire the release on every params/controlTarget change, not
+  // just on an actual mode switch).
+  const handleNoteOffRef = useRef(handleNoteOff);
+  useEffect(() => {
+    handleNoteOffRef.current = handleNoteOff;
+  });
+
+  // Bug fix: release every note still sounding whenever the keyboard mode
+  // changes (or this view unmounts), and clear the chord key-tracking ref.
+  // Without this, a mode switch while a key/button is held leaves its voices
+  // hanging forever — the key-up/pointer-up handler that would have released
+  // them now branches on the *new* mode and finds nothing to release.
+  useEffect(() => {
+    return () => {
+      const held = notesToReleaseOnKeyboardModeChange(
+        arpStateRef.current.activeNotes,
+      );
+      held.forEach((note) => handleNoteOffRef.current(note));
+      chordKeyNotesRef.current.clear();
+    };
+  }, [keyboardMode]);
+
+  // Silence lingering arp voices when all keys are released in arp mode.
+  // Always the keyboard's own (main synth) channel — see KEYBOARD_AUDITION_TARGET.
   useEffect(() => {
     if (
-      params.arpActive &&
+      keyboardParams.arpActive &&
       activeNotes.size === 0 &&
       hasSynthPlaybackContext()
     ) {
-      releaseSynthPlaybackVoices(controlTarget, params.release);
+      releaseSynthPlaybackVoices(KEYBOARD_AUDITION_TARGET, keyboardParams.release);
     }
-  }, [params.arpActive, activeNotes.size, controlTarget, params.release]);
+  }, [keyboardParams.arpActive, activeNotes.size, keyboardParams.release]);
 
   // QWERTY Computer Keyboard mapping — uses keyboardOctave, NOT params.octave
   useEffect(() => {
@@ -298,6 +365,17 @@ export const SynthView = () => {
       }
       if (e.code === "Equal") {
         setKeyboardOctave((o) => clampKeyboardOctave(o + 1));
+        return;
+      }
+      if (keyboardMode === "chord") {
+        const rows = getChordKeyboardRows(scaleRoot, scaleType, keyboardOctave);
+        const btn = [...rows.triadRow, ...rows.melodyRow].find(
+          (b) => b.key === e.code,
+        );
+        if (btn) {
+          chordKeyNotesRef.current.set(e.code, btn.notes);
+          btn.notes.forEach((n) => handleNoteOn(n));
+        }
         return;
       }
       const notesList =
@@ -316,6 +394,14 @@ export const SynthView = () => {
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;
+      if (keyboardMode === "chord") {
+        const held = chordKeyNotesRef.current.get(e.code);
+        if (held) {
+          chordKeyNotesRef.current.delete(e.code);
+          held.forEach((n) => handleNoteOff(n));
+        }
+        return;
+      }
       const notesList =
         keyboardMode === "scale-locked"
           ? getScaleLockedKeyboardNotesFlat(
@@ -1245,32 +1331,49 @@ export const SynthView = () => {
                     ? "[--badge-color:var(--color-module-chord)] [--badge-fg:var(--color-module-chord-content)]"
                     : "[--badge-color:var(--color-module-bass)] [--badge-fg:var(--color-module-bass-content)]"
               }`}
-              title="Current audition sound engine"
+              title="The keyboard always plays the Main Synth; this tint only shows which panel Target is being edited"
             >
-              Audition:{" "}
-              {controlTarget === "synth"
-                ? "Main Synth"
-                : controlTarget === "chord"
-                  ? "Chord Synth"
-                  : "Bass Synth"}
+              Keyboard plays: Main Synth
             </span>
-            <button
-              onClick={() =>
-                setKeyboardMode(
-                  keyboardMode === "chromatic" ? "scale-locked" : "chromatic",
-                )
-              }
-              className={`btn btn-xs text-[11px] font-semibold ${
-                keyboardMode === "scale-locked"
-                  ? "btn-primary"
-                  : "btn-ghost border border-base-300 text-base-content/60"
-              }`}
-              title="Toggle Scale Locked Mode (cuts notes outside active scale)"
+            <div
+              className="join"
+              role="radiogroup"
+              aria-label="Keyboard input mode"
             >
-              {keyboardMode === "scale-locked"
-                ? `Scale Locked (${scaleRoot} ${scaleType})`
-                : "Chromatic Mode"}
-            </button>
+              {(["chromatic", "scale-locked", "chord"] as const).map((m) => (
+                <button
+                  key={m}
+                  id={`btn-keyboard-mode-${m}`}
+                  onClick={() => setKeyboardMode(m)}
+                  role="radio"
+                  aria-checked={keyboardMode === m}
+                  className={`btn btn-xs join-item text-[11px] font-semibold ${
+                    keyboardMode === m
+                      ? "btn-primary"
+                      : "btn-ghost border border-base-300 text-base-content/60"
+                  }`}
+                  title={
+                    m === "chromatic"
+                      ? "Chromatic Mode: every semitone, ignores key/scale"
+                      : m === "scale-locked"
+                        ? "Scale Locked Mode: cuts notes outside the active scale"
+                        : "Chord Mode: diatonic triads per scale degree, plus a melody zone"
+                  }
+                >
+                  {m === "chromatic"
+                    ? "Chromatic"
+                    : m === "scale-locked"
+                      ? "Scale"
+                      : "Chord"}
+                </button>
+              ))}
+            </div>
+            <span
+              className="badge badge-sm badge-outline text-[10px] font-semibold badge-base-content/60"
+              title="Active key and scale"
+            >
+              {`${scaleRoot} ${scaleType}`}
+            </span>
           </div>
 
           {/* Keyboard Octave Pagination — independent from synth pitch octave */}
@@ -1312,10 +1415,19 @@ export const SynthView = () => {
         {/* Keyboard Keys Layout — uses keyboardOctave for display range */}
         <div
           className={`flex justify-center relative h-45 select-none bg-base-300 p-2 rounded-box border border-base-300 overflow-x-auto ${
-            keyboardMode === "scale-locked" ? "flex-col gap-1.5" : ""
+            keyboardMode === "scale-locked" || keyboardMode === "chord"
+              ? "flex-col gap-1.5"
+              : ""
           }`}
         >
-          {keyboardMode === "scale-locked" ? (
+          {keyboardMode === "chord" ? (
+            <ChordKeyboard
+              rows={getChordKeyboardRows(scaleRoot, scaleType, keyboardOctave)}
+              activeNotes={activeNotes}
+              onNoteOn={handleNoteOn}
+              onNoteOff={handleNoteOff}
+            />
+          ) : keyboardMode === "scale-locked" ? (
             <ScaleLockedKeyboard
               rows={getScaleLockedKeyboardNotes(
                 scaleRoot,

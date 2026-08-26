@@ -175,6 +175,7 @@ describe('store defaults', () => {
     expect(s.controlTarget).toBe('synth');
     expect(s.activeTab).toBe('synth');
     expect(s.isProjectModalOpen).toBe(false);
+    expect(s.keyboardMode).toBe('scale-locked');
     expect(s.synthParams).toEqual(INITIAL_SYNTH_PARAMS);
     expect(s.chordSynthParams).toEqual(INITIAL_SYNTH_PARAMS);
     expect(s.bassSynthParams).toEqual({ ...INITIAL_SYNTH_PARAMS, ...FACTORY_BASS_PRESETS[0].params });
@@ -293,6 +294,19 @@ describe('setChordOctave', () => {
   });
 });
 
+describe('setKeyboardMode', () => {
+  test('defaults to scale-locked and the setter updates it', async () => {
+    const { useAppStore } = await getStore();
+    expect(useAppStore.getState().keyboardMode).toBe('scale-locked');
+
+    useAppStore.getState().setKeyboardMode('chromatic');
+    expect(useAppStore.getState().keyboardMode).toBe('chromatic');
+
+    useAppStore.getState().setKeyboardMode('chord');
+    expect(useAppStore.getState().keyboardMode).toBe('chord');
+  });
+});
+
 describe('chords initial octave', () => {
   // Unit-test the slice factory directly: the shared singleton store is
   // mutated by earlier tests (e.g. setChordOctave(6)), so its live state
@@ -381,6 +395,7 @@ describe('persist partialize', () => {
     const excludedKeys = [
       'activeTab',
       'isProjectModalOpen',
+      'keyboardMode',
       'sequencerPlayer',
       'chordsPlayer',
       'setBpm',
@@ -399,6 +414,7 @@ describe('persist partialize', () => {
       'setActiveTab',
       'openProjectsModal',
       'closeProjectsModal',
+      'setKeyboardMode',
       'saveCustomPreset',
       'deleteCustomPreset',
       'saveCustomChordProgression',

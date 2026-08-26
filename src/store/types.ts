@@ -6,6 +6,7 @@ import type {
   ViewMode,
   CustomChordProgressionItem,
   FilterType,
+  KeyboardMode,
 } from '../types';
 import type { SynthControlTarget } from '../utils/synthControl';
 import type { SynthPresetItem, SynthPresetCategory } from '../audio/synthPresets';
@@ -107,9 +108,14 @@ export interface UiSlice {
   // All ui state is transient (not persisted); the active tab comes from the URL query.
   activeTab: ViewMode;
   isProjectModalOpen: boolean;
+  // The synth keyboard's input mode. Transient by design: an input
+  // preference, not composition data, so it does not travel with saved
+  // projects (see partializeAppState in store.ts).
+  keyboardMode: KeyboardMode;
   setActiveTab: (tab: ViewMode) => void;
   openProjectsModal: () => void;
   closeProjectsModal: () => void;
+  setKeyboardMode: (mode: KeyboardMode) => void;
 }
 
 export interface PresetsSlice {

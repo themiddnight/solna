@@ -15,6 +15,9 @@ export type ViewMode =
 
 export type FilterType = 'lowpass' | 'highpass' | 'bandpass';
 
+/** The synth keyboard's input mode: how key presses are mapped to notes. */
+export type KeyboardMode = 'chromatic' | 'scale-locked' | 'chord';
+
 export interface SynthParams {
   oscType: 'sawtooth' | 'square' | 'sine' | 'triangle';
   subOscVolume: number;
