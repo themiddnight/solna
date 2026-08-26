@@ -4,7 +4,6 @@ import {
   Grid,
   FolderOpen,
   Music,
-  Radio,
   Sun,
   Moon,
   type LucideIcon,
@@ -15,6 +14,7 @@ import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/st
 import { useAppStore } from "../store/store";
 import type { PlayerModule } from "../store/types";
 import { PlayerTransport } from "./ui/PlayerTransport";
+import { Wordmark } from "./ui/Wordmark";
 
 interface NavTab {
   view: ViewMode;
@@ -148,17 +148,10 @@ export const Header: React.FC = React.memo(() => {
     <header className="navbar min-h-0 bg-base-100 border-b border-base-300 px-3 py-2 flex items-center justify-between gap-2 text-sm select-none sticky top-0 z-40">
       {/* Brand & Project Info */}
       <div className="flex items-center gap-2.5 shrink-0">
-        <div className="w-7 h-7 rounded-selector bg-linear-to-tr from-primary to-secondary flex items-center justify-center shadow-md shadow-primary/20">
-          <Radio className="w-3.5 h-3.5 text-primary-content" />
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="font-extrabold text-sm tracking-tight text-base-content">
-            Solna
-          </span>
-          <span className="hidden sm:inline-block text-[11px] text-base-content/60 font-medium truncate max-w-30 md:max-w-40">
-            · {projectTitle}
-          </span>
-        </div>
+        <Wordmark />
+        <span className="hidden sm:inline-block text-[11px] text-base-content/60 font-medium truncate max-w-30 md:max-w-40">
+          · {projectTitle}
+        </span>
       </div>
 
       {/* Primary navigation: three join groups of view-switch buttons. */}
