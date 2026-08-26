@@ -139,7 +139,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
   const chipBaseClass =
     'badge badge-sm gap-1 whitespace-nowrap cursor-pointer transition-colors';
   const countClass = (selected: boolean) =>
-    `ml-1 px-1.5 py-0.5 rounded-full font-mono text-[10px] ${
+    `ml-1 px-1.5 py-0.5 rounded-full tabular-nums text-[10px] ${
       selected ? 'bg-primary-content/20' : 'bg-base-300 text-base-content/60'
     }`;
   const closeBtnClass = 'btn btn-xs btn-ghost btn-circle';
@@ -177,7 +177,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                 <h3 className="font-bold text-sm text-base-content flex items-center gap-2">
                   {title}
                   {headerBadge && (
-                    <span className="badge badge-sm badge-primary badge-outline font-mono">
+                    <span className="badge badge-sm badge-primary badge-outline tabular-nums">
                       {headerBadge}
                     </span>
                   )}
@@ -433,7 +433,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                     placeholder="e.g. I – V – vi – IV"
                     value={draft.roman ?? ''}
                     onChange={(e) => setDraft({ ...draft, roman: e.target.value })}
-                    className="input input-sm input-bordered w-full text-xs font-mono"
+                    className="input input-sm input-bordered w-full text-xs"
                   />
                 </div>
               )}
@@ -453,7 +453,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
 
               {save.chordsSummary && (
                 <div className="p-2.5 rounded-box bg-base-200 border border-base-300 text-[11px] text-base-content/60">
-                  <span className="font-mono text-primary block mb-0.5">
+                  <span className="tabular-nums text-primary block mb-0.5">
                     Chords ({save.chordsSummary.count}):
                   </span>
                   <span className="font-mono font-semibold text-base-content">

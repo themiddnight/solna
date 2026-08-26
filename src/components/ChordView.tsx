@@ -503,7 +503,7 @@ export const ChordView: React.FC = React.memo(() => {
           >
             <Library className="w-3.5 h-3.5" />
             <span>Library</span>
-            <span className="badge badge-sm badge-outline font-mono py-0.5 hidden sm:inline [--badge-color:currentColor]">
+            <span className="badge badge-sm badge-outline tabular-nums py-0.5 hidden sm:inline [--badge-color:currentColor]">
               {totalProgressionsCount}
             </span>
           </button>
@@ -544,7 +544,7 @@ export const ChordView: React.FC = React.memo(() => {
                 title="Automatically reharmonized to active scale"
               >
                 <Sparkles className="w-3 h-3 text-secondary" />
-                <span className="font-mono">
+                <span>
                   Auto-Reharmonized to {scaleRoot} {scaleType}
                 </span>
               </span>
@@ -660,7 +660,7 @@ export const ChordView: React.FC = React.memo(() => {
           <div>
             <label className={LABEL_BASE}>Chord Feel</label>
             <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
-              <span className="text-[9px] text-base-content/60 font-mono shrink-0">
+              <span className="text-[9px] text-base-content/60 shrink-0">
                 tight
               </span>
               <Slider
@@ -673,7 +673,7 @@ export const ChordView: React.FC = React.memo(() => {
                 className="range range-xs w-20 text-module-chord [--range-thumb:var(--color-module-chord-content)]"
                 title="Chord note length: tight (short holds) ↔ loose (long holds)"
               />
-              <span className="text-[9px] text-base-content/60 font-mono shrink-0">
+              <span className="text-[9px] text-base-content/60 shrink-0">
                 loose
               </span>
             </div>
@@ -1023,7 +1023,7 @@ export const ChordView: React.FC = React.memo(() => {
           <div>
             <label className={LABEL_BASE}>Bass Feel</label>
             <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
-              <span className="text-[9px] text-base-content/60 font-mono shrink-0">
+              <span className="text-[9px] text-base-content/60 shrink-0">
                 tight
               </span>
               <Slider
@@ -1036,7 +1036,7 @@ export const ChordView: React.FC = React.memo(() => {
                 className="range range-xs w-20 text-module-bass [--range-thumb:var(--color-module-bass-content)]"
                 title="Bass note length: tight (short holds) ↔ loose (long holds)"
               />
-              <span className="text-[9px] text-base-content/60 font-mono shrink-0">
+              <span className="text-[9px] text-base-content/60 shrink-0">
                 loose
               </span>
             </div>

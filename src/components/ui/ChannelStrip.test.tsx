@@ -17,7 +17,13 @@ describe('ChannelStrip tokens', () => {
     expect(html).toContain('text-base-content/50');
     expect(html).toContain('bg-base-200');
     expect(html).toContain('border-base-300');
-    expect(html).toContain('text-accent');
+    // The readout inherits its colour rather than carrying a tint of its own
+    // (a1b4ac2 dropped the hard-coded text-accent), so what is asserted here is
+    // its base-token geometry, not a colour.
+    expect(html).toContain('font-mono min-w-8 text-right');
+    // The icon is the one tinted element, and it wears whatever accentClass
+    // the caller passed — text-primary above, never a hard-coded accent.
+    expect(html).toContain('text-primary');
     expect(html).not.toContain('#0B0D19');
     expect(html).not.toContain('#171B36');
     expect(html).not.toContain('#2D355A');

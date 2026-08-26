@@ -199,7 +199,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
       header: (
         <div className="flex items-center justify-between px-1 pt-2 pb-1 border-b border-base-300">
           <div className="flex items-center gap-2">
-            <span className={`${group.badgeClass} badge-sm font-mono font-semibold`}>
+            <span className={`${group.badgeClass} badge-sm font-semibold`}>
               {group.category}
             </span>
             <span className="text-xs font-bold text-base-content">{group.label}</span>
@@ -273,7 +273,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
                 </span>
               )}
               <span
-                className={`${meta.badgeClass} badge-xs py-0.5 font-mono`}
+                className={`${meta.badgeClass} badge-xs py-0.5`}
               >
                 {preset.category}
               </span>
@@ -286,7 +286,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
             )}
 
             {/* Sound Badge Attributes */}
-            <div className="flex items-center gap-1.5 text-[10px] text-base-content/60 font-mono">
+            <div className="flex items-center gap-1.5 text-[10px] text-base-content/60">
               <span className="badge badge-sm badge-ghost font-mono gap-1">
                 <Activity className="w-2.5 h-2.5 text-primary" />
                 {oscType}

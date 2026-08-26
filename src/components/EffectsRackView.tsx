@@ -48,7 +48,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
               <button
                 id="btn-bypass-reverb"
                 onClick={() => updateFx({ reverbBypass: !effects.reverbBypass })}
-                className={`btn btn-xs gap-1 text-[10px] font-mono font-bold ${
+                className={`btn btn-xs gap-1 text-[10px] font-bold ${
                   effects.reverbBypass ? "btn-ghost" : "btn-accent btn-active"
                 }`}
                 title="Toggle Reverb Bypass"
@@ -104,7 +104,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
               <button
                 id="btn-bypass-delay"
                 onClick={() => updateFx({ delayBypass: !effects.delayBypass })}
-                className={`btn btn-xs gap-1 text-[10px] font-mono font-bold ${
+                className={`btn btn-xs gap-1 text-[10px] font-bold ${
                   effects.delayBypass ? "btn-ghost" : "btn-accent btn-active"
                 }`}
                 title="Toggle Delay Bypass"
@@ -162,7 +162,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
                 onClick={() =>
                   updateFx({ distortionBypass: !effects.distortionBypass })
                 }
-                className={`btn btn-xs gap-1 text-[10px] font-mono font-bold ${
+                className={`btn btn-xs gap-1 text-[10px] font-bold ${
                   effects.distortionBypass ? "btn-ghost" : "btn-primary btn-active"
                 }`}
                 title="Toggle Distortion Bypass"
@@ -204,7 +204,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
               <button
                 id="btn-bypass-eq"
                 onClick={() => updateFx({ eqBypass: !effects.eqBypass })}
-                className={`btn btn-xs gap-1 text-[10px] font-mono font-bold ${
+                className={`btn btn-xs gap-1 text-[10px] font-bold ${
                   effects.eqBypass ? "btn-ghost" : "btn-secondary btn-active"
                 }`}
                 title="Toggle Equalizer Bypass"

@@ -45,7 +45,7 @@ describe('SortableChordCard theming', () => {
 
   test('bar counter and note readout are mono badges/text', () => {
     const html = render(false);
-    expect(html).toContain('badge badge-sm badge-ghost font-mono');
+    expect(html).toContain('badge badge-sm badge-ghost tabular-nums');
     expect(html).toContain('font-mono');
   });
 

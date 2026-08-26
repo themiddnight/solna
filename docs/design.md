@@ -12,37 +12,45 @@
 
 Solna is built using Tailwind CSS and DaisyUI, featuring two custom-crafted warm-tinted themes designed to reduce eye strain during extended creative sessions while maintaining high contrast.
 
-### ☕ Solna-Dark (`solna-dark`) — Espresso & Sunrise Glow
-Designed for deep night-owl or twilight composition sessions with warm charcoal undertones instead of cold blue-blacks.
+### 🔥 Solna-Dark (`solna-dark`) — Ember & Solar Flare
+The hour before sunrise. A warm near-black ground (hue ~55° in OKLCH, not the cold blue-blacks or
+the violet-tinted charcoal this theme used to carry — that band belongs to Murva's dusk) with the
+first full-strength gold breaking over it.
 
-* **Canvas & App Background (`base-200`):** `#14121B` (Deep Espresso Charcoal)
-* **Panels & Cards (`base-100`):** `#1C1924` (Warm Dark Slate)
-* **Borders & Insets (`base-300`):** `#2C2738` (Warm Muted Inset)
-* **Primary Accent (`primary`):** `#F59E0B` (Sunrise Amber — Playhead, Active Steps, Key Controls)
-* **Secondary Accent (`secondary`):** `#FB7185` (Dawn Coral — Chords & Harmony highlights)
-* **Visual Accent (`accent`):** `#2DD4BF` (Fresh Teal — Synth & Modulation)
-* **Base Content (Text):** `#F5EFEB` (Warm Cream Off-White)
-* **Neutral (`neutral`):** `#24202E` / content `#F5EFEB` (chrome that must not read as an accent — inactive audition pills, muted chips)
-* **Success (`success`):** `#5FD08B` — "saved", "envelope OK", live-signal indicator
-* **Warning (`warning`):** `#FACC15` — VU meter upper-mid segments
-* **Error (`error`):** `#F05545` — destructive actions, VU clip segments, mute-on
-* **Info (`info`):** `#79A6E0` — neutral informational hints
+* **Canvas & App Background (`base-200`):** `#110B07` (Pre-Dawn Ember)
+* **Panels & Cards (`base-100`):** `#1B130C` (Warm Ember Panel)
+* **Borders & Insets (`base-300`):** `#2C1F14` (Burnt Umber Inset)
+* **Primary Accent (`primary`):** `#FFB000` (Solar Gold — Playhead, Active Steps, Key Controls)
+* **Secondary Accent (`secondary`):** `#FF6B45` (Horizon Orange — Chords & Harmony highlights)
+* **Visual Accent (`accent`):** `#35C9BA` (Retreating Teal — Synth & Modulation; the cold counterweight that keeps the theme from reading as one continuous orange wash)
+* **Base Content (Text):** `#FBF0E2` (Warm Cream Off-White)
+* **Neutral (`neutral`):** `#231910` / content `#FBF0E2` (chrome that must not read as an accent — inactive audition pills, muted chips)
+* **Success (`success`):** `#63CE8A` — "saved", "envelope OK", live-signal indicator
+* **Warning (`warning`):** `#FFD24A` — VU meter upper-mid segments
+* **Error (`error`):** `#F5533A` — destructive actions, VU clip segments, mute-on
+* **Info (`info`):** `#6FA2D8` — neutral informational hints
 
-### 📜 Solna-Light (`solna-light`) — Sunlight Alabaster & Warm Paper
-Designed for morning and daytime sketching, simulating warm parchment paper without clinical stark white glare.
+### 📜 Solna-Light (`solna-light`) — First Light on Paper
+Designed for morning and daytime sketching, simulating warm parchment paper without clinical stark
+white glare.
 
-* **Canvas & App Background (`base-200`):** `#F7F4EF` (Warm Alabaster Linen)
-* **Panels & Cards (`base-100`):** `#FFFFFF` (Pure White with Warm Cast)
-* **Borders & Insets (`base-300`):** `#E8E2D8` (Soft Warm Gray Border)
-* **Primary Accent (`primary`):** `#D97706` (Deep Warm Amber)
-* **Secondary Accent (`secondary`):** `#E11D48` (Terracotta Rose)
-* **Visual Accent (`accent`):** `#0D9488` (Deep Morning Teal)
-* **Base Content (Text):** `#241E19` (Roasted Coffee Charcoal)
-* **Neutral (`neutral`):** `#3D352E` / content `#FFFFFF`
-* **Success (`success`):** `#2F8F5B`
-* **Warning (`warning`):** `#A16207`
+* **Canvas & App Background (`base-200`):** `#FDF4E4` (First-Light Paper)
+* **Panels & Cards (`base-100`):** `#FFFDF8` (Warm White)
+* **Borders & Insets (`base-300`):** `#F0DFBF` (Soft Sand Border)
+* **Primary Accent (`primary`):** `#B06200` (Deep Solar Gold)
+* **Secondary Accent (`secondary`):** `#D14421` (Ember Terracotta)
+* **Visual Accent (`accent`):** `#0C8F86` (Deep Morning Teal)
+* **Base Content (Text):** `#1F1408` (Roasted Coffee Charcoal)
+* **Neutral (`neutral`):** `#35250F` / content `#FFFFFF`
+* **Success (`success`):** `#238652`
+* **Warning (`warning`):** `#9A6100`
 * **Error (`error`):** `#C2321F`
 * **Info (`info`):** `#2C6FA8`
+
+> **Every `·-content` value is contrast-derived, not chosen by eye.** Each one is whichever of the
+> theme's ink or paper wins WCAG contrast against its own token, and all eight semantic pairs clear
+> 4.5:1 in both themes. The previous palette did not: white on `solna-light`'s `primary` was 3.19:1
+> and on its `accent` 3.74:1. Re-tint a token and its content value has to be re-derived with it.
 
 > **The canvas is a gradient, not a flat fill.** `src/index.css` defines a `bg-canvas` utility — `base-200` under two soft radial glows: a sunrise rising from the bottom edge (`--canvas-dawn`, mixed from `primary`) and a cooler dawn-sky wash in the top-right (`--canvas-sky`, mixed from `secondary`). Both are `color-mix`ed from the live theme tokens, so the gradient re-tints itself on a theme flip rather than needing a second hand-written palette; only the mix percentages differ per theme (warm paper stains at far lower opacity than the espresso base). The app shell in `src/App.tsx` wears `bg-canvas` instead of `bg-base-200` — it is a full-height flex column that would otherwise paint over anything set on `body`. It is **static**: the audio-reactive ambient wash that used to live here was removed deliberately.
 
@@ -52,10 +60,14 @@ Designed for morning and daytime sketching, simulating warm parchment paper with
 
 ## 3. Typography & Hierarchy
 
-Solna uses clean, highly readable font stacks optimized for precision controls and musical notation.
+Typography is shared with murva: one sans face for everything, and monospace reserved for machine values and music notation. `murva-brand/design.md` §4 is the source of truth for the stack — change it there first.
 
-* **Headings & Titles:** **Figtree** (variable, 300-900, loaded from Google Fonts in `index.html`) falling back to `system-ui, -apple-system, sans-serif`, with `tracking-tight` for compact musical labels. Applied to `body` in `src/index.css`.
-* **Musical Values & BPM:** **JetBrains Mono** (weights 400/500/600/700), bound in `src/index.css` to `code, pre, .font-mono`. Every numeric readout carries `font-mono`: BPM, filter cutoff in Hz, gain in dB, percentages, octave offsets, arp step timing (`1/16`, `1/8`, `1/32`), and the oscilloscope's canvas axis labels, which set `8px 'JetBrains Mono', monospace` directly on the 2D context.
+* **Headings & Titles:** **Figtree** (variable, 300-900, loaded from Google Fonts in `index.html`) with **Anuphan** behind it for Thai — `font-family: "Figtree", "Anuphan", sans-serif`, `tracking-tight` for compact musical labels. This stack is **shared with murva** and copied verbatim from `murva-brand/design.md` §4; change it there first. It is registered as `--font-sans` in an `@theme` block in `src/index.css` (so the `font-sans` utility and Tailwind's `--default-font-family` both resolve to it) and applied to `body` in the same file.
+* **Monospace — no face is loaded.** solna loads **no mono webfont**, matching murva: `font-mono` and `<kbd>` fall back to Tailwind's system monospace stack. The oscilloscope's canvas axis labels name that same stack literally (`8px ui-monospace, SFMono-Regular, Menlo, monospace` on the 2D context) because canvas cannot take a class.
+* **When to reach for `font-mono`.** The utility follows murva's usage, not "any number":
+  * **Yes** — values the machine produced or music notation: BPM, cutoff in Hz, gain in dB, master/mix percentages, chord symbols and roman numerals, note names on keys, rhythmic notation (`1/16`, `1/8`, `1/32`), octave offsets, and short technical codes (`LPF`, `saw`).
+  * **`tabular-nums` instead** — numbers sitting in ordinary UI chrome, where mono would read as too heavy: knob parameter readouts, counts in badges and pills, bar numbers. This mirrors murva's `AnalogSynthControls` and `GenreTemplateSelect`.
+  * **Neither** — words. Section labels (`AMP / VCA`, `Category:`), category names, button text, prose. These were on `font-mono` before the murva alignment and were moved off it.
 * **Font Scaling:**
   * **App Title:** 14px Bold (`text-sm font-extrabold`)
   * **Section Headers:** 14-16px Bold
@@ -81,7 +93,7 @@ Solna is structured into modular, single-responsibility React components:
    > | `hiphop-groove` | **Boom Bap** |
    > | `asian-zen` | **Zen Garden** |
    >
-   > The table is duplicated in `src/store/instantVibes.ts` and `src/audio/instantVibes.ts`; both copies must stay in sync.
+   > The table lives in `src/store/instantVibes.ts`. It used to be duplicated in an `audio/` fork; that fork is gone, so there is one copy to keep correct.
 3. **`TransportBar.tsx`**: Bottom sticky player controls featuring Play/Stop All, Tab Play, a BPM stepper (−/+ buttons around a `40`–`240` number input; there is **no** tap-tempo), a Metronome toggle, a **mono** 10-segment VU meter (green below segment 7, `warning` at 7-8, `error` at 9-10), and the Master Output volume fader.
 
    > **Explicitly unbuilt.** Two features described in earlier revisions of this spec were never implemented and are recorded here as future work, not as shipped behaviour:
@@ -117,15 +129,22 @@ Shared, presentation-only controls under `src/components/ui/`. These own the dai
 - **State Management**: Zustand store (`src/store/`) managing transport, synth patches, chord progressions, drum patterns, and master effects in real-time.
 - **Persistence**: Local storage and project JSON export/import workflows allowing creators to save and load their musical sketches effortlessly.
 
-### Known issue: forked Instant Vibes module
+### Resolved: the forked Instant Vibes module
 
-`src/audio/instantVibes.ts` and `src/store/instantVibes.ts` are diverged
-copies of the same module. Only `store/` is imported (by
-`InstantVibesBar.tsx`); the `audio/` copy additionally initialises the
-audio engine and carries different preset content, and is dead code.
-Resolving the fork is a product decision — it changes which presets and
-which engine-sync behaviour ship — and is deliberately out of scope for
-the theme-token migration.
+`src/audio/instantVibes.ts` was a diverged copy of `src/store/instantVibes.ts`
+with no production importer — only its own test file loaded it. The
+`2026-08-24-murva-restructure` plan already called for deleting it after the
+move to `store/`; that step was never carried out, so the fork stayed behind
+and drifted: its drum-pattern keys were `Kick`/`Snare`/`HiHat` where the engine
+reads `kick`/`snare`/`hihat`, and it named a `Velvet EP` preset that no longer
+exists anywhere in the codebase. Its test suite passed the whole time, on data
+nothing shipped.
+
+Both files are now deleted. `src/store/instantVibes.ts` is the only copy, and
+the two `no-restricted-imports` errors the fork raised (`audio/` must not import
+`store/`) are gone with it. The engine-init block and the extra effect
+parameters it carried (`delayTime`, `chorusWet`/`Rate`/`Depth`) were never
+audible and are recoverable from git history if they are ever wanted.
 
 ---
 
@@ -144,7 +163,7 @@ Legacy Murva-era colours and their permanent replacements. When you touch old co
 | `#1C213E`, `#22284C`, `#22274A`, `#20264A`, `#151933` — hover fills and recessed wells | `bg-base-300` / `hover:bg-base-300` |
 | `#252B48`, `#2D355A`, `#3B4371`, `#1E2344` — borders and hairlines | `border-base-300` / `bg-base-300` |
 | `indigo-*` — primary action, active state, playhead | `primary` (Sunrise Amber) |
-| `purple-*` / `pink-*` — harmony, chords, filter / VCF | `secondary` (Dawn Coral) |
+| `purple-*` / `pink-*` — harmony, chords, filter / VCF | `secondary` (Horizon Orange) |
 | `cyan-*` / `purple-*` — LFO, modulation, arpeggiator | `accent` (Fresh Teal) |
 | `emerald-*` meaning "OK / saved / envelope healthy" | `success` |
 | `emerald-*` used as a module accent (e.g. the bass channel) | `accent` |
@@ -203,14 +222,14 @@ daisyUI's semantic roles are about *meaning* (`success` = saved, `error` = destr
 
 | token | hue | used by |
 |---|---|---|
-| `module-chord` / `-content` | olive green | Chord cards, chord audition, the Chord target in `SynthView`'s toggle |
-| `module-bass` / `-content` | steel blue | Bass module, the Bass target in `SynthView`'s toggle |
-| `module-osc` / `-content` | amber `amber-400/600` | `SynthView` panel 1 — Oscillators |
-| `module-filter` / `-content` | rose `rose-400/600` | `SynthView` panel 2 — VCF Filter |
-| `module-env-vca` / `-content` | emerald `emerald-400/600` | `SynthView` panel 3 — ADSR's AMP / VCA half |
-| `module-env-vcf` / `-content` | fuchsia `fuchsia-400/600` | `SynthView` panel 3 — ADSR's FILTER / VCF half |
-| `module-lfo` / `-content` | sky `sky-400/600` | `SynthView` panel 4 — LFO & Octave |
-| `module-arp` / `-content` | violet `violet-400/600` | `SynthView` panel 5 — Arpeggiator |
+| `module-chord` / `-content` | olive 125° | Chord cards, chord audition, the Chord target in `SynthView`'s toggle |
+| `module-bass` / `-content` | steel blue 256° | Bass module, the Bass target in `SynthView`'s toggle |
+| `module-osc` / `-content` | butter gold 87° | `SynthView` panel 1 — Oscillators |
+| `module-filter` / `-content` | rose 356° | `SynthView` panel 2 — VCF Filter |
+| `module-env-vca` / `-content` | emerald 162° | `SynthView` panel 3 — ADSR's AMP / VCA half |
+| `module-env-vcf` / `-content` | violet 294° | `SynthView` panel 3 — ADSR's FILTER / VCF half |
+| `module-lfo` / `-content` | cyan 213° | `SynthView` panel 4 — LFO & Octave |
+| `module-arp` / `-content` | orchid 322° | `SynthView` panel 5 — Arpeggiator |
 
 The synth's **six signal stages each own a hue** — the two ADSR halves share one card, so they are the pair that has to contrast hardest. Values come straight from Tailwind's palette (the `400` step on the espresso base, the `600` step on warm paper, where the `400`s wash out) and are ordered so no two neighbours land in the same family, with every adjacent pair ~50°+ apart on the wheel:
 
@@ -228,6 +247,6 @@ The synth's **six signal stages each own a hue** — the two ADSR halves share o
 
 `module-env-vcf` has no Simple-Mode counterpart because Simple Mode exposes no filter envelope. Chrome that is *not* a signal stage — the Simple/Pro switcher, preset picker, category filters, keyboard octave — stays on `primary`, which now unambiguously means "the thing you picked".
 
-The blue 210–215° band is deliberately left to `module-bass`, whose chip sits on this same page. No synth panel rides a daisyUI semantic any more, which keeps `primary` free to mean "the thing you picked" everywhere else. Because daisyUI components are variable-driven, a module colour fills a control through arbitrary-value overrides (`btn` + `[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]`), a badge through `[--badge-color:…]`, and a range through `text-module-*` + `[--range-thumb:…]` (ranges read `color`, not a variable).
+Hues are spaced around the **OKLCH** wheel rather than sRGB HSL (which bunches the yellows), at a fixed lightness per theme — ~0.75 dark, ~0.57 light — so no stage reads as merely a darker version of its neighbour; every adjacent pair is at least 28° apart. Two rules constrain the set: the 20–60° amber band belongs to `primary` alone, so `module-osc` is a pale butter gold separated from the brand by lightness rather than hue, and no module may reuse a semantic hex — which is exactly what `module-filter` and `secondary` used to do (both `#FB7185`), and `module-osc` and `primary` in the light theme (both `#D97706`). No synth panel rides a daisyUI semantic any more, which keeps `primary` free to mean "the thing you picked" everywhere else. Because daisyUI components are variable-driven, a module colour fills a control through arbitrary-value overrides (`btn` + `[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]`), a badge through `[--badge-color:…]`, and a range through `text-module-*` + `[--range-thumb:…]` (ranges read `color`, not a variable).
 
 `Knob`'s `color` prop is a closed union, so adding a module colour means adding `text-module-*` to that union in `src/components/ui/Knob.tsx` — deliberately, so the set of legal knob colours stays reviewable.

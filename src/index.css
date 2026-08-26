@@ -7,26 +7,26 @@
   name: "solna-dark";
   default: true;
   color-scheme: dark;
-  --color-base-100: #1C1924;
-  --color-base-200: #14121B;
-  --color-base-300: #2C2738;
-  --color-base-content: #F5EFEB;
-  --color-primary: #F59E0B;
-  --color-primary-content: #14121B;
-  --color-secondary: #FB7185;
-  --color-secondary-content: #14121B;
-  --color-accent: #2DD4BF;
-  --color-accent-content: #14121B;
-  --color-neutral: #24202E;
-  --color-neutral-content: #F5EFEB;
-  --color-success: #5FD08B;
-  --color-success-content: #14121B;
-  --color-warning: #FACC15;
-  --color-warning-content: #14121B;
-  --color-error: #F05545;
-  --color-error-content: #14121B;
-  --color-info: #79A6E0;
-  --color-info-content: #14121B;
+  --color-base-100: #1B130C;
+  --color-base-200: #110B07;
+  --color-base-300: #2C1F14;
+  --color-base-content: #FBF0E2;
+  --color-primary: #FFB000;
+  --color-primary-content: #110B07;
+  --color-secondary: #FF6B45;
+  --color-secondary-content: #110B07;
+  --color-accent: #35C9BA;
+  --color-accent-content: #110B07;
+  --color-neutral: #231910;
+  --color-neutral-content: #FBF0E2;
+  --color-success: #63CE8A;
+  --color-success-content: #110B07;
+  --color-warning: #FFD24A;
+  --color-warning-content: #110B07;
+  --color-error: #F5533A;
+  --color-error-content: #110B07;
+  --color-info: #6FA2D8;
+  --color-info-content: #110B07;
   --radius-selector: 0.5rem;
   --radius-field: 0.5rem;
   --radius-box: 0.75rem;
@@ -37,21 +37,21 @@
   name: "solna-light";
   default: false;
   color-scheme: light;
-  --color-base-100: #FFFFFF;
-  --color-base-200: #F7F4EF;
-  --color-base-300: #E8E2D8;
-  --color-base-content: #241E19;
-  --color-primary: #D97706;
+  --color-base-100: #FFFDF8;
+  --color-base-200: #FDF4E4;
+  --color-base-300: #F0DFBF;
+  --color-base-content: #1F1408;
+  --color-primary: #B06200;
   --color-primary-content: #FFFFFF;
-  --color-secondary: #E11D48;
+  --color-secondary: #D14421;
   --color-secondary-content: #FFFFFF;
-  --color-accent: #0D9488;
-  --color-accent-content: #FFFFFF;
-  --color-neutral: #3D352E;
+  --color-accent: #0C8F86;
+  --color-accent-content: #1F1408;
+  --color-neutral: #35250F;
   --color-neutral-content: #FFFFFF;
-  --color-success: #2F8F5B;
+  --color-success: #238652;
   --color-success-content: #FFFFFF;
-  --color-warning: #A16207;
+  --color-warning: #9A6100;
   --color-warning-content: #FFFFFF;
   --color-error: #C2321F;
   --color-error-content: #FFFFFF;
@@ -67,6 +67,17 @@
    both themes, so they cannot ride on base-100/base-content. Registered in
    @theme so Tailwind emits bg-key-white / text-key-black-content utilities,
    with the values indirected through per-theme custom properties. */
+/* Typography is shared with murva, so the stack is copied verbatim from
+   murva-brand/design.md §4 (and murva-app's own @theme block): Figtree for
+   Latin, Anuphan behind it for Thai. Registering it as --font-sans means the
+   `font-sans` utility and Tailwind's --default-font-family both resolve here.
+   No mono face is loaded, also matching murva: `font-mono` and <kbd> fall back
+   to Tailwind's system monospace stack. The utility is reserved for machine
+   values and music notation — see docs/design.md §3. */
+@theme {
+  --font-sans: "Figtree", "Anuphan", sans-serif;
+}
+
 @theme {
   --color-key-white: var(--key-white);
   --color-key-white-content: var(--key-white-content);
@@ -76,17 +87,17 @@
 
 :root,
 [data-theme="solna-dark"] {
-  --key-white: #EDE7E1;
-  --key-white-content: #14121B;
-  --key-black: #241F2E;
-  --key-black-content: #EDE7E1;
+  --key-white: #F2E7D6;
+  --key-white-content: #110B07;
+  --key-black: #221810;
+  --key-black-content: #FBF0E2;
 }
 
 [data-theme="solna-light"] {
   --key-white: #FFFFFF;
-  --key-white-content: #241E19;
-  --key-black: #2A241F;
-  --key-black-content: #F7F4EF;
+  --key-white-content: #1F1408;
+  --key-black: #26190C;
+  --key-black-content: #FFFFFF;
 }
 
 /* Module identity colours: Chord, Bass and the synth's own signal stages get
@@ -97,15 +108,18 @@
 
    The synth's six signal stages must stay distinguishable side by side — the
    two ADSR halves share one card, so they are the pair that has to contrast
-   hardest. Hues are taken from Tailwind's palette (400 for dark, 600 for
-   light) and spaced so no two neighbours land in the same family; every
-   adjacent pair is at least ~50° apart on the colour wheel:
+   hardest. Hues are spaced around the OKLCH wheel (not sRGB HSL, which bunches
+   the yellows), at a fixed lightness per theme — ~0.75 for dark, ~0.57 for
+   light — so no stage reads as merely a darker version of its neighbour:
 
-     osc amber 43° · filter rose 350° · env-vca emerald 160° ·
-     env-vcf fuchsia 292° · lfo sky 199° · arp violet 255°
+     osc 87° · chord 125° · env-vca 162° · lfo 213° ·
+     bass 256° · env-vcf 294° · arp 322° · filter 356°
 
-   The blue 210-215° band is deliberately left to module-bass, whose chip sits
-   on this same page. */
+   Every adjacent pair is at least 28° apart. Two rules constrain the set:
+   the 20-60° amber band belongs to --color-primary alone, so osc is a pale
+   butter gold separated from the brand by lightness rather than hue; and no
+   module may reuse a semantic hex, which is what --module-filter and
+   --color-secondary used to do (both #FB7185). */
 @theme {
   --color-module-chord: var(--module-chord);
   --color-module-chord-content: var(--module-chord-content);
@@ -127,23 +141,23 @@
 
 :root,
 [data-theme="solna-dark"] {
-  --module-chord: #9CB86B;
-  --module-chord-content: #14121B;
-  --module-bass: #6C93C7;
-  --module-bass-content: #14121B;
-  /* Tailwind *-400 — bright enough to read on the espresso base. */
-  --module-osc: #FBBF24;          /* amber-400 */
-  --module-osc-content: #14121B;
-  --module-filter: #FB7185;       /* rose-400 */
-  --module-filter-content: #14121B;
-  --module-env-vca: #34D399;      /* emerald-400 */
-  --module-env-vca-content: #14121B;
-  --module-env-vcf: #E879F9;      /* fuchsia-400 */
-  --module-env-vcf-content: #14121B;
-  --module-lfo: #38BDF8;          /* sky-400 */
-  --module-lfo-content: #14121B;
-  --module-arp: #A78BFA;          /* violet-400 */
-  --module-arp-content: #14121B;
+  /* L ~0.75 in OKLCH — bright enough to read on the near-black ember base. */
+  --module-osc: #F7D584;          /* butter gold 87° */
+  --module-osc-content: #110B07;
+  --module-chord: #A9C96D;        /* olive 125° */
+  --module-chord-content: #110B07;
+  --module-env-vca: #4FD69E;      /* emerald 162° */
+  --module-env-vca-content: #110B07;
+  --module-lfo: #47C6DE;          /* cyan 213° */
+  --module-lfo-content: #110B07;
+  --module-bass: #74A6E8;         /* steel blue 256° */
+  --module-bass-content: #110B07;
+  --module-env-vcf: #AE96F5;      /* violet 294° */
+  --module-env-vcf-content: #110B07;
+  --module-arp: #DC8EE8;          /* orchid 322° */
+  --module-arp-content: #110B07;
+  --module-filter: #F181AE;       /* rose 356° */
+  --module-filter-content: #110B07;
 
   /* Canvas gradient — see the bg-canvas utility below. */
   --canvas-dawn: color-mix(in oklab, var(--color-primary) 14%, transparent);
@@ -151,23 +165,23 @@
 }
 
 [data-theme="solna-light"] {
-  --module-chord: #6B8E4E;
-  --module-chord-content: #FFFFFF;
-  --module-bass: #3E6BA6;
-  --module-bass-content: #FFFFFF;
-  /* Tailwind *-600 — the 400s wash out on warm paper. */
-  --module-osc: #D97706;          /* amber-600 */
-  --module-osc-content: #FFFFFF;
-  --module-filter: #E11D48;       /* rose-600 */
-  --module-filter-content: #FFFFFF;
-  --module-env-vca: #059669;      /* emerald-600 */
-  --module-env-vca-content: #FFFFFF;
-  --module-env-vcf: #C026D3;      /* fuchsia-600 */
-  --module-env-vcf-content: #FFFFFF;
-  --module-lfo: #0284C7;          /* sky-600 */
+  /* L ~0.57 — the dark set's lightness washes out on warm paper. */
+  --module-osc: #B0790C;          /* butter gold 87° */
+  --module-osc-content: #1F1408;
+  --module-chord: #6D8F45;        /* olive 125° */
+  --module-chord-content: #1F1408;
+  --module-env-vca: #099268;      /* emerald 162° */
+  --module-env-vca-content: #1F1408;
+  --module-lfo: #0C7F97;          /* cyan 213° */
   --module-lfo-content: #FFFFFF;
-  --module-arp: #7C3AED;          /* violet-600 */
+  --module-bass: #3D6FBF;         /* steel blue 256° */
+  --module-bass-content: #FFFFFF;
+  --module-env-vcf: #7C56D6;      /* violet 294° */
+  --module-env-vcf-content: #FFFFFF;
+  --module-arp: #A93FB0;          /* orchid 322° */
   --module-arp-content: #FFFFFF;
+  --module-filter: #C13B70;       /* rose 356° */
+  --module-filter-content: #FFFFFF;
 
   /* Warm paper takes far less tint before it reads as a stain. */
   --canvas-dawn: color-mix(in oklab, var(--color-primary) 8%, transparent);
@@ -193,11 +207,7 @@
 
 @layer base {
   body {
-    font-family: 'Figtree', system-ui, -apple-system, sans-serif;
-  }
-
-  code, pre, .font-mono {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: "Figtree", "Anuphan", sans-serif;
   }
 }
 
@@ -256,7 +266,6 @@ input[type="range"] {
   border: var(--border) solid color-mix(in oklab, currentColor 45%, transparent);
   border-radius: var(--radius-selector);
   background-color: transparent;
-  font-family: 'JetBrains Mono', monospace;
   font-size: 0.625rem;
   font-weight: 700;
   line-height: 1;

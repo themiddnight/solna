@@ -22,8 +22,8 @@ describe('SequencerView theming', () => {
     expect(html).toContain('btn btn-xs join-item');
   });
 
-  test('step numbers keep font-mono and the downbeat uses accent', () => {
-    expect(html).toContain('font-mono');
+  test('step numbers keep tabular-nums and the downbeat uses accent', () => {
+    expect(html).toContain('tabular-nums');
     expect(html).toContain('text-accent');
   });
 

@@ -60,22 +60,22 @@ describe('rgbToCss', () => {
 
 describe('SSR / no-DOM safety', () => {
   test('resolveThemeRgb falls back to the built-in default without a document', () => {
-    expect(resolveThemeRgb('--color-primary')).toEqual({ r: 245, g: 158, b: 11 });
+    expect(resolveThemeRgb('--color-primary')).toEqual({ r: 255, g: 176, b: 0 });
   });
 
   test('createThemePalette returns every token even without a document', () => {
     const palette = createThemePalette();
-    expect(palette['--color-primary']).toEqual({ r: 245, g: 158, b: 11 });
+    expect(palette['--color-primary']).toEqual({ r: 255, g: 176, b: 0 });
     expect(palette['--color-base-content']).toBeDefined();
     expect(palette['--color-error']).toBeDefined();
   });
 
   test('state-token fallbacks mirror the solna-dark palette in src/index.css', () => {
-    // #5FD08B, #FACC15, #F05545, #79A6E0 — value-specific so a wrong hex fails.
-    expect(resolveThemeRgb('--color-success')).toEqual({ r: 95, g: 208, b: 139 });
-    expect(resolveThemeRgb('--color-warning')).toEqual({ r: 250, g: 204, b: 21 });
-    expect(resolveThemeRgb('--color-error')).toEqual({ r: 240, g: 85, b: 69 });
-    expect(resolveThemeRgb('--color-info')).toEqual({ r: 121, g: 166, b: 224 });
+    // #63CE8A, #FFD24A, #F5533A, #6FA2D8 — value-specific so a wrong hex fails.
+    expect(resolveThemeRgb('--color-success')).toEqual({ r: 99, g: 206, b: 138 });
+    expect(resolveThemeRgb('--color-warning')).toEqual({ r: 255, g: 210, b: 74 });
+    expect(resolveThemeRgb('--color-error')).toEqual({ r: 245, g: 83, b: 58 });
+    expect(resolveThemeRgb('--color-info')).toEqual({ r: 111, g: 162, b: 216 });
   });
 
   test('subscribeToThemeChange returns a no-op unsubscribe without a document', () => {

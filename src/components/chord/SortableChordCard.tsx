@@ -73,7 +73,7 @@ export function SortableChordCard({
           >
             <GripVertical className="w-3.5 h-3.5" />
           </button>
-          <span className="badge badge-sm badge-ghost font-mono font-bold">
+          <span className="badge badge-sm badge-ghost tabular-nums font-bold">
             Bar {startBar}
           </span>
         </div>

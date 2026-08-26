@@ -125,7 +125,7 @@ export const TransportBar: React.FC = React.memo(() => {
 
         {/* Tempo BPM Control */}
         <div className="flex items-center gap-0.5 bg-base-200 border border-base-300 px-1.5 py-1 rounded-box">
-          <span className="text-[10px] text-base-content/50 font-mono hidden sm:inline">BPM</span>
+          <span className="text-[10px] text-base-content/50 hidden sm:inline">BPM</span>
           <button
             onClick={() => setBpm(Math.max(40, bpm - 1))}
             className="btn btn-xs btn-square btn-ghost"

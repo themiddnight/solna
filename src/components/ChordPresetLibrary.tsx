@@ -321,7 +321,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
               <span className="font-bold text-xs text-base-content group-hover:text-module-chord transition-colors truncate">
                 {tpl.name}
               </span>
-              <span className="badge badge-sm bg-base-300 text-module-chord font-mono py-0.5 shrink-0">
+              <span className="badge badge-sm bg-base-300 text-module-chord py-0.5 shrink-0">
                 {tpl.category}
               </span>
               {autoReharmonize && (
@@ -387,7 +387,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
               <span className="font-bold text-xs text-base-content truncate">
                 {e.name}
               </span>
-              <span className="badge badge-sm badge-secondary badge-outline font-mono py-0.5">
+              <span className="badge badge-sm badge-secondary badge-outline py-0.5">
                 Custom
               </span>
               {autoReharmonize && (
@@ -478,7 +478,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
         </label>
       </div>
 
-      <span className="text-[10px] text-base-content/50 font-mono">
+      <span className="text-[10px] text-base-content/50 tabular-nums">
         {customProgressions.length} custom saved
       </span>
     </div>

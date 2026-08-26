@@ -166,17 +166,17 @@ export const Knob = ({
       {layout === 'horizontal' && (
         <div className="flex flex-col items-end shrink-0">
           {label !== undefined && (
-            <span className="text-[10px] text-base-content/60 block font-mono">
+            <span className="text-[10px] text-base-content/60 block">
               {label}
             </span>
           )}
-          <span className="text-[10px] font-mono text-current block">
+          <span className="text-[10px] tabular-nums text-current block">
             {display}
           </span>
         </div>
       )}
       {layout === 'vertical' && label !== undefined && (
-        <span className="text-[10px] text-base-content/60 block font-mono text-center">
+        <span className="text-[10px] text-base-content/60 block text-center">
           {label}
         </span>
       )}
@@ -277,7 +277,7 @@ export const Knob = ({
         </g>
       </svg>
       {layout === 'vertical' && (
-        <span className="text-[10px] font-mono text-current block text-center">
+        <span className="text-[10px] tabular-nums text-current block text-center">
           {display}
         </span>
       )}

@@ -237,7 +237,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-[10px] text-base-content/60">
                   <span>Mode:</span>
-                  <span className="capitalize font-mono text-module-arp font-bold">
+                  <span className="capitalize text-module-arp font-bold">
                     {params.arpMode ?? "up"}
                   </span>
                 </div>

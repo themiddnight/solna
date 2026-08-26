@@ -294,7 +294,7 @@ export const SequencerView = () => {
             return (
               <div
                 key={i}
-                className={`flex-1 text-center font-mono text-[10px] py-1 rounded transition-all ${
+                className={`flex-1 text-center tabular-nums text-[10px] py-1 rounded transition-all ${
                   isCurrent
                     ? "bg-primary text-primary-content font-bold shadow-md shadow-primary/50"
                     : isDownbeat

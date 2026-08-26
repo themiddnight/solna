@@ -52,8 +52,7 @@ Two invariant scripts import straight from source and must keep passing: `check-
 
 ## Traps recorded in the spec — don't "fix" these
 
-- **Instant Vibes ids drift from labels** (`cyber-dance` → "Cyber EDM", `ambient-chill` → "Deep Ambient", `hiphop-groove` → "Boom Bap", `asian-zen` → "Zen Garden"). Ids are persisted in project files; renaming them breaks saved projects. The table is duplicated in `src/store/instantVibes.ts` and `src/audio/instantVibes.ts` — keep both in sync.
-- **`src/audio/instantVibes.ts` is a dead fork** of `src/store/instantVibes.ts`; only the `store/` copy is imported. Resolving the fork is a product decision, deliberately out of scope.
+- **Instant Vibes ids drift from labels** (`cyber-dance` → "Cyber EDM", `ambient-chill` → "Deep Ambient", `hiphop-groove` → "Boom Bap", `asian-zen` → "Zen Garden"). Ids are persisted in project files; renaming them breaks saved projects. The table lives in `src/store/instantVibes.ts` — the single copy since the `audio/` fork was deleted.
 - **Tap Tempo and stereo VU are unbuilt**, not broken — see `docs/design.md` §4 item 3.
 
 ## Repo-local skills

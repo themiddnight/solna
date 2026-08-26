@@ -68,8 +68,8 @@ describe('PresetLibrary chrome', () => {
     expect(chord).toContain('badge badge-sm');
   });
 
-  test('the header badge is a monospaced outline badge', () => {
-    expect(chord).toContain('badge badge-sm badge-primary badge-outline font-mono');
+  test('the header badge is a tabular-nums outline badge', () => {
+    expect(chord).toContain('badge badge-sm badge-primary badge-outline tabular-nums');
     expect(chord).toContain('24 Total');
   });
 

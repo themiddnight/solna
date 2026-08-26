@@ -463,7 +463,7 @@ export const SynthView = () => {
             >
               <Library className="w-3.5 h-3.5" />
               <span>Presets</span>
-              <span className="badge badge-xs badge-outline [--badge-color:currentColor] text-[10px] font-mono hidden sm:inline">
+              <span className="badge badge-xs badge-outline [--badge-color:currentColor] text-[10px] tabular-nums hidden sm:inline">
                 {totalPresetsCount}
               </span>
             </button>
@@ -475,7 +475,7 @@ export const SynthView = () => {
           <div className="flex flex-wrap items-center justify-between gap-2.5 bg-base-300 border border-base-300 p-2 rounded-box">
             {/* Category Filter Tabs */}
             <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[11px]">
-              <span className="text-[10px] uppercase font-bold text-base-content/50 px-1 font-mono">
+              <span className="text-[10px] uppercase font-bold text-base-content/50 px-1">
                 Category:
               </span>
               {[
@@ -512,7 +512,7 @@ export const SynthView = () => {
                   >
                     <span>{cat.label}</span>
                     <span
-                      className={`badge badge-xs text-[9px] font-mono ${
+                      className={`badge badge-xs text-[9px] ${
                         isSelected
                           ? "badge-outline [--badge-color:currentColor]"
                           : "badge-ghost text-base-content/60"
@@ -530,7 +530,7 @@ export const SynthView = () => {
               {/* Active Category Pill Tag */}
               {activeCategoryMeta && (
                 <span
-                  className={`badge badge-sm badge-outline text-[10px] font-mono font-semibold ${activeCategoryMeta.badgeClass}`}
+                  className={`badge badge-sm badge-outline text-[10px] font-semibold ${activeCategoryMeta.badgeClass}`}
                   title={`Category: ${activeCategoryMeta.label} - ${activeCategoryMeta.description}`}
                 >
                   {activeCategoryMeta.shortLabel}
@@ -601,7 +601,7 @@ export const SynthView = () => {
               <div className="flex items-center gap-2 flex-wrap min-w-0">
                 {activeCategoryMeta && (
                   <span
-                    className={`badge badge-sm text-[10px] font-mono font-bold ${activeCategoryMeta.badgeClass}`}
+                    className={`badge badge-sm text-[10px] font-bold ${activeCategoryMeta.badgeClass}`}
                   >
                     {activeCategoryMeta.label}
                   </span>
@@ -910,7 +910,7 @@ export const SynthView = () => {
             {/* AMP / VCA */}
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] font-mono text-module-env-vca uppercase tracking-wider">
+                <span className="text-[10px] text-module-env-vca uppercase tracking-wider">
                   AMP / VCA
                 </span>
                 <span className="flex-1 h-px bg-base-300" />
@@ -973,7 +973,7 @@ export const SynthView = () => {
             {/* FILTER / VCF */}
             <div className="pt-2.5">
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] font-mono text-module-env-vcf uppercase tracking-wider">
+                <span className="text-[10px] text-module-env-vcf uppercase tracking-wider">
                   FILTER / VCF
                 </span>
                 <span className="flex-1 h-px bg-base-300" />
@@ -1110,7 +1110,7 @@ export const SynthView = () => {
                     key={oct}
                     id={`btn-octave-${oct}`}
                     onClick={() => onChangeParams({ ...params, octave: oct })}
-                    className={`btn btn-xs btn-square w-6 h-6 min-h-0 text-xs font-mono font-bold ${
+                    className={`btn btn-xs btn-square w-6 h-6 min-h-0 text-xs tabular-nums font-bold ${
                       params.octave === oct
                         ? "[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]"
                         : "btn-ghost border border-base-300 text-base-content/60 hover:text-base-content"
@@ -1209,7 +1209,7 @@ export const SynthView = () => {
                       onClick={() =>
                         onChangeParams({ ...params, arpOctaves: oct })
                       }
-                      className={`btn btn-xs w-7 min-h-0 text-xs font-mono font-bold ${
+                      className={`btn btn-xs w-7 min-h-0 text-xs tabular-nums font-bold ${
                         (params.arpOctaves ?? 1) === oct
                           ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
                           : "btn-ghost border border-base-300 text-base-content/60"
@@ -1276,7 +1276,7 @@ export const SynthView = () => {
               {Array.from(activeNotes).join(", ") || "No note"}
             </div>
 
-            <span className="text-[11px] text-base-content/50 font-mono mr-1">
+            <span className="text-[11px] text-base-content/50 mr-1">
               KB OCT
             </span>
             <button

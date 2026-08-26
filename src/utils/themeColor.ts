@@ -53,18 +53,18 @@ export const THEME_TOKENS: readonly ThemeToken[] = [
  * (bun test / SSR) and when a token resolves to something unparseable.
  */
 const FALLBACKS: Record<ThemeToken, Rgb> = {
-  '--color-primary': { r: 245, g: 158, b: 11 },
-  '--color-secondary': { r: 251, g: 113, b: 133 },
-  '--color-accent': { r: 45, g: 212, b: 191 },
-  '--color-base-100': { r: 28, g: 25, b: 36 },
-  '--color-base-200': { r: 20, g: 18, b: 27 },
-  '--color-base-300': { r: 44, g: 39, b: 56 },
-  '--color-base-content': { r: 245, g: 239, b: 235 },
-  '--color-neutral': { r: 36, g: 32, b: 46 },
-  '--color-success': { r: 95, g: 208, b: 139 },
-  '--color-warning': { r: 250, g: 204, b: 21 },
-  '--color-error': { r: 240, g: 85, b: 69 },
-  '--color-info': { r: 121, g: 166, b: 224 },
+  '--color-primary': { r: 255, g: 176, b: 0 },
+  '--color-secondary': { r: 255, g: 107, b: 69 },
+  '--color-accent': { r: 53, g: 201, b: 186 },
+  '--color-base-100': { r: 27, g: 19, b: 12 },
+  '--color-base-200': { r: 17, g: 11, b: 7 },
+  '--color-base-300': { r: 44, g: 31, b: 20 },
+  '--color-base-content': { r: 251, g: 240, b: 226 },
+  '--color-neutral': { r: 35, g: 25, b: 16 },
+  '--color-success': { r: 99, g: 206, b: 138 },
+  '--color-warning': { r: 255, g: 210, b: 74 },
+  '--color-error': { r: 245, g: 83, b: 58 },
+  '--color-info': { r: 111, g: 162, b: 216 },
 };
 
 const clampChannel = (n: number): number => Math.max(0, Math.min(255, Math.round(n)));

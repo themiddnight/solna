@@ -368,7 +368,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
 
       // 2. Axis Scale Labels (+1 at Top, 0 at Center, -1 at Bottom)
       c.fillStyle = tokenColor('--color-base-content', 0.6);
-      c.font = "8px 'JetBrains Mono', monospace";
+      c.font = "8px ui-monospace, SFMono-Regular, Menlo, monospace";
       c.fillText('+1', 3, 9);
       c.fillText(' 0', 3, centerY + 3);
       c.fillText('-1', 3, h - 5);
@@ -535,7 +535,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
           ref={indicatorRef}
           className="w-1.5 h-1.5 rounded-full bg-base-content/30"
         />
-        <span className="text-[9px] font-mono text-base-content/60 uppercase tracking-wider">
+        <span className="text-[9px] text-base-content/60 uppercase tracking-wider">
           {mode === 'wave' ? 'Spectrum Wave' : mode === 'bars' ? 'Spectrum Bars' : 'Waveform'}
         </span>
       </div>

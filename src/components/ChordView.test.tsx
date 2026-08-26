@@ -34,12 +34,15 @@ describe('ChordView theming', () => {
   });
 
   test('the library counter badge uses a valid padding step', () => {
-    expect(html).toContain('badge badge-sm badge-outline font-mono');
+    expect(html).toContain('badge badge-sm badge-outline tabular-nums');
     expect(html).not.toContain('py-0.2');
   });
 
   test('chord chips are keyboard-reachable buttons with font-mono labels', () => {
-    expect(html).toContain('btn btn-xs btn-outline');
+    // Real <button> elements, not divs with click handlers — that is what makes
+    // the chips tab-reachable. btn-soft is the daisyUI variant they wear since
+    // a1b4ac2; the earlier btn-outline was a styling choice, not a contract.
+    expect(html).toContain('<button type="button" class="btn btn-xs btn-soft');
     expect(html).toContain('font-mono');
   });
 
