@@ -1,6 +1,6 @@
 import { SynthParams, MasterEffects, FilterType } from '../types';
 import { noteFrequency, clampBpm, stepDurationSec, STEPS_PER_BAR } from '../utils/musicTheory';
-import { DEFAULT_VELOCITY } from './constants';
+import { DEFAULT_VELOCITY, ENV_FLOOR, SILENCE, clampCutoff } from './constants';
 import { mergeDrumKit, type DrumKit } from './drumKits';
 import { clampEffects } from './effectLimits';
 
@@ -492,7 +492,7 @@ class AudioEngine {
     // its envelope.
     const existing = this.activeVoices.get(`${source}:${noteName}`);
     if (!existing?.releaseScheduledAt) {
-      this.triggerSynthNoteOff(noteName, 0.3, undefined, source);
+      this.triggerSynthNoteOff(noteName, 0.3, time, source);
     }
 
     // Primary Oscillator
@@ -512,11 +512,16 @@ class AudioEngine {
     filter.frequency.setValueAtTime(params.filterCutoff, now);
     filter.Q.setValueAtTime(params.filterResonance, now);
 
-    // Filter Envelope (VCF ADSR)
-    const filterPeak = Math.min(20000, Math.max(20, params.filterCutoff + params.filterEnvAmount));
-    const filterSustainLevel = Math.min(20000, Math.max(20, params.filterCutoff + params.filterEnvAmount * params.filterSustain));
-    filter.frequency.exponentialRampToValueAtTime(filterPeak, now + Math.max(0.01, params.filterAttack));
-    filter.frequency.exponentialRampToValueAtTime(filterSustainLevel, now + params.filterAttack + params.filterDecay);
+    // Filter Envelope (VCF ADSR). The ramps use a floored attack, so the
+    // "envelope has reached sustain" marker below must use the SAME floored
+    // value — synthPresets ships attack: 0.002, under both floors, and a marker
+    // computed from the raw value lands before the ramp ends, sending a release
+    // inside that window down releaseVoice's past-the-envelope branch.
+    const attack = Math.max(0.005, params.attack);
+    const filterAttack = Math.max(0.01, params.filterAttack);
+    const { peak: filterPeak, sustain: filterSustainLevel } = this.filterEnvLevels(params);
+    filter.frequency.exponentialRampToValueAtTime(filterPeak, now + filterAttack);
+    filter.frequency.exponentialRampToValueAtTime(filterSustainLevel, now + filterAttack + params.filterDecay);
 
     // Amplitude Envelope
     const gainNode = this.ctx.createGain();
@@ -524,9 +529,9 @@ class AudioEngine {
     subGain.gain.value = params.subOscVolume;
 
     const peakGain = velocity * 0.4 * scaleFactor;
-    gainNode.gain.setValueAtTime(0.0001, now);
-    gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain), now + Math.max(0.005, params.attack));
-    gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, peakGain * params.sustain), now + params.attack + params.decay);
+    gainNode.gain.setValueAtTime(ENV_FLOOR, now);
+    gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain), now + attack);
+    gainNode.gain.exponentialRampToValueAtTime(Math.max(ENV_FLOOR, peakGain * params.sustain), now + attack + params.decay);
 
     // LFO
     let lfo: OscillatorNode | undefined;
@@ -584,8 +589,8 @@ class AudioEngine {
       lfoTarget: params.lfoTarget,
       sustainLevel: peakGain * params.sustain,
       peakGain,
-      ampEnvEndsAt: now + params.attack + params.decay,
-      filterEnvEndsAt: now + params.filterAttack + params.filterDecay,
+      ampEnvEndsAt: now + attack + params.decay,
+      filterEnvEndsAt: now + filterAttack + params.filterDecay,
       filterSustainCutoff: filterSustainLevel,
       envelopeScale: scaleFactor,
       source,
@@ -638,8 +643,8 @@ class AudioEngine {
       // currentTime, still the envelope floor), so it estimates the sustain
       // level; an immediate release reads the live value.
       const ampFallback = now > this.ctx.currentTime + 0.01
-        ? Math.max(0.0001, voice.sustainLevel)
-        : Math.max(0.0001, mainGain.gain.value);
+        ? Math.max(ENV_FLOOR, voice.sustainLevel)
+        : Math.max(ENV_FLOOR, mainGain.gain.value);
       this.cancelAndHold(mainGain.gain, now, ampFallback);
       // cancelAndHoldAtTime inserts NO hold point when nothing is scheduled at
       // or after `now` — verified against an OfflineAudioContext render. The
@@ -648,17 +653,17 @@ class AudioEngine {
       // the value is exactly the sustain level, so anchor it there; inside the
       // envelope cancelAndHold already left an exact hold point.
       if (now >= voice.ampEnvEndsAt) {
-        mainGain.gain.setValueAtTime(Math.max(0.0001, voice.sustainLevel), now);
+        mainGain.gain.setValueAtTime(Math.max(ENV_FLOOR, voice.sustainLevel), now);
       }
-      mainGain.gain.exponentialRampToValueAtTime(0.00001, now + Math.max(0.01, releaseTime));
+      mainGain.gain.exponentialRampToValueAtTime(SILENCE, now + Math.max(0.01, releaseTime));
 
       // VCF envelope release: ramp filter back to base cutoff
       const filterRelease = Math.max(0.01, voice.filterRelease);
-      this.cancelAndHold(voice.filter.frequency, now, Math.max(20, voice.filter.frequency.value));
+      this.cancelAndHold(voice.filter.frequency, now, clampCutoff(voice.filter.frequency.value));
       if (now >= voice.filterEnvEndsAt) {
-        voice.filter.frequency.setValueAtTime(Math.max(20, voice.filterSustainCutoff), now);
+        voice.filter.frequency.setValueAtTime(clampCutoff(voice.filterSustainCutoff), now);
       }
-      voice.filter.frequency.exponentialRampToValueAtTime(Math.max(20, voice.filterCutoff), now + filterRelease);
+      voice.filter.frequency.exponentialRampToValueAtTime(clampCutoff(voice.filterCutoff), now + filterRelease);
 
       const voiceKey = `${voice.source}:${voice.noteName}`;
       voice.teardownTimer = setTimeout(() => {
@@ -697,9 +702,6 @@ class AudioEngine {
   // Immediately silences every voice of a source — sounding ones and hits
   // still scheduled in the future. Releasing a held preview stops the whole
   // pattern, not just the last scheduled hit.
-  // Immediately silences every voice of a source — sounding ones and hits
-  // still scheduled in the future. Releasing a held preview stops the whole
-  // pattern, not just the last scheduled hit.
   //
   // `time` anchors the release in the AudioContext's timeline so a soft stop
   // can be scheduled exactly on a bar line instead of relying on a timer.
@@ -723,7 +725,7 @@ class AudioEngine {
   applySynthVelocityScale(scale: number): void {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
-    for (const voice of this.activeVoices.values()) {
+    for (const voice of this.reshapeableVoices()) {
       if (voice.releaseScheduledAt !== undefined) continue;
       const factor = scale / voice.envelopeScale;
       if (Math.abs(factor - 1) < 0.001) continue;
@@ -734,9 +736,11 @@ class AudioEngine {
       // the sustain level from it, and an unscaled peak would undo this.
       voice.peakGain *= factor;
       const gain = voice.gains[0].gain;
-      gain.cancelScheduledValues(now);
-      gain.setValueAtTime(Math.max(0.0001, gain.value), now);
-      gain.setTargetAtTime(Math.max(0.0001, voice.sustainLevel), now, 0.01);
+      // cancelAndHold, not cancelScheduledValues: a voice mid-attack has only
+      // the note-on floor as a surviving event, so cancelling would drop the
+      // rebalance to 0.0001 and glide back up — a click on every added note.
+      this.cancelAndHold(gain, now);
+      gain.setTargetAtTime(Math.max(ENV_FLOOR, voice.sustainLevel), now, 0.01);
     }
   }
 
@@ -810,12 +814,58 @@ class AudioEngine {
    * the future, so a caller scheduling ahead passes its best estimate.
    */
   private cancelAndHold(param: AudioParam, now: number, fallbackValue?: number): void {
+    // Read the value BEFORE cancelling: cancelScheduledValues deletes the
+    // in-flight ramp, so param.value reverts to the last surviving event and
+    // the fallback would anchor at the wrong level — usually the note-on floor.
+    const held = fallbackValue ?? param.value;
     try {
       param.cancelAndHoldAtTime(now);
     } catch {
       param.cancelScheduledValues(now);
-      param.setValueAtTime(fallbackValue ?? param.value, now);
+      param.setValueAtTime(held, now);
     }
+  }
+
+
+  /**
+   * The VCF envelope's two levels. Written once here because note-on
+   * (triggerSynthNoteOn) and the live knob path (updateSynthParams) must agree
+   * on the sustain cutoff — a release anchors to it, so a drifted copy makes
+   * the filter jump at note-off.
+   */
+  private filterEnvLevels(params: SynthParams): { peak: number; sustain: number } {
+    return {
+      peak: clampCutoff(params.filterCutoff + params.filterEnvAmount),
+      sustain: clampCutoff(params.filterCutoff + params.filterEnvAmount * params.filterSustain),
+    };
+  }
+
+  /**
+   * Every tracked voice of `source` (or all sources) that can be re-shaped
+   * right now: it has started, and it is not already fading.
+   *
+   * Iterates sourceVoices, not activeVoices: activeVoices only keeps the
+   * LATEST voice per note, so a still-sounding voice that a same-note retrigger
+   * evicted would be skipped and left at the old level.
+   */
+  private reshapeableVoices(source?: string): SynthVoice[] {
+    if (!this.ctx) return [];
+    const now = this.ctx.currentTime;
+    const sets = source
+      ? [this.sourceVoices.get(source) ?? new Set<SynthVoice>()]
+      : Array.from(this.sourceVoices.values());
+    const out: SynthVoice[] = [];
+    for (const set of sets) {
+      for (const voice of set) {
+        // Voices scheduled ahead keep the envelopes they were planned with;
+        // re-targeting them cancels their scheduled ramps, release included.
+        if (voice.startTime > now) continue;
+        // A voice already in its release tail keeps the ramp it was given.
+        if (voice.releaseScheduledAt !== undefined && voice.releaseScheduledAt <= now) continue;
+        out.push(voice);
+      }
+    }
+    return out;
   }
 
   // Re-points a live voice's LFO at the current params, creating the LFO nodes
@@ -874,26 +924,9 @@ class AudioEngine {
     const now = this.ctx.currentTime;
     const tc = 0.03; // smoothing time constant in seconds
 
-    const sustainCutoff = Math.min(
-      20000,
-      Math.max(20, params.filterCutoff + params.filterEnvAmount * params.filterSustain)
-    );
+    const sustainCutoff = this.filterEnvLevels(params).sustain;
 
-    // Iterate every tracked voice of the source (or all of them), not just
-    // the dedup map's latest-per-note entries: a sounding voice that a later
-    // same-note hit replaced in activeVoices must still be re-shaped live.
-    const voices = source
-      ? this.sourceVoices.get(source) ?? new Set<SynthVoice>()
-      : new Set<SynthVoice>(Array.from(this.sourceVoices.values()).flatMap((set) => Array.from(set)));
-    for (const voice of voices) {
-      // Only re-shape voices that are sounding right now. Voices scheduled
-      // ahead keep the envelopes they were planned with (their next trigger
-      // already uses the latest params); re-targeting them here would cancel
-      // their scheduled ramps, release ramps included.
-      if (voice.startTime > this.ctx.currentTime) continue;
-      // A voice already in its release tail keeps the ramp it was scheduled
-      // with; re-targeting its filter mid-release would cancel the fade.
-      if (voice.releaseScheduledAt !== undefined && voice.releaseScheduledAt <= this.ctx.currentTime) continue;
+    for (const voice of this.reshapeableVoices(source)) {
       const osc = voice.oscs[0];
 
       osc.type = params.oscType;
@@ -930,7 +963,7 @@ class AudioEngine {
       if (Math.abs(nextSustain - voice.sustainLevel) > 1e-6) {
         voice.sustainLevel = nextSustain;
         this.cancelAndHold(voice.gains[0].gain, now);
-        voice.gains[0].gain.setTargetAtTime(Math.max(0.0001, nextSustain), now, tc);
+        voice.gains[0].gain.setTargetAtTime(Math.max(ENV_FLOOR, nextSustain), now, tc);
       }
 
       // A voice sounding now whose note-off sits ahead on the clock (a
@@ -1132,12 +1165,17 @@ class AudioEngine {
   // the VCF and its envelope shape it like any other source.
   // `loop` matters: createNoiseNode's buffer is 2 s and a pad's release runs
   // longer, so an unlooped source would fall silent mid-note.
-  private createNoiseNodes(level: number, target: AudioNode, startAt: number): Pick<SynthVoice, 'noise' | 'noiseGain'> {
+  private createNoiseNodes(
+    level: number,
+    target: AudioNode,
+    startAt: number,
+    initialLevel: number = level,
+  ): Pick<SynthVoice, 'noise' | 'noiseGain'> {
     if (!this.ctx || level <= 0) return {};
     const noise = this.createNoiseNode();
     noise.loop = true;
     const noiseGain = this.ctx.createGain();
-    noiseGain.gain.value = level;
+    noiseGain.gain.value = initialLevel;
     noise.connect(noiseGain);
     noiseGain.connect(target);
     noise.start(startAt);
@@ -1155,8 +1193,11 @@ class AudioEngine {
       return;
     }
     if (!voice.noiseGain) {
-      // Ramp up from silence so adding the source mid-note doesn't click.
-      Object.assign(voice, this.createNoiseNodes(Number.MIN_VALUE, voice.filter, now));
+      // Ramp up from silence so adding the source mid-note doesn't click. The
+      // level is ENV_FLOOR rather than Number.MIN_VALUE: the old denormal was
+      // there only to slip past the `level <= 0` guard, which is now expressed
+      // by passing the real level and a separate starting level.
+      Object.assign(voice, this.createNoiseNodes(level, voice.filter, now, ENV_FLOOR));
       if (!voice.noiseGain) return;
     }
     this.cancelAndHold(voice.noiseGain.gain, now);

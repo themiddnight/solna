@@ -1041,3 +1041,115 @@ describe('live Sustain', () => {
     expect(vca.targets).toEqual([]);
   });
 });
+
+describe('envelope-safe rebalancing', () => {
+  test('a velocity rebalance during the attack holds the real curve value, not the floor', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    // Attack is 0.02 s; rebalance 0.01 s in, halfway up the ramp.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'synth');
+    ctx.currentTime = t0 + 0.01;
+    (engine as any).applySynthVelocityScale(0.5);
+
+    const gain = (engine as any).activeVoices.get('synth:C4').gains[0].gain;
+    const anchor = gain.events.find((e: any) => e.t === t0 + 0.01);
+    expect(anchor).toBeTruthy();
+    // cancelScheduledValues would revert to the 0.0001 note-on floor and the
+    // rebalance would then glide up from silence: an audible click.
+    expect(anchor.v).toBeGreaterThan(0.0001);
+  });
+
+  test('the rebalance shares the exact voice-selection helper updateSynthParams uses', () => {
+    // Both call sites must agree on "is this voice live and re-shapeable?" —
+    // updateSynthParams already iterates sourceVoices (not activeVoices) with a
+    // comment explaining that a same-note retrigger evicts a still-sounding
+    // voice from activeVoices; applySynthVelocityScale drifting to its own
+    // selection logic (even one that happens to behave identically today,
+    // since it also skips any voice with a scheduled release) is exactly how
+    // the two silently diverge again the next time either one changes.
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth');
+
+    expect(typeof (engine as any).reshapeableVoices).toBe('function');
+    const spy = spyOn(engine as any, 'reshapeableVoices');
+    (engine as any).applySynthVelocityScale(0.5);
+    expect(spy).toHaveBeenCalled();
+  });
+});
+
+describe('cancelAndHold fallback (Firefox)', () => {
+  test('the fallback reads the value BEFORE the cancel reverts it', () => {
+    const { engine, ctx } = freshEngine({ cancelAndHold: false });
+    const param = fakeParam({ cancelAndHold: false });
+    param.setValueAtTime(0.9, ctx.currentTime - 1);
+    param.value = 0.9;
+
+    // The shared fake's cancelScheduledValues only trims `events`; it does not
+    // model the spec's live reversion of `.value` (no fake AudioParam getter
+    // recomputes it from the automation curve). Wrapping it here — inside the
+    // test, not the shared harness — reproduces that one effect so the test
+    // actually depends on cancelAndHold's read-before-cancel ordering rather
+    // than passing regardless of it.
+    const cancelScheduledValues = param.cancelScheduledValues.bind(param);
+    param.cancelScheduledValues = (t: number) => {
+      cancelScheduledValues(t);
+      param.value = 0.0001;
+    };
+
+    (engine as any).cancelAndHold(param, ctx.currentTime);
+
+    // Reading param.value AFTER cancelling would anchor the hold at the
+    // reverted 0.0001 instead of the real pre-cancel value.
+    expect(param.events.at(-1)!.v).toBe(0.9);
+  });
+});
+
+describe('envelope end markers', () => {
+  test('a sub-millisecond attack marks the end of the CLAMPED ramp', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    // synthPresets ships attack: 0.002, below the 0.005 floor the ramp uses.
+    const fast = { ...SYNTH, attack: 0.002, decay: 0.4, filterAttack: 0.002, filterDecay: 0.4 };
+
+    engine.triggerSynthNoteOn('C4', fast, 0.8, t0, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+
+    // The ramp ends at t0 + max(0.005, 0.002) + 0.4; a marker computed from the
+    // raw 0.002 lands 3 ms early and sends releaseVoice down the wrong branch.
+    expect(voice.ampEnvEndsAt).toBeCloseTo(t0 + 0.005 + 0.4, 9);
+    expect(voice.filterEnvEndsAt).toBeCloseTo(t0 + 0.01 + 0.4, 9);
+  });
+});
+
+describe('scheduled same-note dedup', () => {
+  test('a scheduled repeat cuts the previous voice at the new note start, not at currentTime', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'synth');
+    const first = (engine as any).activeVoices.get('synth:C4');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'synth');
+
+    // The bass path at engine.ts:394 forwards `time`; this one did not, so the
+    // old voice was cut up to a full 100 ms lookahead before the new one began.
+    expect(first.releaseScheduledAt).toBe(t0 + 0.5);
+  });
+});
+
+describe('noise source initial level', () => {
+  test('adding noise to a live voice starts from an explicit floor, not a denormal', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, noiseVolume: 0 }, 0.8, undefined, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    expect(voice.noiseGain).toBeUndefined();
+
+    engine.updateSynthParams({ ...SYNTH, noiseVolume: 0.4 }, 'synth');
+
+    expect(voice.noiseGain).toBeTruthy();
+    // Number.MIN_VALUE (5e-324) is a denormal used only to slip past the
+    // `level <= 0` guard; the initial level is now a named parameter.
+    expect(voice.noiseGain.gain.value).toBe(0.0001);
+    expect(voice.noiseGain.gain.targets.at(-1)!.v).toBe(0.4);
+  });
+});
