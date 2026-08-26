@@ -72,8 +72,9 @@ Key consequences:
 - Drums bypass delay and distortion entirely — they hit `drumBusFilter → dryGain` only.
 - `masterGain` is the user's master trim only (`setMasterVolume()`, clamped 0..1, seeded at unity). Headroom is the compressor (-12 dB, 4:1) and the limiter (-3 dB, 20:1); there is no separate staging gain.
 - Bypass flags are applied in `updateEffects()` by forcing the wet/gain value to 0, not by
-  rewiring. `reverbDecay` change rebuilds the convolver impulse (`buildImpulseResponse`) and is
-  guarded by a cached `this.reverbDecay` so the noise tail is not re-randomized every update.
+  rewiring. `reverbDecay` is the impulse **duration in seconds** (the curve exponent is a fixed
+  2.0); changes are quantised to 0.1 s and the built `AudioBuffer`s are cached in
+  `impulseCache`, which `setupMasterChain()` clears because a buffer belongs to its context.
 - Every numeric `MasterEffects` value is clamped by `src/audio/effectLimits.ts` in BOTH `updateEffects()` and `store.sanitizePersistedState`. Add a new effect's range there, not inline.
 
 ## Voices and per-source buses

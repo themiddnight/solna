@@ -2,7 +2,7 @@ import { SynthParams, MasterEffects, FilterType } from '../types';
 import { noteFrequency, clampBpm, stepDurationSec, STEPS_PER_BAR } from '../utils/musicTheory';
 import { DEFAULT_VELOCITY } from './constants';
 import { mergeDrumKit, type DrumKit } from './drumKits';
-import { clampEffects } from './effectLimits';
+import { EFFECT_LIMITS, clampEffects } from './effectLimits';
 
 type SynthVoice = {
   oscs: OscillatorNode[];
@@ -52,9 +52,15 @@ class AudioEngine {
   // Effect nodes
   private reverbNode: ConvolverNode | null = null;
   private reverbGain: GainNode | null = null;
-  // Last decay applied to the convolver impulse; guards against re-randomizing
-  // the reverb tail on every updateEffects call.
+  // Last decay applied to the convolver, already quantised. Guards against
+  // re-randomizing the reverb tail on every updateEffects call.
   private reverbDecay = 2.0;
+  // Impulse responses keyed by quantised decay. Building one is
+  // sampleRate * decay * 2 channels of Math.random() + Math.pow() on the main
+  // thread; a single knob drag emits ~55 distinct values, so without this a
+  // drag drops frames AND swaps convolver.buffer mid-tail (audible clicks).
+  // Cleared in setupMasterChain: an AudioBuffer belongs to its context.
+  private impulseCache = new Map<number, AudioBuffer>();
   private delayNode: DelayNode | null = null;
   private delayFeedbackGain: GainNode | null = null;
   private delayGain: GainNode | null = null;
@@ -109,6 +115,7 @@ class AudioEngine {
   // missed (backgrounded tab, GC pause) and the schedule should re-anchor
   // rather than let the while loop below burst every step it missed.
   private static readonly CLOCK_STALL_THRESHOLD = 0.05; // seconds
+  private static readonly REVERB_CURVE = 2.0; // impulse envelope exponent; not user-facing
 
   private drumKit: DrumKit = mergeDrumKit();
 
@@ -230,6 +237,11 @@ class AudioEngine {
     // drop them — they are lazily recreated against the new context on demand.
     this.sourceBuses.clear();
 
+    // An AudioBuffer belongs to the context that created it, so impulses built
+    // against the previous context must not survive into the new graph.
+    this.impulseCache.clear();
+    this.reverbDecay = 2.0;
+
     // Master output & analyser. masterGain is the USER's master trim and
     // nothing else: engineSync subscribes masterVolume with fireImmediately,
     // so it is overwritten before the first frame — a "staging ceiling" seeded
@@ -312,7 +324,7 @@ class AudioEngine {
 
     // Reverb (synthesized impulse response)
     this.reverbNode = this.ctx.createConvolver();
-    this.reverbNode.buffer = this.buildImpulseResponse(2.0, 2.0);
+    this.reverbNode.buffer = this.getImpulseResponse(2.0);
     this.reverbGain = this.ctx.createGain();
     this.reverbGain.gain.value = 0.25;
 
@@ -345,20 +357,46 @@ class AudioEngine {
     return curve;
   }
 
-  private buildImpulseResponse(duration: number, decay: number): AudioBuffer {
+  /**
+   * A synthesized reverb impulse: `durationSec` of decaying noise shaped by
+   * `curve`.
+   *
+   * `curve` is the exponent in pow(n / length, curve) and is NOT the user's
+   * Decay knob — it stays fixed at 2.0. The knob is `durationSec`. Feeding the
+   * knob into the exponent (as this used to be called) inverts the control: a
+   * higher value steepens the envelope, so a "6.0 s" setting sounded SHORTER
+   * than a "1.0 s" one, and the real tail was pinned at 2 s either way.
+   */
+  private buildImpulseResponse(durationSec: number, curve: number): AudioBuffer {
     if (!this.ctx) return new AudioBuffer({ length: 1, numberOfChannels: 2, sampleRate: 44100 });
     const sampleRate = this.ctx.sampleRate;
-    const length = sampleRate * duration;
+    const length = Math.max(1, Math.floor(sampleRate * durationSec));
     const impulse = this.ctx.createBuffer(2, length, sampleRate);
     const left = impulse.getChannelData(0);
     const right = impulse.getChannelData(1);
 
     for (let i = 0; i < length; i++) {
       const n = length - i;
-      left[i] = (Math.random() * 2 - 1) * Math.pow(n / length, decay);
-      right[i] = (Math.random() * 2 - 1) * Math.pow(n / length, decay);
+      left[i] = (Math.random() * 2 - 1) * Math.pow(n / length, curve);
+      right[i] = (Math.random() * 2 - 1) * Math.pow(n / length, curve);
     }
     return impulse;
+  }
+
+  /** The knob's own resolution (EffectsRackView's Decay step is 0.1). */
+  private quantiseDecay(decay: number): number {
+    const { min, max } = EFFECT_LIMITS.reverbDecay;
+    const clamped = Number.isFinite(decay) ? Math.min(max, Math.max(min, decay)) : 2.0;
+    return Math.round(clamped * 10) / 10;
+  }
+
+  /** Cached impulse for a quantised decay, built on first use. */
+  private getImpulseResponse(quantisedDecay: number): AudioBuffer {
+    const cached = this.impulseCache.get(quantisedDecay);
+    if (cached) return cached;
+    const built = this.buildImpulseResponse(quantisedDecay, AudioEngine.REVERB_CURVE);
+    this.impulseCache.set(quantisedDecay, built);
+    return built;
   }
 
   private createClickBuffers(): void {
@@ -1125,9 +1163,10 @@ class AudioEngine {
     const eqMid = fx.eqBypass ? 0 : fx.eqMid;
     const eqHigh = fx.eqBypass ? 0 : fx.eqHigh;
 
-    if (this.reverbNode && fx.reverbDecay !== this.reverbDecay) {
-      this.reverbNode.buffer = this.buildImpulseResponse(2.0, fx.reverbDecay);
-      this.reverbDecay = fx.reverbDecay;
+    const nextDecay = this.quantiseDecay(fx.reverbDecay);
+    if (this.reverbNode && nextDecay !== this.reverbDecay) {
+      this.reverbNode.buffer = this.getImpulseResponse(nextDecay);
+      this.reverbDecay = nextDecay;
     }
     if (this.compressor) {
       this.compressor.threshold.setTargetAtTime(fx.compressorThreshold, this.ctx.currentTime, 0.05);

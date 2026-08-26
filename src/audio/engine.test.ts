@@ -488,6 +488,20 @@ describe('master chain', () => {
     expect(analyser._connectTargets).toEqual([ctx.destination]);
     expect(compressor._connectTargets).toEqual([masterGain]);
   });
+
+  test('rebuilding the master chain drops impulses built against the dead context', () => {
+    const engine = makeEngine();
+    (engine as any).ctx = masterChainCtx();
+    (engine as any).setupMasterChain();
+    (engine as any).impulseCache.set(9.9, {} as AudioBuffer);
+
+    (engine as any).ctx = masterChainCtx();
+    (engine as any).setupMasterChain();
+
+    // An AudioBuffer belongs to the context that created it; reusing one from
+    // the previous context is the same class of bug sourceBuses.clear() prevents.
+    expect((engine as any).impulseCache.has(9.9)).toBe(false);
+  });
 });
 
 describe('live polyphony equal-power scaling', () => {
@@ -544,25 +558,66 @@ describe('live polyphony equal-power scaling', () => {
 });
 
 describe('live effect knobs', () => {
-  test('updateEffects rebuilds the convolver impulse only when reverbDecay changes', () => {
+  test('reverbDecay is the impulse DURATION, with the curve exponent fixed', () => {
     const { engine } = freshEngine();
-    // freshEngine leaves reverbNode unset; the guard block needs it present.
     (engine as any).reverbNode = fakeNode();
+    const buildSpy = spyOn(
+      engine as unknown as { buildImpulseResponse: () => AudioBuffer },
+      'buildImpulseResponse',
+    ).mockImplementation(() => ({}) as AudioBuffer);
 
-    // The fake ctx has no createBuffer/sampleRate, so the real impulse
-    // builder would throw if called through — stub the spy (same pattern as
-    // the applyEngineSnapshot test in store.test.ts).
+    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 4.5 });
+
+    // (durationSec, curveExponent) — the UI knob reads "4.5s", so 4.5 must be
+    // the length of the tail, not the steepness of it.
+    expect(buildSpy).toHaveBeenCalledWith(4.5, 2.0);
+  });
+
+  test('unchanged decay does not rebuild the impulse', () => {
+    const { engine } = freshEngine();
+    (engine as any).reverbNode = fakeNode();
     const buildSpy = spyOn(
       engine as unknown as { buildImpulseResponse: () => AudioBuffer },
       'buildImpulseResponse',
     ).mockImplementation(() => ({}) as AudioBuffer);
 
     engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 2.0 });
-    expect(buildSpy).not.toHaveBeenCalled(); // default == the impulse built at setupMasterChain
+    expect(buildSpy).not.toHaveBeenCalled(); // equals the impulse setupMasterChain built
     engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 4.5 });
-    expect(buildSpy).toHaveBeenCalledWith(2.0, 4.5);
     engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 4.5 });
-    expect(buildSpy).toHaveBeenCalledTimes(1); // unchanged decay -> no rebuild
+    expect(buildSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('a knob drag quantises to 0.1 s and reuses cached impulses', () => {
+    const { engine } = freshEngine();
+    (engine as any).reverbNode = fakeNode();
+    const buildSpy = spyOn(
+      engine as unknown as { buildImpulseResponse: () => AudioBuffer },
+      'buildImpulseResponse',
+    ).mockImplementation(() => ({}) as AudioBuffer);
+
+    // A real drag emits dozens of intermediate values. Quantising to the knob's
+    // own 0.1 step collapses them; revisiting a value must hit the cache.
+    for (const d of [3.0, 3.04, 3.02, 3.1, 3.14, 3.0, 3.1]) {
+      engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: d });
+    }
+
+    expect(buildSpy).toHaveBeenCalledTimes(2); // 3.0 and 3.1 only
+    expect(buildSpy.mock.calls.map((c) => c[0])).toEqual([3.0, 3.1]);
+  });
+
+  test('an out-of-range decay is clamped before it becomes a buffer length', () => {
+    const { engine } = freshEngine();
+    (engine as any).reverbNode = fakeNode();
+    const buildSpy = spyOn(
+      engine as unknown as { buildImpulseResponse: () => AudioBuffer },
+      'buildImpulseResponse',
+    ).mockImplementation(() => ({}) as AudioBuffer);
+
+    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: -5 });
+    expect(buildSpy).toHaveBeenCalledWith(0.1, 2.0);
+    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 900 });
+    expect(buildSpy).toHaveBeenLastCalledWith(10, 2.0);
   });
 
   test('updateEffects sets the compressor threshold from the effects value', () => {
