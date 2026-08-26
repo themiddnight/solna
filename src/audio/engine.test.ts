@@ -212,7 +212,7 @@ describe('bass retrigger', () => {
 });
 
 describe('source stop (preview release)', () => {
-  test('stopSource silences every voice of the source, including future-scheduled pattern hits', () => {
+  test('stopSource releases the sounding hit and hard-silences future-scheduled pattern hits', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
@@ -225,15 +225,31 @@ describe('source stop (preview release)', () => {
     engine.triggerSynthNoteOn('E4', SYNTH, 0.8, t0 + 0.5, 'chord');
     engine.triggerSynthNoteOn('F2', SYNTH, 0.8, t0, 'bass');
 
+    const chordVoicesBefore = Array.from(
+      (engine as any).sourceVoices.get('chord') as Set<{ startTime: number; gains: { gain: { cancels: number[]; events: { v: number }[] } }[] }>,
+    );
+    expect(chordVoicesBefore).toHaveLength(3);
+    const soundingVoice = chordVoicesBefore.find((v) => v.startTime <= t0)!;
+    const futureVoices = chordVoicesBefore.filter((v) => v.startTime > t0);
+    expect(futureVoices).toHaveLength(2);
+
     // Releasing the preview must cut the whole chord pattern immediately.
     engine.stopSource('chord', 0.15);
 
-    // Every chord voice's main gain gets its envelope cancelled now —
-    // the sounding first hit and the two hits still scheduled in the future.
-    const chordVoices = (engine as any).sourceVoices.get('chord') as Set<{ gains: { gain: { cancels: number[] } }[] }>;
-    expect(chordVoices.size).toBe(3);
-    for (const v of chordVoices) {
+    // The sounding hit gets a normal release ramp, cancelled at now.
+    expect(soundingVoice.gains[0].gain.cancels).toContain(t0);
+
+    // A future hit's oscillators have not started: a release RAMP on it
+    // finishes before they do, leaving the GainNode at its intrinsic 1.0 (the
+    // ~3x-peak pop this task fixes). It is hard-silenced and torn out of
+    // tracking instead, so it must not remain in sourceVoices.
+    const chordVoicesAfter = (engine as any).sourceVoices.get('chord') as Set<unknown>;
+    expect(chordVoicesAfter.size).toBe(1);
+    expect(chordVoicesAfter.has(soundingVoice)).toBe(true);
+    for (const v of futureVoices) {
+      expect(chordVoicesAfter.has(v)).toBe(false);
       expect(v.gains[0].gain.cancels).toContain(t0);
+      expect(v.gains[0].gain.events.at(-1)!.v).toBe(0);
     }
 
     // The bass voice is untouched.
@@ -1151,5 +1167,120 @@ describe('noise source initial level', () => {
     // `level <= 0` guard; the initial level is now a named parameter.
     expect(voice.noiseGain.gain.value).toBe(0.0001);
     expect(voice.noiseGain.gain.targets.at(-1)!.v).toBe(0.4);
+  });
+});
+
+describe('releasing a voice that has not started', () => {
+  test('stopSource hard-silences a future voice instead of ramping it', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'chord');
+    const voice = (engine as any).activeVoices.get('chord:C4');
+    const vca = voice.gains[0].gain;
+    // The note-on's own attack/decay ramps already sit in `ramps`; clear them
+    // so the assertion below is about ramps stopSource itself schedules.
+    vca.ramps.length = 0;
+
+    engine.stopSource('chord', 0.1);
+
+    // A release RAMP on a voice whose oscillators start at t0 + 0.1 finishes
+    // before the note begins; the node then holds its last value and the hit
+    // sounds at full level. Hard silence is the only correct treatment.
+    expect(vca.events.at(-1)!.v).toBe(0);
+    expect(vca.events.at(-1)!.t).toBe(t0);
+    expect(vca.ramps).toHaveLength(0);
+  });
+
+  test('a future voice is torn down, not left tracked', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'chord');
+    engine.stopSource('chord', 0.1);
+
+    expect((engine as any).sourceVoices.get('chord').size).toBe(0);
+    expect((engine as any).activeVoices.has('chord:C4')).toBe(false);
+  });
+
+  test('a sounding voice still gets its release ramp', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 1, 'chord');
+    const vca = (engine as any).activeVoices.get('chord:C4').gains[0].gain;
+    vca.ramps.length = 0;
+
+    engine.stopSource('chord', 0.1);
+
+    expect(vca.ramps.at(-1)).toEqual({ v: 0.00001, t: t0 + 0.1 });
+  });
+
+  test('releaseSoundingVoices hard-silences a future voice with no release of its own', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'synth');
+    const vca = (engine as any).activeVoices.get('synth:C4').gains[0].gain;
+    // The note-on's own attack/decay ramps already sit in `ramps`; clear them
+    // so the assertion below is about ramps releaseSoundingVoices schedules.
+    vca.ramps.length = 0;
+
+    engine.releaseSoundingVoices('synth', 0.1);
+
+    expect(vca.ramps).toHaveLength(0);
+    expect(vca.events.at(-1)!.v).toBe(0);
+  });
+
+  test('releaseSoundingVoices still leaves a future voice that already has a release', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'synth');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.3, 'synth');
+    const vca = (engine as any).activeVoices.get('synth:C4').gains[0].gain;
+    const before = vca.events.length;
+
+    engine.releaseSoundingVoices('synth', 0.1);
+
+    expect(vca.events.length).toBe(before);
+  });
+});
+
+describe('re-planning a pending release', () => {
+  test('a bass mono-kill keeps its 0.05 s release when the patch says 2 s', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    const pad = { ...SYNTH, release: 2 };
+
+    engine.triggerSynthNoteOn('C2', pad, 0.8, t0 - 1, 'bass');
+    const first = (engine as any).activeVoices.get('bass:C2');
+    // The new bass note releases the old one with the mono-kill's 0.05 s.
+    engine.triggerSynthNoteOn('E2', pad, 0.8, t0 + 1, 'bass');
+    expect(first.releaseTime).toBe(0.05);
+
+    first.gains[0].gain.ramps.length = 0;
+    engine.updateSynthParams(pad, 'bass');
+
+    // Re-arming from params.release would stretch the kill to 2 s and let the
+    // "stopped" note ring under the new one — bass monophony leaks.
+    const ramp = first.gains[0].gain.ramps.at(-1);
+    if (ramp) expect(ramp.t).toBeCloseTo(t0 + 1 + 0.05, 9);
+  });
+
+  test('a note released with the patch release re-arms with the NEW patch release', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 4, 'chord');
+    const vca = (engine as any).activeVoices.get('chord:C4').gains[0].gain;
+    vca.ramps.length = 0;
+
+    engine.updateSynthParams({ ...SYNTH, release: 2 }, 'chord');
+
+    // The pre-existing behaviour (engine.test.ts:275) must survive: a note-off
+    // taken from params.release tracks the knob.
+    expect(vca.ramps.at(-1)).toEqual({ v: 0.00001, t: t0 + 4 + 2 });
   });
 });

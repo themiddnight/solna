@@ -34,6 +34,11 @@ type SynthVoice = {
   noteName: string;
   startTime: number;
   releaseScheduledAt?: number;
+  // The release time this voice was ACTUALLY released with. A pending release
+  // re-planned by updateSynthParams must reuse it, not the current patch's —
+  // the bass mono-kill uses 0.05 s and the same-note dedup 0.3 s, and stretching
+  // either to a pad's 2 s release lets a "stopped" note ring under the new one.
+  releaseTime?: number;
   // Node teardown is a timer sized to the release tail. Re-planning a release
   // that has not started must replace that timer, not add a second one.
   teardownTimer?: ReturnType<typeof setTimeout>;
@@ -482,7 +487,7 @@ class AudioEngine {
     // the future `time` in its delay math.
     if (source === 'bass') {
       for (const key of Array.from(this.activeVoices.keys())) {
-        if (key.startsWith('bass:')) this.triggerSynthNoteOff(key.slice(5), 0.05, time, 'bass');
+        if (key.startsWith('bass:')) this.triggerSynthNoteOff(key.slice(5), 0.05, time, 'bass', true);
       }
     }
 
@@ -492,7 +497,7 @@ class AudioEngine {
     // its envelope.
     const existing = this.activeVoices.get(`${source}:${noteName}`);
     if (!existing?.releaseScheduledAt) {
-      this.triggerSynthNoteOff(noteName, 0.3, time, source);
+      this.triggerSynthNoteOff(noteName, 0.3, time, source, true);
     }
 
     // Primary Oscillator
@@ -608,7 +613,7 @@ class AudioEngine {
   }
 
   // Synthesizer Note Off
-  triggerSynthNoteOff(noteName: string, releaseTime = 0.3, time?: number, source = 'synth'): void {
+  triggerSynthNoteOff(noteName: string, releaseTime = 0.3, time?: number, source = 'synth', pinRelease = false): void {
     if (!this.ctx) return;
     const voice = this.activeVoices.get(`${source}:${noteName}`);
     if (!voice) return;
@@ -618,6 +623,10 @@ class AudioEngine {
     // sounding (or still-scheduled) voices; the same-note dedup in
     // triggerSynthNoteOn skips voices whose release is already planned here.
     voice.releaseScheduledAt = now;
+    // `pinRelease` marks a release the ENGINE chose (bass mono-kill 0.05 s,
+    // same-note dedup 0.3 s). Those must survive a live Release-knob change;
+    // a normal note-off leaves releaseTime unset so the knob still reaches it.
+    voice.releaseTime = pinRelease ? releaseTime : undefined;
     this.releaseVoice(voice, releaseTime, now);
   }
 
@@ -699,6 +708,37 @@ class AudioEngine {
     }
   }
 
+  /**
+   * Hard-silences a voice whose oscillators have not started yet.
+   *
+   * A release RAMP is wrong here: the ramp runs from `now` and finishes before
+   * `voice.startTime`, at which point the oscillators start anyway and the amp
+   * gain holds whatever value the ramp left. Worse, cancelling the note-on
+   * floor event can leave the GainNode at its intrinsic 1.0, so the "released"
+   * voice sounds at roughly 3x peakGain — an audible pop on every pattern stop.
+   */
+  private silenceVoiceNow(voice: SynthVoice, now: number): void {
+    if (voice.teardownTimer !== undefined) clearTimeout(voice.teardownTimer);
+    const voiceKey = `${voice.source}:${voice.noteName}`;
+    try {
+      voice.gains[0].gain.cancelScheduledValues(now);
+      voice.gains[0].gain.setValueAtTime(0, now);
+    } catch { /* ignore */ }
+    if (this.activeVoices.get(voiceKey) === voice) this.activeVoices.delete(voiceKey);
+    this.sourceVoices.get(voice.source)?.delete(voice);
+    voice.oscs.forEach((osc) => {
+      try { osc.stop(now); osc.disconnect(); } catch { /* ignore */ }
+    });
+    voice.gains.forEach((g) => {
+      try { g.disconnect(); } catch { /* ignore */ }
+    });
+    try { voice.filter.disconnect(); } catch { /* ignore */ }
+    if (voice.lfo) { try { voice.lfo.stop(now); voice.lfo.disconnect(); } catch { /* ignore */ } }
+    if (voice.lfoGain) { try { voice.lfoGain.disconnect(); } catch { /* ignore */ } }
+    if (voice.noise) { try { voice.noise.stop(now); voice.noise.disconnect(); } catch { /* ignore */ } }
+    if (voice.noiseGain) { try { voice.noiseGain.disconnect(); } catch { /* ignore */ } }
+  }
+
   // Immediately silences every voice of a source — sounding ones and hits
   // still scheduled in the future. Releasing a held preview stops the whole
   // pattern, not just the last scheduled hit.
@@ -712,7 +752,12 @@ class AudioEngine {
     const voices = this.sourceVoices.get(source);
     if (!voices) return;
     for (const voice of Array.from(voices)) {
+      if (voice.startTime > now) {
+        this.silenceVoiceNow(voice, now);
+        continue;
+      }
       voice.releaseScheduledAt = now;
+      voice.releaseTime = releaseTime;
       this.releaseVoice(voice, releaseTime, now);
     }
   }
@@ -758,8 +803,17 @@ class AudioEngine {
     const voices = this.sourceVoices.get(source);
     if (!voices) return;
     for (const voice of Array.from(voices)) {
-      if (voice.startTime > now && voice.releaseScheduledAt !== undefined) continue;
+      if (voice.startTime > now) {
+        // A future hit that already owns a release keeps it: this is the arp
+        // key-release path, which must not cancel notes the clock has planned.
+        if (voice.releaseScheduledAt !== undefined) continue;
+        // A future hit with no release of its own would drone forever, and a
+        // ramp cannot silence a voice that starts after the ramp ends.
+        this.silenceVoiceNow(voice, now);
+        continue;
+      }
       voice.releaseScheduledAt = now;
+      voice.releaseTime = releaseTime;
       this.releaseVoice(voice, releaseTime, now);
     }
   }
@@ -971,9 +1025,14 @@ class AudioEngine {
       // planned with the OLD release time and cutoff — and the cancelAndHold
       // above just wiped the filter half of it. Re-plan it: nothing has faded
       // yet, so re-arming is silent, and the Release knob reaches the note
-      // that is ringing instead of only the next one.
+      // that is ringing instead of only the next one. Re-plan with the
+      // release the voice was ACTUALLY released with when the engine chose it
+      // (bass mono-kill, same-note dedup), so a pad's long release can't
+      // stretch a kill and break monophony; fall back to the patch's release
+      // for a normal note-off, which must still track a live Release-knob
+      // change.
       if (voice.releaseScheduledAt !== undefined && voice.releaseScheduledAt > now) {
-        this.releaseVoice(voice, params.release, voice.releaseScheduledAt);
+        this.releaseVoice(voice, voice.releaseTime ?? params.release, voice.releaseScheduledAt);
       }
     }
   }
