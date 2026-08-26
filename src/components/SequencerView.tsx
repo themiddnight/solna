@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Grid,
   Play,
@@ -14,8 +14,9 @@ import {
 } from "lucide-react";
 import { useAppStore } from "../store/store";
 import { useSequencerPlayback } from "./useSequencerPlayback";
-import { triggerPad } from "../audio/playback/drumPlayback";
+import { ensureDrumEngine, triggerPad } from "../audio/playback/drumPlayback";
 import { previewSequencerNote } from "../audio/playback/presetPreview";
+import type { PreviewHandle } from "../audio/playback/presetPreview";
 import { GENRE_PRESETS } from "../audio/data/genrePresets";
 import { DRUM_KITS, GENRE_TO_KIT } from "../audio/drumKits";
 import { DrumPads } from "./DrumPads";
@@ -45,6 +46,8 @@ export const SequencerView = () => {
 
   const { currentStep } = useSequencerPlayback();
   const [selectedGenre, setSelectedGenre] = useState<string>("Synthwave");
+  const previewRef = useRef<PreviewHandle | null>(null);
+  useEffect(() => () => previewRef.current?.(), []);
 
   useEffect(() => {
     onChangeSoundKit(GENRE_TO_KIT[selectedGenre] ?? selectedGenre);
@@ -333,8 +336,10 @@ export const SequencerView = () => {
                         track.instrument === "bass"
                       ) {
                         const note = track.instrument === "bass" ? "C2" : "C4";
-                        previewSequencerNote(note, synthParams, 0.8);
+                        previewRef.current?.();
+                        previewRef.current = previewSequencerNote(note, synthParams, 0.8);
                       } else {
+                        ensureDrumEngine();
                         triggerPad(track.instrument, 0.8);
                       }
                     }}

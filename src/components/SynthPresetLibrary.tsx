@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   Download,
@@ -22,6 +22,7 @@ import { INITIAL_SYNTH_PARAMS } from '../store/initialState';
 import { PresetLibrary } from './ui/PresetLibrary';
 import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from './ui/PresetLibrary';
 import { previewSynthPreset } from '../audio/playback/presetPreview';
+import type { PreviewHandle } from '../audio/playback/presetPreview';
 
 interface SynthPresetLibraryProps {
   currentParams: SynthParams;
@@ -46,6 +47,8 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   const savePreset = useAppStore((s) => s.saveCustomPreset);
   const deletePreset = useAppStore((s) => s.deleteCustomPreset);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const previewRef = useRef<PreviewHandle | null>(null);
+  useEffect(() => () => previewRef.current?.(), []);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -135,7 +138,8 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   };
 
   const handleAudition = (preset: SynthPresetItem) => {
-    previewSynthPreset(preset, currentParams);
+    previewRef.current?.();
+    previewRef.current = previewSynthPreset(preset, currentParams);
   };
 
   const handleExport = () => {

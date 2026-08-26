@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Music, Play, Sparkles, Trash2, Upload } from 'lucide-react';
 import type { ChordItem, SynthParams, CustomChordProgressionItem } from '../types';
 import { useAppStore } from '../store/store';
@@ -7,6 +7,7 @@ import type { ChordProgression } from '../audio/data/chordProgressions';
 import { PresetLibrary } from './ui/PresetLibrary';
 import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from './ui/PresetLibrary';
 import { previewChordProgression } from '../audio/playback/presetPreview';
+import type { PreviewHandle } from '../audio/playback/presetPreview';
 import {
   generateBlockChordNotes,
   snapProgressionToScale,
@@ -77,6 +78,8 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   const deleteProgression = useAppStore((s) => s.deleteCustomChordProgression);
   const [auditioningName, setAuditioningName] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const previewRef = useRef<PreviewHandle | null>(null);
+  useEffect(() => () => previewRef.current?.(), []);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -171,7 +174,8 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   // PORT of the original handleAudition: engine trigger moved to
   // presetPreview.ts; the auditioning-name pulse state stays here.
   const handleAudition = (chordsToPlay: ChordItem[], progName: string) => {
-    previewChordProgression(chordsToPlay, synthParams);
+    previewRef.current?.();
+    previewRef.current = previewChordProgression(chordsToPlay, synthParams);
     setAuditioningName(progName);
     window.setTimeout(() => {
       setAuditioningName(null);

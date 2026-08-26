@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Volume2 } from 'lucide-react';
-import { triggerPad as triggerDrumPad } from "../audio/playback/drumPlayback";
+import { ensureDrumEngine, triggerPad as triggerDrumPad } from "../audio/playback/drumPlayback";
 import { isTypingTarget, shortcutLabel } from '../utils/keyboard';
 import { DrumPad } from '../types';
 import { Slider } from './ui/Slider';
@@ -31,6 +31,7 @@ export const DrumPads: React.FC = React.memo(() => {
   const [activePadId, setActivePadId] = useState<string | null>(null);
 
   const triggerPad = useCallback((pad: DrumPad) => {
+    ensureDrumEngine();
     triggerDrumPad(pad.note, pad.volume);
     setActivePadId(pad.id);
     setTimeout(() => setActivePadId(null), 150);

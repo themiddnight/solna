@@ -20,8 +20,13 @@ export interface ArpStateRef {
  * branches collapsed into computeArpTriggers. `stateRef` mirrors the view's
  * live arp state (held notes, params, control target, bpm) exactly like the
  * original arpStateRef. Teardown releases sounding voices, as before.
+ *
+ * `release` and `controlTarget` are read from `stateRef.current`, NOT taken as
+ * parameters: having them in the effect's dependency array made every
+ * Release-knob pointer move tear the subscription down and run the cleanup,
+ * cutting every held arp note mid-drag.
  */
-export function useArpPlayback(stateRef: ArpStateRef, active: boolean, release: number, controlTarget: SynthControlTarget): void {
+export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
   useEffect(() => {
     if (!active) return;
 
@@ -48,9 +53,16 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean, release: 
 
     return () => {
       unsubscribe();
+      // Read release/controlTarget off the ref, NOT from props: having them in
+      // the dependency array made every Release-knob pointer move tear the
+      // subscription down and run this cleanup, cutting every held arp note
+      // mid-drag. Reading here (at cleanup time, not effect-setup time) also
+      // means switching controlTarget mid-hold releases the target the
+      // subscription was ACTUALLY driving, not a stale one captured at mount.
       if (audioEngine.getAudioContext()) {
-        audioEngine.releaseSoundingVoices(controlTarget, release);
+        const { controlTarget, params } = stateRef.current;
+        audioEngine.releaseSoundingVoices(controlTarget, params.release);
       }
     };
-  }, [active, controlTarget, release]);
+  }, [active, stateRef]);
 }

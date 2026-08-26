@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import { useAppStore } from './store';
 import { startEngineSync, stopEngineSync } from './engineSync';
+import type { MasterEffects } from '../types';
 
 // bun's parallel workers share module singletons (the store) across test
 // files, so transport state can leak in from earlier files — normalize what
@@ -98,5 +99,42 @@ describe('engineSync', () => {
     resetClock.mockClear();
     useAppStore.getState().play('chords');
     expect(resetClock).toHaveBeenCalledTimes(1); // genuinely fully stopped
+  });
+
+  test('a respread effects object with unchanged values does not re-run updateEffects', () => {
+    const updateEffects = spyOn(audioEngine, 'updateEffects').mockImplementation(() => {});
+    startEngineSync();
+    updateEffects.mockClear();
+
+    // Any action that rebuilds the object without changing a value.
+    useAppStore.setState((s) => ({ effects: { ...s.effects } }));
+
+    expect(updateEffects).not.toHaveBeenCalled();
+    updateEffects.mockRestore();
+  });
+
+  test('a real effects change still reaches the engine', () => {
+    const updateEffects = spyOn(audioEngine, 'updateEffects').mockImplementation(() => {});
+    startEngineSync();
+    updateEffects.mockClear();
+
+    useAppStore.setState((s) => ({ effects: { ...s.effects, reverbWet: 0.5 } }));
+
+    expect(updateEffects).toHaveBeenCalledTimes(1);
+    expect((updateEffects.mock.calls[0][0] as MasterEffects).reverbWet).toBe(0.5);
+    updateEffects.mockRestore();
+  });
+
+  test('a respread synthParams object does not re-target live voices', () => {
+    const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockImplementation(() => {});
+    startEngineSync();
+    updateSynthParams.mockClear();
+
+    useAppStore.setState((s) => ({ synthParams: { ...s.synthParams } }));
+
+    // updateSynthParams re-shapes every live voice; re-running it for no value
+    // change cancels and re-plans their ramps for nothing.
+    expect(updateSynthParams).not.toHaveBeenCalled();
+    updateSynthParams.mockRestore();
   });
 });

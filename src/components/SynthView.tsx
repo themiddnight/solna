@@ -312,12 +312,7 @@ export const SynthView = () => {
   // Arpeggiator playback: parameterized clock subscriber (the 4 rate branches
   // collapsed into computeArpTriggers, proven equivalent by the exhaustive
   // sweep in src/audio/playback/arpPlayback.test.ts)
-  useArpPlayback(
-    arpStateRef,
-    keyboardParams.arpActive ?? false,
-    keyboardParams.release,
-    KEYBOARD_AUDITION_TARGET,
-  );
+  useArpPlayback(arpStateRef, keyboardParams.arpActive ?? false);
 
   // Kept fresh every render so the mode-change release effect below always
   // calls the latest handleNoteOff without needing it in its dependency array

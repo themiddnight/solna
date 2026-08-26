@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../store/store";
-import { triggerPad } from "../audio/playback/drumPlayback";
+import { ensureDrumEngine, triggerPad } from "../audio/playback/drumPlayback";
 import { sixteenthNoteMs } from "../utils/musicTheory";
 import {
   STEPS_PER_BAR,
@@ -111,6 +111,11 @@ export function useSequencerPlayback(): {
       setCurrentStep(0);
       return;
     }
+
+    // A play transition is the user gesture that starts this effect; init()
+    // belongs here, not per-step (triggerPad no longer calls it — it was
+    // running ~8x/second during playback).
+    ensureDrumEngine();
 
     return subscribePlaybackClock((step, _beat, time) => {
       const action = sequencerStepAction(

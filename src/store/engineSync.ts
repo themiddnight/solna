@@ -69,13 +69,37 @@ export function startEngineSync(): Stop {
     ),
   );
 
-  // effects slice
-  subs.push(useAppStore.subscribe((s) => s.effects, (fx) => audioEngine.updateEffects(fx), { fireImmediately: true }));
+  // effects + synth params: subscribed as an encoded primitive so the
+  // subscription fires only on a real VALUE change. Keying on object identity
+  // re-ran updateEffects / updateSynthParams for any action that merely
+  // respread the object — and updateSynthParams re-targets every live voice,
+  // cancelling and re-planning their ramps for nothing. Same pattern as the
+  // drum-filter subscription above. JSON.stringify is stable here because
+  // both objects are plain literals built from a fixed set of keys
+  // (INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS) and every writer spreads from
+  // those, so key order does not vary.
+  subs.push(
+    useAppStore.subscribe(
+      (s) => JSON.stringify(s.effects),
+      () => audioEngine.updateEffects(useAppStore.getState().effects),
+      { fireImmediately: true },
+    ),
+  );
 
-  // synth slice
-  subs.push(useAppStore.subscribe((s) => s.synthParams, (p) => audioEngine.updateSynthParams(p, 'synth'), { fireImmediately: true }));
-  subs.push(useAppStore.subscribe((s) => s.chordSynthParams, (p) => audioEngine.updateSynthParams(p, 'chord'), { fireImmediately: true }));
-  subs.push(useAppStore.subscribe((s) => s.bassSynthParams, (p) => audioEngine.updateSynthParams(p, 'bass'), { fireImmediately: true }));
+  const synthSources = [
+    ['synthParams', 'synth'],
+    ['chordSynthParams', 'chord'],
+    ['bassSynthParams', 'bass'],
+  ] as const;
+  for (const [field, source] of synthSources) {
+    subs.push(
+      useAppStore.subscribe(
+        (s) => JSON.stringify(s[field]),
+        () => audioEngine.updateSynthParams(useAppStore.getState()[field], source),
+        { fireImmediately: true },
+      ),
+    );
+  }
 
   // Transport player states: init on EVERY transition — the old toggle actions
   // called audioEngine.init() unconditionally, and init()'s resume path is

@@ -101,12 +101,13 @@ export function emitStepEvents(
   for (const ev of events) {
     const start = time + ev.timeOffset;
     audioEngine.triggerSynthNoteOn(ev.noteName, params, ev.velocity, start, source);
-    audioEngine.triggerSynthNoteOff(
-      ev.noteName,
-      params.release,
-      Math.min(start + ev.hold, chordEnd),
-      source,
-    );
+    // The clamp to chordEnd stops a long feel hold from overlapping the next
+    // chord — but a strum's later notes start up to (n-1)*30 ms after `time`,
+    // and on a chord's LAST step at high bpm (200 bpm = 0.075 s/step) that
+    // start is already past chordEnd. Floor the gate at 10 ms so the note-off
+    // can never precede its own note-on.
+    const off = Math.max(start + 0.01, Math.min(start + ev.hold, chordEnd));
+    audioEngine.triggerSynthNoteOff(ev.noteName, params.release, off, source);
   }
 }
 
@@ -258,10 +259,21 @@ export function startPatternLoop(
   getNow: () => number,
 ): () => void {
   let timerId: ReturnType<typeof setTimeout> | undefined;
+  // The next bar's position on the AUDIO clock. Re-arming the timer from the
+  // wall clock alone lets every late callback shift the loop permanently off
+  // the grid; correcting the sleep against this keeps it anchored.
+  let nextTime = getNow();
 
   const tick = () => {
-    play(getNow());
-    timerId = globalThis.setTimeout(tick, barSeconds * 1000);
+    const now = getNow();
+    // Ordinary timer slop (a few ms/tens of ms late) must NOT nudge nextTime
+    // forward — that would re-introduce the exact drift this fix removes.
+    // Only a stall of a whole bar or more (backgrounded tab) re-anchors to
+    // "now"; anything less keeps playing on the original grid position.
+    if (now - nextTime > barSeconds) nextTime = now;
+    play(nextTime);
+    nextTime += barSeconds;
+    timerId = globalThis.setTimeout(tick, Math.max(0, (nextTime - getNow()) * 1000));
   };
   tick();
 

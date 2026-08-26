@@ -71,36 +71,37 @@ describe('legato chord preview', () => {
   });
 });
 
-describe('looping pattern preview', () => {
-  // Fake timer pair: the helper must read setTimeout/clearTimeout off
-  // globalThis at call time so these patches take effect.
-  function withFakeTimers() {
-    const realSetTimeout = globalThis.setTimeout;
-    const realClearTimeout = globalThis.clearTimeout;
-    let callback: (() => void) | undefined;
-    let clearCalls = 0;
-    const patch = {
-      fire: () => callback?.(),
-      clearCalls: () => clearCalls,
-      armed: () => callback !== undefined,
-    };
-    globalThis.setTimeout = ((fn: () => void) => {
-      callback = fn;
-      return 1;
-    }) as typeof setTimeout;
-    globalThis.clearTimeout = (() => {
-      clearCalls += 1;
-      callback = undefined;
-    }) as typeof clearTimeout;
-    return {
-      ...patch,
-      restore: () => {
-        globalThis.setTimeout = realSetTimeout;
-        globalThis.clearTimeout = realClearTimeout;
-      },
-    };
-  }
+// Fake timer pair: the helper must read setTimeout/clearTimeout off
+// globalThis at call time so these patches take effect. Shared by the
+// looping-pattern-preview and grid-alignment describe blocks below.
+function withFakeTimers() {
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  let callback: (() => void) | undefined;
+  let clearCalls = 0;
+  const patch = {
+    fire: () => callback?.(),
+    clearCalls: () => clearCalls,
+    armed: () => callback !== undefined,
+  };
+  globalThis.setTimeout = ((fn: () => void) => {
+    callback = fn;
+    return 1;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = (() => {
+    clearCalls += 1;
+    callback = undefined;
+  }) as typeof clearTimeout;
+  return {
+    ...patch,
+    restore: () => {
+      globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
+    },
+  };
+}
 
+describe('looping pattern preview', () => {
   test('keeps rescheduling the pattern every bar until stop() is called', () => {
     const timers = withFakeTimers();
     try {
@@ -136,6 +137,55 @@ describe('looping pattern preview', () => {
       stop();
       expect(timers.clearCalls()).toBe(1);
       expect(timers.armed()).toBe(false);
+    } finally {
+      timers.restore();
+    }
+  });
+});
+
+describe('startPatternLoop grid alignment', () => {
+  test('a late timer does not shift the loop off the audio grid', () => {
+    const timers = withFakeTimers();
+    try {
+      let now = 10;
+      const plays: number[] = [];
+      const stop = startPatternLoop((time) => plays.push(time), 1.0, () => now);
+
+      // The timer fires 40 ms late twice. Re-arming from the wall clock would
+      // accumulate that lag; the loop must stay on 10, 11, 12.
+      now += 1.04;
+      timers.fire();
+      now += 1.04;
+      timers.fire();
+
+      expect(plays).toEqual([10, 11, 12]);
+      stop();
+    } finally {
+      timers.restore();
+    }
+  });
+
+  test('a stall past a whole bar re-anchors instead of scheduling in the past', () => {
+    const timers = withFakeTimers();
+    try {
+      let now = 10;
+      const plays: number[] = [];
+      const stop = startPatternLoop((time) => plays.push(time), 1.0, () => now);
+
+      now += 30; // tab backgrounded
+      timers.fire();
+
+      // Scheduling at 11 while the clock reads 40 would fire the whole bar at once.
+      expect(plays.at(-1)!).toBeGreaterThanOrEqual(30);
+
+      // Re-firing the very next due timer (simulating the runtime catching up
+      // on an overdue callback) must land on the NEXT bar, not replay the same
+      // instant: a fix that re-anchors nextTime but keeps calling getNow() for
+      // playback (rather than the corrected nextTime) would fire 40 twice.
+      const stalledPlay = plays.at(-1)!;
+      timers.fire();
+      expect(plays.at(-1)!).not.toBe(stalledPlay);
+      stop();
     } finally {
       timers.restore();
     }
@@ -236,6 +286,40 @@ describe('emitStepEvents note-off clamping', () => {
 
     onSpy.mockRestore();
     offSpy.mockRestore();
+  });
+
+  test('a strummed note on a chord last step never gets an off before its on', () => {
+    const calls: Array<{ kind: 'on' | 'off'; note: string; time: number }> = [];
+    const spyOn_ = spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation(
+      (note, _p, _v, time) => { calls.push({ kind: 'on', note, time: time ?? 0 }); },
+    );
+    const spyOff = spyOn(audioEngine, 'triggerSynthNoteOff').mockImplementation(
+      (note, _r, time) => { calls.push({ kind: 'off', note, time: time ?? 0 }); },
+    );
+    try {
+      // 200 BPM: one 16th is 0.075 s. A 4-note strum spreads 3 * 30 ms = 0.09 s,
+      // so the last note's start is already past the chord's own end.
+      const time = 10;
+      const chordEnd = 10.075;
+      emitStepEvents(
+        [0, 1, 2, 3].map((i) => ({
+          noteName: `N${i}`, velocity: 0.8, timeOffset: i * 0.03, hold: 0.2,
+        })),
+        SYNTH,
+        'chord',
+        time,
+        chordEnd,
+      );
+
+      for (const note of ['N0', 'N1', 'N2', 'N3']) {
+        const on = calls.find((c) => c.kind === 'on' && c.note === note)!;
+        const off = calls.find((c) => c.kind === 'off' && c.note === note)!;
+        expect(off.time).toBeGreaterThan(on.time);
+      }
+    } finally {
+      spyOn_.mockRestore();
+      spyOff.mockRestore();
+    }
   });
 });
 
