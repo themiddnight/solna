@@ -3,6 +3,7 @@
 // multi-bar chords. Hits are scheduled against the shared engine clock.
 
 import { groupByStyle } from './groupByStyle';
+import type { MeterId } from '../utils/meter';
 
 export type RhythmHitType = 'block' | 'strum';
 
@@ -30,6 +31,15 @@ export interface RhythmPattern {
   name: string;
   style: string;
   description?: string;
+  /**
+   * The meter this pattern was AUTHORED in. Optional so inline test literals
+   * stay valid; every shipped entry declares it and an invariant test enforces
+   * that. Consumers resolve it with `getMeter(pattern.meter)`, which falls back
+   * to 4/4. Adaptation to a different active meter happens at PLAYBACK time
+   * (utils/eventAdapt.ts) — the user picks these by id and never edits them, so
+   * the library stays pure and needs no migration.
+   */
+  meter?: MeterId;
   hits: RhythmHit[];
 }
 
@@ -58,6 +68,7 @@ const strum = (
 export const RHYTHM_PATTERNS: RhythmPattern[] = [
   {
     id: 'sustained',
+    meter: '4/4',
     name: 'Sustained',
     style: 'Ambient',
     description: 'Full-bar held chord',
@@ -65,6 +76,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'lofiSwing',
+    meter: '4/4',
     name: 'Lo-Fi Swung Strum',
     style: 'Lo-Fi',
     description: 'Relaxed swung strums on beats with soft offbeat pushes',
@@ -77,6 +89,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'eighthPads',
+    meter: '4/4',
     name: '8th-Note Driving Pads',
     style: 'Synthwave',
     description: 'Driving synthwave pulses on every 8th note',
@@ -93,6 +106,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'offbeatStabs',
+    meter: '4/4',
     name: 'Offbeat EDM Stabs',
     style: 'Electronic',
     description: 'Punchy offbeat chord stabs that cut through heavy bass',
@@ -105,6 +119,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'syncopatedPush',
+    meter: '4/4',
     name: 'Syncopated Soul Push',
     style: 'Funk',
     description: 'Neo-soul & boom bap syncopated groove with dynamic accents',
@@ -118,6 +133,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'popBallad8ths',
+    meter: '4/4',
     name: 'Pop Ballad 8ths',
     style: 'Pop',
     description: 'Block chords on every 8th note with downbeat accents',
@@ -134,6 +150,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'tripletBallad',
+    meter: '4/4',
     name: 'Triplet Ballad',
     style: 'Pop',
     description: 'Swinging 8th-triplet feel',
@@ -148,6 +165,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'fourOnFloor',
+    meter: '4/4',
     name: '4-on-the-Floor Stabs',
     style: 'Electronic',
     description: 'Short stabs on every quarter note',
@@ -155,6 +173,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'funkSyncopation',
+    meter: '4/4',
     name: 'Funk Syncopation',
     style: 'Funk',
     description: 'Syncopated 16th comping with velocity accents',
@@ -169,6 +188,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'bossaComping',
+    meter: '4/4',
     name: 'Bossa Nova Comping',
     style: 'Latin',
     description: 'Syncopated bossa comping in the Gilberto/clave tradition',
@@ -183,6 +203,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'montunoClave',
+    meter: '4/4',
     name: 'Montuno / Clave 3-2',
     style: 'Latin',
     description: 'Son clave 3-2 driven montuno hits',
@@ -196,6 +217,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'offbeatSkank',
+    meter: '4/4',
     name: 'Offbeat Skank',
     style: 'Reggae',
     description: 'Chords on the offbeat 8ths',
@@ -203,6 +225,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'arpRollUp',
+    meter: '4/4',
     name: 'Arp Roll Up (Harp)',
     style: 'Harp',
     description: 'Fast upward rolls on every quarter note',
@@ -215,6 +238,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'arpDownEighths',
+    meter: '4/4',
     name: 'Arp Down 8ths',
     style: 'Harp',
     description: 'Downward cascades on every 8th note',
@@ -231,6 +255,7 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
   },
   {
     id: 'bassPlusStrum',
+    meter: '4/4',
     name: 'Bass + Strum',
     style: 'Pop',
     description: 'Root note an octave down on beat 1, upper strum on beat 3',
@@ -238,6 +263,73 @@ export const RHYTHM_PATTERNS: RhythmPattern[] = [
       { step: 0, type: 'block', note: 0, octaveShift: -1, velocity: 0.9, holdSteps: 8 },
       strum(8, 'up', 0.85, 2, 35),
     ],
+  },
+  // --- 3/4, accentGroups [4,4,4]: three quarter-note beats at steps 0, 4, 8 ---
+  {
+    id: 'waltzOompah',
+    meter: '3/4',
+    name: 'Waltz Oom-Pah-Pah',
+    style: 'Waltz',
+    description: 'Low root on beat 1, chord on beats 2 and 3 — the literal waltz',
+    hits: [
+      { step: 0, type: 'block', note: 0, octaveShift: -1, velocity: 0.9, holdSteps: 4 },
+      block(4, 0.7, 3),
+      block(8, 0.65, 3),
+    ],
+  },
+  {
+    id: 'jazzWaltzComp',
+    meter: '3/4',
+    name: 'Jazz Waltz Comp',
+    style: 'Waltz',
+    description: 'Beat 1 then the and-of-2 and and-of-3 — the jazz waltz anticipation',
+    hits: [block(0, 0.85, 2), block(6, 0.7, 2), block(10, 0.6, 2)],
+  },
+  {
+    id: 'waltzArpRoll',
+    meter: '3/4',
+    name: 'Waltz Harp Roll',
+    style: 'Waltz',
+    description: 'Upward roll on each of the three beats',
+    hits: [
+      strum(0, 'up', 0.9, 3, 40),
+      strum(4, 'up', 0.75, 3, 40),
+      strum(8, 'up', 0.8, 3, 40),
+    ],
+  },
+  // --- 6/8, accentGroups [6,6]: TWO dotted-quarter beats at steps 0 and 6 ---
+  // Same twelve steps as 3/4 above; the difference is entirely where the weight
+  // lands. Nothing below may accent 0/4/8, or it reads as a waltz.
+  {
+    id: 'compoundEighthPads',
+    meter: '6/8',
+    name: '6/8 Compound Pads',
+    style: '6/8',
+    description: 'All six eighths, accented in twos of three — the compound pulse',
+    hits: [
+      block(0, 0.95, 2),
+      block(2, 0.7, 2),
+      block(4, 0.7, 2),
+      block(6, 0.85, 2),
+      block(8, 0.7, 2),
+      block(10, 0.7, 2),
+    ],
+  },
+  {
+    id: 'afroBellComp',
+    meter: '6/8',
+    name: 'Afro 6/8 Bell Comp',
+    style: '6/8',
+    description: 'Chord stabs on the Afro-Cuban 6/8 bell cell',
+    hits: [block(0, 0.9, 2), block(4, 0.7, 1.5), block(6, 0.85, 2), block(10, 0.7, 2)],
+  },
+  {
+    id: 'sixEightBallad',
+    meter: '6/8',
+    name: '6/8 Ballad',
+    style: '6/8',
+    description: 'One held chord per dotted-quarter beat',
+    hits: [block(0, 0.9, 6), block(6, 0.8, 6)],
   },
 ];
 

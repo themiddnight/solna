@@ -3,6 +3,7 @@ import type { ChordItem } from '../types';
 import { SCALES, rootSemitone, stepDurationSec } from '../utils/musicTheory';
 import { DEFAULT_VELOCITY } from './constants';
 import { groupByStyle } from './groupByStyle';
+import type { MeterId } from '../utils/meter';
 
 export type BassNoteToken =
   | 'root' | 'third' | 'fifth' | 'seventh' | 'octave'
@@ -25,6 +26,8 @@ export interface BassPattern {
   name: string;
   style: string;           // dropdown group, same as RHYTHM_STYLE_GROUPS
   description?: string;
+  /** Authored meter; see RhythmPattern.meter. Resolved with getMeter(). */
+  meter?: MeterId;
   steps: BassStep[];
 }
 
@@ -140,6 +143,7 @@ export function isApproachToken(token: BassNoteToken): boolean {
 export const BASS_PATTERNS: BassPattern[] = [
   {
     id: 'classic-walk',
+    meter: '4/4',
     name: 'Classic Walk',
     style: 'Walking',
     description: 'Root, 3rd, 5th, then chromatic approach to the next root (alternates above/below per bar)',
@@ -152,6 +156,7 @@ export const BASS_PATTERNS: BassPattern[] = [
   },
   {
     id: 'swing-double-approach',
+    meter: '4/4',
     name: 'Swing Double Approach',
     style: 'Walking',
     description: 'Root, 5th, then two chromatic approaches into the next root',
@@ -164,6 +169,7 @@ export const BASS_PATTERNS: BassPattern[] = [
   },
   {
     id: 'root-fifth-walk',
+    meter: '4/4',
     name: 'Root–5th Walk',
     style: 'Walking',
     description: 'Root, 5th, root, then the 5th of the next chord (dominant approach)',
@@ -176,6 +182,7 @@ export const BASS_PATTERNS: BassPattern[] = [
   },
   {
     id: 'dilla-sub',
+    meter: '4/4',
     name: 'Dilla Sub Groove',
     style: 'Grooves',
     description: 'Swung, deep sub notes hitting on 1, the and-of-2, and beat 3',
@@ -188,6 +195,7 @@ export const BASS_PATTERNS: BassPattern[] = [
   },
   {
     id: 'offbeat-sub',
+    meter: '4/4',
     name: 'Offbeat EDM Sub',
     style: 'Grooves',
     description: 'Offbeat sub pulses locking with synth stabs',
@@ -200,6 +208,7 @@ export const BASS_PATTERNS: BassPattern[] = [
   },
   {
     id: 'walking-groove',
+    meter: '4/4',
     name: 'Soulful Walking Bass',
     style: 'Walking',
     description: 'Walking bassline moving through root, 3rd, 5th and chromatic approaches',
@@ -212,6 +221,7 @@ export const BASS_PATTERNS: BassPattern[] = [
   },
   {
     id: 'driving-eighths',
+    meter: '4/4',
     name: 'Driving 8ths',
     style: 'Grooves',
     description: 'Straight 8th notes on the root (rock/punk drive)',
@@ -219,6 +229,7 @@ export const BASS_PATTERNS: BassPattern[] = [
   },
   {
     id: 'funk-octaves',
+    meter: '4/4',
     name: 'Funk Octaves',
     style: 'Grooves',
     description: 'Syncopated root/octave pops with staccato',
@@ -233,6 +244,7 @@ export const BASS_PATTERNS: BassPattern[] = [
   },
   {
     id: 'reggae-one-drop',
+    meter: '4/4',
     name: 'Reggae One-Drop',
     style: 'Grooves',
     description: 'Root–5th–octave on offbeats, staccato, downbeat left open',
@@ -245,6 +257,7 @@ export const BASS_PATTERNS: BassPattern[] = [
   },
   {
     id: 'arp-1357',
+    meter: '4/4',
     name: 'Arp 1-3-5-7',
     style: 'Grooves',
     description: 'Quarter-note arpeggio; 7th falls back to 5th on triads',
@@ -257,6 +270,7 @@ export const BASS_PATTERNS: BassPattern[] = [
   },
   {
     id: 'half-time-legato',
+    meter: '4/4',
     name: 'Half-Time Legato',
     style: 'Minimal',
     description: 'Root held 2 beats, 5th held 2 beats',
@@ -267,10 +281,60 @@ export const BASS_PATTERNS: BassPattern[] = [
   },
   {
     id: 'whole-note-root',
+    meter: '4/4',
     name: 'Whole-Note Root',
     style: 'Minimal',
     description: 'Root held the full bar',
     steps: [{ step: 0, note: 'root', holdSteps: 16 }],
+  },
+  // --- 3/4, accentGroups [4,4,4]: one note per beat at steps 0, 4, 8 ---
+  {
+    id: 'waltz-root-fifth',
+    meter: '3/4',
+    name: 'Waltz Root–5th',
+    style: 'Waltz',
+    description: 'Rising root, 5th, octave — one note on each of the three beats',
+    steps: [
+      { step: 0, note: 'root', holdSteps: 3 },
+      { step: 4, note: 'fifth', holdSteps: 3, velocity: 0.8 },
+      { step: 8, note: 'octave', holdSteps: 3, velocity: 0.75 },
+    ],
+  },
+  {
+    id: 'waltz-walking-three',
+    meter: '3/4',
+    name: 'Waltz Walking Three',
+    style: 'Waltz',
+    description: 'Jazz-waltz quarter notes: root, 3rd, chromatic approach to the next root',
+    steps: [
+      { step: 0, note: 'root', holdSteps: 4 },
+      { step: 4, note: 'third', holdSteps: 4 },
+      { step: 8, note: 'approachChromaticBelow', holdSteps: 4, alternate: true },
+    ],
+  },
+  // --- 6/8, accentGroups [6,6]: TWO dotted-quarter beats at steps 0 and 6 ---
+  {
+    id: 'six-eight-root-pulse',
+    meter: '6/8',
+    name: '6/8 Root Pulse',
+    style: '6/8',
+    description: 'Root then 5th, one held note per dotted-quarter beat',
+    steps: [
+      { step: 0, note: 'root', holdSteps: 6 },
+      { step: 6, note: 'fifth', holdSteps: 6 },
+    ],
+  },
+  {
+    id: 'afro-six-eight-tumbao',
+    meter: '6/8',
+    name: 'Afro 6/8 Tumbao',
+    style: '6/8',
+    description: 'Both beats plus an octave push on the last eighth of beat 2',
+    steps: [
+      { step: 0, note: 'root', holdSteps: 4 },
+      { step: 6, note: 'fifth', holdSteps: 2, velocity: 0.85 },
+      { step: 10, note: 'octave', holdSteps: 2, velocity: 0.8 },
+    ],
   },
 ];
 

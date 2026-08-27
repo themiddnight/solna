@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { BASS_PATTERNS, BASS_STYLE_GROUPS, resolveBassSteps } from './bassPatterns';
 import type { BassPattern } from './bassPatterns';
 import type { ChordItem } from '../types';
+import { getMeter } from '../utils/meter';
+import type { MeterId } from '../utils/meter';
 
 const Cmaj7: ChordItem = { id: 'c1', root: 'C', quality: 'maj7', bars: 1, notes: ['C4', 'E4', 'G4', 'B4'] };
 const F7: ChordItem = { id: 'c2', root: 'F', quality: '7', bars: 1, notes: ['F4', 'A4', 'C5', 'Eb5'] };
@@ -121,7 +123,98 @@ describe('timing, hold, staccato, velocity, rest, octaveShift (bpm 120 → 16th 
 
 describe('BASS_STYLE_GROUPS', () => {
   test('groups patterns by style in dropdown order', () => {
-    expect(BASS_STYLE_GROUPS.map((g) => g.style)).toEqual(['Walking', 'Grooves', 'Minimal']);
+    expect(BASS_STYLE_GROUPS.map((g) => g.style)).toEqual([
+      'Walking',
+      'Grooves',
+      'Minimal',
+      'Waltz',
+      '6/8',
+    ]);
     expect(BASS_STYLE_GROUPS.flatMap((g) => g.patterns)).toHaveLength(BASS_PATTERNS.length);
+  });
+});
+
+const BASS_METERS: [string, MeterId][] = [
+  ['classic-walk', '4/4'],
+  ['swing-double-approach', '4/4'],
+  ['root-fifth-walk', '4/4'],
+  ['dilla-sub', '4/4'],
+  ['offbeat-sub', '4/4'],
+  ['walking-groove', '4/4'],
+  ['driving-eighths', '4/4'],
+  ['funk-octaves', '4/4'],
+  ['reggae-one-drop', '4/4'],
+  ['arp-1357', '4/4'],
+  ['half-time-legato', '4/4'],
+  ['whole-note-root', '4/4'],
+  ['waltz-root-fifth', '3/4'],
+  ['waltz-walking-three', '3/4'],
+  ['six-eight-root-pulse', '6/8'],
+  ['afro-six-eight-tumbao', '6/8'],
+];
+
+describe('BASS_PATTERNS meter tags', () => {
+  test('every pattern is present, in order, with the meter it was written in', () => {
+    expect(BASS_PATTERNS.map((p) => [p.id, p.meter])).toEqual(BASS_METERS);
+  });
+
+  test("no step falls outside its own pattern's bar", () => {
+    for (const p of BASS_PATTERNS) {
+      const bar = getMeter(p.meter).stepsPerBar;
+      for (const s of p.steps) {
+        expect(s.step, `${p.id} step`).toBeGreaterThanOrEqual(0);
+        expect(s.step, `${p.id} step`).toBeLessThan(bar);
+      }
+    }
+  });
+
+  test('no hold rings past its own bar line', () => {
+    for (const p of BASS_PATTERNS) {
+      const bar = getMeter(p.meter).stepsPerBar;
+      for (const s of p.steps) {
+        expect(s.step + (s.holdSteps ?? 1), `${p.id} hold at step ${s.step}`).toBeLessThanOrEqual(bar);
+      }
+    }
+  });
+
+  test('both 3/4 lines put one note on each of the [4,4,4] beats, with their full authored shape', () => {
+    expect(byId('waltz-root-fifth').steps).toEqual([
+      { step: 0, note: 'root', holdSteps: 3 },
+      { step: 4, note: 'fifth', holdSteps: 3, velocity: 0.8 },
+      { step: 8, note: 'octave', holdSteps: 3, velocity: 0.75 },
+    ]);
+    expect(byId('waltz-walking-three').steps).toEqual([
+      { step: 0, note: 'root', holdSteps: 4 },
+      { step: 4, note: 'third', holdSteps: 4 },
+      { step: 8, note: 'approachChromaticBelow', holdSteps: 4, alternate: true },
+    ]);
+  });
+});
+
+describe('the 6/8 bass lines lean on steps 0 and 6, never on 4 and 8', () => {
+  const byId = (id: string) => BASS_PATTERNS.find((p) => p.id === id)!;
+
+  test('six-eight-root-pulse is one note per dotted-quarter beat', () => {
+    const p = byId('six-eight-root-pulse');
+    expect(p.steps.map((s) => s.step)).toEqual([0, 6]);
+    expect(p.steps.map((s) => s.holdSteps)).toEqual([6, 6]);
+    expect(p.steps.map((s) => s.note)).toEqual(['root', 'fifth']);
+  });
+
+  test('afro-six-eight-tumbao pushes off the last eighth of beat two', () => {
+    const p = byId('afro-six-eight-tumbao');
+    expect(p.steps).toEqual([
+      { step: 0, note: 'root', holdSteps: 4 },
+      { step: 6, note: 'fifth', holdSteps: 2, velocity: 0.85 },
+      { step: 10, note: 'octave', holdSteps: 2, velocity: 0.8 },
+    ]);
+  });
+
+  test('neither 6/8 line lands on the 3/4 beat set', () => {
+    for (const id of ['six-eight-root-pulse', 'afro-six-eight-tumbao']) {
+      const steps = byId(id).steps.map((s) => s.step);
+      expect(steps, id).not.toContain(4);
+      expect(steps, id).not.toContain(8);
+    }
   });
 });

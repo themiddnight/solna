@@ -18,6 +18,8 @@
 // the eslint ban on audio/ -> store/ and audio/ -> components/ cannot be
 // violated here. src/store/ may read it; that direction is allowed.
 
+import { DEFAULT_METER_ID, type MeterId } from '../../utils/meter';
+
 export const VIBE_DRUM_PATTERNS: Record<string, Record<string, number[]>> = {
   'lofi-half-time-brush': {
     kick:    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
@@ -73,6 +75,26 @@ export const VIBE_DRUM_PATTERNS: Record<string, Record<string, number[]>> = {
     tom:     [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     crash:   [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   },
+  // --- 3/4, accentGroups [4,4,4]: beats at 0, 4, 8 ---
+  'waltz-brush-three': {
+    kick:    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    snare:   [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+    hihat:   [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    openhat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+    clap:    [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+    tom:     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    crash:   [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  },
+  // --- 6/8, accentGroups [6,6]: only TWO beats, at 0 and 6 ---
+  'afro-six-eight-bell': {
+    kick:    [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+    snare:   [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0],
+    hihat:   [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    openhat: [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+    clap:    [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0],
+    tom:     [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    crash:   [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  },
 };
 
 /**
@@ -95,4 +117,30 @@ export function drumPatternById(id: string): Record<string, number[]> | undefine
     copy[row] = [...steps];
   }
   return copy;
+}
+
+/**
+ * The meter each authored pattern is written in, keyed by the SAME library ids
+ * as VIBE_DRUM_PATTERNS above.
+ *
+ * A sidecar rather than a field on the pattern, deliberately: VIBE_DRUM_PATTERNS
+ * is a flat `id -> row -> number[]` map, and wrapping it in `{ meter, rows }`
+ * would change `drumPatternById`'s return type, `InstantVibe.drumPattern`, the
+ * ORIGINAL_VIBE_DRUM_PATTERNS golden fixture and three invariant tests — all to
+ * carry one string. The invariant test pins the two key sets together.
+ */
+export const VIBE_DRUM_PATTERN_METERS: Record<string, MeterId> = {
+  'lofi-half-time-brush': '4/4',
+  'synthwave-four-on-floor': '4/4',
+  'edm-offbeat-pump': '4/4',
+  'ambient-sparse-drift': '4/4',
+  'boombap-swung-break': '4/4',
+  'zen-bamboo-pulse': '4/4',
+  'waltz-brush-three': '3/4',
+  'afro-six-eight-bell': '6/8',
+};
+
+/** The meter a library pattern was authored in; 4/4 for anything unknown. */
+export function drumPatternMeterId(id: string): MeterId {
+  return VIBE_DRUM_PATTERN_METERS[id] ?? DEFAULT_METER_ID;
 }

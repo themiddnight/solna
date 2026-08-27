@@ -193,6 +193,8 @@ export const GENRE_TO_KIT: Record<string, string> = {
   'Rock': 'Acoustic Studio',
   'Reggae': 'Warm Riddim',
   'Lo-Fi Hip-Hop': 'Lo-Fi Vinyl',
+  'Waltz': 'Acoustic Studio',
+  'Afro 6/8': 'Warm Riddim',
 };
 
 export function mergeDrumKit(partial?: Partial<DrumKit>): DrumKit {
