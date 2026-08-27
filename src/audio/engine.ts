@@ -1,5 +1,12 @@
 import { SynthParams, MasterEffects, FilterType } from '../types';
 import { noteFrequency, clampBpm, stepDurationSec, STEPS_PER_BAR } from '../utils/musicTheory';
+import {
+  beatIndexAt,
+  getMeter,
+  isBeatBoundary,
+  DEFAULT_METER_ID,
+  type Meter,
+} from '../utils/meter';
 import { DEFAULT_VELOCITY, ENV_FLOOR, SILENCE, clampCutoff, clampVelocity } from './constants';
 import { mergeDrumKit, type DrumKit } from './drumKits';
 import { clampEffects } from './effectLimits';
@@ -144,6 +151,10 @@ class AudioEngine {
   private clockBpm = 120;
   private clockStepIndex = 0; // monotonic 16th-step counter while the clock runs
   private clockNextStepTime = 0; // audio-clock seconds of the next step to schedule
+  // Active time signature. The clock itself stays a monotonic 16th counter —
+  // only BAR-RELATIVE logic (the metronome, the dispatched beat index) reads
+  // this. Set through store/engineSync.ts, never from a component.
+  private meter: Meter = getMeter(DEFAULT_METER_ID);
   private clockListeners = new Set<(step: number, beat: number, time: number) => void>();
   private static readonly CLOCK_LOOKAHEAD = 0.1; // schedule events this far ahead
   private static readonly CLOCK_REANCHOR_DELAY = 0.05; // gap used to re-anchor the schedule after resets and stalls
@@ -222,6 +233,14 @@ class AudioEngine {
     this.clockBpm = clampBpm(bpm);
   }
 
+  setMeter(meter: Meter): void {
+    this.meter = meter;
+  }
+
+  getMeter(): Meter {
+    return this.meter;
+  }
+
   /**
    * Restart the shared grid at step 0. Called when the transport starts from
    * a fully stopped state, so Play All begins at beat 1 instead of resuming
@@ -265,18 +284,33 @@ class AudioEngine {
       this.clockNextStepTime += stepDuration;
       this.clockStepIndex++;
 
-      if (this.metronomeEnabled && step % 4 === 0) {
-        this.playMetronomeClick(step % STEPS_PER_BAR === 0, time);
-      }
+      // THE MONOTONIC-COUNTER TRAP: clockStepIndex never resets, so every
+      // bar-relative decision must be derived here rather than taken from the
+      // absolute step. In 4/4 (stepsPerBar 16, accentGroups [4,4,4,4]) this
+      // reduces to exactly the old `step % 4 === 0` / `step % 16 === 0` /
+      // `Math.floor(step / 4)` arithmetic — output is byte-identical.
+      const stepsPerBar = this.meter.stepsPerBar;
+      const barIndex = Math.floor(step / stepsPerBar);
+      const stepInBar = step - barIndex * stepsPerBar;
+      const beat = barIndex * this.meter.accentGroups.length + beatIndexAt(stepInBar, this.meter.accentGroups);
+
       // One listener's failure is isolated: every other subscriber still gets
       // this step. Logged rather than swallowed so the fault is findable.
+      // Dispatched BEFORE the metronome click so both fire against the same
+      // step/beat pair for this iteration — the two are otherwise independent
+      // side effects (each schedules against the audio-clock `time`, not JS
+      // call order), so this ordering has no audible effect.
       this.clockListeners.forEach((fn) => {
         try {
-          fn(step, Math.floor(step / 4), time);
+          fn(step, beat, time);
         } catch (err) {
           console.error('[audioEngine] clock listener threw; continuing', err);
         }
       });
+
+      if (this.metronomeEnabled && isBeatBoundary(stepInBar, this.meter.accentGroups)) {
+        this.playMetronomeClick(stepInBar === 0, time);
+      }
     }
   }
 

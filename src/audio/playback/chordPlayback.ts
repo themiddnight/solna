@@ -5,6 +5,7 @@ import {
 } from "../rhythmPatterns";
 import { buildArpSequence } from "../arpeggiator";
 import { computeArpTriggers } from "../arpSchedule";
+import { arpStepFor } from "../../utils/meter";
 import {
   deriveChordNotes,
   getDiatonicChordForDegree,
@@ -166,7 +167,9 @@ const ARP_VELOCITY = 0.9;
  * The arpeggiator's take on a chord: instead of the rhythm pattern's hits,
  * `notes` are expanded by arpMode/arpOctaves and walked one note per trigger.
  * `step` is the ABSOLUTE clock step so the arp keeps its stride across bar and
- * chord boundaries rather than restarting on every chord.
+ * chord boundaries rather than restarting on every chord — but it is bar-phased
+ * through `arpStepFor` first, which is the identity in 4/4 and stops the arp
+ * from sliding against the bar line in an odd meter.
  */
 export function arpEventsForStep(
   notes: string[],
@@ -174,6 +177,7 @@ export function arpEventsForStep(
   step: number,
   stepDur: number,
   holdScale: number,
+  stepsPerBar: number = STEPS_PER_BAR,
 ): StepEvent[] {
   const sequence = buildArpSequence(
     notes,
@@ -182,7 +186,7 @@ export function arpEventsForStep(
   );
   if (sequence.length === 0) return [];
 
-  return computeArpTriggers(step, sequence.length, params.arpRate, stepDur).map(
+  return computeArpTriggers(arpStepFor(step, stepsPerBar), sequence.length, params.arpRate, stepDur).map(
     (t) => ({
       noteName: sequence[t.noteIndex],
       velocity: ARP_VELOCITY,
@@ -315,9 +319,15 @@ export function previewChordForScale(
   );
 }
 
-/** Duration of one 16-step bar at the given bpm, in seconds. */
-export function previewBarSeconds(bpm: number): number {
-  return barDurationSec(bpm);
+/**
+ * Duration of one bar at the given bpm, in seconds. `stepsPerBar` defaults to
+ * the 16-step 4/4 bar so every existing caller is unaffected; the ChordView
+ * preview call sites pass the active meter's `stepsPerBar` so the preview
+ * loop period matches what `playChordWithRhythm`/`playBassWithPattern`
+ * actually adapt the pattern to.
+ */
+export function previewBarSeconds(bpm: number, stepsPerBar: number = STEPS_PER_BAR): number {
+  return barDurationSec(bpm, stepsPerBar);
 }
 
 // --- Component preview bridge (layering rule 3) ---

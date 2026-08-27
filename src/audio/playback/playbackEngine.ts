@@ -1,4 +1,4 @@
-import { audioEngine, STEPS_PER_BAR } from "../engine";
+import { audioEngine } from "../engine";
 import type { SynthParams } from "../../types";
 
 // Engine bridge for the component-layer playback hooks (layering rules 1+3):
@@ -6,7 +6,6 @@ import type { SynthParams } from "../../types";
 // of audio/ into components/, and they reach the engine only through this
 // module — audio/ owns the engine, components own store reads and the clock
 // subscription.
-export { STEPS_PER_BAR };
 
 export function initPlaybackEngine(): void {
   audioEngine.init();

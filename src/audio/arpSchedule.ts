@@ -18,6 +18,11 @@ const ARP_RATE_CFG: Record<ArpRate, { stepMod: number; notes: number; holdFloor:
   '32n': { stepMod: 0.5, notes: 2, holdFloor: 0.03, holdFactor: 0.5 * 0.85 },
 };
 
+/**
+ * `step` must already be BAR-PHASED by `arpStepFor` (utils/meter.ts) at the
+ * call site. Passing the raw monotonic clock step makes the arp phase drift
+ * across bar lines in any meter whose bar is not a multiple of four steps.
+ */
 export function computeArpTriggers(step: number, seqLen: number, rate: ArpRate, stepDur16: number): ArpTrigger[] {
   const cfg = ARP_RATE_CFG[rate];
   if (step % cfg.stepMod !== 0) return [];

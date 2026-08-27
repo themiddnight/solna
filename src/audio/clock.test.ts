@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { barDurationSec, STEPS_PER_BAR, stepDurationSec } from '../utils/musicTheory';
+import { getMeter } from '../utils/meter';
 import { fakeCtx, makeEngine, type EngineInstance } from './testFakes';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the engine exports no
@@ -209,5 +210,121 @@ describe('shared clock dispatch', () => {
     for (let i = 1; i < downbeats.length; i++) {
       expect(downbeats[i] - downbeats[i - 1]).toBeCloseTo(barSec, 6);
     }
+  });
+});
+
+describe('meter-aware clock', () => {
+  test('4/4 metronome and beat dispatch are unchanged', () => {
+    const { engine, ctx, tick } = clockEngine();
+    const clicks: Array<{ step: number; downbeat: boolean }> = [];
+    const beats: number[] = [];
+    let dispatched = 0;
+    (engine as any).playMetronomeClick = (isDownbeat: boolean) => {
+      clicks.push({ step: dispatched, downbeat: isDownbeat });
+    };
+    engine.setMeter(getMeter('4/4'));
+    engine.setMetronomeEnabled(true);
+    engine.subscribeClock((step, beat) => {
+      dispatched = step;
+      beats[step] = beat;
+    });
+
+    for (let i = 0; i < 120; i++) {
+      tick();
+      ctx.currentTime += 0.025;
+    }
+
+    // Historical behaviour: a click on every 4th step, accented every 16th.
+    // Constraining only the clicks that DID fire (`c.step % 4 === 0`) is
+    // one-sided: regressing isBeatBoundary to `stepInBar === 0` would keep
+    // every one of those checks green while three-quarters of the metronome
+    // silently disappeared. Assert the complete, exhaustive click set instead.
+    const maxStep = beats.length - 1;
+    const expectedClickSteps = Array.from({ length: Math.floor(maxStep / 4) + 1 }, (_, i) => i * 4);
+    expect(clicks.length).toBeGreaterThan(5);
+    expect(clicks.map((c) => c.step)).toEqual(expectedClickSteps);
+    for (const c of clicks) {
+      expect(c.downbeat).toBe(c.step % 16 === 0);
+    }
+    // Historical behaviour: beat === Math.floor(step / 4).
+    beats.forEach((beat, step) => expect(beat).toBe(Math.floor(step / 4)));
+  });
+
+  test('7/8 clicks on the 3+2+2 grouping and accents only the downbeat', () => {
+    const { engine, ctx, tick } = clockEngine();
+    const clicks: Array<{ step: number; downbeat: boolean }> = [];
+    let dispatched = 0;
+    (engine as any).playMetronomeClick = (isDownbeat: boolean) => {
+      clicks.push({ step: dispatched, downbeat: isDownbeat });
+    };
+    engine.setMeter(getMeter('7/8'));
+    engine.setMetronomeEnabled(true);
+    engine.subscribeClock((step) => {
+      dispatched = step;
+    });
+
+    for (let i = 0; i < 160; i++) {
+      tick();
+      ctx.currentTime += 0.025;
+    }
+
+    expect(clicks.length).toBeGreaterThan(6);
+    for (const c of clicks) {
+      const stepInBar = c.step % 14;
+      expect([0, 6, 10]).toContain(stepInBar);
+      expect(c.downbeat).toBe(stepInBar === 0);
+    }
+  });
+
+  test('7/8 downbeats never drift: bar N starts at exactly 14N steps', () => {
+    const { engine, ctx, tick } = clockEngine();
+    const downbeatSteps: number[] = [];
+    let dispatched = 0;
+    (engine as any).playMetronomeClick = (isDownbeat: boolean) => {
+      if (isDownbeat) downbeatSteps.push(dispatched);
+    };
+    engine.setMeter(getMeter('7/8'));
+    engine.setMetronomeEnabled(true);
+    engine.subscribeClock((step) => {
+      dispatched = step;
+    });
+
+    // 200 ticks (the brief's original count) only covers ~2.9 bars of 14
+    // steps at the default 120 bpm, so at most 3 downbeats are ever dispatched
+    // and `toBeGreaterThan(3)` can never pass. 260 ticks covers ~4.6 bars.
+    for (let i = 0; i < 260; i++) {
+      tick();
+      ctx.currentTime += 0.025;
+    }
+
+    expect(downbeatSteps.length).toBeGreaterThan(3);
+    for (let i = 1; i < downbeatSteps.length; i++) {
+      expect(downbeatSteps[i] - downbeatSteps[i - 1]).toBe(14);
+    }
+  });
+
+  test('6/8 dispatches two beats per twelve-step bar', () => {
+    const { engine, ctx, tick } = clockEngine();
+    const beats: number[] = [];
+    engine.setMeter(getMeter('6/8'));
+    engine.subscribeClock((step, beat) => {
+      beats[step] = beat;
+    });
+
+    for (let i = 0; i < 120; i++) {
+      tick();
+      ctx.currentTime += 0.025;
+    }
+
+    beats.forEach((beat, step) => {
+      const bar = Math.floor(step / 12);
+      const stepInBar = step % 12;
+      expect(beat).toBe(bar * 2 + (stepInBar < 6 ? 0 : 1));
+    });
+  });
+
+  test('the meter defaults to 4/4 before anything sets one', () => {
+    const { engine } = clockEngine();
+    expect(engine.getMeter().id).toBe('4/4');
   });
 });

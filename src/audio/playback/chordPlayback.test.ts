@@ -3,6 +3,7 @@ import { audioEngine } from '../../audio/engine';
 import type { ChordItem, SynthParams } from '../../types';
 import { equalPowerVelocityScale } from '../../audio/rhythmPatterns';
 import type { RhythmPattern } from '../../audio/rhythmPatterns';
+import { arpStepFor } from '../../utils/meter';
 import {
   arpEventsForStep,
   buildChordEvents,
@@ -239,6 +240,18 @@ describe('pattern preview chord & timing', () => {
     // 120 bpm → sixteenth = 0.125 s → one 16-step bar = 2 s.
     expect(previewBarSeconds(120)).toBe(2);
   });
+
+  test('default stepsPerBar still equals the 16-step value', () => {
+    expect(previewBarSeconds(120, 16)).toBe(previewBarSeconds(120));
+  });
+
+  test('a 3/4 bar (12 steps) previews as three quarters of a 4/4 bar at the same bpm', () => {
+    expect(previewBarSeconds(120, 12)).toBeCloseTo(previewBarSeconds(120) * 0.75, 12);
+  });
+
+  test('a 12/8 bar (24 steps) previews as 1.5x a 4/4 bar at the same bpm', () => {
+    expect(previewBarSeconds(120, 24)).toBeCloseTo(previewBarSeconds(120) * 1.5, 12);
+  });
 });
 
 describe('eventsForStep', () => {
@@ -460,6 +473,29 @@ describe('arpEventsForStep', () => {
 
   test('returns nothing when there are no notes to arpeggiate', () => {
     expect(arpEventsForStep([], ARP, 0, 0.125, 1)).toEqual([]);
+  });
+
+  test('a non-default stepsPerBar bar-phases the step instead of taking it raw', () => {
+    // 7/8 (stepsPerBar 14) is the one meter in the table that is NOT a
+    // multiple of 4, so arpStepFor re-phases it: arpStepFor(14, 14) lands on
+    // the next bar's phase-quantised start (16), not on 14 itself. If
+    // arpEventsForStep ever stopped bar-phasing its `step` argument — e.g. by
+    // reverting to a plain `computeArpTriggers(step, ...)` call — this test
+    // would fail even though the whole rest of the suite (which only ever
+    // passes the defaulted, byte-identical 4/4 stepsPerBar) would stay green.
+    const rephasedStep = arpStepFor(14, 14);
+    expect(rephasedStep).toBe(16);
+
+    const [odd] = arpEventsForStep(NOTES, ARP, 14, 0.125, 1, 14);
+    const [control] = arpEventsForStep(NOTES, ARP, 14, 0.125, 1);
+
+    // The 4/4 control call (stepsPerBar defaults to 16, already a multiple of
+    // 4) takes step 14 raw: arpStepFor(14, 16) === 14, noteIndex 14 % 3 = G4.
+    expect(control.noteName).toEqual('G4');
+    // The 7/8 call re-phases 14 to 16 before indexing: noteIndex 16 % 3 = E4 —
+    // the same note `computeArpTriggers` would pick for step 16 directly.
+    expect(odd.noteName).toEqual('E4');
+    expect(odd.noteName).not.toEqual(control.noteName);
   });
 });
 

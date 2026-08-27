@@ -3,6 +3,7 @@ import { audioEngine } from '../engine';
 import { buildArpSequence } from '../arpeggiator';
 import { computeArpTriggers } from '../arpSchedule';
 import { stepDurationSec } from '../../utils/musicTheory';
+import { arpStepFor } from '../../utils/meter';
 import type { SynthParams } from '../../types';
 import type { SynthControlTarget } from '../../utils/synthControl';
 
@@ -44,7 +45,8 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
       if (sequence.length === 0) return;
 
       const stepDur16 = stepDurationSec(bpm);
-      for (const t of computeArpTriggers(step, sequence.length, params.arpRate, stepDur16)) {
+      const arpStep = arpStepFor(step, audioEngine.getMeter().stepsPerBar);
+      for (const t of computeArpTriggers(arpStep, sequence.length, params.arpRate, stepDur16)) {
         const note = sequence[t.noteIndex];
         audioEngine.triggerSynthNoteOn(note, params, 0.9, time + t.timeOffsetSec, target);
         audioEngine.triggerSynthNoteOff(note, params.release, time + t.timeOffsetSec + t.holdSec, target);
