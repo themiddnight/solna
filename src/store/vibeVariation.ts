@@ -2,6 +2,8 @@ import type { DecorationLayer, DensityName, DrumDecorationRule, InstantVibe } fr
 import { progressionById, resolveProgression } from '../audio/data/chordProgressions';
 import { BASS_PATTERNS } from '../audio/bassPatterns';
 import { RHYTHM_PATTERNS } from '../audio/rhythmPatterns';
+import { getMeter, type MeterId } from '../utils/meter';
+import { adaptStepRow } from '../utils/patternAdapt';
 
 /**
  * One bar of sixteenths, step 0 = beat 1. Every row is either a regular
@@ -28,6 +30,28 @@ export const DRUM_DENSITIES: Record<DensityName, number[]> = {
   lateFill:     [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0],
   fillTail:     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
 };
+
+/**
+ * The meter every row above was authored in. Explicit rather than implied by
+ * the row length: 3/4 and 6/8 are both 12 steps and differ only in accent
+ * grouping, so a bare length is not a sufficient tag anywhere in this codebase.
+ */
+export const DRUM_DENSITY_METER: MeterId = '4/4';
+
+/**
+ * A catalogue row adapted to the bar it is about to decorate, using the same
+ * trim/loop rule as every other pattern in the app (utils/patternAdapt.ts).
+ * Always a fresh array: the drawn row flows into a vibe and then into store
+ * state, and the catalogue must stay authoritative and immutable.
+ *
+ * BEWARE: `pickup` (step 14) and `fillTail` (steps 13, 15) are end-of-bar
+ * figures and trim to silence in any bar shorter than 15 steps — i.e. they
+ * become a duplicate of `off` in 3/4, 6/8 and 7/8. An invariant test pins that,
+ * and no vibe should list them as a candidate in those meters.
+ */
+export function densityRowFor(name: DensityName, stepsPerBar: number): number[] {
+  return adaptStepRow(DRUM_DENSITIES[name], stepsPerBar);
+}
 
 /**
  * The order layers are drawn in and printed in. Fixed so a scripted draw can
@@ -105,15 +129,17 @@ export function eligibleDensities(
   layer: DecorationLayer,
   candidates: DensityName[],
   kick: number[],
+  stepsPerBar: number,
 ): DensityName[] {
   if (!COLLISION_FILTERED.includes(layer)) return candidates;
-  return candidates.filter((name) => !collidesWithKick(DRUM_DENSITIES[name], kick));
+  return candidates.filter((name) => !collidesWithKick(densityRowFor(name, stepsPerBar), kick));
 }
 
 function rollDecoration(
   authored: Record<string, number[]>,
   rule: DrumDecorationRule,
   draw: VibeDraw,
+  stepsPerBar: number,
 ): { drumPattern: Record<string, number[]>; drums: VariationSummary['drums'] } {
   const drumPattern: Record<string, number[]> = { ...authored };
   const drums: VariationSummary['drums'] = [];
@@ -125,14 +151,14 @@ function rollDecoration(
     if (!candidates || candidates.length === 0) {
       throw new Error(`DrumDecorationRule: layer "${layer}" is listed with no densities`);
     }
-    const eligible = eligibleDensities(layer, candidates, kick);
+    const eligible = eligibleDensities(layer, candidates, kick, stepsPerBar);
     if (eligible.length === 0) {
       throw new Error(`DrumDecorationRule: every "${layer}" candidate collides with the kick`);
     }
     const density = draw.pick(eligible);
-    // Copy: the catalogue row is shared module state and must not be aliased
-    // into a vibe that later flows into the store.
-    drumPattern[layer] = [...DRUM_DENSITIES[density]];
+    // Adapted to the vibe's own bar, so every row of the returned pattern has
+    // the same length. densityRowFor already returns a fresh array.
+    drumPattern[layer] = densityRowFor(density, stepsPerBar);
     drums.push({ layer, density });
   }
 
@@ -179,7 +205,13 @@ export function resolveVibeVariation(
   // it cannot hit the auto-harmonize collapse bug at all.
   const chords = resolveProgression(progression, scaleRoot, vibe.scaleType, vibe.chordOctave);
 
-  const { drumPattern, drums } = rollDecoration(vibe.drumPattern, rule.drumDecoration, draw);
+  const stepsPerBar = getMeter(vibe.meter).stepsPerBar;
+  const { drumPattern, drums } = rollDecoration(
+    vibe.drumPattern,
+    rule.drumDecoration,
+    draw,
+    stepsPerBar,
+  );
 
   return {
     vibe: {

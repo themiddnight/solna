@@ -62,4 +62,16 @@ export const ORIGINAL_VIBE_CHORDS: Record<string, ChordItem[]> = {
     snapshotChord('zn3', 'G', 'min', 2, 4),
     snapshotChord('zn4', 'D#', 'maj', 2, 4),
   ],
+  'lofi-waltz': [
+    snapshotChord('lw1', 'D', 'min9', 1, 4),
+    snapshotChord('lw2', 'A#', 'maj7', 1, 4),
+    snapshotChord('lw3', 'G', 'min9', 1, 4),
+    snapshotChord('lw4', 'C', '7', 1, 4),
+  ],
+  'afro-six-eight': [
+    snapshotChord('af1', 'D', 'min7', 1, 4),
+    snapshotChord('af2', 'G', '7', 1, 4),
+    snapshotChord('af3', 'D', 'min7', 1, 4),
+    snapshotChord('af4', 'G', '7', 1, 4),
+  ],
 };

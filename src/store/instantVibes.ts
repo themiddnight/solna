@@ -69,6 +69,10 @@ export function applyInstantVibeToStore(vibe: InstantVibe) {
 
   // 1. Context & BPM
   store.setBpm(vibe.bpm);
+  // MUST precede applyDrumPattern below: that action adapts the incoming rows
+  // to whatever meter is active when it runs, so setting the meter afterwards
+  // would leave the grid adapted to the OUTGOING vibe's bar length.
+  store.setMeter(vibe.meter);
   store.setScaleRoot(vibe.scaleRoot);
   store.setScaleType(vibe.scaleType);
   store.setSelectedVibeId(vibe.id);
@@ -114,8 +118,9 @@ export function applyInstantVibeToStore(vibe: InstantVibe) {
   });
 
   // Restart only what was running. Both playback hooks arm on
-  // `step % STEPS_PER_BAR === 0`, so the restart lands on the next bar by
-  // construction — no alignment code needed here.
+  // `step % stepsPerBar === 0` for the ACTIVE meter, which was just set above,
+  // so the restart lands on the next bar by construction — no alignment code
+  // needed here.
   if (wasActive.sequencer) store.play('sequencer');
   if (wasActive.chords) store.play('chords');
 }
@@ -127,6 +132,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     tagline: 'Warm dusty beats & relaxing jazz chords',
     emoji: '☕',
     bpm: 84,
+    meter: '4/4',
     scaleRoot: 'C',
     scaleType: 'Major',
     progressionId: 'lofi-morning-turnaround',
@@ -186,6 +192,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     tagline: 'Neon night driving with retro analog synth & pumping bass',
     emoji: '🏎️',
     bpm: 118,
+    meter: '4/4',
     scaleRoot: 'A',
     scaleType: 'Natural Minor',
     progressionId: 'cine-epic-ostinato',
@@ -247,6 +254,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     tagline: 'High-energy 128 BPM festival drop with punchy kicks & stabs',
     emoji: '⚡',
     bpm: 128,
+    meter: '4/4',
     scaleRoot: 'F',
     scaleType: 'Natural Minor',
     progressionId: 'edm-cyber-vamp',
@@ -305,6 +313,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     tagline: 'Floating ethereal pads, lush reverbs & meditative chords',
     emoji: '🌌',
     bpm: 72,
+    meter: '4/4',
     scaleRoot: 'D',
     scaleType: 'Lydian',
     progressionId: 'ambient-lydian-halo',
@@ -363,6 +372,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     tagline: 'Crisp swing drums, soulful minor keys & groovy bass',
     emoji: '🎙️',
     bpm: 92,
+    meter: '4/4',
     scaleRoot: 'E',
     scaleType: 'Dorian',
     progressionId: 'boombap-soul-piano',
@@ -424,6 +434,7 @@ export const INSTANT_VIBES: InstantVibe[] = [
     tagline: 'Peaceful pentatonic bells, bamboo flute sounds & soothing flow',
     emoji: '🎋',
     bpm: 78,
+    meter: '4/4',
     scaleRoot: 'G',
     scaleType: 'Hirajoshi',
     progressionId: 'zen-bamboo-vamp',
@@ -477,6 +488,126 @@ export const INSTANT_VIBES: InstantVibe[] = [
           hihat: ['quarters', 'eighths', 'halves'],
           openhat: ['off', 'pickup', 'midBar'],
           tom: ['off', 'midBar', 'pickup'],
+          crash: ['off', 'downbeat'],
+        },
+      },
+    },
+  },
+  {
+    id: 'lofi-waltz',
+    name: 'Lo-Fi Waltz',
+    tagline: 'Dusty three-four turns with jazz keys and a brushed kit',
+    emoji: '🎠',
+    bpm: 96,
+    meter: '3/4',
+    scaleRoot: 'F',
+    scaleType: 'Major',
+    progressionId: 'lofi-rainy-window',
+
+    // Beat: brushed three-four, one kick per bar
+    soundKit: 'Lo-Fi Vinyl',
+    drumFilterCutoff: 6800,
+    drumFilterResonance: 1.0,
+    drumFilterType: 'lowpass',
+    drumPatternId: 'waltz-brush-three',
+    drumPattern: drumPatternById('waltz-brush-three')!,
+
+    // Chords: FM tines comping the literal oom-pah-pah
+    chords: resolveProgression(progressionById('lofi-rainy-window')!, 'F', 'Major', 4),
+    chordRhythmId: 'waltzOompah',
+    chordFeel: 0.72, // Loose, brushed
+    chordOctave: 4,
+    chordPresetId: 'factory-mellow-epiano',
+
+    // Bass: rising root-5th-octave, one note per beat
+    bassPatternId: 'waltz-root-fifth',
+    bassFeel: 0.68,
+    bassOctave: 2,
+    bassPresetId: 'bass-warm-tri',
+
+    // Main Synth: FM tine piano
+    synthPresetId: 'factory-fm-tine-piano',
+
+    effectChainId: 'lofi-tape-room',
+    effects: requireEffectChain('lofi-tape-room'),
+
+    // lofi-waltz
+    variation: {
+      genre: 'lofi',
+      keyPool: ['C', 'D', 'F', 'G', 'A'],
+      bpmRange: [88, 104],
+      progressionIds: ['jazz-ii-v-i-vi', 'jazz-neosoul-butter', 'lofi-coffeehouse', 'lofi-bedroom-pop', 'lofi-rainy-window', 'lofi-tape-loop', 'lofi-morning-turnaround'],
+      rhythmIds: ['waltzOompah', 'jazzWaltzComp', 'waltzArpRoll'],
+      bassPatternIds: ['waltz-root-fifth', 'waltz-walking-three'],
+      drumDecoration: {
+        layers: ['hihat', 'openhat', 'tom', 'crash'],
+        densities: {
+          // hihat and crash are exempt from the kick-collision filter, so they
+          // may sit on step 0. The other two may not: this kick is step 0 only.
+          hihat: ['quarters', 'eighths', 'lofi16ths'],
+          openhat: ['off', 'and2and4', 'offbeat8ths'],
+          tom: ['off', 'midBar', 'lateFill'],
+          crash: ['off', 'downbeat'],
+        },
+      },
+    },
+  },
+  {
+    id: 'afro-six-eight',
+    name: 'Afro 6/8',
+    tagline: 'Compound bell groove, modal Dorian vamp, two beats to the bar',
+    emoji: '🪘',
+    bpm: 132,
+    meter: '6/8',
+    scaleRoot: 'D',
+    scaleType: 'Dorian',
+    progressionId: 'cine-dorian-voyage',
+
+    // Beat: two dotted-quarter beats, snare pushing off the last eighth of each
+    soundKit: 'Acoustic Studio',
+    drumFilterCutoff: 9000,
+    drumFilterResonance: 1.0,
+    drumFilterType: 'lowpass',
+    drumPatternId: 'afro-six-eight-bell',
+    drumPattern: drumPatternById('afro-six-eight-bell')!,
+
+    // Chords: tines on the one-bar 6/8 bell cell
+    chords: resolveProgression(progressionById('cine-dorian-voyage')!, 'D', 'Dorian', 4),
+    chordRhythmId: 'afroBellComp',
+    chordFeel: 0.55,
+    chordOctave: 4,
+    chordPresetId: 'factory-fm-tine-piano',
+
+    // Bass: both beats plus the octave push on the last eighth of beat two
+    bassPatternId: 'afro-six-eight-tumbao',
+    bassFeel: 0.5,
+    bassOctave: 2,
+    bassPresetId: 'bass-round-pluck',
+
+    // Main Synth: bell lead, the voice the groove is named for
+    synthPresetId: 'factory-glocken-bell',
+
+    effectChainId: 'boombap-dry-room',
+    effects: requireEffectChain('boombap-dry-room'),
+
+    // afro-six-eight
+    variation: {
+      genre: 'boombap',
+      keyPool: ['C', 'D', 'E', 'F', 'G'],
+      bpmRange: [126, 138],
+      progressionIds: ['cine-dorian-voyage', 'boombap-dusty-ii-v', 'boombap-crate-dig', 'boombap-head-nod', 'boombap-soul-piano'],
+      rhythmIds: ['afroBellComp', 'compoundEighthPads', 'sixEightBallad'],
+      bassPatternIds: ['afro-six-eight-tumbao', 'six-eight-root-pulse'],
+      drumDecoration: {
+        layers: ['hihat', 'openhat', 'tom', 'crash'],
+        densities: {
+          // This kick hits BOTH 0 and 6, so every catalogue row that touches
+          // either is ineligible for openhat and tom once adapted to twelve
+          // steps. What survives is off / backbeat (step 4) / lateFill (step 7).
+          // hihat and crash are exempt from the filter.
+          hihat: ['eighths', 'sixteenths', 'lofi16ths'],
+          openhat: ['off', 'backbeat', 'lateFill'],
+          tom: ['off', 'lateFill'],
           crash: ['off', 'downbeat'],
         },
       },

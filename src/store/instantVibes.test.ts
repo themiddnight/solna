@@ -8,7 +8,7 @@ import { useAppStore } from './store';
 
 describe('Instant Vibes Mode', () => {
   test('contains all 6 curated genre vibes with complete presets and feel settings', () => {
-    expect(INSTANT_VIBES.length).toBe(6);
+    expect(INSTANT_VIBES.length).toBe(8);
 
     for (const vibe of INSTANT_VIBES) {
       expect(Boolean(vibe.id)).toBe(true);
@@ -69,13 +69,33 @@ describe('Instant Vibes Mode', () => {
 
   test('applyInstantVibeToStore actually rewrites the sequencer track steps to match the vibe drum pattern', () => {
     const synthwave = INSTANT_VIBES.find((v) => v.id === 'synthwave-80s')!;
+
+    // Seed the padding (indices 16-23) with a distinguishing `true` before
+    // applying the vibe. Asserting padding is `false` both before and after
+    // can't distinguish "genuinely preserved" from "reset to false" — a
+    // seeded `true` that must survive makes this an independent proof, at the
+    // applyInstantVibeToStore entry point rather than just writeStepWindow's
+    // own unit tests.
+    const before = useAppStore.getState().sequencerTracks;
+    useAppStore
+      .getState()
+      .setSequencerTracks(before.map((t) => ({ ...t, steps: t.steps.map((v, i) => (i === 20 ? true : v)) })));
+
     applyInstantVibeToStore(synthwave);
 
     const tracks = useAppStore.getState().sequencerTracks;
     for (const track of tracks) {
       const vibeSteps = synthwave.drumPattern[track.instrument];
       expect(Boolean(vibeSteps)).toBe(true);
-      expect(track.steps).toEqual(vibeSteps.map((v) => v === 1));
+      // Store rows are always 24-wide; the vibe's 16-step pattern lands in the
+      // window and the untouched padding stays silent.
+      expect(track.steps.length).toBe(24);
+      expect(track.steps.slice(0, vibeSteps.length)).toEqual(vibeSteps.map((v) => v === 1));
+      // Padding invariant: the seeded `true` at index 20 must survive.
+      expect(track.steps[20]).toBe(true);
+      expect(
+        track.steps.slice(vibeSteps.length).every((v, i) => (vibeSteps.length + i === 20 ? v === true : v === false)),
+      ).toBe(true);
     }
   });
 
@@ -109,7 +129,7 @@ describe('vibe preset id resolution', () => {
     }
   });
 
-  test('the 6x3 preset matrix is pinned exactly', () => {
+  test('the 8x3 preset matrix is pinned exactly', () => {
     expect(INSTANT_VIBES.map((v) => ({
       id: v.id,
       synthPresetId: v.synthPresetId,
@@ -122,6 +142,8 @@ describe('vibe preset id resolution', () => {
       { id: 'ambient-chill', synthPresetId: 'factory-celestial-shimmer', chordPresetId: 'factory-warm-polypad', bassPresetId: 'bass-deep-sine' },
       { id: 'hiphop-groove', synthPresetId: 'factory-mellow-epiano', chordPresetId: 'factory-fm-tine-piano', bassPresetId: 'bass-round-pluck' },
       { id: 'asian-zen', synthPresetId: 'factory-glocken-bell', chordPresetId: 'factory-koto-pluck', bassPresetId: 'bass-warm-tri' },
+      { id: 'lofi-waltz', synthPresetId: 'factory-fm-tine-piano', chordPresetId: 'factory-mellow-epiano', bassPresetId: 'bass-warm-tri' },
+      { id: 'afro-six-eight', synthPresetId: 'factory-glocken-bell', chordPresetId: 'factory-fm-tine-piano', bassPresetId: 'bass-round-pluck' },
     ]);
   });
 
@@ -337,6 +359,7 @@ describe('applyInstantVibeToStore audible cut', () => {
 
 import { SCALES, isNoteInScale } from '../utils/musicTheory';
 import { progressionById, resolveProgression } from '../audio/data/chordProgressions';
+import { isMeterId } from '../utils/meter';
 
 describe('vibe scales', () => {
   test('every vibe scaleType is a real key of SCALES', () => {
@@ -362,6 +385,98 @@ describe('vibe scales', () => {
     for (const chord of zen.chords) {
       for (const note of chord.notes) {
         expect(isNoteInScale(note, 'G', 'Hirajoshi')).toBe(true);
+      }
+    }
+  });
+});
+
+describe('vibe meters', () => {
+  test('every vibe declares a real meter; the original six stay at 4/4, lofi-waltz is 3/4 and afro-six-eight is 6/8', () => {
+    for (const vibe of INSTANT_VIBES) {
+      expect(isMeterId(vibe.meter), `${vibe.id} must declare a meter`).toBe(true);
+      const expectedMeter = vibe.id === 'lofi-waltz' ? '3/4' : vibe.id === 'afro-six-eight' ? '6/8' : '4/4';
+      expect(vibe.meter, `${vibe.id} meter`).toBe(expectedMeter);
+    }
+  });
+
+  test('the eight vibe ids are unchanged — they are persisted in project files', () => {
+    expect(INSTANT_VIBES.map((v) => v.id)).toEqual([
+      'lofi-chill',
+      'synthwave-80s',
+      'cyber-dance',
+      'ambient-chill',
+      'hiphop-groove',
+      'asian-zen',
+      'lofi-waltz',
+      'afro-six-eight',
+    ]);
+  });
+
+  test('applying a vibe writes its meter into the transport', () => {
+    useAppStore.getState().setMeter('7/8');
+    applyInstantVibeToStore(INSTANT_VIBES[0]);
+    expect(useAppStore.getState().meterId).toBe('4/4');
+  });
+
+  test('applying a vibe from a narrower meter still lands the transport meter and the drum grid correctly', () => {
+    // End-state sanity check only — NOT an ordering pin. Starting from a
+    // narrower meter, applying a vibe leaves the transport at the vibe's own
+    // meter and the grid holding the vibe's authored hits. It cannot by
+    // itself prove setMeter ran before applyDrumPattern: adaptStepRow
+    // truncates a longer source row rather than stretching it, so
+    // synthwave's kick step 12 — inside both a 14- and a 16-step window —
+    // survives either call order (confirmed by manually swapping the two
+    // calls: this assertion still passed). The real ordering pin is the
+    // call-order recorder in the next test.
+    useAppStore.getState().setMeter('7/8');
+    applyInstantVibeToStore(INSTANT_VIBES[1]);
+    const kick = useAppStore.getState().sequencerTracks.find((t) => t.instrument === 'kick')!;
+    expect(useAppStore.getState().meterId).toBe('4/4');
+    expect(kick.steps[12]).toBe(true);
+  });
+
+  test('setMeter runs before applyDrumPattern — the order the drum grid depends on', () => {
+    // Order-pin via a call recorder (same technique as `focusSynthTarget` in
+    // synthControl.test.ts), rather than relying on drum-cell data to expose
+    // a reorder: applyDrumPattern (Task 9) reads the ACTIVE meter to decide
+    // how to window the incoming rows, so if setMeter ran after it, the grid
+    // would be adapted against the OUTGOING vibe's bar length. This directly
+    // observes which of the two ran first, independent of any one vibe's
+    // pattern shape.
+    const order: string[] = [];
+    const originals = {
+      setMeter: useAppStore.getState().setMeter,
+      applyDrumPattern: useAppStore.getState().applyDrumPattern,
+    };
+    useAppStore.setState({
+      setMeter: (id) => {
+        order.push('setMeter');
+        originals.setMeter(id);
+      },
+      applyDrumPattern: (pattern) => {
+        order.push('applyDrumPattern');
+        originals.applyDrumPattern(pattern);
+      },
+    });
+
+    try {
+      applyInstantVibeToStore(INSTANT_VIBES[0]);
+    } finally {
+      useAppStore.setState({ setMeter: originals.setMeter, applyDrumPattern: originals.applyDrumPattern });
+    }
+
+    expect(order).toEqual(['setMeter', 'applyDrumPattern']);
+  });
+
+  test("each vibe's rhythm and bass pools stay inside its own meter", () => {
+    // A vibe whose dice can land on a 4/4 pattern would silently adapt it every
+    // reroll. Nothing forbids that at the type level; this is the guard.
+    for (const v of INSTANT_VIBES) {
+      for (const id of v.variation!.rhythmIds) {
+        expect(RHYTHM_PATTERNS.find((p) => p.id === id)!.meter, `${v.id}/${id}`).toBe(v.meter);
+      }
+      for (const id of v.variation!.bassPatternIds) {
+        expect(BASS_PATTERNS.find((p) => p.id === id)!.meter, `${v.id}/${id}`).toBe(v.meter);
       }
     }
   });

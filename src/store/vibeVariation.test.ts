@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { INSTANT_VIBES } from './instantVibes';
-import { createDraw, DECORATION_ORDER, DRUM_DENSITIES, LAYER_LABELS } from './vibeVariation';
+import {
+  createDraw,
+  DECORATION_ORDER,
+  DRUM_DENSITIES,
+  DRUM_DENSITY_METER,
+  densityRowFor,
+  LAYER_LABELS,
+} from './vibeVariation';
+import { getMeter } from '../utils/meter';
+import type { DensityName } from '../types';
 import { firstDraw, lastDraw, scriptedDraw } from './vibeVariationFixtures';
 
 function vibe(id: string) {
@@ -236,12 +245,11 @@ describe('authored variation data', () => {
     for (const v of INSTANT_VIBES) {
       const { layers, densities } = v.variation!.drumDecoration;
       const kick = v.drumPattern.kick;
+      const stepsPerBar = getMeter(v.meter).stepsPerBar;
       for (const layer of layers) {
         if (!COLLISION_FILTERED.includes(layer)) continue;
-        const survivors = densities[layer]!.filter(
-          (name) => !DRUM_DENSITIES[name].some((hit, i) => hit === 1 && kick[i] === 1),
-        );
-        expect(survivors.length).toBeGreaterThan(0);
+        const survivors = eligibleDensities(layer, densities[layer]!, kick, stepsPerBar);
+        expect(survivors.length, `${v.id}/${layer}`).toBeGreaterThan(0);
       }
     }
   });
@@ -253,15 +261,32 @@ describe('authored variation data', () => {
     for (const v of INSTANT_VIBES) {
       const { layers, densities } = v.variation!.drumDecoration;
       const kick = v.drumPattern.kick;
+      const stepsPerBar = getMeter(v.meter).stepsPerBar;
       for (const layer of layers) {
         if (!COLLISION_FILTERED.includes(layer)) continue;
-        removed += densities[layer]!.filter((name) =>
-          DRUM_DENSITIES[name].some((hit, i) => hit === 1 && kick[i] === 1),
-        ).length;
+        removed +=
+          densities[layer]!.length -
+          eligibleDensities(layer, densities[layer]!, kick, stepsPerBar).length;
       }
     }
     // hiphop-groove's kick hits step 6, which is `and2and4`'s first hit.
     expect(removed).toBe(1);
+  });
+
+  test('no vibe lists a candidate that is silent in that vibe\'s own meter', () => {
+    // `off` is the deliberate silent member of every pool. Any OTHER candidate
+    // that adapts to an all-zero row is a duplicate of `off` — the pool looks
+    // bigger than it is and the dice has fewer real outcomes than authored.
+    for (const v of INSTANT_VIBES) {
+      const stepsPerBar = getMeter(v.meter).stepsPerBar;
+      for (const [layer, candidates] of Object.entries(v.variation!.drumDecoration.densities)) {
+        for (const name of candidates as DensityName[]) {
+          if (name === 'off') continue;
+          const sounds = densityRowFor(name, stepsPerBar).some((s) => s === 1);
+          expect(sounds, `${v.id}/${layer}/${name} is silent in ${v.meter}`).toBe(true);
+        }
+      }
+    }
   });
 });
 
@@ -317,21 +342,21 @@ function allDraws(v: (typeof INSTANT_VIBES)[number]) {
 describe('eligibleDensities', () => {
   test('openhat and tom drop every candidate that doubles a kick step', () => {
     const kick = [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0]; // hiphop-groove
-    expect(eligibleDensities('openhat', ['off', 'pickup', 'and2and4'], kick)).toEqual([
+    expect(eligibleDensities('openhat', ['off', 'pickup', 'and2and4'], kick, 16)).toEqual([
       'off',
       'pickup',
     ]);
-    expect(eligibleDensities('tom', ['off', 'midBar'], kick)).toEqual(['off']);
+    expect(eligibleDensities('tom', ['off', 'midBar'], kick, 16)).toEqual(['off']);
   });
 
   test('hihat and crash are exempt — closed hats double the kick by design', () => {
     const kick = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]; // lofi-chill
-    expect(eligibleDensities('hihat', ['lofi16ths', 'eighths', 'swung16ths'], kick)).toEqual([
+    expect(eligibleDensities('hihat', ['lofi16ths', 'eighths', 'swung16ths'], kick, 16)).toEqual([
       'lofi16ths',
       'eighths',
       'swung16ths',
     ]);
-    expect(eligibleDensities('crash', ['off', 'downbeat'], kick)).toEqual(['off', 'downbeat']);
+    expect(eligibleDensities('crash', ['off', 'downbeat'], kick, 16)).toEqual(['off', 'downbeat']);
   });
 });
 
@@ -452,8 +477,16 @@ describe('resolveVibeVariation', () => {
         expect(summary.bassPatternName).toBe(
           BASS_PATTERNS.find((p) => p.id === out.bassPatternId)!.name,
         );
+        const stepsPerBar = getMeter(v.meter).stepsPerBar;
         for (const { layer, density } of summary.drums) {
-          expect(out.drumPattern[layer]).toEqual(DRUM_DENSITIES[density]);
+          // Independent of densityRowFor: restates the trim/loop rule inline
+          // against the DRUM_DENSITIES catalogue constant, rather than calling
+          // the production helper that produced `out.drumPattern[layer]` in
+          // the first place — a self-referential comparison would pass no
+          // matter what densityRowFor computed.
+          const source = DRUM_DENSITIES[density];
+          const expected = Array.from({ length: stepsPerBar }, (_, i) => source[i % source.length]);
+          expect(out.drumPattern[layer]).toEqual(expected);
         }
         expect(summary.drums.map((d) => d.layer)).toEqual(
           DECORATION_ORDER.filter((l) => v.variation!.drumDecoration.layers.includes(l)),
@@ -581,5 +614,92 @@ describe('formatVariationSummary', () => {
   test('the roman numeral is printed verbatim, not reformatted', () => {
     const { detail } = formatVariationSummary({ ...BASE, progressionRoman: 'i – VII – VI – VII' });
     expect(detail.startsWith('i – VII – VI – VII · ')).toBe(true);
+  });
+});
+
+describe('DRUM_DENSITIES is a 4/4 catalogue, adapted to the vibe it decorates', () => {
+  test('the catalogue declares the meter its rows were authored in', () => {
+    expect(DRUM_DENSITY_METER).toBe('4/4');
+    for (const row of Object.values(DRUM_DENSITIES)) {
+      expect(row.length).toBe(getMeter(DRUM_DENSITY_METER).stepsPerBar);
+    }
+  });
+
+  test('densityRowFor is the identity in 4/4 — the byte-identical path', () => {
+    for (const name of Object.keys(DRUM_DENSITIES) as DensityName[]) {
+      expect(densityRowFor(name, 16)).toEqual(DRUM_DENSITIES[name]);
+      // A copy, never the module's own array: a drawn row flows into store state.
+      expect(densityRowFor(name, 16)).not.toBe(DRUM_DENSITIES[name]);
+    }
+  });
+
+  test('densityRowFor trims to a shorter bar and loops into a longer one', () => {
+    expect(densityRowFor('quarters', 12)).toEqual([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]);
+    expect(densityRowFor('eighths', 12)).toEqual([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+    // downbeat's only hit is step 0 of the 16-step source; adaptStepRow's loop
+    // rule is out[i] = source[i % source.length] (pinned by
+    // patternAdapt.test.ts's 'wraps once and a half' case), so the repeat lands
+    // at step 16 — one full 16-step cycle — not at step 12.
+    expect(densityRowFor('downbeat', 24)).toEqual([
+      1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      1, 0, 0, 0, 0, 0, 0, 0,
+    ]);
+  });
+
+  test('THE TRAP: pickup and fillTail lose every hit in a 12-step bar', () => {
+    // Both are authored as end-of-bar figures (steps 14, and 13+15). Trimmed to
+    // 12 they are silent, i.e. a duplicate of `off`. A 3/4 or 6/8 vibe that
+    // lists either as a candidate has a smaller real pool than it looks.
+    expect(densityRowFor('pickup', 12).some((s) => s === 1)).toBe(false);
+    expect(densityRowFor('fillTail', 12).some((s) => s === 1)).toBe(false);
+    // ...but they are alive in the 16-step bar they were written for.
+    expect(densityRowFor('pickup', 16).some((s) => s === 1)).toBe(true);
+    expect(densityRowFor('fillTail', 16).some((s) => s === 1)).toBe(true);
+  });
+
+  test('eligibleDensities compares the ADAPTED row against the kick', () => {
+    // A 3/4 kick on beat one only. `quarters` adapted to 12 hits step 0 too.
+    const kick = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    expect(eligibleDensities('tom', ['off', 'quarters', 'midBar'], kick, 12)).toEqual([
+      'off',
+      'midBar',
+    ]);
+    // hihat and crash are exempt from the filter and keep every candidate.
+    expect(eligibleDensities('hihat', ['off', 'quarters', 'midBar'], kick, 12)).toEqual([
+      'off',
+      'quarters',
+      'midBar',
+    ]);
+  });
+
+  // The two `stepsPerBar = 12` (or 16) cases above cannot distinguish an
+  // adapted comparison from a raw one: collidesWithKick only ever reads
+  // indices 0..kick.length-1, so for a TRIM target the discarded tail sits
+  // where the kick has nothing to compare against anyway. Only the LOOP
+  // direction (stepsPerBar > 16) creates a collision opportunity — at an
+  // index the raw 16-length row does not even have — that a bug ignoring
+  // stepsPerBar would miss.
+  test('eligibleDensities catches a collision that only exists in the LOOPED tail', () => {
+    // Kick hits only step 16 — beyond the raw 16-step catalogue, inside the
+    // wrapped portion of a 20-step bar.
+    const kick = [
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      1, 0, 0, 0,
+    ];
+    // quarters = [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0]; looped to 20, steps
+    // 16-19 repeat steps 0-3, so step 16 is a hit -> collides with the kick.
+    // midBar's only hit (step 6) loops to step 6 again, never touching 16-19.
+    expect(eligibleDensities('tom', ['off', 'quarters', 'midBar'], kick, 20)).toEqual([
+      'off',
+      'midBar',
+    ]);
+  });
+
+  test('in 4/4 eligibleDensities returns exactly what it returned before', () => {
+    const kick = [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0]; // boombap-swung-break
+    expect(eligibleDensities('openhat', ['off', 'pickup', 'and2and4'], kick, 16)).toEqual([
+      'off',
+      'pickup',
+    ]);
   });
 });

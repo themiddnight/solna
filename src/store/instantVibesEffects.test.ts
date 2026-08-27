@@ -67,13 +67,15 @@ describe('InstantVibe.effectChainId reproduces the fixture exactly', () => {
     }
   });
 
-  test('the six vibes map onto six distinct library ids', () => {
+  test('the eight vibes draw from six distinct library ids — lofi-waltz reuses lofi-chill\'s chain and afro-six-eight reuses hiphop-groove\'s', () => {
     const referenced = INSTANT_VIBES.map((v) => v.effectChainId);
     expect(new Set(referenced).size).toBe(6);
     expect([...referenced].sort()).toEqual([
       'ambient-cathedral-wash',
       'boombap-dry-room',
+      'boombap-dry-room',
       'edm-club-drive',
+      'lofi-tape-room',
       'lofi-tape-room',
       'synthwave-neon-hall',
       'zen-temple-air',
