@@ -1,9 +1,12 @@
+import type { MeterId } from './utils/meter';
+
 /**
  * The six Instant Vibe genres. Declared here rather than in
  * audio/data/chordProgressions.ts (which re-exports it) because
  * `VibeVariation` in this file needs it while chordProgressions.ts already
  * imports `ChordItem` from here — declaring it there would make the two files
- * import each other. This file imports nothing and must stay a leaf.
+ * import each other. This file imports only the leaf module `utils/meter` and
+ * must stay acyclic.
  */
 export type VibeGenre = 'lofi' | 'synthwave' | 'edm' | 'ambient' | 'boombap' | 'zen';
 
@@ -21,9 +24,10 @@ export type KeyboardMode = 'chromatic' | 'scale-locked' | 'chord';
 /**
  * Arpeggiator order and rate. Declared here rather than in audio/arpeggiator.ts
  * and audio/arpSchedule.ts because SynthParams needs them and this file imports
- * nothing (it must stay a leaf). Both audio modules re-export them, so their
- * existing import paths keep working — the point is that there is one definition
- * instead of an inline copy here and a named copy there that could drift.
+ * only the leaf module `utils/meter` and must stay acyclic. Both audio modules
+ * re-export them, so their existing import paths keep working — the point is
+ * that there is one definition instead of an inline copy here and a named
+ * copy there that could drift.
  */
 export type ArpMode = 'up' | 'down' | 'updown' | 'random';
 export type ArpRate = '4n' | '8n' | '16n' | '32n';
@@ -169,6 +173,12 @@ export interface InstantVibe {
   tagline: string;
   emoji: string;
   bpm: number;
+  /**
+   * The time signature this vibe is written in. Applying the vibe sets the
+   * transport meter to it, so the vibe always resolves patterns of the right
+   * meter. All six current vibes are 4/4; authoring non-4/4 vibes is Stage 2.
+   */
+  meter: MeterId;
   scaleRoot: string;
   scaleType: string;
 

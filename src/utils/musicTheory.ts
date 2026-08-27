@@ -1,5 +1,6 @@
 import { Chord, Interval, Note, transpose } from 'tonal';
 import { ChordItem } from '../types';
+import { METERS } from './meter';
 
 export const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 export type RootNote = typeof ROOTS[number];
@@ -337,12 +338,18 @@ export function sixteenthNoteMs(bpm: number): number {
 
 
 /**
- * The shared grid resolution. Declared here rather than in audio/engine.ts so
- * barDurationSec can use it without a cycle — engine.ts already imports this
- * module. engine.ts re-exports it, so every existing `from '../engine'` import
- * of STEPS_PER_BAR keeps working.
+ * The 4/4 bar length, in 16th steps.
+ *
+ * This is now only a DEFAULT: the live bar length comes from the transport's
+ * meter (`getMeter(meterId).stepsPerBar`). It stays exported and stays 16 so
+ * the functions that already accept `stepsPerBar` as a defaulted parameter keep
+ * their historical behaviour when a caller has no meter to hand — and so
+ * engine.ts's and playbackEngine.ts's re-exports keep resolving.
+ *
+ * Declared here rather than in audio/engine.ts so barDurationSec can use it
+ * without a cycle; utils/meter.ts imports nothing, so this import is safe.
  */
-export const STEPS_PER_BAR = 16;
+export const STEPS_PER_BAR = METERS['4/4'].stepsPerBar;
 
 /** Transport tempo bounds. The engine clock and the store clamp to the same pair. */
 export const MIN_BPM = 20;
@@ -363,9 +370,9 @@ export function stepDurationSec(bpm: number): number {
   return sixteenthNoteMs(bpm) / 1000;
 }
 
-/** One STEPS_PER_BAR bar, in seconds. */
-export function barDurationSec(bpm: number): number {
-  return stepDurationSec(bpm) * STEPS_PER_BAR;
+/** One bar, in seconds. `stepsPerBar` defaults to the 4/4 bar. */
+export function barDurationSec(bpm: number, stepsPerBar: number = STEPS_PER_BAR): number {
+  return stepDurationSec(bpm) * stepsPerBar;
 }
 
 export function noteFrequency(note: string, octaveOffset = 0): number {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   BEATS_PER_BAR,
+  beatsPerBarFor,
   getNextChordIndex,
   groupBeats,
   resolveBeatCounter,
@@ -136,5 +137,59 @@ describe('groupBeats', () => {
 
   test('no beats means no groups', () => {
     expect(groupBeats(0)).toEqual([]);
+  });
+
+  test('a 6/8 bar (2 beats per bar) splits a two-bar counter into two groups of two', () => {
+    expect(groupBeats(4, beatsPerBarFor('6/8'))).toEqual([
+      [0, 1],
+      [2, 3],
+    ]);
+  });
+
+  test('a 5/4 bar (5 beats per bar) keeps a whole bar in one group', () => {
+    expect(groupBeats(5, beatsPerBarFor('5/4'))).toEqual([[0, 1, 2, 3, 4]]);
+  });
+
+  test('4/4 is unchanged: an explicit 4/4 barLength matches the default', () => {
+    expect(groupBeats(8, beatsPerBarFor('4/4'))).toEqual(groupBeats(8));
+  });
+});
+
+describe('beatsPerBarFor', () => {
+  test('4/4 keeps the historical four beats per bar', () => {
+    expect(beatsPerBarFor('4/4')).toBe(BEATS_PER_BAR);
+    expect(beatsPerBarFor('4/4')).toBe(4);
+  });
+
+  test('counts accent groups, so 3/4 and 6/8 differ despite equal bar length', () => {
+    expect(beatsPerBarFor('3/4')).toBe(3);
+    expect(beatsPerBarFor('6/8')).toBe(2);
+    expect(beatsPerBarFor('12/8')).toBe(4);
+    expect(beatsPerBarFor('5/4')).toBe(5);
+    expect(beatsPerBarFor('7/8')).toBe(3);
+  });
+
+  test('an unknown id falls back to four', () => {
+    expect(beatsPerBarFor('9/8')).toBe(4);
+  });
+});
+
+describe('resolveBeatCounter with an explicit beatsPerBar', () => {
+  test('omitting it preserves the historical four-beat bar exactly', () => {
+    expect(resolveBeatCounter({ playheadBeat: 6, chordStartBeat: 0, bars: 2 })).toEqual(
+      resolveBeatCounter({ playheadBeat: 6, chordStartBeat: 0, bars: 2, beatsPerBar: 4 }),
+    );
+  });
+
+  test('a 6/8 chord counts two beats per bar', () => {
+    expect(
+      resolveBeatCounter({ playheadBeat: 3, chordStartBeat: 0, bars: 2, beatsPerBar: 2 }),
+    ).toEqual({ totalBeats: 4, activeBeat: 3 });
+  });
+
+  test('a 5/4 chord counts five beats per bar and still wraps', () => {
+    expect(
+      resolveBeatCounter({ playheadBeat: 7, chordStartBeat: 0, bars: 1, beatsPerBar: 5 }),
+    ).toEqual({ totalBeats: 5, activeBeat: 2 });
   });
 });

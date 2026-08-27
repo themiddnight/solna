@@ -1,7 +1,16 @@
 import type { ChordItem } from '../types';
+import { getMeter } from './meter';
 
-/** The transport grid is 16 sixteenth-steps per bar, i.e. four beats. */
+/**
+ * Beats in a 4/4 bar. Only a DEFAULT — the live count is the active meter's
+ * `accentGroups.length`, which is what `beatsPerBarFor` returns.
+ */
 export const BEATS_PER_BAR = 4;
+
+/** Beats per bar for a meter id. 3/4 -> 3, 6/8 -> 2, 7/8 -> 3. */
+export function beatsPerBarFor(meterId: string): number {
+  return getMeter(meterId).accentGroups.length;
+}
 
 export interface NowNextChords {
   now: ChordItem | null;
@@ -15,6 +24,8 @@ export interface BeatCounterInput {
   chordStartBeat: number;
   /** Bars the current chord spans. */
   bars: number;
+  /** Beats in one bar; defaults to the 4/4 count. */
+  beatsPerBar?: number;
 }
 
 export interface BeatCounter {
@@ -49,8 +60,9 @@ export function resolveBeatCounter({
   playheadBeat,
   chordStartBeat,
   bars,
+  beatsPerBar = BEATS_PER_BAR,
 }: BeatCounterInput): BeatCounter {
-  const totalBeats = Math.max(1, bars || 1) * BEATS_PER_BAR;
+  const totalBeats = Math.max(1, bars || 1) * beatsPerBar;
   if (playheadBeat === null) return { totalBeats, activeBeat: null };
 
   const elapsed = playheadBeat - chordStartBeat;

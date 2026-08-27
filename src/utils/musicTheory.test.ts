@@ -331,4 +331,14 @@ describe('tempo helpers', () => {
     expect(clampBpm(Number.NaN)).toBe(120);
     expect(clampBpm(Number.POSITIVE_INFINITY)).toBe(MAX_BPM);
   });
+
+  test('barDurationSec still defaults to a 16-step bar', () => {
+    expect(barDurationSec(120)).toBeCloseTo(barDurationSec(120, 16), 12);
+  });
+
+  test('barDurationSec scales with the bar length it is given', () => {
+    expect(barDurationSec(120, 12)).toBeCloseTo(stepDurationSec(120) * 12, 12);
+    expect(barDurationSec(120, 24)).toBeCloseTo(stepDurationSec(120) * 24, 12);
+    expect(barDurationSec(120, 14)).toBeCloseTo(stepDurationSec(120) * 14, 12);
+  });
 });
