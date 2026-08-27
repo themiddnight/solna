@@ -13,6 +13,7 @@ import {
   Check,
   Volume2,
   VolumeX,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   DndContext,
@@ -71,6 +72,8 @@ import { QuickSavePopover } from "./ui/QuickSavePopover";
 import { Slider } from "./ui/Slider";
 import { SortableChordCard } from "./chord/SortableChordCard";
 import { resolveBeatCounter } from "../utils/playhead";
+import { focusSynthTarget, SYNTH_TARGET_STYLES } from "../utils/synthControl";
+import type { SynthControlTarget } from "../utils/synthControl";
 
 import { CHORD_PROGRESSIONS } from "../audio/data/chordProgressions";
 
@@ -103,6 +106,29 @@ export function shouldClearReharmonizeIndicator(
   chordsReplaced: boolean,
 ): boolean {
   return chordsReplaced && (from.root !== to.root || from.scaleType !== to.scaleType);
+}
+
+function AdjustSynthButton({
+  target,
+  className = "",
+}: {
+  target: SynthControlTarget;
+  className?: string;
+}) {
+  const setControlTarget = useAppStore((s) => s.setControlTarget);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const label = SYNTH_TARGET_STYLES[target].label;
+  return (
+    <button
+      type="button"
+      onClick={() => focusSynthTarget(target, { setControlTarget, setActiveTab })}
+      className={`btn btn-xs btn-ghost gap-1 ${className}`}
+      title={`Open the synth view with the ${label} target selected`}
+    >
+      <SlidersHorizontal className="w-3.5 h-3.5" />
+      <span>Adjust Synth</span>
+    </button>
+  );
 }
 
 /**
@@ -639,14 +665,17 @@ export const ChordView: React.FC = React.memo(() => {
               </span>
             )}
           </div>
-          <button
-            id="btn-add-chord"
-            onClick={addChord}
-            className="btn btn-xs gap-1 [--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Chord</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              id="btn-add-chord"
+              onClick={addChord}
+              className="btn btn-xs gap-1 [--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Chord</span>
+            </button>
+            <AdjustSynthButton target="chord" className="text-module-chord" />
+          </div>
         </div>
 
         <div className="flex flex-row flex-wrap items-end gap-3">
@@ -1016,12 +1045,15 @@ export const ChordView: React.FC = React.memo(() => {
 
       {/* Bass Module Panel */}
       <div className="mt-4 card bg-panel tint-bass border border-module-bass/30 p-4">
-        <div className="mb-3">
-          <h3 className="text-sm font-bold text-module-bass">Bass Module</h3>
-          <p className="text-[10px] text-base-content/60">
-            Bass line follows the same chord progression loop; pattern steps are
-            16th notes.
-          </p>
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-module-bass">Bass Module</h3>
+            <p className="text-[10px] text-base-content/60">
+              Bass line follows the same chord progression loop; pattern steps
+              are 16th notes.
+            </p>
+          </div>
+          <AdjustSynthButton target="bass" className="text-module-bass" />
         </div>
         <div className="flex flex-row flex-wrap items-end gap-3">
           <div>

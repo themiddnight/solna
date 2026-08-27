@@ -59,28 +59,11 @@ import {
 // lives in ui/Keyboard.tsx; this is the historical import path.
 export { KEYBOARD_NOTES } from "./ui/Keyboard";
 import { isTypingTarget } from "../utils/keyboard";
-import { resolveSynthControlChannel } from "../utils/synthControl";
+import {
+  resolveSynthControlChannel,
+  SYNTH_TARGET_STYLES,
+} from "../utils/synthControl";
 import type { SynthControlTarget } from "../utils/synthControl";
-
-// Shared per-destination accent styling for the card tint and selector buttons.
-// synth = neutral (no tint), chord = module-chord (olive), bass = module-bass
-// (steel blue) — module identity colours, not daisyUI semantics. The tints are
-// flat `@utility` image layers declared in index.css; see the note there for why
-// they are not background-colours.
-const TARGET_STYLES: Record<
-  SynthControlTarget,
-  { tint: string; activeBtn: string }
-> = {
-  synth: { tint: "", activeBtn: "btn-active" },
-  chord: {
-    tint: "ring-1 ring-module-chord/40 tint-chord",
-    activeBtn: "[--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]",
-  },
-  bass: {
-    tint: "ring-1 ring-module-bass/40 tint-bass",
-    activeBtn: "[--btn-color:var(--color-module-bass)] [--btn-fg:var(--color-module-bass-content)]",
-  },
-};
 
 // The interactive keyboard always plays the main synth, regardless of which
 // destination the "Target" selector is currently editing — pinning it here
@@ -137,7 +120,12 @@ export const SynthView = () => {
   );
   const keyboardParams = keyboardChannel.params;
 
-  const tintClass = TARGET_STYLES[controlTarget].tint;
+  const tintClass = [
+    SYNTH_TARGET_STYLES[controlTarget].ring,
+    SYNTH_TARGET_STYLES[controlTarget].tint,
+  ]
+    .filter(Boolean)
+    .join(" ");
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [customPresets, setCustomPresets] = useState<SynthPresetItem[]>([]);
@@ -468,27 +456,23 @@ export const SynthView = () => {
         {/* Row 1: Target Selector + Mode Switcher + Presets */}
         <div className="relative flex flex-wrap items-center justify-between gap-2.5">
           {/* Control Destination Selector */}
-          <div className="join flex items-center gap-1 bg-base-200 border border-base-300 rounded-box p-1">
+          <div className="join flex items-center gap-1 bg-base-200 border border-primary rounded-box p-1">
             <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold pl-1 pr-1 hidden sm:inline">
               Target:
             </span>
             {(
-              [
-                ["synth", "Synth"],
-                ["chord", "Chord"],
-                ["bass", "Bass"],
-              ] as [SynthControlTarget, string][]
-            ).map(([target, label]) => (
+              Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]
+            ).map((target) => (
               <button
                 key={target}
                 onClick={() => onChangeControlTarget(target)}
                 className={`btn btn-xs join-item text-[11px] font-semibold ${
                   controlTarget === target
-                    ? TARGET_STYLES[target].activeBtn
+                    ? SYNTH_TARGET_STYLES[target].activeBtn
                     : "btn-ghost text-base-content/60"
                 }`}
               >
-                {label}
+                {SYNTH_TARGET_STYLES[target].label}
               </button>
             ))}
           </div>
@@ -810,7 +794,11 @@ export const SynthView = () => {
       {/* Simple Mode vs Pro Mode Body Panels */}
       {synthViewMode === "simple" ? (
         <>
-          <SimpleSynthPanel params={params} onChangeParams={onChangeParams} />
+          <SimpleSynthPanel
+            params={params}
+            onChangeParams={onChangeParams}
+            tintClass={tintClass}
+          />
 
           {/* Friendly Pro Mode Hint */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 bg-base-100/70 border border-base-300 px-4 py-2.5 rounded-box text-xs text-base-content">
@@ -1333,12 +1321,6 @@ export const SynthView = () => {
             >
               {`${scaleRoot} ${scaleType}`}
             </span>
-            <span
-              className="badge badge-sm badge-outline text-[10px] font-semibold badge-base-content/60"
-              title="The keyboard always auditions the Main Synth, whichever destination the Target selector is editing"
-            >
-              Keyboard plays: Main Synth
-            </span>
           </div>
 
           {/* Keyboard Octave Pagination — independent from synth pitch octave */}
@@ -1453,6 +1435,8 @@ export const SynthView = () => {
         isOpen={isLibraryOpen}
         onClose={() => setIsLibraryOpen(false)}
         currentParams={params}
+        target={controlTarget}
+        showSoundBadges={synthViewMode === "pro"}
         onSelectPreset={(preset) => {
           handleSelectPreset(preset);
           setIsLibraryOpen(false);

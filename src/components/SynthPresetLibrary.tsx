@@ -23,10 +23,16 @@ import { PresetLibrary } from './ui/PresetLibrary';
 import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from './ui/PresetLibrary';
 import { previewSynthPreset } from '../audio/playback/presetPreview';
 import type { PreviewHandle } from '../audio/playback/presetPreview';
+import { SYNTH_TARGET_STYLES } from '../utils/synthControl';
+import type { SynthControlTarget } from '../utils/synthControl';
 
 interface SynthPresetLibraryProps {
   currentParams: SynthParams;
   onSelectPreset: (preset: SynthPresetItem) => void;
+  /** Which destination `currentParams` belongs to — selecting a preset rewrites that one. */
+  target: SynthControlTarget;
+  /** Per-entry oscillator/filter badges. Off in Simple Mode, which hides those stages entirely. */
+  showSoundBadges?: boolean;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -40,6 +46,8 @@ interface SynthLibraryEntry extends PresetLibraryEntry {
 export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   currentParams,
   onSelectPreset,
+  target,
+  showSoundBadges = true,
   isOpen,
   onClose,
 }) => {
@@ -56,6 +64,13 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   };
 
   const allPresets = useMemo(() => getAllSynthPresets(customPresets), [customPresets]);
+
+  // Which entry the drawer should reveal on open — the one the card list marks
+  // Active, matched the same way (`isCurrent`, by preset name).
+  const activeEntryId = useMemo(
+    () => allPresets.find((p) => p.name === currentParams.preset)?.id,
+    [allPresets, currentParams.preset]
+  );
 
   const entries = useMemo<SynthLibraryEntry[]>(
     () =>
@@ -284,22 +299,26 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
             </div>
 
             {preset.description && (
-              <p className="text-[11px] text-base-content/60 line-clamp-1 mb-2">
+              <p
+                className={`text-[11px] text-base-content/60 line-clamp-1 ${showSoundBadges ? 'mb-2' : ''}`}
+              >
                 {preset.description}
               </p>
             )}
 
             {/* Sound Badge Attributes */}
-            <div className="flex items-center gap-1.5 text-[10px] text-base-content/60">
-              <span className="badge badge-sm badge-ghost font-mono gap-1">
-                <Activity className="w-2.5 h-2.5 text-primary" />
-                {oscType}
-              </span>
-              <span className="badge badge-sm badge-ghost font-mono gap-1">
-                <Sliders className="w-2.5 h-2.5 text-accent" />
-                {filterType === 'lowpass' ? 'LPF' : filterType === 'highpass' ? 'HPF' : 'BPF'} {Math.round(cutoff)}Hz
-              </span>
-            </div>
+            {showSoundBadges && (
+              <div className="flex items-center gap-1.5 text-[10px] text-base-content/60">
+                <span className="badge badge-sm badge-ghost font-mono gap-1">
+                  <Activity className="w-2.5 h-2.5 text-primary" />
+                  {oscType}
+                </span>
+                <span className="badge badge-sm badge-ghost font-mono gap-1">
+                  <Sliders className="w-2.5 h-2.5 text-accent" />
+                  {filterType === 'lowpass' ? 'LPF' : filterType === 'highpass' ? 'HPF' : 'BPF'} {Math.round(cutoff)}Hz
+                </span>
+              </div>
+            )}
           </div>
         </div>
         </button>
@@ -372,7 +391,19 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
       onClose={onClose}
       title="Synth Presets Library"
       headerBadge={`${allPresets.length} Total`}
+      headerAccessory={
+        // The drawer edits whichever destination the Target selector points at,
+        // and the selector is behind this overlay — so name the target here, in
+        // its own module colour, or picking a preset is a blind rewrite.
+        <span
+          className={`badge badge-sm badge-soft font-semibold ${SYNTH_TARGET_STYLES[target].badge}`}
+        >
+          {`Editing: ${SYNTH_TARGET_STYLES[target].label}`}
+        </span>
+      }
       headerSubtitle="Categorized factory sounds & custom user patches"
+      panelTintClass={SYNTH_TARGET_STYLES[target].tint}
+      activeEntryId={activeEntryId}
       saveButton={{ label: 'Save Current Sound', inToolbar: true }}
       toolbarActions={toolbarActions}
       toast={toastMsg}

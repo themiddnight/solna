@@ -59,6 +59,29 @@ describe('SimpleSynthPanel theming', () => {
     expect(html).toContain('text-module-arp');
   });
 
+  /**
+   * Simple Mode edits the same three destinations as Pro Mode, so it wears the
+   * same target tint — otherwise the panel gives no hint that a knob is about to
+   * rewrite the chord or bass voice instead of the main synth.
+   */
+  test('every card carries the target tint, arp card included', () => {
+    const tinted = renderToString(
+      <SimpleSynthPanel
+        params={params}
+        onChangeParams={() => {}}
+        tintClass="ring-1 ring-module-chord/40 tint-chord"
+      />,
+    );
+    const cards = tinted.match(/class="[^"]*card bg-panel[^"]*"/g) ?? [];
+    expect(cards).toHaveLength(5);
+    for (const card of cards) expect(card).toContain('tint-chord');
+  });
+
+  test('the main-synth target leaves every card untinted', () => {
+    expect(html).not.toContain('tint-chord');
+    expect(html).not.toContain('tint-bass');
+  });
+
   test('no dark: variants survive — they key off the OS, not data-theme', () => {
     expect(html).not.toContain('dark:');
   });

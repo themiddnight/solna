@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { PresetLibrary } from './PresetLibrary';
+import { centerScrollDelta, PresetLibrary } from './PresetLibrary';
 import type { PresetLibraryEntry } from './PresetLibrary';
 
 const entries: PresetLibraryEntry[] = [
@@ -110,5 +110,33 @@ describe('PresetLibrary chrome', () => {
       />,
     );
     expect(html).toBe('');
+  });
+});
+
+/**
+ * Opening the drawer scrolls its list so the active entry is already on screen.
+ * The scroll needs a live layout, but the arithmetic that drives it does not —
+ * that part is `centerScrollDelta`, and it is what these tests pin.
+ */
+describe('centerScrollDelta', () => {
+  const container = { top: 100, height: 400 };
+
+  test('an entry already centred needs no scroll', () => {
+    expect(centerScrollDelta(container, { top: 280, height: 40 })).toBe(0);
+  });
+
+  test('an entry below the fold scrolls the list down', () => {
+    expect(centerScrollDelta(container, { top: 900, height: 40 })).toBe(620);
+  });
+
+  test('an entry scrolled off the top scrolls the list back up', () => {
+    expect(centerScrollDelta(container, { top: -100, height: 40 })).toBe(-380);
+  });
+
+  test('the delta is relative to the container, not the viewport', () => {
+    const moved = { top: 0, height: 400 };
+    expect(centerScrollDelta(moved, { top: 180, height: 40 })).toBe(
+      centerScrollDelta(container, { top: 280, height: 40 }),
+    );
   });
 });

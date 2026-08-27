@@ -68,9 +68,14 @@ describe('chromatic keyboard black key geometry', () => {
     expect(html).toContain('A Natural Minor');
   });
 
-  test('the keyboard audition label claims to play the main synth, not the Target selector', () => {
+  /**
+   * The keyboard is pinned to the main synth (KEYBOARD_AUDITION_TARGET) and the
+   * Target selector no longer moves it, so the badge that used to explain that
+   * discrepancy is just noise above the keys.
+   */
+  test('no audition badge above the keyboard', () => {
     const html = renderToString(<SynthView />);
-    expect(html).toContain('Keyboard plays: Main Synth');
+    expect(html).not.toContain('Keyboard plays: Main Synth');
     expect(html).not.toContain('Current audition sound engine');
   });
 

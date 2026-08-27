@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Bookmark, Check, Plus, Search, Sparkles, Trash2, X } from 'lucide-react';
 
 export interface PresetLibraryEntry {
@@ -39,6 +39,9 @@ export interface PresetLibraryProps<T extends PresetLibraryEntry> {
   title: string;
   headerSubtitle?: string;       // e.g. "Key of C • 35 Total Progressions"
   headerBadge?: string;          // e.g. "24 Total" pill beside the title
+  headerAccessory?: React.ReactNode; // caller-styled pill after headerBadge (e.g. the edit target)
+  panelTintClass?: string;       // colour wash over the drawer panel (e.g. tint-chord)
+  activeEntryId?: string;        // entry to reveal in the list whenever the drawer opens
   saveButton?: {                 // "Save Current"-style button (header or toolbar row)
     label: string;
     title?: string;
@@ -77,13 +80,25 @@ export interface PresetLibraryProps<T extends PresetLibraryEntry> {
   onSave: (draft: PresetSaveDraft) => boolean; // false keeps the save form open (wrapper-level guard, e.g. empty grid)
 }
 
+// How far the list must scroll to put `entry` in the middle of `container`.
+// Both boxes are viewport-relative (getBoundingClientRect), so the difference is
+// independent of where the drawer itself sits on screen. Exported for tests —
+// the scroll itself needs a live layout, this arithmetic does not.
+export function centerScrollDelta(
+  container: { top: number; height: number },
+  entry: { top: number; height: number }
+): number {
+  return entry.top - container.top - (container.height - entry.height) / 2;
+}
+
 export function PresetLibrary<T extends PresetLibraryEntry>({
-  isOpen, onClose, title, headerSubtitle, headerBadge, saveButton, renderHeaderActions, toolbarActions, toast, toastPlacement, searchPlaceholder, variant, entries, categories, listContainerClass, subtitle, renderEntryActions, renderEntry, groupEntries, emptyState, filterEntries, footer, save, onSelect, onDelete, onSave,
+  isOpen, onClose, title, headerSubtitle, headerBadge, headerAccessory, panelTintClass, activeEntryId, saveButton, renderHeaderActions, toolbarActions, toast, toastPlacement, searchPlaceholder, variant, entries, categories, listContainerClass, subtitle, renderEntryActions, renderEntry, groupEntries, emptyState, filterEntries, footer, save, onSelect, onDelete, onSave,
 }: PresetLibraryProps<T>) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [showSave, setShowSave] = useState(false);
   const [draft, setDraft] = useState<PresetSaveDraft>({ name: '', category: save.defaultCategory, description: '', roman: '' });
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   const openSave = () => {
     setDraft({ name: save.initialName ?? '', category: save.defaultCategory, description: '', roman: '' });
@@ -102,6 +117,21 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
       ),
     [entries, category, query, filterEntries],
   );
+
+  // Reveal the active entry as soon as the drawer opens, so the current preset
+  // never has to be hunted for in a long list. Scrolls the list container itself
+  // rather than calling scrollIntoView, which would also scroll every ancestor —
+  // including the page sitting behind the overlay.
+  useEffect(() => {
+    if (!isOpen || !activeEntryId) return;
+    const container = listRef.current;
+    const entry = container?.querySelector(`[data-entry-id=${JSON.stringify(activeEntryId)}]`);
+    if (!container || !entry) return;
+    container.scrollTop += centerScrollDelta(
+      container.getBoundingClientRect(),
+      entry.getBoundingClientRect()
+    );
+  }, [isOpen, activeEntryId]);
 
   if (!isOpen) return null;
 
@@ -166,7 +196,9 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
           onClick={onClose}
         />
         {/* Sidebar Drawer */}
-        <aside className="w-full max-w-md h-full bg-base-100 border-l border-base-300 flex flex-col shadow-2xl overflow-hidden animate-slide-in-right">
+        <aside
+          className={`w-full max-w-md h-full bg-base-100 border-l border-base-300 flex flex-col shadow-2xl overflow-hidden animate-slide-in-right ${panelTintClass ?? ''}`}
+        >
           {/* Drawer Header */}
           <div className="p-4 border-b border-base-300 flex items-center justify-between bg-base-200">
             <div className="flex items-center gap-2.5">
@@ -181,6 +213,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                       {headerBadge}
                     </span>
                   )}
+                  {headerAccessory}
                 </h3>
                 {headerSubtitle && <p className="text-[11px] text-base-content/60">{headerSubtitle}</p>}
               </div>
@@ -334,7 +367,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
         )}
 
         {/* List Content */}
-        <div className={listContainerClass ?? 'flex-1 overflow-y-auto p-3.5 space-y-2.5'}>
+        <div ref={listRef} className={listContainerClass ?? 'flex-1 overflow-y-auto p-3.5 space-y-2.5'}>
           {filtered.length === 0 ? (
             emptyState ? (
               emptyState(query, category, openSave)
@@ -347,7 +380,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
                 {group.header}
                 <div className={group.innerClassName ?? 'space-y-2'}>
                   {group.entries.map((entry) => (
-                    <div key={entry.id}>
+                    <div key={entry.id} data-entry-id={entry.id}>
                       {renderEntry ? (
                         renderEntry(entry)
                       ) : (
