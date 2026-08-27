@@ -210,7 +210,9 @@ instruments). `src/audio/drumKits.test.ts:42-46` asserts key-set parity with
 ## UI
 
 One `select` in the transport area listing the six meters. Preset pickers show each
-pattern's native meter and can filter by the active meter. A pattern whose meter differs
+pattern's native meter but do not filter by it — filtering a native `<select>` whose current
+value gets excluded would render blank, and with only 3/4 and 6/8 natively authored a meter
+filter would empty the picker in 12/8, 5/4 and 7/8. A pattern whose meter differs
 stays **selectable** — the user keeps the freedom to run a 4/4 pattern in 6/8 and hear
 what happens — but is labelled so the result is not surprising. The sequencer header must
 stop saying "16-Step" (`SequencerView.tsx:133`) and derive its label from the meter.
