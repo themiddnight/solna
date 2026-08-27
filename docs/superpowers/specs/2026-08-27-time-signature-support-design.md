@@ -22,7 +22,7 @@ problem, not a DSP one.
 **In scope.** A single `select` in the transport area offering six meters (no separate
 numerator/denominator inputs). Meter as transport state, reaching the engine through
 `src/store/engineSync.ts`. Bar-relative derivation of `stepInBar`. Accent-group-driven
-metronome and sequencer UI grouping. A `meter` tag on all 43 existing patterns plus two
+metronome and sequencer UI grouping. A `meter` tag on all 45 existing patterns plus two
 adaptation utilities. Persist migration. Non-destructive meter switching for the user's
 own drum grid.
 
@@ -131,7 +131,7 @@ All four pattern libraries are 4/4 today and stay **byte-identical**; they only 
 | `src/audio/rhythmPatterns.ts` | 15 chord patterns | `RhythmHit[]`, step 0–15 |
 | `src/audio/bassPatterns.ts` | 12 bass patterns | `BassStep[]`, step 0–15 |
 | `src/audio/data/vibeDrumPatterns.ts` | 6 patterns | 7 rows × 16 `number[]` (kick/snare/hihat/openhat/clap/tom/crash) |
-| `src/audio/data/genrePresets.ts` | 10 presets | 7 rows × 16 `boolean[]` (…/tom/bass) |
+| `src/audio/data/genrePresets.ts` | 12 presets | 7 rows × 16 `boolean[]` (…/tom/bass) |
 
 Adaptation rules when a pattern's native meter differs from the active meter:
 
@@ -222,7 +222,7 @@ build on raw palette classes and its `ALLOWLIST` must stay empty.
 
 **Stage 1.** Meter table; transport `meterId` state and select; `stepInBar` plumbing
 through metronome, arp, sequencer and chord playback; accent-group UI grouping; a `meter`
-tag on all 43 existing patterns; the two adaptation utilities; the persist v4→v5
+tag on all 45 existing patterns; the two adaptation utilities; the persist v4→v5
 migration. Acceptance: **default 4/4 output is byte-identical to today's behaviour** and
 every existing preset keeps working.
 
