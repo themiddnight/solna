@@ -23,18 +23,20 @@ import {
   resolveBassSteps,
 } from "../../audio/bassPatterns";
 import {
+  STEPS_PER_BAR,
   generateBlockChordNotes,
   stepDurationSec,
   barDurationSec,
 } from "../../utils/musicTheory";
 import {
-  STEPS_PER_BAR,
   initPlaybackEngine,
   playbackNoteOff,
   playbackNoteOn,
   playbackStopSource,
   subscribePlaybackClock,
 } from "../../audio/playback/playbackEngine";
+import { getMeter } from "../../utils/meter";
+import { adaptStepEvents } from "../../utils/eventAdapt";
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "../playerStop";
 import type { PlayerState } from "../../store/types";
 import type { ChordItem } from "../../types";
@@ -72,6 +74,18 @@ export function resetChordArming(arming: ChordArming): void {
 }
 
 /**
+ * The active bar length in 16th steps, read LIVE from the store.
+ *
+ * Exported so the pure-logic tests can reason about it without React, and used
+ * everywhere the module previously leaned on the STEPS_PER_BAR default. Live,
+ * not captured: the clock subscription outlives a React commit and one
+ * clockTick dispatches several steps synchronously.
+ */
+export function activeStepsPerBar(): number {
+  return getMeter(useAppStore.getState().meterId).stepsPerBar;
+}
+
+/**
  * A chord's playback shape, resolved once when the chord is armed and then
  * emitted one clock step at a time. The events are held here instead of being
  * pushed onto the audio clock upfront so nothing is ever scheduled more than
@@ -93,22 +107,28 @@ interface ChordPlan {
   bassEvents: BarInvariantEvent[];
 }
 
-/** Patterns that hold one voice across the whole chord instead of re-striking. */
-function isFullHoldRhythm(pattern: RhythmPattern): boolean {
+/**
+ * Patterns that hold one voice across the whole chord instead of re-striking.
+ *
+ * `stepsPerBar` is the ACTIVE bar length, not the constant 16: in 12/8 a bar is
+ * 24 steps, and a 16-step hold there covers two thirds of a bar, not all of it.
+ * Exported so the pure-logic tests can reach them without React.
+ */
+export function isFullHoldRhythm(pattern: RhythmPattern, stepsPerBar: number): boolean {
   return (
     pattern.id === "sustained" ||
     (pattern.hits.length === 1 &&
       pattern.hits[0].step === 0 &&
-      (pattern.hits[0].holdSteps ?? 1) >= 16)
+      (pattern.hits[0].holdSteps ?? 1) >= stepsPerBar)
   );
 }
 
-function isFullHoldBass(pattern: BassPattern): boolean {
+export function isFullHoldBass(pattern: BassPattern, stepsPerBar: number): boolean {
   return (
     pattern.id === "whole-note-root" ||
     (pattern.steps.length === 1 &&
       pattern.steps[0].step === 0 &&
-      (pattern.steps[0].holdSteps ?? 1) >= 16)
+      (pattern.steps[0].holdSteps ?? 1) >= stepsPerBar)
   );
 }
 
@@ -121,6 +141,29 @@ function resolveBassPattern(id: string): BassPattern {
 }
 
 /**
+ * Playback-time adaptation. Chord and bass rhythms are picked by id and never
+ * edited by the user, so the library stays byte-identical on disk and a meter
+ * change re-adapts on the next chord — no migration, no lossy write-back.
+ * (The drum grid is the opposite case: it is user-editable, so preset
+ * adaptation there is materialised at APPLY time in the sequencer slice.)
+ *
+ * Returns the SAME object when no adaptation is needed, so the identity checks
+ * and id comparisons downstream (isFullHoldRhythm/isFullHoldBass) are unaffected
+ * in 4/4.
+ */
+export function adaptRhythmPattern(pattern: RhythmPattern, stepsPerBar: number): RhythmPattern {
+  const sourceSteps = getMeter(pattern.meter).stepsPerBar;
+  if (sourceSteps === stepsPerBar) return pattern;
+  return { ...pattern, hits: adaptStepEvents(pattern.hits, sourceSteps, stepsPerBar) };
+}
+
+export function adaptBassPattern(pattern: BassPattern, stepsPerBar: number): BassPattern {
+  const sourceSteps = getMeter(pattern.meter).stepsPerBar;
+  if (sourceSteps === stepsPerBar) return pattern;
+  return { ...pattern, steps: adaptStepEvents(pattern.steps, sourceSteps, stepsPerBar) };
+}
+
+/**
  * Arms a chord: resolves its notes and pattern events, and fires the one-shot
  * voices of the full-hold patterns (those are single long voices that
  * updateSynthParams can already re-shape live, so they need no per-step work).
@@ -129,7 +172,8 @@ function startChordPlan(chord: ChordItem, startStep: number, time: number): Chor
   initPlaybackEngine();
   const s = useAppStore.getState();
   const stepDur = stepDurationSec(s.bpm);
-  const barDur = barDurationSec(s.bpm);
+  const stepsPerBar = activeStepsPerBar();
+  const barDur = barDurationSec(s.bpm, stepsPerBar);
   const totalBars = chord.bars || 1;
 
   const chordNotes = generateBlockChordNotes(chord.quality, chord.root, s.chordOctave);
@@ -139,9 +183,9 @@ function startChordPlan(chord: ChordItem, startStep: number, time: number): Chor
 
   let chordEvents: BarInvariantEvent[] = [];
   if (!chordArp) {
-    const pattern = resolveRhythmPattern(s.chordRhythmId);
+    const pattern = adaptRhythmPattern(resolveRhythmPattern(s.chordRhythmId), stepsPerBar);
     const holdScale = feelToHoldScale(s.chordFeel);
-    if (isFullHoldRhythm(pattern)) {
+    if (isFullHoldRhythm(pattern, stepsPerBar)) {
       playFullHoldChord(
         chordNotes,
         s.chordSynthParams,
@@ -155,7 +199,7 @@ function startChordPlan(chord: ChordItem, startStep: number, time: number): Chor
 
   let bassEvents: BarInvariantEvent[] = [];
   if (!bassArp) {
-    const pattern = resolveBassPattern(s.bassPatternId);
+    const pattern = adaptBassPattern(resolveBassPattern(s.bassPatternId), stepsPerBar);
     const chordIdx = Math.max(0, s.chords.indexOf(chord));
     const resolveWithHold = (holdScale: number) =>
       resolveBassSteps(
@@ -169,7 +213,7 @@ function startChordPlan(chord: ChordItem, startStep: number, time: number): Chor
         holdScale,
       );
 
-    if (isFullHoldBass(pattern)) {
+    if (isFullHoldBass(pattern, stepsPerBar)) {
       const rootEvent = resolveWithHold(1)[0];
       if (rootEvent) {
         playbackNoteOn(rootEvent.noteName, s.bassSynthParams, rootEvent.velocity, time, "bass");
@@ -209,11 +253,12 @@ function emitChordPlanStep(
 ): void {
   const s = useAppStore.getState();
   const stepDur = stepDurationSec(s.bpm);
+  const stepsPerBar = getMeter(s.meterId).stepsPerBar;
   const chordEnd = time + pos.stepsRemaining * stepDur;
 
   emitStepEvents(
     plan.chordArp
-      ? arpEventsForStep(plan.chordNotes, s.chordSynthParams, step, stepDur, feelToHoldScale(s.chordFeel))
+      ? arpEventsForStep(plan.chordNotes, s.chordSynthParams, step, stepDur, feelToHoldScale(s.chordFeel), stepsPerBar)
       : eventsForStep(plan.chordEvents, pos.stepInBar, pos.isLastBar),
     s.chordSynthParams,
     "chord",
@@ -223,7 +268,7 @@ function emitChordPlanStep(
 
   emitStepEvents(
     plan.bassArp
-      ? arpEventsForStep(plan.bassNotes, s.bassSynthParams, step, stepDur, feelToHoldScale(s.bassFeel))
+      ? arpEventsForStep(plan.bassNotes, s.bassSynthParams, step, stepDur, feelToHoldScale(s.bassFeel), stepsPerBar)
       : eventsForStep(plan.bassEvents, pos.stepInBar, pos.isLastBar),
     s.bassSynthParams,
     "bass",
@@ -297,6 +342,9 @@ export function useChordPlayback() {
     (chord: ChordItem, startTime: number, pattern: RhythmPattern) => {
       initPlaybackEngine();
 
+      const stepsPerBar = activeStepsPerBar();
+      const adapted = adaptRhythmPattern(pattern, stepsPerBar);
+
       const notes = generateBlockChordNotes(
         chord.quality,
         chord.root,
@@ -306,8 +354,8 @@ export function useChordPlayback() {
       const totalBars = chord.bars || 1;
       const holdScale = feelToHoldScale(chordFeel);
 
-      if (isFullHoldRhythm(pattern)) {
-        const barDur = barDurationSec(bpm);
+      if (isFullHoldRhythm(adapted, stepsPerBar)) {
+        const barDur = barDurationSec(bpm, stepsPerBar);
         playFullHoldChord(
           notes,
           chordSynthParams,
@@ -318,12 +366,13 @@ export function useChordPlayback() {
       }
 
       scheduleWholeChord(
-        buildChordEvents(pattern, notes, stepDur, holdScale),
+        buildChordEvents(adapted, notes, stepDur, holdScale),
         chordSynthParams,
         "chord",
         startTime,
         stepDur,
         totalBars,
+        stepsPerBar,
       );
     },
     [bpm, chordSynthParams, chordOctave, chordFeel],
@@ -337,13 +386,15 @@ export function useChordPlayback() {
       chordContext?: ChordItem[],
     ) => {
       initPlaybackEngine();
+      const stepsPerBar = activeStepsPerBar();
+      const adapted = adaptBassPattern(pattern, stepsPerBar);
       const context = chordContext ?? chords;
       const chordIdx = Math.max(0, context.indexOf(chord));
       const stepDur = stepDurationSec(bpm);
       const totalBars = chord.bars || 1;
       const resolveWithHold = (holdScale: number) =>
         resolveBassSteps(
-          pattern,
+          adapted,
           context,
           chordIdx,
           bassOctave,
@@ -353,8 +404,8 @@ export function useChordPlayback() {
           holdScale,
         );
 
-      if (isFullHoldBass(pattern)) {
-        const barDur = barDurationSec(bpm);
+      if (isFullHoldBass(adapted, stepsPerBar)) {
+        const barDur = barDurationSec(bpm, stepsPerBar);
         const rootEvent = resolveWithHold(1)[0];
         if (rootEvent) {
           playbackNoteOn(
@@ -388,6 +439,7 @@ export function useChordPlayback() {
         startTime,
         stepDur,
         totalBars,
+        stepsPerBar,
       );
     },
     [chords, bassOctave, scaleRoot, scaleType, bpm, bassSynthParams, bassFeel],
@@ -484,7 +536,8 @@ export function useChordPlayback() {
       const arming = armingRef.current;
       // Live store read, not a ref: see chordStepAction's doc comment.
       const playerState = useAppStore.getState().chordsPlayer;
-      const action = chordStepAction(playerState, step, arming);
+      const stepsPerBar = activeStepsPerBar();
+      const action = chordStepAction(playerState, step, arming, stepsPerBar);
 
       // Soft stop: schedule the release exactly on the bar line the clock is
       // handing us, then mark the player stopped. Using the clock's `time`
@@ -507,7 +560,7 @@ export function useChordPlayback() {
         // The beat the chord was triggered on is what every beat counter measures
         // its progress from — a multi-bar chord spans several bar lines.
         useAppStore.getState().setPlayheadChord(index, beat);
-        arming.nextBarStep = step + (chord.bars || 1) * STEPS_PER_BAR;
+        arming.nextBarStep = step + (chord.bars || 1) * stepsPerBar;
         arming.chordIndex++;
       }
 
@@ -516,7 +569,7 @@ export function useChordPlayback() {
       if (playerState === 'stopped') return;
       const plan = planRef.current;
       if (!plan) return;
-      const pos = chordPlanPosition(plan, step);
+      const pos = chordPlanPosition(plan, step, stepsPerBar);
       if (!pos) {
         planRef.current = null;
         return;

@@ -13,6 +13,9 @@ import {
   Filter,
 } from "lucide-react";
 import { useAppStore } from "../store/store";
+import { getMeter } from "../utils/meter";
+import { sequencerTitle, stepCells } from "./sequencerGrid";
+import { rotateStepWindow, writeStepWindow } from "../utils/patternAdapt";
 import { useSequencerPlayback } from "./useSequencerPlayback";
 import { ensureDrumEngine, triggerPad } from "../audio/playback/drumPlayback";
 import { previewSequencerNote } from "../audio/playback/presetPreview";
@@ -20,6 +23,7 @@ import type { PreviewHandle } from "../audio/playback/presetPreview";
 import { GENRE_PRESETS } from "../audio/data/genrePresets";
 import { DRUM_KITS, GENRE_TO_KIT } from "../audio/drumKits";
 import { DrumPads } from "./DrumPads";
+import { patternMeterTitle, patternOptionLabel } from "./meterSelect";
 import { Knob } from "./ui/Knob";
 import { Slider } from "./ui/Slider";
 
@@ -29,6 +33,10 @@ export const SequencerView = () => {
   // rest of the component body is unchanged).
   const tracks = useAppStore((s) => s.sequencerTracks);
   const onChangeTracks = useAppStore((s) => s.setSequencerTracks);
+  const applyDrumPattern = useAppStore((s) => s.applyDrumPattern);
+  const meter = getMeter(useAppStore((s) => s.meterId));
+  const stepsPerBar = meter.stepsPerBar;
+  const cells = stepCells(meter);
   const isPlaying = useAppStore((s) => s.sequencerPlayer !== 'stopped');
   const synthParams = useAppStore((s) => s.synthParams);
   const soundKit = useAppStore((s) => s.soundKit);
@@ -70,11 +78,14 @@ export const SequencerView = () => {
     );
   };
 
+  // Clear/randomize/shift all act on the VISIBLE window only. The cells past it
+  // are this row's programming for a wider meter; destroying them would make a
+  // meter switch lossy, which is exactly what windowing exists to prevent.
   const clearAllSteps = () => {
     onChangeTracks(
       tracks.map((t) => ({
         ...t,
-        steps: new Array(16).fill(false),
+        steps: writeStepWindow(t.steps, stepsPerBar, new Array(stepsPerBar).fill(false)),
       })),
     );
   };
@@ -83,24 +94,18 @@ export const SequencerView = () => {
     onChangeTracks(
       tracks.map((t) => ({
         ...t,
-        steps: Array.from({ length: 16 }, () => Math.random() > 0.75),
+        steps: writeStepWindow(
+          t.steps,
+          stepsPerBar,
+          Array.from({ length: stepsPerBar }, () => Math.random() > 0.75),
+        ),
       })),
     );
   };
 
   const shiftSteps = (direction: "left" | "right") => {
     onChangeTracks(
-      tracks.map((t) => {
-        const newSteps = [...t.steps];
-        if (direction === "right") {
-          const last = newSteps.pop()!;
-          newSteps.unshift(last);
-        } else {
-          const first = newSteps.shift()!;
-          newSteps.push(first);
-        }
-        return { ...t, steps: newSteps };
-      }),
+      tracks.map((t) => ({ ...t, steps: rotateStepWindow(t.steps, stepsPerBar, direction) })),
     );
   };
 
@@ -108,16 +113,10 @@ export const SequencerView = () => {
     setSelectedGenre(genre);
     const preset = GENRE_PRESETS[genre];
     if (!preset) return;
-
-    onChangeTracks(
-      tracks.map((t) => {
-        const pattern = preset[t.instrument];
-        if (pattern) {
-          return { ...t, steps: [...pattern] };
-        }
-        return t;
-      }),
-    );
+    // Apply-time adaptation: applyDrumPattern trims or loops each row to the
+    // active bar length and writes it into the window, so what the grid shows
+    // is exactly what will sound.
+    applyDrumPattern(preset.rows);
   };
 
   return (
@@ -130,7 +129,7 @@ export const SequencerView = () => {
             <Grid className="w-4 h-4" />
           </div>
           <h2 className="font-bold text-sm sm:text-base text-base-content">
-            Drum Sequencer (16-Step)
+            {sequencerTitle(meter)}
           </h2>
         </div>
 
@@ -159,9 +158,13 @@ export const SequencerView = () => {
               onChange={(e) => applyGenrePreset(e.target.value)}
               className="select select-xs select-ghost focus:outline-none"
             >
-              {Object.keys(GENRE_PRESETS).map((g) => (
-                <option key={g} value={g}>
-                  {g}
+              {Object.entries(GENRE_PRESETS).map(([g, preset]) => (
+                <option
+                  key={g}
+                  value={g}
+                  title={patternMeterTitle(g, preset.meter, meter.id)}
+                >
+                  {patternOptionLabel(g, preset.meter, meter.id)}
                 </option>
               ))}
             </select>
@@ -289,23 +292,22 @@ export const SequencerView = () => {
       {/* Sequencer Grid */}
       <div className="card bg-panel border border-base-300 shadow-md">
         <div className="card-body p-3 sm:p-4 overflow-x-auto">
-        {/* Step Indicator Header (1-16) */}
+        {/* Step Indicator Header — one cell per step of the active bar */}
         <div className="flex items-center gap-2 mb-2 pl-44 min-w-[700px]">
-          {Array.from({ length: 16 }).map((_, i) => {
-            const isDownbeat = i % 4 === 0;
-            const isCurrent = currentStep === i && isPlaying;
+          {cells.map((cell) => {
+            const isCurrent = currentStep === cell.index && isPlaying;
             return (
               <div
-                key={i}
+                key={cell.index}
                 className={`flex-1 text-center tabular-nums text-[10px] py-1 rounded transition-all ${
                   isCurrent
                     ? "bg-primary text-primary-content font-bold shadow-md shadow-primary/50"
-                    : isDownbeat
+                    : cell.isBeatStart
                       ? "text-accent font-bold bg-base-300/40"
                       : "text-base-content/50"
                 }`}
               >
-                {i + 1}
+                {cell.label}
               </div>
             );
           })}
@@ -365,21 +367,21 @@ export const SequencerView = () => {
                 </div>
               </div>
 
-              {/* 16 Step Buttons */}
+              {/* Step Buttons — the visible window of this row */}
               <div className="flex-1 flex items-center gap-1.5">
-                {track.steps.map((isActive, stepIdx) => {
-                  const isBeatGroup = Math.floor(stepIdx / 4) % 2 === 0;
-                  const isCurrent = currentStep === stepIdx && isPlaying;
+                {cells.map((cell) => {
+                  const isActive = track.steps[cell.index] === true;
+                  const isCurrent = currentStep === cell.index && isPlaying;
 
                   return (
                     <button
-                      key={stepIdx}
-                      id={`step-${track.id}-${stepIdx}`}
-                      onClick={() => toggleStep(track.id, stepIdx)}
+                      key={cell.index}
+                      id={`step-${track.id}-${cell.index}`}
+                      onClick={() => toggleStep(track.id, cell.index)}
                       className={`flex-1 h-9 rounded-field transition-all cursor-pointer relative ${
                         isActive
                           ? `${track.color} shadow-md shadow-primary/20 scale-[0.96]`
-                          : isBeatGroup
+                          : cell.isAltBeatGroup
                             ? "bg-base-100 hover:bg-base-300 border border-base-300/50"
                             : "bg-base-200 hover:bg-base-300 border border-base-300/40"
                       } ${isCurrent ? "ring-2 ring-primary brightness-125" : ""}`}

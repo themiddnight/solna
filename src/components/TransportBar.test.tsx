@@ -83,3 +83,21 @@ describe('transport bar aggregate behaviour', () => {
     expect(hardButton).toContain('disabled');
   });
 });
+
+describe('transport meter select', () => {
+  test('renders one select carrying all six meters on semantic tokens', () => {
+    const html = renderToString(<TransportBar />);
+    expect(html).toContain('id="select-transport-meter"');
+    expect(html).toContain('select select-xs select-ghost');
+    for (const label of ['4/4', '3/4', '6/8', '12/8', '5/4', '7/8']) {
+      expect(html).toContain(`>${label}</option>`);
+    }
+  });
+
+  test('the meter control introduces no raw palette classes', () => {
+    const html = renderToString(<TransportBar />);
+    expect(html).not.toContain('indigo-');
+    expect(html).not.toContain('slate-');
+    expect(html).not.toContain('text-white');
+  });
+});

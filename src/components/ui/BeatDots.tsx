@@ -1,4 +1,4 @@
-import { groupBeats } from '../../utils/playhead';
+import { BEATS_PER_BAR, groupBeats } from '../../utils/playhead';
 
 export type BeatDotsTone = 'chord' | 'contrast';
 
@@ -11,6 +11,8 @@ export interface BeatDotsProps {
   /** `contrast` is for dots sitting on a filled module-chord surface. */
   tone?: BeatDotsTone;
   className?: string;
+  /** Beats per bar for the active meter; defaults to the 4/4 count. */
+  beatsPerBar?: number;
 }
 
 const DOT_SIZE = {
@@ -47,8 +49,9 @@ export function BeatDots({
   size = 'md',
   tone = 'chord',
   className = '',
+  beatsPerBar = BEATS_PER_BAR,
 }: BeatDotsProps) {
-  const bars = groupBeats(totalBeats);
+  const bars = groupBeats(totalBeats, beatsPerBar);
   const colors = TONE[tone];
   const label =
     activeBeat === null ? `${totalBeats} beats` : `Beat ${activeBeat + 1} of ${totalBeats}`;

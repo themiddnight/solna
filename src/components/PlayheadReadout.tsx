@@ -1,6 +1,6 @@
 import { useAppStore } from '../store/store';
 import { formatChordLabel } from '../utils/musicTheory';
-import { resolveBeatCounter, resolveNowNext } from '../utils/playhead';
+import { beatsPerBarFor, resolveBeatCounter, resolveNowNext } from '../utils/playhead';
 import { BeatDots } from './ui/BeatDots';
 import { NowNextChord } from './ui/NowNextChord';
 
@@ -13,9 +13,12 @@ export function PlayheadReadout({ className = '' }: { className?: string }) {
   const playheadBeat = useAppStore((s) => s.playheadBeat);
   const playheadChordIndex = useAppStore((s) => s.playheadChordIndex);
   const playheadChordStartBeat = useAppStore((s) => s.playheadChordStartBeat);
+  const meterId = useAppStore((s) => s.meterId);
 
   const { now, next } = resolveNowNext(chords, playheadChordIndex);
   if (!now) return null;
+
+  const beatsPerBar = beatsPerBarFor(meterId);
 
   // The counter always spans the shown chord's full length. With the Chords
   // player stopped there is no trigger beat to measure from, so the global beat
@@ -24,6 +27,7 @@ export function PlayheadReadout({ className = '' }: { className?: string }) {
     playheadBeat,
     chordStartBeat: playheadChordIndex === null ? 0 : playheadChordStartBeat,
     bars: now.bars,
+    beatsPerBar,
   });
 
   return (
@@ -32,7 +36,7 @@ export function PlayheadReadout({ className = '' }: { className?: string }) {
         now={formatChordLabel(now.root, now.quality)}
         next={next ? formatChordLabel(next.root, next.quality) : null}
       />
-      <BeatDots totalBeats={counter.totalBeats} activeBeat={counter.activeBeat} />
+      <BeatDots totalBeats={counter.totalBeats} activeBeat={counter.activeBeat} beatsPerBar={beatsPerBar} />
     </div>
   );
 }

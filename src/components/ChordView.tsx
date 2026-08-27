@@ -57,6 +57,8 @@ import {
   BASS_PATTERNS,
   BASS_STYLE_GROUPS,
 } from "../audio/bassPatterns";
+import { patternMeterTitle, patternOptionLabel } from "./meterSelect";
+import { getMeter } from "../utils/meter";
 import {
   deriveChordNotes,
   snapProgressionToScale,
@@ -71,7 +73,7 @@ import { ChannelStrip } from "./ui/ChannelStrip";
 import { QuickSavePopover } from "./ui/QuickSavePopover";
 import { Slider } from "./ui/Slider";
 import { SortableChordCard } from "./chord/SortableChordCard";
-import { resolveBeatCounter } from "../utils/playhead";
+import { beatsPerBarFor, resolveBeatCounter } from "../utils/playhead";
 import { focusSynthTarget, SYNTH_TARGET_STYLES } from "../utils/synthControl";
 import type { SynthControlTarget } from "../utils/synthControl";
 
@@ -165,6 +167,7 @@ export const ChordView: React.FC = React.memo(() => {
   const playheadBeat = useAppStore((s) => s.playheadBeat);
   const playheadChordIndex = useAppStore((s) => s.playheadChordIndex);
   const playheadChordStartBeat = useAppStore((s) => s.playheadChordStartBeat);
+  const meterId = useAppStore((s) => s.meterId);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
   const synthParams = useAppStore((s) => s.synthParams);
@@ -467,7 +470,8 @@ export const ChordView: React.FC = React.memo(() => {
       scaleType,
       chordOctave,
     );
-    const barSeconds = previewBarSeconds(bpm) * (previewChord.bars || 1);
+    const barSeconds =
+      previewBarSeconds(bpm, getMeter(meterId).stepsPerBar) * (previewChord.bars || 1);
 
     chordPatternPreviewStopRef.current?.();
     chordPatternPreviewStopRef.current = startPatternLoop(
@@ -501,7 +505,8 @@ export const ChordView: React.FC = React.memo(() => {
       scaleType,
       chordOctave,
     );
-    const barSeconds = previewBarSeconds(bpm) * (previewChord.bars || 1);
+    const barSeconds =
+      previewBarSeconds(bpm, getMeter(meterId).stepsPerBar) * (previewChord.bars || 1);
 
     bassPatternPreviewStopRef.current?.();
     bassPatternPreviewStopRef.current = startPatternLoop(
@@ -751,8 +756,12 @@ export const ChordView: React.FC = React.memo(() => {
                 {RHYTHM_STYLE_GROUPS.map((group) => (
                   <optgroup key={group.style} label={group.style}>
                     {group.patterns.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
+                      <option
+                        key={p.id}
+                        value={p.id}
+                        title={patternMeterTitle(p.name, p.meter, meterId)}
+                      >
+                        {patternOptionLabel(p.name, p.meter, meterId)}
                       </option>
                     ))}
                   </optgroup>
@@ -1013,12 +1022,14 @@ export const ChordView: React.FC = React.memo(() => {
                   .reduce((sum, c) => sum + (c.bars || 1), 1);
                 const isActive =
                   playingIndex === idx || activeChordId === chord.id;
+                const beatsPerBar = beatsPerBarFor(meterId);
                 const activeBeat =
                   playheadChordIndex === idx
                     ? resolveBeatCounter({
                         playheadBeat,
                         chordStartBeat: playheadChordStartBeat,
                         bars: chord.bars,
+                        beatsPerBar,
                       }).activeBeat
                     : null;
                 return (
@@ -1030,6 +1041,7 @@ export const ChordView: React.FC = React.memo(() => {
                     startBar={startBar}
                     isActive={isActive}
                     activeBeat={activeBeat}
+                    beatsPerBar={beatsPerBar}
                     updateChord={updateChord}
                     removeChord={removeChord}
                     handleMoveChord={handleMoveChord}
@@ -1125,8 +1137,12 @@ export const ChordView: React.FC = React.memo(() => {
                 {BASS_STYLE_GROUPS.map((group) => (
                   <optgroup key={group.style} label={group.style}>
                     {group.patterns.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
+                      <option
+                        key={p.id}
+                        value={p.id}
+                        title={patternMeterTitle(p.name, p.meter, meterId)}
+                      >
+                        {patternOptionLabel(p.name, p.meter, meterId)}
                       </option>
                     ))}
                   </optgroup>

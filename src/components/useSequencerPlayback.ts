@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../store/store";
 import { ensureDrumEngine, triggerPad } from "../audio/playback/drumPlayback";
-import { stepDurationSec } from "../utils/musicTheory";
+import { STEPS_PER_BAR, stepDurationSec } from "../utils/musicTheory";
 import {
-  STEPS_PER_BAR,
   playbackNoteOff,
   playbackNoteOn,
   subscribePlaybackClock,
 } from "../audio/playback/playbackEngine";
+import { getMeter } from "../utils/meter";
 import { armOnBarLine, isSoftStopBoundary } from "./playerStop";
 import type { PlayerState } from "../store/types";
 
@@ -20,7 +20,7 @@ export type SequencerStepAction = "idle" | "soft-stop" | "play";
 
 /**
  * What the clock callback should do for `step`. Arms (mutating `arming`) on
- * the first bar line it sees, so the 16-step loop lands on beat 1.
+ * the first bar line it sees, so the active bar length lands on beat 1.
  *
  * `state` must be read LIVE from the store, never from a React ref: the stop
  * is fired from inside this callback and the clock subscription stays live
@@ -116,10 +116,16 @@ export function useSequencerPlayback(): {
     ensureDrumEngine();
 
     return subscribePlaybackClock((step, _beat, time) => {
+      // Read the meter LIVE, for the same reason the player state is read live
+      // below: one clockTick dispatches several steps synchronously and the
+      // subscription outlives a React commit, so a captured bar length can be
+      // one meter behind.
+      const stepsPerBar = getMeter(useAppStore.getState().meterId).stepsPerBar;
       const action = sequencerStepAction(
         useAppStore.getState().sequencerPlayer,
         step,
         armingRef.current,
+        stepsPerBar,
       );
       if (action === "idle") return;
       // Soft stop: the Beat player owns no sustained voices — drums are
@@ -131,7 +137,7 @@ export function useSequencerPlayback(): {
         return;
       }
 
-      const stepInLoop = step % STEPS_PER_BAR;
+      const stepInLoop = step % stepsPerBar;
       setCurrentStep(stepInLoop);
       playStepSounds(stepInLoop, time);
     });

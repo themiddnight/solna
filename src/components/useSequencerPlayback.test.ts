@@ -33,3 +33,33 @@ describe('sequencer stepper', () => {
     expect(arming.armed).toBe(false);
   });
 });
+
+const WALTZ_BAR = 12;
+
+describe('sequencer stepper in a non-4/4 meter', () => {
+  test('arms on a 12-step bar line, not a 16-step one', () => {
+    const arming: SequencerArming = { armed: false };
+    expect(sequencerStepAction('playing', 16, arming, WALTZ_BAR)).toBe('idle');
+    expect(arming.armed).toBe(false);
+    expect(sequencerStepAction('playing', 24, arming, WALTZ_BAR)).toBe('play');
+  });
+
+  test('soft-stops on a 12-step bar line', () => {
+    const arming: SequencerArming = { armed: true };
+    expect(sequencerStepAction('stopping', 16, arming, WALTZ_BAR)).toBe('play');
+    expect(sequencerStepAction('stopping', 24, arming, WALTZ_BAR)).toBe('soft-stop');
+  });
+
+  test('an odd 14-step bar still lands every bar line exactly', () => {
+    const arming: SequencerArming = { armed: false };
+    expect(sequencerStepAction('playing', 13, arming, 14)).toBe('idle');
+    expect(sequencerStepAction('playing', 14, arming, 14)).toBe('play');
+    expect(sequencerStepAction('playing', 28, arming, 14)).toBe('play');
+  });
+
+  test('the default parameter still means a 16-step bar', () => {
+    const arming: SequencerArming = { armed: false };
+    expect(sequencerStepAction('playing', 8, arming)).toBe('idle');
+    expect(sequencerStepAction('playing', BAR, arming)).toBe('play');
+  });
+});

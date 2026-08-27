@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { ChordView } from './ChordView';
+import { useAppStore } from '../store/store';
 
 describe('ChordView preview UI', () => {
   test('renders separate chord and bass pattern preview buttons', () => {
@@ -84,6 +85,42 @@ describe('ChordView theming', () => {
       expect(html).not.toContain(s);
     }
   });
+});
+
+describe('ChordView pattern selects carry each pattern\'s meter', () => {
+  test('in 4/4 both selects label every pattern with its own meter', () => {
+    useAppStore.setState({ meterId: '4/4' });
+    const html = renderToString(<ChordView />);
+    expect(html).toContain('Sustained · 4/4');
+    expect(html).toContain('Whole-Note Root · 4/4');
+    expect(html).toContain('value="sustained"');
+    expect(html).toContain('value="whole-note-root"');
+  });
+
+  // There is no companion test here rendering a non-default active meter
+  // (e.g. '6/8') through `<ChordView />` and asserting the "what it becomes"
+  // wording. A real `<ChordView />` cannot be rendered in a non-default
+  // active meter through this harness: zustand v5's `useStore` wires
+  // `getServerSnapshot` to `selector(api.getInitialState())`
+  // (node_modules/zustand/react.js), and `getInitialState()` always returns
+  // the object captured once at store creation — `useAppStore.setState(...)`
+  // never touches it, and `react-dom/server`'s `useSyncExternalStore` shim
+  // calls only `getServerSnapshot()`. Already confirmed and documented in
+  // this repo at `TransportBar.test.tsx:51-66` and `InstantVibesBar.test.tsx`;
+  // verified empirically here too (`useAppStore.setState({ meterId: '6/8' })`
+  // followed by `renderToString(<ChordView />)` still renders the 4/4
+  // default).
+  //
+  // A test that calls `patternOptionLabel`/`patternMeterTitle` directly with
+  // a '6/8' argument instead of going through the component would not
+  // exercise `ChordView.tsx` at all — it cannot fail for a wiring bug in
+  // either select (e.g. a swapped `p.meter`/`meterId` argument order, or a
+  // dropped `title` prop), and `meterSelect.test.ts` already pins that
+  // composition at the helper level. So no such substitute test is added
+  // here; a future task that needs the mismatch case rendered end-to-end will
+  // need either a production-code change to how `ChordView` reads `meterId`
+  // (e.g. a prop/context seam a test can drive) or new module-mocking test
+  // infrastructure this repo does not otherwise use.
 });
 
 import { applyKeyScaleChange, shouldClearReharmonizeIndicator } from './ChordView';

@@ -6,6 +6,7 @@ import { useAppStore } from "../store/store";
 import { Slider } from "./ui/Slider";
 import { PlayerTransport } from "./ui/PlayerTransport";
 import { aggregatePlayerState, isHardStopEnabled } from "../store/transportSlice";
+import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 
 export const TransportBar: React.FC = React.memo(() => {
   // Transport slice
@@ -16,6 +17,8 @@ export const TransportBar: React.FC = React.memo(() => {
   const hardStopAll = useAppStore((s) => s.hardStopAll);
   const bpm = useAppStore((s) => s.bpm);
   const setBpm = useAppStore((s) => s.setBpm);
+  const meterId = useAppStore((s) => s.meterId);
+  const setMeter = useAppStore((s) => s.setMeter);
   const masterVolume = useAppStore((s) => s.masterVolume);
   const setMasterVolume = useAppStore((s) => s.setMasterVolume);
   const metronomeActive = useAppStore((s) => s.metronomeActive);
@@ -106,6 +109,24 @@ export const TransportBar: React.FC = React.memo(() => {
           >
             <Plus className="w-3 h-3" />
           </button>
+        </div>
+
+        {/* Time Signature */}
+        <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-1.5 py-1 rounded-box">
+          <span className="text-[10px] text-base-content/50 hidden sm:inline">Meter</span>
+          <select
+            id="select-transport-meter"
+            value={meterId}
+            onChange={(e) => setMeter(coerceMeterChoice(e.target.value, meterId))}
+            className="select select-xs select-ghost focus:outline-none font-mono font-bold text-primary"
+            title="Time signature"
+          >
+            {METER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value} title={option.title}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Metronome Toggle */}

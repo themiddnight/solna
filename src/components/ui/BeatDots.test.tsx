@@ -40,4 +40,31 @@ describe('BeatDots', () => {
     expect(html).toContain('bg-base-content/20');
     expect(html).not.toContain('#');
   });
+
+  // Bar dividers are drawn by grouping dots into inner wrapper divs; each
+  // wrapper carries the exact class string `flex items-center gap-1` (the
+  // `md` DOT_GAP), so counting that substring counts the bar groups without
+  // depending on internal markup details.
+  const barGroupCount = (html: string) => html.split('flex items-center gap-1"').length - 1;
+
+  describe('beatsPerBar', () => {
+    test('a 6/8 counter (2 beats per bar) draws two bar groups for one bar', () => {
+      const html = renderToString(<BeatDots totalBeats={4} activeBeat={null} beatsPerBar={2} />);
+      expect(barGroupCount(html)).toBe(2);
+    });
+
+    test('a 5/4 counter (5 beats per bar) keeps a whole bar in one group', () => {
+      const html = renderToString(<BeatDots totalBeats={5} activeBeat={null} beatsPerBar={5} />);
+      expect(barGroupCount(html)).toBe(1);
+    });
+
+    test('4/4 is unchanged: an explicit beatsPerBar of 4 renders byte-identically to the default', () => {
+      const withDefault = renderToString(<BeatDots totalBeats={8} activeBeat={3} />);
+      const withExplicit = renderToString(
+        <BeatDots totalBeats={8} activeBeat={3} beatsPerBar={4} />,
+      );
+      expect(withExplicit).toBe(withDefault);
+      expect(barGroupCount(withDefault)).toBe(2);
+    });
+  });
 });

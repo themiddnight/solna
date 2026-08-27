@@ -15,6 +15,8 @@ export interface SortableChordCardProps {
   isActive: boolean;
   /** Beat sounding within this chord, 0-based; null when it is not playing. */
   activeBeat?: number | null;
+  /** Beats per bar for the active meter; defaults to the 4/4 count. */
+  beatsPerBar?: number;
   updateChord: (id: string, updates: Partial<ChordItem>) => void;
   removeChord: (id: string) => void;
   handleMoveChord: (index: number, direction: -1 | 1) => void;
@@ -35,6 +37,7 @@ export function SortableChordCard({
   startBar,
   isActive,
   activeBeat = null,
+  beatsPerBar = BEATS_PER_BAR,
   updateChord,
   removeChord,
   handleMoveChord,
@@ -139,8 +142,9 @@ export function SortableChordCard({
         <BeatDots
           size="sm"
           tone={isActive ? "contrast" : "chord"}
-          totalBeats={Math.max(1, chord.bars || 1) * BEATS_PER_BAR}
+          totalBeats={Math.max(1, chord.bars || 1) * beatsPerBar}
           activeBeat={activeBeat}
+          beatsPerBar={beatsPerBar}
           className="mt-2"
         />
       </button>
