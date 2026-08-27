@@ -2,8 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import {
   migrateProjectTitleToVibeId,
   migrateTrackColors,
+  migrateMeterAndStepWidth,
   LEGACY_TRACK_COLOR_MAP,
 } from './migrate';
+import { MAX_STEPS_PER_BAR } from '../utils/meter';
 
 describe('migrateProjectTitleToVibeId', () => {
   test('drops the legacy projectTitle and seeds a null selectedVibeId', () => {
@@ -108,5 +110,65 @@ describe('migrateTrackColors', () => {
       sequencerTracks: [{ id: 'track-kick', color: 'toString' }],
     } as never) as { sequencerTracks: { color: unknown }[] };
     expect(toStringCase.sequencerTracks[0].color).toBe('toString');
+  });
+});
+
+describe('migrateMeterAndStepWidth (v4 -> v5)', () => {
+  test('defaults meterId to 4/4 when the payload predates meter support', () => {
+    const out = migrateMeterAndStepWidth({ bpm: 96 }) as { meterId: string; bpm: number };
+    expect(out.meterId).toBe('4/4');
+    expect(out.bpm).toBe(96);
+  });
+
+  test('keeps an already-valid meterId', () => {
+    const out = migrateMeterAndStepWidth({ meterId: '6/8' }) as { meterId: string };
+    expect(out.meterId).toBe('6/8');
+  });
+
+  test('replaces an unknown meterId rather than letting it reach the clock', () => {
+    const out = migrateMeterAndStepWidth({ meterId: '9/8' }) as { meterId: string };
+    expect(out.meterId).toBe('4/4');
+    const nonString = migrateMeterAndStepWidth({ meterId: 16 }) as unknown as { meterId: string };
+    expect(nonString.meterId).toBe('4/4');
+  });
+
+  test('pads every 16-length track steps array to MAX_STEPS_PER_BAR with false', () => {
+    const sixteen = [
+      true, false, false, false, true, false, false, false,
+      true, false, false, false, true, false, false, false,
+    ];
+    const out = migrateMeterAndStepWidth({
+      sequencerTracks: [{ id: 'track-kick', instrument: 'kick', steps: sixteen }],
+    }) as { sequencerTracks: Array<{ steps: boolean[] }> };
+
+    expect(MAX_STEPS_PER_BAR).toBe(24);
+    expect(out.sequencerTracks[0].steps.length).toBe(24);
+    expect(out.sequencerTracks[0].steps.slice(0, 16)).toEqual(sixteen);
+    expect(out.sequencerTracks[0].steps.slice(16).every((v) => v === false)).toBe(true);
+  });
+
+  test('leaves an already-24-wide payload byte-identical', () => {
+    const wide = Array.from({ length: 24 }, (_, i) => i % 5 === 0);
+    const out = migrateMeterAndStepWidth({
+      sequencerTracks: [{ id: 'track-kick', steps: wide }],
+    }) as { sequencerTracks: Array<{ steps: boolean[] }> };
+    expect(out.sequencerTracks[0].steps).toEqual(wide);
+  });
+
+  test('survives a corrupt tracks payload without throwing', () => {
+    expect(() => migrateMeterAndStepWidth({ sequencerTracks: 'nope' })).not.toThrow();
+    expect(() => migrateMeterAndStepWidth({ sequencerTracks: [null, 7, { steps: 'x' }] })).not.toThrow();
+    const out = migrateMeterAndStepWidth({
+      sequencerTracks: [null, { id: 'a', steps: [true] }],
+    }) as { sequencerTracks: unknown[] };
+    expect(out.sequencerTracks[0]).toBe(null);
+    expect((out.sequencerTracks[1] as { steps: boolean[] }).steps.length).toBe(24);
+  });
+
+  test('does not mutate the payload it was given', () => {
+    const input = { sequencerTracks: [{ id: 'a', steps: [true, false] }] };
+    migrateMeterAndStepWidth(input);
+    expect(input.sequencerTracks[0].steps.length).toBe(2);
+    expect('meterId' in input).toBe(false);
   });
 });

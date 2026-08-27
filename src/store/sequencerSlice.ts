@@ -1,5 +1,7 @@
 import type { StoreApi } from 'zustand';
 import { INITIAL_SEQUENCER_TRACKS } from './initialState';
+import { getMeter } from '../utils/meter';
+import { adaptStepRow, writeStepWindow } from '../utils/patternAdapt';
 import type { AppStore, SequencerSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -18,15 +20,24 @@ export function createSequencerSlice(set: Set): SequencerSlice {
     drumFilterResonance: 0.7,
     drumFilterType: 'lowpass',
 
+    // Apply-time adaptation (see the spec, "Where adaptation happens differs by
+    // target"): the user edits this grid, so an incoming pattern is adapted to
+    // the active bar length HERE and materialised into state. Trimming at
+    // playback instead would make the UI lie, showing steps that never sound.
     applyDrumPattern: (pattern) =>
-      set((state) => ({
-        sequencerTracks: state.sequencerTracks.map((track) => {
-          if (pattern[track.instrument]) {
-            return { ...track, steps: [...pattern[track.instrument]] };
-          }
-          return track;
-        }),
-      })),
+      set((state) => {
+        const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+        return {
+          sequencerTracks: state.sequencerTracks.map((track) => {
+            const row = pattern[track.instrument];
+            if (!row) return track;
+            return {
+              ...track,
+              steps: writeStepWindow(track.steps, stepsPerBar, adaptStepRow(row, stepsPerBar)),
+            };
+          }),
+        };
+      }),
 
     // Setters backing the SequencerView grid and master volume (previously
     // App.tsx setState wrappers / local useState with the same semantics).

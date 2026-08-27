@@ -3,6 +3,7 @@ import { audioEngine } from '../audio/engine';
 import { DRUM_KITS } from '../audio/drumKits';
 import { useAppStore } from './store';
 import { isPlayerActive } from './transportSlice';
+import { getMeter } from '../utils/meter';
 import type { FilterType } from '../types';
 
 /**
@@ -24,6 +25,7 @@ let stopCurrent: Stop | null = null;
 function applySliceState(): void {
   const s = useAppStore.getState();
   audioEngine.setClockBpm(s.bpm);
+  audioEngine.setMeter(getMeter(s.meterId));
   audioEngine.setMasterVolume(s.masterVolume);
   audioEngine.setMetronomeEnabled(s.metronomeActive);
   audioEngine.setSourceGain('chord', s.chordVolume);
@@ -46,6 +48,11 @@ export function startEngineSync(): Stop {
 
   // transport slice
   subs.push(useAppStore.subscribe((s) => s.bpm, (bpm) => audioEngine.setClockBpm(bpm), { fireImmediately: true }));
+  // Meter reaches the engine HERE and nowhere else: the metronome and the
+  // dispatched beat index are bar-relative, and layering rule 3 forbids a
+  // component calling an engine setter. Subscribed on the id (a primitive), so
+  // the subscription fires only on a real change.
+  subs.push(useAppStore.subscribe((s) => s.meterId, (id) => audioEngine.setMeter(getMeter(id)), { fireImmediately: true }));
   subs.push(useAppStore.subscribe((s) => s.masterVolume, (v) => audioEngine.setMasterVolume(v), { fireImmediately: true }));
   subs.push(useAppStore.subscribe((s) => s.metronomeActive, (v) => audioEngine.setMetronomeEnabled(v), { fireImmediately: true }));
 

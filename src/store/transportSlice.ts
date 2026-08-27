@@ -1,5 +1,6 @@
 import type { StoreApi } from 'zustand';
 import { clampBpm } from '../utils/musicTheory';
+import { DEFAULT_METER_ID } from '../utils/meter';
 import type { AppStore, PlayerModule, PlayerState, TransportSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -74,6 +75,7 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
 
   return {
     bpm: 120,
+    meterId: DEFAULT_METER_ID,
     masterVolume: 0.85,
     metronomeActive: false,
     sequencerPlayer: 'stopped',
@@ -91,6 +93,9 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
     // from a cleared number input would drone notes even though the engine
     // clock itself is safe.
     setBpm: (bpm) => set({ bpm: clampBpm(bpm) }),
+    // No clamping needed: MeterId is a closed union, and getMeter() falls back
+    // to 4/4 for anything that slips through from persisted state.
+    setMeter: (meterId) => set({ meterId }),
     setMasterVolume: (masterVolume) => set({ masterVolume }),
 
     toggleMetronome: () => set((state) => ({ metronomeActive: !state.metronomeActive })),

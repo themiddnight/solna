@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import { useAppStore } from './store';
-import { startEngineSync, stopEngineSync } from './engineSync';
+import { applyEngineSnapshot, startEngineSync, stopEngineSync } from './engineSync';
+import { getMeter } from '../utils/meter';
 import type { MasterEffects } from '../types';
 
 // bun's parallel workers share module singletons (the store) across test
@@ -136,5 +137,38 @@ describe('engineSync', () => {
     // change cancels and re-plans their ramps for nothing.
     expect(updateSynthParams).not.toHaveBeenCalled();
     updateSynthParams.mockRestore();
+  });
+});
+
+describe('engineSync meter bridge', () => {
+  test('fireImmediately pushes the current meter into the engine at startup', () => {
+    useAppStore.setState({ meterId: '4/4' });
+    const setMeter = spyOn(audioEngine, 'setMeter').mockClear();
+    startEngineSync();
+    expect(setMeter).toHaveBeenCalledWith(getMeter('4/4'));
+  });
+
+  test('a meter change flows one-way into the engine; teardown stops it', () => {
+    const setMeter = spyOn(audioEngine, 'setMeter').mockClear();
+    startEngineSync();
+    useAppStore.getState().setMeter('6/8');
+    const meter6_8 = getMeter('6/8');
+    expect(setMeter).toHaveBeenLastCalledWith(meter6_8);
+    expect(meter6_8.stepsPerBar).toBe(12);
+    expect(meter6_8.accentGroups).toEqual([6, 6]);
+
+    stopEngineSync();
+    setMeter.mockClear();
+    useAppStore.getState().setMeter('3/4');
+    expect(setMeter).not.toHaveBeenCalled();
+    useAppStore.getState().setMeter('4/4');
+  });
+
+  test('applyEngineSnapshot re-applies the meter after the AudioContext exists', () => {
+    useAppStore.setState({ meterId: '5/4' });
+    const setMeter = spyOn(audioEngine, 'setMeter').mockClear();
+    applyEngineSnapshot();
+    expect(setMeter).toHaveBeenCalledWith(getMeter('5/4'));
+    useAppStore.setState({ meterId: '4/4' });
   });
 });

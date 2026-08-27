@@ -18,9 +18,11 @@ import {
   migrateLegacyPresets,
   migrateProjectTitleToVibeId,
   migrateTrackColors,
+  migrateMeterAndStepWidth,
   removeLegacyKeys,
   LEGACY_PERSIST_KEY,
 } from './migrate';
+import { isMeterId } from '../utils/meter';
 import type { AppStore, PersistedState } from './types';
 
 export const PERSIST_KEY = 'musibox_project_state_v1';
@@ -99,6 +101,7 @@ let storeApi: StoreApi<AppStore> | undefined;
 export function partializeAppState(state: AppStore): PersistedState {
   return {
     bpm: state.bpm,
+    meterId: state.meterId,
     masterVolume: state.masterVolume,
     metronomeActive: state.metronomeActive,
     scaleRoot: state.scaleRoot,
@@ -251,6 +254,7 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (typeof sanitized.selectedVibeId !== 'string' && sanitized.selectedVibeId !== null) {
     delete sanitized.selectedVibeId;
   }
+  if (!isMeterId(sanitized.meterId)) delete sanitized.meterId;
 
   // Only rewrite the synth param objects that were actually stored; an absent
   // key must keep falling through to the freshly-built currentState default.
@@ -279,7 +283,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: PERSIST_KEY,
-      version: 4,
+      version: 5,
       storage: createJSONStorage<PersistedState>(() => resolveStorage() ?? memoryStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
@@ -295,7 +299,12 @@ export const useAppStore = create<AppStore>()(
         // v2 → v3: raw Tailwind track colours become daisyUI semantic tokens.
         const recoloured =
           version >= 3 ? deprojected : (migrateTrackColors(deprojected) as PersistedState);
-        if (version >= 2) return recoloured;
+        // v4 → v5: step arrays widen to MAX_STEPS_PER_BAR and meterId appears.
+        // Runs on EVERY older version, so it is applied after the chain above
+        // rather than inside the version >= 2 short-circuit below.
+        const metered = (payload: PersistedState): PersistedState =>
+          version >= 5 ? payload : (migrateMeterAndStepWidth(payload) as PersistedState);
+        if (version >= 2) return metered(recoloured);
         // v1 persisted `arpActive: true` from an arpeggiator that never
         // produced a note, while that same flag gated the keyboard's direct
         // trigger — so those sessions came back with a silent keyboard. Clear
@@ -307,7 +316,7 @@ export const useAppStore = create<AppStore>()(
             next[key] = { ...(params as object), arpActive: false };
           }
         }
-        return next as unknown as PersistedState;
+        return metered(next as unknown as PersistedState);
       },
       // Runs on every hydration (also when nothing was stored): sanitize the
       // parsed payload (wrong-typed persisted values must never reach the

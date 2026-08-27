@@ -9,6 +9,7 @@ import type {
   KeyboardMode,
 } from '../types';
 import type { SynthControlTarget } from '../utils/synthControl';
+import type { MeterId } from '../utils/meter';
 import type { SynthPresetItem, SynthPresetCategory } from '../audio/synthPresets';
 
 /** A player is `stopping` between a soft stop and the bar line that ends it. */
@@ -18,6 +19,8 @@ export type PlayerModule = 'sequencer' | 'chords';
 
 export interface TransportSlice {
   bpm: number;
+  /** Active time signature; the sequencer bar length is derived from this, not fixed. */
+  meterId: MeterId;
   masterVolume: number;
   metronomeActive: boolean;
   // Transient (not persisted): mirrors the live transport state.
@@ -33,6 +36,7 @@ export interface TransportSlice {
   setPlayheadBeat: (beat: number | null) => void;
   setPlayheadChord: (chordIndex: number | null, startBeat?: number) => void;
   setBpm: (bpm: number) => void;
+  setMeter: (id: MeterId) => void;
   setMasterVolume: (volume: number) => void;
   toggleMetronome: () => void;
   play: (module: PlayerModule) => void;
@@ -157,6 +161,7 @@ export interface AppStore
 // The exact allow-list shape produced by the persist `partialize` config.
 export interface PersistedState {
   bpm: number;
+  meterId: MeterId;
   masterVolume: number;
   metronomeActive: boolean;
   scaleRoot: string;

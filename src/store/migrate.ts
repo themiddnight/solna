@@ -1,5 +1,7 @@
 import type { SynthPresetItem } from '../audio/synthPresets';
 import type { CustomChordProgressionItem } from '../types';
+import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
+import { padStepRow } from '../utils/patternAdapt';
 
 // Legacy localStorage keys written by the pre-Zustand app:
 // - synth presets:   src/audio/synthPresets.ts (STORAGE_KEY)
@@ -126,4 +128,34 @@ export function migrateTrackColors<T extends object>(state: T): T {
       return next ? { ...(t as object), color: next } : t;
     }),
   };
+}
+
+/**
+ * v4 -> v5: meter support.
+ *
+ * 1. Sequencer step arrays are now ALWAYS stored at MAX_STEPS_PER_BAR (24), so
+ *    switching meter windows the user's programming instead of destroying it.
+ *    Legacy 16-length rows are padded with silence.
+ * 2. `meterId` defaults to '4/4'. An unknown or wrong-typed value is replaced
+ *    rather than preserved — it feeds the clock, and getMeter's own fallback
+ *    should never have to fire on a payload we already own.
+ *
+ * Pure and non-mutating, like its three siblings above.
+ */
+export function migrateMeterAndStepWidth<T extends object>(state: T): T {
+  const next = { ...(state as Record<string, unknown>) };
+
+  if (!isMeterId(next.meterId)) next.meterId = DEFAULT_METER_ID;
+
+  const tracks = next.sequencerTracks;
+  if (Array.isArray(tracks)) {
+    next.sequencerTracks = tracks.map((track) => {
+      if (!track || typeof track !== 'object') return track;
+      const steps = (track as { steps?: unknown }).steps;
+      if (!Array.isArray(steps)) return track;
+      return { ...(track as object), steps: padStepRow(steps as boolean[]) };
+    });
+  }
+
+  return next as unknown as T;
 }

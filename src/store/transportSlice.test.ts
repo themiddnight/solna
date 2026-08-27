@@ -149,3 +149,17 @@ describe('setBpm clamping', () => {
     expect(useAppStore.getState().bpm).toBe(120);
   });
 });
+
+describe('transport meter', () => {
+  test('defaults to 4/4', () => {
+    useAppStore.setState({ meterId: '4/4' });
+    expect(useAppStore.getState().meterId).toBe('4/4');
+  });
+
+  test('setMeter writes the id straight through', () => {
+    useAppStore.getState().setMeter('7/8');
+    expect(useAppStore.getState().meterId).toBe('7/8');
+    useAppStore.getState().setMeter('4/4');
+    expect(useAppStore.getState().meterId).toBe('4/4');
+  });
+});

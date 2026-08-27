@@ -224,16 +224,33 @@ describe('transport semantics', () => {
 });
 
 describe('applyDrumPattern', () => {
-  test('maps the pattern onto the matching track by instrument and leaves others untouched', async () => {
+  test('maps a 16-step pattern onto the matching track window and leaves others untouched', async () => {
     const { useAppStore } = await getStore();
-    const before = useAppStore.getState().sequencerTracks;
-    const newKickSteps = before[0].steps.map((v) => !v);
+    const initial = useAppStore.getState().sequencerTracks;
 
-    useAppStore.getState().applyDrumPattern({ kick: newKickSteps });
+    // Seed the padding (indices 16-23, normally all `false` in
+    // INITIAL_SEQUENCER_TRACKS) with a distinguishing `true` before the write.
+    // An assertion that padding is `false` both before and after cannot tell
+    // "genuinely preserved" from "reset to false" — seeding a `true` value that
+    // must survive makes this an independent proof of the invariant.
+    const seededSteps = initial[0].steps.map((v, i) => (i === 20 ? true : v));
+    useAppStore
+      .getState()
+      .setSequencerTracks(initial.map((t, i) => (i === 0 ? { ...t, steps: seededSteps } : t)));
+    const before = useAppStore.getState().sequencerTracks;
+
+    // Real callers (GENRE_PRESETS, VIBE_DRUM_PATTERNS) hand in a 16-step row —
+    // the width of the default 4/4 window, not the 24-wide storage array.
+    const newKickWindow = before[0].steps.slice(0, 16).map((v) => !v);
+
+    useAppStore.getState().applyDrumPattern({ kick: newKickWindow });
     const after = useAppStore.getState().sequencerTracks;
 
     expect(after[0].instrument).toBe('kick');
-    expect(after[0].steps).toEqual(newKickSteps);
+    expect(after[0].steps.slice(0, 16)).toEqual(newKickWindow);
+    // Padding invariant: the seeded `true` at index 20 must survive untouched.
+    expect(after[0].steps[20]).toBe(true);
+    expect(after[0].steps.slice(16)).toEqual(before[0].steps.slice(16));
     expect(after[0].id).toBe(before[0].id); // rest of the track is preserved
     expect(after[0].volume).toBe(before[0].volume);
     for (let i = 1; i < after.length; i++) {
@@ -843,6 +860,85 @@ describe('sequencer track colour migration wiring (v2 -> v3)', () => {
     await useAppStore.persist.rehydrate();
     const colors = useAppStore.getState().sequencerTracks.map((t) => t.color);
     expect(colors).toEqual(['bg-error', 'bg-custom-brand']);
+  });
+});
+
+describe('meter migration wiring (v4 -> v5)', () => {
+  // migrateMeterAndStepWidth is unit-tested directly in migrate.test.ts. These
+  // tests drive the store's actual `migrate` callback end-to-end, through the
+  // real version-chained pipeline in store.ts, the way the v2->v3 tests above
+  // do for track colours — Task 4's review flagged that no test exercised
+  // this wiring, only the standalone unit.
+  test('a pre-v5 payload with no meterId and 16-wide steps hydrates with a defaulted meterId and 24-wide steps', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.persist.clearStorage();
+
+    const kickSteps = [
+      true, false, false, false, true, false, false, false,
+      true, false, false, false, true, false, false, false,
+    ];
+    const snareSteps = [
+      false, false, false, false, true, false, false, false,
+      false, false, false, false, true, false, false, false,
+    ];
+
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 4,
+        state: {
+          sequencerTracks: [
+            { ...INITIAL_SEQUENCER_TRACKS[0], steps: kickSteps },
+            { ...INITIAL_SEQUENCER_TRACKS[1], steps: snareSteps },
+          ],
+        },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const s = useAppStore.getState();
+
+    // meterId did not exist on a pre-v5 payload: defaults to 4/4.
+    expect(s.meterId).toBe('4/4');
+
+    // Legacy 16-wide rows widen to the 24-wide storage array, padded with
+    // silence — never truncated, never left at their old width.
+    expect(s.sequencerTracks[0].steps.length).toBe(24);
+    expect(s.sequencerTracks[1].steps.length).toBe(24);
+    expect(s.sequencerTracks[0].steps).toEqual([
+      true, false, false, false, true, false, false, false,
+      true, false, false, false, true, false, false, false,
+      false, false, false, false, false, false, false, false,
+    ]);
+    expect(s.sequencerTracks[1].steps).toEqual([
+      false, false, false, false, true, false, false, false,
+      false, false, false, false, true, false, false, false,
+      false, false, false, false, false, false, false, false,
+    ]);
+  });
+
+  test('a current-version payload with an explicit non-4/4 meterId and 24-wide steps passes through untouched', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.persist.clearStorage();
+
+    const wide = Array.from({ length: 24 }, (_, i) => i % 6 === 0);
+
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 5,
+        state: {
+          meterId: '6/8',
+          sequencerTracks: [{ ...INITIAL_SEQUENCER_TRACKS[0], steps: wide }],
+        },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const s = useAppStore.getState();
+
+    expect(s.meterId).toBe('6/8');
+    expect(s.sequencerTracks[0].steps).toEqual(wide);
   });
 });
 
