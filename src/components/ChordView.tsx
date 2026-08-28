@@ -541,6 +541,22 @@ export const ChordView: React.FC = React.memo(() => {
     );
   };
 
+  // Both of these run tonal (Chord.getChord / Note.midi / Note.get) dozens of
+  // times. ChordView subscribes to playheadBeat, so it re-renders twice a
+  // second at 120 BPM — these must not sit inline in the JSX.
+  const borrowedChords = useMemo(
+    () => getBorrowedChords(scaleRoot, scaleType),
+    [scaleRoot, scaleType],
+  );
+
+  const diatonicChords = useMemo(
+    () =>
+      Array.from({ length: SCALES[scaleType]?.intervals.length || 7 }).map((_, i) =>
+        getDiatonicChordForDegree(i, scaleRoot, scaleType, use7thsInQuickAdd),
+      ),
+    [scaleRoot, scaleType, use7thsInQuickAdd],
+  );
+
   const totalProgressionsCount = useMemo(
     () =>
       CHORD_PROGRESSIONS.filter((p) => isProgressionAvailable(p, scaleType)).length +
@@ -871,15 +887,7 @@ export const ChordView: React.FC = React.memo(() => {
             </div>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
-            {Array.from({
-              length: SCALES[scaleType]?.intervals.length || 7,
-            }).map((_, i) => {
-              const diatonic = getDiatonicChordForDegree(
-                i,
-                scaleRoot,
-                scaleType,
-                use7thsInQuickAdd,
-              );
+            {diatonicChords.map((diatonic, i) => {
               return (
                 <button
                   key={i}
@@ -935,7 +943,7 @@ export const ChordView: React.FC = React.memo(() => {
               </span>
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
-              {getBorrowedChords(scaleRoot, scaleType).map((borrowed, i) => (
+              {borrowedChords.map((borrowed, i) => (
                 <button
                   key={i}
                   type="button"
