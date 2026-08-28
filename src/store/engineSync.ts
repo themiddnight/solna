@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
+import { shallow } from 'zustand/shallow';
 import { audioEngine } from '../audio/engine';
 import { DRUM_KITS } from '../audio/drumKits';
 import { useAppStore } from './store';
 import { isPlayerActive } from './transportSlice';
 import { getMeter } from '../utils/meter';
-import type { FilterType } from '../types';
 
 /**
  * One-way bridge from the Zustand store into the audioEngine singleton,
@@ -62,34 +62,35 @@ export function startEngineSync(): Stop {
   subs.push(useAppStore.subscribe((s) => s.chordMuted, (v) => audioEngine.setSourceMuted('chord', v), { fireImmediately: true }));
   subs.push(useAppStore.subscribe((s) => s.bassMuted, (v) => audioEngine.setSourceMuted('bass', v), { fireImmediately: true }));
 
-  // sequencer slice: kit + drum-bus filter (encoded as one primitive so the
-  // subscription fires only when a filter value actually changes)
+  // sequencer slice: kit + drum-bus filter. The filter is watched as one
+  // derived object compared with `shallow`, so the subscription fires once
+  // when any of the three values actually changes — and the listener gets all
+  // three from the same snapshot instead of re-reading the store.
   subs.push(useAppStore.subscribe((s) => s.soundKit, (kit) => audioEngine.setDrumKit(DRUM_KITS[kit]), { fireImmediately: true }));
   subs.push(
     useAppStore.subscribe(
-      (s) => `${s.drumFilterCutoff}|${s.drumFilterResonance}|${s.drumFilterType}`,
-      (key) => {
-        const [cutoff, resonance, type] = key.split('|');
-        audioEngine.setDrumFilter(parseFloat(cutoff), parseFloat(resonance), type as FilterType);
-      },
-      { fireImmediately: true },
+      (s) => ({
+        cutoff: s.drumFilterCutoff,
+        resonance: s.drumFilterResonance,
+        type: s.drumFilterType,
+      }),
+      ({ cutoff, resonance, type }) => audioEngine.setDrumFilter(cutoff, resonance, type),
+      { equalityFn: shallow, fireImmediately: true },
     ),
   );
 
-  // effects + synth params: subscribed as an encoded primitive so the
+  // effects + synth params: identity selectors compared with `shallow`, so the
   // subscription fires only on a real VALUE change. Keying on object identity
-  // re-ran updateEffects / updateSynthParams for any action that merely
+  // alone re-ran updateEffects / updateSynthParams for any action that merely
   // respread the object — and updateSynthParams re-targets every live voice,
-  // cancelling and re-planning their ramps for nothing. Same pattern as the
-  // drum-filter subscription above. JSON.stringify is stable here because
-  // both objects are plain literals built from a fixed set of keys
-  // (INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS) and every writer spreads from
-  // those, so key order does not vary.
+  // cancelling and re-planning their ramps for nothing. Both types are flat
+  // records of primitives (MasterEffects, SynthParams), so shallow equality is
+  // exact — and unlike the JSON encoding it needs no assumption about key order.
   subs.push(
     useAppStore.subscribe(
-      (s) => JSON.stringify(s.effects),
-      () => audioEngine.updateEffects(useAppStore.getState().effects),
-      { fireImmediately: true },
+      (s) => s.effects,
+      (effects) => audioEngine.updateEffects(effects),
+      { equalityFn: shallow, fireImmediately: true },
     ),
   );
 
@@ -101,9 +102,9 @@ export function startEngineSync(): Stop {
   for (const [field, source] of synthSources) {
     subs.push(
       useAppStore.subscribe(
-        (s) => JSON.stringify(s[field]),
-        () => audioEngine.updateSynthParams(useAppStore.getState()[field], source),
-        { fireImmediately: true },
+        (s) => s[field],
+        (params) => audioEngine.updateSynthParams(params, source),
+        { equalityFn: shallow, fireImmediately: true },
       ),
     );
   }
