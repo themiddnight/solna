@@ -3,6 +3,7 @@ import React, {
   useEffect,
   useRef,
   useMemo,
+  useCallback,
 } from "react";
 import {
   Music,
@@ -239,14 +240,20 @@ export const ChordView: React.FC = React.memo(() => {
     }
   };
 
-  const handleMoveChord = (index: number, direction: -1 | 1) => {
+  // Props of the memoized SortableChordCard, so their identity must be
+  // stable. `chords` and `chordOctave` are read LIVE from the store: a
+  // useCallback([]) over the render-scope values would pin the progression
+  // as of the first render and silently corrupt every later edit. The
+  // chords slice exposes a plain-value setter, not an updater.
+  const handleMoveChord = useCallback((index: number, direction: -1 | 1) => {
+    const { chords, setChords } = useAppStore.getState();
     const newIndex = index + direction;
     if (newIndex < 0 || newIndex >= chords.length) return;
     const updated = [...chords];
     const [removed] = updated.splice(index, 1);
     updated.splice(newIndex, 0, removed);
     setChords(updated);
-  };
+  }, []);
 
   const bassPattern =
     BASS_PATTERNS.find((p) => p.id === bassPatternId) ?? BASS_PATTERNS[0];
@@ -436,23 +443,26 @@ export const ChordView: React.FC = React.memo(() => {
     stopChordPreviewSource(0.15);
   };
 
-  const handleCardPreviewMouseDown = (
-    e: React.MouseEvent | React.TouchEvent,
-    chord: ChordItem,
-  ) => {
-    e.stopPropagation();
-    ensurePreviewEngine();
-    playChordLegatoWithEngine(chord, chordSynthParams);
-    setActiveChordId(chord.id);
-  };
+  const handleCardPreviewMouseDown = useCallback(
+    (e: React.MouseEvent | React.TouchEvent, chord: ChordItem) => {
+      e.stopPropagation();
+      ensurePreviewEngine();
+      playChordLegatoWithEngine(chord, useAppStore.getState().chordSynthParams);
+      setActiveChordId(chord.id);
+    },
+    [setActiveChordId],
+  );
 
-  const handleCardPreviewMouseUp = (e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
-    if (!hasPreviewEngine()) return;
-    setActiveChordId(null);
+  const handleCardPreviewMouseUp = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      e.stopPropagation();
+      if (!hasPreviewEngine()) return;
+      setActiveChordId(null);
 
-    stopChordPreviewSource(0.15);
-  };
+      stopChordPreviewSource(0.15);
+    },
+    [setActiveChordId],
+  );
 
   // Pattern previews are per-module: the chord button loops the chord pattern
   // only, the bass button loops the bass pattern only. Both use the scale's
@@ -528,18 +538,20 @@ export const ChordView: React.FC = React.memo(() => {
     stopBassPreviewSource(0.15);
   };
 
-  const removeChord = (id: string) => {
+  const removeChord = useCallback((id: string) => {
+    const { chords, setChords } = useAppStore.getState();
     setChords(chords.filter((c) => c.id !== id));
-  };
+  }, []);
 
-  const updateChord = (id: string, updates: Partial<ChordItem>) => {
+  const updateChord = useCallback((id: string, updates: Partial<ChordItem>) => {
+    const { chords, chordOctave, setChords } = useAppStore.getState();
     setChords(
       chords.map((c) => {
         if (c.id !== id) return c;
         return deriveChordNotes({ ...c, ...updates }, chordOctave);
       }),
     );
-  };
+  }, []);
 
   // Both of these run tonal (Chord.getChord / Note.midi / Note.get) dozens of
   // times. ChordView subscribes to playheadBeat, so it re-renders twice a

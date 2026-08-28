@@ -31,7 +31,14 @@ export interface SortableChordCardProps {
   ) => void;
 }
 
-export function SortableChordCard({
+/**
+ * Memoized: ChordView re-renders on every beat (it subscribes to
+ * playheadBeat) but only one card's `activeBeat` actually changes. All five
+ * callback props are stable useCallbacks in ChordView, so the default
+ * shallow prop comparison is meaningful. `useSortable` below still
+ * subscribes to the drag context, so cards do re-render during a drag.
+ */
+export const SortableChordCard = React.memo(function SortableChordCard({
   chord,
   idx,
   totalChords,
@@ -227,4 +234,4 @@ export function SortableChordCard({
       </div>
     </div>
   );
-}
+});
