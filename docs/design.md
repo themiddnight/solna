@@ -29,7 +29,7 @@ family across opposite ends of the same day.
 * **Neutral (`neutral`):** `#2A1F27` / content `#F6E9E4` (chrome that must not read as an accent — inactive audition pills, muted chips)
 * **Success (`success`):** `#5FD08B` — "saved", "envelope OK", live-signal indicator
 * **Warning (`warning`):** `#F0C244` — VU meter upper-mid segments
-* **Error (`error`):** `#F0604B` — destructive actions, VU clip segments, mute-on
+* **Error (`error`):** `#F0604B` — destructive actions, VU clip segments (mute state is not one of these — see §6.5 / `PowerToggle`, whose off state is `btn-ghost text-base-content/40`, never `btn-error`)
 * **Info (`info`):** `#7C9EE8` — neutral informational hints
 
 ### 📜 Solna-Light (`solna-light`) — First Light on Paper
@@ -86,6 +86,47 @@ Typography is shared with murva: one sans face for everything, and monospace res
   * **App Title:** 14px Bold (`text-sm font-extrabold`)
   * **Section Headers:** 14-16px Bold
   * **Control Labels & Hints:** 10-12px Medium (`text-xs` / `text-[10px]`)
+  * **Casing by role.** A view's header title is Title Case (`Synth Lab`,
+    `Drum Sequencer`). A section header inside a view is
+    `text-xs font-bold uppercase tracking-wider` (`KEYBOARD`, `FX CHAIN`,
+    `BASS MODULE`). A card title is Title Case (`Space Reverb`). Machine-computed
+    context never sits inside a heading — it goes in a `tabular-nums` badge beside
+    it, which is why `sequencerMeterBadge` exists.
+  * **Field labels are not section headers.** A label naming one control is the
+    plain muted 10px form, never `uppercase font-bold tracking-wider` — that
+    weight belongs to the section header above it, and a label wearing it
+    flattens the hierarchy. There is exactly one such label in the app,
+    `FIELD_LABEL` in `components/ui/fieldClasses.ts`; four hand-written copies
+    had drifted in opacity, margin and weight before it existed, and
+    `fieldClasses.test.ts` fails the build if a fifth appears.
+  * **Stacked or inline, by container.** A control inside a card's control row
+    wears its label *above* it (`FIELD_LABEL`) — the form `ChordView`'s
+    preset/octave/pattern/feel/level row uses. An inline `Label:` prefix is only
+    for a group that sits in a one-line toolbar with no room to stack, which is
+    why `Target:` and `Sound Style:` keep it.
+  * **One label line, one control lane.** A stacked label only lines up if every
+    control in the row does, so a labelled field puts its control in
+    `FIELD_LANE` — the 32px line `btn-sm` and `select-sm` already resolve to.
+    Bottom-aligning raw controls instead is what scattered the sequencer's Drum
+    Sound labels across five heights: a 24px `btn-xs` join, a 30px fader shell,
+    a 32px select and a 48px knob in one `items-end` row. A control slightly
+    taller than the lane (a `sm` knob is 36px) centres and overhangs it evenly;
+    that reads as aligned, a differing label baseline does not.
+
+    The *pairing* is the rule, so `components/ui/Field.tsx` owns it and
+    `FIELD_LABEL` / `FIELD_LANE` are its internals: the Drum Sound row
+    hand-assembled the same `<div><label/><div lane/></div>` four times before
+    it existed. A lane with no label above it (the Pattern card's genre select,
+    named by `aria-label` because its card title already says "Pattern") still
+    uses `FIELD_LANE` directly — there the lane is load-bearing layout, since
+    daisyUI's `.select` is `width: 100%` and would claim the whole flex row.
+  * **Section headers and ordinal badges are tokens too.** `SECTION_HEADER`
+    (`text-xs font-bold uppercase tracking-wider text-base-content`) is the
+    string `FIELD_LABEL` defers to above; it was spelled out by hand in six
+    components. `STEP_BADGE` is the ordinal chip a numbered module card carries
+    (the synth's five signal stages, the master rack's four FX units — nine
+    copies), and `HEADER_BADGE` is the badge `ViewHeader` sets beside a title,
+    which ChordView's chord-count chip is a second instance of.
 
 ---
 
@@ -93,7 +134,7 @@ Typography is shared with murva: one sans face for everything, and monospace res
 
 Solna is structured into modular, single-responsibility React components:
 
-1. **`Header.tsx`**: Top navigation bar containing the Solna brand logo, project title, primary view tabs (`Synth`, `Step Matrix`, `Chords`, `Master FX`), global Key/Scale selector, Project modal trigger, and the **Theme Toggle** button.
+1. **`Header.tsx`**: Top navigation bar containing the Solna brand logo, project title, primary view tabs (`Synth`, `Beat Step`, `Chords`, `Master FX`), global Key/Scale selector, Project modal trigger, and the **Theme Toggle** button.
 2. **`InstantVibesBar.tsx`**: Quick-start genre and mood presets (`Lo-Fi Chill`, `Synthwave 80s`, `Cyber EDM`, `Deep Ambient`, `Boom Bap`, `Zen Garden`) allowing instant loading of complete harmonic and rhythmic templates.
 
    > **Ids drift from display names — do not "fix" this.** Four vibe ids predate their current labels. Project files persist the id, so renaming an id silently breaks every saved project that references it.
@@ -108,7 +149,7 @@ Solna is structured into modular, single-responsibility React components:
    > | `asian-zen` | **Zen Garden** |
    >
    > The table lives in `src/store/instantVibes.ts`. It used to be duplicated in an `audio/` fork; that fork is gone, so there is one copy to keep correct.
-3. **`TransportBar.tsx`**: Bottom sticky player controls featuring Play/Stop All, Tab Play, a BPM stepper (−/+ buttons around a `40`–`240` number input; there is **no** tap-tempo), a Metronome toggle, a **mono** 10-segment VU meter (green below segment 7, `warning` at 7-8, `error` at 9-10), and the Master Output volume fader.
+3. **`TransportBar.tsx`**: Bottom sticky player controls featuring Play/Stop All, Tab Play, a BPM stepper (−/+ buttons around a `40`–`240` number input; there is **no** tap-tempo), a Metronome toggle, a **mono** 10-segment VU meter (green below segment 7, `warning` at 7-8, `error` at 9-10), and the Master Output volume fader. Its centre carries `PlayheadReadout`, not the visualizer — the canvas view moved to `EffectsRackView`'s Monitor section (item 7).
 
    > **Explicitly unbuilt.** Two features described in earlier revisions of this spec were never implemented and are recorded here as future work, not as shipped behaviour:
    > - **Tap Tempo** — a button that derives BPM from the interval between successive clicks. The BPM setter (`setBpm`) already exists in the store, so this is UI-only work.
@@ -116,24 +157,39 @@ Solna is structured into modular, single-responsibility React components:
 4. **`SimpleSynthPanel.tsx` / `SynthView.tsx`**: Dual-mode synthesizer interface featuring 4 friendly macro knobs (`Tone`, `Space`, `Vibe`, `Punch`), 1-click Arpeggiator controls, and an interactive musical keyboard supporting computer key bindings.
 5. **`SequencerView.tsx`**: Multi-track step sequencer grid for drums, bass, synth, and percussion patterns with velocity and step probability editing.
 6. **`ChordView.tsx`**: Interactive chord progression builder featuring sortable chord cards, Roman numeral analysis, and automatic chord voicing generation.
-7. **`EffectsRackView.tsx`**: Master audio chain comprising Algorithmic Space Reverb, Stereo Echo Delay, Wave Distortion/Crunch, and a 3-Band Equalizer.
+7. **`EffectsRackView.tsx`**: Two sections. **FX Chain** is a two-column grid (room for a compressor or graphic EQ) holding Algorithmic Space Reverb, Stereo Echo Delay, Wave Distortion/Crunch, and a 3-Band Equalizer. **Monitor** holds `AudioVisualizer` (item 9), passed a `paused` prop tied to whether Master FX is the active tab — see item 9 for why that prop exists at all.
 8. **`ProjectModal.tsx`**: Project save / load / export / import dialog, rendered as a daisyUI `modal` with a `modal-box` and `modal-backdrop`.
-9. **`AudioVisualizer.tsx`**: Canvas visualizer with four modes (`wave`, `bars`, `oscilloscope`, `ambient-bg`). Because canvas takes colour strings rather than classes, it reads the live theme through `src/utils/themeColor.ts`; its `colorTheme` prop takes a semantic role (`primary` | `secondary` | `accent`), never a palette name.
+9. **`AudioVisualizer.tsx`**: Canvas visualizer with three modes (`wave`, `bars`, `oscilloscope`) — `VisualizerMode` never had a fourth; an earlier revision of this spec claimed an `ambient-bg` mode that was never built. Because canvas takes colour strings rather than classes, it reads the live theme through `src/utils/themeColor.ts`; its `colorTheme` prop takes a semantic role (`primary` | `secondary` | `accent`), never a palette name. The mode set and its order live in one exported `VISUALIZER_MODES` so the canvas click-to-cycle gesture and a caller's own switcher cannot disagree about them. It renders no built-in mode switcher: `EffectsRackView` is the only caller that offers one, it renders its own, and a second unused copy inside this component was dead markup that also forced `mode` to support an uncontrolled path nothing used. It lives in Master FX's Monitor section (item 7) and takes a `paused` prop: `App.tsx` keeps all four views mounted at once, only toggling `block`/`hidden` on the active tab so audio never stops on a tab switch, which means any `requestAnimationFrame` loop inside a view keeps running on a hidden tab unless something gates it — `paused` is that gate, driven by `activeTab !== 'effects'`.
 10. **`DrumPads.tsx`**: Velocity-sensitive drum pad grid with computer-key shortcuts. Exports `DEFAULT_PADS`, whose `shortcut` codes are asserted collision-free against the synth keyboard by `scripts/check-key-bindings.ts`.
 11. **`ChordPresetLibrary.tsx`** / **`SynthPresetLibrary.tsx`**: Searchable, category-filtered preset browsers for chord progressions and synth patches, including user-saved presets from `localStorage`.
 12. **`chord/SortableChordCard.tsx`**: A single draggable chord card (`@dnd-kit/sortable`) used by `ChordView`.
 13. **`InstantVibesBar.tsx`** *(see item 2)* and **`useSequencerPlayback.ts`** / **`chord/useChordPlayback.ts`**: playback hooks, not visual components.
+14. **`ui/AmbientBackdrop.tsx`**: full-bleed, analyser-driven ambient field mounted as the first child of the App root at `absolute inset-0 z-0`, behind the whole workspace. Gives every tab continuous "audio is live" feedback without a meter's per-bin detail — three slow-drifting radial-gradient blobs, tinted `primary` / `accent` / `secondary`, whose size and opacity track the analyser's average level. It is frozen (not merely paused) under `prefers-reduced-motion` and idle whenever nothing is playing, per `shouldAnimateBackdrop`. It is one of the three `no-restricted-imports` exemptions in layering rule 3 (with `AudioVisualizer.tsx` and `TransportBar.tsx`), for the same reason as the other two: routing a per-frame analyser read through the Zustand store would mean a store write on every animation frame and a re-render of every subscriber, so it reads `audioEngine` directly instead.
 
 ### The `ui/` primitive layer
 
 Shared, presentation-only controls under `src/components/ui/`. These own the daisyUI class defaults, so feature components should pass **no** colour overrides:
 
-* **`Knob.tsx`** — rotary control. Its `color` prop is a closed union: `'text-primary' | 'text-secondary' | 'text-accent' | 'text-success' | 'text-error'`. Passing a raw palette class is a compile error, which is deliberate.
+* **`Knob.tsx`** — rotary control. Its `color` prop is a closed union: `'text-primary' | 'text-secondary' | 'text-accent' | 'text-success' | 'text-error'`. Passing a raw palette class is a compile error, which is deliberate. Its `descriptor?: string` prop renders a badge tinted from the knob's own colour, for plain-language readings of a raw number — reverb decay in seconds as "Room" / "Hall" / "Cathedral", distortion drive as "Warm" / "Crunch" / "Fuzz" (see `fxDescriptors.ts`). It exists for parameters whose number alone does not say what the user will hear; percentages and dB values already read plainly and deliberately get no descriptor.
 * **`Slider.tsx`** — wraps `<input type="range">`; defaults to `range range-primary range-xs w-full`.
 * **`Keyboard.tsx`** — `ScaleLockedKeyboard` and `ChromaticKeyboard`, plus the `KEYBOARD_NOTES` binding table and the `getBlackKeyLeftPx` geometry helper covered by `SynthView.test.tsx`.
-* **`ChannelStrip.tsx`** — mixer channel (fader, mute, solo, pan).
+* **`ChannelStrip.tsx`** — mixer channel (fader, mute, solo, pan). `max` is required, not defaulted: the fader ceiling is a property of the bus (chord and bass boost to 1.5, the drum bus is a plain 0..1 master), so a default would hand whichever value it picked to the next caller by silence.
 * **`PresetLibrary.tsx`** — the generic library shell both preset browsers build on.
 * **`QuickSavePopover.tsx`** — inline name-and-category save form; its `inputClassName` / `selectClassName` props default to daisyUI classes (`input input-sm input-bordered` / `select select-sm select-bordered`), and `buttonClassName` defaults to `""` and layers over the built-in `btn` classes — all three should be left alone.
+* **Header holds identity; modules hold their own controls.** A view header
+  carries the title, its badge, and at most a few view-level actions (a mode
+  switch, Save, the library drawer). Everything that adjusts one module lives in
+  that module's own card — which is why `Chord Level` and `Re-harmonize` sit
+  inside the chord card rather than the header. `SequencerView` was the last
+  view to break this: its header had grown to seven controls, so the kit, filter
+  and level moved into `Drum Sound` and the genre picker, shift, Random and
+  Clear moved onto the `Pattern` card, beside the grid they rewrite. Those
+  pattern tools sit OUTSIDE that card's `overflow-x-auto`, so they stay put
+  while a grid wider than the card scrolls under them.
+
+* **`ViewHeader.tsx`** — the header card all four views now open with; it used to be copy-pasted into three of them and was simply missing from `SynthView`. Icon and title come from `viewMeta.ts`, so a tab and the view it opens can never disagree about what it's called; the icon chip is always `primary` (§6.5) and takes no colour prop.
+* **`PowerToggle.tsx`** — the single on/off control app-wide. `on` wears the module's own tone (a closed `PowerToggleTone` union); `off` is `btn-ghost text-base-content/40`, never `btn-error` — per §6.5, `error` means destructive, and red on an off control would read as broken rather than muted. One icon throughout: `Power` means on/off; `Volume2`/`VolumeX` are reserved for level controls, not toggles.
+* **`viewMeta.ts`** — not a component but the table both `Header.tsx`'s tab buttons and `ViewHeader.tsx` read: one row per tab with its icon, `tabLabel` (short form, hidden below `xl`) and `title` (long form on the header card). A test pins the four icons as distinct — it caught a real bug where Synth and Master FX both used `Sliders` and were indistinguishable once the tab label disappears below `xl`.
 
 ---
 
@@ -181,7 +237,7 @@ Legacy Murva-era colours and their permanent replacements. When you touch old co
 | `cyan-*` / `purple-*` — LFO, modulation, arpeggiator | `accent` (Fresh Teal) |
 | `emerald-*` meaning "OK / saved / envelope healthy" | `success` |
 | `emerald-*` used as a module accent (e.g. the bass channel) | `accent` |
-| `rose-*` / `red-*` — delete, mute-on, clip | `error` |
+| `rose-*` / `red-*` — delete, clip | `error` |
 | `slate-100` / `slate-200` / `slate-300` | `text-base-content` |
 | `slate-400` / `slate-500` | `text-base-content/60` (or `/50`) |
 | `text-white` sitting on a coloured fill | the matching `*-content` token |
@@ -264,3 +320,7 @@ The synth's **six signal stages each own a hue** — the two ADSR halves share o
 Hues are spaced around the **OKLCH** wheel rather than sRGB HSL (which bunches the yellows), at a fixed lightness per theme — ~0.75 dark, ~0.57 light — so no stage reads as merely a darker version of its neighbour; every adjacent pair is at least 28° apart. Two rules constrain the set: the 20–60° amber band belongs to `primary` alone, so `module-osc` is a pale butter gold separated from the brand by lightness rather than hue, and no module may reuse a semantic hex — which is exactly what `module-filter` and `secondary` used to do (both `#FB7185`), and `module-osc` and `primary` in the light theme (both `#D97706`). No synth panel rides a daisyUI semantic any more, which keeps `primary` free to mean "the thing you picked" everywhere else. Because daisyUI components are variable-driven, a module colour fills a control through arbitrary-value overrides (`btn` + `[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]`), a badge through `[--badge-color:…]`, and a range through `text-module-*` + `[--range-thumb:…]` (ranges read `color`, not a variable).
 
 `Knob`'s `color` prop is a closed union, so adding a module colour means adding `text-module-*` to that union in `src/components/ui/Knob.tsx` — deliberately, so the set of legal knob colours stays reviewable.
+
+View-header chrome is `primary` like every other non-signal-stage control: `ViewHeader`'s icon chip is always `primary`, never a module colour. `ChordView` tinted its header chip `module-chord` until this work — the sole violation of the rule above, now removed. There is deliberately no `module-drum` or `module-fx` token: the sequencer and effects rack are not signal stages with a persistent identity to defend, so their chrome stays on `primary` like everything else that isn't one of the synth's six panels.
+
+**Accepted exception: the four Master FX cards.** `EffectsRackView`'s Reverb, Delay, Distortion and EQ cards tint their active ring and knobs `accent`, `accent`, `primary` and `secondary` respectively, purely so the four units read as visually distinct at a glance — while their bypass `PowerToggle`s are uniformly `accent`, since bypass state (on/off) is one semantic regardless of which unit it belongs to. This borrows daisyUI semantic roles for per-card identity, which is exactly what this section otherwise forbids for modules. It is accepted as-is rather than fixed, because the correct fix — a `module-fx` token pair per unit — is the token this section deliberately declines to add above (the effects rack is not a signal stage with a persistent identity to defend). Revisit only if the effects rack grows enough units that borrowed semantics stop reading as distinct, at which point a real `module-fx-*` set becomes worth its cost.
