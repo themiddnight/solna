@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React from "react";
 import { Volume2, Clock, Plus, Minus } from "lucide-react";
-import { audioEngine } from "../audio/engine";
 import { useAppStore } from "../store/store";
 import { Slider } from "./ui/Slider";
 import { PlayerTransport } from "./ui/PlayerTransport";
 import { PlayheadReadout } from "./PlayheadReadout";
+import { VuMeter } from "./ui/VuMeter";
 import { aggregatePlayerState, isHardStopEnabled } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 
@@ -24,35 +24,10 @@ export const TransportBar: React.FC = React.memo(() => {
   const metronomeActive = useAppStore((s) => s.metronomeActive);
   const toggleMetronome = useAppStore((s) => s.toggleMetronome);
 
-  // Local VU meter state
-  const [vuLevel, setVuLevel] = useState(0);
-
   const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer);
   const hardStopDisabled = !isHardStopEnabled(sequencerPlayer, chordsPlayer);
   // The meter loop only needs to know whether anything is sounding.
   const isPlaying = aggregate !== 'stopped';
-
-  // Meter polling loop — runs only while playing, and only commits state when
-  // the level moved enough to change a VU segment (avoids 60 re-renders/sec)
-  const vuLevelRef = useRef(0);
-  useEffect(() => {
-    if (!isPlaying) {
-      setVuLevel(0);
-      vuLevelRef.current = 0;
-      return;
-    }
-    let animId: number;
-    const updateMeter = () => {
-      const level = audioEngine.getAudioLevel();
-      if (Math.abs(level - vuLevelRef.current) > 0.02) {
-        vuLevelRef.current = level;
-        setVuLevel(level);
-      }
-      animId = requestAnimationFrame(updateMeter);
-    };
-    animId = requestAnimationFrame(updateMeter);
-    return () => cancelAnimationFrame(animId);
-  }, [isPlaying]);
 
   const handleToggleMetronome = () => {
     // Engine mirror happens via useEngineSync (one render later)
@@ -149,31 +124,9 @@ export const TransportBar: React.FC = React.memo(() => {
 
       {/* Right Meter & Master Gain */}
       <div className="flex items-center gap-2 shrink-0 md:justify-self-end">
-        {/* Real-time Stereo VU Meter */}
-        <div className="hidden sm:flex items-center gap-1 bg-base-200 border border-base-300 p-1.5 rounded-box">
-          <div className="w-14 h-2 bg-base-300 rounded-xs overflow-hidden flex gap-0.5 p-0.5">
-            {Array.from({ length: 10 }).map((_, i) => {
-              const active = vuLevel * 10 > i;
-              const isRed = i >= 8;
-              const isYellow = i >= 6 && i < 8;
-
-              return (
-                <div
-                  key={i}
-                  className={`flex-1 rounded-xs transition-colors duration-75 ${
-                    active
-                      ? isRed
-                        ? "bg-error"
-                        : isYellow
-                          ? "bg-warning"
-                          : "bg-success"
-                      : "bg-base-300/50"
-                  }`}
-                />
-              );
-            })}
-          </div>
-        </div>
+        {/* Real-time output level meter — owns its own rAF loop so the level
+            does not re-render the transport bar (see ui/VuMeter). */}
+        <VuMeter isPlaying={isPlaying} />
 
         {/* Master Output Fader */}
         <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-box">
