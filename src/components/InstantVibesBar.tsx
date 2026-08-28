@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Sparkles, Check, ChevronDown, ChevronUp, Dices } from 'lucide-react';
+import { Sparkles, Check, Dices } from 'lucide-react';
 import { INSTANT_VIBES, applyInstantVibeToStore } from '../store/instantVibes';
 import type { InstantVibe } from '../types';
 import { useAppStore } from '../store/store';

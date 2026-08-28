@@ -572,8 +572,8 @@ describe('persisted payload sanitization', () => {
     const s = useAppStore.getState();
     expect(s.bpm).toBe(120);
     expect(s.masterVolume).toBe(0.85);
-    expect(s.chordVolume).toBe(0); // clamped into [0, 1]
-    expect(s.bassVolume).toBe(1); // clamped into [0, 1]
+    expect(s.chordVolume).toBe(0); // clamped into [0, 1.5]
+    expect(s.bassVolume).toBe(1.5); // clamped into [0, 1.5]
     expect(s.masterSequencerVolume).toBe(0.8);
     expect(s.drumFilterCutoff).toBe(12000);
     expect(s.drumFilterResonance).toBe(0.7);
@@ -656,7 +656,7 @@ describe('persisted payload sanitization', () => {
     const s = useAppStore.getState();
     expect(s.bpm).toBe(300); // clamped into [20, 300]
     expect(s.masterVolume).toBe(1); // clamped into [0, 1]
-    expect(s.chordVolume).toBe(0); // clamped into [0, 1]
+    expect(s.chordVolume).toBe(0); // clamped into [0, 1.5]
     expect(s.bassVolume).toBe(0.5);
     expect(s.masterSequencerVolume).toBe(0.1);
     expect(s.drumFilterCutoff).toBe(12000); // clamped into [50, 12000]

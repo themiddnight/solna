@@ -70,11 +70,13 @@ describe('InstantVibesBar markup', () => {
   test('preset buttons are daisyUI buttons and the dead animate-in classes are gone', () => {
     const html = renderToString(<InstantVibesBar />);
 
-    // Nothing is selected in the default state, so only the idle variant
-    // renders here; the selected variant is covered by resolveSelectedVibeId.
+    // SSR renders the store's INITIAL snapshot (zustand v5 serves
+    // getInitialState as the server snapshot), so a selected vibe — and its
+    // reroll dice, which render only next to the selected variation vibe —
+    // cannot be exercised through renderToString. The selection logic itself
+    // is covered by the selectVibe/selectedVibeId tests in this file.
     expect(html).toContain('btn btn-xs');
     expect(html).toContain('btn-soft');
-    expect(html).toContain('btn btn-xs btn-ghost btn-square');
     // tailwindcss-animate is not installed, so these class names generate no CSS.
     expect(html).not.toContain('animate-in');
     expect(html).not.toContain('fade-in ');

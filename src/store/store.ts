@@ -184,6 +184,39 @@ function sanitizeSynthParams(value: unknown): SynthParams {
   return out as unknown as SynthParams;
 }
 
+// The MasterEffects payload: plain-object check (a partial effects object
+// with valid fields is preserved as-is; anything else falls back to the
+// factory defaults), every numeric field clamped through the SAME table the
+// engine uses (audio/effectLimits.ts) so the two can no longer drift — the
+// old code clamped only reverbDecay and compressorThreshold and let a
+// persisted delayFeedback of 1.2 through to a runaway feedback loop. The
+// ternary can hand back the SHARED INITIAL_EFFECTS constant — clone before
+// writing so the module constant is never mutated. Fields removed from
+// MasterEffects (Task 4) must not resurrect from old persisted payloads.
+function sanitizeEffectsValue(effects: unknown): unknown {
+  let result =
+    typeof effects === 'object' && effects !== null && !Array.isArray(effects)
+      ? effects
+      : INITIAL_EFFECTS;
+
+  if (result && typeof result === 'object') {
+    if (result === INITIAL_EFFECTS) result = { ...INITIAL_EFFECTS };
+    const fxWritable = result as Record<string, unknown>;
+    for (const key of Object.keys(EFFECT_LIMITS) as EffectNumericKey[]) {
+      fxWritable[key] = clampEffectValue(key, fxWritable[key]);
+    }
+  }
+
+  if (result && typeof result === 'object') {
+    const fx = result as Record<string, unknown>;
+    for (const key of ['chorusRate', 'chorusDepth', 'chorusWet', 'compressorRatio', 'compressorBypass', 'delayTime', 'distortionDrive']) {
+      delete fx[key];
+    }
+  }
+
+  return result;
+}
+
 function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (typeof persisted !== 'object' || persisted === null) return {};
   const sanitized = { ...(persisted as Record<string, unknown>) };
@@ -216,38 +249,7 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   sanitized.bassMuted = asBoolean(sanitized.bassMuted);
   sanitized.drumMuted = asBoolean(sanitized.drumMuted);
   sanitized.soundKit = asString(sanitized.soundKit) ?? 'Retro Drive';
-  // Plain-object check only: a partial effects object with valid fields is
-  // preserved as-is; anything else falls back to the factory defaults.
-  sanitized.effects =
-    typeof sanitized.effects === 'object' &&
-    sanitized.effects !== null &&
-    !Array.isArray(sanitized.effects)
-      ? sanitized.effects
-      : INITIAL_EFFECTS;
-
-  // Every numeric MasterEffects field is clamped through the SAME table the
-  // engine uses (audio/effectLimits.ts), so the two can no longer drift — the
-  // old code clamped only reverbDecay and compressorThreshold and let a
-  // persisted delayFeedback of 1.2 through to a runaway feedback loop.
-  // The ternary above can hand back the SHARED INITIAL_EFFECTS constant —
-  // clone before writing so the module constant is never mutated.
-  const fxClamped = sanitized.effects as Record<string, unknown> | undefined;
-  if (fxClamped && typeof fxClamped === 'object') {
-    if (sanitized.effects === INITIAL_EFFECTS) sanitized.effects = { ...INITIAL_EFFECTS };
-    const fxWritable = sanitized.effects as Record<string, unknown>;
-    for (const key of Object.keys(EFFECT_LIMITS) as EffectNumericKey[]) {
-      fxWritable[key] = clampEffectValue(key, fxWritable[key]);
-    }
-  }
-
-  // Fields removed from MasterEffects (Task 4) must not resurrect from old
-  // persisted payloads.
-  const fx = sanitized.effects as Record<string, unknown> | undefined;
-  if (fx && typeof fx === 'object') {
-    for (const key of ['chorusRate', 'chorusDepth', 'chorusWet', 'compressorRatio', 'compressorBypass', 'delayTime', 'distortionDrive']) {
-      delete fx[key];
-    }
-  }
+  sanitized.effects = sanitizeEffectsValue(sanitized.effects);
 
   // Arrays and free-form strings: drop invalid values so the currentState
   // defaults win in the merge spread below.

@@ -5,6 +5,7 @@ import { DRUM_KITS } from '../audio/drumKits';
 import { useAppStore } from './store';
 import { isPlayerActive } from './transportSlice';
 import { getMeter } from '../utils/meter';
+import { startMidiInputBridge } from './midiInput';
 
 /**
  * One-way bridge from the Zustand store into the audioEngine singleton,
@@ -47,6 +48,10 @@ function applySliceState(): void {
 export function startEngineSync(): Stop {
   if (syncStarted) return () => undefined;
   syncStarted = true;
+
+  // MIDI input: the listener lives in a store-side module (layering rule 1
+  // forbids audio/ from importing the store) and starts once with the sync.
+  startMidiInputBridge();
 
   const subs: Array<() => void> = [];
 

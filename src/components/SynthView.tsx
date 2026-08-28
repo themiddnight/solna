@@ -94,6 +94,17 @@ export function notesToReleaseOnKeyboardModeChange(
   return Array.from(new Set(currentlyHeldNotes));
 }
 
+// The Target selector's border tint, keyed off the channel currently being
+// edited. Extracted from SynthView's JSX to keep the component body under the
+// ESLint complexity cap.
+function resolveTargetBorderClass(controlTarget: SynthControlTarget): string {
+  return controlTarget === "chord"
+    ? "border-module-chord"
+    : controlTarget === "bass"
+      ? "border-module-bass"
+      : "border-primary";
+}
+
 export const SynthView = () => {
   // Synth slice state + setters (named after the old props so the rest of the
   // component body is unchanged).
@@ -611,7 +622,7 @@ export const SynthView = () => {
       </ViewHeader>
 
       {/* Synth Target & Preset Selection Card */}
-      <div className="card bg-panel border border-base-300 shadow-md">
+      <div className={`card bg-panel border border-base-300 shadow-md ${tintClass}`}>
         <div className="card-body p-3 sm:p-4 flex flex-col gap-3">
         {/* Row 1: Control Destination / Target Selector. Kept as its own row,
             visible in both Simple and Pro mode, because it's the only control
@@ -624,13 +635,7 @@ export const SynthView = () => {
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           {/* Control Destination Selector */}
           <div
-            className={`join flex items-center gap-1 bg-base-200 border rounded-box p-1 shrink-0 ${
-              controlTarget === "chord"
-                ? "border-module-chord"
-                : controlTarget === "bass"
-                  ? "border-module-bass"
-                  : "border-primary"
-            }`}
+            className={`join flex items-center gap-1 bg-base-200 border rounded-box p-1 shrink-0 ${resolveTargetBorderClass(controlTarget)}`}
           >
             <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold pl-1 pr-1 hidden sm:inline">
               Target:
@@ -696,7 +701,7 @@ export const SynthView = () => {
 
         {/* Pro Mode: Row 2 Categorized Preset Selection Bar */}
         {synthViewMode === "pro" && (
-          <div className="flex flex-wrap items-center justify-between gap-2.5 bg-base-300 border border-base-300 p-2 rounded-box">
+          <div className={`flex flex-wrap items-center justify-between gap-2.5 bg-base-300 border border-base-300 p-2 rounded-box ${SYNTH_TARGET_STYLES[controlTarget].tint}`}>
             {/* Category Filter Tabs */}
             <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[11px]">
               <span className="text-[10px] uppercase font-bold text-base-content/50 px-1">

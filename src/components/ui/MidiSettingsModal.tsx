@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Sliders, Radio, Trash2, Plus, RotateCcw, X, Check } from 'lucide-react';
+import { Sliders, Radio, Trash2, Plus, RotateCcw, X } from 'lucide-react';
 import { useAppStore } from '../../store/store';
-import { DEFAULT_MIDI_MAPPINGS, type MidiMapping } from '../../store/types';
+import type { MidiMapping } from '../../store/types';
+import { SECTION_HEADER } from './fieldClasses';
 
 const AVAILABLE_TARGETS = [
   { key: 'masterVolume', label: 'Master Volume' },
@@ -93,7 +94,7 @@ export const MidiSettingsModal: React.FC = () => {
         {/* Connected Devices & Input Selection */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-1.5">
+            <h4 className={`${SECTION_HEADER}/60 flex items-center gap-1.5`}>
               <Radio className="w-3.5 h-3.5 text-primary" /> Connected MIDI Inputs ({inputs.length})
             </h4>
           </div>
@@ -157,7 +158,7 @@ export const MidiSettingsModal: React.FC = () => {
         {/* Mappings Table */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-base-content/60">
+            <h4 className={`${SECTION_HEADER}/60`}>
               Active Mappings ({midiMappings.length})
             </h4>
             <button

@@ -55,6 +55,41 @@ function midiAtOctave(pc: string, octave: number): number {
   return Note.midi(`${pc}${octave}`) ?? Note.midi(`C${octave}`) ?? 60;
 }
 
+// Deterministic above/below alternation: odd bars flip the direction
+function resolveAlternatedToken(
+  note: BassNoteToken,
+  alternate: boolean | undefined,
+  chordIndex: number,
+): BassNoteToken {
+  if (alternate && chordIndex % 2 === 1) {
+    if (note === 'approachChromaticAbove') return 'approachChromaticBelow';
+    if (note === 'approachChromaticBelow') return 'approachChromaticAbove';
+  }
+  return note;
+}
+
+// MIDI for a step token; null for unknown tokens (the caller skips those steps)
+function resolveStepMidi(
+  token: BassNoteToken,
+  bassRootMidi: number,
+  nextRootMidi: number,
+  toneMidi: (tone: 'third' | 'fifth' | 'seventh') => number,
+  diatonicStepAbove: (targetPc: number) => number,
+): number | null {
+  switch (token) {
+    case 'root': return bassRootMidi;
+    case 'third':
+    case 'fifth':
+    case 'seventh': return toneMidi(token);
+    case 'octave': return bassRootMidi + 12;
+    case 'approachChromaticAbove': return nextRootMidi + 1;
+    case 'approachChromaticBelow': return nextRootMidi - 1;
+    case 'approachFifthOfNext': return nextRootMidi + 7;
+    case 'approachDiatonicUp': return nextRootMidi - (nextRootMidi % 12) + diatonicStepAbove(nextRootMidi % 12);
+    default: return null;
+  }
+}
+
 export function resolveBassSteps(
   pattern: BassPattern,
   chords: ChordItem[],
@@ -103,29 +138,16 @@ export function resolveBassSteps(
     if (step.note === 'rest') continue;
 
     // Deterministic above/below alternation: odd bars flip the direction
-    let token = step.note;
-    if (step.alternate && chordIndex % 2 === 1) {
-      if (token === 'approachChromaticAbove') token = 'approachChromaticBelow';
-      else if (token === 'approachChromaticBelow') token = 'approachChromaticAbove';
-    }
+    const token = resolveAlternatedToken(step.note, step.alternate, chordIndex);
 
-    const targetPc = nextRootMidi % 12;
-    let midi: number;
-    switch (token) {
-      case 'root': midi = bassRootMidi; break;
-      case 'third': case 'fifth': case 'seventh': midi = toneMidi(token); break;
-      case 'octave': midi = bassRootMidi + 12; break;
-      case 'approachChromaticAbove': midi = nextRootMidi + 1; break;
-      case 'approachChromaticBelow': midi = nextRootMidi - 1; break;
-      case 'approachFifthOfNext': midi = nextRootMidi + 7; break;
-      case 'approachDiatonicUp': midi = nextRootMidi - targetPc + diatonicStepAbove(targetPc); break;
-      default: continue;
-    }
-    midi += 12 * (step.octaveShift ?? 0);
+    const midi = resolveStepMidi(token, bassRootMidi, nextRootMidi, toneMidi, diatonicStepAbove);
+    if (midi === null) continue;
+
+    const shiftedMidi = midi + 12 * (step.octaveShift ?? 0);
 
     const holdSec = (step.holdSteps ?? 1) * stepDur * (step.staccato ? 0.5 : 1) * holdScale;
     events.push({
-      noteName: Note.fromMidiSharps(midi) ?? 'C2',
+      noteName: Note.fromMidiSharps(shiftedMidi) ?? 'C2',
       step: step.step,
       timeOffsetSec: step.step * stepDur,
       holdSec,

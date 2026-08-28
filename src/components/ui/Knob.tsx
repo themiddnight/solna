@@ -104,6 +104,155 @@ interface GestureState {
   startY: number;
 }
 
+/** Detent angle in degrees, or null when no detent is configured. */
+function detentAngleFor(
+  detent: number | undefined,
+  min: number,
+  max: number,
+  scale: KnobScale,
+): number | null {
+  return detent !== undefined ? detentAngle(detent, min, max, scale) : null;
+}
+
+/** Ring rendering behind the needle, per `indicator`: progress arc on a dark
+    270° ring, thin uniform ring (pan/balance), or full static ring. */
+const IndicatorRing = ({ indicator, dash }: { indicator: KnobIndicator; dash: number }) => (
+  <>
+    {/* indicator="progress": dark 270° ring (same thickness as the arc,
+        spec §5) + progress arc from min (−135°) to the current angle. */}
+    {indicator === 'progress' && (
+      <>
+        <circle
+          cx="50"
+          cy="50"
+          r="44"
+          fill="none"
+          className="stroke-base-300"
+          strokeWidth="10"
+          strokeLinecap="round"
+          pathLength={100}
+          strokeDasharray={`${PROGRESS_ARC_UNITS} ${100 - PROGRESS_ARC_UNITS}`}
+          transform="rotate(135 50 50)"
+        />
+        {/* Butt caps keep the arc tip exactly on the needle. */}
+        <circle
+          cx="50"
+          cy="50"
+          r="44"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="10"
+          pathLength={100}
+          strokeDasharray={`${dash} ${100 - dash}`}
+          transform="rotate(135 50 50)"
+        />
+      </>
+    )}
+    {/* indicator="none": thin uniform full ring, no arc (pan/balance). */}
+    {indicator === 'none' && (
+      <circle
+        cx="50"
+        cy="50"
+        r="44"
+        fill="none"
+        className="stroke-base-300"
+        strokeWidth="2"
+      />
+    )}
+    {/* indicator="full": full-circle static thick ring, no dasharray. */}
+    {indicator === 'full' && (
+      <circle
+        cx="50"
+        cy="50"
+        r="44"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="10"
+      />
+    )}
+  </>
+);
+
+/** Fixed detent tick on the ring, drawn only when the detent is inside [min, max]. */
+const DetentTick = ({ angleDeg }: { angleDeg: number | null }) => (
+  <>
+    {/* Detent tick — short radial line on the ring at the detent angle;
+        drawn only when the detent is inside [min, max]; visual only. */}
+    {angleDeg !== null && (
+      <g transform={`rotate(${angleDeg} 50 50)`}>
+        <line
+          x1="50"
+          y1="14"
+          x2="50"
+          y2="1"
+          className="stroke-base-content/50"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+      </g>
+    )}
+  </>
+);
+
+/** Needle — rotates around the knob center; same t as the arc tip. */
+const Needle = ({ angle }: { angle: number }) => (
+  <>
+    <g transform={`rotate(${angle} 50 50)`}>
+      <rect x="46" y="16" width="8" height="36" rx="4" fill="currentColor" />
+      <circle cx="50" cy="50" r="10" fill="currentColor" />
+    </g>
+  </>
+);
+
+/** Horizontal layout: label + value column left of the knob. */
+const HorizontalReadout = ({ label, display }: { label: string | undefined; display: string }) => (
+  <div className="flex flex-col items-end shrink-0">
+    {label !== undefined && (
+      <span className="text-[10px] text-base-content/60 block">
+        {label}
+      </span>
+    )}
+    <span className="text-[10px] tabular-nums text-current block">
+      {display}
+    </span>
+  </div>
+);
+
+/** Vertical layout: optional label above the knob. */
+const VerticalLabel = ({ label }: { label: string | undefined }) => (
+  <>
+    {label !== undefined && (
+      <span className="text-[10px] text-base-content/60 block text-center">
+        {label}
+      </span>
+    )}
+  </>
+);
+
+/** Vertical layout: value + optional descriptor badge below the knob. */
+const VerticalReadout = ({
+  display,
+  descriptor,
+  color,
+}: {
+  display: string;
+  descriptor: string | undefined;
+  color: KnobColor | undefined;
+}) => (
+  <>
+    <span className="text-[10px] tabular-nums text-current block text-center">
+      {display}
+    </span>
+    {descriptor !== undefined && (
+      <span
+        className={`badge badge-sm badge-soft text-[10px] font-semibold ${badgeColorFor(color)}`}
+      >
+        {descriptor}
+      </span>
+    )}
+  </>
+);
+
 /**
  * Shared rotary knob primitive. Controlled-only (value/onChange).
  * Drag: pointer capture; the axis with the larger accumulated delta wins
@@ -138,7 +287,7 @@ export const Knob = ({
   const angle = angleForT(t);
   const dash = progressDash(t);
   const display = format(value);
-  const detentAngleDeg = detent !== undefined ? detentAngle(detent, min, max, scale) : null;
+  const detentAngleDeg = detentAngleFor(detent, min, max, scale);
 
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (disabled) return;
@@ -206,23 +355,8 @@ export const Knob = ({
 
   return (
     <div className={`flex ${layout === 'horizontal' ? 'flex-row items-center gap-2' : 'flex-col items-center gap-1'} ${color ?? 'text-primary'} ${className ?? ''}`}>
-      {layout === 'horizontal' && (
-        <div className="flex flex-col items-end shrink-0">
-          {label !== undefined && (
-            <span className="text-[10px] text-base-content/60 block">
-              {label}
-            </span>
-          )}
-          <span className="text-[10px] tabular-nums text-current block">
-            {display}
-          </span>
-        </div>
-      )}
-      {layout === 'vertical' && label !== undefined && (
-        <span className="text-[10px] text-base-content/60 block text-center">
-          {label}
-        </span>
-      )}
+      {layout === 'horizontal' && <HorizontalReadout label={label} display={display} />}
+      {layout === 'vertical' && <VerticalLabel label={label} />}
       <svg
         id={id}
         role="slider"
@@ -246,90 +380,12 @@ export const Knob = ({
         onLostPointerCapture={endGesture}
         onKeyDown={handleKeyDown}
       >
-        {/* indicator="progress": dark 270° ring (same thickness as the arc,
-            spec §5) + progress arc from min (−135°) to the current angle. */}
-        {indicator === 'progress' && (
-          <>
-            <circle
-              cx="50"
-              cy="50"
-              r="44"
-              fill="none"
-              className="stroke-base-300"
-              strokeWidth="10"
-              strokeLinecap="round"
-              pathLength={100}
-              strokeDasharray={`${PROGRESS_ARC_UNITS} ${100 - PROGRESS_ARC_UNITS}`}
-              transform="rotate(135 50 50)"
-            />
-            {/* Butt caps keep the arc tip exactly on the needle. */}
-            <circle
-              cx="50"
-              cy="50"
-              r="44"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="10"
-              pathLength={100}
-              strokeDasharray={`${dash} ${100 - dash}`}
-              transform="rotate(135 50 50)"
-            />
-          </>
-        )}
-        {/* indicator="none": thin uniform full ring, no arc (pan/balance). */}
-        {indicator === 'none' && (
-          <circle
-            cx="50"
-            cy="50"
-            r="44"
-            fill="none"
-            className="stroke-base-300"
-            strokeWidth="2"
-          />
-        )}
-        {/* indicator="full": full-circle static thick ring, no dasharray. */}
-        {indicator === 'full' && (
-          <circle
-            cx="50"
-            cy="50"
-            r="44"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="10"
-          />
-        )}
-        {/* Detent tick — short radial line on the ring at the detent angle;
-            drawn only when the detent is inside [min, max]; visual only. */}
-        {detentAngleDeg !== null && (
-          <g transform={`rotate(${detentAngleDeg} 50 50)`}>
-            <line
-              x1="50"
-              y1="14"
-              x2="50"
-              y2="1"
-              className="stroke-base-content/50"
-              strokeWidth="3"
-              strokeLinecap="round"
-            />
-          </g>
-        )}
-        {/* Needle — rotates around the knob center; same t as the arc tip. */}
-        <g transform={`rotate(${angle} 50 50)`}>
-          <rect x="46" y="16" width="8" height="36" rx="4" fill="currentColor" />
-          <circle cx="50" cy="50" r="10" fill="currentColor" />
-        </g>
+        <IndicatorRing indicator={indicator} dash={dash} />
+        <DetentTick angleDeg={detentAngleDeg} />
+        <Needle angle={angle} />
       </svg>
       {layout === 'vertical' && (
-        <span className="text-[10px] tabular-nums text-current block text-center">
-          {display}
-        </span>
-      )}
-      {layout === 'vertical' && descriptor !== undefined && (
-        <span
-          className={`badge badge-sm badge-soft text-[10px] font-semibold ${badgeColorFor(color)}`}
-        >
-          {descriptor}
-        </span>
+        <VerticalReadout display={display} descriptor={descriptor} color={color} />
       )}
     </div>
   );
