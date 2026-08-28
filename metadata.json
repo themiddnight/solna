@@ -1,6 +1,6 @@
 {
-  "name": "Solna",
-  "description": "Dawn solo loop and idea music studio featuring a step sequencer, smart chord progression builder, dual-mode synthesizer, and warm acoustic-analog workflows.",
+  "name": "solna",
+  "description": "solna — a solo loop studio for musical ideas. Step sequencer, smart chord builder, dual-mode synth, and instant vibes to turn a spark into a loop.",
   "requestFramePermissions": [
     "microphone"
   ],

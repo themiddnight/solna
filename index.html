@@ -2,19 +2,89 @@
 <html lang="en" data-theme="solna-dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Solna — Dawn Solo Idea Music Studio</title>
-    <meta name="description" content="Dawn solo loop and idea music studio featuring a step sequencer, smart chord progression builder, dual-mode synthesizer, and warm acoustic-analog workflows." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="solna — a solo loop studio for musical ideas. Step sequencer, smart chord builder, dual-mode synth, and instant vibes to turn a spark into a loop." />
+    <meta name="keywords" content="music loop, loop studio, step sequencer, chord progression, synthesizer, beat maker, drum machine, music sketchpad, solo music production, browser music app" />
+    <meta name="author" content="Pathompong Thitithan" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="English" />
+    <meta name="distribution" content="global" />
+    <meta name="rating" content="general" />
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://app.solna.themiddnight.dev/" />
+
+    <!-- PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="solna" />
+    <meta name="application-name" content="solna" />
+    <meta name="msapplication-TileColor" content="#17100F" />
+    <meta name="msapplication-tap-highlight" content="no" />
+    <meta name="theme-color" content="#17100F" />
+
+    <!-- Social Media Sharing (Open Graph) -->
+    <meta property="og:title" content="solna — build your music loop" />
+    <meta property="og:description" content="solna — build your music loop. Ideas Into Loops." />
+    <meta property="og:image" content="https://app.solna.themiddnight.dev/assets/og.png" />
+    <meta property="og:image:alt" content="solna — Ideas Into Loops" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="https://app.solna.themiddnight.dev/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="solna" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="solna — build your music loop" />
+    <meta name="twitter:description" content="solna — build your music loop. Ideas Into Loops." />
+    <meta name="twitter:image" content="https://app.solna.themiddnight.dev/assets/og.png" />
+    <meta name="twitter:image:alt" content="solna — Ideas Into Loops" />
+    <meta name="twitter:site" content="@middnight" />
+    <meta name="twitter:creator" content="@middnight" />
+
+    <!-- Icons -->
     <link rel="icon" type="image/png" href="/assets/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <link rel="shortcut icon" href="/assets/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png" />
+
+    <!-- Manifest -->
     <link rel="manifest" href="/assets/site.webmanifest" />
-    <meta name="theme-color" content="#17100F" />
-    <meta name="apple-mobile-web-app-title" content="Solna" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&family=Anuphan:wght@100..700&display=swap" rel="stylesheet" />
+
+    <!-- Structured Data for Rich Snippets -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "solna",
+        "description": "solna — a solo loop studio for musical ideas: step sequencer, chord builder, dual-mode synth, and instant vibes",
+        "url": "https://app.solna.themiddnight.dev/",
+        "applicationCategory": "MusicApplication",
+        "operatingSystem": "Web Browser",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "author": {
+          "@type": "Person",
+          "name": "Pathompong Thitithan"
+        },
+        "screenshot": "/assets/og.png",
+        "softwareVersion": "1.0.0"
+      }
+    </script>
+
+    <title>solna — build your music loop</title>
     <script>
       // Pre-paint theme bootstrap. Must stay inline and blocking (no defer/async)
       // so data-theme is correct before the first paint — otherwise solna-light

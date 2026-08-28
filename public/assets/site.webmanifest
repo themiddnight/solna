@@ -1,6 +1,9 @@
 {
-  "name": "solna",
+  "name": "solna — build your music loop",
   "short_name": "solna",
+  "description": "solna — a solo loop studio for musical ideas. Ideas Into Loops.",
+  "start_url": "/",
+  "scope": "/",
   "icons": [
     {
       "src": "/assets/web-app-manifest-192x192.png",

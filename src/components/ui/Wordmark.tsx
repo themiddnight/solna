@@ -19,12 +19,12 @@ export const Wordmark: React.FC<WordmarkProps> = ({ markOnly = false, className 
       <img
         src="/assets/favicon.svg"
         alt="Solna logo"
-        className="h-7 w-7"
+        className="h-8 w-8"
         draggable={false}
       />
       {!markOnly && (
         <span
-          className="text-lg font-normal text-primary leading-none"
+          className="text-2xl font-normal text-primary leading-none"
           style={{ letterSpacing: "0.08em" }}
         >
           solna

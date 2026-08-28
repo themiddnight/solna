@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>solna og</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1200px; height: 630px; }
+      body {
+        background: #17100f;
+        font-family: Figtree, system-ui, sans-serif;
+        color: #f6e9e4;
+        position: relative;
+        overflow: hidden;
+      }
+      /* Warm sunrise glow anchored to the horizon line, mirroring the favicon. */
+      .glow {
+        position: absolute;
+        left: 50%;
+        bottom: -260px;
+        width: 1400px;
+        height: 700px;
+        transform: translateX(-50%);
+        background: radial-gradient(
+          circle at 50% 100%,
+          rgba(255, 179, 71, 0.42) 0%,
+          rgba(242, 101, 126, 0.2) 40%,
+          rgba(255, 179, 71, 0) 72%
+        );
+      }
+      .content {
+        position: relative;
+        padding: 76px 88px 68px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .masthead { display: flex; align-items: center; justify-content: space-between; }
+      .brand { display: flex; align-items: center; gap: 20px; }
+      .brand img { width: 76px; height: 76px; display: block; }
+      .brand span {
+        font-size: 50px;
+        font-weight: 400;
+        letter-spacing: 0.08em;
+        color: #ffb347;
+        line-height: 1;
+      }
+      h1 {
+        font-size: 86px;
+        font-weight: 600;
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        max-width: 900px;
+      }
+      h1 em { font-style: normal; color: #ffb347; }
+      .tagline {
+        margin-top: 24px;
+        font-size: 28px;
+        font-weight: 400;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: rgba(246, 233, 228, 0.62);
+      }
+      .features { display: flex; gap: 12px; }
+      .chip {
+        font-size: 21px;
+        font-weight: 500;
+        padding: 11px 20px;
+        border-radius: 999px;
+        border: 1px solid rgba(246, 233, 228, 0.16);
+        color: rgba(246, 233, 228, 0.82);
+        background: rgba(51, 35, 45, 0.55);
+        white-space: nowrap;
+      }
+      /* Sixteen steps: the loop the app is built around. */
+      .steps { display: flex; gap: 9px; align-items: flex-end; }
+      .steps i { width: 16px; border-radius: 4px; background: rgba(246, 233, 228, 0.14); }
+    </style>
+  </head>
+  <body>
+    <div class="glow"></div>
+    <div class="content">
+      <div class="masthead">
+        <div class="brand">
+          <img src="../../public/assets/favicon.svg" alt="" />
+          <span>solna</span>
+        </div>
+        <div class="steps" id="steps"></div>
+      </div>
+      <div>
+        <h1>build your <em>music loop</em></h1>
+        <p class="tagline">Ideas Into Loops</p>
+      </div>
+      <div class="features">
+        <div class="chip">Step sequencer</div>
+        <div class="chip">Chord builder</div>
+        <div class="chip">Dual-mode synth</div>
+        <div class="chip">Instant vibes</div>
+      </div>
+    </div>
+    <script>
+      // Static, deterministic step heights - an accent every 4th step so the
+      // strip reads as a 4/4 bar rather than random noise.
+      const heights = [34, 14, 20, 14, 46, 14, 20, 26, 34, 14, 26, 14, 52, 20, 30, 16];
+      const accents = { 0: "#ffb347", 4: "#f2657e", 8: "#ffb347", 12: "#8c7be0" };
+      const host = document.getElementById("steps");
+      heights.forEach((h, i) => {
+        const el = document.createElement("i");
+        el.style.height = h + "px";
+        if (accents[i]) el.style.background = accents[i];
+        host.appendChild(el);
+      });
+    </script>
+  </body>
+</html>
