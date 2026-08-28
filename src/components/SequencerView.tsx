@@ -1,20 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  Grid,
   Play,
   RotateCcw,
   Shuffle,
   ArrowLeft,
   ArrowRight,
-  Volume2,
-  VolumeX,
   Sparkles,
   Disc3,
-  Filter,
 } from "lucide-react";
 import { useAppStore } from "../store/store";
 import { getMeter } from "../utils/meter";
-import { sequencerTitle, stepCells } from "./sequencerGrid";
+import { sequencerMeterBadge, stepCells } from "./sequencerGrid";
 import { rotateStepWindow, writeStepWindow } from "../utils/patternAdapt";
 import { useSequencerPlayback } from "./useSequencerPlayback";
 import { ensureDrumEngine, triggerPad } from "../audio/playback/drumPlayback";
@@ -25,7 +21,11 @@ import { DRUM_KITS, GENRE_TO_KIT } from "../audio/drumKits";
 import { DrumPads } from "./DrumPads";
 import { patternMeterTitle, patternOptionLabel } from "./meterSelect";
 import { Knob } from "./ui/Knob";
-import { Slider } from "./ui/Slider";
+import { ViewHeader } from "./ui/ViewHeader";
+import { ChannelStrip } from "./ui/ChannelStrip";
+import { FIELD_LANE, FIELD_SELECT, SECTION_HEADER } from "./ui/fieldClasses";
+import { Field } from "./ui/Field";
+import { PowerToggle } from "./ui/PowerToggle";
 
 
 export const SequencerView = () => {
@@ -121,177 +121,198 @@ export const SequencerView = () => {
 
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
-      {/* Top Header & Preset Bar */}
-      <div className="card bg-panel border border-base-300 shadow-md">
-        <div className="card-body p-3 sm:p-4 flex-row flex-wrap items-center justify-between gap-2.5">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-selector bg-primary/20 border border-primary/30 text-primary">
-            <Grid className="w-4 h-4" />
-          </div>
-          <h2 className="font-bold text-sm sm:text-base text-base-content">
-            {sequencerTitle(meter)}
-          </h2>
-        </div>
+      {/* Identity only. Every other view's header carries at most a few
+          view-level buttons and lets each module own its own controls in its
+          own card (see ChordView's chord/bass cards); this one had grown to
+          seven, including the pattern edits that belong beside the grid. */}
+      <ViewHeader view="sequencer" badge={sequencerMeterBadge(meter)} />
 
-        {/* Preset & Action Buttons */}
-        <div className="flex items-center flex-wrap gap-2">
-          {/* Master Volume */}
-          <div className="flex items-center gap-1.5 mr-2">
-            <Volume2 className="w-3.5 h-3.5 text-primary" />
-            <Slider
-              min={0}
-              max={1}
-              step={0.05}
-              value={masterSequencerVolume}
-              onChange={setMasterSequencerVolume}
-              className="range range-primary range-xs w-16 sm:w-20"
-              title="Drums Master Volume"
-            />
-          </div>
-
-          {/* Genre selector */}
-          <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-field">
-            <Sparkles className="w-3 h-3 text-accent" />
-            <select
-              id="select-sequencer-genre"
-              value={selectedGenre}
-              onChange={(e) => applyGenrePreset(e.target.value)}
-              className="select select-xs select-ghost focus:outline-none"
-            >
-              {Object.entries(GENRE_PRESETS).map(([g, preset]) => (
-                <option
-                  key={g}
-                  value={g}
-                  title={patternMeterTitle(g, preset.meter, meter.id)}
-                >
-                  {patternOptionLabel(g, preset.meter, meter.id)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Sound kit selector */}
-          <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-field">
-            <Disc3 className="w-3 h-3 text-secondary" />
-            <select
-              id="select-sequencer-sound-kit"
-              value={soundKit}
-              onChange={(e) => onChangeSoundKit(e.target.value)}
-              className="select select-xs select-ghost focus:outline-none"
-            >
-              {Object.keys(DRUM_KITS).map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              id="btn-shift-left"
-              onClick={() => shiftSteps("left")}
-              className="btn btn-xs btn-ghost btn-square"
-              title="Shift Pattern Left"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-            </button>
-
-            <button
-              id="btn-shift-right"
-              onClick={() => shiftSteps("right")}
-              className="btn btn-xs btn-ghost btn-square"
-              title="Shift Pattern Right"
-            >
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-
-            <button
-              id="btn-randomize-grid"
-              onClick={randomizeSteps}
-              className="btn btn-xs btn-ghost gap-1"
-              title="Randomize Steps"
-            >
-              <Shuffle className="w-3 h-3" />
-              <span className="hidden sm:inline">Random</span>
-            </button>
-
-            <button
-              id="btn-clear-grid"
-              onClick={clearAllSteps}
-              className="btn btn-xs btn-ghost gap-1"
-              title="Clear Steps"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span className="hidden sm:inline">Clear</span>
-            </button>
-          </div>
-        </div>
-        </div>
-      </div>
-
-      {/* Drum Filter — global lowpass/bandpass/highpass on the drum bus */}
+      {/* Drum Sound — everything that shapes how the kit sounds. Named for all
+          of what it holds now (kit, filter, level), not just the filter. */}
       <div className="card bg-panel border border-base-300 shadow-md">
         <div className="card-body p-3 sm:p-4">
         <div className="flex items-center justify-between flex-wrap gap-2.5">
           <div className="flex items-center gap-2">
-            <Filter className="w-3.5 h-3.5 text-secondary" />
-            <span className="text-xs font-bold uppercase tracking-wider text-base-content">
-              Drum Filter
+            <Disc3 className="w-3.5 h-3.5 text-secondary" />
+            <span className={SECTION_HEADER}>
+              Drum Sound
             </span>
           </div>
 
-          <div className="flex items-center gap-5 flex-wrap">
-            <div className="join">
-              {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
-                <button
-                  key={t}
-                  id={`btn-drum-filter-${t}`}
-                  onClick={() => setDrumFilterType(t)}
-                  className={`btn btn-xs join-item text-[10px] font-semibold uppercase ${
-                    drumFilterType === t ? "btn-secondary" : "btn-ghost"
-                  }`}
-                >
-                  {t === "lowpass" ? "LPF" : t === "bandpass" ? "BPF" : "HPF"}
-                </button>
-              ))}
-            </div>
+          {/* items-start + a shared lane per field: bottom-aligning controls of
+              four different heights (32px select, 24px join, 48px knob, 30px
+              fader) put these five labels on five different baselines. */}
+          <div className="flex items-start gap-5 flex-wrap">
+            <Field label="Kit" htmlFor="select-sequencer-sound-kit">
+              <select
+                id="select-sequencer-sound-kit"
+                value={soundKit}
+                onChange={(e) => onChangeSoundKit(e.target.value)}
+                className={FIELD_SELECT}
+                title="Drum kit — the sounds each track plays"
+              >
+                {Object.keys(DRUM_KITS).map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
-            <Knob
-              id="knob-drum-filter-cutoff"
-              label="Cutoff"
-              color="text-secondary"
-              layout="horizontal"
-              value={drumFilterCutoff}
-              min={50}
-              max={12000}
-              step={10}
-              scale="log"
-              format={(v) => `${Math.round(v)} Hz`}
-              onChange={setDrumFilterCutoff}
-            />
+            <Field label="Filter">
+              <div className="join">
+                {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
+                  <button
+                    key={t}
+                    id={`btn-drum-filter-${t}`}
+                    onClick={() => setDrumFilterType(t)}
+                    className={`btn btn-sm join-item text-[10px] font-semibold uppercase ${
+                      drumFilterType === t ? "btn-secondary" : "btn-ghost"
+                    }`}
+                  >
+                    {t === "lowpass" ? "LPF" : t === "bandpass" ? "BPF" : "HPF"}
+                  </button>
+                ))}
+              </div>
+            </Field>
 
-            <Knob
-              id="knob-drum-filter-resonance"
-              label="Res"
-              color="text-secondary"
-              layout="horizontal"
-              value={drumFilterResonance}
-              min={0.1}
-              max={20}
-              step={0.1}
-              scale="linear"
-              format={(v) => v.toFixed(1)}
-              onChange={setDrumFilterResonance}
+            {/* `size="sm"` (36px), not the app-wide default 48px: every other
+                knob is the main content of its own card, these two are one
+                field in a row. No `label` — the stacked one above says it, so
+                the knob renders its value readout alone. */}
+            <Field label="Cutoff">
+              <Knob
+                id="knob-drum-filter-cutoff"
+                size="sm"
+                color="text-secondary"
+                layout="horizontal"
+                value={drumFilterCutoff}
+                min={50}
+                max={12000}
+                step={10}
+                scale="log"
+                format={(v) => `${Math.round(v)} Hz`}
+                onChange={setDrumFilterCutoff}
+              />
+            </Field>
+
+            <Field label="Res">
+              <Knob
+                id="knob-drum-filter-resonance"
+                size="sm"
+                color="text-secondary"
+                layout="horizontal"
+                value={drumFilterResonance}
+                min={0.1}
+                max={20}
+                step={0.1}
+                scale="linear"
+                format={(v) => v.toFixed(1)}
+                onChange={setDrumFilterResonance}
+              />
+            </Field>
+
+            <ChannelStrip
+              idPrefix="drums"
+              label="Drum Level"
+              volume={masterSequencerVolume}
+              accentClass="text-primary"
+              max={1}
+              sliderClassName="range range-xs range-primary"
+              onVolumeChange={setMasterSequencerVolume}
             />
           </div>
         </div>
         </div>
       </div>
 
-      {/* Sequencer Grid */}
+      {/* Pattern — the grid plus the tools that rewrite it. They used to sit in
+          the view header, two cards away from the thing Random and Clear wipe. */}
       <div className="card bg-panel border border-base-300 shadow-md">
-        <div className="card-body p-3 sm:p-4 overflow-x-auto">
+        <div className="card-body p-3 sm:p-4 gap-3">
+        {/* Outside the scroll container below, so the title and its tools stay
+            put while a 700px-wide grid scrolls under them. */}
+        <div className="flex items-center justify-between flex-wrap gap-2.5">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-accent" />
+            <span className={SECTION_HEADER}>
+              Pattern
+            </span>
+          </div>
+
+          {/* No stacked label here: the card is already titled Pattern and this
+              is its only field, so a "Genre" label above it would say the same
+              thing twice. With no label line to align to, the select and the
+              action buttons share one centred row. `aria-label` keeps the name
+              a visible label would have carried. */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* The lane wrapper is load-bearing, not decoration: daisyUI's
+                `.select` is `width: 100%`, so as a direct flex child it claims
+                the whole row and pushes the buttons onto a second line. */}
+            <div className={FIELD_LANE}>
+              <select
+                id="select-sequencer-genre"
+                value={selectedGenre}
+                onChange={(e) => applyGenrePreset(e.target.value)}
+                className={FIELD_SELECT}
+                aria-label="Drum pattern genre"
+                title="Loads that genre's drum pattern over the grid"
+              >
+                {Object.entries(GENRE_PRESETS).map(([g, preset]) => (
+                  <option
+                    key={g}
+                    value={g}
+                    title={patternMeterTitle(g, preset.meter, meter.id)}
+                  >
+                    {patternOptionLabel(g, preset.meter, meter.id)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                id="btn-shift-left"
+                onClick={() => shiftSteps("left")}
+                className="btn btn-sm btn-ghost btn-square"
+                title="Shift Pattern Left"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                id="btn-shift-right"
+                onClick={() => shiftSteps("right")}
+                className="btn btn-sm btn-ghost btn-square"
+                title="Shift Pattern Right"
+              >
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                id="btn-randomize-grid"
+                onClick={randomizeSteps}
+                className="btn btn-sm btn-ghost gap-1"
+                title="Randomize Steps"
+              >
+                <Shuffle className="w-3 h-3" />
+                <span className="hidden sm:inline">Random</span>
+              </button>
+
+              <button
+                id="btn-clear-grid"
+                onClick={clearAllSteps}
+                className="btn btn-sm btn-ghost gap-1"
+                title="Clear Steps"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span className="hidden sm:inline">Clear</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
         {/* Step Indicator Header — one cell per step of the active bar */}
         <div className="flex items-center gap-2 mb-2 pl-44 min-w-[700px]">
           {cells.map((cell) => {
@@ -350,20 +371,16 @@ export const SequencerView = () => {
                   >
                     <Play className="w-3.5 h-3.5" />
                   </button>
-                  <button
+                  <PowerToggle
                     id={`btn-mute-${track.id}`}
-                    onClick={() => toggleMute(track.id)}
-                    className={`btn btn-ghost btn-xs btn-square ${
-                      track.muted ? "bg-error/20 text-error border border-error/30" : ""
-                    }`}
-                    title={track.muted ? "Unmute" : "Mute"}
-                  >
-                    {track.muted ? (
-                      <VolumeX className="w-3.5 h-3.5" />
-                    ) : (
-                      <Volume2 className="w-3.5 h-3.5" />
-                    )}
-                  </button>
+                    on={!track.muted}
+                    onToggle={() => toggleMute(track.id)}
+                    name={track.name}
+                    tone="primary"
+                    iconOnly
+                    size="xs"
+                    verb={{ on: 'Unmute', off: 'Mute' }}
+                  />
                 </div>
               </div>
 
@@ -395,6 +412,7 @@ export const SequencerView = () => {
               </div>
             </div>
           ))}
+        </div>
         </div>
         </div>
       </div>

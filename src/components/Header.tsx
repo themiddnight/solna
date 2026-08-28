@@ -1,12 +1,8 @@
 import React from "react";
 import {
-  Sliders,
-  Grid,
-  Music,
   Sun,
   Moon,
   ChevronDown,
-  type LucideIcon,
 } from "lucide-react";
 import { ViewMode } from "../types";
 import { ROOTS, SCALES } from "../utils/musicTheory";
@@ -15,24 +11,16 @@ import { useAppStore } from "../store/store";
 import type { PlayerModule } from "../store/types";
 import { PlayerTransport } from "./ui/PlayerTransport";
 import { Wordmark } from "./ui/Wordmark";
-
-interface NavTab {
-  view: ViewMode;
-  label: string;
-  icon: LucideIcon;
-}
+import { VIEW_META } from "./viewMeta";
 
 /** The two automation players. Each gets its own play / soft-stop button. */
-export const AUTOMATION_TABS: Array<NavTab & { module: PlayerModule }> = [
-  { view: 'sequencer', label: 'Beat Step', icon: Grid, module: 'sequencer' },
-  { view: 'chords', label: 'Chords', icon: Music, module: 'chords' },
+export const AUTOMATION_TABS: ReadonlyArray<{ view: ViewMode; module: PlayerModule }> = [
+  { view: 'sequencer', module: 'sequencer' },
+  { view: 'chords', module: 'chords' },
 ];
 
 /** Views with nothing to play: the instrument and the master rack. */
-export const SOLO_TABS: NavTab[] = [
-  { view: 'synth', label: 'Synth', icon: Sliders },
-  { view: 'effects', label: 'Master FX', icon: Sliders },
-];
+export const SOLO_TABS: readonly ViewMode[] = ['synth', 'effects'];
 
 /**
  * One view-switch button. Deliberately NOT daisyUI's `tab` component: an
@@ -40,25 +28,28 @@ export const SOLO_TABS: NavTab[] = [
  * tabs expect a `role="tablist"` holding only `role="tab"` children. This is
  * the documented join + btn + btn-active segmented-control pattern instead,
  * so every group is one `join` whose direct children all carry `join-item`.
+ *
+ * Icon and label come from VIEW_META, never from a local literal.
  */
 const TabButton: React.FC<{
-  tab: { view: ViewMode; label: string; icon: LucideIcon };
+  view: ViewMode;
   activeTab: ViewMode;
   onSelect: (view: ViewMode) => void;
-}> = ({ tab, activeTab, onSelect }) => {
-  const isActive = activeTab === tab.view;
+}> = ({ view, activeTab, onSelect }) => {
+  const isActive = activeTab === view;
+  const { icon: Icon, tabLabel } = VIEW_META[view];
   return (
     <button
-      id={`tab-${tab.view}`}
+      id={`tab-${view}`}
       type="button"
       aria-current={isActive ? 'page' : undefined}
-      onClick={() => onSelect(tab.view)}
+      onClick={() => onSelect(view)}
       className={`btn btn-sm join-item gap-1.5 text-xs font-bold whitespace-nowrap ${
         isActive ? 'btn-active btn-primary' : 'btn-ghost'
       }`}
     >
-      <tab.icon className="w-4 h-4 shrink-0" />
-      <span className="hidden xl:inline">{tab.label}</span>
+      <Icon className="w-4 h-4 shrink-0" />
+      <span className="hidden xl:inline">{tabLabel}</span>
     </button>
   );
 };
@@ -209,7 +200,7 @@ export const Header: React.FC = React.memo(() => {
       <nav className="flex items-center gap-2 min-w-0 overflow-x-auto no-scrollbar">
         {/* Synth stands alone, mirroring Master FX on the right. */}
         <div className={NAV_GROUP_CLASS}>
-          <TabButton tab={SOLO_TABS[0]} activeTab={activeTab} onSelect={setActiveTab} />
+          <TabButton view={SOLO_TABS[0]} activeTab={activeTab} onSelect={setActiveTab} />
         </div>
 
         <div className='divider divider-horizontal m-0' />
@@ -222,7 +213,7 @@ export const Header: React.FC = React.memo(() => {
             const state = tab.module === 'sequencer' ? sequencerPlayer : chordsPlayer;
             return (
               <div key={tab.view} className={NAV_GROUP_CLASS}>
-                <TabButton tab={tab} activeTab={activeTab} onSelect={setActiveTab} />
+                <TabButton view={tab.view} activeTab={activeTab} onSelect={setActiveTab} />
                 <PlayerTransport
                   id={`btn-header-play-${tab.module}`}
                   state={state}
@@ -241,7 +232,7 @@ export const Header: React.FC = React.memo(() => {
         <div className='divider divider-horizontal m-0' />
 
         <div className={NAV_GROUP_CLASS}>
-          <TabButton tab={SOLO_TABS[1]} activeTab={activeTab} onSelect={setActiveTab} />
+          <TabButton view={SOLO_TABS[1]} activeTab={activeTab} onSelect={setActiveTab} />
         </div>
       </nav>
 

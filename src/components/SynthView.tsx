@@ -39,10 +39,12 @@ import {
   getCategoryMeta,
 } from "../audio/synthPresets";
 import { SynthPresetLibrary } from "./SynthPresetLibrary";
+import { AudioVisualizer } from "./AudioVisualizer";
 import { SimpleSynthPanel } from "./SimpleSynthPanel";
-import { PlayheadReadout } from "./PlayheadReadout";
 import { Knob } from "./ui/Knob";
 import { QuickSavePopover } from "./ui/QuickSavePopover";
+import { ViewHeader } from "./ui/ViewHeader";
+import { COUNT_BADGE, SECTION_HEADER, STEP_BADGE } from "./ui/fieldClasses";
 import {
   clampKeyboardOctave,
   getScaleLockedKeyboardNotes,
@@ -90,6 +92,10 @@ export const SynthView = () => {
   // Synth slice state + setters (named after the old props so the rest of the
   // component body is unchanged).
   const controlTarget = useAppStore((s) => s.controlTarget);
+  // App keeps every view mounted (block/hidden) so audio survives a tab
+  // switch, which means the scope's rAF loop must be gated on this or it
+  // runs forever behind a hidden tab.
+  const activeTab = useAppStore((s) => s.activeTab);
   const synthParams = useAppStore((s) => s.synthParams);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
   const bassSynthParams = useAppStore((s) => s.bassSynthParams);
@@ -450,42 +456,13 @@ export const SynthView = () => {
 
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
-      {/* Top Synth Header & Presets */}
-      <div className="card bg-panel border border-base-300 shadow-md relative">
-        <div className="card-body p-3 sm:p-4 flex flex-col gap-3">
-        {/* Row 1: Target Selector + Mode Switcher + Presets */}
-        <div className="relative flex flex-wrap items-center justify-between gap-2.5">
-          {/* Control Destination Selector */}
-          <div className="join flex items-center gap-1 bg-base-200 border border-primary rounded-box p-1">
-            <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold pl-1 pr-1 hidden sm:inline">
-              Target:
-            </span>
-            {(
-              Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]
-            ).map((target) => (
-              <button
-                key={target}
-                onClick={() => onChangeControlTarget(target)}
-                className={`btn btn-xs join-item text-[11px] font-semibold ${
-                  controlTarget === target
-                    ? SYNTH_TARGET_STYLES[target].activeBtn
-                    : "btn-ghost text-base-content/60"
-                }`}
-              >
-                {SYNTH_TARGET_STYLES[target].label}
-              </button>
-            ))}
-          </div>
-
-          {/* Live chord + beat position */}
-          {/* Taken out of the flex flow at sm+ so a longer chord label cannot
-              shift the target selector or the preset actions around it. */}
-          <PlayheadReadout className="order-last w-full sm:order-none sm:absolute sm:left-1/2 sm:top-1/2 sm:w-auto sm:-translate-x-1/2 sm:-translate-y-1/2" />
-
-          {/* Actions: Mode Switcher + Save Current & Full Presets Library */}
-          <div className="flex items-center gap-1.5 flex-wrap">
+      {/* Synth Lab Header: Mode Switcher + Save Current & Full Presets Library */}
+      <ViewHeader
+        view="synth"
+        actions={
+          <>
             {/* Mode Switcher: Simple vs Pro */}
-            <div className="join flex items-center bg-base-200 border border-base-300 rounded-box p-0.5">
+            <div className="join flex items-center bg-base-200 border border-base-300 rounded-box px-0.5 h-8">
               <button
                 id="btn-mode-simple"
                 onClick={() => handleToggleSynthViewMode("simple")}
@@ -525,7 +502,7 @@ export const SynthView = () => {
                 setQuickSaveCategory(activePresetItem?.category ?? "User");
                 setIsQuickSaving(true);
               }}
-              className="btn btn-xs btn-ghost gap-1 border border-base-300 text-xs font-semibold"
+              className="btn btn-sm btn-ghost gap-1 border border-base-300 text-xs font-semibold"
               title="Save preset"
             >
               <Bookmark className="w-3.5 h-3.5 text-primary" />
@@ -535,15 +512,93 @@ export const SynthView = () => {
             <button
               id="btn-open-presets-library"
               onClick={() => setIsLibraryOpen(true)}
-              className="btn btn-xs btn-primary gap-1 text-xs font-semibold"
-              title="Presets Library"
+              className="btn btn-sm btn-primary gap-1 text-xs font-semibold"
+              title="Sound Library"
             >
               <Library className="w-3.5 h-3.5" />
-              <span>Presets</span>
-              <span className="badge badge-xs badge-outline [--badge-color:currentColor] text-[10px] tabular-nums hidden sm:inline">
+              {/* Names the content, not the container: the Chords view has an
+                  identical button in the identical place, and "Library" made
+                  the two read as the same drawer. It also makes the count badge
+                  answerable — "Library 29" never said 29 of what. */}
+              <span>Sounds</span>
+              <span className={COUNT_BADGE}>
                 {totalPresetsCount}
               </span>
             </button>
+          </>
+        }
+      >
+        {saveToast && (
+          <div className="toast toast-top toast-end absolute top-full right-4 mt-2 z-20">
+            <div className="alert alert-success text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-lg">
+              <Check className="w-3.5 h-3.5" />
+              <span>{saveToast}</span>
+            </div>
+          </div>
+        )}
+      </ViewHeader>
+
+      {/* Synth Target & Preset Selection Card */}
+      <div className="card bg-panel border border-base-300 shadow-md">
+        <div className="card-body p-3 sm:p-4 flex flex-col gap-3">
+        {/* Row 1: Control Destination / Target Selector. Kept as its own row,
+            visible in both Simple and Pro mode, because it's the only control
+            that switches which channel (synth/chord/bass) params/onChangeParams
+            below points at — Pro mode's oscillator/filter/envelope sections
+            read that same params object, so folding this into the Simple-only
+            preset bar would silently strand Pro mode on whatever target was
+            last picked. */}
+        <div className="flex items-center gap-2.5">
+          {/* Control Destination Selector */}
+          <div className="join flex items-center gap-1 bg-base-200 border border-primary rounded-box p-1">
+            <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold pl-1 pr-1 hidden sm:inline">
+              Target:
+            </span>
+            {(
+              Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]
+            ).map((target) => (
+              <button
+                key={target}
+                onClick={() => onChangeControlTarget(target)}
+                className={`btn btn-xs join-item text-[11px] font-semibold ${
+                  controlTarget === target
+                    ? SYNTH_TARGET_STYLES[target].activeBtn
+                    : "btn-ghost text-base-content/60"
+                }`}
+              >
+                {SYNTH_TARGET_STYLES[target].label}
+              </button>
+            ))}
+          </div>
+
+          {/* Per-target oscilloscope, the way a hardware synth puts a scope
+              beside the section you are editing. It taps the TARGET layer's
+              own bus — after the VCA, before the sends — so it shows the patch
+              being edited rather than the finished mix the transport bar's
+              master meter reads.
+
+              The label is not decoration: the QWERTY keyboard always plays the
+              'synth' layer regardless of Target (see KEYBOARD_AUDITION_TARGET),
+              so with Target on Chord or Bass the trace stays flat while keys
+              are pressed. Naming the tapped layer is what keeps that legible
+              instead of reading as a broken scope. */}
+          <div
+            className="ml-auto hidden sm:flex items-center gap-2 bg-base-200 border border-base-300 rounded-box px-2 h-8 shrink-0"
+            title={`Oscilloscope — ${SYNTH_TARGET_STYLES[controlTarget].label} layer`}
+          >
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-base-content/50">
+              {SYNTH_TARGET_STYLES[controlTarget].label}
+            </span>
+            <AudioVisualizer
+              mode="oscilloscope"
+              variant="inline"
+              source={controlTarget}
+              paused={activeTab !== 'synth'}
+              height={22}
+              className="w-28 lg:w-40 rounded"
+              colorTheme="primary"
+
+            />
           </div>
         </div>
 
@@ -762,16 +817,6 @@ export const SynthView = () => {
             </div>
           </div>
         )}
-
-        {/* Floating Save Toast */}
-        {saveToast && (
-          <div className="toast toast-top toast-end absolute top-full right-4 mt-2 z-20">
-            <div className="alert alert-success text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-lg">
-              <Check className="w-3.5 h-3.5" />
-              <span>{saveToast}</span>
-            </div>
-          </div>
-        )}
         </div>
       </div>
 
@@ -827,9 +872,10 @@ export const SynthView = () => {
           >
             <div className="card-body p-4 space-y-3.5">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
+                <span className={STEP_BADGE}>1</span>
                 <Activity className="w-3.5 h-3.5 text-module-osc" />
-                1. Oscillators
+                Oscillators
               </span>
             </div>
 
@@ -902,9 +948,10 @@ export const SynthView = () => {
           >
             <div className="card-body p-4 space-y-3.5">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
+                <span className={STEP_BADGE}>2</span>
                 <Sliders className="w-3.5 h-3.5 text-module-filter" />
-                2. VCF Filter
+                VCF Filter
               </span>
             </div>
 
@@ -982,9 +1029,10 @@ export const SynthView = () => {
           >
             <div className="card-body p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
+                <span className={STEP_BADGE}>3</span>
                 <Volume2 className="w-3.5 h-3.5 text-module-env-vca" />
-                3. ADSR Envelope
+                ADSR Envelope
               </span>
             </div>
 
@@ -1129,9 +1177,10 @@ export const SynthView = () => {
           >
             <div className="card-body p-4 space-y-3.5">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
+                <span className={STEP_BADGE}>4</span>
                 <Activity className="w-3.5 h-3.5 text-module-lfo" />
-                4. LFO & Octave
+                LFO & Octave
               </span>
             </div>
 
@@ -1210,9 +1259,10 @@ export const SynthView = () => {
           >
             <div className="card-body p-4 space-y-3.5">
             <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content uppercase tracking-wider flex items-center gap-1.5">
+              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
+                <span className={STEP_BADGE}>5</span>
                 <Sparkles className="w-3.5 h-3.5 text-module-arp" />
-                5. Arpeggiator
+                Arpeggiator
               </span>
               <button
                 id="btn-toggle-arp"
@@ -1312,7 +1362,7 @@ export const SynthView = () => {
         <div className="card-body p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-base-content">
+            <span className={SECTION_HEADER}>
               Keyboard
             </span>
             <span

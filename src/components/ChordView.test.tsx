@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { ChordView } from './ChordView';
 import { useAppStore } from '../store/store';
+import { COUNT_BADGE } from './ui/fieldClasses';
 
 describe('ChordView preview UI', () => {
   test('renders separate chord and bass pattern preview buttons', () => {
@@ -18,6 +19,17 @@ describe('ChordView preview UI', () => {
     expect(html).not.toContain(
       'title="Hold to Preview Chord &amp; Bass Pattern"',
     );
+  });
+});
+
+describe('ChordView progression drawer button', () => {
+  // See the matching test in SynthView.test.tsx for why neither button says
+  // "Library" any more.
+  test('names its content, not the container', () => {
+    const html = renderToString(<ChordView />);
+    expect(html).toContain('>Progressions<');
+    expect(html).toContain('title="Progression Library"');
+    expect(html).not.toContain('>Library<');
   });
 });
 
@@ -45,9 +57,13 @@ describe('ChordView theming', () => {
     expect(html).toContain('select select-sm');
   });
 
-  test('the library counter badge uses a valid padding step', () => {
-    expect(html).toContain('badge badge-sm badge-outline tabular-nums');
-    expect(html).not.toContain('py-0.2');
+  // Was: an assertion that this badge used a valid `py-` step. The padding is
+  // gone — it was compensating for a badge whose display had been overridden to
+  // plain `inline`, which drops daisyUI's own centring. The shared COUNT_BADGE
+  // keeps `inline-flex`, so the badge centres its own digits and needs none.
+  test('the library counter badge is the shared token, centred by inline-flex', () => {
+    expect(html).toContain(COUNT_BADGE);
+    expect(html).not.toContain('tabular-nums py-0.5');
   });
 
   test('chord chips are keyboard-reachable buttons with font-mono labels', () => {

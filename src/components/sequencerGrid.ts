@@ -6,9 +6,12 @@ import { beatIndexAt, isBeatBoundary, type Meter } from '../utils/meter';
  * setup and every component's testable logic is exported like this.
  */
 
-/** Header label. The old copy said "Drum Sequencer (16-Step)" unconditionally. */
-export function sequencerTitle(meter: Meter): string {
-  return `Drum Sequencer (${meter.stepsPerBar}-Step · ${meter.label})`;
+/**
+ * The machine-computed half of the old header string. The name itself now
+ * lives in VIEW_META, so this returns only what belongs in the badge.
+ */
+export function sequencerMeterBadge(meter: Meter): string {
+  return `${meter.stepsPerBar}-Step · ${meter.label}`;
 }
 
 export interface StepCell {

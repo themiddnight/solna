@@ -1,14 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import { sequencerTitle, stepCells } from './sequencerGrid';
+import { sequencerMeterBadge, stepCells } from './sequencerGrid';
 import { METERS } from '../utils/meter';
 
-describe('sequencerTitle', () => {
-  test('names the bar length and the meter instead of a hardcoded 16', () => {
-    expect(sequencerTitle(METERS['4/4'])).toBe('Drum Sequencer (16-Step · 4/4)');
-    expect(sequencerTitle(METERS['3/4'])).toBe('Drum Sequencer (12-Step · 3/4)');
-    expect(sequencerTitle(METERS['6/8'])).toBe('Drum Sequencer (12-Step · 6/8)');
-    expect(sequencerTitle(METERS['12/8'])).toBe('Drum Sequencer (24-Step · 12/8)');
-    expect(sequencerTitle(METERS['7/8'])).toBe('Drum Sequencer (14-Step · 7/8)');
+describe('sequencerMeterBadge', () => {
+  // The name now comes from VIEW_META; the badge carries only the
+  // machine-computed part, which design.md 3 says belongs in tabular-nums
+  // chrome rather than inside a heading.
+  test('reports step count and meter label', () => {
+    expect(sequencerMeterBadge(METERS['4/4'])).toBe('16-Step · 4/4');
+    expect(sequencerMeterBadge(METERS['3/4'])).toBe('12-Step · 3/4');
+    expect(sequencerMeterBadge(METERS['6/8'])).toBe('12-Step · 6/8');
+    expect(sequencerMeterBadge(METERS['12/8'])).toBe('24-Step · 12/8');
+    expect(sequencerMeterBadge(METERS['7/8'])).toBe('14-Step · 7/8');
   });
 });
 

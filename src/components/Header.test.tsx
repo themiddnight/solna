@@ -82,11 +82,11 @@ describe('header tab grouping', () => {
   });
 
   test('synth and master fx stand alone, with no transport', () => {
-    expect(SOLO_TABS.map((t) => t.view)).toEqual(['synth', 'effects']);
+    expect(SOLO_TABS).toEqual(['synth', 'effects']);
   });
 
   test('every tab view is still reachable', () => {
-    const views = [...SOLO_TABS, ...AUTOMATION_TABS].map((t) => t.view).sort();
+    const views = [...SOLO_TABS, ...AUTOMATION_TABS.map((t) => t.view)].sort();
     expect(views).toEqual(['chords', 'effects', 'sequencer', 'synth']);
   });
 });

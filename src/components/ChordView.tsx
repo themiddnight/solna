@@ -12,7 +12,6 @@ import {
   Bookmark,
   Check,
   Volume2,
-  VolumeX,
   SlidersHorizontal,
 } from "lucide-react";
 import {
@@ -70,17 +69,17 @@ import {
 } from "../utils/musicTheory";
 import { ChordPresetLibrary, isProgressionAvailable } from "./ChordPresetLibrary";
 import { ChannelStrip } from "./ui/ChannelStrip";
+import { COUNT_BADGE, FIELD_LABEL, FIELD_SELECT, HEADER_BADGE, SECTION_HEADER } from './ui/fieldClasses';
+import { PowerToggle } from "./ui/PowerToggle";
 import { QuickSavePopover } from "./ui/QuickSavePopover";
 import { Slider } from "./ui/Slider";
+import { ViewHeader } from "./ui/ViewHeader";
 import { SortableChordCard } from "./chord/SortableChordCard";
 import { beatsPerBarFor, resolveBeatCounter } from "../utils/playhead";
 import { focusSynthTarget, SYNTH_TARGET_STYLES } from "../utils/synthControl";
 import type { SynthControlTarget } from "../utils/synthControl";
 
 import { CHORD_PROGRESSIONS } from "../audio/data/chordProgressions";
-
-const SELECT_BASE = "select select-sm font-semibold";
-const LABEL_BASE = "text-[10px] text-base-content/60 block mb-1";
 
 /**
  * Whether a run of the auto-harmonize effect should clear a stale "Auto-
@@ -552,92 +551,64 @@ export const ChordView: React.FC = React.memo(() => {
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Scale & Chord Studio Header */}
-      <div className="card bg-panel border border-base-300 shadow-md relative">
-        <div className="card-body p-3 sm:p-4 flex-row flex-wrap items-center justify-between gap-2.5">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-selector bg-module-chord/20 border border-module-chord/30 text-module-chord">
-            <Music className="w-4 h-4" />
-          </div>
-          <h2 className="font-bold text-sm sm:text-base text-base-content">
-            Chord Studio & Harmony
-          </h2>
-        </div>
+      <ViewHeader
+        view="chords"
+        actions={
+          <>
+            <PowerToggle
+              id="btn-mute-chord"
+              on={!chordMuted}
+              onToggle={toggleChordMuted}
+              name="Chord"
+              tone="module-chord"
+            />
+            <PowerToggle
+              id="btn-mute-bass"
+              on={!bassMuted}
+              onToggle={toggleBassMuted}
+              name="Bass"
+              tone="module-bass"
+            />
+            <div className="divider divider-horizontal mx-0" />
 
-        {/* Action Controls & Layer Mutes */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {/* Per-layer mute toggles */}
-          <button
-            id="btn-mute-chord"
-            onClick={toggleChordMuted}
-            className={`btn btn-sm gap-1 text-xs font-semibold ${
-              chordMuted ? "btn-error btn-outline" : "btn-ghost"
-            }`}
-            title="Mute Chord Layer"
-          >
-            {chordMuted ? (
-              <VolumeX className="w-3.5 h-3.5 text-error" />
-            ) : (
-              <Volume2 className="w-3.5 h-3.5 text-module-chord" />
-            )}
-            <span>Chord {chordMuted ? "Off" : "On"}</span>
-          </button>
+            {/* Quick Save Current Progression */}
+            <button
+              id="btn-quick-save-chord-progression"
+              onClick={() => {
+                setQuickSaveName(`Progression in ${scaleRoot}`);
+                setIsQuickSaving(true);
+              }}
+              className="btn btn-sm btn-ghost gap-1"
+              title="Save chord progression"
+            >
+              <Bookmark className="w-3.5 h-3.5 text-module-chord" />
+              <span className="hidden sm:inline">Save</span>
+            </button>
 
-          <button
-            id="btn-mute-bass"
-            onClick={toggleBassMuted}
-            className={`btn btn-sm gap-1 text-xs font-semibold ${
-              bassMuted ? "btn-error btn-outline" : "btn-ghost"
-            }`}
-            title="Mute Bass Layer"
-          >
-            {bassMuted ? (
-              <VolumeX className="w-3.5 h-3.5 text-error" />
-            ) : (
-              <Volume2 className="w-3.5 h-3.5 text-module-bass" />
-            )}
-            <span>Bass {bassMuted ? "Off" : "On"}</span>
-          </button>
-
-          <div className="divider divider-horizontal mx-0" />
-
-          {/* Quick Save Current Progression */}
-          <button
-            id="btn-quick-save-chord-progression"
-            onClick={() => {
-              setQuickSaveName(`Progression in ${scaleRoot}`);
-              setIsQuickSaving(true);
-            }}
-            className="btn btn-sm btn-ghost gap-1"
-            title="Save chord progression"
-          >
-            <Bookmark className="w-3.5 h-3.5 text-module-chord" />
-            <span className="hidden sm:inline">Save</span>
-          </button>
-
-          {/* Open Presets Library Drawer Button */}
-          <button
-            id="btn-open-chord-presets-library"
-            onClick={() => setIsLibraryOpen(true)}
-            className="btn btn-sm gap-1 [--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]"
-            title="Progression Library"
-          >
-            <Library className="w-3.5 h-3.5" />
-            <span>Library</span>
-            <span className="badge badge-sm badge-outline tabular-nums py-0.5 hidden sm:inline [--badge-color:currentColor]">
-              {totalProgressionsCount}
-            </span>
-          </button>
-        </div>
-
-        {/* Floating Save Toast */}
+            {/* Open Presets Library Drawer Button */}
+            <button
+              id="btn-open-chord-presets-library"
+              onClick={() => setIsLibraryOpen(true)}
+              className="btn btn-sm gap-1 [--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]"
+              title="Progression Library"
+            >
+              <Library className="w-3.5 h-3.5" />
+              {/* See the matching button in SynthView: content, not container. */}
+              <span>Progressions</span>
+              <span className={COUNT_BADGE}>
+                {totalProgressionsCount}
+              </span>
+            </button>
+          </>
+        }
+      >
         {saveToast && (
           <div className="alert alert-success absolute top-full right-4 mt-2 z-20 w-auto py-1.5 px-3 text-xs shadow-lg animate-fade-in">
             <Check className="w-3.5 h-3.5" />
             <span>{saveToast}</span>
           </div>
         )}
-        </div>
-      </div>
+      </ViewHeader>
 
       {/* Quick Save Modal Popover */}
       <QuickSavePopover
@@ -656,7 +627,10 @@ export const ChordView: React.FC = React.memo(() => {
         <div className="flex items-center justify-between border-b border-base-300 pb-2 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-base-content uppercase tracking-wider">
-              Active Chord Progression Loop ({chords.length} Chords)
+              Active Chord Progression Loop
+            </span>
+            <span className={HEADER_BADGE}>
+              {chords.length} Chords
             </span>
             {isAutoReharmonizedIndicator && (
               <span
@@ -686,7 +660,7 @@ export const ChordView: React.FC = React.memo(() => {
         <div className="flex flex-row flex-wrap items-end gap-3">
           {/* Chord Sound Preset Select */}
           <div>
-            <label className={LABEL_BASE}>Chord Preset</label>
+            <label className={FIELD_LABEL}>Chord Preset</label>
             <select
               id="select-chord-sound-preset"
               value={chordSynthParams.preset ?? ""}
@@ -702,7 +676,7 @@ export const ChordView: React.FC = React.memo(() => {
                   preset: preset.name,
                 });
               }}
-              className={SELECT_BASE}
+              className={FIELD_SELECT}
               title="Chord sound preset — factory and saved presets, synced with the synth page"
             >
               <option value="">Chord Preset…</option>
@@ -726,12 +700,12 @@ export const ChordView: React.FC = React.memo(() => {
 
           {/* Chord Octave Select */}
           <div>
-            <label className={LABEL_BASE}>Chord Octave</label>
+            <label className={FIELD_LABEL}>Chord Octave</label>
             <select
               id="select-chord-octave"
               value={chordOctave}
               onChange={(e) => setChordOctave(parseInt(e.target.value, 10))}
-              className={SELECT_BASE}
+              className={FIELD_SELECT}
               title="Octave for chord playback"
             >
               {[2, 3, 4, 5, 6].map((o) => (
@@ -744,13 +718,13 @@ export const ChordView: React.FC = React.memo(() => {
 
           {/* Chord Rhythm Pattern Select */}
           <div>
-            <label className={LABEL_BASE}>Chord Pattern</label>
+            <label className={FIELD_LABEL}>Chord Pattern</label>
             <div className="flex items-center gap-1.5">
               <select
                 id="select-chord-rhythm-pattern"
                 value={rhythmId}
                 onChange={(e) => setChordRhythmId(e.target.value)}
-                className={SELECT_BASE}
+                className={FIELD_SELECT}
                 title="Rhythm pattern for chord playback"
               >
                 {RHYTHM_STYLE_GROUPS.map((group) => (
@@ -785,7 +759,7 @@ export const ChordView: React.FC = React.memo(() => {
 
           {/* Chord Feel Slider (tight ↔ loose) */}
           <div>
-            <label className={LABEL_BASE}>Chord Feel</label>
+            <label className={FIELD_LABEL}>Chord Feel</label>
             <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
               <span className="text-[9px] text-base-content/60 shrink-0">
                 tight
@@ -811,6 +785,7 @@ export const ChordView: React.FC = React.memo(() => {
             idPrefix="chord"
             label="Chord Level"
             volume={chordVolume}
+            max={1.5}
             accentClass="text-module-chord"
             sliderClassName="range range-xs text-module-chord [--range-thumb:var(--color-module-chord-content)]"
             onVolumeChange={handleChordVolumeChange}
@@ -1059,7 +1034,9 @@ export const ChordView: React.FC = React.memo(() => {
       <div className="mt-4 card bg-panel tint-bass border border-module-bass/30 p-4">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div>
-            <h3 className="text-sm font-bold text-module-bass">Bass Module</h3>
+            <h3 className={SECTION_HEADER}>
+              Bass Module
+            </h3>
             <p className="text-[10px] text-base-content/60">
               Bass line follows the same chord progression loop; pattern steps
               are 16th notes.
@@ -1069,7 +1046,7 @@ export const ChordView: React.FC = React.memo(() => {
         </div>
         <div className="flex flex-row flex-wrap items-end gap-3">
           <div>
-            <label className={LABEL_BASE}>Bass Preset</label>
+            <label className={FIELD_LABEL}>Bass Preset</label>
             <select
               id="select-bass-sound-preset"
               value={bassSynthParams.preset ?? ""}
@@ -1085,7 +1062,7 @@ export const ChordView: React.FC = React.memo(() => {
                   preset: preset.name,
                 });
               }}
-              className={SELECT_BASE}
+              className={FIELD_SELECT}
               title="Bass sound preset — any factory, bass, or saved preset, synced with the synth page"
             >
               <option value="">Bass Preset…</option>
@@ -1108,12 +1085,12 @@ export const ChordView: React.FC = React.memo(() => {
           </div>
 
           <div>
-            <label className={LABEL_BASE}>Bass Octave</label>
+            <label className={FIELD_LABEL}>Bass Octave</label>
             <select
               id="select-bass-octave"
               value={bassOctave}
               onChange={(e) => setBassOctave(parseInt(e.target.value, 10))}
-              className={SELECT_BASE}
+              className={FIELD_SELECT}
               title="Register for the bass line (embedded in the note names)"
             >
               {[1, 2, 3, 4].map((o) => (
@@ -1125,13 +1102,13 @@ export const ChordView: React.FC = React.memo(() => {
           </div>
 
           <div>
-            <label className={LABEL_BASE}>Bass Pattern</label>
+            <label className={FIELD_LABEL}>Bass Pattern</label>
             <div className="flex items-center gap-1.5">
               <select
                 id="select-bass-rhythm-pattern"
                 value={bassPatternId}
                 onChange={(e) => setBassPatternId(e.target.value)}
-                className={SELECT_BASE}
+                className={FIELD_SELECT}
                 title="Bass pattern (16th-note grid, deterministic)"
               >
                 {BASS_STYLE_GROUPS.map((group) => (
@@ -1166,7 +1143,7 @@ export const ChordView: React.FC = React.memo(() => {
 
           {/* Bass Feel Slider (tight ↔ loose) */}
           <div>
-            <label className={LABEL_BASE}>Bass Feel</label>
+            <label className={FIELD_LABEL}>Bass Feel</label>
             <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
               <span className="text-[9px] text-base-content/60 shrink-0">
                 tight
@@ -1191,6 +1168,7 @@ export const ChordView: React.FC = React.memo(() => {
             idPrefix="bass"
             label="Bass Level"
             volume={bassVolume}
+            max={1.5}
             accentClass="text-module-bass"
             onVolumeChange={handleBassVolumeChange}
             showReadout={false}

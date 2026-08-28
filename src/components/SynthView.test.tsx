@@ -63,6 +63,16 @@ describe('chromatic keyboard black key geometry', () => {
     expect(at(2)).toEqual(BLACK_KEY_STYLES);
   });
 
+  // ChordView has an identical button in the identical place; when both said
+  // "Library" they read as the same drawer. Each now names its own content,
+  // which also makes the count badge answerable ("Sounds 29", not "Library 29").
+  test('the preset drawer button names its content', () => {
+    const html = renderToString(<SynthView />);
+    expect(html).toContain('>Sounds<');
+    expect(html).toContain('title="Sound Library"');
+    expect(html).not.toContain('>Library<');
+  });
+
   test('SynthView still renders', () => {
     const html = renderToString(<SynthView />);
     expect(html).toContain('A Natural Minor');

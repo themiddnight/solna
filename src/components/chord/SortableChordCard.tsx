@@ -1,4 +1,5 @@
 import React from "react";
+import { FIELD_LABEL } from '../ui/fieldClasses';
 import { GripVertical, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -152,7 +153,7 @@ export function SortableChordCard({
       {/* Edit Controls */}
       <div className="flex gap-2 pt-1 border-t border-base-300/60">
         <div className="shrink min-w-0">
-          <label className="text-[10px] text-base-content/60 block mb-0.5">
+          <label className={FIELD_LABEL}>
             Root
           </label>
           <select
@@ -170,7 +171,7 @@ export function SortableChordCard({
         </div>
 
         <div className="flex-1 min-w-0">
-          <label className="text-[10px] text-base-content/60 block mb-0.5">
+          <label className={FIELD_LABEL}>
             Quality
           </label>
           <select
@@ -207,7 +208,7 @@ export function SortableChordCard({
         </div>
 
         <div className="shrink min-w-0">
-          <label className="text-[10px] text-base-content/60 block mb-0.5">
+          <label className={FIELD_LABEL}>
             Duration (Bars)
           </label>
           <select

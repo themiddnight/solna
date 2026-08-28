@@ -389,7 +389,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
     <PresetLibrary
       isOpen={isOpen}
       onClose={onClose}
-      title="Synth Presets Library"
+      title="Sound Library"
       headerBadge={`${allPresets.length} Total`}
       headerAccessory={
         // The drawer edits whichever destination the Target selector points at,

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { SequencerView } from './SequencerView';
 import { useAppStore } from '../store/store';
+import { FIELD_LABEL, FIELD_LANE, FIELD_SELECT } from './ui/fieldClasses';
 
 describe('SequencerView theming', () => {
   const html = renderToString(<SequencerView />);
@@ -13,14 +14,62 @@ describe('SequencerView theming', () => {
     expect(html).not.toContain('#0B0D19');
   });
 
-  test('toolbar controls use daisyUI btn and select classes', () => {
-    expect(html).toContain('btn btn-xs btn-ghost');
-    expect(html).toContain('select select-xs select-ghost');
+  /**
+   * The view header carries identity only, like Master FX. Each module owns its
+   * own controls in its own card, which is what ChordView's chord and bass cards
+   * already did — the sequencer's header had grown to seven controls, including
+   * the pattern edits that belong beside the grid they rewrite.
+   */
+  test('the drum controls live in their module cards, not the view header', () => {
+    const soundCard = html.indexOf('Drum Sound');
+    const patternCard = html.indexOf('>Pattern<');
+    expect(soundCard).toBeGreaterThan(-1);
+    expect(patternCard).toBeGreaterThan(-1);
+    // The kit belongs to the sound module; the genre picker and the three
+    // destructive pattern tools belong to the pattern module.
+    expect(html.indexOf('select-sequencer-sound-kit')).toBeGreaterThan(soundCard);
+    expect(html.indexOf('select-sequencer-genre')).toBeGreaterThan(patternCard);
+    expect(html.indexOf('btn-randomize-grid')).toBeGreaterThan(patternCard);
+    expect(html.indexOf('btn-clear-grid')).toBeGreaterThan(patternCard);
+    // Both cards come after the header, so nothing above them can be the header.
+    expect(soundCard).toBeGreaterThan(html.indexOf('Drum Sequencer'));
   });
 
-  test('the drum filter type switch is a daisyUI join', () => {
+  // A control inside a card's control row wears a stacked label above it (the
+  // form ChordView uses); an inline `Label:` prefix is for a group sitting in a
+  // one-line toolbar (`Target:`, `Sound Style:`). These two moved into cards, so
+  // they moved to the stacked form — and to the shared token, not a fifth copy.
+  // The regression this row was rebuilt for: five fields whose controls were
+  // 24, 30, 32 and 48px tall bottom-aligned into five different label heights.
+  test('every field in a control row shares one label line and one control lane', () => {
+    const soundRow = html.slice(html.indexOf('Drum Sound'), html.indexOf('>Pattern<'));
+    const labels = soundRow.split(FIELD_LABEL).length - 1;
+    const lanes = soundRow.split(FIELD_LANE).length - 1;
+    // Kit, Filter, Cutoff, Res each own a label + lane; Drum Level's label and
+    // 32px shell come from ChannelStrip, which sits on the same line already.
+    expect(labels).toBe(5);
+    expect(lanes).toBe(4);
+  });
+
+  test('the kit and genre selects use the shared stacked field label', () => {
+    expect(html).toContain(FIELD_LABEL);
+    expect(html).toContain(FIELD_SELECT);
+    expect(html).toContain('>Kit</label>');
+    expect(html).not.toContain('Pattern:');
+    expect(html).not.toContain('Kit:');
+    // The genre select carries no visible label — the card it sits in is
+    // already titled Pattern and it is that card's only field — so its
+    // accessible name has to come from somewhere else.
+    expect(html).toContain('aria-label="Drum pattern genre"');
+    expect(html).not.toContain('>Genre</label>');
+  });
+
+  test('the drum filter type switch is a daisyUI join on the 32px control lane', () => {
     expect(html).toContain('join');
-    expect(html).toContain('btn btn-xs join-item');
+    // `sm`, not `xs`: it is one field in a control row, and a 24px join next to
+    // a 32px select is what pushed the row's labels onto different baselines.
+    expect(html).toContain('btn btn-sm join-item');
+    expect(html).toContain(FIELD_LANE);
   });
 
   test('step numbers keep tabular-nums and the downbeat uses accent', () => {

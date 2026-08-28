@@ -484,7 +484,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
     <PresetLibrary
       isOpen={isOpen}
       onClose={onClose}
-      title="Chord Progression Manager"
+      title="Progression Library"
       headerSubtitle={`Key of ${scaleRoot} • ${entries.length} Total Progressions`}
       saveButton={{ label: 'Save Current', title: 'Save current chord progression' }}
       toast={toastMsg}

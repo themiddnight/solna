@@ -65,6 +65,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                   id="simple-macro-tone"
                   label=""
                   color="text-module-filter"
+                  descriptor={toneLabel}
                   value={cutoffValue}
                   min={300}
                   max={12000}
@@ -73,10 +74,6 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                   onChange={(v) => onChangeParams({ ...params, filterCutoff: v })}
                 />
               </div>
-
-              <span className="badge badge-sm badge-soft [--badge-color:var(--color-module-filter)] text-[10px] font-semibold">
-                {toneLabel}
-              </span>
             </div>
           </div>
 
@@ -93,6 +90,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                   id="simple-macro-space"
                   label=""
                   color="text-module-env-vca"
+                  descriptor={spaceLabel}
                   value={releaseValue}
                   min={0.05}
                   max={2.5}
@@ -107,10 +105,6 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                   }
                 />
               </div>
-
-              <span className="badge badge-sm badge-soft [--badge-color:var(--color-module-env-vca)] text-[10px] font-semibold">
-                {spaceLabel}
-              </span>
             </div>
           </div>
 
@@ -127,6 +121,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                   id="simple-macro-vibe"
                   label=""
                   color="text-module-lfo"
+                  descriptor={vibeLabel}
                   value={detuneValue}
                   min={0}
                   max={50}
@@ -141,10 +136,6 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                   }
                 />
               </div>
-
-              <span className="badge badge-sm badge-soft [--badge-color:var(--color-module-lfo)] text-[10px] font-semibold">
-                {vibeLabel}
-              </span>
             </div>
           </div>
 
@@ -161,6 +152,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                   id="simple-macro-punch"
                   label=""
                   color="text-module-osc"
+                  descriptor={punchLabel}
                   value={subValue}
                   min={0}
                   max={1}
@@ -175,10 +167,6 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                   }
                 />
               </div>
-
-              <span className="badge badge-sm badge-soft [--badge-color:var(--color-module-osc)] text-[10px] font-semibold">
-                {punchLabel}
-              </span>
             </div>
           </div>
 

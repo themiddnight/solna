@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { AmbientBackdrop } from './components/ui/AmbientBackdrop';
 import { Header } from './components/Header';
 import { InstantVibesBar } from './components/InstantVibesBar';
 import { SynthView } from './components/SynthView';
@@ -76,6 +77,12 @@ export function App() {
 
   return (
     <div className="h-dvh bg-canvas text-base-content flex flex-col font-sans selection:bg-primary selection:text-primary-content relative overflow-hidden">
+      {/* Low-contrast analyser-driven field behind the whole workspace, so
+          every tab shows continuous "audio is live" feedback. Must stay the
+          first child at z-0 — see AmbientBackdrop.tsx's doc comment for why
+          `fixed`/`-z-10` would paint behind the root's opaque bg-canvas. */}
+      <AmbientBackdrop />
+
       {/* Navigation Header */}
       <Header />
 
