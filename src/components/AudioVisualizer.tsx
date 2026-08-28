@@ -204,24 +204,38 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       const freqData = freqBufRef.current;
       const timeData = timeBufRef.current;
 
-      analyser.getByteFrequencyData(freqData);
+      // The oscilloscope draws from timeData alone, so neither the frequency
+      // read nor the avgEnergy loop earns its keep there — and SynthView
+      // keeps an inline scope alive alongside the panel visualizer.
+      const needsFrequencyData = mode !== 'oscilloscope';
+      if (needsFrequencyData) {
+        analyser.getByteFrequencyData(freqData);
+      }
       analyser.getByteTimeDomainData(timeData);
 
       // Check if there is actual audio activity (filter out digital silence & DC bias)
-      let energy = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        energy += freqData[i];
-      }
-      const avgEnergy = energy / bufferLength;
-
       let maxDeviation = 0;
       for (let i = 0; i < timeData.length; i++) {
         const dev = Math.abs(timeData[i] - 128);
         if (dev > maxDeviation) maxDeviation = dev;
       }
 
-      // Strictly consider sounding only if audio is genuinely active
-      const isSounding = avgEnergy > 2.5 && maxDeviation > 3;
+      // Strictly consider sounding only if audio is genuinely active. The
+      // spectrum modes keep the original two-term test verbatim: maxDeviation
+      // alone would also accept a sub-audio LFO sweep that avgEnergy rejects.
+      // The oscilloscope uses the time-domain term only — it has no frequency
+      // data to consult, and a DC offset is a steady deviation from 128 that
+      // maxDeviation catches on its own.
+      let isSounding: boolean;
+      if (needsFrequencyData) {
+        let energy = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          energy += freqData[i];
+        }
+        isSounding = energy / bufferLength > 2.5 && maxDeviation > 3;
+      } else {
+        isSounding = maxDeviation > 3;
+      }
       const indicator = indicatorRef.current;
       if (indicator && indicator.dataset.sounding !== String(isSounding)) {
         indicator.dataset.sounding = String(isSounding);
