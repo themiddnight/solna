@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Play,
   RotateCcw,
   Shuffle,
   ArrowLeft,
@@ -25,7 +24,9 @@ import { ViewHeader } from "./ui/ViewHeader";
 import { ChannelStrip } from "./ui/ChannelStrip";
 import { FIELD_LANE, FIELD_SELECT, SECTION_HEADER } from "./ui/fieldClasses";
 import { Field } from "./ui/Field";
-import { PowerToggle } from "./ui/PowerToggle";
+import { StepHeader } from "./sequencer/StepHeader";
+import { TrackRow } from "./sequencer/TrackRow";
+import type { SequencerTrack } from "../types";
 
 
 export const SequencerView = () => {
@@ -34,11 +35,13 @@ export const SequencerView = () => {
   const tracks = useAppStore((s) => s.sequencerTracks);
   const onChangeTracks = useAppStore((s) => s.setSequencerTracks);
   const applyDrumPattern = useAppStore((s) => s.applyDrumPattern);
-  const meter = getMeter(useAppStore((s) => s.meterId));
+  const meterId = useAppStore((s) => s.meterId);
+  // getMeter returns the shared METERS[id] object, so `meter` is a stable
+  // identity per meterId and this memo only rebuilds on a real meter change.
+  const meter = getMeter(meterId);
   const stepsPerBar = meter.stepsPerBar;
-  const cells = stepCells(meter);
+  const cells = useMemo(() => stepCells(meter), [meter]);
   const isPlaying = useAppStore((s) => s.sequencerPlayer !== 'stopped');
-  const synthParams = useAppStore((s) => s.synthParams);
   const soundKit = useAppStore((s) => s.soundKit);
   const onChangeSoundKit = useAppStore((s) => s.setSoundKit);
   const masterSequencerVolume = useAppStore((s) => s.masterSequencerVolume);
@@ -61,22 +64,44 @@ export const SequencerView = () => {
     onChangeSoundKit(GENRE_TO_KIT[selectedGenre] ?? selectedGenre);
   }, [selectedGenre, onChangeSoundKit]);
 
-  const toggleStep = (trackId: string, stepIndex: number) => {
-    onChangeTracks(
-      tracks.map((t) => {
+  // These are props of the memoized TrackRow, so their identity must be
+  // stable. They read `sequencerTracks` LIVE from the store rather than from
+  // the render scope: a useCallback([]) over the closed-over `tracks` would
+  // capture the tracks as of the first render and silently drop every edit
+  // made after it. The slice's setter takes a plain value, not an updater.
+  const toggleStep = useCallback((trackId: string, stepIndex: number) => {
+    const { sequencerTracks, setSequencerTracks } = useAppStore.getState();
+    setSequencerTracks(
+      sequencerTracks.map((t) => {
         if (t.id !== trackId) return t;
         const newSteps = [...t.steps];
         newSteps[stepIndex] = !newSteps[stepIndex];
         return { ...t, steps: newSteps };
       }),
     );
-  };
+  }, []);
 
-  const toggleMute = (trackId: string) => {
-    onChangeTracks(
-      tracks.map((t) => (t.id === trackId ? { ...t, muted: !t.muted } : t)),
+  const toggleMute = useCallback((trackId: string) => {
+    const { sequencerTracks, setSequencerTracks } = useAppStore.getState();
+    setSequencerTracks(
+      sequencerTracks.map((t) => (t.id === trackId ? { ...t, muted: !t.muted } : t)),
     );
-  };
+  }, []);
+
+  const previewTrack = useCallback((track: SequencerTrack) => {
+    if (track.instrument === "synth" || track.instrument === "bass") {
+      const note = track.instrument === "bass" ? "C2" : "C4";
+      previewRef.current?.();
+      previewRef.current = previewSequencerNote(
+        note,
+        useAppStore.getState().synthParams,
+        0.8,
+      );
+    } else {
+      ensureDrumEngine();
+      triggerPad(track.instrument, 0.8);
+    }
+  }, []);
 
   // Clear/randomize/shift all act on the VISIBLE window only. The cells past it
   // are this row's programming for a wider meter; destroying them would make a
@@ -314,103 +339,21 @@ export const SequencerView = () => {
 
         <div className="overflow-x-auto">
         {/* Step Indicator Header — one cell per step of the active bar */}
-        <div className="flex items-center gap-2 mb-2 pl-44 min-w-[700px]">
-          {cells.map((cell) => {
-            const isCurrent = currentStep === cell.index && isPlaying;
-            return (
-              <div
-                key={cell.index}
-                className={`flex-1 text-center tabular-nums text-[10px] py-1 rounded transition-all ${
-                  isCurrent
-                    ? "bg-primary text-primary-content font-bold shadow-md shadow-primary/50"
-                    : cell.isBeatStart
-                      ? "text-accent font-bold bg-base-300/40"
-                      : "text-base-content/50"
-                }`}
-              >
-                {cell.label}
-              </div>
-            );
-          })}
-        </div>
+        <StepHeader cells={cells} currentStep={currentStep} isPlaying={isPlaying} />
 
         {/* Track Lanes */}
         <div className="space-y-2 min-w-[700px]">
           {tracks.map((track) => (
-            <div
+            <TrackRow
               key={track.id}
-              id={`sequencer-row-${track.id}`}
-              className="flex items-center gap-2 bg-base-200 p-2 rounded-box border border-base-300 hover:border-primary/40 transition-colors"
-            >
-              {/* Track Info & Mute */}
-              <div className="w-40 flex items-center justify-between pr-2 border-r border-base-300">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full ${track.color}`} />
-                  <span className="text-xs font-bold text-base-content truncate">
-                    {track.name}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => {
-                      if (
-                        track.instrument === "synth" ||
-                        track.instrument === "bass"
-                      ) {
-                        const note = track.instrument === "bass" ? "C2" : "C4";
-                        previewRef.current?.();
-                        previewRef.current = previewSequencerNote(note, synthParams, 0.8);
-                      } else {
-                        ensureDrumEngine();
-                        triggerPad(track.instrument, 0.8);
-                      }
-                    }}
-                    className="btn btn-ghost btn-xs btn-square hover:text-primary"
-                    title="Preview Instrument"
-                  >
-                    <Play className="w-3.5 h-3.5" />
-                  </button>
-                  <PowerToggle
-                    id={`btn-mute-${track.id}`}
-                    on={!track.muted}
-                    onToggle={() => toggleMute(track.id)}
-                    name={track.name}
-                    tone="primary"
-                    iconOnly
-                    size="xs"
-                    verb={{ on: 'Unmute', off: 'Mute' }}
-                  />
-                </div>
-              </div>
-
-              {/* Step Buttons — the visible window of this row */}
-              <div className="flex-1 flex items-center gap-1.5">
-                {cells.map((cell) => {
-                  const isActive = track.steps[cell.index] === true;
-                  const isCurrent = currentStep === cell.index && isPlaying;
-
-                  return (
-                    <button
-                      key={cell.index}
-                      id={`step-${track.id}-${cell.index}`}
-                      onClick={() => toggleStep(track.id, cell.index)}
-                      className={`flex-1 h-9 rounded-field transition-all cursor-pointer relative ${
-                        isActive
-                          ? `${track.color} shadow-md shadow-primary/20 scale-[0.96]`
-                          : cell.isAltBeatGroup
-                            ? "bg-base-100 hover:bg-base-300 border border-base-300/50"
-                            : "bg-base-200 hover:bg-base-300 border border-base-300/40"
-                      } ${isCurrent ? "ring-2 ring-primary brightness-125" : ""}`}
-                    >
-                      {isActive && (
-                        <div className="absolute inset-0 bg-base-content/10 rounded-field animate-pulse" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+              track={track}
+              cells={cells}
+              currentStep={currentStep}
+              isPlaying={isPlaying}
+              onToggleStep={toggleStep}
+              onToggleMute={toggleMute}
+              onPreview={previewTrack}
+            />
           ))}
         </div>
         </div>
