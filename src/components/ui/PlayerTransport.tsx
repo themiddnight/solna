@@ -24,12 +24,12 @@ export function resolveTransportButtons(state: PlayerState): TransportButtons {
   switch (state) {
     case 'playing':
       return {
-        main: { icon: 'stop', label: 'Soft Stop', className: 'btn-warning', disabled: false },
+        main: { icon: 'stop', label: 'Stop', className: 'btn-warning', disabled: false },
         hard: { disabled: false },
       };
     case 'stopping':
       return {
-        main: { icon: 'stop', label: 'Stopping', className: 'btn-warning animate-pulse', disabled: true },
+        main: { icon: 'stop', label: 'Stopping…', className: 'btn-warning animate-pulse', disabled: true },
         hard: { disabled: false },
       };
     default:
@@ -106,11 +106,10 @@ export const PlayerTransport: React.FC<PlayerTransportProps> = ({
           type="button"
           onClick={onHardStop}
           disabled={hardStopDisabled ?? buttons.hard.disabled}
-          title="Hard Stop (cut now)"
-          className={`btn ${sizeClass} join-item btn-error gap-1.5 font-bold text-xs`}
+          title="Stop immediately"
+          className={`btn ${sizeClass} join-item btn-error btn-square font-bold text-xs`}
         >
-          <X className="w-3.5 h-3.5 shrink-0" />
-          <span className={compact ? 'hidden lg:inline' : 'hidden sm:inline'}>Hard Stop</span>
+          <X className={size === 'xs' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
         </button>
       )}
     </>

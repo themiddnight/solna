@@ -10,17 +10,17 @@ describe('resolveTransportButtons', () => {
     expect(b.hard.disabled).toBe(true);
   });
 
-  test('playing offers soft stop and enables hard stop', () => {
+  test('playing offers stop and enables hard stop', () => {
     const b = resolveTransportButtons('playing');
     expect(b.main.icon).toBe('stop');
-    expect(b.main.label).toBe('Soft Stop');
+    expect(b.main.label).toBe('Stop');
     expect(b.main.disabled).toBe(false);
     expect(b.hard.disabled).toBe(false);
   });
 
-  test('stopping is a disabled pulsing indicator, but hard stop stays live', () => {
+  test('stopping is a disabled pulsing stop indicator, but hard stop stays live', () => {
     const b = resolveTransportButtons('stopping');
-    expect(b.main.label).toBe('Stopping');
+    expect(b.main.label).toBe('Stopping…');
     expect(b.main.disabled).toBe(true);
     expect(b.main.className).toContain('animate-pulse');
     expect(b.hard.disabled).toBe(false);

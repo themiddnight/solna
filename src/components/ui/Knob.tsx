@@ -17,21 +17,51 @@ import type { KeyDir, KnobIndicator, KnobScale, KnobSize } from '../../utils/kno
 
 export type { KnobIndicator, KnobScale, KnobSize };
 
-/** The only knob tints allowed by the theme; keeps palette classes out. */
-export type KnobColor =
-  | 'text-primary'
-  | 'text-secondary'
-  | 'text-accent'
-  | 'text-success'
-  | 'text-error'
-  | 'text-module-chord'
-  | 'text-module-bass'
-  | 'text-module-osc'
-  | 'text-module-filter'
-  | 'text-module-env-vca'
-  | 'text-module-env-vcf'
-  | 'text-module-lfo'
-  | 'text-module-arp';
+/** Runtime list so tests can assert the badge map is exhaustive. */
+export const KNOB_COLORS = [
+  'text-primary',
+  'text-secondary',
+  'text-accent',
+  'text-success',
+  'text-error',
+  'text-module-chord',
+  'text-module-bass',
+  'text-module-osc',
+  'text-module-filter',
+  'text-module-env-vca',
+  'text-module-env-vcf',
+  'text-module-lfo',
+  'text-module-arp',
+] as const;
+
+export type KnobColor = (typeof KNOB_COLORS)[number];
+
+/**
+ * Badge tint for the descriptor, keyed off the knob's own colour so the badge
+ * and the needle always agree.
+ *
+ * Written out as literals on purpose: Tailwind v4 scans source statically, so
+ * a class assembled from `--color-${token}` at runtime would never be emitted.
+ */
+const BADGE_COLOR: Record<KnobColor, string> = {
+  'text-primary': '[--badge-color:var(--color-primary)]',
+  'text-secondary': '[--badge-color:var(--color-secondary)]',
+  'text-accent': '[--badge-color:var(--color-accent)]',
+  'text-success': '[--badge-color:var(--color-success)]',
+  'text-error': '[--badge-color:var(--color-error)]',
+  'text-module-chord': '[--badge-color:var(--color-module-chord)]',
+  'text-module-bass': '[--badge-color:var(--color-module-bass)]',
+  'text-module-osc': '[--badge-color:var(--color-module-osc)]',
+  'text-module-filter': '[--badge-color:var(--color-module-filter)]',
+  'text-module-env-vca': '[--badge-color:var(--color-module-env-vca)]',
+  'text-module-env-vcf': '[--badge-color:var(--color-module-env-vcf)]',
+  'text-module-lfo': '[--badge-color:var(--color-module-lfo)]',
+  'text-module-arp': '[--badge-color:var(--color-module-arp)]',
+};
+
+export function badgeColorFor(color: KnobColor = 'text-primary'): string {
+  return BADGE_COLOR[color];
+}
 
 export interface KnobProps {
   value: number;
@@ -42,6 +72,18 @@ export interface KnobProps {
   scale?: KnobScale;
   size?: KnobSize;
   label?: string;
+  /**
+   * Plain-language reading of the current value, shown as a badge under the
+   * knob (vertical layout only). Use it where the number alone does not say
+   * what the user will hear — decay in seconds, cutoff in Hz — and NOT for
+   * percentages or dB, which already read plainly.
+   *
+   * LIMITATION: silently ignored when `layout === 'horizontal'` — there is no
+   * horizontal rendering for it yet. Passing `descriptor` to a horizontal
+   * knob compiles and renders with no error or warning, it just never shows.
+   * Do not rely on it for a horizontal knob until horizontal support lands.
+   */
+  descriptor?: string;
   /** Needle + progress arc + value tint. Token classes only (default 'text-primary'). */
   color?: KnobColor;
   format?: (v: number) => string;
@@ -80,6 +122,7 @@ export const Knob = ({
   scale = 'linear',
   size = 'md',
   label,
+  descriptor,
   color,
   format = String,
   indicator = 'progress',
@@ -279,6 +322,13 @@ export const Knob = ({
       {layout === 'vertical' && (
         <span className="text-[10px] tabular-nums text-current block text-center">
           {display}
+        </span>
+      )}
+      {layout === 'vertical' && descriptor !== undefined && (
+        <span
+          className={`badge badge-sm badge-soft text-[10px] font-semibold ${badgeColorFor(color)}`}
+        >
+          {descriptor}
         </span>
       )}
     </div>

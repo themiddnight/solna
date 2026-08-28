@@ -42,8 +42,10 @@ export default tseslint.config(
   },
   {
     // Layering rule 3: components are dumb views — no direct audio/engine.
-    // Exceptions: the two read-only analyser views (AudioVisualizer,
-    // TransportBar level meter) and test files.
+    // Exceptions: the three read-only analyser consumers (AudioVisualizer,
+    // TransportBar's level meter, AmbientBackdrop) and test files. Routing
+    // their per-frame reads through the store would mean a store write every
+    // animation frame and a re-render of every subscriber.
     files: ['src/components/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
@@ -60,6 +62,7 @@ export default tseslint.config(
     files: [
       'src/components/AudioVisualizer.tsx',
       'src/components/TransportBar.tsx',
+      'src/components/ui/AmbientBackdrop.tsx',
       '**/*.test.ts',
       '**/*.test.tsx',
     ],

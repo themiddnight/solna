@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { Knob } from './Knob';
+import { badgeColorFor, KNOB_COLORS, Knob } from './Knob';
 
 // Static-render structure checks: where the label/value sit relative to the
 // role="slider" svg pins each layout variant without a DOM.
@@ -79,5 +79,19 @@ describe('Knob theme tokens', () => {
     );
     expect(accent).toContain('text-accent');
     expect(accent).not.toContain('text-primary');
+  });
+});
+
+describe('badgeColorFor', () => {
+  test('every legal knob colour has a badge class', () => {
+    for (const color of KNOB_COLORS) {
+      expect(badgeColorFor(color)).toMatch(/^\[--badge-color:var\(--color-[a-z-]+\)\]$/);
+    }
+    expect(new Set(KNOB_COLORS.map(badgeColorFor)).size).toBe(KNOB_COLORS.length);
+  });
+
+  test('maps the colour role, not a palette name', () => {
+    expect(badgeColorFor('text-module-filter')).toBe('[--badge-color:var(--color-module-filter)]');
+    expect(badgeColorFor('text-primary')).toBe('[--badge-color:var(--color-primary)]');
   });
 });

@@ -8,13 +8,17 @@ describe('ChannelStrip tokens', () => {
       idPrefix="chord"
       label="Chord Level"
       volume={0.8}
+      max={1.5}
       accentClass="text-primary"
       onVolumeChange={() => {}}
     />,
   );
 
   test('uses base tokens for the label, shell and readout', () => {
-    expect(html).toContain('text-base-content/50');
+    // The label now comes from the shared FIELD_LABEL token (see
+    // ui/fieldClasses.ts), which settled on /60 for contrast; the point of this
+    // assertion — a theme token, never a raw colour — is unchanged.
+    expect(html).toContain('text-base-content/60');
     expect(html).toContain('bg-base-200');
     expect(html).toContain('border-base-300');
     // The readout inherits its colour rather than carrying a tint of its own
@@ -51,6 +55,7 @@ describe('ChannelStrip tokens', () => {
         idPrefix="bass"
         label="Bass Level"
         volume={0.5}
+        max={1.5}
         accentClass="text-accent"
         onVolumeChange={() => {}}
         showReadout={false}

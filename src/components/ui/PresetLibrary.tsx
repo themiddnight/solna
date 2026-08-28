@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { FIELD_LABEL } from './fieldClasses';
 import { Bookmark, Check, Plus, Search, Sparkles, Trash2, X } from 'lucide-react';
 
 export interface PresetLibraryEntry {
@@ -315,7 +316,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
             </div>
 
             <div>
-              <label className="text-[10px] uppercase font-bold text-base-content/60 block mb-1">Preset Name</label>
+              <label className={FIELD_LABEL}>Preset Name</label>
               <input
                 type="text"
                 required
@@ -329,7 +330,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
             <div className="grid grid-cols-2 gap-2">
               {save.withCategory && (
                 <div>
-                  <label className="text-[10px] uppercase font-bold text-base-content/60 block mb-1">Category</label>
+                  <label className={FIELD_LABEL}>Category</label>
                   <select
                     value={draft.category}
                     onChange={(e) => setDraft({ ...draft, category: e.target.value })}
@@ -343,7 +344,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
               )}
               {save.withDescription && (
                 <div>
-                  <label className="text-[10px] uppercase font-bold text-base-content/60 block mb-1">Description (Optional)</label>
+                  <label className={FIELD_LABEL}>Description (Optional)</label>
                   <input
                     type="text"
                     placeholder="e.g. Heavy punchy lead tone"
