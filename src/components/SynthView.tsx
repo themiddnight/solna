@@ -254,8 +254,14 @@ export const SynthView = () => {
   // regardless of which destination the Target selector is currently editing.
   const handleNoteOn = useCallback(
     (note: string) => {
+      // Params come from arpStateRef, refreshed by an unconditional effect
+      // after every commit, so this reads exactly the value the closure used
+      // to capture — but the callback identity no longer changes on every
+      // knob move, which used to tear down and re-register the window
+      // keydown/keyup listeners ~60 times a second during a drag.
+      const params = arpStateRef.current.params;
       initSynthPlayback();
-      if (!keyboardParams.arpActive) {
+      if (!params.arpActive) {
         // Equal-power polyphony: a new note lowers every held voice so the
         // total level stays flat as keys are added. The ref mirrors
         // activeNotes synchronously so rapid presses see each other.
@@ -268,7 +274,7 @@ export const SynthView = () => {
         }
         synthPlaybackNoteOn(
           note,
-          keyboardParams,
+          params,
           1.0,
           undefined,
           KEYBOARD_AUDITION_TARGET,
@@ -277,19 +283,21 @@ export const SynthView = () => {
       }
       setActiveNotes((prev) => new Set(prev).add(note));
     },
-    [keyboardParams.arpActive, keyboardParams],
+    [],
   );
 
   const handleNoteOff = useCallback(
     (note: string) => {
+      // Same ref read as handleNoteOn — see the note there.
+      const params = arpStateRef.current.params;
       const held = arpStateRef.current.activeNotes;
       const wasHeld = held.delete(note);
-      if (wasHeld && !keyboardParams.arpActive) {
+      if (wasHeld && !params.arpActive) {
         // Release first (marks the voice so re-scaling skips it), then let
         // the remaining held voices rise back toward full level.
         synthPlaybackNoteOff(
           note,
-          keyboardParams.release,
+          params.release,
           undefined,
           KEYBOARD_AUDITION_TARGET,
         );
@@ -301,7 +309,7 @@ export const SynthView = () => {
         return next;
       });
     },
-    [keyboardParams.arpActive, keyboardParams.release],
+    [],
   );
 
   // Arpeggiator playback: parameterized clock subscriber (the 4 rate branches
@@ -350,6 +358,24 @@ export const SynthView = () => {
     [scaleRoot, scaleType, keyboardOctave],
   );
 
+  // The keyboard handlers below used to rebuild these from tonal on every
+  // keystroke, and the rows variant was called fresh in the JSX on every
+  // render while its sibling chordKeyboardRows was already memoized.
+  const scaleLockedNotesFlat = useMemo(
+    () => getScaleLockedKeyboardNotesFlat(scaleRoot, scaleType, keyboardOctave),
+    [scaleRoot, scaleType, keyboardOctave],
+  );
+
+  const scaleLockedRows = useMemo(
+    () => getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave),
+    [scaleRoot, scaleType, keyboardOctave],
+  );
+
+  const chromaticNotes = useMemo(
+    () => getChromaticKeyboardNotes(keyboardOctave),
+    [keyboardOctave],
+  );
+
   // QWERTY Computer Keyboard mapping — uses keyboardOctave, NOT params.octave
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -375,13 +401,7 @@ export const SynthView = () => {
         return;
       }
       const notesList =
-        keyboardMode === "scale-locked"
-          ? getScaleLockedKeyboardNotesFlat(
-              scaleRoot,
-              scaleType,
-              keyboardOctave,
-            )
-          : getChromaticKeyboardNotes(keyboardOctave);
+        keyboardMode === "scale-locked" ? scaleLockedNotesFlat : chromaticNotes;
       const keyObj = notesList.find((n) => n.key === e.code);
       if (keyObj) {
         handleNoteOn(keyObj.note);
@@ -399,13 +419,7 @@ export const SynthView = () => {
         return;
       }
       const notesList =
-        keyboardMode === "scale-locked"
-          ? getScaleLockedKeyboardNotesFlat(
-              scaleRoot,
-              scaleType,
-              keyboardOctave,
-            )
-          : getChromaticKeyboardNotes(keyboardOctave);
+        keyboardMode === "scale-locked" ? scaleLockedNotesFlat : chromaticNotes;
       const keyObj = notesList.find((n) => n.key === e.code);
       if (keyObj) {
         handleNoteOff(keyObj.note);
@@ -419,13 +433,19 @@ export const SynthView = () => {
       window.removeEventListener("keyup", handleKeyUp);
     };
   }, [
+    // handleNoteOn/handleNoteOff are useCallback([]) now, so they never
+    // change — kept here because the effect genuinely calls them. scaleRoot,
+    // scaleType and keyboardOctave are no longer read directly: they reach
+    // the handlers through the three memos above, which change identity only
+    // when the notes actually change. keyboardOctave is still *written* by
+    // handleKeyDown, but only through the setKeyboardOctave((o) => ...)
+    // updater form, which never reads the current value from the closure.
     handleNoteOn,
     handleNoteOff,
     keyboardMode,
-    scaleRoot,
-    scaleType,
-    keyboardOctave,
     chordKeyboardRows,
+    scaleLockedNotesFlat,
+    chromaticNotes,
   ]);
 
   const handleSelectPreset = (preset: SynthPresetItem) => {
@@ -1459,11 +1479,7 @@ export const SynthView = () => {
             />
           ) : keyboardMode === "scale-locked" ? (
             <ScaleLockedKeyboard
-              rows={getScaleLockedKeyboardNotes(
-                scaleRoot,
-                scaleType,
-                keyboardOctave,
-              )}
+              rows={scaleLockedRows}
               activeNotes={activeNotes}
               onNoteOn={handleNoteOn}
               onNoteOff={handleNoteOff}
