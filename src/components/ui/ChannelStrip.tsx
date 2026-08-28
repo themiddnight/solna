@@ -10,7 +10,7 @@ type StripAccent = KnobColor;
 
 interface ChannelStripProps {
   idPrefix: string;
-  label: string;
+  label?: string;
   volume: number;
   accentClass: StripAccent;
   onVolumeChange: (v: number) => void;
@@ -42,9 +42,9 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
   const layerName = idPrefix.charAt(0).toUpperCase() + idPrefix.slice(1);
   return (
     <div className="min-w-40">
-      <label className={FIELD_LABEL}>
+      {label && <label className={FIELD_LABEL}>
         {label} <span className="font-mono">({Math.round(volume * 100)}%)</span>
-      </label>
+      </label>}
       <div className="flex items-center gap-2 bg-base-200 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
         <Volume2 className={`w-3.5 h-3.5 ${accentClass} shrink-0`} />
         <Slider

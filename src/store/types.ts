@@ -61,10 +61,14 @@ export interface SynthSlice {
   chordSynthParams: SynthParams;
   bassSynthParams: SynthParams;
   controlTarget: SynthControlTarget;
+  synthVolume: number;
+  synthMuted: boolean;
   setSynthParams: (params: SynthParams) => void;
   setChordSynthParams: (params: SynthParams) => void;
   setBassSynthParams: (params: SynthParams) => void;
   setControlTarget: (target: SynthControlTarget) => void;
+  setSynthVolume: (volume: number) => void;
+  toggleSynthMuted: () => void;
 }
 
 export interface ChordsSlice {
@@ -99,6 +103,7 @@ export interface SequencerSlice {
   sequencerTracks: SequencerTrack[];
   soundKit: string;
   masterSequencerVolume: number;
+  drumMuted: boolean;
   drumFilterCutoff: number;
   drumFilterResonance: number;
   drumFilterType: FilterType;
@@ -106,10 +111,30 @@ export interface SequencerSlice {
   setSequencerTracks: (tracks: SequencerTrack[]) => void;
   setSoundKit: (kit: string) => void;
   setMasterSequencerVolume: (volume: number) => void;
+  toggleDrumMuted: () => void;
   setDrumFilterCutoff: (cutoff: number) => void;
   setDrumFilterResonance: (resonance: number) => void;
   setDrumFilterType: (type: FilterType) => void;
 }
+
+export interface MidiMapping {
+  id: string;
+  type: 'cc' | 'note';
+  ccNumber?: number;
+  targetKey: string;
+  targetLabel: string;
+  enabled: boolean;
+}
+
+export const DEFAULT_MIDI_MAPPINGS: MidiMapping[] = [
+  { id: 'm-vol', type: 'cc', ccNumber: 7, targetKey: 'masterVolume', targetLabel: 'Master Volume', enabled: true },
+  { id: 'm-cutoff', type: 'cc', ccNumber: 74, targetKey: 'filterCutoff', targetLabel: 'Filter Cutoff', enabled: true },
+  { id: 'm-res', type: 'cc', ccNumber: 71, targetKey: 'filterResonance', targetLabel: 'Filter Resonance', enabled: true },
+  { id: 'm-osc', type: 'cc', ccNumber: 16, targetKey: 'oscType', targetLabel: 'Oscillator Type', enabled: true },
+  { id: 'm-atk', type: 'cc', ccNumber: 73, targetKey: 'attack', targetLabel: 'Attack Time', enabled: true },
+  { id: 'm-rel', type: 'cc', ccNumber: 72, targetKey: 'release', targetLabel: 'Release Time', enabled: true },
+  { id: 'm-notes', type: 'note', targetKey: 'notes', targetLabel: 'Keyboard Notes (Note On/Off)', enabled: true },
+];
 
 export interface EffectsSlice {
   effects: MasterEffects;
@@ -123,8 +148,22 @@ export interface UiSlice {
   // preference, not composition data, so it does not travel with saved
   // projects (see partializeAppState in store.ts).
   keyboardMode: KeyboardMode;
+  midiActivityTimestamp: number | null;
+  midiMappings: MidiMapping[];
+  isMidiSettingsOpen: boolean;
+  midiLearnTargetId: string | null;
+  selectedMidiInputId: string;
   setActiveTab: (tab: ViewMode) => void;
   setKeyboardMode: (mode: KeyboardMode) => void;
+  triggerMidiActivity: () => void;
+  setMidiMappings: (mappings: MidiMapping[]) => void;
+  updateMidiMapping: (id: string, updates: Partial<MidiMapping>) => void;
+  addMidiMapping: (mapping: MidiMapping) => void;
+  removeMidiMapping: (id: string) => void;
+  resetMidiMappings: () => void;
+  setIsMidiSettingsOpen: (open: boolean) => void;
+  setMidiLearnTargetId: (id: string | null) => void;
+  setSelectedMidiInputId: (id: string) => void;
 }
 
 export interface PresetsSlice {
@@ -171,6 +210,8 @@ export interface PersistedState {
   chordSynthParams: SynthParams;
   bassSynthParams: SynthParams;
   controlTarget: SynthControlTarget;
+  synthVolume: number;
+  synthMuted: boolean;
   chords: ChordItem[];
   chordRhythmId: string;
   chordFeel: number;
@@ -185,6 +226,7 @@ export interface PersistedState {
   sequencerTracks: SequencerTrack[];
   soundKit: string;
   masterSequencerVolume: number;
+  drumMuted: boolean;
   drumFilterCutoff: number;
   drumFilterResonance: number;
   drumFilterType: FilterType;

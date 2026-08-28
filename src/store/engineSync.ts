@@ -28,10 +28,14 @@ function applySliceState(): void {
   audioEngine.setMeter(getMeter(s.meterId));
   audioEngine.setMasterVolume(s.masterVolume);
   audioEngine.setMetronomeEnabled(s.metronomeActive);
+  audioEngine.setSourceGain('synth', s.synthVolume);
   audioEngine.setSourceGain('chord', s.chordVolume);
   audioEngine.setSourceGain('bass', s.bassVolume);
+  audioEngine.setSourceGain('sequencer', s.masterSequencerVolume);
+  audioEngine.setSourceMuted('synth', s.synthMuted);
   audioEngine.setSourceMuted('chord', s.chordMuted);
   audioEngine.setSourceMuted('bass', s.bassMuted);
+  audioEngine.setSourceMuted('sequencer', s.drumMuted);
   audioEngine.setDrumKit(DRUM_KITS[s.soundKit]);
   audioEngine.setDrumFilter(s.drumFilterCutoff, s.drumFilterResonance, s.drumFilterType);
   audioEngine.updateEffects(s.effects);
@@ -56,11 +60,15 @@ export function startEngineSync(): Stop {
   subs.push(useAppStore.subscribe((s) => s.masterVolume, (v) => audioEngine.setMasterVolume(v), { fireImmediately: true }));
   subs.push(useAppStore.subscribe((s) => s.metronomeActive, (v) => audioEngine.setMetronomeEnabled(v), { fireImmediately: true }));
 
-  // chords + bass buses
+  // synth + chords + bass + sequencer buses
+  subs.push(useAppStore.subscribe((s) => s.synthVolume, (v) => audioEngine.setSourceGain('synth', v), { fireImmediately: true }));
   subs.push(useAppStore.subscribe((s) => s.chordVolume, (v) => audioEngine.setSourceGain('chord', v), { fireImmediately: true }));
   subs.push(useAppStore.subscribe((s) => s.bassVolume, (v) => audioEngine.setSourceGain('bass', v), { fireImmediately: true }));
+  subs.push(useAppStore.subscribe((s) => s.masterSequencerVolume, (v) => audioEngine.setSourceGain('sequencer', v), { fireImmediately: true }));
+  subs.push(useAppStore.subscribe((s) => s.synthMuted, (v) => audioEngine.setSourceMuted('synth', v), { fireImmediately: true }));
   subs.push(useAppStore.subscribe((s) => s.chordMuted, (v) => audioEngine.setSourceMuted('chord', v), { fireImmediately: true }));
   subs.push(useAppStore.subscribe((s) => s.bassMuted, (v) => audioEngine.setSourceMuted('bass', v), { fireImmediately: true }));
+  subs.push(useAppStore.subscribe((s) => s.drumMuted, (v) => audioEngine.setSourceMuted('sequencer', v), { fireImmediately: true }));
 
   // sequencer slice: kit + drum-bus filter. The filter is watched as one
   // derived object compared with `shallow`, so the subscription fires once

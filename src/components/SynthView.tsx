@@ -47,6 +47,7 @@ const SynthPresetLibrary = React.lazy(() =>
 import { AudioVisualizer } from "./AudioVisualizer";
 import { SimpleSynthPanel } from "./SimpleSynthPanel";
 import { Knob } from "./ui/Knob";
+import { ChannelStrip } from "./ui/ChannelStrip";
 import { QuickSavePopover } from "./ui/QuickSavePopover";
 import { ViewHeader } from "./ui/ViewHeader";
 import { COUNT_BADGE, SECTION_HEADER, STEP_BADGE } from "./ui/fieldClasses";
@@ -111,6 +112,52 @@ export const SynthView = () => {
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
   const bpm = useAppStore((s) => s.bpm);
+  const synthVolume = useAppStore((s) => s.synthVolume);
+  const setSynthVolume = useAppStore((s) => s.setSynthVolume);
+  const chordVolume = useAppStore((s) => s.chordVolume);
+  const setChordVolume = useAppStore((s) => s.setChordVolume);
+  const bassVolume = useAppStore((s) => s.bassVolume);
+  const setBassVolume = useAppStore((s) => s.setBassVolume);
+
+  const activeTargetVolumeConfig = useMemo(() => {
+    switch (controlTarget) {
+      case "chord":
+        return {
+          idPrefix: "chord",
+          volume: chordVolume,
+          onVolumeChange: setChordVolume,
+          accentClass: "text-module-chord" as const,
+          sliderClassName:
+            "range range-xs text-module-chord [--range-thumb:var(--color-module-chord-content)]",
+        };
+      case "bass":
+        return {
+          idPrefix: "bass",
+          volume: bassVolume,
+          onVolumeChange: setBassVolume,
+          accentClass: "text-module-bass" as const,
+          sliderClassName:
+            "range range-xs text-module-bass [--range-thumb:var(--color-module-bass-content)]",
+        };
+      case "synth":
+      default:
+        return {
+          idPrefix: "synth",
+          volume: synthVolume,
+          onVolumeChange: setSynthVolume,
+          accentClass: "text-primary" as const,
+          sliderClassName: "range range-xs range-primary",
+        };
+    }
+  }, [
+    controlTarget,
+    synthVolume,
+    setSynthVolume,
+    chordVolume,
+    setChordVolume,
+    bassVolume,
+    setBassVolume,
+  ]);
 
   // Route the control panel (knobs, preset selects) to the selected
   // destination; the keyboard always plays the main synth (see handleNoteOn).
@@ -573,9 +620,18 @@ export const SynthView = () => {
             read that same params object, so folding this into the Simple-only
             preset bar would silently strand Pro mode on whatever target was
             last picked. */}
-        <div className="flex items-center gap-2.5">
+        {/* Row 1: Control Destination / Target Selector + Dynamic Target Volume Slider */}
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           {/* Control Destination Selector */}
-          <div className="join flex items-center gap-1 bg-base-200 border border-primary rounded-box p-1">
+          <div
+            className={`join flex items-center gap-1 bg-base-200 border rounded-box p-1 shrink-0 ${
+              controlTarget === "chord"
+                ? "border-module-chord"
+                : controlTarget === "bass"
+                  ? "border-module-bass"
+                  : "border-primary"
+            }`}
+          >
             <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold pl-1 pr-1 hidden sm:inline">
               Target:
             </span>
@@ -596,6 +652,18 @@ export const SynthView = () => {
             ))}
           </div>
 
+          {/* Target Volume Slider, dynamic to active target with matching tint */}
+          <div className="flex-1 min-w-44 max-w-xs">
+            <ChannelStrip
+              idPrefix={activeTargetVolumeConfig.idPrefix}
+              volume={activeTargetVolumeConfig.volume}
+              max={1.5}
+              accentClass={activeTargetVolumeConfig.accentClass}
+              sliderClassName={activeTargetVolumeConfig.sliderClassName}
+              onVolumeChange={activeTargetVolumeConfig.onVolumeChange}
+            />
+          </div>
+
           {/* Per-target oscilloscope, the way a hardware synth puts a scope
               beside the section you are editing. It taps the TARGET layer's
               own bus — after the VCA, before the sends — so it shows the patch
@@ -608,7 +676,7 @@ export const SynthView = () => {
               are pressed. Naming the tapped layer is what keeps that legible
               instead of reading as a broken scope. */}
           <div
-            className="ml-auto hidden sm:flex items-center gap-2 bg-base-200 border border-base-300 rounded-box px-2 h-8 shrink-0"
+            className="ml-auto hidden sm:flex items-center gap-2 bg-base-200 border border-base-300 rounded-box px-2 h-8 shrink-0 self-end mb-0.5"
             title={`Oscilloscope — ${SYNTH_TARGET_STYLES[controlTarget].label} layer`}
           >
             <span className="text-[10px] uppercase tracking-wider font-semibold text-base-content/50">
@@ -621,8 +689,7 @@ export const SynthView = () => {
               paused={activeTab !== 'synth'}
               height={22}
               className="w-28 lg:w-40 rounded"
-              colorTheme="primary"
-
+              colorTheme={controlTarget === "chord" ? "accent" : "primary"}
             />
           </div>
         </div>

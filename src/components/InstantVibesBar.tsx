@@ -66,7 +66,6 @@ export const InstantVibesBar: React.FC = React.memo(() => {
   const [rollingVibeId, setRollingVibeId] = useState<string | null>(null);
   const bpm = useAppStore((s) => s.bpm);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
 
   // Only one toast and one spin can be pending at a time. Without tracking
   // these, clicking a chip and then its dice within the chip's 3s toast
@@ -117,58 +116,56 @@ export const InstantVibesBar: React.FC = React.memo(() => {
         </div>
 
         {/* Horizontal Scrolling Vibe Buttons */}
-        {!isCollapsed && (
-          <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 px-1 no-scrollbar scroll-smooth flex-1 max-w-full">
-            {INSTANT_VIBES.map((vibe) => {
-              const isSelected = selectedVibeId === vibe.id;
+        <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 px-1 no-scrollbar scroll-smooth flex-1 max-w-full">
+          {INSTANT_VIBES.map((vibe) => {
+            const isSelected = selectedVibeId === vibe.id;
 
-              const chip = (
+            const chip = (
+              <button
+                id={`btn-vibe-${vibe.id}`}
+                onClick={() => handleSelectVibe(vibe)}
+                title={`${vibe.name} (${vibe.bpm} BPM · ${vibe.scaleRoot} ${vibe.scaleType})`}
+                className={`btn btn-xs group gap-1.5 font-semibold whitespace-nowrap shrink-0 normal-case ${
+                  isSelected
+                    ? `${vibe.variation ? 'join-item ' : ''}btn-primary`
+                    : 'btn-soft'
+                }`}
+              >
+                <span className="text-xs leading-none">{vibe.emoji}</span>
+                <span className="font-medium">{vibe.name}</span>
+                <span className="text-[9px] font-mono opacity-70">
+                  {/* The loaded chip is the always-visible readout of what is
+                      actually loaded: after a reroll the authored BPM is no
+                      longer true, and there is no undo to fall back on. */}
+                  {isSelected ? `${scaleRoot} · ${bpm}` : vibe.bpm}
+                </span>
+              </button>
+            );
+
+            if (!isSelected || !vibe.variation) {
+              return <React.Fragment key={vibe.id}>{chip}</React.Fragment>;
+            }
+
+            return (
+              <div key={vibe.id} className="join shrink-0">
+                {chip}
                 <button
-                  id={`btn-vibe-${vibe.id}`}
-                  onClick={() => handleSelectVibe(vibe)}
-                  title={`${vibe.name} (${vibe.bpm} BPM · ${vibe.scaleRoot} ${vibe.scaleType})`}
-                  className={`btn btn-xs group gap-1.5 font-semibold whitespace-nowrap shrink-0 normal-case ${
-                    isSelected
-                      ? `${vibe.variation ? 'join-item ' : ''}btn-primary`
-                      : 'btn-soft'
-                  }`}
+                  id={`btn-vibe-reroll-${vibe.id}`}
+                  onClick={() => handleReroll(vibe)}
+                  title={`Reroll ${vibe.name}`}
+                  aria-label={`Reroll ${vibe.name}`}
+                  className="join-item btn btn-xs btn-primary btn-square"
                 >
-                  <span className="text-xs leading-none">{vibe.emoji}</span>
-                  <span className="font-medium">{vibe.name}</span>
-                  <span className="text-[9px] font-mono opacity-70">
-                    {/* The loaded chip is the always-visible readout of what is
-                        actually loaded: after a reroll the authored BPM is no
-                        longer true, and there is no undo to fall back on. */}
-                    {isSelected ? `${scaleRoot} · ${bpm}` : vibe.bpm}
-                  </span>
+                  <Dices
+                    className={`w-3.5 h-3.5 ${
+                      rollingVibeId === vibe.id ? 'animate-spin motion-reduce:animate-none' : ''
+                    }`}
+                  />
                 </button>
-              );
-
-              if (!isSelected || !vibe.variation) {
-                return <React.Fragment key={vibe.id}>{chip}</React.Fragment>;
-              }
-
-              return (
-                <div key={vibe.id} className="join shrink-0">
-                  {chip}
-                  <button
-                    id={`btn-vibe-reroll-${vibe.id}`}
-                    onClick={() => handleReroll(vibe)}
-                    title={`Reroll ${vibe.name}`}
-                    aria-label={`Reroll ${vibe.name}`}
-                    className="join-item btn btn-xs btn-primary btn-square"
-                  >
-                    <Dices
-                      className={`w-3.5 h-3.5 ${
-                        rollingVibeId === vibe.id ? 'animate-spin motion-reduce:animate-none' : ''
-                      }`}
-                    />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
+              </div>
+            );
+          })}
+        </div>
 
         {/* Collapse toggle & Feedback banner */}
         <div className="flex items-center gap-1.5 shrink-0">
@@ -193,14 +190,6 @@ export const InstantVibesBar: React.FC = React.memo(() => {
               )}
             </div>
           )}
-
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="btn btn-xs btn-ghost btn-square"
-            title={isCollapsed ? 'Show Vibes' : 'Hide Vibes'}
-          >
-            {isCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-          </button>
         </div>
       </div>
     </div>

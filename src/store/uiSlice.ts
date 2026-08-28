@@ -1,6 +1,7 @@
 import type { StoreApi } from 'zustand';
 import type { KeyboardMode } from '../types';
 import type { AppStore, UiSlice } from './types';
+import { DEFAULT_MIDI_MAPPINGS } from './types';
 import { readValidatedStorageValue, persistGuardedStorageValue } from '../utils/storage';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -43,11 +44,34 @@ export function createUiSlice(set: Set): UiSlice {
   return {
     activeTab: 'synth',
     keyboardMode: readStoredKeyboardMode() ?? 'scale-locked',
+    midiActivityTimestamp: null,
+    midiMappings: DEFAULT_MIDI_MAPPINGS,
+    isMidiSettingsOpen: false,
+    midiLearnTargetId: null,
+    selectedMidiInputId: 'all',
 
     setActiveTab: (activeTab) => set({ activeTab }),
     setKeyboardMode: (keyboardMode) => {
       persistKeyboardMode(keyboardMode);
       set({ keyboardMode });
     },
+    triggerMidiActivity: () => set({ midiActivityTimestamp: Date.now() }),
+    setMidiMappings: (midiMappings) => set({ midiMappings }),
+    updateMidiMapping: (id, updates) =>
+      set((state) => ({
+        midiMappings: state.midiMappings.map((m) => (m.id === id ? { ...m, ...updates } : m)),
+      })),
+    addMidiMapping: (mapping) =>
+      set((state) => ({
+        midiMappings: [...state.midiMappings, mapping],
+      })),
+    removeMidiMapping: (id) =>
+      set((state) => ({
+        midiMappings: state.midiMappings.filter((m) => m.id !== id),
+      })),
+    resetMidiMappings: () => set({ midiMappings: DEFAULT_MIDI_MAPPINGS }),
+    setIsMidiSettingsOpen: (isMidiSettingsOpen) => set({ isMidiSettingsOpen }),
+    setMidiLearnTargetId: (midiLearnTargetId) => set({ midiLearnTargetId }),
+    setSelectedMidiInputId: (selectedMidiInputId) => set({ selectedMidiInputId }),
   };
 }

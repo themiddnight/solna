@@ -15,6 +15,8 @@ export function createSynthSlice(set: Set): SynthSlice {
     chordSynthParams: INITIAL_SYNTH_PARAMS,
     bassSynthParams: { ...INITIAL_SYNTH_PARAMS, ...FACTORY_BASS_PRESETS[0].params },
     controlTarget: 'synth',
+    synthVolume: 1.0,
+    synthMuted: false,
 
     // Setters backing the SynthView control panel (previously App.tsx
     // setState wrappers with the same semantics).
@@ -22,5 +24,7 @@ export function createSynthSlice(set: Set): SynthSlice {
     setChordSynthParams: (chordSynthParams) => set({ chordSynthParams }),
     setBassSynthParams: (bassSynthParams) => set({ bassSynthParams }),
     setControlTarget: (controlTarget) => set({ controlTarget }),
+    setSynthVolume: (synthVolume) => set({ synthVolume }),
+    toggleSynthMuted: () => set((state) => ({ synthMuted: !state.synthMuted })),
   };
 }

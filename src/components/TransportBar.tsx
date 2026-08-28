@@ -5,6 +5,7 @@ import { Slider } from "./ui/Slider";
 import { PlayerTransport } from "./ui/PlayerTransport";
 import { PlayheadReadout } from "./PlayheadReadout";
 import { VuMeter } from "./ui/VuMeter";
+import { MidiIndicator } from "./ui/MidiIndicator";
 import { aggregatePlayerState, isHardStopEnabled } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 
@@ -39,7 +40,7 @@ export const TransportBar: React.FC = React.memo(() => {
     // sits dead-centre in the viewport) whenever there is room, and floored at
     // their own content width when there isn't — which degrades to an off-centre
     // readout instead of side groups overlapping or overflowing the bar.
-    <div className="bg-base-100 border-t border-base-300 px-3 py-2 flex md:grid md:grid-cols-[minmax(max-content,1fr)_minmax(0,20rem)_minmax(max-content,1fr)] items-center justify-between gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
+    <div className="bg-base-100 border-t border-base-300 px-3 py-2 flex md:grid md:grid-cols-[minmax(max-content,1fr)_minmax(0,20rem)_minmax(max-content,1fr)] items-center justify-between gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl overflow-x-auto no-scrollbar">
       {/* Left Transport Actions: Play All + Tab Play + Tempo */}
       <div className="flex items-center gap-1.5 shrink-0">
         {/* Master transport: drives both automation players together. The
@@ -102,7 +103,15 @@ export const TransportBar: React.FC = React.memo(() => {
             ))}
           </select>
         </div>
+      </div>
 
+      {/* Middle: playhead readout — now/next chord + beat dots, visible on every tab */}
+      <div className="flex-1 max-w-xs hidden md:flex items-center gap-2">
+        <PlayheadReadout />
+      </div>
+
+      {/* Right Meter & Master Gain */}
+      <div className="flex items-center gap-2 shrink-0 md:justify-self-end">
         {/* Metronome Toggle */}
         <button
           id="btn-transport-metronome"
@@ -115,15 +124,10 @@ export const TransportBar: React.FC = React.memo(() => {
           <Clock className="w-3.5 h-3.5" />
           <span className="hidden lg:inline text-[11px]">Click</span>
         </button>
-      </div>
 
-      {/* Middle: playhead readout — now/next chord + beat dots, visible on every tab */}
-      <div className="flex-1 max-w-xs hidden md:flex items-center gap-2">
-        <PlayheadReadout />
-      </div>
+        {/* MIDI Activity Indicator */}
+        <MidiIndicator />
 
-      {/* Right Meter & Master Gain */}
-      <div className="flex items-center gap-2 shrink-0 md:justify-self-end">
         {/* Real-time output level meter — owns its own rAF loop so the level
             does not re-render the transport bar (see ui/VuMeter). */}
         <VuMeter isPlaying={isPlaying} />

@@ -1,5 +1,7 @@
 import { SynthParams, MasterEffects, FilterType } from '../types';
 import { noteFrequency, clampBpm, stepDurationSec, STEPS_PER_BAR } from '../utils/musicTheory';
+import { Note } from 'tonal';
+import { useAppStore } from '../store/store';
 import {
   beatIndexAt,
   getMeter,
@@ -190,6 +192,7 @@ class AudioEngine {
   private static readonly IMPULSE_CACHE_MAX = 8; // LRU cap; real use revisits a handful of decays
 
   private drumKit: DrumKit = mergeDrumKit();
+  private midiAccess: MIDIAccess | null = null;
 
   async init(): Promise<void> {
     if (!this.ctx) {
@@ -207,6 +210,112 @@ class AudioEngine {
       }
     }
     this.isInitialized = true;
+    this.initMidi();
+  }
+
+  private async initMidi(): Promise<void> {
+    if (this.midiAccess || typeof navigator === 'undefined' || !('requestMIDIAccess' in navigator)) {
+      return;
+    }
+    try {
+      const access = await (navigator as Navigator & { requestMIDIAccess?: () => Promise<MIDIAccess> }).requestMIDIAccess?.();
+      if (!access) return;
+      this.midiAccess = access;
+
+      const handleMessage = (event: MIDIMessageEvent) => {
+        const data = event.data;
+        if (!data || data.length < 3) return;
+        const s = useAppStore.getState();
+        const selectedId = s.selectedMidiInputId;
+        const sourceInput = event.target as MIDIInput | null;
+        if (selectedId && selectedId !== 'all' && sourceInput && sourceInput.id !== selectedId) {
+          return;
+        }
+        s.triggerMidiActivity();
+        const status = data[0];
+        const command = status & 0xF0;
+        const data1 = data[1];
+        const data2 = data[2];
+
+        // Check if MIDI Learn is active for CC
+        const learnId = s.midiLearnTargetId;
+        if (learnId && command === 0xB0) {
+          const ccNum = data1;
+          s.updateMidiMapping(learnId, { ccNumber: ccNum, type: 'cc' });
+          s.setMidiLearnTargetId(null);
+          return;
+        }
+
+        const mappings = s.midiMappings;
+
+        if (command === 0x90 || command === 0x80) {
+          const noteMapping = mappings.find((m) => m.enabled && m.type === 'note');
+          if (noteMapping) {
+            const noteName = Note.fromMidi(data1);
+            if (!noteName) return;
+            const params = s.synthParams;
+            const velocity = data2;
+            if (command === 0x90 && velocity > 0) {
+              this.triggerSynthNoteOn(noteName, params, velocity / 127, undefined, 'synth', 1);
+            } else {
+              this.triggerSynthNoteOff(noteName, 0.3, undefined, 'synth');
+            }
+          }
+        } else if (command === 0xB0) {
+          const ccNumber = data1;
+          const ccValue = data2;
+          const mapping = mappings.find(
+            (m) => m.enabled && m.type === 'cc' && m.ccNumber === ccNumber
+          );
+          if (mapping) {
+            const normalized = ccValue / 127;
+            if (mapping.targetKey === 'masterVolume') {
+              s.setMasterVolume(normalized);
+              this.setMasterVolume(normalized);
+            } else if (mapping.targetKey === 'filterCutoff') {
+              const hz = 20 * Math.pow(1000, normalized);
+              const updated = { ...s.synthParams, filterCutoff: Math.round(hz) };
+              s.setSynthParams(updated);
+              this.updateSynthParams(updated, 'synth');
+            } else if (mapping.targetKey === 'filterResonance') {
+              const res = normalized * 20;
+              const updated = { ...s.synthParams, filterResonance: Number(res.toFixed(1)) };
+              s.setSynthParams(updated);
+              this.updateSynthParams(updated, 'synth');
+            } else if (mapping.targetKey === 'attack') {
+              const atk = 0.001 + normalized * 1.999;
+              const updated = { ...s.synthParams, attack: Number(atk.toFixed(3)) };
+              s.setSynthParams(updated);
+              this.updateSynthParams(updated, 'synth');
+            } else if (mapping.targetKey === 'release') {
+              const rel = 0.01 + normalized * 4.99;
+              const updated = { ...s.synthParams, release: Number(rel.toFixed(3)) };
+              s.setSynthParams(updated);
+              this.updateSynthParams(updated, 'synth');
+            } else if (mapping.targetKey === 'oscType') {
+              const types = ['sine', 'triangle', 'sawtooth', 'square'] as const;
+              const idx = Math.min(types.length - 1, Math.floor(normalized * types.length));
+              const updated = { ...s.synthParams, oscType: types[idx] };
+              s.setSynthParams(updated);
+              this.updateSynthParams(updated, 'synth');
+            }
+          }
+        }
+      };
+
+      const setupInputs = (acc: MIDIAccess) => {
+        for (const input of acc.inputs.values()) {
+          input.onmidimessage = handleMessage;
+        }
+      };
+
+      setupInputs(access);
+      access.onstatechange = () => {
+        setupInputs(access);
+      };
+    } catch (err) {
+      console.warn('[AudioEngine] MIDI access not available:', err);
+    }
   }
 
   /**
@@ -390,12 +499,12 @@ class AudioEngine {
     this.dryGain = this.ctx.createGain();
     this.dryGain.gain.value = 1.0;
 
-    // Drum bus filter — open by default (12 kHz reads as bypass for drum content)
+    // Drum bus filter — routed through the sequencer source bus for volume and mute control
     this.drumBusFilter = this.ctx.createBiquadFilter();
     this.drumBusFilter.type = this.drumFilterType;
     this.drumBusFilter.frequency.value = this.drumFilterCutoff;
     this.drumBusFilter.Q.value = this.drumFilterResonance;
-    this.drumBusFilter.connect(this.dryGain);
+    this.drumBusFilter.connect(this.getSourceBus('sequencer'));
 
     // Same settings, wired to the reverb send only.
     this.drumSendFilter = this.ctx.createBiquadFilter();

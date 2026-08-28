@@ -111,6 +111,8 @@ export function partializeAppState(state: AppStore): PersistedState {
     chordSynthParams: state.chordSynthParams,
     bassSynthParams: state.bassSynthParams,
     controlTarget: state.controlTarget,
+    synthVolume: state.synthVolume,
+    synthMuted: state.synthMuted,
     chords: state.chords,
     chordRhythmId: state.chordRhythmId,
     chordFeel: state.chordFeel,
@@ -125,6 +127,7 @@ export function partializeAppState(state: AppStore): PersistedState {
     sequencerTracks: state.sequencerTracks,
     soundKit: state.soundKit,
     masterSequencerVolume: state.masterSequencerVolume,
+    drumMuted: state.drumMuted,
     drumFilterCutoff: state.drumFilterCutoff,
     drumFilterResonance: state.drumFilterResonance,
     drumFilterType: state.drumFilterType,
@@ -195,8 +198,9 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
 
   sanitized.bpm = clampFinite(sanitized.bpm, 20, 300, 120);
   sanitized.masterVolume = clampFinite(sanitized.masterVolume, 0, 1, 0.85);
-  sanitized.chordVolume = clampFinite(sanitized.chordVolume, 0, 1, 1.0);
-  sanitized.bassVolume = clampFinite(sanitized.bassVolume, 0, 1, 1.0);
+  sanitized.synthVolume = clampFinite(sanitized.synthVolume, 0, 1.5, 1.0);
+  sanitized.chordVolume = clampFinite(sanitized.chordVolume, 0, 1.5, 1.0);
+  sanitized.bassVolume = clampFinite(sanitized.bassVolume, 0, 1.5, 1.0);
   sanitized.masterSequencerVolume = clampFinite(sanitized.masterSequencerVolume, 0, 1, 0.8);
   sanitized.drumFilterCutoff = clampFinite(sanitized.drumFilterCutoff, 50, 12000, 12000);
   sanitized.drumFilterResonance = clampFinite(sanitized.drumFilterResonance, 0.1, 20, 0.7);
@@ -207,8 +211,10 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
       ? sanitized.drumFilterType
       : 'lowpass';
   sanitized.metronomeActive = asBoolean(sanitized.metronomeActive);
+  sanitized.synthMuted = asBoolean(sanitized.synthMuted);
   sanitized.chordMuted = asBoolean(sanitized.chordMuted);
   sanitized.bassMuted = asBoolean(sanitized.bassMuted);
+  sanitized.drumMuted = asBoolean(sanitized.drumMuted);
   sanitized.soundKit = asString(sanitized.soundKit) ?? 'Retro Drive';
   // Plain-object check only: a partial effects object with valid fields is
   // preserved as-is; anything else falls back to the factory defaults.

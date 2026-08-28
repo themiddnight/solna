@@ -15,6 +15,7 @@ export function createSequencerSlice(set: Set): SequencerSlice {
     sequencerTracks: INITIAL_SEQUENCER_TRACKS,
     soundKit: 'Retro Drive',
     masterSequencerVolume: 0.8,
+    drumMuted: false,
     // Drum bus filter defaults: fully open so it reads as bypass until touched.
     drumFilterCutoff: 12000,
     drumFilterResonance: 0.7,
@@ -44,6 +45,7 @@ export function createSequencerSlice(set: Set): SequencerSlice {
     setSequencerTracks: (sequencerTracks) => set({ sequencerTracks }),
     setSoundKit: (soundKit) => set({ soundKit }),
     setMasterSequencerVolume: (masterSequencerVolume) => set({ masterSequencerVolume }),
+    toggleDrumMuted: () => set((state) => ({ drumMuted: !state.drumMuted })),
     setDrumFilterCutoff: (drumFilterCutoff) => set({ drumFilterCutoff }),
     setDrumFilterResonance: (drumFilterResonance) => set({ drumFilterResonance }),
     setDrumFilterType: (drumFilterType) => set({ drumFilterType }),

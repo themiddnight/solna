@@ -7,6 +7,7 @@ import { SequencerView } from './components/SequencerView';
 import { ChordView } from './components/ChordView';
 import { EffectsRackView } from './components/EffectsRackView';
 import { TransportBar } from './components/TransportBar';
+import { MidiSettingsModal } from './components/ui/MidiSettingsModal';
 import { audioEngine } from './audio/engine';
 import { useAppStore } from './store/store';
 import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
@@ -107,6 +108,9 @@ export function App() {
 
       {/* Persistent Transport Bar at bottom */}
       <TransportBar />
+
+      {/* MIDI Settings Modal */}
+      <MidiSettingsModal />
     </div>
   );
 }
