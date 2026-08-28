@@ -5,6 +5,19 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      output: {
+        // Split the three biggest third-party trees out of the app chunk so
+        // an app-code edit stops invalidating them in the browser cache.
+        manualChunks: {
+          tonal: ['tonal'],
+          dndkit: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+          icons: ['lucide-react'],
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

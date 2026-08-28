@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Music, Play, Sparkles, Trash2, Upload } from 'lucide-react';
 import type { ChordItem, SynthParams, CustomChordProgressionItem } from '../types';
 import { useAppStore } from '../store/store';
@@ -12,9 +12,10 @@ import {
   generateBlockChordNotes,
   snapProgressionToScale,
   formatChordLabel,
-  SCALES,
 } from '../utils/musicTheory';
+import { isProgressionAvailable } from './chord/progressionAvailability';
 
+export { isProgressionAvailable };
 export type { CustomChordProgressionItem };
 
 // Wrapper entries: factory templates and custom progressions both render through
@@ -51,17 +52,6 @@ const BASE_CHORD_CATEGORIES: PresetCategory[] = [
   { id: 'Classical & Baroque', label: 'Classical & Baroque', badgeClass: 'badge badge-primary', description: '' },
   { id: 'Ambient & Zen', label: 'Ambient & Zen', badgeClass: 'badge badge-primary', description: '' },
 ];
-
-/**
- * A progression is only offered in a scale that has at least as many degrees as
- * it was authored against. Entries that fail are hidden rather than resolved
- * with wrapped degrees, which would silently produce a different progression.
- * An unknown scaleType is treated as seven degrees, matching SCALES' own
- * `|| SCALES['Major']` fallback.
- */
-export function isProgressionAvailable(p: ChordProgression, scaleType: string): boolean {
-  return (SCALES[scaleType]?.intervals.length ?? 7) >= p.minScaleLength;
-}
 
 export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   currentChords,
@@ -122,7 +112,9 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   // PORT of the original filteredTemplates + filteredCustom predicates: the
   // 'User' chip shows every custom progression regardless of its saved category
   // and hides factory templates; search covers name, roman, and description.
-  const filterEntries = (e: ChordLibraryEntry, query: string, categoryId: string) => {
+  // Stable identity — see the note in SynthPresetLibrary. The body reads
+  // only its own arguments, so [] is complete.
+  const filterEntries = useCallback((e: ChordLibraryEntry, query: string, categoryId: string) => {
     const matchesCategory =
       categoryId === 'All'
         ? true
@@ -137,7 +129,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
       e.description.toLowerCase().includes(query.toLowerCase());
 
     return matchesCategory && matchesSearch;
-  };
+  }, []);
 
   // Degree form has no other resolution: the result is in the active key and
   // scale by construction, so this is NOT gated on autoReharmonize any more

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   Download,
@@ -114,7 +114,10 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   // PORT of the original filteredPresets predicate: the 'User' chip matches
   // every custom entry regardless of its saved category (plus any factory entry
   // stored under 'User'); search covers name + description.
-  const filterEntries = (e: SynthLibraryEntry, query: string, categoryId: string) => {
+  // Stable identity: this is in the dep array of the `filtered` useMemo
+  // inside ui/PresetLibrary, so a fresh function every render defeated it.
+  // The body reads only its own arguments, so [] is complete.
+  const filterEntries = useCallback((e: SynthLibraryEntry, query: string, categoryId: string) => {
     const matchesCategory =
       categoryId === 'All'
         ? true
@@ -128,7 +131,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
       (e.description && e.description.toLowerCase().includes(query.toLowerCase()));
 
     return matchesCategory && matchesSearch;
-  };
+  }, []);
 
   // PORT of the original save handler: save the current params (the store
   // action strips the `preset` label and trims name/description internally),

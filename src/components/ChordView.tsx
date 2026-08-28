@@ -4,6 +4,7 @@ import React, {
   useRef,
   useMemo,
   useCallback,
+  Suspense,
 } from "react";
 import {
   Music,
@@ -68,7 +69,13 @@ import {
   getBorrowedChords,
   formatChordLabel,
 } from "../utils/musicTheory";
-import { ChordPresetLibrary, isProgressionAvailable } from "./ChordPresetLibrary";
+import { isProgressionAvailable } from "./chord/progressionAvailability";
+
+// The drawer is never needed on first paint — PresetLibrary early-returns
+// null when closed — so it is code-split out of the main chunk.
+const ChordPresetLibrary = React.lazy(() =>
+  import("./ChordPresetLibrary").then((m) => ({ default: m.ChordPresetLibrary })),
+);
 import { ChannelStrip } from "./ui/ChannelStrip";
 import { COUNT_BADGE, FIELD_LABEL, FIELD_SELECT, HEADER_BADGE, SECTION_HEADER } from './ui/fieldClasses';
 import { PowerToggle } from "./ui/PowerToggle";
@@ -1198,16 +1205,26 @@ export const ChordView: React.FC = React.memo(() => {
       </div>
 
       {/* Full Chord Preset Library Sidebar Drawer */}
-      <ChordPresetLibrary
-        isOpen={isLibraryOpen}
-        onClose={() => setIsLibraryOpen(false)}
-        currentChords={chords}
-        scaleRoot={scaleRoot}
-        scaleType={scaleType}
-        autoReharmonize={autoReharmonize}
-        synthParams={synthParams}
-        onApplyChords={handleApplyLibraryChords}
-      />
+      <Suspense
+        fallback={
+          isLibraryOpen ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-base-300/60">
+              <span className="loading loading-spinner loading-lg text-primary" />
+            </div>
+          ) : null
+        }
+      >
+        <ChordPresetLibrary
+          isOpen={isLibraryOpen}
+          onClose={() => setIsLibraryOpen(false)}
+          currentChords={chords}
+          scaleRoot={scaleRoot}
+          scaleType={scaleType}
+          autoReharmonize={autoReharmonize}
+          synthParams={synthParams}
+          onApplyChords={handleApplyLibraryChords}
+        />
+      </Suspense>
     </div>
   );
 });

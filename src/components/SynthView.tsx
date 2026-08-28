@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useMemo,
   useRef,
+  Suspense,
 } from "react";
 import {
   Sliders,
@@ -38,7 +39,11 @@ import {
   getPresetsGroupedByCategory,
   getCategoryMeta,
 } from "../audio/synthPresets";
-import { SynthPresetLibrary } from "./SynthPresetLibrary";
+// The drawer is never needed on first paint — PresetLibrary early-returns
+// null when closed — so it is code-split out of the main chunk.
+const SynthPresetLibrary = React.lazy(() =>
+  import("./SynthPresetLibrary").then((m) => ({ default: m.SynthPresetLibrary })),
+);
 import { AudioVisualizer } from "./AudioVisualizer";
 import { SimpleSynthPanel } from "./SimpleSynthPanel";
 import { Knob } from "./ui/Knob";
@@ -1497,17 +1502,27 @@ export const SynthView = () => {
       </div>
 
       {/* Preset Library Sidebar Drawer / Modal */}
-      <SynthPresetLibrary
-        isOpen={isLibraryOpen}
-        onClose={() => setIsLibraryOpen(false)}
-        currentParams={params}
-        target={controlTarget}
-        showSoundBadges={synthViewMode === "pro"}
-        onSelectPreset={(preset) => {
-          handleSelectPreset(preset);
-          setIsLibraryOpen(false);
-        }}
-      />
+      <Suspense
+        fallback={
+          isLibraryOpen ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-base-300/60">
+              <span className="loading loading-spinner loading-lg text-primary" />
+            </div>
+          ) : null
+        }
+      >
+        <SynthPresetLibrary
+          isOpen={isLibraryOpen}
+          onClose={() => setIsLibraryOpen(false)}
+          currentParams={params}
+          target={controlTarget}
+          showSoundBadges={synthViewMode === "pro"}
+          onSelectPreset={(preset) => {
+            handleSelectPreset(preset);
+            setIsLibraryOpen(false);
+          }}
+        />
+      </Suspense>
     </div>
   );
 };
