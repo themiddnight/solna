@@ -44,7 +44,6 @@ export default tseslint.config(
     // Layering rule 3: components are dumb views — no direct audio/engine.
     // Exceptions: the read-only analyser consumers (AudioVisualizer, the
     // transport VU meter in ui/VuMeter, AmbientBackdrop) and test files.
-    // TransportBar stays listed while it still holds analyser-adjacent code.
     // Routing their per-frame reads through the store would mean a store
     // write every animation frame and a re-render of every subscriber.
     files: ['src/components/**/*.{ts,tsx}'],
@@ -62,7 +61,6 @@ export default tseslint.config(
   {
     files: [
       'src/components/AudioVisualizer.tsx',
-      'src/components/TransportBar.tsx',
       'src/components/ui/AmbientBackdrop.tsx',
       'src/components/ui/VuMeter.tsx',
       '**/*.test.ts',

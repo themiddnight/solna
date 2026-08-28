@@ -264,9 +264,9 @@ export const SynthView = () => {
       // to capture — but the callback identity no longer changes on every
       // knob move, which used to tear down and re-register the window
       // keydown/keyup listeners ~60 times a second during a drag.
-      const params = arpStateRef.current.params;
+      const liveParams = arpStateRef.current.params;
       initSynthPlayback();
-      if (!params.arpActive) {
+      if (!liveParams.arpActive) {
         // Equal-power polyphony: a new note lowers every held voice so the
         // total level stays flat as keys are added. The ref mirrors
         // activeNotes synchronously so rapid presses see each other.
@@ -279,7 +279,7 @@ export const SynthView = () => {
         }
         synthPlaybackNoteOn(
           note,
-          params,
+          liveParams,
           1.0,
           undefined,
           KEYBOARD_AUDITION_TARGET,
@@ -294,15 +294,15 @@ export const SynthView = () => {
   const handleNoteOff = useCallback(
     (note: string) => {
       // Same ref read as handleNoteOn — see the note there.
-      const params = arpStateRef.current.params;
+      const liveParams = arpStateRef.current.params;
       const held = arpStateRef.current.activeNotes;
       const wasHeld = held.delete(note);
-      if (wasHeld && !params.arpActive) {
+      if (wasHeld && !liveParams.arpActive) {
         // Release first (marks the voice so re-scaling skips it), then let
         // the remaining held voices rise back toward full level.
         synthPlaybackNoteOff(
           note,
-          params.release,
+          liveParams.release,
           undefined,
           KEYBOARD_AUDITION_TARGET,
         );

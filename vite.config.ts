@@ -8,7 +8,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // Split the three biggest third-party trees out of the app chunk so
+        // Split the four biggest third-party trees out of the app chunk so
         // an app-code edit stops invalidating them in the browser cache.
         // Function form, not object form: react and react-dom are CJS, so
         // vite's commonjs plugin rewrites their module ids to `?commonjs-*`

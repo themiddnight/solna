@@ -253,10 +253,10 @@ export const ChordView: React.FC = React.memo(() => {
   // as of the first render and silently corrupt every later edit. The
   // chords slice exposes a plain-value setter, not an updater.
   const handleMoveChord = useCallback((index: number, direction: -1 | 1) => {
-    const { chords, setChords } = useAppStore.getState();
+    const { chords: liveChords, setChords } = useAppStore.getState();
     const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= chords.length) return;
-    const updated = [...chords];
+    if (newIndex < 0 || newIndex >= liveChords.length) return;
+    const updated = [...liveChords];
     const [removed] = updated.splice(index, 1);
     updated.splice(newIndex, 0, removed);
     setChords(updated);
@@ -546,16 +546,16 @@ export const ChordView: React.FC = React.memo(() => {
   };
 
   const removeChord = useCallback((id: string) => {
-    const { chords, setChords } = useAppStore.getState();
-    setChords(chords.filter((c) => c.id !== id));
+    const { chords: liveChords, setChords } = useAppStore.getState();
+    setChords(liveChords.filter((c) => c.id !== id));
   }, []);
 
   const updateChord = useCallback((id: string, updates: Partial<ChordItem>) => {
-    const { chords, chordOctave, setChords } = useAppStore.getState();
+    const { chords: liveChords, chordOctave: liveChordOctave, setChords } = useAppStore.getState();
     setChords(
-      chords.map((c) => {
+      liveChords.map((c) => {
         if (c.id !== id) return c;
-        return deriveChordNotes({ ...c, ...updates }, chordOctave);
+        return deriveChordNotes({ ...c, ...updates }, liveChordOctave);
       }),
     );
   }, []);
