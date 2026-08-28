@@ -259,6 +259,62 @@ describe('bass retrigger', () => {
     expect(oldVoiceGain.cancels).toContain(t0 + 0.5);
     expect(oldVoiceGain.cancels).not.toContain(t0);
   });
+
+  // peakGain is velocity * 0.4 * scaleFactor; sustainLevel is that times the
+  // patch's Sustain. Written out rather than imported because the point of
+  // these two tests is that the gain must never be RE-ANCHORED at this value.
+  const PEAK_GAIN = 0.8 * 0.4;
+  const SUSTAIN_LEVEL = PEAK_GAIN * SYNTH.sustain;
+
+  test('a second release on an already-fading voice never lifts its gain back to sustain', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    // attack 0.02 + decay 0.4, so the amp envelope is past sustain by t0 + 0.42
+    // and every release below takes releaseVoice's "past the envelope" branch.
+    engine.triggerSynthNoteOn('C2', SYNTH, 0.8, t0, 'bass');
+    const gain = ctx._gains[0].gain;
+
+    engine.triggerSynthNoteOff('C2', 0.05, t0 + 1, 'bass');
+    expect(gain.valueAt(t0 + 1.05)).toBeLessThan(1e-4);
+
+    // The voice stays tracked until its teardown timer fires, so a later kill
+    // still finds it — by then it has faded to SILENCE. Anchoring it at
+    // sustainLevel there jumps the gain from silence to full in ONE sample:
+    // a click on every note, loudest with Sustain at max. The in-flight (here,
+    // finished) release ramp is what the second release must hold instead.
+    engine.triggerSynthNoteOff('C2', 0.05, t0 + 2, 'bass');
+    expect(gain.valueAt(t0 + 2)).toBeLessThan(1e-4);
+    for (const e of gain.events.filter((ev) => ev.t >= t0 + 2)) {
+      expect(e.v).toBeLessThan(SUSTAIN_LEVEL);
+    }
+  });
+
+  test('a new bass note re-kills only the bass voices that are not already fading', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    const bassVoices = () =>
+      Array.from((engine as any).sourceVoices.get('bass') as Set<any>);
+
+    // C2 is released and left to fade; E2 is held with its note-off still
+    // ahead on the clock.
+    engine.triggerSynthNoteOn('C2', SYNTH, 0.8, t0, 'bass');
+    engine.triggerSynthNoteOff('C2', 0.05, t0 + 0.5, 'bass');
+    engine.triggerSynthNoteOn('E2', SYNTH, 0.8, t0 + 1, 'bass');
+    engine.triggerSynthNoteOff('E2', SYNTH.release, t0 + 5, 'bass');
+
+    const c2 = bassVoices().find((v) => v.noteName === 'C2');
+    const e2 = bassVoices().find((v) => v.noteName === 'E2');
+
+    engine.triggerSynthNoteOn('G2', SYNTH, 0.8, t0 + 2, 'bass');
+
+    // C2's release has already STARTED: killing it again would only reset its
+    // teardown timer and re-run its ramps.
+    expect(c2.gains[0].gain.cancels).not.toContain(t0 + 2);
+    // E2's release is still AHEAD of the new note, so monophony needs it cut
+    // short there — otherwise a long scheduled note rings under the new one.
+    expect(e2.gains[0].gain.cancels).toContain(t0 + 2);
+  });
 });
 
 describe('source stop (preview release)', () => {
@@ -1730,5 +1786,44 @@ describe('master chain effect defaults', () => {
     for (const field of ['eqLowNode', 'eqMidNode', 'eqHighNode']) {
       expect((engine as any)[field].gain.value, field).toBe(0);
     }
+  });
+});
+
+describe('getSourceAnalyser', () => {
+  test('is null before init(), like every other engine accessor', () => {
+    const engine = makeEngine();
+    expect(engine.getSourceAnalyser('synth')).toBeNull();
+  });
+
+  test('each source gets its own analyser, and the same one every time', () => {
+    const { engine } = freshEngine();
+    const synth = engine.getSourceAnalyser('synth');
+    const chord = engine.getSourceAnalyser('chord');
+
+    expect(synth).not.toBeNull();
+    expect(engine.getSourceAnalyser('synth')).toBe(synth);
+    expect(chord).not.toBe(synth);
+  });
+
+  // The tap point is the source bus, which sits after the VCA and tremolo but
+  // before the parallel sends and the master chain. That is what makes the
+  // Synth view's scope show the layer being edited rather than the finished
+  // mix — a master-tapped scope cannot do that.
+  test('taps the source bus, not the master chain', () => {
+    const { engine } = freshEngine();
+    const analyser = engine.getSourceAnalyser('synth');
+    const bus = (engine as any).sourceBuses.get('synth');
+
+    expect(bus).toBeDefined();
+    expect(bus.connectedTo).toContain(analyser);
+  });
+
+  // Nodes belong to the context that made them, so a rebuilt master chain must
+  // drop them alongside sourceBuses or the next tap returns a dead node.
+  test('setupMasterChain clears the analysers with the buses', () => {
+    const { engine } = freshEngine();
+    const before = engine.getSourceAnalyser('synth');
+    (engine as any).sourceAnalysers.clear();
+    expect(engine.getSourceAnalyser('synth')).not.toBe(before);
   });
 });

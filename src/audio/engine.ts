@@ -50,6 +50,12 @@ type SynthVoice = {
   noteName: string;
   startTime: number;
   releaseScheduledAt?: number;
+  // When an amp release ramp was last STARTED for this voice. Distinct from
+  // releaseScheduledAt, which triggerSynthNoteOff overwrites BEFORE calling
+  // releaseVoice: this one is the previous release as seen from inside
+  // releaseVoice, which is what tells a second release that the voice is
+  // already fading and must not be re-anchored to its sustain level.
+  ampReleaseAt?: number;
   // The release time this voice was ACTUALLY released with. A pending release
   // re-planned by updateSynthParams must reuse it, not the current patch's —
   // the bass mono-kill uses 0.05 s and the same-note dedup 0.3 s, and stretching
@@ -135,6 +141,10 @@ class AudioEngine {
   // Voice gains connect here instead of straight to dry/effects, so a whole layer
   // (e.g. bass) can be muted or leveled with one click-free ramp.
   private sourceBuses = new Map<string, GainNode>();
+  // One analyser per source bus, for per-layer scopes (the Synth view's
+  // oscilloscope follows its Target selector). Cleared with sourceBuses in
+  // setupMasterChain — an AnalyserNode belongs to the context that made it.
+  private sourceAnalysers = new Map<string, AnalyserNode>();
   private sourceMuted = new Map<string, boolean>();
   private sourceGains = new Map<string, number>();
 
@@ -321,6 +331,7 @@ class AudioEngine {
     // per-source buses from the previous context are wired into dead nodes, so
     // drop them — they are lazily recreated against the new context on demand.
     this.sourceBuses.clear();
+    this.sourceAnalysers.clear();
 
     // An AudioBuffer belongs to the context that created it, so impulses built
     // against the previous context must not survive into the new graph.
@@ -570,8 +581,16 @@ class AudioEngine {
     // new note starts (not immediately); the release timeout already accounts for
     // the future `time` in its delay math.
     if (source === 'bass') {
-      for (const key of Array.from(this.activeVoices.keys())) {
-        if (key.startsWith('bass:')) this.triggerSynthNoteOff(key.slice(5), 0.05, time, 'bass', true);
+      const killAt = time ?? this.ctx.currentTime;
+      for (const [key, tracked] of Array.from(this.activeVoices.entries())) {
+        if (!key.startsWith('bass:')) continue;
+        // A voice whose release has already STARTED is on its way out; killing
+        // it again only resets its teardown timer and re-runs the ramps. A
+        // release still ahead on the clock is a different case and must be cut
+        // short here, or a long scheduled note would ring through the new one
+        // and break monophony.
+        if (tracked.releaseScheduledAt !== undefined && tracked.releaseScheduledAt <= killAt) continue;
+        this.triggerSynthNoteOff(key.slice(5), 0.05, time, 'bass', true);
       }
     }
 
@@ -762,6 +781,15 @@ class AudioEngine {
   private releaseVoice(voice: SynthVoice, releaseTime: number, now: number): void {
     if (!this.ctx) return;
     const mainGain = voice.gains[0];
+    // A voice can be released twice: the bass mono-kill runs over every tracked
+    // bass voice on every note-on, and updateSynthParams re-plans a pending
+    // release. The second release must hold whatever the FIRST release ramp
+    // left behind — never the sustain level. Anchoring a voice that has already
+    // faded lifts its gain from SILENCE back to sustain in a single sample,
+    // which is an audible click on every note, and one that scales with the
+    // Sustain knob. `<` not `<=`: updateSynthParams re-plans a release AT its
+    // own scheduled time, and that re-plan does still need the anchor.
+    const alreadyFading = voice.ampReleaseAt !== undefined && voice.ampReleaseAt < now;
     // Computed up front (outside the try below) because a throw partway
     // through AudioParam scheduling must never leave the voice without a
     // teardown timer — these values are pure arithmetic and cannot throw,
@@ -785,9 +813,9 @@ class AudioEngine {
       // release scheduled ahead can't read `.value` (it reports the value at
       // currentTime, still the envelope floor), so it estimates the sustain
       // level; an immediate release reads the live value.
-      const ampFallback = now > this.ctx.currentTime + 0.01
-        ? Math.max(ENV_FLOOR, voice.sustainLevel)
-        : Math.max(ENV_FLOOR, mainGain.gain.value);
+      const ampFallback = alreadyFading || now <= this.ctx.currentTime + 0.01
+        ? Math.max(ENV_FLOOR, mainGain.gain.value)
+        : Math.max(ENV_FLOOR, voice.sustainLevel);
       this.cancelAndHold(mainGain.gain, now, ampFallback);
       // cancelAndHoldAtTime inserts NO hold point when nothing is scheduled at
       // or after `now` — verified against an OfflineAudioContext render. The
@@ -795,14 +823,14 @@ class AudioEngine {
       // `now`, fading a held chord out across its whole length. Past the decay
       // the value is exactly the sustain level, so anchor it there; inside the
       // envelope cancelAndHold already left an exact hold point.
-      if (now >= voice.ampEnvEndsAt) {
+      if (!alreadyFading && now >= voice.ampEnvEndsAt) {
         mainGain.gain.setValueAtTime(Math.max(ENV_FLOOR, voice.sustainLevel), now);
       }
       mainGain.gain.exponentialRampToValueAtTime(SILENCE, now + Math.max(0.01, releaseTime));
 
       // VCF envelope release: ramp filter back to base cutoff
       this.cancelAndHold(voice.filter.frequency, now, clampCutoff(voice.filter.frequency.value));
-      if (now >= voice.filterEnvEndsAt) {
+      if (!alreadyFading && now >= voice.filterEnvEndsAt) {
         voice.filter.frequency.setValueAtTime(clampCutoff(voice.filterSustainCutoff), now);
       }
       voice.filter.frequency.exponentialRampToValueAtTime(clampCutoff(voice.filterCutoff), now + filterRelease);
@@ -815,6 +843,7 @@ class AudioEngine {
       // teardown timer at all (it would otherwise stay in `activeVoices`/
       // `sourceVoices` forever and the same-note dedup at the top of
       // `triggerSynthNoteOn` would refuse to release it again).
+      voice.ampReleaseAt = now;
       if (voice.teardownTimer !== undefined) clearTimeout(voice.teardownTimer);
       voice.teardownTimer = setTimeout(() => {
         // Only delete the map entry if this voice is still the current one —
@@ -1496,6 +1525,32 @@ class AudioEngine {
 
   getAnalyser(): AnalyserNode | null {
     return this.analyser;
+  }
+
+  /**
+   * Analyser tapping one source layer's bus — after the VCA and tremolo,
+   * before the parallel sends and the master chain. That is deliberately a
+   * different picture from `getAnalyser()`, which sits post-limiter and so
+   * shows the finished mix: a per-layer scope is what lets the Synth view
+   * show the patch being edited rather than everything at once.
+   *
+   * Created on demand and kept, so repeated calls hand back the same node.
+   * A larger fftSize than the master analyser's 256 buys a smoother trace,
+   * which matters on a scope only a few dozen pixels tall.
+   */
+  getSourceAnalyser(source: string): AnalyserNode | null {
+    if (!this.ctx) return null;
+    let analyser = this.sourceAnalysers.get(source);
+    if (!analyser) {
+      analyser = this.ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.4;
+      // Observe-only: the bus keeps its own path to the sends and the dry
+      // gain, so the analyser needs no output of its own.
+      this.getSourceBus(source).connect(analyser);
+      this.sourceAnalysers.set(source, analyser);
+    }
+    return analyser;
   }
 
   getByteFrequencyData(array: Uint8Array<ArrayBuffer>): void {

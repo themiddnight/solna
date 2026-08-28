@@ -156,6 +156,7 @@ export function fakeCtx(opts: FakeOpts = {}) {
       return g;
     },
     createBiquadFilter: () => fakeNode(opts),
+    createAnalyser: () => ({ ...fakeNode(opts), fftSize: 2048, smoothingTimeConstant: 0.8 }),
     createBuffer: (_channels: number, length: number, sampleRate: number) => ({
       sampleRate,
       // Real AudioBuffers expose duration; noiseStartOffset reads it to pick a
