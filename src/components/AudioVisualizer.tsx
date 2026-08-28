@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { audioEngine } from '../audio/engine';
-import { Activity, BarChart2, Waves } from 'lucide-react';
 import {
   createThemePalette,
   rgbToCss,
@@ -11,29 +10,103 @@ import {
 
 export type VisualizerMode = 'wave' | 'bars' | 'oscilloscope';
 
+/**
+ * Single source of truth for the mode names shown in this component's own
+ * legend/controls AND in any caller-rendered switcher (e.g.
+ * `EffectsRackView`'s Spectrum/Bars/Waveform buttons). Both used to spell
+ * these out separately and drifted ("Spectrum Wave" vs "Spectrum") — read
+ * from here instead of re-typing the strings.
+ */
+export const VISUALIZER_MODE_LABEL: Record<VisualizerMode, string> = {
+  wave: 'Spectrum',
+  bars: 'Bars',
+  oscilloscope: 'Waveform',
+};
+
+/**
+ * The mode order, shared by the canvas click-to-cycle gesture and any
+ * caller-rendered switcher. The set and its order used to be spelled out
+ * separately in both places, so a fourth mode would have had to be added
+ * twice — exactly the split `VISUALIZER_MODE_LABEL` closed for the names.
+ */
+export const VISUALIZER_MODES = Object.keys(VISUALIZER_MODE_LABEL) as VisualizerMode[];
+
 interface AudioVisualizerProps {
   mode?: VisualizerMode;
   className?: string;
   height?: number | string;
-  showControls?: boolean;
   /** Semantic role the visualizer paints in. Resolved at runtime from the
    *  active daisyUI theme by src/utils/themeColor.ts. */
   colorTheme?: 'primary' | 'secondary' | 'accent';
+  /**
+   * Freeze the render loop. `App.tsx` keeps all four views mounted (toggling
+   * `block`/`hidden`) so audio never stops on a tab switch, which means a
+   * visualizer inside a view would otherwise keep an rAF loop alive on every
+   * hidden tab. Callers inside a view MUST bind this to their tab's activity.
+   */
+  paused?: boolean;
+  /**
+   * Makes `mode` controlled: when provided, the canvas quick-toggle click
+   * calls this instead of writing
+   * to internal state, and the component renders strictly from the `mode`
+   * prop. Required whenever a caller renders its own mode switcher alongside
+   * this component (e.g. `EffectsRackView`) — otherwise the canvas click and
+   * the caller's switcher fight over two separate sources of truth. Omit it
+   * for a simple, self-contained visualizer with no external switcher.
+   */
+  onModeChange?: (mode: VisualizerMode) => void;
+  /**
+   * Tap one source layer's bus (`'synth' | 'chord' | 'bass'`) instead of the
+   * master output. The layer bus sits after the VCA but before the parallel
+   * sends, so the trace is that patch alone rather than the finished mix —
+   * which is what makes the Synth view's scope follow its Target selector.
+   * Omit for the master analyser.
+   */
+  source?: string;
+  /**
+   * 'panel' is the full widget: click-to-cycle, the live-signal legend, and
+   * the optional mode buttons. 'inline' is a fixed read-only trace for a
+   * control row — no legend, and no click handler, so a stray click cannot
+   * cycle a dedicated oscilloscope away from the mode its caller chose.
+   */
+  variant?: 'panel' | 'inline';
 }
 
 export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
   mode: initialMode = 'wave',
   className = '',
   height = 40,
-  showControls = false,
   colorTheme = 'primary',
+  paused = false,
+  onModeChange,
+  source,
+  variant = 'panel',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [mode, setMode] = useState<VisualizerMode>(initialMode);
+  const [internalMode, setInternalMode] = useState<VisualizerMode>(initialMode);
+  // Controlled/uncontrolled split (same shape as a plain <input>): when the
+  // caller passes `onModeChange` it owns `mode` entirely and this component
+  // never keeps its own copy that could drift from the caller's switcher.
+  const isControlled = onModeChange !== undefined;
+  const mode = isControlled ? initialMode : internalMode;
+  const setMode = (next: VisualizerMode) => {
+    if (onModeChange) {
+      onModeChange(next);
+    } else {
+      setInternalMode(next);
+    }
+  };
   // Sounding indicator is updated imperatively from the rAF loop — a React
   // state update here would re-render the component every frame.
   const indicatorRef = useRef<HTMLSpanElement | null>(null);
+
+  // Analyser scratch buffers. The render loop runs 60x/sec, so allocating
+  // these per frame would hand the GC ~1.5KB every frame, per instance —
+  // they are reused and only reallocated when the analyser's size changes,
+  // the same guard `AudioEngine.getAudioLevel` uses for its own buffer.
+  const freqBufRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const timeBufRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
 
   // Peak hold data for spectrum bars
   const peaksRef = useRef<number[]>([]);
@@ -41,10 +114,11 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
 
   // Resolved theme colours, cached across frames. The rAF loop runs 60x/sec,
   // and getComputedStyle is a layout-flushing call, so it must never be in it.
+  // Built by the effect below, which runs before the first frame. A lazy
+  // init here as well would build the palette twice at mount — 12
+  // getComputedStyle reads and up to 12 probe elements — and throw the first
+  // one away unused.
   const paletteRef = useRef<Record<ThemeToken, Rgb> | null>(null);
-  if (paletteRef.current === null) {
-    paletteRef.current = createThemePalette();
-  }
 
   useEffect(() => {
     const refresh = () => {
@@ -55,8 +129,12 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
   }, []);
 
   useEffect(() => {
-    setMode(initialMode);
-  }, [initialMode]);
+    // Controlled mode renders straight from `initialMode` already (see
+    // `mode` above); re-deriving internal state here too would just be a
+    // second, redundant write.
+    if (isControlled) return;
+    setInternalMode(initialMode);
+  }, [initialMode, isControlled]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -86,9 +164,17 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
     };
 
     const render = () => {
-      const analyser = audioEngine.getAnalyser();
-      const width = canvas.width;
-      const height = canvas.height;
+      const analyser = source === undefined
+        ? audioEngine.getAnalyser()
+        : audioEngine.getSourceAnalyser(source);
+      // The backing store is sized in device pixels and the context is scaled
+      // by the same dpr, so the drawing math must be in CSS pixels or every
+      // shape comes out dpr-times too big and its bottom half falls off the
+      // canvas. That is what hid the oscilloscope's whole negative half: -1
+      // was being drawn a full canvas-height below the visible area.
+      const dpr = window.devicePixelRatio || 1;
+      const width = canvas.width / dpr;
+      const height = canvas.height / dpr;
 
       // Clear canvas
       ctx.clearRect(0, 0, width, height);
@@ -106,8 +192,17 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       }
 
       const bufferLength = analyser.frequencyBinCount;
-      const freqData = new Uint8Array(bufferLength);
-      const timeData = new Uint8Array(bufferLength);
+      if (freqBufRef.current?.length !== bufferLength) {
+        freqBufRef.current = new Uint8Array(bufferLength);
+      }
+      // Time-domain data is fftSize long, NOT frequencyBinCount (= fftSize/2).
+      // Sizing this buffer off frequencyBinCount handed the scope half a window
+      // and made its trigger search miss cycles it should have locked onto.
+      if (timeBufRef.current?.length !== analyser.fftSize) {
+        timeBufRef.current = new Uint8Array(analyser.fftSize);
+      }
+      const freqData = freqBufRef.current;
+      const timeData = timeBufRef.current;
 
       analyser.getByteFrequencyData(freqData);
       analyser.getByteTimeDomainData(timeData);
@@ -120,7 +215,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       const avgEnergy = energy / bufferLength;
 
       let maxDeviation = 0;
-      for (let i = 0; i < bufferLength; i++) {
+      for (let i = 0; i < timeData.length; i++) {
         const dev = Math.abs(timeData[i] - 128);
         if (dev > maxDeviation) maxDeviation = dev;
       }
@@ -138,7 +233,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       if (mode === 'bars') {
         renderBars(ctx, width, height, freqData, bufferLength, isSounding);
       } else if (mode === 'oscilloscope') {
-        renderOscilloscope(ctx, width, height, timeData, bufferLength, isSounding);
+        renderOscilloscope(ctx, width, height, timeData, timeData.length, isSounding);
       } else {
         // 'wave' spectrum wave
         renderSpectrumWave(ctx, width, height, freqData, bufferLength, isSounding);
@@ -204,14 +299,26 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       len: number,
       isSounding: boolean
     ) => {
-      const barCount = Math.min(36, Math.max(12, Math.floor(w / 5)));
-      const gap = 1.5;
-      const barWidth = Math.max(2, (w - (barCount - 1) * gap) / barCount);
+      // ~4x the old resolution. The cap is the analyser's own bin count — you
+      // cannot draw more bars than there are frequency bins to fill them, and
+      // asking getLogFrequencyData for more just duplicates neighbours.
+      const barCount = Math.min(100, len, Math.max(24, Math.floor(w / 3)));
+      const gap = barCount > 48 ? 0.5 : 1.5;
+      const barWidth = Math.max(1, (w - (barCount - 1) * gap) / barCount);
       const logData = isSounding ? getLogFrequencyData(data, barCount, len) : new Array(barCount).fill(0);
 
       if (peaksRef.current.length !== barCount) {
         peaksRef.current = new Array(barCount).fill(0);
       }
+
+      // Bar-independent, so they are built once per frame rather than once
+      // per bar: `barCount` reaches 100, and each rebuild cost a gradient
+      // plus three palette lookups and template-string builds.
+      const barGradient = c.createLinearGradient(0, h, 0, 0);
+      barGradient.addColorStop(0, roleColor(0.55));
+      barGradient.addColorStop(0.7, roleColor(0.9));
+      barGradient.addColorStop(1, roleColor(1));
+      const peakColor = tokenColor('--color-base-content', 0.85);
 
       for (let i = 0; i < barCount; i++) {
         const val = logData[i] || 0;
@@ -228,13 +335,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
         }
 
         if (barHeight > 0) {
-          // Gradient for bars
-          const grad = c.createLinearGradient(0, h, 0, 0);
-          grad.addColorStop(0, roleColor(0.55));
-          grad.addColorStop(0.7, roleColor(0.9));
-          grad.addColorStop(1, roleColor(1));
-
-          c.fillStyle = grad;
+          c.fillStyle = barGradient;
           c.beginPath();
           if (c.roundRect) {
             c.roundRect(x, y, barWidth, barHeight, [2, 2, 0, 0]);
@@ -247,7 +348,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
         // Peak line
         if (peaksRef.current[i] > 1) {
           const peakY = h - peaksRef.current[i] - 1;
-          c.fillStyle = tokenColor('--color-base-content', 0.85);
+          c.fillStyle = peakColor;
           c.fillRect(x, Math.max(0, peakY), barWidth, 1.5);
         }
       }
@@ -344,34 +445,40 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       isSounding: boolean
     ) => {
       const centerY = h / 2;
-      const amplitudeLimit = Math.max(4, (h / 2) - 4); // Max distance from center to top (+1) or bottom (-1)
+      // An inline scope is a couple of dozen CSS pixels tall, so the axis
+      // furniture below is dropped there and the trace gets the height back —
+      // labels and a dashed grid at that size crowd out the wave they annotate.
+      const showAxes = variant !== 'inline';
+      // Full half-height either way: +1 reaches the top edge and -1 the bottom,
+      // with 0 on centerY. Leaving 4px of slack made a small scope look like it
+      // only had a positive half.
+      const amplitudeLimit = Math.max(2, (h / 2) - (showAxes ? 3 : 1));
 
-      // 1. Draw Axis Reference Grid Lines (+1 Top, 0 Center, -1 Bottom)
-      c.beginPath();
-      c.strokeStyle = tokenColor('--color-base-content', 0.25);
-      c.lineWidth = 1;
-      c.setLineDash([3, 3]);
-      
-      // Top +1 boundary reference
-      c.moveTo(0, 3);
-      c.lineTo(w, 3);
+      if (showAxes) {
+        // 1. Axis reference grid: +1 top, 0 centre, -1 bottom.
+        c.beginPath();
+        c.strokeStyle = tokenColor('--color-base-content', 0.25);
+        c.lineWidth = 1;
+        c.setLineDash([3, 3]);
 
-      // Center 0V zero-crossing line
-      c.moveTo(0, centerY);
-      c.lineTo(w, centerY);
+        c.moveTo(0, 3);
+        c.lineTo(w, 3);
 
-      // Bottom -1 boundary reference
-      c.moveTo(0, h - 3);
-      c.lineTo(w, h - 3);
-      c.stroke();
-      c.setLineDash([]); // Reset dash
+        c.moveTo(0, centerY);
+        c.lineTo(w, centerY);
 
-      // 2. Axis Scale Labels (+1 at Top, 0 at Center, -1 at Bottom)
-      c.fillStyle = tokenColor('--color-base-content', 0.6);
-      c.font = "8px ui-monospace, SFMono-Regular, Menlo, monospace";
-      c.fillText('+1', 3, 9);
-      c.fillText(' 0', 3, centerY + 3);
-      c.fillText('-1', 3, h - 5);
+        c.moveTo(0, h - 3);
+        c.lineTo(w, h - 3);
+        c.stroke();
+        c.setLineDash([]);
+
+        // 2. Axis scale labels.
+        c.fillStyle = tokenColor('--color-base-content', 0.6);
+        c.font = "8px ui-monospace, SFMono-Regular, Menlo, monospace";
+        c.fillText('+1', 3, 9);
+        c.fillText(' 0', 3, centerY + 3);
+        c.fillText('-1', 3, h - 5);
+      }
 
       const points: { x: number; y: number }[] = [];
 
@@ -380,20 +487,33 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
         points.push({ x: 0, y: centerY });
         points.push({ x: w, y: centerY });
       } else {
-        // Trigger detection to stabilize waveform display
-        let triggerOffset = 0;
-        for (let i = 0; i < Math.min(len / 2, 256); i++) {
+        // Trigger detection, anchored at the CENTRE of the display the way a
+        // hardware scope does it: the rising zero-crossing is placed at w/2 and
+        // the samples before it fill the left half. Drawing from the trigger at
+        // x=0 (what this did before) throws away every pre-trigger sample and
+        // pins the waveform to the left edge.
+        const span = Math.min(len, 512);
+        const half = Math.floor(span / 2);
+
+        // Search forward from `half` so a trigger found still has `half`
+        // samples of history behind it to draw.
+        let triggerIndex = half;
+        for (let i = half; i < len - 1 && i < half + 256; i++) {
           if (data[i] < 128 && data[i + 1] >= 128) {
-            triggerOffset = i;
+            triggerIndex = i;
             break;
           }
         }
 
-        const activeSamples = Math.min(len - triggerOffset, 512);
+        const startIndex = triggerIndex - half;
+        const activeSamples = span;
         const sliceWidth = w / (activeSamples - 1);
 
         for (let i = 0; i < activeSamples; i++) {
-          const rawByte = data[triggerOffset + i] !== undefined ? data[triggerOffset + i] : 128;
+          const idx = startIndex + i;
+          // 128 is the byte value of silence, so out-of-range reads rest on the
+          // centre line rather than snapping the trace to a corner.
+          const rawByte = idx >= 0 && idx < len && data[idx] !== undefined ? data[idx] : 128;
           // Normalized from -1.0 (negative trough) to +1.0 (positive crest), centered at 0
           const normalized = (rawByte - 128) / 128.0;
           const x = i * sliceWidth;
@@ -454,7 +574,10 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       const dpr = window.devicePixelRatio || 1;
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
-      ctx.scale(dpr, dpr);
+      // setTransform, not scale: ResizeObserver fires this on every layout
+      // change and scale() multiplies onto whatever transform is already
+      // there, so repeated resizes compounded to dpr^n.
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
     handleResize();
@@ -463,13 +586,24 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       resizeObserver.observe(containerRef.current);
     }
 
+    // App.tsx keeps every tab's view mounted (block/hidden), so a hidden
+    // view's visualizer must never schedule a frame — skipping draw work
+    // inside a still-running loop would still burn rAF callbacks forever.
+    // Resize tracking stays live (cheap, and keeps the canvas correctly
+    // sized for when the tab reappears); only the render loop is gated.
+    if (paused) {
+      return () => {
+        resizeObserver.disconnect();
+      };
+    }
+
     animationId = requestAnimationFrame(render);
 
     return () => {
       cancelAnimationFrame(animationId);
       resizeObserver.disconnect();
     };
-  }, [mode, colorTheme]);
+  }, [mode, colorTheme, paused, source, variant]);
 
   return (
     <div
@@ -479,64 +613,35 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
     >
       <canvas
         ref={canvasRef}
-        className="w-full h-full block cursor-pointer transition-opacity"
-        title="Click to toggle visualizer mode"
-        onClick={() => {
-          if (showControls) return;
-          // Quick toggle through modes on canvas click
-          const modes: VisualizerMode[] = ['wave', 'bars', 'oscilloscope'];
-          const nextIndex = (modes.indexOf(mode) + 1) % modes.length;
-          setMode(modes[nextIndex]);
-        }}
+        className={`w-full h-full block transition-opacity ${
+          variant === 'inline' ? '' : 'cursor-pointer'
+        }`}
+        title={variant === 'inline' ? undefined : 'Click to toggle visualizer mode'}
+        onClick={
+          variant === 'inline'
+            ? undefined
+            : () => {
+                // Quick toggle through modes on canvas click
+                const nextIndex = (VISUALIZER_MODES.indexOf(mode) + 1) % VISUALIZER_MODES.length;
+                setMode(VISUALIZER_MODES[nextIndex]);
+              }
+        }
       />
 
-      {/* Optional Mode Switch Buttons */}
-      {showControls && (
-        <div className="join absolute top-1.5 right-1.5 flex items-center gap-1 bg-base-100/80 backdrop-blur-xs p-1 rounded-box border border-base-300 z-10">
-          <button
-            onClick={() => setMode('wave')}
-            className={`btn btn-xs join-item btn-square ${
-              mode === 'wave'
-                ? 'btn-active bg-accent text-accent-content'
-                : 'btn-ghost text-base-content/60'
-            }`}
-            title="Frequency Spectrum Wave"
-          >
-            <Waves className="w-3 h-3" />
-          </button>
-          <button
-            onClick={() => setMode('bars')}
-            className={`btn btn-xs join-item btn-square ${
-              mode === 'bars'
-                ? 'btn-active bg-accent text-accent-content'
-                : 'btn-ghost text-base-content/60'
-            }`}
-            title="Spectrum Bars"
-          >
-            <BarChart2 className="w-3 h-3" />
-          </button>
-          <button
-            onClick={() => setMode('oscilloscope')}
-            className={`btn btn-xs join-item btn-square ${
-              mode === 'oscilloscope'
-                ? 'btn-active bg-accent text-accent-content'
-                : 'btn-ghost text-base-content/60'
-            }`}
-            title="Oscilloscope Waveform"
-          >
-            <Activity className="w-3 h-3" />
-          </button>
-        </div>
-      )}
-
-      {/* Subtle Live Signal Indicator */}
-      <div className="absolute bottom-1 left-2 flex items-center gap-1 pointer-events-none opacity-60">
+      {/* Subtle Live Signal Indicator. An inline trace is only a few dozen
+          pixels tall and its caller already labels it, so the legend would sit
+          on top of the waveform saying nothing new. */}
+      <div
+        className={`absolute bottom-1 left-2 items-center gap-1 pointer-events-none opacity-60 ${
+          variant === 'inline' ? 'hidden' : 'flex'
+        }`}
+      >
         <span
           ref={indicatorRef}
           className="w-1.5 h-1.5 rounded-full bg-base-content/30"
         />
         <span className="text-[9px] text-base-content/60 uppercase tracking-wider">
-          {mode === 'wave' ? 'Spectrum Wave' : mode === 'bars' ? 'Spectrum Bars' : 'Waveform'}
+          {VISUALIZER_MODE_LABEL[mode]}
         </span>
       </div>
     </div>

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Volume2, Clock, Waves, Plus, Minus } from "lucide-react";
+import { Volume2, Clock, Plus, Minus } from "lucide-react";
 import { audioEngine } from "../audio/engine";
-import { AudioVisualizer, VisualizerMode } from "./AudioVisualizer";
 import { useAppStore } from "../store/store";
 import { Slider } from "./ui/Slider";
 import { PlayerTransport } from "./ui/PlayerTransport";
+import { PlayheadReadout } from "./PlayheadReadout";
 import { aggregatePlayerState, isHardStopEnabled } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 
@@ -24,9 +24,8 @@ export const TransportBar: React.FC = React.memo(() => {
   const metronomeActive = useAppStore((s) => s.metronomeActive);
   const toggleMetronome = useAppStore((s) => s.toggleMetronome);
 
-  // Local visualizer state
+  // Local VU meter state
   const [vuLevel, setVuLevel] = useState(0);
-  const [vizMode, setVizMode] = useState<VisualizerMode>("wave");
 
   const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer);
   const hardStopDisabled = !isHardStopEnabled(sequencerPlayer, chordsPlayer);
@@ -61,10 +60,10 @@ export const TransportBar: React.FC = React.memo(() => {
   };
 
   return (
-    // Side columns are `minmax(max-content, 1fr)`: equal (so the visualizer sits
-    // dead-centre in the viewport) whenever there is room, and floored at their
-    // own content width when there isn't — which degrades to an off-centre
-    // visualizer instead of side groups overlapping or overflowing the bar.
+    // Side columns are `minmax(max-content, 1fr)`: equal (so the playhead readout
+    // sits dead-centre in the viewport) whenever there is room, and floored at
+    // their own content width when there isn't — which degrades to an off-centre
+    // readout instead of side groups overlapping or overflowing the bar.
     <div className="bg-base-100 border-t border-base-300 px-3 py-2 flex md:grid md:grid-cols-[minmax(max-content,1fr)_minmax(0,20rem)_minmax(max-content,1fr)] items-center justify-between gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
       {/* Left Transport Actions: Play All + Tab Play + Tempo */}
       <div className="flex items-center gap-1.5 shrink-0">
@@ -143,28 +142,9 @@ export const TransportBar: React.FC = React.memo(() => {
         </button>
       </div>
 
-      {/* Middle Audio Spectrum Wave (Desktop & Tablet) */}
+      {/* Middle: playhead readout — now/next chord + beat dots, visible on every tab */}
       <div className="flex-1 max-w-xs hidden md:flex items-center gap-2">
-        <div className="flex-1 bg-base-200 border border-base-300 rounded-box p-1 flex items-center relative overflow-hidden shadow-inner group">
-          <AudioVisualizer
-            mode={vizMode}
-            height={24}
-            className="w-full rounded"
-            colorTheme="primary"
-            showControls={false}
-          />
-          <button
-            onClick={() => {
-              const modes: VisualizerMode[] = ["wave", "bars", "oscilloscope"];
-              const nextIndex = (modes.indexOf(vizMode) + 1) % modes.length;
-              setVizMode(modes[nextIndex]);
-            }}
-            className="btn btn-xs btn-square btn-ghost absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-            title="Switch Visualizer Mode"
-          >
-            <Waves className="w-2.5 h-2.5" />
-          </button>
-        </div>
+        <PlayheadReadout />
       </div>
 
       {/* Right Meter & Master Gain */}
