@@ -8,7 +8,7 @@ import { ViewMode } from "../types";
 import { ROOTS, SCALES } from "../utils/musicTheory";
 import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/storage";
 import { useAppStore } from "../store/store";
-import type { PlayerModule } from "../store/types";
+import type { PlayerModule, PlayerState } from "../store/types";
 import { PlayerTransport } from "./ui/PlayerTransport";
 import { Wordmark } from "./ui/Wordmark";
 import { VIEW_META } from "./viewMeta";
@@ -145,10 +145,21 @@ export const Header: React.FC = React.memo(() => {
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
   const chordsPlayer = useAppStore((s) => s.chordsPlayer);
+  const leadPlayer = useAppStore((s) => s.leadPlayer);
   const play = useAppStore((s) => s.play);
   const softStop = useAppStore((s) => s.softStop);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
+
+  // Module -> player state lookup, keyed on PlayerModule so it stays three-way
+  // when the lead tab (and its transport button) land in a later task. A
+  // two-player ternary here would silently map a future `lead` tab to the
+  // chords state.
+  const playerStateByModule: Record<PlayerModule, PlayerState> = {
+    sequencer: sequencerPlayer,
+    chords: chordsPlayer,
+    lead: leadPlayer,
+  };
 
   const [currentTheme, setCurrentTheme] = React.useState<SolnaTheme>(() =>
     resolveInitialTheme(
@@ -210,7 +221,7 @@ export const Header: React.FC = React.memo(() => {
             never nest inside another <button>. */}
         <div className="flex items-center gap-1.5 shrink-0">
           {AUTOMATION_TABS.map((tab) => {
-            const state = tab.module === 'sequencer' ? sequencerPlayer : chordsPlayer;
+            const state = playerStateByModule[tab.module];
             return (
               <div key={tab.view} className={NAV_GROUP_CLASS}>
                 <TabButton view={tab.view} activeTab={activeTab} onSelect={setActiveTab} />

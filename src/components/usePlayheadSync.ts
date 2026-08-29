@@ -1,6 +1,17 @@
 import { useEffect } from 'react';
 import { useAppStore } from '../store/store';
+import { aggregatePlayerState } from '../store/transportSlice';
+import type { PlayerState } from '../store/types';
 import { subscribePlaybackClock } from '../audio/playback/playbackEngine';
+
+/**
+ * Pure decision, exported so it is testable without a DOM: the playhead runs
+ * whenever ANY of the three transport players is active. A two-player
+ * derivation here would silently drop the lead player from the playhead.
+ */
+export function shouldRunPlayheadSync(...players: PlayerState[]): boolean {
+  return aggregatePlayerState(...players) !== 'stopped';
+}
 
 /**
  * Publishes the shared clock's beat position into the store so any view can
@@ -15,7 +26,8 @@ import { subscribePlaybackClock } from '../audio/playback/playbackEngine';
 export function usePlayheadSync(): void {
   const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
   const chordsPlayer = useAppStore((s) => s.chordsPlayer);
-  const isRunning = sequencerPlayer !== 'stopped' || chordsPlayer !== 'stopped';
+  const leadPlayer = useAppStore((s) => s.leadPlayer);
+  const isRunning = shouldRunPlayheadSync(sequencerPlayer, chordsPlayer, leadPlayer);
 
   useEffect(() => {
     const { setPlayheadBeat, setPlayheadChord } = useAppStore.getState();

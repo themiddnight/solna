@@ -50,6 +50,7 @@ export function applyInstantVibeToStore(vibe: InstantVibe) {
   const wasActive = {
     sequencer: store.sequencerPlayer !== 'stopped',
     chords: store.chordsPlayer !== 'stopped',
+    lead: store.leadPlayer !== 'stopped',
   };
   store.hardStopAll();
   // The transport transition alone does NOT silence anything: the whole swap
@@ -123,6 +124,7 @@ export function applyInstantVibeToStore(vibe: InstantVibe) {
   // needed here.
   if (wasActive.sequencer) store.play('sequencer');
   if (wasActive.chords) store.play('chords');
+  if (wasActive.lead) store.play('lead');
 }
 
 export const INSTANT_VIBES: InstantVibe[] = [
