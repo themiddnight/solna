@@ -9,9 +9,11 @@ import {
   adaptRhythmPattern,
   isFullHoldBass,
   isFullHoldRhythm,
+  resolvePlaybackBassPattern,
+  resolvePlaybackRhythmPattern,
 } from './useChordPlayback';
 import { RHYTHM_PATTERNS, type RhythmPattern } from '../../audio/rhythmPatterns';
-import { BASS_PATTERNS, type BassPattern } from '../../audio/bassPatterns';
+import { BASS_PATTERNS, type BassPattern, type BassStepChoice } from '../../audio/bassPatterns';
 import { useAppStore } from '../../store/store';
 
 const BAR = 16;
@@ -266,5 +268,58 @@ describe('isFullHoldRhythm / isFullHoldBass measure the hold against the ACTIVE 
       ],
     };
     expect(isFullHoldRhythm(twoHits, 16)).toBe(false);
+  });
+});
+
+describe('playback pattern resolution honours the mode', () => {
+  test('preset mode resolves the library pattern by id', () => {
+    const pattern = resolvePlaybackRhythmPattern('preset', 'offbeatStabs', [true], 16, '4/4');
+    expect(pattern.id).toBe('offbeatStabs');
+    const bass = resolvePlaybackBassPattern('preset', 'classic-walk', ['root'], 16, '4/4');
+    expect(bass.id).toBe('classic-walk');
+  });
+
+  test('custom mode synthesizes a grid into a custom pattern', () => {
+    const grid = [
+      true, false, false, false,
+      true, false, false, false,
+      true, false, false, false,
+      true, false, false, false,
+    ];
+    const pattern = resolvePlaybackRhythmPattern('custom', 'offbeatStabs', grid, 16, '4/4');
+    expect(pattern.id).toBe('custom');
+    expect(pattern.hits).toHaveLength(4);
+  });
+
+  test('bass custom mode maps choices to steps with no approach tokens', () => {
+    const choices: BassStepChoice[] = [
+      'root', 'rest', 'third', 'rest', 'fifth', 'rest', 'seventh', 'rest',
+      'octave', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest',
+    ];
+    const pattern = resolvePlaybackBassPattern('custom', 'classic-walk', choices, 16, '4/4');
+    expect(pattern.id).toBe('custom');
+    expect(pattern.steps.map((s) => s.note)).toEqual(['root', 'third', 'fifth', 'seventh', 'root']);
+  });
+});
+
+describe('custom patterns flow through the playback pipeline', () => {
+  test('a custom rhythm pattern is never a full-hold and adapts to other meters', () => {
+    const grid = [
+      true, false, false, false,
+      true, false, false, false,
+      true, false, false, false,
+      true, false, false, false,
+    ];
+    const custom = resolvePlaybackRhythmPattern('custom', 'sustained', grid, 16, '4/4');
+    expect(isFullHoldRhythm(custom, 16)).toBe(false);
+    const adapted = adaptRhythmPattern(custom, 24);
+    expect(adapted.hits.map((h) => h.step)).toEqual([0, 4, 8, 12, 16, 20]);
+  });
+
+  test('a custom bass pattern is never a full-hold and is returned unchanged in 4/4', () => {
+    const choices: BassStepChoice[] = ['root', ...new Array<BassStepChoice>(15).fill('rest')];
+    const custom = resolvePlaybackBassPattern('custom', 'whole-note-root', choices, 16, '4/4');
+    expect(isFullHoldBass(custom, 16)).toBe(false);
+    expect(adaptBassPattern(custom, 16)).toBe(custom);
   });
 });
