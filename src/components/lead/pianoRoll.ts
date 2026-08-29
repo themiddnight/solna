@@ -1,4 +1,4 @@
-import { getScaleNotes, isNoteInScale, ROOTS } from '../../utils/musicTheory';
+import { getScaleNotesInOctave, isNoteInScale, ROOTS } from '../../utils/musicTheory';
 import { MAX_STEPS_PER_BAR } from '../../utils/meter';
 import type { LeadMelodyView } from '../../store/types';
 
@@ -21,12 +21,14 @@ export function leadPitchRows(
   lowestOctave: number,
   octaveCount: number,
 ): string[] {
-  const pitchClasses =
-    view === 'chromatic' ? (ROOTS as readonly string[]) : getScaleNotes(root, scaleType);
   const rows: string[] = [];
   for (let oct = lowestOctave + octaveCount - 1; oct >= lowestOctave; oct--) {
-    for (let i = pitchClasses.length - 1; i >= 0; i--) {
-      rows.push(`${pitchClasses[i]}${oct}`);
+    const notes =
+      view === 'chromatic'
+        ? (ROOTS as readonly string[]).map((pc) => `${pc}${oct}`)
+        : getScaleNotesInOctave(root, scaleType, oct);
+    for (let i = notes.length - 1; i >= 0; i--) {
+      rows.push(notes[i]);
     }
   }
   return rows;
@@ -47,4 +49,19 @@ export function hasOutOfScaleNote(
  */
 export function leadStoredIndex(barIndex: number, stepInBar: number): number {
   return barIndex * MAX_STEPS_PER_BAR + stepInBar;
+}
+
+/**
+ * True when `note` is a "black key" pitch class (sharp/flat). Used to shade
+ * chromatic rows darker like a piano keyboard; applies to scale-locked rows
+ * too when a scale degree is itself a sharp/flat (e.g. F# in G major).
+ */
+export function isBlackKey(note: string): boolean {
+  const pitchClass = note.replace(/\d+$/, '');
+  return pitchClass.includes('#') || pitchClass.includes('b');
+}
+
+/** True when `note`'s pitch class is the active tonic (`scaleRoot`). */
+export function isRootNote(note: string, root: string): boolean {
+  return note.replace(/\d+$/, '') === root;
 }

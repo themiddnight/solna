@@ -104,12 +104,30 @@ export const SCALES: Record<string, ScaleDefinition> = {
 };
 
 /**
- * Returns all notes contained in the given scale for a root note (e.g. ['C', 'D', 'E', 'F', 'G', 'A', 'B'])
+ * Returns all notes contained in the given scale for a root note (e.g. ['C', 'D', 'E', 'F', 'G', 'A', 'B']).
+ * Spelling is sharp-only (the ROOTS convention): C# major's 7th is `C` (enharmonic
+ * B#), F major's 4th is `A#` (enharmonic Bb). This keeps every pitch-class name
+ * identical to the chromatic rows.
  */
 export function getScaleNotes(root: string, scaleType: string): string[] {
   const rootIndex = rootSemitone(root);
   const scale = SCALES[scaleType] || SCALES['Major'];
   return scale.intervals.map((int) => ROOTS[(rootIndex + int) % 12]);
+}
+
+/**
+ * The scale's notes in a specific octave, with correct OCTAVE rollover — D
+ * major's 7th is `C#5` (not `C#4`). Spelling stays sharp-only (ROOTS), matching
+ * getScaleNotes and the chromatic rows. The pitch-class-only getScaleNotes stays
+ * for consumers that wrap octaves themselves (the keyboard).
+ */
+export function getScaleNotesInOctave(root: string, scaleType: string, octave: number): string[] {
+  const rootIndex = rootSemitone(root);
+  const scale = SCALES[scaleType] || SCALES['Major'];
+  return scale.intervals.map((int) => {
+    const abs = rootIndex + int;
+    return `${ROOTS[abs % 12]}${octave + Math.floor(abs / 12)}`;
+  });
 }
 
 /**

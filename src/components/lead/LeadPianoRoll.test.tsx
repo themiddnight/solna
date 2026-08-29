@@ -33,4 +33,10 @@ describe('LeadPianoRoll', () => {
     expect(html).not.toContain('bg-black');
     expect(html).not.toContain('rgba(');
   });
+
+  test('renders a clear button and the note-name column', () => {
+    const html = renderToString(<LeadPianoRoll currentStep={0} isPlaying={false} />);
+    expect(html).toContain('id="btn-lead-clear"');
+    expect(html).toContain('font-mono');
+  });
 });
