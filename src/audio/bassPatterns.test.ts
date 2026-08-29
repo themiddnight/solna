@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { BASS_PATTERNS, BASS_STYLE_GROUPS, resolveBassSteps } from './bassPatterns';
-import type { BassPattern } from './bassPatterns';
+import { BASS_PATTERNS, BASS_STYLE_GROUPS, customBassPattern, resolveBassSteps } from './bassPatterns';
+import type { BassPattern, BassStepChoice } from './bassPatterns';
 import type { ChordItem } from '../types';
 import { getMeter } from '../utils/meter';
 import type { MeterId } from '../utils/meter';
@@ -216,5 +216,70 @@ describe('the 6/8 bass lines lean on steps 0 and 6, never on 4 and 8', () => {
       expect(steps, id).not.toContain(4);
       expect(steps, id).not.toContain(8);
     }
+  });
+});
+
+const FOUR_FOUR: MeterId = '4/4';
+
+describe('customBassPattern — choice grid to BassPattern', () => {
+  test('root/third/fifth/seventh map to one 16th step each; octave maps to root + octaveShift', () => {
+    const choices: BassStepChoice[] = [
+      'root', 'rest', 'third', 'rest', 'fifth', 'rest', 'seventh', 'rest',
+      'rest', 'rest', 'rest', 'rest', 'octave', 'rest', 'rest', 'rest',
+    ];
+    const pattern = customBassPattern(choices, 16, FOUR_FOUR);
+    expect(pattern.id).toBe('custom');
+    expect(pattern.meter).toBe('4/4');
+    expect(pattern.steps).toEqual([
+      { step: 0, note: 'root' },
+      { step: 2, note: 'third' },
+      { step: 4, note: 'fifth' },
+      { step: 6, note: 'seventh' },
+      { step: 12, note: 'root', octaveShift: 1 },
+    ]);
+  });
+
+  test('all-rest grid yields no steps', () => {
+    const choices: BassStepChoice[] = new Array(16).fill('rest');
+    expect(customBassPattern(choices, 16, FOUR_FOUR).steps).toEqual([]);
+  });
+
+  test('steps at or past stepsPerBar are ignored', () => {
+    const choices: BassStepChoice[] = ['root', 'root', 'root', 'root', 'root'];
+    expect(customBassPattern(choices, 4, FOUR_FOUR).steps).toEqual([
+      { step: 0, note: 'root' },
+      { step: 1, note: 'root' },
+      { step: 2, note: 'root' },
+      { step: 3, note: 'root' },
+    ]);
+  });
+});
+
+describe('customBassPattern — resolution reuses the existing quality-aware resolver', () => {
+  const maj7: ChordItem = {
+    id: 't', root: 'C', quality: 'maj7', bars: 1,
+    notes: ['C4', 'E4', 'G4', 'B4'],
+  };
+
+  test('octave resolves an octave above the bass root', () => {
+    const choices: BassStepChoice[] = ['octave', ...new Array<BassStepChoice>(15).fill('rest')];
+    const events = resolveBassSteps(
+      customBassPattern(choices, 16, FOUR_FOUR),
+      [maj7], 0, 2, 'C', 'major', 120,
+    );
+    expect(events[0].noteName).toBe('C3'); // bass octave 2 → C2, +12 → C3
+  });
+
+  test('seventh falls back through the FALLBACK_CHAIN to fifth on a triad', () => {
+    const triad: ChordItem = {
+      id: 't', root: 'C', quality: 'maj', bars: 1,
+      notes: ['C4', 'E4', 'G4'],
+    };
+    const choices: BassStepChoice[] = ['seventh', ...new Array<BassStepChoice>(15).fill('rest')];
+    const events = resolveBassSteps(
+      customBassPattern(choices, 16, FOUR_FOUR),
+      [triad], 0, 2, 'C', 'major', 120,
+    );
+    expect(events[0].noteName).toBe('G2'); // C2 + 7 semitones
   });
 });
