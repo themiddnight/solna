@@ -99,6 +99,24 @@ export interface BassSlice {
   toggleBassMuted: () => void;
 }
 
+export type LeadMelodyView = 'scale-locked' | 'chromatic';
+
+export interface LeadSlice {
+  /** Absolute note names per step, stored at a fixed MAX_STEPS_PER_BAR per bar. */
+  leadMelodySteps: string[][];
+  /** Loop length in bars; must divide Σ ChordItem.bars. */
+  leadLoopLength: number;
+  /** Transient view mode; not persisted. */
+  leadMelodyView: LeadMelodyView;
+  /** Transient lowest octave of the visible window; not persisted. */
+  leadMelodyOctave: number;
+  setLeadMelodySteps: (steps: string[][]) => void;
+  setLeadLoopLength: (bars: number) => void;
+  setLeadMelodyView: (view: LeadMelodyView) => void;
+  setLeadMelodyOctave: (octave: number) => void;
+  toggleLeadNote: (stepIndex: number, note: string) => void;
+}
+
 export interface SequencerSlice {
   sequencerTracks: SequencerTrack[];
   soundKit: string;
@@ -192,6 +210,7 @@ export interface AppStore
     SynthSlice,
     ChordsSlice,
     BassSlice,
+    LeadSlice,
     SequencerSlice,
     EffectsSlice,
     UiSlice,
@@ -223,6 +242,8 @@ export interface PersistedState {
   bassOctave: number;
   bassMuted: boolean;
   bassVolume: number;
+  leadMelodySteps: string[][];
+  leadLoopLength: number;
   sequencerTracks: SequencerTrack[];
   soundKit: string;
   masterSequencerVolume: number;
