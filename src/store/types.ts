@@ -11,6 +11,7 @@ import type {
 import type { SynthControlTarget } from '../utils/synthControl';
 import type { MeterId } from '../utils/meter';
 import type { SynthPresetItem, SynthPresetCategory } from '../audio/synthPresets';
+import type { BassStepChoice } from '../audio/bassPatterns';
 
 /** A player is `stopping` between a soft stop and the bar line that ends it. */
 export type PlayerState = 'stopped' | 'playing' | 'stopping';
@@ -74,6 +75,10 @@ export interface SynthSlice {
 export interface ChordsSlice {
   chords: ChordItem[];
   chordRhythmId: string;
+  chordRhythmMode: 'preset' | 'custom';
+  customChordRhythm: boolean[];
+  setChordRhythmMode: (mode: 'preset' | 'custom') => void;
+  setCustomChordRhythm: (steps: boolean[]) => void;
   chordFeel: number;
   chordOctave: number;
   chordMuted: boolean;
@@ -88,6 +93,10 @@ export interface ChordsSlice {
 
 export interface BassSlice {
   bassPatternId: string;
+  bassPatternMode: 'preset' | 'custom';
+  customBassPattern: BassStepChoice[];
+  setBassPatternMode: (mode: 'preset' | 'custom') => void;
+  setCustomBassPattern: (steps: BassStepChoice[]) => void;
   bassFeel: number;
   bassOctave: number;
   bassMuted: boolean;
@@ -214,11 +223,15 @@ export interface PersistedState {
   synthMuted: boolean;
   chords: ChordItem[];
   chordRhythmId: string;
+  chordRhythmMode: 'preset' | 'custom';
+  customChordRhythm: boolean[];
   chordFeel: number;
   chordOctave: number;
   chordMuted: boolean;
   chordVolume: number;
   bassPatternId: string;
+  bassPatternMode: 'preset' | 'custom';
+  customBassPattern: BassStepChoice[];
   bassFeel: number;
   bassOctave: number;
   bassMuted: boolean;

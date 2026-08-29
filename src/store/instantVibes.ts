@@ -98,12 +98,14 @@ export function applyInstantVibeToStore(vibe: InstantVibe) {
   // 3. Chords & Rhythm Pattern & Feel (Tight/Loose) & Sound Preset
   store.setChords(vibe.chords);
   store.setChordRhythmId(vibe.chordRhythmId);
+  store.setChordRhythmMode('preset');
   store.setChordFeel(vibe.chordFeel);
   store.setChordOctave(vibe.chordOctave);
   store.setChordSynthParams(finalChordSynthParams);
 
   // 4. Bass Pattern & Feel (Tight/Loose) & Sound Preset
   store.setBassPatternId(vibe.bassPatternId);
+  store.setBassPatternMode('preset');
   store.setBassFeel(vibe.bassFeel);
   store.setBassOctave(vibe.bassOctave);
   store.setBassSynthParams(finalBassSynthParams);

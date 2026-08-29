@@ -115,11 +115,15 @@ export function partializeAppState(state: AppStore): PersistedState {
     synthMuted: state.synthMuted,
     chords: state.chords,
     chordRhythmId: state.chordRhythmId,
+    chordRhythmMode: state.chordRhythmMode,
+    customChordRhythm: state.customChordRhythm,
     chordFeel: state.chordFeel,
     chordOctave: state.chordOctave,
     chordMuted: state.chordMuted,
     chordVolume: state.chordVolume,
     bassPatternId: state.bassPatternId,
+    bassPatternMode: state.bassPatternMode,
+    customBassPattern: state.customBassPattern,
     bassFeel: state.bassFeel,
     bassOctave: state.bassOctave,
     bassMuted: state.bassMuted,
@@ -253,11 +257,15 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
 
   // Arrays and free-form strings: drop invalid values so the currentState
   // defaults win in the merge spread below.
-  for (const key of ['chords', 'sequencerTracks', 'customSynthPresets', 'customChordProgressions']) {
+  for (const key of ['chords', 'sequencerTracks', 'customSynthPresets', 'customChordProgressions', 'customChordRhythm', 'customBassPattern']) {
     if (!Array.isArray(sanitized[key])) delete sanitized[key];
   }
   for (const key of ['scaleRoot', 'scaleType', 'chordRhythmId', 'bassPatternId']) {
     if (typeof sanitized[key] !== 'string') delete sanitized[key];
+  }
+  for (const key of ['chordRhythmMode', 'bassPatternMode']) {
+    const v = sanitized[key];
+    if (v !== 'preset' && v !== 'custom') delete sanitized[key];
   }
   if (typeof sanitized.selectedVibeId !== 'string' && sanitized.selectedVibeId !== null) {
     delete sanitized.selectedVibeId;
