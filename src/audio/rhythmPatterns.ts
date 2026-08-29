@@ -353,3 +353,25 @@ export function equalPowerVelocityScale(noteCount: number): number {
 export function fullHoldDuration(totalBars: number, barDur: number, holdScale: number): number {
   return Math.min(totalBars * barDur * holdScale, totalBars * barDur);
 }
+
+/**
+ * Synthesize a RhythmPattern from the user's custom chord grid. Every true step
+ * is one block hit (no strum); the pattern is authored at the ACTIVE meter, so
+ * the meter is stamped on it and `adaptRhythmPattern` returns it unchanged in
+ * that meter. Never full-hold: holdSteps is always 1, so `isFullHoldRhythm`
+ * resolves false even for a one-hit grid.
+ */
+export function customRhythmPattern(
+  grid: readonly boolean[],
+  stepsPerBar: number,
+  meter: MeterId,
+): RhythmPattern {
+  const hits: RhythmHit[] = [];
+  const length = Math.min(grid.length, stepsPerBar);
+  for (let step = 0; step < length; step++) {
+    if (grid[step] === true) {
+      hits.push({ step, type: 'block' as const, velocity: 1, holdSteps: 1 });
+    }
+  }
+  return { id: 'custom', name: 'Custom', style: 'Custom', meter, hits };
+}
