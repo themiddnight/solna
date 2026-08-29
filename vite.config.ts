@@ -1,20 +1,17 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import path from 'path';
+import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         // Split the four biggest third-party trees out of the app chunk so
         // an app-code edit stops invalidating them in the browser cache.
-        // Function form, not object form: react and react-dom are CJS, so
-        // vite's commonjs plugin rewrites their module ids to `?commonjs-*`
-        // suffixed forms that object-form entries cannot match — that form
-        // emitted an empty vendor chunk and left the react family duplicated
-        // across dndkit, icons and index.
+        // Function form: Vite 8 (Rolldown) removed the object form, and
+        // matching by node_modules path holds regardless of CJS interop.
         manualChunks(id) {
           if (!id.includes('/node_modules/')) return;
           if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/')) {
@@ -35,7 +32,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
   server: {
