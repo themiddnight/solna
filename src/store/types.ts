@@ -15,7 +15,7 @@ import type { SynthPresetItem, SynthPresetCategory } from '../audio/synthPresets
 /** A player is `stopping` between a soft stop and the bar line that ends it. */
 export type PlayerState = 'stopped' | 'playing' | 'stopping';
 
-export type PlayerModule = 'sequencer' | 'chords';
+export type PlayerModule = 'sequencer' | 'chords' | 'lead';
 
 export interface TransportSlice {
   bpm: number;
@@ -26,6 +26,7 @@ export interface TransportSlice {
   // Transient (not persisted): mirrors the live transport state.
   sequencerPlayer: PlayerState;
   chordsPlayer: PlayerState;
+  leadPlayer: PlayerState;
   // Transient playhead (not persisted): `playheadBeat` is the absolute beat
   // index since the shared clock was reset, so every consumer measures from the
   // same origin; the chord fields say which chord the Chords player is sounding

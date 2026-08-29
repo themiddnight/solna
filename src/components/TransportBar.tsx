@@ -13,6 +13,7 @@ export const TransportBar: React.FC = React.memo(() => {
   // Transport slice
   const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
   const chordsPlayer = useAppStore((s) => s.chordsPlayer);
+  const leadPlayer = useAppStore((s) => s.leadPlayer);
   const playAll = useAppStore((s) => s.playAll);
   const softStopAll = useAppStore((s) => s.softStopAll);
   const hardStopAll = useAppStore((s) => s.hardStopAll);
@@ -25,8 +26,8 @@ export const TransportBar: React.FC = React.memo(() => {
   const metronomeActive = useAppStore((s) => s.metronomeActive);
   const toggleMetronome = useAppStore((s) => s.toggleMetronome);
 
-  const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer);
-  const hardStopDisabled = !isHardStopEnabled(sequencerPlayer, chordsPlayer);
+  const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer);
+  const hardStopDisabled = !isHardStopEnabled(sequencerPlayer, chordsPlayer, leadPlayer);
   // The meter loop only needs to know whether anything is sounding.
   const isPlaying = aggregate !== 'stopped';
 

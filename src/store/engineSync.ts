@@ -127,17 +127,19 @@ export function startEngineSync(): Stop {
   // load-bearing (the browser suspends the AudioContext when the tab is
   // backgrounded, so returning with chords playing and starting the sequencer
   // must resume audio). resetClock stays restricted to the fully-stopped ->
-  // active transition, which keeps both players counting the SAME bars: a
-  // player joining while the other runs must not restart the grid.
+  // active transition, which keeps all three players counting the SAME bars: a
+  // player joining while the others run must not restart the grid.
   //
-  // "Fully stopped" means BOTH players are 'stopped'. A 'stopping' player is
-  // still active — otherwise a soft stop followed by a restart would reset the
-  // grid mid-flight. Encoded 1/2/3 so the subscription fires only on real
+  // "Fully stopped" means ALL three players are 'stopped'. A 'stopping' player
+  // is still active — otherwise a soft stop followed by a restart would reset
+  // the grid mid-flight. Encoded 1/2/4 so the subscription fires only on real
   // transitions.
   subs.push(
     useAppStore.subscribe(
       (s) =>
-        (isPlayerActive(s.sequencerPlayer) ? 1 : 0) + (isPlayerActive(s.chordsPlayer) ? 2 : 0),
+        (isPlayerActive(s.sequencerPlayer) ? 1 : 0) +
+        (isPlayerActive(s.chordsPlayer) ? 2 : 0) +
+        (isPlayerActive(s.leadPlayer) ? 4 : 0),
       (flags, prevFlags) => {
         audioEngine.init();
         if (flags !== 0 && prevFlags === 0) {

@@ -6,11 +6,12 @@ import type { AppStore, PlayerModule, PlayerState, TransportSlice } from './type
 type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
 
-type PlayerField = 'sequencerPlayer' | 'chordsPlayer';
+type PlayerField = 'sequencerPlayer' | 'chordsPlayer' | 'leadPlayer';
 
 const FIELD: Record<PlayerModule, PlayerField> = {
   sequencer: 'sequencerPlayer',
   chords: 'chordsPlayer',
+  lead: 'leadPlayer',
 };
 
 /** A player still owns scheduled sound unless it is fully stopped. */
@@ -18,26 +19,26 @@ export function isPlayerActive(state: PlayerState): boolean {
   return state !== 'stopped';
 }
 
-/** The single state the master transport shows for both players. */
-export function aggregatePlayerState(a: PlayerState, b: PlayerState): PlayerState {
-  if (a === 'playing' || b === 'playing') return 'playing';
-  if (a === 'stopping' || b === 'stopping') return 'stopping';
+/** The single state the master transport shows across all players. */
+export function aggregatePlayerState(...states: PlayerState[]): PlayerState {
+  if (states.includes('playing')) return 'playing';
+  if (states.includes('stopping')) return 'stopping';
   return 'stopped';
 }
 
 /**
  * Deliberately NOT derived from aggregatePlayerState: when one player is
- * `stopping` and the other is already `stopped`, the aggregate reads
+ * `stopping` and the others are already `stopped`, the aggregate reads
  * `stopping` but there is still sound to cut, so hard stop must stay live.
  */
-export function isHardStopEnabled(a: PlayerState, b: PlayerState): boolean {
-  return isPlayerActive(a) || isPlayerActive(b);
+export function isHardStopEnabled(...states: PlayerState[]): boolean {
+  return states.some(isPlayerActive);
 }
 
 /**
- * Transport slice. `sequencerPlayer` / `chordsPlayer` and the `playhead*`
- * fields are transient (excluded from `partializeAppState`); everything else
- * persists.
+ * Transport slice. `sequencerPlayer` / `chordsPlayer` / `leadPlayer` and the
+ * `playhead*` fields are transient (excluded from `partializeAppState`);
+ * everything else persists.
  *
  * Engine side-effects (init/resetClock on the fully-stopped -> playing
  * transition) are handled by engineSync's transport subscription; the actual
@@ -80,6 +81,7 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
     metronomeActive: false,
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
+    leadPlayer: 'stopped',
     playheadBeat: null,
     playheadChordIndex: null,
     playheadChordStartBeat: 0,

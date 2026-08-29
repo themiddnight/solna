@@ -34,6 +34,7 @@ describe('transport player state machine', () => {
     const s = makeSlice().state;
     expect(s.sequencerPlayer).toBe('stopped');
     expect(s.chordsPlayer).toBe('stopped');
+    expect(s.leadPlayer).toBe('stopped');
   });
 
   test('play only starts a stopped player — it never cancels a pending stop', () => {
@@ -161,5 +162,37 @@ describe('transport meter', () => {
     expect(useAppStore.getState().meterId).toBe('7/8');
     useAppStore.getState().setMeter('4/4');
     expect(useAppStore.getState().meterId).toBe('4/4');
+  });
+});
+
+describe('three-way derived transport helpers', () => {
+  test('aggregate covers all 27 triples: playing wins, then stopping', () => {
+    const expected = (a: PlayerState, b: PlayerState, c: PlayerState): PlayerState => {
+      if (a === 'playing' || b === 'playing' || c === 'playing') return 'playing';
+      if (a === 'stopping' || b === 'stopping' || c === 'stopping') return 'stopping';
+      return 'stopped';
+    };
+    for (const a of ALL) {
+      for (const b of ALL) {
+        for (const c of ALL) {
+          expect(aggregatePlayerState(a, b, c)).toBe(expected(a, b, c));
+        }
+      }
+    }
+  });
+
+  test('hard stop is enabled whenever any of three players is active', () => {
+    expect(isHardStopEnabled('stopped', 'stopped', 'stopped')).toBe(false);
+    expect(isHardStopEnabled('stopped', 'stopped', 'playing')).toBe(true);
+    expect(isHardStopEnabled('stopped', 'stopping', 'stopped')).toBe(true);
+    expect(isHardStopEnabled('stopped', 'stopped', 'stopping')).toBe(true);
+  });
+
+  test('master actions drive the lead too', () => {
+    const h = makeSlice({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped', leadPlayer: 'stopped' });
+    h.state.playAll();
+    expect(h.state.leadPlayer).toBe('playing');
+    h.state.hardStopAll();
+    expect(h.state.leadPlayer).toBe('stopped');
   });
 });
