@@ -52,7 +52,8 @@ export function AmbientBackdrop() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
   const chordsPlayer = useAppStore((s) => s.chordsPlayer);
-  const isPlaying = aggregatePlayerState(sequencerPlayer, chordsPlayer) !== 'stopped';
+  const leadPlayer = useAppStore((s) => s.leadPlayer);
+  const isPlaying = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer) !== 'stopped';
 
   const [reducedMotion, setReducedMotion] = useState(
     () => window.matchMedia(REDUCED_MOTION_QUERY).matches,

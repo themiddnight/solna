@@ -46,6 +46,8 @@ const SynthPresetLibrary = React.lazy(() =>
 );
 import { AudioVisualizer } from "./AudioVisualizer";
 import { SimpleSynthPanel } from "./SimpleSynthPanel";
+import { LeadPianoRoll } from "./lead/LeadPianoRoll";
+import { useLeadPlayback } from "./lead/useLeadPlayback";
 import { Knob } from "./ui/Knob";
 import { ChannelStrip } from "./ui/ChannelStrip";
 import { QuickSavePopover } from "./ui/QuickSavePopover";
@@ -211,6 +213,7 @@ export const SynthView = () => {
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const keyboardMode = useAppStore((s) => s.keyboardMode);
   const setKeyboardMode = useAppStore((s) => s.setKeyboardMode);
+  const { currentStep: leadCurrentStep, isPlaying: leadIsPlaying } = useLeadPlayback();
   // Chord mode: maps a held KeyboardEvent.code to the exact notes it played,
   // so key-up releases those notes even if key/scale/octave changed while
   // the key was held — never recompute the chord at release time.
@@ -1572,6 +1575,9 @@ export const SynthView = () => {
         </div>
         </div>
       </div>
+
+      {/* Lead Melody Piano-Roll Step Sequencer */}
+      <LeadPianoRoll currentStep={leadCurrentStep} isPlaying={leadIsPlaying} />
 
       {/* Preset Library Sidebar Drawer / Modal */}
       <Suspense

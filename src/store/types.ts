@@ -16,7 +16,7 @@ import type { BassStepChoice } from '../audio/bassPatterns';
 /** A player is `stopping` between a soft stop and the bar line that ends it. */
 export type PlayerState = 'stopped' | 'playing' | 'stopping';
 
-export type PlayerModule = 'sequencer' | 'chords';
+export type PlayerModule = 'sequencer' | 'chords' | 'lead';
 
 export interface TransportSlice {
   bpm: number;
@@ -27,6 +27,7 @@ export interface TransportSlice {
   // Transient (not persisted): mirrors the live transport state.
   sequencerPlayer: PlayerState;
   chordsPlayer: PlayerState;
+  leadPlayer: PlayerState;
   // Transient playhead (not persisted): `playheadBeat` is the absolute beat
   // index since the shared clock was reset, so every consumer measures from the
   // same origin; the chord fields say which chord the Chords player is sounding
@@ -106,6 +107,24 @@ export interface BassSlice {
   setBassOctave: (octave: number) => void;
   setBassVolume: (volume: number) => void;
   toggleBassMuted: () => void;
+}
+
+export type LeadMelodyView = 'scale-locked' | 'chromatic';
+
+export interface LeadSlice {
+  /** Absolute note names per step, stored at a fixed MAX_STEPS_PER_BAR per bar. */
+  leadMelodySteps: string[][];
+  /** Loop length in bars; must divide Σ ChordItem.bars. */
+  leadLoopLength: number;
+  /** Transient view mode; not persisted. */
+  leadMelodyView: LeadMelodyView;
+  /** Transient lowest octave of the visible window; not persisted. */
+  leadMelodyOctave: number;
+  setLeadMelodySteps: (steps: string[][]) => void;
+  setLeadLoopLength: (bars: number) => void;
+  setLeadMelodyView: (view: LeadMelodyView) => void;
+  setLeadMelodyOctave: (octave: number) => void;
+  toggleLeadNote: (stepIndex: number, note: string) => void;
 }
 
 export interface SequencerSlice {
@@ -201,6 +220,7 @@ export interface AppStore
     SynthSlice,
     ChordsSlice,
     BassSlice,
+    LeadSlice,
     SequencerSlice,
     EffectsSlice,
     UiSlice,
@@ -236,6 +256,8 @@ export interface PersistedState {
   bassOctave: number;
   bassMuted: boolean;
   bassVolume: number;
+  leadMelodySteps: string[][];
+  leadLoopLength: number;
   sequencerTracks: SequencerTrack[];
   soundKit: string;
   masterSequencerVolume: number;

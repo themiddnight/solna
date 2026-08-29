@@ -7,6 +7,7 @@ import { createMusicContextSlice } from './musicContextSlice';
 import { createSynthSlice } from './synthSlice';
 import { createChordsSlice } from './chordsSlice';
 import { createBassSlice } from './bassSlice';
+import { createLeadSlice } from './leadSlice';
 import { createSequencerSlice } from './sequencerSlice';
 import { createEffectsSlice } from './effectsSlice';
 import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
@@ -128,6 +129,8 @@ export function partializeAppState(state: AppStore): PersistedState {
     bassOctave: state.bassOctave,
     bassMuted: state.bassMuted,
     bassVolume: state.bassVolume,
+    leadMelodySteps: state.leadMelodySteps,
+    leadLoopLength: state.leadLoopLength,
     sequencerTracks: state.sequencerTracks,
     soundKit: state.soundKit,
     masterSequencerVolume: state.masterSequencerVolume,
@@ -267,6 +270,21 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
     const v = sanitized[key];
     if (v !== 'preset' && v !== 'custom') delete sanitized[key];
   }
+  if (
+    !Array.isArray(sanitized.leadMelodySteps) ||
+    !(sanitized.leadMelodySteps as unknown[]).every(
+      (row) => Array.isArray(row) && (row as unknown[]).every((n) => typeof n === 'string'),
+    )
+  ) {
+    delete sanitized.leadMelodySteps;
+  }
+  if (
+    typeof sanitized.leadLoopLength !== 'number' ||
+    !Number.isInteger(sanitized.leadLoopLength) ||
+    sanitized.leadLoopLength < 1
+  ) {
+    delete sanitized.leadLoopLength;
+  }
   if (typeof sanitized.selectedVibeId !== 'string' && sanitized.selectedVibeId !== null) {
     delete sanitized.selectedVibeId;
   }
@@ -291,6 +309,7 @@ export const useAppStore = create<AppStore>()(
         ...createSynthSlice(set),
         ...createChordsSlice(set),
         ...createBassSlice(set),
+        ...createLeadSlice(set),
         ...createSequencerSlice(set),
         ...createEffectsSlice(set),
         ...createUiSlice(set),
