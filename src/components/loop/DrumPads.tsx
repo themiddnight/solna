@@ -1,33 +1,22 @@
-import React, { useState, useCallback } from 'react';
-import { ensureDrumEngine, triggerPad as triggerDrumPad } from '../../audio/playback/drumPlayback';
-import type { DrumPad } from '../../types';
-import { DrumPadGrid, DEFAULT_PADS } from '../ui/DrumPadGrid';
+import React from 'react';
+import { DrumPadGrid } from '../ui/DrumPadGrid';
+import type { InputDeckDrumProps } from '../useInputDeck';
 
-export const DrumPads: React.FC = React.memo(() => {
-  const [pads, setPads] = useState<DrumPad[]>(DEFAULT_PADS);
-  const [activePadId, setActivePadId] = useState<string | null>(null);
+interface DrumPadsProps {
+  drumProps: InputDeckDrumProps;
+}
 
-  const triggerPad = useCallback((pad: DrumPad) => {
-    ensureDrumEngine();
-    triggerDrumPad(pad.note, pad.volume);
-    setActivePadId(pad.id);
-    setTimeout(() => setActivePadId(null), 150);
-  }, []);
-
-  const handlePadVolumeChange = useCallback((padId: string, volume: number) => {
-    setPads((prev) => prev.map((p) => (p.id === padId ? { ...p, volume } : p)));
-  }, []);
-
+/** Pure presentational wrapper: renders the shared DrumPadGrid inside the
+ *  in-page card shell. All pad state (pads, activePadId, volume, trigger) is
+ *  owned upstream by `useInputDeck` and forwarded via `drumProps`, so the
+ *  card's volume sliders drive the same state as the dock's Drums tab and the
+ *  QWERTY drum listener. */
+export const DrumPads: React.FC<DrumPadsProps> = ({ drumProps }) => {
   return (
     <div className="card bg-panel border border-base-300 shadow-md">
       <div className="card-body p-3 sm:p-4">
-        <DrumPadGrid
-          pads={pads}
-          activePadId={activePadId}
-          onTriggerPad={triggerPad}
-          onPadVolumeChange={handlePadVolumeChange}
-        />
+        <DrumPadGrid {...drumProps} />
       </div>
     </div>
   );
-});
+};

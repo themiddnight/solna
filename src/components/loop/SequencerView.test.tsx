@@ -3,9 +3,18 @@ import { renderToString } from 'react-dom/server';
 import { SequencerView } from './SequencerView';
 import { useAppStore } from '../../store/store';
 import { FIELD_LABEL, FIELD_LANE, FIELD_SELECT } from '../ui/fieldClasses';
+import { DEFAULT_PADS } from '../ui/DrumPadGrid';
+import type { InputDeckDrumProps } from '../useInputDeck';
+
+const drumProps: InputDeckDrumProps = {
+  pads: DEFAULT_PADS,
+  activePadId: null,
+  onTriggerPad: () => {},
+  onPadVolumeChange: () => {},
+};
 
 describe('SequencerView theming', () => {
-  const html = renderToString(<SequencerView />);
+  const html = renderToString(<SequencerView drumProps={drumProps} />);
 
   test('panels are daisyUI cards on base tokens', () => {
     expect(html).toContain('card bg-panel border border-base-300');
@@ -112,7 +121,7 @@ describe('SequencerView theming', () => {
 describe('SequencerView genre options carry their meter', () => {
   test('in 4/4 every genre is labelled with its own meter', () => {
     useAppStore.setState({ meterId: '4/4' });
-    const html = renderToString(<SequencerView />);
+    const html = renderToString(<SequencerView drumProps={drumProps} />);
     expect(html).toContain('Synthwave · 4/4');
     expect(html).toContain('Boom Bap · 4/4');
     // The value is still the bare genre key, so applyGenrePreset is unaffected.
