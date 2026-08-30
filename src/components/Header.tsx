@@ -12,15 +12,19 @@ import type { PlayerModule, PlayerState } from "../store/types";
 import { PlayerTransport } from "./ui/PlayerTransport";
 import { Wordmark } from "./ui/Wordmark";
 import { VIEW_META } from "./viewMeta";
+import { RegionSelector } from './RegionSelector';
 
-/** The two automation players. Each gets its own play / soft-stop button. */
+/** The three playable views. Each gets its own play / soft-stop button. The
+ *  synth page edits the synth patch but plays the lead melody, so it joins the
+ *  `lead` transport. */
 export const AUTOMATION_TABS: ReadonlyArray<{ view: ViewMode; module: PlayerModule }> = [
+  { view: 'synth', module: 'lead' },
   { view: 'sequencer', module: 'sequencer' },
   { view: 'chords', module: 'chords' },
 ];
 
-/** Views with nothing to play: the instrument and the master rack. */
-export const SOLO_TABS: readonly ViewMode[] = ['synth', 'effects'];
+/** Views with nothing to play: the arrangement and the global master rack. */
+export const SOLO_TABS: readonly ViewMode[] = ['arrange', 'effects'];
 
 /**
  * One view-switch button. Deliberately NOT daisyUI's `tab` component: an
@@ -203,22 +207,15 @@ export const Header: React.FC = React.memo(() => {
         <Wordmark />
       </div>
 
-      {/* Primary navigation: three join groups of view-switch buttons. It owns
+      {/* Primary navigation: two join groups of view-switch buttons. It owns
           the header's only overflow scroller, so a nav too wide for the viewport
           scrolls within its own column instead of pushing the right-hand group
           off-screen (the app shell is `overflow-hidden`, so pushed-out controls
           are unreachable, not merely off-layout). */}
       <nav className="flex items-center gap-2 min-w-0 overflow-x-auto no-scrollbar">
-        {/* Synth stands alone, mirroring Master FX on the right. */}
-        <div className={NAV_GROUP_CLASS}>
-          <TabButton view={SOLO_TABS[0]} activeTab={activeTab} onSelect={setActiveTab} />
-        </div>
-
-        <div className='divider divider-horizontal m-0' />
-
-        {/* The automation players: view button and transport side by side, all
-            of them direct join-item children of one join. A <button> must
-            never nest inside another <button>. */}
+        {/* The three playable views: synth/lead, beat step, chords/bass — each
+            a view button joined to its own transport. A <button> must never
+            nest inside another <button>. */}
         <div className="flex items-center gap-1.5 shrink-0">
           {AUTOMATION_TABS.map((tab) => {
             const state = playerStateByModule[tab.module];
@@ -242,13 +239,22 @@ export const Header: React.FC = React.memo(() => {
 
         <div className='divider divider-horizontal m-0' />
 
-        <div className={NAV_GROUP_CLASS}>
-          <TabButton view={SOLO_TABS[1]} activeTab={activeTab} onSelect={setActiveTab} />
+        {/* The two non-playable views: Arrange and the global Master FX rack. */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {SOLO_TABS.map((view) => (
+            <div key={view} className={NAV_GROUP_CLASS}>
+              <TabButton view={view} activeTab={activeTab} onSelect={setActiveTab} />
+            </div>
+          ))}
         </div>
       </nav>
 
       {/* Key, Scale & Global Actions */}
       <div className="flex items-center gap-1.5 shrink-0 xl:justify-self-end">
+        {/* Region picker — per-region editing tabs only; hidden on Arrange and
+            the global Master FX rack. */}
+        {activeTab !== 'arrange' && activeTab !== 'effects' && <RegionSelector />}
+
         {/* Scale Picker Compact */}
         <div className="hidden md:flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-field">
           <ScaleSelects idPrefix="select-master-scale" />

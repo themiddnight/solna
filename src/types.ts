@@ -14,7 +14,8 @@ export type ViewMode =
   | 'synth'
   | 'sequencer'
   | 'chords'
-  | 'effects';
+  | 'effects'
+  | 'arrange';
 
 export type FilterType = 'lowpass' | 'highpass' | 'bandpass';
 

@@ -1,4 +1,4 @@
-import { AudioWaveform, Grid, Music, Sliders, type LucideIcon } from 'lucide-react';
+import { AudioWaveform, Grid, LayoutList, Music, Sliders, type LucideIcon } from 'lucide-react';
 import type { ViewMode } from '../types';
 
 /**
@@ -16,12 +16,13 @@ export interface ViewMeta {
 }
 
 /** Left-to-right order in the nav; also the iteration order tests assert on. */
-export const VIEW_ORDER = ['synth', 'sequencer', 'chords', 'effects'] as const;
+export const VIEW_ORDER = ['synth', 'sequencer', 'chords', 'arrange', 'effects'] as const;
 
 export const VIEW_META: Record<ViewMode, ViewMeta> = {
-  synth: { icon: Sliders, tabLabel: 'Synth', title: 'Synth Lab' },
+  synth: { icon: Sliders, tabLabel: 'Synth/Lead', title: 'Synth / Lead' },
   sequencer: { icon: Grid, tabLabel: 'Beat Step', title: 'Drum Sequencer' },
-  chords: { icon: Music, tabLabel: 'Chords', title: 'Chord Studio' },
+  chords: { icon: Music, tabLabel: 'Chords/Bass', title: 'Chords / Bass' },
   // Was `Sliders`, identical to Synth's — see viewMeta.test.ts.
   effects: { icon: AudioWaveform, tabLabel: 'Master FX', title: 'Master Effects Rack' },
+  arrange: { icon: LayoutList, tabLabel: 'Arrange', title: 'Arrangement' },
 };

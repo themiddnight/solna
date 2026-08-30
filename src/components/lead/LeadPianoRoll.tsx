@@ -129,6 +129,7 @@ export const LeadPianoRoll: React.FC<LeadPianoRollProps> = ({ currentStep, isPla
   const setLeadMelodyView = useAppStore((s) => s.setLeadMelodyView);
   const setLeadMelodyOctave = useAppStore((s) => s.setLeadMelodyOctave);
   const setLeadLoopLength = useAppStore((s) => s.setLeadLoopLength);
+  const setLeadLoopLengthPreserve = useAppStore((s) => s.setLeadLoopLengthPreserve);
   const setLeadMelodySteps = useAppStore((s) => s.setLeadMelodySteps);
   const toggleLeadNote = useAppStore((s) => s.toggleLeadNote);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
@@ -148,11 +149,15 @@ export const LeadPianoRoll: React.FC<LeadPianoRollProps> = ({ currentStep, isPla
     [leadMelodyView, scaleRoot, scaleType, leadMelodyOctave],
   );
 
-  // Clamp loopLength down when the progression no longer divides it.
+  // Clamp loopLength down when the progression no longer divides it. Uses the
+  // non-destructive setter: resizing here would trim the melody grid, so
+  // deleting a chord on the Chord tab would permanently delete the drawn notes
+  // in the bars that fell out of the loop (they stay dormant and return if the
+  // loop length is raised again).
   useEffect(() => {
     const clamped = clampLeadLoopLength(leadLoopLength, totalBars);
-    if (clamped !== leadLoopLength) setLeadLoopLength(clamped);
-  }, [totalBars, leadLoopLength, setLeadLoopLength]);
+    if (clamped !== leadLoopLength) setLeadLoopLengthPreserve(clamped);
+  }, [totalBars, leadLoopLength, setLeadLoopLengthPreserve]);
 
   const onToggle = useCallback(
     (stepIndex: number, note: string) => toggleLeadNote(stepIndex, note),

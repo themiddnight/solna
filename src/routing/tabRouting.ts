@@ -1,6 +1,6 @@
 import type { ViewMode } from '../types';
 
-export const TAB_VALUES: ViewMode[] = ['synth', 'sequencer', 'chords', 'effects'];
+export const TAB_VALUES: ViewMode[] = ['synth', 'sequencer', 'chords', 'effects', 'arrange'];
 
 /**
  * Parse the `tab` query parameter out of a search string.

@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { TransportBar } from './TransportBar';
+import { TransportBar, songModeLabel } from './TransportBar';
 import { aggregatePlayerState, isHardStopEnabled } from '../store/transportSlice';
 import { resolveTransportButtons } from './ui/PlayerTransport';
+import { createDefaultRegion } from '../store/regionSlice';
+import type { Region } from '../store/types';
 
 describe('TransportBar', () => {
   test('the BPM label uses a real Tailwind breakpoint, not the phantom xs:', () => {
@@ -99,5 +101,13 @@ describe('transport meter select', () => {
     expect(html).not.toContain('indigo-');
     expect(html).not.toContain('slate-');
     expect(html).not.toContain('text-white');
+  });
+});
+
+describe('songModeLabel', () => {
+  test('returns a song-mode badge only while a song position exists', () => {
+    const regions: Region[] = [createDefaultRegion()];
+    expect(songModeLabel(null, regions)).toBe(null);
+    expect(songModeLabel(0, regions)).toBe('Song · Region 1');
   });
 });

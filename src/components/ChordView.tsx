@@ -602,6 +602,10 @@ export const ChordView: React.FC = React.memo(() => {
 
   const removeChord = useCallback((id: string) => {
     const { chords: liveChords, setChords } = useAppStore.getState();
+    // A region must keep at least one chord: an empty chords array makes
+    // regionLengthSteps() 0, which freezes the song advance on that region
+    // (a silent dead end with no way past).
+    if (liveChords.length <= 1) return;
     setChords(liveChords.filter((c) => c.id !== id));
   }, []);
 
