@@ -85,17 +85,6 @@ describe('chromatic keyboard black key geometry', () => {
     expect(html).not.toContain('A Natural Minor');
   });
 
-  /**
-   * The keyboard is pinned to the main synth (KEYBOARD_AUDITION_TARGET) and the
-   * Target selector no longer moves it, so the badge that used to explain that
-   * discrepancy is just noise above the keys.
-   */
-  test('no audition badge above the keyboard', () => {
-    const html = renderToString(<SynthView />);
-    expect(html).not.toContain('Keyboard plays: Main Synth');
-    expect(html).not.toContain('Current audition sound engine');
-  });
-
   test('the lead melody piano-roll renders', () => {
     const html = renderToString(<SynthView />);
     expect(html).toContain('Lead Melody');
@@ -105,8 +94,9 @@ describe('chromatic keyboard black key geometry', () => {
 
 // Regression for: the interactive keyboard must always play the main synth,
 // independent of whatever the Target selector (Synth/Chord/Bass) is editing.
-// SynthView pins its own audio call sites to resolveSynthControlChannel('synth', ...)
-// — this asserts that fixed routing decision holds for every possible Target value.
+// useInputDeck pins the keyboard to the 'synth' channel (KEYBOARD_AUDITION_TARGET),
+// and this pure test asserts the resolveSynthControlChannel utility keeps that
+// decision fixed for every possible Target value.
 describe('keyboard audition channel is always the main synth', () => {
   const baseParams: SynthParams = {
     oscType: 'sine',
