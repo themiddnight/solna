@@ -56,10 +56,12 @@ export interface ChordArming {
   armed: boolean;
   chordIndex: number;
   nextBarStep: number;
+  /** Previous clock step, tracked so a resetClock rewind (step going backwards) can be detected. */
+  lastStep: number;
 }
 
 export function createChordArming(): ChordArming {
-  return { armed: false, chordIndex: 0, nextBarStep: 0 };
+  return { armed: false, chordIndex: 0, nextBarStep: 0, lastStep: 0 };
 }
 
 /**
@@ -74,6 +76,21 @@ export function resetChordArming(arming: ChordArming): void {
   arming.armed = false;
   arming.chordIndex = 0;
   arming.nextBarStep = 0;
+  arming.lastStep = 0;
+}
+
+/**
+ * Rewind the scheduler when the shared clock has jumped backwards. `nextBarStep`
+ * counts ABSOLUTE steps, so after a loadRegion/instant-vibe swap resets the
+ * clock to 0 mid-dispatch, the chord listener would otherwise re-arm on the
+ * stale pre-reset step and leave `nextBarStep` pointing past the reset grid —
+ * the progression then goes silent for the whole next region. The sequencer
+ * and lead are immune (they arm bar-relative); only the chord scheduler tracks
+ * an absolute advance, so it alone needs this rewind.
+ */
+export function rewindChordOnClockReset(arming: ChordArming, step: number): void {
+  if (step < arming.lastStep) resetChordArming(arming);
+  arming.lastStep = step;
 }
 
 /**
@@ -587,6 +604,7 @@ export function useChordPlayback() {
 
     return subscribePlaybackClock((step, beat, time) => {
       const arming = armingRef.current;
+      rewindChordOnClockReset(arming, step);
       // Live store read, not a ref: see chordStepAction's doc comment.
       const playerState = useAppStore.getState().chordsPlayer;
       const stepsPerBar = activeStepsPerBar();
@@ -606,8 +624,15 @@ export function useChordPlayback() {
       }
 
       if (action === 'play') {
-        const index = arming.chordIndex % chords.length;
-        const chord = chords[index];
+        // Read the progression LIVE, not from the effect closure: on a region
+        // switch the old subscription still gets the boundary step before React
+        // swaps it out, and a closure would play the OLD region's chord against
+        // the NEW region's synth state. startChordPlan's own indexOf() then
+        // finds the chord in the current region's progression.
+        const liveChords = useAppStore.getState().chords;
+        if (liveChords.length === 0) return;
+        const index = arming.chordIndex % liveChords.length;
+        const chord = liveChords[index];
         planRef.current = startChordPlan(chord, step, time);
         setPlayingIndex(index);
         setActiveChordId(chord.id);

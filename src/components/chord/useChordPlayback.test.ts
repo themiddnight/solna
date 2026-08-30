@@ -4,6 +4,7 @@ import {
   chordStepAction,
   createChordArming,
   resetChordArming,
+  rewindChordOnClockReset,
   type ChordArming,
   adaptBassPattern,
   adaptRhythmPattern,
@@ -65,9 +66,26 @@ describe('chord scheduler arming', () => {
   });
 
   test('resetChordArming rewinds the progression, not just the gate', () => {
-    const arming: ChordArming = { armed: true, chordIndex: 7, nextBarStep: 960 };
+    const arming: ChordArming = { armed: true, chordIndex: 7, nextBarStep: 960, lastStep: 123 };
     resetChordArming(arming);
-    expect(arming).toEqual({ armed: false, chordIndex: 0, nextBarStep: 0 });
+    expect(arming).toEqual({ armed: false, chordIndex: 0, nextBarStep: 0, lastStep: 0 });
+  });
+
+  test('rewindChordOnClockReset rewinds only when the clock steps backwards', () => {
+    const arming = createChordArming();
+    // Forward steps are just recorded.
+    rewindChordOnClockReset(arming, 60);
+    rewindChordOnClockReset(arming, 61);
+    expect(arming.lastStep).toBe(61);
+    expect(arming.armed).toBe(false);
+
+    // A step behind the previous one means resetClock rewound the grid: the
+    // absolute nextBarStep must not survive into the new clock.
+    arming.armed = true;
+    arming.chordIndex = 5;
+    arming.nextBarStep = 80;
+    rewindChordOnClockReset(arming, 0);
+    expect(arming).toEqual({ armed: false, chordIndex: 0, nextBarStep: 0, lastStep: 0 });
   });
 });
 
@@ -78,7 +96,7 @@ describe('chord scheduler stop timing', () => {
     // step 16 and marks the player stopped, but React has not committed, so
     // the old code re-read a stale 'stopping' from a ref and let a whole new
     // chord through a sixteenth after the cut.
-    const arming: ChordArming = { armed: true, chordIndex: 1, nextBarStep: 16 };
+    const arming: ChordArming = { armed: true, chordIndex: 1, nextBarStep: 16, lastStep: 15 };
     expect(chordStepAction('stopping', 16, arming, BAR)).toBe('soft-stop');
     // stale ref (what the bug read) would have played:
     expect(chordStepAction('stopping', 17, { ...arming }, BAR)).toBe('play');
@@ -93,7 +111,7 @@ describe('chord scheduler stop timing', () => {
   });
 
   test('a soft stop only lands on a bar line', () => {
-    const arming: ChordArming = { armed: true, chordIndex: 1, nextBarStep: 32 };
+    const arming: ChordArming = { armed: true, chordIndex: 1, nextBarStep: 32, lastStep: 19 };
     expect(chordStepAction('stopping', 20, arming, BAR)).toBe('idle');
     expect(chordStepAction('stopping', 32, arming, BAR)).toBe('soft-stop');
   });
