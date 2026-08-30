@@ -4,17 +4,18 @@ import {
   Moon,
   ChevronDown,
 } from "lucide-react";
-import { ViewMode } from "../types";
+import { Layer, layerForTab, ViewMode } from "../types";
+import { defaultTabForLayer } from "../routing/tabRouting";
 import { ROOTS, SCALES } from "../utils/musicTheory";
 import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/storage";
 import { useAppStore } from "../store/store";
 import type { PlayerModule, PlayerState } from "../store/types";
 import { PlayerTransport } from "./ui/PlayerTransport";
 import { Wordmark } from "./ui/Wordmark";
+import { LoopSelector } from "./loop/LoopSelector";
 import { VIEW_META } from "./viewMeta";
-import { RegionSelector } from './RegionSelector';
 
-/** The three playable views. Each gets its own play / soft-stop button. The
+/** The three loop-layer tabs. Each gets its own play / soft-stop button. The
  *  synth page edits the synth patch but plays the lead melody, so it joins the
  *  `lead` transport. */
 export const AUTOMATION_TABS: ReadonlyArray<{ view: ViewMode; module: PlayerModule }> = [
@@ -23,8 +24,23 @@ export const AUTOMATION_TABS: ReadonlyArray<{ view: ViewMode; module: PlayerModu
   { view: 'chords', module: 'chords' },
 ];
 
-/** Views with nothing to play: the arrangement and the global master rack. */
-export const SOLO_TABS: readonly ViewMode[] = ['arrange', 'effects'];
+/** The two song-layer tabs: the arrangement and the global master rack. */
+export const SONG_NAV_TABS: readonly ViewMode[] = ['arrange', 'effects'];
+
+/** The two layers in toggle order. Labels are user-facing copy. */
+export const LAYER_META: ReadonlyArray<{ layer: Layer; label: string }> = [
+  { layer: 'loop', label: 'Loop' },
+  { layer: 'song', label: 'Song' },
+];
+
+/**
+ * The tab to navigate to when the user clicks the layer toggle for `target`
+ * while on `current`. Returns `null` when already on `target` — clicking the
+ * active layer is a no-op (it must not reset the layer's current sub-tab).
+ */
+export function layerToggleTarget(current: Layer, target: Layer): ViewMode | null {
+  return current === target ? null : defaultTabForLayer(target);
+}
 
 /**
  * One view-switch button. Deliberately NOT daisyUI's `tab` component: an
@@ -146,6 +162,7 @@ export function persistTheme(theme: SolnaTheme, storage?: Pick<Storage, 'setItem
 
 export const Header: React.FC = React.memo(() => {
   const activeTab = useAppStore((s) => s.activeTab);
+  const layer = layerForTab(activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
   const chordsPlayer = useAppStore((s) => s.chordsPlayer);
@@ -205,6 +222,28 @@ export const Header: React.FC = React.memo(() => {
       {/* Brand */}
       <div className="flex items-center gap-2.5 shrink-0">
         <Wordmark />
+        <div className={NAV_GROUP_CLASS}>
+          {LAYER_META.map(({ layer: l, label }) => {
+            const isActive = layer === l;
+            return (
+              <button
+                key={l}
+                id={`layer-${l}`}
+                type="button"
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => {
+                  const target = layerToggleTarget(layer, l);
+                  if (target) setActiveTab(target);
+                }}
+                className={`btn btn-sm join-item text-xs font-bold ${
+                  isActive ? 'btn-active btn-primary' : 'btn-ghost'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Primary navigation: two join groups of view-switch buttons. It owns
@@ -216,65 +255,65 @@ export const Header: React.FC = React.memo(() => {
         {/* The three playable views: synth/lead, beat step, chords/bass — each
             a view button joined to its own transport. A <button> must never
             nest inside another <button>. */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {AUTOMATION_TABS.map((tab) => {
-            const state = playerStateByModule[tab.module];
-            return (
-              <div key={tab.view} className={NAV_GROUP_CLASS}>
-                <TabButton view={tab.view} activeTab={activeTab} onSelect={setActiveTab} />
-                <PlayerTransport
-                  id={`btn-header-play-${tab.module}`}
-                  state={state}
-                  // Matches TabButton's own btn-sm so the joined pair is flush.
-                  size="sm"
-                  compact
-                  unwrapped
-                  onPlay={() => play(tab.module)}
-                  onSoftStop={() => softStop(tab.module)}
-                />
+        {layer === 'loop' && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {AUTOMATION_TABS.map((tab) => {
+              const state = playerStateByModule[tab.module];
+              return (
+                <div key={tab.view} className={NAV_GROUP_CLASS}>
+                  <TabButton view={tab.view} activeTab={activeTab} onSelect={setActiveTab} />
+                  <PlayerTransport
+                    id={`btn-header-play-${tab.module}`}
+                    state={state}
+                    size="sm"
+                    compact
+                    unwrapped
+                    onPlay={() => play(tab.module)}
+                    onSoftStop={() => softStop(tab.module)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {layer === 'song' && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {SONG_NAV_TABS.map((view) => (
+              <div key={view} className={NAV_GROUP_CLASS}>
+                <TabButton view={view} activeTab={activeTab} onSelect={setActiveTab} />
               </div>
-            );
-          })}
-        </div>
-
-        <div className='divider divider-horizontal m-0' />
-
-        {/* The two non-playable views: Arrange and the global Master FX rack. */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {SOLO_TABS.map((view) => (
-            <div key={view} className={NAV_GROUP_CLASS}>
-              <TabButton view={view} activeTab={activeTab} onSelect={setActiveTab} />
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </nav>
 
       {/* Key, Scale & Global Actions */}
       <div className="flex items-center gap-1.5 shrink-0 xl:justify-self-end">
-        {/* Region picker — per-region editing tabs only; hidden on Arrange and
-            the global Master FX rack. */}
-        {activeTab !== 'arrange' && activeTab !== 'effects' && <RegionSelector />}
+        {layer === 'loop' && (
+          <>
+            <LoopSelector />
+            {/* Scale Picker Compact */}
+            <div className="hidden md:flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-field">
+              <ScaleSelects idPrefix="select-master-scale" />
+            </div>
 
-        {/* Scale Picker Compact */}
-        <div className="hidden md:flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-field">
-          <ScaleSelects idPrefix="select-master-scale" />
-        </div>
-
-        {/* Below `md` the inline picker would leave the nav about 20px of room,
-            so the same two selects move behind a root-note pill instead. */}
-        <details className="dropdown dropdown-end md:hidden">
-          <summary
-            id="btn-scale-dropdown"
-            className="btn btn-sm btn-ghost gap-1 text-xs font-bold list-none"
-            title={`Key & Scale — ${scaleRoot} ${SCALES[scaleType]?.name ?? scaleType}`}
-          >
-            <span className="text-primary">{scaleRoot}</span>
-            <ChevronDown className="w-3 h-3 opacity-60" />
-          </summary>
-          <div className="dropdown-content z-50 mt-1 w-56 p-2 flex flex-col gap-2 bg-base-100 border border-base-300 rounded-box shadow-xl">
-            <ScaleSelects idPrefix="select-master-scale-compact" stacked />
-          </div>
-        </details>
+            {/* Below `md` the inline picker would leave the nav about 20px of room,
+                so the same two selects move behind a root-note pill instead. */}
+            <details className="dropdown dropdown-end md:hidden">
+              <summary
+                id="btn-scale-dropdown"
+                className="btn btn-sm btn-ghost gap-1 text-xs font-bold list-none"
+                title={`Key & Scale — ${scaleRoot} ${SCALES[scaleType]?.name ?? scaleType}`}
+              >
+                <span className="text-primary">{scaleRoot}</span>
+                <ChevronDown className="w-3 h-3 opacity-60" />
+              </summary>
+              <div className="dropdown-content z-50 mt-1 w-56 p-2 flex flex-col gap-2 bg-base-100 border border-base-300 rounded-box shadow-xl">
+                <ScaleSelects idPrefix="select-master-scale-compact" stacked />
+              </div>
+            </details>
+          </>
+        )}
 
         {/* Theme Toggle Button */}
         <button
