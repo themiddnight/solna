@@ -223,7 +223,7 @@ export const LeadPianoRoll: React.FC<LeadPianoRollProps> = ({ currentStep, isPla
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto bg-base-200 p-3 rounded">
           <div className="w-fit mx-auto">
             {/* Bar-number header */}
             <div className="flex">

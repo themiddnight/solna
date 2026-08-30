@@ -57,9 +57,9 @@ export const BottomInputDock: React.FC<{
   } = keyboardProps;
 
   return (
-    <div className="border-t border-base-300 bg-base-100 z-30">
+    <div className="relative z-30 pointer-events-none">
       {/* Always-visible header: the toggle, plus (when open) the Keyboard | Drums tabs. */}
-      <div className="flex items-center gap-2 px-3 py-1.5 select-none">
+      <div className="absolute bottom-full left-0 flex items-center gap-1.5 p-1 bg-base-100 rounded-t-lg border border-base-300 pointer-events-auto">
         <button
           id="btn-toggle-input-deck"
           type="button"
@@ -96,13 +96,13 @@ export const BottomInputDock: React.FC<{
       {/* Collapsible body: grid-template-rows 0fr -> 1fr animates the intrinsic
           height without fighting auto-sized content. */}
       <div
-        className={`grid transition-[grid-template-rows] duration-200 ease-out ${
-          isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        className={`grid transition-[grid-template-rows] duration-200 ease-out pointer-events-auto ${
+          isOpen ? 'bg-base-100 grid-rows-[1fr]' : 'grid-rows-[0fr]'
         }`}
       >
         <div className="overflow-hidden min-h-0">
           {isOpen && mode === 'keyboard' && (
-            <div className="px-3 pb-3 space-y-2">
+            <div className="p-3 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className={SECTION_HEADER}>Keyboard</span>
