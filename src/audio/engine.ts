@@ -566,6 +566,10 @@ class AudioEngine {
     gain.connect(this.dryGain);
     const now = time ?? this.ctx.currentTime;
     source.start(now);
+    source.onended = () => {
+      try { source.disconnect(); } catch { /* ignore */ }
+      try { gain.disconnect(); } catch { /* ignore */ }
+    };
   }
 
   // Synthesizer Note On
@@ -1254,13 +1258,14 @@ class AudioEngine {
    * kits); it used to be tested as a boolean and the send ran at full voice
    * level, so the whole spread was inaudible.
    */
-  private wireDrumVoice(env: GainNode, reverbSend = 0): void {
+  private wireDrumVoice(env: GainNode, reverbSend = 0): GainNode | null {
     env.connect(this.drumBusFilter!);
-    if (reverbSend <= 0 || !this.drumSendFilter) return;
+    if (reverbSend <= 0 || !this.drumSendFilter) return null;
     const send = this.ctx!.createGain();
     send.gain.value = reverbSend;
     env.connect(send);
     send.connect(this.drumSendFilter);
+    return send;
   }
 
   /** A pitched drum component (kick body, kick click, snare body, tom). */
@@ -1282,9 +1287,14 @@ class AudioEngine {
     }
     const env = this.drumEnv(o.peak, o.decay, o.t);
     osc.connect(env);
-    this.wireDrumVoice(env);
+    const send = this.wireDrumVoice(env);
     osc.start(o.t);
     osc.stop(o.stopAt ?? o.t + o.decay + 0.02);
+    osc.onended = () => {
+      try { osc.disconnect(); } catch { /* ignore */ }
+      try { env.disconnect(); } catch { /* ignore */ }
+      if (send) try { send.disconnect(); } catch { /* ignore */ }
+    };
   }
 
   /** A filtered noise drum component (hats, snare snap, clap, crash). */
@@ -1311,9 +1321,15 @@ class AudioEngine {
 
     noise.connect(filter);
     filter.connect(env);
-    this.wireDrumVoice(env, o.reverbSend);
+    const send = this.wireDrumVoice(env, o.reverbSend);
     noise.start(o.t, this.noiseStartOffset());
     noise.stop(o.t + o.decay + (o.stopPad ?? 0.01));
+    noise.onended = () => {
+      try { noise.disconnect(); } catch { /* ignore */ }
+      try { filter.disconnect(); } catch { /* ignore */ }
+      try { env.disconnect(); } catch { /* ignore */ }
+      if (send) try { send.disconnect(); } catch { /* ignore */ }
+    };
   }
 
   /**
