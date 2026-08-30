@@ -12,19 +12,23 @@ import { createSequencerSlice } from './sequencerSlice';
 import { createEffectsSlice } from './effectsSlice';
 import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
 import { EFFECT_LIMITS, clampEffectValue, type EffectNumericKey } from '../audio/effectLimits';
-import type { SynthParams } from '../types';
+import type { SynthParams, ChordItem, SequencerTrack, FilterType } from '../types';
 import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
+import { createRegionSlice, createDefaultRegion } from './regionSlice';
 import {
   migrateLegacyPresets,
   migrateProjectTitleToVibeId,
   migrateTrackColors,
   migrateMeterAndStepWidth,
+  wrapFlatStateIntoRegion,
   removeLegacyKeys,
   LEGACY_PERSIST_KEY,
 } from './migrate';
+import { regionStatePatch } from './region';
+import type { BassStepChoice } from '../audio/bassPatterns';
 import { isMeterId } from '../utils/meter';
-import type { AppStore, PersistedState } from './types';
+import type { AppStore, PersistedState, Region } from './types';
 
 export const PERSIST_KEY = 'musibox_project_state_v1';
 
@@ -97,50 +101,23 @@ function resolveStorage(): StateStorage | null {
 // is still in its temporal dead zone) can still reach the store api.
 let storeApi: StoreApi<AppStore> | undefined;
 
-// Explicit allow-list: everything except the ui slice, the transient playing
-// flags, and all actions.
+// Explicit allow-list: the nine global fields plus the regions arrangement.
+// Every per-region musical field lives inside `regions`; the flat copies in the
+// live state are intentionally NOT persisted (they are the working copy of the
+// active region and are kept in sync by regionSync's live-write subscription).
 export function partializeAppState(state: AppStore): PersistedState {
   return {
     bpm: state.bpm,
     meterId: state.meterId,
     masterVolume: state.masterVolume,
     metronomeActive: state.metronomeActive,
-    scaleRoot: state.scaleRoot,
-    scaleType: state.scaleType,
     selectedVibeId: state.selectedVibeId,
-    synthParams: state.synthParams,
-    chordSynthParams: state.chordSynthParams,
-    bassSynthParams: state.bassSynthParams,
     controlTarget: state.controlTarget,
-    synthVolume: state.synthVolume,
-    synthMuted: state.synthMuted,
-    chords: state.chords,
-    chordRhythmId: state.chordRhythmId,
-    chordRhythmMode: state.chordRhythmMode,
-    customChordRhythm: state.customChordRhythm,
-    chordFeel: state.chordFeel,
-    chordOctave: state.chordOctave,
-    chordMuted: state.chordMuted,
-    chordVolume: state.chordVolume,
-    bassPatternId: state.bassPatternId,
-    bassPatternMode: state.bassPatternMode,
-    customBassPattern: state.customBassPattern,
-    bassFeel: state.bassFeel,
-    bassOctave: state.bassOctave,
-    bassMuted: state.bassMuted,
-    bassVolume: state.bassVolume,
-    leadMelodySteps: state.leadMelodySteps,
-    leadLoopLength: state.leadLoopLength,
-    sequencerTracks: state.sequencerTracks,
-    soundKit: state.soundKit,
-    masterSequencerVolume: state.masterSequencerVolume,
-    drumMuted: state.drumMuted,
-    drumFilterCutoff: state.drumFilterCutoff,
-    drumFilterResonance: state.drumFilterResonance,
-    drumFilterType: state.drumFilterType,
     effects: state.effects,
     customSynthPresets: state.customSynthPresets,
     customChordProgressions: state.customChordProgressions,
+    regions: state.regions,
+    activeRegionId: state.activeRegionId,
   };
 }
 
@@ -224,6 +201,86 @@ function sanitizeEffectsValue(effects: unknown): unknown {
   return result;
 }
 
+/**
+ * Validates a persisted `regions` array. Each region is rebuilt through the
+ * same per-field guards/clamps the flat payload used (synth params, finite
+ * clamps, string/enum checks), with createDefaultRegion() as the fallback for
+ * missing or wrong-typed fields. Rows that are not plain objects are dropped;
+ * an empty result means "no valid regions" and the caller falls back to the
+ * default single region.
+ */
+function sanitizeRegions(value: unknown): Region[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  // Module-level helper: this function is not inside sanitizePersistedState, so
+  // it cannot see that function's local clampFinite/asBoolean — define its own.
+  const clampFinite = (v: unknown, min: number, max: number, fallback: number): number => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return fallback;
+    return Math.min(max, Math.max(min, v));
+  };
+  const asBoolean = (v: unknown): boolean => (typeof v === 'boolean' ? v : false);
+  const regions: Region[] = [];
+  for (const raw of value) {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue;
+    const fallback = createDefaultRegion();
+    const r = { ...fallback, ...(raw as Record<string, unknown>) } as Record<string, unknown>;
+    regions.push({
+      id: typeof r.id === 'string' && r.id.length > 0 ? r.id : `region-${regions.length}`,
+      name: typeof r.name === 'string' && r.name.length > 0 ? r.name : `Region ${regions.length + 1}`,
+      scaleRoot: typeof r.scaleRoot === 'string' ? r.scaleRoot : fallback.scaleRoot,
+      scaleType: typeof r.scaleType === 'string' ? r.scaleType : fallback.scaleType,
+      synthParams: sanitizeSynthParams(r.synthParams),
+      chordSynthParams: sanitizeSynthParams(r.chordSynthParams),
+      bassSynthParams: sanitizeSynthParams(r.bassSynthParams),
+      chords: Array.isArray(r.chords) ? (r.chords as ChordItem[]) : fallback.chords,
+      chordRhythmId: typeof r.chordRhythmId === 'string' ? r.chordRhythmId : fallback.chordRhythmId,
+      chordRhythmMode:
+        r.chordRhythmMode === 'preset' || r.chordRhythmMode === 'custom'
+          ? r.chordRhythmMode
+          : fallback.chordRhythmMode,
+      customChordRhythm: Array.isArray(r.customChordRhythm)
+        ? (r.customChordRhythm as boolean[])
+        : fallback.customChordRhythm,
+      chordFeel: clampFinite(r.chordFeel, 0, 1, fallback.chordFeel),
+      chordOctave: clampFinite(r.chordOctave, 0, 8, fallback.chordOctave),
+      bassPatternId: typeof r.bassPatternId === 'string' ? r.bassPatternId : fallback.bassPatternId,
+      bassPatternMode:
+        r.bassPatternMode === 'preset' || r.bassPatternMode === 'custom'
+          ? r.bassPatternMode
+          : fallback.bassPatternMode,
+      customBassPattern: Array.isArray(r.customBassPattern)
+        ? (r.customBassPattern as BassStepChoice[])
+        : fallback.customBassPattern,
+      bassFeel: clampFinite(r.bassFeel, 0, 1, fallback.bassFeel),
+      bassOctave: clampFinite(r.bassOctave, 0, 8, fallback.bassOctave),
+      leadMelodySteps: Array.isArray(r.leadMelodySteps)
+        ? (r.leadMelodySteps as string[][])
+        : fallback.leadMelodySteps,
+      leadLoopLength:
+        typeof r.leadLoopLength === 'number' && Number.isInteger(r.leadLoopLength) && r.leadLoopLength >= 1
+          ? r.leadLoopLength
+          : fallback.leadLoopLength,
+      sequencerTracks: Array.isArray(r.sequencerTracks)
+        ? (r.sequencerTracks as SequencerTrack[])
+        : fallback.sequencerTracks,
+      soundKit: typeof r.soundKit === 'string' ? r.soundKit : fallback.soundKit,
+      drumFilterCutoff: clampFinite(r.drumFilterCutoff, 50, 12000, fallback.drumFilterCutoff),
+      drumFilterResonance: clampFinite(r.drumFilterResonance, 0.1, 20, fallback.drumFilterResonance),
+      drumFilterType: FILTER_TYPES.has(r.drumFilterType as string)
+        ? (r.drumFilterType as FilterType)
+        : fallback.drumFilterType,
+      synthVolume: clampFinite(r.synthVolume, 0, 1.5, fallback.synthVolume),
+      synthMuted: asBoolean(r.synthMuted),
+      chordVolume: clampFinite(r.chordVolume, 0, 1.5, fallback.chordVolume),
+      chordMuted: asBoolean(r.chordMuted),
+      bassVolume: clampFinite(r.bassVolume, 0, 1.5, fallback.bassVolume),
+      bassMuted: asBoolean(r.bassMuted),
+      masterSequencerVolume: clampFinite(r.masterSequencerVolume, 0, 1, fallback.masterSequencerVolume),
+      drumMuted: asBoolean(r.drumMuted),
+    });
+  }
+  return regions.length > 0 ? regions : undefined;
+}
+
 function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (typeof persisted !== 'object' || persisted === null) return {};
   const sanitized = { ...(persisted as Record<string, unknown>) };
@@ -296,6 +353,23 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
     if (key in sanitized) sanitized[key] = sanitizeSynthParams(sanitized[key]);
   }
 
+  // v6: regions + activeRegionId. A valid regions array also pins
+  // activeRegionId to an existing region (else the first); a missing/invalid
+  // array drops both keys so the currentState defaults win in the merge.
+  const regions = sanitizeRegions(sanitized.regions);
+  if (regions) {
+    sanitized.regions = regions;
+    if (
+      typeof sanitized.activeRegionId !== 'string' ||
+      !regions.some((r) => r.id === sanitized.activeRegionId)
+    ) {
+      sanitized.activeRegionId = regions[0].id;
+    }
+  } else {
+    delete sanitized.regions;
+    delete sanitized.activeRegionId;
+  }
+
   return sanitized as unknown as Partial<AppStore>;
 }
 
@@ -314,11 +388,12 @@ export const useAppStore = create<AppStore>()(
         ...createEffectsSlice(set),
         ...createUiSlice(set),
         ...createPresetsSlice(set),
+        ...createRegionSlice(set, get),
       };
     }),
     {
       name: PERSIST_KEY,
-      version: 5,
+      version: 6,
       storage: createJSONStorage<PersistedState>(() => resolveStorage() ?? memoryStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
@@ -327,23 +402,20 @@ export const useAppStore = create<AppStore>()(
         const migrated = migrateLegacyPresets(
           (persisted ?? {}) as Partial<PersistedState>
         ) as PersistedState;
-        // v3 → v4: the project concept is gone; the vibe bar's highlight is
-        // its own persisted field now.
+        // v3 → v4
         const deprojected =
           version >= 4 ? migrated : (migrateProjectTitleToVibeId(migrated) as PersistedState);
-        // v2 → v3: raw Tailwind track colours become daisyUI semantic tokens.
+        // v2 → v3
         const recoloured =
           version >= 3 ? deprojected : (migrateTrackColors(deprojected) as PersistedState);
-        // v4 → v5: step arrays widen to MAX_STEPS_PER_BAR and meterId appears.
-        // Runs on EVERY older version, so it is applied after the chain above
-        // rather than inside the version >= 2 short-circuit below.
+        // v4 → v5 (runs on EVERY older version, after the chain above)
         const metered = (payload: PersistedState): PersistedState =>
           version >= 5 ? payload : (migrateMeterAndStepWidth(payload) as PersistedState);
-        if (version >= 2) return metered(recoloured);
-        // v1 persisted `arpActive: true` from an arpeggiator that never
-        // produced a note, while that same flag gated the keyboard's direct
-        // trigger — so those sessions came back with a silent keyboard. Clear
-        // the flag once on the way to v2; the arp can be switched back on.
+        // v5 → v6 (single-region wrap; forward-compat guard for a future v7)
+        const wrapped = (payload: PersistedState): PersistedState =>
+          version >= 6 ? payload : (wrapFlatStateIntoRegion(payload) as PersistedState);
+        if (version >= 2) return wrapped(metered(recoloured));
+        // v1 arp fix (unchanged) …
         const next = { ...recoloured } as Record<string, unknown>;
         for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams']) {
           const params = next[key];
@@ -351,7 +423,7 @@ export const useAppStore = create<AppStore>()(
             next[key] = { ...(params as object), arpActive: false };
           }
         }
-        return metered(next as unknown as PersistedState);
+        return wrapped(metered(next as unknown as PersistedState));
       },
       // Runs on every hydration (also when nothing was stored): sanitize the
       // parsed payload (wrong-typed persisted values must never reach the
@@ -359,8 +431,22 @@ export const useAppStore = create<AppStore>()(
       // drop the legacy keys once the merged state has been written under the
       // new key.
       merge: (persistedState, currentState) => {
-        const base = { ...currentState, ...sanitizePersistedState(persistedState) };
-        return { ...base, ...migrateLegacyPresets(base as Partial<PersistedState>) };
+        const sanitized = sanitizePersistedState(persistedState);
+        const base = { ...currentState, ...sanitized };
+        const withPresets = { ...base, ...migrateLegacyPresets(base as Partial<PersistedState>) };
+        // v6: load regions[activeRegionId] into the flat slices LAST, so the
+        // region's fields win over any stale top-level per-region keys that a
+        // legacy payload still carried. Guarded on the SANITIZED payload having
+        // regions (a pre-v6 flat payload has none, so the flat keys hydrate the
+        // old way until Task 5's wrap migration normalises them).
+        const regions = sanitized.regions as Region[] | undefined;
+        if (Array.isArray(regions) && regions.length > 0) {
+          const activeId =
+            typeof sanitized.activeRegionId === 'string' ? sanitized.activeRegionId : regions[0].id;
+          const active = regions.find((r) => r.id === activeId) ?? regions[0];
+          return { ...withPresets, regions, activeRegionId: active.id, ...regionStatePatch(active) };
+        }
+        return withPresets;
       },
       // Post-hydration: the merged state (legacy presets adopted by `merge`
       // above) must be written under the new persist key before the legacy

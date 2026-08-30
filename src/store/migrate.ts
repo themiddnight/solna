@@ -2,6 +2,7 @@ import type { SynthPresetItem } from '../audio/synthPresets';
 import type { CustomChordProgressionItem } from '../types';
 import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
 import { padStepRow } from '../utils/patternAdapt';
+import { newRegionId, REGION_FLAT_KEYS } from './region';
 
 // Legacy localStorage keys written by the pre-Zustand app:
 // - synth presets:   src/audio/synthPresets.ts (STORAGE_KEY)
@@ -157,5 +158,27 @@ export function migrateMeterAndStepWidth<T extends object>(state: T): T {
     });
   }
 
+  return next as unknown as T;
+}
+
+/**
+ * v5 -> v6: the single-region wrap. The flat per-region fields become the
+ * first region; the global fields stay top-level. Runs at the END of the
+ * migrate chain for every version < 6, after the v1->v5 chain has normalised
+ * older payloads to the v5 flat shape — so it only ever sees the current flat
+ * layout. Pure and non-mutating, like its four siblings above.
+ */
+export function wrapFlatStateIntoRegion<T extends object>(state: T): T {
+  const next = { ...(state as Record<string, unknown>) } as Record<string, unknown>;
+  const region: Record<string, unknown> = {
+    id: newRegionId(),
+    name: 'Region 1',
+  };
+  for (const key of REGION_FLAT_KEYS) {
+    if (key in next) region[key] = next[key];
+  }
+  next.regions = [region];
+  next.activeRegionId = region.id;
+  for (const key of REGION_FLAT_KEYS) delete next[key];
   return next as unknown as T;
 }

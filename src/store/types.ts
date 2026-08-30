@@ -37,6 +37,9 @@ export interface TransportSlice {
   playheadChordStartBeat: number;
   setPlayheadBeat: (beat: number | null) => void;
   setPlayheadChord: (chordIndex: number | null, startBeat?: number) => void;
+  /** Transient song-mode cursor: index into regions[] currently sounding, null = loop mode. */
+  songRegionIndex: number | null;
+  setSongRegionIndex: (index: number | null) => void;
   setBpm: (bpm: number) => void;
   setMeter: (id: MeterId) => void;
   setMasterVolume: (volume: number) => void;
@@ -122,6 +125,8 @@ export interface LeadSlice {
   leadMelodyOctave: number;
   setLeadMelodySteps: (steps: string[][]) => void;
   setLeadLoopLength: (bars: number) => void;
+  /** Like setLeadLoopLength but never resizes/trims the melody grid. */
+  setLeadLoopLengthPreserve: (bars: number) => void;
   setLeadMelodyView: (view: LeadMelodyView) => void;
   setLeadMelodyOctave: (octave: number) => void;
   toggleLeadNote: (stepIndex: number, note: string) => void;
@@ -214,6 +219,73 @@ export interface PresetsSlice {
   deleteCustomChordProgression: (id: string) => CustomChordProgressionItem[];
 }
 
+/** A full per-region musical snapshot: identity + the 31 per-region fields. */
+export interface Region {
+  id: string;
+  name: string; // auto-named "Region N"; ids are the stable handle
+  scaleRoot: string;
+  scaleType: string;
+  synthParams: SynthParams;
+  chordSynthParams: SynthParams;
+  bassSynthParams: SynthParams;
+  chords: ChordItem[];
+  chordRhythmId: string;
+  chordRhythmMode: 'preset' | 'custom';
+  customChordRhythm: boolean[];
+  chordFeel: number;
+  chordOctave: number;
+  bassPatternId: string;
+  bassPatternMode: 'preset' | 'custom';
+  customBassPattern: BassStepChoice[];
+  bassFeel: number;
+  bassOctave: number;
+  leadMelodySteps: string[][];
+  leadLoopLength: number;
+  sequencerTracks: SequencerTrack[];
+  soundKit: string;
+  drumFilterCutoff: number;
+  drumFilterResonance: number;
+  drumFilterType: FilterType;
+  synthVolume: number;
+  synthMuted: boolean;
+  chordVolume: number;
+  chordMuted: boolean;
+  bassVolume: number;
+  bassMuted: boolean;
+  masterSequencerVolume: number;
+  drumMuted: boolean;
+}
+
+/** The 31 per-region fields, without identity — what loadRegion writes to the flat slices. */
+export type RegionStatePatch = Omit<Region, 'id' | 'name'>;
+
+/** The per-region mixer: the 8 volume/mute fields edited on each Arrange card. */
+export type RegionMixPatch = Pick<
+  Region,
+  | 'synthVolume'
+  | 'synthMuted'
+  | 'chordVolume'
+  | 'chordMuted'
+  | 'bassVolume'
+  | 'bassMuted'
+  | 'masterSequencerVolume'
+  | 'drumMuted'
+>;
+
+export interface RegionSlice {
+  /** The arrangement, in list (playback) order. Always ≥ 1 element. */
+  regions: Region[];
+  /** Id of the region currently being edited. */
+  activeRegionId: string;
+  addRegion: () => string;
+  duplicateRegion: (id: string) => string | null;
+  deleteRegion: (id: string) => string | null;
+  reorderRegions: (id: string, direction: -1 | 1) => void;
+  setActiveRegion: (id: string) => void;
+  /** Edit a region's 8 mixer fields in place; mirrors to the flat slices when active. */
+  setRegionMix: (id: string, patch: Partial<RegionMixPatch>) => void;
+}
+
 export interface AppStore
   extends TransportSlice,
     MusicContextSlice,
@@ -224,48 +296,23 @@ export interface AppStore
     SequencerSlice,
     EffectsSlice,
     UiSlice,
-    PresetsSlice {}
+    PresetsSlice,
+    RegionSlice {}
 
 // The exact allow-list shape produced by the persist `partialize` config.
+// Per-region fields live inside `regions`; the nine global fields stay
+// top-level. `regions` ∪ {the nine globals} reconstructs today's single
+// persisted snapshot exactly.
 export interface PersistedState {
   bpm: number;
   meterId: MeterId;
   masterVolume: number;
   metronomeActive: boolean;
-  scaleRoot: string;
-  scaleType: string;
   selectedVibeId: string | null;
-  synthParams: SynthParams;
-  chordSynthParams: SynthParams;
-  bassSynthParams: SynthParams;
   controlTarget: SynthControlTarget;
-  synthVolume: number;
-  synthMuted: boolean;
-  chords: ChordItem[];
-  chordRhythmId: string;
-  chordRhythmMode: 'preset' | 'custom';
-  customChordRhythm: boolean[];
-  chordFeel: number;
-  chordOctave: number;
-  chordMuted: boolean;
-  chordVolume: number;
-  bassPatternId: string;
-  bassPatternMode: 'preset' | 'custom';
-  customBassPattern: BassStepChoice[];
-  bassFeel: number;
-  bassOctave: number;
-  bassMuted: boolean;
-  bassVolume: number;
-  leadMelodySteps: string[][];
-  leadLoopLength: number;
-  sequencerTracks: SequencerTrack[];
-  soundKit: string;
-  masterSequencerVolume: number;
-  drumMuted: boolean;
-  drumFilterCutoff: number;
-  drumFilterResonance: number;
-  drumFilterType: FilterType;
   effects: MasterEffects;
   customSynthPresets: SynthPresetItem[];
   customChordProgressions: CustomChordProgressionItem[];
+  regions: Region[];
+  activeRegionId: string;
 }

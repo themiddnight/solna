@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore, partializeAppState } from './store';
+import { startRegionSync } from './regionSync';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 
 function resetLead(): void {
@@ -56,6 +57,22 @@ describe('lead slice — setLeadLoopLength resizes by whole bars', () => {
     expect(shrunk.leadMelodySteps[0]).toEqual(['C4']);
   });
 
+  test('setLeadLoopLengthPreserve lowers the loop length without trimming the grid', () => {
+    const s = useAppStore.getState();
+    s.toggleLeadNote(0, 'C4');
+    s.setLeadLoopLength(2); // grow to 48 slots
+    useAppStore.getState().toggleLeadNote(24, 'E4'); // bar 1 step 0
+    useAppStore.getState().setLeadLoopLengthPreserve(1);
+    const clamped = useAppStore.getState();
+    expect(clamped.leadLoopLength).toBe(1);
+    // The drawn bar-1 note survives dormant and returns if the length is raised.
+    expect(clamped.leadMelodySteps).toHaveLength(48);
+    expect(clamped.leadMelodySteps[24]).toEqual(['E4']);
+    useAppStore.getState().setLeadLoopLength(2);
+    const restored = useAppStore.getState();
+    expect(restored.leadMelodySteps[24]).toEqual(['E4']);
+  });
+
   test('a meter change never touches the stored melody (non-destructive)', () => {
     const s = useAppStore.getState();
     s.toggleLeadNote(18, 'G4'); // step 18 visible in 12/8 (24), hidden in 4/4
@@ -69,13 +86,22 @@ describe('lead slice — setLeadLoopLength resizes by whole bars', () => {
 
 describe('lead slice — persistence', () => {
   beforeEach(resetLead);
-  test('leadMelodySteps and leadLoopLength are persisted', () => {
-    const s = useAppStore.getState();
-    s.toggleLeadNote(0, 'C4');
-    s.setLeadLoopLength(2);
-    const persisted = partializeAppState(useAppStore.getState());
-    expect(persisted.leadMelodySteps).toEqual(useAppStore.getState().leadMelodySteps);
-    expect(persisted.leadLoopLength).toBe(2);
+  test('leadMelodySteps and leadLoopLength are persisted inside the active region', () => {
+    // v6: per-region fields persist inside regions[activeRegionId], kept fresh
+    // by the live-write sync-back (regionSync). Start it here so the edits to
+    // the flat slices reach the persisted region copy, as they do in the app.
+    const stop = startRegionSync();
+    try {
+      const s = useAppStore.getState();
+      s.toggleLeadNote(0, 'C4');
+      s.setLeadLoopLength(2);
+      const persisted = partializeAppState(useAppStore.getState());
+      const region = persisted.regions.find((r) => r.id === persisted.activeRegionId)!;
+      expect(region.leadMelodySteps).toEqual(useAppStore.getState().leadMelodySteps);
+      expect(region.leadLoopLength).toBe(2);
+    } finally {
+      stop();
+    }
   });
 
   test('leadMelodyView, leadMelodyOctave and leadPlayer are transient', () => {
