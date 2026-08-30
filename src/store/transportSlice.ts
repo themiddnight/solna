@@ -85,8 +85,8 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
     playheadBeat: null,
     playheadChordIndex: null,
     playheadChordStartBeat: 0,
-    songRegionIndex: null,
-    setSongRegionIndex: (songRegionIndex) => set({ songRegionIndex }),
+    songLoopIndex: null,
+    setSongLoopIndex: (songLoopIndex) => set({ songLoopIndex }),
 
     setPlayheadBeat: (playheadBeat) => set({ playheadBeat }),
     setPlayheadChord: (playheadChordIndex, startBeat = 0) =>

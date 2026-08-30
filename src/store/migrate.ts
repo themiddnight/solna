@@ -2,11 +2,11 @@ import type { SynthPresetItem } from '../audio/synthPresets';
 import type { CustomChordProgressionItem } from '../types';
 import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
 import { padStepRow } from '../utils/patternAdapt';
-import { newRegionId, REGION_FLAT_KEYS } from './region';
+import { newLoopId, LOOP_FLAT_KEYS } from './loop';
 
 // Legacy localStorage keys written by the pre-Zustand app:
 // - synth presets:   src/audio/synthPresets.ts (STORAGE_KEY)
-// - chord progressions: src/components/ChordPresetLibrary.tsx
+// - chord progressions: src/components/loop/ChordPresetLibrary.tsx
 export const LEGACY_SYNTH_PRESETS_KEY = 'murva_synth_custom_presets_v1';
 export const LEGACY_CHORD_PROGRESSIONS_KEY = 'murva_chord_custom_progressions_v1';
 export const LEGACY_PERSIST_KEY = 'murva_project_state_v1';
@@ -162,23 +162,43 @@ export function migrateMeterAndStepWidth<T extends object>(state: T): T {
 }
 
 /**
- * v5 -> v6: the single-region wrap. The flat per-region fields become the
- * first region; the global fields stay top-level. Runs at the END of the
+ * v5 -> v6: the single-loop wrap. The flat per-loop fields become the
+ * first loop; the global fields stay top-level. Runs at the END of the
  * migrate chain for every version < 6, after the v1->v5 chain has normalised
  * older payloads to the v5 flat shape — so it only ever sees the current flat
  * layout. Pure and non-mutating, like its four siblings above.
  */
-export function wrapFlatStateIntoRegion<T extends object>(state: T): T {
+export function wrapFlatStateIntoLoop<T extends object>(state: T): T {
   const next = { ...(state as Record<string, unknown>) } as Record<string, unknown>;
-  const region: Record<string, unknown> = {
-    id: newRegionId(),
-    name: 'Region 1',
+  const loop: Record<string, unknown> = {
+    id: newLoopId(),
+    name: 'Loop 1',
   };
-  for (const key of REGION_FLAT_KEYS) {
-    if (key in next) region[key] = next[key];
+  for (const key of LOOP_FLAT_KEYS) {
+    if (key in next) loop[key] = next[key];
   }
-  next.regions = [region];
-  next.activeRegionId = region.id;
-  for (const key of REGION_FLAT_KEYS) delete next[key];
+  next.loops = [loop];
+  next.activeLoopId = loop.id;
+  for (const key of LOOP_FLAT_KEYS) delete next[key];
+  return next as unknown as T;
+}
+
+/**
+ * v6 -> v7: rename the two historical persisted keys (`regions` /
+ * `activeRegionId`) to the loop shape (`loops` / `activeLoopId`). Runs LAST in
+ * the migrate chain for every version < 7, after the v5->v6 wrap has already
+ * normalised older payloads to the loop shape — for those the rename is a
+ * no-op. Pure and non-mutating, like its siblings.
+ */
+export function renameRegionKeysToLoop<T extends object>(state: T): T {
+  const next = { ...(state as Record<string, unknown>) } as Record<string, unknown>;
+  if ('regions' in next) {
+    next.loops = next.regions;
+    delete next.regions;
+  }
+  if ('activeRegionId' in next) {
+    next.activeLoopId = next.activeRegionId;
+    delete next.activeRegionId;
+  }
   return next as unknown as T;
 }

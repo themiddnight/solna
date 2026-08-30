@@ -317,10 +317,10 @@ describe('chords initial octave', () => {
     ];
 
     // Persist custom chords (the persist middleware writes on every setState).
-    // Seed BOTH the region copy and the flat slices so the v6 payload carries
-    // the chords inside regions[].
+    // Seed BOTH the loop copy and the flat slices so the v6 payload carries
+    // the chords inside loops[].
     useAppStore.setState({
-      regions: [{ ...useAppStore.getState().regions[0], chords: customChords }],
+      loops: [{ ...useAppStore.getState().loops[0], chords: customChords }],
       chords: customChords,
     });
     const persistedPayload = fakeLocalStorage.getItem('musibox_project_state_v1');
@@ -331,7 +331,7 @@ describe('chords initial octave', () => {
     useAppStore.setState({ chords: INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)) });
     fakeLocalStorage.setItem('musibox_project_state_v1', persistedPayload!);
 
-    // Hydration merges the stored value via the region path: chords come back
+    // Hydration merges the stored value via the loop path: chords come back
     // as stored, not re-derived.
     await useAppStore.persist.rehydrate();
     expect(useAppStore.getState().chords).toEqual(customChords);
@@ -358,14 +358,14 @@ describe('persist partialize', () => {
       'effects',
       'customSynthPresets',
       'customChordProgressions',
-      'regions',
-      'activeRegionId',
+      'loops',
+      'activeLoopId',
     ];
     for (const key of persistedKeys) {
       expect(snapshot).toHaveProperty(key);
     }
-    expect(snapshot.regions).toHaveLength(1);
-    expect(snapshot.activeRegionId).toBe(snapshot.regions[0].id);
+    expect(snapshot.loops).toHaveLength(1);
+    expect(snapshot.activeLoopId).toBe(snapshot.loops[0].id);
 
     const excludedKeys = [
       'activeTab',
@@ -396,8 +396,8 @@ describe('persist partialize', () => {
       'deleteCustomPreset',
       'saveCustomChordProgression',
       'deleteCustomChordProgression',
-      // v6: the eight representative per-region fields — the split moved them
-      // into regions[], so they must be absent at the top level.
+      // v6: the eight representative per-loop fields — the split moved them
+      // into loops[], so they must be absent at the top level.
       'scaleRoot',
       'scaleType',
       'synthParams',
@@ -527,9 +527,9 @@ describe('persisted payload sanitization', () => {
       drumFilterCutoff: 12000,
       drumFilterResonance: 0.7,
       drumFilterType: 'lowpass',
-      // Per-region fields are restored too: the pre-v6 payload wraps into a
-      // single region (Task 5), so the merge's region-load re-applies the
-      // wrapped region's content to the flat slices. Restoring the defaults
+      // Per-loop fields are restored too: the pre-v6 payload wraps into a
+      // single loop (Task 5), so the merge's loop-load re-applies the
+      // wrapped loop's content to the flat slices. Restoring the defaults
       // makes "invalid array -> factory default" observable, the same way the
       // restored scalars above are.
       chords: INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)),
@@ -592,7 +592,7 @@ describe('persisted payload sanitization', () => {
     expect(s.selectedVibeId).toBe(null);
     expect(s.chordRhythmId).toBe('sustained');
     expect(s.bassPatternId).toBe(BASS_PATTERNS[0].id);
-    // Invalid arrays are dropped; the region-load re-applies the factory
+    // Invalid arrays are dropped; the loop-load re-applies the factory
     // defaults that chordsBefore/tracksBefore captured above.
     expect(s.chords).toEqual(chordsBefore);
     expect(s.sequencerTracks).toEqual(tracksBefore);
@@ -947,8 +947,8 @@ describe('meter migration wiring (v4 -> v5)', () => {
   });
 });
 
-describe('region wrap migration wiring (v5 -> v6)', () => {
-  test('a version-5 payload wraps into a single region and hydrates the flat slices from it', async () => {
+describe('loop wrap migration wiring (v5 -> v6)', () => {
+  test('a version-5 payload wraps into a single loop and hydrates the flat slices from it', async () => {
     const { useAppStore } = await getStore();
     useAppStore.persist.clearStorage();
 
@@ -969,31 +969,31 @@ describe('region wrap migration wiring (v5 -> v6)', () => {
 
     await useAppStore.persist.rehydrate();
     const s = useAppStore.getState();
-    expect(s.regions).toHaveLength(1);
-    expect(s.regions[0].name).toBe('Region 1');
-    expect(s.regions[0].scaleRoot).toBe('D');
-    expect(s.activeRegionId).toBe(s.regions[0].id);
-    // The wrapped region's content reached the flat editing surface.
+    expect(s.loops).toHaveLength(1);
+    expect(s.loops[0].name).toBe('Loop 1');
+    expect(s.loops[0].scaleRoot).toBe('D');
+    expect(s.activeLoopId).toBe(s.loops[0].id);
+    // The wrapped loop's content reached the flat editing surface.
     expect(s.scaleRoot).toBe('D');
-    expect(s.regions[0].sequencerTracks[0].steps).toEqual(wide);
+    expect(s.loops[0].sequencerTracks[0].steps).toEqual(wide);
     expect(s.bpm).toBe(96);
   });
 
-  test('a corrupt regions array falls back to a valid single default region', async () => {
+  test('a corrupt loops array falls back to a valid single default loop', async () => {
     const { useAppStore } = await getStore();
     useAppStore.persist.clearStorage();
     useAppStore.setState({ scaleRoot: 'A' });
 
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
-      JSON.stringify({ version: 6, state: { regions: [null, 7, 'x'], activeRegionId: 'nope' } })
+      JSON.stringify({ version: 6, state: { loops: [null, 7, 'x'], activeLoopId: 'nope' } })
     );
 
     await useAppStore.persist.rehydrate();
     const s = useAppStore.getState();
-    expect(s.regions).toHaveLength(1);
-    expect(s.regions[0].name).toBe('Region 1');
-    expect(s.activeRegionId).toBe(s.regions[0].id);
+    expect(s.loops).toHaveLength(1);
+    expect(s.loops[0].name).toBe('Loop 1');
+    expect(s.activeLoopId).toBe(s.loops[0].id);
     expect(s.scaleRoot).toBe('A');
   });
 });

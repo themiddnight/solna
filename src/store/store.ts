@@ -15,20 +15,21 @@ import { EFFECT_LIMITS, clampEffectValue, type EffectNumericKey } from '../audio
 import type { SynthParams, ChordItem, SequencerTrack, FilterType } from '../types';
 import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
-import { createRegionSlice, createDefaultRegion } from './regionSlice';
+import { createLoopSlice, createDefaultLoop } from './loopSlice';
 import {
   migrateLegacyPresets,
   migrateProjectTitleToVibeId,
   migrateTrackColors,
   migrateMeterAndStepWidth,
-  wrapFlatStateIntoRegion,
+  wrapFlatStateIntoLoop,
+  renameRegionKeysToLoop,
   removeLegacyKeys,
   LEGACY_PERSIST_KEY,
 } from './migrate';
-import { regionStatePatch } from './region';
+import { loopStatePatch } from './loop';
 import type { BassStepChoice } from '../audio/bassPatterns';
 import { isMeterId } from '../utils/meter';
-import type { AppStore, PersistedState, Region } from './types';
+import type { AppStore, PersistedState, Loop } from './types';
 
 export const PERSIST_KEY = 'musibox_project_state_v1';
 
@@ -101,10 +102,10 @@ function resolveStorage(): StateStorage | null {
 // is still in its temporal dead zone) can still reach the store api.
 let storeApi: StoreApi<AppStore> | undefined;
 
-// Explicit allow-list: the nine global fields plus the regions arrangement.
-// Every per-region musical field lives inside `regions`; the flat copies in the
+// Explicit allow-list: the nine global fields plus the loops arrangement.
+// Every per-loop musical field lives inside `loops`; the flat copies in the
 // live state are intentionally NOT persisted (they are the working copy of the
-// active region and are kept in sync by regionSync's live-write subscription).
+// active loop and are kept in sync by loopSync's live-write subscription).
 export function partializeAppState(state: AppStore): PersistedState {
   return {
     bpm: state.bpm,
@@ -116,8 +117,8 @@ export function partializeAppState(state: AppStore): PersistedState {
     effects: state.effects,
     customSynthPresets: state.customSynthPresets,
     customChordProgressions: state.customChordProgressions,
-    regions: state.regions,
-    activeRegionId: state.activeRegionId,
+    loops: state.loops,
+    activeLoopId: state.activeLoopId,
   };
 }
 
@@ -202,14 +203,14 @@ function sanitizeEffectsValue(effects: unknown): unknown {
 }
 
 /**
- * Validates a persisted `regions` array. Each region is rebuilt through the
+ * Validates a persisted `loops` array. Each loop is rebuilt through the
  * same per-field guards/clamps the flat payload used (synth params, finite
- * clamps, string/enum checks), with createDefaultRegion() as the fallback for
+ * clamps, string/enum checks), with createDefaultLoop() as the fallback for
  * missing or wrong-typed fields. Rows that are not plain objects are dropped;
- * an empty result means "no valid regions" and the caller falls back to the
- * default single region.
+ * an empty result means "no valid loops" and the caller falls back to the
+ * default single loop.
  */
-function sanitizeRegions(value: unknown): Region[] | undefined {
+function sanitizeLoops(value: unknown): Loop[] | undefined {
   if (!Array.isArray(value)) return undefined;
   // Module-level helper: this function is not inside sanitizePersistedState, so
   // it cannot see that function's local clampFinite/asBoolean — define its own.
@@ -218,14 +219,14 @@ function sanitizeRegions(value: unknown): Region[] | undefined {
     return Math.min(max, Math.max(min, v));
   };
   const asBoolean = (v: unknown): boolean => (typeof v === 'boolean' ? v : false);
-  const regions: Region[] = [];
+  const loops: Loop[] = [];
   for (const raw of value) {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue;
-    const fallback = createDefaultRegion();
+    const fallback = createDefaultLoop();
     const r = { ...fallback, ...(raw as Record<string, unknown>) } as Record<string, unknown>;
-    regions.push({
-      id: typeof r.id === 'string' && r.id.length > 0 ? r.id : `region-${regions.length}`,
-      name: typeof r.name === 'string' && r.name.length > 0 ? r.name : `Region ${regions.length + 1}`,
+    loops.push({
+      id: typeof r.id === 'string' && r.id.length > 0 ? r.id : `loop-${loops.length}`,
+      name: typeof r.name === 'string' && r.name.length > 0 ? r.name : `Loop ${loops.length + 1}`,
       scaleRoot: typeof r.scaleRoot === 'string' ? r.scaleRoot : fallback.scaleRoot,
       scaleType: typeof r.scaleType === 'string' ? r.scaleType : fallback.scaleType,
       synthParams: sanitizeSynthParams(r.synthParams),
@@ -278,7 +279,7 @@ function sanitizeRegions(value: unknown): Region[] | undefined {
       drumMuted: asBoolean(r.drumMuted),
     });
   }
-  return regions.length > 0 ? regions : undefined;
+  return loops.length > 0 ? loops : undefined;
 }
 
 function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
@@ -353,21 +354,21 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
     if (key in sanitized) sanitized[key] = sanitizeSynthParams(sanitized[key]);
   }
 
-  // v6: regions + activeRegionId. A valid regions array also pins
-  // activeRegionId to an existing region (else the first); a missing/invalid
+  // v7: loops + activeLoopId. A valid loops array also pins
+  // activeLoopId to an existing loop (else the first); a missing/invalid
   // array drops both keys so the currentState defaults win in the merge.
-  const regions = sanitizeRegions(sanitized.regions);
-  if (regions) {
-    sanitized.regions = regions;
+  const loops = sanitizeLoops(sanitized.loops);
+  if (loops) {
+    sanitized.loops = loops;
     if (
-      typeof sanitized.activeRegionId !== 'string' ||
-      !regions.some((r) => r.id === sanitized.activeRegionId)
+      typeof sanitized.activeLoopId !== 'string' ||
+      !loops.some((r) => r.id === sanitized.activeLoopId)
     ) {
-      sanitized.activeRegionId = regions[0].id;
+      sanitized.activeLoopId = loops[0].id;
     }
   } else {
-    delete sanitized.regions;
-    delete sanitized.activeRegionId;
+    delete sanitized.loops;
+    delete sanitized.activeLoopId;
   }
 
   return sanitized as unknown as Partial<AppStore>;
@@ -388,12 +389,12 @@ export const useAppStore = create<AppStore>()(
         ...createEffectsSlice(set),
         ...createUiSlice(set),
         ...createPresetsSlice(set),
-        ...createRegionSlice(set, get),
+        ...createLoopSlice(set, get),
       };
     }),
     {
       name: PERSIST_KEY,
-      version: 6,
+      version: 7,
       storage: createJSONStorage<PersistedState>(() => resolveStorage() ?? memoryStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
@@ -411,10 +412,15 @@ export const useAppStore = create<AppStore>()(
         // v4 → v5 (runs on EVERY older version, after the chain above)
         const metered = (payload: PersistedState): PersistedState =>
           version >= 5 ? payload : (migrateMeterAndStepWidth(payload) as PersistedState);
-        // v5 → v6 (single-region wrap; forward-compat guard for a future v7)
+        // v5 → v6 (single-loop wrap; forward-compat guard for a future v7)
         const wrapped = (payload: PersistedState): PersistedState =>
-          version >= 6 ? payload : (wrapFlatStateIntoRegion(payload) as PersistedState);
-        if (version >= 2) return wrapped(metered(recoloured));
+          version >= 6 ? payload : (wrapFlatStateIntoLoop(payload) as PersistedState);
+        // v6 → v7 (historical-key rename; no-op once the payload already uses
+        // the loop shape, which the wrap above always emits). Runs LAST so it
+        // also translates a v6 payload's two old keys.
+        const looped = (payload: PersistedState): PersistedState =>
+          version >= 7 ? payload : (renameRegionKeysToLoop(payload) as PersistedState);
+        if (version >= 2) return looped(wrapped(metered(recoloured)));
         // v1 arp fix (unchanged) …
         const next = { ...recoloured } as Record<string, unknown>;
         for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams']) {
@@ -423,7 +429,7 @@ export const useAppStore = create<AppStore>()(
             next[key] = { ...(params as object), arpActive: false };
           }
         }
-        return wrapped(metered(next as unknown as PersistedState));
+        return looped(wrapped(metered(next as unknown as PersistedState)));
       },
       // Runs on every hydration (also when nothing was stored): sanitize the
       // parsed payload (wrong-typed persisted values must never reach the
@@ -434,17 +440,17 @@ export const useAppStore = create<AppStore>()(
         const sanitized = sanitizePersistedState(persistedState);
         const base = { ...currentState, ...sanitized };
         const withPresets = { ...base, ...migrateLegacyPresets(base as Partial<PersistedState>) };
-        // v6: load regions[activeRegionId] into the flat slices LAST, so the
-        // region's fields win over any stale top-level per-region keys that a
+        // v7: load loops[activeLoopId] into the flat slices LAST, so the
+        // loop's fields win over any stale top-level per-loop keys that a
         // legacy payload still carried. Guarded on the SANITIZED payload having
-        // regions (a pre-v6 flat payload has none, so the flat keys hydrate the
-        // old way until Task 5's wrap migration normalises them).
-        const regions = sanitized.regions as Region[] | undefined;
-        if (Array.isArray(regions) && regions.length > 0) {
+        // loops (a pre-v6 flat payload has none, so the flat keys hydrate the
+        // old way until the wrap migration normalises them).
+        const loops = sanitized.loops as Loop[] | undefined;
+        if (Array.isArray(loops) && loops.length > 0) {
           const activeId =
-            typeof sanitized.activeRegionId === 'string' ? sanitized.activeRegionId : regions[0].id;
-          const active = regions.find((r) => r.id === activeId) ?? regions[0];
-          return { ...withPresets, regions, activeRegionId: active.id, ...regionStatePatch(active) };
+            typeof sanitized.activeLoopId === 'string' ? sanitized.activeLoopId : loops[0].id;
+          const active = loops.find((l) => l.id === activeId) ?? loops[0];
+          return { ...withPresets, loops, activeLoopId: active.id, ...loopStatePatch(active) };
         }
         return withPresets;
       },

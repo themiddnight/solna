@@ -11,7 +11,7 @@ type Get = StoreApi<AppStore>['getState'];
  * writes — see migrate.ts for the one-time adoption of those legacy keys).
  *
  * These actions are called directly by the UI layer (the thin store-wrapper
- * helpers in src/audio/synthPresets.ts and src/components/ChordPresetLibrary.tsx
+ * helpers in src/audio/synthPresets.ts and src/components/loop/ChordPresetLibrary.tsx
  * were deleted; components call the slice actions themselves).
  */
 export function createPresetsSlice(set: Set): PresetsSlice {

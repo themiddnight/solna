@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore, partializeAppState } from './store';
-import { startRegionSync } from './regionSync';
+import { startLoopSync } from './loopSync';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 
 function resetLead(): void {
@@ -86,19 +86,19 @@ describe('lead slice — setLeadLoopLength resizes by whole bars', () => {
 
 describe('lead slice — persistence', () => {
   beforeEach(resetLead);
-  test('leadMelodySteps and leadLoopLength are persisted inside the active region', () => {
-    // v6: per-region fields persist inside regions[activeRegionId], kept fresh
-    // by the live-write sync-back (regionSync). Start it here so the edits to
-    // the flat slices reach the persisted region copy, as they do in the app.
-    const stop = startRegionSync();
+  test('leadMelodySteps and leadLoopLength are persisted inside the active loop', () => {
+    // v6: per-loop fields persist inside loops[activeLoopId], kept fresh
+    // by the live-write sync-back (loopSync). Start it here so the edits to
+    // the flat slices reach the persisted loop copy, as they do in the app.
+    const stop = startLoopSync();
     try {
       const s = useAppStore.getState();
       s.toggleLeadNote(0, 'C4');
       s.setLeadLoopLength(2);
       const persisted = partializeAppState(useAppStore.getState());
-      const region = persisted.regions.find((r) => r.id === persisted.activeRegionId)!;
-      expect(region.leadMelodySteps).toEqual(useAppStore.getState().leadMelodySteps);
-      expect(region.leadLoopLength).toBe(2);
+      const loop = persisted.loops.find((r) => r.id === persisted.activeLoopId)!;
+      expect(loop.leadMelodySteps).toEqual(useAppStore.getState().leadMelodySteps);
+      expect(loop.leadLoopLength).toBe(2);
     } finally {
       stop();
     }
