@@ -36,7 +36,6 @@ export function leadStepAction(
 ): LeadStepAction {
   if (state === 'stopped') return 'idle';
   if (isSoftStopBoundary(state, step, stepsPerBar)) return 'soft-stop';
-  if (state === 'stopping') return 'idle';
   if (!armOnBarLine(arming, step, stepsPerBar)) return 'idle';
   return 'play';
 }

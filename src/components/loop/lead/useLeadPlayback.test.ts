@@ -15,9 +15,9 @@ describe('leadStepAction', () => {
     expect(leadStepAction('playing', 17, arming, 16)).toBe('play');
   });
 
-  test('a soft stop only lands on a bar line', () => {
+  test('a soft stop keeps playing to the bar line, then stops there', () => {
     const arming: LeadArming = { armed: true };
-    expect(leadStepAction('stopping', 20, arming, 16)).toBe('idle');
+    expect(leadStepAction('stopping', 20, arming, 16)).toBe('play');
     expect(leadStepAction('stopping', 32, arming, 16)).toBe('soft-stop');
   });
 });
