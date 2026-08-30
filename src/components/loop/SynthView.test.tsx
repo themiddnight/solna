@@ -75,7 +75,14 @@ describe('chromatic keyboard black key geometry', () => {
 
   test('SynthView still renders', () => {
     const html = renderToString(<SynthView />);
-    expect(html).toContain('A Natural Minor');
+    expect(html).toContain('Target:');
+  });
+
+  test('the interactive keyboard moved to the dock, not SynthView', () => {
+    const html = renderToString(<SynthView />);
+    expect(html).not.toContain('btn-keyboard-mode-chromatic');
+    expect(html).not.toContain('KB OCT');
+    expect(html).not.toContain('A Natural Minor');
   });
 
   /**
@@ -87,24 +94,6 @@ describe('chromatic keyboard black key geometry', () => {
     const html = renderToString(<SynthView />);
     expect(html).not.toContain('Keyboard plays: Main Synth');
     expect(html).not.toContain('Current audition sound engine');
-  });
-
-  test('the keyboard-mode switch is a three-way daisyUI join', () => {
-    const html = renderToString(<SynthView />);
-    expect(html).toContain('join');
-    expect(html).toContain('btn btn-xs join-item');
-    expect(html).toContain('>Chromatic<');
-    expect(html).toContain('>Scale<');
-    expect(html).toContain('>Chord<');
-  });
-
-  test('the keyboard-mode switch announces as an accessible radio group', () => {
-    const html = renderToString(<SynthView />);
-    expect(html).toContain('role="radiogroup"');
-    expect(html).toContain('aria-label="Keyboard input mode"');
-    expect(html).toContain('role="radio"');
-    expect(html).toContain('aria-checked="true"');
-    expect(html).toContain('aria-checked="false"');
   });
 
   test('the lead melody piano-roll renders', () => {

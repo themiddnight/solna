@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { AmbientBackdrop } from './components/ui/AmbientBackdrop';
+import { BottomInputDock } from './components/ui/BottomInputDock';
 import { Header } from './components/Header';
 import { InstantVibesBar } from './components/InstantVibesBar';
 import { LoopPage } from './components/loop/LoopPage';
@@ -11,6 +12,7 @@ import { useAppStore } from './store/store';
 import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
 import { useRouteSync } from './routing/useRouteSync';
 import { usePlayheadSync } from './components/usePlayheadSync';
+import { useInputDeck } from './components/useInputDeck';
 import { useLoopSync } from './store/loopSync';
 import { useSongModeSync } from './store/songMode';
 import { isSongLayer } from './types';
@@ -19,9 +21,9 @@ import { isSongLayer } from './types';
  * `window` in the app and by a fake target in tests (no DOM required). */
 type GestureEventTarget = Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
 
-/** Any one of these counts as the user's "first gesture": SynthView and
- * DrumPads can both start audio purely from the keyboard, so `click` alone
- * missed those paths (see App.test.tsx for the regression this covers). */
+/** Any one of these counts as the user's "first gesture": the global input
+ * deck can start audio purely from the keyboard, so `click` alone would miss
+ * those paths (see App.test.tsx for the regression this covers). */
 const FIRST_GESTURE_EVENTS = ['click', 'keydown', 'pointerdown'] as const;
 
 /**
@@ -65,12 +67,15 @@ export function App() {
   useLoopSync();
   useSongModeSync();
 
+  // Global input: owns the QWERTY listeners + note playing, feeds the dock.
+  const { keyboardProps, drumProps } = useInputDeck();
+
   // UI slice
   const activeTab = useAppStore((s) => s.activeTab);
 
   // Initialize audio engine on first user interaction (click, keydown, or
-  // pointerdown — SynthView's and DrumPads' keyboard shortcuts can start
-  // audio before any click ever happens).
+  // pointerdown — the global input deck's keyboard can start audio before any
+  // click ever happens).
   useEffect(() => {
     return registerFirstGesture(window, () => {
       audioEngine.init();
@@ -106,6 +111,9 @@ export function App() {
           <SongPage />
         </div>
       </main>
+
+      {/* Bottom Input Dock — Keyboard | Drums, reachable from any page */}
+      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />
 
       {/* Persistent Transport Bar at bottom */}
       <TransportBar />
