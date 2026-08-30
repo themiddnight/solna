@@ -43,6 +43,7 @@ export const TransportBar: React.FC = React.memo(() => {
   const hardStopDisabled = !isHardStopEnabled(sequencerPlayer, chordsPlayer, leadPlayer);
   // The meter loop only needs to know whether anything is sounding.
   const isPlaying = aggregate !== 'stopped';
+  const songLabel = songModeLabel(songLoopIndex, loops);
 
   const handleToggleMetronome = () => {
     // Engine mirror happens via useEngineSync (one render later)
@@ -72,13 +73,13 @@ export const TransportBar: React.FC = React.memo(() => {
           showLabel
         />
 
-        {songModeLabel(songLoopIndex, loops) && (
+        {songLabel && (
           <span
             id="badge-song-mode"
             className="badge badge-sm badge-ghost font-bold text-primary hidden md:inline-flex"
             title="Song mode: loops play in order in the song layer"
           >
-            {songModeLabel(songLoopIndex, loops)}
+            {songLabel}
           </span>
         )}
 

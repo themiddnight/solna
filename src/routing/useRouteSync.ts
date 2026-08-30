@@ -1,22 +1,13 @@
 import { useEffect } from 'react';
-import type { ViewMode } from '../types';
 import { layerForTab } from '../types';
 import { useAppStore } from '../store/store';
 import { loadLoop } from '../store/loadLoop';
 import { buildRouteUrl, resolveRoute, parseLoopId } from './tabRouting';
 
-export function resolveInitialRoute(
-  pathname: string,
-  search: string,
-): { tab: ViewMode; loopId: string | null; needsNormalize: boolean } {
-  const { tab, loopId, needsNormalize } = resolveRoute(pathname, search);
-  return { tab, loopId, needsNormalize };
-}
-
 export function useRouteSync(): void {
   useEffect(() => {
     // Mount: URL wins — adopt tab and loopId, then normalize a bad URL.
-    const { tab, loopId, needsNormalize } = resolveRoute(
+    const { tab, loopId, needsNormalize, layer } = resolveRoute(
       window.location.pathname,
       window.location.search,
     );
@@ -27,7 +18,7 @@ export function useRouteSync(): void {
       window.history.replaceState(
         window.history.state,
         '',
-        buildRouteUrl(resolveRoute(window.location.pathname, window.location.search).layer, tab, loopId),
+        buildRouteUrl(layer, tab, loopId),
       );
     }
 

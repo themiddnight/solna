@@ -33,7 +33,11 @@ import {
 } from "@dnd-kit/sortable";
 import { ChordItem, CustomChordProgressionItem } from "../../types";
 import { useAppStore } from "../../store/store";
-import { useChordPlayback } from "./chord/useChordPlayback";
+import {
+  useChordPlayback,
+  resolvePlaybackRhythmPattern,
+  resolvePlaybackBassPattern,
+} from "./chord/useChordPlayback";
 import {
   ensurePreviewEngine,
   hasPreviewEngine,
@@ -50,15 +54,9 @@ import {
   findPresetByName,
   getPresetsGroupedByCategory,
 } from "../../audio/synthPresets";
+import { RHYTHM_STYLE_GROUPS } from "../../audio/rhythmPatterns";
 import {
-  RHYTHM_PATTERNS,
-  RHYTHM_STYLE_GROUPS,
-  customRhythmPattern,
-} from "../../audio/rhythmPatterns";
-import {
-  BASS_PATTERNS,
   BASS_STYLE_GROUPS,
-  customBassPattern as buildCustomBassPattern,
   type BassStepChoice,
 } from "../../audio/bassPatterns";
 import { patternMeterTitle, patternOptionLabel } from "../meterSelect";
@@ -248,16 +246,17 @@ export const ChordView: React.FC = React.memo(() => {
 
   const chordCells = useMemo(() => stepCells(getMeter(meterId)), [meterId]);
 
-  const rhythmPattern = useMemo(() => {
-    if (chordRhythmMode === 'custom') {
-      return customRhythmPattern(
+  const rhythmPattern = useMemo(
+    () =>
+      resolvePlaybackRhythmPattern(
+        chordRhythmMode,
+        rhythmId,
         customChordRhythm,
         getMeter(meterId).stepsPerBar,
         getMeter(meterId).id,
-      );
-    }
-    return RHYTHM_PATTERNS.find((p) => p.id === rhythmId) ?? RHYTHM_PATTERNS[0];
-  }, [chordRhythmMode, customChordRhythm, rhythmId, meterId]);
+      ),
+    [chordRhythmMode, customChordRhythm, rhythmId, meterId],
+  );
 
   // Master Playback Loop — driven by the shared audio-clock scheduler
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
@@ -309,16 +308,17 @@ export const ChordView: React.FC = React.memo(() => {
     setChords(updated);
   }, []);
 
-  const bassPattern = useMemo(() => {
-    if (bassPatternMode === 'custom') {
-      return buildCustomBassPattern(
+  const bassPattern = useMemo(
+    () =>
+      resolvePlaybackBassPattern(
+        bassPatternMode,
+        bassPatternId,
         customBassPattern,
         getMeter(meterId).stepsPerBar,
         getMeter(meterId).id,
-      );
-    }
-    return BASS_PATTERNS.find((p) => p.id === bassPatternId) ?? BASS_PATTERNS[0];
-  }, [bassPatternMode, customBassPattern, bassPatternId, meterId]);
+      ),
+    [bassPatternMode, customBassPattern, bassPatternId, meterId],
+  );
 
   // Volumes live in the store; engineSync pushes them into the engine buses
   // (no dual-write here — Task 5).

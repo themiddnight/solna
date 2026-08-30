@@ -1,17 +1,13 @@
 import React from 'react';
 import { subscribePlaybackClock } from '../audio/playback/playbackEngine';
-import { isSongLayer, layerForTab } from '../types';
+import { layerForTab } from '../types';
 import type { Layer } from '../types';
 import { getMeter } from '../utils/meter';
 import { loadLoop } from './loadLoop';
 import { loopBars } from './loop';
 import { useAppStore } from './store';
+import { aggregatePlayerState } from './transportSlice';
 import type { Loop } from './types';
-
-// `isSongLayer` is defined once in ../types (`arrange || effects`). Re-export
-// it here for any consumer still importing song-mode predicates from this
-// module.
-export { isSongLayer };
 
 /** A loop's length in steps = Σ chord.bars × stepsPerBar. */
 export function loopLengthSteps(chords: readonly { bars?: number }[], stepsPerBar: number): number {
@@ -98,7 +94,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
     prevLayer = layer;
 
     const playing =
-      s.sequencerPlayer === 'playing' || s.chordsPlayer === 'playing' || s.leadPlayer === 'playing';
+      aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
     if (layer === 'song' && playing) {
       if (s.songLoopIndex === null) {
         useAppStore.setState({ songLoopIndex: enterSongIndex(s.loops, s.activeLoopId) });
@@ -107,11 +103,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
         unsubClock = subscribeClock((step) => {
           const cur = useAppStore.getState();
           if (cur.songLoopIndex === null) return;
-          if (
-            cur.sequencerPlayer !== 'playing' &&
-            cur.chordsPlayer !== 'playing' &&
-            cur.leadPlayer !== 'playing'
-          )
+          if (aggregatePlayerState(cur.sequencerPlayer, cur.chordsPlayer, cur.leadPlayer) !== 'playing')
             return;
           const target = songAdvanceTarget(
             cur.loops,

@@ -202,6 +202,50 @@ function sanitizeEffectsValue(effects: unknown): unknown {
   return result;
 }
 
+function clampFinite(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+function asBoolean(value: unknown): boolean {
+  return typeof value === 'boolean' ? value : false;
+}
+
+function asString(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function asArray<T>(value: unknown, fallback: T[]): T[] {
+  return Array.isArray(value) ? (value as T[]) : fallback;
+}
+
+function isPatternMode(value: unknown): value is 'preset' | 'custom' {
+  return value === 'preset' || value === 'custom';
+}
+
+function asPatternMode(value: unknown, fallback: 'preset' | 'custom'): 'preset' | 'custom' {
+  return isPatternMode(value) ? value : fallback;
+}
+
+function asFilterType(value: unknown, fallback: FilterType): FilterType {
+  return FILTER_TYPES.has(value as string) ? (value as FilterType) : fallback;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
+}
+
+function asPositiveInteger(value: unknown, fallback: number): number {
+  return isPositiveInteger(value) ? value : fallback;
+}
+
+function isStringMatrix(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((row) => Array.isArray(row) && row.every((n) => typeof n === 'string'))
+  );
+}
+
 /**
  * Validates a persisted `loops` array. Each loop is rebuilt through the
  * same per-field guards/clamps the flat payload used (synth params, finite
@@ -212,13 +256,6 @@ function sanitizeEffectsValue(effects: unknown): unknown {
  */
 function sanitizeLoops(value: unknown): Loop[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  // Module-level helper: this function is not inside sanitizePersistedState, so
-  // it cannot see that function's local clampFinite/asBoolean — define its own.
-  const clampFinite = (v: unknown, min: number, max: number, fallback: number): number => {
-    if (typeof v !== 'number' || !Number.isFinite(v)) return fallback;
-    return Math.min(max, Math.max(min, v));
-  };
-  const asBoolean = (v: unknown): boolean => (typeof v === 'boolean' ? v : false);
   const loops: Loop[] = [];
   for (const raw of value) {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue;
@@ -227,48 +264,29 @@ function sanitizeLoops(value: unknown): Loop[] | undefined {
     loops.push({
       id: typeof r.id === 'string' && r.id.length > 0 ? r.id : `loop-${loops.length}`,
       name: typeof r.name === 'string' && r.name.length > 0 ? r.name : `Loop ${loops.length + 1}`,
-      scaleRoot: typeof r.scaleRoot === 'string' ? r.scaleRoot : fallback.scaleRoot,
-      scaleType: typeof r.scaleType === 'string' ? r.scaleType : fallback.scaleType,
+      scaleRoot: asString(r.scaleRoot, fallback.scaleRoot),
+      scaleType: asString(r.scaleType, fallback.scaleType),
       synthParams: sanitizeSynthParams(r.synthParams),
       chordSynthParams: sanitizeSynthParams(r.chordSynthParams),
       bassSynthParams: sanitizeSynthParams(r.bassSynthParams),
-      chords: Array.isArray(r.chords) ? (r.chords as ChordItem[]) : fallback.chords,
-      chordRhythmId: typeof r.chordRhythmId === 'string' ? r.chordRhythmId : fallback.chordRhythmId,
-      chordRhythmMode:
-        r.chordRhythmMode === 'preset' || r.chordRhythmMode === 'custom'
-          ? r.chordRhythmMode
-          : fallback.chordRhythmMode,
-      customChordRhythm: Array.isArray(r.customChordRhythm)
-        ? (r.customChordRhythm as boolean[])
-        : fallback.customChordRhythm,
+      chords: asArray<ChordItem>(r.chords, fallback.chords),
+      chordRhythmId: asString(r.chordRhythmId, fallback.chordRhythmId),
+      chordRhythmMode: asPatternMode(r.chordRhythmMode, fallback.chordRhythmMode),
+      customChordRhythm: asArray<boolean>(r.customChordRhythm, fallback.customChordRhythm),
       chordFeel: clampFinite(r.chordFeel, 0, 1, fallback.chordFeel),
       chordOctave: clampFinite(r.chordOctave, 0, 8, fallback.chordOctave),
-      bassPatternId: typeof r.bassPatternId === 'string' ? r.bassPatternId : fallback.bassPatternId,
-      bassPatternMode:
-        r.bassPatternMode === 'preset' || r.bassPatternMode === 'custom'
-          ? r.bassPatternMode
-          : fallback.bassPatternMode,
-      customBassPattern: Array.isArray(r.customBassPattern)
-        ? (r.customBassPattern as BassStepChoice[])
-        : fallback.customBassPattern,
+      bassPatternId: asString(r.bassPatternId, fallback.bassPatternId),
+      bassPatternMode: asPatternMode(r.bassPatternMode, fallback.bassPatternMode),
+      customBassPattern: asArray<BassStepChoice>(r.customBassPattern, fallback.customBassPattern),
       bassFeel: clampFinite(r.bassFeel, 0, 1, fallback.bassFeel),
       bassOctave: clampFinite(r.bassOctave, 0, 8, fallback.bassOctave),
-      leadMelodySteps: Array.isArray(r.leadMelodySteps)
-        ? (r.leadMelodySteps as string[][])
-        : fallback.leadMelodySteps,
-      leadLoopLength:
-        typeof r.leadLoopLength === 'number' && Number.isInteger(r.leadLoopLength) && r.leadLoopLength >= 1
-          ? r.leadLoopLength
-          : fallback.leadLoopLength,
-      sequencerTracks: Array.isArray(r.sequencerTracks)
-        ? (r.sequencerTracks as SequencerTrack[])
-        : fallback.sequencerTracks,
-      soundKit: typeof r.soundKit === 'string' ? r.soundKit : fallback.soundKit,
+      leadMelodySteps: asArray<string[]>(r.leadMelodySteps, fallback.leadMelodySteps),
+      leadLoopLength: asPositiveInteger(r.leadLoopLength, fallback.leadLoopLength),
+      sequencerTracks: asArray<SequencerTrack>(r.sequencerTracks, fallback.sequencerTracks),
+      soundKit: asString(r.soundKit, fallback.soundKit),
       drumFilterCutoff: clampFinite(r.drumFilterCutoff, 50, 12000, fallback.drumFilterCutoff),
       drumFilterResonance: clampFinite(r.drumFilterResonance, 0.1, 20, fallback.drumFilterResonance),
-      drumFilterType: FILTER_TYPES.has(r.drumFilterType as string)
-        ? (r.drumFilterType as FilterType)
-        : fallback.drumFilterType,
+      drumFilterType: asFilterType(r.drumFilterType, fallback.drumFilterType),
       synthVolume: clampFinite(r.synthVolume, 0, 1.5, fallback.synthVolume),
       synthMuted: asBoolean(r.synthMuted),
       chordVolume: clampFinite(r.chordVolume, 0, 1.5, fallback.chordVolume),
@@ -286,14 +304,6 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (typeof persisted !== 'object' || persisted === null) return {};
   const sanitized = { ...(persisted as Record<string, unknown>) };
 
-  const clampFinite = (value: unknown, min: number, max: number, fallback: number): number => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
-    return Math.min(max, Math.max(min, value));
-  };
-  const asBoolean = (value: unknown): boolean => (typeof value === 'boolean' ? value : false);
-  const asString = (value: unknown): string | undefined =>
-    typeof value === 'string' ? value : undefined;
-
   sanitized.bpm = clampFinite(sanitized.bpm, 20, 300, 120);
   sanitized.masterVolume = clampFinite(sanitized.masterVolume, 0, 1, 0.85);
   sanitized.synthVolume = clampFinite(sanitized.synthVolume, 0, 1.5, 1.0);
@@ -302,18 +312,13 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   sanitized.masterSequencerVolume = clampFinite(sanitized.masterSequencerVolume, 0, 1, 0.8);
   sanitized.drumFilterCutoff = clampFinite(sanitized.drumFilterCutoff, 50, 12000, 12000);
   sanitized.drumFilterResonance = clampFinite(sanitized.drumFilterResonance, 0.1, 20, 0.7);
-  sanitized.drumFilterType =
-    sanitized.drumFilterType === 'lowpass' ||
-    sanitized.drumFilterType === 'highpass' ||
-    sanitized.drumFilterType === 'bandpass'
-      ? sanitized.drumFilterType
-      : 'lowpass';
+  sanitized.drumFilterType = asFilterType(sanitized.drumFilterType, 'lowpass');
   sanitized.metronomeActive = asBoolean(sanitized.metronomeActive);
   sanitized.synthMuted = asBoolean(sanitized.synthMuted);
   sanitized.chordMuted = asBoolean(sanitized.chordMuted);
   sanitized.bassMuted = asBoolean(sanitized.bassMuted);
   sanitized.drumMuted = asBoolean(sanitized.drumMuted);
-  sanitized.soundKit = asString(sanitized.soundKit) ?? 'Retro Drive';
+  sanitized.soundKit = asString(sanitized.soundKit, 'Retro Drive');
   sanitized.effects = sanitizeEffectsValue(sanitized.effects);
 
   // Arrays and free-form strings: drop invalid values so the currentState
@@ -325,22 +330,12 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
     if (typeof sanitized[key] !== 'string') delete sanitized[key];
   }
   for (const key of ['chordRhythmMode', 'bassPatternMode']) {
-    const v = sanitized[key];
-    if (v !== 'preset' && v !== 'custom') delete sanitized[key];
+    if (!isPatternMode(sanitized[key])) delete sanitized[key];
   }
-  if (
-    !Array.isArray(sanitized.leadMelodySteps) ||
-    !(sanitized.leadMelodySteps as unknown[]).every(
-      (row) => Array.isArray(row) && (row as unknown[]).every((n) => typeof n === 'string'),
-    )
-  ) {
+  if (!isStringMatrix(sanitized.leadMelodySteps)) {
     delete sanitized.leadMelodySteps;
   }
-  if (
-    typeof sanitized.leadLoopLength !== 'number' ||
-    !Number.isInteger(sanitized.leadLoopLength) ||
-    sanitized.leadLoopLength < 1
-  ) {
+  if (!isPositiveInteger(sanitized.leadLoopLength)) {
     delete sanitized.leadLoopLength;
   }
   if (typeof sanitized.selectedVibeId !== 'string' && sanitized.selectedVibeId !== null) {

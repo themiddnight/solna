@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from 'lucide-react';
 import { loadLoop } from '../../store/loadLoop';
 import { loopBars } from '../../store/loop';
+import { aggregatePlayerState } from '../../store/transportSlice';
 import { useAppStore } from '../../store/store';
 import { buildRouteUrl } from '../../routing/tabRouting';
 import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
@@ -108,7 +109,7 @@ export const ArrangeView: React.FC = () => {
     if (cloneId === null) return;
     const s = useAppStore.getState();
     const playing =
-      s.sequencerPlayer === 'playing' || s.chordsPlayer === 'playing' || s.leadPlayer === 'playing';
+      aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
     // During a live song-mode pass, activating the clone would hard-stop the
     // sounding loop and jump the song onto it — the duplicate is only meant
     // to be added for editing, so skip the swap while the song is running.

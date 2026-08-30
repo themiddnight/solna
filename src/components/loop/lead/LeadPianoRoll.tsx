@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useAppStore } from '../../../store/store';
+import { loopBars } from '../../../store/loop';
 import { getMeter, type Meter } from '../../../utils/meter';
 import { stepCells } from '../../sequencerGrid';
 import { clampLeadLoopLength, loopLengthDivisors } from '../../../audio/leadMelody';
@@ -111,7 +112,7 @@ export const LeadPianoRoll: React.FC<LeadPianoRollProps> = ({ currentStep, isPla
 
   const meter = getMeter(meterId);
   const stepsPerBar = meter.stepsPerBar;
-  const totalBars = chords.reduce((sum, c) => sum + (c.bars || 1), 0);
+  const totalBars = loopBars(chords);
   const divisors = loopLengthDivisors(totalBars);
   const cellsPerBar = useMemo(() => stepCells(meter), [meter]);
 
