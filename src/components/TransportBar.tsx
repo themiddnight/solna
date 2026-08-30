@@ -8,16 +8,16 @@ import { VuMeter } from "./ui/VuMeter";
 import { MidiIndicator } from "./ui/MidiIndicator";
 import { aggregatePlayerState, isHardStopEnabled } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
-import type { Region } from '../store/types';
+import type { Loop } from '../store/types';
 
 /** The song-mode badge: present only while a song position exists. */
 export function songModeLabel(
-  songRegionIndex: number | null,
-  regions: readonly Region[],
+  songLoopIndex: number | null,
+  loops: readonly Loop[],
 ): string | null {
-  if (songRegionIndex === null) return null;
-  const region = regions[songRegionIndex];
-  return region ? `Song · ${region.name}` : null;
+  if (songLoopIndex === null) return null;
+  const loop = loops[songLoopIndex];
+  return loop ? `Song · ${loop.name}` : null;
 }
 
 export const TransportBar: React.FC = React.memo(() => {
@@ -36,8 +36,8 @@ export const TransportBar: React.FC = React.memo(() => {
   const setMasterVolume = useAppStore((s) => s.setMasterVolume);
   const metronomeActive = useAppStore((s) => s.metronomeActive);
   const toggleMetronome = useAppStore((s) => s.toggleMetronome);
-  const songRegionIndex = useAppStore((s) => s.songRegionIndex);
-  const regions = useAppStore((s) => s.regions);
+  const songLoopIndex = useAppStore((s) => s.songLoopIndex);
+  const loops = useAppStore((s) => s.loops);
 
   const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer);
   const hardStopDisabled = !isHardStopEnabled(sequencerPlayer, chordsPlayer, leadPlayer);
@@ -72,13 +72,13 @@ export const TransportBar: React.FC = React.memo(() => {
           showLabel
         />
 
-        {songModeLabel(songRegionIndex, regions) && (
+        {songModeLabel(songLoopIndex, loops) && (
           <span
             id="badge-song-mode"
             className="badge badge-sm badge-ghost font-bold text-primary hidden md:inline-flex"
-            title="Song mode: regions play in order on the Arrange tab"
+            title="Song mode: loops play in order in the song layer"
           >
-            {songModeLabel(songRegionIndex, regions)}
+            {songModeLabel(songLoopIndex, loops)}
           </span>
         )}
 

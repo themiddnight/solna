@@ -1,5 +1,5 @@
-import { DEFAULT_PADS } from '../src/components/DrumPads.tsx';
-import { KEYBOARD_NOTES } from '../src/components/SynthView.tsx';
+import { DEFAULT_PADS } from '../src/components/loop/DrumPads.tsx';
+import { KEYBOARD_NOTES } from '../src/components/loop/SynthView.tsx';
 
 let failures = 0;
 const check = (cond: boolean, label: string) => {

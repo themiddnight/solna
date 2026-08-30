@@ -3,8 +3,8 @@ import { renderToString } from 'react-dom/server';
 import { TransportBar, songModeLabel } from './TransportBar';
 import { aggregatePlayerState, isHardStopEnabled } from '../store/transportSlice';
 import { resolveTransportButtons } from './ui/PlayerTransport';
-import { createDefaultRegion } from '../store/regionSlice';
-import type { Region } from '../store/types';
+import { createDefaultLoop } from '../store/loopSlice';
+import type { Loop } from '../store/types';
 
 describe('TransportBar', () => {
   test('the BPM label uses a real Tailwind breakpoint, not the phantom xs:', () => {
@@ -106,8 +106,8 @@ describe('transport meter select', () => {
 
 describe('songModeLabel', () => {
   test('returns a song-mode badge only while a song position exists', () => {
-    const regions: Region[] = [createDefaultRegion()];
-    expect(songModeLabel(null, regions)).toBe(null);
-    expect(songModeLabel(0, regions)).toBe('Song · Region 1');
+    const loops: Loop[] = [createDefaultLoop()];
+    expect(songModeLabel(null, loops)).toBe(null);
+    expect(songModeLabel(0, loops)).toBe('Song · Loop 1');
   });
 });
