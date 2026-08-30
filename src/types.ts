@@ -35,6 +35,9 @@ export type FilterType = 'lowpass' | 'highpass' | 'bandpass';
 /** The synth keyboard's input mode: how key presses are mapped to notes. */
 export type KeyboardMode = 'chromatic' | 'scale-locked' | 'chord';
 
+/** The bottom input dock's active surface. */
+export type InputPanelMode = 'keyboard' | 'drums';
+
 /**
  * Arpeggiator order and rate. Declared here rather than in audio/arpeggiator.ts
  * and audio/arpSchedule.ts because SynthParams needs them and this file imports

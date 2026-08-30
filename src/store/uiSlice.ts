@@ -1,5 +1,5 @@
 import type { StoreApi } from 'zustand';
-import type { KeyboardMode } from '../types';
+import type { InputPanelMode, KeyboardMode } from '../types';
 import type { AppStore, UiSlice } from './types';
 import { DEFAULT_MIDI_MAPPINGS } from './types';
 import { readValidatedStorageValue, persistGuardedStorageValue } from '../utils/storage';
@@ -47,6 +47,8 @@ export function createUiSlice(set: Set): UiSlice {
     midiActivityTimestamp: null,
     midiMappings: DEFAULT_MIDI_MAPPINGS,
     isMidiSettingsOpen: false,
+    isInputPanelOpen: false,
+    inputPanelMode: 'keyboard',
     midiLearnTargetId: null,
     selectedMidiInputId: 'all',
 
@@ -72,6 +74,8 @@ export function createUiSlice(set: Set): UiSlice {
     resetMidiMappings: () => set({ midiMappings: DEFAULT_MIDI_MAPPINGS }),
     setIsMidiSettingsOpen: (isMidiSettingsOpen) => set({ isMidiSettingsOpen }),
     setMidiLearnTargetId: (midiLearnTargetId) => set({ midiLearnTargetId }),
+    setIsInputPanelOpen: (isInputPanelOpen) => set({ isInputPanelOpen }),
+    setInputPanelMode: (inputPanelMode: InputPanelMode) => set({ inputPanelMode }),
     setSelectedMidiInputId: (selectedMidiInputId) => set({ selectedMidiInputId }),
   };
 }

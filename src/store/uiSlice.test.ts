@@ -80,3 +80,26 @@ describe('createUiSlice defaults', () => {
     expect(applied).toEqual({ keyboardMode: 'chord' });
   });
 });
+
+describe('input deck dock state', () => {
+  test('defaults to a closed keyboard panel', () => {
+    const calls: Record<string, unknown>[] = [];
+    const slice = createUiSlice(((partial: Record<string, unknown>) => calls.push(partial)) as never);
+    expect(slice.isInputPanelOpen).toBe(false);
+    expect(slice.inputPanelMode).toBe('keyboard');
+  });
+
+  test('setIsInputPanelOpen updates the flag', () => {
+    let applied: Record<string, unknown> | undefined;
+    const slice = createUiSlice(((partial: Record<string, unknown>) => { applied = partial; }) as never);
+    slice.setIsInputPanelOpen(true);
+    expect(applied).toEqual({ isInputPanelOpen: true });
+  });
+
+  test('setInputPanelMode updates the mode', () => {
+    let applied: Record<string, unknown> | undefined;
+    const slice = createUiSlice(((partial: Record<string, unknown>) => { applied = partial; }) as never);
+    slice.setInputPanelMode('drums');
+    expect(applied).toEqual({ inputPanelMode: 'drums' });
+  });
+});

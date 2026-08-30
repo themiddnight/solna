@@ -7,6 +7,7 @@ import type {
   CustomChordProgressionItem,
   FilterType,
   KeyboardMode,
+  InputPanelMode,
 } from '../types';
 import type { SynthControlTarget } from '../utils/synthControl';
 import type { MeterId } from '../utils/meter';
@@ -184,6 +185,10 @@ export interface UiSlice {
   midiActivityTimestamp: number | null;
   midiMappings: MidiMapping[];
   isMidiSettingsOpen: boolean;
+  // The bottom input dock's open state and active tab. Session-only by design:
+  // an input-surface preference, not composition data (see partializeAppState).
+  isInputPanelOpen: boolean;
+  inputPanelMode: InputPanelMode;
   midiLearnTargetId: string | null;
   selectedMidiInputId: string;
   setActiveTab: (tab: ViewMode) => void;
@@ -196,6 +201,8 @@ export interface UiSlice {
   resetMidiMappings: () => void;
   setIsMidiSettingsOpen: (open: boolean) => void;
   setMidiLearnTargetId: (id: string | null) => void;
+  setIsInputPanelOpen: (open: boolean) => void;
+  setInputPanelMode: (mode: InputPanelMode) => void;
   setSelectedMidiInputId: (id: string) => void;
 }
 

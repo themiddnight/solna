@@ -370,6 +370,8 @@ describe('persist partialize', () => {
     const excludedKeys = [
       'activeTab',
       'keyboardMode',
+      'isInputPanelOpen',
+      'inputPanelMode',
       'sequencerPlayer',
       'chordsPlayer',
       'playheadBeat',
