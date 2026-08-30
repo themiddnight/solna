@@ -219,4 +219,21 @@ describe('loopSlice', () => {
     expect(h.state.loops[1].bassVolume).toBe(1.0);
     expect(h.state.loops[1].drumMuted).toBe(false);
   });
+
+  test('setLoopName updates the name of the specified loop', () => {
+    const h = makeSlice();
+    const id = h.state.loops[0].id;
+    h.state.setLoopName(id, 'Intro Verse');
+    expect(h.state.loops[0].name).toBe('Intro Verse');
+  });
+
+  test('reorderLoopsArray replaces the loop array and maintains songLoopIndex', () => {
+    const h = makeSlice({ songLoopIndex: 0 });
+    h.state.addLoop(); // loop 1 (idx 0), loop 2 (idx 1, active)
+    const [l1, l2] = h.state.loops;
+    h.state.setActiveLoop(l1.id);
+    h.state.reorderLoopsArray([l2, l1]);
+    expect(h.state.loops.map((r) => r.id)).toEqual([l2.id, l1.id]);
+    expect(h.state.songLoopIndex).toBe(1); // l1 is now at index 1
+  });
 });

@@ -18,7 +18,7 @@ export const LoopSelector: React.FC = () => {
       id="select-loop"
       value={activeLoopId}
       onChange={(e) => onSelectLoop(e.target.value)}
-      className="select select-sm select-ghost font-bold text-primary max-w-32"
+      className="select select-sm select-ghost font-bold text-primary max-w-24 sm:max-w-32 truncate"
       title="Active Loop"
     >
       {loops.map((loop) => (

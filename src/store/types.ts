@@ -40,7 +40,10 @@ export interface TransportSlice {
   setPlayheadChord: (chordIndex: number | null, startBeat?: number) => void;
   /** Transient song-mode cursor: index into loops[] currently sounding, null = loop mode. */
   songLoopIndex: number | null;
+  /** Transient audition loop id: when set, plays only this loop in isolated loop mode inside the song layer. */
+  auditionLoopId: string | null;
   setSongLoopIndex: (index: number | null) => void;
+  setAuditionLoopId: (id: string | null) => void;
   setBpm: (bpm: number) => void;
   setMeter: (id: MeterId) => void;
   setMasterVolume: (volume: number) => void;
@@ -230,6 +233,7 @@ export interface PresetsSlice {
 export interface Loop {
   id: string;
   name: string; // auto-named "Loop N"; ids are the stable handle
+  repeatCount?: number; // default 1, number of times this loop plays before advancing in song mode
   scaleRoot: string;
   scaleType: string;
   synthParams: SynthParams;
@@ -264,7 +268,7 @@ export interface Loop {
 }
 
 /** The 31 per-loop fields, without identity — what loadLoop writes to the flat slices. */
-export type LoopStatePatch = Omit<Loop, 'id' | 'name'>;
+export type LoopStatePatch = Omit<Loop, 'id' | 'name' | 'repeatCount'>;
 
 /** The per-loop mixer: the 8 volume/mute fields edited on each Arrange card. */
 export type LoopMixPatch = Pick<
@@ -288,6 +292,9 @@ export interface LoopSlice {
   duplicateLoop: (id: string) => string | null;
   deleteLoop: (id: string) => string | null;
   reorderLoops: (id: string, direction: -1 | 1) => void;
+  reorderLoopsArray: (loops: Loop[]) => void;
+  setLoopName: (id: string, name: string) => void;
+  setLoopRepeatCount: (id: string, repeatCount: number) => void;
   setActiveLoop: (id: string) => void;
   /** Edit a loop's 8 mixer fields in place; mirrors to the flat slices when active. */
   setLoopMix: (id: string, patch: Partial<LoopMixPatch>) => void;

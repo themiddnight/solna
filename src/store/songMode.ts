@@ -46,7 +46,9 @@ export function songAdvanceTarget(
   // bar so the song keeps flowing instead of freezing (a 0 length can never
   // hit the `step % length === 0` boundary).
   const effectiveLength = Math.max(length, stepsPerBar);
-  if (step <= 0 || step % effectiveLength !== 0) return null;
+  const repeats = Math.max(1, loop.repeatCount ?? 1);
+  const totalSteps = effectiveLength * repeats;
+  if (step <= 0 || step % totalSteps !== 0) return null;
   const target = loops[nextLoopIndex(loops, songLoopIndex)]?.id ?? null;
   // A single-loop arrangement wraps onto itself: reloading the loop we are
   // already in would hard-stop the players and reset the shared clock on every
@@ -88,6 +90,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
     if (prevLayer !== null && prevLayer !== layer) {
       s.hardStopAll();
       s.setSongLoopIndex(null);
+      s.setAuditionLoopId(null);
       stopClock();
       unsubClock = null;
     }
@@ -95,14 +98,14 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
 
     const playing =
       aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
-    if (layer === 'song' && playing) {
+    if (layer === 'song' && playing && !s.auditionLoopId) {
       if (s.songLoopIndex === null) {
         useAppStore.setState({ songLoopIndex: enterSongIndex(s.loops, s.activeLoopId) });
       }
       if (!unsubClock) {
         unsubClock = subscribeClock((step) => {
           const cur = useAppStore.getState();
-          if (cur.songLoopIndex === null) return;
+          if (cur.songLoopIndex === null || cur.auditionLoopId !== null) return;
           if (aggregatePlayerState(cur.sequencerPlayer, cur.chordsPlayer, cur.leadPlayer) !== 'playing')
             return;
           const target = songAdvanceTarget(
@@ -123,7 +126,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
           queueMicrotask(() => loadLoop(target));
         });
       }
-    } else if (layer !== 'song' && s.songLoopIndex !== null) {
+    } else if ((layer !== 'song' || s.auditionLoopId !== null) && s.songLoopIndex !== null) {
       s.setSongLoopIndex(null);
       stopClock();
     }
@@ -136,11 +139,16 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
       seq: state.sequencerPlayer,
       chords: state.chordsPlayer,
       lead: state.leadPlayer,
+      audition: state.auditionLoopId,
     }),
     reconcile,
     {
       equalityFn: (a, b) =>
-        a.tab === b.tab && a.seq === b.seq && a.chords === b.chords && a.lead === b.lead,
+        a.tab === b.tab &&
+        a.seq === b.seq &&
+        a.chords === b.chords &&
+        a.lead === b.lead &&
+        a.audition === b.audition,
     }
   );
   return () => {

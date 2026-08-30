@@ -11,6 +11,7 @@ import type { MeterId } from './utils/meter';
 export type VibeGenre = 'lofi' | 'synthwave' | 'edm' | 'ambient' | 'boombap' | 'zen';
 
 export type ViewMode =
+  | 'arrange'
   | 'synth'
   | 'sequencer'
   | 'chords'
@@ -28,6 +29,53 @@ export function isSongLayer(tab: ViewMode): boolean {
 
 export function layerForTab(tab: ViewMode): Layer {
   return isSongLayer(tab) ? 'song' : 'loop';
+}
+
+export type ArrangementTrackType = 'chords' | 'drums' | 'bass' | 'lead';
+
+export interface LeadNote {
+  note: string;
+  step: number; // 0-based step within the region
+  durationSteps: number; // in 16th steps
+  velocity?: number;
+}
+
+export interface ArrangementRegionData {
+  // Chords data
+  chords?: ChordItem[];
+  chordRhythmId?: string;
+  chordFeel?: number;
+  chordOctave?: number;
+  chordPresetId?: string;
+  // Drums data
+  drumPattern?: Record<string, boolean[]>;
+  soundKit?: string;
+  // Bass data
+  bassPatternId?: string;
+  bassFeel?: number;
+  bassOctave?: number;
+  bassPresetId?: string;
+  // Lead / Synth data
+  synthParams?: SynthParams;
+  leadNotes?: LeadNote[];
+}
+
+export interface ArrangementRegion {
+  id: string;
+  trackType: ArrangementTrackType;
+  name: string;
+  startBar: number; // 0-based bar index
+  lengthBars: number; // in bars (e.g. 2, 4, 8)
+  color?: string; // semantic tag e.g. 'primary' | 'secondary' | 'accent' | 'warning' | 'info' | 'success'
+  data: ArrangementRegionData;
+}
+
+export interface SongArrangement {
+  totalBars: number;
+  loopEnabled: boolean;
+  loopStartBar: number;
+  loopEndBar: number;
+  regions: ArrangementRegion[];
 }
 
 export type FilterType = 'lowpass' | 'highpass' | 'bandpass';

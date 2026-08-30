@@ -55,12 +55,10 @@ export const TransportBar: React.FC = React.memo(() => {
     // sits dead-centre in the viewport) whenever there is room, and floored at
     // their own content width when there isn't — which degrades to an off-centre
     // readout instead of side groups overlapping or overflowing the bar.
-    <div className="bg-base-100 border-t border-base-300 px-3 py-2 flex md:grid md:grid-cols-[minmax(max-content,1fr)_minmax(0,20rem)_minmax(max-content,1fr)] items-center justify-between gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl overflow-x-auto no-scrollbar">
-      {/* Left Transport Actions: Play All + Tab Play + Tempo */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        {/* Master transport: drives both automation players together. The
-            hard stop stays live whenever anything is still scheduled, even
-            when the aggregate reads `stopping`. */}
+    <div className="bg-base-100 border-t border-base-300 px-2 sm:px-3 py-1.5 sm:py-2 flex items-center justify-between gap-1.5 sm:gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
+      {/* Left Transport Actions: Play All + Tempo + Meter */}
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0">
+        {/* Master transport: drives both automation players together. */}
         <PlayerTransport
           id="btn-bottom-transport"
           state={aggregate}
@@ -84,7 +82,7 @@ export const TransportBar: React.FC = React.memo(() => {
         )}
 
         {/* Tempo BPM Control */}
-        <div className="flex items-center gap-0.5 bg-base-200 border border-base-300 px-1.5 py-1 rounded-box">
+        <div className="flex items-center gap-0.5 bg-base-200 border border-base-300 px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-box">
           <span className="text-[10px] text-base-content/50 hidden sm:inline">BPM</span>
           <button
             onClick={() => setBpm(Math.max(40, bpm - 1))}
@@ -100,7 +98,7 @@ export const TransportBar: React.FC = React.memo(() => {
             max={240}
             value={bpm}
             onChange={(e) => setBpm(Number(e.target.value))}
-            className="input input-xs input-ghost w-12 px-0 text-center font-mono font-bold text-primary text-xs"
+            className="input input-xs input-ghost w-8 sm:w-12 px-0 text-center font-mono font-bold text-primary text-xs"
           />
           <button
             onClick={() => setBpm(Math.min(240, bpm + 1))}
@@ -112,13 +110,13 @@ export const TransportBar: React.FC = React.memo(() => {
         </div>
 
         {/* Time Signature */}
-        <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-1.5 py-1 rounded-box">
+        <div className="flex items-center gap-0.5 sm:gap-1 bg-base-200 border border-base-300 px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-box">
           <span className="text-[10px] text-base-content/50 hidden sm:inline">Meter</span>
           <select
             id="select-transport-meter"
             value={meterId}
             onChange={(e) => setMeter(coerceMeterChoice(e.target.value, meterId))}
-            className="select select-xs select-ghost focus:outline-none font-mono font-bold text-primary"
+            className="select select-xs select-ghost focus:outline-none font-mono font-bold text-primary px-1"
             title="Time signature"
           >
             {METER_OPTIONS.map((option) => (
@@ -130,18 +128,18 @@ export const TransportBar: React.FC = React.memo(() => {
         </div>
       </div>
 
-      {/* Middle: playhead readout — now/next chord + beat dots, visible on every tab */}
-      <div className="flex-1 max-w-xs hidden md:flex items-center gap-2">
+      {/* Middle: playhead readout — now/next chord + beat dots, visible on larger screens */}
+      <div className="flex-1 max-w-xs hidden xl:flex items-center justify-center gap-2">
         <PlayheadReadout />
       </div>
 
       {/* Right Meter & Master Gain */}
-      <div className="flex items-center gap-2 shrink-0 md:justify-self-end">
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
         {/* Metronome Toggle */}
         <button
           id="btn-transport-metronome"
           onClick={handleToggleMetronome}
-          className={`btn btn-sm gap-1 text-xs ${
+          className={`btn btn-sm btn-square sm:btn-md sm:w-auto sm:px-2 gap-1 text-xs ${
             metronomeActive ? "btn-primary" : "btn-ghost"
           }`}
           title="Metronome"
@@ -150,15 +148,16 @@ export const TransportBar: React.FC = React.memo(() => {
           <span className="hidden lg:inline text-[11px]">Click</span>
         </button>
 
-        {/* MIDI Activity Indicator */}
-        <MidiIndicator />
+        {/* MIDI Activity Indicator (hidden on small mobile to conserve space) */}
+        <div className="hidden sm:block">
+          <MidiIndicator />
+        </div>
 
-        {/* Real-time output level meter — owns its own rAF loop so the level
-            does not re-render the transport bar (see ui/VuMeter). */}
+        {/* Real-time output level meter */}
         <VuMeter isPlaying={isPlaying} />
 
         {/* Master Output Fader */}
-        <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-box">
+        <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-box">
           <Volume2 className="w-3.5 h-3.5 text-base-content/60 shrink-0" />
           <Slider
             id="slider-transport-master"
@@ -167,10 +166,10 @@ export const TransportBar: React.FC = React.memo(() => {
             step={0.01}
             value={masterVolume}
             onChange={setMasterVolume}
-            className="range range-xs range-primary w-14 sm:w-16"
+            className="range range-xs range-primary w-10 sm:w-16"
             title={`Master: ${(masterVolume * 100).toFixed(0)}%`}
           />
-          <span className="font-mono text-[10px] text-base-content/60 w-6 text-right">
+          <span className="font-mono text-[10px] text-base-content/60 w-5 sm:w-6 text-right">
             {(masterVolume * 100).toFixed(0)}
           </span>
         </div>

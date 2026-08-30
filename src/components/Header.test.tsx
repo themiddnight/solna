@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS } from './Header';
+import React from 'react';
+import { renderToString } from 'react-dom/server';
+import { TabButton, AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS } from './Header';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
+import { layerForTab } from '../types';
 
 describe('resolveInitialTheme', () => {
   test('a stored theme always wins over the OS preference', () => {
@@ -113,5 +116,42 @@ describe('layer toggle', () => {
     for (const { layer } of LAYER_META) {
       expect(tabsForLayer(layer)).toContain(defaultTabForLayer(layer));
     }
+  });
+});
+
+describe('TabButton rendering', () => {
+  test('renders with default class (hidden xl:inline) for loop tabs', () => {
+    const html = renderToString(
+      <TabButton view="synth" activeTab="synth" onSelect={() => {}} />
+    );
+    expect(html).toContain('id="tab-synth"');
+    expect(html).toContain('Synth/Lead');
+    expect(html).toContain('class="truncate hidden xl:inline"');
+  });
+
+  test('renders song mode tabs (Arrange & Master FX) with tablet-visible sm:inline label', () => {
+    const arrangeHtml = renderToString(
+      <TabButton
+        view="arrange"
+        activeTab="arrange"
+        onSelect={() => {}}
+        labelClassName="truncate sm:inline"
+      />
+    );
+    expect(arrangeHtml).toContain('id="tab-arrange"');
+    expect(arrangeHtml).toContain('Arrange');
+    expect(arrangeHtml).toContain('class="truncate sm:inline"');
+
+    const fxHtml = renderToString(
+      <TabButton
+        view="effects"
+        activeTab="arrange"
+        onSelect={() => {}}
+        labelClassName="truncate sm:inline"
+      />
+    );
+    expect(fxHtml).toContain('id="tab-effects"');
+    expect(fxHtml).toContain('Master FX');
+    expect(fxHtml).toContain('class="truncate sm:inline"');
   });
 });

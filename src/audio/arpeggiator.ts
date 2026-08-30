@@ -1,6 +1,4 @@
 import { Note, transpose } from 'tonal';
-
-export type { ArpMode } from '../types';
 import type { ArpMode } from '../types';
 
 /**
@@ -51,3 +49,4 @@ export function buildArpSequence(
 
   return [...expanded];
 }
+

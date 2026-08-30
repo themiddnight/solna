@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { INITIAL_CHORDS } from './initialState';
 import { createDefaultLoop } from './loopSlice';
+import { loopStatePatch } from './loop';
 import { useAppStore } from './store';
 import { isSongLayer } from '../types';
 import {
@@ -52,6 +53,16 @@ describe('song mode pure helpers', () => {
     expect(songAdvanceTarget(loops, 1, 31, 16)).toBe(null);
   });
 
+  test('songAdvanceTarget multiplies loop length by repeatCount before advancing', () => {
+    const loopA = { ...shortLoop('a', 2), repeatCount: 3 }; // 2 bars x 16 steps x 3 repeats = 96 steps
+    const loopB = shortLoop('b', 1);
+    const loops = [loopA, loopB];
+    expect(songAdvanceTarget(loops, 0, 32, 16)).toBe(null); // After 1st rep
+    expect(songAdvanceTarget(loops, 0, 64, 16)).toBe(null); // After 2nd rep
+    expect(songAdvanceTarget(loops, 0, 95, 16)).toBe(null);
+    expect(songAdvanceTarget(loops, 0, 96, 16)).toBe('b'); // After 3rd rep
+  });
+
   test('songAdvanceTarget ignores step 0, loop mode and an out-of-range cursor', () => {
     const loops = [shortLoop('a', 4)];
     expect(songAdvanceTarget(loops, null, 64, 16)).toBe(null);
@@ -99,15 +110,22 @@ function makeFakeClock() {
   };
 }
 
-afterEach(() => {
+const resetState = () => {
+  const loop = createDefaultLoop();
   useAppStore.setState({
+    loops: [loop],
+    activeLoopId: loop.id,
+    ...loopStatePatch(loop),
     activeTab: 'synth',
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
     songLoopIndex: null,
   });
-});
+};
+
+beforeEach(resetState);
+afterEach(resetState);
 
 describe('song mode coordinator', () => {
   test('entering song mode keeps the active loop and subscribes the clock', () => {
@@ -147,13 +165,13 @@ describe('song mode coordinator', () => {
     // hard-stop + restart resets the shared clock, so each loop's boundary is
     // measured from 0. First loop is 4 bars x 16 = 64 steps.
     clock.tick(64);
-    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().activeLoopId).toBe('loop-b');
     expect(useAppStore.getState().songLoopIndex).toBe(1);
 
     // Second loop is 2 bars x 16 = 32 steps; 64 + 32 = 96 wraps to loop 0.
     clock.tick(96);
-    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
     expect(useAppStore.getState().songLoopIndex).toBe(0);
     stop();
@@ -189,7 +207,7 @@ describe('song mode coordinator', () => {
     // Enters at the active loop (index 1), not the top.
     expect(useAppStore.getState().songLoopIndex).toBe(1);
     clock.tick(64);
-    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
     expect(useAppStore.getState().songLoopIndex).toBe(0);
     useAppStore.getState().setActiveTab('synth');
@@ -238,6 +256,27 @@ describe('song mode coordinator', () => {
     expect(s.leadPlayer).toBe('stopped');
     expect(s.songLoopIndex).toBe(null);
     expect(clock.count).toBe(0);
+    stop();
+  });
+
+  test('auditionLoopId keeps playback isolated on the loop without entering song mode advancement', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+      activeTab: 'arrange',
+      songLoopIndex: null,
+      auditionLoopId: 'loop-default-1',
+    });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    useAppStore.getState().playAll();
+
+    // When auditionLoopId is set, songLoopIndex remains null
+    expect(useAppStore.getState().songLoopIndex).toBe(null);
+    // Ticking past the loop length does not advance to loop B
+    clock.tick(64);
+    expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
     stop();
   });
 });

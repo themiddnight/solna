@@ -264,6 +264,7 @@ function sanitizeLoops(value: unknown): Loop[] | undefined {
     loops.push({
       id: typeof r.id === 'string' && r.id.length > 0 ? r.id : `loop-${loops.length}`,
       name: typeof r.name === 'string' && r.name.length > 0 ? r.name : `Loop ${loops.length + 1}`,
+      repeatCount: clampFinite(asPositiveInteger(r.repeatCount, fallback.repeatCount ?? 1), 1, 32, 1),
       scaleRoot: asString(r.scaleRoot, fallback.scaleRoot),
       scaleType: asString(r.scaleType, fallback.scaleType),
       synthParams: sanitizeSynthParams(r.synthParams),

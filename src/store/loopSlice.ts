@@ -17,6 +17,7 @@ export function createDefaultLoop(): Loop {
   return {
     id: DEFAULT_LOOP_ID,
     name: 'Loop 1',
+    repeatCount: 1,
     scaleRoot: 'A',
     scaleType: 'Natural Minor',
     synthParams: INITIAL_SYNTH_PARAMS,
@@ -139,6 +140,27 @@ export function createLoopSlice(set: Set, get: Get): LoopSlice {
               : null,
         };
       }),
+
+    reorderLoopsArray: (loops) =>
+      set((state) => ({
+        loops,
+        songLoopIndex:
+          state.songLoopIndex !== null
+            ? Math.max(0, loops.findIndex((r) => r.id === state.activeLoopId))
+            : null,
+      })),
+
+    setLoopName: (id, name) =>
+      set((state) => ({
+        loops: state.loops.map((r) => (r.id === id ? { ...r, name } : r)),
+      })),
+
+    setLoopRepeatCount: (id, repeatCount) =>
+      set((state) => ({
+        loops: state.loops.map((r) =>
+          r.id === id ? { ...r, repeatCount: Math.max(1, Math.min(32, Math.round(repeatCount))) } : r
+        ),
+      })),
 
     setLoopMix: (id, patch) =>
       set((state) => {

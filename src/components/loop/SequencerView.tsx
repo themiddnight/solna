@@ -17,7 +17,6 @@ import { previewSequencerNote } from "../../audio/playback/presetPreview";
 import type { PreviewHandle } from "../../audio/playback/presetPreview";
 import { GENRE_PRESETS } from "../../audio/data/genrePresets";
 import { DRUM_KITS, GENRE_TO_KIT } from "../../audio/drumKits";
-import { DrumPads } from "./DrumPads";
 import type { InputDeckDrumProps } from "../useInputDeck";
 import { patternMeterTitle, patternOptionLabel } from "../meterSelect";
 import { Knob } from "../ui/Knob";
@@ -31,10 +30,10 @@ import type { SequencerTrack } from "../../types";
 
 
 interface SequencerViewProps {
-  drumProps: InputDeckDrumProps;
+  drumProps?: InputDeckDrumProps;
 }
 
-export const SequencerView = ({ drumProps }: SequencerViewProps) => {
+export const SequencerView = ({ drumProps: _drumProps }: SequencerViewProps = {}) => {
   // Sequencer/transport/synth state + setters (named after the old props so the
   // rest of the component body is unchanged).
   const tracks = useAppStore((s) => s.sequencerTracks);
@@ -364,9 +363,6 @@ export const SequencerView = ({ drumProps }: SequencerViewProps) => {
         </div>
         </div>
       </div>
-
-      {/* Live Performance Drum Pads */}
-      <DrumPads drumProps={drumProps} />
     </div>
   );
 };

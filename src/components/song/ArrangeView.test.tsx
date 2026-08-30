@@ -4,6 +4,7 @@ import { loopStatePatch } from '../../store/loop';
 import { createDefaultLoop } from '../../store/loopSlice';
 import { useAppStore } from '../../store/store';
 import { ArrangeView, buildEditRoute, editLoop } from './ArrangeView';
+import { getActiveChordIndex, SortableLoopCard } from './SortableLoopCard';
 
 // editLoop -> loadLoop mutates the shared singleton store (flat slices,
 // activeLoopId, player states). bun runs every test file in one process
@@ -81,6 +82,77 @@ describe('ArrangeView', () => {
     const html = renderToString(<ArrangeView />);
     expect(html).toContain('id="btn-loop-edit-loop-default-1"');
     expect(html).toContain('>Edit</button>');
+  });
+
+  test('renders key/scale and chord progression for loops', () => {
+    const html = renderToString(<ArrangeView />);
+    expect(html).toContain('Key:');
+    expect(html).toContain('Natural Minor');
+    expect(html).toContain('Progression:');
+  });
+
+  test('renders rename button for loops', () => {
+    const html = renderToString(<ArrangeView />);
+    expect(html).toContain('id="btn-loop-rename-loop-default-1"');
+  });
+
+  test('renders repeat count selector for loops', () => {
+    const html = renderToString(<ArrangeView />);
+    expect(html).toContain('id="select-repeat-loop-default-1"');
+    expect(html).toContain('Repeat:');
+    expect(html).toContain('<option value="1"');
+    expect(html).toContain('<option value="2"');
+  });
+
+  test('renders isolated play button for each loop', () => {
+    const html = renderToString(<ArrangeView />);
+    expect(html).toContain('id="btn-loop-play-loop-default-1"');
+    expect(html).toContain('Play');
+  });
+
+  test('renders active chord highlight when loop is playing', () => {
+    const loop = createDefaultLoop();
+    const html = renderToString(
+      <SortableLoopCard
+        loop={loop}
+        index={0}
+        totalLoops={1}
+        isPlaying={true}
+        isActive={true}
+        currentStepInLoop={0}
+        totalStepsInLoop={64}
+        stepsPerBar={16}
+        onSelect={() => {}}
+        onEdit={() => {}}
+        onDuplicate={() => {}}
+        onDelete={() => {}}
+        onReorder={() => {}}
+        onRename={() => {}}
+        onSetRepeat={() => {}}
+        onTogglePlayLoop={() => {}}
+        onSetMix={() => {}}
+      />
+    );
+    expect(html).toContain('badge-primary font-bold ring-2');
+  });
+});
+
+describe('getActiveChordIndex helper', () => {
+  test('returns -1 for empty chords or invalid steps', () => {
+    expect(getActiveChordIndex([], 0, 16)).toBe(-1);
+    expect(getActiveChordIndex([{ bars: 1 }], 0, 0)).toBe(-1);
+  });
+
+  test('correctly maps step offset to chord index based on chord bars', () => {
+    const chords = [{ bars: 2 }, { bars: 1 }, { bars: 1 }]; // 2 bars (0-31), 1 bar (32-47), 1 bar (48-63)
+    expect(getActiveChordIndex(chords, 0, 16)).toBe(0);
+    expect(getActiveChordIndex(chords, 31, 16)).toBe(0);
+    expect(getActiveChordIndex(chords, 32, 16)).toBe(1);
+    expect(getActiveChordIndex(chords, 47, 16)).toBe(1);
+    expect(getActiveChordIndex(chords, 48, 16)).toBe(2);
+    expect(getActiveChordIndex(chords, 63, 16)).toBe(2);
+    // Wraps into next cycle properly
+    expect(getActiveChordIndex(chords, 64, 16)).toBe(0);
   });
 });
 

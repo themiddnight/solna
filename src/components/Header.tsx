@@ -51,25 +51,29 @@ export function layerToggleTarget(current: Layer, target: Layer): ViewMode | nul
  *
  * Icon and label come from VIEW_META, never from a local literal.
  */
-const TabButton: React.FC<{
+export const TabButton: React.FC<{
   view: ViewMode;
   activeTab: ViewMode;
   onSelect: (view: ViewMode) => void;
-}> = ({ view, activeTab, onSelect }) => {
+  labelClassName?: string;
+}> = ({ view, activeTab, onSelect, labelClassName }) => {
   const isActive = activeTab === view;
   const { icon: Icon, tabLabel } = VIEW_META[view];
+
   return (
     <button
       id={`tab-${view}`}
       type="button"
       aria-current={isActive ? 'page' : undefined}
+      aria-label={tabLabel}
       onClick={() => onSelect(view)}
-      className={`btn btn-sm join-item gap-1.5 text-xs font-bold whitespace-nowrap ${
+      className={`btn btn-sm join-item flex-1 sm:flex-initial min-w-0 px-2 sm:px-2.5 xl:px-3 gap-1 xl:gap-1.5 text-xs font-bold ${
         isActive ? 'btn-active btn-primary' : 'btn-ghost'
       }`}
+      title={tabLabel}
     >
       <Icon className="w-4 h-4 shrink-0" />
-      <span className="hidden xl:inline">{tabLabel}</span>
+      <span className={labelClassName ?? 'truncate hidden xl:inline'}>{tabLabel}</span>
     </button>
   );
 };
@@ -184,8 +188,11 @@ export const Header: React.FC = React.memo(() => {
 
   const [currentTheme, setCurrentTheme] = React.useState<SolnaTheme>(() =>
     resolveInitialTheme(
-      document.documentElement.getAttribute("data-theme"),
+      typeof document !== "undefined"
+        ? document.documentElement.getAttribute("data-theme")
+        : null,
       typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-color-scheme: light)").matches,
     ),
   );
@@ -214,13 +221,9 @@ export const Header: React.FC = React.memo(() => {
   }, []);
 
   return (
-    // Side columns are `minmax(max-content, 1fr)`: equal (so the nav sits dead-
-    // centre in the viewport) whenever there is room, and floored at their own
-    // content width when there isn't — which degrades to an off-centre nav
-    // instead of the side groups overlapping or overflowing the header.
-    <header className="navbar min-h-0 bg-base-100 border-b border-base-300 px-3 py-2 flex xl:grid xl:grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)] items-center justify-between gap-2 text-sm select-none sticky top-0 z-40">
-      {/* Brand */}
-      <div className="flex items-center gap-2.5 shrink-0">
+    <header className="navbar min-h-0 bg-base-100 border-b border-base-300 px-2.5 sm:px-4 py-2 select-none sticky top-0 z-40 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 sm:gap-x-3 gap-y-2 text-sm">
+      {/* Brand & Layer Switcher */}
+      <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
         <Wordmark />
         <div className={NAV_GROUP_CLASS}>
           {LAYER_META.map(({ layer: l, label }) => {
@@ -246,21 +249,17 @@ export const Header: React.FC = React.memo(() => {
         </div>
       </div>
 
-      {/* Primary navigation: two join groups of view-switch buttons. It owns
-          the header's only overflow scroller, so a nav too wide for the viewport
-          scrolls within its own column instead of pushing the right-hand group
-          off-screen (the app shell is `overflow-hidden`, so pushed-out controls
-          are unreachable, not merely off-layout). */}
-      <nav className="flex items-center gap-2 min-w-0 overflow-x-auto no-scrollbar">
-        {/* The three playable views: synth/lead, beat step, chords/bass — each
-            a view button joined to its own transport. A <button> must never
-            nest inside another <button>. */}
+      {/* Primary navigation: View tabs and module transports */}
+      <nav className="flex items-center justify-center order-3 md:order-2 w-full md:w-auto shrink-0">
         {layer === 'loop' && (
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {AUTOMATION_TABS.map((tab) => {
               const state = playerStateByModule[tab.module];
               return (
-                <div key={tab.view} className={NAV_GROUP_CLASS}>
+                <div
+                  key={tab.view}
+                  className={`${NAV_GROUP_CLASS} flex items-center`}
+                >
                   <TabButton view={tab.view} activeTab={activeTab} onSelect={setActiveTab} />
                   <PlayerTransport
                     id={`btn-header-play-${tab.module}`}
@@ -277,38 +276,51 @@ export const Header: React.FC = React.memo(() => {
           </div>
         )}
         {layer === 'song' && (
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {SONG_NAV_TABS.map((view) => (
-              <div key={view} className={NAV_GROUP_CLASS}>
-                <TabButton view={view} activeTab={activeTab} onSelect={setActiveTab} />
+              <div
+                key={view}
+                className={`${NAV_GROUP_CLASS} flex items-center`}
+              >
+                <TabButton
+                  view={view}
+                  activeTab={activeTab}
+                  onSelect={setActiveTab}
+                  labelClassName="truncate sm:inline"
+                />
               </div>
             ))}
           </div>
         )}
       </nav>
 
-      {/* Key, Scale & Global Actions */}
-      <div className="flex items-center gap-1.5 shrink-0 xl:justify-self-end">
+      {/* Loop Selector, Key/Scale & Theme Actions */}
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 order-2 md:order-3">
         {layer === 'loop' && (
           <>
             <LoopSelector />
-            {/* Scale Picker Compact */}
-            <div className="hidden md:flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-1 rounded-field">
+            {/* Scale Picker Compact (Desktop >= xl) */}
+            <div className="hidden xl:flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-0.5 rounded-field">
               <ScaleSelects idPrefix="select-master-scale" />
             </div>
 
-            {/* Below `md` the inline picker would leave the nav about 20px of room,
-                so the same two selects move behind a root-note pill instead. */}
-            <details className="dropdown dropdown-end md:hidden">
+            {/* Below `xl` (mobile and landscape/portrait tablet): Compact Scale Picker Dropdown */}
+            <details className="dropdown dropdown-end xl:hidden">
               <summary
                 id="btn-scale-dropdown"
-                className="btn btn-sm btn-ghost gap-1 text-xs font-bold list-none"
+                className="btn btn-sm btn-ghost gap-1 px-2 text-xs font-bold list-none bg-base-200/70 border border-base-300"
                 title={`Key & Scale — ${scaleRoot} ${SCALES[scaleType]?.name ?? scaleType}`}
               >
                 <span className="text-primary">{scaleRoot}</span>
-                <ChevronDown className="w-3 h-3 opacity-60" />
+                <span className="text-[10px] text-base-content/70 max-w-12 truncate">
+                  {SCALES[scaleType]?.name?.slice(0, 4) ?? scaleType}
+                </span>
+                <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
               </summary>
-              <div className="dropdown-content z-50 mt-1 w-56 p-2 flex flex-col gap-2 bg-base-100 border border-base-300 rounded-box shadow-xl">
+              <div className="dropdown-content z-50 mt-1 w-56 p-2.5 flex flex-col gap-2 bg-base-100 border border-base-300 rounded-box shadow-xl">
+                <div className="text-[11px] font-bold text-base-content/60 uppercase tracking-wider px-1">
+                  Master Key & Scale
+                </div>
                 <ScaleSelects idPrefix="select-master-scale-compact" stacked />
               </div>
             </details>

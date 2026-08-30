@@ -1,4 +1,4 @@
-import type { SynthParams, SequencerTrack, ChordItem, MasterEffects } from '../types';
+import type { SynthParams, SequencerTrack, ChordItem, MasterEffects, SongArrangement } from '../types';
 
 // Moved verbatim from src/App.tsx — the app's original useState initial values.
 
@@ -104,4 +104,175 @@ export const INITIAL_EFFECTS: MasterEffects = {
   eqMid: 0,
   eqHigh: 3,
   compressorThreshold: -12,
+};
+
+export const INITIAL_ARRANGEMENT: SongArrangement = {
+  totalBars: 16,
+  loopEnabled: true,
+  loopStartBar: 0,
+  loopEndBar: 16,
+  regions: [
+    // Chords Track
+    {
+      id: 'reg-chord-intro',
+      trackType: 'chords',
+      name: 'Intro Chords',
+      startBar: 0,
+      lengthBars: 4,
+      color: 'primary',
+      data: {
+        chords: INITIAL_CHORDS,
+        chordRhythmId: 'sustained',
+        chordFeel: 0.1,
+        chordOctave: 0,
+      },
+    },
+    {
+      id: 'reg-chord-verse',
+      trackType: 'chords',
+      name: 'Verse Chords',
+      startBar: 4,
+      lengthBars: 4,
+      color: 'primary',
+      data: {
+        chords: INITIAL_CHORDS,
+        chordRhythmId: 'lofi-rhodes-push',
+        chordFeel: 0.3,
+        chordOctave: 0,
+      },
+    },
+    {
+      id: 'reg-chord-chorus',
+      trackType: 'chords',
+      name: 'Chorus Chords',
+      startBar: 8,
+      lengthBars: 4,
+      color: 'primary',
+      data: {
+        chords: INITIAL_CHORDS,
+        chordRhythmId: 'syncopated-groove',
+        chordFeel: 0.4,
+        chordOctave: 0,
+      },
+    },
+    {
+      id: 'reg-chord-outro',
+      trackType: 'chords',
+      name: 'Outro Chords',
+      startBar: 12,
+      lengthBars: 4,
+      color: 'primary',
+      data: {
+        chords: INITIAL_CHORDS,
+        chordRhythmId: 'sustained',
+        chordFeel: 0.1,
+        chordOctave: 0,
+      },
+    },
+
+    // Bass Track
+    {
+      id: 'reg-bass-verse',
+      trackType: 'bass',
+      name: 'Verse Bass',
+      startBar: 4,
+      lengthBars: 4,
+      color: 'accent',
+      data: {
+        bassPatternId: 'root-and-octave-pump',
+        bassFeel: 0.3,
+        bassOctave: 0,
+      },
+    },
+    {
+      id: 'reg-bass-chorus',
+      trackType: 'bass',
+      name: 'Driving Bass',
+      startBar: 8,
+      lengthBars: 4,
+      color: 'accent',
+      data: {
+        bassPatternId: 'funky-sixteenths',
+        bassFeel: 0.4,
+        bassOctave: 0,
+      },
+    },
+    {
+      id: 'reg-bass-outro',
+      trackType: 'bass',
+      name: 'Outro Sub',
+      startBar: 12,
+      lengthBars: 4,
+      color: 'accent',
+      data: {
+        bassPatternId: 'whole-note-root',
+        bassFeel: 0.1,
+        bassOctave: 0,
+      },
+    },
+
+    // Drums Track
+    {
+      id: 'reg-drum-verse',
+      trackType: 'drums',
+      name: 'Verse Beat',
+      startBar: 4,
+      lengthBars: 4,
+      color: 'warning',
+      data: {
+        soundKit: 'Retro Drive',
+        drumPattern: {
+          kick: [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false],
+          snare: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false],
+          hihat: [true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false],
+          openhat: [false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false],
+          clap: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false],
+        },
+      },
+    },
+    {
+      id: 'reg-drum-chorus',
+      trackType: 'drums',
+      name: 'Chorus Beat',
+      startBar: 8,
+      lengthBars: 4,
+      color: 'warning',
+      data: {
+        soundKit: 'Retro Drive',
+        drumPattern: {
+          kick: [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false],
+          snare: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false],
+          hihat: [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true],
+          openhat: [false, false, true, false, false, false, true, false, false, false, true, false, false, false, true, false],
+          clap: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false],
+        },
+      },
+    },
+
+    // Lead Track
+    {
+      id: 'reg-lead-chorus',
+      trackType: 'lead',
+      name: 'Chorus Hook',
+      startBar: 8,
+      lengthBars: 4,
+      color: 'secondary',
+      data: {
+        leadNotes: [
+          { note: 'E4', step: 0, durationSteps: 3, velocity: 0.85 },
+          { note: 'G4', step: 4, durationSteps: 3, velocity: 0.85 },
+          { note: 'A4', step: 8, durationSteps: 6, velocity: 0.9 },
+          { note: 'C5', step: 16, durationSteps: 3, velocity: 0.85 },
+          { note: 'D5', step: 20, durationSteps: 3, velocity: 0.85 },
+          { note: 'E5', step: 24, durationSteps: 6, velocity: 0.95 },
+          { note: 'D5', step: 32, durationSteps: 3, velocity: 0.8 },
+          { note: 'C5', step: 36, durationSteps: 3, velocity: 0.8 },
+          { note: 'A4', step: 40, durationSteps: 6, velocity: 0.85 },
+          { note: 'G4', step: 48, durationSteps: 3, velocity: 0.8 },
+          { note: 'E4', step: 52, durationSteps: 3, velocity: 0.8 },
+          { note: 'A4', step: 56, durationSteps: 8, velocity: 0.9 },
+        ],
+      },
+    },
+  ],
 };

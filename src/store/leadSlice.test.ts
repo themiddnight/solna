@@ -5,6 +5,7 @@ import { MAX_STEPS_PER_BAR } from '../utils/meter';
 
 function resetLead(): void {
   useAppStore.setState({
+    meterId: '4/4',
     leadMelodySteps: Array.from({ length: MAX_STEPS_PER_BAR }, () => [] as string[]),
     leadLoopLength: 1,
     leadMelodyView: 'scale-locked',

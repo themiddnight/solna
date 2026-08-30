@@ -1,71 +1,29 @@
-import React from 'react';
-import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Plus } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { loadLoop } from '../../store/loadLoop';
 import { loopBars } from '../../store/loop';
 import { aggregatePlayerState } from '../../store/transportSlice';
 import { useAppStore } from '../../store/store';
 import { buildRouteUrl } from '../../routing/tabRouting';
-import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
-import { Slider } from '../ui/Slider';
+import { getMeter } from '../../utils/meter';
+import { subscribePlaybackClock } from '../../audio/playback/playbackEngine';
 import { ViewHeader } from '../ui/ViewHeader';
-
-type MixChannelProps = {
-  idPrefix: string;
-  label: string;
-  volume: number;
-  muted: boolean;
-  max: number;
-  tone: PowerToggleTone;
-  sliderAccent: string;
-  onVolume: (v: number) => void;
-  onToggleMute: () => void;
-};
-
-/** One compact mixer strip (mute + gain) inside a loop card. */
-const MixChannel: React.FC<MixChannelProps> = ({
-  idPrefix,
-  label,
-  volume,
-  muted,
-  max,
-  tone,
-  sliderAccent,
-  onVolume,
-  onToggleMute,
-}) => (
-  <div className="flex flex-col gap-1 min-w-0">
-    <div className="flex items-center justify-between gap-1">
-      <span className="text-[10px] font-bold uppercase tracking-wide text-base-content/60">
-        {label}
-      </span>
-      <PowerToggle
-        id={`btn-mute-${idPrefix}`}
-        on={!muted}
-        onToggle={onToggleMute}
-        name={`${label} mute`}
-        tone={tone}
-        size="xs"
-        iconOnly
-        verb={{ on: 'Unmute', off: 'Mute' }}
-      />
-    </div>
-    <div className="flex items-center gap-1.5">
-      <Slider
-        id={`slider-${idPrefix}`}
-        min={0}
-        max={max}
-        step={0.05}
-        value={volume}
-        onChange={onVolume}
-        className={`range range-xs ${sliderAccent} w-full`}
-        title={`${label} gain`}
-      />
-      <span className="text-[10px] font-mono w-8 text-right shrink-0">
-        {Math.round(volume * 100)}%
-      </span>
-    </div>
-  </div>
-);
+import { SortableLoopCard } from './SortableLoopCard';
 
 /** Pure route for the loop-editor deep-link, exported for a pure test. */
 export const buildEditRoute = (id: string) => buildRouteUrl('loop', 'synth', id);
@@ -93,33 +51,117 @@ export const ArrangeView: React.FC = () => {
   const loops = useAppStore((s) => s.loops);
   const activeLoopId = useAppStore((s) => s.activeLoopId);
   const songLoopIndex = useAppStore((s) => s.songLoopIndex);
+  const auditionLoopId = useAppStore((s) => s.auditionLoopId);
+  const meterId = useAppStore((s) => s.meterId);
+  const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
+  const chordsPlayer = useAppStore((s) => s.chordsPlayer);
+  const leadPlayer = useAppStore((s) => s.leadPlayer);
+
   const addLoop = useAppStore((s) => s.addLoop);
   const duplicateLoop = useAppStore((s) => s.duplicateLoop);
   const deleteLoop = useAppStore((s) => s.deleteLoop);
   const reorderLoops = useAppStore((s) => s.reorderLoops);
+  const reorderLoopsArray = useAppStore((s) => s.reorderLoopsArray);
+  const setLoopName = useAppStore((s) => s.setLoopName);
+  const setLoopRepeatCount = useAppStore((s) => s.setLoopRepeatCount);
   const setLoopMix = useAppStore((s) => s.setLoopMix);
 
+  const isPlaying =
+    aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer) === 'playing';
+
   const playingId =
-    songLoopIndex !== null && loops[songLoopIndex]
+    auditionLoopId !== null
+      ? auditionLoopId
+      : songLoopIndex !== null && loops[songLoopIndex]
       ? loops[songLoopIndex].id
       : activeLoopId;
 
-  const handleDuplicate = (id: string) => {
-    const cloneId = duplicateLoop(id);
-    if (cloneId === null) return;
+  // Live playback clock step for real-time progress bar
+  const [currentStep, setCurrentStep] = useState(0);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      setCurrentStep(0);
+      return;
+    }
+    return subscribePlaybackClock((step) => {
+      setCurrentStep(step);
+    });
+  }, [isPlaying]);
+
+  const stepsPerBar = useMemo(() => getMeter(meterId).stepsPerBar, [meterId]);
+
+  const loopIds = useMemo(() => loops.map((l) => l.id), [loops]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (over && active.id !== over.id) {
+        const oldIndex = loops.findIndex((item) => item.id === active.id);
+        const newIndex = loops.findIndex((item) => item.id === over.id);
+        if (oldIndex !== -1 && newIndex !== -1) {
+          const newLoops = arrayMove(loops, oldIndex, newIndex);
+          reorderLoopsArray(newLoops);
+        }
+      }
+    },
+    [loops, reorderLoopsArray]
+  );
+
+  const handleSelectLoop = useCallback((id: string) => {
+    loadLoop(id);
+  }, []);
+
+  const handleTogglePlayLoop = useCallback((id: string) => {
     const s = useAppStore.getState();
     const playing =
       aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
-    // During a live song-mode pass, activating the clone would hard-stop the
-    // sounding loop and jump the song onto it — the duplicate is only meant
-    // to be added for editing, so skip the swap while the song is running.
-    if (s.songLoopIndex !== null && playing) return;
-    loadLoop(cloneId);
-  };
-  const handleDelete = (id: string) => {
-    const fallback = deleteLoop(id);
-    if (fallback !== null) loadLoop(fallback);
-  };
+
+    if (playing && s.auditionLoopId === id) {
+      s.hardStopAll();
+      s.setAuditionLoopId(null);
+      return;
+    }
+
+    loadLoop(id);
+    s.playAll();
+    useAppStore.setState({ auditionLoopId: id, songLoopIndex: null });
+  }, []);
+
+  const handleDuplicate = useCallback(
+    (id: string) => {
+      const cloneId = duplicateLoop(id);
+      if (cloneId === null) return;
+      const s = useAppStore.getState();
+      const playing =
+        aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
+      // During a live song-mode pass, activating the clone would hard-stop the
+      // sounding loop and jump the song onto it — the duplicate is only meant
+      // to be added for editing, so skip the swap while the song is running.
+      if (s.songLoopIndex !== null && playing) return;
+      loadLoop(cloneId);
+    },
+    [duplicateLoop]
+  );
+
+  const handleDelete = useCallback(
+    (id: string) => {
+      const fallback = deleteLoop(id);
+      if (fallback !== null) loadLoop(fallback);
+    },
+    [deleteLoop]
+  );
 
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto flex flex-col gap-3">
@@ -139,129 +181,68 @@ export const ArrangeView: React.FC = () => {
         }
       />
 
-      <div className="flex flex-col gap-2">
-        {loops.map((loop, index) => {
-          const bars = loopBars(loop.chords);
-          const isPlaying = loop.id === playingId;
-          return (
-            <div
-              key={loop.id}
-              className={`rounded-box border bg-base-200 ${
-                isPlaying ? 'border-primary/40 bg-primary/5' : 'border-base-300'
-              }`}
-            >
-              <div className="flex items-center gap-2 p-2">
-                <button
-                  id={`btn-loop-select-${loop.id}`}
-                  type="button"
-                  onClick={() => loadLoop(loop.id)}
-                  className="btn btn-sm btn-ghost flex-1 justify-start gap-2 min-w-0"
-                >
-                  <span className="font-bold text-base-content truncate">{loop.name}</span>
-                  <span className="text-xs text-base-content/50 shrink-0">
-                    {`${bars} bar${bars === 1 ? '' : 's'}`}
-                  </span>
-                </button>
-                <button
-                  id={`btn-loop-edit-${loop.id}`}
-                  type="button"
-                  aria-label={`Edit ${loop.name}`}
-                  onClick={() => editLoop(loop.id)}
-                  className="btn btn-xs btn-ghost"
-                >
-                  Edit
-                </button>
-                <button
-                  id={`btn-loop-up-${loop.id}`}
-                  type="button"
-                  aria-label={`Move ${loop.name} up`}
-                  disabled={index === 0}
-                  onClick={() => reorderLoops(loop.id, -1)}
-                  className="btn btn-sm btn-square btn-ghost"
-                >
-                  <ArrowUp className="w-4 h-4" />
-                </button>
-                <button
-                  id={`btn-loop-down-${loop.id}`}
-                  type="button"
-                  aria-label={`Move ${loop.name} down`}
-                  disabled={index === loops.length - 1}
-                  onClick={() => reorderLoops(loop.id, 1)}
-                  className="btn btn-sm btn-square btn-ghost"
-                >
-                  <ArrowDown className="w-4 h-4" />
-                </button>
-                <button
-                  id={`btn-loop-duplicate-${loop.id}`}
-                  type="button"
-                  aria-label={`Duplicate ${loop.name}`}
-                  onClick={() => handleDuplicate(loop.id)}
-                  className="btn btn-sm btn-square btn-ghost"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
-                <button
-                  id={`btn-loop-delete-${loop.id}`}
-                  type="button"
-                  aria-label={`Delete ${loop.name}`}
-                  disabled={loops.length <= 1}
-                  onClick={() => handleDelete(loop.id)}
-                  className="btn btn-sm btn-square btn-ghost"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={loopIds} strategy={verticalListSortingStrategy}>
+          <div className="flex flex-col gap-3">
+            {loops.map((loop, index) => {
+              const bars = loopBars(loop.chords);
+              const repeatCount = Math.max(1, loop.repeatCount ?? 1);
+              const singleCycleSteps = Math.max(1, bars * stepsPerBar);
+              const isAuditioning = isPlaying && auditionLoopId === loop.id;
+              const isSongPlaying = isPlaying && auditionLoopId === null && loop.id === playingId;
+              const isCurrentPlaying = isAuditioning || isSongPlaying;
+              const isSelected = loop.id === activeLoopId;
 
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-2 pt-0">
-                <MixChannel
-                  idPrefix={`synth-${loop.id}`}
-                  label="Lead"
-                  volume={loop.synthVolume}
-                  muted={loop.synthMuted}
-                  max={1.5}
-                  tone="primary"
-                  sliderAccent="text-primary"
-                  onVolume={(v) => setLoopMix(loop.id, { synthVolume: v })}
-                  onToggleMute={() => setLoopMix(loop.id, { synthMuted: !loop.synthMuted })}
+              const totalStepsInLoop = singleCycleSteps * (isAuditioning ? 1 : repeatCount);
+
+              const currentStepInLoop = isCurrentPlaying
+                ? currentStep % totalStepsInLoop
+                : 0;
+
+              const currentRep =
+                isCurrentPlaying && !isAuditioning
+                  ? Math.floor(currentStepInLoop / singleCycleSteps) + 1
+                  : 1;
+
+              const progressPercent = isCurrentPlaying
+                ? Math.min(100, Math.max(0, ((currentStepInLoop + 1) / totalStepsInLoop) * 100))
+                : 0;
+
+              return (
+                <SortableLoopCard
+                  key={loop.id}
+                  loop={loop}
+                  index={index}
+                  totalLoops={loops.length}
+                  isPlaying={isCurrentPlaying}
+                  isAuditioning={isAuditioning}
+                  isActive={isSelected}
+                  progressPercent={progressPercent}
+                  currentStepInLoop={currentStepInLoop}
+                  totalStepsInLoop={totalStepsInLoop}
+                  singleCycleSteps={singleCycleSteps}
+                  currentRep={currentRep}
+                  repeatCount={repeatCount}
+                  stepsPerBar={stepsPerBar}
+                  onSelect={handleSelectLoop}
+                  onEdit={editLoop}
+                  onDuplicate={handleDuplicate}
+                  onDelete={handleDelete}
+                  onReorder={reorderLoops}
+                  onRename={setLoopName}
+                  onSetRepeat={setLoopRepeatCount}
+                  onTogglePlayLoop={handleTogglePlayLoop}
+                  onSetMix={setLoopMix}
                 />
-                <MixChannel
-                  idPrefix={`drum-${loop.id}`}
-                  label="Drum"
-                  volume={loop.masterSequencerVolume}
-                  muted={loop.drumMuted}
-                  max={1.0}
-                  tone="accent"
-                  sliderAccent="text-accent"
-                  onVolume={(v) => setLoopMix(loop.id, { masterSequencerVolume: v })}
-                  onToggleMute={() => setLoopMix(loop.id, { drumMuted: !loop.drumMuted })}
-                />
-                <MixChannel
-                  idPrefix={`chord-${loop.id}`}
-                  label="Chord"
-                  volume={loop.chordVolume}
-                  muted={loop.chordMuted}
-                  max={1.5}
-                  tone="module-chord"
-                  sliderAccent="text-module-chord"
-                  onVolume={(v) => setLoopMix(loop.id, { chordVolume: v })}
-                  onToggleMute={() => setLoopMix(loop.id, { chordMuted: !loop.chordMuted })}
-                />
-                <MixChannel
-                  idPrefix={`bass-${loop.id}`}
-                  label="Bass"
-                  volume={loop.bassVolume}
-                  muted={loop.bassMuted}
-                  max={1.5}
-                  tone="module-bass"
-                  sliderAccent="text-module-bass"
-                  onVolume={(v) => setLoopMix(loop.id, { bassVolume: v })}
-                  onToggleMute={() => setLoopMix(loop.id, { bassMuted: !loop.bassMuted })}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </SortableContext>
+      </DndContext>
     </div>
   );
 };
