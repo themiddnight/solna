@@ -16,7 +16,7 @@ const pitchOf = (note: string): number => {
   const [, name, octave] = match;
   return (ROOTS as readonly string[]).indexOf(name) + 12 * parseInt(octave, 10);
 };
-import { DEFAULT_PADS } from '../loop/DrumPads';
+import { DEFAULT_PADS } from '../ui/DrumPadGrid';
 
 const byKey = (rows: ReturnType<typeof getScaleLockedKeyboardNotes>) =>
   Object.fromEntries(
