@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { hasOutOfScaleNote, isBlackKey, isRootNote, leadPitchRows, leadStoredIndex } from './pianoRoll';
+import { isBlackKey, isRootNote, leadPitchRows, leadStoredIndex } from './pianoRoll';
 
 describe('leadPitchRows — scale-locked', () => {
   test('lists the scale notes across the window, highest first', () => {
@@ -29,14 +29,6 @@ describe('leadPitchRows — chromatic', () => {
     expect(rows).toHaveLength(12);
     expect(rows[0]).toBe('B3');
     expect(rows[11]).toBe('C3');
-  });
-});
-
-describe('hasOutOfScaleNote', () => {
-  test('detects a note outside the active scale', () => {
-    expect(hasOutOfScaleNote(['C4', 'C#4'], 'C', 'Major')).toBe(true);
-    expect(hasOutOfScaleNote(['C4', 'E4'], 'C', 'Major')).toBe(false);
-    expect(hasOutOfScaleNote([], 'C', 'Major')).toBe(false);
   });
 });
 

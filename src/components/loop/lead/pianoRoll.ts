@@ -1,4 +1,4 @@
-import { getScaleNotesInOctave, isNoteInScale, ROOTS } from '../../../utils/musicTheory';
+import { getScaleNotesInOctave, ROOTS } from '../../../utils/musicTheory';
 import { MAX_STEPS_PER_BAR } from '../../../utils/meter';
 import type { LeadMelodyView } from '../../../store/types';
 
@@ -32,15 +32,6 @@ export function leadPitchRows(
     }
   }
   return rows;
-}
-
-/** True when a step holds at least one note outside the active scale. */
-export function hasOutOfScaleNote(
-  notes: readonly string[],
-  root: string,
-  scaleType: string,
-): boolean {
-  return notes.some((n) => !isNoteInScale(n, root, scaleType));
 }
 
 /**

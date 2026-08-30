@@ -11,13 +11,11 @@ import {
 import {
   LEAD_CELL_WIDTH,
   LEAD_WINDOW_OCTAVES,
-  hasOutOfScaleNote,
   isBlackKey,
   isRootNote,
   leadPitchRows,
   leadStoredIndex,
 } from './pianoRoll';
-import type { LeadMelodyView } from '../../../store/types';
 
 export interface LeadPianoRollProps {
   currentStep: number;
@@ -35,8 +33,6 @@ const LeadPianoCells = React.memo(function LeadPianoCells({
   melody,
   rows,
   root,
-  scaleType,
-  view,
   onToggle,
 }: {
   meter: Meter;
@@ -44,8 +40,6 @@ const LeadPianoCells = React.memo(function LeadPianoCells({
   melody: readonly string[][];
   rows: readonly string[];
   root: string;
-  scaleType: string;
-  view: LeadMelodyView;
   onToggle: (stepIndex: number, note: string) => void;
 }) {
   const stepsPerBar = meter.stepsPerBar;
@@ -94,28 +88,6 @@ const LeadPianoCells = React.memo(function LeadPianoCells({
           })}
         </React.Fragment>
       ))}
-      {view === 'scale-locked' && (
-        <React.Fragment key="out-of-scale">
-          {Array.from({ length: columns }, (_, col) => {
-            const barIndex = Math.floor(col / stepsPerBar);
-            const stepInBar = col - barIndex * stepsPerBar;
-            const idx = leadStoredIndex(barIndex, stepInBar);
-            const outOfScale = hasOutOfScaleNote(melody[idx] ?? [], root, scaleType);
-            const sep =
-              barIndex > 0 && stepInBar === 0
-                ? 'border-l-2 border-l-base-content/50'
-                : '';
-            return (
-              <div
-                key={`oos-${col}`}
-                className={`h-5 border border-base-300 ${
-                  outOfScale ? 'bg-warning' : 'bg-base-200'
-                } ${sep}`}
-              />
-            );
-          })}
-        </React.Fragment>
-      )}
     </div>
   );
 });
@@ -311,11 +283,6 @@ export const LeadPianoRoll: React.FC<LeadPianoRollProps> = ({ currentStep, isPla
                     {note}
                   </button>
                 ))}
-                {leadMelodyView === 'scale-locked' && (
-                  <div className="h-5 flex items-center justify-end pr-2 text-[10px] leading-none text-warning">
-                    ♯
-                  </div>
-                )}
               </div>
 
               <div className="relative shrink-0">
@@ -325,8 +292,6 @@ export const LeadPianoRoll: React.FC<LeadPianoRollProps> = ({ currentStep, isPla
                   melody={leadMelodySteps}
                   rows={rows}
                   root={scaleRoot}
-                  scaleType={scaleType}
-                  view={leadMelodyView}
                   onToggle={onToggle}
                 />
                 {isPlaying && (
