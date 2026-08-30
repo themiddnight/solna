@@ -112,7 +112,15 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
             getMeter(cur.meterId).stepsPerBar,
           );
           if (target === null) return;
-          loadLoop(target);
+          // Defer: loadLoop hard-stops and restarts, which resets the shared
+          // clock (via engineSync's transport subscription). Running that reset
+          // synchronously here mutates clockStepIndex mid-dispatch — this
+          // callback is one of clockTick's listeners — so the boundary step's
+          // own dispatch and the reset's step-0 re-dispatch collide and the new
+          // loop's first chord/drum fires twice. A microtask runs before the
+          // next 25 ms clock tick, so the reset lands cleanly on the following
+          // tick with every playback hook re-armed.
+          queueMicrotask(() => loadLoop(target));
         });
       }
     } else if (layer !== 'song' && s.songLoopIndex !== null) {
