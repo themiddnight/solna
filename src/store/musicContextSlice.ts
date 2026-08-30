@@ -1,5 +1,6 @@
 import type { StoreApi } from 'zustand';
 import type { AppStore, MusicContextSlice } from './types';
+import { remapLeadMelodyByScale, transposeLeadMelodyByRoot } from '../audio/leadMelody';
 
 type Set = StoreApi<AppStore>['setState'];
 
@@ -15,8 +16,25 @@ export function createMusicContextSlice(set: Set): MusicContextSlice {
     scaleType: 'Natural Minor',
     selectedVibeId: null,
 
-    setScaleRoot: (scaleRoot) => set({ scaleRoot }),
-    setScaleType: (scaleType) => set({ scaleType }),
+    setScaleRoot: (scaleRoot) =>
+      set((state) => ({
+        scaleRoot,
+        leadMelodySteps: transposeLeadMelodyByRoot(
+          state.leadMelodySteps,
+          state.scaleRoot,
+          scaleRoot,
+        ),
+      })),
+    setScaleType: (scaleType) =>
+      set((state) => ({
+        scaleType,
+        leadMelodySteps: remapLeadMelodyByScale(
+          state.leadMelodySteps,
+          state.scaleRoot,
+          state.scaleType,
+          scaleType,
+        ),
+      })),
     setSelectedVibeId: (selectedVibeId) => set({ selectedVibeId }),
   };
 }

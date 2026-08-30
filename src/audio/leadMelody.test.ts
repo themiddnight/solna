@@ -4,9 +4,11 @@ import {
   clampLeadLoopLength,
   leadStepNotes,
   loopLengthDivisors,
+  remapLeadMelodyByScale,
   resizeLeadMelody,
   resolveLeadStepTriggers,
   stepInLoopFor,
+  transposeLeadMelodyByRoot,
 } from './leadMelody';
 
 describe('loopLengthDivisors', () => {
@@ -105,5 +107,23 @@ describe('resolveLeadStepTriggers', () => {
     const triggers = resolveLeadStepTriggers(['C4'], true, 0, { ...params, arpOctaves: 2 }, 0.125);
     expect(triggers).toHaveLength(1);
     expect(triggers[0].note).toBe('C4'); // step 0 → first of [C4, C5]
+  });
+});
+
+describe('transposeLeadMelodyByRoot', () => {
+  test('transposes every note in every step by the root interval', () => {
+    const steps = [['A3', 'C4'], ['E4'], []];
+    expect(transposeLeadMelodyByRoot(steps, 'A', 'C')).toEqual([['C3', 'D#3'], ['G3'], []]);
+  });
+});
+
+describe('remapLeadMelodyByScale', () => {
+  test('re-maps in-scale degrees on a scale change, leaves out-of-scale unchanged', () => {
+    const steps = [['A3', 'F4', 'C#4'], []];
+    // A natural minor → A dorian: F (degree 5) → F#; C#4 is out of scale
+    expect(remapLeadMelodyByScale(steps, 'A', 'Natural Minor', 'Dorian')).toEqual([
+      ['A3', 'F#4', 'C#4'],
+      [],
+    ]);
   });
 });

@@ -2,6 +2,7 @@ import type { ArpMode, ArpRate } from '../types';
 import { buildArpSequence } from './arpeggiator';
 import { computeArpTriggers } from './arpSchedule';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { remapNoteByScaleDegree, rootSemitone, transposeNoteBySemitones } from '../utils/musicTheory';
 
 /**
  * Fixed note-gate fraction for block-mode lead notes (arp off). One step at
@@ -74,6 +75,34 @@ export function resizeLeadMelody(
   const out = steps.slice(0, targetLen);
   while (out.length < targetLen) out.push([]);
   return out;
+}
+
+/**
+ * Transpose the whole melody by the root-change interval (uniform chromatic
+ * transpose — preserves every interval and moves out-of-scale notes too).
+ */
+export function transposeLeadMelodyByRoot(
+  steps: readonly string[][],
+  fromRoot: string,
+  toRoot: string,
+): string[][] {
+  const delta = rootSemitone(toRoot) - rootSemitone(fromRoot);
+  return steps.map((row) => row.map((note) => transposeNoteBySemitones(note, delta)));
+}
+
+/**
+ * Re-map the melody to a new scale by degree (same root). In-scale notes move to
+ * the same degree of the new scale; out-of-scale notes stay put.
+ */
+export function remapLeadMelodyByScale(
+  steps: readonly string[][],
+  root: string,
+  fromType: string,
+  toType: string,
+): string[][] {
+  return steps.map((row) =>
+    row.map((note) => remapNoteByScaleDegree(note, root, fromType, root, toType)),
+  );
 }
 
 /**
