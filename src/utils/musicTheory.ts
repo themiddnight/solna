@@ -144,6 +144,40 @@ export function isNoteInScale(noteWithOrWithoutOctave: string, root: string, sca
   return scale.intervals.includes(interval);
 }
 
+/** Transpose a note by a raw semitone count (sharp-spelled via ROOTS convention). */
+export function transposeNoteBySemitones(note: string, semitones: number): string {
+  const midi = Note.midi(note);
+  if (midi == null) return note;
+  return Note.fromMidiSharps(midi + semitones);
+}
+
+/**
+ * Re-map an in-scale note to the same degree of a new key/scale, preserving its
+ * position in the scale (degree + octave block). Returns the note unchanged when
+ * it is out of the source scale or its degree has no target (a 7-note scale's
+ * 6th degree has no home in a 5-note pentatonic). Sharp-spelled, like the rest
+ * of the ROOTS convention.
+ */
+export function remapNoteByScaleDegree(
+  note: string,
+  fromRoot: string,
+  fromScaleType: string,
+  toRoot: string,
+  toScaleType: string,
+): string {
+  const midi = Note.midi(note);
+  if (midi == null) return note;
+  const rootRef = rootSemitone(fromRoot);
+  const block = Math.floor((midi - rootRef) / 12);
+  const offset = ((midi - rootRef) % 12 + 12) % 12;
+  const fromIntervals = (SCALES[fromScaleType] || SCALES['Major']).intervals;
+  const degree = fromIntervals.indexOf(offset);
+  if (degree === -1) return note;
+  const toIntervals = (SCALES[toScaleType] || SCALES['Major']).intervals;
+  if (degree >= toIntervals.length) return note;
+  return Note.fromMidiSharps(rootSemitone(toRoot) + block * 12 + toIntervals[degree]);
+}
+
 // True when the in-scale palette (triads or 7ths) renders the same root+quality.
 function isInScalePaletteChord(
   chordRoot: string,

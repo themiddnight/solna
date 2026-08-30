@@ -17,10 +17,12 @@ import {
   getDiatonicChordForDegree,
   getScaleNotes,
   isNoteInScale,
+  remapNoteByScaleDegree,
   rootSemitone,
   sixteenthNoteMs,
   snapProgressionToScale,
   stepDurationSec,
+  transposeNoteBySemitones,
   transposeProgression,
 } from './musicTheory';
 import type { ChordItem } from '../types';
@@ -340,5 +342,41 @@ describe('tempo helpers', () => {
     expect(barDurationSec(120, 12)).toBeCloseTo(stepDurationSec(120) * 12, 12);
     expect(barDurationSec(120, 24)).toBeCloseTo(stepDurationSec(120) * 24, 12);
     expect(barDurationSec(120, 14)).toBeCloseTo(stepDurationSec(120) * 14, 12);
+  });
+});
+
+describe('transposeNoteBySemitones', () => {
+  test('shifts a note up by a positive semitone count', () => {
+    expect(transposeNoteBySemitones('C4', 3)).toBe('D#4');
+  });
+  test('shifts a note down by a negative semitone count', () => {
+    expect(transposeNoteBySemitones('A3', -9)).toBe('C3');
+  });
+  test('zero is identity', () => {
+    expect(transposeNoteBySemitones('F#5', 0)).toBe('F#5');
+  });
+});
+
+describe('remapNoteByScaleDegree', () => {
+  test('keeps the tonic on the tonic at the same register', () => {
+    expect(remapNoteByScaleDegree('A3', 'A', 'Natural Minor', 'C', 'Natural Minor')).toBe('C3');
+  });
+  test('re-maps a degree to the same degree of the new scale (b3 → b3)', () => {
+    // C4 = degree 2 (b3) of A natural minor → degree 2 of C natural minor = D#3
+    expect(remapNoteByScaleDegree('C4', 'A', 'Natural Minor', 'C', 'Natural Minor')).toBe('D#3');
+  });
+  test('scale-type change shifts a degree by its interval delta (minor → major)', () => {
+    // D#4 = degree 2 of C natural minor → degree 2 of C major = E4
+    expect(remapNoteByScaleDegree('D#4', 'C', 'Natural Minor', 'C', 'Major')).toBe('E4');
+  });
+  test('leaves an out-of-scale note unchanged', () => {
+    expect(remapNoteByScaleDegree('C#4', 'C', 'Major', 'C', 'Natural Minor')).toBe('C#4');
+  });
+  test('leaves a note whose degree overflows the target scale unchanged', () => {
+    // B4 = degree 6 of C major; Major Pentatonic has only 5 degrees
+    expect(remapNoteByScaleDegree('B4', 'C', 'Major', 'C', 'Major Pentatonic')).toBe('B4');
+  });
+  test('no-op (same key and scale) is identity', () => {
+    expect(remapNoteByScaleDegree('E4', 'C', 'Major', 'C', 'Major')).toBe('E4');
   });
 });

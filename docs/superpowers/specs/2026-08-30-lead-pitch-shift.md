@@ -88,8 +88,8 @@ export function remapNoteByScaleDegree(
 }
 ```
 
-Worked example (A Natural Minor → C Natural Minor): `A3 C4 E4` ⇒ `C3 Eb3 G3`
-(degrees 0,2,4 preserved; uniform −9 semitones).
+Worked example (A Natural Minor → C Natural Minor, sharp-spelled per the ROOTS
+convention): `A3 C4 E4` ⇒ `C3 D#3 G3` (degrees 0,2,4 preserved; uniform −9 semitones).
 
 ### 2. Step-level transforms in `src/audio/leadMelody.ts`
 
