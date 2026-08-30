@@ -6,6 +6,7 @@ import { SynthView } from './components/SynthView';
 import { SequencerView } from './components/SequencerView';
 import { ChordView } from './components/ChordView';
 import { EffectsRackView } from './components/EffectsRackView';
+import { ArrangeView } from './components/ArrangeView';
 import { TransportBar } from './components/TransportBar';
 import { MidiSettingsModal } from './components/ui/MidiSettingsModal';
 import { audioEngine } from './audio/engine';
@@ -13,6 +14,8 @@ import { useAppStore } from './store/store';
 import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
 import { useTabRouting } from './routing/useTabRouting';
 import { usePlayheadSync } from './components/usePlayheadSync';
+import { useRegionSync } from './store/regionSync';
+import { useSongModeSync } from './store/songMode';
 
 /** Minimal event-target shape `registerFirstGesture` needs — satisfied by
  * `window` in the app and by a fake target in tests (no DOM required). */
@@ -60,6 +63,10 @@ export function App() {
   // Shared clock -> store playhead, so every tab can show the beat position.
   usePlayheadSync();
 
+  // Region live-write sync-back + song-mode coordinator (store-level, mounted once).
+  useRegionSync();
+  useSongModeSync();
+
   // UI slice
   const activeTab = useAppStore((s) => s.activeTab);
 
@@ -103,6 +110,9 @@ export function App() {
         </div>
         <div className={activeTab === 'effects' ? 'block' : 'hidden'}>
           <EffectsRackView />
+        </div>
+        <div className={activeTab === 'arrange' ? 'block' : 'hidden'}>
+          <ArrangeView />
         </div>
       </main>
 

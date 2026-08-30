@@ -11,6 +11,16 @@ export type BassNoteToken =
   | 'approachDiatonicUp' | 'approachFifthOfNext'
   | 'rest';
 
+/**
+ * The subset of BassNoteToken the custom bass grid offers. Deliberately no
+ * scale-degree or 2-4-6 colour tones: borrowed/non-diatonic chords are always
+ * possible, so a step that assumes a scale degree could resolve off-key.
+ */
+export type BassStepChoice = Extract<
+  BassNoteToken,
+  'rest' | 'root' | 'third' | 'fifth' | 'seventh' | 'octave'
+>;
+
 export interface BassStep {
   step: number;            // 16th-note position in the bar (0–15)
   note: BassNoteToken;
@@ -361,3 +371,30 @@ export const BASS_PATTERNS: BassPattern[] = [
 ];
 
 export const BASS_STYLE_GROUPS = groupByStyle(BASS_PATTERNS);
+
+/**
+ * Synthesize a BassPattern from the user's custom bass grid. Each non-rest step
+ * is a single 16th hit (holdSteps defaults to 1, no staccato/alternate);
+ * 'octave' maps to root + octaveShift 1 (the +12 the resolver's own 'octave'
+ * token would give, expressed per the SP1 spec). Authored at the ACTIVE meter.
+ * Resolution is NOT reimplemented here — resolveBassSteps consumes this the
+ * same way it consumes any library pattern.
+ */
+export function customBassPattern(
+  choices: readonly BassStepChoice[],
+  stepsPerBar: number,
+  meter: MeterId,
+): BassPattern {
+  const steps: BassStep[] = [];
+  const length = Math.min(choices.length, stepsPerBar);
+  for (let step = 0; step < length; step++) {
+    const choice = choices[step];
+    if (choice === 'rest') continue;
+    steps.push(
+      choice === 'octave'
+        ? { step, note: 'root' as const, octaveShift: 1 }
+        : { step, note: choice },
+    );
+  }
+  return { id: 'custom', name: 'Custom', style: 'Custom', meter, steps };
+}

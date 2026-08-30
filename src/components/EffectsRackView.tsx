@@ -4,7 +4,6 @@ import { MasterEffects } from "../types";
 import { useAppStore } from "../store/store";
 import { Knob } from "./ui/Knob";
 import { PowerToggle } from "./ui/PowerToggle";
-import { ChannelStrip } from "./ui/ChannelStrip";
 import { ViewHeader } from "./ui/ViewHeader";
 import { SECTION_HEADER, STEP_BADGE } from "./ui/fieldClasses";
 import { AudioVisualizer, VISUALIZER_MODES, VISUALIZER_MODE_LABEL, type VisualizerMode } from "./AudioVisualizer";
@@ -20,24 +19,6 @@ export const EffectsRackView: React.FC = React.memo(() => {
   const activeTab = useAppStore((s) => s.activeTab);
   const [vizMode, setVizMode] = React.useState<VisualizerMode>("wave");
 
-  const synthVolume = useAppStore((s) => s.synthVolume);
-  const setSynthVolume = useAppStore((s) => s.setSynthVolume);
-
-  const masterSequencerVolume = useAppStore((s) => s.masterSequencerVolume);
-  const setMasterSequencerVolume = useAppStore((s) => s.setMasterSequencerVolume);
-  const drumMuted = useAppStore((s) => s.drumMuted);
-  const toggleDrumMuted = useAppStore((s) => s.toggleDrumMuted);
-
-  const chordVolume = useAppStore((s) => s.chordVolume);
-  const setChordVolume = useAppStore((s) => s.setChordVolume);
-  const chordMuted = useAppStore((s) => s.chordMuted);
-  const toggleChordMuted = useAppStore((s) => s.toggleChordMuted);
-
-  const bassVolume = useAppStore((s) => s.bassVolume);
-  const setBassVolume = useAppStore((s) => s.setBassVolume);
-  const bassMuted = useAppStore((s) => s.bassMuted);
-  const toggleBassMuted = useAppStore((s) => s.toggleBassMuted);
-
   const updateFx = (updates: Partial<MasterEffects>) => {
     // Engine mirror happens via useEngineSync (one render later)
     setEffects({ ...effects, ...updates });
@@ -46,114 +27,6 @@ export const EffectsRackView: React.FC = React.memo(() => {
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       <ViewHeader view="effects" />
-
-      {/* Master Mixer Section */}
-      <section className="space-y-2">
-        <h3 className={`${SECTION_HEADER} px-1 flex items-center gap-2`}>
-          <Sliders className="w-4 h-4 text-primary" />
-          Master Mixer & Volumes
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {/* 1. Main Synth Channel */}
-          <div className="card bg-panel border border-base-300 shadow-md p-3 sm:p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                <span className={STEP_BADGE}>1</span>
-                <span>Main Synth</span>
-              </span>
-            </div>
-            <ChannelStrip
-              idPrefix="synth"
-              volume={synthVolume}
-              max={1.5}
-              accentClass="text-primary"
-              sliderClassName="range range-xs text-primary"
-              onVolumeChange={setSynthVolume}
-            />
-          </div>
-
-          {/* 2. Drum / Beat Channel */}
-          <div className="card bg-panel border border-base-300 shadow-md p-3 sm:p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                <span className={STEP_BADGE}>2</span>
-                <span>Drum / Beat</span>
-              </span>
-              <PowerToggle
-                id="btn-mute-drum"
-                on={!drumMuted}
-                onToggle={toggleDrumMuted}
-                name="Drum Mute"
-                tone="accent"
-                size="xs"
-                iconOnly
-              />
-            </div>
-            <ChannelStrip
-              idPrefix="drum"
-              volume={masterSequencerVolume}
-              max={1.0}
-              accentClass="text-accent"
-              sliderClassName="range range-xs text-accent"
-              onVolumeChange={setMasterSequencerVolume}
-            />
-          </div>
-
-          {/* 3. Chord Synth Channel */}
-          <div className="card bg-panel border border-base-300 shadow-md p-3 sm:p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                <span className={STEP_BADGE}>3</span>
-                <span>Chord Synth</span>
-              </span>
-              <PowerToggle
-                id="btn-mute-chord"
-                on={!chordMuted}
-                onToggle={toggleChordMuted}
-                name="Chord Synth Mute"
-                tone="module-chord"
-                size="xs"
-                iconOnly
-              />
-            </div>
-            <ChannelStrip
-              idPrefix="chord"
-              volume={chordVolume}
-              max={1.5}
-              accentClass="text-module-chord"
-              sliderClassName="range range-xs text-module-chord"
-              onVolumeChange={setChordVolume}
-            />
-          </div>
-
-          {/* 4. Bass Synth Channel */}
-          <div className="card bg-panel border border-base-300 shadow-md p-3 sm:p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                <span className={STEP_BADGE}>4</span>
-                <span>Bass Synth</span>
-              </span>
-              <PowerToggle
-                id="btn-mute-bass"
-                on={!bassMuted}
-                onToggle={toggleBassMuted}
-                name="Bass Synth Mute"
-                tone="module-bass"
-                size="xs"
-                iconOnly
-              />
-            </div>
-            <ChannelStrip
-              idPrefix="bass"
-              volume={bassVolume}
-              max={1.5}
-              accentClass="text-module-bass"
-              sliderClassName="range range-xs text-module-bass"
-              onVolumeChange={setBassVolume}
-            />
-          </div>
-        </div>
-      </section>
 
       <section className="space-y-2">
         <h3 className={`${SECTION_HEADER} px-1`}>

@@ -106,6 +106,12 @@ describe('chromatic keyboard black key geometry', () => {
     expect(html).toContain('aria-checked="true"');
     expect(html).toContain('aria-checked="false"');
   });
+
+  test('the lead melody piano-roll renders', () => {
+    const html = renderToString(<SynthView />);
+    expect(html).toContain('Lead Melody');
+    expect(html).toContain('id="select-lead-loop-length"');
+  });
 });
 
 // Regression for: voices hang forever when the keyboard mode changes while a

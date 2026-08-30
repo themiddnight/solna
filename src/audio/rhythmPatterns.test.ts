@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { RHYTHM_PATTERNS, equalPowerVelocityScale, feelToHoldScale, fullHoldDuration } from './rhythmPatterns';
+import { RHYTHM_PATTERNS, customRhythmPattern, equalPowerVelocityScale, feelToHoldScale, fullHoldDuration } from './rhythmPatterns';
 import { getMeter } from '../utils/meter';
 import type { MeterId } from '../utils/meter';
 
@@ -140,5 +140,43 @@ describe('the 6/8 chord rhythms group in twos, not threes', () => {
     for (const id of ['waltzOompah', 'waltzArpRoll']) {
       expect(strongOnsets(id), id).not.toEqual([0, 6]);
     }
+  });
+});
+
+const FOUR_FOUR: MeterId = '4/4';
+
+const FOUR_ON_FLOOR = [
+  true, false, false, false,
+  true, false, false, false,
+  true, false, false, false,
+  true, false, false, false,
+];
+
+describe('customRhythmPattern — boolean grid to RhythmPattern', () => {
+  test('every true step becomes one block hit at that step', () => {
+    const pattern = customRhythmPattern(FOUR_ON_FLOOR, 16, FOUR_FOUR);
+    expect(pattern.id).toBe('custom');
+    expect(pattern.name).toBe('Custom');
+    expect(pattern.meter).toBe('4/4');
+    expect(pattern.hits).toEqual([
+      { step: 0, type: 'block', velocity: 1, holdSteps: 1 },
+      { step: 4, type: 'block', velocity: 1, holdSteps: 1 },
+      { step: 8, type: 'block', velocity: 1, holdSteps: 1 },
+      { step: 12, type: 'block', velocity: 1, holdSteps: 1 },
+    ]);
+  });
+
+  test('all-false grid yields no hits', () => {
+    expect(customRhythmPattern(new Array(16).fill(false), 16, FOUR_FOUR).hits).toEqual([]);
+  });
+
+  test('steps at or past stepsPerBar are ignored even if the array is longer', () => {
+    const grid = [true, true, true, true, true];
+    expect(customRhythmPattern(grid, 4, FOUR_FOUR).hits).toEqual([
+      { step: 0, type: 'block', velocity: 1, holdSteps: 1 },
+      { step: 1, type: 'block', velocity: 1, holdSteps: 1 },
+      { step: 2, type: 'block', velocity: 1, holdSteps: 1 },
+      { step: 3, type: 'block', velocity: 1, holdSteps: 1 },
+    ]);
   });
 });

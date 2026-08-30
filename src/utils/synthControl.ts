@@ -15,7 +15,7 @@ export const SYNTH_TARGET_STYLES: Record<
   SynthControlTarget,
   { label: string; tint: string; ring: string; activeBtn: string; badge: string }
 > = {
-  synth: { label: 'Synth', tint: '', ring: '', activeBtn: 'btn-active', badge: '' },
+  synth: { label: 'Lead', tint: '', ring: '', activeBtn: 'btn-active', badge: '' },
   chord: {
     label: 'Chord',
     tint: 'tint-chord',

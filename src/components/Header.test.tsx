@@ -76,17 +76,18 @@ describe('persistTheme', () => {
 });
 
 describe('header tab grouping', () => {
-  test('only the two automation players carry a transport', () => {
-    expect(AUTOMATION_TABS.map((t) => t.view)).toEqual(['sequencer', 'chords']);
+  test('the three playable views carry a transport, synth driving the lead', () => {
+    expect(AUTOMATION_TABS.map((t) => t.view)).toEqual(['synth', 'sequencer', 'chords']);
     expect(AUTOMATION_TABS.every((t) => t.module !== undefined)).toBe(true);
+    expect(AUTOMATION_TABS[0].module).toBe('lead');
   });
 
-  test('synth and master fx stand alone, with no transport', () => {
-    expect(SOLO_TABS).toEqual(['synth', 'effects']);
+  test('arrange and master fx stand alone, with no transport', () => {
+    expect(SOLO_TABS).toEqual(['arrange', 'effects']);
   });
 
   test('every tab view is still reachable', () => {
     const views = [...SOLO_TABS, ...AUTOMATION_TABS.map((t) => t.view)].sort();
-    expect(views).toEqual(['chords', 'effects', 'sequencer', 'synth']);
+    expect(views).toEqual(['arrange', 'chords', 'effects', 'sequencer', 'synth']);
   });
 });

@@ -4,9 +4,9 @@ import { AUTOMATION_TABS, SOLO_TABS } from './Header';
 
 describe('VIEW_META', () => {
   test('covers every view exactly once', () => {
-    expect(VIEW_ORDER).toEqual(['synth', 'sequencer', 'chords', 'effects']);
+    expect(VIEW_ORDER).toEqual(['synth', 'sequencer', 'chords', 'arrange', 'effects']);
     expect(Object.keys(VIEW_META).sort()).toEqual(
-      ['chords', 'effects', 'sequencer', 'synth'],
+      ['arrange', 'chords', 'effects', 'sequencer', 'synth'],
     );
   });
 
@@ -29,6 +29,6 @@ describe('VIEW_META', () => {
 
   test('Header covers every view across its two tab groups', () => {
     const covered = [...SOLO_TABS, ...AUTOMATION_TABS.map((t) => t.view)].sort();
-    expect(covered).toEqual(['chords', 'effects', 'sequencer', 'synth']);
+    expect(covered).toEqual(['arrange', 'chords', 'effects', 'sequencer', 'synth']);
   });
 });

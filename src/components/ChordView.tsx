@@ -53,10 +53,13 @@ import {
 import {
   RHYTHM_PATTERNS,
   RHYTHM_STYLE_GROUPS,
+  customRhythmPattern,
 } from "../audio/rhythmPatterns";
 import {
   BASS_PATTERNS,
   BASS_STYLE_GROUPS,
+  customBassPattern as buildCustomBassPattern,
+  type BassStepChoice,
 } from "../audio/bassPatterns";
 import { patternMeterTitle, patternOptionLabel } from "./meterSelect";
 import { getMeter } from "../utils/meter";
@@ -82,6 +85,8 @@ import { PowerToggle } from "./ui/PowerToggle";
 import { QuickSavePopover } from "./ui/QuickSavePopover";
 import { Slider } from "./ui/Slider";
 import { ViewHeader } from "./ui/ViewHeader";
+import { StepRow } from "./ui/StepRow";
+import { stepCells } from "./sequencerGrid";
 import { SortableChordCard } from "./chord/SortableChordCard";
 import { beatsPerBarFor, resolveBeatCounter } from "../utils/playhead";
 import { focusSynthTarget, SYNTH_TARGET_STYLES } from "../utils/synthControl";
@@ -115,6 +120,32 @@ export function shouldClearReharmonizeIndicator(
   chordsReplaced: boolean,
 ): boolean {
   return chordsReplaced && (from.root !== to.root || from.scaleType !== to.scaleType);
+}
+
+const BASS_STEP_CYCLE: BassStepChoice[] = ['rest', 'root', 'third', 'fifth', 'seventh', 'octave'];
+
+/**
+ * The next bass grid value for a click. Exported so the pure-logic tests can
+ * pin the full cycle without a DOM.
+ */
+export function nextBassStepChoice(current: BassStepChoice): BassStepChoice {
+  const idx = BASS_STEP_CYCLE.indexOf(current);
+  return BASS_STEP_CYCLE[(idx + 1) % BASS_STEP_CYCLE.length];
+}
+
+/**
+ * The short label shown on an active bass grid step. Exported for the same
+ * reason as nextBassStepChoice.
+ */
+export function bassStepLabel(choice: BassStepChoice): string {
+  switch (choice) {
+    case 'root': return 'R';
+    case 'third': return '3';
+    case 'fifth': return '5';
+    case 'seventh': return '7';
+    case 'octave': return '8';
+    case 'rest': return '';
+  }
 }
 
 function AdjustSynthButton({
@@ -190,6 +221,14 @@ export const ChordView: React.FC = React.memo(() => {
   const setChordOctave = useAppStore((s) => s.setChordOctave);
   const bassPatternId = useAppStore((s) => s.bassPatternId);
   const setBassPatternId = useAppStore((s) => s.setBassPatternId);
+  const chordRhythmMode = useAppStore((s) => s.chordRhythmMode);
+  const setChordRhythmMode = useAppStore((s) => s.setChordRhythmMode);
+  const customChordRhythm = useAppStore((s) => s.customChordRhythm);
+  const setCustomChordRhythm = useAppStore((s) => s.setCustomChordRhythm);
+  const bassPatternMode = useAppStore((s) => s.bassPatternMode);
+  const setBassPatternMode = useAppStore((s) => s.setBassPatternMode);
+  const customBassPattern = useAppStore((s) => s.customBassPattern);
+  const setCustomBassPattern = useAppStore((s) => s.setCustomBassPattern);
   const bassFeel = useAppStore((s) => s.bassFeel);
   const setBassFeel = useAppStore((s) => s.setBassFeel);
   const bassOctave = useAppStore((s) => s.bassOctave);
@@ -203,14 +242,22 @@ export const ChordView: React.FC = React.memo(() => {
   const setChordVolume = useAppStore((s) => s.setChordVolume);
   const bassVolume = useAppStore((s) => s.bassVolume);
   const setBassVolume = useAppStore((s) => s.setBassVolume);
-  const { playChordWithRhythm, playBassWithPattern, playingIndex, activeChordId, setActiveChordId } = useChordPlayback();
+  const { playChordWithRhythm, playBassWithPattern, playingIndex, activeChordId, setActiveChordId, currentStep, isPlaying } = useChordPlayback();
   // Chord sound presets: factory presets plus presets saved from the synth view
   const customPresets = useAppStore((s) => s.customSynthPresets);
 
-  const rhythmPattern = useMemo(
-    () => RHYTHM_PATTERNS.find((p) => p.id === rhythmId) ?? RHYTHM_PATTERNS[0],
-    [rhythmId],
-  );
+  const chordCells = useMemo(() => stepCells(getMeter(meterId)), [meterId]);
+
+  const rhythmPattern = useMemo(() => {
+    if (chordRhythmMode === 'custom') {
+      return customRhythmPattern(
+        customChordRhythm,
+        getMeter(meterId).stepsPerBar,
+        getMeter(meterId).id,
+      );
+    }
+    return RHYTHM_PATTERNS.find((p) => p.id === rhythmId) ?? RHYTHM_PATTERNS[0];
+  }, [chordRhythmMode, customChordRhythm, rhythmId, meterId]);
 
   // Master Playback Loop — driven by the shared audio-clock scheduler
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
@@ -262,8 +309,16 @@ export const ChordView: React.FC = React.memo(() => {
     setChords(updated);
   }, []);
 
-  const bassPattern =
-    BASS_PATTERNS.find((p) => p.id === bassPatternId) ?? BASS_PATTERNS[0];
+  const bassPattern = useMemo(() => {
+    if (bassPatternMode === 'custom') {
+      return buildCustomBassPattern(
+        customBassPattern,
+        getMeter(meterId).stepsPerBar,
+        getMeter(meterId).id,
+      );
+    }
+    return BASS_PATTERNS.find((p) => p.id === bassPatternId) ?? BASS_PATTERNS[0];
+  }, [bassPatternMode, customBassPattern, bassPatternId, meterId]);
 
   // Volumes live in the store; engineSync pushes them into the engine buses
   // (no dual-write here — Task 5).
@@ -547,6 +602,10 @@ export const ChordView: React.FC = React.memo(() => {
 
   const removeChord = useCallback((id: string) => {
     const { chords: liveChords, setChords } = useAppStore.getState();
+    // A region must keep at least one chord: an empty chords array makes
+    // regionLengthSteps() 0, which freezes the song advance on that region
+    // (a silent dead end with no way past).
+    if (liveChords.length <= 1) return;
     setChords(liveChords.filter((c) => c.id !== id));
   }, []);
 
@@ -757,11 +816,19 @@ export const ChordView: React.FC = React.memo(() => {
             <div className="flex items-center gap-1.5">
               <select
                 id="select-chord-rhythm-pattern"
-                value={rhythmId}
-                onChange={(e) => setChordRhythmId(e.target.value)}
+                value={chordRhythmMode === 'custom' ? 'custom' : rhythmId}
+                onChange={(e) => {
+                  if (e.target.value === 'custom') {
+                    setChordRhythmMode('custom');
+                  } else {
+                    setChordRhythmMode('preset');
+                    setChordRhythmId(e.target.value);
+                  }
+                }}
                 className={FIELD_SELECT}
                 title="Rhythm pattern for chord playback"
               >
+                <option value="custom">Custom…</option>
                 {RHYTHM_STYLE_GROUPS.map((group) => (
                   <optgroup key={group.style} label={group.style}>
                     {group.patterns.map((p) => (
@@ -790,6 +857,23 @@ export const ChordView: React.FC = React.memo(() => {
                 <Volume2 className="w-3 h-3" />
               </button>
             </div>
+            {chordRhythmMode === 'custom' && (
+              <div className="mt-2 overflow-x-auto">
+                <StepRow<boolean>
+                  cells={chordCells}
+                  steps={customChordRhythm}
+                  currentStep={currentStep}
+                  isPlaying={isPlaying}
+                  color="bg-module-chord text-module-chord-content"
+                  isActive={(v) => v === true}
+                  onStepClick={(i) =>
+                    setCustomChordRhythm(
+                      customChordRhythm.map((v, idx) => (idx === i ? !v : v)),
+                    )
+                  }
+                />
+              </div>
+            )}
           </div>
 
           {/* Chord Feel Slider (tight ↔ loose) */}
@@ -1133,11 +1217,19 @@ export const ChordView: React.FC = React.memo(() => {
             <div className="flex items-center gap-1.5">
               <select
                 id="select-bass-rhythm-pattern"
-                value={bassPatternId}
-                onChange={(e) => setBassPatternId(e.target.value)}
+                value={bassPatternMode === 'custom' ? 'custom' : bassPatternId}
+                onChange={(e) => {
+                  if (e.target.value === 'custom') {
+                    setBassPatternMode('custom');
+                  } else {
+                    setBassPatternMode('preset');
+                    setBassPatternId(e.target.value);
+                  }
+                }}
                 className={FIELD_SELECT}
                 title="Bass pattern (16th-note grid, deterministic)"
               >
+                <option value="custom">Custom…</option>
                 {BASS_STYLE_GROUPS.map((group) => (
                   <optgroup key={group.style} label={group.style}>
                     {group.patterns.map((p) => (
@@ -1166,6 +1258,26 @@ export const ChordView: React.FC = React.memo(() => {
                 <Volume2 className="w-3 h-3" />
               </button>
             </div>
+            {bassPatternMode === 'custom' && (
+              <div className="mt-2 overflow-x-auto">
+                <StepRow<BassStepChoice>
+                  cells={chordCells}
+                  steps={customBassPattern}
+                  currentStep={currentStep}
+                  isPlaying={isPlaying}
+                  color="bg-module-bass text-module-bass-content"
+                  isActive={(v) => v !== 'rest'}
+                  getLabel={bassStepLabel}
+                  onStepClick={(i) =>
+                    setCustomBassPattern(
+                      customBassPattern.map((v, idx) =>
+                        idx === i ? nextBassStepChoice(v) : v,
+                      ),
+                    )
+                  }
+                />
+              </div>
+            )}
           </div>
 
           {/* Bass Feel Slider (tight ↔ loose) */}

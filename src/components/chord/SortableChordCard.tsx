@@ -115,7 +115,8 @@ export const SortableChordCard = React.memo(function SortableChordCard({
           <button
             id={`btn-remove-chord-${chord.id}`}
             onClick={() => removeChord(chord.id)}
-            className="btn btn-ghost btn-xs btn-square hover:text-error ml-1"
+            disabled={totalChords <= 1}
+            className="btn btn-ghost btn-xs btn-square hover:text-error ml-1 disabled:opacity-30"
             title="Delete Chord"
           >
             <Trash2 className="w-3.5 h-3.5" />

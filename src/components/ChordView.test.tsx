@@ -229,3 +229,69 @@ describe('shouldClearReharmonizeIndicator', () => {
     expect(shouldClearReharmonizeIndicator(A_MINOR, { ...A_MINOR, root: 'C' }, false)).toBe(false);
   });
 });
+
+import { nextBassStepChoice, bassStepLabel } from './ChordView';
+import type { BassStepChoice } from '../audio/bassPatterns';
+
+describe('ChordView custom step grid helpers', () => {
+  test('bass steps cycle rest → root → third → fifth → seventh → octave → rest', () => {
+    let value: BassStepChoice = 'rest';
+    const seen: BassStepChoice[] = [value];
+    for (let i = 0; i < 6; i++) {
+      value = nextBassStepChoice(value);
+      seen.push(value);
+    }
+    expect(seen).toEqual(['rest', 'root', 'third', 'fifth', 'seventh', 'octave', 'rest']);
+  });
+
+  test('bass step labels abbreviate each tone', () => {
+    expect(bassStepLabel('root')).toBe('R');
+    expect(bassStepLabel('third')).toBe('3');
+    expect(bassStepLabel('fifth')).toBe('5');
+    expect(bassStepLabel('seventh')).toBe('7');
+    expect(bassStepLabel('octave')).toBe('8');
+    expect(bassStepLabel('rest')).toBe('');
+  });
+});
+
+describe('ChordView custom step grids', () => {
+  // renderToString serves the store's INITIAL snapshot (zustand v5 wires the
+  // server snapshot to api.getInitialState(), which setState never touches —
+  // see the note above the meter tests). Live setState therefore cannot put
+  // the component into custom mode for a server render, so these tests drive
+  // the server-snapshot object directly and restore it afterward.
+  test('the rhythm dropdown offers Custom; the grid renders only in custom mode', () => {
+    useAppStore.getState().setChordRhythmMode('preset');
+    const presetHtml = renderToString(<ChordView />);
+    expect(presetHtml).toContain('>Custom…<');
+    expect(presetHtml).not.toContain('bg-module-chord text-module-chord-content');
+
+    const initial = useAppStore.getInitialState();
+    initial.chordRhythmMode = 'custom';
+    initial.customChordRhythm = [true, ...new Array(15).fill(false)];
+    const customHtml = renderToString(<ChordView />);
+    // The active step 0 of the chord grid wears the module fill.
+    expect(customHtml).toContain('bg-module-chord text-module-chord-content');
+    // The chord grid has no per-step labels, so no tone letter can appear.
+    expect(customHtml).not.toContain('>R<');
+
+    initial.chordRhythmMode = 'preset';
+    initial.customChordRhythm = new Array(16).fill(false);
+    useAppStore.getState().setChordRhythmMode('preset');
+    useAppStore.getState().setCustomChordRhythm(new Array(16).fill(false));
+  });
+
+  test('the bass dropdown offers Custom; the bass grid renders in custom mode', () => {
+    const initial = useAppStore.getInitialState();
+    initial.bassPatternMode = 'custom';
+    initial.customBassPattern = ['root', ...new Array<BassStepChoice>(15).fill('rest')];
+    const customHtml = renderToString(<ChordView />);
+    // The active step 0 of the bass grid wears the module fill and its label.
+    expect(customHtml).toContain('bg-module-bass text-module-bass-content');
+    expect(customHtml).toContain('>R<');
+    initial.bassPatternMode = 'preset';
+    initial.customBassPattern = new Array<BassStepChoice>(16).fill('rest');
+    useAppStore.getState().setBassPatternMode('preset');
+    useAppStore.getState().setCustomBassPattern(new Array<BassStepChoice>(16).fill('rest'));
+  });
+});

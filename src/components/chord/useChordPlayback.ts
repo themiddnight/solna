@@ -13,14 +13,17 @@ import type { BarInvariantEvent } from "../../audio/playback/chordPlayback";
 import {
   RHYTHM_PATTERNS,
   RhythmPattern,
+  customRhythmPattern,
   feelToHoldScale,
   fullHoldDuration,
 } from "../../audio/rhythmPatterns";
 import {
   BASS_PATTERNS,
   BassPattern,
+  customBassPattern,
   isApproachToken,
   resolveBassSteps,
+  type BassStepChoice,
 } from "../../audio/bassPatterns";
 import {
   STEPS_PER_BAR,
@@ -35,7 +38,7 @@ import {
   playbackStopSource,
   subscribePlaybackClock,
 } from "../../audio/playback/playbackEngine";
-import { getMeter } from "../../utils/meter";
+import { getMeter, type MeterId } from "../../utils/meter";
 import { adaptStepEvents } from "../../utils/eventAdapt";
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "../playerStop";
 import type { PlayerState } from "../../store/types";
@@ -53,10 +56,12 @@ export interface ChordArming {
   armed: boolean;
   chordIndex: number;
   nextBarStep: number;
+  /** Previous clock step, tracked so a resetClock rewind (step going backwards) can be detected. */
+  lastStep: number;
 }
 
 export function createChordArming(): ChordArming {
-  return { armed: false, chordIndex: 0, nextBarStep: 0 };
+  return { armed: false, chordIndex: 0, nextBarStep: 0, lastStep: 0 };
 }
 
 /**
@@ -71,6 +76,21 @@ export function resetChordArming(arming: ChordArming): void {
   arming.armed = false;
   arming.chordIndex = 0;
   arming.nextBarStep = 0;
+  arming.lastStep = 0;
+}
+
+/**
+ * Rewind the scheduler when the shared clock has jumped backwards. `nextBarStep`
+ * counts ABSOLUTE steps, so after a loadRegion/instant-vibe swap resets the
+ * clock to 0 mid-dispatch, the chord listener would otherwise re-arm on the
+ * stale pre-reset step and leave `nextBarStep` pointing past the reset grid —
+ * the progression then goes silent for the whole next region. The sequencer
+ * and lead are immune (they arm bar-relative); only the chord scheduler tracks
+ * an absolute advance, so it alone needs this rewind.
+ */
+export function rewindChordOnClockReset(arming: ChordArming, step: number): void {
+  if (step < arming.lastStep) resetChordArming(arming);
+  arming.lastStep = step;
 }
 
 /**
@@ -141,6 +161,35 @@ function resolveBassPattern(id: string): BassPattern {
 }
 
 /**
+ * Mode-aware pattern resolution for playback. Custom grids are synthesized at
+ * the ACTIVE meter, so the returned pattern is stamped with `meterId` and
+ * `adaptRhythmPattern`/`adaptBassPattern` return it unchanged there.
+ */
+export function resolvePlaybackRhythmPattern(
+  mode: 'preset' | 'custom',
+  rhythmId: string,
+  customGrid: readonly boolean[],
+  stepsPerBar: number,
+  meterId: MeterId,
+): RhythmPattern {
+  return mode === 'custom'
+    ? customRhythmPattern(customGrid, stepsPerBar, meterId)
+    : resolveRhythmPattern(rhythmId);
+}
+
+export function resolvePlaybackBassPattern(
+  mode: 'preset' | 'custom',
+  patternId: string,
+  customGrid: readonly BassStepChoice[],
+  stepsPerBar: number,
+  meterId: MeterId,
+): BassPattern {
+  return mode === 'custom'
+    ? customBassPattern(customGrid, stepsPerBar, meterId)
+    : resolveBassPattern(patternId);
+}
+
+/**
  * Playback-time adaptation. Chord and bass rhythms are picked by id and never
  * edited by the user, so the library stays byte-identical on disk and a meter
  * change re-adapts on the next chord — no migration, no lossy write-back.
@@ -183,7 +232,16 @@ function startChordPlan(chord: ChordItem, startStep: number, time: number): Chor
 
   let chordEvents: BarInvariantEvent[] = [];
   if (!chordArp) {
-    const pattern = adaptRhythmPattern(resolveRhythmPattern(s.chordRhythmId), stepsPerBar);
+    const pattern = adaptRhythmPattern(
+      resolvePlaybackRhythmPattern(
+        s.chordRhythmMode,
+        s.chordRhythmId,
+        s.customChordRhythm,
+        stepsPerBar,
+        getMeter(s.meterId).id,
+      ),
+      stepsPerBar,
+    );
     const holdScale = feelToHoldScale(s.chordFeel);
     if (isFullHoldRhythm(pattern, stepsPerBar)) {
       playFullHoldChord(
@@ -199,7 +257,16 @@ function startChordPlan(chord: ChordItem, startStep: number, time: number): Chor
 
   let bassEvents: BarInvariantEvent[] = [];
   if (!bassArp) {
-    const pattern = adaptBassPattern(resolveBassPattern(s.bassPatternId), stepsPerBar);
+    const pattern = adaptBassPattern(
+      resolvePlaybackBassPattern(
+        s.bassPatternMode,
+        s.bassPatternId,
+        s.customBassPattern,
+        stepsPerBar,
+        getMeter(s.meterId).id,
+      ),
+      stepsPerBar,
+    );
     const chordIdx = Math.max(0, s.chords.indexOf(chord));
     const resolveWithHold = (holdScale: number) =>
       resolveBassSteps(
@@ -334,6 +401,7 @@ export function useChordPlayback() {
 
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const [activeChordId, setActiveChordId] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState<number>(0);
 
   // Pattern previews only. These are driven by a bar timer rather than the
   // shared clock, so they still lay the whole chord down in one call; the
@@ -495,6 +563,7 @@ export function useChordPlayback() {
             resetChordArming(armingRef.current);
             planRef.current = null;
             setPlayingIndex(null);
+            setCurrentStep(0);
             setActiveChordId(null);
             useAppStore.getState().setPlayheadChord(null);
           }
@@ -527,6 +596,7 @@ export function useChordPlayback() {
       resetChordArming(armingRef.current);
       planRef.current = null;
       setPlayingIndex(null);
+      setCurrentStep(0);
       setActiveChordId(null);
       useAppStore.getState().setPlayheadChord(null);
       return;
@@ -534,9 +604,11 @@ export function useChordPlayback() {
 
     return subscribePlaybackClock((step, beat, time) => {
       const arming = armingRef.current;
+      rewindChordOnClockReset(arming, step);
       // Live store read, not a ref: see chordStepAction's doc comment.
       const playerState = useAppStore.getState().chordsPlayer;
       const stepsPerBar = activeStepsPerBar();
+      setCurrentStep(step % stepsPerBar);
       const action = chordStepAction(playerState, step, arming, stepsPerBar);
 
       // Soft stop: schedule the release exactly on the bar line the clock is
@@ -552,8 +624,15 @@ export function useChordPlayback() {
       }
 
       if (action === 'play') {
-        const index = arming.chordIndex % chords.length;
-        const chord = chords[index];
+        // Read the progression LIVE, not from the effect closure: on a region
+        // switch the old subscription still gets the boundary step before React
+        // swaps it out, and a closure would play the OLD region's chord against
+        // the NEW region's synth state. startChordPlan's own indexOf() then
+        // finds the chord in the current region's progression.
+        const liveChords = useAppStore.getState().chords;
+        if (liveChords.length === 0) return;
+        const index = arming.chordIndex % liveChords.length;
+        const chord = liveChords[index];
         planRef.current = startChordPlan(chord, step, time);
         setPlayingIndex(index);
         setActiveChordId(chord.id);
@@ -578,5 +657,5 @@ export function useChordPlayback() {
     });
   }, [isPlaying, chords]);
 
-  return { playChordWithRhythm, playBassWithPattern, playingIndex, setPlayingIndex, activeChordId, setActiveChordId };
+  return { playChordWithRhythm, playBassWithPattern, playingIndex, setPlayingIndex, activeChordId, setActiveChordId, currentStep, isPlaying };
 }

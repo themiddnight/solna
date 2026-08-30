@@ -82,7 +82,7 @@ describe('SynthPresetLibrary edit target', () => {
     );
 
   test('the header names the destination being edited', () => {
-    expect(renderFor('synth')).toContain('Editing: Synth');
+    expect(renderFor('synth')).toContain('Editing: Lead');
     expect(renderFor('chord')).toContain('Editing: Chord');
     expect(renderFor('bass')).toContain('Editing: Bass');
   });

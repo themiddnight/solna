@@ -316,19 +316,23 @@ describe('chords initial octave', () => {
       { id: 'chord-x', root: 'C', quality: 'maj', bars: 2, notes: ['C3', 'E3', 'G3'] },
     ];
 
-    // Persist custom chords (the persist middleware writes on every setState)
-    // and capture the exact payload it wrote.
-    useAppStore.setState({ chords: customChords });
+    // Persist custom chords (the persist middleware writes on every setState).
+    // Seed BOTH the region copy and the flat slices so the v6 payload carries
+    // the chords inside regions[].
+    useAppStore.setState({
+      regions: [{ ...useAppStore.getState().regions[0], chords: customChords }],
+      chords: customChords,
+    });
     const persistedPayload = fakeLocalStorage.getItem('musibox_project_state_v1');
     expect(persistedPayload).toContain('chord-x');
 
-    // Reset the in-memory chords to the initial derived set (simulating a
-    // fresh session), then put the captured payload back into storage
-    // directly — bypassing the store, whose next setState would overwrite it.
+    // Reset the in-memory flat chords (simulating a fresh session), then put
+    // the captured payload back into storage directly.
     useAppStore.setState({ chords: INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)) });
     fakeLocalStorage.setItem('musibox_project_state_v1', persistedPayload!);
 
-    // Hydration merges the stored value: chords come back as stored, not re-derived
+    // Hydration merges the stored value via the region path: chords come back
+    // as stored, not re-derived.
     await useAppStore.persist.rehydrate();
     expect(useAppStore.getState().chords).toEqual(customChords);
     expect(useAppStore.getState().chords).not.toEqual(
@@ -346,39 +350,22 @@ describe('persist partialize', () => {
 
     const persistedKeys = [
       'bpm',
+      'meterId',
       'masterVolume',
       'metronomeActive',
-      'scaleRoot',
-      'scaleType',
       'selectedVibeId',
-      'synthParams',
-      'chordSynthParams',
-      'bassSynthParams',
       'controlTarget',
-      'chords',
-      'chordRhythmId',
-      'chordFeel',
-      'chordOctave',
-      'chordMuted',
-      'chordVolume',
-      'bassPatternId',
-      'bassFeel',
-      'bassOctave',
-      'bassMuted',
-      'bassVolume',
-      'sequencerTracks',
-      'soundKit',
-      'masterSequencerVolume',
-      'drumFilterCutoff',
-      'drumFilterResonance',
-      'drumFilterType',
       'effects',
       'customSynthPresets',
       'customChordProgressions',
+      'regions',
+      'activeRegionId',
     ];
     for (const key of persistedKeys) {
       expect(snapshot).toHaveProperty(key);
     }
+    expect(snapshot.regions).toHaveLength(1);
+    expect(snapshot.activeRegionId).toBe(snapshot.regions[0].id);
 
     const excludedKeys = [
       'activeTab',
@@ -409,6 +396,16 @@ describe('persist partialize', () => {
       'deleteCustomPreset',
       'saveCustomChordProgression',
       'deleteCustomChordProgression',
+      // v6: the eight representative per-region fields — the split moved them
+      // into regions[], so they must be absent at the top level.
+      'scaleRoot',
+      'scaleType',
+      'synthParams',
+      'chordSynthParams',
+      'bassSynthParams',
+      'chords',
+      'sequencerTracks',
+      'leadMelodySteps',
     ];
     for (const key of excludedKeys) {
       expect(snapshot).not.toHaveProperty(key);
@@ -530,6 +527,13 @@ describe('persisted payload sanitization', () => {
       drumFilterCutoff: 12000,
       drumFilterResonance: 0.7,
       drumFilterType: 'lowpass',
+      // Per-region fields are restored too: the pre-v6 payload wraps into a
+      // single region (Task 5), so the merge's region-load re-applies the
+      // wrapped region's content to the flat slices. Restoring the defaults
+      // makes "invalid array -> factory default" observable, the same way the
+      // restored scalars above are.
+      chords: INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)),
+      sequencerTracks: INITIAL_SEQUENCER_TRACKS,
     });
     const chordsBefore = useAppStore.getState().chords;
     const tracksBefore = useAppStore.getState().sequencerTracks;
@@ -588,7 +592,8 @@ describe('persisted payload sanitization', () => {
     expect(s.selectedVibeId).toBe(null);
     expect(s.chordRhythmId).toBe('sustained');
     expect(s.bassPatternId).toBe(BASS_PATTERNS[0].id);
-    // Invalid arrays are dropped, leaving the pre-hydration state untouched.
+    // Invalid arrays are dropped; the region-load re-applies the factory
+    // defaults that chordsBefore/tracksBefore captured above.
     expect(s.chords).toEqual(chordsBefore);
     expect(s.sequencerTracks).toEqual(tracksBefore);
     expect(s.customSynthPresets).toEqual(presetsBefore);
@@ -939,6 +944,57 @@ describe('meter migration wiring (v4 -> v5)', () => {
 
     expect(s.meterId).toBe('6/8');
     expect(s.sequencerTracks[0].steps).toEqual(wide);
+  });
+});
+
+describe('region wrap migration wiring (v5 -> v6)', () => {
+  test('a version-5 payload wraps into a single region and hydrates the flat slices from it', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.persist.clearStorage();
+
+    const wide = Array.from({ length: 24 }, (_, i) => i % 2 === 0);
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 5,
+        state: {
+          meterId: '4/4',
+          bpm: 96,
+          scaleRoot: 'D',
+          scaleType: 'Major',
+          sequencerTracks: [{ ...INITIAL_SEQUENCER_TRACKS[0], steps: wide }],
+        },
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const s = useAppStore.getState();
+    expect(s.regions).toHaveLength(1);
+    expect(s.regions[0].name).toBe('Region 1');
+    expect(s.regions[0].scaleRoot).toBe('D');
+    expect(s.activeRegionId).toBe(s.regions[0].id);
+    // The wrapped region's content reached the flat editing surface.
+    expect(s.scaleRoot).toBe('D');
+    expect(s.regions[0].sequencerTracks[0].steps).toEqual(wide);
+    expect(s.bpm).toBe(96);
+  });
+
+  test('a corrupt regions array falls back to a valid single default region', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.persist.clearStorage();
+    useAppStore.setState({ scaleRoot: 'A' });
+
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({ version: 6, state: { regions: [null, 7, 'x'], activeRegionId: 'nope' } })
+    );
+
+    await useAppStore.persist.rehydrate();
+    const s = useAppStore.getState();
+    expect(s.regions).toHaveLength(1);
+    expect(s.regions[0].name).toBe('Region 1');
+    expect(s.activeRegionId).toBe(s.regions[0].id);
+    expect(s.scaleRoot).toBe('A');
   });
 });
 

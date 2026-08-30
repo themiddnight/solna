@@ -3,9 +3,12 @@ import {
   migrateProjectTitleToVibeId,
   migrateTrackColors,
   migrateMeterAndStepWidth,
+  wrapFlatStateIntoRegion,
   LEGACY_TRACK_COLOR_MAP,
 } from './migrate';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { REGION_FLAT_KEYS } from './region';
+import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
 
 describe('migrateProjectTitleToVibeId', () => {
   test('drops the legacy projectTitle and seeds a null selectedVibeId', () => {
@@ -170,5 +173,69 @@ describe('migrateMeterAndStepWidth (v4 -> v5)', () => {
     migrateMeterAndStepWidth(input);
     expect(input.sequencerTracks[0].steps.length).toBe(2);
     expect('meterId' in input).toBe(false);
+  });
+});
+
+describe('wrapFlatStateIntoRegion (v5 -> v6)', () => {
+  test('wraps the flat per-region fields into a single region and drops them from the top level', () => {
+    const out = wrapFlatStateIntoRegion({
+      bpm: 96,
+      scaleRoot: 'D',
+      scaleType: 'Major',
+      synthParams: INITIAL_SYNTH_PARAMS,
+      chordFeel: 0.3,
+      drumMuted: true,
+      effects: { ...INITIAL_EFFECTS },
+    } as never) as {
+      bpm: number;
+      effects: unknown;
+      scaleRoot?: unknown;
+      chordFeel?: unknown;
+      regions: Array<{
+        id: string;
+        name: string;
+        scaleRoot: string;
+        scaleType: string;
+        chordFeel: number;
+        drumMuted: boolean;
+      }>;
+      activeRegionId: string;
+    };
+
+    expect(out.bpm).toBe(96);
+    expect(out.effects).toEqual(INITIAL_EFFECTS);
+    expect('scaleRoot' in out).toBe(false);
+    expect('chordFeel' in out).toBe(false);
+    expect(out.regions).toHaveLength(1);
+    expect(out.regions[0].name).toBe('Region 1');
+    expect(out.regions[0].scaleRoot).toBe('D');
+    expect(out.regions[0].scaleType).toBe('Major');
+    expect(out.regions[0].chordFeel).toBe(0.3);
+    expect(out.regions[0].drumMuted).toBe(true);
+    expect(out.activeRegionId).toBe(out.regions[0].id);
+  });
+
+  test('a payload with no per-region keys still produces a valid single region', () => {
+    const out = wrapFlatStateIntoRegion({ bpm: 120 } as never) as { regions: unknown[] };
+    expect(out.regions).toHaveLength(1);
+  });
+
+  test('does not mutate the payload it was given', () => {
+    const input = { bpm: 96, scaleRoot: 'D' };
+    wrapFlatStateIntoRegion(input);
+    expect(input).toEqual({ bpm: 96, scaleRoot: 'D' });
+  });
+
+  test('wrap covers exactly the 31 per-region keys', () => {
+    const source: Record<string, unknown> = { bpm: 90 };
+    for (const key of REGION_FLAT_KEYS) source[key] = `v-${key}`;
+    const out = wrapFlatStateIntoRegion(source) as {
+      regions: Array<Record<string, unknown>>;
+      [key: string]: unknown;
+    };
+    for (const key of REGION_FLAT_KEYS) {
+      expect(out.regions[0][key]).toBe(`v-${key}`);
+      expect(key in out).toBe(false);
+    }
   });
 });

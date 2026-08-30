@@ -92,6 +92,12 @@
   --color-key-white-content: var(--key-white-content);
   --color-key-black: var(--key-black);
   --color-key-black-content: var(--key-black-content);
+
+  /* Piano-roll grid rows: subtle theme tints, NOT the physical white/black of
+     the keyboard above. The roll must stay legible without the hard contrast
+     of a real keyboard, so black rows are only one tint darker than white. */
+  --color-roll-key-white: var(--roll-key-white);
+  --color-roll-key-black: var(--roll-key-black);
 }
 
 :root,
@@ -100,6 +106,8 @@
   --key-white-content: #17100F;
   --key-black: #271C24;
   --key-black-content: #F6E9E4;
+  --roll-key-white: #281823;
+  --roll-key-black: #1D1320;
 }
 
 [data-theme="solna-light"] {
@@ -107,6 +115,8 @@
   --key-white-content: #2A1A20;
   --key-black: #2C2027;
   --key-black-content: #FFFFFF;
+  --roll-key-white: #F9F0EC;
+  --roll-key-black: #F4E3E1;
 }
 
 /* Module identity colours: Chord, Bass and the synth's own signal stages get
