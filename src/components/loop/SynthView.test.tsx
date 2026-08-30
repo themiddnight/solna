@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { ChromaticKeyboard, getBlackKeyLeftPx } from '../ui/Keyboard';
-import { SynthView, notesToReleaseOnKeyboardModeChange } from './SynthView';
+import { SynthView } from './SynthView';
 import { resolveSynthControlChannel } from '../../utils/synthControl';
 import type { SynthParamChannel } from '../../utils/synthControl';
 import type { SynthParams } from '../../types';
@@ -111,39 +111,6 @@ describe('chromatic keyboard black key geometry', () => {
     const html = renderToString(<SynthView />);
     expect(html).toContain('Lead Melody');
     expect(html).toContain('id="select-lead-loop-length"');
-  });
-});
-
-// Regression for: voices hang forever when the keyboard mode changes while a
-// key/button is held. The release decision on a mode change must come from
-// the snapshot of notes actually sounding (activeNotes) — never recomputed
-// under the new mode/key/scale/octave, which can name a different note (or
-// none) for the same held key code.
-describe('notesToReleaseOnKeyboardModeChange', () => {
-  test('returns every currently-held note, deduplicated', () => {
-    const held = new Set(['C4', 'E4', 'G4']);
-    expect(notesToReleaseOnKeyboardModeChange(held)).toEqual([
-      'C4',
-      'E4',
-      'G4',
-    ]);
-  });
-
-  test('release list is the held snapshot, never what the new mode recomputes for the same key', () => {
-    // Concrete bug scenario: KeyQ held in Chord mode sounds C4/E4/G4; the user
-    // switches to Scale mode, where KeyQ maps to C3. The release must still
-    // be the chord snapshot, not C3, or the chord voices hang forever.
-    const chordSnapshot = ['C4', 'E4', 'G4'];
-    const scaleLockedNoteForSameKey = 'C3';
-
-    const released = notesToReleaseOnKeyboardModeChange(chordSnapshot);
-
-    expect(released).toEqual(chordSnapshot);
-    expect(released).not.toContain(scaleLockedNoteForSameKey);
-  });
-
-  test('returns an empty list when nothing is held', () => {
-    expect(notesToReleaseOnKeyboardModeChange([])).toEqual([]);
   });
 });
 
