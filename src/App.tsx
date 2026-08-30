@@ -2,20 +2,18 @@ import { useEffect } from 'react';
 import { AmbientBackdrop } from './components/ui/AmbientBackdrop';
 import { Header } from './components/Header';
 import { InstantVibesBar } from './components/InstantVibesBar';
-import { SynthView } from './components/SynthView';
-import { SequencerView } from './components/SequencerView';
-import { ChordView } from './components/ChordView';
-import { EffectsRackView } from './components/EffectsRackView';
-import { ArrangeView } from './components/ArrangeView';
+import { LoopPage } from './components/loop/LoopPage';
+import { SongPage } from './components/song/SongPage';
 import { TransportBar } from './components/TransportBar';
 import { MidiSettingsModal } from './components/ui/MidiSettingsModal';
 import { audioEngine } from './audio/engine';
 import { useAppStore } from './store/store';
 import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
-import { useTabRouting } from './routing/useTabRouting';
+import { useRouteSync } from './routing/useRouteSync';
 import { usePlayheadSync } from './components/usePlayheadSync';
-import { useRegionSync } from './store/regionSync';
+import { useLoopSync } from './store/loopSync';
 import { useSongModeSync } from './store/songMode';
+import { isSongLayer } from './types';
 
 /** Minimal event-target shape `registerFirstGesture` needs — satisfied by
  * `window` in the app and by a fake target in tests (no DOM required). */
@@ -57,14 +55,14 @@ export function App() {
   // engine-sync useEffect blocks that used to live here).
   useEngineSync();
 
-  // Two-way sync: URL ?tab= <-> uiSlice.activeTab (called exactly once).
-  useTabRouting();
+  // Two-way sync: URL /loop|/song ?tab= & ?loopId= <-> store (called exactly once).
+  useRouteSync();
 
   // Shared clock -> store playhead, so every tab can show the beat position.
   usePlayheadSync();
 
-  // Region live-write sync-back + song-mode coordinator (store-level, mounted once).
-  useRegionSync();
+  // Loop live-write sync-back + song-mode coordinator (store-level, mounted once).
+  useLoopSync();
   useSongModeSync();
 
   // UI slice
@@ -97,22 +95,15 @@ export function App() {
       {/* 1-Click Instant Vibes Quick Starter Bar */}
       <InstantVibesBar />
 
-      {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity */}
+      {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity.
+          Both layers stay mounted; the active layer gates which page is visible,
+          and each page toggles its own sub-tabs (block/hidden). */}
       <main className="flex-1 min-h-0 relative overflow-y-auto">
-        <div className={activeTab === 'synth' ? 'block' : 'hidden'}>
-          <SynthView />
+        <div className={isSongLayer(activeTab) ? 'hidden' : 'block'}>
+          <LoopPage />
         </div>
-        <div className={activeTab === 'sequencer' ? 'block' : 'hidden'}>
-          <SequencerView />
-        </div>
-        <div className={activeTab === 'chords' ? 'block' : 'hidden'}>
-          <ChordView />
-        </div>
-        <div className={activeTab === 'effects' ? 'block' : 'hidden'}>
-          <EffectsRackView />
-        </div>
-        <div className={activeTab === 'arrange' ? 'block' : 'hidden'}>
-          <ArrangeView />
+        <div className={isSongLayer(activeTab) ? 'block' : 'hidden'}>
+          <SongPage />
         </div>
       </main>
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { VIEW_META, VIEW_ORDER } from './viewMeta';
-import { AUTOMATION_TABS, SOLO_TABS } from './Header';
+import { AUTOMATION_TABS, SONG_NAV_TABS } from './Header';
 
 describe('VIEW_META', () => {
   test('covers every view exactly once', () => {
@@ -28,7 +28,7 @@ describe('VIEW_META', () => {
   });
 
   test('Header covers every view across its two tab groups', () => {
-    const covered = [...SOLO_TABS, ...AUTOMATION_TABS.map((t) => t.view)].sort();
+    const covered = [...SONG_NAV_TABS, ...AUTOMATION_TABS.map((t) => t.view)].sort();
     expect(covered).toEqual(['arrange', 'chords', 'effects', 'sequencer', 'synth']);
   });
 });

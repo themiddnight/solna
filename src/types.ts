@@ -17,6 +17,19 @@ export type ViewMode =
   | 'effects'
   | 'arrange';
 
+export type Layer = 'loop' | 'song';
+
+export const LOOP_TABS: readonly ViewMode[] = ['synth', 'sequencer', 'chords'];
+export const SONG_TABS: readonly ViewMode[] = ['arrange', 'effects'];
+
+export function isSongLayer(tab: ViewMode): boolean {
+  return tab === 'arrange' || tab === 'effects';
+}
+
+export function layerForTab(tab: ViewMode): Layer {
+  return isSongLayer(tab) ? 'song' : 'loop';
+}
+
 export type FilterType = 'lowpass' | 'highpass' | 'bandpass';
 
 /** The synth keyboard's input mode: how key presses are mapped to notes. */

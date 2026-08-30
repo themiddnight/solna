@@ -3,11 +3,12 @@ import {
   migrateProjectTitleToVibeId,
   migrateTrackColors,
   migrateMeterAndStepWidth,
-  wrapFlatStateIntoRegion,
+  wrapFlatStateIntoLoop,
+  renameRegionKeysToLoop,
   LEGACY_TRACK_COLOR_MAP,
 } from './migrate';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
-import { REGION_FLAT_KEYS } from './region';
+import { LOOP_FLAT_KEYS } from './loop';
 import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
 
 describe('migrateProjectTitleToVibeId', () => {
@@ -176,9 +177,9 @@ describe('migrateMeterAndStepWidth (v4 -> v5)', () => {
   });
 });
 
-describe('wrapFlatStateIntoRegion (v5 -> v6)', () => {
-  test('wraps the flat per-region fields into a single region and drops them from the top level', () => {
-    const out = wrapFlatStateIntoRegion({
+describe('wrapFlatStateIntoLoop (v5 -> v6)', () => {
+  test('wraps the flat per-loop fields into a single loop and drops them from the top level', () => {
+    const out = wrapFlatStateIntoLoop({
       bpm: 96,
       scaleRoot: 'D',
       scaleType: 'Major',
@@ -191,7 +192,7 @@ describe('wrapFlatStateIntoRegion (v5 -> v6)', () => {
       effects: unknown;
       scaleRoot?: unknown;
       chordFeel?: unknown;
-      regions: Array<{
+      loops: Array<{
         id: string;
         name: string;
         scaleRoot: string;
@@ -199,43 +200,70 @@ describe('wrapFlatStateIntoRegion (v5 -> v6)', () => {
         chordFeel: number;
         drumMuted: boolean;
       }>;
-      activeRegionId: string;
+      activeLoopId: string;
     };
 
     expect(out.bpm).toBe(96);
     expect(out.effects).toEqual(INITIAL_EFFECTS);
     expect('scaleRoot' in out).toBe(false);
     expect('chordFeel' in out).toBe(false);
-    expect(out.regions).toHaveLength(1);
-    expect(out.regions[0].name).toBe('Region 1');
-    expect(out.regions[0].scaleRoot).toBe('D');
-    expect(out.regions[0].scaleType).toBe('Major');
-    expect(out.regions[0].chordFeel).toBe(0.3);
-    expect(out.regions[0].drumMuted).toBe(true);
-    expect(out.activeRegionId).toBe(out.regions[0].id);
+    expect(out.loops).toHaveLength(1);
+    expect(out.loops[0].name).toBe('Loop 1');
+    expect(out.loops[0].scaleRoot).toBe('D');
+    expect(out.loops[0].scaleType).toBe('Major');
+    expect(out.loops[0].chordFeel).toBe(0.3);
+    expect(out.loops[0].drumMuted).toBe(true);
+    expect(out.activeLoopId).toBe(out.loops[0].id);
   });
 
-  test('a payload with no per-region keys still produces a valid single region', () => {
-    const out = wrapFlatStateIntoRegion({ bpm: 120 } as never) as { regions: unknown[] };
-    expect(out.regions).toHaveLength(1);
+  test('a payload with no per-loop keys still produces a valid single loop', () => {
+    const out = wrapFlatStateIntoLoop({ bpm: 120 } as never) as { loops: unknown[] };
+    expect(out.loops).toHaveLength(1);
   });
 
   test('does not mutate the payload it was given', () => {
     const input = { bpm: 96, scaleRoot: 'D' };
-    wrapFlatStateIntoRegion(input);
+    wrapFlatStateIntoLoop(input);
     expect(input).toEqual({ bpm: 96, scaleRoot: 'D' });
   });
 
-  test('wrap covers exactly the 31 per-region keys', () => {
+  test('wrap covers exactly the 31 per-loop keys', () => {
     const source: Record<string, unknown> = { bpm: 90 };
-    for (const key of REGION_FLAT_KEYS) source[key] = `v-${key}`;
-    const out = wrapFlatStateIntoRegion(source) as {
-      regions: Array<Record<string, unknown>>;
+    for (const key of LOOP_FLAT_KEYS) source[key] = `v-${key}`;
+    const out = wrapFlatStateIntoLoop(source) as {
+      loops: Array<Record<string, unknown>>;
       [key: string]: unknown;
     };
-    for (const key of REGION_FLAT_KEYS) {
-      expect(out.regions[0][key]).toBe(`v-${key}`);
+    for (const key of LOOP_FLAT_KEYS) {
+      expect(out.loops[0][key]).toBe(`v-${key}`);
       expect(key in out).toBe(false);
     }
+  });
+});
+
+describe('renameRegionKeysToLoop (v6 -> v7)', () => {
+  test('renameRegionKeysToLoop renames the two persisted keys and leaves the rest', () => {
+    const state = {
+      regions: [{ id: 'a', name: 'Region 1' }],
+      activeRegionId: 'a',
+      bpm: 128,
+    };
+    const out = renameRegionKeysToLoop(state as never) as {
+      loops: { id: string; name: string }[];
+      activeLoopId: string;
+      bpm: number;
+      regions?: unknown;
+      activeRegionId?: unknown;
+    };
+    expect(out.loops).toEqual([{ id: 'a', name: 'Region 1' }]);
+    expect(out.activeLoopId).toBe('a');
+    expect(out.regions).toBeUndefined();
+    expect(out.activeRegionId).toBeUndefined();
+    expect(out.bpm).toBe(128);
+  });
+
+  test('renameRegionKeysToLoop is a no-op when the keys are already absent', () => {
+    const state = { loops: [], activeLoopId: null, bpm: 100 };
+    expect(renameRegionKeysToLoop(state as never)).toEqual({ loops: [], activeLoopId: null, bpm: 100 });
   });
 });

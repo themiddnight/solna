@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { AUTOMATION_TABS, persistTheme, readStoredTheme, resolveInitialTheme, SOLO_TABS } from './Header';
+import { AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS } from './Header';
+import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
 
 describe('resolveInitialTheme', () => {
   test('a stored theme always wins over the OS preference', () => {
@@ -83,11 +84,34 @@ describe('header tab grouping', () => {
   });
 
   test('arrange and master fx stand alone, with no transport', () => {
-    expect(SOLO_TABS).toEqual(['arrange', 'effects']);
+    expect(SONG_NAV_TABS).toEqual(['arrange', 'effects']);
   });
 
   test('every tab view is still reachable', () => {
-    const views = [...SOLO_TABS, ...AUTOMATION_TABS.map((t) => t.view)].sort();
+    const views = [...SONG_NAV_TABS, ...AUTOMATION_TABS.map((t) => t.view)].sort();
     expect(views).toEqual(['arrange', 'chords', 'effects', 'sequencer', 'synth']);
+  });
+});
+
+describe('layer toggle', () => {
+  test('lists the two layers in order with stable labels', () => {
+    expect(LAYER_META.map((l) => l.layer)).toEqual(['loop', 'song']);
+    expect(LAYER_META.map((l) => l.label)).toEqual(['Loop', 'Song']);
+  });
+
+  test('clicking a different layer navigates to that layer default tab', () => {
+    expect(layerToggleTarget('loop', 'song')).toBe('arrange');
+    expect(layerToggleTarget('song', 'loop')).toBe('synth');
+  });
+
+  test('clicking the current layer is a no-op', () => {
+    expect(layerToggleTarget('loop', 'loop')).toBeNull();
+    expect(layerToggleTarget('song', 'song')).toBeNull();
+  });
+
+  test('every toggle target is a tab inside that layer', () => {
+    for (const { layer } of LAYER_META) {
+      expect(tabsForLayer(layer)).toContain(defaultTabForLayer(layer));
+    }
   });
 });

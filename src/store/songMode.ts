@@ -1,65 +1,61 @@
 import React from 'react';
 import { subscribePlaybackClock } from '../audio/playback/playbackEngine';
-import type { ViewMode } from '../types';
+import { isSongLayer, layerForTab } from '../types';
+import type { Layer } from '../types';
 import { getMeter } from '../utils/meter';
-import { loadRegion } from './loadRegion';
-import { regionBars } from './region';
+import { loadLoop } from './loadLoop';
+import { loopBars } from './loop';
 import { useAppStore } from './store';
-import type { Region } from './types';
+import type { Loop } from './types';
 
-/** Play mode is coupled to the active tab: Arrange = song, every other tab = loop. */
-export function isSongTab(tab: ViewMode): boolean {
-  return tab === 'arrange';
-}
+// `isSongLayer` is defined once in ../types (`arrange || effects`). Re-export
+// it here for any consumer still importing song-mode predicates from this
+// module.
+export { isSongLayer };
 
-/** The detach rule: leaving the Arrange tab drops the song position. */
-export function detachSongPosition(tab: ViewMode, index: number | null): number | null {
-  return isSongTab(tab) ? index : null;
-}
-
-/** A region's length in steps = Σ chord.bars × stepsPerBar. */
-export function regionLengthSteps(chords: readonly { bars?: number }[], stepsPerBar: number): number {
-  return regionBars(chords) * stepsPerBar;
+/** A loop's length in steps = Σ chord.bars × stepsPerBar. */
+export function loopLengthSteps(chords: readonly { bars?: number }[], stepsPerBar: number): number {
+  return loopBars(chords) * stepsPerBar;
 }
 
 /** Advance one slot in the arrangement, wrapping to the top (the song loops). */
-export function nextRegionIndex(regions: readonly { id: string }[], current: number): number {
-  return (current + 1) % regions.length;
+export function nextLoopIndex(loops: readonly { id: string }[], current: number): number {
+  return (current + 1) % loops.length;
 }
 
-/** Where the song starts: the active region's list index, else the top. */
-export function enterSongIndex(regions: readonly { id: string }[], activeRegionId: string): number {
-  const index = regions.findIndex((r) => r.id === activeRegionId);
+/** Where the song starts: the active loop's list index, else the top. */
+export function enterSongIndex(loops: readonly { id: string }[], activeLoopId: string): number {
+  const index = loops.findIndex((r) => r.id === activeLoopId);
   return index === -1 ? 0 : index;
 }
 
 /**
- * The region id to load when the current region's bars complete on this clock
+ * The loop id to load when the current loop's bars complete on this clock
  * step. `step` is measured from the shared clock's reset origin — after every
- * advance loadRegion hard-stops and restarts, which resets the clock, so each
- * region's boundary is `regionLength` steps from 0 (the same alignment the
+ * advance loadLoop hard-stops and restarts, which resets the clock, so each
+ * loop's boundary is `loopLength` steps from 0 (the same alignment the
  * Instant Vibe swap relies on). Non-boundary steps and loop mode return null.
  */
 export function songAdvanceTarget(
-  regions: readonly Region[],
-  songRegionIndex: number | null,
+  loops: readonly Loop[],
+  songLoopIndex: number | null,
   step: number,
   stepsPerBar: number,
 ): string | null {
-  if (songRegionIndex === null) return null;
-  const region = regions[songRegionIndex];
-  if (!region) return null;
-  const length = regionLengthSteps(region.chords, stepsPerBar);
-  // A region with no chords is a silent bar, not a dead end: dwell it for one
+  if (songLoopIndex === null) return null;
+  const loop = loops[songLoopIndex];
+  if (!loop) return null;
+  const length = loopLengthSteps(loop.chords, stepsPerBar);
+  // A loop with no chords is a silent bar, not a dead end: dwell it for one
   // bar so the song keeps flowing instead of freezing (a 0 length can never
   // hit the `step % length === 0` boundary).
   const effectiveLength = Math.max(length, stepsPerBar);
   if (step <= 0 || step % effectiveLength !== 0) return null;
-  const target = regions[nextRegionIndex(regions, songRegionIndex)]?.id ?? null;
-  // A single-region arrangement wraps onto itself: reloading the region we are
+  const target = loops[nextLoopIndex(loops, songLoopIndex)]?.id ?? null;
+  // A single-loop arrangement wraps onto itself: reloading the loop we are
   // already in would hard-stop the players and reset the shared clock on every
   // loop. Loop it in place instead, exactly like loop mode.
-  return target === region.id ? null : target;
+  return target === loop.id ? null : target;
 }
 
 export interface SongModeDeps {
@@ -69,16 +65,18 @@ export interface SongModeDeps {
 
 /**
  * Store-level song-mode coordinator (not a component — mirrors engineSync's
- * shape). Derives song mode from {activeTab, playing}: on the Arrange tab with
- * any player active, entering song mode loads regions[0] (the song restarts
- * from the top) and subscribes to the shared clock; on every region boundary
- * it calls loadRegion(next). Leaving the Arrange tab (or stopping) detaches:
- * the cursor drops to null and the clock subscription is removed — audio never
- * stops, only the advance cursor does, so loop mode keeps looping what was
- * playing (the flat slices already hold the last-sounded region).
+ * shape). Play mode is keyed on the LAYER, not the tab: the song layer is
+ * {arrange, effects} (see `isSongLayer` in ../types), everything else is loop
+ * mode. Crossing the loop/song boundary is a HARD STOP — all players are
+ * silenced and the song cursor is dropped; the layer never "detaches but keeps
+ * looping" the way SP3's Arrange-only rule did. Entering the song layer never
+ * auto-starts a song: song mode is entered only when a player is already
+ * `playing`, and the cursor is established from the active loop's index
+ * (`enterSongIndex`) rather than restarting from the top.
  */
 export function startSongModeSync(deps: SongModeDeps = {}): () => void {
   const subscribeClock = deps.subscribeClock ?? subscribePlaybackClock;
+  let prevLayer: Layer | null = null;
   let unsubClock: (() => void) | null = null;
 
   const stopClock = () => {
@@ -90,50 +88,43 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
 
   const reconcile = () => {
     const s = useAppStore.getState();
+    const layer = layerForTab(s.activeTab);
+    if (prevLayer !== null && prevLayer !== layer) {
+      s.hardStopAll();
+      s.setSongLoopIndex(null);
+      stopClock();
+      unsubClock = null;
+    }
+    prevLayer = layer;
+
     const playing =
-      s.sequencerPlayer !== 'stopped' || s.chordsPlayer !== 'stopped' || s.leadPlayer !== 'stopped';
-    if (isSongTab(s.activeTab) && playing) {
-      if (s.songRegionIndex === null) {
-        // Enter song mode: establish the cursor BEFORE loadRegion so its
-        // transient hardStop→restart (players flip 'stopped' then 'playing')
-        // neither re-triggers entry nor reads as a detach.
-        useAppStore.setState({ songRegionIndex: 0 });
-        loadRegion(s.regions[0]?.id ?? s.activeRegionId);
-      } else if (!unsubClock) {
+      s.sequencerPlayer === 'playing' || s.chordsPlayer === 'playing' || s.leadPlayer === 'playing';
+    if (layer === 'song' && playing) {
+      if (s.songLoopIndex === null) {
+        useAppStore.setState({ songLoopIndex: enterSongIndex(s.loops, s.activeLoopId) });
+      }
+      if (!unsubClock) {
         unsubClock = subscribeClock((step) => {
-          const current = useAppStore.getState();
-          if (current.songRegionIndex === null) return;
-          // Advance only while a player is genuinely playing. A soft-stopping
-          // player is releasing on the next bar line, so the boundary that bar
-          // line reaches must complete the stop, not jump the song — the old
-          // `!== 'stopped'` check treated 'stopping' as playing and cancelled
-          // a Stop pressed in the last bar of a region.
-          const playingNow =
-            current.sequencerPlayer === 'playing' ||
-            current.chordsPlayer === 'playing' ||
-            current.leadPlayer === 'playing';
-          if (!playingNow) return;
+          const cur = useAppStore.getState();
+          if (cur.songLoopIndex === null) return;
+          if (
+            cur.sequencerPlayer !== 'playing' &&
+            cur.chordsPlayer !== 'playing' &&
+            cur.leadPlayer !== 'playing'
+          )
+            return;
           const target = songAdvanceTarget(
-            current.regions,
-            current.songRegionIndex,
+            cur.loops,
+            cur.songLoopIndex,
             step,
-            getMeter(current.meterId).stepsPerBar,
+            getMeter(cur.meterId).stepsPerBar,
           );
           if (target === null) return;
-          // Defer the swap out of the in-flight dispatch. loadRegion
-          // hard-stops and resets the shared clock (engineSync), and doing that
-          // mid-dispatch makes the stale boundary step AND the post-reset
-          // step 0 both reach the playback hooks, so the incoming region's
-          // first chord/notes fire twice (~one step apart). Running the swap
-          // after the current turn drains leaves the boundary step with the old
-          // region and starts the new one cleanly at step 0.
-          queueMicrotask(() => loadRegion(target));
+          loadLoop(target);
         });
       }
-    } else if (!isSongTab(s.activeTab) && s.songRegionIndex !== null) {
-      // Detach on leaving the Arrange tab (the spec's detach rule). Stopping
-      // while still on Arrange pauses; the clock guard above stops the advance.
-      s.setSongRegionIndex(null);
+    } else if (layer !== 'song' && s.songLoopIndex !== null) {
+      s.setSongLoopIndex(null);
       stopClock();
     }
   };
