@@ -1,6 +1,6 @@
 import type { ArpMode, ArpRate } from '../types';
 import { buildArpSequence } from './arpeggiator';
-import { computeArpTriggers } from './arpSchedule';
+import { arpFiresOnStep, computeArpTriggers } from './arpSchedule';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import { remapNoteByScaleDegree, rootSemitone, transposeNoteBySemitones } from '../utils/musicTheory';
 
@@ -129,6 +129,7 @@ export function resolveLeadStepTriggers(
       holdSec: LEAD_GATE * stepDurSec,
     }));
   }
+  if (!arpFiresOnStep(arpStep, params.arpRate)) return [];
   const sequence = buildArpSequence(notes, params.arpMode, params.arpOctaves);
   if (sequence.length === 0) return [];
   return computeArpTriggers(arpStep, sequence.length, params.arpRate, stepDurSec).map(

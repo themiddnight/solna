@@ -37,6 +37,14 @@ export function subscribePlaybackClock(
 }
 
 /**
+ * Release time for a HARD stop: short enough to read as an instant cut, long
+ * enough not to click. Lives beside playbackStopSource, which owns the
+ * semantics — it was declared verbatim in both note-based playback hooks, and
+ * a tuning constant for an audible fade must not have two copies to drift.
+ */
+export const HARD_STOP_RELEASE = 0.02;
+
+/**
  * Silences a whole playback source — sounding voices AND hits already
  * scheduled ahead of the transport. `time` anchors the release on the audio
  * clock so a soft stop lands exactly on a bar line.

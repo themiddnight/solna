@@ -659,7 +659,7 @@ describe('live effect knobs', () => {
       'buildImpulseResponse',
     ).mockImplementation(() => ({}) as AudioBuffer);
 
-    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 4.5 });
+    engine.setReverbDecay(4.5);
 
     // (durationSec, curveExponent) — the UI knob reads "4.5s", so 4.5 must be
     // the length of the tail, not the steepness of it.
@@ -674,14 +674,14 @@ describe('live effect knobs', () => {
       'buildImpulseResponse',
     ).mockImplementation(() => ({}) as AudioBuffer);
 
-    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 2.0 });
+    engine.setReverbDecay(2.0);
     expect(buildSpy).not.toHaveBeenCalled(); // equals the impulse setupMasterChain built
-    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 4.5 });
+    engine.setReverbDecay(4.5);
     // Asserting the args (not just the count) is what actually discriminates
     // the duration-vs-exponent fix: the pre-Task-4 engine would have called
     // this with (2.0, 4.5), which also passes a count-only assertion.
     expect(buildSpy).toHaveBeenCalledWith(4.5, 2.0);
-    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 4.5 });
+    engine.setReverbDecay(4.5);
     expect(buildSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -696,7 +696,7 @@ describe('live effect knobs', () => {
     // A real drag emits dozens of intermediate values. Quantising to the knob's
     // own 0.1 step collapses them; revisiting a value must hit the cache.
     for (const d of [3.0, 3.04, 3.02, 3.1, 3.14, 3.0, 3.1]) {
-      engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: d });
+      engine.setReverbDecay(d);
     }
 
     expect(buildSpy).toHaveBeenCalledTimes(2); // 3.0 and 3.1 only
@@ -711,13 +711,13 @@ describe('live effect knobs', () => {
       'buildImpulseResponse',
     ).mockImplementation(() => ({}) as AudioBuffer);
 
-    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: -5 });
+    engine.setReverbDecay(-5);
     expect(buildSpy).toHaveBeenCalledWith(0.1, 2.0);
-    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 900 });
+    engine.setReverbDecay(900);
     expect(buildSpy).toHaveBeenLastCalledWith(10, 2.0);
   });
 
-  test('the impulse cache evicts least-recently-used entries past its cap', () => {
+  test('the impulse cache evicts least-recently-used entries past its byte budget', () => {
     const { engine } = freshEngine();
     (engine as any).reverbNode = fakeNode();
     spyOn(
@@ -725,21 +725,23 @@ describe('live effect knobs', () => {
       'buildImpulseResponse',
     ).mockImplementation(() => ({}) as AudioBuffer);
 
-    // Cap is 8: fill it exactly, then touch the oldest entry to refresh its
-    // recency before pushing two more distinct decays past the cap.
-    for (const d of [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7]) {
-      engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: d });
+    // Override the byte budget rather than allocate real multi-megabyte
+    // buffers: at freshEngine's fake sampleRate (64), decay d costs
+    // floor(64 * d) * 2 samples, so a budget of 500 forces eviction partway
+    // through this sequence without needing thousands of samples.
+    (engine as any).impulseCacheSampleBudget = 500;
+
+    for (const d of [1.0, 1.1, 1.2, 1.3, 1.4]) {
+      engine.setReverbDecay(d);
     }
-    const cache = (engine as any).impulseCache as Map<number, AudioBuffer>;
-    expect(cache.size).toBe(8);
+    const cache = (engine as any).impulseCache as Map<number, { buffer: AudioBuffer; samples: number }>;
+    expect(Array.from(cache.keys())).toEqual([1.2, 1.3, 1.4]); // 1.0, 1.1 evicted to stay under budget
 
-    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 1.0 }); // refresh recency
-    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 1.8 });
-    engine.updateEffects({ ...INITIAL_EFFECTS, reverbDecay: 1.9 });
+    engine.setReverbDecay(1.2); // refresh recency
+    engine.setReverbDecay(1.8); // pushes the total over budget again
 
-    expect(cache.size).toBe(8); // never exceeds the cap
-    expect(cache.has(1.0)).toBe(true); // refreshed, survives eviction
-    expect(cache.has(1.1)).toBe(false); // least-recently-used, evicted first
+    expect(cache.has(1.2)).toBe(true); // refreshed, survives eviction
+    expect(cache.has(1.3)).toBe(false); // least-recently-used, evicted first
   });
 
   test('updateEffects sets the compressor threshold from the effects value', () => {
@@ -1825,5 +1827,643 @@ describe('getSourceAnalyser', () => {
     const before = engine.getSourceAnalyser('synth');
     (engine as any).sourceAnalysers.clear();
     expect(engine.getSourceAnalyser('synth')).not.toBe(before);
+  });
+});
+
+describe('voice lifetime backstop', () => {
+  // maxVoiceLifetimeMs is overridden via the same private-field cast
+  // testFakes.ts documents (ctx, activeVoices, etc.) — waiting out the real
+  // 30 s default would make this test take 30 s for no added coverage.
+  test('a note-on with no matching note-off is torn down after maxVoiceLifetimeMs', async () => {
+    const { engine, ctx } = freshEngine();
+    (engine as any).maxVoiceLifetimeMs = 20;
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, filterRelease: 0.01 }, 0.8, ctx.currentTime, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    const stopped = spyOn(voice.oscs[0], 'stop');
+
+    // Guard fires at 20 ms and calls releaseVoice(voice, 0.05, now), which
+    // arms its own teardown timer of (max(0.05, 0.01) + 0.1) * 1000 = 150 ms
+    // — wait past both.
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(stopped).toHaveBeenCalled();
+    expect((engine as any).activeVoices.has('synth:C4')).toBe(false);
+  });
+
+  test('a voice released normally before the guard fires is never released twice', async () => {
+    const { engine, ctx } = freshEngine();
+    (engine as any).maxVoiceLifetimeMs = 50;
+    engine.triggerSynthNoteOn(
+      'C4',
+      { ...SYNTH, release: 0.01, filterRelease: 0.01 },
+      0.8,
+      ctx.currentTime,
+      'synth',
+    );
+    const voice = (engine as any).activeVoices.get('synth:C4');
+    const stopped = spyOn(voice.oscs[0], 'stop');
+
+    // The real note-off's releaseScheduledAt is set synchronously, well
+    // before the 50 ms guard fires, so the guard must see it and no-op.
+    engine.triggerSynthNoteOff('C4', 0.01, undefined, 'synth');
+    await new Promise((r) => setTimeout(r, 250));
+
+    expect(stopped).toHaveBeenCalledTimes(1);
+  });
+
+  test('a still-scheduled future voice is not touched by an already-expired guard', () => {
+    const { engine, ctx } = freshEngine();
+    (engine as any).maxVoiceLifetimeMs = 30_000;
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime + 5, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+
+    expect(voice.lifetimeGuardTimer).toBeDefined();
+    expect(voice.releaseScheduledAt).toBeUndefined();
+  });
+
+  test('a guard timer whose voice is no longer the current one for its key does not release it', async () => {
+    const { engine, ctx } = freshEngine();
+    (engine as any).maxVoiceLifetimeMs = 20;
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, filterRelease: 0.01 }, 0.8, ctx.currentTime, 'synth');
+    const staleVoice = (engine as any).activeVoices.get('synth:C4');
+    const staleStopped = spyOn(staleVoice.oscs[0], 'stop');
+
+    // Force the exact stale state the identity check exists for: something
+    // other than a normal release/retrigger has swapped the map entry for
+    // this key out from under staleVoice, WITHOUT going through
+    // triggerSynthNoteOff, so staleVoice.releaseScheduledAt is still
+    // undefined when the guard fires. Every real caller today releases the
+    // outgoing voice synchronously before overwriting the entry, so this can
+    // only be reached in a test by writing the map directly.
+    const replacement = { ...staleVoice };
+    (engine as any).activeVoices.set('synth:C4', replacement);
+    expect(staleVoice.releaseScheduledAt).toBeUndefined();
+
+    // Wait past the 20 ms guard AND the ~150 ms teardown delay releaseVoice
+    // would arm if it ran (max(release, filterRelease) + 0.1 s, scaled to
+    // ms). Without the activeVoices identity check, the guard would see
+    // releaseScheduledAt still undefined and release staleVoice anyway, even
+    // though it is no longer the voice this key refers to.
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(staleStopped).not.toHaveBeenCalled();
+  });
+
+  test('a voice released by the guard is no longer reshapeable during its release tail', async () => {
+    const { engine, ctx } = freshEngine();
+    (engine as any).maxVoiceLifetimeMs = 20;
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, filterRelease: 0.01 }, 0.8, ctx.currentTime, 'synth');
+    const voice = (engine as any).activeVoices.get('synth:C4');
+
+    // Wait past the 20 ms guard but well inside the ~150 ms teardown window
+    // releaseVoice arms (max(0.05, 0.01) + 0.1 s), so the voice is still
+    // tracked and mid release tail when we probe it.
+    await new Promise((r) => setTimeout(r, 60));
+
+    const sustainBefore = voice.sustainLevel;
+    engine.applySynthVelocityScale(0.3);
+
+    expect((engine as any).reshapeableVoices()).not.toContain(voice);
+    expect(voice.sustainLevel).toBe(sustainBefore);
+  });
+});
+
+describe('voice cap', () => {
+  test('exceeding maxVoicesPerSource steals the oldest already-started voice', () => {
+    const { engine, ctx } = freshEngine();
+    (engine as any).maxVoicesPerSource = 3;
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('D4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    const oldest = (engine as any).activeVoices.get('synth:C4');
+    expect(oldest.releaseScheduledAt).toBeUndefined();
+
+    engine.triggerSynthNoteOn('F4', SYNTH, 0.8, ctx.currentTime, 'synth');
+
+    expect(oldest.releaseScheduledAt).toBeDefined();
+    const newest = (engine as any).activeVoices.get('synth:F4');
+    expect(newest.releaseScheduledAt).toBeUndefined();
+  });
+
+  test('a voice scheduled into the future is never stolen', () => {
+    const { engine, ctx } = freshEngine();
+    (engine as any).maxVoicesPerSource = 2;
+    const future = ctx.currentTime + 5;
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, future, 'synth');
+    engine.triggerSynthNoteOn('D4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth');
+
+    const futureVoice = (engine as any).activeVoices.get('synth:C4');
+    const middleVoice = (engine as any).activeVoices.get('synth:D4');
+    expect(futureVoice.releaseScheduledAt).toBeUndefined();
+    expect(middleVoice.releaseScheduledAt).toBeDefined();
+  });
+
+  test('a second steal after the first one picks a different, newer voice', () => {
+    const { engine, ctx } = freshEngine();
+    (engine as any).maxVoicesPerSource = 2;
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('D4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    const first = (engine as any).activeVoices.get('synth:C4');
+    const firstReleasedAt = first.releaseScheduledAt;
+    expect(firstReleasedAt).toBeDefined();
+
+    engine.triggerSynthNoteOn('G4', SYNTH, 0.8, ctx.currentTime, 'synth');
+
+    const second = (engine as any).activeVoices.get('synth:D4');
+    expect(second.releaseScheduledAt).toBeDefined();
+    expect(first.releaseScheduledAt).toBe(firstReleasedAt);
+    const newest = (engine as any).activeVoices.get('synth:G4');
+    expect(newest.releaseScheduledAt).toBeUndefined();
+  });
+
+  test('a voice already releasing is never stolen a second time', () => {
+    const { engine, ctx } = freshEngine();
+    (engine as any).maxVoicesPerSource = 2;
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOff('C4', 0.3, ctx.currentTime, 'synth');
+    const releasing = (engine as any).activeVoices.get('synth:C4');
+    const releasedAt = releasing.releaseScheduledAt;
+
+    engine.triggerSynthNoteOn('D4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth');
+
+    expect(releasing.releaseScheduledAt).toBe(releasedAt);
+  });
+});
+
+describe('bass mono kill iterates the bass voice set, not every active voice', () => {
+  test('a new bass note releases the previous bass voice and leaves other sources alone', () => {
+    const { engine, ctx } = freshEngine();
+    const e = engine as any;
+
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'chord');
+    e.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass');
+
+    const oldBass = e.activeVoices.get('bass:C2');
+    expect(oldBass).toBeTruthy();
+    expect(oldBass.releaseScheduledAt).toBeUndefined();
+
+    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass');
+
+    // The previous bass voice was released...
+    expect(oldBass.releaseScheduledAt).toBe(ctx.currentTime);
+    // ...and nothing else was touched.
+    expect(e.activeVoices.get('chord:C4').releaseScheduledAt).toBeUndefined();
+    expect(e.activeVoices.get('synth:E4').releaseScheduledAt).toBeUndefined();
+  });
+
+  test('a bass voice whose release has already started is not re-released', () => {
+    const { engine, ctx } = freshEngine();
+    const e = engine as any;
+
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    e.triggerSynthNoteOff('C2', 0.2, ctx.currentTime, 'bass');
+    const dying = e.activeVoices.get('bass:C2');
+    const cancelsBefore = dying.gains[0].gain.cancels.length;
+
+    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass');
+
+    expect(dying.gains[0].gain.cancels.length).toBe(cancelsBefore);
+  });
+
+  test('a bass voice whose release is scheduled in the FUTURE is still cut short', () => {
+    const { engine, ctx } = freshEngine();
+    const e = engine as any;
+
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    // Release planned one second ahead — a long scheduled note that would
+    // otherwise ring through the new one and break monophony.
+    e.triggerSynthNoteOff('C2', 0.2, ctx.currentTime + 1, 'bass');
+    const pending = e.activeVoices.get('bass:C2');
+    expect(pending.releaseScheduledAt).toBe(ctx.currentTime + 1);
+
+    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass');
+
+    expect(pending.releaseScheduledAt).toBe(ctx.currentTime);
+  });
+
+  test('a superseded bass voice of the same note is not double-released', () => {
+    // sourceVoices keeps every live-or-releasing voice; activeVoices keeps
+    // only the latest per key. Iterating sourceVoices without the identity
+    // guard would call triggerSynthNoteOff('C2') twice for the same note.
+    const { engine, ctx } = freshEngine();
+    const e = engine as any;
+
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    const superseded = e.activeVoices.get('bass:C2');
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    const current = e.activeVoices.get('bass:C2');
+    expect(current).not.toBe(superseded);
+
+    const currentCancels = current.gains[0].gain.cancels.length;
+    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass');
+
+    // Exactly one release reached the current C2 voice.
+    expect(current.gains[0].gain.cancels.length).toBe(currentCancels + 1);
+  });
+
+  test('a sourceVoices entry whose activeVoices slot was reassigned to a different real voice is left alone', () => {
+    // The identity guard exists for a write path that has never shipped on
+    // this branch: something replacing the activeVoices slot for a `bass:`
+    // key with a different voice without going through triggerSynthNoteOff
+    // (the only real path, which always sets releaseScheduledAt on the OLD
+    // occupant first). Constructed directly here via the sanctioned
+    // (engine as any) cast, since no real note-on/note-off sequence reaches
+    // this state: a full real voice is planted in the slot the stale
+    // sourceVoices entry still believes is its own.
+    const { engine, ctx } = freshEngine();
+    const e = engine as any;
+
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    const stale = e.activeVoices.get('bass:C2');
+    expect(stale.releaseScheduledAt).toBeUndefined();
+
+    // A real voice, built the normal way but under a different source so
+    // creating it does not run the bass mono-kill against `stale`.
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'synth');
+    const occupant = e.activeVoices.get('synth:C2');
+    const occupantCancelsBefore = occupant.gains[0].gain.cancels.length;
+
+    // Reassign the bass:C2 slot to this unrelated real voice, bypassing
+    // triggerSynthNoteOff entirely.
+    e.activeVoices.set('bass:C2', occupant);
+
+    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass');
+
+    // The identity guard must refuse to act on `stale` because it no longer
+    // matches its own activeVoices slot — and, critically, must not release
+    // whatever real voice DOES occupy that slot either.
+    expect(occupant.releaseScheduledAt).toBeUndefined();
+    expect(occupant.gains[0].gain.cancels.length).toBe(occupantCancelsBefore);
+  });
+});
+
+describe('impulse cache is bounded by samples, not entries', () => {
+  test('long impulses evict early; short impulses do not', () => {
+    const { engine } = freshEngine();
+    const e = engine as any;
+    // freshEngine's fake context reports sampleRate 64, so a real 4,000,000
+    // budget would need 31,250 s of decay to trip. Shrink the ENGINE's budget
+    // instead of faking a sample rate, so this exercises the same code path
+    // production does. At sampleRate 64, samples = floor(64 * decay) * 2.
+    e.impulseCacheSampleBudget = 800;
+
+    e.getImpulseResponse(2.0); // 256 samples
+    e.getImpulseResponse(2.5); // 320 samples -> total 576, inside 800
+    expect(Array.from(e.impulseCache.keys())).toEqual([2.0, 2.5]);
+
+    e.getImpulseResponse(3.0); // 384 samples -> total 960, over budget;
+                               // evicting the oldest (256) brings it to 704.
+    expect(Array.from(e.impulseCache.keys())).toEqual([2.5, 3.0]);
+  });
+
+  test('a hit moves the key to the newest position (LRU order is preserved)', () => {
+    const { engine } = freshEngine();
+    const e = engine as any;
+    e.getImpulseResponse(1.0);
+    e.getImpulseResponse(2.0);
+    e.getImpulseResponse(1.0);
+    expect(Array.from(e.impulseCache.keys())).toEqual([2.0, 1.0]);
+  });
+
+  test('a single impulse larger than the whole budget is still cached', () => {
+    const { engine } = freshEngine();
+    const e = engine as any;
+    e.impulseCacheSampleBudget = 10;
+    const buffer = e.getImpulseResponse(9.9);
+    expect(buffer).toBeTruthy();
+    expect(Array.from(e.impulseCache.keys())).toEqual([9.9]);
+  });
+
+  test('a repeated decay returns the same buffer instance', () => {
+    const { engine } = freshEngine();
+    const e = engine as any;
+    expect(e.getImpulseResponse(2.0)).toBe(e.getImpulseResponse(2.0));
+  });
+});
+
+describe('idle suspend and audio-clock teardown', () => {
+  /** freshEngine's fake context has no state/suspend — add the two this needs. */
+  function suspendableEngine() {
+    const { engine, ctx } = freshEngine();
+    const c = ctx as any;
+    c.state = 'running';
+    c.suspendCalls = 0;
+    c.resumeCalls = 0;
+    c.suspend = async () => {
+      c.suspendCalls++;
+      c.state = 'suspended';
+    };
+    c.resume = async () => {
+      c.resumeCalls++;
+      c.state = 'running';
+    };
+    return { engine, ctx: c };
+  }
+
+  test('an idle engine suspends when its idle timer fires', () => {
+    const { engine, ctx } = suspendableEngine();
+    (engine as any).maybeSuspendNow();
+    expect(ctx.suspendCalls).toBe(1);
+  });
+
+  test('a live voice blocks the suspend', () => {
+    const { engine, ctx } = suspendableEngine();
+    (engine as any).triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    (engine as any).maybeSuspendNow();
+    expect(ctx.suspendCalls).toBe(0);
+  });
+
+  test('a clock listener blocks the suspend', () => {
+    const { engine, ctx } = suspendableEngine();
+    const unsubscribe = engine.subscribeClock(() => {});
+    (engine as any).maybeSuspendNow();
+    expect(ctx.suspendCalls).toBe(0);
+    unsubscribe();
+  });
+
+  test('an enabled metronome blocks the suspend', () => {
+    const { engine, ctx } = suspendableEngine();
+    engine.setMetronomeEnabled(true);
+    (engine as any).maybeSuspendNow();
+    expect(ctx.suspendCalls).toBe(0);
+    engine.setMetronomeEnabled(false);
+  });
+
+  test('wakeIfIdle resumes a context this engine suspended', () => {
+    const { engine, ctx } = suspendableEngine();
+    (engine as any).maybeSuspendNow();
+    expect(ctx.state).toBe('suspended');
+
+    engine.wakeIfIdle();
+    expect(ctx.resumeCalls).toBe(1);
+  });
+
+  test('wakeIfIdle on a running context is a no-op and never throws', () => {
+    const { engine, ctx } = suspendableEngine();
+    engine.wakeIfIdle();
+    engine.wakeIfIdle();
+    expect(ctx.resumeCalls).toBe(0);
+  });
+
+  test('wakeIfIdle before init never throws', () => {
+    const engine = makeEngine();
+    expect(() => engine.wakeIfIdle()).not.toThrow();
+  });
+
+  test('a released voice records its teardown time on the AUDIO clock', () => {
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
+
+    const voice = e.activeVoices.get('synth:C4');
+    // max(release 0.5, filterRelease 0.5) + 0.1 grace
+    expect(voice.teardownAt).toBeCloseTo(ctx.currentTime + 0.6, 5);
+  });
+
+  test('a releasing voice also blocks the suspend — a release tail must never be cut', () => {
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
+    e.maybeSuspendNow();
+    expect(ctx.suspendCalls).toBe(0);
+    clearTimeout(e.activeVoices.get('synth:C4').teardownTimer);
+  });
+
+  test('wakeIfIdle re-arms a pending teardown against the frozen audio clock, when THIS engine idle-suspended', () => {
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
+    const voice = e.activeVoices.get('synth:C4');
+    const firstTimer = voice.teardownTimer;
+
+    // A releasing voice blocks maybeSuspendNow (proven above), so this drives
+    // wakeIfIdle's own resume/re-arm branch directly by forcing the internal
+    // state maybeSuspendNow would have set had the predicate allowed it. This
+    // is NOT what a real backgrounded-tab suspend looks like — that path
+    // never touches suspendedForIdle at all and is covered separately below,
+    // through init()'s own resume branch.
+    ctx.state = 'suspended';
+    e.suspendedForIdle = true;
+    engine.wakeIfIdle();
+
+    // The timer was replaced, and the voice is still tracked — the old wall
+    // clock timer would have torn it down 10 s into a 0.6 s release.
+    expect(voice.teardownTimer).not.toBe(firstTimer);
+    expect(e.activeVoices.get('synth:C4')).toBe(voice);
+    clearTimeout(voice.teardownTimer);
+  });
+
+  test('init resumes and re-arms a pending teardown when the BROWSER suspended the context', async () => {
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    ctx.state = 'suspended';
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
+    const voice = e.activeVoices.get('synth:C4');
+    const firstTimer = voice.teardownTimer;
+
+    // This is the genuine backgrounded-tab scenario: the browser suspends on
+    // its own schedule, with no idle flag of ours ever set. init()'s existing
+    // resume branch is the only thing that ever sees it.
+    await e.init();
+
+    expect(ctx.resumeCalls).toBe(1);
+    expect(voice.teardownTimer).not.toBe(firstTimer);
+    clearTimeout(voice.teardownTimer);
+  });
+
+  test('a MIDI-triggered note-on wakes a context this engine idle-suspended', () => {
+    // midiInput.ts calls triggerSynthNoteOn directly with no init()/gesture
+    // path of its own — this proves the wake happens at the engine boundary
+    // regardless of caller, not only from a pointer/keyboard gesture.
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.maybeSuspendNow();
+    expect(ctx.state).toBe('suspended');
+
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    expect(ctx.resumeCalls).toBe(1);
+  });
+
+  test('a MIDI-triggered drum hit wakes a context this engine idle-suspended', () => {
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.maybeSuspendNow();
+    expect(ctx.state).toBe('suspended');
+
+    engine.triggerDrum('kick');
+    expect(ctx.resumeCalls).toBe(1);
+  });
+
+  test('an ordinary click on a running (never idle-suspended) context still restarts the idle countdown', () => {
+    // Regression: wakeIfIdle used to clear the timer and return before
+    // reaching markActivity() whenever there was nothing of its own to
+    // resume, leaving idle suspend disarmed after the first click until the
+    // next note, clock tick or metronome event.
+    const { engine } = suspendableEngine();
+    const e = engine as any;
+    e.idleTimer = null;
+    engine.wakeIfIdle();
+    expect(e.idleTimer).not.toBeNull();
+  });
+
+  test('triggerSynthNoteOn marks activity', () => {
+    const { engine, ctx } = freshEngine();
+    const e = engine as any;
+    expect(e.idleTimer).toBeNull();
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    expect(e.idleTimer).not.toBeNull();
+  });
+
+  test('triggerDrum marks activity', () => {
+    const { engine } = freshEngine();
+    const e = engine as any;
+    expect(e.idleTimer).toBeNull();
+    engine.triggerDrum('kick');
+    expect(e.idleTimer).not.toBeNull();
+  });
+
+  test('subscribeClock marks activity on subscribe and again on the last unsubscribe', () => {
+    const { engine } = freshEngine();
+    const e = engine as any;
+    expect(e.idleTimer).toBeNull();
+    const unsubscribe = engine.subscribeClock(() => {});
+    expect(e.idleTimer).not.toBeNull();
+
+    // Reset so the assertion below can only pass if the DISPOSER'S OWN call
+    // fires, not the one already proven above.
+    clearTimeout(e.idleTimer);
+    e.idleTimer = null;
+    unsubscribe();
+    expect(e.idleTimer).not.toBeNull();
+  });
+
+  test('setMetronomeEnabled marks activity on both the on and the off transition', () => {
+    const { engine } = freshEngine();
+    const e = engine as any;
+    expect(e.idleTimer).toBeNull();
+    engine.setMetronomeEnabled(true);
+    expect(e.idleTimer).not.toBeNull();
+
+    clearTimeout(e.idleTimer);
+    e.idleTimer = null;
+    engine.setMetronomeEnabled(false);
+    expect(e.idleTimer).not.toBeNull();
+  });
+
+  test('init marks activity', async () => {
+    const { engine } = suspendableEngine();
+    const e = engine as any;
+    e.idleTimer = null;
+    expect(e.idleTimer).toBeNull();
+    await e.init();
+    expect(e.idleTimer).not.toBeNull();
+  });
+
+  test("init clears suspendedForIdle on its own resume, so a later wakeIfIdle doesn't redundantly resume again", async () => {
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.maybeSuspendNow();
+    expect(ctx.state).toBe('suspended');
+    expect(e.suspendedForIdle).toBe(true);
+
+    await e.init();
+    expect(ctx.resumeCalls).toBe(1);
+    expect(e.suspendedForIdle).toBe(false);
+
+    // Nothing left for wakeIfIdle to do — it must not resume() a second time.
+    engine.wakeIfIdle();
+    expect(ctx.resumeCalls).toBe(1);
+  });
+
+  test('a rejected resume() leaves the engine recoverable: the flag stays true and a later trigger retries', async () => {
+    // The exact regression this guards: clearing suspendedForIdle BEFORE
+    // resume() settles (instead of inside its .then()) would make a refused
+    // resume permanent — no later gesture or note would ever try again, and
+    // the instrument stays silent for the rest of the session.
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.maybeSuspendNow();
+    expect(ctx.state).toBe('suspended');
+
+    let resumeAttempts = 0;
+    ctx.resume = async () => {
+      resumeAttempts++;
+      throw new Error('autoplay policy refused this resume');
+    };
+
+    engine.wakeIfIdle();
+    // Flush the rejected promise's .then/.catch chain.
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(resumeAttempts).toBe(1);
+    // Still owed a resume — this is the behaviour under test, not the retry.
+    expect(e.suspendedForIdle).toBe(true);
+    expect(ctx.state).toBe('suspended');
+
+    // Prove recoverability end-to-end: the very next sound-producing trigger
+    // retries resume(), it is not stuck silent forever.
+    ctx.resume = async () => { resumeAttempts++; ctx.state = 'running'; };
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    expect(resumeAttempts).toBe(2);
+  });
+});
+
+describe('reshapeableVoices reuses one scratch array', () => {
+  const visits = (v: any) => v.filter.Q.cancels.length;
+
+  test('each call visits its own source exactly once, and no other', () => {
+    const { engine, ctx } = freshEngine();
+    const e = engine as any;
+    const t0 = ctx.currentTime;
+
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    e.triggerSynthNoteOn('E4', SYNTH, 0.8, t0, 'chord');
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, t0, 'bass');
+
+    const a = e.activeVoices.get('chord:C4');
+    const b = e.activeVoices.get('chord:E4');
+    const bass = e.activeVoices.get('bass:C2');
+    const base = [visits(a), visits(b), visits(bass)];
+
+    // Each call ticks the clock forward, as real knob-drag calls would: a
+    // second cancelAndHold at the SAME timestamp hits the fake's "refuses a
+    // timeline with setTargetAtTime" guard and takes its throwing branch,
+    // which would double-count a visit and mask what this test checks.
+    ctx.currentTime += 0.01;
+    engine.updateSynthParams(SYNTH, 'chord');
+    expect([visits(a), visits(b), visits(bass)]).toEqual([base[0] + 1, base[1] + 1, base[2]]);
+
+    // A call over a DIFFERENT source must not re-visit the first source's
+    // voices — exactly what an uncleared scratch array would do.
+    ctx.currentTime += 0.01;
+    engine.updateSynthParams(SYNTH, 'bass');
+    expect([visits(a), visits(b), visits(bass)]).toEqual([base[0] + 1, base[1] + 1, base[2] + 1]);
+
+    // And the all-sources call visits each voice exactly once more.
+    ctx.currentTime += 0.01;
+    engine.updateSynthParams(SYNTH);
+    expect([visits(a), visits(b), visits(bass)]).toEqual([base[0] + 2, base[1] + 2, base[2] + 2]);
+  });
+
+  test('two successive calls over the same voice set schedule identical automation', () => {
+    const { engine, ctx } = freshEngine();
+    const e = engine as any;
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'chord');
+    const voice = e.activeVoices.get('chord:C4');
+
+    engine.updateSynthParams(SYNTH, 'chord');
+    engine.updateSynthParams(SYNTH, 'chord');
+
+    const targets = voice.filter.frequency.targets;
+    expect(targets.length).toBeGreaterThanOrEqual(2);
+    expect(targets.at(-1)).toEqual(targets.at(-2));
   });
 });
