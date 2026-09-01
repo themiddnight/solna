@@ -7,9 +7,7 @@ import React, {
 } from "react";
 import {
   Sliders,
-  Activity,
   Zap,
-  Volume2,
   Sparkles,
   Bookmark,
   Library,
@@ -17,7 +15,6 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { initSynthPlayback } from "../../audio/playback/synthPlayback";
 import { useAppStore } from "../../store/store";
 import {
   SynthPresetItem,
@@ -36,13 +33,16 @@ const SynthPresetLibrary = React.lazy(() =>
 );
 import { AudioVisualizer } from "../AudioVisualizer";
 import { SimpleSynthPanel } from "./SimpleSynthPanel";
+import { OscillatorPanel } from "./synth/OscillatorPanel";
+import { FilterPanel } from "./synth/FilterPanel";
+import { EnvelopePanel } from "./synth/EnvelopePanel";
+import { LfoPanel } from "./synth/LfoPanel";
+import { ArpeggiatorPanel } from "./synth/ArpeggiatorPanel";
 import { LeadPianoRoll } from "./lead/LeadPianoRoll";
-import { useLeadPlayback } from "./lead/useLeadPlayback";
-import { Knob } from "../ui/Knob";
 import { ChannelStrip } from "../ui/ChannelStrip";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { ViewHeader } from "../ui/ViewHeader";
-import { COUNT_BADGE, STEP_BADGE } from "../ui/fieldClasses";
+import { COUNT_BADGE } from "../ui/fieldClasses";
 
 // Re-exported for scripts/check-key-bindings.ts, which asserts that the synth
 // key bindings never collide with the drum-pad shortcuts. The table itself
@@ -65,7 +65,7 @@ function resolveTargetBorderClass(controlTarget: SynthControlTarget): string {
       : "border-primary";
 }
 
-export const SynthView = () => {
+export const SynthView: React.FC = React.memo(() => {
   // Synth slice state + setters (named after the old props so the rest of the
   // component body is unchanged).
   const controlTarget = useAppStore((s) => s.controlTarget);
@@ -157,7 +157,6 @@ export const SynthView = () => {
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [quickSaveName, setQuickSaveName] = useState<string>("");
   const [saveToast, setSaveToast] = useState<string | null>(null);
-  const { currentStep: leadCurrentStep, isPlaying: leadIsPlaying } = useLeadPlayback();
 
   // Simple vs Pro UI Mode toggle with localStorage persistence
   const [synthViewMode, setSynthViewMode] = useState<"simple" | "pro">(() => {
@@ -687,499 +686,16 @@ export const SynthView = () => {
       ) : (
         /* Pro Mode: Control Panels Grid */
         <div className="w-full flex flex-wrap gap-3">
-          {/* 1. Oscillators Section */}
-          <div
-            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
-          >
-            <div className="card-body p-4 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                <span className={STEP_BADGE}>1</span>
-                <Activity className="w-3.5 h-3.5 text-module-osc" />
-                Oscillators
-              </span>
-            </div>
-
-            <div>
-              <label className="text-xs text-base-content/60 block mb-1.5 font-medium">
-                Waveform
-              </label>
-              <div className="grid grid-cols-4 gap-1">
-                {(["sawtooth", "square", "sine", "triangle"] as const).map(
-                  (w) => (
-                    <button
-                      key={w}
-                      id={`btn-wave-${w}`}
-                      onClick={() => onChangeParams({ ...params, oscType: w })}
-                      className={`btn btn-xs text-[11px] font-semibold capitalize ${
-                        params.oscType === w
-                          ? "[--btn-color:var(--color-module-osc)] [--btn-fg:var(--color-module-osc-content)]"
-                          : "btn-ghost border border-base-300 text-base-content/60"
-                      }`}
-                    >
-                      {w.slice(0, 4)}
-                    </button>
-                  ),
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-start justify-between gap-2">
-              <Knob
-                id="slider-sub-osc"
-                label="Sub-Osc"
-                color="text-module-osc"
-                value={params.subOscVolume}
-                min={0}
-                max={1}
-                step={0.01}
-                format={(v) => `${(v * 100).toFixed(0)}%`}
-                onChange={(v) => onChangeParams({ ...params, subOscVolume: v })}
-              />
-
-              <Knob
-                id="slider-detune"
-                label="Detune"
-                color="text-module-osc"
-                value={params.detune}
-                min={0}
-                max={50}
-                step={1}
-                format={(v) => `${v} ct`}
-                onChange={(v) => onChangeParams({ ...params, detune: v })}
-              />
-
-              <Knob
-                id="slider-noise"
-                label="Noise"
-                color="text-module-osc"
-                value={params.noiseVolume}
-                min={0}
-                max={0.5}
-                step={0.01}
-                format={(v) => `${(v * 100).toFixed(0)}%`}
-                onChange={(v) => onChangeParams({ ...params, noiseVolume: v })}
-              />
-            </div>
-            </div>
-          </div>
-          {/* 2. Filter Section */}
-          <div
-            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
-          >
-            <div className="card-body p-4 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                <span className={STEP_BADGE}>2</span>
-                <Sliders className="w-3.5 h-3.5 text-module-filter" />
-                VCF Filter
-              </span>
-            </div>
-
-            <div>
-              <label className="text-xs text-base-content/60 block mb-1.5 font-medium">
-                Filter Type
-              </label>
-              <div className="grid grid-cols-3 gap-1">
-                {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
-                  <button
-                    key={t}
-                    id={`btn-filter-${t}`}
-                    onClick={() => onChangeParams({ ...params, filterType: t })}
-                    className={`btn btn-xs text-[11px] font-semibold uppercase ${
-                      params.filterType === t
-                        ? "[--btn-color:var(--color-module-filter)] [--btn-fg:var(--color-module-filter-content)]"
-                        : "btn-ghost border border-base-300 text-base-content/60"
-                    }`}
-                  >
-                    {t === "lowpass" ? "LPF" : t === "bandpass" ? "BPF" : "HPF"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-start justify-between gap-2">
-              <Knob
-                id="slider-filter-cutoff"
-                label="Cutoff"
-                color="text-module-filter"
-                value={params.filterCutoff}
-                min={50}
-                max={12000}
-                step={10}
-                scale="log"
-                format={(v) => `${Math.round(v)} Hz`}
-                onChange={(v) => onChangeParams({ ...params, filterCutoff: v })}
-              />
-
-              <Knob
-                id="slider-filter-resonance"
-                label="Resonance"
-                color="text-module-filter"
-                value={params.filterResonance}
-                min={0.1}
-                max={20}
-                step={0.1}
-                scale="linear"
-                format={(v) => v.toFixed(1)}
-                onChange={(v) =>
-                  onChangeParams({ ...params, filterResonance: v })
-                }
-              />
-
-              <Knob
-                id="slider-filter-env"
-                label="Env Mod"
-                color="text-module-filter"
-                value={params.filterEnvAmount}
-                min={0}
-                max={6000}
-                step={50}
-                scale="linear"
-                format={(v) => `+${Math.round(v)} Hz`}
-                onChange={(v) =>
-                  onChangeParams({ ...params, filterEnvAmount: v })
-                }
-              />
-            </div>
-            </div>
-          </div>
-          {/* 3. Envelope ADSR */}
-          <div
-            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
-          >
-            <div className="card-body p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                <span className={STEP_BADGE}>3</span>
-                <Volume2 className="w-3.5 h-3.5 text-module-env-vca" />
-                ADSR Envelope
-              </span>
-            </div>
-
-            {/* AMP / VCA */}
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] text-module-env-vca uppercase tracking-wider">
-                  AMP / VCA
-                </span>
-                <span className="flex-1 h-px bg-base-300" />
-              </div>
-              <div className="flex items-start justify-around gap-2">
-                {/* Attack */}
-                <Knob
-                  id="slider-env-attack"
-                  label="ATT"
-                  color="text-module-env-vca"
-                  value={params.attack}
-                  min={0.005}
-                  max={2.0}
-                  step={0.01}
-                  format={(v) => `${v.toFixed(2)}s`}
-                  onChange={(v) => onChangeParams({ ...params, attack: v })}
-                />
-
-                {/* Decay */}
-                <Knob
-                  id="slider-env-decay"
-                  label="DEC"
-                  color="text-module-env-vca"
-                  value={params.decay}
-                  min={0.01}
-                  max={2.0}
-                  step={0.01}
-                  format={(v) => `${v.toFixed(2)}s`}
-                  onChange={(v) => onChangeParams({ ...params, decay: v })}
-                />
-
-                {/* Sustain */}
-                <Knob
-                  id="slider-env-sustain"
-                  label="SUS"
-                  color="text-module-env-vca"
-                  value={params.sustain}
-                  min={0}
-                  max={1.0}
-                  step={0.01}
-                  format={(v) => `${(v * 100).toFixed(0)}%`}
-                  onChange={(v) => onChangeParams({ ...params, sustain: v })}
-                />
-
-                {/* Release */}
-                <Knob
-                  id="slider-env-release"
-                  label="REL"
-                  color="text-module-env-vca"
-                  value={params.release}
-                  min={0.01}
-                  max={3.0}
-                  step={0.01}
-                  format={(v) => `${v.toFixed(2)}s`}
-                  onChange={(v) => onChangeParams({ ...params, release: v })}
-                />
-              </div>
-            </div>
-
-            {/* FILTER / VCF */}
-            <div className="pt-2.5">
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] text-module-env-vcf uppercase tracking-wider">
-                  FILTER / VCF
-                </span>
-                <span className="flex-1 h-px bg-base-300" />
-              </div>
-              <div className="flex items-start justify-around">
-                {/* Filter Attack */}
-                <Knob
-                  id="slider-env-filter-attack"
-                  label="ATT"
-                  color="text-module-env-vcf"
-                  value={params.filterAttack}
-                  min={0.005}
-                  max={2.0}
-                  step={0.01}
-                  format={(v) => `${v.toFixed(2)}s`}
-                  onChange={(v) =>
-                    onChangeParams({ ...params, filterAttack: v })
-                  }
-                />
-
-                {/* Filter Decay */}
-                <Knob
-                  id="slider-env-filter-decay"
-                  label="DEC"
-                  color="text-module-env-vcf"
-                  value={params.filterDecay}
-                  min={0.01}
-                  max={2.0}
-                  step={0.01}
-                  format={(v) => `${v.toFixed(2)}s`}
-                  onChange={(v) =>
-                    onChangeParams({ ...params, filterDecay: v })
-                  }
-                />
-
-                {/* Filter Sustain */}
-                <Knob
-                  id="slider-env-filter-sustain"
-                  label="SUS"
-                  color="text-module-env-vcf"
-                  value={params.filterSustain}
-                  min={0}
-                  max={1.0}
-                  step={0.01}
-                  format={(v) => `${(v * 100).toFixed(0)}%`}
-                  onChange={(v) =>
-                    onChangeParams({ ...params, filterSustain: v })
-                  }
-                />
-
-                {/* Filter Release */}
-                <Knob
-                  id="slider-env-filter-release"
-                  label="REL"
-                  color="text-module-env-vcf"
-                  value={params.filterRelease}
-                  min={0.01}
-                  max={3.0}
-                  step={0.01}
-                  format={(v) => `${v.toFixed(2)}s`}
-                  onChange={(v) =>
-                    onChangeParams({ ...params, filterRelease: v })
-                  }
-                />
-              </div>
-            </div>
-            </div>
-          </div>{" "}
-          {/* 4. LFO & Master Pitch */}
-          <div
-            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
-          >
-            <div className="card-body p-4 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                <span className={STEP_BADGE}>4</span>
-                <Activity className="w-3.5 h-3.5 text-module-lfo" />
-                LFO & Octave
-              </span>
-            </div>
-
-            <div>
-              <label className="text-xs text-base-content/60 block mb-1.5 font-medium">
-                LFO Destination
-              </label>
-              <div className="grid grid-cols-3 gap-1">
-                {(["cutoff", "pitch", "volume"] as const).map((t) => (
-                  <button
-                    key={t}
-                    id={`btn-lfo-target-${t}`}
-                    onClick={() => onChangeParams({ ...params, lfoTarget: t })}
-                    className={`btn btn-xs text-[11px] font-semibold capitalize ${
-                      params.lfoTarget === t
-                        ? "[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]"
-                        : "btn-ghost border border-base-300 text-base-content/60"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-start justify-around gap-2">
-              <Knob
-                id="slider-lfo-rate"
-                label="LFO Rate"
-                color="text-module-lfo"
-                value={params.lfoRate}
-                min={0.1}
-                max={20}
-                step={0.1}
-                format={(v) => `${v.toFixed(1)} Hz`}
-                onChange={(v) => onChangeParams({ ...params, lfoRate: v })}
-              />
-
-              <Knob
-                id="slider-lfo-depth"
-                label="LFO Depth"
-                color="text-module-lfo"
-                value={params.lfoDepth}
-                min={0}
-                max={1}
-                step={0.01}
-                format={(v) => `${(v * 100).toFixed(0)}%`}
-                onChange={(v) => onChangeParams({ ...params, lfoDepth: v })}
-              />
-            </div>
-
-            <div className="pt-1 flex items-center justify-between">
-              <span className="text-xs text-base-content/60">Octave Pitch</span>
-              <div className="flex items-center gap-1">
-                {([-2, -1, 0, 1, 2] as const).map((oct) => (
-                  <button
-                    key={oct}
-                    id={`btn-octave-${oct}`}
-                    onClick={() => onChangeParams({ ...params, octave: oct })}
-                    className={`btn btn-xs btn-square w-6 h-6 min-h-0 text-xs tabular-nums font-bold ${
-                      params.octave === oct
-                        ? "[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]"
-                        : "btn-ghost border border-base-300 text-base-content/60 hover:text-base-content"
-                    }`}
-                  >
-                    {oct > 0 ? `+${oct}` : oct}
-                  </button>
-                ))}
-              </div>
-            </div>
-            </div>
-          </div>
-          {/* 5. Arpeggiator */}
-          <div
-            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
-          >
-            <div className="card-body p-4 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                <span className={STEP_BADGE}>5</span>
-                <Sparkles className="w-3.5 h-3.5 text-module-arp" />
-                Arpeggiator
-              </span>
-              <button
-                id="btn-toggle-arp"
-                onClick={() => {
-                  initSynthPlayback();
-                  onChangeParams({
-                    ...params,
-                    arpActive: !params.arpActive,
-                  });
-                }}
-                className={`btn btn-xs text-[10px] font-bold uppercase tracking-wider ${
-                  params.arpActive
-                    ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)] shadow-md shadow-module-arp/30"
-                    : "btn-ghost border border-base-300 text-base-content/60"
-                }`}
-              >
-                {params.arpActive ? "Active" : "Bypass"}
-              </button>
-            </div>
-
-            <div>
-              <label className="text-xs text-base-content/60 block mb-1.5 font-medium">
-                Arp Mode
-              </label>
-              <div className="grid grid-cols-4 gap-1">
-                {(["up", "down", "updown", "random"] as const).map((m) => (
-                  <button
-                    key={m}
-                    id={`btn-arp-mode-${m}`}
-                    onClick={() => onChangeParams({ ...params, arpMode: m })}
-                    className={`btn btn-xs text-[10px] font-semibold capitalize ${
-                      params.arpMode === m
-                        ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
-                        : "btn-ghost border border-base-300 text-base-content/60"
-                    }`}
-                  >
-                    {m === "updown" ? "Up/Dn" : m}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <label className="text-[11px] text-base-content/60 block mb-1 font-medium">
-                  Rate
-                </label>
-                <div className="flex gap-1">
-                  {(["16n", "8n", "32n"] as const).map((r) => (
-                    <button
-                      key={r}
-                      id={`btn-arp-rate-${r}`}
-                      onClick={() => onChangeParams({ ...params, arpRate: r })}
-                      className={`btn btn-xs text-[11px] font-mono font-semibold ${
-                        params.arpRate === r
-                          ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
-                          : "btn-ghost border border-base-300 text-base-content/60"
-                      }`}
-                    >
-                      {r === "16n" ? "1/16" : r === "8n" ? "1/8" : "1/32"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] text-base-content/60 block mb-1 font-medium">
-                  Octaves
-                </label>
-                <div className="flex gap-1">
-                  {[1, 2, 3].map((oct) => (
-                    <button
-                      key={oct}
-                      id={`btn-arp-octave-${oct}`}
-                      onClick={() =>
-                        onChangeParams({ ...params, arpOctaves: oct })
-                      }
-                      className={`btn btn-xs w-7 min-h-0 text-xs tabular-nums font-bold ${
-                        params.arpOctaves === oct
-                          ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
-                          : "btn-ghost border border-base-300 text-base-content/60"
-                      }`}
-                    >
-                      +{oct}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            </div>
-          </div>
+          <OscillatorPanel />
+          <FilterPanel />
+          <EnvelopePanel />
+          <LfoPanel />
+          <ArpeggiatorPanel />
         </div>
       )}
 
       {/* Lead Melody Piano-Roll Step Sequencer */}
-      <LeadPianoRoll currentStep={leadCurrentStep} isPlaying={leadIsPlaying} />
+      <LeadPianoRoll />
 
       {/* Preset Library Sidebar Drawer / Modal */}
       <Suspense
@@ -1205,4 +721,4 @@ export const SynthView = () => {
       </Suspense>
     </div>
   );
-};
+});

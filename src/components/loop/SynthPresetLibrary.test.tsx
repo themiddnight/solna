@@ -156,3 +156,18 @@ describe('SynthPresetLibrary open-scroll anchor', () => {
     expect(html).toContain('badge badge-xs badge-primary');
   });
 });
+
+describe('SynthPresetLibrary closed', () => {
+  test('renders nothing when isOpen is false', () => {
+    const closedHtml = renderToString(
+      <SynthPresetLibrary
+        isOpen={false}
+        onClose={noop}
+        currentParams={INITIAL_SYNTH_PARAMS}
+        target="synth"
+        onSelectPreset={noop}
+      />,
+    );
+    expect(closedHtml).toBe('');
+  });
+});

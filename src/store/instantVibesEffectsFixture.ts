@@ -1,6 +1,6 @@
 /**
  * A golden snapshot of every Instant Vibe's `effects` block, originally
- * captured before task 2 of the vibe-effects-from-library plan replaced each
+ * captured before the vibe-effects-from-library plan replaced each
  * vibe's inline block with `effectChainId` + `effectChainById`. That
  * migration is long done; this fixture's ongoing job is to pin the resolved
  * mix so `instantVibesEffects.test.ts` fails loudly if a VIBE_EFFECT_CHAINS

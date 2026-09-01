@@ -25,6 +25,8 @@ import { getMeter } from '../../utils/meter';
 import { subscribePlaybackClock } from '../../audio/playback/playbackEngine';
 import { ViewHeader } from '../ui/ViewHeader';
 import { SortableLoopCard } from './SortableLoopCard';
+import { arrangeCycleSteps, arrangeStep } from './arrangeStep';
+import { loopIdKeyOf, loopIdsFromKey } from './loopIdKey';
 
 /** Pure route for the loop-editor deep-link, exported for a pure test. */
 export const buildEditRoute = (id: string) => buildRouteUrl('loop', 'synth', id);
@@ -48,7 +50,7 @@ export const editLoop = (id: string) => {
  * looping). Clicking a row selects it as active (loadLoop), which while
  * playing jumps the song/loop to that loop.
  */
-export const ArrangeView: React.FC = () => {
+export const ArrangeView: React.FC = React.memo(() => {
   const loops = useAppStore((s) => s.loops);
   const activeLoopId = useAppStore((s) => s.activeLoopId);
   const songLoopIndex = useAppStore((s) => s.songLoopIndex);
@@ -79,22 +81,59 @@ export const ArrangeView: React.FC = () => {
       ? loops[songLoopIndex].id
       : activeLoopId;
 
+  const activeTab = useAppStore((s) => s.activeTab);
+  const stepsPerBar = useMemo(() => getMeter(meterId).stepsPerBar, [meterId]);
+
+  // The per-card totals this view divides the playhead by (see the map below).
+  // The stored step may only be reduced modulo a COMMON multiple of all of
+  // them, or a card's progress bar would jump — arrangeStep.test.ts pins that
+  // invariant.
+  const cycleSteps = useMemo(
+    () =>
+      arrangeCycleSteps(
+        loops.map(
+          (loop) =>
+            Math.max(1, loopBars(loop.chords) * stepsPerBar) *
+            Math.max(1, loop.repeatCount ?? 1),
+        ),
+      ),
+    [loops, stepsPerBar],
+  );
+
   // Live playback clock step for real-time progress bar
   const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
-    if (!isPlaying) {
+    // Gated on the tab, not just on isPlaying: SongPage.tsx:10 keeps this view
+    // mounted behind `hidden` while the user is on any other tab, so without
+    // this the clock drove a setState 8-16x/sec into an invisible list. Same
+    // idiom (and same reason) as the AudioVisualizer `paused` gates at
+    // EffectsRackView.tsx:299 and SynthView.tsx:418 — see
+    // AudioVisualizer.tsx:603-612 for why gating inside the callback is not
+    // enough.
+    if (!isPlaying || activeTab !== 'arrange') {
       setCurrentStep(0);
       return;
     }
     return subscribePlaybackClock((step) => {
-      setCurrentStep(step);
+      // Bar-relative, not the raw monotonic step: bounded to one arrangement
+      // cycle instead of growing all session, and the identity guard can then
+      // actually suppress a render when the clock re-dispatches a step it has
+      // already delivered (the stall detector at engine.ts:294 re-anchors the
+      // grid and does exactly that).
+      const next = arrangeStep(step, cycleSteps);
+      setCurrentStep((prev) => (prev === next ? prev : next));
     });
-  }, [isPlaying]);
+  }, [isPlaying, activeTab, cycleSteps]);
 
-  const stepsPerBar = useMemo(() => getMeter(meterId).stepsPerBar, [meterId]);
-
-  const loopIds = useMemo(() => loops.map((l) => l.id), [loops]);
+  // The mirrored per-loop field write rebuilds `loops` (and every loop
+  // object in it) on every knob/fader change to the active loop, so keying
+  // this list on the array identity rebuilt it at pointer rate and dnd-kit's
+  // SortableContext re-rendered every card through context — past its own
+  // React.memo. Keying on id content instead only changes the list when
+  // membership or ordering actually does.
+  const loopIdKey = loopIdKeyOf(loops);
+  const loopIds = useMemo(() => loopIdsFromKey(loopIdKey), [loopIdKey]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -253,4 +292,4 @@ export const ArrangeView: React.FC = () => {
       </DndContext>
     </div>
   );
-};
+});

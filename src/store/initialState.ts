@@ -92,8 +92,8 @@ export const INITIAL_CHORDS: ChordItem[] = [
 //
 // NOTE: reverbDecay (2.0) and compressorThreshold (-12) deliberately equal the
 // engine's setupMasterChain hardcodes so the default sound is unchanged now
-// that these knobs are live (Task 14). Persisted values from older sessions
-// take effect and are clamped in sanitizePersistedState.
+// that these knobs are live. Persisted values from older sessions take
+// effect and are clamped in sanitizePersistedState.
 export const INITIAL_EFFECTS: MasterEffects = {
   reverbWet: 0.25,
   reverbDecay: 2.0,

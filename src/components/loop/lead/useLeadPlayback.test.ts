@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { leadStepAction, type LeadArming } from './useLeadPlayback';
 
 describe('leadStepAction', () => {
@@ -19,5 +21,16 @@ describe('leadStepAction', () => {
     const arming: LeadArming = { armed: true };
     expect(leadStepAction('stopping', 20, arming, 16)).toBe('play');
     expect(leadStepAction('stopping', 32, arming, 16)).toBe('soft-stop');
+  });
+});
+
+describe('useLeadPlayback shares the one HARD_STOP_RELEASE', () => {
+  test('declares no local copy and still uses the shared constant', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/components/loop/lead/useLeadPlayback.ts'),
+      'utf8',
+    );
+    expect(source).not.toMatch(/^const HARD_STOP_RELEASE/m);
+    expect(source).toContain('HARD_STOP_RELEASE');
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { audioEngine } from '../engine';
 import { buildArpSequence } from '../arpeggiator';
-import { computeArpTriggers } from '../arpSchedule';
+import { arpFiresOnStep, computeArpTriggers } from '../arpSchedule';
 import { stepDurationSec } from '../../utils/musicTheory';
 import { arpStepFor } from '../../utils/meter';
 import type { SynthParams } from '../../types';
@@ -37,6 +37,13 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
       if (!params.arpActive) return;
       if (activeNotes.size === 0) return;
 
+      // Gate BEFORE the build: at rate 4n this skips four of every five
+      // buildArpSequence calls, each of which is a tonal sort plus one
+      // transpose per note per octave, inside the lookahead callback.
+      const stepDur16 = stepDurationSec(bpm);
+      const arpStep = arpStepFor(step, audioEngine.getMeter().stepsPerBar);
+      if (!arpFiresOnStep(arpStep, params.arpRate)) return;
+
       const sequence = buildArpSequence(
         activeNotes,
         params.arpMode,
@@ -44,8 +51,6 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
       );
       if (sequence.length === 0) return;
 
-      const stepDur16 = stepDurationSec(bpm);
-      const arpStep = arpStepFor(step, audioEngine.getMeter().stepsPerBar);
       for (const t of computeArpTriggers(arpStep, sequence.length, params.arpRate, stepDur16)) {
         const note = sequence[t.noteIndex];
         audioEngine.triggerSynthNoteOn(note, params, 0.9, time + t.timeOffsetSec, target);

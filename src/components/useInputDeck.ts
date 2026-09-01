@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { equalPowerVelocityScale } from '../audio/rhythmPatterns';
-import { useArpPlayback } from '../audio/playback/arpPlayback';
+import { useArpPlayback, type ArpStateRef } from '../audio/playback/arpPlayback';
 import {
   applySynthPlaybackVelocityScale,
   hasSynthPlaybackContext,
@@ -12,6 +12,7 @@ import {
 } from '../audio/playback/synthPlayback';
 import { ensureDrumEngine, triggerPad as triggerDrumPad } from '../audio/playback/drumPlayback';
 import { useAppStore } from '../store/store';
+import type { AppStore } from '../store/types';
 import {
   clampKeyboardOctave,
   getChromaticKeyboardNotes,
@@ -45,6 +46,18 @@ export function notesToReleaseOnKeyboardModeChange(
   return Array.from(new Set(currentlyHeldNotes));
 }
 
+// Releases every note currently reported as held, via the given release
+// callback. Shared by the keyboard-mode-change cleanup effect above and the
+// window-blur / visibilitychange backstop below — a held note must never
+// survive losing keyboard focus (Cmd-Tab, alt-tab, an OS dialog stealing
+// the keyup) or its voice drones until the exact same key is pressed again.
+export function releaseAllHeldNotes(
+  heldNotes: Iterable<string>,
+  releaseNote: (note: string) => void,
+): void {
+  notesToReleaseOnKeyboardModeChange(heldNotes).forEach(releaseNote);
+}
+
 export interface InputDeckKeyboardProps {
   keyboardMode: KeyboardMode;
   setKeyboardMode: (mode: KeyboardMode) => void;
@@ -66,6 +79,44 @@ export interface InputDeckDrumProps {
   onPadVolumeChange: (padId: string, volume: number) => void;
 }
 
+// Named (not inline) so a test can pin their behaviour directly: given two
+// `synthParams` objects differing only in a field the hook does not read
+// reactively, each selector must still return the SAME primitive — that
+// equality is what lets `useAppStore(selectArpActive)` skip a re-render on
+// every unrelated knob move.
+export const selectArpActive = (s: AppStore): boolean => s.synthParams.arpActive;
+export const selectSynthRelease = (s: AppStore): number => s.synthParams.release;
+
+/**
+ * Keeps `arpStateRef.current.params` / `.bpm` fresh by IMPERATIVE store
+ * subscription instead of by a render-driven effect. The hook used to select
+ * the whole `synthParams` object at App level purely to feed this ref, which
+ * re-rendered the entire application tree on every knob pointermove. Zustand
+ * notifies synchronously on `set()`, so the ref is refreshed strictly EARLIER
+ * than the old post-commit effect did it — the arp can never read staler
+ * params than before. Same pattern as `useSequencerPlayback.ts:69-78`.
+ */
+export function subscribeArpState(ref: ArpStateRef): () => void {
+  const unsubParams = useAppStore.subscribe(
+    (s) => s.synthParams,
+    (params) => {
+      ref.current.params = params;
+    },
+    { fireImmediately: true },
+  );
+  const unsubBpm = useAppStore.subscribe(
+    (s) => s.bpm,
+    (bpm) => {
+      ref.current.bpm = bpm;
+    },
+    { fireImmediately: true },
+  );
+  return () => {
+    unsubParams();
+    unsubBpm();
+  };
+}
+
 /** Plays notes (synth + drums) and owns the global QWERTY listeners. Mounted
  *  exactly once, at App level. The dock is a purely visual surface — it never
  *  gates these listeners. */
@@ -77,10 +128,17 @@ export function useInputDeck(): {
   const setKeyboardMode = useAppStore((s) => s.setKeyboardMode);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
-  const bpm = useAppStore((s) => s.bpm);
   // The keyboard always auditions the main synth (KEYBOARD_AUDITION_TARGET),
   // regardless of which destination the panel's Target selector is editing.
-  const keyboardParams = useAppStore((s) => s.synthParams);
+  //
+  // Deliberately two PRIMITIVE selectors, not `(s) => s.synthParams`. This hook
+  // is mounted in App, and `synthParams` is a fresh object on every knob
+  // pointermove (60-120 Hz), so selecting the object re-rendered App and with
+  // it SynthView + SequencerView + ArrangeView + BottomInputDock — three of
+  // them on hidden tabs. These two scalars are the ONLY reactive reads; the
+  // full params object reaches the arp through arpStateRef below.
+  const arpActive = useAppStore(selectArpActive);
+  const release = useAppStore(selectSynthRelease);
 
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
   // Keyboard display octave — independent from synth pitch octave (params.octave)
@@ -96,28 +154,26 @@ export function useInputDeck(): {
   // never the panel's currently-edited target — see KEYBOARD_AUDITION_TARGET.
   const arpStateRef = useRef({
     activeNotes,
-    params: keyboardParams,
+    params: useAppStore.getState().synthParams,
     controlTarget: KEYBOARD_AUDITION_TARGET,
-    bpm,
+    bpm: useAppStore.getState().bpm,
   });
+  // activeNotes is React state, so it still needs a commit-time mirror.
   useEffect(() => {
-    arpStateRef.current = {
-      activeNotes,
-      params: keyboardParams,
-      controlTarget: KEYBOARD_AUDITION_TARGET,
-      bpm,
-    };
-  });
+    arpStateRef.current.activeNotes = activeNotes;
+  }, [activeNotes]);
+  // params/bpm come straight off the store — no render subscription needed.
+  useEffect(() => subscribeArpState(arpStateRef), []);
 
   // The keyboard always auditions the main synth (KEYBOARD_AUDITION_TARGET),
   // regardless of which destination the Target selector is currently editing.
   const handleNoteOn = useCallback(
     (note: string) => {
-      // Params come from arpStateRef, refreshed by an unconditional effect
-      // after every commit, so this reads exactly the value the closure used
-      // to capture — but the callback identity no longer changes on every
-      // knob move, which used to tear down and re-register the window
-      // keydown/keyup listeners ~60 times a second during a drag.
+      // Params come from arpStateRef, kept fresh by an imperative store
+      // subscription (subscribeArpState) rather than a render dependency, so
+      // this reads the latest value without the callback identity changing
+      // on every knob move — which used to tear down and re-register the
+      // window keydown/keyup listeners ~60 times a second during a drag.
       const liveParams = arpStateRef.current.params;
       initSynthPlayback();
       if (!liveParams.arpActive) {
@@ -174,7 +230,7 @@ export function useInputDeck(): {
   // Arpeggiator playback: parameterized clock subscriber (the 4 rate branches
   // collapsed into computeArpTriggers, proven equivalent by the exhaustive
   // sweep in src/audio/playback/arpPlayback.test.ts)
-  useArpPlayback(arpStateRef, keyboardParams.arpActive);
+  useArpPlayback(arpStateRef, arpActive);
 
   // Kept fresh every render so the mode-change release effect below always
   // calls the latest handleNoteOff without needing it in its dependency array
@@ -203,14 +259,10 @@ export function useInputDeck(): {
   // Silence lingering arp voices when all keys are released in arp mode.
   // Always the keyboard's own (main synth) channel — see KEYBOARD_AUDITION_TARGET.
   useEffect(() => {
-    if (
-      keyboardParams.arpActive &&
-      activeNotes.size === 0 &&
-      hasSynthPlaybackContext()
-    ) {
-      releaseSynthPlaybackVoices(KEYBOARD_AUDITION_TARGET, keyboardParams.release);
+    if (arpActive && activeNotes.size === 0 && hasSynthPlaybackContext()) {
+      releaseSynthPlaybackVoices(KEYBOARD_AUDITION_TARGET, release);
     }
-  }, [keyboardParams.arpActive, activeNotes.size, keyboardParams.release]);
+  }, [arpActive, activeNotes.size, release]);
 
   const chordKeyboardRows = useMemo(
     () => getChordKeyboardRows(scaleRoot, scaleType, keyboardOctave),
@@ -307,6 +359,27 @@ export function useInputDeck(): {
     chromaticNotes,
   ]);
 
+  // Cmd-Tab / alt-tab / an OS-level dialog steals the keyup that would have
+  // released a held note — window blur and visibilitychange (tab hidden) are
+  // the only two signals a page gets for "the user is no longer interacting
+  // with this tab", so both release every held note. Reads activeNotes from
+  // the ref (not the closed-over activeNotes state) for the same reason
+  // handleNoteOn/handleNoteOff already do — see the comment above arpStateRef.
+  useEffect(() => {
+    const releaseHeld = () => {
+      releaseAllHeldNotes(arpStateRef.current.activeNotes, handleNoteOffRef.current);
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) releaseHeld();
+    };
+    window.addEventListener('blur', releaseHeld);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('blur', releaseHeld);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   // Drums: pad state + trigger, and the QWERTY drum listener (verbatim from
   // DrumPads, including the isTypingTarget guard, e.repeat skip, and the
   // [pads, triggerPad] deps).
@@ -338,8 +411,11 @@ export function useInputDeck(): {
     setPads((prev) => prev.map((p) => (p.id === padId ? { ...p, volume } : p)));
   }, []);
 
-  return {
-    keyboardProps: {
+  // App mounts every tab simultaneously and calls this hook once at the top,
+  // so a fresh object here on every render defeats React.memo on every
+  // consumer downstream no matter how stable their other props are.
+  const keyboardProps = useMemo<InputDeckKeyboardProps>(
+    () => ({
       keyboardMode,
       setKeyboardMode,
       keyboardOctave,
@@ -351,12 +427,31 @@ export function useInputDeck(): {
       chordKeyboardRows,
       handleNoteOn,
       handleNoteOff,
-    },
-    drumProps: {
+    }),
+    [
+      keyboardMode,
+      setKeyboardMode,
+      keyboardOctave,
+      setKeyboardOctave,
+      activeNotes,
+      scaleRoot,
+      scaleType,
+      scaleLockedRows,
+      chordKeyboardRows,
+      handleNoteOn,
+      handleNoteOff,
+    ],
+  );
+
+  const drumProps = useMemo<InputDeckDrumProps>(
+    () => ({
       pads,
       activePadId,
       onTriggerPad: triggerPad,
       onPadVolumeChange: handlePadVolumeChange,
-    },
-  };
+    }),
+    [pads, activePadId, triggerPad, handlePadVolumeChange],
+  );
+
+  return { keyboardProps, drumProps };
 }

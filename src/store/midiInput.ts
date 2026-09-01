@@ -4,6 +4,48 @@ import { useAppStore } from './store';
 
 let started = false;
 
+// Diffs two id lists and returns the ones that dropped out. Pure so the
+// device-disconnect trigger below is unit-testable without a real
+// MIDIAccess object.
+export function computeDisconnectedInputIds(
+  previousIds: readonly string[],
+  currentIds: readonly string[],
+): string[] {
+  const current = new Set(currentIds);
+  return previousIds.filter((id) => !current.has(id));
+}
+
+// Tracks which notes are currently on, per input device id, so a device
+// that disappears mid-note (unplugged, put to sleep, a USB hub dropping
+// out) can have its stuck notes released even though its note-off will
+// never arrive.
+export function createHeldNoteTracker() {
+  const notesByInput = new Map<string, Set<string>>();
+  return {
+    noteOn(inputId: string, note: string): void {
+      let set = notesByInput.get(inputId);
+      if (!set) {
+        set = new Set();
+        notesByInput.set(inputId, set);
+      }
+      set.add(note);
+    },
+    noteOff(inputId: string, note: string): void {
+      notesByInput.get(inputId)?.delete(note);
+    },
+    release(inputId: string): string[] {
+      const set = notesByInput.get(inputId);
+      if (!set) return [];
+      const notes = Array.from(set);
+      notesByInput.delete(inputId);
+      return notes;
+    },
+  };
+}
+
+const heldNotes = createHeldNoteTracker();
+let knownInputIds: string[] = [];
+
 // Applies one CC message through the enabled CC mapping for that number:
 // writes the store, then pushes the same value into the engine so the change
 // is audible immediately (engineSync fires only on a store VALUE change).
@@ -97,9 +139,12 @@ export function startMidiInputBridge(): void {
             if (!noteName) return;
             const params = s.synthParams;
             const velocity = data2;
+            const inputId = sourceInput?.id ?? '';
             if (command === 0x90 && velocity > 0) {
+              heldNotes.noteOn(inputId, noteName);
               audioEngine.triggerSynthNoteOn(noteName, params, velocity / 127, undefined, 'synth', 1);
             } else {
+              heldNotes.noteOff(inputId, noteName);
               audioEngine.triggerSynthNoteOff(noteName, 0.3, undefined, 'synth');
             }
           }
@@ -108,14 +153,44 @@ export function startMidiInputBridge(): void {
         }
       };
 
+      const flushInputNotes = (inputId: string): void => {
+        heldNotes.release(inputId).forEach((note) => {
+          audioEngine.triggerSynthNoteOff(note, 0.05, undefined, 'synth');
+        });
+      };
+
       const setupInputs = (acc: MIDIAccess) => {
+        const currentIds: string[] = [];
         for (const input of acc.inputs.values()) {
           input.onmidimessage = handleMessage;
+          currentIds.push(input.id);
         }
+        // Defense in depth only: an id missing from the fresh enumeration
+        // means an implementation that drops disconnected ports from the map
+        // (the spec's "should not appear" text is non-normative, so this is
+        // permitted but not guaranteed). Chromium does not do this — it
+        // keeps the port and only flips its `state` — so the statechange
+        // handler below is the detection path that actually fires there.
+        // `heldNotes.release` empties an input's set on first call, so a
+        // device caught by both paths is flushed once, not twice.
+        for (const goneId of computeDisconnectedInputIds(knownInputIds, currentIds)) {
+          flushInputNotes(goneId);
+        }
+        knownInputIds = currentIds;
       };
 
       setupInputs(access);
-      access.onstatechange = () => {
+      access.onstatechange = (event) => {
+        // A reused port id must keep resolving to the same MIDIPort across
+        // connect/disconnect (WebAudio/web-midi-api#79), so Chromium never
+        // erases a disconnected input from `acc.inputs` — it only sets
+        // `port.state`. That leaves the map diff in setupInputs() unable to
+        // ever see this case; the event's own port is the only place a
+        // disconnect is observable there.
+        const port = event.port;
+        if (port && port.type === 'input' && port.state === 'disconnected') {
+          flushInputNotes(port.id);
+        }
         setupInputs(access);
       };
     })

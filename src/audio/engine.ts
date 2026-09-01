@@ -9,7 +9,9 @@ import {
 } from '../utils/meter';
 import { DEFAULT_VELOCITY, ENV_FLOOR, SILENCE, clampCutoff, clampVelocity } from './constants';
 import { mergeDrumKit, type DrumKit } from './drumKits';
-import { clampEffects } from './effectLimits';
+import { clampEffects, clampEffectValue } from './effectLimits';
+import { IMPULSE_CACHE_SAMPLE_BUDGET, impulseSampleCount, keysToEvict } from './impulseBudget';
+import { IDLE_SUSPEND_MS, shouldSuspendWhenIdle } from './idleSuspend';
 
 type SynthVoice = {
   oscs: OscillatorNode[];
@@ -64,6 +66,22 @@ type SynthVoice = {
   // Node teardown is a timer sized to the release tail. Re-planning a release
   // that has not started must replace that timer, not add a second one.
   teardownTimer?: ReturnType<typeof setTimeout>;
+  // Wall-clock backstop for a note-off that never arrives (window blur while
+  // a key is held, a MIDI device unplugged mid-note, a touch interrupted by
+  // the OS — see useInputDeck.ts, Keyboard.tsx and midiInput.ts). Cleared in
+  // teardownVoiceNodes alongside lfoTeardownTimer so a normal release cannot
+  // let this fire a second time.
+  lifetimeGuardTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * AUDIO-clock time this voice's nodes should be torn down.
+   *
+   * teardownTimer is a wall-clock setTimeout while the envelope it waits on
+   * runs on the audio clock. When the context is suspended, currentTime
+   * freezes and the timer keeps counting, so teardown fires before the release
+   * ramp has run and the note is gone on resume. rearmVoiceTeardowns() uses
+   * this to re-derive the delay from the audio clock after a resume.
+   */
+  teardownAt?: number;
 };
 
 /**
@@ -90,22 +108,37 @@ class AudioEngine {
   private reverbNode: ConvolverNode | null = null;
   private reverbGain: GainNode | null = null;
   // Last decay applied to the convolver, already quantised. Guards against
-  // re-randomizing the reverb tail on every updateEffects call.
+  // re-randomizing the reverb tail on every setReverbDecay call.
   private reverbDecay = 2.0;
-  // Impulse responses keyed by quantised decay, bounded to
-  // IMPULSE_CACHE_MAX entries (LRU eviction): the 0.1 s quantum over the
-  // 0.1-10 s clamp range is up to 100 distinct decays, and a 10 s stereo
-  // buffer at 44.1 kHz is ~3.5 MB, so an unbounded cache could pin ~350 MB
-  // of AudioBuffer for the AudioContext's lifetime after a full-range sweep.
+  // Impulse responses keyed by quantised decay, bounded by TOTAL SAMPLES
+  // (see audio/impulseBudget.ts) rather than by entry count. The 0.1 s quantum
+  // over the 0.1-10 s clamp range is up to 100 distinct decays, and a 10 s
+  // stereo buffer at 48 kHz is ~3.84 MB — an 8-ENTRY cap therefore allowed
+  // ~30 MB of pinned AudioBuffer, while eight short impulses cost ~150 KB. The
+  // cap was measuring the wrong thing.
+  //
   // Building one is sampleRate * decay * 2 channels of Math.random() +
-  // Math.pow() on the main thread; a single knob drag emits ~55 distinct
-  // values, so this cache skips the rebuild once a value has been seen.
-  // Swap and rebuild share one gate (nextDecay !== this.reverbDecay in
-  // updateEffects), so a monotonic sweep still swaps convolver.buffer once
-  // per 0.1 s step crossed — this cache skips the expensive rebuild, not the
-  // swap itself. Cleared in setupMasterChain: an AudioBuffer belongs to its
-  // context.
-  private impulseCache = new Map<number, AudioBuffer>();
+  // Math.pow() on the main thread, so this cache skips the rebuild once a
+  // value has been seen. Swap and rebuild share one gate
+  // (nextDecay !== this.reverbDecay in setReverbDecay, which owns the decay
+  // path so a knob drag's transient values never reach updateEffects), so a
+  // monotonic sweep
+  // still swaps convolver.buffer once per 0.1 s step crossed — this cache
+  // skips the expensive rebuild, not the swap itself. `samples` is recorded at
+  // build time from the decay rather than read off the AudioBuffer, so the
+  // accounting does not depend on AudioBuffer.length. Cleared in
+  // setupMasterChain: an AudioBuffer belongs to its context.
+  private impulseCache = new Map<number, { buffer: AudioBuffer; samples: number }>();
+  /** Overridable for tests; production always uses the module default. */
+  private impulseCacheSampleBudget = IMPULSE_CACHE_SAMPLE_BUDGET;
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * True only when THIS engine called suspend(). A context the BROWSER
+   * suspended (backgrounded tab) is resumed by init()'s existing resume path,
+   * and must not be resumed by a stray pointer event that only wakes idle
+   * suspends.
+   */
+  private suspendedForIdle = false;
   private delayNode: DelayNode | null = null;
   private delayFeedbackGain: GainNode | null = null;
   private delayGain: GainNode | null = null;
@@ -136,6 +169,17 @@ class AudioEngine {
   // scheduled voice per source so a whole layer can be silenced at once.
   private activeVoices = new Map<string, SynthVoice>();
   private sourceVoices = new Map<string, Set<SynthVoice>>();
+
+  // Ceiling on how long a voice can sit in activeVoices without a note-off,
+  // in real wall-clock ms (not audio-clock seconds — this must keep counting
+  // even if ctx.currentTime stalls). An instance field, not a module
+  // constant, so a test can shrink it instead of waiting out 30 real seconds.
+  private maxVoiceLifetimeMs = 30_000;
+
+  // Generous per-source ceiling. Bounds worst-case node count from a fast
+  // arp with a long release, where dozens of voices can otherwise pile up
+  // faster than maxVoiceLifetimeMs alone drains them.
+  private maxVoicesPerSource = 24;
 
   // Per-source buses: one gain bus per source string ('synth', 'chord', 'bass', ...).
   // Voice gains connect here instead of straight to dry/effects, so a whole layer
@@ -187,7 +231,6 @@ class AudioEngine {
     if (params.lfoTarget === 'pitch') return params.lfoDepth * 50;
     return Math.min(1, params.lfoDepth) * 0.2;
   }
-  private static readonly IMPULSE_CACHE_MAX = 8; // LRU cap; real use revisits a handful of decays
 
   private drumKit: DrumKit = mergeDrumKit();
 
@@ -202,10 +245,16 @@ class AudioEngine {
     if (this.ctx.state === 'suspended') {
       try {
         await this.ctx.resume();
+        this.rearmVoiceTeardowns();
+        // This resume already happened, whoever it was for — a stale true
+        // here would make the next wakeIfIdle() redundantly resume() and
+        // sweep every voice's teardown again for nothing.
+        this.suspendedForIdle = false;
       } catch {
         // browser autoplay policy requires user gesture
       }
     }
+    this.markActivity();
     this.isInitialized = true;
   }
 
@@ -222,6 +271,7 @@ class AudioEngine {
     } else if (this.clockListeners.size === 0) {
       this.stopClockTimer();
     }
+    this.markActivity();
   }
 
   isMetronomeEnabled(): boolean {
@@ -231,10 +281,12 @@ class AudioEngine {
   subscribeClock(listener: (step: number, beat: number, time: number) => void): () => void {
     this.clockListeners.add(listener);
     this.ensureClockRunning();
+    this.markActivity();
     return () => {
       this.clockListeners.delete(listener);
       if (this.clockListeners.size === 0 && !this.metronomeEnabled) {
         this.stopClockTimer();
+        this.markActivity();
       }
     };
   }
@@ -259,6 +311,127 @@ class AudioEngine {
   resetClock(): void {
     this.clockStepIndex = 0;
     this.clockNextStepTime = this.ctx ? this.ctx.currentTime + AudioEngine.CLOCK_REANCHOR_DELAY : 0;
+  }
+
+  /** Every voice still live OR still releasing, across every source. */
+  private liveVoiceCount(): number {
+    let count = 0;
+    for (const voices of this.sourceVoices.values()) count += voices.size;
+    return count;
+  }
+
+  /**
+   * Restart the idle countdown. Called from every path that produces sound or
+   * takes the clock — so the timer only ever reaches zero after genuinely
+   * nothing has happened for IDLE_SUSPEND_MS.
+   */
+  private markActivity(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    if (!this.ctx) return;
+    this.idleTimer = setTimeout(() => this.maybeSuspendNow(), IDLE_SUSPEND_MS);
+  }
+
+  /** Suspend if and only if shouldSuspendWhenIdle agrees. */
+  private maybeSuspendNow(): void {
+    if (!this.ctx) return;
+    const ok = shouldSuspendWhenIdle({
+      clockListenerCount: this.clockListeners.size,
+      metronomeEnabled: this.metronomeEnabled,
+      liveVoiceCount: this.liveVoiceCount(),
+      contextState: this.ctx.state,
+    });
+    if (!ok) {
+      // Something is still running: re-arm rather than giving up for the
+      // session, or a single note during the window would disable idle
+      // suspend until the next init().
+      this.markActivity();
+      return;
+    }
+    try {
+      const suspending = Promise.resolve(this.ctx.suspend());
+      // Set true only once suspend() has actually been issued without
+      // throwing synchronously — otherwise wakeIfIdle would believe there is
+      // a suspend of ITS OWN to resume that never actually started.
+      this.suspendedForIdle = true;
+      void suspending.catch(() => {
+        this.suspendedForIdle = false;
+      });
+    } catch {
+      this.suspendedForIdle = false;
+    }
+  }
+
+  /**
+   * Wake from an idle suspend. Wired to pointerdown/keydown in App.tsx rather
+   * than to the note-on itself: resuming a suspended context is asynchronous,
+   * so doing it at note-on time would make the first note late. By the time a
+   * pointer has travelled from press to a knob or a key, the context is back.
+   *
+   * Safe before init() and safe to call on every pointer event.
+   */
+  wakeIfIdle(): void {
+    if (!this.ctx) return;
+    if (!this.suspendedForIdle) {
+      // Nothing of ours to resume, but the gesture is still activity: without
+      // this, an ordinary click on a context that was never idle-suspended
+      // cleared the countdown and never restarted it, leaving idle suspend
+      // disarmed until the next note, clock tick or metronome event.
+      this.markActivity();
+      return;
+    }
+    void Promise.resolve(this.ctx.resume())
+      .then(() => {
+        this.suspendedForIdle = false;
+      })
+      .catch(() => {
+        // Left true so the NEXT gesture retries resume() instead of
+        // silently giving up on a rejection that may not be permanent.
+      });
+    // Re-arm synchronously too: currentTime is still frozen at this exact
+    // instant — it only starts advancing once resume() actually takes
+    // effect, not when it is merely called — so this is not a race with the
+    // .then() above. It protects a fake context that resolves resume() on a
+    // microtask, and a real one that may take a frame, from either letting a
+    // stale wall-clock timer fire first.
+    this.rearmVoiceTeardowns();
+    this.markActivity();
+  }
+
+  /**
+   * Re-derive every pending teardown delay from the audio clock.
+   *
+   * While the context is suspended, currentTime freezes and the wall-clock
+   * teardown timers keep counting, so on resume they are due immediately and
+   * a note in the middle of a 2 s release is torn down mid-ramp. Called on
+   * every resume — this engine's idle wake AND init()'s existing resume path,
+   * which covers a browser-initiated backgrounded-tab suspend.
+   */
+  private rearmVoiceTeardowns(): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    for (const voices of this.sourceVoices.values()) {
+      for (const voice of voices) {
+        if (voice.teardownTimer === undefined || voice.teardownAt === undefined) continue;
+        clearTimeout(voice.teardownTimer);
+        voice.teardownTimer = setTimeout(
+          () => this.finishVoiceTeardown(voice),
+          Math.max(0, voice.teardownAt - now) * 1000,
+        );
+      }
+    }
+  }
+
+  /** The body the teardown timer runs — shared by releaseVoice and the re-arm. */
+  private finishVoiceTeardown(voice: SynthVoice): void {
+    const voiceKey = `${voice.source}:${voice.noteName}`;
+    // Only delete the map entry if this voice is still the current one — a
+    // same-note retrigger overwrites the entry before this timeout fires. The
+    // voice's own nodes are always torn down regardless.
+    if (this.activeVoices.get(voiceKey) === voice) {
+      this.activeVoices.delete(voiceKey);
+    }
+    this.sourceVoices.get(voice.source)?.delete(voice);
+    this.teardownVoiceNodes(voice);
   }
 
   // The shared clock keeps its grid position across stop/start and
@@ -327,14 +500,19 @@ class AudioEngine {
   private setupMasterChain(): void {
     if (!this.ctx) return;
 
-    // The master chain is (re)built on every AudioContext (re)creation; any
-    // per-source buses from the previous context are wired into dead nodes, so
-    // drop them — they are lazily recreated against the new context on demand.
+    // NOTE: this cleanup is currently UNREACHABLE, and that is a deliberate
+    // keep, not an oversight. init() only calls setupMasterChain inside
+    // `if (!this.ctx)` and nothing anywhere calls ctx.close(), so the context
+    // is created exactly once per page load and this method runs exactly once
+    // — these three clears have never executed in production.
+    //
+    // They stay because they are the correct behaviour the day the context IS
+    // recreated: per-source buses from a dead context are wired into dead
+    // nodes, and an AudioBuffer belongs to the context that created it, so
+    // impulses built against the old one must not survive into the new graph.
+    // Do NOT write new code that relies on these running.
     this.sourceBuses.clear();
     this.sourceAnalysers.clear();
-
-    // An AudioBuffer belongs to the context that created it, so impulses built
-    // against the previous context must not survive into the new graph.
     this.impulseCache.clear();
     this.reverbDecay = 2.0;
 
@@ -496,8 +674,8 @@ class AudioEngine {
   /**
    * The knob's own resolution (EffectsRackView's Decay step is 0.1).
    *
-   * Only caller is updateEffects, which already ran `fx` through
-   * clampEffects — so `decay` here is always finite and within
+   * Only caller is setReverbDecay, which already ran `decay` through
+   * clampEffectValue — so it is always finite and within
    * EFFECT_LIMITS.reverbDecay. Re-clamping here would be a second source of
    * truth for the same bound; this only quantises.
    */
@@ -505,11 +683,11 @@ class AudioEngine {
     return Math.round(decay * 10) / 10;
   }
 
-  /** Cached impulse for a quantised decay, built on first use. */
   /**
-   * Cached impulse for a quantised decay, built on first use. Bounded to
-   * IMPULSE_CACHE_MAX entries with LRU eviction — see the field comment on
-   * `impulseCache` for why an unbounded cache is not acceptable here.
+   * Cached impulse for a quantised decay, built on first use. Bounded by a
+   * total-sample budget with LRU eviction — see `audio/impulseBudget.ts` for
+   * the policy and the field comment on `impulseCache` for why bytes, not
+   * entries, is the right unit here.
    */
   private getImpulseResponse(quantisedDecay: number): AudioBuffer {
     const cached = this.impulseCache.get(quantisedDecay);
@@ -518,15 +696,17 @@ class AudioEngine {
       // which this cache uses as its LRU recency order.
       this.impulseCache.delete(quantisedDecay);
       this.impulseCache.set(quantisedDecay, cached);
-      return cached;
+      return cached.buffer;
     }
-    const built = this.buildImpulseResponse(quantisedDecay, AudioEngine.REVERB_CURVE);
-    this.impulseCache.set(quantisedDecay, built);
-    if (this.impulseCache.size > AudioEngine.IMPULSE_CACHE_MAX) {
-      const oldestKey = this.impulseCache.keys().next().value;
-      if (oldestKey !== undefined) this.impulseCache.delete(oldestKey);
+    const buffer = this.buildImpulseResponse(quantisedDecay, AudioEngine.REVERB_CURVE);
+    const samples = impulseSampleCount(this.ctx?.sampleRate ?? 44100, quantisedDecay);
+    this.impulseCache.set(quantisedDecay, { buffer, samples });
+
+    const entries = Array.from(this.impulseCache, ([key, value]) => ({ key, samples: value.samples }));
+    for (const key of keysToEvict(entries, this.impulseCacheSampleBudget)) {
+      this.impulseCache.delete(key);
     }
-    return built;
+    return buffer;
   }
 
   private createClickBuffers(): void {
@@ -572,31 +752,58 @@ class AudioEngine {
     };
   }
 
-  // Synthesizer Note On
+  // Bass is monophonic like a real bass: kill any other sounding bass voice
+  // BEFORE creating the new one.
+  //
+  // Iterates sourceVoices.get('bass') — the set that already holds exactly
+  // the bass voices — rather than snapshotting the WHOLE activeVoices map on
+  // every bass note-on and filtering it down by key prefix. During an arp
+  // that map holds every chord, lead and preview voice too.
+  //
+  // The identity guard restores the old semantics exactly: activeVoices kept
+  // only the LATEST voice per key, so a superseded same-note voice was never
+  // visited. sourceVoices keeps every live-or-releasing voice, so without
+  // this check a superseded voice would send a second, duplicate note-off
+  // for the same note name — which triggerSynthNoteOff resolves against the
+  // CURRENT voice, releasing it twice.
+  //
+  // The set is snapshotted with Array.from for the same reason the map used
+  // to be: triggerSynthNoteOff reaches releaseVoice, and a future change
+  // there that deletes from sourceVoices synchronously must not invalidate
+  // this iteration. The copy is now over ~1-2 bass voices, not ~50.
+  //
+  // Pass `time` so a live previous voice's release ramp starts exactly when
+  // the new note starts (not immediately); the release timeout already
+  // accounts for the future `time` in its delay math.
+  private killPreviousBassVoice(time?: number): void {
+    if (!this.ctx) return;
+    const killAt = time ?? this.ctx.currentTime;
+    const bassVoices = this.sourceVoices.get('bass');
+    if (!bassVoices) return;
+    for (const tracked of Array.from(bassVoices)) {
+      if (this.activeVoices.get(`bass:${tracked.noteName}`) !== tracked) continue;
+      // A voice whose release has already STARTED is on its way out;
+      // killing it again only resets its teardown timer and re-runs the
+      // ramps. A release still ahead on the clock is a different case and
+      // must be cut short here, or a long scheduled note would ring
+      // through the new one and break monophony.
+      if (tracked.releaseScheduledAt !== undefined && tracked.releaseScheduledAt <= killAt) continue;
+      this.triggerSynthNoteOff(tracked.noteName, 0.05, time, 'bass', true);
+    }
+  }
+
   triggerSynthNoteOn(noteName: string, params: SynthParams, velocity = DEFAULT_VELOCITY, time?: number, source = 'synth', scaleFactor = 1): void {
     if (!this.ctx || !this.dryGain) return;
+    // wakeIfIdle() re-arms the idle countdown itself on every reachable path
+    // (see its body) — a second explicit markActivity() call here was a
+    // redundant clearTimeout+setTimeout pair on every single note-on. Every
+    // caller reaches this choke point, including MIDI input, which triggers
+    // notes directly with no init()/gesture path of its own.
+    this.wakeIfIdle();
     const freq = noteFrequency(noteName, params.octave);
     const now = time ?? this.ctx.currentTime;
 
-    // Bass is monophonic like a real bass: kill any other sounding bass voice
-    // BEFORE creating the new one. Keys are snapshotted because
-    // triggerSynthNoteOff deletes map entries while we iterate.
-    // Pass `time` so a live previous voice's release ramp starts exactly when the
-    // new note starts (not immediately); the release timeout already accounts for
-    // the future `time` in its delay math.
-    if (source === 'bass') {
-      const killAt = time ?? this.ctx.currentTime;
-      for (const [key, tracked] of Array.from(this.activeVoices.entries())) {
-        if (!key.startsWith('bass:')) continue;
-        // A voice whose release has already STARTED is on its way out; killing
-        // it again only resets its teardown timer and re-runs the ramps. A
-        // release still ahead on the clock is a different case and must be cut
-        // short here, or a long scheduled note would ring through the new one
-        // and break monophony.
-        if (tracked.releaseScheduledAt !== undefined && tracked.releaseScheduledAt <= killAt) continue;
-        this.triggerSynthNoteOff(key.slice(5), 0.05, time, 'bass', true);
-      }
-    }
+    if (source === 'bass') this.killPreviousBassVoice(time);
 
     // Stop an existing live voice of the same note. Skipped when the existing
     // voice already has its release planned (pre-scheduled pattern hits or the
@@ -720,6 +927,55 @@ class AudioEngine {
       this.sourceVoices.set(source, voicesOfSource);
     }
     voicesOfSource.add(voice);
+
+    // Backstop: force this voice through the normal release path after
+    // maxVoiceLifetimeMs of wall-clock time if nothing ever releases it. The
+    // two `this.activeVoices.get(...) !== voice` / releaseScheduledAt checks
+    // make this a no-op on every voice that was released normally — see
+    // teardownVoiceNodes, which clears this timer on every real teardown path.
+    const voiceKey = `${source}:${noteName}`;
+    voice.lifetimeGuardTimer = setTimeout(() => {
+      if (this.activeVoices.get(voiceKey) !== voice) return;
+      if (voice.releaseScheduledAt !== undefined) return;
+      if (!this.ctx) return;
+      const releasedAt = this.ctx.currentTime;
+      // Same requirement as stealOldestVoice below: releaseVoice() does not
+      // set releaseScheduledAt itself, and this voice is still in
+      // sourceVoices. Leaving it undefined would keep it reshapeable through
+      // its 0.05 s release tail, so a knob move or new note-on landing in
+      // that window re-targets it toward sustain right as teardown stops the
+      // oscillator — an audible click on a voice that is meant to be dying.
+      voice.releaseScheduledAt = releasedAt;
+      voice.releaseTime = 0.05;
+      this.releaseVoice(voice, 0.05, releasedAt);
+    }, this.maxVoiceLifetimeMs);
+
+    if (voicesOfSource.size > this.maxVoicesPerSource) {
+      this.stealOldestVoice(voicesOfSource, voice, now);
+    }
+  }
+
+  // Steals the oldest already-started, not-yet-releasing voice of a source
+  // once its count exceeds maxVoicesPerSource. `startTime > now` is excluded
+  // — stealing a voice scheduled ahead would cancel a planned envelope, the
+  // same hazard releaseVoice's own comments describe for reshapeableVoices.
+  private stealOldestVoice(voicesOfSource: Set<SynthVoice>, incoming: SynthVoice, now: number): void {
+    let oldest: SynthVoice | undefined;
+    for (const tracked of voicesOfSource) {
+      if (tracked === incoming) continue;
+      if (tracked.startTime > now) continue;
+      if (tracked.releaseScheduledAt !== undefined) continue;
+      if (!oldest || tracked.startTime < oldest.startTime) oldest = tracked;
+    }
+    if (!oldest) return;
+    // releaseVoice() does not set releaseScheduledAt on its own — only
+    // triggerSynthNoteOff and the hard-silence paths do. Set it here, or the
+    // `releaseScheduledAt !== undefined` guard above never excludes the voice
+    // this loop just stole, and the same voice gets re-stolen on every
+    // note-on over the cap while newer voices run unbounded.
+    oldest.releaseScheduledAt = now;
+    oldest.releaseTime = 0.02;
+    this.releaseVoice(oldest, 0.02, now);
   }
 
   // Synthesizer Note Off
@@ -748,6 +1004,7 @@ class AudioEngine {
   // Each node is wrapped in its own try/catch so one already-stopped node
   // can't prevent the rest of the voice from being torn down.
   private teardownVoiceNodes(voice: SynthVoice, when?: number): void {
+    if (voice.lifetimeGuardTimer !== undefined) clearTimeout(voice.lifetimeGuardTimer);
     if (voice.lfoTeardownTimer !== undefined) clearTimeout(voice.lfoTeardownTimer);
     voice.oscs.forEach((osc) => {
       try {
@@ -799,7 +1056,6 @@ class AudioEngine {
     // teardown timer — these values are pure arithmetic and cannot throw,
     // so the `finally` block can always use them to schedule teardown.
     const filterRelease = Math.max(0.01, voice.filterRelease);
-    const voiceKey = `${voice.source}:${voice.noteName}`;
     const teardownDelayMs =
       (Math.max(releaseTime, filterRelease) + Math.max(0, now - this.ctx.currentTime) + 0.1) * 1000;
 
@@ -848,17 +1104,13 @@ class AudioEngine {
       // `sourceVoices` forever and the same-note dedup at the top of
       // `triggerSynthNoteOn` would refuse to release it again).
       voice.ampReleaseAt = now;
+      // Recorded on the AUDIO clock as well as armed on the wall clock:
+      // rearmVoiceTeardowns() re-derives the delay from this after any resume,
+      // because currentTime freezes while the context is suspended and the
+      // wall-clock timer does not.
+      voice.teardownAt = now + Math.max(releaseTime, filterRelease) + 0.1;
       if (voice.teardownTimer !== undefined) clearTimeout(voice.teardownTimer);
-      voice.teardownTimer = setTimeout(() => {
-        // Only delete the map entry if this voice is still the current one —
-        // a same-note retrigger overwrites the entry before this timeout
-        // fires. The voice's own nodes are always torn down regardless.
-        if (this.activeVoices.get(voiceKey) === voice) {
-          this.activeVoices.delete(voiceKey);
-        }
-        this.sourceVoices.get(voice.source)?.delete(voice);
-        this.teardownVoiceNodes(voice);
-      }, teardownDelayMs);
+      voice.teardownTimer = setTimeout(() => this.finishVoiceTeardown(voice), teardownDelayMs);
     }
   }
 
@@ -1039,31 +1291,59 @@ class AudioEngine {
   }
 
   /**
+   * Reused output buffer for reshapeableVoices. Instance-scoped so the
+   * fake-context engines the test harness builds never share one, and
+   * cleared-and-refilled per call rather than reallocated: this runs on
+   * every updateSynthParams and every equal-power rebalance, i.e. at
+   * knob-drag and note-on rate. Bounded by concurrent voice count, which the
+   * voice-lifetime guard and stealOldestVoice already cap, so it never grows
+   * past a small, stable size.
+   */
+  private readonly reshapeScratch: SynthVoice[] = [];
+
+  /**
    * Every tracked voice of `source` (or all sources) that can be re-shaped
    * right now: it has started, and it is not already fading.
    *
    * Iterates sourceVoices, not activeVoices: activeVoices only keeps the
    * LATEST voice per note, so a still-sounding voice that a same-note retrigger
    * evicted would be skipped and left at the old level.
+   *
+   * Returns the shared scratch buffer, not a fresh array. Both call sites
+   * consume it in one synchronous for...of and neither is re-entered from
+   * inside that loop, so reuse is safe as long as no caller retains the
+   * result past that loop — the readonly return type keeps it that way.
    */
-  private reshapeableVoices(source?: string): SynthVoice[] {
-    if (!this.ctx) return [];
+  private reshapeableVoices(source?: string): readonly SynthVoice[] {
+    const out = this.reshapeScratch;
+    out.length = 0;
+    if (!this.ctx) return out;
     const now = this.ctx.currentTime;
-    const sets = source
-      ? [this.sourceVoices.get(source) ?? new Set<SynthVoice>()]
-      : Array.from(this.sourceVoices.values());
-    const out: SynthVoice[] = [];
-    for (const set of sets) {
-      for (const voice of set) {
-        // Voices scheduled ahead keep the envelopes they were planned with;
-        // re-targeting them cancels their scheduled ramps, release included.
-        if (voice.startTime > now) continue;
-        // A voice already in its release tail keeps the ramp it was given.
-        if (voice.releaseScheduledAt !== undefined && voice.releaseScheduledAt <= now) continue;
-        out.push(voice);
+    if (source !== undefined) {
+      this.collectReshapeable(this.sourceVoices.get(source), now, out);
+    } else {
+      for (const set of this.sourceVoices.values()) {
+        this.collectReshapeable(set, now, out);
       }
     }
     return out;
+  }
+
+  /** Appends one source set's reshapeable voices to `out`. */
+  private collectReshapeable(
+    set: Set<SynthVoice> | undefined,
+    now: number,
+    out: SynthVoice[],
+  ): void {
+    if (!set) return;
+    for (const voice of set) {
+      // Voices scheduled ahead keep the envelopes they were planned with;
+      // re-targeting them cancels their scheduled ramps, release included.
+      if (voice.startTime > now) continue;
+      // A voice already in its release tail keeps the ramp it was given.
+      if (voice.releaseScheduledAt !== undefined && voice.releaseScheduledAt <= now) continue;
+      out.push(voice);
+    }
   }
 
   // Points a voice's (already-created) LFO gain at the given target and
@@ -1344,6 +1624,9 @@ class AudioEngine {
   // Drum Synthesizer Trigger
   triggerDrum(type: string, velocity = DEFAULT_VELOCITY, time?: number): void {
     if (!this.ctx || !this.dryGain || !this.drumBusFilter) return;
+    // wakeIfIdle() marks activity for us on every reachable path — see the
+    // comment in triggerSynthNoteOn.
+    this.wakeIfIdle();
     const now = time ?? this.ctx.currentTime;
     const v = clampVelocity(velocity);
     const k = this.drumKit;
@@ -1497,12 +1780,43 @@ class AudioEngine {
     return noise;
   }
 
-  updateEffects(raw: MasterEffects): void {
+  /**
+   * Structural half of the reverb control, split out of updateEffects so the
+   * store bridge can commit it on gesture end.
+   *
+   * Assigning ConvolverNode.buffer is not a pointer swap: Blink rebuilds the
+   * partitioned-FFT reverb and takes the graph lock, and a miss in
+   * impulseCache additionally builds sampleRate * decay * 2 channels of
+   * Float32Array on the main thread. quantiseDecay's 0.1 s step equals the
+   * Decay knob's own step, so an unthrottled drag missed the cache on every
+   * pointer frame — see engineSync's REVERB_DECAY_COMMIT_MS.
+   *
+   * The audible WET amount (reverbGain) is unaffected and stays continuous.
+   */
+  setReverbDecay(decay: number): void {
+    if (!this.ctx || !this.reverbNode) return;
+    // Clamped here, not by the caller: updateEffects used to clamp the whole
+    // effects object before this ran, and a persisted or imported project is
+    // untrusted input (a non-finite decay becomes a NaN buffer length).
+    const nextDecay = this.quantiseDecay(clampEffectValue('reverbDecay', decay));
+    if (nextDecay === this.reverbDecay) return;
+    this.reverbNode.buffer = this.getImpulseResponse(nextDecay);
+    this.reverbDecay = nextDecay;
+  }
+
+  // `reverbDecay` is intentionally absent: it is the structural half of the
+  // reverb control, owned by setReverbDecay above, and this narrower type
+  // makes a caller that still has it (persisted state, a store slice) unable
+  // to silently drop it here instead of routing it to its real setter.
+  updateEffects(raw: Omit<MasterEffects, 'reverbDecay'>): void {
     if (!this.ctx) return;
     // Clamp before anything touches an AudioParam. A persisted or imported
     // project is untrusted input: delayFeedback >= 1 is a runaway loop and a
     // non-finite value writes NaN into the graph, which silences it permanently.
-    const fx = clampEffects(raw);
+    // reverbDecay is filled in from the engine's own tracked value only to
+    // satisfy clampEffects' MasterEffects parameter — the clamped result is
+    // never read back out of `fx` below.
+    const fx = clampEffects({ ...raw, reverbDecay: this.reverbDecay });
     const reverbWet = fx.reverbBypass ? 0 : fx.reverbWet;
     const delayWet = fx.delayBypass ? 0 : fx.delayWet;
     const delayFeedback = fx.delayBypass ? 0 : fx.delayFeedback;
@@ -1511,11 +1825,6 @@ class AudioEngine {
     const eqMid = fx.eqBypass ? 0 : fx.eqMid;
     const eqHigh = fx.eqBypass ? 0 : fx.eqHigh;
 
-    const nextDecay = this.quantiseDecay(fx.reverbDecay);
-    if (this.reverbNode && nextDecay !== this.reverbDecay) {
-      this.reverbNode.buffer = this.getImpulseResponse(nextDecay);
-      this.reverbDecay = nextDecay;
-    }
     if (this.compressor) {
       this.compressor.threshold.setTargetAtTime(fx.compressorThreshold, this.ctx.currentTime, 0.05);
     }

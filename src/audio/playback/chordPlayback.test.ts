@@ -570,3 +570,35 @@ describe('buildChordEvents', () => {
     expect(events[0].hold).toBeCloseTo(2 * 0.125 * 2, 6);
   });
 });
+
+describe('eventsForStep output is unchanged by the single-pass rewrite', () => {
+  const events: BarInvariantEvent[] = [
+    { step: 0, noteName: 'C4', velocity: 0.8, timeOffset: 0, hold: 0.5 },
+    { step: 0, noteName: 'E4', velocity: 0.7, timeOffset: 0.01, hold: 0.5 },
+    { step: 4, noteName: 'G4', velocity: 0.6, timeOffset: 0, hold: 0.25 },
+    { step: 4, noteName: 'B3', velocity: 0.5, timeOffset: 0, hold: 0.25, lastBarOnly: true },
+    { step: 15, noteName: 'D4', velocity: 0.4, timeOffset: 0, hold: 0.1, lastBarOnly: true },
+  ];
+
+  // The old .filter().map(), kept verbatim as the oracle.
+  const reference = (stepInBar: number, isLastBar: boolean) =>
+    events
+      .filter((ev) => ev.step === stepInBar && (isLastBar || !ev.lastBarOnly))
+      .map(({ noteName, velocity, timeOffset, hold }) => ({ noteName, velocity, timeOffset, hold }));
+
+  test('matches the reference across every step and both bar positions', () => {
+    for (let step = 0; step < 16; step++) {
+      for (const isLastBar of [false, true]) {
+        expect(eventsForStep(events, step, isLastBar)).toEqual(reference(step, isLastBar));
+      }
+    }
+  });
+
+  test('returns a fresh array of fresh objects with exactly the four StepEvent keys', () => {
+    const a = eventsForStep(events, 0, true);
+    expect(a).not.toBe(eventsForStep(events, 0, true));
+    expect(a[0]).not.toBe(events[0]);
+    expect(Object.keys(a[0]).sort()).toEqual(['hold', 'noteName', 'timeOffset', 'velocity']);
+    expect(eventsForStep([], 0, true)).toEqual([]);
+  });
+});

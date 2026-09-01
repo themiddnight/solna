@@ -33,6 +33,31 @@ describe('ChordView progression drawer button', () => {
   });
 });
 
+function djb2(s: string): number {
+  let hash = 5381;
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash * 33) ^ s.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+describe('ChordView renders byte-identically with a memoized chordIds array', () => {
+  test('two renders of the same store snapshot produce identical markup', () => {
+    // A cross-run hardcoded length/hash is not reliable in this suite: dnd-kit
+    // assigns each `DndContext`/`SortableContext` mount an auto-incrementing
+    // `aria-describedby="DndDescribedBy-N"` id, so the id itself always
+    // differs between any two renders regardless of store state — normalize
+    // it out, then two renders back-to-back must still match byte-for-byte,
+    // proving the memoized chordIds array introduced no rendering
+    // non-determinism.
+    const normalize = (html: string) => html.replace(/DndDescribedBy-\d+/g, 'DndDescribedBy-N');
+    const first = normalize(renderToString(<ChordView />));
+    const second = normalize(renderToString(<ChordView />));
+    expect(second).toBe(first);
+    expect(djb2(second)).toBe(djb2(first));
+  });
+});
+
 describe('ChordView theming', () => {
   const html = renderToString(<ChordView />);
 
@@ -230,7 +255,7 @@ describe('shouldClearReharmonizeIndicator', () => {
   });
 });
 
-import { nextBassStepChoice, bassStepLabel } from './ChordView';
+import { nextBassStepChoice, bassStepLabel } from './chord/bassStepChoice';
 import type { BassStepChoice } from '../../audio/bassPatterns';
 
 describe('ChordView custom step grid helpers', () => {

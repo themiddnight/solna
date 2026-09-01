@@ -241,7 +241,7 @@ export interface InstantVibe {
   /**
    * The time signature this vibe is written in. Applying the vibe sets the
    * transport meter to it, so the vibe always resolves patterns of the right
-   * meter. All six current vibes are 4/4; authoring non-4/4 vibes is Stage 2.
+   * meter. All six current vibes are 4/4; non-4/4 vibes are not yet supported.
    */
   meter: MeterId;
   scaleRoot: string;

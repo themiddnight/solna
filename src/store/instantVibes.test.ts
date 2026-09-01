@@ -438,7 +438,7 @@ describe('vibe meters', () => {
   test('setMeter runs before applyDrumPattern — the order the drum grid depends on', () => {
     // Order-pin via a call recorder (same technique as `focusSynthTarget` in
     // synthControl.test.ts), rather than relying on drum-cell data to expose
-    // a reorder: applyDrumPattern (Task 9) reads the ACTIVE meter to decide
+    // a reorder: applyDrumPattern reads the ACTIVE meter to decide
     // how to window the incoming rows, so if setMeter ran after it, the grid
     // would be adapted against the OUTGOING vibe's bar length. This directly
     // observes which of the two ran first, independent of any one vibe's

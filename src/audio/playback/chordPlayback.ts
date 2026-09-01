@@ -4,7 +4,7 @@ import {
   equalPowerVelocityScale,
 } from "../rhythmPatterns";
 import { buildArpSequence } from "../arpeggiator";
-import { computeArpTriggers } from "../arpSchedule";
+import { arpFiresOnStep, computeArpTriggers } from "../arpSchedule";
 import { arpStepFor } from "../../utils/meter";
 import {
   deriveChordNotes,
@@ -74,14 +74,20 @@ export function eventsForStep(
   stepInBar: number,
   isLastBar: boolean,
 ): StepEvent[] {
-  return events
-    .filter((ev) => ev.step === stepInBar && (isLastBar || !ev.lastBarOnly))
-    .map(({ noteName, velocity, timeOffset, hold }) => ({
-      noteName,
-      velocity,
-      timeOffset,
-      hold,
-    }));
+  // A single pass avoids the intermediate array .filter().map() would
+  // allocate; this runs twice per 16th step (chord + bass) for the session.
+  const out: StepEvent[] = [];
+  for (const ev of events) {
+    if (ev.step !== stepInBar) continue;
+    if (!isLastBar && ev.lastBarOnly) continue;
+    out.push({
+      noteName: ev.noteName,
+      velocity: ev.velocity,
+      timeOffset: ev.timeOffset,
+      hold: ev.hold,
+    });
+  }
+  return out;
 }
 
 /**
@@ -179,6 +185,9 @@ export function arpEventsForStep(
   holdScale: number,
   stepsPerBar: number = STEPS_PER_BAR,
 ): StepEvent[] {
+  const arpStep = arpStepFor(step, stepsPerBar);
+  if (!arpFiresOnStep(arpStep, params.arpRate)) return [];
+
   const sequence = buildArpSequence(
     notes,
     params.arpMode,
@@ -186,7 +195,7 @@ export function arpEventsForStep(
   );
   if (sequence.length === 0) return [];
 
-  return computeArpTriggers(arpStepFor(step, stepsPerBar), sequence.length, params.arpRate, stepDur).map(
+  return computeArpTriggers(arpStep, sequence.length, params.arpRate, stepDur).map(
     (t) => ({
       noteName: sequence[t.noteIndex],
       velocity: ARP_VELOCITY,

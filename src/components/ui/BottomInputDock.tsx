@@ -33,10 +33,12 @@ function useLiveStore<T>(
  *  keyboard and the drum pads in one panel. QWERTY input is owned by
  *  useInputDeck (mounted in App) and is NEVER gated by this dock's open state
  *  or mode toggle. */
-export const BottomInputDock: React.FC<{
+interface BottomInputDockProps {
   keyboardProps: InputDeckKeyboardProps;
   drumProps: InputDeckDrumProps;
-}> = ({ keyboardProps, drumProps }) => {
+}
+
+export const BottomInputDock: React.FC<BottomInputDockProps> = React.memo(({ keyboardProps, drumProps }: BottomInputDockProps) => {
   const isOpen = useLiveStore((s) => s.isInputPanelOpen);
   const setIsOpen = useLiveStore((s) => s.setIsInputPanelOpen);
   const mode = useLiveStore((s) => s.inputPanelMode);
@@ -217,4 +219,4 @@ export const BottomInputDock: React.FC<{
       </div>
     </div>
   );
-};
+});

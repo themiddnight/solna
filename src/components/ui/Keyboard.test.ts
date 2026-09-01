@@ -1,9 +1,15 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import React from 'react';
+import { renderToString } from 'react-dom/server';
 import {
   clampKeyboardOctave,
   getScaleLockedKeyboardNotes,
   getScaleLockedKeyboardNotesFlat,
   getChordKeyboardRows,
+  getChromaticKeyboardNotes,
+  ChromaticKeyboard,
   MELODY_KEYS,
   HOME_ROW_KEYS,
   TOP_ROW_KEYS,
@@ -251,5 +257,73 @@ describe('getChordKeyboardRows', () => {
       ...HOME_ROW_KEYS.slice(7, 11),
       ...TOP_ROW_KEYS.slice(7, 12),
     ]);
+  });
+});
+
+// renderToString cannot see this: React event handlers never serialize to
+// HTML, so a markup snapshot passes whether or not onTouchCancel is bound.
+// Assert on the source directly instead — precise enough to fail if the
+// handler is missing, wraps a different callback, or isn't wired to every
+// touch-bound render site.
+describe('touch handlers release notes on touchcancel, not only touchend', () => {
+  const source = readFileSync(
+    join(process.cwd(), 'src/components/ui/Keyboard.tsx'),
+    'utf8',
+  );
+
+  test('KeyCap binds onTouchCancel to the same onRelease used by onTouchEnd', () => {
+    expect(source).toMatch(
+      /onTouchEnd=\{\(e\) => \{\s*e\.preventDefault\(\);\s*onRelease\(\);\s*\}\}\s*onTouchCancel=\{onRelease\}/,
+    );
+  });
+
+  test('ChromaticKeyboard binds onTouchCancel to onNoteOff on both the black-key and white-key blocks', () => {
+    const matches = source.match(
+      /onTouchEnd=\{\(e\) => \{\s*e\.preventDefault\(\);\s*onNoteOff\(k\.note\);\s*\}\}\s*onTouchCancel=\{\(\) => onNoteOff\(k\.note\)\}/g,
+    );
+    expect(matches?.length).toBe(2);
+  });
+
+  // The two tests above only pin the three sites known at write time — each
+  // matches an onTouchEnd/onTouchCancel *pair*, so a future touch-bound
+  // element added with onTouchEnd and no onTouchCancel contributes to
+  // neither count and slips through undetected. This asserts the aggregate
+  // instead: every onTouchEnd in the file has a corresponding onTouchCancel
+  // somewhere in it, regardless of adjacency, closing that gap.
+  test('every onTouchEnd binding in the file has a matching onTouchCancel binding', () => {
+    const touchEndCount = source.match(/onTouchEnd=/g)?.length;
+    const touchCancelCount = source.match(/onTouchCancel=/g)?.length;
+    expect(touchCancelCount).toBe(touchEndCount);
+  });
+});
+
+describe('getChromaticKeyboardNotes', () => {
+  test('is deterministic for a given octaveOffset', () => {
+    expect(getChromaticKeyboardNotes(1)).toEqual(getChromaticKeyboardNotes(1));
+  });
+
+  test('shifts every note name by the given octave offset', () => {
+    const base = getChromaticKeyboardNotes(0);
+    const shifted = getChromaticKeyboardNotes(2);
+    expect(shifted.map((k) => k.note)).toEqual(
+      base.map((k) => {
+        const match = k.note.match(/^([A-G][#b]?)(-?\d+)/)!;
+        return `${match[1]}${parseInt(match[2], 10) + 2}`;
+      }),
+    );
+  });
+});
+
+describe('ChromaticKeyboard renders byte-identically once getChromaticKeyboardNotes is memoized', () => {
+  test('default octave, no active notes', () => {
+    const html = renderToString(
+      React.createElement(ChromaticKeyboard, {
+        octaveOffset: 0,
+        activeNotes: new Set<string>(),
+        onNoteOn: () => {},
+        onNoteOff: () => {},
+      }),
+    );
+    expect(html.length).toBe(7062);
   });
 });

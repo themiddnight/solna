@@ -5,8 +5,8 @@ import { generateBlockChordNotes, ROOTS, rootSemitone, SCALES } from '../../util
 /**
  * The 22 original interval-form templates, copied verbatim. `interval` is
  * semitones from the key root. This fixture outlives the data it was copied
- * from: Task 7 deletes CHORD_PROGRESSION_TEMPLATES, and this stays as the only
- * remaining record of what each progression used to sound like.
+ * from: CHORD_PROGRESSION_TEMPLATES has since been deleted, and this stays
+ * as the only remaining record of what each progression used to sound like.
  *
  * `referenceScale` is the scale each progression's degrees are authored in —
  * the first scale in the preference order [Major, Natural Minor, Dorian,

@@ -1,48 +1,37 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Sparkles, Check, Dices } from 'lucide-react';
-import { INSTANT_VIBES, applyInstantVibeToStore } from '../store/instantVibes';
-import type { InstantVibe } from '../types';
+import { VIBE_CHIPS, type VibeChip } from '../store/vibeChips';
 import { useAppStore } from '../store/store';
-import {
-  createDraw,
-  formatVariationSummary,
-  resolveVibeVariation,
-  type RerollToast,
-} from '../store/vibeVariation';
-
-export function selectVibe(
-  vibe: InstantVibe,
-  deps: { onToast: (text: string) => void }
-): void {
-  applyInstantVibeToStore(vibe);
-  deps.onToast(`Loaded ${vibe.name} (${vibe.bpm} BPM · Key ${vibe.scaleRoot} ${vibe.scaleType})`);
-}
 
 /**
- * Rerolls the loaded vibe into a different piece of music in the same genre.
+ * The vibe table plus the two actions, loaded on demand.
  *
- * The ONLY place this feature calls Math.random: everything below
- * resolveVibeVariation takes the VibeDraw this creates, which is what makes the
- * draw policy testable by enumeration.
+ * instantVibes.ts resolves every vibe's chords, drum pattern and effect chain
+ * at module-evaluation time, so a static import here put ~45 KB of source
+ * (instantVibes + vibeVariation + vibeDrumPatterns + vibeEffectChains) into
+ * the eagerly-parsed main chunk for a bar that renders eight names and eight
+ * emoji. None of it is needed until a chip is clicked.
  *
- * Applies through the same applyInstantVibeToStore a chip click uses. That is
- * deliberate and load-bearing: the synchronous
- * audioEngine.stopSource('chord'|'bass', 0.02) cut, the selective restart and
- * the bar-grid rewind all live in there, and a second apply path would have to
- * keep them in sync. This function makes no engine call of its own.
+ * The promise is cached, so the module is fetched and evaluated at most once.
  */
-export function rerollVibe(
-  vibe: InstantVibe,
-  deps: { onToast: (toast: RerollToast) => void }
-): void {
-  const { scaleRoot, chordRhythmId, bassPatternId } = useAppStore.getState();
-  const result = resolveVibeVariation(
-    vibe,
-    { scaleRoot, chordRhythmId, bassPatternId },
-    createDraw(Math.random),
-  );
-  applyInstantVibeToStore(result.vibe);
-  deps.onToast(formatVariationSummary(result.summary));
+let vibeActionsPromise: Promise<{
+  INSTANT_VIBES: import('../types').InstantVibe[];
+  selectVibe: typeof import('./vibeActions').selectVibe;
+  rerollVibe: typeof import('./vibeActions').rerollVibe;
+}> | null = null;
+
+export function loadVibeActions() {
+  if (!vibeActionsPromise) {
+    vibeActionsPromise = Promise.all([
+      import('./vibeActions'),
+      import('../store/instantVibes'),
+    ]).then(([actions, table]) => ({
+      INSTANT_VIBES: table.INSTANT_VIBES,
+      selectVibe: actions.selectVibe,
+      rerollVibe: actions.rerollVibe,
+    }));
+  }
+  return vibeActionsPromise;
 }
 
 /** Cancels whatever this ref has pending, then schedules `fn` to replace it. */
@@ -85,13 +74,36 @@ export const InstantVibesBar: React.FC = React.memo(() => {
   const scheduleToastClear = (ms: number) =>
     scheduleTimeout(toastTimerRef, () => setToast(null), ms);
 
-  const handleSelectVibe = (vibe: InstantVibe) => {
+  // Prefetch so the click is never the first time this module is fetched.
+  // Idle time after mount covers the common case; hover/focus covers a user
+  // who clicks within the first idle-callback window.
+  const prefetch = useCallback(() => { void loadVibeActions(); }, []);
+
+  useEffect(() => {
+    const idle = (window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+    }).requestIdleCallback;
+    if (idle) {
+      idle(() => { void loadVibeActions(); }, { timeout: 2000 });
+      return;
+    }
+    const timer = setTimeout(() => { void loadVibeActions(); }, 1200);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleSelectVibe = async (chip: VibeChip) => {
+    const { INSTANT_VIBES, selectVibe } = await loadVibeActions();
+    const vibe = INSTANT_VIBES.find((v) => v.id === chip.id);
+    if (!vibe) return;
     selectVibe(vibe, { onToast: (text) => setToast({ kind: 'load', text }) });
     scheduleToastClear(3000);
   };
 
-  const handleReroll = (vibe: InstantVibe) => {
-    setRollingVibeId(vibe.id);
+  const handleReroll = async (chip: VibeChip) => {
+    const { INSTANT_VIBES, rerollVibe } = await loadVibeActions();
+    const vibe = INSTANT_VIBES.find((v) => v.id === chip.id);
+    if (!vibe) return;
+    setRollingVibeId(chip.id);
     try {
       rerollVibe(vibe, { onToast: (t) => setToast({ kind: 'reroll', ...t }) });
       // 400 ms of spin, then the icon settles; the toast holds longer because
@@ -117,17 +129,19 @@ export const InstantVibesBar: React.FC = React.memo(() => {
 
         {/* Horizontal Scrolling Vibe Buttons */}
         <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 px-1 no-scrollbar scroll-smooth flex-1 max-w-full">
-          {INSTANT_VIBES.map((vibe) => {
+          {VIBE_CHIPS.map((vibe) => {
             const isSelected = selectedVibeId === vibe.id;
 
             const chip = (
               <button
                 id={`btn-vibe-${vibe.id}`}
                 onClick={() => handleSelectVibe(vibe)}
+                onMouseEnter={prefetch}
+                onFocus={prefetch}
                 title={`${vibe.name} (${vibe.bpm} BPM · ${vibe.scaleRoot} ${vibe.scaleType})`}
                 className={`btn btn-xs group gap-1.5 font-semibold whitespace-nowrap shrink-0 normal-case ${
                   isSelected
-                    ? `${vibe.variation ? 'join-item ' : ''}btn-primary`
+                    ? `${vibe.hasVariation ? 'join-item ' : ''}btn-primary`
                     : 'btn-soft'
                 }`}
               >
@@ -142,7 +156,7 @@ export const InstantVibesBar: React.FC = React.memo(() => {
               </button>
             );
 
-            if (!isSelected || !vibe.variation) {
+            if (!isSelected || !vibe.hasVariation) {
               return <React.Fragment key={vibe.id}>{chip}</React.Fragment>;
             }
 

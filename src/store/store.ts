@@ -27,8 +27,10 @@ import {
   LEGACY_PERSIST_KEY,
 } from './migrate';
 import { loopStatePatch } from './loop';
+import { createLoopMirroringSet } from './loopSync';
 import type { BassStepChoice } from '../audio/bassPatterns';
 import { isMeterId } from '../utils/meter';
+import { createCoalescedStorage } from '../utils/coalescedStorage';
 import type { AppStore, PersistedState, Loop } from './types';
 
 export const PERSIST_KEY = 'musibox_project_state_v1';
@@ -95,6 +97,40 @@ function resolveStorage(): StateStorage | null {
       }
     },
   };
+}
+
+/**
+ * The persist storage. `resolveStorage()` may legitimately return null (no
+ * localStorage at all) and its setItem already swallows throws; the in-memory
+ * fallback keeps persist functional either way. The coalescer sits BELOW
+ * partialize and createJSONStorage, so it only ever sees an already-serialised
+ * string and cannot change WHAT is persisted — only how often it is written.
+ */
+const persistStorage = createCoalescedStorage(resolveStorage() ?? memoryStorage);
+
+/**
+ * Force every buffered persist write out to storage now. Called on pagehide and
+ * on the hidden transition so closing or backgrounding a tab can never lose
+ * state, and exported so tests can assert on storage right after a write.
+ */
+export function flushPersistedWrites(): void {
+  persistStorage.flush();
+}
+
+// `pagehide` (not `beforeunload`) is the event that actually fires on iOS
+// Safari and on bfcache navigations; `visibilitychange` covers a tab that is
+// backgrounded and then killed by the OS without ever firing pagehide.
+try {
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('pagehide', flushPersistedWrites);
+  }
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushPersistedWrites();
+    });
+  }
+} catch {
+  // ignore — a restricted embedding context may deny even addEventListener
 }
 
 // Captured during store creation so the persist onRehydrateStorage callback
@@ -177,7 +213,7 @@ function sanitizeSynthParams(value: unknown): SynthParams {
 // persisted delayFeedback of 1.2 through to a runaway feedback loop. The
 // ternary can hand back the SHARED INITIAL_EFFECTS constant — clone before
 // writing so the module constant is never mutated. Fields removed from
-// MasterEffects (Task 4) must not resurrect from old persisted payloads.
+// MasterEffects must not resurrect from old persisted payloads.
 function sanitizeEffectsValue(effects: unknown): unknown {
   let result =
     typeof effects === 'object' && effects !== null && !Array.isArray(effects)
@@ -374,24 +410,29 @@ export const useAppStore = create<AppStore>()(
   persist(
     subscribeWithSelector((set, get, api) => {
       storeApi = api;
+      // Every slice writes through a `set` that carries the loops[] mirror in
+      // the SAME state update — see loopSync.ts. This replaced a second,
+      // independent setState that doubled persist writes and render waves on
+      // every per-loop edit.
+      const setWithLoopMirror = createLoopMirroringSet(set, get);
       return {
-        ...createTransportSlice(set, get),
-        ...createMusicContextSlice(set),
-        ...createSynthSlice(set),
-        ...createChordsSlice(set),
-        ...createBassSlice(set),
-        ...createLeadSlice(set),
-        ...createSequencerSlice(set),
-        ...createEffectsSlice(set),
-        ...createUiSlice(set),
-        ...createPresetsSlice(set),
-        ...createLoopSlice(set, get),
+        ...createTransportSlice(setWithLoopMirror, get),
+        ...createMusicContextSlice(setWithLoopMirror),
+        ...createSynthSlice(setWithLoopMirror),
+        ...createChordsSlice(setWithLoopMirror),
+        ...createBassSlice(setWithLoopMirror),
+        ...createLeadSlice(setWithLoopMirror),
+        ...createSequencerSlice(setWithLoopMirror),
+        ...createEffectsSlice(setWithLoopMirror),
+        ...createUiSlice(setWithLoopMirror),
+        ...createPresetsSlice(setWithLoopMirror),
+        ...createLoopSlice(setWithLoopMirror, get),
       };
     }),
     {
       name: PERSIST_KEY,
       version: 7,
-      storage: createJSONStorage<PersistedState>(() => resolveStorage() ?? memoryStorage),
+      storage: createJSONStorage<PersistedState>(() => persistStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
       // before the merge (merge only fills empty arrays, so it is safe).

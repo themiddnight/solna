@@ -14,7 +14,6 @@ import {
   Bookmark,
   Check,
   Volume2,
-  SlidersHorizontal,
 } from "lucide-react";
 import {
   DndContext,
@@ -49,17 +48,6 @@ import {
   stopBassPreviewSource,
   stopChordPreviewSource,
 } from "../../audio/playback/chordPlayback";
-import {
-  getAllSynthPresets,
-  findPresetByName,
-  getPresetsGroupedByCategory,
-} from "../../audio/synthPresets";
-import { RHYTHM_STYLE_GROUPS } from "../../audio/rhythmPatterns";
-import {
-  BASS_STYLE_GROUPS,
-  type BassStepChoice,
-} from "../../audio/bassPatterns";
-import { patternMeterTitle, patternOptionLabel } from "../meterSelect";
 import { getMeter } from "../../utils/meter";
 import {
   deriveChordNotes,
@@ -77,18 +65,15 @@ import { isProgressionAvailable } from "./chord/progressionAvailability";
 const ChordPresetLibrary = React.lazy(() =>
   import("./ChordPresetLibrary").then((m) => ({ default: m.ChordPresetLibrary })),
 );
-import { ChannelStrip } from "../ui/ChannelStrip";
-import { COUNT_BADGE, FIELD_LABEL, FIELD_SELECT, HEADER_BADGE, SECTION_HEADER } from '../ui/fieldClasses';
 import { PowerToggle } from "../ui/PowerToggle";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
-import { Slider } from "../ui/Slider";
 import { ViewHeader } from "../ui/ViewHeader";
-import { StepRow } from "../ui/StepRow";
-import { stepCells } from "../sequencerGrid";
+import { COUNT_BADGE, HEADER_BADGE } from '../ui/fieldClasses';
 import { SortableChordCard } from "./chord/SortableChordCard";
+import { AdjustSynthButton } from "./chord/AdjustSynthButton";
+import { ChordModulePanel } from "./chord/ChordModulePanel";
+import { BassModulePanel } from "./chord/BassModulePanel";
 import { beatsPerBarFor, resolveBeatCounter } from "../../utils/playhead";
-import { focusSynthTarget, SYNTH_TARGET_STYLES } from "../../utils/synthControl";
-import type { SynthControlTarget } from "../../utils/synthControl";
 
 import { CHORD_PROGRESSIONS } from "../../audio/data/chordProgressions";
 
@@ -120,55 +105,6 @@ export function shouldClearReharmonizeIndicator(
   return chordsReplaced && (from.root !== to.root || from.scaleType !== to.scaleType);
 }
 
-const BASS_STEP_CYCLE: BassStepChoice[] = ['rest', 'root', 'third', 'fifth', 'seventh', 'octave'];
-
-/**
- * The next bass grid value for a click. Exported so the pure-logic tests can
- * pin the full cycle without a DOM.
- */
-export function nextBassStepChoice(current: BassStepChoice): BassStepChoice {
-  const idx = BASS_STEP_CYCLE.indexOf(current);
-  return BASS_STEP_CYCLE[(idx + 1) % BASS_STEP_CYCLE.length];
-}
-
-/**
- * The short label shown on an active bass grid step. Exported for the same
- * reason as nextBassStepChoice.
- */
-export function bassStepLabel(choice: BassStepChoice): string {
-  switch (choice) {
-    case 'root': return 'R';
-    case 'third': return '3';
-    case 'fifth': return '5';
-    case 'seventh': return '7';
-    case 'octave': return '8';
-    case 'rest': return '';
-  }
-}
-
-function AdjustSynthButton({
-  target,
-  className = "",
-}: {
-  target: SynthControlTarget;
-  className?: string;
-}) {
-  const setControlTarget = useAppStore((s) => s.setControlTarget);
-  const setActiveTab = useAppStore((s) => s.setActiveTab);
-  const label = SYNTH_TARGET_STYLES[target].label;
-  return (
-    <button
-      type="button"
-      onClick={() => focusSynthTarget(target, { setControlTarget, setActiveTab })}
-      className={`btn btn-xs btn-ghost gap-1 ${className}`}
-      title={`Open the synth view with the ${label} target selected`}
-    >
-      <SlidersHorizontal className="w-3.5 h-3.5" />
-      <span>Adjust Synth</span>
-    </button>
-  );
-}
-
 /**
  * As one pure function so it is testable without a DOM (repo convention:
  * components export their testable helpers).
@@ -196,8 +132,8 @@ export function applyKeyScaleChange(
 }
 
 export const ChordView: React.FC = React.memo(() => {
-  // ChordView reads the store directly (Task 5): every value below replaces
-  // one of the ~34 props it used to receive from App.tsx.
+  // ChordView reads the store directly: every value below replaces one of
+  // the ~34 props it used to receive from App.tsx.
   const chords = useAppStore((s) => s.chords);
   const setChords = useAppStore((s) => s.setChords);
   const playheadBeat = useAppStore((s) => s.playheadBeat);
@@ -208,43 +144,26 @@ export const ChordView: React.FC = React.memo(() => {
   const scaleType = useAppStore((s) => s.scaleType);
   const synthParams = useAppStore((s) => s.synthParams);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
-  const setChordSynthParams = useAppStore((s) => s.setChordSynthParams);
-  const bassSynthParams = useAppStore((s) => s.bassSynthParams);
-  const setBassSynthParams = useAppStore((s) => s.setBassSynthParams);
   const rhythmId = useAppStore((s) => s.chordRhythmId);
-  const setChordRhythmId = useAppStore((s) => s.setChordRhythmId);
-  const chordFeel = useAppStore((s) => s.chordFeel);
-  const setChordFeel = useAppStore((s) => s.setChordFeel);
   const chordOctave = useAppStore((s) => s.chordOctave);
-  const setChordOctave = useAppStore((s) => s.setChordOctave);
   const bassPatternId = useAppStore((s) => s.bassPatternId);
-  const setBassPatternId = useAppStore((s) => s.setBassPatternId);
   const chordRhythmMode = useAppStore((s) => s.chordRhythmMode);
-  const setChordRhythmMode = useAppStore((s) => s.setChordRhythmMode);
   const customChordRhythm = useAppStore((s) => s.customChordRhythm);
-  const setCustomChordRhythm = useAppStore((s) => s.setCustomChordRhythm);
   const bassPatternMode = useAppStore((s) => s.bassPatternMode);
-  const setBassPatternMode = useAppStore((s) => s.setBassPatternMode);
   const customBassPattern = useAppStore((s) => s.customBassPattern);
-  const setCustomBassPattern = useAppStore((s) => s.setCustomBassPattern);
-  const bassFeel = useAppStore((s) => s.bassFeel);
-  const setBassFeel = useAppStore((s) => s.setBassFeel);
-  const bassOctave = useAppStore((s) => s.bassOctave);
-  const setBassOctave = useAppStore((s) => s.setBassOctave);
   const chordMuted = useAppStore((s) => s.chordMuted);
   const toggleChordMuted = useAppStore((s) => s.toggleChordMuted);
   const bassMuted = useAppStore((s) => s.bassMuted);
   const toggleBassMuted = useAppStore((s) => s.toggleBassMuted);
   const bpm = useAppStore((s) => s.bpm);
-  const chordVolume = useAppStore((s) => s.chordVolume);
-  const setChordVolume = useAppStore((s) => s.setChordVolume);
-  const bassVolume = useAppStore((s) => s.bassVolume);
-  const setBassVolume = useAppStore((s) => s.setBassVolume);
-  const { playChordWithRhythm, playBassWithPattern, playingIndex, activeChordId, setActiveChordId, currentStep, isPlaying } = useChordPlayback();
-  // Chord sound presets: factory presets plus presets saved from the synth view
-  const customPresets = useAppStore((s) => s.customSynthPresets);
+  const { playChordWithRhythm, playBassWithPattern, playingIndex, activeChordId, setActiveChordId, isPlaying } = useChordPlayback();
 
-  const chordCells = useMemo(() => stepCells(getMeter(meterId)), [meterId]);
+  // Stable identity so SortableContext's contextValue (which lists `items` in
+  // its own dep array) doesn't change on every render — an inline
+  // chords.map() here defeats React.memo on every SortableChordCard, which
+  // otherwise correctly bails out on the twice-a-second playheadBeat churn.
+  // Same pattern as ArrangeView.tsx's loopIds.
+  const chordIds = useMemo(() => chords.map((c) => c.id), [chords]);
 
   const rhythmPattern = useMemo(
     () =>
@@ -319,16 +238,6 @@ export const ChordView: React.FC = React.memo(() => {
       ),
     [bassPatternMode, customBassPattern, bassPatternId, meterId],
   );
-
-  // Volumes live in the store; engineSync pushes them into the engine buses
-  // (no dual-write here — Task 5).
-  const handleChordVolumeChange = (vol: number) => {
-    setChordVolume(vol);
-  };
-
-  const handleBassVolumeChange = (vol: number) => {
-    setBassVolume(vol);
-  };
 
   // Auto-harmonize refs. The effect must not re-run when the toggle or the
   // octave changes — only when the key or the chords do — so those two are read
@@ -619,9 +528,11 @@ export const ChordView: React.FC = React.memo(() => {
     );
   }, []);
 
-  // Both of these run tonal (Chord.getChord / Note.midi / Note.get) dozens of
-  // times. ChordView subscribes to playheadBeat, so it re-renders twice a
-  // second at 120 BPM — these must not sit inline in the JSX.
+  // ChordView subscribes to playheadBeat, so it re-renders twice a second at
+  // 120 BPM — the 16th-note step no longer passes through here (it is
+  // published to components/playbackStep.ts and read by the two
+  // PlayingStepRows), so this is again the real rate. Both memos below call
+  // into tonal and must stay memoized.
   const borrowedChords = useMemo(
     () => getBorrowedChords(scaleRoot, scaleType),
     [scaleRoot, scaleType],
@@ -751,217 +662,32 @@ export const ChordView: React.FC = React.memo(() => {
           </div>
         </div>
 
-        <div className="flex flex-row flex-wrap items-end gap-3">
-          {/* Chord Sound Preset Select */}
-          <div>
-            <label className={FIELD_LABEL}>Chord Preset</label>
-            <select
-              id="select-chord-sound-preset"
-              value={chordSynthParams.preset ?? ""}
-              onChange={(e) => {
-                const preset = findPresetByName(
-                  e.target.value,
-                  getAllSynthPresets(customPresets),
-                );
-                if (!preset) return;
-                setChordSynthParams({
-                  ...chordSynthParams,
-                  ...preset.params,
-                  preset: preset.name,
-                });
-              }}
-              className={FIELD_SELECT}
-              title="Chord sound preset — factory and saved presets, synced with the synth page"
-            >
-              <option value="">Chord Preset…</option>
-              {getPresetsGroupedByCategory(
-                getAllSynthPresets(customPresets),
-              ).map((group) => (
-                <optgroup key={group.category} label={group.label} className="font-bold">
-                  {group.presets.map((p) => (
-                    <option
-                      key={p.id}
-                      value={p.name}
-                      className={p.isFactory ? "" : "text-secondary"}
-                    >
-                      {!p.isFactory ? `★ ${p.name}` : p.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </div>
-
-          {/* Chord Octave Select */}
-          <div>
-            <label className={FIELD_LABEL}>Chord Octave</label>
-            <select
-              id="select-chord-octave"
-              value={chordOctave}
-              onChange={(e) => setChordOctave(parseInt(e.target.value, 10))}
-              className={FIELD_SELECT}
-              title="Octave for chord playback"
-            >
-              {[2, 3, 4, 5, 6].map((o) => (
-                <option key={o} value={o}>
-                  Oct {o}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Chord Rhythm Pattern Select */}
-          <div>
-            <label className={FIELD_LABEL}>Chord Pattern</label>
-            <div className="flex items-center gap-1.5">
-              <select
-                id="select-chord-rhythm-pattern"
-                value={chordRhythmMode === 'custom' ? 'custom' : rhythmId}
-                onChange={(e) => {
-                  if (e.target.value === 'custom') {
-                    setChordRhythmMode('custom');
-                  } else {
-                    setChordRhythmMode('preset');
-                    setChordRhythmId(e.target.value);
-                  }
-                }}
-                className={FIELD_SELECT}
-                title="Rhythm pattern for chord playback"
-              >
-                <option value="custom">Custom…</option>
-                {RHYTHM_STYLE_GROUPS.map((group) => (
-                  <optgroup key={group.style} label={group.style}>
-                    {group.patterns.map((p) => (
-                      <option
-                        key={p.id}
-                        value={p.id}
-                        title={patternMeterTitle(p.name, p.meter, meterId)}
-                      >
-                        {patternOptionLabel(p.name, p.meter, meterId)}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              <button
-                id="btn-preview-chord-pattern"
-                type="button"
-                onMouseDown={handleChordPatternPreviewMouseDown}
-                onMouseUp={handleChordPatternPreviewMouseUp}
-                onMouseLeave={handleChordPatternPreviewMouseUp}
-                onTouchStart={handleChordPatternPreviewMouseDown}
-                onTouchEnd={handleChordPatternPreviewMouseUp}
-                className="btn btn-xs btn-ghost btn-square text-module-chord select-none"
-                title="Hold to Preview Chord Pattern Loop"
-              >
-                <Volume2 className="w-3 h-3" />
-              </button>
-            </div>
-            {chordRhythmMode === 'custom' && (
-              <div className="mt-2 overflow-x-auto">
-                <StepRow<boolean>
-                  cells={chordCells}
-                  steps={customChordRhythm}
-                  currentStep={currentStep}
-                  isPlaying={isPlaying}
-                  color="bg-module-chord text-module-chord-content"
-                  isActive={(v) => v === true}
-                  onStepClick={(i) =>
-                    setCustomChordRhythm(
-                      customChordRhythm.map((v, idx) => (idx === i ? !v : v)),
-                    )
-                  }
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Chord Feel Slider (tight ↔ loose) */}
-          <div>
-            <label className={FIELD_LABEL}>Chord Feel</label>
-            <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
-              <span className="text-[9px] text-base-content/60 shrink-0">
-                tight
-              </span>
-              <Slider
-                id="slider-chord-feel"
-                min={0}
-                max={1}
-                step={0.01}
-                value={chordFeel}
-                onChange={setChordFeel}
-                className="range range-xs w-20 text-module-chord [--range-thumb:var(--color-module-chord-content)]"
-                title="Chord note length: tight (short holds) ↔ loose (long holds)"
-              />
-              <span className="text-[9px] text-base-content/60 shrink-0">
-                loose
-              </span>
-            </div>
-          </div>
-
-          {/* Chord Layer Volume Slider */}
-          <ChannelStrip
-            idPrefix="chord"
-            label="Chord Level"
-            volume={chordVolume}
-            max={1.5}
-            accentClass="text-module-chord"
-            sliderClassName="range range-xs text-module-chord [--range-thumb:var(--color-module-chord-content)]"
-            onVolumeChange={handleChordVolumeChange}
-          />
-          {/* Option B Re-harmonize Button */}
-          <button
-            id="btn-reharmonize-chord-progression"
-            onClick={() => {
-              const updated = snapProgressionToScale(
-                chords,
-                scaleRoot,
-                scaleType,
-                chordOctave,
-              );
-              setChords(updated);
-              setIsAutoReharmonizedIndicator(true);
-              setSaveToast(
-                `Re-harmonized progression to ${scaleRoot} ${scaleType} (Option B)!`,
-              );
-              setTimeout(() => setSaveToast(null), 3000);
-            }}
-            className="btn btn-sm btn-secondary btn-outline gap-1.5"
-            title="Option B: Diatonically snap current chord progression to active key and scale"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Re-harmonize</span>
-          </button>
-
-          {/* Auto-Reharmonize Toggle */}
-          <button
-            id="btn-toggle-auto-reharmonize"
-            onClick={() => {
-              // Turning this ON must not rewrite the current chords: a snap here
-              // would reproduce the exact scramble this feature exists to
-              // remove (e.g. key change made while OFF, then toggled back ON
-              // would snap chords still sitting in the old key). Flipping the
-              // flag only starts applying `applyKeyScaleChange` to *future*
-              // key/scale changes; it is not itself a harmonize action. The
-              // explicit "Re-harmonize" button above is the deliberate,
-              // user-requested snap — leave that one alone.
-              const nextVal = !autoReharmonize;
-              setAutoReharmonize(nextVal);
-              if (!nextVal) {
-                setIsAutoReharmonizedIndicator(false);
-              }
-            }}
-            className={`btn btn-sm gap-1.5 text-xs font-semibold btn-secondary ${
-              autoReharmonize ? "" : "btn-soft"
-            }`}
-            title="Toggle automatic re-harmonization when loading presets or changing scales"
-          >
-            <Sparkles
-              className={`w-3.5 h-3.5 ${autoReharmonize ? "text-base" : "text-secondary"}`}
-            />
-            <span>Auto-Reharmonize: {autoReharmonize ? "ON" : "OFF"}</span>
-          </button>
-        </div>
+        <ChordModulePanel
+          onPatternPreviewDown={handleChordPatternPreviewMouseDown}
+          onPatternPreviewUp={handleChordPatternPreviewMouseUp}
+          autoReharmonize={autoReharmonize}
+          isPlaying={isPlaying}
+          onToggleAutoReharmonize={() => {
+            // Turning this ON must not rewrite the current chords: a snap here
+            // would reproduce the exact scramble this feature exists to
+            // remove (e.g. key change made while OFF, then toggled back ON
+            // would snap chords still sitting in the old key). Flipping the
+            // flag only starts applying `applyKeyScaleChange` to *future*
+            // key/scale changes; it is not itself a harmonize action. The
+            // explicit "Re-harmonize" button is the deliberate,
+            // user-requested snap — leave that one alone.
+            const nextVal = !autoReharmonize;
+            setAutoReharmonize(nextVal);
+            if (!nextVal) setIsAutoReharmonizedIndicator(false);
+          }}
+          onReharmonize={() => {
+            const updated = snapProgressionToScale(chords, scaleRoot, scaleType, chordOctave);
+            setChords(updated);
+            setIsAutoReharmonizedIndicator(true);
+            setSaveToast(`Re-harmonized progression to ${scaleRoot} ${scaleType} (Option B)!`);
+            setTimeout(() => setSaveToast(null), 3000);
+          }}
+        />
 
         {/* In-Scale & Borrowed Quick Add Palette */}
         <div className="bg-base-100 border border-base-300 rounded-box p-3 space-y-3">
@@ -1098,7 +824,7 @@ export const ChordView: React.FC = React.memo(() => {
           onDragEnd={handleDragEnd}
         >
           <SortableContext
-            items={chords.map((c) => c.id)}
+            items={chordIds}
             strategy={rectSortingStrategy}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2">
@@ -1142,179 +868,11 @@ export const ChordView: React.FC = React.memo(() => {
       </div>
 
       {/* Bass Module Panel */}
-      <div className="mt-4 card bg-panel tint-bass border border-module-bass/30 p-4">
-        <div className="mb-3 flex items-start justify-between gap-2">
-          <div>
-            <h3 className={SECTION_HEADER}>
-              Bass Module
-            </h3>
-            <p className="text-[10px] text-base-content/60">
-              Bass line follows the same chord progression loop; pattern steps
-              are 16th notes.
-            </p>
-          </div>
-          <AdjustSynthButton target="bass" className="text-module-bass" />
-        </div>
-        <div className="flex flex-row flex-wrap items-end gap-3">
-          <div>
-            <label className={FIELD_LABEL}>Bass Preset</label>
-            <select
-              id="select-bass-sound-preset"
-              value={bassSynthParams.preset ?? ""}
-              onChange={(e) => {
-                const preset = findPresetByName(
-                  e.target.value,
-                  getAllSynthPresets(customPresets),
-                );
-                if (!preset) return;
-                setBassSynthParams({
-                  ...bassSynthParams,
-                  ...preset.params,
-                  preset: preset.name,
-                });
-              }}
-              className={FIELD_SELECT}
-              title="Bass sound preset — any factory, bass, or saved preset, synced with the synth page"
-            >
-              <option value="">Bass Preset…</option>
-              {getPresetsGroupedByCategory(
-                getAllSynthPresets(customPresets),
-              ).map((group) => (
-                <optgroup key={group.category} label={group.label} className="font-bold">
-                  {group.presets.map((p) => (
-                    <option
-                      key={p.id}
-                      value={p.name}
-                      className={p.isFactory ? "" : "text-secondary"}
-                    >
-                      {!p.isFactory ? `★ ${p.name}` : p.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className={FIELD_LABEL}>Bass Octave</label>
-            <select
-              id="select-bass-octave"
-              value={bassOctave}
-              onChange={(e) => setBassOctave(parseInt(e.target.value, 10))}
-              className={FIELD_SELECT}
-              title="Register for the bass line (embedded in the note names)"
-            >
-              {[1, 2, 3, 4].map((o) => (
-                <option key={o} value={o}>
-                  Oct {o}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className={FIELD_LABEL}>Bass Pattern</label>
-            <div className="flex items-center gap-1.5">
-              <select
-                id="select-bass-rhythm-pattern"
-                value={bassPatternMode === 'custom' ? 'custom' : bassPatternId}
-                onChange={(e) => {
-                  if (e.target.value === 'custom') {
-                    setBassPatternMode('custom');
-                  } else {
-                    setBassPatternMode('preset');
-                    setBassPatternId(e.target.value);
-                  }
-                }}
-                className={FIELD_SELECT}
-                title="Bass pattern (16th-note grid, deterministic)"
-              >
-                <option value="custom">Custom…</option>
-                {BASS_STYLE_GROUPS.map((group) => (
-                  <optgroup key={group.style} label={group.style}>
-                    {group.patterns.map((p) => (
-                      <option
-                        key={p.id}
-                        value={p.id}
-                        title={patternMeterTitle(p.name, p.meter, meterId)}
-                      >
-                        {patternOptionLabel(p.name, p.meter, meterId)}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              <button
-                id="btn-preview-bass-pattern"
-                type="button"
-                onMouseDown={handleBassPatternPreviewMouseDown}
-                onMouseUp={handleBassPatternPreviewMouseUp}
-                onMouseLeave={handleBassPatternPreviewMouseUp}
-                onTouchStart={handleBassPatternPreviewMouseDown}
-                onTouchEnd={handleBassPatternPreviewMouseUp}
-                className="btn btn-xs btn-ghost btn-square text-module-bass select-none"
-                title="Hold to Preview Bass Pattern Loop"
-              >
-                <Volume2 className="w-3 h-3" />
-              </button>
-            </div>
-            {bassPatternMode === 'custom' && (
-              <div className="mt-2 overflow-x-auto">
-                <StepRow<BassStepChoice>
-                  cells={chordCells}
-                  steps={customBassPattern}
-                  currentStep={currentStep}
-                  isPlaying={isPlaying}
-                  color="bg-module-bass text-module-bass-content"
-                  isActive={(v) => v !== 'rest'}
-                  getLabel={bassStepLabel}
-                  onStepClick={(i) =>
-                    setCustomBassPattern(
-                      customBassPattern.map((v, idx) =>
-                        idx === i ? nextBassStepChoice(v) : v,
-                      ),
-                    )
-                  }
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Bass Feel Slider (tight ↔ loose) */}
-          <div>
-            <label className={FIELD_LABEL}>Bass Feel</label>
-            <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
-              <span className="text-[9px] text-base-content/60 shrink-0">
-                tight
-              </span>
-              <Slider
-                id="slider-bass-feel"
-                min={0}
-                max={1}
-                step={0.01}
-                value={bassFeel}
-                onChange={setBassFeel}
-                className="range range-xs w-20 text-module-bass [--range-thumb:var(--color-module-bass-content)]"
-                title="Bass note length: tight (short holds) ↔ loose (long holds)"
-              />
-              <span className="text-[9px] text-base-content/60 shrink-0">
-                loose
-              </span>
-            </div>
-          </div>
-
-          <ChannelStrip
-            idPrefix="bass"
-            label="Bass Level"
-            volume={bassVolume}
-            max={1.5}
-            accentClass="text-module-bass"
-            onVolumeChange={handleBassVolumeChange}
-            showReadout={false}
-            sliderClassName="range range-xs text-module-bass [--range-thumb:var(--color-module-bass-content)]"
-          />
-        </div>
-      </div>
+      <BassModulePanel
+        onPatternPreviewDown={handleBassPatternPreviewMouseDown}
+        onPatternPreviewUp={handleBassPatternPreviewMouseUp}
+        isPlaying={isPlaying}
+      />
 
       {/* Full Chord Preset Library Sidebar Drawer */}
       <Suspense

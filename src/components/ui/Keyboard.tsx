@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import {
   getScaleNotes,
   rootSemitone,
@@ -197,6 +197,7 @@ export function KeyCap({
         e.preventDefault();
         onRelease();
       }}
+      onTouchCancel={onRelease}
       className={`w-12 h-19.5 rounded-b-field border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
         isActive
           ? "bg-primary text-primary-content shadow-inner scale-[0.99]"
@@ -473,9 +474,13 @@ export function ChromaticKeyboard({
   onNoteOn: (note: string) => void;
   onNoteOff: (note: string) => void;
 }) {
+  // A regex match, parseInt and an object spread per key (25 keys) — cheap
+  // once, but this component re-renders at pointer/clock rate elsewhere in
+  // the dock, so recomputing on every render was measurable.
+  const notes = useMemo(() => getChromaticKeyboardNotes(octaveOffset), [octaveOffset]);
   return (
     <div className="relative flex">
-      {getChromaticKeyboardNotes(octaveOffset).map((k, noteIndex) => {
+      {notes.map((k, noteIndex) => {
         const isActive = activeNotes.has(k.note);
         if (k.isBlack) {
           return (
@@ -508,6 +513,7 @@ export function ChromaticKeyboard({
                 e.preventDefault();
                 onNoteOff(k.note);
               }}
+              onTouchCancel={() => onNoteOff(k.note)}
               className={`absolute z-10 w-9 h-25 rounded-b-field border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
                 isActive
                   ? "bg-primary text-primary-content shadow-lg shadow-primary/50 scale-[0.98]"
@@ -557,6 +563,7 @@ export function ChromaticKeyboard({
               e.preventDefault();
               onNoteOff(k.note);
             }}
+            onTouchCancel={() => onNoteOff(k.note)}
             className={`w-16 h-full rounded-b-field border border-base-300 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
               isActive
                 ? "bg-primary text-primary-content shadow-inner scale-[0.99]"

@@ -4,6 +4,7 @@ import { loopStatePatch } from '../../store/loop';
 import { createDefaultLoop } from '../../store/loopSlice';
 import { useAppStore } from '../../store/store';
 import { ArrangeView, buildEditRoute, editLoop } from './ArrangeView';
+import { loopIdKeyOf } from './loopIdKey';
 import { getActiveChordIndex, SortableLoopCard } from './SortableLoopCard';
 
 // editLoop -> loadLoop mutates the shared singleton store (flat slices,
@@ -181,5 +182,59 @@ describe('ArrangeView deep-link', () => {
     expect(fakeWindow.calls[0].url).toBe('/loop?tab=synth&loopId=loop-b');
     expect(useAppStore.getState().activeTab).toBe('synth');
     expect(useAppStore.getState().activeLoopId).toBe('loop-b');
+  });
+});
+
+// renderToString cannot pin this: zustand's getServerSnapshot freezes on
+// getInitialState(), so a setState between two renders never reaches the
+// markup (confirmed empirically — even setting `loops: []` left "Loop 1" in
+// the output); and DndContext's internal useId counter advances between ANY
+// two renders regardless of state, so two back-to-back renderToString calls
+// are never byte-identical even with zero mutation in between. Neither
+// re-render counts nor cross-render array identity are observable through
+// this harness (see .claude/rules/testing.md), so the invariant is pinned on
+// the id-content key itself, driven through the real store write.
+describe('loopIds identity across the real setLoopMix path', () => {
+  test('setLoopMix on the active loop rewrites loops but not the id key', () => {
+    const { activeLoopId } = useAppStore.getState();
+    const before = useAppStore.getState().loops;
+    const beforeKey = loopIdKeyOf(before);
+
+    useAppStore.getState().setLoopMix(activeLoopId, { synthVolume: 0.42 });
+
+    const after = useAppStore.getState().loops;
+    // Confirms the pre-existing mirrored-write behaviour this task leans on:
+    // the array AND the touched loop object both get a fresh identity.
+    expect(after).not.toBe(before);
+    expect(after.find((l) => l.id === activeLoopId)).not.toBe(
+      before.find((l) => l.id === activeLoopId)
+    );
+    // The id key React's useMemo depends on is unchanged (primitive string
+    // equality), so the derived loopIds array is not rebuilt by this write.
+    expect(loopIdKeyOf(after)).toBe(beforeKey);
+  });
+});
+
+describe('loopIds changes on add, remove and reorder through the real store actions', () => {
+  test('addLoop changes the id key', () => {
+    const before = loopIdKeyOf(useAppStore.getState().loops);
+    useAppStore.getState().addLoop();
+    expect(loopIdKeyOf(useAppStore.getState().loops)).not.toBe(before);
+  });
+
+  test('deleteLoop changes the id key', () => {
+    useAppStore.getState().addLoop();
+    const before = loopIdKeyOf(useAppStore.getState().loops);
+    const { activeLoopId } = useAppStore.getState();
+    useAppStore.getState().deleteLoop(activeLoopId);
+    expect(loopIdKeyOf(useAppStore.getState().loops)).not.toBe(before);
+  });
+
+  test('reorderLoops changes the id key', () => {
+    useAppStore.getState().addLoop();
+    const before = loopIdKeyOf(useAppStore.getState().loops);
+    const { activeLoopId } = useAppStore.getState();
+    useAppStore.getState().reorderLoops(activeLoopId, -1);
+    expect(loopIdKeyOf(useAppStore.getState().loops)).not.toBe(before);
   });
 });

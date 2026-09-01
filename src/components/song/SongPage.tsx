@@ -3,7 +3,7 @@ import { useAppStore } from '../../store/store';
 import { ArrangeView } from './ArrangeView';
 import { EffectsRackView } from './EffectsRackView';
 
-export const SongPage: React.FC = () => {
+export const SongPage: React.FC = React.memo(() => {
   const activeTab = useAppStore((s) => s.activeTab);
   return (
     <>
@@ -11,4 +11,4 @@ export const SongPage: React.FC = () => {
       <div className={activeTab === 'effects' ? 'block' : 'hidden'}><EffectsRackView /></div>
     </>
   );
-};
+});

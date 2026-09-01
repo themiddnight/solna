@@ -31,6 +31,59 @@ export const VISUALIZER_MODE_LABEL: Record<VisualizerMode, string> = {
  */
 export const VISUALIZER_MODES = Object.keys(VISUALIZER_MODE_LABEL) as VisualizerMode[];
 
+/**
+ * Consecutive silent frames before the render loop drops to a low rate.
+ *
+ * 90 frames is 1.5 s at 60 fps: past the tail of any release this app can
+ * produce, so a decaying note never stutters, but short enough that an idle
+ * tab stops burning a full canvas repaint within two seconds.
+ */
+export const SILENT_FRAMES_BEFORE_THROTTLE = 90;
+
+/** ~10 fps while silent — enough for the idle trace to look alive. */
+export const THROTTLED_FRAME_INTERVAL_MS = 100;
+
+export interface SilenceThrottle {
+  silentFrames: number;
+  lastDrawAtMs: number;
+}
+
+export function initialSilenceThrottle(): SilenceThrottle {
+  return { silentFrames: 0, lastDrawAtMs: Number.NEGATIVE_INFINITY };
+}
+
+/**
+ * Whether this frame should draw, and the next state.
+ *
+ * The rAF loop is gated on `paused` (tab visibility) but was never gated on
+ * whether anything is SOUNDING, so a visible tab repainted a full canvas at
+ * 60 fps into silence for the whole session. The analyser reads stay
+ * every-frame — they are two getByte* calls into pre-allocated buffers, and
+ * they are what detects the return of sound; only the draw is skipped.
+ *
+ * Pure, and exported, so the state machine is testable without a canvas, a
+ * DOM or a real animation frame (this repo has no testing-library setup).
+ */
+export function nextSilenceThrottle(
+  state: SilenceThrottle,
+  isSounding: boolean,
+  nowMs: number,
+): { state: SilenceThrottle; shouldDraw: boolean } {
+  if (isSounding) {
+    // Snap back instantly: one sounding frame is enough, so the first sample
+    // of a new note is drawn on the frame it arrives.
+    return { state: { silentFrames: 0, lastDrawAtMs: nowMs }, shouldDraw: true };
+  }
+  const silentFrames = state.silentFrames + 1;
+  if (silentFrames <= SILENT_FRAMES_BEFORE_THROTTLE) {
+    return { state: { silentFrames, lastDrawAtMs: nowMs }, shouldDraw: true };
+  }
+  if (nowMs - state.lastDrawAtMs >= THROTTLED_FRAME_INTERVAL_MS) {
+    return { state: { silentFrames, lastDrawAtMs: nowMs }, shouldDraw: true };
+  }
+  return { state: { silentFrames, lastDrawAtMs: state.lastDrawAtMs }, shouldDraw: false };
+}
+
 interface AudioVisualizerProps {
   mode?: VisualizerMode;
   className?: string;
@@ -112,6 +165,11 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
   const peaksRef = useRef<number[]>([]);
   const prevDataRef = useRef<number[]>([]);
 
+  // Silence throttle state, in a ref: it is per-frame bookkeeping, so a
+  // useState here would re-render the component 60 times a second — the same
+  // reason indicatorRef exists.
+  const throttleRef = useRef<SilenceThrottle>(initialSilenceThrottle());
+
   // Resolved theme colours, cached across frames. The rAF loop runs 60x/sec,
   // and getComputedStyle is a layout-flushing call, so it must never be in it.
   // Built by the effect below, which runs before the first frame. A lazy
@@ -176,11 +234,9 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       const width = canvas.width / dpr;
       const height = canvas.height / dpr;
 
-      // Clear canvas
-      ctx.clearRect(0, 0, width, height);
-
       if (!analyser) {
         // Idle placeholder line
+        ctx.clearRect(0, 0, width, height);
         ctx.beginPath();
         ctx.strokeStyle = tokenColor('--color-base-content', 0.35);
         ctx.lineWidth = 1.5;
@@ -243,6 +299,23 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
           ? 'w-1.5 h-1.5 rounded-full bg-success animate-ping'
           : 'w-1.5 h-1.5 rounded-full bg-base-content/30';
       }
+
+      // Nothing is sounding and nothing has been for SILENT_FRAMES_BEFORE_
+      // THROTTLE frames: keep reading the analyser (that is how sound is
+      // detected) but stop repainting the canvas every frame. The canvas is
+      // NOT cleared on a skipped frame, so the last drawn image simply stays.
+      const throttle = nextSilenceThrottle(
+        throttleRef.current,
+        isSounding,
+        performance.now(),
+      );
+      throttleRef.current = throttle.state;
+      if (!throttle.shouldDraw) {
+        animationId = requestAnimationFrame(render);
+        return;
+      }
+
+      ctx.clearRect(0, 0, width, height);
 
       if (mode === 'bars') {
         renderBars(ctx, width, height, freqData, bufferLength, isSounding);
@@ -611,6 +684,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
       };
     }
 
+    throttleRef.current = initialSilenceThrottle();
     animationId = requestAnimationFrame(render);
 
     return () => {
