@@ -61,7 +61,7 @@ export const TransportBar: React.FC = React.memo(() => {
     // sits dead-centre in the viewport) whenever there is room, and floored at
     // their own content width when there isn't — which degrades to an off-centre
     // readout instead of side groups overlapping or overflowing the bar.
-    <div className="bg-base-100 border-t border-base-300 px-2 sm:px-3 py-1.5 sm:py-2 flex items-center justify-between gap-1.5 sm:gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
+    <div className="shrink-0 bg-base-100 border-t border-base-300 px-2 sm:px-3 py-1.5 sm:py-2 flex items-center justify-between gap-1.5 sm:gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
       {/* Left Transport Actions: Play All + Tempo + Meter */}
       <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0">
         {/* Master transport: drives both automation players together. */}
@@ -175,7 +175,13 @@ export const TransportBar: React.FC = React.memo(() => {
             className="range range-xs range-primary w-10 sm:w-16"
             title={`Master: ${(masterVolume * 100).toFixed(0)}%`}
           />
-          <span className="font-mono text-[10px] text-base-content/60 w-5 sm:w-6 text-right">
+          {/* Hidden below `sm`. Both side groups are `shrink-0`, so this bar
+              has one fixed width under that breakpoint — 378px, which overran
+              a 375px iPhone and a 360px Android and cut the fader off at the
+              screen edge. Dropping this readout (24px with its gap) is what
+              brings it to 354px. The level is still readable from the fader
+              position, and the exact percentage stays in its `title`. */}
+          <span className="font-mono text-[10px] text-base-content/60 w-5 sm:w-6 text-right hidden sm:inline">
             {(masterVolume * 100).toFixed(0)}
           </span>
         </div>

@@ -221,10 +221,14 @@ export const Header: React.FC = React.memo(() => {
   }, []);
 
   return (
-    <header className="navbar min-h-0 bg-base-100 border-b border-base-300 px-2.5 sm:px-4 py-2 select-none sticky top-0 z-40 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 sm:gap-x-3 gap-y-2 text-sm">
+    <header className="navbar min-h-0 shrink-0 bg-base-100 border-b border-base-300 px-2.5 sm:px-4 py-2 select-none sticky top-0 z-40 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 sm:gap-x-3 gap-y-2 text-sm">
       {/* Brand & Layer Switcher */}
       <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-        <Wordmark />
+        {/* Below `sm` the wordmark text costs ~74px, which is exactly what
+            pushes the loop/scale/theme group off the brand's row and gives the
+            navbar a third row on a phone. The mark alone still identifies the
+            app. */}
+        <Wordmark textClassName="hidden sm:inline" />
         <div className={NAV_GROUP_CLASS}>
           {LAYER_META.map(({ layer: l, label }) => {
             const isActive = layer === l;
@@ -312,7 +316,13 @@ export const Header: React.FC = React.memo(() => {
                 title={`Key & Scale — ${scaleRoot} ${SCALES[scaleType]?.name ?? scaleType}`}
               >
                 <span className="text-primary">{scaleRoot}</span>
-                <span className="text-[10px] text-base-content/70 max-w-12 truncate">
+                {/* Dropped below 390px — the width at which brand + this group
+                    stop sharing one row and the navbar grows a third one. The
+                    cut is `max-[390px]` rather than `sm` so the 390px+ phones
+                    that DO fit keep the scale name; narrower ones keep the root
+                    note, the full name in the `title`, and both selects one tap
+                    away in the dropdown. */}
+                <span className="text-[10px] text-base-content/70 max-w-12 truncate max-[390px]:hidden">
                   {SCALES[scaleType]?.name?.slice(0, 4) ?? scaleType}
                 </span>
                 <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
