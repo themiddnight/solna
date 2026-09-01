@@ -122,6 +122,9 @@ export interface SortableLoopCardProps {
   totalLoops: number;
   isPlaying: boolean;
   isAuditioning?: boolean;
+  /** Scope rule: disabled while the song owns the transport, and on every
+   *  non-soloing card while another loop is soloing. */
+  playDisabled?: boolean;
   isActive: boolean;
   progressPercent?: number;
   currentStepInLoop?: number;
@@ -148,6 +151,7 @@ export const SortableLoopCard: React.FC<SortableLoopCardProps> = React.memo(
     totalLoops,
     isPlaying,
     isAuditioning = false,
+    playDisabled = false,
     isActive,
     progressPercent = 0,
     currentStepInLoop = 0,
@@ -280,11 +284,12 @@ export const SortableLoopCard: React.FC<SortableLoopCardProps> = React.memo(
                 type="button"
                 aria-label={isAuditioning ? `Stop ${loop.name}` : `Play only ${loop.name}`}
                 onClick={() => onTogglePlayLoop(loop.id)}
+                disabled={playDisabled}
                 className={`btn btn-xs gap-1 font-bold shadow-xs transition-all ${
                   isAuditioning
                     ? 'btn-error text-error-content hover:brightness-110'
                     : 'btn-success text-success-content hover:brightness-110'
-                }`}
+                } disabled:opacity-30`}
                 title={isAuditioning ? 'Stop loop audition' : 'Play only this loop (isolated)'}
               >
                 {isAuditioning ? (

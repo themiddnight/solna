@@ -20,6 +20,7 @@ const resetStore = () => {
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
     songLoopIndex: null,
+    playbackScope: { kind: 'none' },
   });
 };
 
