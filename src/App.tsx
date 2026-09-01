@@ -7,6 +7,7 @@ import { LoopPage } from './components/loop/LoopPage';
 import { SongPage } from './components/song/SongPage';
 import { TransportBar } from './components/TransportBar';
 import { MidiSettingsModal } from './components/ui/MidiSettingsModal';
+import { UpdateBanner } from './components/ui/UpdateBanner';
 import { audioEngine } from './audio/engine';
 import { useAppStore } from './store/store';
 import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
@@ -14,6 +15,7 @@ import { useRouteSync } from './routing/useRouteSync';
 import { usePlayheadSync } from './components/usePlayheadSync';
 import { useInputDeck } from './components/useInputDeck';
 import { useSongModeSync } from './store/songMode';
+import { useServiceWorkerUpdate } from './pwa/useServiceWorkerUpdate';
 import { isSongLayer } from './types';
 
 /** Minimal event-target shape `registerFirstGesture` needs — satisfied by
@@ -95,6 +97,11 @@ export function App() {
   // Global input: owns the QWERTY listeners + note playing, feeds the dock.
   const { keyboardProps, drumProps } = useInputDeck();
 
+  // PWA: registers the worker and reports a waiting version. It never applies
+  // one on its own — see useServiceWorkerUpdate for why a reload is the user's
+  // call in an app that is usually making sound.
+  const { updateReady, applyPendingUpdate, dismissUpdate } = useServiceWorkerUpdate();
+
   // UI slice
   const activeTab = useAppStore((s) => s.activeTab);
 
@@ -117,7 +124,15 @@ export function App() {
   }, []);
 
   return (
-    <div className="h-dvh bg-canvas text-base-content flex flex-col font-sans selection:bg-primary selection:text-primary-content relative overflow-hidden">
+    <div
+      // The left/right display-cutout insets, once for the whole app: a phone
+      // held in landscape puts the notch column over the navbar's brand and
+      // the transport bar's master fader otherwise. `env()` is 0px in a normal
+      // tab, so this is inert outside an installed, rotated app. The bottom
+      // inset is on the transport bar itself (see index.css) so that bar's own
+      // background, not the canvas, sits under the home indicator.
+      className="h-dvh bg-canvas text-base-content flex flex-col font-sans selection:bg-primary selection:text-primary-content relative overflow-hidden pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
+    >
       {/* Low-contrast analyser-driven field behind the whole workspace, so
           every tab shows continuous "audio is live" feedback. Must stay the
           first child at z-0 — see AmbientBackdrop.tsx's doc comment for why
@@ -153,6 +168,13 @@ export function App() {
 
       {/* Bottom Input Dock — Keyboard | Drums, reachable from any page */}
       <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />
+
+      {/* A waiting service worker, announced above the transport bar. */}
+      <UpdateBanner
+        open={updateReady}
+        onReload={applyPendingUpdate}
+        onDismiss={dismissUpdate}
+      />
 
       {/* Persistent Transport Bar at bottom */}
       <TransportBar />

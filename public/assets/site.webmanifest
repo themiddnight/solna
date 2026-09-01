@@ -1,10 +1,33 @@
 {
+  "id": "/",
   "name": "solna — build your music loop",
   "short_name": "solna",
   "description": "solna — a solo loop studio for musical ideas. Ideas Into Loops.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "categories": ["music", "entertainment"],
+  "theme_color": "#17100F",
+  "background_color": "#17100F",
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
   "icons": [
+    {
+      "src": "/assets/web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/assets/web-app-manifest-192x192.png",
       "sizes": "192x192",
@@ -18,7 +41,20 @@
       "purpose": "maskable"
     }
   ],
-  "theme_color": "#17100F",
-  "background_color": "#17100F",
-  "display": "standalone"
+  "screenshots": [
+    {
+      "src": "/assets/screenshot-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "The 16-step drum sequencer with the pattern library and drum-sound rack"
+    },
+    {
+      "src": "/assets/screenshot-narrow.png",
+      "sizes": "780x1688",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "The chord and bass modules on a phone"
+    }
+  ]
 }
