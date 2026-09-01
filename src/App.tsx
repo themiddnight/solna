@@ -127,8 +127,11 @@ export function App() {
       {/* Navigation Header */}
       <Header />
 
-      {/* 1-Click Instant Vibes Quick Starter Bar */}
-      <InstantVibesBar />
+      {/* 1-Click Instant Vibes Quick Starter Bar. Loop-layer only: a vibe
+          rewrites the loop's chords, drums, presets and BPM, which is not an
+          action the song layer offers — showing it over the arrangement
+          invites a click that silently rewrites the loop being arranged. */}
+      {!isSongLayer(activeTab) && <InstantVibesBar />}
 
       {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity.
           Both layers stay mounted; the active layer gates which page is visible,
