@@ -16,7 +16,8 @@ import { stepCells } from "../../sequencerGrid";
 import { ChannelStrip } from "../../ui/ChannelStrip";
 import { FIELD_LABEL, FIELD_SELECT, SECTION_HEADER } from "../../ui/fieldClasses";
 import { Slider } from "../../ui/Slider";
-import { PlayingStepRow } from "../../ui/StepRow";
+import { PlayingStepRow, STEP_ROW_CLASS } from "../../ui/StepRow";
+import { PlayingStepHeader } from "../../ui/StepHeader";
 import { AdjustSynthButton } from "./AdjustSynthButton";
 import { bassStepLabel, nextBassStepChoice } from "./bassStepChoice";
 
@@ -168,26 +169,6 @@ export const BassModulePanel: React.FC<BassModulePanelProps> = ({
                 <Volume2 className="w-3 h-3" />
               </button>
             </div>
-            {bassPatternMode === 'custom' && (
-              <div className="mt-2 overflow-x-auto">
-                <PlayingStepRow<BassStepChoice>
-                  player="chords"
-                  cells={chordCells}
-                  steps={customBassPattern}
-                  isPlaying={isPlaying}
-                  color="bg-module-bass text-module-bass-content"
-                  isActive={(v) => v !== 'rest'}
-                  getLabel={bassStepLabel}
-                  onStepClick={(i) =>
-                    setCustomBassPattern(
-                      customBassPattern.map((v, idx) =>
-                        idx === i ? nextBassStepChoice(v) : v,
-                      ),
-                    )
-                  }
-                />
-              </div>
-            )}
           </div>
 
           {/* Bass Feel Slider (tight ↔ loose) */}
@@ -224,6 +205,39 @@ export const BassModulePanel: React.FC<BassModulePanelProps> = ({
             sliderClassName="range range-xs text-module-bass [--range-thumb:var(--color-module-bass-content)]"
           />
         </div>
+
+        {/* Full-width step editor — see ChordModulePanel for why this left the
+            "Bass Pattern" field cell. The tone letters bassStepLabel draws are
+            only legible once a block is wider than the letter itself. */}
+        {bassPatternMode === 'custom' && (
+          <div className="overflow-x-auto mt-3">
+            <label className={FIELD_LABEL}>Custom Bass Pattern</label>
+            <div className="min-w-[520px]">
+              <PlayingStepHeader
+                player="chords"
+                cells={chordCells}
+                isPlaying={isPlaying}
+                className={`${STEP_ROW_CLASS} mb-1.5`}
+              />
+              <PlayingStepRow<BassStepChoice>
+                player="chords"
+                cells={chordCells}
+                steps={customBassPattern}
+                isPlaying={isPlaying}
+                color="bg-module-bass text-module-bass-content"
+                isActive={(v) => v !== 'rest'}
+                getLabel={bassStepLabel}
+                onStepClick={(i) =>
+                  setCustomBassPattern(
+                    customBassPattern.map((v, idx) =>
+                      idx === i ? nextBassStepChoice(v) : v,
+                    ),
+                  )
+                }
+              />
+            </div>
+          </div>
+        )}
       </div>
   );
 };

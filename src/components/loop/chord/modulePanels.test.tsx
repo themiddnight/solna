@@ -64,6 +64,13 @@ describe('ChordModulePanel', () => {
     // INITIAL state has chordRhythmMode 'preset', so no PlayingStepRow renders.
     expect(html).not.toContain('rounded-field transition-all cursor-pointer relative');
   });
+
+  test('the step-number strip is gated on the same mode as the grid', () => {
+    // Both moved out of the pattern field together; a conditional left behind
+    // on only one of them would leave a bare 1..16 strip under a preset.
+    expect(html).not.toContain('Custom Chord Pattern');
+    expect(html).not.toContain('min-w-[520px]');
+  });
 });
 
 describe('BassModulePanel', () => {
@@ -93,5 +100,11 @@ describe('BassModulePanel', () => {
 
   test('carries the Adjust Synth button', () => {
     expect(html).toContain('Adjust Synth');
+  });
+
+  test('the custom step grid and its number strip are hidden while preset', () => {
+    expect(html).not.toContain('rounded-field transition-all cursor-pointer relative');
+    expect(html).not.toContain('Custom Bass Pattern');
+    expect(html).not.toContain('min-w-[520px]');
   });
 });

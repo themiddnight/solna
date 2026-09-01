@@ -40,18 +40,18 @@ const WIRINGS: Array<{
       regex: /export function PlayingStepRow[\s\S]*?useCurrentStep\(\s*(?:'([^']+)'|(\w+))\s*\)/,
       expected: 'player',
     },
-    // PlayingStepRow takes its id at runtime, so the literal that actually
-    // binds 'chords' lives at each call site. Both call sites moved out of
-    // ChordView.tsx into the module panels it now renders (one each), so the
-    // count is asserted across both instead of the single file that used to
-    // hold them.
+    // PlayingStepRow and PlayingStepHeader both take their id at runtime, so
+    // the literal that actually binds 'chords' lives at each call site. Each
+    // module panel holds a pair — the step-number strip and the buttons under
+    // it must read the SAME player or the numbers would highlight a different
+    // column than the one lit up below them.
     consumerCallSites: {
       files: [
         'src/components/loop/chord/ChordModulePanel.tsx',
         'src/components/loop/chord/BassModulePanel.tsx',
       ],
       regex: /\bplayer\s*=\s*"chords"/g,
-      expectedCount: 2,
+      expectedCount: 4,
     },
   },
   {

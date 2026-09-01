@@ -13,7 +13,8 @@ import { stepCells } from "../../sequencerGrid";
 import { ChannelStrip } from "../../ui/ChannelStrip";
 import { FIELD_LABEL, FIELD_SELECT } from "../../ui/fieldClasses";
 import { Slider } from "../../ui/Slider";
-import { PlayingStepRow } from "../../ui/StepRow";
+import { PlayingStepRow, STEP_ROW_CLASS } from "../../ui/StepRow";
+import { PlayingStepHeader } from "../../ui/StepHeader";
 
 export interface ChordModulePanelProps {
   onPatternPreviewDown: (e: React.MouseEvent | React.TouchEvent) => void;
@@ -63,6 +64,7 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
   const chordCells = useMemo(() => stepCells(getMeter(meterId)), [meterId]);
 
   return (
+      <>
         <div className="flex flex-row flex-wrap items-end gap-3">
           {/* Chord Sound Preset Select */}
           <div>
@@ -169,23 +171,6 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
                 <Volume2 className="w-3 h-3" />
               </button>
             </div>
-            {chordRhythmMode === 'custom' && (
-              <div className="mt-2 overflow-x-auto">
-                <PlayingStepRow<boolean>
-                  player="chords"
-                  cells={chordCells}
-                  steps={customChordRhythm}
-                  isPlaying={isPlaying}
-                  color="bg-module-chord text-module-chord-content"
-                  isActive={(v) => v === true}
-                  onStepClick={(i) =>
-                    setCustomChordRhythm(
-                      customChordRhythm.map((v, idx) => (idx === i ? !v : v)),
-                    )
-                  }
-                />
-              </div>
-            )}
           </div>
 
           {/* Chord Feel Slider (tight ↔ loose) */}
@@ -247,5 +232,40 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
             <span>Auto-Reharmonize: {autoReharmonize ? "ON" : "OFF"}</span>
           </button>
         </div>
+
+        {/* Full-width step editor. It sits BELOW the field row rather than
+            inside the "Chord Pattern" field cell, where its 16 buttons shared
+            the width of one dropdown and rendered ~7px wide. Same StepRow the
+            drum sequencer uses; only the container changed. */}
+        {chordRhythmMode === 'custom' && (
+          <div className="overflow-x-auto">
+            <label className={FIELD_LABEL}>Custom Chord Pattern</label>
+            {/* min-w matches the drum grid's step area (its 700px less the
+                176px track-label gutter), so a narrow window scrolls rather
+                than squeezing the blocks back down. */}
+            <div className="min-w-[520px]">
+              <PlayingStepHeader
+                player="chords"
+                cells={chordCells}
+                isPlaying={isPlaying}
+                className={`${STEP_ROW_CLASS} mb-1.5`}
+              />
+              <PlayingStepRow<boolean>
+                player="chords"
+                cells={chordCells}
+                steps={customChordRhythm}
+                isPlaying={isPlaying}
+                color="bg-module-chord text-module-chord-content"
+                isActive={(v) => v === true}
+                onStepClick={(i) =>
+                  setCustomChordRhythm(
+                    customChordRhythm.map((v, idx) => (idx === i ? !v : v)),
+                  )
+                }
+              />
+            </div>
+          </div>
+        )}
+      </>
   );
 };
