@@ -260,7 +260,13 @@ export const SortableLoopCard: React.FC<SortableLoopCardProps> = React.memo(
         <div className="p-3 sm:p-4 flex flex-col gap-3">
           {/* Card Header */}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
+            {/* `flex-wrap` is load-bearing: this group holds seven items whose
+                widths are content-driven (the loop name, a bar count, a live
+                "Playing 7/64 (Rep 1/2)" badge), and as a single non-wrapping
+                row they overlapped each other on a phone rather than
+                overflowing visibly. `basis-full` keeps the action cluster
+                beside it from being squeezed onto the same short line. */}
+            <div className="flex flex-wrap items-center gap-2 min-w-0 basis-full sm:basis-0 sm:flex-1">
               {/* Drag Handle */}
               <button
                 type="button"
@@ -480,8 +486,11 @@ export const SortableLoopCard: React.FC<SortableLoopCardProps> = React.memo(
 
             <div className="divider divider-horizontal my-0 mx-0.5 hidden sm:flex" />
 
-            {/* Chord Progression Display with Real-Time Highlighting */}
-            <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+            {/* Chord Progression Display with Real-Time Highlighting.
+                `basis-full` below `sm`: sharing a row with Key and Repeat leaves
+                a phone about 40px for the label plus every chord, which pushed
+                "Progression:" past the card's right edge. Its own line fits both. */}
+            <div className="flex flex-wrap items-center gap-1.5 basis-full sm:basis-0 sm:flex-1 min-w-0">
               <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50 shrink-0">
                 Progression:
               </span>
