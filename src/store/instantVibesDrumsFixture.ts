@@ -1,6 +1,6 @@
 /**
  * A golden snapshot of every Instant Vibe's `drumPattern`, originally
- * captured before task 3 of the vibe-drums-from-library plan replaced each
+ * captured before the vibe-drums-from-library plan replaced each
  * vibe's inline rows with `drumPatternId` + `drumPatternById`. That migration
  * is long done; this fixture's ongoing job is to pin all 6×7×16 authored
  * cells so `instantVibesDrums.test.ts` fails loudly if a VIBE_DRUM_PATTERNS

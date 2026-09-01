@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore, partializeAppState } from './store';
-import { startLoopSync } from './loopSync';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 
 function resetLead(): void {
@@ -88,21 +87,15 @@ describe('lead slice — setLeadLoopLength resizes by whole bars', () => {
 describe('lead slice — persistence', () => {
   beforeEach(resetLead);
   test('leadMelodySteps and leadLoopLength are persisted inside the active loop', () => {
-    // v6: per-loop fields persist inside loops[activeLoopId], kept fresh
-    // by the live-write sync-back (loopSync). Start it here so the edits to
-    // the flat slices reach the persisted loop copy, as they do in the app.
-    const stop = startLoopSync();
-    try {
-      const s = useAppStore.getState();
-      s.toggleLeadNote(0, 'C4');
-      s.setLeadLoopLength(2);
-      const persisted = partializeAppState(useAppStore.getState());
-      const loop = persisted.loops.find((r) => r.id === persisted.activeLoopId)!;
-      expect(loop.leadMelodySteps).toEqual(useAppStore.getState().leadMelodySteps);
-      expect(loop.leadLoopLength).toBe(2);
-    } finally {
-      stop();
-    }
+    // v6: per-loop fields persist inside loops[activeLoopId], kept fresh by
+    // the live-write sync-back folded into the store's own set() (loopSync).
+    const s = useAppStore.getState();
+    s.toggleLeadNote(0, 'C4');
+    s.setLeadLoopLength(2);
+    const persisted = partializeAppState(useAppStore.getState());
+    const loop = persisted.loops.find((r) => r.id === persisted.activeLoopId)!;
+    expect(loop.leadMelodySteps).toEqual(useAppStore.getState().leadMelodySteps);
+    expect(loop.leadLoopLength).toBe(2);
   });
 
   test('leadMelodyView, leadMelodyOctave and leadPlayer are transient', () => {

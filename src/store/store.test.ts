@@ -311,7 +311,7 @@ describe('chords initial octave', () => {
   });
 
   test('persisted hydration returns stored chords verbatim (no re-derivation on load)', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     const customChords = [
       { id: 'chord-x', root: 'C', quality: 'maj', bars: 2, notes: ['C3', 'E3', 'G3'] },
     ];
@@ -323,12 +323,14 @@ describe('chords initial octave', () => {
       loops: [{ ...useAppStore.getState().loops[0], chords: customChords }],
       chords: customChords,
     });
+    flushPersistedWrites();
     const persistedPayload = fakeLocalStorage.getItem('musibox_project_state_v1');
     expect(persistedPayload).toContain('chord-x');
 
     // Reset the in-memory flat chords (simulating a fresh session), then put
     // the captured payload back into storage directly.
     useAppStore.setState({ chords: INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)) });
+    flushPersistedWrites();
     fakeLocalStorage.setItem('musibox_project_state_v1', persistedPayload!);
 
     // Hydration merges the stored value via the loop path: chords come back
@@ -420,7 +422,7 @@ describe('persist partialize', () => {
 
 describe('legacy preset migration', () => {
   test('hydrate adopts the legacy localStorage presets and removeLegacyKeys cleans them up', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
 
     const legacySynthPresets: SynthPresetItem[] = [
       {
@@ -460,6 +462,7 @@ describe('legacy preset migration', () => {
     expect(fakeLocalStorage.getItem('murva_synth_custom_presets_v1')).toBeNull();
     expect(fakeLocalStorage.getItem('murva_chord_custom_progressions_v1')).toBeNull();
     // And the new persist key now owns the presets
+    flushPersistedWrites();
     expect(fakeLocalStorage.getItem('musibox_project_state_v1')).not.toBeNull();
   });
 
@@ -506,7 +509,7 @@ describe('applyEngineSnapshot', () => {
 
 describe('persisted payload sanitization', () => {
   test('wrong-typed persisted values hydrate to the store defaults', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
 
     // Restore every field under test to its factory default so the fallback
     // values below are observable.
@@ -530,10 +533,10 @@ describe('persisted payload sanitization', () => {
       drumFilterResonance: 0.7,
       drumFilterType: 'lowpass',
       // Per-loop fields are restored too: the pre-v6 payload wraps into a
-      // single loop (Task 5), so the merge's loop-load re-applies the
-      // wrapped loop's content to the flat slices. Restoring the defaults
-      // makes "invalid array -> factory default" observable, the same way the
-      // restored scalars above are.
+      // single loop, so the merge's loop-load re-applies the wrapped loop's
+      // content to the flat slices. Restoring the defaults makes "invalid
+      // array -> factory default" observable, the same way the restored
+      // scalars above are.
       chords: INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)),
       sequencerTracks: INITIAL_SEQUENCER_TRACKS,
     });
@@ -543,6 +546,7 @@ describe('persisted payload sanitization', () => {
     const progressionsBefore = useAppStore.getState().customChordProgressions;
 
     // Parseable but wrong-typed payload: JSON.parse accepts all of this.
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
@@ -603,7 +607,7 @@ describe('persisted payload sanitization', () => {
   });
 
   test('valid persisted values pass through; out-of-range numbers are clamped', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     const partialEffects = { reverbWet: 0.9 };
 
     useAppStore.setState({
@@ -628,6 +632,7 @@ describe('persisted payload sanitization', () => {
       customChordProgressions: [],
     });
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
@@ -673,11 +678,11 @@ describe('persisted payload sanitization', () => {
     expect(s.chordMuted).toBe(true);
     expect(s.bassMuted).toBe(true);
     expect(s.soundKit).toBe('Deep Dub');
-    // Task 3: every numeric MasterEffects field is now clamped through the
-    // shared EFFECT_LIMITS table (audio/effectLimits.ts), not just the two
-    // former "live knob" fields — a partial persisted effects object has
-    // every missing field backfilled with its EFFECT_LIMITS fallback (which
-    // equals INITIAL_EFFECTS), so it must never reach the engine as undefined.
+    // Every numeric MasterEffects field is clamped through the shared
+    // EFFECT_LIMITS table (audio/effectLimits.ts), not just the two former
+    // "live knob" fields — a partial persisted effects object has every
+    // missing field backfilled with its EFFECT_LIMITS fallback (which equals
+    // INITIAL_EFFECTS), so it must never reach the engine as undefined.
     expect(s.effects).toEqual({ ...INITIAL_EFFECTS, ...partialEffects });
     expect(s.chords).toEqual([{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] }]);
     expect(s.sequencerTracks).toEqual([]);
@@ -691,7 +696,7 @@ describe('persisted payload sanitization', () => {
   });
 
   test('corrupt JSON in the legacy preset keys is ignored without crashing', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
 
     useAppStore.setState({ customSynthPresets: [], customChordProgressions: [] });
     useAppStore.persist.clearStorage();
@@ -703,12 +708,14 @@ describe('persisted payload sanitization', () => {
     expect(useAppStore.getState().customSynthPresets).toEqual([]);
     expect(useAppStore.getState().customChordProgressions).toEqual([]);
     // Rehydration still ran to completion and wrote the merged state back.
+    flushPersistedWrites();
     expect(fakeLocalStorage.getItem('musibox_project_state_v1')).not.toBeNull();
   });
 
   test('sanitize clamps reverbDecay and compressorThreshold on rehydrate', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
@@ -717,9 +724,9 @@ describe('persisted payload sanitization', () => {
           bpm: 120,
           masterVolume: 0.85,
           // Both values out of range: -70 sits below the [-60, 0] floor, and
-          // 99 sits above reverbDecay's [0.1, 10] ceiling (Task 3: the range
-          // moved from [0.5, 6.0] once decay became a post-Task-4 duration in
-          // seconds rather than a curve exponent).
+          // 99 sits above reverbDecay's [0.1, 10] ceiling (the range moved
+          // from [0.5, 6.0] once decay became a duration in seconds rather
+          // than a curve exponent).
           effects: { ...INITIAL_EFFECTS, reverbDecay: 99, compressorThreshold: -70 },
         },
       })
@@ -737,9 +744,10 @@ describe('arp migration off stale persisted state', () => {
   // notes at all, which silenced the keyboard on every later session. The
   // version bump has to clear that flag so those users get their keys back.
   test('a version-1 payload with arpActive:true hydrates with the arp disabled', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
@@ -760,9 +768,10 @@ describe('arp migration off stale persisted state', () => {
   });
 
   test('a version-1 payload keeps every other synth param it stored', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
@@ -787,9 +796,10 @@ describe('arp migration off stale persisted state', () => {
   });
 
   test('a current-version payload keeps arpActive:true so the arp stays usable', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
@@ -811,9 +821,10 @@ describe('sequencer track colour migration wiring (v2 -> v3)', () => {
   // future refactor that inverts the `version >= 3` / `version >= 2`
   // ordering (store.ts) breaks a test here, not just in production.
   test('a version-2 payload with legacy palette track colours rehydrates with daisyUI tokens', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
@@ -846,9 +857,10 @@ describe('sequencer track colour migration wiring (v2 -> v3)', () => {
   });
 
   test('a version-3 payload passes through untouched (no double-remap, no clobber)', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
@@ -874,10 +886,10 @@ describe('meter migration wiring (v4 -> v5)', () => {
   // migrateMeterAndStepWidth is unit-tested directly in migrate.test.ts. These
   // tests drive the store's actual `migrate` callback end-to-end, through the
   // real version-chained pipeline in store.ts, the way the v2->v3 tests above
-  // do for track colours — Task 4's review flagged that no test exercised
-  // this wiring, only the standalone unit.
+  // do for track colours — the standalone unit alone never exercised this
+  // wiring end-to-end.
   test('a pre-v5 payload with no meterId and 16-wide steps hydrates with a defaulted meterId and 24-wide steps', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
 
     const kickSteps = [
@@ -889,6 +901,7 @@ describe('meter migration wiring (v4 -> v5)', () => {
       false, false, false, false, true, false, false, false,
     ];
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
@@ -925,11 +938,12 @@ describe('meter migration wiring (v4 -> v5)', () => {
   });
 
   test('a current-version payload with an explicit non-4/4 meterId and 24-wide steps passes through untouched', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
 
     const wide = Array.from({ length: 24 }, (_, i) => i % 6 === 0);
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
@@ -951,10 +965,11 @@ describe('meter migration wiring (v4 -> v5)', () => {
 
 describe('loop wrap migration wiring (v5 -> v6)', () => {
   test('a version-5 payload wraps into a single loop and hydrates the flat slices from it', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
 
     const wide = Array.from({ length: 24 }, (_, i) => i % 2 === 0);
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
@@ -982,10 +997,11 @@ describe('loop wrap migration wiring (v5 -> v6)', () => {
   });
 
   test('a corrupt loops array falls back to a valid single default loop', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
     useAppStore.setState({ scaleRoot: 'A' });
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({ version: 6, state: { loops: [null, 7, 'x'], activeLoopId: 'nope' } })
@@ -1002,10 +1018,11 @@ describe('loop wrap migration wiring (v5 -> v6)', () => {
 
 describe('synth param payload sanitization', () => {
   test('a non-object synthParams payload falls back to the factory defaults', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
     useAppStore.setState({ synthParams: INITIAL_SYNTH_PARAMS });
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({ version: 2, state: { synthParams: 'not-an-object' } })
@@ -1016,10 +1033,11 @@ describe('synth param payload sanitization', () => {
   });
 
   test('wrong-typed numeric synth params fall back instead of reaching the engine as NaN', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
     useAppStore.setState({ synthParams: INITIAL_SYNTH_PARAMS });
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
@@ -1045,9 +1063,10 @@ describe('synth param payload sanitization', () => {
   });
 
   test('an invalid arpMode falls back to a mode the arpeggiator understands', async () => {
-    const { useAppStore } = await getStore();
+    const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
 
+    flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({

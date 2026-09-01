@@ -3,7 +3,7 @@ import { deriveChordNotes } from '../utils/musicTheory';
 
 /**
  * A golden snapshot of every Instant Vibe's `chords` array, originally
- * captured before Task 6 of the vibe-chords-from-progressions plan replaced
+ * captured before the vibe-chords-from-progressions plan replaced
  * each vibe's inline chords with `progressionId` + `resolveProgression`. That
  * migration is long done; this fixture's ongoing job is to pin the resolved
  * output so `instantVibesProgressions.test.ts` fails loudly if a library

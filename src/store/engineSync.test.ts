@@ -3,7 +3,7 @@ import { audioEngine } from '../audio/engine';
 import { useAppStore } from './store';
 import { applyEngineSnapshot, startEngineSync, stopEngineSync } from './engineSync';
 import { getMeter } from '../utils/meter';
-import type { MasterEffects } from '../types';
+import type { MasterEffects, SynthParams } from '../types';
 
 // bun's parallel workers share module singletons (the store) across test
 // files, so transport state can leak in from earlier files — normalize what
@@ -138,6 +138,44 @@ describe('engineSync', () => {
     expect(updateSynthParams).not.toHaveBeenCalled();
     updateSynthParams.mockRestore();
   });
+
+  test('a one-shot params change reaches the engine in the same tick', () => {
+    // The coalescer is leading-edge on purpose: a preset load or a vibe apply
+    // must NOT wait for an animation frame.
+    const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockImplementation(
+      () => {},
+    );
+    startEngineSync();
+    updateSynthParams.mockClear();
+
+    useAppStore.setState((s) => ({ synthParams: { ...s.synthParams, detune: 11 } }));
+
+    expect(updateSynthParams).toHaveBeenCalledTimes(1);
+    expect((updateSynthParams.mock.calls[0][0] as SynthParams).detune).toBe(11);
+    expect(updateSynthParams.mock.calls[0][1]).toBe('synth');
+    updateSynthParams.mockRestore();
+  });
+
+  test('one action touching three param sources applies all three immediately', () => {
+    const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockImplementation(
+      () => {},
+    );
+    startEngineSync();
+    updateSynthParams.mockClear();
+
+    useAppStore.setState((s) => ({
+      synthParams: { ...s.synthParams, detune: 3 },
+      chordSynthParams: { ...s.chordSynthParams, detune: 4 },
+      bassSynthParams: { ...s.bassSynthParams, detune: 5 },
+    }));
+
+    expect(updateSynthParams.mock.calls.map((c) => c[1]).sort()).toEqual([
+      'bass',
+      'chord',
+      'synth',
+    ]);
+    updateSynthParams.mockRestore();
+  });
 });
 
 describe('engineSync meter bridge', () => {
@@ -170,5 +208,35 @@ describe('engineSync meter bridge', () => {
     applyEngineSnapshot();
     expect(setMeter).toHaveBeenCalledWith(getMeter('5/4'));
     useAppStore.setState({ meterId: '4/4' });
+  });
+
+  test('a reverbDecay drag does not re-run updateEffects', () => {
+    const updateEffects = spyOn(audioEngine, 'updateEffects').mockImplementation(() => {});
+    const setReverbDecay = spyOn(audioEngine, 'setReverbDecay').mockImplementation(() => {});
+    startEngineSync();
+    updateEffects.mockClear();
+    setReverbDecay.mockClear();
+
+    for (const d of [2.1, 2.2, 2.3, 2.4]) {
+      useAppStore.setState((s) => ({ effects: { ...s.effects, reverbDecay: d } }));
+    }
+
+    // Decay is committed on a trailing timer, and the wet-path listener must
+    // not fire at all for a decay-only change.
+    expect(updateEffects).not.toHaveBeenCalled();
+    expect(setReverbDecay).not.toHaveBeenCalled();
+    updateEffects.mockRestore();
+    setReverbDecay.mockRestore();
+  });
+
+  test('applyEngineSnapshot applies the decay directly, bypassing the debounce', () => {
+    const setReverbDecay = spyOn(audioEngine, 'setReverbDecay').mockImplementation(() => {});
+    useAppStore.setState((s) => ({ effects: { ...s.effects, reverbDecay: 3.3 } }));
+    setReverbDecay.mockClear();
+
+    applyEngineSnapshot();
+
+    expect(setReverbDecay).toHaveBeenCalledWith(3.3);
+    setReverbDecay.mockRestore();
   });
 });

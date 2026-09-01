@@ -6,6 +6,9 @@ import { useAppStore } from './store';
 import { isPlayerActive } from './transportSlice';
 import { getMeter } from '../utils/meter';
 import { startMidiInputBridge } from './midiInput';
+import { createFrameCoalescer } from '../utils/frameCoalescer';
+import { createTrailingDebounce } from '../utils/trailingDebounce';
+import type { MasterEffects } from '../types';
 
 /**
  * One-way bridge from the Zustand store into the audioEngine singleton,
@@ -22,6 +25,39 @@ type Stop = () => void;
 
 let syncStarted = false;
 let stopCurrent: Stop | null = null;
+
+/**
+ * Trailing-commit window for the reverb Decay knob. Long enough that a
+ * continuous sweep rebuilds the impulse exactly once (on release), short
+ * enough to read as immediate. The wet amount is a separate, continuous
+ * AudioParam ramp, so the knob still sounds live while the tail length waits.
+ */
+export const REVERB_DECAY_COMMIT_MS = 180;
+
+// Every MasterEffects field EXCEPT reverbDecay, which has its own debounced
+// subscription below. Comparing on this list keeps a decay drag from also
+// re-running updateEffects' seven setTargetAtTime calls for nothing.
+const EFFECT_KEYS_EXCEPT_DECAY = [
+  'reverbWet',
+  'reverbBypass',
+  'delayWet',
+  'delayFeedback',
+  'delayBypass',
+  'distortionWet',
+  'distortionBypass',
+  'eqLow',
+  'eqMid',
+  'eqHigh',
+  'eqBypass',
+  'compressorThreshold',
+] as const;
+
+function effectsEqualExceptDecay(a: MasterEffects, b: MasterEffects): boolean {
+  for (const key of EFFECT_KEYS_EXCEPT_DECAY) {
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
+}
 
 function applySliceState(): void {
   const s = useAppStore.getState();
@@ -40,6 +76,10 @@ function applySliceState(): void {
   audioEngine.setDrumKit(DRUM_KITS[s.soundKit]);
   audioEngine.setDrumFilter(s.drumFilterCutoff, s.drumFilterResonance, s.drumFilterType);
   audioEngine.updateEffects(s.effects);
+  // Applied DIRECTLY, not through the debounce: applyEngineSnapshot runs once
+  // right after init(), when every earlier setter was a no-op, so the impulse
+  // must exist before the first note.
+  audioEngine.setReverbDecay(s.effects.reverbDecay);
   audioEngine.updateSynthParams(s.synthParams, 'synth');
   audioEngine.updateSynthParams(s.chordSynthParams, 'chord');
   audioEngine.updateSynthParams(s.bassSynthParams, 'bass');
@@ -54,6 +94,16 @@ export function startEngineSync(): Stop {
   startMidiInputBridge();
 
   const subs: Array<() => void> = [];
+
+  // The parameter bridge is capped at one engine call per key per animation
+  // frame. updateSynthParams re-targets EVERY live voice with ~15-20
+  // timeline-locking AudioParam operations, so an unthrottled knob drag with
+  // 8 held voices is thousands of lock acquisitions a second on the same
+  // thread as the 25 ms scheduler. The coalescer is leading-edge, so a
+  // one-shot change (preset load, vibe apply, the fireImmediately bootstrap)
+  // still reaches the engine in the same tick — only a REPEAT on the same key
+  // inside one frame is deferred.
+  const paramFrames = createFrameCoalescer();
 
   // transport slice
   subs.push(useAppStore.subscribe((s) => s.bpm, (bpm) => audioEngine.setClockBpm(bpm), { fireImmediately: true }));
@@ -102,8 +152,35 @@ export function startEngineSync(): Stop {
   subs.push(
     useAppStore.subscribe(
       (s) => s.effects,
-      (effects) => audioEngine.updateEffects(effects),
-      { equalityFn: shallow, fireImmediately: true },
+      (effects, prevEffects) => {
+        // subscribeWithSelector's fireImmediately calls the listener with the
+        // SAME reference twice (see its source), which is otherwise
+        // impossible once the equality check above has already gated out a
+        // no-op change. That is the one reliable signal that this call is the
+        // startup bootstrap rather than a real edit, and the coalescer must
+        // never see it: consuming the leading slot at boot would push the
+        // very next genuine edit — however unrelated — into next frame.
+        if (effects === prevEffects) audioEngine.updateEffects(effects);
+        else paramFrames.push('effects', () => audioEngine.updateEffects(effects));
+      },
+      { equalityFn: effectsEqualExceptDecay, fireImmediately: true },
+    ),
+  );
+
+  // Decay is STRUCTURAL: committing it rebuilds a multi-megabyte impulse and
+  // re-partitions the ConvolverNode, and quantiseDecay's 0.1 s step equals the
+  // knob's own step, so an unthrottled drag rebuilt on ~every pointer frame
+  // and starved the 25 ms scheduler. Commit on gesture end instead; the wet
+  // amount above stays continuous, so the knob is still audibly live.
+  const decayCommit = createTrailingDebounce<number>(
+    (decay) => audioEngine.setReverbDecay(decay),
+    REVERB_DECAY_COMMIT_MS,
+  );
+  subs.push(
+    useAppStore.subscribe(
+      (s) => s.effects.reverbDecay,
+      (decay) => decayCommit.push(decay),
+      { fireImmediately: true },
     ),
   );
 
@@ -116,7 +193,10 @@ export function startEngineSync(): Stop {
     subs.push(
       useAppStore.subscribe(
         (s) => s[field],
-        (params) => audioEngine.updateSynthParams(params, source),
+        (params, prevParams) => {
+          if (params === prevParams) audioEngine.updateSynthParams(params, source);
+          else paramFrames.push(source, () => audioEngine.updateSynthParams(params, source));
+        },
         { equalityFn: shallow, fireImmediately: true },
       ),
     );
@@ -152,6 +232,11 @@ export function startEngineSync(): Stop {
   stopCurrent = () => {
     for (const unsub of subs) unsub();
     subs.length = 0;
+    // Drop, don't flush: stopping the bridge means the engine must stop
+    // receiving store values, and a flush would fire a call after the last
+    // subscription was already torn down.
+    paramFrames.cancel();
+    decayCommit.cancel();
     syncStarted = false;
     stopCurrent = null;
   };
