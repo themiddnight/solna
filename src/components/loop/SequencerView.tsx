@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   RotateCcw,
   Shuffle,
@@ -11,29 +11,22 @@ import { useAppStore } from "../../store/store";
 import { getMeter } from "../../utils/meter";
 import { sequencerMeterBadge, stepCells } from "../sequencerGrid";
 import { rotateStepWindow, writeStepWindow } from "../../utils/patternAdapt";
-import { useSequencerPlayback } from "../useSequencerPlayback";
 import { ensureDrumEngine, triggerPad } from "../../audio/playback/drumPlayback";
 import { previewSequencerNote } from "../../audio/playback/presetPreview";
 import type { PreviewHandle } from "../../audio/playback/presetPreview";
 import { GENRE_PRESETS } from "../../audio/data/genrePresets";
 import { DRUM_KITS, GENRE_TO_KIT } from "../../audio/drumKits";
-import type { InputDeckDrumProps } from "../useInputDeck";
 import { patternMeterTitle, patternOptionLabel } from "../meterSelect";
 import { Knob } from "../ui/Knob";
 import { ViewHeader } from "../ui/ViewHeader";
 import { ChannelStrip } from "../ui/ChannelStrip";
 import { FIELD_LANE, FIELD_SELECT, SECTION_HEADER } from "../ui/fieldClasses";
 import { Field } from "../ui/Field";
-import { StepHeader } from "./sequencer/StepHeader";
-import { TrackRow } from "./sequencer/TrackRow";
+import { SequencerGrid } from "./sequencer/SequencerGrid";
 import type { SequencerTrack } from "../../types";
 
 
-interface SequencerViewProps {
-  drumProps?: InputDeckDrumProps;
-}
-
-export const SequencerView = ({ drumProps: _drumProps }: SequencerViewProps = {}) => {
+export const SequencerView: React.FC = React.memo(() => {
   // Sequencer/transport/synth state + setters (named after the old props so the
   // rest of the component body is unchanged).
   const tracks = useAppStore((s) => s.sequencerTracks);
@@ -45,7 +38,6 @@ export const SequencerView = ({ drumProps: _drumProps }: SequencerViewProps = {}
   const meter = getMeter(meterId);
   const stepsPerBar = meter.stepsPerBar;
   const cells = useMemo(() => stepCells(meter), [meter]);
-  const isPlaying = useAppStore((s) => s.sequencerPlayer !== 'stopped');
   const soundKit = useAppStore((s) => s.soundKit);
   const onChangeSoundKit = useAppStore((s) => s.setSoundKit);
   const masterSequencerVolume = useAppStore((s) => s.masterSequencerVolume);
@@ -59,7 +51,6 @@ export const SequencerView = ({ drumProps: _drumProps }: SequencerViewProps = {}
   const setDrumFilterResonance = useAppStore((s) => s.setDrumFilterResonance);
   const setDrumFilterType = useAppStore((s) => s.setDrumFilterType);
 
-  const { currentStep } = useSequencerPlayback();
   const [selectedGenre, setSelectedGenre] = useState<string>("Synthwave");
   const previewRef = useRef<PreviewHandle | null>(null);
   useEffect(() => () => previewRef.current?.(), []);
@@ -341,28 +332,15 @@ export const SequencerView = ({ drumProps: _drumProps }: SequencerViewProps = {}
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-        {/* Step Indicator Header — one cell per step of the active bar */}
-        <StepHeader cells={cells} currentStep={currentStep} isPlaying={isPlaying} />
-
-        {/* Track Lanes */}
-        <div className="space-y-2 min-w-[700px]">
-          {tracks.map((track) => (
-            <TrackRow
-              key={track.id}
-              track={track}
-              cells={cells}
-              currentStep={currentStep}
-              isPlaying={isPlaying}
-              onToggleStep={toggleStep}
-              onToggleMute={toggleMute}
-              onPreview={previewTrack}
-            />
-          ))}
-        </div>
-        </div>
+        <SequencerGrid
+          tracks={tracks}
+          cells={cells}
+          onToggleStep={toggleStep}
+          onToggleMute={toggleMute}
+          onPreview={previewTrack}
+        />
         </div>
       </div>
     </div>
   );
-};
+});

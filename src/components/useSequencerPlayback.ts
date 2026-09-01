@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useAppStore } from "../store/store";
+import { publishStep, resetStep } from "./playbackStep";
 import { ensureDrumEngine, triggerPad } from "../audio/playback/drumPlayback";
 import { STEPS_PER_BAR, stepDurationSec } from "../utils/musicTheory";
 import {
@@ -10,6 +11,7 @@ import {
 import { getMeter } from "../utils/meter";
 import { armOnBarLine, isSoftStopBoundary } from "./playerStop";
 import type { PlayerState } from "../store/types";
+import type { SequencerTrack, SynthParams } from "../types";
 
 /** Whether the stepper has caught a bar line and started running. */
 export interface SequencerArming {
@@ -40,24 +42,52 @@ export function sequencerStepAction(
   return "play";
 }
 
+/** What one sequencer step must trigger. Pure so the per-step decision is
+ *  testable without a clock, an AudioContext or a React render. */
+export type SequencerStepEvent =
+  | { kind: 'note'; note: string; release: number; offsetSec: number }
+  | { kind: 'pad'; instrument: string };
+
+export function sequencerStepEvents(
+  tracks: readonly SequencerTrack[],
+  stepIndex: number,
+  synthParams: SynthParams,
+  bpm: number,
+): SequencerStepEvent[] {
+  const events: SequencerStepEvent[] = [];
+  const offsetSec = stepDurationSec(bpm) * 0.8;
+  for (const track of tracks) {
+    if (track.muted) continue;
+    if (!track.steps[stepIndex]) continue;
+    if (track.instrument === 'synth' || track.instrument === 'bass') {
+      events.push({
+        kind: 'note',
+        note: track.instrument === 'bass' ? 'C2' : 'C4',
+        release: synthParams.release,
+        offsetSec,
+      });
+    } else {
+      events.push({ kind: 'pad', instrument: track.instrument });
+    }
+  }
+  return events;
+}
+
 // Real-time sequencer stepper hook. Moved here from
 // audio/playback/sequencerPlayback.ts (layering rule 1: audio/ must not import
 // store/) — the hook reads store state, so it is a component-layer concern;
 // the engine is reached only through the audio-layer bridge in
 // playbackEngine.ts (layering rule 3).
-export function useSequencerPlayback(): {
-  currentStep: number;
-  setCurrentStep: (step: number) => void;
-} {
-  const tracks = useAppStore((s) => s.sequencerTracks);
-  const synthParams = useAppStore((s) => s.synthParams);
-  const masterSequencerVolume = useAppStore((s) => s.masterSequencerVolume);
-  const bpm = useAppStore((s) => s.bpm);
+export function useSequencerPlayback(): void {
+  // tracks / synthParams / masterSequencerVolume / bpm are deliberately NOT
+  // selected here: they are read LIVE inside the clock callback below. As
+  // render-scope values they landed in playStepSounds' useCallback deps and
+  // then in the clock effect's deps, so every knob pointermove tore down and
+  // re-subscribed the clock (~120x/sec) and re-ran ensureDrumEngine(). The
+  // live read is also strictly fresher — see the meter comment in the callback.
   const playerState = useAppStore((s) => s.sequencerPlayer);
   const hardStop = useAppStore((s) => s.hardStop);
   const isPlaying = playerState !== 'stopped';
-
-  const [currentStep, setCurrentStep] = useState<number>(0);
 
   // Real-time playback stepper — driven by the shared audio-clock scheduler
   const armingRef = useRef<SequencerArming>({ armed: false });
@@ -76,37 +106,10 @@ export function useSequencerPlayback(): {
       ),
     [],
   );
-  const playStepSounds = useCallback(
-    (stepIndex: number, time: number) => {
-      tracks.forEach((track) => {
-        if (track.muted) return;
-        if (track.steps[stepIndex]) {
-          if (track.instrument === "synth" || track.instrument === "bass") {
-            const note = track.instrument === "bass" ? "C2" : "C4";
-            playbackNoteOn(
-              note,
-              synthParams,
-              masterSequencerVolume,
-              time,
-            );
-            playbackNoteOff(
-              note,
-              synthParams.release,
-              time + stepDurationSec(bpm) * 0.8,
-            );
-          } else {
-            triggerPad(track.instrument, masterSequencerVolume, time);
-          }
-        }
-      });
-    },
-    [tracks, synthParams, masterSequencerVolume, bpm],
-  );
-
   useEffect(() => {
     if (!isPlaying) {
       armingRef.current.armed = false;
-      setCurrentStep(0);
+      resetStep('sequencer');
       return;
     }
 
@@ -138,10 +141,26 @@ export function useSequencerPlayback(): {
       }
 
       const stepInLoop = step % stepsPerBar;
-      setCurrentStep(stepInLoop);
-      playStepSounds(stepInLoop, time);
-    });
-  }, [isPlaying, playStepSounds]);
+      publishStep('sequencer', stepInLoop);
 
-  return { currentStep, setCurrentStep };
+      // Everything the step needs, read LIVE off the store — same rationale as
+      // the meter read above, and the pattern useLeadPlayback.ts:90 and
+      // useChordPlayback.ts:632 already use.
+      const live = useAppStore.getState();
+      const volume = live.masterSequencerVolume;
+      for (const event of sequencerStepEvents(
+        live.sequencerTracks,
+        stepInLoop,
+        live.synthParams,
+        live.bpm,
+      )) {
+        if (event.kind === 'note') {
+          playbackNoteOn(event.note, live.synthParams, volume, time);
+          playbackNoteOff(event.note, event.release, time + event.offsetSec);
+        } else {
+          triggerPad(event.instrument, volume, time);
+        }
+      }
+    });
+  }, [isPlaying, hardStop]);
 }

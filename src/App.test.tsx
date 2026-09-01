@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { registerFirstGesture } from './App';
+import { registerFirstGesture, registerIdleWake } from './App';
 
 /**
  * A minimal EventTarget stand-in: no DOM, just enough of the
@@ -89,5 +89,52 @@ describe('registerFirstGesture', () => {
     target.dispatch('keydown');
     target.dispatch('pointerdown');
     expect(calls).toBe(0);
+  });
+});
+
+describe('registerIdleWake', () => {
+  function fakeTarget() {
+    const listeners = new Map<string, Set<() => void>>();
+    return {
+      listeners,
+      addEventListener: (type: string, fn: () => void) => {
+        if (!listeners.has(type)) listeners.set(type, new Set());
+        listeners.get(type)!.add(fn);
+      },
+      removeEventListener: (type: string, fn: () => void) => {
+        listeners.get(type)?.delete(fn);
+      },
+      fire: (type: string) => {
+        for (const fn of Array.from(listeners.get(type) ?? [])) fn();
+      },
+    };
+  }
+
+  test('it listens on pointerdown and keydown', () => {
+    const target = fakeTarget();
+    registerIdleWake(target, () => {});
+    expect(Array.from(target.listeners.keys()).sort()).toEqual(['keydown', 'pointerdown']);
+  });
+
+  test('unlike registerFirstGesture it stays registered and fires every time', () => {
+    const target = fakeTarget();
+    let woken = 0;
+    registerIdleWake(target, () => { woken++; });
+
+    target.fire('pointerdown');
+    target.fire('pointerdown');
+    target.fire('keydown');
+    expect(woken).toBe(3);
+  });
+
+  test('the returned cleanup removes both listeners', () => {
+    const target = fakeTarget();
+    let woken = 0;
+    const cleanup = registerIdleWake(target, () => { woken++; });
+    cleanup();
+
+    target.fire('pointerdown');
+    target.fire('keydown');
+    expect(woken).toBe(0);
   });
 });

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo } from 'react';
 import { useAppStore } from '../../../store/store';
 import { loopBars } from '../../../store/loop';
 import { getMeter, type Meter } from '../../../utils/meter';
-import { stepCells } from '../../sequencerGrid';
+import { stepCells, type StepCell } from '../../sequencerGrid';
 import { clampLeadLoopLength, loopLengthDivisors } from '../../../audio/leadMelody';
 import {
   initSynthPlayback,
@@ -17,14 +17,28 @@ import {
   leadPitchRows,
   leadStoredIndex,
 } from './pianoRoll';
-
-export interface LeadPianoRollProps {
-  currentStep: number;
-  isPlaying: boolean;
-}
+import { useCurrentStep } from '../../playbackStep';
+import { useLeadPlayback } from './useLeadPlayback';
 
 /** Fixed width (px) of the note-name column, shared by the header spacer. */
 const LABEL_WIDTH = 44;
+
+/**
+ * The moving column. Split out with an explicit prop so the geometry stays
+ * unit-testable: LeadPianoRoll owns useLeadPlayback now, and renderToString
+ * cannot force a playing store state (zustand v5 serves
+ * selector(api.getInitialState()) as the server snapshot — see
+ * ui/BottomInputDock.tsx:9-21).
+ */
+export const LeadPlayhead: React.FC<{ currentStep: number }> = ({ currentStep }) => (
+  <div
+    className="pointer-events-none absolute top-0 bottom-0 bg-primary/20 ring-1 ring-inset ring-primary"
+    style={{
+      width: LEAD_CELL_WIDTH,
+      transform: `translateX(${currentStep * LEAD_CELL_WIDTH}px)`,
+    }}
+  />
+);
 
 // Memoized: props are stable across clock ticks, so the cells never re-render
 // when only the playhead moves.
@@ -93,7 +107,75 @@ const LeadPianoCells = React.memo(function LeadPianoCells({
   );
 });
 
-export const LeadPianoRoll: React.FC<LeadPianoRollProps> = ({ currentStep, isPlaying }) => {
+
+// Memoized for the same reason as LeadPianoCells above: LeadPianoRoll
+// re-renders once per 16th note to move the playhead, and these two strips
+// rebuild `columns` divs each — 128 of them for a 4-bar loop in 4/4 — every
+// time. stepsPerBar and columns are numbers, and cellsPerBar is useMemo'd on
+// the shared METERS[id] object, so the shallow prop comparison is meaningful.
+export const LeadPianoHeaders = React.memo(function LeadPianoHeaders({
+  stepsPerBar,
+  columns,
+  cellsPerBar,
+}: {
+  stepsPerBar: number;
+  columns: number;
+  cellsPerBar: StepCell[];
+}) {
+  return (
+    <>
+      {/* Bar-number header */}
+      <div className="flex">
+        <div className="shrink-0" style={{ width: LABEL_WIDTH }} />
+        <div className="flex shrink-0">
+          {Array.from({ length: columns }, (_, col) => {
+            const barIndex = Math.floor(col / stepsPerBar);
+            const stepInBar = col - barIndex * stepsPerBar;
+            return (
+              <div
+                key={col}
+                className="text-[8px] leading-none text-center font-bold text-base-content/60"
+                style={{ width: LEAD_CELL_WIDTH }}
+              >
+                {stepInBar === 0 ? barIndex + 1 : ''}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Beat-number header */}
+      <div className="flex">
+        <div className="shrink-0" style={{ width: LABEL_WIDTH }} />
+        <div className="flex shrink-0">
+          {Array.from({ length: columns }, (_, col) => {
+            const barIndex = Math.floor(col / stepsPerBar);
+            const stepInBar = col - barIndex * stepsPerBar;
+            const cell = cellsPerBar[stepInBar];
+            return (
+              <div
+                key={col}
+                className="text-[9px] leading-none text-center text-base-content/50"
+                style={{ width: LEAD_CELL_WIDTH }}
+              >
+                {cell.isBeatStart ? cell.beatIndex + 1 : ''}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+});
+
+export const LeadPianoRoll: React.FC = () => {
+  // Mounted here, not in SynthView: the step used to arrive as a prop, so all
+  // 174 JSX nodes of the 1208-line SynthView reconciled 8x/sec to move one
+  // translateX. LeadPianoRoll is rendered exactly once (SynthView.tsx, in
+  // both simple and pro mode), which is the requirement — useLeadPlayback
+  // subscribes the clock and owns the hard stop.
+  const { isPlaying } = useLeadPlayback();
+  const currentStep = useCurrentStep('lead');
   const meterId = useAppStore((s) => s.meterId);
   const leadMelodySteps = useAppStore((s) => s.leadMelodySteps);
   const leadLoopLength = useAppStore((s) => s.leadLoopLength);
@@ -226,46 +308,11 @@ export const LeadPianoRoll: React.FC<LeadPianoRollProps> = ({ currentStep, isPla
 
         <div className="overflow-x-auto bg-base-200 p-3 rounded">
           <div className="w-fit mx-auto">
-            {/* Bar-number header */}
-            <div className="flex">
-              <div className="shrink-0" style={{ width: LABEL_WIDTH }} />
-              <div className="flex shrink-0">
-                {Array.from({ length: columns }, (_, col) => {
-                  const barIndex = Math.floor(col / stepsPerBar);
-                  const stepInBar = col - barIndex * stepsPerBar;
-                  return (
-                    <div
-                      key={col}
-                      className="text-[8px] leading-none text-center font-bold text-base-content/60"
-                      style={{ width: LEAD_CELL_WIDTH }}
-                    >
-                      {stepInBar === 0 ? barIndex + 1 : ''}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Beat-number header */}
-            <div className="flex">
-              <div className="shrink-0" style={{ width: LABEL_WIDTH }} />
-              <div className="flex shrink-0">
-                {Array.from({ length: columns }, (_, col) => {
-                  const barIndex = Math.floor(col / stepsPerBar);
-                  const stepInBar = col - barIndex * stepsPerBar;
-                  const cell = cellsPerBar[stepInBar];
-                  return (
-                    <div
-                      key={col}
-                      className="text-[9px] leading-none text-center text-base-content/50"
-                      style={{ width: LEAD_CELL_WIDTH }}
-                    >
-                      {cell.isBeatStart ? cell.beatIndex + 1 : ''}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <LeadPianoHeaders
+              stepsPerBar={stepsPerBar}
+              columns={columns}
+              cellsPerBar={cellsPerBar}
+            />
 
             {/* Body: note column + cells + playhead */}
             <div className="flex">
@@ -295,15 +342,7 @@ export const LeadPianoRoll: React.FC<LeadPianoRollProps> = ({ currentStep, isPla
                   root={scaleRoot}
                   onToggle={onToggle}
                 />
-                {isPlaying && (
-                  <div
-                    className="pointer-events-none absolute top-0 bottom-0 bg-primary/20 ring-1 ring-inset ring-primary"
-                    style={{
-                      width: LEAD_CELL_WIDTH,
-                      transform: `translateX(${currentStep * LEAD_CELL_WIDTH}px)`,
-                    }}
-                  />
-                )}
+                {isPlaying && <LeadPlayhead currentStep={currentStep} />}
               </div>
             </div>
           </div>

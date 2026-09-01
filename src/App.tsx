@@ -13,7 +13,6 @@ import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
 import { useRouteSync } from './routing/useRouteSync';
 import { usePlayheadSync } from './components/usePlayheadSync';
 import { useInputDeck } from './components/useInputDeck';
-import { useLoopSync } from './store/loopSync';
 import { useSongModeSync } from './store/songMode';
 import { isSongLayer } from './types';
 
@@ -52,6 +51,31 @@ export function registerFirstGesture(
   return cleanup;
 }
 
+/** The two gestures that mean "the user is back" — a pointer press or a key. */
+const IDLE_WAKE_EVENTS = ['pointerdown', 'keydown'] as const;
+
+/**
+ * Persistent (NOT one-shot, unlike registerFirstGesture) listeners that wake
+ * an idle-suspended AudioContext.
+ *
+ * Wired to the gesture rather than to the note-on: resuming is asynchronous,
+ * so resuming at note-on time would make the first note late. A pointer press
+ * happens tens of milliseconds before it reaches a key or a pad.
+ *
+ * DOM-injectable so it is unit-testable without a real DOM or
+ * testing-library, same pattern as registerFirstGesture.
+ */
+export function registerIdleWake(
+  target: GestureEventTarget,
+  onWake: () => void,
+): () => void {
+  const handle = () => onWake();
+  IDLE_WAKE_EVENTS.forEach((event) => target.addEventListener(event, handle));
+  return () => {
+    IDLE_WAKE_EVENTS.forEach((event) => target.removeEventListener(event, handle));
+  };
+}
+
 export function App() {
   // One-way bridge: store state -> audioEngine singleton (replaces the
   // engine-sync useEffect blocks that used to live here).
@@ -63,8 +87,9 @@ export function App() {
   // Shared clock -> store playhead, so every tab can show the beat position.
   usePlayheadSync();
 
-  // Loop live-write sync-back + song-mode coordinator (store-level, mounted once).
-  useLoopSync();
+  // Song-mode coordinator (store-level, mounted once). The loop live-write
+  // sync-back is no longer a subscription — it rides along inside the store's
+  // own set(), see store/loopSync.ts.
   useSongModeSync();
 
   // Global input: owns the QWERTY listeners + note playing, feeds the dock.
@@ -86,6 +111,11 @@ export function App() {
     });
   }, []);
 
+  // Wake an idle-suspended AudioContext on the first sign the user is back.
+  useEffect(() => {
+    return registerIdleWake(window, () => audioEngine.wakeIfIdle());
+  }, []);
+
   return (
     <div className="h-dvh bg-canvas text-base-content flex flex-col font-sans selection:bg-primary selection:text-primary-content relative overflow-hidden">
       {/* Low-contrast analyser-driven field behind the whole workspace, so
@@ -105,7 +135,7 @@ export function App() {
           and each page toggles its own sub-tabs (block/hidden). */}
       <main className="flex-1 min-h-0 relative overflow-y-auto">
         <div className={isSongLayer(activeTab) ? 'hidden' : 'block'}>
-          <LoopPage drumProps={drumProps} />
+          <LoopPage />
         </div>
         <div className={isSongLayer(activeTab) ? 'block' : 'hidden'}>
           <SongPage />

@@ -4,7 +4,8 @@ import { INSTANT_VIBES, applyInstantVibeToStore } from '../store/instantVibes';
 import { audioEngine } from '../audio/engine';
 import { useAppStore } from '../store/store';
 import { startEngineSync, stopEngineSync } from '../store/engineSync';
-import { selectVibe, InstantVibesBar, rerollVibe } from './InstantVibesBar';
+import { InstantVibesBar } from './InstantVibesBar';
+import { rerollVibe, selectVibe } from './vibeActions';
 
 const noop = { onToast: () => {} };
 

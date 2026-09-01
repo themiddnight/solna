@@ -3,18 +3,9 @@ import { renderToString } from 'react-dom/server';
 import { SequencerView } from './SequencerView';
 import { useAppStore } from '../../store/store';
 import { FIELD_LABEL, FIELD_LANE, FIELD_SELECT } from '../ui/fieldClasses';
-import { DEFAULT_PADS } from '../ui/DrumPadGrid';
-import type { InputDeckDrumProps } from '../useInputDeck';
-
-const drumProps: InputDeckDrumProps = {
-  pads: DEFAULT_PADS,
-  activePadId: null,
-  onTriggerPad: () => {},
-  onPadVolumeChange: () => {},
-};
 
 describe('SequencerView theming', () => {
-  const html = renderToString(<SequencerView drumProps={drumProps} />);
+  const html = renderToString(<SequencerView />);
 
   test('panels are daisyUI cards on base tokens', () => {
     expect(html).toContain('card bg-panel border border-base-300');
@@ -121,7 +112,7 @@ describe('SequencerView theming', () => {
 describe('SequencerView genre options carry their meter', () => {
   test('in 4/4 every genre is labelled with its own meter', () => {
     useAppStore.setState({ meterId: '4/4' });
-    const html = renderToString(<SequencerView drumProps={drumProps} />);
+    const html = renderToString(<SequencerView />);
     expect(html).toContain('Synthwave · 4/4');
     expect(html).toContain('Boom Bap · 4/4');
     // The value is still the bare genre key, so applyGenrePreset is unaffected.
@@ -152,4 +143,109 @@ describe('SequencerView genre options carry their meter', () => {
   // need either a production-code change to how `SequencerView` reads
   // `meterId` (e.g. a prop/context seam a test can drive) or new
   // module-mocking test infrastructure this repo does not otherwise use.
+});
+
+import { SequencerGrid } from './sequencer/SequencerGrid';
+import { stepPublisher } from '../playbackStep';
+import { stepCells } from '../sequencerGrid';
+import { getMeter } from '../../utils/meter';
+import { StepHeader } from './sequencer/StepHeader';
+import { TrackRow } from './sequencer/TrackRow';
+import { useCurrentStep } from '../playbackStep';
+import React from 'react';
+
+describe('SequencerGrid', () => {
+  const cells = stepCells(getMeter('4/4'));
+  const tracks = useAppStore.getState().sequencerTracks;
+
+  const render = () =>
+    renderToString(
+      <SequencerGrid
+        tracks={tracks}
+        cells={cells}
+        onToggleStep={() => {}}
+        onToggleMute={() => {}}
+        onPreview={() => {}}
+      />,
+    );
+
+  test('renders the step header and one row per track', () => {
+    const html = render();
+    for (const track of tracks) {
+      expect(html).toContain(`id="sequencer-row-${track.id}"`);
+    }
+    expect(html).toContain('pl-44'); // StepHeader's strip
+  });
+
+  // `isCurrent` in StepHeader/TrackRow is gated by `isPlaying`, which
+  // SequencerGrid reads with a plain `useAppStore` selector — the same
+  // selector the pre-move SequencerView used, and the same one that hits the
+  // renderToString/getInitialState trap documented at the bottom of this
+  // file: `setState` cannot move it here, so a full `<SequencerGrid
+  // isPlaying-through-the-store />` render can never show the highlight under
+  // this harness, playing or not. What this harness CAN exercise is the
+  // exact hook call SequencerGrid makes (`useCurrentStep('sequencer')`),
+  // wired into the same leaves with `isPlaying` supplied directly — proving
+  // the publisher's value actually reaches the grid, the same way
+  // StepRow.test.tsx proves PlayingStepRow's gated ring with a literal prop.
+  test('reads the playhead from the step publisher', () => {
+    const Probe: React.FC = () => {
+      const currentStep = useCurrentStep('sequencer');
+      return <StepHeader cells={cells} currentStep={currentStep} isPlaying />;
+    };
+    stepPublisher.reset('sequencer');
+    const atZero = renderToString(<Probe />);
+    stepPublisher.publish('sequencer', 7);
+    const atSeven = renderToString(<Probe />);
+    expect(atSeven).not.toBe(atZero);
+    expect(atSeven).toContain('bg-primary text-primary-content font-bold shadow-md shadow-primary/50');
+    stepPublisher.reset('sequencer');
+    expect(renderToString(<Probe />)).toBe(atZero);
+  });
+
+  test('no raw palette or absolute black/white classes leak in', () => {
+    const html = render();
+    expect(html).not.toContain('indigo-');
+    expect(html).not.toContain('slate-');
+    expect(html).not.toContain('text-white');
+    expect(html).not.toContain('bg-black');
+    expect(html).not.toContain('rgba(');
+  });
+
+  // The grid's JSX was moved out of SequencerView verbatim, not rewritten —
+  // this proves it byte-for-byte rather than by the substring checks above,
+  // which would pass even if a class or an element got dropped or reordered
+  // as long as one known fragment survived. `isPlaying` is computed the same
+  // way `SequencerGrid` computes it (off `getInitialState`, not `getState`)
+  // because plain `useAppStore` selectors hit the zustand+renderToString trap
+  // documented at the top of this file: a rendered `<SequencerGrid />` always
+  // reflects the store's creation-time snapshot, never a later `setState`.
+  test('renders exactly the markup SequencerView used to inline', () => {
+    stepPublisher.publish('sequencer', 5);
+    const isPlaying = useAppStore.getInitialState().sequencerPlayer !== 'stopped';
+
+    const before = renderToString(
+      <div className="overflow-x-auto">
+        <StepHeader cells={cells} currentStep={5} isPlaying={isPlaying} />
+        <div className="space-y-2 min-w-[700px]">
+          {tracks.map((track) => (
+            <TrackRow
+              key={track.id}
+              track={track}
+              cells={cells}
+              currentStep={5}
+              isPlaying={isPlaying}
+              onToggleStep={() => {}}
+              onToggleMute={() => {}}
+              onPreview={() => {}}
+            />
+          ))}
+        </div>
+      </div>,
+    );
+    const after = render();
+    stepPublisher.reset('sequencer');
+
+    expect(after).toBe(before);
+  });
 });

@@ -3,7 +3,6 @@ import React from 'react';
 import { renderToString } from 'react-dom/server';
 import { TabButton, AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS } from './Header';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
-import { layerForTab } from '../types';
 
 describe('resolveInitialTheme', () => {
   test('a stored theme always wins over the OS preference', () => {

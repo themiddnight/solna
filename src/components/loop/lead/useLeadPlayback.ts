@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAppStore } from '../../../store/store';
 import { leadStepNotes, resolveLeadStepTriggers } from '../../../audio/leadMelody';
 import {
+  HARD_STOP_RELEASE,
   initPlaybackEngine,
   playbackNoteOff,
   playbackNoteOn,
@@ -12,10 +13,8 @@ import { DEFAULT_VELOCITY } from '../../../audio/constants';
 import { stepDurationSec } from '../../../utils/musicTheory';
 import { arpStepFor, getMeter } from '../../../utils/meter';
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from '../../playerStop';
+import { publishStep, resetStep } from '../../playbackStep';
 import type { PlayerState } from '../../../store/types';
-
-/** Short enough to read as an instant cut, long enough not to click. */
-const HARD_STOP_RELEASE = 0.02;
 
 export interface LeadArming {
   armed: boolean;
@@ -47,12 +46,11 @@ export function leadStepAction(
  * and params are read LIVE from the store inside the clock callback, so a
  * knob tweak reaches the next hit without re-subscribing.
  */
-export function useLeadPlayback(): { currentStep: number; isPlaying: boolean } {
+export function useLeadPlayback(): { isPlaying: boolean } {
   const playerState = useAppStore((s) => s.leadPlayer);
   const hardStop = useAppStore((s) => s.hardStop);
   const isPlaying = playerState !== 'stopped';
 
-  const [currentStep, setCurrentStep] = useState<number>(0);
   const armingRef = useRef<LeadArming>({ armed: false });
   const softStopPendingRef = useRef(false);
 
@@ -65,7 +63,7 @@ export function useLeadPlayback(): { currentStep: number; isPlaying: boolean } {
         (next, prev) => {
           if (next === 'stopped') {
             armingRef.current.armed = false;
-            setCurrentStep(0);
+            resetStep('lead');
           }
           if (!shouldHardStopNow(prev, next, softStopPendingRef.current)) {
             if (next !== 'stopping') softStopPendingRef.current = false;
@@ -80,7 +78,7 @@ export function useLeadPlayback(): { currentStep: number; isPlaying: boolean } {
   useEffect(() => {
     if (!isPlaying) {
       armingRef.current.armed = false;
-      setCurrentStep(0);
+      resetStep('lead');
       return;
     }
 
@@ -91,7 +89,6 @@ export function useLeadPlayback(): { currentStep: number; isPlaying: boolean } {
       const playerState = s.leadPlayer;
       const stepsPerBar = getMeter(s.meterId).stepsPerBar;
       const melodyLength = s.leadLoopLength * stepsPerBar;
-      setCurrentStep(step % melodyLength);
       const action = leadStepAction(playerState, step, armingRef.current, stepsPerBar);
 
       if (action === 'soft-stop') {
@@ -100,9 +97,14 @@ export function useLeadPlayback(): { currentStep: number; isPlaying: boolean } {
         hardStop('lead');
         return;
       }
+      // Publish only for steps that actually sound: while armed-but-not-yet-
+      // playing, or during 'stopping', there is nothing for the piano-roll
+      // playhead to track, so leaving the last published step in place is
+      // more correct than sweeping ahead of the audio.
       if (action !== 'play') return;
 
       const stepInLoop = step % melodyLength;
+      publishStep('lead', stepInLoop);
       const notes = leadStepNotes(s.leadMelodySteps, stepInLoop, stepsPerBar);
       const stepDur = stepDurationSec(s.bpm);
       const arpStep = arpStepFor(step, stepsPerBar);
@@ -120,5 +122,5 @@ export function useLeadPlayback(): { currentStep: number; isPlaying: boolean } {
     });
   }, [isPlaying, hardStop]);
 
-  return { currentStep, isPlaying };
+  return { isPlaying };
 }

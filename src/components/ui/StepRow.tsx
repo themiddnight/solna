@@ -1,5 +1,6 @@
 import React from "react";
 import type { StepCell } from "../sequencerGrid";
+import { useCurrentStep, type StepPlayerId } from "../playbackStep";
 
 export interface StepRowProps<T> {
   /** Machine-computed cell metadata (index, beat grouping) from stepCells(). */
@@ -21,15 +22,37 @@ export interface StepRowProps<T> {
   isActive: (value: T) => boolean;
   /** Optional short label for active steps (e.g. bass tone letters). */
   getLabel?: (value: T) => React.ReactNode;
+  /**
+   * Stable DOM id per step button. TrackRow has stamped
+   * `step-${track.id}-${index}` on its buttons since before this primitive
+   * existed; nothing queries it today, but it is a reasonable convention to
+   * preserve and the sequencer rows are the one grid a user can address by
+   * track.
+   */
+  getButtonId?: (index: number) => string;
+  /**
+   * What an ACTIVE step draws on top of its fill.
+   *
+   * `'label'` (default) is the `getLabel` badge the chord and bass grids use.
+   * `'pulse'` is the sequencer's `bg-base-content/10 animate-pulse` overlay —
+   * the one difference that kept TrackRow off this primitive.
+   */
+  activeOverlay?: 'label' | 'pulse';
+  /**
+   * Classes on the row container. Defaults to the chord/bass grids' own
+   * wrapper; the sequencer's row sits inside a flex header and needs `flex-1`.
+   */
+  rowClassName?: string;
   /** Fired on click with the 0-based step index. The parent cycles the value. */
   onStepClick: (index: number) => void;
 }
 
 /**
- * A theme-agnostic step grid row. The step-button class conventions mirror
- * TrackRow (daisyUI role classes only; active steps wear the caller's module
- * colour), the only difference being the per-step VALUE is generic — so a
- * boolean hit grid and a chord-tone-choice grid share one implementation.
+ * A theme-agnostic step grid row — the single implementation of a step button
+ * app-wide. The chord on/off grid, the bass tone-choice grid and the
+ * sequencer's drum/synth lanes all render through this; the per-step VALUE is
+ * generic, the active fill colour is the caller's module token, and the active
+ * overlay is either a short label or the sequencer's pulse.
  */
 export function StepRow<T>({
   cells,
@@ -39,10 +62,13 @@ export function StepRow<T>({
   color,
   isActive,
   getLabel,
+  getButtonId,
+  activeOverlay = 'label',
+  rowClassName = 'flex items-center gap-1.5',
   onStepClick,
 }: StepRowProps<T>) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className={rowClassName}>
       {cells.map((cell) => {
         const value = steps[cell.index];
         const active = value !== undefined && isActive(value);
@@ -50,6 +76,7 @@ export function StepRow<T>({
         return (
           <button
             key={cell.index}
+            id={getButtonId?.(cell.index)}
             onClick={() => onStepClick(cell.index)}
             className={`flex-1 h-9 rounded-field transition-all cursor-pointer relative ${
               active
@@ -59,7 +86,9 @@ export function StepRow<T>({
                   : "bg-base-200 hover:bg-base-300 border border-base-300/40"
             } ${isCurrent ? "ring-2 ring-primary brightness-125" : ""}`}
           >
-            {active && getLabel ? (
+            {active && activeOverlay === 'pulse' ? (
+              <div className="absolute inset-0 bg-base-content/10 rounded-field animate-pulse" />
+            ) : active && getLabel ? (
               <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold leading-none pointer-events-none select-none">
                 {getLabel(value)}
               </span>
@@ -69,4 +98,20 @@ export function StepRow<T>({
       })}
     </div>
   );
+}
+
+/**
+ * A StepRow that reads the transport position itself.
+ *
+ * The playhead used to arrive as a prop from ChordView, so the whole 1342-line
+ * view re-rendered 8x/sec to deliver a value that is only rendered in the
+ * 'custom' pattern modes. Subscribing here confines the per-step re-render to
+ * this row.
+ */
+export function PlayingStepRow<T>({
+  player,
+  ...rest
+}: Omit<StepRowProps<T>, 'currentStep'> & { player: StepPlayerId }) {
+  const currentStep = useCurrentStep(player);
+  return <StepRow<T> {...rest} currentStep={currentStep} />;
 }
