@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { audioEngine } from '../audio/engine';
 import { INITIAL_CHORDS } from './initialState';
 import { loadLoop } from './loadLoop';
 import { createDefaultLoop } from './loopSlice';
@@ -74,7 +75,7 @@ describe('song mode pure helpers', () => {
 
   test('songAdvanceTarget does not reload the sole loop of a single-loop arrangement', () => {
     const loops = [shortLoop('a', 4)];
-    // Wrapping onto itself would hard-stop and reset the clock every loop; the
+    // Wrapping onto itself would rewind the shared clock every loop; the
     // single-loop song must just loop in place like loop mode.
     expect(songAdvanceTarget(loops, 0, 64, 16)).toBe(null);
   });
@@ -106,8 +107,8 @@ function makeFakeClock() {
         if (i >= 0) cbs.splice(i, 1);
       };
     },
-    tick: (step: number) => {
-      for (const cb of [...cbs]) cb(step, step, 0);
+    tick: (step: number, time = 0) => {
+      for (const cb of [...cbs]) cb(step, step, time);
     },
   };
 }
@@ -165,16 +166,16 @@ describe('song mode coordinator', () => {
     expect(useAppStore.getState().songLoopIndex).toBe(0);
     expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
 
-    // The advance runs synchronously inside the clock dispatch: loadLoop's
-    // hard-stop + restart resets the shared clock, so each loop's boundary is
-    // measured from 0. First loop is 4 bars x 16 = 64 steps.
+    // The advance is queued from inside the clock dispatch and re-anchors the
+    // shared grid on the boundary, so each loop's boundary is measured from 0.
+    // First loop is 4 bars x 16 = 64 steps.
     clock.tick(64);
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().activeLoopId).toBe('loop-b');
     expect(useAppStore.getState().songLoopIndex).toBe(1);
-    // The arrangement boundary crosses through loadLoop's internal hard stop,
-    // which must not decay the scope back to 'none' — every card button
-    // would re-enable mid-song otherwise.
+    // Nothing stops on the seamless path, so no 'stop-all' is dispatched and
+    // the scope survives by construction — every card button would re-enable
+    // mid-song if it decayed to 'none' here.
     expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
 
     // Second loop is 2 bars x 16 = 32 steps; 64 + 32 = 96 wraps to loop 0.
@@ -184,6 +185,32 @@ describe('song mode coordinator', () => {
     expect(useAppStore.getState().songLoopIndex).toBe(0);
     expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
     stop();
+  });
+
+  test('the advance carries the boundary step\'s audio time down to the clock', async () => {
+    // The seam is only seamless if the new grid is anchored on the boundary
+    // instant. The default anchor is `now + 50ms`, which ignores how far ahead
+    // the step was scheduled and lands the downbeat 25-42 ms early
+    // (clock.test.ts measures it) — audible as a stumble between loops.
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const resetClock = spyOn(audioEngine, 'resetClock');
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    try {
+      useAppStore.getState().playAll();
+      resetClock.mockClear();
+
+      clock.tick(64, 12.75);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(useAppStore.getState().activeLoopId).toBe('loop-b');
+      expect(resetClock.mock.calls.at(-1)).toEqual([12.75]);
+    } finally {
+      resetClock.mockRestore();
+      stop();
+    }
   });
 
   test('a user-initiated Stop still clears the song scope after a boundary crossing', async () => {

@@ -83,6 +83,48 @@ describe('loadLoop', () => {
     }
   });
 
+  test('a song advance never stops a player and never cuts a bus', () => {
+    // The whole point of the seamless path: a hard stop is what made both
+    // playback hooks cut 'chord', 'bass' and 'synth' to 20 ms, so the advance
+    // must not produce one.
+    const stopSource = spyOn(audioEngine, 'stopSource');
+    const drop = spyOn(audioEngine, 'dropVoicesScheduledFrom');
+    const resetClock = spyOn(audioEngine, 'resetClock');
+    try {
+      useAppStore.setState({
+        loops: [createDefaultLoop(), { ...createDefaultLoop(), id: 'loop-b', name: 'B' }],
+        activeLoopId: 'loop-default-1',
+        songLoopIndex: 0,
+        sequencerPlayer: 'playing',
+        chordsPlayer: 'playing',
+        leadPlayer: 'playing',
+        playbackScope: { kind: 'song' },
+      });
+      stopSource.mockClear();
+      resetClock.mockClear();
+
+      loadLoop('loop-b', { atBoundary: 42.5 });
+
+      const s = useAppStore.getState();
+      expect(s.activeLoopId).toBe('loop-b');
+      expect([s.sequencerPlayer, s.chordsPlayer, s.leadPlayer]).toEqual([
+        'playing', 'playing', 'playing',
+      ]);
+      // The scope survives because nothing dispatched 'stop-all', not because
+      // it was captured and restored.
+      expect(s.playbackScope).toEqual({ kind: 'song' });
+      expect(stopSource).not.toHaveBeenCalled();
+      expect(drop.mock.calls).toEqual([
+        ['chord', 42.5], ['bass', 42.5], ['synth', 42.5],
+      ]);
+      expect(resetClock.mock.calls.at(-1)).toEqual([42.5]);
+    } finally {
+      stopSource.mockRestore();
+      drop.mockRestore();
+      resetClock.mockRestore();
+    }
+  });
+
   test('is a safe no-op for an unknown id', () => {
     useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1', scaleRoot: 'A' });
     loadLoop('loop-missing');

@@ -307,10 +307,28 @@ class AudioEngine {
    * Restart the shared grid at step 0. Called when the transport starts from
    * a fully stopped state, so Play All begins at beat 1 instead of resuming
    * mid-grid wherever the previous session stopped.
+   *
+   * `atTime` anchors that step 0 on the audio clock instead of the default
+   * CLOCK_REANCHOR_DELAY ahead of now. A restart that must continue an
+   * ALREADY-RUNNING grid — the song-mode loop advance — has to pass the
+   * boundary step's own time: steps are dispatched from up to CLOCK_LOOKAHEAD
+   * ahead, so a fixed `now + 0.05` puts the new loop's downbeat off the grid by
+   * `0.05 - (how far ahead the boundary was scheduled)`, which is 25-42 ms
+   * EARLY across the usual tempos and reads as a stumble at the seam.
+   *
+   * An `atTime` the audio clock has already passed (a stalled tick) is ignored
+   * in favour of the default: scheduling behind `currentTime` would make
+   * clockTick burst every step in between.
    */
-  resetClock(): void {
+  resetClock(atTime?: number): void {
     this.clockStepIndex = 0;
-    this.clockNextStepTime = this.ctx ? this.ctx.currentTime + AudioEngine.CLOCK_REANCHOR_DELAY : 0;
+    if (!this.ctx) {
+      this.clockNextStepTime = 0;
+      return;
+    }
+    const fallback = this.ctx.currentTime + AudioEngine.CLOCK_REANCHOR_DELAY;
+    this.clockNextStepTime =
+      atTime !== undefined && atTime > this.ctx.currentTime ? atTime : fallback;
   }
 
   /** Every voice still live OR still releasing, across every source. */
@@ -1142,6 +1160,25 @@ class AudioEngine {
   // `time` anchors the release in the AudioContext's timeline so a soft stop
   // can be scheduled exactly on a bar line instead of relying on a timer.
   // releaseVoice already handles a `now` in the future.
+  /**
+   * Drops a source's voices that have NOT started sounding by `time`, and
+   * leaves every voice that has alone — envelope, release tail and all.
+   *
+   * The seamless half of `stopSource`. A song-mode loop advance must not touch
+   * what is already ringing (that is the outgoing loop's tail, and cutting it
+   * is exactly the seam the user hears), but it must still drop the outgoing
+   * loop's notes that the 0.1 s lookahead has already queued PAST the boundary
+   * — those would sound over the incoming loop.
+   */
+  dropVoicesScheduledFrom(source: string, time: number): void {
+    if (!this.ctx) return;
+    const voices = this.sourceVoices.get(source);
+    if (!voices) return;
+    for (const voice of Array.from(voices)) {
+      if (voice.startTime >= time) this.silenceVoiceNow(voice, time);
+    }
+  }
+
   stopSource(source: string, releaseTime = 0.1, time?: number): void {
     if (!this.ctx) return;
     const now = time ?? this.ctx.currentTime;

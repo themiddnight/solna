@@ -328,3 +328,73 @@ describe('meter-aware clock', () => {
     expect(engine.getMeter().id).toBe('4/4');
   });
 });
+
+describe('resetClock anchoring', () => {
+  test('with no argument it re-anchors CLOCK_REANCHOR_DELAY ahead of now', () => {
+    const { engine, ctx } = clockEngine();
+    engine.resetClock();
+    expect((engine as any).clockStepIndex).toBe(0);
+    expect((engine as any).clockNextStepTime).toBeCloseTo(ctx.currentTime + 0.05, 6);
+  });
+
+  test('an explicit future anchor puts step 0 exactly there', () => {
+    const { engine, ctx } = clockEngine();
+    const target = ctx.currentTime + 0.075;
+    engine.resetClock(target);
+    expect((engine as any).clockStepIndex).toBe(0);
+    expect((engine as any).clockNextStepTime).toBe(target);
+  });
+
+  test('an anchor already in the past falls back rather than scheduling behind', () => {
+    // A stalled tick (backgrounded tab, GC pause) can hand back a boundary
+    // time the audio clock has already passed. Scheduling there would make
+    // clockTick burst every step between then and now.
+    const { engine, ctx } = clockEngine();
+    engine.resetClock(ctx.currentTime - 0.2);
+    expect((engine as any).clockNextStepTime).toBeCloseTo(ctx.currentTime + 0.05, 6);
+  });
+});
+
+describe('song boundary alignment', () => {
+  /**
+   * Drives the real clock to a loop boundary and re-anchors from inside the
+   * dispatch, the way songMode's advance does through loadLoop. Returns how
+   * far the new loop's step 0 lands from where the grid wanted it, in ms.
+   */
+  function boundaryErrorMs(bpm: number, anchorToBoundary: boolean): number {
+    const { engine, ctx, tick } = clockEngine(bpm);
+    const seen: Array<{ step: number; time: number }> = [];
+    let want: number | null = null;
+    engine.subscribeClock((step, _beat, time) => {
+      seen.push({ step, time });
+      if (step === 64 && want === null) {
+        want = time;
+        engine.resetClock(anchorToBoundary ? time : undefined);
+      }
+    });
+    for (let i = 0; i < 900; i++) {
+      tick();
+      ctx.currentTime += 0.025;
+    }
+    const landed = seen.find((s, i) => i > 0 && s.step === 0 && seen[i - 1].step !== 0);
+    if (want === null || !landed) throw new Error('boundary never reached');
+    return (landed.time - want) * 1000;
+  }
+
+  test('anchoring on the boundary step lands the new loop exactly on the grid', () => {
+    for (const bpm of [90, 120, 140]) {
+      expect(boundaryErrorMs(bpm, true)).toBeCloseTo(0, 6);
+    }
+  });
+
+  test('the default anchor lands it EARLY — the glitch this alignment fixes', () => {
+    // Pins the defect so the fix cannot silently regress: the fixed 50 ms
+    // re-anchor ignores how far ahead the boundary step was scheduled, so the
+    // new loop's downbeat arrives early by (lookahead remaining - 50 ms).
+    for (const bpm of [90, 120, 140]) {
+      const err = boundaryErrorMs(bpm, false);
+      expect(err).toBeLessThan(-20);
+      expect(err).toBeGreaterThan(-50);
+    }
+  });
+});

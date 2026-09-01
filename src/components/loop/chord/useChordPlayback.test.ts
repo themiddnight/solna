@@ -89,6 +89,19 @@ describe('chord scheduler arming', () => {
     rewindChordOnClockReset(arming, 0);
     expect(arming).toEqual({ armed: false, chordIndex: 0, nextBarStep: 0, lastStep: 0 });
   });
+
+  test('a seamless song advance lands on the NEW loop\'s first chord', () => {
+    // loadLoop's atBoundary path never stops a player, so the rewind is the
+    // ONLY thing that re-arms the progression. Without it chordIndex keeps
+    // counting from the outgoing loop and `chordIndex % chords.length` picks a
+    // chord in the middle of the incoming one whenever the two loops hold a
+    // different number of chords — 4 chords played, 3 in the new loop, 4 % 3 = 1.
+    const arming: ChordArming = { armed: true, chordIndex: 4, nextBarStep: 64, lastStep: 63 };
+
+    rewindChordOnClockReset(arming, 0);
+    expect(chordStepAction('playing', 0, arming, 16)).toBe('play');
+    expect(arming.chordIndex % 3).toBe(0);
+  });
 });
 
 describe('chord scheduler stop timing', () => {

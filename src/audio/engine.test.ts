@@ -2467,3 +2467,50 @@ describe('reshapeableVoices reuses one scratch array', () => {
     expect(targets.at(-1)).toEqual(targets.at(-2));
   });
 });
+
+describe('dropVoicesScheduledFrom', () => {
+  const LONG = { ...SYNTH, release: 2.0 };
+
+  test('drops only what has not started by the boundary', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    const T = t0 + 0.075;
+
+    engine.triggerSynthNoteOn('C4', LONG, 0.8, t0 - 0.05, 'chord'); // sounding
+    engine.triggerSynthNoteOn('E4', LONG, 0.8, t0 + 0.03, 'chord'); // before T
+    engine.triggerSynthNoteOn('G4', LONG, 0.8, t0 + 0.09, 'chord'); // past T
+    // Exactly ON the boundary belongs to the OUTGOING loop's schedule; the
+    // incoming loop's own note at T is emitted by the new scheduler.
+    engine.triggerSynthNoteOn('A4', LONG, 0.8, T, 'chord');
+
+    engine.dropVoicesScheduledFrom('chord', T);
+
+    const left = [...((engine as any).sourceVoices.get('chord') as Set<any>)]
+      .map((v) => v.noteName)
+      .sort();
+    expect(left).toEqual(['C4', 'E4']);
+  });
+
+  test('a surviving voice keeps its own envelope — no forced release', () => {
+    // This is the whole point against stopSource: the outgoing loop's tail must
+    // ring across the seam with the release its preset asks for, not the 20 ms
+    // HARD_STOP_RELEASE a user Stop uses.
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    engine.triggerSynthNoteOn('C4', LONG, 0.8, t0, 'chord');
+    const voice = [...((engine as any).sourceVoices.get('chord') as Set<any>)][0];
+    const rampsBefore = voice.gains[0].gain.ramps.length;
+
+    engine.dropVoicesScheduledFrom('chord', t0 + 0.075);
+
+    expect(voice.releaseScheduledAt).toBeUndefined();
+    expect(voice.gains[0].gain.ramps.length).toBe(rampsBefore);
+  });
+
+  test('an unknown source and a missing context are no-ops', () => {
+    const { engine, ctx } = freshEngine();
+    expect(() => engine.dropVoicesScheduledFrom('nope', ctx.currentTime)).not.toThrow();
+    const bare = makeEngine();
+    expect(() => bare.dropVoicesScheduledFrom('chord', 0)).not.toThrow();
+  });
+});

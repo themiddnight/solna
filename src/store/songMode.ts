@@ -105,7 +105,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
         useAppStore.setState({ songLoopIndex: enterSongIndex(s.loops, s.activeLoopId) });
       }
       if (!unsubClock) {
-        unsubClock = subscribeClock((step) => {
+        unsubClock = subscribeClock((step, _beat, time) => {
           const cur = useAppStore.getState();
           if (cur.songLoopIndex === null || cur.playbackScope.kind === 'solo') return;
           if (aggregatePlayerState(cur.sequencerPlayer, cur.chordsPlayer, cur.leadPlayer) !== 'playing')
@@ -117,15 +117,18 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
             getMeter(cur.meterId).stepsPerBar,
           );
           if (target === null) return;
-          // Defer: loadLoop hard-stops and restarts, which resets the shared
-          // clock (via engineSync's transport subscription). Running that reset
+          // Defer: loadLoop re-anchors the shared grid, and running that
           // synchronously here mutates clockStepIndex mid-dispatch — this
-          // callback is one of clockTick's listeners — so the boundary step's
-          // own dispatch and the reset's step-0 re-dispatch collide and the new
-          // loop's first chord/drum fires twice. A microtask runs before the
-          // next 25 ms clock tick, so the reset lands cleanly on the following
-          // tick with every playback hook re-armed.
-          queueMicrotask(() => loadLoop(target, { preserveScope: true }));
+          // callback is one of clockTick's own listeners — so the boundary
+          // step's dispatch and the rewind's step-0 re-dispatch collide and the
+          // new loop's first chord/drum fires twice. A microtask runs before
+          // the next 25 ms tick, so the rewind lands cleanly on the following
+          // one with every playback hook re-armed.
+          //
+          // `time` is the boundary step's own audio time. It selects loadLoop's
+          // seamless path — no player ever stops, so nothing cuts the outgoing
+          // loop's tails — and anchors the incoming loop's step 0 exactly there.
+          queueMicrotask(() => loadLoop(target, { atBoundary: time }));
         });
       }
     } else if (layer !== 'song' || s.playbackScope.kind === 'solo') {
