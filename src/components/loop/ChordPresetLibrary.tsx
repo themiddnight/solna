@@ -442,8 +442,12 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   };
 
   // PORT of the original footer (original lines ~504-530): labeled Export/Import
-  // buttons + "{N} custom saved" counter.
-  const footer = (
+  // buttons + "{N} custom saved" counter. Guarded on isOpen: PresetLibrary
+  // itself bails to null while closed, but without this guard this ~10-node
+  // tree was still built and discarded on every parent render regardless —
+  // at pointer rate during a knob drag (App-level synthParams cascade) and
+  // 8x/sec during chord playback (currentStep).
+  const footer = !isOpen ? null : (
     <div className="p-3 border-t border-base-300 bg-base-200 flex items-center justify-between gap-2">
       <div className="flex items-center gap-2">
         <button

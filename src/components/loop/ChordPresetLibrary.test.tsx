@@ -108,3 +108,21 @@ describe('isProgressionAvailable', () => {
     ]);
   });
 });
+
+describe('ChordPresetLibrary closed', () => {
+  test('renders nothing when isOpen is false', () => {
+    const closedHtml = renderToString(
+      <ChordPresetLibrary
+        isOpen={false}
+        onClose={noop}
+        currentChords={[]}
+        scaleRoot="C"
+        scaleType="Major"
+        autoReharmonize
+        synthParams={INITIAL_SYNTH_PARAMS}
+        onApplyChords={noop}
+      />,
+    );
+    expect(closedHtml).toBe('');
+  });
+});

@@ -1,4 +1,6 @@
 import { describe, test, expect } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   activeStepsPerBar,
   chordStepAction,
@@ -201,10 +203,10 @@ describe('adaptBassPattern', () => {
 });
 
 describe('activeStepsPerBar', () => {
-  // Task 8's review flagged this as untested: the function is exported and
-  // pure-testable, only the clock callback's use of it (which needs the DOM
-  // harness this repo deliberately does not have) is out of reach. Uses the
-  // real shared store singleton the way transportSlice.test.ts does.
+  // This function is exported and pure-testable; only the clock callback's
+  // use of it (which needs the DOM harness this repo deliberately does not
+  // have) is out of reach. Uses the real shared store singleton the way
+  // transportSlice.test.ts does.
   test('reflects a live store meterId change, not a value captured at import time', () => {
     const original = useAppStore.getState().meterId;
     try {
@@ -339,5 +341,16 @@ describe('custom patterns flow through the playback pipeline', () => {
     const custom = resolvePlaybackBassPattern('custom', 'whole-note-root', choices, 16, '4/4');
     expect(isFullHoldBass(custom, 16)).toBe(false);
     expect(adaptBassPattern(custom, 16)).toBe(custom);
+  });
+});
+
+describe('useChordPlayback shares the one HARD_STOP_RELEASE', () => {
+  test('declares no local copy and still uses the shared constant', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/components/loop/chord/useChordPlayback.ts'),
+      'utf8',
+    );
+    expect(source).not.toMatch(/^const HARD_STOP_RELEASE/m);
+    expect(source).toContain('HARD_STOP_RELEASE');
   });
 });

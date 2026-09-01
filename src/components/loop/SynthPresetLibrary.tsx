@@ -375,8 +375,10 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   );
 
   // PORT of the original footer (original lines ~418-427): LocalStorage note +
-  // Done button.
-  const footer = (
+  // Done button. Guarded on isOpen for the same reason as ChordPresetLibrary's
+  // footer -- PresetLibrary bails to null while closed, but this JSX was still
+  // built and discarded on every parent render without the guard.
+  const footer = !isOpen ? null : (
     <div className="p-3 border-t border-base-300 bg-base-200 flex items-center justify-between text-[11px] text-base-content/60">
       <span>Storage: Browser LocalStorage</span>
       <button

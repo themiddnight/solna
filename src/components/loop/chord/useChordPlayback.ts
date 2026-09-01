@@ -32,6 +32,7 @@ import {
   barDurationSec,
 } from "../../../utils/musicTheory";
 import {
+  HARD_STOP_RELEASE,
   initPlaybackEngine,
   playbackNoteOff,
   playbackNoteOn,
@@ -43,9 +44,7 @@ import { adaptStepEvents } from "../../../utils/eventAdapt";
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "../../playerStop";
 import type { PlayerState } from "../../../store/types";
 import type { ChordItem } from "../../../types";
-
-/** Short enough to read as an instant cut, long enough not to click. */
-const HARD_STOP_RELEASE = 0.02;
+import { publishStep, resetStep } from "../../playbackStep";
 
 /**
  * Where the chord+bass scheduler currently is on the shared grid. Kept as a
@@ -401,7 +400,6 @@ export function useChordPlayback() {
 
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const [activeChordId, setActiveChordId] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState<number>(0);
 
   // Pattern previews only. These are driven by a bar timer rather than the
   // shared clock, so they still lay the whole chord down in one call; the
@@ -563,7 +561,7 @@ export function useChordPlayback() {
             resetChordArming(armingRef.current);
             planRef.current = null;
             setPlayingIndex(null);
-            setCurrentStep(0);
+            resetStep('chords');
             setActiveChordId(null);
             useAppStore.getState().setPlayheadChord(null);
           }
@@ -596,7 +594,7 @@ export function useChordPlayback() {
       resetChordArming(armingRef.current);
       planRef.current = null;
       setPlayingIndex(null);
-      setCurrentStep(0);
+      resetStep('chords');
       setActiveChordId(null);
       useAppStore.getState().setPlayheadChord(null);
       return;
@@ -608,7 +606,7 @@ export function useChordPlayback() {
       // Live store read, not a ref: see chordStepAction's doc comment.
       const playerState = useAppStore.getState().chordsPlayer;
       const stepsPerBar = activeStepsPerBar();
-      setCurrentStep(step % stepsPerBar);
+      publishStep('chords', step % stepsPerBar);
       const action = chordStepAction(playerState, step, arming, stepsPerBar);
 
       // Soft stop: schedule the release exactly on the bar line the clock is
@@ -657,5 +655,5 @@ export function useChordPlayback() {
     });
   }, [isPlaying, chords]);
 
-  return { playChordWithRhythm, playBassWithPattern, playingIndex, setPlayingIndex, activeChordId, setActiveChordId, currentStep, isPlaying };
+  return { playChordWithRhythm, playBassWithPattern, playingIndex, setPlayingIndex, activeChordId, setActiveChordId, isPlaying };
 }
