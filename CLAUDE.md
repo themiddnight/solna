@@ -52,9 +52,13 @@ shows it, never in a slice.
    are exempt — routing their per-frame analyser reads through the store would mean a store
    write on every animation frame and a re-render of every subscriber.
 
-**`persist` has no throttle.** Every `set()` that touches a key returned by `partialize`
-synchronously serialises that slice and writes `localStorage` on the spot. Anything driven by a
-pointer, a clock tick or an animation frame must not write persisted state directly.
+**`persist` serialises on every `set()`; only the `localStorage` write is coalesced.** Every
+`set()` that touches a key returned by `partialize` re-serialises that slice on the spot. The
+write itself goes through `utils/coalescedStorage.ts`, which buffers it to an idle callback and
+flushes on `pagehide`/`visibilitychange` — so the serialise cost is still per-`set()`, and
+anything driven by a pointer, a clock tick or an animation frame must not write persisted state
+directly. Consequence for tests and for reading `localStorage` in a live page: storage lags the
+store by up to one idle window; call `flushPersistedWrites()` before asserting on it.
 
 **The store→engine bridge** is `src/store/engineSync.ts`: one `subscribeWithSelector`
 subscription per engine-settable value with `fireImmediately`, started once by `useEngineSync()`
