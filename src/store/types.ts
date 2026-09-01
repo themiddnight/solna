@@ -129,9 +129,9 @@ export interface LeadSlice {
   leadMelodySteps: string[][];
   /** Loop length in bars; must divide Σ ChordItem.bars. */
   leadLoopLength: number;
-  /** Transient view mode; not persisted. */
+  /** Scale-locked or chromatic rows; persisted per loop. */
   leadMelodyView: LeadMelodyView;
-  /** Transient lowest octave of the visible window; not persisted. */
+  /** Lowest octave of the visible window; persisted per loop. */
   leadMelodyOctave: number;
   setLeadMelodySteps: (steps: string[][]) => void;
   setLeadLoopLength: (bars: number) => void;
@@ -235,7 +235,7 @@ export interface PresetsSlice {
   deleteCustomChordProgression: (id: string) => CustomChordProgressionItem[];
 }
 
-/** A full per-loop musical snapshot: identity + the 31 per-loop fields. */
+/** A full per-loop musical snapshot: identity + every per-loop field. */
 export interface Loop {
   id: string;
   name: string; // auto-named "Loop N"; ids are the stable handle
@@ -258,6 +258,8 @@ export interface Loop {
   bassOctave: number;
   leadMelodySteps: string[][];
   leadLoopLength: number;
+  leadMelodyView: LeadMelodyView;
+  leadMelodyOctave: number;
   sequencerTracks: SequencerTrack[];
   soundKit: string;
   drumFilterCutoff: number;
@@ -273,7 +275,7 @@ export interface Loop {
   drumMuted: boolean;
 }
 
-/** The 31 per-loop fields, without identity — what loadLoop writes to the flat slices. */
+/** The per-loop fields, without identity — what loadLoop writes to the flat slices. */
 export type LoopStatePatch = Omit<Loop, 'id' | 'name' | 'repeatCount'>;
 
 /** The per-loop mixer: the 8 volume/mute fields edited on each Arrange card. */

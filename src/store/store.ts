@@ -7,7 +7,7 @@ import { createMusicContextSlice } from './musicContextSlice';
 import { createSynthSlice } from './synthSlice';
 import { createChordsSlice } from './chordsSlice';
 import { createBassSlice } from './bassSlice';
-import { createLeadSlice } from './leadSlice';
+import { createLeadSlice, LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
 import { createSequencerSlice } from './sequencerSlice';
 import { createEffectsSlice } from './effectsSlice';
 import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
@@ -23,6 +23,7 @@ import {
   migrateMeterAndStepWidth,
   wrapFlatStateIntoLoop,
   renameRegionKeysToLoop,
+  backfillLeadWindow,
   removeLegacyKeys,
   LEGACY_PERSIST_KEY,
 } from './migrate';
@@ -319,6 +320,10 @@ function sanitizeLoops(value: unknown): Loop[] | undefined {
       bassOctave: clampFinite(r.bassOctave, 0, 8, fallback.bassOctave),
       leadMelodySteps: asArray<string[]>(r.leadMelodySteps, fallback.leadMelodySteps),
       leadLoopLength: asPositiveInteger(r.leadLoopLength, fallback.leadLoopLength),
+      leadMelodyView: r.leadMelodyView === 'chromatic' ? 'chromatic' : 'scale-locked',
+      leadMelodyOctave: clampFinite(
+        r.leadMelodyOctave, LEAD_OCTAVE_MIN, LEAD_OCTAVE_MAX, fallback.leadMelodyOctave,
+      ),
       sequencerTracks: asArray<SequencerTrack>(r.sequencerTracks, fallback.sequencerTracks),
       soundKit: asString(r.soundKit, fallback.soundKit),
       drumFilterCutoff: clampFinite(r.drumFilterCutoff, 50, 12000, fallback.drumFilterCutoff),
@@ -431,7 +436,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: PERSIST_KEY,
-      version: 7,
+      version: 8,
       storage: createJSONStorage<PersistedState>(() => persistStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
@@ -457,7 +462,11 @@ export const useAppStore = create<AppStore>()(
         // also translates a v6 payload's two old keys.
         const looped = (payload: PersistedState): PersistedState =>
           version >= 7 ? payload : (renameRegionKeysToLoop(payload) as PersistedState);
-        if (version >= 2) return looped(wrapped(metered(recoloured)));
+        // v7 → v8 (per-loop lead octave window + view mode). Runs after the
+        // rename so `loops` is already the current key.
+        const windowed = (payload: PersistedState): PersistedState =>
+          version >= 8 ? payload : (backfillLeadWindow(looped(payload)) as PersistedState);
+        if (version >= 2) return windowed(wrapped(metered(recoloured)));
         // v1 arp fix (unchanged) …
         const next = { ...recoloured } as Record<string, unknown>;
         for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams']) {
@@ -466,7 +475,7 @@ export const useAppStore = create<AppStore>()(
             next[key] = { ...(params as object), arpActive: false };
           }
         }
-        return looped(wrapped(metered(next as unknown as PersistedState)));
+        return windowed(wrapped(metered(next as unknown as PersistedState)));
       },
       // Runs on every hydration (also when nothing was stored): sanitize the
       // parsed payload (wrong-typed persisted values must never reach the

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore, partializeAppState } from './store';
+import { loadLoop } from './loadLoop';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 
 function resetLead(): void {
@@ -98,10 +99,37 @@ describe('lead slice — persistence', () => {
     expect(loop.leadLoopLength).toBe(2);
   });
 
-  test('leadMelodyView, leadMelodyOctave and leadPlayer are transient', () => {
+  test('the octave window and view mode persist inside the active loop', () => {
+    const s = useAppStore.getState();
+    s.setLeadMelodyOctave(5);
+    s.setLeadMelodyView('chromatic');
+    const persisted = partializeAppState(useAppStore.getState());
+    const loop = persisted.loops.find((r) => r.id === persisted.activeLoopId)!;
+    expect(loop.leadMelodyOctave).toBe(5);
+    expect(loop.leadMelodyView).toBe('chromatic');
+  });
+
+  test('each loop keeps its own octave window across a loop switch', () => {
+    const first = useAppStore.getState().activeLoopId;
+    useAppStore.getState().setLeadMelodyOctave(2);
+    const second = useAppStore.getState().addLoop();
+    loadLoop(second);
+    useAppStore.getState().setLeadMelodyOctave(5);
+    useAppStore.getState().setLeadMelodyView('chromatic');
+
+    loadLoop(first);
+    expect(useAppStore.getState().leadMelodyOctave).toBe(2);
+    expect(useAppStore.getState().leadMelodyView).toBe('scale-locked');
+
+    loadLoop(second);
+    expect(useAppStore.getState().leadMelodyOctave).toBe(5);
+    expect(useAppStore.getState().leadMelodyView).toBe('chromatic');
+  });
+
+  test('leadPlayer stays transient, and no per-loop lead field leaks top-level', () => {
     const persisted = partializeAppState(useAppStore.getState()) as unknown as Record<string, unknown>;
+    expect('leadPlayer' in persisted).toBe(false);
     expect('leadMelodyView' in persisted).toBe(false);
     expect('leadMelodyOctave' in persisted).toBe(false);
-    expect('leadPlayer' in persisted).toBe(false);
   });
 });

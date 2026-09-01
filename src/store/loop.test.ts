@@ -33,6 +33,8 @@ function makeLoop(overrides: Partial<Loop> = {}): Loop {
     bassOctave: 2,
     leadMelodySteps: [[]],
     leadLoopLength: 1,
+    leadMelodyView: 'scale-locked',
+    leadMelodyOctave: 3,
     sequencerTracks: INITIAL_SEQUENCER_TRACKS.map((t) => ({ ...t, steps: [...t.steps] })),
     soundKit: 'Retro Drive',
     drumFilterCutoff: 12000,

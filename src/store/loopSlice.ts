@@ -36,6 +36,8 @@ export function createDefaultLoop(): Loop {
     bassOctave: 2,
     leadMelodySteps: Array.from({ length: MAX_STEPS_PER_BAR }, () => [] as string[]),
     leadLoopLength: 1,
+    leadMelodyView: 'scale-locked',
+    leadMelodyOctave: 3,
     sequencerTracks: INITIAL_SEQUENCER_TRACKS.map((t) => ({ ...t, steps: [...t.steps] })),
     soundKit: 'Retro Drive',
     drumFilterCutoff: 12000,

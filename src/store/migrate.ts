@@ -202,3 +202,27 @@ export function renameRegionKeysToLoop<T extends object>(state: T): T {
   }
   return next as unknown as T;
 }
+
+/**
+ * v7 -> v8: the lead melody's octave window and view mode became per-loop
+ * fields. Every loop persisted before v8 lacks them, and `loadLoop` writes the
+ * patch verbatim — so without this backfill activating an old loop would set
+ * `leadMelodyOctave` to undefined and `leadPitchRows` would build its window
+ * from NaN. Backfills the slice defaults. Runs after the v5->v6 wrap and the
+ * v6->v7 rename, so `loops` is always the current key by the time it sees the
+ * payload. Pure and non-mutating, like its siblings.
+ */
+export function backfillLeadWindow<T extends object>(state: T): T {
+  const next = { ...(state as Record<string, unknown>) } as Record<string, unknown>;
+  if (!Array.isArray(next.loops)) return next as unknown as T;
+  next.loops = next.loops.map((loop) => {
+    if (!loop || typeof loop !== 'object') return loop;
+    const row = loop as Record<string, unknown>;
+    return {
+      ...row,
+      leadMelodyView: row.leadMelodyView ?? 'scale-locked',
+      leadMelodyOctave: row.leadMelodyOctave ?? 3,
+    };
+  });
+  return next as unknown as T;
+}

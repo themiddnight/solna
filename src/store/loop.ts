@@ -1,6 +1,6 @@
 import type { Loop, LoopStatePatch } from './types';
 
-/** The 31 per-loop persisted fields, in one source of truth. */
+/** Every per-loop persisted field, in one source of truth. */
 export const LOOP_FLAT_KEYS = [
   'scaleRoot',
   'scaleType',
@@ -20,6 +20,8 @@ export const LOOP_FLAT_KEYS = [
   'bassOctave',
   'leadMelodySteps',
   'leadLoopLength',
+  'leadMelodyView',
+  'leadMelodyOctave',
   'sequencerTracks',
   'soundKit',
   'drumFilterCutoff',
@@ -77,7 +79,7 @@ export function cloneLoop(loop: Loop): Loop {
 }
 
 /**
- * Picks the 31 per-loop fields off any object that carries them — a `Loop`
+ * Picks the per-loop fields off any object that carries them — a `Loop`
  * (for `loadLoop`) or the flat `AppStore` (for the sync-back subscription).
  */
 export function loopStatePatch(source: object): LoopStatePatch {

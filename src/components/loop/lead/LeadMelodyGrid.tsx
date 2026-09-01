@@ -263,7 +263,7 @@ export const LeadMelodyGrid: React.FC = () => {
             <button
               id="btn-lead-octave-down"
               type="button"
-              onClick={() => setLeadMelodyOctave(Math.max(1, leadMelodyOctave - 1))}
+              onClick={() => setLeadMelodyOctave(leadMelodyOctave - 1)}
               className="btn btn-xs btn-square btn-ghost border border-base-300"
               title="Octave window down"
             >
@@ -273,7 +273,7 @@ export const LeadMelodyGrid: React.FC = () => {
             <button
               id="btn-lead-octave-up"
               type="button"
-              onClick={() => setLeadMelodyOctave(Math.min(6, leadMelodyOctave + 1))}
+              onClick={() => setLeadMelodyOctave(leadMelodyOctave + 1)}
               className="btn btn-xs btn-square btn-ghost border border-base-300"
               title="Octave window up"
             >

@@ -5,6 +5,7 @@ import {
   migrateMeterAndStepWidth,
   wrapFlatStateIntoLoop,
   renameRegionKeysToLoop,
+  backfillLeadWindow,
   LEGACY_TRACK_COLOR_MAP,
 } from './migrate';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
@@ -227,7 +228,7 @@ describe('wrapFlatStateIntoLoop (v5 -> v6)', () => {
     expect(input).toEqual({ bpm: 96, scaleRoot: 'D' });
   });
 
-  test('wrap covers exactly the 31 per-loop keys', () => {
+  test('wrap covers exactly the per-loop keys', () => {
     const source: Record<string, unknown> = { bpm: 90 };
     for (const key of LOOP_FLAT_KEYS) source[key] = `v-${key}`;
     const out = wrapFlatStateIntoLoop(source) as {
@@ -265,5 +266,31 @@ describe('renameRegionKeysToLoop (v6 -> v7)', () => {
   test('renameRegionKeysToLoop is a no-op when the keys are already absent', () => {
     const state = { loops: [], activeLoopId: null, bpm: 100 };
     expect(renameRegionKeysToLoop(state as never)).toEqual({ loops: [], activeLoopId: null, bpm: 100 });
+  });
+});
+
+describe('backfillLeadWindow (v7 -> v8)', () => {
+  test('a pre-v8 loop gets the slice defaults for the octave window and view', () => {
+    const out = backfillLeadWindow({
+      loops: [{ id: 'a', name: 'Loop 1', leadLoopLength: 2 }],
+    }) as { loops: Array<Record<string, unknown>> };
+    expect(out.loops[0].leadMelodyOctave).toBe(3);
+    expect(out.loops[0].leadMelodyView).toBe('scale-locked');
+    expect(out.loops[0].leadLoopLength).toBe(2);
+  });
+
+  test('a loop that already carries them is left alone', () => {
+    const out = backfillLeadWindow({
+      loops: [{ id: 'a', leadMelodyOctave: 5, leadMelodyView: 'chromatic' }],
+    }) as { loops: Array<Record<string, unknown>> };
+    expect(out.loops[0].leadMelodyOctave).toBe(5);
+    expect(out.loops[0].leadMelodyView).toBe('chromatic');
+  });
+
+  test('it is pure, and tolerates a payload with no loops array', () => {
+    const input = { loops: [{ id: 'a' }] };
+    backfillLeadWindow(input);
+    expect(input).toEqual({ loops: [{ id: 'a' }] });
+    expect(backfillLeadWindow({ bpm: 90 })).toEqual({ bpm: 90 });
   });
 });
