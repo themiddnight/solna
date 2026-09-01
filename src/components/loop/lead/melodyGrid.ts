@@ -2,14 +2,14 @@ import { getScaleNotesInOctave, ROOTS } from '../../../utils/musicTheory';
 import { MAX_STEPS_PER_BAR } from '../../../utils/meter';
 import type { LeadMelodyView } from '../../../store/types';
 
-/** Number of octaves the piano-roll window shows. Fixed at 2 (spec default). */
+/** Number of octaves the melody grid's window shows. Fixed at 2 (spec default). */
 export const LEAD_WINDOW_OCTAVES = 2;
 
 /** Fixed cell width in px — the playhead's translateX stride. */
 export const LEAD_CELL_WIDTH = 20;
 
 /**
- * The pitch rows of the piano-roll, from HIGHEST (index 0) to LOWEST. In
+ * The pitch rows of the melody grid, from HIGHEST (index 0) to LOWEST. In
  * scale-locked view rows are the active scale's notes across the window; in
  * chromatic view all 12 semitones across the window. `lowestOctave` is the
  * lowest octave shown (leadMelodyOctave); the window spans octaveCount octaves.

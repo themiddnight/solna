@@ -16,7 +16,7 @@ import {
   isRootNote,
   leadPitchRows,
   leadStoredIndex,
-} from './pianoRoll';
+} from './melodyGrid';
 import { useCurrentStep } from '../../playbackStep';
 import { useLeadPlayback } from './useLeadPlayback';
 
@@ -25,7 +25,7 @@ const LABEL_WIDTH = 44;
 
 /**
  * The moving column. Split out with an explicit prop so the geometry stays
- * unit-testable: LeadPianoRoll owns useLeadPlayback now, and renderToString
+ * unit-testable: LeadMelodyGrid owns useLeadPlayback now, and renderToString
  * cannot force a playing store state (zustand v5 serves
  * selector(api.getInitialState()) as the server snapshot — see
  * ui/BottomInputDock.tsx:9-21).
@@ -42,7 +42,7 @@ export const LeadPlayhead: React.FC<{ currentStep: number }> = ({ currentStep })
 
 // Memoized: props are stable across clock ticks, so the cells never re-render
 // when only the playhead moves.
-const LeadPianoCells = React.memo(function LeadPianoCells({
+const LeadMelodyCells = React.memo(function LeadMelodyCells({
   meter,
   loopLength,
   melody,
@@ -108,12 +108,12 @@ const LeadPianoCells = React.memo(function LeadPianoCells({
 });
 
 
-// Memoized for the same reason as LeadPianoCells above: LeadPianoRoll
+// Memoized for the same reason as LeadMelodyCells above: LeadMelodyGrid
 // re-renders once per 16th note to move the playhead, and these two strips
 // rebuild `columns` divs each — 128 of them for a 4-bar loop in 4/4 — every
 // time. stepsPerBar and columns are numbers, and cellsPerBar is useMemo'd on
 // the shared METERS[id] object, so the shallow prop comparison is meaningful.
-export const LeadPianoHeaders = React.memo(function LeadPianoHeaders({
+export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
   stepsPerBar,
   columns,
   cellsPerBar,
@@ -168,10 +168,10 @@ export const LeadPianoHeaders = React.memo(function LeadPianoHeaders({
   );
 });
 
-export const LeadPianoRoll: React.FC = () => {
+export const LeadMelodyGrid: React.FC = () => {
   // Mounted here, not in SynthView: the step used to arrive as a prop, so all
   // 174 JSX nodes of the 1208-line SynthView reconciled 8x/sec to move one
-  // translateX. LeadPianoRoll is rendered exactly once (SynthView.tsx, in
+  // translateX. LeadMelodyGrid is rendered exactly once (SynthView.tsx, in
   // both simple and pro mode), which is the requirement — useLeadPlayback
   // subscribes the clock and owns the hard stop.
   const { isPlaying } = useLeadPlayback();
@@ -308,7 +308,7 @@ export const LeadPianoRoll: React.FC = () => {
 
         <div className="overflow-x-auto bg-base-200 p-3 rounded">
           <div className="w-fit mx-auto">
-            <LeadPianoHeaders
+            <LeadMelodyHeaders
               stepsPerBar={stepsPerBar}
               columns={columns}
               cellsPerBar={cellsPerBar}
@@ -334,7 +334,7 @@ export const LeadPianoRoll: React.FC = () => {
               </div>
 
               <div className="relative shrink-0">
-                <LeadPianoCells
+                <LeadMelodyCells
                   meter={meter}
                   loopLength={leadLoopLength}
                   melody={leadMelodySteps}

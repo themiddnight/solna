@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isBlackKey, isRootNote, leadPitchRows, leadStoredIndex } from './pianoRoll';
+import { isBlackKey, isRootNote, leadPitchRows, leadStoredIndex } from './melodyGrid';
 
 describe('leadPitchRows — scale-locked', () => {
   test('lists the scale notes across the window, highest first', () => {

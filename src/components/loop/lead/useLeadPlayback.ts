@@ -98,7 +98,7 @@ export function useLeadPlayback(): { isPlaying: boolean } {
         return;
       }
       // Publish only for steps that actually sound: while armed-but-not-yet-
-      // playing, or during 'stopping', there is nothing for the piano-roll
+      // playing, or during 'stopping', there is nothing for the melody grid
       // playhead to track, so leaving the last published step in place is
       // more correct than sweeping ahead of the audio.
       if (action !== 'play') return;

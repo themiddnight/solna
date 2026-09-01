@@ -14,7 +14,7 @@ export interface SynthChannel {
  *
  * Each panel calls this itself rather than taking props, so the five panels
  * are independent leaves: SynthView's own re-renders (preset stepping, save
- * toasts, library open/close, the lead piano-roll's per-step state) no longer
+ * toasts, library open/close, the lead melody grid's per-step state) no longer
  * reconcile hundreds of lines of knob JSX, and a panel only re-renders when
  * the channel it is pointed at actually changes.
  */

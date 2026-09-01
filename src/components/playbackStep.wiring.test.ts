@@ -61,7 +61,7 @@ const WIRINGS: Array<{
       regex: /publishStep\(\s*'([^']+)'/,
     },
     consumer: {
-      file: 'src/components/loop/lead/LeadPianoRoll.tsx',
+      file: 'src/components/loop/lead/LeadMelodyGrid.tsx',
       regex: /useCurrentStep\(\s*(?:'([^']+)'|(\w+))\s*\)/,
       expected: 'lead',
     },

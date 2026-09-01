@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { LeadPianoHeaders, LeadPianoRoll, LeadPlayhead } from './LeadPianoRoll';
+import { LeadMelodyHeaders, LeadMelodyGrid, LeadPlayhead } from './LeadMelodyGrid';
 import { stepCells } from '../../sequencerGrid';
 import { getMeter } from '../../../utils/meter';
 
-describe('LeadPianoRoll', () => {
+describe('LeadMelodyGrid', () => {
   test('renders one loop-length option per divisor of the progression', () => {
     // Default progression (INITIAL_CHORDS) totals 4 bars → divisors 1, 2, 4.
-    const html = renderToString(<LeadPianoRoll />);
+    const html = renderToString(<LeadMelodyGrid />);
     expect(html).toContain('id="select-lead-loop-length"');
     expect(html).toContain('value="1"');
     expect(html).toContain('value="2"');
@@ -16,7 +16,7 @@ describe('LeadPianoRoll', () => {
 
   test('the grid lays out loopLength × stepsPerBar columns', () => {
     // Defaults: 4/4 (16 steps) × 1-bar loop → 16 columns of 20px.
-    const html = renderToString(<LeadPianoRoll />);
+    const html = renderToString(<LeadMelodyGrid />);
     expect(html).toContain('repeat(16, 20px)');
   });
 
@@ -26,13 +26,13 @@ describe('LeadPianoRoll', () => {
   });
 
   test('a stopped lead player renders no playhead at all', () => {
-    // The store's lead player is 'stopped' by default, and LeadPianoRoll now
+    // The store's lead player is 'stopped' by default, and LeadMelodyGrid now
     // owns useLeadPlayback, so this is the real stopped rendering.
-    expect(renderToString(<LeadPianoRoll />)).not.toContain('ring-inset ring-primary');
+    expect(renderToString(<LeadMelodyGrid />)).not.toContain('ring-inset ring-primary');
   });
 
   test('no raw palette or absolute black/white classes leak in', () => {
-    const html = renderToString(<LeadPianoRoll />);
+    const html = renderToString(<LeadMelodyGrid />);
     expect(html).not.toContain('indigo-');
     expect(html).not.toContain('slate-');
     expect(html).not.toContain('text-white');
@@ -41,19 +41,19 @@ describe('LeadPianoRoll', () => {
   });
 
   test('renders a clear button and the note-name column', () => {
-    const html = renderToString(<LeadPianoRoll />);
+    const html = renderToString(<LeadMelodyGrid />);
     expect(html).toContain('id="btn-lead-clear"');
     expect(html).toContain('font-mono');
   });
 });
 
-describe('LeadPianoHeaders', () => {
+describe('LeadMelodyHeaders', () => {
   const meter = getMeter('4/4');
   const cellsPerBar = stepCells(meter);
 
   test('renders one cell per column in both strips, numbering bars and beats', () => {
     const html = renderToString(
-      <LeadPianoHeaders stepsPerBar={meter.stepsPerBar} columns={32} cellsPerBar={cellsPerBar} />,
+      <LeadMelodyHeaders stepsPerBar={meter.stepsPerBar} columns={32} cellsPerBar={cellsPerBar} />,
     );
     // Two strips of 32 columns, plus one label spacer each.
     expect(html.split('width:20px').length - 1).toBe(64);
@@ -69,7 +69,7 @@ describe('LeadPianoHeaders', () => {
   test('output is byte-identical to the same props rendered twice', () => {
     const render = () =>
       renderToString(
-        <LeadPianoHeaders stepsPerBar={meter.stepsPerBar} columns={16} cellsPerBar={cellsPerBar} />,
+        <LeadMelodyHeaders stepsPerBar={meter.stepsPerBar} columns={16} cellsPerBar={cellsPerBar} />,
       );
     expect(render()).toBe(render());
   });
@@ -77,14 +77,14 @@ describe('LeadPianoHeaders', () => {
   test('is memoized, so the parent re-rendering with the same props is free', () => {
     // React.memo wraps the function component; assert the wrapper is present so
     // the whole point of the extraction cannot be silently undone.
-    expect((LeadPianoHeaders as unknown as { $$typeof: symbol }).$$typeof).toBe(
+    expect((LeadMelodyHeaders as unknown as { $$typeof: symbol }).$$typeof).toBe(
       Symbol.for('react.memo'),
     );
   });
 
   test('no raw palette or absolute black/white classes leak in', () => {
     const html = renderToString(
-      <LeadPianoHeaders stepsPerBar={meter.stepsPerBar} columns={16} cellsPerBar={cellsPerBar} />,
+      <LeadMelodyHeaders stepsPerBar={meter.stepsPerBar} columns={16} cellsPerBar={cellsPerBar} />,
     );
     expect(html).not.toContain('indigo-');
     expect(html).not.toContain('slate-');

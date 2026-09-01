@@ -38,7 +38,7 @@ import { FilterPanel } from "./synth/FilterPanel";
 import { EnvelopePanel } from "./synth/EnvelopePanel";
 import { LfoPanel } from "./synth/LfoPanel";
 import { ArpeggiatorPanel } from "./synth/ArpeggiatorPanel";
-import { LeadPianoRoll } from "./lead/LeadPianoRoll";
+import { LeadMelodyGrid } from "./lead/LeadMelodyGrid";
 import { ChannelStrip } from "../ui/ChannelStrip";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { ViewHeader } from "../ui/ViewHeader";
@@ -694,8 +694,8 @@ export const SynthView: React.FC = React.memo(() => {
         </div>
       )}
 
-      {/* Lead Melody Piano-Roll Step Sequencer */}
-      <LeadPianoRoll />
+      {/* Lead Melody Grid — the per-step pitch sequencer */}
+      <LeadMelodyGrid />
 
       {/* Preset Library Sidebar Drawer / Modal */}
       <Suspense

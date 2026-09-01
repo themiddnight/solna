@@ -22,7 +22,7 @@ export interface StepPublisher {
  *
  * Why it exists: the playback hooks own scheduling and must stay mounted
  * exactly once, high in the tree — but the step they produce is consumed by
- * LEAVES (a StepRow's highlight, a piano-roll playhead's translateX, a
+ * LEAVES (a StepRow's highlight, the melody grid's playhead translateX, a
  * sequencer column). Holding it in React state at the hook's mount point
  * re-rendered whole 1200-1400 line views 8-16 times a second, including views
  * on hidden tabs (App.tsx keeps every tab mounted by design, and display:none

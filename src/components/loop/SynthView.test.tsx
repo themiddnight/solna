@@ -85,7 +85,7 @@ describe('chromatic keyboard black key geometry', () => {
     expect(html).not.toContain('A Natural Minor');
   });
 
-  test('the lead melody piano-roll renders', () => {
+  test('the lead melody grid renders', () => {
     const html = renderToString(<SynthView />);
     expect(html).toContain('Lead Melody');
     expect(html).toContain('id="select-lead-loop-length"');
