@@ -2,7 +2,7 @@ import React from 'react';
 import { useAppStore } from '../../../store/store';
 import { useSequencerPlayback } from '../../useSequencerPlayback';
 import { useCurrentStep } from '../../playbackStep';
-import { StepHeader } from './StepHeader';
+import { StepHeader } from '../../ui/StepHeader';
 import { TrackRow } from './TrackRow';
 import type { StepCell } from '../../sequencerGrid';
 import type { SequencerTrack } from '../../../types';

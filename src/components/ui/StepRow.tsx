@@ -2,6 +2,14 @@ import React from "react";
 import type { StepCell } from "../sequencerGrid";
 import { useCurrentStep, type StepPlayerId } from "../playbackStep";
 
+/**
+ * The step buttons' own flex container. Exported because a step-number strip
+ * lives in a SEPARATE flex container from the buttons it labels: any other gap
+ * utility puts the two on different column pitches and the drift compounds
+ * across the row, so a header must be given this exact class.
+ */
+export const STEP_ROW_CLASS = 'flex items-center gap-1.5';
+
 export interface StepRowProps<T> {
   /** Machine-computed cell metadata (index, beat grouping) from stepCells(). */
   cells: StepCell[];
@@ -64,7 +72,7 @@ export function StepRow<T>({
   getLabel,
   getButtonId,
   activeOverlay = 'label',
-  rowClassName = 'flex items-center gap-1.5',
+  rowClassName = STEP_ROW_CLASS,
   onStepClick,
 }: StepRowProps<T>) {
   return (

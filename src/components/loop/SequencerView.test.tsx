@@ -149,7 +149,7 @@ import { SequencerGrid } from './sequencer/SequencerGrid';
 import { stepPublisher } from '../playbackStep';
 import { stepCells } from '../sequencerGrid';
 import { getMeter } from '../../utils/meter';
-import { StepHeader } from './sequencer/StepHeader';
+import { StepHeader } from '../ui/StepHeader';
 import { TrackRow } from './sequencer/TrackRow';
 import { useCurrentStep } from '../playbackStep';
 import React from 'react';
