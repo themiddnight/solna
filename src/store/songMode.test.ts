@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { INITIAL_CHORDS } from './initialState';
+import { loadLoop } from './loadLoop';
 import { createDefaultLoop } from './loopSlice';
 import { loopStatePatch } from './loop';
+import { soloLoopId } from './playbackScope';
 import { useAppStore } from './store';
 import { isSongLayer } from '../types';
 import {
@@ -121,6 +123,7 @@ const resetState = () => {
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
     songLoopIndex: null,
+    playbackScope: { kind: 'none' },
   });
 };
 
@@ -160,6 +163,7 @@ describe('song mode coordinator', () => {
 
     useAppStore.getState().playAll();
     expect(useAppStore.getState().songLoopIndex).toBe(0);
+    expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
 
     // The advance runs synchronously inside the clock dispatch: loadLoop's
     // hard-stop + restart resets the shared clock, so each loop's boundary is
@@ -168,12 +172,39 @@ describe('song mode coordinator', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().activeLoopId).toBe('loop-b');
     expect(useAppStore.getState().songLoopIndex).toBe(1);
+    // The arrangement boundary crosses through loadLoop's internal hard stop,
+    // which must not decay the scope back to 'none' — every card button
+    // would re-enable mid-song otherwise.
+    expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
 
     // Second loop is 2 bars x 16 = 32 steps; 64 + 32 = 96 wraps to loop 0.
     clock.tick(96);
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
     expect(useAppStore.getState().songLoopIndex).toBe(0);
+    expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
+    stop();
+  });
+
+  test('a user-initiated Stop still clears the song scope after a boundary crossing', async () => {
+    const loopB = {
+      ...createDefaultLoop(),
+      id: 'loop-b',
+      name: 'Loop B',
+      chords: [{ id: 'c1', root: 'C', quality: 'maj', bars: 2, notes: ['C4'] }],
+    };
+    useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+
+    useAppStore.getState().playAll();
+    clock.tick(64);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
+
+    useAppStore.getState().hardStopAll();
+    expect(useAppStore.getState().playbackScope).toEqual({ kind: 'none' });
     stop();
   });
 
@@ -259,24 +290,100 @@ describe('song mode coordinator', () => {
     stop();
   });
 
-  test('auditionLoopId keeps playback isolated on the loop without entering song mode advancement', () => {
+  test('a solo scope keeps playback isolated and suppresses song advance', () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
     useAppStore.setState({
       loops: [createDefaultLoop(), loopB],
       activeLoopId: 'loop-default-1',
       activeTab: 'arrange',
       songLoopIndex: null,
-      auditionLoopId: 'loop-default-1',
     });
     const clock = makeFakeClock();
     const stop = startSongModeSync({ subscribeClock: clock.subscribe });
-    useAppStore.getState().playAll();
+    useAppStore.getState().soloLoop('loop-default-1');
 
-    // When auditionLoopId is set, songLoopIndex remains null
+    // When the scope is solo, songLoopIndex remains null
     expect(useAppStore.getState().songLoopIndex).toBe(null);
     // Ticking past the loop length does not advance to loop B
     clock.tick(64);
     expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
+    stop();
+  });
+
+  test('solo, stop, then Play All advances the arrangement — the solo cannot survive', async () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+      activeTab: 'arrange',
+      songLoopIndex: null,
+    });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+
+    // 2. Play one loop from its card.
+    useAppStore.getState().soloLoop('loop-default-1');
+    expect(useAppStore.getState().playbackScope).toEqual({
+      kind: 'solo',
+      loopId: 'loop-default-1',
+    });
+
+    useAppStore.getState().hardStopAll();
+    expect(useAppStore.getState().playbackScope).toEqual({ kind: 'none' });
+
+    // 3. Every later Play All must run the arrangement, with no refresh.
+    useAppStore.getState().playAll();
+    expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
+    expect(useAppStore.getState().songLoopIndex).toBe(0);
+    clock.tick(64);
+    await new Promise((r) => setTimeout(r, 0)); // songMode defers loadLoop to a microtask
+    expect(useAppStore.getState().activeLoopId).toBe('loop-b');
+    stop();
+  });
+
+  // Reported bug: "press Play All, it works. Play one loop from its card.
+  // Every Play All after that plays just that loop, solo, until refresh."
+  // Runs the user's own three steps in order, against the real reducer and
+  // a real (fake) clock, rather than a shortcut that starts mid-sequence.
+  test('reported bug repro: Play All, solo a loop from its card, Play All again must resume and advance the song', async () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    const loopC = {
+      ...createDefaultLoop(),
+      id: 'loop-c',
+      name: 'Loop C',
+      chords: [{ id: 'c-c', root: 'C', quality: 'maj', bars: 2, notes: ['C4'] }],
+    };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB, loopC],
+      activeLoopId: 'loop-default-1',
+      activeTab: 'arrange',
+      songLoopIndex: null,
+    });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+
+    // 1. "Refresh the page, press Play All first thing" — works from a clean state.
+    useAppStore.getState().playAll();
+    expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
+
+    // 2. "Play any single loop from its card once" — drive ArrangeView's own
+    // handler shape exactly: loadLoop (restarts playback) then soloLoop
+    // (which owns the scope AND drops the song cursor in one set()).
+    loadLoop('loop-b');
+    useAppStore.getState().soloLoop('loop-b');
+    expect(useAppStore.getState().playbackScope).toEqual({ kind: 'solo', loopId: 'loop-b' });
+
+    // 3. "Every subsequent Play All plays that one loop solo" — must stop
+    // happening: the master transport takes over, and the song keeps moving.
+    useAppStore.getState().playAll();
+    expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
+    expect(soloLoopId(useAppStore.getState().playbackScope)).toBe(null);
+
+    clock.tick(64); // loop-b is 4 bars x 16 steps, same as the default loop
+    await new Promise((r) => setTimeout(r, 0)); // songMode defers loadLoop to a microtask
+    const s = useAppStore.getState();
+    expect(s.activeLoopId).toBe('loop-c'); // advanced past the loop that was soloing
+    expect(s.songLoopIndex).toBe(2);
     stop();
   });
 });

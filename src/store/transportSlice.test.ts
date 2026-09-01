@@ -5,6 +5,7 @@ import {
   createTransportSlice,
   isHardStopEnabled,
   isPlayerActive,
+  transportDisplayState,
 } from './transportSlice';
 import { useAppStore } from './store';
 import { MAX_BPM, MIN_BPM } from '../utils/musicTheory';
@@ -194,5 +195,60 @@ describe('three-way derived transport helpers', () => {
     expect(h.state.leadPlayer).toBe('playing');
     h.state.hardStopAll();
     expect(h.state.leadPlayer).toBe('stopped');
+  });
+});
+
+describe('playbackScope rides alongside the player transitions in one set()', () => {
+  test('playAll starts stopped players AND claims the song scope in one set', () => {
+    const h = makeSlice();
+    h.state.playAll();
+    expect(h.state.sequencerPlayer).toBe('playing');
+    expect(h.state.playbackScope).toEqual({ kind: 'song' });
+  });
+
+  test('playAll takes over from a solo — the solo id cannot survive it', () => {
+    const h = makeSlice({ playbackScope: { kind: 'solo', loopId: 'loop-a' } });
+    h.state.playAll();
+    expect(h.state.playbackScope).toEqual({ kind: 'song' });
+  });
+
+  test('soft and hard stop both clear the scope', () => {
+    const soft = makeSlice({ playbackScope: { kind: 'solo', loopId: 'loop-a' } });
+    soft.state.softStopAll();
+    expect(soft.state.playbackScope).toEqual({ kind: 'none' });
+    const hard = makeSlice({ playbackScope: { kind: 'song' } });
+    hard.state.hardStopAll();
+    expect(hard.state.playbackScope).toEqual({ kind: 'none' });
+  });
+
+  test('soloLoop starts the players, claims the solo and drops the song cursor', () => {
+    const h = makeSlice({ songLoopIndex: 2 });
+    h.state.soloLoop('loop-a');
+    expect(h.state.playbackScope).toEqual({ kind: 'solo', loopId: 'loop-a' });
+    expect(h.state.songLoopIndex).toBe(null);
+    expect(h.state.sequencerPlayer).toBe('playing');
+    expect(h.state.chordsPlayer).toBe('playing');
+    expect(h.state.leadPlayer).toBe('playing');
+  });
+
+  test('soloLoop on the soloing loop stops every player immediately', () => {
+    const h = makeSlice({ playbackScope: { kind: 'solo', loopId: 'loop-a' } });
+    h.state.soloLoop('loop-a');
+    expect(h.state.playbackScope).toEqual({ kind: 'none' });
+    expect(h.state.sequencerPlayer).toBe('stopped');
+    expect(h.state.chordsPlayer).toBe('stopped');
+    expect(h.state.leadPlayer).toBe('stopped');
+  });
+
+  test('per-module play never touches the scope (loadLoop restarts through it)', () => {
+    const h = makeSlice({ playbackScope: { kind: 'solo', loopId: 'loop-a' } });
+    h.state.play('sequencer');
+    expect(h.state.playbackScope).toEqual({ kind: 'solo', loopId: 'loop-a' });
+  });
+
+  test('transportDisplayState presents Play while soloing so Play All takes over', () => {
+    expect(transportDisplayState({ kind: 'solo', loopId: 'a' }, 'playing')).toBe('stopped');
+    expect(transportDisplayState({ kind: 'song' }, 'playing')).toBe('playing');
+    expect(transportDisplayState({ kind: 'none' }, 'stopping')).toBe('stopping');
   });
 });
