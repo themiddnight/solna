@@ -44,8 +44,11 @@ export const SequencerGrid: React.FC<SequencerGridProps> = ({
       {/* Step Indicator Header — one cell per step of the active bar */}
       <StepHeader cells={cells} currentStep={currentStep} isPlaying={isPlaying} />
 
-      {/* Track Lanes */}
-      <div className="space-y-2 min-w-[700px]">
+      {/* Track Lanes. The min-width keeps a step button ~24px wide rather than
+          letting 16 of them squeeze to nothing on a phone; the row scrolls
+          instead, and TrackRow's gutter stays pinned while it does. Any change
+          here must be mirrored in StepHeader's DRUM_HEADER_CLASS. */}
+      <div className="space-y-2 min-w-[600px] sm:min-w-[700px]">
         {tracks.map((track) => (
           <TrackRow
             key={track.id}

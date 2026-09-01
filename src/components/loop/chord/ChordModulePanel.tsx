@@ -240,10 +240,13 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
         {chordRhythmMode === 'custom' && (
           <div className="overflow-x-auto">
             <label className={FIELD_LABEL}>Custom Chord Pattern</label>
-            {/* min-w matches the drum grid's step area (its 700px less the
-                176px track-label gutter), so a narrow window scrolls rather
-                than squeezing the blocks back down. */}
-            <div className="min-w-[520px]">
+            {/* min-w keeps a narrow window scrolling rather than squeezing the
+                blocks back down. Above `sm` it matches the drum grid's step
+                area (its 700px less the 176px track-label gutter). A phone
+                takes a smaller floor instead of that grid's: this one has no
+                label gutter to scroll out of view, so less width per step buys
+                less scrolling at no cost in orientation. */}
+            <div className="min-w-[420px] sm:min-w-[520px]">
               <PlayingStepHeader
                 player="chords"
                 cells={chordCells}

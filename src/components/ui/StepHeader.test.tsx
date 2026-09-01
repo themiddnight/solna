@@ -22,18 +22,22 @@ describe('StepHeader', () => {
     const html = renderToString(
       <StepHeader cells={cells} currentStep={0} isPlaying={false} />,
     );
-    expect(html).toContain('flex items-center gap-2 mb-2 pl-44 min-w-[700px]');
+    expect(html).toContain(
+      'flex items-center gap-2 mb-2 pl-38 sm:pl-44 min-w-[600px] sm:min-w-[700px]',
+    );
   });
 
   test('a className REPLACES the default rather than appending to it', () => {
-    // Appending would leave pl-44 in place and indent the chord/bass numbers
-    // by the drum grid's 176px label gutter.
+    // Appending would leave the pl-* gutter in place and indent the chord and
+    // bass numbers by the drum grid's track-label column.
     const html = renderToString(
       <StepHeader cells={cells} currentStep={0} isPlaying={false} className={STEP_ROW_CLASS} />,
     );
     expect(html).toContain(`class="${STEP_ROW_CLASS}"`);
     expect(html).not.toContain('pl-44');
+    expect(html).not.toContain('pl-38');
     expect(html).not.toContain('min-w-[700px]');
+    expect(html).not.toContain('min-w-[600px]');
   });
 
   test('STEP_ROW_CLASS is the row default, so a header sharing it aligns', () => {

@@ -46,21 +46,46 @@ export const TrackRow: React.FC<TrackRowProps> = React.memo(
     return (
       <div
         id={`sequencer-row-${track.id}`}
-        className="flex items-center gap-2 bg-base-200 p-2 rounded-box border border-base-300 hover:border-primary/40 transition-colors"
+        // `overflow-clip`, not `overflow-hidden`: steps scrolling under the
+        // sticky gutter would otherwise show through the row's rounded left
+        // corners, and only a clip rect trims them to the card's own shape.
+        // `hidden` would do that too, but it makes the row a scroll container,
+        // and the gutter would then stick to the row instead of to the grid.
+        className="flex items-center gap-2 bg-base-200 py-2 pr-2 rounded-box border border-base-300 overflow-clip hover:border-primary/40 transition-colors"
       >
-        {/* Track Info & Mute */}
-        <div className="w-40 flex items-center justify-between pr-2 border-r border-base-300">
-          <div className="flex items-center gap-2">
-            <div className={`w-2.5 h-2.5 rounded-full ${track.color}`} />
+        {/* Track Info & Mute.
+            `sticky left-0` pins the gutter to the left edge of SequencerGrid's
+            `overflow-x-auto` while the 16 steps scroll under it — without it a
+            phone shows five anonymous step buttons and no way to tell which
+            lane they belong to. Everything else here exists to make that pin
+            fully opaque, because any gap in it shows a step button sliding
+            past: `bg-base-200` is the row's own colour, `self-stretch` with
+            `-my-2 py-2` covers the row's whole height (its padding included —
+            the active steps' glow spills into that), and `pl-2` takes over the
+            row's left padding so nothing scrolls through the 8px beside it.
+            Its width must stay in step with StepHeader's `pl-38 sm:pl-44`:
+            gutter + the row's `gap-2`. */}
+        <div className="sticky left-0 z-10 self-stretch -my-2 py-2 bg-base-200 w-36 sm:w-42 shrink-0 flex items-center justify-between pl-2 pr-2 border-r border-base-300">
+          {/* `min-w-0` is what lets the name actually truncate: a flex item's
+              floor is its content width until you say otherwise, so without it
+              "Closed Hat" plus the two buttons simply overran the gutter and
+              painted on top of the steps at the phone's narrower `w-36`. */}
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${track.color}`} />
             <span className="text-xs font-bold text-base-content truncate">
               {track.name}
             </span>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
+            {/* Hidden below `sm`. The gutter is only 144px wide there, and
+                with both buttons in it the track name truncated to "Kick…" —
+                a lane you cannot name is worse than one you cannot audition
+                from here. Nothing is lost: every one of these tracks has a pad
+                in the input deck's Drums tab that triggers the same sound. */}
             <button
               onClick={() => onPreview(track)}
-              className="btn btn-ghost btn-xs btn-square hover:text-primary"
+              className="btn btn-ghost btn-xs btn-square hover:text-primary hidden sm:inline-flex"
               title="Preview Instrument"
             >
               <Play className="w-3.5 h-3.5" />

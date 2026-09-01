@@ -212,7 +212,7 @@ export const BassModulePanel: React.FC<BassModulePanelProps> = ({
         {bassPatternMode === 'custom' && (
           <div className="overflow-x-auto mt-3">
             <label className={FIELD_LABEL}>Custom Bass Pattern</label>
-            <div className="min-w-[520px]">
+            <div className="min-w-[420px] sm:min-w-[520px]">
               <PlayingStepHeader
                 player="chords"
                 cells={chordCells}

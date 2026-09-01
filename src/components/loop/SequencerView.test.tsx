@@ -227,7 +227,7 @@ describe('SequencerGrid', () => {
     const before = renderToString(
       <div className="overflow-x-auto">
         <StepHeader cells={cells} currentStep={5} isPlaying={isPlaying} />
-        <div className="space-y-2 min-w-[700px]">
+        <div className="space-y-2 min-w-[600px] sm:min-w-[700px]">
           {tracks.map((track) => (
             <TrackRow
               key={track.id}

@@ -2,8 +2,16 @@ import React from "react";
 import type { StepCell } from "../sequencerGrid";
 import { useCurrentStep, type StepPlayerId } from "../playbackStep";
 
-/** The drum grid's own container: `pl-44` clears its track-label gutter. */
-const DRUM_HEADER_CLASS = 'flex items-center gap-2 mb-2 pl-44 min-w-[700px]';
+/**
+ * The drum grid's own container. The left padding clears TrackRow's label
+ * gutter and MUST stay in step with it, or the numbers drift off the columns
+ * they label: `pl-2` (8px) + gutter + `gap-2` (8px), i.e. `pl-38` for the
+ * phone's `w-36` gutter and `pl-44` for the `sm:w-42` one. The min-widths are
+ * SequencerGrid's, repeated because the strip is that grid's sibling, not its
+ * child — both must be the same width for the columns to line up.
+ */
+const DRUM_HEADER_CLASS =
+  'flex items-center gap-2 mb-2 pl-38 sm:pl-44 min-w-[600px] sm:min-w-[700px]';
 
 export interface StepHeaderProps {
   cells: StepCell[];
