@@ -394,3 +394,28 @@ input[type="range"] {
 @utility animate-slide-in-right {
   animation: solna-slide-in-right 200ms ease-out;
 }
+
+/* ---------------------------------------------------------------------------
+   Display-cutout insets (installed PWA)
+
+   index.html sets `viewport-fit=cover`, so an installed app fills the whole
+   screen — including the strip the home indicator sits in. Nothing consumed
+   `env(safe-area-inset-*)` before, which put that indicator directly on top of
+   the transport bar's play button.
+
+   `env()` resolves to 0px in a browser tab and on hardware with no cutout, so
+   these are inert everywhere except where they are needed. There are two
+   because the transport bar's own vertical padding steps up at `sm` and a
+   utility declares one fixed value — `pb-safe` carries the `py-1.5` base,
+   `pb-safe-lg` the `sm:py-2` one. The inset is NOT dropped above `sm`: iPads
+   have a home indicator too. The left/right insets are handled once on the
+   app's root container instead of per-bar.
+   -------------------------------------------------------------------------- */
+
+@utility pb-safe {
+  padding-bottom: calc(var(--spacing) * 1.5 + env(safe-area-inset-bottom));
+}
+
+@utility pb-safe-lg {
+  padding-bottom: calc(var(--spacing) * 2 + env(safe-area-inset-bottom));
+}

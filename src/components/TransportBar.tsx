@@ -61,7 +61,7 @@ export const TransportBar: React.FC = React.memo(() => {
     // sits dead-centre in the viewport) whenever there is room, and floored at
     // their own content width when there isn't — which degrades to an off-centre
     // readout instead of side groups overlapping or overflowing the bar.
-    <div className="shrink-0 bg-base-100 border-t border-base-300 px-2 sm:px-3 py-1.5 sm:py-2 flex items-center justify-between gap-1.5 sm:gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
+    <div className="shrink-0 bg-base-100 border-t border-base-300 px-2 sm:px-3 py-1.5 sm:py-2 pb-safe sm:pb-safe-lg flex items-center justify-between gap-1.5 sm:gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
       {/* Left Transport Actions: Play All + Tempo + Meter */}
       <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0">
         {/* Master transport: drives both automation players together. */}
