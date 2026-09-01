@@ -178,7 +178,17 @@ export const BottomInputDock: React.FC<BottomInputDockProps> = React.memo(({ key
               </div>
 
               <div
-                className={`flex justify-center relative h-45 select-none bg-base-300 p-2 rounded-box border border-base-300 overflow-x-auto ${
+                // `justify-center-safe`, not `justify-center`: a keyboard wider
+                // than this box is centred by the plain keyword, which pushes
+                // its first keys off the LEFT edge — past scroll position 0, so
+                // they cannot be reached at all. The -safe variant falls back to
+                // flex-start exactly when the content overflows.
+                // The short-viewport height is what keeps a landscape phone
+                // whole: the navbar, vibes bar and transport bar are all
+                // `shrink-0`, so at 180px this box plus its toolbar overran
+                // 390px of screen and the overflow was clipped off the top of
+                // the app. See KeyCap for the matching row height.
+                className={`flex justify-center-safe relative h-45 [@media(max-height:560px)]:h-36 select-none bg-base-300 p-2 rounded-box border border-base-300 overflow-x-auto ${
                   keyboardMode === 'scale-locked' || keyboardMode === 'chord'
                     ? 'flex-col gap-1.5'
                     : ''

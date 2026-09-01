@@ -151,6 +151,12 @@ export const KEYBOARD_NOTES = [
 // flex-col gap-1.5 = 6px between the two rows) — (180 - 16 - 2 - 6) / 2 = 78px
 // per row. That is the established scale-mode look; chord mode is what
 // changes to match it.
+//
+// Because the height is intrinsic rather than inherited, it does NOT follow
+// that container when it shrinks — so the short-viewport height here is the
+// same arithmetic over the dock's `[@media(max-height:560px)]:h-36`:
+// (144 - 16 - 2 - 6) / 2 = 60px = h-15. A landscape phone would otherwise
+// push two 78px rows out through the bottom of a 144px box.
 export function KeyCap({
   id,
   ariaLabel,
@@ -198,7 +204,7 @@ export function KeyCap({
         onRelease();
       }}
       onTouchCancel={onRelease}
-      className={`w-12 h-19.5 rounded-b-field border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
+      className={`w-12 h-19.5 [@media(max-height:560px)]:h-15 rounded-b-field border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
         isActive
           ? "bg-primary text-primary-content shadow-inner scale-[0.99]"
           : "bg-key-white text-key-white-content hover:brightness-105"
@@ -479,7 +485,7 @@ export function ChromaticKeyboard({
   // the dock, so recomputing on every render was measurable.
   const notes = useMemo(() => getChromaticKeyboardNotes(octaveOffset), [octaveOffset]);
   return (
-    <div className="relative flex">
+    <div className={CHROMATIC_KEYBOARD_CLASS}>
       {notes.map((k, noteIndex) => {
         const isActive = activeNotes.has(k.note);
         if (k.isBlack) {
@@ -514,14 +520,12 @@ export function ChromaticKeyboard({
                 onNoteOff(k.note);
               }}
               onTouchCancel={() => onNoteOff(k.note)}
-              className={`absolute z-10 w-9 h-25 rounded-b-field border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
+              className={`absolute z-10 w-[var(--chromatic-key-black-w)] h-25 rounded-b-field border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
                 isActive
                   ? "bg-primary text-primary-content shadow-lg shadow-primary/50 scale-[0.98]"
                   : "bg-key-black text-key-black-content hover:brightness-125"
               }`}
-              style={{
-                left: `${getBlackKeyLeftPx(noteIndex)}px`,
-              }}
+              style={{ left: getBlackKeyLeft(noteIndex) }}
             >
               <span className="text-[9px] font-mono font-bold text-key-black-content">
                 {k.label}
@@ -564,7 +568,7 @@ export function ChromaticKeyboard({
               onNoteOff(k.note);
             }}
             onTouchCancel={() => onNoteOff(k.note)}
-            className={`w-16 h-full rounded-b-field border border-base-300 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
+            className={`w-[calc(var(--chromatic-key-stride)-4px)] h-full rounded-b-field border border-base-300 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
               isActive
                 ? "bg-primary text-primary-content shadow-inner scale-[0.99]"
                 : "bg-key-white text-key-white-content hover:brightness-105"
@@ -583,17 +587,42 @@ export function ChromaticKeyboard({
   );
 }
 
-// White key: w-16 (64px) + mx-0.5 (4px total) = 68px stride; black key: w-9 = 36px.
-// Positions are derived from white-key boundaries, so they hold at any octave
-// offset and container width.
-const WHITE_KEY_STRIDE_PX = 68;
-const BLACK_KEY_WIDTH_PX = 36;
+/**
+ * The chromatic keyboard's two metrics, as CSS custom properties declared on
+ * its container (see CHROMATIC_KEYBOARD_CLASS).
+ *
+ * They are custom properties rather than TypeScript constants because the
+ * phone value has to differ from the desktop one and only CSS can answer a
+ * media query: at the desktop 68px stride a 390px screen fits under five white
+ * keys, so half an octave was always off-screen. Black keys are absolutely
+ * positioned against white-key boundaries, so their offsets are `calc()` over
+ * the same two properties and stay correct at either size — and at any octave
+ * offset or container width.
+ */
+const KEY_STRIDE_VAR = '--chromatic-key-stride';
+const KEY_BLACK_WIDTH_VAR = '--chromatic-key-black-w';
 
-export function getBlackKeyLeftPx(noteIndex: number): number {
-  const whiteKeysBefore = KEYBOARD_NOTES.slice(0, noteIndex).filter(
-    (k) => !k.isBlack,
-  ).length;
-  return whiteKeysBefore * WHITE_KEY_STRIDE_PX - BLACK_KEY_WIDTH_PX / 2;
+/**
+ * 46px stride fits a full octave (7 white keys) across a 375px phone; 68px is
+ * the original desktop size. `mx-0.5` on each white key eats 4px of the stride,
+ * hence the `-4px` in its width.
+ */
+export const CHROMATIC_KEYBOARD_CLASS =
+  'relative flex [--chromatic-key-stride:46px] [--chromatic-key-black-w:26px] ' +
+  'sm:[--chromatic-key-stride:68px] sm:[--chromatic-key-black-w:36px]';
+
+/**
+ * How many white keys precede `noteIndex` — the black key's offset in stride
+ * units. Exported (rather than the px total it used to return) because the
+ * stride is now a CSS value this module cannot read.
+ */
+export function whiteKeysBefore(noteIndex: number): number {
+  return KEYBOARD_NOTES.slice(0, noteIndex).filter((k) => !k.isBlack).length;
+}
+
+/** A black key's `left`, centred on the white-key boundary it straddles. */
+export function getBlackKeyLeft(noteIndex: number): string {
+  return `calc(${whiteKeysBefore(noteIndex)} * var(${KEY_STRIDE_VAR}) - var(${KEY_BLACK_WIDTH_VAR}) / 2)`;
 }
 
 // Chromatic keyboard always starts from C — octaveOffset shifts the range up/down

@@ -1,21 +1,27 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { ChromaticKeyboard, getBlackKeyLeftPx } from '../ui/Keyboard';
+import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
 import { SynthView } from './SynthView';
 import { resolveSynthControlChannel } from '../../utils/synthControl';
 import type { SynthParamChannel } from '../../utils/synthControl';
 import type { SynthParams } from '../../types';
 
-// White key: w-16 (64px) + mx-0.5 (4px total) = 68px stride.
-// Black key: w-9 = 36px wide, centered on the boundary between white keys.
+// A black key is half its own width left of the white-key boundary it
+// straddles, so its offset is (white keys before it) strides minus half a black
+// key. Both metrics are CSS custom properties — the stride shrinks below `sm`
+// so a phone fits a whole octave — which is why these are calc() strings rather
+// than the pixel totals they used to be.
+const left = (whiteKeys: number) =>
+  `left:calc(${whiteKeys} * var(--chromatic-key-stride) - var(--chromatic-key-black-w) / 2)`;
+
 const BLACK_KEY_STYLES = [
-  'left:50px', // C#3
-  'left:118px', // D#3
-  'left:254px', // F#3
-  'left:322px', // G#3
-  'left:390px', // A#3
-  'left:526px', // C#4
-  'left:594px', // D#4
+  left(1), // C#3
+  left(2), // D#3
+  left(4), // F#3
+  left(5), // G#3
+  left(6), // A#3
+  left(8), // C#4
+  left(9), // D#4
 ];
 
 function blackKeyStyles(html: string): string[] {
@@ -25,14 +31,23 @@ function blackKeyStyles(html: string): string[] {
 }
 
 describe('chromatic keyboard black key geometry', () => {
-  test('getBlackKeyLeftPx centers each black key on a white-key boundary', () => {
-    expect(getBlackKeyLeftPx(1)).toBe(50); // C#3
-    expect(getBlackKeyLeftPx(3)).toBe(118); // D#3
-    expect(getBlackKeyLeftPx(6)).toBe(254); // F#3
-    expect(getBlackKeyLeftPx(8)).toBe(322); // G#3
-    expect(getBlackKeyLeftPx(10)).toBe(390); // A#3
-    expect(getBlackKeyLeftPx(13)).toBe(526); // C#4
-    expect(getBlackKeyLeftPx(15)).toBe(594); // D#4
+  test('whiteKeysBefore counts the strides a black key is offset by', () => {
+    expect(whiteKeysBefore(1)).toBe(1); // C#3
+    expect(whiteKeysBefore(3)).toBe(2); // D#3
+    expect(whiteKeysBefore(6)).toBe(4); // F#3
+    expect(whiteKeysBefore(8)).toBe(5); // G#3
+    expect(whiteKeysBefore(10)).toBe(6); // A#3
+    expect(whiteKeysBefore(13)).toBe(8); // C#4
+    expect(whiteKeysBefore(15)).toBe(9); // D#4
+  });
+
+  test('getBlackKeyLeft centers each black key on a white-key boundary', () => {
+    expect(getBlackKeyLeft(1)).toBe(
+      'calc(1 * var(--chromatic-key-stride) - var(--chromatic-key-black-w) / 2)',
+    );
+    expect(getBlackKeyLeft(15)).toBe(
+      'calc(9 * var(--chromatic-key-stride) - var(--chromatic-key-black-w) / 2)',
+    );
   });
 
   test('black keys render at geometric positions over the white keys', () => {
