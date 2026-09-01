@@ -6,7 +6,7 @@ import { PlayerTransport } from "./ui/PlayerTransport";
 import { PlayheadReadout } from "./PlayheadReadout";
 import { VuMeter } from "./ui/VuMeter";
 import { MidiIndicator } from "./ui/MidiIndicator";
-import { aggregatePlayerState, isHardStopEnabled } from "../store/transportSlice";
+import { aggregatePlayerState, isHardStopEnabled, transportDisplayState } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 import type { Loop } from '../store/types';
 
@@ -38,10 +38,16 @@ export const TransportBar: React.FC = React.memo(() => {
   const toggleMetronome = useAppStore((s) => s.toggleMetronome);
   const songLoopIndex = useAppStore((s) => s.songLoopIndex);
   const loops = useAppStore((s) => s.loops);
+  const playbackScope = useAppStore((s) => s.playbackScope);
 
   const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer);
+  // While a loop is soloing the master button offers Play (a one-click
+  // takeover). Hard stop stays live off the REAL player states, so soloing
+  // audio always has a visible global kill even if the card is scrolled away.
+  const displayState = transportDisplayState(playbackScope, aggregate);
   const hardStopDisabled = !isHardStopEnabled(sequencerPlayer, chordsPlayer, leadPlayer);
-  // The meter loop only needs to know whether anything is sounding.
+  // The meter loop only needs to know whether anything is sounding, off the
+  // true aggregate — not the takeover-driven display state.
   const isPlaying = aggregate !== 'stopped';
   const songLabel = songModeLabel(songLoopIndex, loops);
 
@@ -61,7 +67,7 @@ export const TransportBar: React.FC = React.memo(() => {
         {/* Master transport: drives both automation players together. */}
         <PlayerTransport
           id="btn-bottom-transport"
-          state={aggregate}
+          state={displayState}
           size="sm"
           showHardStop
           hardStopDisabled={hardStopDisabled}

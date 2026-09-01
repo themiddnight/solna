@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { TransportBar, songModeLabel } from './TransportBar';
-import { aggregatePlayerState, isHardStopEnabled } from '../store/transportSlice';
+import { aggregatePlayerState, isHardStopEnabled, transportDisplayState } from '../store/transportSlice';
 import { resolveTransportButtons } from './ui/PlayerTransport';
 import { createDefaultLoop } from '../store/loopSlice';
 import type { Loop } from '../store/types';
@@ -48,6 +48,16 @@ describe('transport bar aggregate behaviour', () => {
   test('fully stopped disables the hard stop', () => {
     expect(aggregatePlayerState('stopped', 'stopped')).toBe('stopped');
     expect(isHardStopEnabled('stopped', 'stopped')).toBe(false);
+  });
+
+  test('a soloing scope makes the master button offer Play, so a click takes over into song mode', () => {
+    // Task 2 already covers transportDisplayState's three cases in isolation;
+    // this proves the composition the master button actually renders from —
+    // a playing aggregate presented as 'stopped' resolves to the Play button,
+    // and PlayerTransport routes a click on that button to onPlay (playAll).
+    const displayState = transportDisplayState({ kind: 'solo', loopId: 'a' }, 'playing');
+    expect(displayState).toBe('stopped');
+    expect(resolveTransportButtons(displayState).main.label).toBe('Play');
   });
 
   // NOTE on the mixed 'stopping'/'stopped' case specifically: it cannot be

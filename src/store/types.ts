@@ -13,6 +13,7 @@ import type { SynthControlTarget } from '../utils/synthControl';
 import type { MeterId } from '../utils/meter';
 import type { SynthPresetItem, SynthPresetCategory } from '../audio/synthPresets';
 import type { BassStepChoice } from '../audio/bassPatterns';
+import type { PlaybackScope } from './playbackScope';
 
 /** A player is `stopping` between a soft stop and the bar line that ends it. */
 export type PlayerState = 'stopped' | 'playing' | 'stopping';
@@ -40,10 +41,15 @@ export interface TransportSlice {
   setPlayheadChord: (chordIndex: number | null, startBeat?: number) => void;
   /** Transient song-mode cursor: index into loops[] currently sounding, null = loop mode. */
   songLoopIndex: number | null;
-  /** Transient audition loop id: when set, plays only this loop in isolated loop mode inside the song layer. */
-  auditionLoopId: string | null;
   setSongLoopIndex: (index: number | null) => void;
-  setAuditionLoopId: (id: string | null) => void;
+  /**
+   * Transient (never persisted): the single source of truth for playback MODE.
+   * `songLoopIndex` beside it is a pure CURSOR — never read its null-ness as a
+   * mode. See src/store/playbackScope.ts.
+   */
+  playbackScope: PlaybackScope;
+  /** A loop card's own play/stop button: solo the loop, or stop the solo. */
+  soloLoop: (loopId: string) => void;
   setBpm: (bpm: number) => void;
   setMeter: (id: MeterId) => void;
   setMasterVolume: (volume: number) => void;

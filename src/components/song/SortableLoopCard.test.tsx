@@ -76,6 +76,25 @@ describe('getActiveChordIndex', () => {
 describe('SortableLoopCard', () => {
   const defaultLoop = createDefaultLoop();
 
+  // Shared no-op callbacks + loop/index scaffolding for scope-driven tests
+  // that only care about one prop at a time.
+  const baseProps = {
+    loop: defaultLoop,
+    index: 0,
+    totalLoops: 2,
+    isPlaying: false,
+    isActive: false,
+    onSelect: () => {},
+    onEdit: () => {},
+    onDuplicate: () => {},
+    onDelete: () => {},
+    onReorder: () => {},
+    onRename: () => {},
+    onSetRepeat: () => {},
+    onTogglePlayLoop: () => {},
+    onSetMix: () => {},
+  };
+
   test('renders card container with id and cursor-pointer for full-card click selection', () => {
     const html = renderToString(
       <SortableLoopCard
@@ -277,6 +296,37 @@ describe('SortableLoopCard', () => {
     expect(html).toContain('id="slider-chord-loop-default-1"');
     expect(html).toContain('id="btn-mute-bass-loop-default-1"');
     expect(html).toContain('id="slider-bass-loop-default-1"');
+  });
+
+  test('the play button is disabled when the scope forbids it', () => {
+    const html = renderToString(<SortableLoopCard {...baseProps} playDisabled />);
+    const button = html.match(/<button id="btn-loop-play-loop-default-1"[^>]*>/)?.[0];
+    expect(button).toBeDefined();
+    expect(button).toContain('disabled:opacity-30');
+    // `disabled:opacity-30` itself contains the substring "disabled", and the
+    // card's other buttons (e.g. "Move up" at index 0) render their own
+    // disabled="" independently of this prop — scope to this button and pin
+    // the actual HTML boolean attribute, not a class-name substring.
+    expect(button).toContain('disabled=""');
+  });
+
+  test('the play button is not disabled when the scope allows it', () => {
+    const html = renderToString(<SortableLoopCard {...baseProps} playDisabled={false} />);
+    const button = html.match(/<button id="btn-loop-play-loop-default-1"[^>]*>/)?.[0];
+    expect(button).toBeDefined();
+    expect(button).not.toContain('disabled=""');
+  });
+
+  test('the soloing card shows Stop and the SOLO badge, and is not disabled', () => {
+    const html = renderToString(<SortableLoopCard {...baseProps} isPlaying isAuditioning />);
+    expect(html).toContain('badge badge-sm badge-accent');
+    expect(html).toContain('Solo ');
+    expect(html).toContain('btn btn-xs gap-1 font-bold shadow-xs transition-all btn-error');
+  });
+
+  test('a non-soloing card shows no SOLO badge', () => {
+    const html = renderToString(<SortableLoopCard {...baseProps} isPlaying />);
+    expect(html).not.toContain('badge-accent');
   });
 
   test('does not leak raw color literals or dark classes', () => {

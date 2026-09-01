@@ -19,18 +19,27 @@ export const LOAD_LOOP_RELEASE = 0.02;
  * React effect keyed on it never runs and the cut must happen here,
  * synchronously). Drums are fire-and-forget one-shots; one already-scheduled
  * hit can still land, which the spec accepts.
+ *
+ * `preserveScope` is for song advance only: its internal hard stop is not a
+ * user Stop, so the `kind: 'song'` PlaybackScope must survive it — otherwise
+ * every card re-enables the moment the arrangement crosses its first loop
+ * boundary, even though the song is still playing. A real Stop (or any other
+ * loadLoop caller) leaves the scope to decay through hardStopAll's own
+ * 'stop-all' dispatch as normal.
  */
-export function loadLoop(id: string): void {
+export function loadLoop(id: string, opts: { preserveScope?: boolean } = {}): void {
   const store = useAppStore.getState();
   const loop = store.loops.find((r) => r.id === id);
   if (!loop) return;
 
+  const scopeToRestore = opts.preserveScope ? store.playbackScope : null;
   const wasActive = {
     sequencer: store.sequencerPlayer !== 'stopped',
     chords: store.chordsPlayer !== 'stopped',
     lead: store.leadPlayer !== 'stopped',
   };
   store.hardStopAll();
+  if (scopeToRestore !== null) useAppStore.setState({ playbackScope: scopeToRestore });
   audioEngine.stopSource('chord', LOAD_LOOP_RELEASE);
   audioEngine.stopSource('bass', LOAD_LOOP_RELEASE);
 

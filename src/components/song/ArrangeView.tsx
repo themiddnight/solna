@@ -16,6 +16,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { loadLoop } from '../../store/loadLoop';
+import { loopPlayButton, soloLoopId } from '../../store/playbackScope';
 import { loopBars } from '../../store/loop';
 import { aggregatePlayerState } from '../../store/transportSlice';
 import { useAppStore } from '../../store/store';
@@ -51,7 +52,7 @@ export const ArrangeView: React.FC = () => {
   const loops = useAppStore((s) => s.loops);
   const activeLoopId = useAppStore((s) => s.activeLoopId);
   const songLoopIndex = useAppStore((s) => s.songLoopIndex);
-  const auditionLoopId = useAppStore((s) => s.auditionLoopId);
+  const playbackScope = useAppStore((s) => s.playbackScope);
   const meterId = useAppStore((s) => s.meterId);
   const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
   const chordsPlayer = useAppStore((s) => s.chordsPlayer);
@@ -69,9 +70,11 @@ export const ArrangeView: React.FC = () => {
   const isPlaying =
     aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer) === 'playing';
 
+  const soloId = soloLoopId(playbackScope);
+
   const playingId =
-    auditionLoopId !== null
-      ? auditionLoopId
+    soloId !== null
+      ? soloId
       : songLoopIndex !== null && loops[songLoopIndex]
       ? loops[songLoopIndex].id
       : activeLoopId;
@@ -128,15 +131,18 @@ export const ArrangeView: React.FC = () => {
     const playing =
       aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
 
-    if (playing && s.auditionLoopId === id) {
+    if (playing && soloLoopId(s.playbackScope) === id) {
+      // hardStopAll's own 'stop-all' dispatch already resets the scope.
       s.hardStopAll();
-      s.setAuditionLoopId(null);
       return;
     }
 
+    // loadLoop first (it hard-stops and restarts whatever was playing), then
+    // let soloLoop own the scope AND the player patch in one set() — it
+    // already starts the stopped players and drops songLoopIndex itself, so
+    // there is no second writer to keep in sync with the reducer.
     loadLoop(id);
-    s.playAll();
-    useAppStore.setState({ auditionLoopId: id, songLoopIndex: null });
+    s.soloLoop(id);
   }, []);
 
   const handleDuplicate = useCallback(
@@ -192,10 +198,11 @@ export const ArrangeView: React.FC = () => {
               const bars = loopBars(loop.chords);
               const repeatCount = Math.max(1, loop.repeatCount ?? 1);
               const singleCycleSteps = Math.max(1, bars * stepsPerBar);
-              const isAuditioning = isPlaying && auditionLoopId === loop.id;
-              const isSongPlaying = isPlaying && auditionLoopId === null && loop.id === playingId;
+              const isAuditioning = isPlaying && soloId === loop.id;
+              const isSongPlaying = isPlaying && soloId === null && loop.id === playingId;
               const isCurrentPlaying = isAuditioning || isSongPlaying;
               const isSelected = loop.id === activeLoopId;
+              const playButton = loopPlayButton(playbackScope, loop.id);
 
               const totalStepsInLoop = singleCycleSteps * (isAuditioning ? 1 : repeatCount);
 
@@ -220,6 +227,7 @@ export const ArrangeView: React.FC = () => {
                   totalLoops={loops.length}
                   isPlaying={isCurrentPlaying}
                   isAuditioning={isAuditioning}
+                  playDisabled={playButton.disabled}
                   isActive={isSelected}
                   progressPercent={progressPercent}
                   currentStepInLoop={currentStepInLoop}

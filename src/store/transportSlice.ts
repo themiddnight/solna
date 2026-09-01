@@ -2,6 +2,8 @@ import type { StoreApi } from 'zustand';
 import { clampBpm } from '../utils/musicTheory';
 import { DEFAULT_METER_ID } from '../utils/meter';
 import type { AppStore, PlayerModule, PlayerState, TransportSlice } from './types';
+import { playbackScopeReducer, SCOPE_NONE } from './playbackScope';
+import type { PlaybackScope } from './playbackScope';
 
 type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
@@ -44,6 +46,41 @@ export function isHardStopEnabled(...states: PlayerState[]): boolean {
  * transition) are handled by engineSync's transport subscription; the actual
  * silencing of scheduled voices is owned by each playback hook.
  */
+/**
+ * The player half of an all-players transition, as a pure patch. Extracted so
+ * playAll / softStopAll / hardStopAll / soloLoop can each fold the player patch
+ * and the PlaybackScope patch into ONE set() — an intermediate set() would fire
+ * songMode's subscription against a state where the scope and the players
+ * disagree, which is the two-writer shape this refactor exists to remove.
+ */
+function allPlayersPatch(
+  state: AppStore,
+  next: (current: PlayerState) => PlayerState,
+): Partial<AppStore> {
+  const patch: Partial<AppStore> = {};
+  (Object.keys(FIELD) as PlayerModule[]).forEach((module) => {
+    const field = FIELD[module];
+    const current = state[field];
+    const target = next(current);
+    if (target !== current) patch[field] = target;
+  });
+  return patch;
+}
+
+/**
+ * What the MASTER transport button shows. While a loop is soloing the master
+ * button presents as Play, so clicking it TAKES OVER into song mode in one
+ * click (spec: "Transport Play All shows Stop only when kind === 'song'").
+ * Hard stop is unaffected — it stays live off the real player states via
+ * isHardStopEnabled, so soloing audio always has a visible global kill.
+ */
+export function transportDisplayState(
+  scope: PlaybackScope,
+  aggregate: PlayerState,
+): PlayerState {
+  return scope.kind === 'solo' ? 'stopped' : aggregate;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- get is unused but kept for signature parity with the other slice creators
 export function createTransportSlice(set: Set, _get: Get): TransportSlice {
   const transition = (module: PlayerModule, next: (current: PlayerState) => PlayerState) =>
@@ -52,18 +89,6 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
       const current = state[field];
       const target = next(current);
       return target === current ? {} : ({ [field]: target } as Partial<AppStore>);
-    });
-
-  const transitionAll = (next: (current: PlayerState) => PlayerState) =>
-    set((state) => {
-      const patch: Partial<AppStore> = {};
-      (Object.keys(FIELD) as PlayerModule[]).forEach((module) => {
-        const field = FIELD[module];
-        const current = state[field];
-        const target = next(current);
-        if (target !== current) patch[field] = target;
-      });
-      return patch;
     });
 
   const play = (module: PlayerModule) =>
@@ -86,9 +111,9 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
     playheadChordIndex: null,
     playheadChordStartBeat: 0,
     songLoopIndex: null,
-    auditionLoopId: null,
     setSongLoopIndex: (songLoopIndex) => set({ songLoopIndex }),
-    setAuditionLoopId: (auditionLoopId) => set({ auditionLoopId }),
+
+    playbackScope: SCOPE_NONE,
 
     setPlayheadBeat: (playheadBeat) => set({ playheadBeat }),
     setPlayheadChord: (playheadChordIndex, startBeat = 0) =>
@@ -110,8 +135,39 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
     softStop,
     hardStop,
 
-    playAll: () => transitionAll((current) => (current === 'stopped' ? 'playing' : current)),
-    softStopAll: () => transitionAll((current) => (current === 'playing' ? 'stopping' : current)),
-    hardStopAll: () => transitionAll(() => 'stopped'),
+    playAll: () =>
+      set((state) => ({
+        ...allPlayersPatch(state, (current) => (current === 'stopped' ? 'playing' : current)),
+        playbackScope: playbackScopeReducer(state.playbackScope, { type: 'play-all' }),
+      })),
+    softStopAll: () =>
+      set((state) => ({
+        ...allPlayersPatch(state, (current) => (current === 'playing' ? 'stopping' : current)),
+        playbackScope: playbackScopeReducer(state.playbackScope, { type: 'stop-all' }),
+      })),
+    hardStopAll: () =>
+      set((state) => ({
+        ...allPlayersPatch(state, () => 'stopped'),
+        playbackScope: playbackScopeReducer(state.playbackScope, { type: 'stop-all' }),
+      })),
+
+    /**
+     * A loop card's own play/stop button. Starting a solo also drops the song
+     * cursor, in the same set() — the two can never be observed disagreeing.
+     * The caller (ArrangeView) is responsible for loadLoop-ing the target
+     * FIRST, because loadLoop hard-stops and restarts whatever was playing.
+     */
+    soloLoop: (loopId) =>
+      set((state) => {
+        const scope = playbackScopeReducer(state.playbackScope, { type: 'toggle-loop', loopId });
+        if (scope === state.playbackScope) return {};
+        return scope.kind === 'solo'
+          ? {
+              playbackScope: scope,
+              songLoopIndex: null,
+              ...allPlayersPatch(state, (current) => (current === 'stopped' ? 'playing' : current)),
+            }
+          : { playbackScope: scope, ...allPlayersPatch(state, () => 'stopped') };
+      }),
   };
 }
