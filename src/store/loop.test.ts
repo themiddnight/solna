@@ -7,8 +7,10 @@ import {
   nextLoopName,
   loopBars,
   loopStatePatch,
+  resolveActiveLoop,
   LOOP_FLAT_KEYS,
 } from './loop';
+import { createDefaultLoop } from './loopSlice';
 import type { Loop } from './types';
 
 function makeLoop(overrides: Partial<Loop> = {}): Loop {
@@ -123,5 +125,20 @@ describe('loopStatePatch', () => {
     const patch = loopStatePatch({ scaleRoot: 'C', chords: INITIAL_CHORDS, id: 'nope' });
     expect(patch.scaleRoot).toBe('C');
     expect('id' in patch).toBe(false);
+  });
+});
+
+describe('resolveActiveLoop', () => {
+  const loops = [
+    { ...createDefaultLoop(), id: 'a' },
+    { ...createDefaultLoop(), id: 'b' },
+  ];
+  test('returns the loop named by activeId when it exists', () => {
+    expect(resolveActiveLoop(loops, 'b').id).toBe('b');
+  });
+  test('falls back to loops[0] for a foreign id, null or undefined', () => {
+    expect(resolveActiveLoop(loops, 'zzz').id).toBe('a');
+    expect(resolveActiveLoop(loops, null).id).toBe('a');
+    expect(resolveActiveLoop(loops, undefined).id).toBe('a');
   });
 });

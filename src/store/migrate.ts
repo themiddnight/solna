@@ -226,3 +226,15 @@ export function backfillLeadWindow<T extends object>(state: T): T {
   });
   return next as unknown as T;
 }
+
+/**
+ * v8 -> v9: the working buffer carries the project identity (which stored
+ * project the session belongs to) and the dirty baseline fingerprint, so a
+ * killed tab comes back knowing which project was open. Both default to null.
+ */
+export function migrateAddProjectIdentity<T extends object>(state: T): T {
+  const next = { ...(state as Record<string, unknown>) };
+  if (!('currentProjectId' in next)) next.currentProjectId = null;
+  if (!('projectBaselineHash' in next)) next.projectBaselineHash = null;
+  return next as unknown as T;
+}

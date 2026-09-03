@@ -6,6 +6,7 @@ import {
   wrapFlatStateIntoLoop,
   renameRegionKeysToLoop,
   backfillLeadWindow,
+  migrateAddProjectIdentity,
   LEGACY_TRACK_COLOR_MAP,
 } from './migrate';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
@@ -292,5 +293,25 @@ describe('backfillLeadWindow (v7 -> v8)', () => {
     backfillLeadWindow(input);
     expect(input).toEqual({ loops: [{ id: 'a' }] });
     expect(backfillLeadWindow({ bpm: 90 })).toEqual({ bpm: 90 });
+  });
+});
+
+describe('migrateAddProjectIdentity (v8 -> v9)', () => {
+  test('a v8 payload gains both fields as null', () => {
+    const out = migrateAddProjectIdentity({ bpm: 120, loops: [] }) as Record<string, unknown>;
+    expect(out.currentProjectId).toBeNull();
+    expect(out.projectBaselineHash).toBeNull();
+    expect(out.bpm).toBe(120);
+  });
+
+  test('a v9 payload is unchanged by the step', () => {
+    const input = { bpm: 90, currentProjectId: 'p-1', projectBaselineHash: 'abc' };
+    expect(migrateAddProjectIdentity(input)).toEqual(input);
+  });
+
+  test('does not mutate the payload it was given', () => {
+    const input = { bpm: 90 } as Record<string, unknown>;
+    migrateAddProjectIdentity(input);
+    expect('currentProjectId' in input).toBe(false);
   });
 });

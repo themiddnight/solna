@@ -90,3 +90,12 @@ export function loopStatePatch(source: object): LoopStatePatch {
   }
   return out as LoopStatePatch;
 }
+
+/**
+ * The loop the flat slices should show: `activeId` when it names a loop, else
+ * the first one. This is the resolution persist `merge` uses on rehydrate and
+ * the resolution project Open uses — one function so the two can never drift.
+ */
+export function resolveActiveLoop(loops: readonly Loop[], activeId: string | null | undefined): Loop {
+  return loops.find((l) => l.id === activeId) ?? loops[0];
+}
