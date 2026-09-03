@@ -1081,3 +1081,69 @@ describe('synth param payload sanitization', () => {
     expect(p.arpOctaves).toBe(1);
   });
 });
+
+describe('project identity migration wiring (v8 -> v9)', () => {
+  test('a version-8 payload hydrates with a null project id and baseline', async () => {
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    useAppStore.persist.clearStorage();
+    flushPersistedWrites();
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({ version: 8, state: { bpm: 111 } })
+    );
+    await useAppStore.persist.rehydrate();
+    const s = useAppStore.getState();
+    expect(s.bpm).toBe(111);
+    expect(s.currentProjectId).toBeNull();
+    expect(s.projectBaselineHash).toBeNull();
+  });
+
+  test('a version-1 payload still terminates in the v9 shape', async () => {
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    useAppStore.persist.clearStorage();
+    flushPersistedWrites();
+    fakeLocalStorage.setItem('musibox_project_state_v1', JSON.stringify({ version: 1, state: { bpm: 100 } }));
+    await useAppStore.persist.rehydrate();
+    expect(useAppStore.getState().currentProjectId).toBeNull();
+    flushPersistedWrites();
+    expect(JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}').version).toBe(9);
+  });
+
+  test('a wrong-typed currentProjectId / projectBaselineHash is coerced to null', async () => {
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    useAppStore.persist.clearStorage();
+    flushPersistedWrites();
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({ version: 9, state: { currentProjectId: 42, projectBaselineHash: { x: 1 } } })
+    );
+    await useAppStore.persist.rehydrate();
+    expect(useAppStore.getState().currentProjectId).toBeNull();
+    expect(useAppStore.getState().projectBaselineHash).toBeNull();
+  });
+
+  test('the two identity fields are persisted and nothing transient rides along', async () => {
+    const { useAppStore, flushPersistedWrites, partializeAppState } = await getStore();
+    useAppStore.setState({ currentProjectId: 'p-9', projectBaselineHash: 'h' });
+    flushPersistedWrites();
+    const stored = JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}');
+    expect(stored.state.currentProjectId).toBe('p-9');
+    expect(stored.state.projectBaselineHash).toBe('h');
+    expect('dirty' in partializeAppState(useAppStore.getState())).toBe(false);
+  });
+});
+
+describe('flushBeforeHide', () => {
+  test('runs the dirty pass before the persisted flush, so storage never carries a stale dirty:false', async () => {
+    const { useAppStore, flushBeforeHide } = await getStore();
+    useAppStore.getState().newProject();
+    useAppStore.setState({ bpm: 133 });
+    expect(useAppStore.getState().dirty).toBe(false); // not yet — idle-debounced
+    flushBeforeHide();
+    expect(useAppStore.getState().dirty).toBe(true);
+    const stored = JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}');
+    // Untitled after New: the baseline stays null; dirty came from the default-project comparison.
+    expect(stored.state.projectBaselineHash).toBeNull();
+    expect(stored.state.currentProjectId).toBeNull();
+  });
+});

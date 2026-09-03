@@ -7,15 +7,12 @@ import { createMusicContextSlice } from './musicContextSlice';
 import { createSynthSlice } from './synthSlice';
 import { createChordsSlice } from './chordsSlice';
 import { createBassSlice } from './bassSlice';
-import { createLeadSlice, LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
+import { createLeadSlice } from './leadSlice';
 import { createSequencerSlice } from './sequencerSlice';
 import { createEffectsSlice } from './effectsSlice';
-import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
-import { EFFECT_LIMITS, clampEffectValue, type EffectNumericKey } from '../audio/effectLimits';
-import type { SynthParams, ChordItem, SequencerTrack, FilterType } from '../types';
 import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
-import { createLoopSlice, createDefaultLoop } from './loopSlice';
+import { createLoopSlice } from './loopSlice';
 import {
   migrateLegacyPresets,
   migrateProjectTitleToVibeId,
@@ -24,17 +21,37 @@ import {
   wrapFlatStateIntoLoop,
   renameRegionKeysToLoop,
   backfillLeadWindow,
+  migrateAddProjectIdentity,
   removeLegacyKeys,
   LEGACY_PERSIST_KEY,
 } from './migrate';
-import { loopStatePatch } from './loop';
+import { loopStatePatch, resolveActiveLoop } from './loop';
 import { createLoopMirroringSet } from './loopSync';
-import type { BassStepChoice } from '../audio/bassPatterns';
+import { createProjectSlice } from './projectSlice';
+import { createDirtyTracker } from './projectDirty';
+import { createProjectStore } from './projectStore';
+import { openIndexedDbBackend } from './projectStoreIdb';
 import { isMeterId } from '../utils/meter';
 import { createCoalescedStorage } from '../utils/coalescedStorage';
 import type { AppStore, PersistedState, Loop } from './types';
+import {
+  sanitizeSynthParams,
+  sanitizeEffectsValue,
+  sanitizeLoops,
+  clampFinite,
+  asBoolean,
+  asString,
+  asNullableString,
+  isPatternMode,
+  asFilterType,
+  isPositiveInteger,
+  isStringMatrix,
+} from './sanitize';
 
 export const PERSIST_KEY = 'musibox_project_state_v1';
+
+/** One project store per tab; opened lazily on the first Project Manager call. */
+export const projectStore = createProjectStore(openIndexedDbBackend);
 
 // Fallback when localStorage is unavailable (SSR, tests, restricted
 // contexts): an in-memory stub keeps the persist middleware functional so the
@@ -118,22 +135,6 @@ export function flushPersistedWrites(): void {
   persistStorage.flush();
 }
 
-// `pagehide` (not `beforeunload`) is the event that actually fires on iOS
-// Safari and on bfcache navigations; `visibilitychange` covers a tab that is
-// backgrounded and then killed by the OS without ever firing pagehide.
-try {
-  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-    window.addEventListener('pagehide', flushPersistedWrites);
-  }
-  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') flushPersistedWrites();
-    });
-  }
-} catch {
-  // ignore — a restricted embedding context may deny even addEventListener
-}
-
 // Captured during store creation so the persist onRehydrateStorage callback
 // (which runs synchronously inside create(), while the `useAppStore` binding
 // is still in its temporal dead zone) can still reach the store api.
@@ -156,192 +157,18 @@ export function partializeAppState(state: AppStore): PersistedState {
     customChordProgressions: state.customChordProgressions,
     loops: state.loops,
     activeLoopId: state.activeLoopId,
+    currentProjectId: state.currentProjectId,
+    projectBaselineHash: state.projectBaselineHash,
   };
 }
 
-// Type-guard the parsed persisted payload before it is merged into the live
-// state. Corrupt JSON never reaches this point (createJSONStorage returns null
-// and persist falls back to defaults), but WRONG-TYPED values survive parsing
-// and would flow straight into engine setters (`bpm: "fast"` -> NaN clock,
-// string volumes -> setTargetAtTime(NaN)). Each checked key is clamped,
-// coerced, or dropped; dropped keys fall back to the freshly-built
-// currentState defaults. Only the keys listed here are checked — everything
-// else passes through unchanged.
-const OSC_TYPES = new Set(['sawtooth', 'square', 'sine', 'triangle']);
-const FILTER_TYPES = new Set(['lowpass', 'highpass', 'bandpass']);
-const LFO_TARGETS = new Set(['cutoff', 'pitch', 'volume']);
-const ARP_MODES = new Set(['up', 'down', 'updown', 'random']);
-const ARP_RATES = new Set(['4n', '8n', '16n', '32n']);
-
 /**
- * Synth params are written straight onto AudioParams, so a wrong-typed
- * persisted value (a string cutoff, a null attack) would land as
- * setValueAtTime(NaN) and silence the voice. Each field keeps its stored value
- * only when the type matches the factory default — and, for the enum fields,
- * only when the engine and arpeggiator actually understand it.
+ * Type-guards the parsed persist payload before it reaches the merge. ONLY the
+ * keys listed here are checked — everything else in the payload passes through
+ * unchanged, so a key added to partialize gets no validation until it is added
+ * here too. The per-value rules live in sanitize.ts, shared with the `.solna`
+ * import path (projectFile.ts) so the two readers cannot drift.
  */
-function sanitizeSynthParams(value: unknown): SynthParams {
-  const fallback = INITIAL_SYNTH_PARAMS;
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return fallback;
-  const raw = value as Record<string, unknown>;
-  const out = { ...fallback } as Record<string, unknown>;
-
-  for (const [key, def] of Object.entries(fallback)) {
-    const stored = raw[key];
-    if (typeof def === 'number') {
-      out[key] = typeof stored === 'number' && Number.isFinite(stored) ? stored : def;
-    } else if (typeof def === 'boolean') {
-      out[key] = typeof stored === 'boolean' ? stored : def;
-    } else if (typeof def === 'string') {
-      out[key] = typeof stored === 'string' ? stored : def;
-    }
-  }
-
-  if (!OSC_TYPES.has(out.oscType as string)) out.oscType = fallback.oscType;
-  if (!FILTER_TYPES.has(out.filterType as string)) out.filterType = fallback.filterType;
-  if (!LFO_TARGETS.has(out.lfoTarget as string)) out.lfoTarget = fallback.lfoTarget;
-  if (!ARP_MODES.has(out.arpMode as string)) out.arpMode = fallback.arpMode;
-  if (!ARP_RATES.has(out.arpRate as string)) out.arpRate = fallback.arpRate;
-
-  return out as unknown as SynthParams;
-}
-
-// The MasterEffects payload: plain-object check (a partial effects object
-// with valid fields is preserved as-is; anything else falls back to the
-// factory defaults), every numeric field clamped through the SAME table the
-// engine uses (audio/effectLimits.ts) so the two can no longer drift — the
-// old code clamped only reverbDecay and compressorThreshold and let a
-// persisted delayFeedback of 1.2 through to a runaway feedback loop. The
-// ternary can hand back the SHARED INITIAL_EFFECTS constant — clone before
-// writing so the module constant is never mutated. Fields removed from
-// MasterEffects must not resurrect from old persisted payloads.
-function sanitizeEffectsValue(effects: unknown): unknown {
-  let result =
-    typeof effects === 'object' && effects !== null && !Array.isArray(effects)
-      ? effects
-      : INITIAL_EFFECTS;
-
-  if (result && typeof result === 'object') {
-    if (result === INITIAL_EFFECTS) result = { ...INITIAL_EFFECTS };
-    const fxWritable = result as Record<string, unknown>;
-    for (const key of Object.keys(EFFECT_LIMITS) as EffectNumericKey[]) {
-      fxWritable[key] = clampEffectValue(key, fxWritable[key]);
-    }
-  }
-
-  if (result && typeof result === 'object') {
-    const fx = result as Record<string, unknown>;
-    for (const key of ['chorusRate', 'chorusDepth', 'chorusWet', 'compressorRatio', 'compressorBypass', 'delayTime', 'distortionDrive']) {
-      delete fx[key];
-    }
-  }
-
-  return result;
-}
-
-function clampFinite(value: unknown, min: number, max: number, fallback: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
-  return Math.min(max, Math.max(min, value));
-}
-
-function asBoolean(value: unknown): boolean {
-  return typeof value === 'boolean' ? value : false;
-}
-
-function asString(value: unknown, fallback: string): string {
-  return typeof value === 'string' ? value : fallback;
-}
-
-function asArray<T>(value: unknown, fallback: T[]): T[] {
-  return Array.isArray(value) ? (value as T[]) : fallback;
-}
-
-function isPatternMode(value: unknown): value is 'preset' | 'custom' {
-  return value === 'preset' || value === 'custom';
-}
-
-function asPatternMode(value: unknown, fallback: 'preset' | 'custom'): 'preset' | 'custom' {
-  return isPatternMode(value) ? value : fallback;
-}
-
-function asFilterType(value: unknown, fallback: FilterType): FilterType {
-  return FILTER_TYPES.has(value as string) ? (value as FilterType) : fallback;
-}
-
-function isPositiveInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
-}
-
-function asPositiveInteger(value: unknown, fallback: number): number {
-  return isPositiveInteger(value) ? value : fallback;
-}
-
-function isStringMatrix(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    value.every((row) => Array.isArray(row) && row.every((n) => typeof n === 'string'))
-  );
-}
-
-/**
- * Validates a persisted `loops` array. Each loop is rebuilt through the
- * same per-field guards/clamps the flat payload used (synth params, finite
- * clamps, string/enum checks), with createDefaultLoop() as the fallback for
- * missing or wrong-typed fields. Rows that are not plain objects are dropped;
- * an empty result means "no valid loops" and the caller falls back to the
- * default single loop.
- */
-function sanitizeLoops(value: unknown): Loop[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const loops: Loop[] = [];
-  for (const raw of value) {
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue;
-    const fallback = createDefaultLoop();
-    const r = { ...fallback, ...(raw as Record<string, unknown>) } as Record<string, unknown>;
-    loops.push({
-      id: typeof r.id === 'string' && r.id.length > 0 ? r.id : `loop-${loops.length}`,
-      name: typeof r.name === 'string' && r.name.length > 0 ? r.name : `Loop ${loops.length + 1}`,
-      repeatCount: clampFinite(asPositiveInteger(r.repeatCount, fallback.repeatCount ?? 1), 1, 32, 1),
-      scaleRoot: asString(r.scaleRoot, fallback.scaleRoot),
-      scaleType: asString(r.scaleType, fallback.scaleType),
-      synthParams: sanitizeSynthParams(r.synthParams),
-      chordSynthParams: sanitizeSynthParams(r.chordSynthParams),
-      bassSynthParams: sanitizeSynthParams(r.bassSynthParams),
-      chords: asArray<ChordItem>(r.chords, fallback.chords),
-      chordRhythmId: asString(r.chordRhythmId, fallback.chordRhythmId),
-      chordRhythmMode: asPatternMode(r.chordRhythmMode, fallback.chordRhythmMode),
-      customChordRhythm: asArray<boolean>(r.customChordRhythm, fallback.customChordRhythm),
-      chordFeel: clampFinite(r.chordFeel, 0, 1, fallback.chordFeel),
-      chordOctave: clampFinite(r.chordOctave, 0, 8, fallback.chordOctave),
-      bassPatternId: asString(r.bassPatternId, fallback.bassPatternId),
-      bassPatternMode: asPatternMode(r.bassPatternMode, fallback.bassPatternMode),
-      customBassPattern: asArray<BassStepChoice>(r.customBassPattern, fallback.customBassPattern),
-      bassFeel: clampFinite(r.bassFeel, 0, 1, fallback.bassFeel),
-      bassOctave: clampFinite(r.bassOctave, 0, 8, fallback.bassOctave),
-      leadMelodySteps: asArray<string[]>(r.leadMelodySteps, fallback.leadMelodySteps),
-      leadLoopLength: asPositiveInteger(r.leadLoopLength, fallback.leadLoopLength),
-      leadMelodyView: r.leadMelodyView === 'chromatic' ? 'chromatic' : 'scale-locked',
-      leadMelodyOctave: clampFinite(
-        r.leadMelodyOctave, LEAD_OCTAVE_MIN, LEAD_OCTAVE_MAX, fallback.leadMelodyOctave,
-      ),
-      sequencerTracks: asArray<SequencerTrack>(r.sequencerTracks, fallback.sequencerTracks),
-      soundKit: asString(r.soundKit, fallback.soundKit),
-      drumFilterCutoff: clampFinite(r.drumFilterCutoff, 50, 12000, fallback.drumFilterCutoff),
-      drumFilterResonance: clampFinite(r.drumFilterResonance, 0.1, 20, fallback.drumFilterResonance),
-      drumFilterType: asFilterType(r.drumFilterType, fallback.drumFilterType),
-      synthVolume: clampFinite(r.synthVolume, 0, 1.5, fallback.synthVolume),
-      synthMuted: asBoolean(r.synthMuted),
-      chordVolume: clampFinite(r.chordVolume, 0, 1.5, fallback.chordVolume),
-      chordMuted: asBoolean(r.chordMuted),
-      bassVolume: clampFinite(r.bassVolume, 0, 1.5, fallback.bassVolume),
-      bassMuted: asBoolean(r.bassMuted),
-      masterSequencerVolume: clampFinite(r.masterSequencerVolume, 0, 1, fallback.masterSequencerVolume),
-      drumMuted: asBoolean(r.drumMuted),
-    });
-  }
-  return loops.length > 0 ? loops : undefined;
-}
-
 function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (typeof persisted !== 'object' || persisted === null) return {};
   const sanitized = { ...(persisted as Record<string, unknown>) };
@@ -408,6 +235,9 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
     delete sanitized.activeLoopId;
   }
 
+  sanitized.currentProjectId = asNullableString(sanitized.currentProjectId);
+  sanitized.projectBaselineHash = asNullableString(sanitized.projectBaselineHash);
+
   return sanitized as unknown as Partial<AppStore>;
 }
 
@@ -432,11 +262,12 @@ export const useAppStore = create<AppStore>()(
         ...createUiSlice(setWithLoopMirror),
         ...createPresetsSlice(setWithLoopMirror),
         ...createLoopSlice(setWithLoopMirror, get),
+        ...createProjectSlice(setWithLoopMirror, get, projectStore),
       };
     }),
     {
       name: PERSIST_KEY,
-      version: 8,
+      version: 9,
       storage: createJSONStorage<PersistedState>(() => persistStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
@@ -466,7 +297,10 @@ export const useAppStore = create<AppStore>()(
         // rename so `loops` is already the current key.
         const windowed = (payload: PersistedState): PersistedState =>
           version >= 8 ? payload : (backfillLeadWindow(looped(payload)) as PersistedState);
-        if (version >= 2) return windowed(wrapped(metered(recoloured)));
+        // v8 → v9 (project identity). Runs LAST; a no-op on a v9 payload.
+        const identified = (payload: PersistedState): PersistedState =>
+          version >= 9 ? payload : (migrateAddProjectIdentity(windowed(payload)) as PersistedState);
+        if (version >= 2) return identified(wrapped(metered(recoloured)));
         // v1 arp fix (unchanged) …
         const next = { ...recoloured } as Record<string, unknown>;
         for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams']) {
@@ -475,7 +309,7 @@ export const useAppStore = create<AppStore>()(
             next[key] = { ...(params as object), arpActive: false };
           }
         }
-        return windowed(wrapped(metered(next as unknown as PersistedState)));
+        return identified(wrapped(metered(next as unknown as PersistedState)));
       },
       // Runs on every hydration (also when nothing was stored): sanitize the
       // parsed payload (wrong-typed persisted values must never reach the
@@ -493,9 +327,10 @@ export const useAppStore = create<AppStore>()(
         // old way until the wrap migration normalises them).
         const loops = sanitized.loops as Loop[] | undefined;
         if (Array.isArray(loops) && loops.length > 0) {
-          const activeId =
-            typeof sanitized.activeLoopId === 'string' ? sanitized.activeLoopId : loops[0].id;
-          const active = loops.find((l) => l.id === activeId) ?? loops[0];
+          const active = resolveActiveLoop(
+            loops,
+            typeof sanitized.activeLoopId === 'string' ? sanitized.activeLoopId : null,
+          );
           return { ...withPresets, loops, activeLoopId: active.id, ...loopStatePatch(active) };
         }
         return withPresets;
@@ -513,3 +348,42 @@ export const useAppStore = create<AppStore>()(
     }
   )
 );
+
+/** Idle-debounced dirty detection — see projectDirty.ts. Started once per tab. */
+export const dirtyTracker = createDirtyTracker(useAppStore);
+
+// The boot pass. persist hydration is SYNCHRONOUS inside create() above (a
+// sync StateStorage resolves through zustand's toThenable without yielding),
+// so it has already restored the content keys before this tracker existed and
+// its subscription never sees them. Without this one scheduled pass a reloaded
+// session carrying unsaved work reports `dirty: false` — no badge, and no
+// dirty guard on Open / Import / New, which is exactly the tab-killed case the
+// dirty flag exists for. Scheduled, not run now, so launch pays nothing.
+dirtyTracker.schedule();
+
+/**
+ * The buffered persist write goes out on the way to hidden. The dirty pass is
+ * forced first only so the badge and the guard are honest for whatever runs
+ * next in this tab — `dirty` is transient (not in partialize), so this is not
+ * about what gets persisted.
+ */
+export function flushBeforeHide(): void {
+  dirtyTracker.runNow();
+  flushPersistedWrites();
+}
+
+// `pagehide` (not `beforeunload`) is the event that actually fires on iOS
+// Safari and on bfcache navigations; `visibilitychange` covers a tab that is
+// backgrounded and then killed by the OS without ever firing pagehide.
+try {
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('pagehide', flushBeforeHide);
+  }
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushBeforeHide();
+    });
+  }
+} catch {
+  // ignore — a restricted embedding context may deny even addEventListener
+}
