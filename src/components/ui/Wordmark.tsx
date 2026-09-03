@@ -11,28 +11,48 @@ interface WordmarkProps {
    * `hidden sm:inline`, which is what keeps its phone layout down to two rows).
    */
   textClassName?: string;
+  /** Opens the Project Manager. The wordmark is the feature's only entry point. */
+  onClick?: () => void;
+  /** Unsaved changes: shows the corner dot on the mark. */
+  dirty?: boolean;
 }
 
 /**
- * Brand wordmark — the Solna sunrise mark paired with the "Solna" wordmark
- * text. Typography (font-normal weight, wide tracking, primary color) mirrors
- * murva's Wordmark, since Solna is murva's sibling app and shares its font
- * stack (Figtree/Anuphan) — sized down from murva's text-2xl/3xl to fit
- * Solna's compact navbar instead of growing it.
+ * Brand wordmark AND the Project Manager button. A real <button> so keyboard
+ * focus, Enter/Space and screen-reader semantics come for free. The mark image
+ * stays 32px; the 44px tap target comes from the button's min size — below
+ * `sm` the text is hidden and this is the whole target, so it is a
+ * requirement, not polish. Typography mirrors murva's Wordmark.
  */
 export const Wordmark: React.FC<WordmarkProps> = ({
   markOnly = false,
   className = "",
   textClassName = "",
+  onClick,
+  dirty = false,
 }) => {
   return (
-    <span className={`inline-flex items-center gap-2 ${className}`}>
-      <img
-        src="/assets/favicon.svg"
-        alt="Solna logo"
-        className="h-8 w-8"
-        draggable={false}
-      />
+    <button
+      type="button"
+      aria-label="Open Project Manager"
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 min-h-11 min-w-11 px-1.5 rounded-box cursor-pointer transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${className}`}
+    >
+      <span className="indicator">
+        {dirty && (
+          <span
+            role="status"
+            aria-label="Unsaved changes"
+            className="indicator-item status status-warning status-sm"
+          />
+        )}
+        <img
+          src="/assets/favicon.svg"
+          alt=""
+          className="h-8 w-8"
+          draggable={false}
+        />
+      </span>
       {!markOnly && (
         <span
           className={`text-2xl font-normal text-primary leading-none ${textClassName}`}
@@ -41,6 +61,6 @@ export const Wordmark: React.FC<WordmarkProps> = ({
           solna
         </span>
       )}
-    </span>
+    </button>
   );
 };

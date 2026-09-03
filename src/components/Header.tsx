@@ -9,11 +9,13 @@ import { defaultTabForLayer } from "../routing/tabRouting";
 import { ROOTS, SCALES } from "../utils/musicTheory";
 import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/storage";
 import { useAppStore } from "../store/store";
+import { useLiveStore } from "./ui/useLiveStore";
 import type { PlayerModule, PlayerState } from "../store/types";
 import { PlayerTransport } from "./ui/PlayerTransport";
 import { Wordmark } from "./ui/Wordmark";
 import { LoopSelector } from "./loop/LoopSelector";
 import { VIEW_META } from "./viewMeta";
+import { sessionLabel } from "./project/projectManagerFlow";
 
 /** The three loop-layer tabs. Each gets its own play / soft-stop button. The
  *  synth page edits the synth patch but plays the lead melody, so it joins the
@@ -128,6 +130,34 @@ const ScaleSelects: React.FC<{ idPrefix: string; stacked?: boolean }> = ({
   );
 };
 
+/**
+ * The current project's name, song layer only. Takes `layer` as a prop
+ * (rather than reading `activeTab` itself) so it can be unit-tested directly:
+ * under `renderToString`, `Header`'s own `activeTab` read is a plain
+ * `useAppStore` selector, which serves the store's CREATION-time value and
+ * never reflects a test's `setState` (see .claude/rules/testing.md) — there is
+ * no way to reach the song layer through a rendered `<Header />` in a test.
+ */
+export const ProjectNameLabel: React.FC<{
+  layer: Layer;
+  currentProjectId: string | null;
+  currentProjectName: string | null;
+}> = ({ layer, currentProjectId, currentProjectName }) => {
+  if (layer !== 'song') return null;
+  const label = sessionLabel(currentProjectId, currentProjectName);
+  return (
+    <span
+      id="header-project-name"
+      title={label}
+      className={`hidden sm:inline text-xs font-semibold truncate max-w-[10rem] ${
+        currentProjectId ? 'text-base-content/80' : 'text-base-content/50 italic'
+      }`}
+    >
+      {label}
+    </span>
+  );
+};
+
 /** Shared shell for every header group: the daisyUI join plus this app's chrome. */
 const NAV_GROUP_CLASS =
   'join bg-base-200 border border-base-300 rounded-box p-1 shrink-0';
@@ -173,6 +203,13 @@ export const Header: React.FC = React.memo(() => {
   const leadPlayer = useAppStore((s) => s.leadPlayer);
   const play = useAppStore((s) => s.play);
   const softStop = useAppStore((s) => s.softStop);
+  // Live reads (useLiveStore, not useAppStore): under renderToString a plain
+  // selector serves the store's CREATION-time state, so a test that sets
+  // `dirty` before rendering would silently see false — see .claude/rules/testing.md.
+  const dirty = useLiveStore((s) => s.dirty);
+  const setIsProjectManagerOpen = useLiveStore((s) => s.setIsProjectManagerOpen);
+  const currentProjectId = useLiveStore((s) => s.currentProjectId);
+  const currentProjectName = useLiveStore((s) => s.currentProjectName);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
 
@@ -228,7 +265,7 @@ export const Header: React.FC = React.memo(() => {
             pushes the loop/scale/theme group off the brand's row and gives the
             navbar a third row on a phone. The mark alone still identifies the
             app. */}
-        <Wordmark textClassName="hidden sm:inline" />
+        <Wordmark textClassName="hidden sm:inline" dirty={dirty} onClick={() => setIsProjectManagerOpen(true)} />
         <div className={NAV_GROUP_CLASS}>
           {LAYER_META.map(({ layer: l, label }) => {
             const isActive = layer === l;
@@ -336,6 +373,12 @@ export const Header: React.FC = React.memo(() => {
             </details>
           </>
         )}
+
+        <ProjectNameLabel
+          layer={layer}
+          currentProjectId={currentProjectId}
+          currentProjectName={currentProjectName}
+        />
 
         {/* Theme Toggle Button */}
         <button

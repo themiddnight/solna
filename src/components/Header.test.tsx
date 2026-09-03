@@ -1,8 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
-import { TabButton, AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS } from './Header';
+import { ProjectNameLabel, TabButton, AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS } from './Header';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
+
+/** The full opening tag of the element whose markup contains `needle` — pins the tag name, not text position. */
+function openTagContaining(html: string, needle: string): string {
+  const idx = html.indexOf(needle);
+  if (idx === -1) throw new Error(`not found in markup: ${needle}`);
+  const start = html.lastIndexOf('<', idx);
+  const end = html.indexOf('>', idx);
+  return html.slice(start, end + 1);
+}
 
 describe('resolveInitialTheme', () => {
   test('a stored theme always wins over the OS preference', () => {
@@ -152,5 +161,46 @@ describe('TabButton rendering', () => {
     expect(fxHtml).toContain('id="tab-effects"');
     expect(fxHtml).toContain('Master FX');
     expect(fxHtml).toContain('class="truncate sm:inline"');
+  });
+});
+
+// ProjectNameLabel takes `layer` as a plain prop rather than reading
+// `activeTab` itself (see the comment on the component): Header's own
+// `activeTab` read is a plain `useAppStore` selector, which under
+// `renderToString` always serves the store's CREATION-time value ('synth',
+// a loop tab) regardless of `setState` — there is no way to reach the song
+// layer through a rendered `<Header />` in this suite. Testing the label via
+// its own props, the same way `TabButton` above is tested standalone, avoids
+// that trap entirely.
+describe('ProjectNameLabel (song layer only)', () => {
+  test('a saved project shows its name, dimmed but not italic', () => {
+    const html = renderToString(
+      <ProjectNameLabel layer="song" currentProjectId="p1" currentProjectName="Lo-Fi Study Session" />
+    );
+    expect(html).toContain('id="header-project-name"');
+    expect(html).toContain('Lo-Fi Study Session');
+    expect(openTagContaining(html, 'id="header-project-name"')).toContain('text-base-content/80');
+  });
+
+  test('an untitled session shows the sessionLabel text, italicized', () => {
+    const html = renderToString(
+      <ProjectNameLabel layer="song" currentProjectId={null} currentProjectName={null} />
+    );
+    expect(html).toContain('Unsaved session');
+    expect(openTagContaining(html, 'id="header-project-name"')).toContain('italic');
+  });
+
+  test('the loop layer never shows the label, even with a current project', () => {
+    const html = renderToString(
+      <ProjectNameLabel layer="loop" currentProjectId="p1" currentProjectName="Lo-Fi Study Session" />
+    );
+    expect(html).not.toContain('id="header-project-name"');
+  });
+
+  test('the label is a plain span, not a button', () => {
+    const html = renderToString(
+      <ProjectNameLabel layer="song" currentProjectId="p1" currentProjectName="Lo-Fi Study Session" />
+    );
+    expect(openTagContaining(html, 'id="header-project-name"')).toMatch(/^<span/);
   });
 });

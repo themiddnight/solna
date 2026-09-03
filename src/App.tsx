@@ -7,6 +7,7 @@ import { LoopPage } from './components/loop/LoopPage';
 import { SongPage } from './components/song/SongPage';
 import { TransportBar } from './components/TransportBar';
 import { MidiSettingsModal } from './components/ui/MidiSettingsModal';
+import { ProjectManagerModal } from './components/project/ProjectManagerModal';
 import { UpdateBanner } from './components/ui/UpdateBanner';
 import { audioEngine } from './audio/engine';
 import { useAppStore } from './store/store';
@@ -181,6 +182,7 @@ export function App() {
 
       {/* MIDI Settings Modal */}
       <MidiSettingsModal />
+      <ProjectManagerModal />
     </div>
   );
 }
