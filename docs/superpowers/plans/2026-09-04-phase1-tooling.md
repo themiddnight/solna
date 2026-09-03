@@ -166,7 +166,7 @@ SynthPresetLibrary.filterEntries returns a real boolean; the
 projectDirty test store's initializer is annotated Partial<AppStore>
 so subscribeWithSelector infers the store's own type.
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GfaSnXgbwJGHRwMGkpxKAr"
 ```
 
@@ -357,7 +357,7 @@ every jsx-a11y recommended rule, consistent-type-definitions
 
 bun run eslint: 0 errors, <N> warnings on main at this commit.
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GfaSnXgbwJGHRwMGkpxKAr"
 ```
 
@@ -419,7 +419,7 @@ Expected: the eslint step prints the warning list from Task 2 and the summary `(
 git add package.json
 git commit -m "chore(scripts): run eslint inside the verify gate
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GfaSnXgbwJGHRwMGkpxKAr"
 ```
 
@@ -513,7 +513,7 @@ Expected: green; eslint warning count unchanged from Task 2.
 git add src/store/transportSlice.ts src/store/projectFormat.ts src/store/projectFormat.test.ts
 git commit -m "refactor(store): DEFAULT_BPM owned by transportSlice, read by factoryProjectContent
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GfaSnXgbwJGHRwMGkpxKAr"
 ```
 
@@ -587,7 +587,7 @@ git commit -m "refactor(utils): rename projectFile to projectFileIO
 The store module of the same basename owns the format; this one owns
 browser file I/O (decision D8).
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GfaSnXgbwJGHRwMGkpxKAr"
 ```
 
@@ -666,7 +666,7 @@ Expected: green.
 git add src/components/project/ProjectManagerModal.tsx src/audio/data/vibeEffectChains.ts src/audio/data/vibeDrumPatterns.ts
 git commit -m "docs(comments): drop plan task and phase references, keep the reasons
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GfaSnXgbwJGHRwMGkpxKAr"
 ```
 
@@ -718,7 +718,7 @@ Expected: `✖ N problems (0 errors, N warnings)` — the same `N` recorded in T
 git add CLAUDE.md
 git commit -m "docs(claude-md): verify now runs eslint
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GfaSnXgbwJGHRwMGkpxKAr"
 ```
 
