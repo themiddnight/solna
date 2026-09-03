@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { downloadTextFile, projectFileName, readFileAsText, slugifyProjectName } from './projectFile';
+import { downloadTextFile, projectFileName, readFileAsText, slugifyProjectName } from './projectFileIO';
 
 describe('slugifyProjectName / projectFileName', () => {
   test('slugifies and appends .solna', () => {
