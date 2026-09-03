@@ -53,7 +53,7 @@ All final. Do not add options.
 | --- | --- | --- |
 | D1 | Component style is `export function X(props: XProps)` with `interface XProps`; named exports; no `React.FC`. | The codebase is already 32:2 on `interface` and the 9 plain-function files are the newest. `React.FC` adds nothing under `react-jsx` and hides the props type behind a generic. |
 | D2 | `@/` alias for every cross-layer or cross-folder import (`@/store/...`, `@/ui/...`, `@/audio/...`); relative imports only within the same feature folder. ESLint bans `../../`. | 148 `../../` paths break on every move; Phase 3 is a move. The alias is already configured in both tsconfig and Vite. |
-| D3 | ESLint additions are limited to: `eslint-plugin-react-hooks` (`rules-of-hooks` error, `exhaustive-deps` warn), `eslint-plugin-jsx-a11y` recommended, `@typescript-eslint/consistent-type-definitions: interface`, `no-restricted-syntax` banning `React.FC` and `confirm`/`alert`/`prompt`, `no-restricted-imports` banning `../../`. **No import ordering.** | Each rule guards a measured defect. Import ordering guards nothing measured and generates churn on every move. |
+| D3 | ESLint additions are limited to: `eslint-plugin-react-hooks` (`rules-of-hooks` error, `exhaustive-deps` warn), `eslint-plugin-jsx-a11y` recommended, `@typescript-eslint/consistent-type-definitions: interface`, `no-restricted-syntax` banning `React.FC` and `../../`, `no-restricted-globals` + `no-restricted-properties` banning `confirm`/`alert`/`prompt`. **No import ordering.** | Each rule guards a measured defect. Import ordering guards nothing measured and generates churn on every move. |
 | D4 | **No Radix** or other headless library. | Surface is 4 dialogs, 1 popover, 2 daisyUI dropdowns, 0 tab primitives, native selects. Native `<dialog>` already provides focus trap + Escape once `showModal()` is called. daisyUI styles by class; Radix styles by `data-state`, which would mean a second styling vocabulary for four components. |
 | D5 | New rules land as `warn` in Phase 1 and flip to `error` in the phase that fixes the offending code. | `verify` must stay green at every phase boundary; a rule that errors on code nobody has touched yet blocks unrelated work. |
 | D6 | `audio/` and `store/` remain layers. Only the view layer becomes feature-based. | `engineSync`, `partialize`, `projectDirty` and `PROJECT_CONTENT_KEYS` are cross-cutting: every feature's state passes through them. Layering ESLint is path-based, so a layer must be a path. |
@@ -121,9 +121,19 @@ role in the same PR; a primitive with zero call sites is not done.
 nothing outside `ui/Modal.tsx`'s own comment. Every `<button>` whose only child is an icon
 carries `aria-label`.
 
-**Warn vs error at end of Phase 2.** Flip to error: `no-restricted-syntax` (confirm/alert/
-prompt), all `jsx-a11y` rules. Still warn: `React.FC` ban, `../../` ban,
-`consistent-type-definitions`, `exhaustive-deps`.
+**Warn vs error at end of Phase 2.** Flip to error: the confirm/alert/prompt ban, all
+`jsx-a11y` rules. Still warn: `React.FC` ban, `../../` ban, `consistent-type-definitions`,
+`exhaustive-deps`.
+
+Phase 1 landed the `../../` ban inside `no-restricted-syntax` rather than
+`no-restricted-imports`, because flat config replaces a rule's options wholesale and the three
+path-scoped `no-restricted-imports` blocks erased the global copy for every file under `src/`.
+That leaves three bans sharing one rule id, and ESLint has one severity per rule id — so
+"confirm/alert to error while `React.FC` stays warn" is not expressible. Phase 2 therefore
+**moves the confirm/alert/prompt ban out** of `no-restricted-syntax` into `no-restricted-globals`
+(bare `confirm()`) plus `no-restricted-properties` (`window.confirm()`), both at **error**.
+`no-restricted-syntax` is left holding `React.FC` and `../../`, which Phase 3 flips to error
+together.
 
 ## Phase 3 — Restructure
 
@@ -164,7 +174,7 @@ importers).
 - New rules: `src/ui/**` may not import `**/store/**` or `**/features/**` (**error** — verified
   clean by the mapping above); `src/features/X/**` may not import `src/features/Y/**` (**warn**
   — the known violations are listed in the backlog, not fixed here).
-- Flip to error: `React.FC` ban, `../../` ban, `consistent-type-definitions`.
+- Flip to error: `no-restricted-syntax` (now `React.FC` + `../../` only), `consistent-type-definitions`.
 - `.claude/rules/testing.md` and `theming.md` path globs updated.
 
 **Acceptance.** `bun run verify` green. `git log --stat` for the commit shows renames (R) for
@@ -222,9 +232,9 @@ Import direction: `app → features → ui`, everything → `store → audio`, e
 | `react-hooks/rules-of-hooks` | P1 | — | P1 |
 | `react-hooks/exhaustive-deps` | P1 | P1 | stays warn (backlog) |
 | `jsx-a11y` recommended | P1 | P1 | P2 |
-| `no-restricted-syntax`: `confirm`/`alert`/`prompt` | P1 | P1 | P2 |
+| `confirm`/`alert`/`prompt` ban (P1 `no-restricted-syntax`; P2 moves it to `no-restricted-globals` + `no-restricted-properties`) | P1 | P1 | P2 |
 | `no-restricted-syntax`: `React.FC` | P1 | P1 | P3 |
-| `no-restricted-imports`: `../../` | P1 | P1 | P3 |
+| `no-restricted-syntax`: `../../` (not `no-restricted-imports` — see Phase 2) | P1 | P1 | P3 |
 | `@typescript-eslint/consistent-type-definitions: interface` | P1 | P1 | P3 |
 | `ui/` may not import `store/` or `features/` | P3 | — | P3 |
 | `features/X` may not import `features/Y` | P3 | P3 | backlog |
