@@ -4,6 +4,7 @@ import { DEFAULT_METER_ID } from '../utils/meter';
 import { INITIAL_EFFECTS } from './initialState';
 import { LOOP_FLAT_KEYS, loopStatePatch, resolveActiveLoop } from './loop';
 import { createDefaultLoop } from './loopSlice';
+import { DEFAULT_BPM } from './transportSlice';
 import type { AppStore, Loop, LoopStatePatch } from './types';
 
 /**
@@ -88,7 +89,7 @@ export function applyProjectContent(content: ProjectContent): ProjectOpenPatch {
 /** The content of a brand-new project: store defaults plus one default loop. */
 export function factoryProjectContent(): ProjectContent {
   return {
-    bpm: 120,
+    bpm: DEFAULT_BPM,
     meterId: DEFAULT_METER_ID,
     masterVolume: 0.85,
     effects: { ...INITIAL_EFFECTS },

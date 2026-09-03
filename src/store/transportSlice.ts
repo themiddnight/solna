@@ -8,6 +8,9 @@ import type { PlaybackScope } from './playbackScope';
 type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
 
+/** The transport's default tempo; factoryProjectContent() reads it so a new project matches a fresh session. */
+export const DEFAULT_BPM = 120;
+
 type PlayerField = 'sequencerPlayer' | 'chordsPlayer' | 'leadPlayer';
 
 const FIELD: Record<PlayerModule, PlayerField> = {
@@ -100,7 +103,7 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
   const hardStop = (module: PlayerModule) => transition(module, () => 'stopped');
 
   return {
-    bpm: 120,
+    bpm: DEFAULT_BPM,
     meterId: DEFAULT_METER_ID,
     masterVolume: 0.85,
     metronomeActive: false,
