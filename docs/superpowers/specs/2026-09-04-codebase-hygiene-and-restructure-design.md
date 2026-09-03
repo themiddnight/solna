@@ -28,6 +28,15 @@ rules are enforceable by path. Three things must be true when this is done:
 
 ## Measurements (2026-09-04, `main`)
 
+**These counts predate Phase 1 and several are low.** Re-measured at `3b944f5`: 32 unlabelled
+icon-only buttons across 13 files (not ~12), 16 card shells (not 4), 10 header rows (not 9),
+10 `FIELD_LABEL` lookalikes across 5 files (not 4). Each phase plan carries its own re-measured
+call-site list with `file:line`; that list, not this table, is what a task is checked against.
+`ModuleTint` in the Phase 2 table is not a type that exists — call sites pass a runtime-joined
+string of `SYNTH_TARGET_STYLES[target].ring` + `.tint`, and a closed union cannot represent that
+pair without making `ui/` import `utils/synthControl`, which Phase 3's layering rule forbids at
+error. The contract is `tint?: string`.
+
 These are what the phases below respond to. They are measurements, not opinions.
 
 | Area | Finding |
@@ -107,7 +116,7 @@ role in the same PR; a primitive with zero call sites is not done.
 | `ConfirmDialog` | Built on `Modal`. `title`, `message`, `confirmLabel`, `danger?: boolean`, `onConfirm`, `onCancel`. Lifted from `DeleteConfirmDialog`, which becomes a thin call. | The 4 `confirm()` calls. The 2 `alert()` calls become inline `role="alert"` notices in the preset libraries. |
 | `IconButton` | `label: string` (required; emitted as both `aria-label` and `title`), `icon`, `size: 'xs' \| 'sm' \| 'md'`, `variant: 'ghost' \| 'outline' \| 'primary' \| 'error'`, `active?`, plus native button props. | The ~12 unlabelled icon buttons and the 9 hand-written icon-button class variants. |
 | `ModuleHeader` | `badge?`, `icon?`, `title`, `right?: ReactNode`. Renders the `flex items-center justify-between border-b border-base-300 pb-2` row with the `text-xs font-bold ... gap-1.5` title. | 9 header rows + 10 title spans. |
-| `PanelCard` | `tint?: ModuleTint`, `children`, `className?`. Renders `card bg-panel border border-base-300 shadow-md` plus the module tint class. | 4 card shells. |
+| `PanelCard` | `tint?: string`, `children`, `className?`. Renders `card bg-panel border border-base-300 shadow-md` plus the module tint class. | 4 card shells. |
 
 - `ui/QuickSavePopover.tsx`: close on Escape, return focus to the trigger on close.
 - `ui/fieldClasses.test.ts`: extend the guard to regex over `src/` for hand-written
@@ -150,14 +159,14 @@ importers).
 | `loop/SynthView.tsx`, `loop/SimpleSynthPanel.tsx`, `loop/SynthPresetLibrary.tsx`, `loop/synth/*` | `features/synth/` | |
 | `loop/ChordView.tsx`, `loop/ChordPresetLibrary.tsx`, `loop/chord/*` | `features/chords/` | `SortableChordCard` imports `BeatDots` (cross-feature, see backlog). |
 | `loop/lead/*` | `features/lead/` | |
-| `loop/SequencerView.tsx`, `loop/sequencer/*`, `sequencerGrid.ts`, `playbackStep.ts`, `playerStop.ts`, `useSequencerPlayback.ts` | `features/sequencer/` | `playbackStep`/`sequencerGrid` are imported by `SequencerGrid` and `LeadMelodyGrid`; the sequencer owns them, lead imports across (backlog). |
+| `loop/SequencerView.tsx`, `loop/sequencer/*`, `playerStop.ts`, `useSequencerPlayback.ts` | `features/sequencer/` | `sequencerGrid.ts` and `playbackStep.ts` do **not** come here — see the `src/ui/` row below. |
 | `loop/LoopPage.tsx`, `loop/LoopSelector.tsx`, `song/*` (`ArrangeView`, `EffectsRackView`, `SongPage`, `SortableLoopCard`, `arrangeStep`, `loopIdKey`), `fxDescriptors.ts` | `features/song/` | `LoopSelector` is loop-library UI used by `Header`; it belongs with the arrangement, not the shell. `fxDescriptors` has one importer, `EffectsRackView`. |
 | `project/*`, `ProjectNameLabel` from `Header.tsx` | `features/project/` | |
 | `ui/BottomInputDock.tsx`, `ui/Keyboard.tsx` (+ tests), `ui/DrumPadGrid.tsx`, `loop/DrumPads.tsx`, `useInputDeck.ts` | `features/input/` | `DrumPadGrid` and `Keyboard` are imported by `BottomInputDock` and `useInputDeck`; `DrumPads.tsx` is imported only by `DrumPadGrid`. `SynthView` importing `Keyboard` is cross-feature (backlog). |
 | `TransportBar.tsx`, `ui/PlayerTransport.tsx`, `PlayheadReadout.tsx`, `ui/NowNextChord.tsx`, `usePlayheadSync.ts`, `meterSelect.ts` | `features/transport/` | `PlayerTransport` and `PlayheadReadout` are imported by `TransportBar`/`Header`; `NowNextChord` only by `PlayheadReadout`. `meterSelect` is also imported by the sequencer and chord panels (backlog). |
 | `ui/MidiSettingsModal.tsx`, `ui/MidiIndicator.tsx` | `features/midi/` | Both read `store/midiInput`. |
 | `InstantVibesBar.tsx`, `vibeActions.ts` | `features/vibes/` | `vibeActions` has one importer. |
-| `ui/Knob`, `ui/Slider`, `ui/Field`, `ui/fieldClasses`, `ui/PowerToggle`, `ui/StepRow`, `ui/StepHeader`, `ui/BeatDots`, `ui/ChannelStrip`, `ui/PresetLibrary`, `ui/QuickSavePopover`, `ui/ViewHeader` + `viewMeta.ts`, `ui/VuMeter`, and the Phase 2 primitives | `src/ui/` | None import `store/` (verified by grep). `VuMeter` keeps its analyser exemption. `StepRow`/`StepHeader`/`ChannelStrip` are used by sequencer *and* chords, so they are shared primitives rather than sequencer files. |
+| `ui/Knob`, `ui/Slider`, `ui/Field`, `ui/fieldClasses`, `ui/PowerToggle`, `ui/StepRow`, `ui/StepHeader`, `ui/BeatDots`, `ui/ChannelStrip`, `ui/PresetLibrary`, `ui/QuickSavePopover`, `ui/ViewHeader` + `viewMeta.ts`, `ui/VuMeter`, `playbackStep.ts`, `sequencerGrid.ts`, and the Phase 2 primitives | `src/ui/` | None import `store/` (verified by grep). `VuMeter` keeps its analyser exemption. `StepRow`/`StepHeader`/`ChannelStrip` are used by sequencer *and* chords, so they are shared primitives rather than sequencer files. `playbackStep`/`sequencerGrid` land here rather than in `features/sequencer/` because `StepRow` and `StepHeader` both import them: sending them to a feature would put four violations inside the `ui/ ↛ features/` rule this phase sets at **error**, failing `verify` on the commit that introduces it. Both are pure (`playbackStep` imports only `react`, `sequencerGrid` only `utils/meter`) and are consumed by ui, sequencer, lead and chords alike. |
 | `ui/useLiveStore.ts` | `src/store/useLiveStore.ts` | It imports the store, so it cannot live in `ui/`; it is a store-read helper, sibling of `useAppStore`. |
 | `appChildMemo.test.tsx`, `viewMeta.test.ts` | follow their subject | |
 | `src/store/*` | `src/store/slices/` (the 11 slices, `initialState`, `types`), `src/store/persist/` (`store.ts` stays at root; `migrate`, `sanitize`, `loop`, `loadLoop`, `loopSync`), `src/store/project/` (`projectFile`, `projectFormat`, `projectFormatMigrate`, `projectFingerprint`, `projectDirty`, `projectStore`, `projectStoreIdb`) | Regrouping only; still one layer. `engineSync`, `instantVibes*`, `vibe*`, `midiInput`, `playbackScope`, `songMode`, `customStepSequencer` stay at the root. |
@@ -171,9 +180,17 @@ importers).
 - `eslint.config.js`: layering rule 3 glob becomes `src/{features,ui,app}/**`; rules 1 and 2
   ban `**/features/**`, `**/ui/**`, `**/app/**` instead of `**/components/**`. Exemption list
   updated to the new paths of `AudioVisualizer`, `AmbientBackdrop`, `VuMeter`.
-- New rules: `src/ui/**` may not import `**/store/**` or `**/features/**` (**error** — verified
-  clean by the mapping above); `src/features/X/**` may not import `src/features/Y/**` (**warn**
-  — the known violations are listed in the backlog, not fixed here).
+- New rule: `src/ui/**` may not import `**/store/**` or `**/features/**` (**error** — clean once
+  `playbackStep`/`sequencerGrid` land in `ui/`, per the mapping above). That block must also
+  **repeat** layering rule 3's `audio/engine` pattern, because flat config replaces a rule's
+  options wholesale and would otherwise drop the engine ban for those files.
+- `src/features/X/**` may not import `src/features/Y/**` is **not shipped as an ESLint rule**.
+  A per-feature `no-restricted-imports` block would silently erase layering rule 3's
+  `audio/engine` **error** ban for those files (same wholesale-replacement trap that killed the
+  `../../` ban in Phase 1), `no-restricted-syntax` is global and flips to error this phase, and
+  D3 forbids `eslint-plugin-import`. It ships instead as a frozen-allowlist test,
+  `src/features/crossFeature.test.ts`: the accepted edges are enumerated there, and any new one
+  fails the suite.
 - Flip to error: `no-restricted-syntax` (now `React.FC` + `../../` only), `consistent-type-definitions`.
 - `.claude/rules/testing.md` and `theming.md` path globs updated.
 
@@ -237,7 +254,7 @@ Import direction: `app → features → ui`, everything → `store → audio`, e
 | `no-restricted-syntax`: `../../` (not `no-restricted-imports` — see Phase 2) | P1 | P1 | P3 |
 | `@typescript-eslint/consistent-type-definitions: interface` | P1 | P1 | P3 |
 | `ui/` may not import `store/` or `features/` | P3 | — | P3 |
-| `features/X` may not import `features/Y` | P3 | P3 | backlog |
+| `features/X` may not import `features/Y` — frozen-allowlist test, not ESLint (see Phase 3) | P3 | — | test fails on a new edge |
 | `complexity` 20 (existing) | — | already | never (SortableLoopCard accepted) |
 
 ## Testing

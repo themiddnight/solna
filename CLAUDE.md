@@ -45,7 +45,7 @@ shows it, never in a slice.
    All engine setters no-op until `init()` creates the `AudioContext`.
 2. `src/store/` — never imports `components/`. One Zustand store composed from slices
    (`transport`, `musicContext`, `synth`, `chords`, `bass`, `sequencer`, `effects`, `ui`,
-   `presets`, `loop`, `project`), with `persist` (key `musibox_project_state_v1`, `partialize` +
+   `presets`, `loop`, `lead`, `project`), with `persist` (key `musibox_project_state_v1`, `partialize` +
    `migrate` in `store.ts`, legacy-key adoption in `migrate.ts`) and `subscribeWithSelector`.
    Bump the persist `version` and add a migration step whenever the persisted shape changes.
 3. `src/components/` — dumb views; must not import `audio/engine`. Only `AudioVisualizer.tsx`,
