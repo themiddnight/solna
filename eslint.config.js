@@ -35,7 +35,7 @@ export default tseslint.config(
           message: 'Use `export function X(props: XProps)` instead of React.FC (decision D1).',
         },
         {
-          selector: "TSTypeReference[typeName.property.name='FC']",
+          selector: "TSTypeReference[typeName.type='TSQualifiedName'][typeName.right.name='FC']",
           message: 'Use `export function X(props: XProps)` instead of React.FC (decision D1).',
         },
         {
