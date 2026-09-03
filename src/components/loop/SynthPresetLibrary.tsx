@@ -128,7 +128,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
     const matchesSearch =
       query.trim() === '' ||
       e.name.toLowerCase().includes(query.toLowerCase()) ||
-      (e.description && e.description.toLowerCase().includes(query.toLowerCase()));
+      Boolean(e.description && e.description.toLowerCase().includes(query.toLowerCase()));
 
     return matchesCategory && matchesSearch;
   }, []);

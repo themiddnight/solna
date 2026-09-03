@@ -10,6 +10,7 @@ import {
 import { LOOP_FLAT_KEYS } from './loop';
 import { createDefaultLoop } from './loopSlice';
 import { INITIAL_EFFECTS } from './initialState';
+import { DEFAULT_BPM } from './transportSlice';
 import type { Loop } from './types';
 
 // A Loop literal typed against the interface: adding a field to `Loop`
@@ -113,7 +114,7 @@ describe('provenance is preserved verbatim', () => {
 describe('factoryProjectContent / makeEnvelope', () => {
   test('factory content is the store defaults with one default loop', () => {
     const c = factoryProjectContent();
-    expect(c.bpm).toBe(120);
+    expect(c.bpm).toBe(DEFAULT_BPM);
     expect(c.meterId).toBe('4/4');
     expect(c.masterVolume).toBe(0.85);
     expect(c.effects).toEqual(INITIAL_EFFECTS);

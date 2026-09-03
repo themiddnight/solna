@@ -24,7 +24,7 @@ function manualScheduler() {
 function makeStore(identity: { currentProjectId: string | null; projectBaselineHash: string | null }) {
   const content = factoryProjectContent();
   return create<Partial<AppStore>>()(
-    subscribeWithSelector(() => ({
+    subscribeWithSelector((): Partial<AppStore> => ({
       ...content,
       controlTarget: 'synth',
       selectedVibeId: null,

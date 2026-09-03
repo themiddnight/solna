@@ -4,7 +4,7 @@ import { useLiveStore } from '../ui/useLiveStore';
 import { SECTION_HEADER } from '../ui/fieldClasses';
 import { PROJECT_FILE_ACCEPT, PROJECT_FILE_MIME, parseProjectFile, serializeProject, unknownLibraryReferences } from '../../store/projectFile';
 import type { ProjectBody } from '../../store/projectFormat';
-import { downloadTextFile, projectFileName, readFileAsText } from '../../utils/projectFile';
+import { downloadTextFile, projectFileName, readFileAsText } from '../../utils/projectFileIO';
 import { ProjectList } from './ProjectList';
 import { DeleteConfirmDialog, DirtyGuardDialog, ImportConflictDialog, NamePromptDialog } from './ProjectDialogs';
 import {
@@ -74,7 +74,7 @@ export const ProjectManagerModal: React.FC = () => {
    * Import may have something the user needs to see — an unavailable-storage
    * caveat, unrecognised references, or both — in which case the project is
    * still installed into the session but the modal stays open so the notice
-   * is reachable (closing would unmount it, per the Task 12 review finding).
+   * is reachable (closing would unmount it).
    */
   const runImport = async (body: ProjectBody, mode: ImportMode) => {
     const r = await importProject(body, mode);
