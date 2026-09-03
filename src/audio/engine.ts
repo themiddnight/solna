@@ -1254,7 +1254,7 @@ class AudioEngine {
   // Lazily create (and cache) the gain bus for a source, wired like the old
   // per-voice routing: dry + conditionally delay/reverb/distortion.
   private getSourceBus(source: string): GainNode {
-    if (!this.ctx) throw new Error('AudioContext not initialized');
+    if (!this.ctx || !this.dryGain) throw new Error('AudioContext not initialized');
     let bus = this.sourceBuses.get(source);
     if (!bus) {
       bus = this.ctx.createGain();
