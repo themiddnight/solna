@@ -19,10 +19,18 @@ const localRules = {
   },
 };
 
-// Phase 1 of the hygiene plan lands every jsx-a11y rule as `warn`; Phase 2
-// (the primitives that fix the offending markup) flips them to `error`.
+// Phase 1 of the hygiene plan lands every jsx-a11y rule the preset actually
+// enables as `warn`; Phase 2 (the primitives that fix the offending markup)
+// flips them to `error`. Rules the preset ships `off` (e.g. the deprecated
+// `label-has-for`, superseded by `label-has-associated-control`) stay `off`
+// — a blanket `Object.keys().map()` would arm those too.
 const jsxA11yAsWarnings = Object.fromEntries(
-  Object.keys(jsxA11y.flatConfigs.recommended.rules).map((rule) => [rule, 'warn']),
+  Object.entries(jsxA11y.flatConfigs.recommended.rules)
+    .filter(([, severity]) => {
+      const level = Array.isArray(severity) ? severity[0] : severity;
+      return level !== 'off' && level !== 0;
+    })
+    .map(([rule]) => [rule, 'warn']),
 );
 
 export default tseslint.config(
