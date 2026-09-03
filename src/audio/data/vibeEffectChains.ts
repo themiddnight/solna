@@ -91,8 +91,8 @@ export const VIBE_EFFECT_CHAINS: Record<string, Partial<MasterEffects>> = {
  * Returns a FRESH shallow copy on every call — never the module's own object.
  * A shallow copy is sufficient and correct here: every value in a chain is a
  * scalar (number), so there is no nested structure for a copy to alias.
- * `resolveProgression` and `drumPatternById`, the phase 1 and phase 3
- * precedents, also return freshly built objects every call.
+ * `resolveProgression` and `drumPatternById` follow the same rule and also
+ * return freshly built objects every call.
  */
 export function effectChainById(id: string): Partial<MasterEffects> | undefined {
   const chain = VIBE_EFFECT_CHAINS[id];

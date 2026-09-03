@@ -106,8 +106,8 @@ export const VIBE_DRUM_PATTERNS: Record<string, Record<string, number[]>> = {
  * resolves each pattern once at module load; applyInstantVibeToStore then
  * transforms it to a boolean grid via .map(), so the grid in the store shares
  * no array references with the library regardless — but the copy guards the
- * library itself against any direct mutation.) `resolveProgression`, the
- * phase 1 precedent, also returns freshly built objects every call.
+ * library itself against any direct mutation.) `resolveProgression` follows
+ * the same rule and also returns freshly built objects every call.
  */
 export function drumPatternById(id: string): Record<string, number[]> | undefined {
   const pattern = VIBE_DRUM_PATTERNS[id];
