@@ -3,21 +3,6 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
-import { builtinRules } from 'eslint/use-at-your-own-risk';
-
-// Flat config keeps only the *last* value set for a given rule key on a
-// matching file — it does not merge across config objects. The three
-// layering blocks below each set `no-restricted-imports` (to `error`), so if
-// the repo-wide `../../` ban used that same key it would be silently wiped
-// out for every file under src/audio, src/store and src/components — which
-// is every file with a `../../` import in this repo. Aliasing the core rule
-// under a second name keeps the two concerns on separate rule keys, so
-// neither can shadow the other regardless of block order.
-const localRules = {
-  rules: {
-    'no-relative-parent-imports': builtinRules.get('no-restricted-imports'),
-  },
-};
 
 // Phase 1 of the hygiene plan lands every jsx-a11y rule the preset actually
 // enables as `warn`; Phase 2 (the primitives that fix the offending markup)
@@ -43,7 +28,7 @@ export default tseslint.config(
     rules: jsxA11yAsWarnings,
   },
   {
-    plugins: { 'react-hooks': reactHooks, local: localRules },
+    plugins: { 'react-hooks': reactHooks },
     rules: {
       complexity: ['warn', 20],
       // A hook called conditionally is a bug, not a style choice — error from day one.
@@ -69,16 +54,24 @@ export default tseslint.config(
           selector: "CallExpression[callee.object.name='window'][callee.property.name=/^(confirm|alert|prompt)$/]",
           message: 'Native prompts block the audio thread and cannot be styled — use a dialog component.',
         },
-      ],
-      'local/no-relative-parent-imports': [
-        'warn',
+        // Decision D2, `../../` ban: the path-scoped layering blocks below
+        // override only `no-restricted-imports` for their files, so a second
+        // copy of that rule here would be shadowed the same way the original
+        // one was. `no-restricted-syntax` is untouched by those blocks, so
+        // this entry reaches every file, including src/audio, src/store and
+        // src/components. Two or more `../` levels are banned; a single
+        // `../` (same-folder-ish) is left alone.
         {
-          patterns: [
-            {
-              group: ['../../*'],
-              message: 'Cross-folder imports use the `@/` alias (decision D2); relative paths only within one folder.',
-            },
-          ],
+          selector: "ImportDeclaration[source.value=/^\\.\\.\\/\\.\\.\\//]",
+          message: 'Cross-folder imports use the `@/` alias (decision D2); relative paths only within one folder.',
+        },
+        {
+          selector: "ExportNamedDeclaration[source.value=/^\\.\\.\\/\\.\\.\\//]",
+          message: 'Cross-folder imports use the `@/` alias (decision D2); relative paths only within one folder.',
+        },
+        {
+          selector: "ExportAllDeclaration[source.value=/^\\.\\.\\/\\.\\.\\//]",
+          message: 'Cross-folder imports use the `@/` alias (decision D2); relative paths only within one folder.',
         },
       ],
     },
