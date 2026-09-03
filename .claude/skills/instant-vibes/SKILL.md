@@ -230,12 +230,12 @@ a tested pool.
 5. Update `instantVibes.test.ts`'s count and preset matrix, then add your entry to
    all three golden fixtures. Every one of these fails loudly, so the gate will walk
    you through them — but it reports them one at a time, so expect several passes
-6. `bun run verify`, then `bun run eslint` separately
+6. `bun run verify`
 
 ## Gate
 
-`bun run verify` (test + lint + check:keys + check:drums + build). Run
-`bun run eslint` **separately** — it is not part of `verify` — whenever imports move.
+`bun run verify` (test + lint + eslint + check:keys + check:drums + build) — eslint runs as
+part of it, so it will catch import issues whenever imports move.
 
 ## Bundled with this skill
 
