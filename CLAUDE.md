@@ -21,12 +21,13 @@ bun test -t "reverb decay"                 # one test by name
 bun run check:theme    # theme-token guard suite only
 bun run check:keys     # drum-pad vs synth key-binding collision check
 bun run check:drums    # drum-kit audible-separation check
-bun run verify         # test + lint + check:keys + check:drums + build (the gate)
+bun run verify         # test + lint + eslint + check:keys + check:drums + build (the gate)
 ```
 
-`bun run verify` is the completion gate — run it before claiming work is done. It does **not**
-include `bun run eslint`, so unused variables and imports pass the gate unnoticed; run eslint
-separately whenever you touch imports or delete code.
+`bun run verify` is the completion gate — run it before claiming work is done. It runs
+`bun run eslint`, which must report zero errors; warnings are tolerated until the phase that
+fixes them flips the rule to `error` (see the ESLint rule matrix in
+`docs/superpowers/specs/2026-09-04-codebase-hygiene-and-restructure-design.md`).
 
 ## Architecture
 
