@@ -44,9 +44,9 @@ shows it, never in a slice.
    All engine setters no-op until `init()` creates the `AudioContext`.
 2. `src/store/` — never imports `components/`. One Zustand store composed from slices
    (`transport`, `musicContext`, `synth`, `chords`, `bass`, `sequencer`, `effects`, `ui`,
-   `presets`, `loop`), with `persist` (key `musibox_project_state_v1`, `partialize` + `migrate`
-   in `store.ts`, legacy-key adoption in `migrate.ts`) and `subscribeWithSelector`. Bump the
-   persist `version` and add a migration step whenever the persisted shape changes.
+   `presets`, `loop`, `project`), with `persist` (key `musibox_project_state_v1`, `partialize` +
+   `migrate` in `store.ts`, legacy-key adoption in `migrate.ts`) and `subscribeWithSelector`.
+   Bump the persist `version` and add a migration step whenever the persisted shape changes.
 3. `src/components/` — dumb views; must not import `audio/engine`. Only `AudioVisualizer.tsx`,
    `ui/VuMeter.tsx` and `ui/AmbientBackdrop.tsx` (read-only analyser consumers) and test files
    are exempt — routing their per-frame analyser reads through the store would mean a store
@@ -70,6 +70,25 @@ from a component** — add the state to a slice and wire it in `engineSync.ts`.
 cookies, embedded webviews), not just return null — `store.ts` falls back to an in-memory
 `StateStorage`, and helpers like `Header.tsx`'s theme functions take an injectable storage param
 and read it *inside* a `try`, never in a default-parameter expression.
+
+**Three storage zones, not two.** `localStorage` holds the live session (persist, above);
+`sessionStorage` nothing; and **IndexedDB holds the saved project library**, reached only
+through `store/projectStore.ts`. That wrapper resolves availability *once, lazily* and turns
+every failure into a typed result — a device that cannot store projects is a **normal degraded
+state the UI renders, never an exception path**, the same discipline `resolveStorage()` follows.
+Bodies and metadata live in **separate object stores** so listing the library never deserialises
+a single project body; every write touches both in one transaction. A **project body is the
+content set only** (see `PROJECT_CONTENT_KEYS`) — view, session and library state are excluded
+by construction — and its `formatVersion` is deliberately **independent of the persist
+`version`**: that one bumps for private `localStorage` reshapes, this one only when the content
+contract changes, and the persist migration chain must never be used to read a project body.
+
+**`dirty` is derived, never persisted.** One idle pass fingerprints the content set and compares
+it to the project's baseline (or, untitled, to the default project) — see `projectDirty.ts`;
+computing it per `set()` would fingerprint the whole arrangement on every knob tick. Because
+hydration runs synchronously *inside* `create()`, before the tracker exists, `store.ts` schedules
+**one pass at boot** — that pass is what makes a reloaded session honest, and without it a
+restored session with unsaved work gets no badge and no dirty guard.
 
 ## Testing — the one trap worth knowing up front
 
