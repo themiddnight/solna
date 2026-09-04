@@ -586,29 +586,3 @@ describe('lead slice — step entry', () => {
     expect(at(0)).toEqual([]);
   });
 });
-
-describe('lead slice — advanceLeadCursor', () => {
-  beforeEach(resetLead);
-
-  test('moves one column on', () => {
-    useAppStore.getState().setLeadCursor(3);
-    useAppStore.getState().advanceLeadCursor();
-    expect(useAppStore.getState().leadCursor).toBe(4);
-  });
-
-  test('wraps at the loop end instead of dead-ending on the last column', () => {
-    useAppStore.getState().setLeadCursor(15);
-    useAppStore.getState().advanceLeadCursor();
-    expect(useAppStore.getState().leadCursor).toBe(0);
-  });
-
-  test('re-clamps a cursor a shrunken loop left out of range', () => {
-    useAppStore.setState({ leadLoopLength: 2 });
-    useAppStore.getState().setLeadCursor(31);
-    useAppStore.setState({ leadLoopLength: 1 });
-
-    useAppStore.getState().advanceLeadCursor();
-
-    expect(useAppStore.getState().leadCursor).toBe(0);
-  });
-});

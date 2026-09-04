@@ -113,21 +113,8 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
         ),
       })),
 
-    // Wraps rather than stopping at the last column: step entry that dead-ends
-    // at the loop end would make the last note of a loop the one you cannot
-    // follow, and there is nowhere else for the cursor to go.
-    advanceLeadCursor: () =>
-      set((state) => {
-        const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-        const columns = state.leadLoopLength * stepsPerBar;
-        if (columns <= 0) return { leadCursor: 0 };
-        const cursor = clampLeadCursor(state.leadCursor, state.leadLoopLength, stepsPerBar);
-        return { leadCursor: (cursor + 1) % columns };
-      }),
-
-    // Returns whether it actually wrote, so the caller can tell a captured
-    // note from a declined one and not burn a column on a press that left
-    // nothing behind.
+    // Returns whether it actually wrote, so a caller can tell a captured note
+    // from one the grid refused.
     recordLeadNote: (note) => {
       const state = get();
       if (!state.leadRecording) return false;

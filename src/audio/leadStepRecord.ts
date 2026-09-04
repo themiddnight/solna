@@ -2,6 +2,12 @@
  * Step entry: the decisions behind writing a performed note into the melody
  * grid while the transport is stopped.
  *
+ * Playing a note does NOT move the cursor. The cursor is the user's to place,
+ * with the arrow keys on the grid header; a recorder that walked it forward
+ * on its own would fight them for it, and would have to guess what a declined
+ * note or a held chord meant. Everything a chord needs falls out of that: with
+ * the cursor still, notes played together simply land together.
+ *
  * Pure and separate from the store for the reason every gesture module here
  * is: there is no DOM in this suite to press a key against, so anything left
  * inside an event handler cannot be tested at all.
@@ -9,41 +15,6 @@
 
 /** Number of octaves the melody grid's window shows. Fixed at 2 (spec default). */
 export const LEAD_WINDOW_OCTAVES = 2;
-
-export interface StepRecordOn {
-  held: Set<string>;
-  /** False when the key was already down — a key repeat is not a second note. */
-  write: boolean;
-}
-
-export interface StepRecordOff {
-  held: Set<string>;
-  /** True only as the LAST held key comes up. See the note below. */
-  advance: boolean;
-}
-
-/**
- * The cursor advances when the last key is RELEASED, not when a key is
- * pressed. That single choice is what makes chords work: hold C, E and G,
- * let go, and all three land in one column before the cursor moves on.
- * Advancing per press would spread them across three columns and there would
- * be no way to enter a chord at all.
- */
-export function stepRecordOn(held: ReadonlySet<string>, note: string): StepRecordOn {
-  const next = new Set(held);
-  const write = !next.has(note);
-  next.add(note);
-  return { held: next, write };
-}
-
-export function stepRecordOff(held: ReadonlySet<string>, note: string): StepRecordOff {
-  const next = new Set(held);
-  // A release for a note we never saw pressed must not advance anything: it
-  // arrives whenever recording is armed mid-hold, and moving the cursor for
-  // a key the recorder never captured would silently skip a column.
-  const wasHeld = next.delete(note);
-  return { held: next, advance: wasHeld && next.size === 0 };
-}
 
 /** The trailing digits of a note name, e.g. 'F#4' -> 4. Null if there are none. */
 export function noteOctave(note: string): number | null {
