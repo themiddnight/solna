@@ -13,7 +13,7 @@ import { DEFAULT_VELOCITY } from '../../../audio/constants';
 import { stepDurationSec } from '../../../utils/musicTheory';
 import { arpStepFor, getMeter } from '../../../utils/meter';
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from '../../playerStop';
-import { publishStep, resetStep } from '../../playbackStep';
+import { publishStepAt, resetStep } from '../../playbackStep';
 import type { PlayerState } from '../../../store/types';
 
 export interface LeadArming {
@@ -104,7 +104,7 @@ export function useLeadPlayback(): { isPlaying: boolean } {
       if (action !== 'play') return;
 
       const stepInLoop = step % melodyLength;
-      publishStep('lead', stepInLoop);
+      publishStepAt('lead', stepInLoop, time);
       const sounding = leadSoundingNotes(s.leadMelodySteps, stepInLoop, stepsPerBar);
       const stepDur = stepDurationSec(s.bpm);
       const arpStep = arpStepFor(step, stepsPerBar);

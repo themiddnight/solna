@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useAppStore } from "../store/store";
-import { publishStep, resetStep } from "./playbackStep";
+import { publishStepAt, resetStep } from "./playbackStep";
 import { ensureDrumEngine, triggerPad } from "../audio/playback/drumPlayback";
 import { STEPS_PER_BAR, stepDurationSec } from "../utils/musicTheory";
 import {
@@ -141,7 +141,7 @@ export function useSequencerPlayback(): void {
       }
 
       const stepInLoop = step % stepsPerBar;
-      publishStep('sequencer', stepInLoop);
+      publishStepAt('sequencer', stepInLoop, time);
 
       // Everything the step needs, read LIVE off the store — same rationale as
       // the meter read above, and the pattern useLeadPlayback.ts:90 and

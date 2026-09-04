@@ -42,6 +42,26 @@ export function subscribePlaybackClock(
  * semantics — it was declared verbatim in both note-based playback hooks, and
  * a tuning constant for an audible fade must not have two copies to drift.
  */
+/**
+ * How long from NOW until `time` is actually heard, in seconds.
+ *
+ * The clock is a lookahead scheduler: it hands listeners the future
+ * AudioContext time a step will sound at, tens of milliseconds before it
+ * does. `outputLatency` is the further delay between the context reaching
+ * that time and the sound leaving the speaker. Anything that should coincide
+ * with what the user HEARS — a playhead, most of all — has to wait out both.
+ *
+ * Returns 0 when there is no context yet, or when `time` has already passed.
+ */
+export function playbackAudibleDelaySec(time: number): number {
+  const ctx = audioEngine.getAudioContext();
+  if (!ctx) return 0;
+  // outputLatency is unimplemented on some browsers; baseLatency is the
+  // conservative stand-in, and 0 is better than NaN in either case.
+  const latency = ctx.outputLatency || ctx.baseLatency || 0;
+  return Math.max(0, time + latency - ctx.currentTime);
+}
+
 export const HARD_STOP_RELEASE = 0.02;
 
 /**

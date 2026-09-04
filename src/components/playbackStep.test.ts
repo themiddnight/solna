@@ -169,3 +169,96 @@ describe('createStepPublisher', () => {
     expect(b.getStep('lead')).toBe(0);
   });
 });
+
+// The clock is a lookahead scheduler, so a step published inline from its
+// callback lands ahead of its own audio. These pin the deferral that fixes it.
+describe('createStepPublisher — deferred publishing', () => {
+  const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+  test('a delayed publish does not land immediately', async () => {
+    const publisher = createStepPublisher();
+
+    publisher.publishAt('lead', 7, 40);
+
+    expect(publisher.getStep('lead')).toBe(0);
+    await sleep(70);
+    expect(publisher.getStep('lead')).toBe(7);
+  });
+
+  test('a delayed publish notifies subscribers when it lands, not before', async () => {
+    const publisher = createStepPublisher();
+    let notified = 0;
+    publisher.subscribe('lead', () => (notified += 1));
+
+    publisher.publishAt('lead', 3, 40);
+    expect(notified).toBe(0);
+
+    await sleep(70);
+    expect(notified).toBe(1);
+  });
+
+  test('a delay of zero or less publishes synchronously', () => {
+    // The no-AudioContext case, and every test that does not want a timer.
+    const publisher = createStepPublisher();
+
+    publisher.publishAt('lead', 5, 0);
+    expect(publisher.getStep('lead')).toBe(5);
+
+    publisher.publishAt('lead', 6, -20);
+    expect(publisher.getStep('lead')).toBe(6);
+  });
+
+  test('reset cancels a pending publish — a stopped transport must not move again', async () => {
+    // Without this, stopping leaves the playhead parked a step later than the
+    // user ever played to, whenever a scheduled step was still in flight.
+    const publisher = createStepPublisher();
+    publisher.publishAt('lead', 9, 40);
+
+    publisher.reset('lead');
+    await sleep(70);
+
+    expect(publisher.getStep('lead')).toBe(0);
+  });
+
+  test('reset with no player cancels every player\'s pending publishes', async () => {
+    const publisher = createStepPublisher();
+    publisher.publishAt('lead', 9, 40);
+    publisher.publishAt('chords', 9, 40);
+    publisher.publishAt('sequencer', 9, 40);
+
+    publisher.reset();
+    await sleep(70);
+
+    expect([
+      publisher.getStep('lead'),
+      publisher.getStep('chords'),
+      publisher.getStep('sequencer'),
+    ]).toEqual([0, 0, 0]);
+  });
+
+  test('resetting one player leaves another player\'s pending publish alone', async () => {
+    const publisher = createStepPublisher();
+    publisher.publishAt('lead', 9, 40);
+    publisher.publishAt('chords', 4, 40);
+
+    publisher.reset('lead');
+    await sleep(70);
+
+    expect(publisher.getStep('lead')).toBe(0);
+    expect(publisher.getStep('chords')).toBe(4);
+  });
+
+  test('several pending publishes all land, in order', async () => {
+    const publisher = createStepPublisher();
+    const seen: number[] = [];
+    publisher.subscribe('lead', () => seen.push(publisher.getStep('lead')));
+
+    publisher.publishAt('lead', 1, 20);
+    publisher.publishAt('lead', 2, 40);
+    publisher.publishAt('lead', 3, 60);
+
+    await sleep(110);
+
+    expect(seen).toEqual([1, 2, 3]);
+  });
+});

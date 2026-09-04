@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 /**
  * Pins that each clock hook publishes under the SAME StepPlayerId its leaf
- * reads with useCurrentStep. publishStep/useCurrentStep are matched by
+ * reads with useCurrentStep. publishStepAt/useCurrentStep are matched by
  * runtime string only — nothing in playbackStep.ts itself ties a producer to
  * a consumer, so retyping one side's id (or copy-pasting a hook and
  * forgetting to change it) compiles clean and fails silently at runtime
@@ -33,7 +33,7 @@ const WIRINGS: Array<{
     player: 'chords',
     producer: {
       file: 'src/components/loop/chord/useChordPlayback.ts',
-      regex: /publishStep\(\s*'([^']+)'/,
+      regex: /publishStepAt\(\s*'([^']+)'/,
     },
     consumer: {
       file: 'src/components/ui/StepRow.tsx',
@@ -58,7 +58,7 @@ const WIRINGS: Array<{
     player: 'lead',
     producer: {
       file: 'src/components/loop/lead/useLeadPlayback.ts',
-      regex: /publishStep\(\s*'([^']+)'/,
+      regex: /publishStepAt\(\s*'([^']+)'/,
     },
     consumer: {
       file: 'src/components/loop/lead/LeadMelodyGrid.tsx',
@@ -70,7 +70,7 @@ const WIRINGS: Array<{
     player: 'sequencer',
     producer: {
       file: 'src/components/useSequencerPlayback.ts',
-      regex: /publishStep\(\s*'([^']+)'/,
+      regex: /publishStepAt\(\s*'([^']+)'/,
     },
     consumer: {
       file: 'src/components/loop/sequencer/SequencerGrid.tsx',
@@ -85,13 +85,13 @@ const WIRINGS: Array<{
 // else observes the call order. A manual grep confirmed the order once; this
 // pins it so a future edit can't reverse it back unnoticed.
 describe('useLeadPlayback publishes only after its action !== "play" early-out', () => {
-  test('the early-out return precedes the publishStep call in source order', () => {
+  test('the early-out return precedes the publishStepAt call in source order', () => {
     const source = readFileSync(
       join(process.cwd(), 'src/components/loop/lead/useLeadPlayback.ts'),
       'utf8',
     );
     const earlyOutIndex = source.indexOf("if (action !== 'play') return;");
-    const publishIndex = source.indexOf("publishStep('lead', stepInLoop);");
+    const publishIndex = source.indexOf("publishStepAt('lead', stepInLoop, time);");
     expect(earlyOutIndex).toBeGreaterThan(-1);
     expect(publishIndex).toBeGreaterThan(-1);
     expect(earlyOutIndex).toBeLessThan(publishIndex);

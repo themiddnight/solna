@@ -44,7 +44,7 @@ import { adaptStepEvents } from "../../../utils/eventAdapt";
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "../../playerStop";
 import type { PlayerState } from "../../../store/types";
 import type { ChordItem } from "../../../types";
-import { publishStep, resetStep } from "../../playbackStep";
+import { publishStepAt, resetStep } from "../../playbackStep";
 
 /**
  * Where the chord+bass scheduler currently is on the shared grid. Kept as a
@@ -606,7 +606,7 @@ export function useChordPlayback() {
       // Live store read, not a ref: see chordStepAction's doc comment.
       const playerState = useAppStore.getState().chordsPlayer;
       const stepsPerBar = activeStepsPerBar();
-      publishStep('chords', step % stepsPerBar);
+      publishStepAt('chords', step % stepsPerBar, time);
       const action = chordStepAction(playerState, step, arming, stepsPerBar);
 
       // Soft stop: schedule the release exactly on the bar line the clock is

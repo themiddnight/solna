@@ -1,4 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
+import { playbackAudibleDelaySec } from '@/audio/playback/playbackEngine';
 
 /** One id per clock-driven player that publishes a 16th-note step. */
 export type StepPlayerId = 'chords' | 'lead' | 'sequencer';
@@ -9,6 +10,13 @@ export interface StepPublisher {
   /** Records `step` for `player` and notifies its listeners — but only when
    *  the value actually changed, so a repeated step is a no-op. */
   publish(player: StepPlayerId, step: number): void;
+  /**
+   * Publishes after `delayMs`, so the value lands when the step is HEARD
+   * rather than when the scheduler queued it. A delay of 0 or less publishes
+   * synchronously, which keeps the no-AudioContext case and the tests on the
+   * plain path.
+   */
+  publishAt(player: StepPlayerId, step: number, delayMs: number): void;
   /** The player's current step; 0 before anything was published. */
   getStep(player: StepPlayerId): number;
   /** Subscribes to one player. Returns the unsubscribe function. */
@@ -35,10 +43,26 @@ export interface StepPublisher {
  *
  * `publish` is identity-checked, so a repeated step (the clock re-dispatches
  * one whenever the stall detector re-anchors the grid) costs nothing.
+ *
+ * Publishing is DEFERRED to the moment the step sounds. The clock is a
+ * lookahead scheduler, so publishing inline from its callback put every
+ * playhead in the app ahead of its own audio — measured at ~116ms, which at
+ * 120bpm is very nearly a whole column. Timer jitter of a few milliseconds is
+ * meaningless against a column 125-180ms wide, so a timer is enough; what is
+ * NOT optional is cancelling the pending ones on reset, or a step lands after
+ * the transport has already stopped.
  */
 export function createStepPublisher(): StepPublisher {
   const steps = new Map<StepPlayerId, number>();
   const listeners = new Map<StepPlayerId, Set<() => void>>();
+  const pending = new Map<StepPlayerId, Set<ReturnType<typeof setTimeout>>>();
+
+  const cancelPending = (player: StepPlayerId): void => {
+    const timers = pending.get(player);
+    if (!timers) return;
+    for (const timer of timers) clearTimeout(timer);
+    timers.clear();
+  };
 
   const notify = (player: StepPlayerId): void => {
     const set = listeners.get(player);
@@ -59,8 +83,26 @@ export function createStepPublisher(): StepPublisher {
     notify(player);
   };
 
+  const publishAt = (player: StepPlayerId, step: number, delayMs: number): void => {
+    if (!(delayMs > 0)) {
+      set(player, step);
+      return;
+    }
+    let timers = pending.get(player);
+    if (!timers) {
+      timers = new Set();
+      pending.set(player, timers);
+    }
+    const timer = setTimeout(() => {
+      timers.delete(timer);
+      set(player, step);
+    }, delayMs);
+    timers.add(timer);
+  };
+
   return {
     publish: set,
+    publishAt,
     getStep: (player) => steps.get(player) ?? 0,
     subscribe: (player, listener) => {
       let set = listeners.get(player);
@@ -74,11 +116,18 @@ export function createStepPublisher(): StepPublisher {
       };
     },
     reset: (player) => {
+      // Cancel BEFORE setting: a timer surviving a stop would publish a step
+      // after the transport had already rewound, leaving a playhead parked
+      // somewhere the user never played to.
       if (player) {
+        cancelPending(player);
         set(player, 0);
         return;
       }
-      for (const id of PLAYER_IDS) set(id, 0);
+      for (const id of PLAYER_IDS) {
+        cancelPending(id);
+        set(id, 0);
+      }
     },
   };
 }
@@ -89,6 +138,18 @@ export const stepPublisher: StepPublisher = createStepPublisher();
 /** Convenience wrapper for clock callbacks. */
 export function publishStep(player: StepPlayerId, step: number): void {
   stepPublisher.publish(player, step);
+}
+
+/**
+ * What clock callbacks should call. `audibleTime` is the AudioContext time the
+ * step will sound at — the third argument the clock hands every listener.
+ */
+export function publishStepAt(
+  player: StepPlayerId,
+  step: number,
+  audibleTime: number,
+): void {
+  stepPublisher.publishAt(player, step, playbackAudibleDelaySec(audibleTime) * 1000);
 }
 
 /** Convenience wrapper for the stop/rewind paths. */
