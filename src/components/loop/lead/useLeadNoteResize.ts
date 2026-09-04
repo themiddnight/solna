@@ -16,29 +16,55 @@ export interface LeadResizeDrag {
   maxLen: number;
   startX: number;
   pointerId: number;
+  /** Set once the pointer has travelled past the slop. See leadResizeMoved. */
+  moved: boolean;
 }
 
 /**
- * What a finished gesture commits, or null for "commit nothing".
+ * How far the pointer must travel before the gesture counts as a drag.
+ *
+ * The grab strip covers the right 8px of a 20px cell, so nearly half of every
+ * drawn note is handle rather than note. Without a slop the strip would
+ * swallow the click that should have erased the note, and the user would find
+ * a large dead zone on every note they tried to remove.
+ */
+export const LEAD_RESIZE_SLOP_PX = 4;
+
+export function leadResizeMoved(startX: number, clientX: number): boolean {
+  return Math.abs(clientX - startX) >= LEAD_RESIZE_SLOP_PX;
+}
+
+/**
+ * What a finished gesture does. A press on the handle that never became a
+ * drag is a CLICK on the note, and a click on a note erases it — exactly as
+ * it does anywhere else on the note, so the handle is not a hole in that rule.
+ */
+export type LeadResizeOutcome =
+  | { kind: 'none' }
+  | { kind: 'resize'; stepIndex: number; note: string; len: number }
+  | { kind: 'erase'; stepIndex: number; note: string };
+
+/**
+ * Only a real `pointerup` does anything. `pointercancel` means the PLATFORM
+ * aborted the gesture — a touch-scroll takeover, another gesture interrupting
+ * — not that the user released, so acting on it would silently rewrite a note
+ * the user never chose to change.
  *
  * Pure, exported and unit-tested for the same reason leadResizeLen and
  * resolveLeadCellSpan are: logic embedded in a pointer handler cannot be
  * exercised at all here (no DOM, no testing-library), and a source-text
  * assertion about the handler passes just as happily when the guard sits on
  * the wrong branch.
- *
- * Only a real `pointerup` commits. `pointercancel` means the PLATFORM aborted
- * the gesture — a touch-scroll takeover, another gesture interrupting — not
- * that the user released, so committing on it would silently rewrite a note
- * the user never chose to change.
  */
 export function leadResizeCommit(
   drag: LeadResizeDrag | null,
   eventType: string,
   clientX: number,
-): LeadResizePreview | null {
-  if (!drag || eventType !== 'pointerup') return null;
+): LeadResizeOutcome {
+  if (!drag || eventType !== 'pointerup') return { kind: 'none' };
+  if (!drag.moved) return { kind: 'erase', stepIndex: drag.stepIndex, note: drag.note };
   return {
+    kind: 'resize',
     stepIndex: drag.stepIndex,
     note: drag.note,
     len: leadResizeLen(drag.startLen, clientX - drag.startX, LEAD_CELL_WIDTH, drag.maxLen),
@@ -78,7 +104,15 @@ export function useLeadNoteResize(): {
       // toggle the note off the moment it starts.
       e.stopPropagation();
       e.preventDefault();
-      dragRef.current = { stepIndex, note, startLen, maxLen, startX: e.clientX, pointerId: e.pointerId };
+      dragRef.current = {
+        stepIndex,
+        note,
+        startLen,
+        maxLen,
+        startX: e.clientX,
+        pointerId: e.pointerId,
+        moved: false,
+      };
       setPreview({ stepIndex, note, len: startLen });
 
       const lenAt = (clientX: number, drag: LeadResizeDrag): number =>
@@ -87,6 +121,9 @@ export function useLeadNoteResize(): {
       const onMove = (ev: PointerEvent): void => {
         const drag = dragRef.current;
         if (!drag || ev.pointerId !== drag.pointerId) return;
+        // Sticky: a gesture that has travelled stays a drag even if it comes
+        // back to where it started, so a wobble out and back is not an erase.
+        if (!drag.moved && leadResizeMoved(drag.startX, ev.clientX)) drag.moved = true;
         setPreview({ stepIndex: drag.stepIndex, note: drag.note, len: lenAt(ev.clientX, drag) });
       };
       const onEnd = (ev: PointerEvent): void => {
@@ -99,9 +136,12 @@ export function useLeadNoteResize(): {
         setPreview(null);
         // Whether this gesture commits — and what it commits — is
         // leadResizeCommit's decision, so it can be tested for real.
-        const commit = leadResizeCommit(drag, ev.type, ev.clientX);
-        if (!commit) return;
-        useAppStore.getState().setLeadNoteLength(commit.stepIndex, commit.note, commit.len);
+        const outcome = leadResizeCommit(drag, ev.type, ev.clientX);
+        if (outcome.kind === 'resize') {
+          useAppStore.getState().setLeadNoteLength(outcome.stepIndex, outcome.note, outcome.len);
+        } else if (outcome.kind === 'erase') {
+          useAppStore.getState().paintLeadNote(outcome.stepIndex, outcome.note, 'erase');
+        }
       };
       // WINDOW, not the grab strip, and no setPointerCapture. The strip is
       // rendered only on the cell that ENDS the span ({endsSpan && ...} in

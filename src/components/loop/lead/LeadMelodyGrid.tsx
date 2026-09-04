@@ -23,6 +23,7 @@ import {
 import { useCurrentStep } from '../../playbackStep';
 import { useLeadPlayback } from './useLeadPlayback';
 import { useLeadNoteResize } from './useLeadNoteResize';
+import { useLeadNotePaint } from './useLeadNotePaint';
 import { Slider } from '@/components/ui/Slider';
 
 /** Fixed width (px) of the note-name column, shared by the header spacer. */
@@ -53,7 +54,6 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   melody,
   rows,
   root,
-  onToggle,
   onResize,
 }: {
   meter: Meter;
@@ -61,13 +61,19 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   melody: readonly LeadNote[][];
   rows: readonly string[];
   root: string;
-  onToggle: (stepIndex: number, note: string) => void;
   onResize: (stepIndex: number, note: string, len: number) => void;
 }) {
   const stepsPerBar = meter.stepsPerBar;
   const columns = loopLength * stepsPerBar;
   const cellsPerBar = stepCells(meter);
   const { preview, startResize } = useLeadNoteResize();
+  // Column → stored index. Stored indices are bar-major at MAX_STEPS_PER_BAR,
+  // so this is not the identity and a skipped-cell fill must go through it.
+  const resolveStepIndex = useCallback(
+    (col: number) => leadStoredIndex(Math.floor(col / stepsPerBar), col % stepsPerBar),
+    [stepsPerBar],
+  );
+  const paint = useLeadNotePaint(resolveStepIndex);
   // The drag preview is applied here, in local render state — the store is
   // written once, on pointerup (see useLeadNoteResize).
   const previewed = useMemo(() => {
@@ -128,7 +134,11 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
                   type="button"
                   aria-label={note}
                   aria-pressed={kind !== 'none'}
-                  onClick={() => onToggle(idx, note)}
+                  onClick={(e) => paint.onCellClick(e, idx, note)}
+                  onPointerDown={(e) =>
+                    paint.onCellPointerDown(e, idx, col, note, kind !== 'none')
+                  }
+                  onPointerEnter={(e) => paint.onCellPointerEnter(e, idx, col, note)}
                   onKeyDown={(e) => {
                     if (
                       !e.shiftKey ||
@@ -251,7 +261,6 @@ export const LeadMelodyGrid: React.FC = () => {
   const setLeadLoopLength = useAppStore((s) => s.setLeadLoopLength);
   const setLeadLoopLengthPreserve = useAppStore((s) => s.setLeadLoopLengthPreserve);
   const setLeadMelodySteps = useAppStore((s) => s.setLeadMelodySteps);
-  const toggleLeadNote = useAppStore((s) => s.toggleLeadNote);
   const leadGate = useAppStore((s) => s.leadGate);
   const setLeadGate = useAppStore((s) => s.setLeadGate);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
@@ -280,11 +289,6 @@ export const LeadMelodyGrid: React.FC = () => {
     const clamped = clampLeadLoopLength(leadLoopLength, totalBars);
     if (clamped !== leadLoopLength) setLeadLoopLengthPreserve(clamped);
   }, [totalBars, leadLoopLength, setLeadLoopLengthPreserve]);
-
-  const onToggle = useCallback(
-    (stepIndex: number, note: string) => toggleLeadNote(stepIndex, note),
-    [toggleLeadNote],
-  );
 
   const setLeadNoteLength = useAppStore((s) => s.setLeadNoteLength);
   const onResize = useCallback(
@@ -427,7 +431,6 @@ export const LeadMelodyGrid: React.FC = () => {
                   melody={leadMelodySteps}
                   rows={rows}
                   root={scaleRoot}
-                  onToggle={onToggle}
                   onResize={onResize}
                 />
                 {isPlaying && <LeadPlayhead currentStep={currentStep} />}
