@@ -18,6 +18,7 @@ import { FIELD_LABEL, FIELD_SELECT, SECTION_HEADER } from "../../ui/fieldClasses
 import { Slider } from "../../ui/Slider";
 import { PlayingStepRow, STEP_ROW_CLASS } from "../../ui/StepRow";
 import { PlayingStepHeader } from "../../ui/StepHeader";
+import { IconButton } from "../../ui/IconButton";
 import { AdjustSynthButton } from "./AdjustSynthButton";
 import { bassStepLabel, nextBassStepChoice } from "./bassStepChoice";
 
@@ -68,7 +69,7 @@ export const BassModulePanel: React.FC<BassModulePanelProps> = ({
         </div>
         <div className="flex flex-row flex-wrap items-end gap-3">
           <div>
-            <label className={FIELD_LABEL}>Bass Preset</label>
+            <label className={FIELD_LABEL} htmlFor="select-bass-sound-preset">Bass Preset</label>
             <select
               id="select-bass-sound-preset"
               value={bassSynthParams.preset ?? ""}
@@ -107,7 +108,7 @@ export const BassModulePanel: React.FC<BassModulePanelProps> = ({
           </div>
 
           <div>
-            <label className={FIELD_LABEL}>Bass Octave</label>
+            <label className={FIELD_LABEL} htmlFor="select-bass-octave">Bass Octave</label>
             <select
               id="select-bass-octave"
               value={bassOctave}
@@ -124,7 +125,7 @@ export const BassModulePanel: React.FC<BassModulePanelProps> = ({
           </div>
 
           <div>
-            <label className={FIELD_LABEL}>Bass Pattern</label>
+            <label className={FIELD_LABEL} htmlFor="select-bass-rhythm-pattern">Bass Pattern</label>
             <div className="flex items-center gap-1.5">
               <select
                 id="select-bass-rhythm-pattern"
@@ -155,25 +156,24 @@ export const BassModulePanel: React.FC<BassModulePanelProps> = ({
                   </optgroup>
                 ))}
               </select>
-              <button
+              <IconButton
                 id="btn-preview-bass-pattern"
-                type="button"
+                label="Hold to Preview Bass Pattern Loop"
+                icon={<Volume2 className="w-3 h-3" />}
+                size="xs"
+                className="text-module-bass select-none"
                 onMouseDown={onPatternPreviewDown}
                 onMouseUp={onPatternPreviewUp}
                 onMouseLeave={onPatternPreviewUp}
                 onTouchStart={onPatternPreviewDown}
                 onTouchEnd={onPatternPreviewUp}
-                className="btn btn-xs btn-ghost btn-square text-module-bass select-none"
-                title="Hold to Preview Bass Pattern Loop"
-              >
-                <Volume2 className="w-3 h-3" />
-              </button>
+              />
             </div>
           </div>
 
           {/* Bass Feel Slider (tight ↔ loose) */}
           <div>
-            <label className={FIELD_LABEL}>Bass Feel</label>
+            <label className={FIELD_LABEL} htmlFor="slider-bass-feel">Bass Feel</label>
             <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
               <span className="text-[9px] text-base-content/60 shrink-0">
                 tight
@@ -211,8 +211,8 @@ export const BassModulePanel: React.FC<BassModulePanelProps> = ({
             only legible once a block is wider than the letter itself. */}
         {bassPatternMode === 'custom' && (
           <div className="overflow-x-auto mt-3">
-            <label className={FIELD_LABEL}>Custom Bass Pattern</label>
-            <div className="min-w-[420px] sm:min-w-[520px]">
+            <span className={FIELD_LABEL} id="label-custom-bass-pattern">Custom Bass Pattern</span>
+            <div className="min-w-[420px] sm:min-w-[520px]" role="group" aria-labelledby="label-custom-bass-pattern">
               <PlayingStepHeader
                 player="chords"
                 cells={chordCells}

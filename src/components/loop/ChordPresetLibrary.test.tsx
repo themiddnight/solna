@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { ChordPresetLibrary, isProgressionAvailable } from './ChordPresetLibrary';
+import { ChordPresetLibrary, isProgressionAvailable, templateAuditionClassName, customAuditionClassName } from './ChordPresetLibrary';
 import { INITIAL_SYNTH_PARAMS } from '../../store/initialState';
 import { CHORD_PROGRESSIONS, progressionById } from '../../audio/data/chordProgressions';
 import { SCALES } from '../../utils/musicTheory';
@@ -39,10 +39,26 @@ describe('ChordPresetLibrary theming', () => {
   });
 
   test('card actions are daisyUI buttons', () => {
-    expect(html).toContain('btn btn-xs btn-ghost');
+    expect(html).toContain('btn btn-square btn-xs btn-ghost');
     expect(html).toContain('[--btn-color:var(--color-module-chord)]');
     // hover:btn-error (the custom-card delete button) is unreachable under
     // renderToString for the same frozen-server-snapshot reason as above.
+  });
+
+  /**
+   * Regression: IconButton always adds `btn-ghost`, which zeroes daisyUI's
+   * `--btn-bg`. Both audition buttons default that prop, so their auditioning
+   * (filled, pulsing) branch has to restore `--btn-bg` itself or the fill
+   * silently disappears — the bug this pins. `auditioningName` is component
+   * state set only by a click handler, so it is unreachable from
+   * renderToString; these two exported pure functions are the only way to
+   * pin the auditioning branch's class string without a DOM.
+   */
+  test('the auditioning fill is restored on both audition buttons', () => {
+    expect(templateAuditionClassName(true)).toContain(
+      '[--btn-bg:var(--color-module-chord)] [--btn-color:var(--color-module-chord)]',
+    );
+    expect(customAuditionClassName(true)).toContain('btn-secondary [--btn-bg:var(--color-secondary)]');
   });
 
   test('the footer sits on base tokens', () => {

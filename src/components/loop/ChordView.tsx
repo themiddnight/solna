@@ -68,6 +68,7 @@ const ChordPresetLibrary = React.lazy(() =>
 import { PowerToggle } from "../ui/PowerToggle";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { ViewHeader } from "../ui/ViewHeader";
+import { ModuleHeader } from "../ui/ModuleHeader";
 import { COUNT_BADGE, HEADER_BADGE } from '../ui/fieldClasses';
 import { SortableChordCard } from "./chord/SortableChordCard";
 import { AdjustSynthButton } from "./chord/AdjustSynthButton";
@@ -386,7 +387,7 @@ export const ChordView: React.FC = React.memo(() => {
   // Held chord previews (catalog palette + progression cards): all notes
   // strike at once and sustain — no rhythm pattern, no scheduled note-offs.
   const handlePreviewMouseDown = (
-    e: React.MouseEvent | React.TouchEvent,
+    e: React.MouseEvent | React.TouchEvent | React.KeyboardEvent,
     root: string,
     quality: string,
   ) => {
@@ -406,7 +407,7 @@ export const ChordView: React.FC = React.memo(() => {
     );
   };
 
-  const handlePreviewMouseUp = (e: React.MouseEvent | React.TouchEvent) => {
+  const handlePreviewMouseUp = (e: React.MouseEvent | React.TouchEvent | React.KeyboardEvent) => {
     e.stopPropagation();
     e.preventDefault();
     if (!hasPreviewEngine()) return;
@@ -629,7 +630,22 @@ export const ChordView: React.FC = React.memo(() => {
 
       {/* Active Progression Blocks & Playable Chord Pads */}
       <div className="card bg-panel tint-chord border border-module-chord/30 p-4 shadow-xl space-y-3">
-        <div className="flex items-center justify-between border-b border-base-300 pb-2 flex-wrap gap-2">
+        <ModuleHeader
+          className="flex-wrap gap-2"
+          right={
+            <div className="flex items-center gap-2">
+              <button
+                id="btn-add-chord"
+                onClick={addChord}
+                className="btn btn-xs gap-1 [--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Chord</span>
+              </button>
+              <AdjustSynthButton target="chord" className="text-module-chord" />
+            </div>
+          }
+        >
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-base-content uppercase tracking-wider">
               Active Chord Progression Loop
@@ -649,18 +665,7 @@ export const ChordView: React.FC = React.memo(() => {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              id="btn-add-chord"
-              onClick={addChord}
-              className="btn btn-xs gap-1 [--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Chord</span>
-            </button>
-            <AdjustSynthButton target="chord" className="text-module-chord" />
-          </div>
-        </div>
+        </ModuleHeader>
 
         <ChordModulePanel
           onPatternPreviewDown={handleChordPatternPreviewMouseDown}
@@ -749,6 +754,17 @@ export const ChordView: React.FC = React.memo(() => {
                     onTouchEnd={(e) =>
                       handlePreviewMouseUp(e)
                     }
+                    onKeyDown={(e) => {
+                      // Press-and-hold audition: the key repeat would retrigger
+                      // the chord every few milliseconds.
+                      if (e.repeat) return;
+                      if (e.key !== 'Enter' && e.key !== ' ') return;
+                      handlePreviewMouseDown(e, diatonic.root, diatonic.quality);
+                    }}
+                    onKeyUp={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return;
+                      handlePreviewMouseUp(e);
+                    }}
                     onClick={(e) => e.stopPropagation()}
                     className="p-1 text-base-content/60 hover:text-module-chord transition-colors ml-0.5 rounded-selector hover:bg-base-300 cursor-pointer select-none"
                     title="Hold to Preview Chord Audio"
@@ -806,6 +822,17 @@ export const ChordView: React.FC = React.memo(() => {
                     onTouchEnd={(e) =>
                       handlePreviewMouseUp(e)
                     }
+                    onKeyDown={(e) => {
+                      // Press-and-hold audition: the key repeat would retrigger
+                      // the chord every few milliseconds.
+                      if (e.repeat) return;
+                      if (e.key !== 'Enter' && e.key !== ' ') return;
+                      handlePreviewMouseDown(e, borrowed.root, borrowed.quality);
+                    }}
+                    onKeyUp={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return;
+                      handlePreviewMouseUp(e);
+                    }}
                     onClick={(e) => e.stopPropagation()}
                     className="p-1 text-base-content/60 hover:text-secondary transition-colors ml-0.5 rounded-selector hover:bg-base-300 cursor-pointer select-none"
                     title="Hold to Preview Chord Audio"

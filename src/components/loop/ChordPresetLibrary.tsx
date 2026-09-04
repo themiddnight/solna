@@ -5,6 +5,8 @@ import { useAppStore } from '../../store/store';
 import { CHORD_PROGRESSIONS, resolveProgression } from '../../audio/data/chordProgressions';
 import type { ChordProgression } from '../../audio/data/chordProgressions';
 import { PresetLibrary } from '../ui/PresetLibrary';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { IconButton } from '../ui/IconButton';
 import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from '../ui/PresetLibrary';
 import { previewChordProgression } from '../../audio/playback/presetPreview';
 import type { PreviewHandle } from '../../audio/playback/presetPreview';
@@ -17,6 +19,27 @@ import { isProgressionAvailable } from './chord/progressionAvailability';
 
 export { isProgressionAvailable };
 export type { CustomChordProgressionItem };
+
+/**
+ * Audition button fill for the template-progression card. `IconButton`
+ * always adds `btn-ghost`, which zeroes `--btn-bg` — so the auditioning
+ * (filled, pulsing) branch has to restore it explicitly rather than relying
+ * on `.btn`'s default fallback to `--btn-color`, the way the un-converted
+ * button used to. Exported so the fill can be pinned by a literal-string
+ * test without rendering the whole card in that (otherwise unreachable via
+ * renderToString) local-state branch.
+ */
+export function templateAuditionClassName(isAuditioning: boolean): string {
+  return isAuditioning
+    ? '[--btn-bg:var(--color-module-chord)] [--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)] animate-pulse'
+    : 'btn-ghost text-module-chord';
+}
+
+/** Same fix, for the custom-progression card's audition button. */
+export function customAuditionClassName(isAuditioning: boolean): string {
+  return isAuditioning ? 'btn-secondary [--btn-bg:var(--color-secondary)] animate-pulse' : 'btn-ghost text-secondary';
+}
+
 
 // Wrapper entries: factory templates and custom progressions both render through
 // the generic; the template pointer is what the onSelect handler transposes.
@@ -68,10 +91,13 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   const deleteProgression = useAppStore((s) => s.deleteCustomChordProgression);
   const [auditioningName, setAuditioningName] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [toastTone, setToastTone] = useState<'success' | 'error'>('success');
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const previewRef = useRef<PreviewHandle | null>(null);
   useEffect(() => () => previewRef.current?.(), []);
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, tone: 'success' | 'error' = 'success') => {
+    setToastTone(tone);
     setToastMsg(msg);
     window.setTimeout(() => setToastMsg(null), 3000);
   };
@@ -175,9 +201,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   };
 
   const handleDeleteCustom = (id: string, name: string) => {
-    if (confirm(`Delete custom progression "${name}"?`)) {
-      deleteProgression(id);
-    }
+    setPendingDelete({ id, name });
   };
 
   // PORT of the original save handler: the roman default is the original's
@@ -241,7 +265,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
           showToast(`Imported ${imported.length} chord progressions!`);
         }
       } catch {
-        alert('Invalid JSON chord progression file');
+        showToast('Invalid JSON chord progression file', 'error');
       }
     };
     reader.readAsText(file);
@@ -331,17 +355,13 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
 
           <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
             {/* Audition Play Button */}
-            <button
+            <IconButton
+              label="Audition Sound"
+              icon={<Play className="w-3.5 h-3.5 fill-current" />}
+              size="xs"
+              className={templateAuditionClassName(auditioningName === progression.name)}
               onClick={() => handleAudition(resolvedChords, progression.name)}
-              className={`btn btn-xs ${
-                auditioningName === progression.name
-                  ? '[--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)] animate-pulse'
-                  : 'btn-ghost text-module-chord'
-              }`}
-              title="Audition Sound"
-            >
-              <Play className="w-3.5 h-3.5 fill-current" />
-            </button>
+            />
 
             {/* Apply Button */}
             <button
@@ -399,17 +419,13 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
 
           <div className="flex items-center gap-1 shrink-0 pt-0.5">
             {/* Play/Audition Button */}
-            <button
+            <IconButton
+              label="Audition Progression Sound"
+              icon={<Play className="w-3.5 h-3.5 fill-current" />}
+              size="xs"
+              className={customAuditionClassName(auditioningName === e.name)}
               onClick={() => handleAudition(resolvedCustom, e.name)}
-              className={`btn btn-xs ${
-                auditioningName === e.name
-                  ? 'btn-secondary animate-pulse'
-                  : 'btn-ghost text-secondary'
-              }`}
-              title="Audition Progression Sound"
-            >
-              <Play className="w-3.5 h-3.5 fill-current" />
-            </button>
+            />
 
             {/* Apply Button */}
             <button
@@ -423,13 +439,13 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
             </button>
 
             {/* Delete Button */}
-            <button
+            <IconButton
+              label="Delete Custom Progression"
+              icon={<Trash2 className="w-3.5 h-3.5" />}
+              size="xs"
+              className="hover:btn-error"
               onClick={() => handleDeleteCustom(e.id, e.name)}
-              className="btn btn-xs btn-ghost hover:btn-error"
-              title="Delete Custom Progression"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            />
           </div>
         </div>
       </div>
@@ -477,45 +493,59 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   );
 
   return (
-    <PresetLibrary
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Progression Library"
-      headerSubtitle={`Key of ${scaleRoot} • ${entries.length} Total Progressions`}
-      saveButton={{ label: 'Save Current', title: 'Save current chord progression' }}
-      toast={toastMsg}
-      toastPlacement="top"
-      variant="chord"
-      searchPlaceholder="Search by name, Roman numerals (ii-V-I, vi-IV-I-V)..."
-      entries={entries}
-      categories={categories}
-      listContainerClass="flex-1 overflow-y-auto p-3.5 space-y-2.5 divide-y divide-base-300/60"
-      groupEntries={groupEntries}
-      renderEntry={renderEntry}
-      emptyState={emptyState}
-      filterEntries={filterEntries}
-      footer={footer}
-      save={{
-        heading: 'Save Progression Preset',
-        buttonLabel: 'Save Progression',
-        withCategory: true,
-        withDescription: true,
-        withRoman: true,
-        defaultCategory: 'User',
-        variant: 'modal',
-        chordsSummary: {
-          count: currentChords.length,
-          text: currentChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → '),
-        },
-      }}
-      onSelect={applyEntry}
-      onDelete={(id) => {
-        const entry = entries.find((en) => en.id === id);
-        if (entry && confirm(`Delete custom progression "${entry.name}"?`)) {
-          deleteProgression(id);
-        }
-      }}
-      onSave={handleSave}
-    />
+    <>
+      <PresetLibrary
+        isOpen={isOpen}
+        onClose={onClose}
+        title="Progression Library"
+        headerSubtitle={`Key of ${scaleRoot} • ${entries.length} Total Progressions`}
+        saveButton={{ label: 'Save Current', title: 'Save current chord progression' }}
+        toast={toastMsg}
+        toastPlacement="top"
+        toastTone={toastTone}
+        variant="chord"
+        searchPlaceholder="Search by name, Roman numerals (ii-V-I, vi-IV-I-V)..."
+        entries={entries}
+        categories={categories}
+        listContainerClass="flex-1 overflow-y-auto p-3.5 space-y-2.5 divide-y divide-base-300/60"
+        groupEntries={groupEntries}
+        renderEntry={renderEntry}
+        emptyState={emptyState}
+        filterEntries={filterEntries}
+        footer={footer}
+        save={{
+          heading: 'Save Progression Preset',
+          buttonLabel: 'Save Progression',
+          withCategory: true,
+          withDescription: true,
+          withRoman: true,
+          defaultCategory: 'User',
+          variant: 'modal',
+          chordsSummary: {
+            count: currentChords.length,
+            text: currentChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → '),
+          },
+        }}
+        onSelect={applyEntry}
+        onDelete={(id) => {
+          const entry = entries.find((en) => en.id === id);
+          if (entry) setPendingDelete({ id, name: entry.name });
+        }}
+        onSave={handleSave}
+      />
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete progression"
+          message={<>Delete custom progression <strong>{pendingDelete.name}</strong>?</>}
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => {
+            deleteProgression(pendingDelete.id);
+            setPendingDelete(null);
+          }}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+    </>
   );
 };

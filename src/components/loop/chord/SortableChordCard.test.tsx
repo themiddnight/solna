@@ -56,7 +56,7 @@ describe('SortableChordCard theming', () => {
 
   test('header controls are daisyUI ghost buttons', () => {
     const html = render(false);
-    expect(html).toContain('btn btn-ghost btn-xs');
+    expect(html).toContain('btn btn-square btn-xs btn-ghost');
     expect(html).toContain('hover:text-error');
   });
 

@@ -15,6 +15,7 @@ import { FIELD_LABEL, FIELD_SELECT } from "../../ui/fieldClasses";
 import { Slider } from "../../ui/Slider";
 import { PlayingStepRow, STEP_ROW_CLASS } from "../../ui/StepRow";
 import { PlayingStepHeader } from "../../ui/StepHeader";
+import { IconButton } from "../../ui/IconButton";
 
 export interface ChordModulePanelProps {
   onPatternPreviewDown: (e: React.MouseEvent | React.TouchEvent) => void;
@@ -68,7 +69,7 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
         <div className="flex flex-row flex-wrap items-end gap-3">
           {/* Chord Sound Preset Select */}
           <div>
-            <label className={FIELD_LABEL}>Chord Preset</label>
+            <label className={FIELD_LABEL} htmlFor="select-chord-sound-preset">Chord Preset</label>
             <select
               id="select-chord-sound-preset"
               value={chordSynthParams.preset ?? ""}
@@ -108,7 +109,7 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
 
           {/* Chord Octave Select */}
           <div>
-            <label className={FIELD_LABEL}>Chord Octave</label>
+            <label className={FIELD_LABEL} htmlFor="select-chord-octave">Chord Octave</label>
             <select
               id="select-chord-octave"
               value={chordOctave}
@@ -126,7 +127,7 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
 
           {/* Chord Rhythm Pattern Select */}
           <div>
-            <label className={FIELD_LABEL}>Chord Pattern</label>
+            <label className={FIELD_LABEL} htmlFor="select-chord-rhythm-pattern">Chord Pattern</label>
             <div className="flex items-center gap-1.5">
               <select
                 id="select-chord-rhythm-pattern"
@@ -157,25 +158,24 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
                   </optgroup>
                 ))}
               </select>
-              <button
+              <IconButton
                 id="btn-preview-chord-pattern"
-                type="button"
+                label="Hold to Preview Chord Pattern Loop"
+                icon={<Volume2 className="w-3 h-3" />}
+                size="xs"
+                className="text-module-chord select-none"
                 onMouseDown={onPatternPreviewDown}
                 onMouseUp={onPatternPreviewUp}
                 onMouseLeave={onPatternPreviewUp}
                 onTouchStart={onPatternPreviewDown}
                 onTouchEnd={onPatternPreviewUp}
-                className="btn btn-xs btn-ghost btn-square text-module-chord select-none"
-                title="Hold to Preview Chord Pattern Loop"
-              >
-                <Volume2 className="w-3 h-3" />
-              </button>
+              />
             </div>
           </div>
 
           {/* Chord Feel Slider (tight ↔ loose) */}
           <div>
-            <label className={FIELD_LABEL}>Chord Feel</label>
+            <label className={FIELD_LABEL} htmlFor="slider-chord-feel">Chord Feel</label>
             <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
               <span className="text-[9px] text-base-content/60 shrink-0">
                 tight
@@ -239,14 +239,14 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
             drum sequencer uses; only the container changed. */}
         {chordRhythmMode === 'custom' && (
           <div className="overflow-x-auto">
-            <label className={FIELD_LABEL}>Custom Chord Pattern</label>
+            <span className={FIELD_LABEL} id="label-custom-chord-pattern">Custom Chord Pattern</span>
             {/* min-w keeps a narrow window scrolling rather than squeezing the
                 blocks back down. Above `sm` it matches the drum grid's step
                 area (its 700px less the 176px track-label gutter). A phone
                 takes a smaller floor instead of that grid's: this one has no
                 label gutter to scroll out of view, so less width per step buys
                 less scrolling at no cost in orientation. */}
-            <div className="min-w-[420px] sm:min-w-[520px]">
+            <div className="min-w-[420px] sm:min-w-[520px]" role="group" aria-labelledby="label-custom-chord-pattern">
               <PlayingStepHeader
                 player="chords"
                 cells={chordCells}

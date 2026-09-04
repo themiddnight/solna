@@ -7,6 +7,7 @@ import { ChordItem } from "../../../types";
 import { ROOTS, formatChordQuality } from "../../../utils/musicTheory";
 import { BEATS_PER_BAR } from "../../../utils/playhead";
 import { BeatDots } from "../../ui/BeatDots";
+import { IconButton } from "../../ui/IconButton";
 
 export interface SortableChordCardProps {
   chord: ChordItem;
@@ -80,47 +81,44 @@ export const SortableChordCard = React.memo(function SortableChordCard({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
+          <IconButton
             {...attributes}
             {...listeners}
-            className="btn btn-ghost btn-xs btn-square cursor-grab active:cursor-grabbing text-base-content/50 hover:text-base-content focus:outline-none"
-            title="Drag to reorder"
-          >
-            <GripVertical className="w-3.5 h-3.5" />
-          </button>
+            label="Drag to reorder"
+            icon={<GripVertical className="w-3.5 h-3.5" />}
+            size="xs"
+            className="cursor-grab active:cursor-grabbing text-base-content/50 hover:text-base-content focus:outline-none"
+          />
           <span className="badge badge-sm badge-ghost tabular-nums font-bold">
             Bar {startBar}
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
+          <IconButton
+            label="Move Left"
+            icon={<ChevronLeft className="w-3.5 h-3.5" />}
+            size="xs"
+            className="disabled:opacity-30"
             disabled={idx === 0}
             onClick={() => handleMoveChord(idx, -1)}
-            className="btn btn-ghost btn-xs btn-square disabled:opacity-30"
-            title="Move Left"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
+          />
+          <IconButton
+            label="Move Right"
+            icon={<ChevronRight className="w-3.5 h-3.5" />}
+            size="xs"
+            className="disabled:opacity-30"
             disabled={idx === totalChords - 1}
             onClick={() => handleMoveChord(idx, 1)}
-            className="btn btn-ghost btn-xs btn-square disabled:opacity-30"
-            title="Move Right"
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-          <button
+          />
+          <IconButton
             id={`btn-remove-chord-${chord.id}`}
-            onClick={() => removeChord(chord.id)}
+            label="Delete Chord"
+            icon={<Trash2 className="w-3.5 h-3.5" />}
+            size="xs"
+            className="hover:text-error ml-1 disabled:opacity-30"
             disabled={totalChords <= 1}
-            className="btn btn-ghost btn-xs btn-square hover:text-error ml-1 disabled:opacity-30"
-            title="Delete Chord"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+            onClick={() => removeChord(chord.id)}
+          />
         </div>
       </div>
 
@@ -161,7 +159,7 @@ export const SortableChordCard = React.memo(function SortableChordCard({
       {/* Edit Controls */}
       <div className="flex gap-2 pt-1 border-t border-base-300/60">
         <div className="shrink min-w-0">
-          <label className={FIELD_LABEL}>
+          <label className={FIELD_LABEL} htmlFor={`select-chord-root-${chord.id}`}>
             Root
           </label>
           <select
@@ -179,7 +177,7 @@ export const SortableChordCard = React.memo(function SortableChordCard({
         </div>
 
         <div className="flex-1 min-w-0">
-          <label className={FIELD_LABEL}>
+          <label className={FIELD_LABEL} htmlFor={`select-chord-quality-${chord.id}`}>
             Quality
           </label>
           <select
@@ -216,7 +214,7 @@ export const SortableChordCard = React.memo(function SortableChordCard({
         </div>
 
         <div className="shrink min-w-0">
-          <label className={FIELD_LABEL}>
+          <label className={FIELD_LABEL} htmlFor={`select-chord-bars-${chord.id}`}>
             Duration (Bars)
           </label>
           <select
