@@ -9,6 +9,7 @@ import {
   leadStoredIndex,
   resolveLeadCellSpan,
   type LeadCellKind,
+  leadCursorKeyTarget,
 } from './melodyGrid';
 import type { LeadNote } from '../../../audio/leadMelody';
 
@@ -253,5 +254,29 @@ describe('leadSpanClasses', () => {
     expect(leadSpanClasses('end', 'none')).toBe(
       'bg-primary text-primary-content border-l-0 rounded-r-xs',
     );
+  });
+});
+
+describe('leadCursorKeyTarget', () => {
+  test('arrows step one column, and stop at the loop edges', () => {
+    expect(leadCursorKeyTarget(5, 'ArrowRight', false, 16, 32)).toBe(6);
+    expect(leadCursorKeyTarget(5, 'ArrowLeft', false, 16, 32)).toBe(4);
+    expect(leadCursorKeyTarget(0, 'ArrowLeft', false, 16, 32)).toBe(0);
+    expect(leadCursorKeyTarget(31, 'ArrowRight', false, 16, 32)).toBe(31);
+  });
+
+  test('shift jumps a whole bar', () => {
+    expect(leadCursorKeyTarget(5, 'ArrowRight', true, 16, 32)).toBe(21);
+    expect(leadCursorKeyTarget(21, 'ArrowLeft', true, 16, 32)).toBe(5);
+  });
+
+  test('a shift jump past the edge lands ON the edge rather than doing nothing', () => {
+    expect(leadCursorKeyTarget(20, 'ArrowRight', true, 16, 32)).toBe(31);
+    expect(leadCursorKeyTarget(5, 'ArrowLeft', true, 16, 32)).toBe(0);
+  });
+
+  test('any other key is not ours — null, so the browser keeps its own behaviour', () => {
+    expect(leadCursorKeyTarget(5, 'Enter', false, 16, 32)).toBeNull();
+    expect(leadCursorKeyTarget(5, 'ArrowUp', false, 16, 32)).toBeNull();
   });
 });

@@ -3,7 +3,13 @@ import { useAppStore } from '../../../store/store';
 import { loopBars } from '../../../store/loop';
 import { getMeter, type Meter } from '../../../utils/meter';
 import { stepCells, type StepCell } from '../../sequencerGrid';
-import { clampLeadLoopLength, loopLengthDivisors, type LeadNote } from '../../../audio/leadMelody';
+import {
+  clampLeadCursor,
+  clampLeadLoopLength,
+  leadCursorBar,
+  loopLengthDivisors,
+  type LeadNote,
+} from '../../../audio/leadMelody';
 import {
   initSynthPlayback,
   synthPlaybackNoteOff,
@@ -15,6 +21,7 @@ import {
   isBlackKey,
   isRootNote,
   leadCellKinds,
+  leadCursorKeyTarget,
   leadPitchRows,
   leadSpanClasses,
   leadStoredIndex,
@@ -192,14 +199,31 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
   stepsPerBar,
   columns,
   cellsPerBar,
+  cursor,
+  selectedBar,
+  onSelectColumn,
 }: {
   stepsPerBar: number;
   columns: number;
   cellsPerBar: StepCell[];
+  cursor: number;
+  selectedBar: number;
+  onSelectColumn: (col: number) => void;
 }) {
+  // Arrows move the cursor AND the focus together. Leaving focus behind would
+  // put the ring on one column while the selection sat on another.
+  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, col: number): void => {
+    const next = leadCursorKeyTarget(col, e.key, e.shiftKey, stepsPerBar, columns);
+    if (next === null) return;
+    e.preventDefault();
+    onSelectColumn(next);
+    const strip = e.currentTarget.parentElement;
+    (strip?.children[next] as HTMLElement | undefined)?.focus();
+  };
+
   return (
     <>
-      {/* Bar-number header */}
+      {/* Bar-number header — the whole bar's width selects that bar. */}
       <div className="flex">
         <div className="shrink-0" style={{ width: LABEL_WIDTH }} />
         <div className="flex shrink-0">
@@ -207,19 +231,28 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
             const barIndex = Math.floor(col / stepsPerBar);
             const stepInBar = col - barIndex * stepsPerBar;
             return (
-              <div
+              <button
                 key={col}
-                className="text-[8px] leading-none text-center font-bold text-base-content/60"
+                type="button"
+                aria-label={`Bar ${barIndex + 1}`}
+                aria-pressed={barIndex === selectedBar}
+                onClick={() => onSelectColumn(barIndex * stepsPerBar)}
+                onKeyDown={(e) => onKeyDown(e, col)}
+                className={`text-[8px] leading-none text-center font-bold ${
+                  barIndex === selectedBar
+                    ? 'bg-primary/20 text-primary'
+                    : 'text-base-content/60'
+                }`}
                 style={{ width: LEAD_CELL_WIDTH }}
               >
-                {stepInBar === 0 ? barIndex + 1 : ''}
-              </div>
+                {stepInBar === 0 ? barIndex + 1 : '\u00a0'}
+              </button>
             );
           })}
         </div>
       </div>
 
-      {/* Beat-number header */}
+      {/* Beat-number header — one column each, and the cursor lives here. */}
       <div className="flex">
         <div className="shrink-0" style={{ width: LABEL_WIDTH }} />
         <div className="flex shrink-0">
@@ -228,13 +261,22 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
             const stepInBar = col - barIndex * stepsPerBar;
             const cell = cellsPerBar[stepInBar];
             return (
-              <div
+              <button
                 key={col}
-                className="text-[9px] leading-none text-center text-base-content/50"
+                type="button"
+                aria-label={`Bar ${barIndex + 1} step ${stepInBar + 1}`}
+                aria-pressed={col === cursor}
+                onClick={() => onSelectColumn(col)}
+                onKeyDown={(e) => onKeyDown(e, col)}
+                className={`text-[9px] leading-none text-center ${
+                  col === cursor
+                    ? 'bg-secondary text-secondary-content'
+                    : 'text-base-content/50'
+                }`}
                 style={{ width: LEAD_CELL_WIDTH }}
               >
-                {cell.isBeatStart ? cell.beatIndex + 1 : ''}
-              </div>
+                {cell.isBeatStart ? cell.beatIndex + 1 : '\u00a0'}
+              </button>
             );
           })}
         </div>
@@ -290,6 +332,12 @@ export const LeadMelodyGrid: React.FC = () => {
     if (clamped !== leadLoopLength) setLeadLoopLengthPreserve(clamped);
   }, [totalBars, leadLoopLength, setLeadLoopLengthPreserve]);
 
+  const leadCursor = useAppStore((s) => s.leadCursor);
+  const setLeadCursor = useAppStore((s) => s.setLeadCursor);
+  const copySelectedLeadBar = useAppStore((s) => s.copySelectedLeadBar);
+  const pasteIntoSelectedLeadBar = useAppStore((s) => s.pasteIntoSelectedLeadBar);
+  const hasClipboard = useAppStore((s) => s.leadBarClipboard !== null);
+
   const setLeadNoteLength = useAppStore((s) => s.setLeadNoteLength);
   const onResize = useCallback(
     (stepIndex: number, note: string, len: number) => setLeadNoteLength(stepIndex, note, len),
@@ -311,6 +359,10 @@ export const LeadMelodyGrid: React.FC = () => {
   );
 
   const columns = leadLoopLength * stepsPerBar;
+  // Clamped again HERE, not only on write: a meter or loop-length change can
+  // narrow the window under a cursor that was legal when it was set.
+  const cursor = clampLeadCursor(leadCursor, leadLoopLength, stepsPerBar);
+  const selectedBar = leadCursorBar(cursor, stepsPerBar);
 
   return (
     <div className="card bg-panel border border-base-300 shadow-xl">
@@ -386,6 +438,25 @@ export const LeadMelodyGrid: React.FC = () => {
             />
 
             <button
+              id="btn-lead-copy-bar"
+              type="button"
+              onClick={copySelectedLeadBar}
+              className="btn btn-xs btn-ghost border border-base-300 text-base-content/70"
+              title={`Copy bar ${selectedBar + 1}`}
+            >
+              Copy
+            </button>
+            <button
+              id="btn-lead-paste-bar"
+              type="button"
+              onClick={pasteIntoSelectedLeadBar}
+              disabled={!hasClipboard}
+              className="btn btn-xs btn-ghost border border-base-300 text-base-content/70"
+              title={`Paste over bar ${selectedBar + 1}`}
+            >
+              Paste
+            </button>
+            <button
               id="btn-lead-clear"
               type="button"
               onClick={clearMelody}
@@ -400,6 +471,9 @@ export const LeadMelodyGrid: React.FC = () => {
         <div className="overflow-x-auto bg-base-200 p-3 rounded">
           <div className="w-fit mx-auto">
             <LeadMelodyHeaders
+              cursor={cursor}
+              selectedBar={selectedBar}
+              onSelectColumn={setLeadCursor}
               stepsPerBar={stepsPerBar}
               columns={columns}
               cellsPerBar={cellsPerBar}

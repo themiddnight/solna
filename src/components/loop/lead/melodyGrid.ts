@@ -171,3 +171,22 @@ export function leadSpanClasses(kind: LeadCellKind, next: LeadCellKind): string 
   return parts.join(' ');
 }
 
+
+/**
+ * Where an arrow key moves the selection cursor, or null when the key is not
+ * one this widget handles. Shift jumps a whole bar. A jump that overshoots
+ * lands on the edge rather than being refused — refusing would make the last
+ * partial bar unreachable by keyboard.
+ */
+export function leadCursorKeyTarget(
+  col: number,
+  key: string,
+  shiftKey: boolean,
+  stepsPerBar: number,
+  columns: number,
+): number | null {
+  if (key !== 'ArrowLeft' && key !== 'ArrowRight') return null;
+  const stride = shiftKey ? stepsPerBar : 1;
+  const next = col + (key === 'ArrowRight' ? stride : -stride);
+  return Math.min(columns - 1, Math.max(0, next));
+}
