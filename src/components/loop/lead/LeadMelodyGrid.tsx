@@ -12,8 +12,7 @@ import {
 } from '../../../audio/leadMelody';
 import {
   initSynthPlayback,
-  synthPlaybackNoteOff,
-  synthPlaybackNoteOn,
+  synthPlaybackPreview,
 } from '../../../audio/playback/synthPlayback';
 import {
   LEAD_CELL_WIDTH,
@@ -349,11 +348,12 @@ export const LeadMelodyGrid: React.FC = () => {
     [leadMelodySteps, setLeadMelodySteps],
   );
 
+  // synthPlaybackPreview, not synthPlaybackNoteOn: hearing a cell you clicked
+  // is not performing a note, and the note-input bus must not see it.
   const previewNote = useCallback(
     (note: string) => {
       initSynthPlayback();
-      synthPlaybackNoteOn(note, synthParams, 0.8);
-      window.setTimeout(() => synthPlaybackNoteOff(note, synthParams.release), 220);
+      synthPlaybackPreview(note, synthParams);
     },
     [synthParams],
   );

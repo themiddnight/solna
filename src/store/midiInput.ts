@@ -1,5 +1,6 @@
 import { Note } from 'tonal';
 import { audioEngine } from '../audio/engine';
+import { synthPlaybackNoteOff, synthPlaybackNoteOn } from '../audio/playback/synthPlayback';
 import { useAppStore } from './store';
 
 let started = false;
@@ -92,9 +93,13 @@ function applyCcMapping(ccNumber: number, ccValue: number): void {
 // The MIDI listener lives on the store side of the engine bridge (layering
 // rule 1 forbids src/audio/ from importing the store): the handler reads live
 // MIDI state from the store (input selection, mappings, learn target) and
-// writes back through store actions, while audio flows only through engine
-// methods. Engine methods no-op before init(), so messages arriving ahead of
-// the first user click are harmless.
+// writes back through store actions, while audio flows only through the
+// playback wrappers. Notes go through synthPlaybackNoteOn/Off rather than
+// audioEngine directly: that wrapper is where a performed note is announced
+// on the note-input bus, so a device that skipped it would be audible but
+// invisible to anything watching for played notes. Engine methods no-op
+// before init(), so messages arriving ahead of the first user click are
+// harmless.
 export function startMidiInputBridge(): void {
   if (started || typeof navigator === 'undefined' || !('requestMIDIAccess' in navigator)) {
     return;
@@ -142,10 +147,10 @@ export function startMidiInputBridge(): void {
             const inputId = sourceInput?.id ?? '';
             if (command === 0x90 && velocity > 0) {
               heldNotes.noteOn(inputId, noteName);
-              audioEngine.triggerSynthNoteOn(noteName, params, velocity / 127, undefined, 'synth', 1);
+              synthPlaybackNoteOn(noteName, params, velocity / 127, undefined, 'synth', 1);
             } else {
               heldNotes.noteOff(inputId, noteName);
-              audioEngine.triggerSynthNoteOff(noteName, 0.3, undefined, 'synth');
+              synthPlaybackNoteOff(noteName, 0.3, undefined, 'synth');
             }
           }
         } else if (command === 0xB0) {
@@ -155,7 +160,7 @@ export function startMidiInputBridge(): void {
 
       const flushInputNotes = (inputId: string): void => {
         heldNotes.release(inputId).forEach((note) => {
-          audioEngine.triggerSynthNoteOff(note, 0.05, undefined, 'synth');
+          synthPlaybackNoteOff(note, 0.05, undefined, 'synth');
         });
       };
 

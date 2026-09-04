@@ -1,4 +1,5 @@
 import { audioEngine } from "../engine";
+import { emitNoteInput } from "./noteInputBus";
 import type { SynthParams } from "../../types";
 
 // Thin engine bridge for SynthView's keyboard/arp handlers (layering rule 3):
@@ -17,6 +18,18 @@ export function applySynthPlaybackVelocityScale(scale: number): void {
   audioEngine.applySynthVelocityScale(scale);
 }
 
+/**
+ * A note a PERSON played — the computer keyboard, the on-screen keyboard, a
+ * MIDI device. Every one of those routes through here, and here is where the
+ * note-input bus is told about it, so a feature that wants performed notes
+ * subscribes once instead of being soldered onto each source.
+ *
+ * Two things deliberately do NOT come through here. Sequenced notes go to
+ * playbackEngine, because a step the transport played is not a step the user
+ * performed. Grid auditions go to synthPlaybackPreview, because clicking a
+ * cell to hear what you just drew is not playing a note either — routing it
+ * here would let a preview click record itself.
+ */
 export function synthPlaybackNoteOn(
   note: string,
   params: SynthParams,
@@ -33,8 +46,12 @@ export function synthPlaybackNoteOn(
     target,
     scaleFactor,
   );
+  // After the engine call, never before: a subscriber that throws must not be
+  // able to swallow the note the user played.
+  emitNoteInput({ kind: "on", note, velocity, time });
 }
 
+/** The release half of synthPlaybackNoteOn; announced on the same bus. */
 export function synthPlaybackNoteOff(
   note: string,
   releaseTime = 0.3,
@@ -42,6 +59,31 @@ export function synthPlaybackNoteOff(
   target = "synth",
 ): void {
   audioEngine.triggerSynthNoteOff(note, releaseTime, time, target);
+  emitNoteInput({ kind: "off", note, velocity: 0, time });
+}
+
+/**
+ * Audition a note the UI is showing — a melody-grid cell, a preset chip —
+ * for holdMs, then release it.
+ *
+ * Separate from synthPlaybackNoteOn ON PURPOSE, and the separation is the
+ * whole point: this path is silent on the note-input bus. A grid cell click
+ * plays a note without anyone having performed one, so if it announced itself
+ * the recorder would write the cell you clicked a second time.
+ */
+export function synthPlaybackPreview(
+  note: string,
+  params: SynthParams,
+  holdMs = 220,
+  velocity = 0.8,
+): void {
+  audioEngine.triggerSynthNoteOn(note, params, velocity, undefined, "synth", 1);
+  // Bare setTimeout, not window.setTimeout: this module is in audio/ and must
+  // not assume a DOM (the test runner has no window).
+  setTimeout(
+    () => audioEngine.triggerSynthNoteOff(note, params.release, undefined, "synth"),
+    holdMs,
+  );
 }
 
 export function releaseSynthPlaybackVoices(

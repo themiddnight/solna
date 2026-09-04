@@ -1,5 +1,10 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
+import {
+  resetNoteInputListeners,
+  subscribeNoteInput,
+  type NoteInputEvent,
+} from '../audio/playback/noteInputBus';
 import { computeDisconnectedInputIds, createHeldNoteTracker, startMidiInputBridge } from './midiInput';
 
 describe('computeDisconnectedInputIds', () => {
@@ -169,5 +174,46 @@ describe('startMidiInputBridge releases held notes on disconnect (map removal fa
 
     expect(triggerSynthNoteOff.mock.calls.map((call) => call[0])).toEqual(['C4']);
     triggerSynthNoteOff.mockRestore();
+  });
+});
+
+// A MIDI device is a person playing, so it has to arrive on the note-input
+// bus like every other input source. It used to call audioEngine directly,
+// which made it audible but invisible: a recorder listening for performed
+// notes would have heard the computer keyboard and silently missed the piano.
+describe('MIDI joins the note-input funnel', () => {
+  test('a note-on from a device is announced on the bus', () => {
+    const events: NoteInputEvent[] = [];
+    subscribeNoteInput((e) => events.push(e));
+    const input = connect('dev-bus-on');
+
+    noteOn(input, 60); // C4
+
+    expect(events).toEqual([{ kind: 'on', note: 'C4', velocity: 100 / 127, time: undefined }]);
+    resetNoteInputListeners();
+  });
+
+  test('a note-off from a device is announced too', () => {
+    const events: NoteInputEvent[] = [];
+    subscribeNoteInput((e) => events.push(e));
+    const input = connect('dev-bus-off');
+
+    noteOn(input, 60);
+    input.onmidimessage?.({ data: [0x80, 60, 0], target: input });
+
+    expect(events.map((e) => e.kind)).toEqual(['on', 'off']);
+    resetNoteInputListeners();
+  });
+
+  test('notes flushed by a disconnect are announced, so nothing stays stuck held', () => {
+    const events: NoteInputEvent[] = [];
+    const input = connect('dev-bus-flush');
+    noteOn(input, 60);
+    subscribeNoteInput((e) => events.push(e));
+
+    disconnectByStateFlip(input);
+
+    expect(events).toEqual([{ kind: 'off', note: 'C4', velocity: 0, time: undefined }]);
+    resetNoteInputListeners();
   });
 });

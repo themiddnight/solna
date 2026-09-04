@@ -10,6 +10,7 @@ import {
   synthPlaybackNoteOff,
   synthPlaybackNoteOn,
 } from '../audio/playback/synthPlayback';
+import { emitNoteInput } from '../audio/playback/noteInputBus';
 import { ensureDrumEngine, triggerPad as triggerDrumPad } from '../audio/playback/drumPlayback';
 import { useAppStore } from '../store/store';
 import type { AppStore } from '../store/types';
@@ -195,6 +196,12 @@ export function useInputDeck(): {
           KEYBOARD_AUDITION_TARGET,
           scale,
         );
+      } else {
+        // The arp swallows the key: it schedules the note itself, so nothing
+        // reaches synthPlaybackNoteOn and the bus would never hear about a key
+        // the user genuinely pressed. Announce it here instead, or arming the
+        // recorder with the arp on would silently capture nothing.
+        emitNoteInput({ kind: 'on', note, velocity: 1.0 });
       }
       setActiveNotes((prev) => new Set(prev).add(note));
     },
@@ -217,6 +224,9 @@ export function useInputDeck(): {
           KEYBOARD_AUDITION_TARGET,
         );
         applySynthPlaybackVelocityScale(equalPowerVelocityScale(held.size));
+      } else if (wasHeld) {
+        // Arp branch — see handleNoteOn.
+        emitNoteInput({ kind: 'off', note, velocity: 0 });
       }
       setActiveNotes((prev) => {
         const next = new Set(prev);
