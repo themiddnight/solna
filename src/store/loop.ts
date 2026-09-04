@@ -22,6 +22,7 @@ export const LOOP_FLAT_KEYS = [
   'leadLoopLength',
   'leadMelodyView',
   'leadMelodyOctave',
+  'leadGate',
   'sequencerTracks',
   'soundKit',
   'drumFilterCutoff',

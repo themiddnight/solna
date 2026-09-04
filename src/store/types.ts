@@ -13,6 +13,7 @@ import type { SynthControlTarget } from '../utils/synthControl';
 import type { MeterId } from '../utils/meter';
 import type { SynthPresetItem, SynthPresetCategory } from '../audio/synthPresets';
 import type { BassStepChoice } from '../audio/bassPatterns';
+import type { LeadNote } from '../audio/leadMelody';
 import type { PlaybackScope } from './playbackScope';
 import type { ProjectSlice } from './projectSlice';
 
@@ -126,21 +127,29 @@ export interface BassSlice {
 export type LeadMelodyView = 'scale-locked' | 'chromatic';
 
 export interface LeadSlice {
-  /** Absolute note names per step, stored at a fixed MAX_STEPS_PER_BAR per bar. */
-  leadMelodySteps: string[][];
+  /** Notes per step, stored at a fixed MAX_STEPS_PER_BAR per bar. The index is the step a note STARTS on. */
+  leadMelodySteps: LeadNote[][];
   /** Loop length in bars; must divide Σ ChordItem.bars. */
   leadLoopLength: number;
   /** Scale-locked or chromatic rows; persisted per loop. */
   leadMelodyView: LeadMelodyView;
   /** Lowest octave of the visible window; persisted per loop. */
   leadMelodyOctave: number;
-  setLeadMelodySteps: (steps: string[][]) => void;
+  /** Fraction of a note's FINAL step that sounds, 0.05-1.0; per loop. */
+  leadGate: number;
+  setLeadMelodySteps: (steps: LeadNote[][]) => void;
   setLeadLoopLength: (bars: number) => void;
   /** Like setLeadLoopLength but never resizes/trims the melody grid. */
   setLeadLoopLengthPreserve: (bars: number) => void;
   setLeadMelodyView: (view: LeadMelodyView) => void;
   setLeadMelodyOctave: (octave: number) => void;
+  setLeadGate: (gate: number) => void;
   toggleLeadNote: (stepIndex: number, note: string) => void;
+  /**
+   * Set a drawn note's length. `stepIndex` is the STORED index; `len` counts
+   * ACTIVE steps. The one place the three length invariants are enforced.
+   */
+  setLeadNoteLength: (stepIndex: number, note: string, len: number) => void;
 }
 
 export interface SequencerSlice {
@@ -259,10 +268,11 @@ export interface Loop {
   customBassPattern: BassStepChoice[];
   bassFeel: number;
   bassOctave: number;
-  leadMelodySteps: string[][];
+  leadMelodySteps: LeadNote[][];
   leadLoopLength: number;
   leadMelodyView: LeadMelodyView;
   leadMelodyOctave: number;
+  leadGate: number;
   sequencerTracks: SequencerTrack[];
   soundKit: string;
   drumFilterCutoff: number;

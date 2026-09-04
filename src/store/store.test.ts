@@ -1098,7 +1098,7 @@ describe('project identity migration wiring (v8 -> v9)', () => {
     expect(s.projectBaselineHash).toBeNull();
   });
 
-  test('a version-1 payload still terminates in the v9 shape', async () => {
+  test('a version-1 payload still terminates in the v10 shape', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
     flushPersistedWrites();
@@ -1106,7 +1106,7 @@ describe('project identity migration wiring (v8 -> v9)', () => {
     await useAppStore.persist.rehydrate();
     expect(useAppStore.getState().currentProjectId).toBeNull();
     flushPersistedWrites();
-    expect(JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}').version).toBe(9);
+    expect(JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}').version).toBe(10);
   });
 
   test('a wrong-typed currentProjectId / projectBaselineHash is coerced to null', async () => {

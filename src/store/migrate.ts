@@ -1,5 +1,6 @@
 import type { SynthPresetItem } from '../audio/synthPresets';
 import type { CustomChordProgressionItem } from '../types';
+import { DEFAULT_LEAD_GATE, isLegacyLeadMelody, upgradeLeadMelodyV1 } from '../audio/leadMelody';
 import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
 import { padStepRow } from '../utils/patternAdapt';
 import { newLoopId, LOOP_FLAT_KEYS } from './loop';
@@ -236,5 +237,31 @@ export function migrateAddProjectIdentity<T extends object>(state: T): T {
   const next = { ...(state as Record<string, unknown>) };
   if (!('currentProjectId' in next)) next.currentProjectId = null;
   if (!('projectBaselineHash' in next)) next.projectBaselineHash = null;
+  return next as unknown as T;
+}
+
+/**
+ * v9 -> v10: lead notes gain a length and each loop gains a gate. Only the
+ * loops are touched — persist `merge` writes loops[activeLoopId] over the
+ * flat lead keys through loopStatePatch, so the flat mirror is rebuilt from
+ * the upgraded loop. Must run BEFORE sanitizePersistedState (zustand runs
+ * `migrate` before `merge`, and `merge` is where sanitize is called): the
+ * new isLeadNoteMatrix guard rejects the v1 string shape, so a payload that
+ * reached sanitize un-upgraded would blank the melody with no error.
+ */
+export function migrateLeadNoteLength<T extends object>(state: T): T {
+  const next = { ...(state as Record<string, unknown>) } as Record<string, unknown>;
+  if (!Array.isArray(next.loops)) return next as unknown as T;
+  next.loops = next.loops.map((loop) => {
+    if (!loop || typeof loop !== 'object' || Array.isArray(loop)) return loop;
+    const row = loop as Record<string, unknown>;
+    return {
+      ...row,
+      leadMelodySteps: isLegacyLeadMelody(row.leadMelodySteps)
+        ? upgradeLeadMelodyV1(row.leadMelodySteps)
+        : row.leadMelodySteps,
+      leadGate: typeof row.leadGate === 'number' ? row.leadGate : DEFAULT_LEAD_GATE,
+    };
+  });
   return next as unknown as T;
 }

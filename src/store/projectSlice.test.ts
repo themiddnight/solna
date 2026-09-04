@@ -1,7 +1,8 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import { createMemoryBackend, createProjectStore } from './projectStore';
-import { buildProjectContent, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
+import { PROJECT_FORMAT_VERSION, buildProjectContent, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
+import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
 import { fingerprintContent } from './projectFingerprint';
 import { createDefaultLoop, DEFAULT_LOOP_ID } from './loopSlice';
 import { LOOP_FLAT_KEYS } from './loop';
@@ -402,5 +403,63 @@ describe('openProject through the loop-mirroring set', () => {
       expect(s.loops[0][key]).toEqual(incoming.content.loops[0][key]);
       expect(s[key]).toEqual(incoming.content.loops[0][key]);
     }
+  });
+});
+
+/**
+ * The IndexedDB twin of projectFormat.test.ts's `.solna` regression. CLAUDE.md
+ * calls IndexedDB the saved project library, so Open is the FIRST reader of a
+ * pre-DEV-369 body, not the second: every project saved before this branch
+ * sits at formatVersion 1 with a `string[][]` melody and no leadGate. Without
+ * the upgrade-then-sanitize pass on the read path, install() spreads that body
+ * straight into the store — the grid renders empty, holdSec goes NaN, and the
+ * corrupted matrix is persisted, so the melody is gone for good on the next
+ * reload. It fails by blanking data, never by throwing.
+ */
+function legacyV1Body(id: string): ProjectBody {
+  const loop = { ...createDefaultLoop(), id: 'loop-legacy' } as unknown as Record<string, unknown>;
+  loop.leadMelodySteps = [['C4', 'E4'], [], ['G4']];
+  delete loop.leadGate;
+  return {
+    ...makeEnvelope('Legacy', 1_000),
+    id,
+    formatVersion: 1,
+    content: { ...factoryProjectContent(), bpm: 118, loops: [loop] },
+  } as unknown as ProjectBody;
+}
+
+const UPGRADED_MELODY = [
+  [{ note: 'C4', len: 1 }, { note: 'E4', len: 1 }],
+  [],
+  [{ note: 'G4', len: 1 }],
+];
+
+describe('a formatVersion-1 body in the project library', () => {
+  test('openProject keeps its melody — upgraded, gated and restamped', async () => {
+    const body = legacyV1Body('project-legacy-open');
+    const { useAppStore, slice } = await sliceWithBackend([body]);
+
+    const result = await slice.openProject(body.id);
+    expect(result.ok).toBe(true);
+
+    const s = useAppStore.getState();
+    expect(s.leadMelodySteps).toEqual(UPGRADED_MELODY);
+    expect(s.loops[0].leadMelodySteps).toEqual(UPGRADED_MELODY);
+    expect(s.leadGate).toBe(DEFAULT_LEAD_GATE);
+    expect(s.loops[0].leadGate).toBe(DEFAULT_LEAD_GATE);
+    expect(s.bpm).toBe(118);
+  });
+
+  test('exportStoredProject upgrades the content it stamps as current', async () => {
+    const body = legacyV1Body('project-legacy-export');
+    const { slice } = await sliceWithBackend([body]);
+
+    const result = await slice.exportStoredProject(body.id);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('exportStoredProject refused a stored body');
+    // A body re-stamped as current WITHOUT upgrading its content turns a
+    // recoverable old project into a permanently mislabelled one.
+    expect(result.value.formatVersion).toBe(PROJECT_FORMAT_VERSION);
+    expect(result.value.content.loops[0].leadMelodySteps).toEqual(UPGRADED_MELODY);
   });
 });

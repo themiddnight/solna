@@ -7,11 +7,13 @@ import {
   renameRegionKeysToLoop,
   backfillLeadWindow,
   migrateAddProjectIdentity,
+  migrateLeadNoteLength,
   LEGACY_TRACK_COLOR_MAP,
 } from './migrate';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import { LOOP_FLAT_KEYS } from './loop';
 import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
+import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
 
 describe('migrateProjectTitleToVibeId', () => {
   test('drops the legacy projectTitle and seeds a null selectedVibeId', () => {
@@ -313,5 +315,37 @@ describe('migrateAddProjectIdentity (v8 -> v9)', () => {
     const input = { bpm: 90 } as Record<string, unknown>;
     migrateAddProjectIdentity(input);
     expect('currentProjectId' in input).toBe(false);
+  });
+});
+
+describe('migrateLeadNoteLength (v9 -> v10)', () => {
+  test('upgrades every loop melody to len-1 notes and seeds leadGate', () => {
+    const migrated = migrateLeadNoteLength({
+      loops: [
+        { id: 'loop-1', leadMelodySteps: [['C4', 'E4'], [], ['G4']] },
+        { id: 'loop-2', leadMelodySteps: [[]] },
+      ],
+    } as never) as { loops: { id: string; leadMelodySteps: unknown; leadGate: number }[] };
+
+    expect(migrated.loops[0].leadMelodySteps).toEqual([
+      [{ note: 'C4', len: 1 }, { note: 'E4', len: 1 }],
+      [],
+      [{ note: 'G4', len: 1 }],
+    ]);
+    expect(migrated.loops[0].leadGate).toBe(DEFAULT_LEAD_GATE);
+    expect(migrated.loops[1].leadGate).toBe(DEFAULT_LEAD_GATE);
+  });
+
+  test('is a no-op on an already-upgraded payload and keeps a custom gate', () => {
+    const already = {
+      loops: [{ id: 'loop-1', leadMelodySteps: [[{ note: 'C4', len: 4 }]], leadGate: 0.4 }],
+    };
+    const migrated = migrateLeadNoteLength(already as never) as typeof already;
+    expect(migrated.loops[0].leadMelodySteps).toEqual([[{ note: 'C4', len: 4 }]]);
+    expect(migrated.loops[0].leadGate).toBe(0.4);
+  });
+
+  test('a payload with no loops array passes through untouched', () => {
+    expect(migrateLeadNoteLength({ bpm: 118 } as never)).toEqual({ bpm: 118 } as never);
   });
 });

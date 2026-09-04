@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { createMemoryBackend, createProjectStore, QUOTA_MESSAGE } from './projectStore';
-import { factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
+import { PROJECT_FORMAT_VERSION, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
+import { createDefaultLoop } from './loopSlice';
+import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
 
 const body = (name: string, now = 1000): ProjectBody => ({ ...makeEnvelope(name, now), content: factoryProjectContent() });
 
@@ -109,5 +111,43 @@ describe('createProjectStore against the in-memory backend', () => {
     expect(store.status()).toBe('ready');
     const list = await store.list();
     expect(list.ok && list.value.map((m) => m.name)).toEqual(['Survivor']);
+  });
+});
+
+/**
+ * The seam: `get` is where a stored body is READ, so it is where the format
+ * chain runs — open, export, rename and saveProject's existence check all go
+ * through it and none of them has to remember.
+ */
+describe('get normalises the body it hands out', () => {
+  const legacy = (): ProjectBody => {
+    const loop = { ...createDefaultLoop(), id: 'loop-legacy' } as unknown as Record<string, unknown>;
+    loop.leadMelodySteps = [['C4'], []];
+    delete loop.leadGate;
+    return {
+      ...makeEnvelope('Legacy', 1000),
+      formatVersion: 1,
+      content: { ...factoryProjectContent(), loops: [loop] },
+    } as unknown as ProjectBody;
+  };
+
+  test('a formatVersion-1 body comes back upgraded, gated and restamped', async () => {
+    const b = legacy();
+    const store = createProjectStore(async () => createMemoryBackend([b]));
+    const hit = await store.get(b.id);
+    expect(hit.ok).toBe(true);
+    if (!hit.ok) return;
+    expect(hit.value.formatVersion).toBe(PROJECT_FORMAT_VERSION);
+    expect(hit.value.content.loops[0].leadMelodySteps).toEqual([[{ note: 'C4', len: 1 }], []]);
+    expect(hit.value.content.loops[0].leadGate).toBe(DEFAULT_LEAD_GATE);
+  });
+
+  test('a body from a NEWER build is handed back verbatim, not downgrade-stamped', async () => {
+    // `get` cannot report "newer-version", and sanitising would strip the
+    // fields that build added and persist the loss on the next save.
+    const b = { ...body('Future'), formatVersion: PROJECT_FORMAT_VERSION + 1 };
+    const store = createProjectStore(async () => createMemoryBackend([b]));
+    const hit = await store.get(b.id);
+    expect(hit.ok && hit.value.formatVersion).toBe(PROJECT_FORMAT_VERSION + 1);
   });
 });

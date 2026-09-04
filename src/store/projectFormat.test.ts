@@ -1,12 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import {
   PROJECT_CONTENT_KEYS,
+  PROJECT_FORMAT_VERSION,
   PROJECT_LOOP_KEYS,
   applyProjectContent,
   buildProjectContent,
   factoryProjectContent,
   makeEnvelope,
 } from './projectFormat';
+import { migrateProjectBody } from './projectFormatMigrate';
+import { parseProjectFile } from './projectFile';
+import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
 import { LOOP_FLAT_KEYS } from './loop';
 import { createDefaultLoop } from './loopSlice';
 import { INITIAL_EFFECTS } from './initialState';
@@ -126,9 +130,86 @@ describe('factoryProjectContent / makeEnvelope', () => {
     const a = makeEnvelope('One', 1000);
     const b = makeEnvelope('One', 1000);
     expect(a.id).not.toBe(b.id);
-    expect(a.formatVersion).toBe(1);
+    expect(a.formatVersion).toBe(PROJECT_FORMAT_VERSION);
     expect(a.name).toBe('One');
     expect(a.createdAt).toBe(1000);
     expect(a.updatedAt).toBe(1000);
+  });
+});
+
+describe('migrateProjectBody — v1 -> v2 (lead note length + gate)', () => {
+  test('upgrades every loop melody and seeds leadGate', () => {
+    const migrated = migrateProjectBody(
+      {
+        content: {
+          bpm: 120,
+          loops: [{ id: 'loop-1', leadMelodySteps: [['C4'], [], ['E4', 'G4']] }],
+        },
+      },
+      1,
+    ) as { content: { bpm: number; loops: { leadMelodySteps: unknown; leadGate: number }[] } };
+
+    expect(migrated.content.loops[0].leadMelodySteps).toEqual([
+      [{ note: 'C4', len: 1 }],
+      [],
+      [{ note: 'E4', len: 1 }, { note: 'G4', len: 1 }],
+    ]);
+    expect(migrated.content.loops[0].leadGate).toBe(DEFAULT_LEAD_GATE);
+    expect(migrated.content.bpm).toBe(120);
+  });
+
+  test('is a no-op at the current version', () => {
+    const body = {
+      content: { loops: [{ id: 'loop-1', leadMelodySteps: [[{ note: 'C4', len: 3 }]], leadGate: 0.3 }] },
+    };
+    expect(migrateProjectBody(body, PROJECT_FORMAT_VERSION)).toEqual(body);
+  });
+
+  test('a body with no content or no loops passes through', () => {
+    expect(migrateProjectBody({ id: 'p' }, 1)).toEqual({ id: 'p' });
+    expect(migrateProjectBody({ content: { bpm: 90 } }, 1)).toEqual({ content: { bpm: 90 } });
+  });
+});
+
+/**
+ * A formatVersion-1 file exactly as an older build wrote it: string melody
+ * rows, no leadGate. Built from createDefaultLoop so every other field is
+ * valid and the only thing under test is the melody.
+ */
+function legacyV1ProjectFile(): string {
+  const loop = { ...createDefaultLoop(), id: 'loop-1', name: 'Loop 1' } as unknown as Record<string, unknown>;
+  loop.leadMelodySteps = [['C4', 'E4'], [], ['G4']];
+  delete loop.leadGate;
+  return JSON.stringify({
+    formatVersion: 1,
+    id: 'project-legacy',
+    name: 'Legacy',
+    createdAt: 1,
+    updatedAt: 2,
+    content: {
+      bpm: 118,
+      meterId: '4/4',
+      masterVolume: 0.85,
+      effects: INITIAL_EFFECTS,
+      loops: [loop],
+    },
+  });
+}
+
+describe('a formatVersion-1 .solna file keeps its melody through the real import path', () => {
+  test('parseProjectFile upgrades before sanitize, so nothing is blanked', () => {
+    const result = parseProjectFile(legacyV1ProjectFile());
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('parseProjectFile refused a valid v1 file');
+
+    const loop: Loop = result.body.content.loops[0];
+    expect(result.body.formatVersion).toBe(PROJECT_FORMAT_VERSION);
+    expect(loop.leadMelodySteps).toEqual([
+      [{ note: 'C4', len: 1 }, { note: 'E4', len: 1 }],
+      [],
+      [{ note: 'G4', len: 1 }],
+    ]);
+    expect(loop.leadGate).toBe(DEFAULT_LEAD_GATE);
+    expect(result.body.content.bpm).toBe(118);
   });
 });

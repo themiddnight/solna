@@ -13,6 +13,7 @@ import { createEffectsSlice } from './effectsSlice';
 import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
 import { createLoopSlice } from './loopSlice';
+import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
 import {
   migrateLegacyPresets,
   migrateProjectTitleToVibeId,
@@ -22,6 +23,7 @@ import {
   renameRegionKeysToLoop,
   backfillLeadWindow,
   migrateAddProjectIdentity,
+  migrateLeadNoteLength,
   removeLegacyKeys,
   LEGACY_PERSIST_KEY,
 } from './migrate';
@@ -45,7 +47,7 @@ import {
   isPatternMode,
   asFilterType,
   isPositiveInteger,
-  isStringMatrix,
+  asLeadNoteMatrix,
 } from './sanitize';
 
 export const PERSIST_KEY = 'musibox_project_state_v1';
@@ -181,6 +183,7 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   sanitized.masterSequencerVolume = clampFinite(sanitized.masterSequencerVolume, 0, 1, 0.8);
   sanitized.drumFilterCutoff = clampFinite(sanitized.drumFilterCutoff, 50, 12000, 12000);
   sanitized.drumFilterResonance = clampFinite(sanitized.drumFilterResonance, 0.1, 20, 0.7);
+  sanitized.leadGate = clampFinite(sanitized.leadGate, 0.05, 1, DEFAULT_LEAD_GATE);
   sanitized.drumFilterType = asFilterType(sanitized.drumFilterType, 'lowpass');
   sanitized.metronomeActive = asBoolean(sanitized.metronomeActive);
   sanitized.synthMuted = asBoolean(sanitized.synthMuted);
@@ -201,9 +204,11 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   for (const key of ['chordRhythmMode', 'bassPatternMode']) {
     if (!isPatternMode(sanitized[key])) delete sanitized[key];
   }
-  if (!isStringMatrix(sanitized.leadMelodySteps)) {
-    delete sanitized.leadMelodySteps;
-  }
+  // Coerced, not merely checked: one fractional `len` must not cost the
+  // session its whole melody (see asLeadNoteMatrix).
+  const melody = asLeadNoteMatrix(sanitized.leadMelodySteps);
+  if (melody) sanitized.leadMelodySteps = melody;
+  else delete sanitized.leadMelodySteps;
   if (!isPositiveInteger(sanitized.leadLoopLength)) {
     delete sanitized.leadLoopLength;
   }
@@ -267,7 +272,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: PERSIST_KEY,
-      version: 9,
+      version: 10,
       storage: createJSONStorage<PersistedState>(() => persistStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
@@ -300,7 +305,13 @@ export const useAppStore = create<AppStore>()(
         // v8 → v9 (project identity). Runs LAST; a no-op on a v9 payload.
         const identified = (payload: PersistedState): PersistedState =>
           version >= 9 ? payload : (migrateAddProjectIdentity(windowed(payload)) as PersistedState);
-        if (version >= 2) return identified(wrapped(metered(recoloured)));
+        // v9 -> v10 (lead note length + per-loop gate). Runs LAST, outside
+        // `identified`, so every older payload is already in loop shape.
+        const lengthened = (payload: PersistedState): PersistedState => {
+          const base = identified(payload);
+          return version >= 10 ? base : (migrateLeadNoteLength(base) as PersistedState);
+        };
+        if (version >= 2) return lengthened(wrapped(metered(recoloured)));
         // v1 arp fix (unchanged) …
         const next = { ...recoloured } as Record<string, unknown>;
         for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams']) {
@@ -309,7 +320,7 @@ export const useAppStore = create<AppStore>()(
             next[key] = { ...(params as object), arpActive: false };
           }
         }
-        return identified(wrapped(metered(next as unknown as PersistedState)));
+        return lengthened(wrapped(metered(next as unknown as PersistedState)));
       },
       // Runs on every hydration (also when nothing was stored): sanitize the
       // parsed payload (wrong-typed persisted values must never reach the

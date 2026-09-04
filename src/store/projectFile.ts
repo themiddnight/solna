@@ -40,7 +40,7 @@ const malformed = (): ProjectParseResult => ({ ok: false, error: 'malformed', me
  * a wrong-typed field falls back, an empty or invalid loops array becomes one
  * default loop, and unknown library ids are kept verbatim.
  */
-function sanitizeContent(raw: unknown): ProjectContent {
+export function sanitizeContent(raw: unknown): ProjectContent {
   const c = isPlainObject(raw) ? raw : {};
   return {
     bpm: clampFinite(c.bpm, 20, 300, 120),
@@ -109,5 +109,37 @@ export function parseProjectFile(text: string): ProjectParseResult {
       content,
     },
     warnings: unknownLibraryReferences(content),
+  };
+}
+
+/**
+ * The OTHER reader of a stored project body: one read back out of the
+ * IndexedDB library (projectStore.ts). CLAUDE.md calls IndexedDB the saved
+ * project library and `.solna` the secondary path, so this is the reader that
+ * sees an old body FIRST — every project saved before a format bump sits in
+ * there at its original version.
+ *
+ * Same two steps as parseProjectFile, in the same order and for the same
+ * reason: migrate, THEN sanitize. Reversing them hands a v1 melody to the
+ * isLeadNoteMatrix guard as a matrix of strings, which blanks it with no
+ * error and no exception (projectFormatMigrate.ts). The envelope is NOT
+ * re-validated — a body that got into the library came through parse or
+ * through this build's own writer — and the version is restamped only after
+ * the content it labels has actually been upgraded.
+ *
+ * A body from a NEWER build is returned verbatim: `get` has no way to report
+ * "newer-version", and sanitising it would strip the fields that build added
+ * and then persist the loss on the next save. Leaving it alone keeps it
+ * readable by the build that wrote it.
+ */
+export function normalizeStoredBody(body: ProjectBody): ProjectBody {
+  const raw = body as unknown as Record<string, unknown>;
+  const version = isFiniteNumber(raw.formatVersion) ? raw.formatVersion : 1;
+  if (version > PROJECT_FORMAT_VERSION) return body;
+  const migrated = version < PROJECT_FORMAT_VERSION ? migrateProjectBody(raw, version) : raw;
+  return {
+    ...(migrated as unknown as ProjectBody),
+    formatVersion: PROJECT_FORMAT_VERSION,
+    content: sanitizeContent(migrated.content),
   };
 }

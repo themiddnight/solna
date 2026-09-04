@@ -5,6 +5,7 @@ import type { BassStepChoice } from '../audio/bassPatterns';
 import { createDefaultLoop } from './loopSlice';
 import { LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
 import type { Loop } from './types';
+import type { LeadNote } from '../audio/leadMelody';
 
 // Type-guards for a parsed persisted payload AND for a parsed `.solna` file.
 // Wrong-typed values survive JSON.parse and would flow straight into engine
@@ -120,11 +121,66 @@ export function asPositiveInteger(value: unknown, fallback: number): number {
   return isPositiveInteger(value) ? value : fallback;
 }
 
-export function isStringMatrix(value: unknown): boolean {
+/**
+ * The TYPE GUARD: is this already a valid lead melody — rows of
+ * { note: string; len: integer >= 1 }? It answers yes or no about the whole
+ * matrix and repairs nothing; asLeadNoteMatrix below is what readers use.
+ */
+export function isLeadNoteMatrix(value: unknown): value is LeadNote[][] {
   return (
     Array.isArray(value) &&
-    value.every((row) => Array.isArray(row) && row.every((n) => typeof n === 'string'))
+    value.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.every(
+          (n) =>
+            typeof n === 'object' &&
+            n !== null &&
+            typeof (n as LeadNote).note === 'string' &&
+            Number.isInteger((n as LeadNote).len) &&
+            (n as LeadNote).len >= 1,
+        ),
+    )
   );
+}
+
+/**
+ * The COERCION readers use: the most of a stored melody that can honestly be
+ * kept. A note whose `len` is missing, fractional or below 1 has that one
+ * field repaired (rounded, floored at one step) instead of costing the user
+ * every other note in the melody — the spec's rule, and the same choice
+ * `leadGate` makes through clampFinite one line below in sanitizeLoops. An
+ * object entry with no usable `note` is dropped: there is no pitch to invent.
+ *
+ * The SHAPE, unlike `len`, stays all-or-nothing: `undefined` means "not a
+ * melody at all" and the caller falls back to its default. That is what keeps
+ * the v1 `string[][]` matrix refused whole — coercing it would hand back rows
+ * of empty arrays wearing a valid face, i.e. exactly the silently blanked
+ * melody the upgrade-before-sanitize ordering exists to prevent (both chains
+ * upgrade first; see projectFormatMigrate.ts and the persist migrate/merge
+ * order in store.ts).
+ */
+export function asLeadNoteMatrix(value: unknown): LeadNote[][] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: LeadNote[][] = [];
+  for (const row of value) {
+    if (!Array.isArray(row)) return undefined;
+    const notes: LeadNote[] = [];
+    for (const entry of row) {
+      // A non-object entry is not a broken note, it is a different shape
+      // entirely (a v1 string, a number): the whole value is refused rather
+      // than quietly coerced into rows of empty arrays.
+      if (typeof entry !== 'object' || entry === null) return undefined;
+      const { note, len } = entry as LeadNote;
+      if (typeof note !== 'string') continue;
+      notes.push({
+        note,
+        len: typeof len === 'number' && Number.isFinite(len) ? Math.max(1, Math.round(len)) : 1,
+      });
+    }
+    out.push(notes);
+  }
+  return out;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -223,12 +279,13 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
       customBassPattern: asCheckedArray<BassStepChoice>(r.customBassPattern, isBassStepChoice, fallback.customBassPattern),
       bassFeel: clampFinite(r.bassFeel, 0, 1, fallback.bassFeel),
       bassOctave: clampFinite(r.bassOctave, 0, 8, fallback.bassOctave),
-      leadMelodySteps: isStringMatrix(r.leadMelodySteps) ? (r.leadMelodySteps as string[][]) : fallback.leadMelodySteps,
+      leadMelodySteps: asLeadNoteMatrix(r.leadMelodySteps) ?? fallback.leadMelodySteps,
       leadLoopLength: asPositiveInteger(r.leadLoopLength, fallback.leadLoopLength),
       leadMelodyView: r.leadMelodyView === 'chromatic' ? 'chromatic' : 'scale-locked',
       leadMelodyOctave: clampFinite(
         r.leadMelodyOctave, LEAD_OCTAVE_MIN, LEAD_OCTAVE_MAX, fallback.leadMelodyOctave,
       ),
+      leadGate: clampFinite(r.leadGate, 0.05, 1, fallback.leadGate),
       sequencerTracks: asCheckedArray<SequencerTrack>(r.sequencerTracks, isSequencerTrack, fallback.sequencerTracks),
       soundKit: asString(r.soundKit, fallback.soundKit),
       drumFilterCutoff: clampFinite(r.drumFilterCutoff, 50, 12000, fallback.drumFilterCutoff),

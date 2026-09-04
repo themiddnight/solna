@@ -12,6 +12,7 @@ import {
 } from './loop';
 import { createDefaultLoop } from './loopSlice';
 import type { Loop } from './types';
+import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
 
 function makeLoop(overrides: Partial<Loop> = {}): Loop {
   return {
@@ -37,6 +38,7 @@ function makeLoop(overrides: Partial<Loop> = {}): Loop {
     leadLoopLength: 1,
     leadMelodyView: 'scale-locked',
     leadMelodyOctave: 3,
+    leadGate: DEFAULT_LEAD_GATE,
     sequencerTracks: INITIAL_SEQUENCER_TRACKS.map((t) => ({ ...t, steps: [...t.steps] })),
     soundKit: 'Retro Drive',
     drumFilterCutoff: 12000,

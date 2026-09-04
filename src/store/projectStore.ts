@@ -1,3 +1,4 @@
+import { normalizeStoredBody } from './projectFile';
 import type { ProjectBody, ProjectMeta } from './projectFormat';
 
 export interface ProjectStoreBackend {
@@ -99,11 +100,17 @@ export function createProjectStore(openBackend: () => Promise<ProjectStoreBacken
         metas.sort((x, y) => y.updatedAt - x.updatedAt);
         return { ok: true, value: metas };
       }),
+    // Every body LEAVES the library through here — open, export, rename and
+    // saveProject's existence check all read through get — so the upgrade
+    // runs where the body is READ, not at one caller. A body stored before a
+    // format bump is otherwise spread straight into the store by
+    // openProject/install, or re-stamped as current by a writer that never
+    // upgraded its content; both fail silently, by blanking data.
     get: (id) =>
       run(async (b) => {
         const body = await b.getBody(id);
         return body
-          ? { ok: true, value: body }
+          ? { ok: true, value: normalizeStoredBody(body) }
           : { ok: false, error: 'not-found', message: NOT_FOUND_MESSAGE };
       }),
     put: (body) =>
