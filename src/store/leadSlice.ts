@@ -29,6 +29,46 @@ export const LEAD_OCTAVE_MAX = 6;
  * helper, so a meter switch never drops steps.
  */
 export function createLeadSlice(set: Set): LeadSlice {
+  // Every note add/remove funnels through here, whatever started it: a click,
+  // a keyboard activation, or one cell of a drag-to-paint stroke. `mode` is
+  // what separates them — 'draw' never removes and 'erase' never adds, so a
+  // stroke that crosses a filled cell cannot start eating what it just drew,
+  // which a per-cell toggle would do.
+  //
+  // Once notes have length, melody[stepIndex] is NOT "is this cell filled": a
+  // len-4 note at step 0 fills steps 0-3 while slots 1-3 stay empty, so an
+  // unguarded append would put a second C4 inside the first one. A covered
+  // cell renders filled and carries aria-pressed="true", so what the user
+  // sees and what `covered` says are the same thing.
+  const paintLeadNote: LeadSlice['paintLeadNote'] = (stepIndex, note, mode) =>
+    set((state) => {
+      const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+      const stepInLoop = leadActivePosAt(stepIndex, stepsPerBar);
+      // A DORMANT slot has no active position, so "what covers it" has no
+      // answer: the slot's own contents are the only honest test, and that
+      // beats searching from a fictitious position in another bar — which
+      // never matched, so a second click used to ADD a duplicate note.
+      const coveringIdx =
+        stepInLoop < 0
+          ? (state.leadMelodySteps[stepIndex]?.some((n) => n.note === note) ? stepIndex : -1)
+          : leadCoveringNoteIndex(state.leadMelodySteps, stepInLoop, stepsPerBar, note);
+      const covered = coveringIdx >= 0;
+      if (mode === 'draw' && covered) return {};
+      if (mode === 'erase' && !covered) return {};
+
+      // A covered cell is deleted from the index where the note STARTS, not
+      // where it was clicked. (Rejected: truncating the covering note and
+      // creating a new one at the click point. More DAW-like, but one click
+      // producing two notes is harder to explain, and nothing asks for it.)
+      const target = covered ? coveringIdx : stepIndex;
+      return {
+        leadMelodySteps: state.leadMelodySteps.map((r, i) => {
+          if (i !== target) return r;
+          return covered ? r.filter((n) => n.note !== note) : [...r, { note, len: 1 }];
+        }),
+      };
+    });
+
   return {
     leadMelodySteps: Array.from({ length: MAX_STEPS_PER_BAR }, () => [] as LeadNote[]),
     leadLoopLength: 1,
@@ -67,35 +107,9 @@ export function createLeadSlice(set: Set): LeadSlice {
           ? Math.min(1, Math.max(0.05, gate))
           : DEFAULT_LEAD_GATE,
       }),
-    // Invariant 1 again, from the other direction. Once notes have length,
-    // melody[stepIndex] is NOT "is this cell filled": a len-4 note at step 0
-    // fills steps 0-3 while rows 1-3 are empty, so an unguarded append would
-    // put a second C4 inside the first one. A covered cell renders filled and
-    // carries aria-pressed="true", so a click must switch it off — and the
-    // note is deleted from the index where it STARTS, not where it was
-    // clicked. (Rejected: truncating the covering note and creating a new one
-    // at the click point. More DAW-like, but one click producing two notes is
-    // harder to explain, and nothing in DEV-369 asks for it.)
-    toggleLeadNote: (stepIndex, note) =>
-      set((state) => {
-        const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-        const stepInLoop = leadActivePosAt(stepIndex, stepsPerBar);
-        // A DORMANT slot has no active position, so "what covers it" has no
-        // answer: the slot's own contents are the only honest test, and that
-        // beats searching from a fictitious position in another bar — which
-        // never matched, so a second click used to ADD a duplicate note.
-        const coveringIdx =
-          stepInLoop < 0
-            ? (state.leadMelodySteps[stepIndex]?.some((n) => n.note === note) ? stepIndex : -1)
-            : leadCoveringNoteIndex(state.leadMelodySteps, stepInLoop, stepsPerBar, note);
-        const target = coveringIdx >= 0 ? coveringIdx : stepIndex;
-        return {
-          leadMelodySteps: state.leadMelodySteps.map((r, i) => {
-            if (i !== target) return r;
-            return coveringIdx >= 0 ? r.filter((n) => n.note !== note) : [...r, { note, len: 1 }];
-          }),
-        };
-      }),
+    toggleLeadNote: (stepIndex, note) => paintLeadNote(stepIndex, note, 'toggle'),
+
+    paintLeadNote,
 
     // All three invariants live here, never at a call site — a call site that
     // can violate an invariant is a call site that eventually will.

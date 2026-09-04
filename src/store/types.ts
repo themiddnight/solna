@@ -126,6 +126,14 @@ export interface BassSlice {
 
 export type LeadMelodyView = 'scale-locked' | 'chromatic';
 
+/**
+ * How one note write should behave. A click toggles; a drag-to-paint stroke
+ * commits to one direction at pointer-down and keeps it for every cell it
+ * crosses. Declared in the store because the store owns the write — the grid
+ * narrows it to the two directions a stroke can take.
+ */
+export type LeadNotePaintMode = 'draw' | 'erase' | 'toggle';
+
 export interface LeadSlice {
   /** Notes per step, stored at a fixed MAX_STEPS_PER_BAR per bar. The index is the step a note STARTS on. */
   leadMelodySteps: LeadNote[][];
@@ -145,6 +153,12 @@ export interface LeadSlice {
   setLeadMelodyOctave: (octave: number) => void;
   setLeadGate: (gate: number) => void;
   toggleLeadNote: (stepIndex: number, note: string) => void;
+  /**
+   * Add or remove one drawn note. `'toggle'` is the click; `'draw'`/`'erase'`
+   * are the two directions a drag-to-paint stroke can take, and are no-ops
+   * when the cell is already in the state the stroke wants.
+   */
+  paintLeadNote: (stepIndex: number, note: string, mode: LeadNotePaintMode) => void;
   /**
    * Set a drawn note's length. `stepIndex` is the STORED index; `len` counts
    * ACTIVE steps. The one place the three length invariants are enforced.

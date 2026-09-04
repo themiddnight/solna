@@ -360,3 +360,61 @@ describe('toggleLeadNote — a click on a covered cell removes the covering note
     expect(useAppStore.getState().leadMelodySteps[15]).toEqual([]);
   });
 });
+
+describe('lead slice — paintLeadNote', () => {
+  beforeEach(resetLead);
+
+  test("draw adds a note; erase on the same cell takes it away", () => {
+    const s = useAppStore.getState();
+    s.paintLeadNote(0, 'C4', 'draw');
+    expect(useAppStore.getState().leadMelodySteps[0]).toEqual([{ note: 'C4', len: 1 }]);
+    useAppStore.getState().paintLeadNote(0, 'C4', 'erase');
+    expect(useAppStore.getState().leadMelodySteps[0]).toEqual([]);
+  });
+
+  test('draw is IDEMPOTENT — a stroke that crosses its own note leaves one note, not two', () => {
+    const s = useAppStore.getState();
+    s.paintLeadNote(0, 'C4', 'draw');
+    useAppStore.getState().paintLeadNote(0, 'C4', 'draw');
+    expect(useAppStore.getState().leadMelodySteps[0]).toEqual([{ note: 'C4', len: 1 }]);
+  });
+
+  test('erase on an empty cell is a no-op, so a stroke over a gap does not toggle notes on', () => {
+    useAppStore.getState().paintLeadNote(5, 'C4', 'erase');
+    expect(useAppStore.getState().leadMelodySteps[5]).toEqual([]);
+  });
+
+  test('draw over the BODY of a long note adds nothing — that step already sounds it', () => {
+    const s = useAppStore.getState();
+    s.paintLeadNote(0, 'C4', 'draw');
+    useAppStore.getState().setLeadNoteLength(0, 'C4', 4);
+    useAppStore.getState().paintLeadNote(2, 'C4', 'draw');
+    expect(useAppStore.getState().leadMelodySteps[0]).toEqual([{ note: 'C4', len: 4 }]);
+    expect(useAppStore.getState().leadMelodySteps[2]).toEqual([]);
+  });
+
+  test('erase over the body of a long note removes the WHOLE note, from where it starts', () => {
+    const s = useAppStore.getState();
+    s.paintLeadNote(0, 'C4', 'draw');
+    useAppStore.getState().setLeadNoteLength(0, 'C4', 4);
+    useAppStore.getState().paintLeadNote(2, 'C4', 'erase');
+    expect(useAppStore.getState().leadMelodySteps[0]).toEqual([]);
+  });
+
+  test('a long note in another row is untouched by a stroke through its steps', () => {
+    const s = useAppStore.getState();
+    s.paintLeadNote(0, 'C4', 'draw');
+    useAppStore.getState().setLeadNoteLength(0, 'C4', 4);
+    useAppStore.getState().paintLeadNote(2, 'E4', 'draw');
+    expect(useAppStore.getState().leadMelodySteps[0]).toEqual([{ note: 'C4', len: 4 }]);
+    expect(useAppStore.getState().leadMelodySteps[2]).toEqual([{ note: 'E4', len: 1 }]);
+  });
+
+  test('toggleLeadNote still flips, and is the same code path as paint', () => {
+    const s = useAppStore.getState();
+    s.paintLeadNote(0, 'C4', 'toggle');
+    expect(useAppStore.getState().leadMelodySteps[0]).toEqual([{ note: 'C4', len: 1 }]);
+    useAppStore.getState().paintLeadNote(0, 'C4', 'toggle');
+    expect(useAppStore.getState().leadMelodySteps[0]).toEqual([]);
+  });
+});
