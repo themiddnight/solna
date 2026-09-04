@@ -157,8 +157,25 @@ export interface LeadSlice {
   /** One copied bar at its full stored width, or null before the first copy. */
   leadBarClipboard: LeadNote[][] | null;
   setLeadCursor: (cursor: number) => void;
+  /** Move the cursor one column on, wrapping at the loop end. */
+  advanceLeadCursor: () => void;
   copySelectedLeadBar: () => void;
   pasteIntoSelectedLeadBar: () => void;
+  /**
+   * Rec arming. NOT persisted: an armed recorder surviving a reload would
+   * capture the first note of the next session into a project the user
+   * thought they had only opened.
+   */
+  leadRecording: boolean;
+  setLeadRecording: (recording: boolean) => void;
+  /**
+   * Write a PERFORMED note at the cursor. Declines anything the grid cannot
+   * show — out-of-scale in scale-locked view, or an octave no legal window
+   * reaches — and follows the octave window when it can, so a recorded note
+   * is never invisible. Does nothing unless armed and the transport is
+   * stopped; capture against a running clock is DEV-374.
+   */
+  recordLeadNote: (note: string) => boolean;
   toggleLeadNote: (stepIndex: number, note: string) => void;
   /**
    * Add or remove one drawn note. `'toggle'` is the click; `'draw'`/`'erase'`

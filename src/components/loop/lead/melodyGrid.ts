@@ -3,8 +3,10 @@ import { MAX_STEPS_PER_BAR } from '../../../utils/meter';
 import type { LeadMelodyView } from '../../../store/types';
 import type { LeadNote } from '../../../audio/leadMelody';
 
-/** Number of octaves the melody grid's window shows. Fixed at 2 (spec default). */
-export const LEAD_WINDOW_OCTAVES = 2;
+// Declared in audio/leadStepRecord so the store can read it as well: step
+// entry follows the window when a recorded note falls outside it, and
+// store/ may not import components/.
+export { LEAD_WINDOW_OCTAVES } from '@/audio/leadStepRecord';
 
 /** Fixed cell width in px — the playhead's translateX stride. */
 export const LEAD_CELL_WIDTH = 20;

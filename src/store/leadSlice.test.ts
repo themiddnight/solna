@@ -13,6 +13,10 @@ function resetLead(): void {
     leadMelodyOctave: 3,
     leadCursor: 0,
     leadBarClipboard: null,
+    leadRecording: false,
+    leadPlayer: 'stopped',
+    scaleRoot: 'C',
+    scaleType: 'Major',
   });
 }
 
@@ -492,5 +496,119 @@ describe('lead slice — selection cursor and bar clipboard', () => {
     >;
     expect('leadCursor' in persisted).toBe(false);
     expect('leadBarClipboard' in persisted).toBe(false);
+  });
+});
+
+describe('lead slice — step entry', () => {
+  beforeEach(resetLead);
+
+  const at = (col: number): LeadNote[] => useAppStore.getState().leadMelodySteps[col];
+  const arm = (): void => useAppStore.getState().setLeadRecording(true);
+
+  test('arming is off by default and toggles', () => {
+    expect(useAppStore.getState().leadRecording).toBe(false);
+    arm();
+    expect(useAppStore.getState().leadRecording).toBe(true);
+  });
+
+  test('arming is NOT persisted — a reload must never come back recording', () => {
+    arm();
+    const persisted = partializeAppState(useAppStore.getState()) as unknown as Record<string, unknown>;
+    expect('leadRecording' in persisted).toBe(false);
+  });
+
+  test('a recorded note lands at the cursor and reports that it wrote', () => {
+    arm();
+    useAppStore.getState().setLeadCursor(5);
+
+    expect(useAppStore.getState().recordLeadNote('C4')).toBe(true);
+    expect(at(5)).toEqual([{ note: 'C4', len: 1 }]);
+  });
+
+  test('recording declines while disarmed', () => {
+    expect(useAppStore.getState().recordLeadNote('C4')).toBe(false);
+    expect(at(0)).toEqual([]);
+  });
+
+  test('recording declines while the transport plays — that is DEV-374', () => {
+    arm();
+    useAppStore.setState({ leadPlayer: 'playing' });
+
+    expect(useAppStore.getState().recordLeadNote('C4')).toBe(false);
+    expect(at(0)).toEqual([]);
+  });
+
+  test('a note already at the cursor is a no-op, never a delete', () => {
+    // 'draw', not 'toggle'. A performer repeating a note expects nothing to
+    // happen, not the note they just played to disappear.
+    arm();
+    useAppStore.getState().recordLeadNote('C4');
+    useAppStore.getState().recordLeadNote('C4');
+
+    expect(at(0)).toEqual([{ note: 'C4', len: 1 }]);
+  });
+
+  test('several notes at one cursor build a chord', () => {
+    arm();
+    for (const note of ['C4', 'E4', 'G4']) useAppStore.getState().recordLeadNote(note);
+
+    expect(at(0).map((n) => n.note).sort()).toEqual(['C4', 'E4', 'G4']);
+  });
+
+  test('scale-locked view refuses a note the grid has no row for', () => {
+    // C# is not in C major, so there is no row to draw it on. Storing it
+    // would leave a note that plays but cannot be seen or erased.
+    arm();
+    expect(useAppStore.getState().recordLeadNote('C#4')).toBe(false);
+    expect(at(0)).toEqual([]);
+  });
+
+  test('chromatic view accepts that same note', () => {
+    arm();
+    useAppStore.setState({ leadMelodyView: 'chromatic' });
+
+    expect(useAppStore.getState().recordLeadNote('C#4')).toBe(true);
+    expect(at(0)).toEqual([{ note: 'C#4', len: 1 }]);
+  });
+
+  test('a note above the window drags the window up rather than vanishing', () => {
+    arm();
+    // Window at 3 shows octaves 3-4; C6 needs the lowest octave at 5.
+    expect(useAppStore.getState().recordLeadNote('C6')).toBe(true);
+    expect(useAppStore.getState().leadMelodyOctave).toBe(5);
+    expect(at(0)).toEqual([{ note: 'C6', len: 1 }]);
+  });
+
+  test('a note no legal window can show is refused, and moves nothing', () => {
+    arm();
+    expect(useAppStore.getState().recordLeadNote('C9')).toBe(false);
+    expect(useAppStore.getState().leadMelodyOctave).toBe(3);
+    expect(at(0)).toEqual([]);
+  });
+});
+
+describe('lead slice — advanceLeadCursor', () => {
+  beforeEach(resetLead);
+
+  test('moves one column on', () => {
+    useAppStore.getState().setLeadCursor(3);
+    useAppStore.getState().advanceLeadCursor();
+    expect(useAppStore.getState().leadCursor).toBe(4);
+  });
+
+  test('wraps at the loop end instead of dead-ending on the last column', () => {
+    useAppStore.getState().setLeadCursor(15);
+    useAppStore.getState().advanceLeadCursor();
+    expect(useAppStore.getState().leadCursor).toBe(0);
+  });
+
+  test('re-clamps a cursor a shrunken loop left out of range', () => {
+    useAppStore.setState({ leadLoopLength: 2 });
+    useAppStore.getState().setLeadCursor(31);
+    useAppStore.setState({ leadLoopLength: 1 });
+
+    useAppStore.getState().advanceLeadCursor();
+
+    expect(useAppStore.getState().leadCursor).toBe(0);
   });
 });

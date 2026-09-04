@@ -261,7 +261,7 @@ export const useAppStore = create<AppStore>()(
         ...createSynthSlice(setWithLoopMirror),
         ...createChordsSlice(setWithLoopMirror),
         ...createBassSlice(setWithLoopMirror),
-        ...createLeadSlice(setWithLoopMirror),
+        ...createLeadSlice(setWithLoopMirror, get),
         ...createSequencerSlice(setWithLoopMirror),
         ...createEffectsSlice(setWithLoopMirror),
         ...createUiSlice(setWithLoopMirror),

@@ -336,6 +336,8 @@ export const LeadMelodyGrid: React.FC = () => {
   const copySelectedLeadBar = useAppStore((s) => s.copySelectedLeadBar);
   const pasteIntoSelectedLeadBar = useAppStore((s) => s.pasteIntoSelectedLeadBar);
   const hasClipboard = useAppStore((s) => s.leadBarClipboard !== null);
+  const leadRecording = useAppStore((s) => s.leadRecording);
+  const setLeadRecording = useAppStore((s) => s.setLeadRecording);
 
   const setLeadNoteLength = useAppStore((s) => s.setLeadNoteLength);
   const onResize = useCallback(
@@ -437,6 +439,24 @@ export const LeadMelodyGrid: React.FC = () => {
               title="How much of each note's final step sounds. Applies when the arp is off."
             />
 
+            <button
+              id="btn-lead-record"
+              type="button"
+              onClick={() => setLeadRecording(!leadRecording)}
+              aria-pressed={leadRecording}
+              className={
+                leadRecording
+                  ? 'btn btn-xs btn-error'
+                  : 'btn btn-xs btn-ghost border border-base-300 text-base-content/70'
+              }
+              title={
+                leadRecording
+                  ? 'Stop recording played notes into the grid'
+                  : `Record played notes into bar ${selectedBar + 1}, from the selected step`
+              }
+            >
+              Rec
+            </button>
             <button
               id="btn-lead-copy-bar"
               type="button"

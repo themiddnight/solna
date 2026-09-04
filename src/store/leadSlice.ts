@@ -12,9 +12,12 @@ import {
   resizeLeadMelody,
   type LeadNote,
 } from '../audio/leadMelody';
+import { LEAD_WINDOW_OCTAVES, leadRecordOctave } from '../audio/leadStepRecord';
+import { isNoteInScale } from '../utils/musicTheory';
 import type { AppStore, LeadSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
+type Get = StoreApi<AppStore>['getState'];
 
 /**
  * Bounds of the lead melody's octave window (its LOWEST octave). The window
@@ -45,7 +48,7 @@ function selectedBar(state: {
   );
 }
 
-export function createLeadSlice(set: Set): LeadSlice {
+export function createLeadSlice(set: Set, get: Get): LeadSlice {
   // Every note add/remove funnels through here, whatever started it: a click,
   // a keyboard activation, or one cell of a drag-to-paint stroke. `mode` is
   // what separates them — 'draw' never removes and 'erase' never adds, so a
@@ -94,6 +97,9 @@ export function createLeadSlice(set: Set): LeadSlice {
     leadGate: DEFAULT_LEAD_GATE,
     leadCursor: 0,
     leadBarClipboard: null,
+    leadRecording: false,
+
+    setLeadRecording: (leadRecording) => set({ leadRecording }),
 
     // Clamped against the CURRENT window on write. It is clamped again on
     // read, because a later meter or loop-length change can narrow the window
@@ -106,6 +112,56 @@ export function createLeadSlice(set: Set): LeadSlice {
           getMeter(state.meterId).stepsPerBar,
         ),
       })),
+
+    // Wraps rather than stopping at the last column: step entry that dead-ends
+    // at the loop end would make the last note of a loop the one you cannot
+    // follow, and there is nowhere else for the cursor to go.
+    advanceLeadCursor: () =>
+      set((state) => {
+        const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+        const columns = state.leadLoopLength * stepsPerBar;
+        if (columns <= 0) return { leadCursor: 0 };
+        const cursor = clampLeadCursor(state.leadCursor, state.leadLoopLength, stepsPerBar);
+        return { leadCursor: (cursor + 1) % columns };
+      }),
+
+    // Returns whether it actually wrote, so the caller can tell a captured
+    // note from a declined one and not burn a column on a press that left
+    // nothing behind.
+    recordLeadNote: (note) => {
+      const state = get();
+      if (!state.leadRecording) return false;
+      // Capture against a running clock is DEV-374. Until then a note played
+      // during playback auditions and nothing more.
+      if (state.leadPlayer !== 'stopped') return false;
+
+      // Both guards exist to keep one promise: a recorded note is visible on
+      // the grid the moment it is recorded. Storing what the grid cannot draw
+      // would leave notes that play back but cannot be seen or erased.
+      if (
+        state.leadMelodyView === 'scale-locked' &&
+        !isNoteInScale(note, state.scaleRoot, state.scaleType)
+      ) {
+        return false;
+      }
+      const octave = leadRecordOctave(
+        note,
+        state.leadMelodyOctave,
+        LEAD_WINDOW_OCTAVES,
+        LEAD_OCTAVE_MIN,
+        LEAD_OCTAVE_MAX,
+      );
+      if (octave === null) return false;
+
+      const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+      const cursor = clampLeadCursor(state.leadCursor, state.leadLoopLength, stepsPerBar);
+      if (octave !== state.leadMelodyOctave) set({ leadMelodyOctave: octave });
+      // 'draw', never 'toggle': playing a note that is already at this column
+      // must be a no-op, not a delete. A performer repeating a note expects
+      // nothing to happen, not the note to vanish.
+      paintLeadNote(leadStoredIndexAt(cursor, stepsPerBar), note, 'draw');
+      return true;
+    },
 
     copySelectedLeadBar: () =>
       set((state) => ({ leadBarClipboard: copyLeadBar(state.leadMelodySteps, selectedBar(state)) })),
