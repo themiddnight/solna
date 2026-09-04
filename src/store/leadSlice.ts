@@ -2,7 +2,11 @@ import type { StoreApi } from 'zustand';
 import { MAX_STEPS_PER_BAR, getMeter } from '../utils/meter';
 import {
   DEFAULT_LEAD_GATE,
+  clampLeadCursor,
+  copyLeadBar,
   leadActivePosAt,
+  leadCursorBar,
+  pasteLeadBar,
   leadCoveringNoteIndex,
   leadStoredIndexAt,
   resizeLeadMelody,
@@ -28,6 +32,19 @@ export const LEAD_OCTAVE_MAX = 6;
  * time. A loopLength change resizes by whole bars (trim/pad) via the pure
  * helper, so a meter switch never drops steps.
  */
+/** The bar the cursor sits in, with the cursor re-clamped to the live window. */
+function selectedBar(state: {
+  leadCursor: number;
+  leadLoopLength: number;
+  meterId: AppStore['meterId'];
+}): number {
+  const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+  return leadCursorBar(
+    clampLeadCursor(state.leadCursor, state.leadLoopLength, stepsPerBar),
+    stepsPerBar,
+  );
+}
+
 export function createLeadSlice(set: Set): LeadSlice {
   // Every note add/remove funnels through here, whatever started it: a click,
   // a keyboard activation, or one cell of a drag-to-paint stroke. `mode` is
@@ -75,6 +92,38 @@ export function createLeadSlice(set: Set): LeadSlice {
     leadMelodyView: 'scale-locked',
     leadMelodyOctave: 3,
     leadGate: DEFAULT_LEAD_GATE,
+    leadCursor: 0,
+    leadBarClipboard: null,
+
+    // Clamped against the CURRENT window on write. It is clamped again on
+    // read, because a later meter or loop-length change can narrow the window
+    // under a cursor that was legal when it was set.
+    setLeadCursor: (cursor) =>
+      set((state) => ({
+        leadCursor: clampLeadCursor(
+          cursor,
+          state.leadLoopLength,
+          getMeter(state.meterId).stepsPerBar,
+        ),
+      })),
+
+    copySelectedLeadBar: () =>
+      set((state) => ({ leadBarClipboard: copyLeadBar(state.leadMelodySteps, selectedBar(state)) })),
+
+    pasteIntoSelectedLeadBar: () =>
+      set((state) =>
+        state.leadBarClipboard
+          ? {
+              leadMelodySteps: pasteLeadBar(
+                state.leadMelodySteps,
+                selectedBar(state),
+                state.leadBarClipboard,
+                getMeter(state.meterId).stepsPerBar,
+                state.leadLoopLength,
+              ),
+            }
+          : {},
+      ),
 
     setLeadMelodySteps: (leadMelodySteps) => set({ leadMelodySteps }),
     setLeadLoopLength: (leadLoopLength) =>

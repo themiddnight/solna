@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  clampLeadCursor,
   clampLeadLoopLength,
+  copyLeadBar,
+  leadCursorBar,
+  pasteLeadBar,
   isLegacyLeadMelody,
   leadActivePosAt,
   leadCoveringNoteIndex,
@@ -470,5 +474,120 @@ describe('leadCoveringNoteIndex', () => {
     const m = [...oneBar(), ...oneBar()];
     m[15] = [{ note: 'A4', len: 3 }];
     expect(leadCoveringNoteIndex(m, 17, 16, 'A4')).toBe(15);
+  });
+});
+
+describe('lead selection cursor', () => {
+  test('clamps into the active window and never lands past the last column', () => {
+    expect(clampLeadCursor(-3, 2, 16)).toBe(0);
+    expect(clampLeadCursor(99, 2, 16)).toBe(31);
+    expect(clampLeadCursor(5, 2, 16)).toBe(5);
+  });
+
+  test('a cursor left outside the window by a METER change is pulled back in', () => {
+    // 24 columns in 12/8, then the meter drops to 4/4 and the loop is 16 wide.
+    expect(clampLeadCursor(20, 1, 16)).toBe(15);
+  });
+
+  test('a non-number cursor collapses to the start rather than poisoning the grid', () => {
+    expect(clampLeadCursor(Number.NaN, 1, 16)).toBe(0);
+    expect(clampLeadCursor(2.6, 1, 16)).toBe(3);
+  });
+
+  test('the selected bar is derived from the cursor, never stored beside it', () => {
+    expect(leadCursorBar(0, 16)).toBe(0);
+    expect(leadCursorBar(15, 16)).toBe(0);
+    expect(leadCursorBar(16, 16)).toBe(1);
+    expect(leadCursorBar(35, 16)).toBe(2);
+  });
+});
+
+function emptyMelody(bars: number): LeadNote[][] {
+  return Array.from({ length: bars * 24 }, () => [] as LeadNote[]);
+}
+
+describe('copyLeadBar', () => {
+  test('copies the bar at its FULL stored width, dormant slots included', () => {
+    const steps = emptyMelody(2);
+    steps[0] = [{ note: 'C4', len: 1 }];
+    steps[18] = [{ note: 'E4', len: 1 }]; // dormant in 4/4, reachable in 12/8
+    const clip = copyLeadBar(steps, 0);
+    expect(clip).toHaveLength(24);
+    expect(clip[0]).toEqual([{ note: 'C4', len: 1 }]);
+    expect(clip[18]).toEqual([{ note: 'E4', len: 1 }]);
+  });
+
+  test('the clipboard is a deep copy — editing the grid afterwards must not rewrite it', () => {
+    const steps = emptyMelody(1);
+    steps[0] = [{ note: 'C4', len: 1 }];
+    const clip = copyLeadBar(steps, 0);
+    steps[0][0].len = 8;
+    expect(clip[0]).toEqual([{ note: 'C4', len: 1 }]);
+  });
+
+  test('a bar past the end of the melody copies as silence, not undefined rows', () => {
+    expect(copyLeadBar(emptyMelody(1), 5).every((row) => row.length === 0)).toBe(true);
+  });
+});
+
+describe('pasteLeadBar', () => {
+  test('overwrites the target bar and leaves every other bar alone', () => {
+    const steps = emptyMelody(3);
+    steps[0] = [{ note: 'C4', len: 1 }];
+    steps[24] = [{ note: 'D4', len: 1 }];
+    steps[48] = [{ note: 'E4', len: 1 }];
+    const next = pasteLeadBar(steps, 1, copyLeadBar(steps, 0), 16, 3);
+    expect(next[0]).toEqual([{ note: 'C4', len: 1 }]);
+    expect(next[24]).toEqual([{ note: 'C4', len: 1 }]);
+    expect(next[48]).toEqual([{ note: 'E4', len: 1 }]);
+  });
+
+  test('pasting a bar over itself changes nothing', () => {
+    const steps = emptyMelody(2);
+    steps[0] = [{ note: 'C4', len: 3 }];
+    steps[20] = [{ note: 'G4', len: 1 }];
+    expect(pasteLeadBar(steps, 0, copyLeadBar(steps, 0), 16, 2)).toEqual(steps);
+  });
+
+  test('a note reaching across the bar line INTO the target is truncated at the line', () => {
+    // Without this the paste leaves two notes of one pitch sounding at once,
+    // which is exactly what the store's overlap invariant forbids.
+    const steps = emptyMelody(2);
+    steps[14] = [{ note: 'C4', len: 6 }]; // active 14..19, crosses into bar 1 at 16
+    const next = pasteLeadBar(steps, 1, copyLeadBar(emptyMelody(1), 0), 16, 2);
+    expect(next[14]).toEqual([{ note: 'C4', len: 2 }]);
+  });
+
+  test('a note that stops exactly at the bar line is left alone', () => {
+    const steps = emptyMelody(2);
+    steps[14] = [{ note: 'C4', len: 2 }];
+    const next = pasteLeadBar(steps, 1, copyLeadBar(emptyMelody(1), 0), 16, 2);
+    expect(next[14]).toEqual([{ note: 'C4', len: 2 }]);
+  });
+
+  test('a pasted note is clamped to the loop end — notes never wrap', () => {
+    const steps = emptyMelody(2);
+    steps[0] = [{ note: 'C4', len: 20 }];
+    const next = pasteLeadBar(steps, 1, copyLeadBar(steps, 0), 16, 2);
+    expect(next[24]).toEqual([{ note: 'C4', len: 16 }]);
+  });
+
+  test('a pasted note SWALLOWS the same pitch in the bars it reaches over', () => {
+    const steps = emptyMelody(3);
+    steps[0] = [{ note: 'C4', len: 20 }]; // reaches 4 steps into the next bar
+    steps[50] = [{ note: 'C4', len: 1 }]; // bar 2, active 34 — under the paste
+    steps[52] = [{ note: 'G4', len: 1 }]; // a different pitch survives
+    const next = pasteLeadBar(steps, 1, copyLeadBar(steps, 0), 16, 3);
+    expect(next[24]).toEqual([{ note: 'C4', len: 20 }]);
+    expect(next[50]).toEqual([]);
+    expect(next[52]).toEqual([{ note: 'G4', len: 1 }]);
+  });
+
+  test('does not mutate the melody it was given', () => {
+    const steps = emptyMelody(2);
+    steps[0] = [{ note: 'C4', len: 1 }];
+    const before = JSON.stringify(steps);
+    pasteLeadBar(steps, 1, copyLeadBar(steps, 0), 16, 2);
+    expect(JSON.stringify(steps)).toBe(before);
   });
 });

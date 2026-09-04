@@ -11,6 +11,8 @@ function resetLead(): void {
     leadLoopLength: 1,
     leadMelodyView: 'scale-locked',
     leadMelodyOctave: 3,
+    leadCursor: 0,
+    leadBarClipboard: null,
   });
 }
 
@@ -416,5 +418,79 @@ describe('lead slice — paintLeadNote', () => {
     expect(useAppStore.getState().leadMelodySteps[0]).toEqual([{ note: 'C4', len: 1 }]);
     useAppStore.getState().paintLeadNote(0, 'C4', 'toggle');
     expect(useAppStore.getState().leadMelodySteps[0]).toEqual([]);
+  });
+});
+
+describe('lead slice — selection cursor and bar clipboard', () => {
+  beforeEach(resetLead);
+
+  test('the cursor starts at the first column and clamps to the loop on write', () => {
+    expect(useAppStore.getState().leadCursor).toBe(0);
+    useAppStore.getState().setLeadCursor(99);
+    expect(useAppStore.getState().leadCursor).toBe(15); // 1 bar of 4/4
+    useAppStore.getState().setLeadCursor(-4);
+    expect(useAppStore.getState().leadCursor).toBe(0);
+  });
+
+  test('a shorter loop pulls the cursor back inside it', () => {
+    useAppStore.getState().setLeadLoopLength(2);
+    useAppStore.getState().setLeadCursor(30);
+    expect(useAppStore.getState().leadCursor).toBe(30);
+    useAppStore.getState().setLeadLoopLength(1);
+    useAppStore.getState().setLeadCursor(30);
+    expect(useAppStore.getState().leadCursor).toBe(15);
+  });
+
+  test('copy then paste duplicates the selected bar into another one', () => {
+    const s = useAppStore.getState();
+    s.paintLeadNote(0, 'C4', 'draw');
+    useAppStore.getState().setLeadLoopLength(2);
+    useAppStore.getState().setLeadCursor(0);
+    useAppStore.getState().copySelectedLeadBar();
+    useAppStore.getState().setLeadCursor(16); // bar 1
+    useAppStore.getState().pasteIntoSelectedLeadBar();
+    expect(useAppStore.getState().leadMelodySteps[24]).toEqual([{ note: 'C4', len: 1 }]);
+    expect(useAppStore.getState().leadMelodySteps[0]).toEqual([{ note: 'C4', len: 1 }]);
+  });
+
+  test('the clipboard survives edits made between the copy and the paste', () => {
+    const s = useAppStore.getState();
+    s.paintLeadNote(0, 'C4', 'draw');
+    useAppStore.getState().setLeadLoopLength(2);
+    useAppStore.getState().copySelectedLeadBar();
+    useAppStore.getState().paintLeadNote(0, 'C4', 'erase');
+    useAppStore.getState().setLeadCursor(16);
+    useAppStore.getState().pasteIntoSelectedLeadBar();
+    expect(useAppStore.getState().leadMelodySteps[24]).toEqual([{ note: 'C4', len: 1 }]);
+  });
+
+  test('pasting with nothing copied leaves the melody untouched', () => {
+    const s = useAppStore.getState();
+    s.paintLeadNote(0, 'C4', 'draw');
+    const before = useAppStore.getState().leadMelodySteps;
+    useAppStore.getState().pasteIntoSelectedLeadBar();
+    expect(useAppStore.getState().leadMelodySteps).toBe(before);
+  });
+
+  test('the cursor selects the bar it sits in, not only a bar it starts', () => {
+    const s = useAppStore.getState();
+    s.setLeadLoopLength(2);
+    useAppStore.getState().paintLeadNote(24, 'E4', 'draw'); // bar 1, step 0
+    useAppStore.getState().setLeadCursor(20); // mid bar 1
+    useAppStore.getState().copySelectedLeadBar();
+    useAppStore.getState().setLeadCursor(0);
+    useAppStore.getState().pasteIntoSelectedLeadBar();
+    expect(useAppStore.getState().leadMelodySteps[0]).toEqual([{ note: 'E4', len: 1 }]);
+  });
+
+  test('neither the cursor nor the clipboard is persisted — they are session state', () => {
+    useAppStore.getState().setLeadCursor(5);
+    useAppStore.getState().copySelectedLeadBar();
+    const persisted = partializeAppState(useAppStore.getState()) as unknown as Record<
+      string,
+      unknown
+    >;
+    expect('leadCursor' in persisted).toBe(false);
+    expect('leadBarClipboard' in persisted).toBe(false);
   });
 });

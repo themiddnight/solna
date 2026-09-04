@@ -152,6 +152,13 @@ export interface LeadSlice {
   setLeadMelodyView: (view: LeadMelodyView) => void;
   setLeadMelodyOctave: (octave: number) => void;
   setLeadGate: (gate: number) => void;
+  /** The selected COLUMN. The selected bar is derived, never stored beside it. */
+  leadCursor: number;
+  /** One copied bar at its full stored width, or null before the first copy. */
+  leadBarClipboard: LeadNote[][] | null;
+  setLeadCursor: (cursor: number) => void;
+  copySelectedLeadBar: () => void;
+  pasteIntoSelectedLeadBar: () => void;
   toggleLeadNote: (stepIndex: number, note: string) => void;
   /**
    * Add or remove one drawn note. `'toggle'` is the click; `'draw'`/`'erase'`

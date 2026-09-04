@@ -310,3 +310,92 @@ export function resolveLeadStepTriggers(
     }),
   );
 }
+
+/**
+ * The grid's selection is ONE number: the column the cursor sits on. The
+ * selected bar is derived from it (leadCursorBar) rather than stored beside
+ * it, so a bar highlight and a record head cannot drift apart.
+ *
+ * Clamped on read, not migrated on write: a meter change narrows the active
+ * window, and a cursor left outside it is pulled back rather than being
+ * silently rewritten in a slice that a project reload would restore anyway.
+ */
+export function clampLeadCursor(cursor: number, loopLength: number, stepsPerBar: number): number {
+  if (!Number.isFinite(cursor)) return 0;
+  const lastColumn = Math.max(0, loopLength * stepsPerBar - 1);
+  return Math.min(lastColumn, Math.max(0, Math.round(cursor)));
+}
+
+/** The bar a cursor column falls in. */
+export function leadCursorBar(cursor: number, stepsPerBar: number): number {
+  return Math.floor(cursor / stepsPerBar);
+}
+
+/**
+ * One bar's notes, at the FULL stored width rather than the visible columns.
+ * Copying only what the meter can currently reach would make copy→paste lose
+ * the dormant slots, and would leave "what if the meter changes between the
+ * two" as a question with no good answer.
+ */
+export function copyLeadBar(steps: readonly LeadNote[][], bar: number): LeadNote[][] {
+  const base = bar * MAX_STEPS_PER_BAR;
+  return Array.from({ length: MAX_STEPS_PER_BAR }, (_, i) =>
+    (steps[base + i] ?? []).map((n) => ({ note: n.note, len: n.len })),
+  );
+}
+
+/**
+ * Replace one bar with a copied one, keeping the two length invariants the
+ * store enforces everywhere else:
+ *
+ *   - A note that STARTS in an earlier bar can reach across the bar line into
+ *     the target. Overwriting the target's slots alone would leave that note
+ *     and a pasted one sounding the same pitch at the same step, so it is
+ *     truncated at the line.
+ *   - A pasted note can be longer than the room left in the loop, and can
+ *     reach over notes in later bars. It is clamped to the loop end and
+ *     swallows the same pitch underneath it — the same rule dragging a note's
+ *     end already follows.
+ */
+export function pasteLeadBar(
+  steps: readonly LeadNote[][],
+  bar: number,
+  clip: readonly LeadNote[][],
+  stepsPerBar: number,
+  loopLength: number,
+): LeadNote[][] {
+  const next = steps.map((row) => row.map((n) => ({ note: n.note, len: n.len })));
+  const base = bar * MAX_STEPS_PER_BAR;
+  const barStart = bar * stepsPerBar;
+  const loopEnd = loopLength * stepsPerBar;
+
+  for (let idx = 0; idx < base && idx < next.length; idx++) {
+    const pos = leadActivePosAt(idx, stepsPerBar);
+    if (pos < 0) continue;
+    next[idx] = next[idx].map((n) =>
+      pos + n.len > barStart ? { note: n.note, len: barStart - pos } : n,
+    );
+  }
+
+  for (let i = 0; i < MAX_STEPS_PER_BAR; i++) {
+    next[base + i] = (clip[i] ?? []).map((n) => ({ note: n.note, len: n.len }));
+  }
+
+  for (let i = 0; i < MAX_STEPS_PER_BAR; i++) {
+    const pos = leadActivePosAt(base + i, stepsPerBar);
+    if (pos < 0) continue;
+    next[base + i] = next[base + i].map((n) => ({
+      note: n.note,
+      len: Math.max(1, Math.min(n.len, loopEnd - pos)),
+    }));
+    for (const n of next[base + i]) {
+      for (let k = 1; k < n.len; k++) {
+        const covered = leadStoredIndexAt(pos + k, stepsPerBar);
+        if (covered === base + i || !next[covered]) continue;
+        next[covered] = next[covered].filter((x) => x.note !== n.note);
+      }
+    }
+  }
+
+  return next;
+}
