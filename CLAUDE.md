@@ -125,8 +125,9 @@ effect chains, signal routing, or `AudioContext` lifecycle) and `music-theory` (
 notes, keyboard, drum pads, sequencer, or chord/bass generation).
 
 `.claude/rules/` holds path-scoped rules that load automatically when you open the files they
-cover: `theming.md` (components, `index.css`, `themeColor.ts`) and `testing.md` (test files and
-`scripts/`).
+cover: `theming.md` (components, `index.css`, `themeColor.ts`), `testing.md` (test files and
+`scripts/`), and `note-input.md` (the one dispatcher every played note goes through, and why
+previews and sequenced notes stay off it).
 
 `squash-by-logical-change` (consolidating noisy agent-generated commits before review) is a
 **global** skill in `~/.claude/skills/`, not part of this repo.
