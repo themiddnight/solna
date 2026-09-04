@@ -2,6 +2,7 @@ import React from 'react';
 import type { ViewMode } from '../../types';
 import { VIEW_META } from '../viewMeta';
 import { HEADER_BADGE } from './fieldClasses';
+import { PanelCard } from './PanelCard';
 
 export interface ViewHeaderProps {
   view: ViewMode;
@@ -25,7 +26,7 @@ export interface ViewHeaderProps {
 export const ViewHeader: React.FC<ViewHeaderProps> = ({ view, badge, actions, children }) => {
   const { icon: Icon, title } = VIEW_META[view];
   return (
-    <div className="card bg-panel border border-base-300 shadow-md relative">
+    <PanelCard className="relative">
       <div className="card-body p-3 sm:p-4 flex-row flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center gap-2 min-h-8">
           <div className="p-1.5 rounded-selector bg-primary/20 border border-primary/30 text-primary">
@@ -43,6 +44,6 @@ export const ViewHeader: React.FC<ViewHeaderProps> = ({ view, badge, actions, ch
         )}
         {children}
       </div>
-    </div>
+    </PanelCard>
   );
 };

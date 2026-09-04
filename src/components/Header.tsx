@@ -12,6 +12,7 @@ import { useAppStore } from "../store/store";
 import { useLiveStore } from "./ui/useLiveStore";
 import type { PlayerModule, PlayerState } from "../store/types";
 import { PlayerTransport } from "./ui/PlayerTransport";
+import { IconButton } from "./ui/IconButton";
 import { Wordmark } from "./ui/Wordmark";
 import { LoopSelector } from "./loop/LoopSelector";
 import { VIEW_META } from "./viewMeta";
@@ -381,18 +382,19 @@ export const Header: React.FC = React.memo(() => {
         />
 
         {/* Theme Toggle Button */}
-        <button
+        <IconButton
           id="btn-toggle-theme"
+          label={`Switch to ${currentTheme === 'solna-dark' ? 'Light' : 'Dark'} Theme`}
+          icon={
+            currentTheme === 'solna-dark' ? (
+              <Sun className="w-4 h-4 text-primary" />
+            ) : (
+              <Moon className="w-4 h-4 text-primary" />
+            )
+          }
+          size="sm"
           onClick={toggleTheme}
-          className="btn btn-sm btn-square btn-ghost"
-          title={`Switch to ${currentTheme === 'solna-dark' ? 'Light' : 'Dark'} Theme`}
-        >
-          {currentTheme === 'solna-dark' ? (
-            <Sun className="w-4 h-4 text-primary" />
-          ) : (
-            <Moon className="w-4 h-4 text-primary" />
-          )}
-        </button>
+        />
       </div>
     </header>
   );

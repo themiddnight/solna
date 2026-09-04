@@ -1,6 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { FIELD_LABEL } from './fieldClasses';
-import { Bookmark, Check, Plus, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { IconButton } from './IconButton';
+import { Modal } from './Modal';
+import { ModuleHeader } from './ModuleHeader';
+import { cx } from './cx';
+import { Bookmark, Check, Plus, Search, Sparkles, Trash2, TriangleAlert, X } from 'lucide-react';
 
 export interface PresetLibraryEntry {
   id: string;
@@ -53,6 +57,8 @@ export interface PresetLibraryProps<T extends PresetLibraryEntry> {
   toolbarActions?: React.ReactNode;      // extra toolbar-row content after the save button
   toast?: string | null;         // wrapper-controlled success message
   toastPlacement?: 'top' | 'toolbar';
+  /** `error` switches the notice to alert-error and role="alert" (an import that failed to parse). */
+  toastTone?: 'success' | 'error';
   searchPlaceholder?: string;
   variant: 'chord' | 'synth';    // toolbar/chip/search/close styling of the two originals
   entries: T[];                  // merged: custom first, factory after
@@ -94,7 +100,6 @@ export function centerScrollDelta(
 
 const chipBaseClass =
   'badge badge-sm gap-1 whitespace-nowrap cursor-pointer transition-colors';
-const closeBtnClass = 'btn btn-xs btn-ghost btn-circle';
 
 function countClass(selected: boolean) {
   return `ml-1 px-1.5 py-0.5 rounded-full tabular-nums text-[10px] ${
@@ -115,8 +120,8 @@ function variantChrome(isChord: boolean, saveButton?: PresetLibraryProps<PresetL
       ? 'w-3.5 h-3.5 text-base-content/60 absolute left-3 inset-y-0 my-auto pointer-events-none z-10'
       : 'w-3.5 h-3.5 text-base-content/60 absolute left-2.5 top-2.5 z-10',
     clearBtnClass: isChord
-      ? 'btn btn-xs btn-ghost btn-circle absolute right-1.5 inset-y-0 my-auto'
-      : 'btn btn-xs btn-ghost btn-circle absolute right-1.5 top-1',
+      ? 'btn-circle absolute right-1.5 inset-y-0 my-auto'
+      : 'btn-circle absolute right-1.5 top-1',
     chipsRowClass: isChord
       ? 'flex items-center gap-1.5 overflow-x-auto pb-1'
       : 'flex gap-1 overflow-x-auto pb-1 text-[11px]',
@@ -165,8 +170,9 @@ function PresetLibraryHeader(props: {
   onClose: () => void;
   toast?: string | null;
   toastPlacement?: 'top' | 'toolbar';
+  toastTone?: 'success' | 'error';
 }) {
-  const { title, headerBadge, headerAccessory, headerSubtitle, saveButton, saveButtonClass, openSave, renderHeaderActions, onClose, toast, toastPlacement } = props;
+  const { title, headerBadge, headerAccessory, headerSubtitle, saveButton, saveButtonClass, openSave, renderHeaderActions, onClose, toast, toastPlacement, toastTone } = props;
   return (
     <>
       {/* Drawer Header */}
@@ -201,16 +207,19 @@ function PresetLibraryHeader(props: {
             </button>
           )}
           {renderHeaderActions}
-          <button onClick={onClose} className={closeBtnClass}>
-            <X className="w-4 h-4" />
-          </button>
+          <IconButton label="Close" icon={<X className="w-4 h-4" />} size="xs" className="btn-circle" onClick={onClose} />
         </div>
       </div>
 
       {/* Save Success Toast */}
       {toastPlacement === 'top' && toast && (
-        <div className="alert alert-success mx-4 mt-3 py-2 text-xs animate-fade-in">
-          <Check className="w-3.5 h-3.5 shrink-0" />
+        <div
+          role={toastTone === 'error' ? 'alert' : 'status'}
+          className={cx('alert', toastTone === 'error' ? 'alert-error' : 'alert-success', 'mx-4 mt-3 py-2 text-xs animate-fade-in')}
+        >
+          {toastTone === 'error'
+            ? <TriangleAlert className="w-3.5 h-3.5 shrink-0" />
+            : <Check className="w-3.5 h-3.5 shrink-0" />}
           <span>{toast}</span>
         </div>
       )}
@@ -235,8 +244,9 @@ function PresetLibraryToolbar(props: {
   setCategory: (c: string) => void;
   toast?: string | null;
   toastPlacement?: 'top' | 'toolbar';
+  toastTone?: 'success' | 'error';
 }) {
-  const { toolbarClass, saveButton, saveButtonClass, openSave, toolbarActions, searchIconClass, searchPlaceholder, query, setQuery, clearBtnClass, chipsRowClass, categories, category, setCategory, toast, toastPlacement } = props;
+  const { toolbarClass, saveButton, saveButtonClass, openSave, toolbarActions, searchIconClass, searchPlaceholder, query, setQuery, clearBtnClass, chipsRowClass, categories, category, setCategory, toast, toastPlacement, toastTone } = props;
   return (
     <div className={toolbarClass}>
       {(saveButton?.inToolbar || toolbarActions) && (
@@ -261,9 +271,13 @@ function PresetLibraryToolbar(props: {
           className="input input-sm w-full pl-8 pr-8 text-xs"
         />
         {query && (
-          <button onClick={() => setQuery('')} className={clearBtnClass}>
-            <X className="w-3 h-3" />
-          </button>
+          <IconButton
+            label="Clear search"
+            icon={<X className="w-3 h-3" />}
+            size="xs"
+            className={clearBtnClass}
+            onClick={() => setQuery('')}
+          />
         )}
       </div>
 
@@ -286,8 +300,13 @@ function PresetLibraryToolbar(props: {
       </div>
 
       {toastPlacement === 'toolbar' && toast && (
-        <div className="alert alert-success py-1.5 text-xs animate-fade-in">
-          <Check className="w-3.5 h-3.5" />
+        <div
+          role={toastTone === 'error' ? 'alert' : 'status'}
+          className={cx('alert', toastTone === 'error' ? 'alert-error' : 'alert-success', 'py-1.5 text-xs animate-fade-in')}
+        >
+          {toastTone === 'error'
+            ? <TriangleAlert className="w-3.5 h-3.5" />
+            : <Check className="w-3.5 h-3.5" />}
           <span>{toast}</span>
         </div>
       )}
@@ -305,25 +324,32 @@ function InlineSaveForm(props: {
   onSubmit: (e: React.FormEvent) => void;
 }) {
   const { showSave, save, draft, setDraft, setShowSave, categories, onSubmit } = props;
+  const uid = useId();
   if (!showSave || save.variant !== 'inline') return null;
   return (
     <form onSubmit={onSubmit} className="p-3 bg-base-200 border-b border-primary/30 space-y-2.5 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-          <Bookmark className="w-3.5 h-3.5 text-primary" />
-          {save.heading}
-        </span>
-        <button type="button" onClick={() => setShowSave(false)} className="btn btn-xs btn-ghost btn-circle">
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <ModuleHeader
+        divider={false}
+        icon={<Bookmark className="w-3.5 h-3.5 text-primary" />}
+        title={save.heading}
+        right={
+          <IconButton
+            label="Close save form"
+            icon={<X className="w-3.5 h-3.5" />}
+            size="xs"
+            className="btn-circle"
+            onClick={() => setShowSave(false)}
+          />
+        }
+      />
 
       <div>
-        <label className={FIELD_LABEL}>Preset Name</label>
+        <label className={FIELD_LABEL} htmlFor={`${uid}-name`}>Preset Name</label>
         <input
           type="text"
           required
           placeholder="e.g. Hyper Saw Lead"
+          id={`${uid}-name`}
           value={draft.name}
           onChange={(e) => setDraft({ ...draft, name: e.target.value })}
           className="input input-sm w-full text-xs"
@@ -333,8 +359,9 @@ function InlineSaveForm(props: {
       <div className="grid grid-cols-2 gap-2">
         {save.withCategory && (
           <div>
-            <label className={FIELD_LABEL}>Category</label>
+            <label className={FIELD_LABEL} htmlFor={`${uid}-category`}>Category</label>
             <select
+              id={`${uid}-category`}
               value={draft.category}
               onChange={(e) => setDraft({ ...draft, category: e.target.value })}
               className="select select-sm w-full text-xs"
@@ -347,10 +374,11 @@ function InlineSaveForm(props: {
         )}
         {save.withDescription && (
           <div>
-            <label className={FIELD_LABEL}>Description (Optional)</label>
+            <label className={FIELD_LABEL} htmlFor={`${uid}-description`}>Description (Optional)</label>
             <input
               type="text"
               placeholder="e.g. Heavy punchy lead tone"
+              id={`${uid}-description`}
               value={draft.description}
               onChange={(e) => setDraft({ ...draft, description: e.target.value })}
               className="input input-sm w-full text-xs"
@@ -381,24 +409,21 @@ function SaveModalForm(props: {
   onSubmit: (e: React.FormEvent) => void;
 }) {
   const { showSave, save, draft, setDraft, setShowSave, categories, onSubmit } = props;
+  const uid = useId();
   if (!showSave || save.variant !== 'modal') return null;
   return (
-    <dialog className="modal modal-open">
-      <div className="modal-box max-w-sm bg-base-100 border border-primary/40 space-y-4">
-        <div className="flex items-center justify-between">
-          <h4 className="font-bold text-sm text-base-content flex items-center gap-2">
-            <Bookmark className="w-4 h-4 text-primary" />
-            {save.heading}
-          </h4>
-          <button onClick={() => setShowSave(false)} className="btn btn-xs btn-ghost btn-circle">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
+    <Modal
+      open
+      onClose={() => setShowSave(false)}
+      size="sm"
+      boxClassName="space-y-4"
+      title={<><Bookmark className="w-4 h-4 text-primary" />{save.heading}</>}
+    >
         <form onSubmit={onSubmit} className="space-y-3">
           <div>
-            <label className="text-[11px] text-base-content/60 block mb-1">Progression Name</label>
+            <label className={FIELD_LABEL} htmlFor={`${uid}-name`}>Progression Name</label>
             <input
+              id={`${uid}-name`}
               type="text"
               required
               placeholder="e.g. My Epic Verse Flow"
@@ -410,8 +435,9 @@ function SaveModalForm(props: {
 
           {save.withCategory && (
             <div>
-              <label className="text-[11px] text-base-content/60 block mb-1">Category</label>
+              <label className={FIELD_LABEL} htmlFor={`${uid}-category`}>Category</label>
               <select
+                id={`${uid}-category`}
                 value={draft.category}
                 onChange={(e) => setDraft({ ...draft, category: e.target.value })}
                 className="select select-sm w-full text-xs"
@@ -425,8 +451,9 @@ function SaveModalForm(props: {
 
           {save.withRoman && (
             <div>
-              <label className="text-[11px] text-base-content/60 block mb-1">Roman numerals (optional)</label>
+              <label className={FIELD_LABEL} htmlFor={`${uid}-roman`}>Roman numerals (optional)</label>
               <input
+                id={`${uid}-roman`}
                 type="text"
                 placeholder="e.g. I – V – vi – IV"
                 value={draft.roman ?? ''}
@@ -438,8 +465,9 @@ function SaveModalForm(props: {
 
           {save.withDescription && (
             <div>
-              <label className="text-[11px] text-base-content/60 block mb-1">Description (Optional)</label>
+              <label className={FIELD_LABEL} htmlFor={`${uid}-description`}>Description (Optional)</label>
               <input
+                id={`${uid}-description`}
                 type="text"
                 placeholder="Notes about groove, tempo, or feel..."
                 value={draft.description}
@@ -473,11 +501,7 @@ function SaveModalForm(props: {
             </button>
           </div>
         </form>
-      </div>
-      <form method="dialog" className="modal-backdrop">
-        <button type="button" onClick={() => setShowSave(false)}>close</button>
-      </form>
-    </dialog>
+    </Modal>
   );
 }
 
@@ -528,9 +552,13 @@ function PresetEntryList<T extends PresetLibraryEntry>(props: {
                         <Check className="w-3 h-3" /> Select
                       </button>
                       {!entry.isFactory && onDelete && (
-                        <button onClick={() => onDelete(entry.id)} className="btn btn-xs btn-ghost btn-circle text-base-content/60 hover:text-error">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <IconButton
+                          label={`Delete ${entry.name}`}
+                          icon={<Trash2 className="w-3.5 h-3.5" />}
+                          size="xs"
+                          className="btn-circle text-base-content/60 hover:text-error"
+                          onClick={() => onDelete(entry.id)}
+                        />
                       )}
                     </div>
                   )}
@@ -545,7 +573,7 @@ function PresetEntryList<T extends PresetLibraryEntry>(props: {
 }
 
 export function PresetLibrary<T extends PresetLibraryEntry>({
-  isOpen, onClose, title, headerSubtitle, headerBadge, headerAccessory, panelTintClass, activeEntryId, saveButton, renderHeaderActions, toolbarActions, toast, toastPlacement, searchPlaceholder, variant, entries, categories, listContainerClass, subtitle, renderEntryActions, renderEntry, groupEntries, emptyState, filterEntries, footer, save, onSelect, onDelete, onSave,
+  isOpen, onClose, title, headerSubtitle, headerBadge, headerAccessory, panelTintClass, activeEntryId, saveButton, renderHeaderActions, toolbarActions, toast, toastPlacement, toastTone, searchPlaceholder, variant, entries, categories, listContainerClass, subtitle, renderEntryActions, renderEntry, groupEntries, emptyState, filterEntries, footer, save, onSelect, onDelete, onSave,
 }: PresetLibraryProps<T>) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
@@ -607,7 +635,8 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
       {/* The panel is fixed, so the content column must not eat backdrop clicks. */}
       <div className="drawer-content pointer-events-none" />
       <div className="drawer-side z-50">
-        <label
+        <button
+          type="button"
           className="drawer-overlay"
           aria-label="Close preset library"
           onClick={onClose}
@@ -628,6 +657,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
             onClose={onClose}
             toast={toast}
             toastPlacement={toastPlacement}
+            toastTone={toastTone}
           />
 
           {/* Search & Filter Toolbar */}
@@ -648,6 +678,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
             setCategory={setCategory}
             toast={toast}
             toastPlacement={toastPlacement}
+            toastTone={toastTone}
           />
 
           {/* Inline Save Form (synth original) */}

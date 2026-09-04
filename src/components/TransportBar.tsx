@@ -1,5 +1,6 @@
 import React from "react";
 import { Volume2, Clock, Plus, Minus } from "lucide-react";
+import { IconButton } from "./ui/IconButton";
 import { useAppStore } from "../store/store";
 import { Slider } from "./ui/Slider";
 import { PlayerTransport } from "./ui/PlayerTransport";
@@ -90,13 +91,12 @@ export const TransportBar: React.FC = React.memo(() => {
         {/* Tempo BPM Control */}
         <div className="flex items-center gap-0.5 bg-base-200 border border-base-300 px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-box">
           <span className="text-[10px] text-base-content/50 hidden sm:inline">BPM</span>
-          <button
+          <IconButton
+            label="Decrease BPM"
+            icon={<Minus className="w-3 h-3" />}
+            size="xs"
             onClick={() => setBpm(Math.max(40, bpm - 1))}
-            className="btn btn-xs btn-square btn-ghost"
-            title="Decrease BPM"
-          >
-            <Minus className="w-3 h-3" />
-          </button>
+          />
           <input
             id="input-transport-bpm"
             type="number"
@@ -106,13 +106,12 @@ export const TransportBar: React.FC = React.memo(() => {
             onChange={(e) => setBpm(Number(e.target.value))}
             className="input input-xs input-ghost w-8 sm:w-12 px-0 text-center font-mono font-bold text-primary text-xs"
           />
-          <button
+          <IconButton
+            label="Increase BPM"
+            icon={<Plus className="w-3 h-3" />}
+            size="xs"
             onClick={() => setBpm(Math.min(240, bpm + 1))}
-            className="btn btn-xs btn-square btn-ghost"
-            title="Increase BPM"
-          >
-            <Plus className="w-3 h-3" />
-          </button>
+          />
         </div>
 
         {/* Time Signature */}

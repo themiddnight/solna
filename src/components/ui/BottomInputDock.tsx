@@ -4,6 +4,7 @@ import { useAppStore } from '../../store/store';
 import { ChromaticKeyboard, ScaleLockedKeyboard, ChordKeyboard } from './Keyboard';
 import { DrumPadGrid } from './DrumPadGrid';
 import { SECTION_HEADER } from './fieldClasses';
+import { IconButton } from './IconButton';
 import type { InputDeckDrumProps, InputDeckKeyboardProps } from '../useInputDeck';
 
 /** Reads one slice of the store with the LIVE state as the server snapshot too.
@@ -118,31 +119,29 @@ export const BottomInputDock: React.FC<BottomInputDockProps> = React.memo(({ key
 
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-base-content/50 mr-1">KB OCT</span>
-                  <button
+                  <IconButton
                     id="btn-keyboard-octave-down"
-                    type="button"
+                    label="Keyboard Octave Down"
+                    icon={<ChevronLeft className="w-4 h-4" />}
+                    size="xs"
                     onClick={() => setKeyboardOctave((o) => Math.max(-2, o - 1))}
                     disabled={keyboardOctave <= -2}
-                    className="btn btn-xs btn-square btn-ghost w-7 h-7 min-h-0 border border-base-300 text-base-content/60 hover:text-base-content hover:border-primary hover:bg-primary/20 disabled:opacity-30"
-                    title="Keyboard Octave Down"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
+                    className="w-7 h-7 min-h-0 border border-base-300 text-base-content/60 hover:text-base-content hover:border-primary hover:bg-primary/20 disabled:opacity-30"
+                  />
                   <div className="badge badge-primary badge-outline min-w-13 h-7 px-2">
                     <span className="text-xs font-mono font-bold">
                       {keyboardOctave >= 0 ? `+${keyboardOctave}` : keyboardOctave} Oct
                     </span>
                   </div>
-                  <button
+                  <IconButton
                     id="btn-keyboard-octave-up"
-                    type="button"
+                    label="Keyboard Octave Up"
+                    icon={<ChevronRight className="w-4 h-4" />}
+                    size="xs"
                     onClick={() => setKeyboardOctave((o) => Math.min(2, o + 1))}
                     disabled={keyboardOctave >= 2}
-                    className="btn btn-xs btn-square btn-ghost w-7 h-7 min-h-0 border border-base-300 text-base-content/60 hover:text-base-content hover:border-primary hover:bg-primary/20 disabled:opacity-30"
-                    title="Keyboard Octave Up"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
+                    className="w-7 h-7 min-h-0 border border-base-300 text-base-content/60 hover:text-base-content hover:border-primary hover:bg-primary/20 disabled:opacity-30"
+                  />
 
                   <div className="join" role="radiogroup" aria-label="Keyboard input mode">
                     {(['chromatic', 'scale-locked', 'chord'] as const).map((m) => (

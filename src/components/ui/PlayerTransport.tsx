@@ -1,5 +1,6 @@
 import React from 'react';
 import { Play, Square, X } from 'lucide-react';
+import { IconButton } from './IconButton';
 import type { PlayerState } from '../../store/types';
 
 export interface TransportButtons {
@@ -101,16 +102,16 @@ export const PlayerTransport: React.FC<PlayerTransportProps> = ({
       </button>
 
       {showLabel && showHardStop && (
-        <button
+        <IconButton
           id={id ? `${id}-hard` : undefined}
-          type="button"
+          label="Stop immediately"
+          icon={<X className={size === 'xs' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />}
+          size={size}
+          variant="error"
           onClick={onHardStop}
           disabled={hardStopDisabled ?? buttons.hard.disabled}
-          title="Stop immediately"
-          className={`btn ${sizeClass} join-item btn-error btn-square font-bold text-xs`}
-        >
-          <X className={size === 'xs' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
-        </button>
+          className="join-item font-bold text-xs"
+        />
       )}
     </>
   );
