@@ -1,7 +1,9 @@
 import React from "react";
 import { Activity } from "lucide-react";
 import { Knob } from "../../ui/Knob";
-import { STEP_BADGE } from "../../ui/fieldClasses";
+import { ModuleHeader } from "../../ui/ModuleHeader";
+import { PanelCard } from "../../ui/PanelCard";
+import { FIELD_LABEL } from "../../ui/fieldClasses";
 import { useSynthChannel } from "./useSynthChannel";
 
 /**
@@ -14,23 +16,19 @@ export const OscillatorPanel: React.FC = () => {
   const { params, onChangeParams, tintClass } = useSynthChannel();
   // 1. Oscillators Section
   return (
-          <div
-            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
-          >
+          <PanelCard tint={tintClass} className="flex-1">
             <div className="card-body p-4 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                <span className={STEP_BADGE}>1</span>
-                <Activity className="w-3.5 h-3.5 text-module-osc" />
-                Oscillators
-              </span>
-            </div>
+            <ModuleHeader
+              badge={1}
+              icon={<Activity className="w-3.5 h-3.5 text-module-osc" />}
+              title="Oscillators"
+            />
 
             <div>
-              <label className="text-xs text-base-content/60 block mb-1.5 font-medium">
+              <span className={FIELD_LABEL} id="label-osc-wave">
                 Waveform
-              </label>
-              <div className="grid grid-cols-4 gap-1">
+              </span>
+              <div className="grid grid-cols-4 gap-1" role="group" aria-labelledby="label-osc-wave">
                 {(["sawtooth", "square", "sine", "triangle"] as const).map(
                   (w) => (
                     <button
@@ -88,6 +86,6 @@ export const OscillatorPanel: React.FC = () => {
               />
             </div>
             </div>
-          </div>
+          </PanelCard>
   );
 };

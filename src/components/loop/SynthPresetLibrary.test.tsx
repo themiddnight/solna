@@ -33,8 +33,8 @@ describe('SynthPresetLibrary theming', () => {
   });
 
   test('card actions and footer use daisyUI buttons', () => {
-    expect(html).toContain('btn btn-xs btn-ghost');
-    expect(html).toContain('btn btn-sm btn-ghost');
+    expect(html).toContain('btn btn-square btn-xs btn-ghost');
+    expect(html).toContain('btn btn-square btn-sm btn-ghost');
     expect(html).toContain('border-t border-base-300 bg-base-200');
   });
 

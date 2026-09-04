@@ -20,6 +20,8 @@ import {
 import { useAppStore } from '../../store/store';
 import { INITIAL_SYNTH_PARAMS } from '../../store/initialState';
 import { PresetLibrary } from '../ui/PresetLibrary';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { IconButton } from '../ui/IconButton';
 import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from '../ui/PresetLibrary';
 import { previewSynthPreset } from '../../audio/playback/presetPreview';
 import type { PreviewHandle } from '../../audio/playback/presetPreview';
@@ -55,10 +57,13 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   const savePreset = useAppStore((s) => s.saveCustomPreset);
   const deletePreset = useAppStore((s) => s.deleteCustomPreset);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [toastTone, setToastTone] = useState<'success' | 'error'>('success');
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const previewRef = useRef<PreviewHandle | null>(null);
   useEffect(() => () => previewRef.current?.(), []);
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, tone: 'success' | 'error' = 'success') => {
+    setToastTone(tone);
     setToastMsg(msg);
     window.setTimeout(() => setToastMsg(null), 3000);
   };
@@ -150,9 +155,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete preset "${name}"?`)) {
-      deletePreset(id);
-    }
+    setPendingDelete({ id, name });
   };
 
   const handleAudition = (preset: SynthPresetItem) => {
@@ -196,7 +199,7 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
           showToast(`Imported ${imported.length} presets!`);
         }
       } catch {
-        alert('Invalid JSON preset file');
+        showToast('Invalid JSON preset file', 'error');
       }
     };
     reader.readAsText(file);
@@ -283,67 +286,67 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
           onClick={() => onSelectPreset(preset)}
           className="w-full text-left p-3 cursor-pointer"
         >
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <h4 className="font-semibold text-xs text-base-content truncate group-hover:text-primary transition-colors">
-                {preset.name}
-              </h4>
-              {isCurrent && (
-                <span className="badge badge-xs badge-primary py-0.5 font-bold uppercase tracking-wider">
-                  Active
-                </span>
-              )}
-              <span
-                className={`${meta.badgeClass} badge-xs py-0.5`}
-              >
-                {preset.category}
-              </span>
-            </div>
-
-            {preset.description && (
-              <p
-                className={`text-[11px] text-base-content/60 line-clamp-1 ${showSoundBadges ? 'mb-2' : ''}`}
-              >
-                {preset.description}
-              </p>
-            )}
-
-            {/* Sound Badge Attributes */}
-            {showSoundBadges && (
-              <div className="flex items-center gap-1.5 text-[10px] text-base-content/60">
-                <span className="badge badge-sm badge-ghost font-mono gap-1">
-                  <Activity className="w-2.5 h-2.5 text-primary" />
-                  {oscType}
-                </span>
-                <span className="badge badge-sm badge-ghost font-mono gap-1">
-                  <Sliders className="w-2.5 h-2.5 text-accent" />
-                  {filterType === 'lowpass' ? 'LPF' : filterType === 'highpass' ? 'HPF' : 'BPF'} {Math.round(cutoff)}Hz
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h4 className="font-semibold text-xs text-base-content truncate group-hover:text-primary transition-colors">
+                  {preset.name}
+                </h4>
+                {isCurrent && (
+                  <span className="badge badge-xs badge-primary py-0.5 font-bold uppercase tracking-wider">
+                    Active
+                  </span>
+                )}
+                <span
+                  className={`${meta.badgeClass} badge-xs py-0.5`}
+                >
+                  {preset.category}
                 </span>
               </div>
-            )}
+
+              {preset.description && (
+                <p
+                  className={`text-[11px] text-base-content/60 line-clamp-1 ${showSoundBadges ? 'mb-2' : ''}`}
+                >
+                  {preset.description}
+                </p>
+              )}
+
+              {/* Sound Badge Attributes */}
+              {showSoundBadges && (
+                <div className="flex items-center gap-1.5 text-[10px] text-base-content/60">
+                  <span className="badge badge-sm badge-ghost font-mono gap-1">
+                    <Activity className="w-2.5 h-2.5 text-primary" />
+                    {oscType}
+                  </span>
+                  <span className="badge badge-sm badge-ghost font-mono gap-1">
+                    <Sliders className="w-2.5 h-2.5 text-accent" />
+                    {filterType === 'lowpass' ? 'LPF' : filterType === 'highpass' ? 'HPF' : 'BPF'} {Math.round(cutoff)}Hz
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
         </button>
 
         {/* Action buttons */}
         <div className="absolute top-3 right-3 flex items-center gap-1 shrink-0">
-          <button
+          <IconButton
+            label="Audition Sound (Play Note)"
+            icon={<Volume2 className="w-3.5 h-3.5" />}
+            size="xs"
+            className="hover:btn-primary"
             onClick={() => handleAudition(preset)}
-            className="btn btn-xs btn-ghost btn-square hover:btn-primary"
-            title="Audition Sound (Play Note)"
-          >
-            <Volume2 className="w-3.5 h-3.5" />
-          </button>
+          />
 
           {!preset.isFactory && (
-            <button
+            <IconButton
+              label="Delete Custom Preset"
+              icon={<Trash2 className="w-3.5 h-3.5" />}
+              size="xs"
+              className="hover:btn-error"
               onClick={() => handleDelete(preset.id, preset.name)}
-              className="btn btn-xs btn-ghost btn-square hover:btn-error"
-              title="Delete Custom Preset"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            />
           )}
         </div>
       </div>
@@ -355,21 +358,27 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   // Export/Import buttons follow it in the same flex row.
   const toolbarActions = (
     <>
-      <button
-        onClick={handleExport}
+      <IconButton
+        label="Export User Presets to JSON"
+        icon={<Download className="w-3.5 h-3.5" />}
+        size="sm"
+        className="disabled:opacity-40"
         disabled={customPresets.length === 0}
-        className="btn btn-sm btn-ghost btn-square disabled:opacity-40"
-        title="Export User Presets to JSON"
-      >
-        <Download className="w-3.5 h-3.5" />
-      </button>
+        onClick={handleExport}
+      />
 
       <label
         className="btn btn-sm btn-ghost btn-square disabled:opacity-40"
         title="Import Presets from JSON"
       >
         <Upload className="w-3.5 h-3.5" />
-        <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+        <input
+          type="file"
+          accept=".json"
+          onChange={handleImport}
+          className="hidden"
+          aria-label="Import Presets from JSON"
+        />
       </label>
     </>
   );
@@ -391,56 +400,70 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
   );
 
   return (
-    <PresetLibrary
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Sound Library"
-      headerBadge={`${allPresets.length} Total`}
-      headerAccessory={
-        // The drawer edits whichever destination the Target selector points at,
-        // and the selector is behind this overlay — so name the target here, in
-        // its own module colour, or picking a preset is a blind rewrite.
-        <span
-          className={`badge badge-sm badge-soft font-semibold ${SYNTH_TARGET_STYLES[target].badge}`}
-        >
-          {`Editing: ${SYNTH_TARGET_STYLES[target].label}`}
-        </span>
-      }
-      headerSubtitle="Categorized factory sounds & custom user patches"
-      panelTintClass={SYNTH_TARGET_STYLES[target].tint}
-      activeEntryId={activeEntryId}
-      saveButton={{ label: 'Save Current Sound', inToolbar: true }}
-      toolbarActions={toolbarActions}
-      toast={toastMsg}
-      toastPlacement="toolbar"
-      variant="synth"
-      searchPlaceholder="Search presets by name or tone..."
-      entries={entries}
-      categories={categories}
-      listContainerClass="flex-1 overflow-y-auto p-3 space-y-3"
-      groupEntries={groupEntries}
-      renderEntry={renderEntry}
-      emptyState={emptyState}
-      filterEntries={filterEntries}
-      footer={footer}
-      save={{
-        heading: 'Save New Preset to LocalStorage',
-        buttonLabel: 'Save Preset',
-        withCategory: true,
-        withDescription: true,
-        withRoman: false,
-        defaultCategory: 'Lead',
-        variant: 'inline',
-        initialName: currentParams.preset ? `${currentParams.preset} (Custom)` : 'My Synth Patch',
-      }}
-      onSelect={(entry) => onSelectPreset(entry.preset)}
-      onDelete={(id) => {
-        const entry = entries.find((en) => en.id === id);
-        if (entry && confirm(`Are you sure you want to delete preset "${entry.name}"?`)) {
-          deletePreset(id);
+    <>
+      <PresetLibrary
+        isOpen={isOpen}
+        onClose={onClose}
+        title="Sound Library"
+        headerBadge={`${allPresets.length} Total`}
+        headerAccessory={
+          // The drawer edits whichever destination the Target selector points at,
+          // and the selector is behind this overlay — so name the target here, in
+          // its own module colour, or picking a preset is a blind rewrite.
+          <span
+            className={`badge badge-sm badge-soft font-semibold ${SYNTH_TARGET_STYLES[target].badge}`}
+          >
+            {`Editing: ${SYNTH_TARGET_STYLES[target].label}`}
+          </span>
         }
-      }}
-      onSave={handleSave}
-    />
+        headerSubtitle="Categorized factory sounds & custom user patches"
+        panelTintClass={SYNTH_TARGET_STYLES[target].tint}
+        activeEntryId={activeEntryId}
+        saveButton={{ label: 'Save Current Sound', inToolbar: true }}
+        toolbarActions={toolbarActions}
+        toast={toastMsg}
+        toastPlacement="toolbar"
+        toastTone={toastTone}
+        variant="synth"
+        searchPlaceholder="Search presets by name or tone..."
+        entries={entries}
+        categories={categories}
+        listContainerClass="flex-1 overflow-y-auto p-3 space-y-3"
+        groupEntries={groupEntries}
+        renderEntry={renderEntry}
+        emptyState={emptyState}
+        filterEntries={filterEntries}
+        footer={footer}
+        save={{
+          heading: 'Save New Preset to LocalStorage',
+          buttonLabel: 'Save Preset',
+          withCategory: true,
+          withDescription: true,
+          withRoman: false,
+          defaultCategory: 'Lead',
+          variant: 'inline',
+          initialName: currentParams.preset ? `${currentParams.preset} (Custom)` : 'My Synth Patch',
+        }}
+        onSelect={(entry) => onSelectPreset(entry.preset)}
+        onDelete={(id) => {
+          const entry = entries.find((en) => en.id === id);
+          if (entry) setPendingDelete({ id, name: entry.name });
+        }}
+        onSave={handleSave}
+      />
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete preset"
+          message={<>Are you sure you want to delete preset <strong>{pendingDelete.name}</strong>?</>}
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => {
+            deletePreset(pendingDelete.id);
+            setPendingDelete(null);
+          }}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+    </>
   );
 };

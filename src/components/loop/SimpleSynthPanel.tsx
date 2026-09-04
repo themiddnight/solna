@@ -2,6 +2,7 @@ import React from "react";
 import { Sparkles, Sun, Flame, Waves, Compass } from "lucide-react";
 import { SynthParams } from "../../types";
 import { Knob } from "../ui/Knob";
+import { PanelCard } from "../ui/PanelCard";
 
 interface SimpleSynthPanelProps {
   params: SynthParams;
@@ -53,7 +54,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
         {/* 2. Four Friendly Macro Dials + 1-Click Arp */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {/* Macro 1: Tone (Brightness) */}
-          <div className={`card bg-panel border border-base-300 shadow-md ${tintClass}`}>
+          <PanelCard tint={tintClass}>
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
                 <Sun className="w-3.5 h-3.5 text-module-filter" />
@@ -75,10 +76,10 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 />
               </div>
             </div>
-          </div>
+          </PanelCard>
 
           {/* Macro 2: Space (Release & Tail) */}
-          <div className={`card bg-panel border border-base-300 shadow-md ${tintClass}`}>
+          <PanelCard tint={tintClass}>
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
                 <Compass className="w-3.5 h-3.5 text-module-env-vca" />
@@ -106,10 +107,10 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 />
               </div>
             </div>
-          </div>
+          </PanelCard>
 
           {/* Macro 3: Vibe (Movement & Detune) */}
-          <div className={`card bg-panel border border-base-300 shadow-md ${tintClass}`}>
+          <PanelCard tint={tintClass}>
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
                 <Waves className="w-3.5 h-3.5 text-module-lfo" />
@@ -137,10 +138,10 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 />
               </div>
             </div>
-          </div>
+          </PanelCard>
 
           {/* Macro 4: Punch (Sub & Power) */}
-          <div className={`card bg-panel border border-base-300 shadow-md ${tintClass}`}>
+          <PanelCard tint={tintClass}>
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
                 <Flame className="w-3.5 h-3.5 text-module-osc" />
@@ -168,7 +169,7 @@ export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
                 />
               </div>
             </div>
-          </div>
+          </PanelCard>
 
           {/* 1-Click Easy Arpeggiator Card */}
           <div

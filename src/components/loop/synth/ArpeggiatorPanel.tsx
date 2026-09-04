@@ -1,6 +1,8 @@
 import React from "react";
 import { Sparkles } from "lucide-react";
-import { STEP_BADGE } from "../../ui/fieldClasses";
+import { ModuleHeader } from "../../ui/ModuleHeader";
+import { PanelCard } from "../../ui/PanelCard";
+import { FIELD_LABEL } from "../../ui/fieldClasses";
 import { initSynthPlayback } from "../../../audio/playback/synthPlayback";
 import { useSynthChannel } from "./useSynthChannel";
 
@@ -14,40 +16,38 @@ export const ArpeggiatorPanel: React.FC = () => {
   const { params, onChangeParams, tintClass } = useSynthChannel();
   // 5. Arpeggiator
   return (
-          <div
-            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
-          >
+          <PanelCard tint={tintClass} className="flex-1">
             <div className="card-body p-4 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                <span className={STEP_BADGE}>5</span>
-                <Sparkles className="w-3.5 h-3.5 text-module-arp" />
-                Arpeggiator
-              </span>
-              <button
-                id="btn-toggle-arp"
-                onClick={() => {
-                  initSynthPlayback();
-                  onChangeParams({
-                    ...params,
-                    arpActive: !params.arpActive,
-                  });
-                }}
-                className={`btn btn-xs text-[10px] font-bold uppercase tracking-wider ${
-                  params.arpActive
-                    ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)] shadow-md shadow-module-arp/30"
-                    : "btn-ghost border border-base-300 text-base-content/60"
-                }`}
-              >
-                {params.arpActive ? "Active" : "Bypass"}
-              </button>
-            </div>
+            <ModuleHeader
+              badge={5}
+              icon={<Sparkles className="w-3.5 h-3.5 text-module-arp" />}
+              title="Arpeggiator"
+              right={
+                <button
+                  id="btn-toggle-arp"
+                  onClick={() => {
+                    initSynthPlayback();
+                    onChangeParams({
+                      ...params,
+                      arpActive: !params.arpActive,
+                    });
+                  }}
+                  className={`btn btn-xs text-[10px] font-bold uppercase tracking-wider ${
+                    params.arpActive
+                      ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)] shadow-md shadow-module-arp/30"
+                      : "btn-ghost border border-base-300 text-base-content/60"
+                  }`}
+                >
+                  {params.arpActive ? "Active" : "Bypass"}
+                </button>
+              }
+            />
 
             <div>
-              <label className="text-xs text-base-content/60 block mb-1.5 font-medium">
+              <span className={FIELD_LABEL} id="label-arp-mode">
                 Arp Mode
-              </label>
-              <div className="grid grid-cols-4 gap-1">
+              </span>
+              <div className="grid grid-cols-4 gap-1" role="group" aria-labelledby="label-arp-mode">
                 {(["up", "down", "updown", "random"] as const).map((m) => (
                   <button
                     key={m}
@@ -67,10 +67,10 @@ export const ArpeggiatorPanel: React.FC = () => {
 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <label className="text-[11px] text-base-content/60 block mb-1 font-medium">
+                <span className={FIELD_LABEL} id="label-arp-rate">
                   Rate
-                </label>
-                <div className="flex gap-1">
+                </span>
+                <div className="flex gap-1" role="group" aria-labelledby="label-arp-rate">
                   {(["16n", "8n", "32n"] as const).map((r) => (
                     <button
                       key={r}
@@ -89,10 +89,10 @@ export const ArpeggiatorPanel: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-[11px] text-base-content/60 block mb-1 font-medium">
+                <span className={FIELD_LABEL} id="label-arp-octaves">
                   Octaves
-                </label>
-                <div className="flex gap-1">
+                </span>
+                <div className="flex gap-1" role="group" aria-labelledby="label-arp-octaves">
                   {[1, 2, 3].map((oct) => (
                     <button
                       key={oct}
@@ -113,6 +113,6 @@ export const ArpeggiatorPanel: React.FC = () => {
               </div>
             </div>
             </div>
-          </div>
+          </PanelCard>
   );
 };

@@ -42,6 +42,8 @@ import { LeadMelodyGrid } from "./lead/LeadMelodyGrid";
 import { ChannelStrip } from "../ui/ChannelStrip";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { ViewHeader } from "../ui/ViewHeader";
+import { PanelCard } from "../ui/PanelCard";
+import { IconButton } from "../ui/IconButton";
 import { COUNT_BADGE } from "../ui/fieldClasses";
 
 // Re-exported for scripts/check-key-bindings.ts, which asserts that the synth
@@ -345,7 +347,7 @@ export const SynthView: React.FC = React.memo(() => {
       </ViewHeader>
 
       {/* Synth Target & Preset Selection Card */}
-      <div className={`card bg-panel border border-base-300 shadow-md ${tintClass}`}>
+      <PanelCard tint={tintClass}>
         <div className="card-body p-3 sm:p-4 flex flex-col gap-3">
         {/* Row 1: Control Destination / Target Selector. Kept as its own row,
             visible in both Simple and Pro mode, because it's the only control
@@ -490,14 +492,14 @@ export const SynthView: React.FC = React.memo(() => {
               )}
 
               {/* Step Previous Preset Button */}
-              <button
+              <IconButton
                 id="btn-prev-synth-preset"
+                label="Previous Preset"
+                icon={<ChevronLeft className="w-3.5 h-3.5" />}
+                size="xs"
+                variant="outline"
                 onClick={() => handleStepPreset(-1)}
-                className="btn btn-xs btn-square btn-ghost border border-base-300"
-                title="Previous Preset"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
+              />
 
               {/* Categorized Dropdown with Optgroups */}
               <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-field px-2 min-w-50 max-w-60">
@@ -533,14 +535,14 @@ export const SynthView: React.FC = React.memo(() => {
               </div>
 
               {/* Step Next Preset Button */}
-              <button
+              <IconButton
                 id="btn-next-synth-preset"
+                label="Next Preset"
+                icon={<ChevronRight className="w-3.5 h-3.5" />}
+                size="xs"
+                variant="outline"
                 onClick={() => handleStepPreset(1)}
-                className="btn btn-xs btn-square btn-ghost border border-base-300"
-                title="Next Preset"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              />
             </div>
           </div>
         )}
@@ -565,14 +567,14 @@ export const SynthView: React.FC = React.memo(() => {
 
               {/* Preset Stepper & Selector */}
               <div className="flex items-center gap-2">
-                <button
+                <IconButton
                   id="btn-simple-prev-preset"
+                  label="Previous Sound"
+                  icon={<ChevronLeft className="w-4 h-4" />}
+                  size="sm"
+                  variant="outline"
                   onClick={() => handleStepPreset(-1)}
-                  className="btn btn-sm btn-square btn-ghost border border-base-300"
-                  title="Previous Sound"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
+                />
 
                 <select
                   id="select-simple-preset"
@@ -592,14 +594,14 @@ export const SynthView: React.FC = React.memo(() => {
                   ))}
                 </select>
 
-                <button
+                <IconButton
                   id="btn-simple-next-preset"
+                  label="Next Sound"
+                  icon={<ChevronRight className="w-4 h-4" />}
+                  size="sm"
+                  variant="outline"
                   onClick={() => handleStepPreset(1)}
-                  className="btn btn-sm btn-square btn-ghost border border-base-300"
-                  title="Next Sound"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+                />
               </div>
             </div>
 
@@ -638,7 +640,7 @@ export const SynthView: React.FC = React.memo(() => {
           </div>
         )}
         </div>
-      </div>
+      </PanelCard>
 
       {/* Quick Save Modal Popover with Category selection */}
       <QuickSavePopover

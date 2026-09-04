@@ -28,7 +28,10 @@ describe('Pro-Mode panels render the markup SynthView used to render inline', ()
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('text-module-osc');
-    expect(html).toContain('card flex-1 bg-panel border border-base-300 shadow-md');
+    // Phase 2: ui/PanelCard renders the shell first and the caller's extras
+    // last, so `flex-1` moved to the end. Tailwind utilities are
+    // order-independent in the attribute; nothing renders differently.
+    expect(html).toContain('card bg-panel border border-base-300 shadow-md flex-1');
     expect(html).not.toContain('#');
     expect(html).not.toContain('indigo-');
   });
@@ -89,10 +92,10 @@ describe('Pro-Mode panels render the markup SynthView used to render inline', ()
     expect(html).toContain('Bypass');
   });
 
-  test('every panel renders exactly one card wrapper', () => {
+  test('every panel renders exactly one card wrapper, still carrying flex-1', () => {
     for (const Panel of [OscillatorPanel, FilterPanel, EnvelopePanel, LfoPanel, ArpeggiatorPanel]) {
       const html = renderToString(<Panel />);
-      expect(html.split('card flex-1 bg-panel').length - 1).toBe(1);
+      expect(html.split('card bg-panel border border-base-300 shadow-md flex-1').length - 1).toBe(1);
     }
   });
 });

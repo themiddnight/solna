@@ -1,7 +1,8 @@
 import React from "react";
 import { Volume2 } from "lucide-react";
 import { Knob } from "../../ui/Knob";
-import { STEP_BADGE } from "../../ui/fieldClasses";
+import { ModuleHeader } from "../../ui/ModuleHeader";
+import { PanelCard } from "../../ui/PanelCard";
 import { useSynthChannel } from "./useSynthChannel";
 
 /**
@@ -16,17 +17,13 @@ export const EnvelopePanel: React.FC = () => {
   const { params, onChangeParams, tintClass } = useSynthChannel();
   // 3. Envelope ADSR
   return (
-          <div
-            className={`card flex-1 bg-panel border border-base-300 shadow-md ${tintClass}`}
-          >
+          <PanelCard tint={tintClass} className="flex-1">
             <div className="card-body p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-base-300 pb-2">
-              <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                <span className={STEP_BADGE}>3</span>
-                <Volume2 className="w-3.5 h-3.5 text-module-env-vca" />
-                ADSR Envelope
-              </span>
-            </div>
+            <ModuleHeader
+              badge={3}
+              icon={<Volume2 className="w-3.5 h-3.5 text-module-env-vca" />}
+              title="ADSR Envelope"
+            />
 
             {/* AMP / VCA */}
             <div>
@@ -162,6 +159,6 @@ export const EnvelopePanel: React.FC = () => {
               </div>
             </div>
             </div>
-          </div>
+          </PanelCard>
   );
 };
