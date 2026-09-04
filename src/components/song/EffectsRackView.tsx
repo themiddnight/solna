@@ -5,7 +5,9 @@ import { useAppStore } from "../../store/store";
 import { Knob } from "../ui/Knob";
 import { PowerToggle } from "../ui/PowerToggle";
 import { ViewHeader } from "../ui/ViewHeader";
-import { SECTION_HEADER, STEP_BADGE } from "../ui/fieldClasses";
+import { ModuleHeader } from "../ui/ModuleHeader";
+import { PanelCard } from "../ui/PanelCard";
+import { SECTION_HEADER } from "../ui/fieldClasses";
 import { AudioVisualizer, VISUALIZER_MODES, VISUALIZER_MODE_LABEL, type VisualizerMode } from "../AudioVisualizer";
 import {
   delayFeedbackDescriptor,
@@ -42,22 +44,22 @@ export const EffectsRackView: React.FC = React.memo(() => {
             }`}
           >
             <div className="card-body p-3 sm:p-4 space-y-3">
-              <div className="flex items-center justify-between border-b border-base-300 pb-2">
-                <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                  <span className={STEP_BADGE}>1</span>
-                  <Waves className="w-3.5 h-3.5 text-accent" />
-                  Space Reverb
-                </span>
-                <PowerToggle
-                  id="btn-bypass-reverb"
-                  on={!effects.reverbBypass}
-                  onToggle={() => updateFx({ reverbBypass: !effects.reverbBypass })}
-                  name="Reverb"
-                  tone="accent"
-                  size="xs"
-                  iconOnly
-                />
-              </div>
+              <ModuleHeader
+                badge={1}
+                icon={<Waves className="w-3.5 h-3.5 text-accent" />}
+                title="Space Reverb"
+                right={
+                  <PowerToggle
+                    id="btn-bypass-reverb"
+                    on={!effects.reverbBypass}
+                    onToggle={() => updateFx({ reverbBypass: !effects.reverbBypass })}
+                    name="Reverb"
+                    tone="accent"
+                    size="xs"
+                    iconOnly
+                  />
+                }
+              />
 
               <div className="flex items-start justify-around gap-2 w-full min-w-max mx-auto">
                 <Knob
@@ -98,22 +100,22 @@ export const EffectsRackView: React.FC = React.memo(() => {
             }`}
           >
             <div className="card-body p-3 sm:p-4 space-y-3">
-              <div className="flex items-center justify-between border-b border-base-300 pb-2">
-                <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                  <span className={STEP_BADGE}>2</span>
-                  <Activity className="w-3.5 h-3.5 text-accent" />
-                  Stereo Echo
-                </span>
-                <PowerToggle
-                  id="btn-bypass-delay"
-                  on={!effects.delayBypass}
-                  onToggle={() => updateFx({ delayBypass: !effects.delayBypass })}
-                  name="Delay"
-                  tone="accent"
-                  size="xs"
-                  iconOnly
-                />
-              </div>
+              <ModuleHeader
+                badge={2}
+                icon={<Activity className="w-3.5 h-3.5 text-accent" />}
+                title="Stereo Echo"
+                right={
+                  <PowerToggle
+                    id="btn-bypass-delay"
+                    on={!effects.delayBypass}
+                    onToggle={() => updateFx({ delayBypass: !effects.delayBypass })}
+                    name="Delay"
+                    tone="accent"
+                    size="xs"
+                    iconOnly
+                  />
+                }
+              />
 
               <div className="flex items-start justify-around gap-2 w-full min-w-max mx-auto">
                 <Knob
@@ -154,24 +156,24 @@ export const EffectsRackView: React.FC = React.memo(() => {
             }`}
           >
             <div className="card-body p-3 sm:p-4 space-y-3">
-              <div className="flex items-center justify-between border-b border-base-300 pb-2">
-                <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                  <span className={STEP_BADGE}>3</span>
-                  <Sparkles className="w-3.5 h-3.5 text-primary" />
-                  Distortion
-                </span>
-                <PowerToggle
-                  id="btn-bypass-distortion"
-                  on={!effects.distortionBypass}
-                  onToggle={() =>
-                    updateFx({ distortionBypass: !effects.distortionBypass })
-                  }
-                  name="Distortion"
-                  tone="accent"
-                  size="xs"
-                  iconOnly
-                />
-              </div>
+              <ModuleHeader
+                badge={3}
+                icon={<Sparkles className="w-3.5 h-3.5 text-primary" />}
+                title="Distortion"
+                right={
+                  <PowerToggle
+                    id="btn-bypass-distortion"
+                    on={!effects.distortionBypass}
+                    onToggle={() =>
+                      updateFx({ distortionBypass: !effects.distortionBypass })
+                    }
+                    name="Distortion"
+                    tone="accent"
+                    size="xs"
+                    iconOnly
+                  />
+                }
+              />
 
               <Knob
                 id="slider-distortion-wet"
@@ -198,22 +200,22 @@ export const EffectsRackView: React.FC = React.memo(() => {
             }`}
           >
             <div className="card-body p-3 sm:p-4 space-y-3">
-              <div className="flex items-center justify-between border-b border-base-300 pb-2">
-                <span className="text-xs font-bold text-base-content flex items-center gap-1.5">
-                  <span className={STEP_BADGE}>4</span>
-                  <Sliders className="w-3.5 h-3.5 text-secondary" />
-                  3-Band EQ
-                </span>
-                <PowerToggle
-                  id="btn-bypass-eq"
-                  on={!effects.eqBypass}
-                  onToggle={() => updateFx({ eqBypass: !effects.eqBypass })}
-                  name="Equalizer"
-                  tone="accent"
-                  size="xs"
-                  iconOnly
-                />
-              </div>
+              <ModuleHeader
+                badge={4}
+                icon={<Sliders className="w-3.5 h-3.5 text-secondary" />}
+                title="3-Band EQ"
+                right={
+                  <PowerToggle
+                    id="btn-bypass-eq"
+                    on={!effects.eqBypass}
+                    onToggle={() => updateFx({ eqBypass: !effects.eqBypass })}
+                    name="Equalizer"
+                    tone="accent"
+                    size="xs"
+                    iconOnly
+                  />
+                }
+              />
 
               <div className="flex items-start justify-around gap-2 w-full min-w-max mx-auto">
                 <Knob
@@ -267,7 +269,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
         <h3 className={`${SECTION_HEADER} px-1`}>
           Monitor
         </h3>
-        <div className="card bg-panel border border-base-300 shadow-md">
+        <PanelCard>
           <div className="card-body p-3 sm:p-4 gap-3">
             <div className="join self-start">
               {VISUALIZER_MODES.map((mode) => (
@@ -300,7 +302,7 @@ export const EffectsRackView: React.FC = React.memo(() => {
               paused={activeTab !== "effects"}
             />
           </div>
-        </div>
+        </PanelCard>
       </section>
     </div>
   );

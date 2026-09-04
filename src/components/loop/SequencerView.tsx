@@ -19,9 +19,11 @@ import { DRUM_KITS, GENRE_TO_KIT } from "../../audio/drumKits";
 import { patternMeterTitle, patternOptionLabel } from "../meterSelect";
 import { Knob } from "../ui/Knob";
 import { ViewHeader } from "../ui/ViewHeader";
+import { PanelCard } from "../ui/PanelCard";
 import { ChannelStrip } from "../ui/ChannelStrip";
 import { FIELD_LANE, FIELD_SELECT, SECTION_HEADER } from "../ui/fieldClasses";
 import { Field } from "../ui/Field";
+import { IconButton } from "../ui/IconButton";
 import { SequencerGrid } from "./sequencer/SequencerGrid";
 import type { SequencerTrack } from "../../types";
 
@@ -149,7 +151,7 @@ export const SequencerView: React.FC = React.memo(() => {
 
       {/* Drum Sound — everything that shapes how the kit sounds. Named for all
           of what it holds now (kit, filter, level), not just the filter. */}
-      <div className="card bg-panel border border-base-300 shadow-md">
+      <PanelCard>
         <div className="card-body p-3 sm:p-4">
         <div className="flex items-center justify-between flex-wrap gap-2.5">
           <div className="flex items-center gap-2">
@@ -244,11 +246,11 @@ export const SequencerView: React.FC = React.memo(() => {
           </div>
         </div>
         </div>
-      </div>
+      </PanelCard>
 
       {/* Pattern — the grid plus the tools that rewrite it. They used to sit in
           the view header, two cards away from the thing Random and Clear wipe. */}
-      <div className="card bg-panel border border-base-300 shadow-md">
+      <PanelCard>
         <div className="card-body p-3 sm:p-4 gap-3">
         {/* Outside the scroll container below, so the title and its tools stay
             put while a 700px-wide grid scrolls under them. */}
@@ -291,23 +293,21 @@ export const SequencerView: React.FC = React.memo(() => {
             </div>
 
             <div className="flex items-center gap-1">
-              <button
+              <IconButton
                 id="btn-shift-left"
+                label="Shift Pattern Left"
+                icon={<ArrowLeft className="w-3.5 h-3.5" />}
+                size="sm"
                 onClick={() => shiftSteps("left")}
-                className="btn btn-sm btn-ghost btn-square"
-                title="Shift Pattern Left"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-              </button>
+              />
 
-              <button
+              <IconButton
                 id="btn-shift-right"
+                label="Shift Pattern Right"
+                icon={<ArrowRight className="w-3.5 h-3.5" />}
+                size="sm"
                 onClick={() => shiftSteps("right")}
-                className="btn btn-sm btn-ghost btn-square"
-                title="Shift Pattern Right"
-              >
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              />
 
               <button
                 id="btn-randomize-grid"
@@ -340,7 +340,7 @@ export const SequencerView: React.FC = React.memo(() => {
           onPreview={previewTrack}
         />
         </div>
-      </div>
+      </PanelCard>
     </div>
   );
 });

@@ -1,5 +1,6 @@
 import React from 'react';
 import { DrumPadGrid } from '../ui/DrumPadGrid';
+import { PanelCard } from '../ui/PanelCard';
 import type { InputDeckDrumProps } from '../useInputDeck';
 
 interface DrumPadsProps {
@@ -13,10 +14,10 @@ interface DrumPadsProps {
  *  QWERTY drum listener. */
 export const DrumPads: React.FC<DrumPadsProps> = ({ drumProps }) => {
   return (
-    <div className="card bg-panel border border-base-300 shadow-md">
+    <PanelCard>
       <div className="card-body p-3 sm:p-4">
         <DrumPadGrid {...drumProps} />
       </div>
-    </div>
+    </PanelCard>
   );
 };

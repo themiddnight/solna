@@ -4,6 +4,7 @@ import type { SequencerTrack } from "../../../types";
 import type { StepCell } from "../../sequencerGrid";
 import { PowerToggle } from "../../ui/PowerToggle";
 import { StepRow } from "../../ui/StepRow";
+import { IconButton } from "../../ui/IconButton";
 
 export interface TrackRowProps {
   track: SequencerTrack;
@@ -83,13 +84,13 @@ export const TrackRow: React.FC<TrackRowProps> = React.memo(
                 a lane you cannot name is worse than one you cannot audition
                 from here. Nothing is lost: every one of these tracks has a pad
                 in the input deck's Drums tab that triggers the same sound. */}
-            <button
+            <IconButton
+              label="Preview Instrument"
+              icon={<Play className="w-3.5 h-3.5" />}
+              size="xs"
+              className="hover:text-primary hidden sm:inline-flex"
               onClick={() => onPreview(track)}
-              className="btn btn-ghost btn-xs btn-square hover:text-primary hidden sm:inline-flex"
-              title="Preview Instrument"
-            >
-              <Play className="w-3.5 h-3.5" />
-            </button>
+            />
             <PowerToggle
               id={`btn-mute-${track.id}`}
               on={!track.muted}
