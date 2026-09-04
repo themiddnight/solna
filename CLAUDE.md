@@ -106,6 +106,14 @@ before a render has no effect unless the component reads the store the way
   `src/store/instantVibes.ts` — the single copy since the `audio/` fork was deleted.
 - **Tap Tempo and stereo VU are unbuilt**, not broken — see `docs/design.md` §4 item 3.
 
+## Git conventions
+
+Branch names are `<type>/<issue-code>-<name>`: the type is the conventional-commit type the
+branch's work will land as (`feat`, `fix`, `refactor`, `docs`, `chore`), the issue code is the
+Linear id lowercased and is omitted entirely when the work has no issue, and the name is a short
+kebab-case summary — `feat/dev-369-lead-note-length`, `chore/eslint-guards`. Feature work never
+lands as a commit made directly on `main`.
+
 ## Repo-local skills and rules
 
 `.claude/skills/` ships two skills worth loading when relevant: `dsp-audio` (read before touching
