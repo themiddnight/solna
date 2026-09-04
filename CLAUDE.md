@@ -105,6 +105,10 @@ before a render has no effect unless the component reads the store the way
   project files; renaming them breaks saved projects. The table lives in
   `src/store/instantVibes.ts` — the single copy since the `audio/` fork was deleted.
 - **Tap Tempo and stereo VU are unbuilt**, not broken — see `docs/design.md` §4 item 3.
+- **The lead melody's two migration chains must run before their sanitize step.** `isLeadNoteMatrix`
+  rejects the pre-DEV-369 `string[][]` shape, so a v1 payload that reaches sanitize un-upgraded
+  comes back blank — no throw, no warning. Persist upgrades in `migrate` (before `merge`);
+  `.solna` upgrades in `migrateProjectBody` (before `sanitizeContent`). Never merge the two.
 
 ## Git conventions
 
