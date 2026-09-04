@@ -2,6 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { COUNT_BADGE, FIELD_LABEL, FIELD_SELECT, SECTION_HEADER, STEP_BADGE } from './fieldClasses';
+import { ICON_BUTTON_BASE } from './IconButton';
+import { MODAL_BOX } from './Modal';
+import { MODULE_HEADER_ROW, MODULE_TITLE } from './ModuleHeader';
+import { PANEL_CARD } from './PanelCard';
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -71,6 +75,63 @@ describe('field label token', () => {
     const offenders = sourceFiles('src/components')
       .filter((f) => !f.endsWith('fieldClasses.ts'))
       .filter((f) => readFileSync(f, 'utf8').includes(`"${STEP_BADGE}"`));
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * The existing sweep only catches a `text-[10px]` copy. The four components
+   * that leaked wrote the same role at 11px and at text-xs, with two different
+   * bottom margins — same drift, invisible to a regex pinned to one size.
+   */
+  test('no component hand-writes a stacked field label at any size', () => {
+    const lookalike = /text-(\[1[01]px\]|xs)\s+text-base-content\/\d+[^"'`]*block\s+mb-/;
+    const offenders = sourceFiles('src')
+      .filter((f) => !f.endsWith('fieldClasses.ts'))
+      .filter((f) => lookalike.test(readFileSync(f, 'utf8')));
+    expect(offenders).toEqual([]);
+  });
+
+  /** design.md §3 reserves this exact combination for SECTION headers. */
+  test('no component hand-writes the section header at any opacity', () => {
+    const lookalike = /text-xs\s+font-bold\s+uppercase\s+tracking-wider/;
+    const offenders = sourceFiles('src')
+      .filter((f) => !f.endsWith('fieldClasses.ts'))
+      .filter((f) => lookalike.test(readFileSync(f, 'utf8')));
+    expect(offenders).toEqual([]);
+  });
+
+  /** ui/ModuleHeader owns the card header row and its title — ten copies each. */
+  test('no component hand-writes the module header row or title', () => {
+    const offenders = sourceFiles('src')
+      .filter((f) => !f.endsWith('ModuleHeader.tsx'))
+      .filter((f) => {
+        const text = readFileSync(f, 'utf8');
+        return text.includes(MODULE_HEADER_ROW) || text.includes(MODULE_TITLE);
+      });
+    expect(offenders).toEqual([]);
+  });
+
+  /** ui/PanelCard owns the panel shell — sixteen copies. */
+  test('no component hand-writes the panel card shell', () => {
+    const offenders = sourceFiles('src')
+      .filter((f) => !f.endsWith('PanelCard.tsx'))
+      .filter((f) => readFileSync(f, 'utf8').includes(PANEL_CARD));
+    expect(offenders).toEqual([]);
+  });
+
+  /** ui/IconButton owns the icon-only button shape — a new hand-rolled copy must fail here. */
+  test('no component hand-writes the icon button shape', () => {
+    const offenders = sourceFiles('src')
+      .filter((f) => !f.endsWith('IconButton.tsx'))
+      .filter((f) => readFileSync(f, 'utf8').includes(ICON_BUTTON_BASE));
+    expect(offenders).toEqual([]);
+  });
+
+  /** ui/Modal owns the dialog box chrome — a new hand-rolled copy must fail here. */
+  test('no component hand-writes the modal box chrome', () => {
+    const offenders = sourceFiles('src')
+      .filter((f) => !f.endsWith('Modal.tsx'))
+      .filter((f) => readFileSync(f, 'utf8').includes(MODAL_BOX));
     expect(offenders).toEqual([]);
   });
 });

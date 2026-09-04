@@ -4,18 +4,18 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 
-// Phase 1 of the hygiene plan lands every jsx-a11y rule the preset actually
-// enables as `warn`; Phase 2 (the primitives that fix the offending markup)
-// flips them to `error`. Rules the preset ships `off` (e.g. the deprecated
-// `label-has-for`, superseded by `label-has-associated-control`) stay `off`
-// — a blanket `Object.keys().map()` would arm those too.
-const jsxA11yAsWarnings = Object.fromEntries(
+// Phase 2 flipped every jsx-a11y rule the preset actually enables to `error`:
+// the primitives that fix the offending markup have landed and the count is
+// zero. Rules the preset ships `off` (e.g. the deprecated `label-has-for`,
+// superseded by `label-has-associated-control`) stay `off` — a blanket
+// `Object.keys().map()` would arm those too.
+const jsxA11yAsErrors = Object.fromEntries(
   Object.entries(jsxA11y.flatConfigs.recommended.rules)
     .filter(([, severity]) => {
       const level = Array.isArray(severity) ? severity[0] : severity;
       return level !== 'off' && level !== 0;
     })
-    .map(([rule]) => [rule, 'warn']),
+    .map(([rule]) => [rule, 'error']),
 );
 
 export default tseslint.config(
@@ -25,7 +25,7 @@ export default tseslint.config(
   {
     ...jsxA11y.flatConfigs.recommended,
     files: ['**/*.{jsx,tsx}'],
-    rules: jsxA11yAsWarnings,
+    rules: jsxA11yAsErrors,
   },
   {
     plugins: { 'react-hooks': reactHooks },
@@ -36,6 +36,25 @@ export default tseslint.config(
       'react-hooks/exhaustive-deps': 'warn',
       // Decision D1: `interface XProps`, never `type XProps = {...}`.
       '@typescript-eslint/consistent-type-definitions': ['warn', 'interface'],
+      // Phase 2 moved this ban out of no-restricted-syntax: one rule id has one
+      // severity, and that rule still carries the React.FC and ../../ bans,
+      // which stay `warn` until Phase 3. Splitting the confirm ban into the two
+      // rules below is what makes it expressible at `error` on its own.
+      //
+      // Native prompts block the main thread — the transport's clock lives
+      // there — and cannot be themed. Use ui/ConfirmDialog or ui/Modal.
+      'no-restricted-globals': [
+        'error',
+        { name: 'confirm', message: 'Use ui/ConfirmDialog — confirm() blocks the main thread and cannot be themed.' },
+        { name: 'alert', message: 'Use an inline role="alert" notice — alert() blocks the main thread and cannot be themed.' },
+        { name: 'prompt', message: 'Use ui/Modal with a form — prompt() blocks the main thread and cannot be themed.' },
+      ],
+      'no-restricted-properties': [
+        'error',
+        { object: 'window', property: 'confirm', message: 'Use ui/ConfirmDialog — window.confirm blocks the main thread and cannot be themed.' },
+        { object: 'window', property: 'alert', message: 'Use an inline role="alert" notice — window.alert blocks the main thread and cannot be themed.' },
+        { object: 'window', property: 'prompt', message: 'Use ui/Modal with a form — window.prompt blocks the main thread and cannot be themed.' },
+      ],
       'no-restricted-syntax': [
         'warn',
         {
@@ -45,14 +64,6 @@ export default tseslint.config(
         {
           selector: "TSTypeReference[typeName.type='TSQualifiedName'][typeName.right.name='FC']",
           message: 'Use `export function X(props: XProps)` instead of React.FC (decision D1).',
-        },
-        {
-          selector: "CallExpression[callee.name=/^(confirm|alert|prompt)$/]",
-          message: 'Native prompts block the audio thread and cannot be styled — use a dialog component.',
-        },
-        {
-          selector: "CallExpression[callee.object.name='window'][callee.property.name=/^(confirm|alert|prompt)$/]",
-          message: 'Native prompts block the audio thread and cannot be styled — use a dialog component.',
         },
         // Decision D2, `../../` ban: the path-scoped layering blocks below
         // override only `no-restricted-imports` for their files, so a second
