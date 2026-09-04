@@ -40,6 +40,7 @@ const InlineName: React.FC<{ name: string; disabled: boolean; onCommit: (name: s
   }
   return (
     <input
+      // eslint-disable-next-line jsx-a11y/no-autofocus -- the input replaces the name in place on an explicit rename click; focusing it is the action the user asked for.
       autoFocus
       type="text"
       aria-label="Project name"

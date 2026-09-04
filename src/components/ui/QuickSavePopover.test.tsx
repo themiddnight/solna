@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { QuickSavePopover } from './QuickSavePopover';
+import { QuickSavePopover, isDismissKey } from './QuickSavePopover';
 
 const base = {
   open: true,
@@ -73,5 +73,37 @@ describe('QuickSavePopover', () => {
 
   test('open=false renders nothing', () => {
     expect(renderToString(<QuickSavePopover {...base} open={false} />)).toBe('');
+  });
+});
+
+describe('QuickSavePopover dismissal', () => {
+  test('Escape dismisses; nothing else does', () => {
+    expect(isDismissKey({ key: 'Escape' })).toBe(true);
+    expect(isDismissKey({ key: 'Enter' })).toBe(false);
+    expect(isDismissKey({ key: 'Esc' })).toBe(false);   // the IE spelling is not a browser we ship to
+    expect(isDismissKey({ key: 'a' })).toBe(false);
+  });
+
+  /**
+   * autoFocus is replaced by an effect that records the trigger first, so the
+   * popover can hand focus back when it closes. The attribute must be gone from
+   * the markup or React focuses the input before the effect can look at
+   * document.activeElement.
+   */
+  test('the name input no longer carries autoFocus', () => {
+    const html = renderToString(
+      <QuickSavePopover
+        open
+        onClose={() => {}}
+        heading="Save"
+        placeholder="Name"
+        saveLabel="Save"
+        name=""
+        onNameChange={() => {}}
+        onSubmit={() => {}}
+      />,
+    );
+    expect(html).not.toContain('autofocus');
+    expect(html).toContain('class="input input-sm flex-1"');
   });
 });

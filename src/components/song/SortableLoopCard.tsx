@@ -230,6 +230,7 @@ export const SortableLoopCard: React.FC<SortableLoopCardProps> = React.memo(
     };
 
     return (
+      /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the card click is a shortcut for the loop-name button inside it (line 343), which is a real focusable control; the handler already ignores clicks that landed on a control. */
       <div
         id={`card-loop-${loop.id}`}
         ref={setNodeRef}
@@ -321,6 +322,7 @@ export const SortableLoopCard: React.FC<SortableLoopCardProps> = React.memo(
                     onChange={(e) => setTempName(e.target.value)}
                     onKeyDown={handleKeyDown}
                     onBlur={handleSaveName}
+                    // eslint-disable-next-line jsx-a11y/no-autofocus -- the input replaces the name in place on an explicit rename click; focusing it is the action the user asked for.
                     autoFocus
                     className="input input-xs input-bordered font-bold max-w-40 sm:max-w-56"
                     placeholder="Loop name..."
