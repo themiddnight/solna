@@ -47,6 +47,15 @@ describe('LeadMelodyGrid', () => {
   });
 });
 
+describe('LeadMelodyGrid cells', () => {
+  test('an empty melody renders every cell unpressed with its pitch label', () => {
+    const html = renderToString(<LeadMelodyGrid />);
+    expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain('aria-label="C4"');
+    expect(html).not.toContain('aria-pressed="true"');
+  });
+});
+
 describe('LeadMelodyHeaders', () => {
   const meter = getMeter('4/4');
   const cellsPerBar = stepCells(meter);
@@ -91,5 +100,19 @@ describe('LeadMelodyHeaders', () => {
     expect(html).not.toContain('text-white');
     expect(html).not.toContain('bg-black');
     expect(html).not.toContain('rgba(');
+  });
+});
+
+describe('LeadMelodyGrid gate slider', () => {
+  test('renders the labelled per-loop gate at the default 85%', () => {
+    const html = renderToString(<LeadMelodyGrid />);
+    expect(html).toContain('Gate 85%');
+    expect(html).toContain('id="range-lead-gate"');
+    expect(html).toContain('range range-primary range-xs w-20');
+  });
+
+  test('the slider states that gate applies when the arp is off', () => {
+    const html = renderToString(<LeadMelodyGrid />);
+    expect(html).toContain('Applies when the arp is off');
   });
 });

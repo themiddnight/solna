@@ -34,3 +34,19 @@ describe('useLeadPlayback shares the one HARD_STOP_RELEASE', () => {
     expect(source).toContain('HARD_STOP_RELEASE');
   });
 });
+
+describe('useLeadPlayback feeds the loop gate and the sounding notes into the scheduler', () => {
+  const source = readFileSync(
+    join(process.cwd(), 'src/components/loop/lead/useLeadPlayback.ts'),
+    'utf8',
+  );
+
+  test('reads leadGate live from the store inside the clock callback', () => {
+    expect(source).toContain('s.leadGate');
+  });
+
+  test('resolves triggers from leadSoundingNotes, not a step note set', () => {
+    expect(source).toContain('leadSoundingNotes(s.leadMelodySteps, stepInLoop, stepsPerBar)');
+    expect(source).not.toContain('leadStepNotes');
+  });
+});

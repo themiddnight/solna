@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '../../../store/store';
-import { leadStepNotes, resolveLeadStepTriggers } from '../../../audio/leadMelody';
+import { leadSoundingNotes, resolveLeadStepTriggers } from '../../../audio/leadMelody';
 import {
   HARD_STOP_RELEASE,
   initPlaybackEngine,
@@ -105,15 +105,19 @@ export function useLeadPlayback(): { isPlaying: boolean } {
 
       const stepInLoop = step % melodyLength;
       publishStep('lead', stepInLoop);
-      const notes = leadStepNotes(s.leadMelodySteps, stepInLoop, stepsPerBar);
+      const sounding = leadSoundingNotes(s.leadMelodySteps, stepInLoop, stepsPerBar);
       const stepDur = stepDurationSec(s.bpm);
       const arpStep = arpStepFor(step, stepsPerBar);
       const triggers = resolveLeadStepTriggers(
-        notes,
+        sounding,
         s.synthParams.arpActive,
         arpStep,
         s.synthParams,
         stepDur,
+        s.leadGate,
+        // The ACTIVE window, so a note left overhanging by a METER change is
+        // capped at read time instead of ringing over the loop seam.
+        { stepInLoop, melodyLength },
       );
       for (const t of triggers) {
         playbackNoteOn(t.note, s.synthParams, DEFAULT_VELOCITY, time + t.timeOffsetSec, 'synth');

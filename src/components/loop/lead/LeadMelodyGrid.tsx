@@ -3,7 +3,7 @@ import { useAppStore } from '../../../store/store';
 import { loopBars } from '../../../store/loop';
 import { getMeter, type Meter } from '../../../utils/meter';
 import { stepCells, type StepCell } from '../../sequencerGrid';
-import { clampLeadLoopLength, loopLengthDivisors } from '../../../audio/leadMelody';
+import { clampLeadLoopLength, loopLengthDivisors, type LeadNote } from '../../../audio/leadMelody';
 import {
   initSynthPlayback,
   synthPlaybackNoteOff,
@@ -14,11 +14,16 @@ import {
   LEAD_WINDOW_OCTAVES,
   isBlackKey,
   isRootNote,
+  leadCellKinds,
   leadPitchRows,
+  leadSpanClasses,
   leadStoredIndex,
+  resolveLeadCellSpan,
 } from './melodyGrid';
 import { useCurrentStep } from '../../playbackStep';
 import { useLeadPlayback } from './useLeadPlayback';
+import { useLeadNoteResize } from './useLeadNoteResize';
+import { Slider } from '@/components/ui/Slider';
 
 /** Fixed width (px) of the note-name column, shared by the header spacer. */
 const LABEL_WIDTH = 44;
@@ -49,60 +54,120 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   rows,
   root,
   onToggle,
+  onResize,
 }: {
   meter: Meter;
   loopLength: number;
-  melody: readonly string[][];
+  melody: readonly LeadNote[][];
   rows: readonly string[];
   root: string;
   onToggle: (stepIndex: number, note: string) => void;
+  onResize: (stepIndex: number, note: string, len: number) => void;
 }) {
   const stepsPerBar = meter.stepsPerBar;
   const columns = loopLength * stepsPerBar;
   const cellsPerBar = stepCells(meter);
+  const { preview, startResize } = useLeadNoteResize();
+  // The drag preview is applied here, in local render state — the store is
+  // written once, on pointerup (see useLeadNoteResize).
+  const previewed = useMemo(() => {
+    if (!preview) return melody;
+    return melody.map((row, i) =>
+      i === preview.stepIndex
+        ? row.map((n) => (n.note === preview.note ? { note: n.note, len: preview.len } : n))
+        : row,
+    );
+  }, [melody, preview]);
+  // One pass over the notes, not a per-cell backward search.
+  const kinds = useMemo(
+    () => leadCellKinds(previewed, rows, columns, stepsPerBar),
+    [previewed, rows, columns, stepsPerBar],
+  );
 
   return (
     <div
       className="grid shrink-0"
       style={{ gridTemplateColumns: `repeat(${columns}, ${LEAD_CELL_WIDTH}px)` }}
     >
-      {rows.map((note) => (
-        <React.Fragment key={note}>
-          {Array.from({ length: columns }, (_, col) => {
-            const barIndex = Math.floor(col / stepsPerBar);
-            const stepInBar = col - barIndex * stepsPerBar;
-            const idx = leadStoredIndex(barIndex, stepInBar);
-            const active = melody[idx]?.includes(note) ?? false;
-            const cell = cellsPerBar[stepInBar];
+      {rows.map((note) => {
+        const rowKinds = kinds.get(note) ?? [];
+        return (
+          <React.Fragment key={note}>
+            {Array.from({ length: columns }, (_, col) => {
+              const barIndex = Math.floor(col / stepsPerBar);
+              const stepInBar = col - barIndex * stepsPerBar;
+              const idx = leadStoredIndex(barIndex, stepInBar);
+              const kind = rowKinds[col] ?? 'none';
+              const span = leadSpanClasses(kind, rowKinds[col + 1] ?? 'none');
+              const cell = cellsPerBar[stepInBar];
 
-            const inactive = isRootNote(note, root)
-              ? 'bg-primary/20'
-              : isBlackKey(note)
-                ? 'bg-roll-key-black'
-                : 'bg-roll-key-white';
+              const inactive = isRootNote(note, root)
+                ? 'bg-primary/20'
+                : isBlackKey(note)
+                  ? 'bg-roll-key-black'
+                  : 'bg-roll-key-white';
 
-            const sep =
-              barIndex > 0 && stepInBar === 0
-                ? 'border-l-2 border-l-base-content/50'
-                : cell.isBeatStart && stepInBar > 0
-                  ? 'border-l border-l-base-content/30'
-                  : '';
+              const sep =
+                barIndex > 0 && stepInBar === 0
+                  ? 'border-l-2 border-l-base-content/50'
+                  : cell.isBeatStart && stepInBar > 0
+                    ? 'border-l border-l-base-content/30'
+                    : '';
 
-            return (
-              <button
-                key={`${note}-${col}`}
-                type="button"
-                aria-label={note}
-                aria-pressed={active}
-                onClick={() => onToggle(idx, note)}
-                className={`h-5 border border-base-300 ${
-                  active ? 'bg-primary text-primary-content' : inactive
-                } ${sep}`}
-              />
-            );
-          })}
-        </React.Fragment>
-      ))}
+              const { spanStartIdx, spanLen, endsSpan, startCol } = resolveLeadCellSpan(
+                rowKinds,
+                col,
+                stepsPerBar,
+                note,
+                previewed,
+              );
+
+              return (
+                <button
+                  key={`${note}-${col}`}
+                  type="button"
+                  aria-label={note}
+                  aria-pressed={kind !== 'none'}
+                  onClick={() => onToggle(idx, note)}
+                  onKeyDown={(e) => {
+                    if (
+                      !e.shiftKey ||
+                      e.ctrlKey ||
+                      e.altKey ||
+                      e.metaKey ||
+                      (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')
+                    )
+                      return;
+                    if (kind === 'none') return;
+                    // The keyboard equivalent of the drag: required, not
+                    // optional — a pointer-only editing affordance is an
+                    // accessibility regression with jsx-a11y at error.
+                    e.preventDefault();
+                    onResize(spanStartIdx, note, spanLen + (e.key === 'ArrowRight' ? 1 : -1));
+                  }}
+                  className={`relative h-5 border border-base-300 ${span || inactive} ${
+                    kind === 'none' || kind === 'start' ? sep : ''
+                  }`}
+                >
+                  {endsSpan && (
+                    <span
+                      aria-hidden="true"
+                      onPointerDown={(e) =>
+                        startResize(e, spanStartIdx, note, spanLen, columns - startCol)
+                      }
+                      // touch-none: without it a touch drag the browser
+                      // turns into a scroll fires pointercancel, which now
+                      // correctly discards — so the gesture would silently
+                      // do nothing on a touch device.
+                      className="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none"
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 });
@@ -187,6 +252,8 @@ export const LeadMelodyGrid: React.FC = () => {
   const setLeadLoopLengthPreserve = useAppStore((s) => s.setLeadLoopLengthPreserve);
   const setLeadMelodySteps = useAppStore((s) => s.setLeadMelodySteps);
   const toggleLeadNote = useAppStore((s) => s.toggleLeadNote);
+  const leadGate = useAppStore((s) => s.leadGate);
+  const setLeadGate = useAppStore((s) => s.setLeadGate);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
   const chords = useAppStore((s) => s.chords);
@@ -219,8 +286,14 @@ export const LeadMelodyGrid: React.FC = () => {
     [toggleLeadNote],
   );
 
+  const setLeadNoteLength = useAppStore((s) => s.setLeadNoteLength);
+  const onResize = useCallback(
+    (stepIndex: number, note: string, len: number) => setLeadNoteLength(stepIndex, note, len),
+    [setLeadNoteLength],
+  );
+
   const clearMelody = useCallback(
-    () => setLeadMelodySteps(leadMelodySteps.map(() => [] as string[])),
+    () => setLeadMelodySteps(leadMelodySteps.map(() => [] as LeadNote[])),
     [leadMelodySteps, setLeadMelodySteps],
   );
 
@@ -294,6 +367,20 @@ export const LeadMelodyGrid: React.FC = () => {
               ))}
             </select>
 
+            <span className="text-[10px] font-mono text-base-content/60 whitespace-nowrap">
+              {`Gate ${Math.round(leadGate * 100)}%`}
+            </span>
+            <Slider
+              id="range-lead-gate"
+              value={Math.round(leadGate * 100)}
+              min={5}
+              max={100}
+              step={5}
+              onChange={(percent) => setLeadGate(percent / 100)}
+              className="range range-primary range-xs w-20"
+              title="How much of each note's final step sounds. Applies when the arp is off."
+            />
+
             <button
               id="btn-lead-clear"
               type="button"
@@ -341,6 +428,7 @@ export const LeadMelodyGrid: React.FC = () => {
                   rows={rows}
                   root={scaleRoot}
                   onToggle={onToggle}
+                  onResize={onResize}
                 />
                 {isPlaying && <LeadPlayhead currentStep={currentStep} />}
               </div>
