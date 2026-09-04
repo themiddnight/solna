@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Download, FilePlus, Save, Upload, X } from 'lucide-react';
+import { Download, FilePlus, Save, Upload } from 'lucide-react';
 import { useLiveStore } from '../ui/useLiveStore';
 import { SECTION_HEADER } from '../ui/fieldClasses';
+import { Modal } from '../ui/Modal';
 import { PROJECT_FILE_ACCEPT, PROJECT_FILE_MIME, parseProjectFile, serializeProject, unknownLibraryReferences } from '../../store/projectFile';
 import type { ProjectBody } from '../../store/projectFormat';
 import { downloadTextFile, projectFileName, readFileAsText } from '../../utils/projectFileIO';
@@ -142,71 +143,61 @@ export const ProjectManagerModal: React.FC = () => {
 
   return (
     <>
-      <dialog className="modal modal-open" onCancel={(e) => { e.preventDefault(); close(); }}>
-        <div className="modal-box max-w-2xl bg-base-100 border border-base-300 shadow-2xl space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold text-lg">Projects</h2>
-            <button type="button" className="btn btn-sm btn-ghost btn-square" aria-label="Close" onClick={close}><X className="w-4 h-4" /></button>
+      <Modal open onClose={close} size="lg" boxClassName="space-y-6" title="Projects">
+        {disabled && (
+          <div role="alert" className="alert alert-warning text-sm">
+            Project storage is unavailable on this device (private browsing or blocked site storage). Export still works.
           </div>
+        )}
+        {notice && (
+          <div role="status" className="alert text-sm">
+            <span className="flex-1">{notice}</span>
+            <button type="button" className="btn btn-xs btn-ghost" onClick={() => report(null)}>Dismiss</button>
+          </div>
+        )}
 
-          {disabled && (
-            <div role="alert" className="alert alert-warning text-sm">
-              Project storage is unavailable on this device (private browsing or blocked site storage). Export still works.
+        <section className="space-y-2">
+          <h3 className={SECTION_HEADER}>Current session</h3>
+          <p className="font-semibold">
+            {sessionLabel(currentProjectId, currentProjectName)}
+            {dirty && <span className="ml-2 badge badge-sm badge-warning">Unsaved changes</span>}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <div className={disabled ? 'tooltip' : ''} data-tip={disabled ? EXPORT_TIP : undefined}>
+              <button type="button" className="btn btn-sm btn-primary gap-1" disabled={disabled} onClick={() => void save(null)}><Save className="w-4 h-4" />Save</button>
             </div>
-          )}
-          {notice && (
-            <div role="status" className="alert text-sm">
-              <span className="flex-1">{notice}</span>
-              <button type="button" className="btn btn-xs btn-ghost" onClick={() => report(null)}>Dismiss</button>
+            <div className={disabled ? 'tooltip' : ''} data-tip={disabled ? EXPORT_TIP : undefined}>
+              <button type="button" className="btn btn-sm gap-1" disabled={disabled} onClick={() => setDialog({ kind: 'name-prompt', purpose: 'save-copy', initial: nameDefault('save-copy', currentProjectName), then: null })}>Save as new copy</button>
             </div>
-          )}
+            <button type="button" className="btn btn-sm gap-1" onClick={() => requestAction({ kind: 'new' })}><FilePlus className="w-4 h-4" />New</button>
+          </div>
+        </section>
 
-          <section className="space-y-2">
-            <h3 className={SECTION_HEADER}>Current session</h3>
-            <p className="font-semibold">
-              {sessionLabel(currentProjectId, currentProjectName)}
-              {dirty && <span className="ml-2 badge badge-sm badge-warning">Unsaved changes</span>}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <div className={disabled ? 'tooltip' : ''} data-tip={disabled ? EXPORT_TIP : undefined}>
-                <button type="button" className="btn btn-sm btn-primary gap-1" disabled={disabled} onClick={() => void save(null)}><Save className="w-4 h-4" />Save</button>
-              </div>
-              <div className={disabled ? 'tooltip' : ''} data-tip={disabled ? EXPORT_TIP : undefined}>
-                <button type="button" className="btn btn-sm gap-1" disabled={disabled} onClick={() => setDialog({ kind: 'name-prompt', purpose: 'save-copy', initial: nameDefault('save-copy', currentProjectName), then: null })}>Save as new copy</button>
-              </div>
-              <button type="button" className="btn btn-sm gap-1" onClick={() => requestAction({ kind: 'new' })}><FilePlus className="w-4 h-4" />New</button>
-            </div>
-          </section>
+        <section className="space-y-2">
+          <h3 className={SECTION_HEADER}>Import</h3>
+          <button id="project-import-button" type="button" className="btn btn-sm gap-1" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4" />Import .solna file</button>
+          <input ref={fileInputRef} type="file" accept={PROJECT_FILE_ACCEPT} className="hidden" onChange={(e) => void onImportFile(e)} />
+        </section>
 
-          <section className="space-y-2">
-            <h3 className={SECTION_HEADER}>Import</h3>
-            <button id="project-import-button" type="button" className="btn btn-sm gap-1" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4" />Import .solna file</button>
-            <input ref={fileInputRef} type="file" accept={PROJECT_FILE_ACCEPT} className="hidden" onChange={(e) => void onImportFile(e)} />
-          </section>
+        <section className="space-y-2">
+          <h3 className={SECTION_HEADER}>Projects on this device</h3>
+          <ProjectList
+            projects={projectList}
+            currentProjectId={currentProjectId}
+            now={Date.now()}
+            disabled={disabled}
+            onOpen={(id) => requestAction({ kind: 'open', id })}
+            onRename={(id, name) => void renameProject(id, name).then((r) => { if (r.ok === false) report(r.message); })}
+            onExport={(id) => void exportRow(id)}
+            onDelete={(project) => setDialog({ kind: 'delete-confirm', project })}
+          />
+        </section>
 
-          <section className="space-y-2">
-            <h3 className={SECTION_HEADER}>Projects on this device</h3>
-            <ProjectList
-              projects={projectList}
-              currentProjectId={currentProjectId}
-              now={Date.now()}
-              disabled={disabled}
-              onOpen={(id) => requestAction({ kind: 'open', id })}
-              onRename={(id, name) => void renameProject(id, name).then((r) => { if (r.ok === false) report(r.message); })}
-              onExport={(id) => void exportRow(id)}
-              onDelete={(project) => setDialog({ kind: 'delete-confirm', project })}
-            />
-          </section>
-
-          <section className="border-t border-base-300 pt-4">
-            <p className="text-xs text-base-content/60 mb-2">Writes what you are hearing right now, including unsaved edits. A row's Export writes the file as last saved.</p>
-            <button id="project-export-session" type="button" className="btn btn-sm btn-outline gap-1" onClick={exportSession}><Download className="w-4 h-4" />Export current session</button>
-          </section>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button type="button" onClick={close}>close</button>
-        </form>
-      </dialog>
+        <section className="border-t border-base-300 pt-4">
+          <p className="text-xs text-base-content/60 mb-2">Writes what you are hearing right now, including unsaved edits. A row's Export writes the file as last saved.</p>
+          <button id="project-export-session" type="button" className="btn btn-sm btn-outline gap-1" onClick={exportSession}><Download className="w-4 h-4" />Export current session</button>
+        </section>
+      </Modal>
 
       {dialog.kind === 'dirty-guard' && (
         <DirtyGuardDialog

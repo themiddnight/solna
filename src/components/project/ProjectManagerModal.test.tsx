@@ -29,7 +29,8 @@ describe('ProjectManagerModal', () => {
   test('an unsaved session shows the label, Save, Save as new copy, New, Import and Export current session', () => {
     useAppStore.setState({ isProjectManagerOpen: true, currentProjectId: null, currentProjectName: null, dirty: false, projectStoreStatus: 'ready', projectList: [] });
     const html = renderToString(<ProjectManagerModal />);
-    expect(html).toContain('<dialog class="modal modal-open"');
+    // Phase 2: openness is a DOM property set by showModal(), never a class.
+    expect(html).toContain('<dialog class="modal"');
     expect(html).toContain('Unsaved session');
     expect(html).toContain('>Save<');
     expect(html).toContain('>Save as new copy<');
@@ -68,7 +69,8 @@ describe('ProjectManagerModal', () => {
       projectNotice: 'Imported with unrecognised references: bass pattern "x"',
     });
     const html = renderToString(<ProjectManagerModal />);
-    expect(html).toContain('<dialog class="modal modal-open"');
+    // Phase 2: openness is a DOM property set by showModal(), never a class.
+    expect(html).toContain('<dialog class="modal"');
     expect(html).toContain('role="status"');
     expect(html).toContain('Imported with unrecognised references: bass pattern &quot;x&quot;');
   });
