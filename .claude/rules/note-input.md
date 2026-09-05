@@ -51,6 +51,12 @@ uncaptured with no error anywhere.
 **Emit after the sound is scheduled, never before.** A subscriber that throws
 must not be able to swallow a note the user played.
 
+**A note-off is data now, not just a release.** Live capture (DEV-374) reads
+the gap between a note's on and its off, quantised in steps, and extends the
+written note through `setLeadNoteLength`. A source that plays a note but
+never announces the release therefore records a one-step note — audible,
+visible, and silently wrong. Announce both edges.
+
 **Sequenced notes are not input.** Playback goes through `playbackEngine`
 (`playbackNoteOn`), which is deliberately not on this bus. A step the
 transport played is not a step the user performed.
@@ -66,3 +72,8 @@ Velocity reaches the bus but never the stored note: `LeadNote` is
 `{ note, len }`, and widening it would force a persist `version` bump and a
 project `formatVersion` bump. The bus carries it so that day needs no second
 refactor.
+
+The bus's `time` is likewise not what the recorder quantises against. It is
+whatever the source scheduled at, and only some sources name one; the
+recorder reads `ctx.currentTime` itself, through
+`audio/playback/leadLiveClock.ts`, and subtracts the output latency there.
