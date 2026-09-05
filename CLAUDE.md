@@ -71,6 +71,15 @@ anything driven by a pointer, a clock tick or an animation frame must not write 
 directly. Consequence for tests and for reading `localStorage` in a live page: storage lags the
 store by up to one idle window; call `flushPersistedWrites()` before asserting on it.
 
+**The shared 16th clock runs if and only if a player holds a subscription.** `subscribeClock`
+starts the timer for the first listener and `stopClockTimer` ends it with the last, and nothing
+else may start or hold it. The metronome is a **click, not a transport**: `setMetronomeEnabled`
+only arms the click that `clockTick` emits, so it sounds while something plays and does nothing
+at all otherwise. It once started the clock and blocked the idle suspend, which made the toggle a
+second, invisible transport — the grid's playhead ran and the lead recorder quantised against it
+with no music playing. Anything that needs a clock must start a player; to record in time to a
+click alone, press play on the lead.
+
 **The store→engine bridge** is `src/store/engineSync.ts`: one `subscribeWithSelector`
 subscription per engine-settable value with `fireImmediately`, started once by `useEngineSync()`
 in `App.tsx`. The `AudioContext` is created on the first user click, after which

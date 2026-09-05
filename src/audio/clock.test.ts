@@ -398,3 +398,44 @@ describe('song boundary alignment', () => {
     }
   });
 });
+
+/**
+ * The metronome is a CLICK, not a transport.
+ *
+ * It used to be both: setMetronomeEnabled started the shared clock, and
+ * subscribeClock's disposer refused to stop the timer while the metronome was
+ * on. That made a second, invisible transport — the grid's playhead ran, the
+ * lead recorder quantised against it, and the context never went idle, all
+ * from a toggle that only claims to add a click to music that is already
+ * playing. These pin that the toggle no longer moves time.
+ */
+describe('the metronome does not run the clock', () => {
+  test('enabling it starts no timer', () => {
+    const { engine } = clockEngine();
+    engine.setMetronomeEnabled(true);
+    expect((engine as any).clockTimer).toBeNull();
+  });
+
+  test('the last subscriber leaving stops the clock even with it enabled', () => {
+    const { engine } = clockEngine();
+    engine.setMetronomeEnabled(true);
+    const unsubscribe = engine.subscribeClock(() => {});
+    expect((engine as any).clockTimer).not.toBeNull();
+    unsubscribe();
+    expect((engine as any).clockTimer).toBeNull();
+  });
+
+  test('it still clicks on the beat while a player holds the clock', () => {
+    const { engine, ctx, tick } = clockEngine();
+    const clicks: number[] = [];
+    (engine as any).playMetronomeClick = (_down: boolean, time: number) => clicks.push(time);
+    engine.setMetronomeEnabled(true);
+    engine.subscribeClock(() => {});
+
+    for (let i = 0; i < 40; i++) {
+      tick();
+      ctx.currentTime += 0.025;
+    }
+    expect(clicks.length).toBeGreaterThan(1);
+  });
+});

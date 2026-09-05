@@ -264,13 +264,19 @@ class AudioEngine {
    * sample-accurately. Once started the clock runs continuously; re-subscribing
    * never restarts the grid, so live changes stay glitch-free.
    */
+  /**
+   * Arms or disarms the CLICK. It does not start, stop or hold the clock.
+   *
+   * It used to do all three, which made the toggle a second transport: the
+   * grid's playhead ran, the lead recorder quantised against it and the
+   * context never went idle, from a control that only claims to add a click
+   * to music that is already playing. The click is emitted from clockTick,
+   * and clockTick only runs while a player holds a subscription, so "clicks
+   * only while something plays" now falls out of the wiring instead of
+   * needing a guard of its own.
+   */
   setMetronomeEnabled(enabled: boolean): void {
     this.metronomeEnabled = enabled;
-    if (enabled) {
-      this.ensureClockRunning();
-    } else if (this.clockListeners.size === 0) {
-      this.stopClockTimer();
-    }
     this.markActivity();
   }
 
@@ -284,7 +290,7 @@ class AudioEngine {
     this.markActivity();
     return () => {
       this.clockListeners.delete(listener);
-      if (this.clockListeners.size === 0 && !this.metronomeEnabled) {
+      if (this.clockListeners.size === 0) {
         this.stopClockTimer();
         this.markActivity();
       }
@@ -354,7 +360,6 @@ class AudioEngine {
     if (!this.ctx) return;
     const ok = shouldSuspendWhenIdle({
       clockListenerCount: this.clockListeners.size,
-      metronomeEnabled: this.metronomeEnabled,
       liveVoiceCount: this.liveVoiceCount(),
       contextState: this.ctx.state,
     });

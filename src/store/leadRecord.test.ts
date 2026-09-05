@@ -242,10 +242,11 @@ describe('leadRecord bridge — live capture', () => {
     useAppStore.setState({ sequencerPlayer: 'stopped' });
     expect(clockRuns).toBe(0);
 
-    // So does the metronome — it is the same clock, and it is what a player
-    // counts against when nothing else is running.
+    // The metronome does NOT: it is a click on music that is already
+    // playing, and on its own it neither sounds nor runs a clock to
+    // quantise against.
     useAppStore.setState({ metronomeActive: true });
-    expect(clockRuns).toBe(1);
+    expect(clockRuns).toBe(0);
   });
 
   test('unsubscribing stops the anchor collector too', () => {
@@ -263,7 +264,6 @@ describe('leadClockActive', () => {
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
-    metronomeActive: false,
     ...patch,
   });
 
@@ -275,8 +275,13 @@ describe('leadClockActive', () => {
     expect(leadClockActive(clockState({ leadPlayer: 'playing' }))).toBe(true);
     expect(leadClockActive(clockState({ chordsPlayer: 'playing' }))).toBe(true);
     expect(leadClockActive(clockState({ sequencerPlayer: 'playing' }))).toBe(true);
-    expect(leadClockActive(clockState({ metronomeActive: true }))).toBe(true);
   });
+
+  // There is no metronome case to write here any more, and that is the
+  // point: the toggle is not a field of either predicate, so "the metronome
+  // counts" is not merely false but unrepresentable. What it still cannot do
+  // — start the anchor collector — is pinned through the real store in the
+  // bridge suite above, where metronomeActive does exist.
 
   test('a player still stopping still owns the clock', () => {
     expect(leadClockActive(clockState({ leadPlayer: 'stopping' }))).toBe(true);
@@ -289,7 +294,6 @@ describe('leadMarkerFollowsClock', () => {
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
-    metronomeActive: false,
     leadRecording: false,
     ...patch,
   });
@@ -303,10 +307,7 @@ describe('leadMarkerFollowsClock', () => {
 
   // The gap DEV-378 closes: something else is playing, capture is armed and
   // in time, so the marker has a write column to show and must show it.
-  test('another section or the metronome counts once Rec is armed', () => {
-    expect(
-      leadMarkerFollowsClock(markerState({ metronomeActive: true, leadRecording: true })),
-    ).toBe(true);
+  test('another section counts once Rec is armed', () => {
     expect(
       leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing', leadRecording: true })),
     ).toBe(true);
@@ -320,9 +321,8 @@ describe('leadMarkerFollowsClock', () => {
   // nothing (recordLeadNote returns false while leadRecording is off), so a
   // marker sweeping the grid would animate a write head that does not exist.
   test('a clock with nothing armed and the lead silent does not move it', () => {
-    expect(leadMarkerFollowsClock(markerState({ metronomeActive: true }))).toBe(false);
     expect(leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing' }))).toBe(false);
-    expect(leadClockActive(markerState({ metronomeActive: true }))).toBe(true);
+    expect(leadClockActive(markerState({ sequencerPlayer: 'playing' }))).toBe(true);
   });
 
   test('arming alone, with no clock anywhere, does not move it', () => {

@@ -13,19 +13,24 @@ import type { PlayerState } from './types';
  *
  * The DEV-370 guard was `leadPlayer !== 'stopped'`, which meant that playing
  * only the drums and then pressing a key wrote to a static cursor while the
- * beat ran. The rule should fit in one sentence — if music is playing,
- * record in time; if not, record at the cursor — and the metronome counts,
- * because it runs on the same clock and is exactly what a player counts
- * against when nothing else is going.
+ * beat ran. The rule should fit in one sentence: if music is playing, record
+ * in time; if not, record at the cursor.
+ *
+ * The metronome was once counted here, on the reasoning that it runs the same
+ * clock and is what a player counts against when nothing else is going. It no
+ * longer runs a clock at all — it is a click on music that is already playing
+ * (see setMetronomeEnabled in audio/engine.ts) — so counting it would put this
+ * predicate in disagreement with whether a clock exists to quantise against.
+ * To record in time to a click alone, press play on the lead: an empty melody
+ * makes no sound, and the click, the marker and capture all follow from the
+ * one transport that is running.
  */
 export function leadClockActive(state: {
-  metronomeActive: boolean;
   sequencerPlayer: PlayerState;
   chordsPlayer: PlayerState;
   leadPlayer: PlayerState;
 }): boolean {
   return (
-    state.metronomeActive ||
     isPlayerActive(state.sequencerPlayer) ||
     isPlayerActive(state.chordsPlayer) ||
     isPlayerActive(state.leadPlayer)
@@ -53,7 +58,6 @@ export function leadClockActive(state: {
  * first.
  */
 export function leadMarkerFollowsClock(state: {
-  metronomeActive: boolean;
   sequencerPlayer: PlayerState;
   chordsPlayer: PlayerState;
   leadPlayer: PlayerState;

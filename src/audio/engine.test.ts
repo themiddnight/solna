@@ -2185,11 +2185,13 @@ describe('idle suspend and audio-clock teardown', () => {
     unsubscribe();
   });
 
-  test('an enabled metronome blocks the suspend', () => {
+  // The metronome is a click, not a transport: with no clock listener it
+  // makes no sound, so leaving the toggle on must not hold the context.
+  test('an enabled metronome with nothing playing does not block the suspend', () => {
     const { engine, ctx } = suspendableEngine();
     engine.setMetronomeEnabled(true);
     (engine as any).maybeSuspendNow();
-    expect(ctx.suspendCalls).toBe(0);
+    expect(ctx.suspendCalls).toBe(1);
     engine.setMetronomeEnabled(false);
   });
 

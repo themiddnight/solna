@@ -24,7 +24,6 @@ export const IDLE_SUSPEND_MS = 30_000;
 export interface IdleSnapshot {
   /** How many listeners hold the shared 16th clock. Any player running is >= 1. */
   clockListenerCount: number;
-  metronomeEnabled: boolean;
   /** Every voice still live OR still releasing, across all sources. */
   liveVoiceCount: number;
   contextState: AudioContextState;
@@ -33,7 +32,10 @@ export interface IdleSnapshot {
 export function shouldSuspendWhenIdle(snapshot: IdleSnapshot): boolean {
   if (snapshot.contextState !== 'running') return false;
   if (snapshot.clockListenerCount > 0) return false;
-  if (snapshot.metronomeEnabled) return false;
+  // The metronome is deliberately absent. It is a click on a clock somebody
+  // else runs, so with no listener it makes no sound, and an armed-but-silent
+  // toggle must not keep the master chain rendering for the rest of the
+  // session — which is exactly what it did while it ran the clock itself.
   // A held QWERTY note is a live voice with no clock listener and no player —
   // suspending here would cut a sustained note the user is still holding.
   if (snapshot.liveVoiceCount > 0) return false;
