@@ -1,18 +1,22 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
 import {
   isBlackKey,
   isRootNote,
   leadCellKinds,
+  leadColumnCells,
+  leadNoteCells,
   leadPitchRows,
   leadResizeLen,
   leadSpanClasses,
-  leadStoredIndex,
   resolveLeadCellSpan,
   type LeadCellKind,
   leadCursorKeyTarget,
   leadMarkerColumn,
 } from './melodyGrid';
 import type { LeadNote } from '../../../audio/leadMelody';
+import { columnsPerBar, LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
+import { getMeter } from '@/utils/meter';
 
 describe('leadPitchRows — scale-locked', () => {
   test('lists the scale notes across the window, highest first', () => {
@@ -45,15 +49,6 @@ describe('leadPitchRows — chromatic', () => {
   });
 });
 
-describe('leadStoredIndex', () => {
-  test('maps a (bar, step) column to the fixed-width stored slot', () => {
-    expect(leadStoredIndex(0, 0)).toBe(0);
-    expect(leadStoredIndex(0, 15)).toBe(15);
-    expect(leadStoredIndex(1, 0)).toBe(24);
-    expect(leadStoredIndex(2, 5)).toBe(53);
-  });
-});
-
 describe('isBlackKey', () => {
   test('sharp/flat pitch classes are black keys, naturals are not', () => {
     expect(isBlackKey('C#4')).toBe(true);
@@ -74,77 +69,94 @@ describe('isRootNote', () => {
   });
 });
 
-const emptyBar = (): LeadNote[][] => Array.from({ length: 24 }, () => [] as LeadNote[]);
+const emptyBar = (): LeadNote[][] => Array.from({ length: 48 }, () => [] as LeadNote[]);
 
 describe('leadCellKinds', () => {
+  // Fixed at TICKS_PER_SIXTEENTH (the 1/16 stride): these fixtures predate
+  // per-resolution stride and their `len`s are chosen so a "1-cell",
+  // "2-cell" etc. story reads the same as it always did — `len` is
+  // TICKS_PER_SIXTEENTH per intended cell, since leadNoteCells rounds up.
+  const stride = TICKS_PER_SIXTEENTH;
+
   test('a one-step note is a lone start', () => {
     const m = emptyBar();
     m[0] = [{ note: 'C4', len: 1 }];
-    const kinds = leadCellKinds(m, ['C4'], 4, 16);
+    const kinds = leadCellKinds(m, ['C4'], 4, 16, stride);
     expect(kinds.get('C4')).toEqual(['start', 'none', 'none', 'none']);
   });
 
-  test('a two-step note is start then end, with no body', () => {
+  test('a two-cell note is start then end, with no body', () => {
     const m = emptyBar();
-    m[0] = [{ note: 'C4', len: 2 }];
-    expect(leadCellKinds(m, ['C4'], 4, 16).get('C4')).toEqual(['start', 'end', 'none', 'none']);
+    m[0] = [{ note: 'C4', len: 4 }];
+    expect(leadCellKinds(m, ['C4'], 4, 16, stride).get('C4')).toEqual([
+      'start', 'end', 'none', 'none',
+    ]);
   });
 
-  test('a three-step note is start, body, end', () => {
+  test('a three-cell note is start, body, end', () => {
     const m = emptyBar();
-    m[1] = [{ note: 'C4', len: 3 }];
-    expect(leadCellKinds(m, ['C4'], 5, 16).get('C4')).toEqual([
+    m[2] = [{ note: 'C4', len: 6 }]; // column 1 -> stored tick 2
+    expect(leadCellKinds(m, ['C4'], 5, 16, stride).get('C4')).toEqual([
       'none', 'start', 'body', 'end', 'none',
     ]);
   });
 
   test('two notes in one pitch row are painted independently', () => {
     const m = emptyBar();
-    m[0] = [{ note: 'C4', len: 2 }];
-    m[3] = [{ note: 'C4', len: 1 }];
-    expect(leadCellKinds(m, ['C4'], 5, 16).get('C4')).toEqual([
+    m[0] = [{ note: 'C4', len: 4 }];
+    m[6] = [{ note: 'C4', len: 1 }]; // column 3 -> stored tick 6
+    expect(leadCellKinds(m, ['C4'], 5, 16, stride).get('C4')).toEqual([
       'start', 'end', 'none', 'start', 'none',
     ]);
   });
 
   test('a note crossing the bar boundary spans into the next bar', () => {
     const m: LeadNote[][] = [...emptyBar(), ...emptyBar()];
-    m[15] = [{ note: 'C4', len: 3 }];
-    const kinds = leadCellKinds(m, ['C4'], 32, 16) as Map<string, LeadCellKind[]>;
+    m[30] = [{ note: 'C4', len: 6 }]; // column 15 -> stored tick 30
+    const kinds = leadCellKinds(m, ['C4'], 32, 16, stride) as Map<string, LeadCellKind[]>;
     expect(kinds.get('C4')?.slice(14, 19)).toEqual(['none', 'start', 'body', 'end', 'none']);
   });
 
   test('a span running past the last column is truncated, not wrapped', () => {
     const m = emptyBar();
-    m[14] = [{ note: 'C4', len: 6 }];
-    expect(leadCellKinds(m, ['C4'], 16, 16).get('C4')?.slice(13)).toEqual([
+    m[28] = [{ note: 'C4', len: 12 }]; // column 14 -> stored tick 28
+    // 'end' marks the last cell of the DRAWN run, not the note's true last
+    // cell: it is resolveLeadCellSpan's sole signal for endsSpan, which
+    // gates the resize handle. A truncated note still needs a handle at the
+    // window edge — startResize already clamps maxLen to columns - startCol,
+    // so a handle there can only ever shrink toward the loop end, never
+    // reach past it.
+    expect(leadCellKinds(m, ['C4'], 16, 16, stride).get('C4')?.slice(13)).toEqual([
       'none', 'start', 'end',
     ]);
   });
 
   test('every requested row gets an entry, all none when nothing is drawn', () => {
-    const kinds = leadCellKinds(emptyBar(), ['C4', 'E4'], 3, 16);
+    const kinds = leadCellKinds(emptyBar(), ['C4', 'E4'], 3, 16, stride);
     expect(kinds.get('E4')).toEqual(['none', 'none', 'none']);
     expect([...kinds.keys()]).toEqual(['C4', 'E4']);
   });
 
   test('a note whose pitch row is outside the visible window is ignored', () => {
     const m = emptyBar();
-    m[0] = [{ note: 'C7', len: 2 }];
-    const kinds = leadCellKinds(m, ['C4'], 3, 16);
+    m[0] = [{ note: 'C7', len: 4 }];
+    const kinds = leadCellKinds(m, ['C4'], 3, 16, stride);
     expect(kinds.get('C4')).toEqual(['none', 'none', 'none']);
     expect(kinds.has('C7')).toBe(false);
   });
 });
 
 describe('resolveLeadCellSpan', () => {
+  const stride = TICKS_PER_SIXTEENTH;
+
   test('a one-step note resolves to itself and ends its own span', () => {
     const rowKinds: LeadCellKind[] = ['none', 'start', 'none'];
     const m = emptyBar();
-    m[1] = [{ note: 'C4', len: 1 }];
-    expect(resolveLeadCellSpan(rowKinds, 1, 16, 'C4', m)).toEqual({
-      spanStartIdx: 1,
+    m[2] = [{ note: 'C4', len: 1 }]; // column 1 -> stored tick 2
+    expect(resolveLeadCellSpan(rowKinds, 1, 16, stride, 'C4', m)).toEqual({
+      spanStartIdx: 2,
       spanLen: 1,
+      spanCells: 1,
       endsSpan: true,
       startCol: 1,
     });
@@ -154,16 +166,18 @@ describe('resolveLeadCellSpan', () => {
     const rowKinds: LeadCellKind[] = ['start', 'body', 'end'];
     const m = emptyBar();
     m[0] = [{ note: 'C4', len: 3 }];
-    expect(resolveLeadCellSpan(rowKinds, 1, 16, 'C4', m)).toEqual({
+    expect(resolveLeadCellSpan(rowKinds, 1, 16, stride, 'C4', m)).toEqual({
       spanStartIdx: 0,
       spanLen: 3,
+      spanCells: 2,
       endsSpan: false,
       startCol: 0,
     });
     // The end cell of the same span both resolves to the same start and ends it.
-    expect(resolveLeadCellSpan(rowKinds, 2, 16, 'C4', m)).toEqual({
+    expect(resolveLeadCellSpan(rowKinds, 2, 16, stride, 'C4', m)).toEqual({
       spanStartIdx: 0,
       spanLen: 3,
+      spanCells: 2,
       endsSpan: true,
       startCol: 0,
     });
@@ -171,17 +185,19 @@ describe('resolveLeadCellSpan', () => {
 
   test('a span crossing a bar boundary resolves through the stored index, not the column, at a stepsPerBar other than the 24-step storage width', () => {
     // stepsPerBar=5: bar 1 starts at column 5. A span starting at column 7
-    // (bar 1, step 2) stores at leadStoredIndex(1, 2) = 24 + 2 = 26, not at
-    // column 7 — MAX_STEPS_PER_BAR (24) is fixed regardless of the active meter.
+    // (bar 1, column 2) stores at bar 1's base plus 2 columns of 2 ticks =
+    // 48 + 4 = 52, not at column 7 — LEAD_TICKS_PER_BAR (48) is fixed
+    // regardless of the active meter or resolution.
     const rowKinds: LeadCellKind[] = [
       'none', 'none', 'none', 'none', 'none', // bar 0 (columns 0-4)
       'none', 'none', 'start', 'body', 'end', // bar 1 (columns 5-9)
     ];
     const m = [...emptyBar(), ...emptyBar()];
-    m[26] = [{ note: 'C4', len: 3 }];
-    expect(resolveLeadCellSpan(rowKinds, 8, 5, 'C4', m)).toEqual({
-      spanStartIdx: 26,
+    m[52] = [{ note: 'C4', len: 3 }];
+    expect(resolveLeadCellSpan(rowKinds, 8, 5, stride, 'C4', m)).toEqual({
+      spanStartIdx: 52,
       spanLen: 3,
+      spanCells: 2,
       endsSpan: false,
       startCol: 7,
     });
@@ -189,9 +205,10 @@ describe('resolveLeadCellSpan', () => {
 
   test('an empty cell has no span to resolve', () => {
     const rowKinds: LeadCellKind[] = ['none', 'none'];
-    expect(resolveLeadCellSpan(rowKinds, 0, 16, 'C4', emptyBar())).toEqual({
+    expect(resolveLeadCellSpan(rowKinds, 0, 16, stride, 'C4', emptyBar())).toEqual({
       spanStartIdx: -1,
       spanLen: 0,
+      spanCells: 1,
       endsSpan: false,
       startCol: -1,
     });
@@ -276,6 +293,16 @@ describe('leadCursorKeyTarget', () => {
     expect(leadCursorKeyTarget(5, 'ArrowLeft', true, 16, 32)).toBe(0);
   });
 
+  test('shift jumps a bar in COLUMNS, not in 16ths', () => {
+    // 4/4 at 1/8: a bar is eight columns and the loop is sixteen. Every
+    // other case in this describe passes 16 with columns 32, which reads
+    // equally well as a 4/4 stepsPerBar — so only a case where the two
+    // numbers disagree can tell the parameter's coordinate space.
+    expect(leadCursorKeyTarget(0, 'ArrowRight', true, 8, 16)).toBe(8);
+    expect(leadCursorKeyTarget(8, 'ArrowLeft', true, 8, 16)).toBe(0);
+    expect(leadCursorKeyTarget(9, 'ArrowRight', true, 8, 16)).toBe(15);
+  });
+
   test('any other key is not ours — null, so the browser keeps its own behaviour', () => {
     expect(leadCursorKeyTarget(5, 'Enter', false, 16, 32)).toBeNull();
     expect(leadCursorKeyTarget(5, 'ArrowUp', false, 16, 32)).toBeNull();
@@ -323,5 +350,123 @@ describe('leadMarkerColumn', () => {
     // currentStep never carries a non-finite value in practice (stepPublisher
     // seeds it at 0), so this guard is specific to the stopped/cursor branch.
     expect(leadMarkerColumn(false, 0, Number.NaN, 16)).toBe(0);
+  });
+});
+
+describe('the stored-index conversion has exactly one copy', () => {
+  test('melodyGrid does not declare its own', () => {
+    // Two copies of bar-major arithmetic agreed only for as long as it took
+    // no meter argument. DEV-375 gives it a stride as well, and a second
+    // copy that looks correct in isolation is how a note ends up drawn on
+    // one column and scheduled on another.
+    const src = readFileSync(new URL('./melodyGrid.ts', import.meta.url), 'utf8');
+    expect(src).not.toContain('export function leadStoredIndex(');
+    expect(src).toContain('leadStoredIndexAt');
+  });
+});
+
+describe('leadNoteCells', () => {
+  test('a quarter note is 2 cells at 1/8, 4 at 1/16 and 8 at 1/32', () => {
+    expect(leadNoteCells(8, 4)).toBe(2);
+    expect(leadNoteCells(8, 2)).toBe(4);
+    expect(leadNoteCells(8, 1)).toBe(8);
+  });
+
+  test('a note finer than the grid still draws one cell, never zero', () => {
+    // The same ceil and the same floor holdSec uses. What sounds is what
+    // is drawn: two roundings that could disagree would put a note on the
+    // grid at a width its sound does not match.
+    expect(leadNoteCells(1, 4)).toBe(1);
+    expect(leadNoteCells(3, 4)).toBe(1);
+    expect(leadNoteCells(5, 4)).toBe(2);
+  });
+});
+
+describe('leadColumnCells', () => {
+  const meter = getMeter('4/4');
+
+  test('one descriptor per COLUMN, not per 16th', () => {
+    expect(leadColumnCells(meter, 2)).toHaveLength(16);
+    expect(leadColumnCells(meter, 4)).toHaveLength(8);
+    expect(leadColumnCells(meter, 1)).toHaveLength(32);
+  });
+
+  test('a beat starts on the column that starts the accent group', () => {
+    // 4/4 accents every 4 sixteenths = every 8 ticks: columns 0/2/4/6 at
+    // 1/8, 0/4/8/12 at 1/16, 0/8/16/24 at 1/32.
+    expect(leadColumnCells(meter, 4).filter((c) => c.isBeatStart).map((c) => c.index))
+      .toEqual([0, 2, 4, 6]);
+    expect(leadColumnCells(meter, 2).filter((c) => c.isBeatStart).map((c) => c.index))
+      .toEqual([0, 4, 8, 12]);
+    expect(leadColumnCells(meter, 1).filter((c) => c.isBeatStart).map((c) => c.index))
+      .toEqual([0, 8, 16, 24]);
+  });
+
+  test('the odd meter still groups 3+2+2', () => {
+    const seven = leadColumnCells(getMeter('7/8'), 4);
+    expect(seven).toHaveLength(7);
+    expect(seven.filter((c) => c.isBeatStart).map((c) => c.index)).toEqual([0, 3, 5]);
+  });
+
+  test('labels are 1-based columns, so every column has a distinct one', () => {
+    expect(leadColumnCells(meter, 1)[31].label).toBe(32);
+  });
+});
+
+describe('leadCellKinds draws a note its audible width', () => {
+  const rows = ['C4'];
+  const melody = (len: number): LeadNote[][] => {
+    const steps: LeadNote[][] = Array.from({ length: LEAD_TICKS_PER_BAR }, () => []);
+    steps[0] = [{ note: 'C4', len }];
+    return steps;
+  };
+  const kinds = (len: number, stride: number): LeadCellKind[] =>
+    leadCellKinds(melody(len), rows, columnsPerBar(16, stride), 16, stride).get('C4')!;
+
+  test('a quarter note spans 2 cells at 1/8 and 8 at 1/32', () => {
+    expect(kinds(8, 4).slice(0, 3)).toEqual(['start', 'end', 'none']);
+    expect(kinds(8, 1).slice(0, 9)).toEqual([
+      'start', 'body', 'body', 'body', 'body', 'body', 'body', 'end', 'none',
+    ]);
+  });
+
+  test('an off-grid note is not drawn at all — it is dormant, not lost', () => {
+    const steps: LeadNote[][] = Array.from({ length: LEAD_TICKS_PER_BAR }, () => []);
+    steps[1] = [{ note: 'C4', len: 1 }];
+    expect(leadCellKinds(steps, rows, 16, 16, 2).get('C4')!.every((k) => k === 'none')).toBe(true);
+    expect(leadCellKinds(steps, rows, 32, 16, 1).get('C4')![1]).toBe('start');
+  });
+
+  test('a span running past the last column is truncated, never wrapped', () => {
+    expect(kinds(64, 4)).toHaveLength(8);
+    // Index 7 is the last VISIBLE cell of a note that needs 16 to sound in
+    // full — 'end' here marks where the grab handle goes, not where the
+    // note stops. A handle at the window edge is correct: startResize caps
+    // maxLen at columns - startCol (the loop end), never at the next
+    // note's position, so it can only shrink this note, not extend it past
+    // the window.
+    expect(kinds(64, 4)[7]).toBe('end');
+  });
+});
+
+describe('resolveLeadCellSpan reports both units', () => {
+  test('the stored start, the tick length and the drawn cell count', () => {
+    const previewed: LeadNote[][] = Array.from({ length: LEAD_TICKS_PER_BAR }, () => []);
+    previewed[0] = [{ note: 'C4', len: 8 }];
+    const rowKinds = leadCellKinds(previewed, ['C4'], 8, 16, 4).get('C4')!;
+
+    // Shift+Arrow must work from ANY cell of a span, not just its first.
+    const span = resolveLeadCellSpan(rowKinds, 1, 16, 4, 'C4', previewed);
+    expect(span.spanStartIdx).toBe(0);
+    expect(span.startCol).toBe(0);
+    expect(span.spanLen).toBe(8);
+    expect(span.spanCells).toBe(2);
+    expect(span.endsSpan).toBe(true);
+  });
+
+  test('an empty cell resolves to no span', () => {
+    const previewed: LeadNote[][] = Array.from({ length: LEAD_TICKS_PER_BAR }, () => []);
+    const rowKinds = leadCellKinds(previewed, ['C4'], 8, 16, 4).get('C4')!;
+    expect(resolveLeadCellSpan(rowKinds, 3, 16, 4, 'C4', previewed).spanStartIdx).toBe(-1);
   });
 });

@@ -1,8 +1,10 @@
 import { getScaleNotesInOctave, ROOTS } from '../../../utils/musicTheory';
-import { MAX_STEPS_PER_BAR } from '../../../utils/meter';
 import type { LeadMelodyView } from '../../../store/types';
-import type { LeadNote } from '../../../audio/leadMelody';
-import { clockStepToGridColumn } from '@/audio/leadLiveRecord';
+import { leadStoredIndexAt, type LeadNote } from '../../../audio/leadMelody';
+import { wrapColumn } from '@/audio/leadLiveRecord';
+import { TICKS_PER_SIXTEENTH, columnsPerBar } from '@/utils/stepResolution';
+import { beatIndexAt, isBeatBoundary, type Meter } from '@/utils/meter';
+import type { StepCell } from '@/components/sequencerGrid';
 
 // Declared in audio/leadStepRecord so the store can read it as well: step
 // entry follows the window when a recorded note falls outside it, and
@@ -39,14 +41,6 @@ export function leadPitchRows(
 }
 
 /**
- * The flat stored index for a (bar, stepInBar) column. The melody is stored at
- * MAX_STEPS_PER_BAR per bar, so this never depends on the active meter.
- */
-export function leadStoredIndex(barIndex: number, stepInBar: number): number {
-  return barIndex * MAX_STEPS_PER_BAR + stepInBar;
-}
-
-/**
  * True when `note` is a "black key" pitch class (sharp/flat). Used to shade
  * chromatic rows darker like a piano keyboard; applies to scale-locked rows
  * too when a scale degree is itself a sharp/flat (e.g. F# in G major).
@@ -70,32 +64,72 @@ export function isRootNote(note: string, root: string): boolean {
 export type LeadCellKind = 'none' | 'start' | 'body' | 'end';
 
 /**
+ * How many CELLS a tick-counted note draws. The same expression
+ * resolveLeadStepTriggers rounds holdSec with, deliberately: what sounds
+ * must be what is drawn, or a note that showed as two cells while sounding
+ * for five ticks reintroduces exactly the invisible state that silent
+ * dormancy was chosen to avoid.
+ */
+export function leadNoteCells(len: number, stride: number): number {
+  const cell = stride > 0 ? stride : 1;
+  return Math.max(1, Math.ceil(len / cell));
+}
+
+/**
+ * One header descriptor per COLUMN rather than per 16th. `stepCells` in
+ * sequencerGrid.ts answers the same question for a grid whose column IS a
+ * 16th, which the lead's no longer is; the accent grouping still comes from
+ * the meter, so a beat starts on the column whose tick starts an accent
+ * group and nowhere else.
+ */
+export function leadColumnCells(meter: Meter, stride: number): StepCell[] {
+  const cells: StepCell[] = [];
+  const columns = columnsPerBar(meter.stepsPerBar, stride);
+  for (let index = 0; index < columns; index++) {
+    const tick = index * stride;
+    const sixteenth = Math.floor(tick / TICKS_PER_SIXTEENTH);
+    const onSixteenth = tick % TICKS_PER_SIXTEENTH === 0;
+    const beatIndex = beatIndexAt(sixteenth, meter.accentGroups);
+    cells.push({
+      index,
+      label: index + 1,
+      isBeatStart: onSixteenth && isBeatBoundary(sixteenth, meter.accentGroups),
+      beatIndex,
+      isAltBeatGroup: beatIndex % 2 === 0,
+    });
+  }
+  return cells;
+}
+
+/**
  * One LeadCellKind per column for every visible pitch row, keyed by note
  * name, so the render is a map lookup rather than a per-cell backward search.
  * Computed in a single pass over the note data — walk each note once and
  * paint its span — so the cost stays linear in notes, not in cells.
  *
- * `columns` is the ACTIVE window (loopLength x stepsPerBar); a span running
- * past the last column is truncated, never wrapped, which matches invariant 2.
+ * `columns` is the ACTIVE window (loopLength x columnsPerBar); a span
+ * running past the last column is truncated, never wrapped, which matches
+ * invariant 2. A note the current resolution cannot reach is never looked
+ * up, so it draws nothing — dormant, not lost.
  */
 export function leadCellKinds(
   melody: readonly LeadNote[][],
   rows: readonly string[],
   columns: number,
   stepsPerBar: number,
+  stride: number,
 ): Map<string, LeadCellKind[]> {
   const map = new Map<string, LeadCellKind[]>();
   for (const note of rows) {
     map.set(note, new Array<LeadCellKind>(columns).fill('none'));
   }
   for (let col = 0; col < columns; col++) {
-    const barIndex = Math.floor(col / stepsPerBar);
-    const row = melody[leadStoredIndex(barIndex, col - barIndex * stepsPerBar)];
+    const row = melody[leadStoredIndexAt(col, stepsPerBar, stride)];
     if (!row) continue;
     for (const n of row) {
       const kinds = map.get(n.note);
       if (!kinds) continue;
-      const span = Math.min(Math.max(1, n.len), columns - col);
+      const span = Math.min(leadNoteCells(n.len, stride), columns - col);
       for (let k = 0; k < span; k++) {
         kinds[col + k] = k === 0 ? 'start' : k === span - 1 ? 'end' : 'body';
       }
@@ -121,20 +155,21 @@ export function resolveLeadCellSpan(
   rowKinds: readonly LeadCellKind[],
   col: number,
   stepsPerBar: number,
+  stride: number,
   note: string,
   previewed: readonly LeadNote[][],
-): { spanStartIdx: number; spanLen: number; endsSpan: boolean; startCol: number } {
+): { spanStartIdx: number; spanLen: number; spanCells: number; endsSpan: boolean; startCol: number } {
   const kind = rowKinds[col] ?? 'none';
   const startCol = kind === 'none' ? -1 : rowKinds.lastIndexOf('start', col);
-  const startBar = startCol < 0 ? 0 : Math.floor(startCol / stepsPerBar);
-  const spanStartIdx =
-    startCol < 0 ? -1 : leadStoredIndex(startBar, startCol - startBar * stepsPerBar);
+  const spanStartIdx = startCol < 0 ? -1 : leadStoredIndexAt(startCol, stepsPerBar, stride);
   const spanLen =
-    startCol < 0 ? 0 : (previewed[spanStartIdx]?.find((n) => n.note === note)?.len ?? 1);
+    startCol < 0 ? 0 : (previewed[spanStartIdx]?.find((n) => n.note === note)?.len ?? stride);
   const nextKind = rowKinds[col + 1] ?? 'none';
   const endsSpan =
     kind === 'end' || (kind === 'start' && nextKind !== 'body' && nextKind !== 'end');
-  return { spanStartIdx, spanLen, endsSpan, startCol };
+  // Both units, because the caller needs both: the drag handle counts
+  // CELLS, and the write it eventually makes counts TICKS.
+  return { spanStartIdx, spanLen, spanCells: leadNoteCells(spanLen, stride), endsSpan, startCol };
 }
 
 /**
@@ -180,17 +215,23 @@ export function leadSpanClasses(kind: LeadCellKind, next: LeadCellKind): string 
  * one this widget handles. Shift jumps a whole bar. A jump that overshoots
  * lands on the edge rather than being refused — refusing would make the last
  * partial bar unreachable by keyboard.
+ *
+ * Every number here is a COLUMN: `col`, `colsPerBar` and `columns` all live
+ * in the active window's coordinate space, never in 16ths. The two only
+ * coincide at 1/16, which is why this parameter is not called stepsPerBar —
+ * at 1/8 a 4/4 bar is eight columns, and a shift jump of sixteen would
+ * cross two bars.
  */
 export function leadCursorKeyTarget(
   col: number,
   key: string,
   shiftKey: boolean,
-  stepsPerBar: number,
+  colsPerBar: number,
   columns: number,
 ): number | null {
   if (key !== 'ArrowLeft' && key !== 'ArrowRight') return null;
-  const stride = shiftKey ? stepsPerBar : 1;
-  const next = col + (key === 'ArrowRight' ? stride : -stride);
+  const jump = shiftKey ? colsPerBar : 1;
+  const next = col + (key === 'ArrowRight' ? jump : -jump);
   return Math.min(columns - 1, Math.max(0, next));
 }
 
@@ -208,12 +249,11 @@ export function leadMarkerColumn(
   cursor: number,
   columns: number,
 ): number {
-  // Playing, the marker goes through clockStepToGridColumn — the SAME named
-  // conversion the recorder uses (decision 6) — not its own clamp. The two
-  // used to disagree (wrap vs. clamp) whenever a source landed outside
-  // [0, columns), which is exactly the "scattered pieces that each look
-  // correct in isolation" the named conversion exists to prevent.
-  if (isPlaying) return clockStepToGridColumn(currentStep, columns);
+  // Playing, the source is a column the publisher already converted through
+  // clockStepToGridColumn (the ONE named conversion). Converting it a
+  // second time here would multiply by the stride twice; it only needs the
+  // wrap, which is why that wrap has its own name.
+  if (isPlaying) return wrapColumn(currentStep, columns);
   // Stopped, the source is the user-placed cursor, not a clock quantity, so
   // it clamps to the visible edge rather than wrapping — landing on column 0
   // via modulo would look like the user chose column 0, which they didn't.

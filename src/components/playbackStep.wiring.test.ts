@@ -90,13 +90,19 @@ const WIRINGS: Array<{
 // during pre-arm or 'stopping', exactly when a player is plainly playing
 // along to something. This pins the order so a future edit can't put the
 // publish back behind a gate unnoticed.
+//
+// DEV-375 (task 8) moved the call from one publish per dispatch to a loop
+// over `marks` (one publish per on-grid tick the dispatch owns, each with
+// its own audible offset — see leadScheduleHits) — but that loop, like the
+// single call it replaced, still runs before both early-outs, so what this
+// pins is unchanged: source order, not call count.
 describe('useLeadPlayback publishes the step before either early-out', () => {
   test('publishStepAt precedes the soft-stop and non-play early-outs in source order', () => {
     const source = readFileSync(
       join(process.cwd(), 'src/components/loop/lead/useLeadPlayback.ts'),
       'utf8',
     );
-    const publishIndex = source.indexOf("publishStepAt('lead', stepInLoop, time);");
+    const publishIndex = source.indexOf("publishStepAt('lead', mark.column, time + mark.offsetSec);");
     const softStopIndex = source.indexOf("if (action === 'soft-stop')");
     const notPlayIndex = source.indexOf("if (action !== 'play') return;");
     expect(publishIndex).toBeGreaterThan(-1);

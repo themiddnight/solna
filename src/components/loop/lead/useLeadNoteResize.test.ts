@@ -15,7 +15,9 @@ const source = readFileSync(
   'utf8',
 );
 
-/** A drag started on a len-2 note at x=100, with room to grow to 8. */
+/** A drag started on a len-2 note at x=100, with room to grow to 8. Stride 1
+ * (1/32) so cells and ticks coincide — the case that was already passing
+ * before the cells→ticks conversion existed. */
 const drag: LeadResizeDrag = {
   stepIndex: 4,
   note: 'C4',
@@ -24,7 +26,12 @@ const drag: LeadResizeDrag = {
   startX: 100,
   pointerId: 1,
   moved: true,
+  stride: 1,
 };
+
+/** The same gesture, one resolution coarser (1/16, stride 2) — the case that
+ * was silently under-writing by half before this fix. */
+const dragAtStride2: LeadResizeDrag = { ...drag, stride: 2 };
 
 /** The same gesture, released without ever travelling past the slop. */
 const press: LeadResizeDrag = { ...drag, moved: false };
@@ -78,6 +85,18 @@ describe('leadResizeCommit', () => {
     expect(grown).toEqual({ kind: 'resize', stepIndex: 4, note: 'C4', len: 8 });
   });
 
+  test('the committed length is TICKS, not cells — a 3-cell drag at stride 2 writes 6', () => {
+    // leadResizeLen resolves 3 cells (startLen 2 + 1 cell of travel); the
+    // write must be 3 * stride = 6 ticks, not 3. Proves the boundary
+    // conversion this task adds, not just the stride-1 identity case.
+    expect(leadResizeCommit(dragAtStride2, 'pointerup', 100 + 1 * LEAD_CELL_WIDTH)).toEqual({
+      kind: 'resize',
+      stepIndex: 4,
+      note: 'C4',
+      len: 6,
+    });
+  });
+
   test('a half-cell drag rounds to the nearest step', () => {
     expect(leadResizeCommit(drag, 'pointerup', 100 + 0.6 * LEAD_CELL_WIDTH)).toEqual({
       kind: 'resize',
@@ -126,5 +145,16 @@ describe('useLeadNoteResize', () => {
 
   test('pointercancel is wired to the same teardown as pointerup', () => {
     expect(source).toContain("addEventListener('pointercancel', onEnd)");
+  });
+
+  // The live preview cannot be exercised without a DOM (renderToString gives
+  // none), so its cells→ticks conversion is pinned at the source: both the
+  // initial preview (on startResize) and every subsequent one (on pointer
+  // move) must multiply by the drag's stride, the same way the committed
+  // length does in leadResizeCommit above — one boundary, applied everywhere
+  // a cell count would otherwise leak into a ticks-typed field.
+  test('the preview converts cells to ticks too, not only the commit', () => {
+    expect(source).toContain('len: startLen * stride');
+    expect(source).toContain('len: lenAt(ev.clientX, drag) * drag.stride');
   });
 });

@@ -6,6 +6,8 @@ import { LEAD_CELL_WIDTH, leadResizeLen } from './melodyGrid';
 export interface LeadResizePreview {
   stepIndex: number;
   note: string;
+  /** TICKS — the same unit as LeadNote.len, so the caller can drop it
+   * straight into `previewed` with no second conversion. */
   len: number;
 }
 
@@ -18,6 +20,15 @@ export interface LeadResizeDrag {
   pointerId: number;
   /** Set once the pointer has travelled past the slop. See leadResizeMoved. */
   moved: boolean;
+  /**
+   * Ticks per CELL, at the resolution active when the drag started. Cells
+   * are what the pointer moves over (leadResizeLen's unit, pinned by the
+   * plan); ticks are what a length IS (LeadNote.len's unit, since Task 4).
+   * The conversion happens once, here, at the boundary — both the committed
+   * length (leadResizeCommit) and the live preview (below) multiply by it,
+   * so nothing downstream ever sees a cell count again.
+   */
+  stride: number;
 }
 
 /**
@@ -67,7 +78,9 @@ export function leadResizeCommit(
     kind: 'resize',
     stepIndex: drag.stepIndex,
     note: drag.note,
-    len: leadResizeLen(drag.startLen, clientX - drag.startX, LEAD_CELL_WIDTH, drag.maxLen),
+    len:
+      leadResizeLen(drag.startLen, clientX - drag.startX, LEAD_CELL_WIDTH, drag.maxLen) *
+      drag.stride,
   };
 }
 
@@ -87,6 +100,7 @@ export function useLeadNoteResize(): {
     note: string,
     startLen: number,
     maxLen: number,
+    stride: number,
   ) => void;
 } {
   const [preview, setPreview] = useState<LeadResizePreview | null>(null);
@@ -99,6 +113,7 @@ export function useLeadNoteResize(): {
       note: string,
       startLen: number,
       maxLen: number,
+      stride: number,
     ) => {
       // Never let the gesture reach the cell's onClick, or the drag would
       // toggle the note off the moment it starts.
@@ -112,8 +127,9 @@ export function useLeadNoteResize(): {
         startX: e.clientX,
         pointerId: e.pointerId,
         moved: false,
+        stride,
       };
-      setPreview({ stepIndex, note, len: startLen });
+      setPreview({ stepIndex, note, len: startLen * stride });
 
       const lenAt = (clientX: number, drag: LeadResizeDrag): number =>
         leadResizeLen(drag.startLen, clientX - drag.startX, LEAD_CELL_WIDTH, drag.maxLen);
@@ -124,7 +140,11 @@ export function useLeadNoteResize(): {
         // Sticky: a gesture that has travelled stays a drag even if it comes
         // back to where it started, so a wobble out and back is not an erase.
         if (!drag.moved && leadResizeMoved(drag.startX, ev.clientX)) drag.moved = true;
-        setPreview({ stepIndex: drag.stepIndex, note: drag.note, len: lenAt(ev.clientX, drag) });
+        setPreview({
+          stepIndex: drag.stepIndex,
+          note: drag.note,
+          len: lenAt(ev.clientX, drag) * drag.stride,
+        });
       };
       const onEnd = (ev: PointerEvent): void => {
         const drag = dragRef.current;

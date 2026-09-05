@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useMemo } from 'react';
 import { useAppStore } from '../../../store/store';
 import { loopBars } from '../../../store/loop';
 import { getMeter, type Meter } from '../../../utils/meter';
-import { stepCells, type StepCell } from '../../sequencerGrid';
+import { type StepCell } from '../../sequencerGrid';
 import {
   clampLeadCursor,
   clampLeadLoopLength,
   leadCursorBar,
+  leadStoredIndexAt,
   loopLengthDivisors,
   type LeadNote,
 } from '../../../audio/leadMelody';
@@ -20,12 +21,18 @@ import {
   isBlackKey,
   isRootNote,
   leadCellKinds,
+  leadColumnCells,
   leadCursorKeyTarget,
   leadPitchRows,
   leadSpanClasses,
-  leadStoredIndex,
   resolveLeadCellSpan,
 } from './melodyGrid';
+import {
+  LEAD_STEP_RESOLUTIONS,
+  LEAD_STEP_RESOLUTION_IDS,
+  columnsPerBar,
+  strideFor,
+} from '@/utils/stepResolution';
 import { useLeadMarkerColumn } from './useLeadMarker';
 import { useLeadPlayback } from './useLeadPlayback';
 import { useLeadNoteResize } from './useLeadNoteResize';
@@ -69,6 +76,9 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   rows,
   root,
   onResize,
+  stride,
+  colsPerBar,
+  cellsPerBar,
 }: {
   meter: Meter;
   loopLength: number;
@@ -76,16 +86,18 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   rows: readonly string[];
   root: string;
   onResize: (stepIndex: number, note: string, len: number) => void;
+  stride: number;
+  colsPerBar: number;
+  cellsPerBar: StepCell[];
 }) {
   const stepsPerBar = meter.stepsPerBar;
-  const columns = loopLength * stepsPerBar;
-  const cellsPerBar = stepCells(meter);
+  const columns = loopLength * colsPerBar;
   const { preview, startResize } = useLeadNoteResize();
   // Column → stored index. Stored indices are bar-major at MAX_STEPS_PER_BAR,
   // so this is not the identity and a skipped-cell fill must go through it.
   const resolveStepIndex = useCallback(
-    (col: number) => leadStoredIndex(Math.floor(col / stepsPerBar), col % stepsPerBar),
-    [stepsPerBar],
+    (col: number) => leadStoredIndexAt(col, stepsPerBar, stride),
+    [stepsPerBar, stride],
   );
   const paint = useLeadNotePaint(resolveStepIndex);
   // The drag preview is applied here, in local render state — the store is
@@ -100,8 +112,8 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   }, [melody, preview]);
   // One pass over the notes, not a per-cell backward search.
   const kinds = useMemo(
-    () => leadCellKinds(previewed, rows, columns, stepsPerBar),
-    [previewed, rows, columns, stepsPerBar],
+    () => leadCellKinds(previewed, rows, columns, stepsPerBar, stride),
+    [previewed, rows, columns, stepsPerBar, stride],
   );
 
   return (
@@ -114,9 +126,9 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
         return (
           <React.Fragment key={note}>
             {Array.from({ length: columns }, (_, col) => {
-              const barIndex = Math.floor(col / stepsPerBar);
-              const stepInBar = col - barIndex * stepsPerBar;
-              const idx = leadStoredIndex(barIndex, stepInBar);
+              const barIndex = Math.floor(col / colsPerBar);
+              const stepInBar = col - barIndex * colsPerBar;
+              const idx = leadStoredIndexAt(barIndex * colsPerBar + stepInBar, stepsPerBar, stride);
               const kind = rowKinds[col] ?? 'none';
               const span = leadSpanClasses(kind, rowKinds[col + 1] ?? 'none');
               const cell = cellsPerBar[stepInBar];
@@ -134,10 +146,11 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
                     ? 'border-l border-l-base-content/30'
                     : '';
 
-              const { spanStartIdx, spanLen, endsSpan, startCol } = resolveLeadCellSpan(
+              const { spanStartIdx, spanCells, endsSpan, startCol } = resolveLeadCellSpan(
                 rowKinds,
                 col,
                 stepsPerBar,
+                stride,
                 note,
                 previewed,
               );
@@ -167,7 +180,12 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
                     // optional — a pointer-only editing affordance is an
                     // accessibility regression with jsx-a11y at error.
                     e.preventDefault();
-                    onResize(spanStartIdx, note, spanLen + (e.key === 'ArrowRight' ? 1 : -1));
+                    // leadResizeLen counts CELLS, because that is what the
+                    // pointer moves over; the write counts TICKS, because
+                    // that is what a length IS. The conversion happens once,
+                    // here, at the boundary.
+                    const cells = spanCells + (e.key === 'ArrowRight' ? 1 : -1);
+                    onResize(spanStartIdx, note, cells * stride);
                   }}
                   className={`relative h-5 border border-base-300 ${span || inactive} ${
                     kind === 'none' || kind === 'start' ? sep : ''
@@ -177,7 +195,7 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
                     <span
                       aria-hidden="true"
                       onPointerDown={(e) =>
-                        startResize(e, spanStartIdx, note, spanLen, columns - startCol)
+                        startResize(e, spanStartIdx, note, spanCells, columns - startCol, stride)
                       }
                       // touch-none: without it a touch drag the browser
                       // turns into a scroll fires pointercancel, which now
@@ -203,24 +221,28 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
 // time. stepsPerBar and columns are numbers, and cellsPerBar is useMemo'd on
 // the shared METERS[id] object, so the shallow prop comparison is meaningful.
 export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
-  stepsPerBar,
   columns,
   cellsPerBar,
   cursor,
   selectedBar,
   onSelectColumn,
+  columnsPerBar,
 }: {
+  // Accepted for prop-shape parity with the rest of the grid's header wiring
+  // (and the tests that construct this via a shared `headerProps` helper) —
+  // the strips group columns by `columnsPerBar` now, not the raw meter width.
   stepsPerBar: number;
   columns: number;
   cellsPerBar: StepCell[];
   cursor: number;
   selectedBar: number;
   onSelectColumn: (col: number) => void;
+  columnsPerBar: number;
 }) {
   // Arrows move the cursor AND the focus together. Leaving focus behind would
   // put the ring on one column while the selection sat on another.
   const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, col: number): void => {
-    const next = leadCursorKeyTarget(col, e.key, e.shiftKey, stepsPerBar, columns);
+    const next = leadCursorKeyTarget(col, e.key, e.shiftKey, columnsPerBar, columns);
     if (next === null) return;
     e.preventDefault();
     onSelectColumn(next);
@@ -240,15 +262,15 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
         <div className="shrink-0" style={{ width: LABEL_WIDTH }} />
         <div className="flex shrink-0">
           {Array.from({ length: columns }, (_, col) => {
-            const barIndex = Math.floor(col / stepsPerBar);
-            const stepInBar = col - barIndex * stepsPerBar;
+            const barIndex = Math.floor(col / columnsPerBar);
+            const stepInBar = col % columnsPerBar;
             return (
               <button
                 key={col}
                 type="button"
                 aria-label={`Bar ${barIndex + 1}`}
                 aria-pressed={barIndex === selectedBar}
-                onClick={() => onSelectColumn(barIndex * stepsPerBar)}
+                onClick={() => onSelectColumn(barIndex * columnsPerBar)}
                 onKeyDown={(e) => onKeyDown(e, col)}
                 // bg-primary/20 text-primary now means "the selected bar for
                 // copy/paste" — it is a live selection tint, not a second
@@ -273,8 +295,8 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
         <div className="shrink-0" style={{ width: LABEL_WIDTH }} />
         <div className="flex shrink-0">
           {Array.from({ length: columns }, (_, col) => {
-            const barIndex = Math.floor(col / stepsPerBar);
-            const stepInBar = col - barIndex * stepsPerBar;
+            const barIndex = Math.floor(col / columnsPerBar);
+            const stepInBar = col % columnsPerBar;
             const cell = cellsPerBar[stepInBar];
             return (
               <button
@@ -312,6 +334,8 @@ export const LeadMelodyGrid: React.FC = () => {
   const meterId = useAppStore((s) => s.meterId);
   const leadMelodySteps = useAppStore((s) => s.leadMelodySteps);
   const leadLoopLength = useAppStore((s) => s.leadLoopLength);
+  const leadStepResolution = useAppStore((s) => s.leadStepResolution);
+  const setLeadStepResolution = useAppStore((s) => s.setLeadStepResolution);
   const leadMelodyView = useAppStore((s) => s.leadMelodyView);
   const leadMelodyOctave = useAppStore((s) => s.leadMelodyOctave);
   const setLeadMelodyView = useAppStore((s) => s.setLeadMelodyView);
@@ -330,7 +354,9 @@ export const LeadMelodyGrid: React.FC = () => {
   const stepsPerBar = meter.stepsPerBar;
   const totalBars = loopBars(chords);
   const divisors = loopLengthDivisors(totalBars);
-  const cellsPerBar = useMemo(() => stepCells(meter), [meter]);
+  const stride = strideFor(leadStepResolution);
+  const colsPerBar = columnsPerBar(stepsPerBar, stride);
+  const cellsPerBar = useMemo(() => leadColumnCells(meter, stride), [meter, stride]);
 
   const rows = useMemo(
     () =>
@@ -377,12 +403,12 @@ export const LeadMelodyGrid: React.FC = () => {
     [synthParams],
   );
 
-  const columns = leadLoopLength * stepsPerBar;
+  const columns = leadLoopLength * colsPerBar;
   const markerColumn = useLeadMarkerColumn(columns);
   // Clamped again HERE, not only on write: a meter or loop-length change can
   // narrow the window under a cursor that was legal when it was set.
-  const cursor = clampLeadCursor(leadCursor, leadLoopLength, stepsPerBar);
-  const selectedBar = leadCursorBar(cursor, stepsPerBar);
+  const cursor = clampLeadCursor(leadCursor, leadLoopLength, stepsPerBar, stride);
+  const selectedBar = leadCursorBar(cursor, stepsPerBar, stride);
 
   return (
     <div className="card bg-panel border border-base-300 shadow-xl">
@@ -439,6 +465,20 @@ export const LeadMelodyGrid: React.FC = () => {
               {divisors.map((d) => (
                 <option key={d} value={d}>
                   {d} bar{d === 1 ? '' : 's'}
+                </option>
+              ))}
+            </select>
+
+            <select
+              id="select-lead-step-resolution"
+              value={leadStepResolution}
+              onChange={(e) => setLeadStepResolution(e.target.value as typeof leadStepResolution)}
+              className="select select-xs select-ghost"
+              title="Melody grid resolution — a finer grid reveals more columns and never moves a note"
+            >
+              {LEAD_STEP_RESOLUTION_IDS.map((id) => (
+                <option key={id} value={id}>
+                  {LEAD_STEP_RESOLUTIONS[id].label}
                 </option>
               ))}
             </select>
@@ -515,6 +555,7 @@ export const LeadMelodyGrid: React.FC = () => {
               stepsPerBar={stepsPerBar}
               columns={columns}
               cellsPerBar={cellsPerBar}
+              columnsPerBar={colsPerBar}
             />
 
             {/* Body: note column + cells + marker */}
@@ -544,6 +585,9 @@ export const LeadMelodyGrid: React.FC = () => {
                   rows={rows}
                   root={scaleRoot}
                   onResize={onResize}
+                  stride={stride}
+                  colsPerBar={colsPerBar}
+                  cellsPerBar={cellsPerBar}
                 />
               </div>
             </div>

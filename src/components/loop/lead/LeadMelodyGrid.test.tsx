@@ -4,6 +4,7 @@ import { renderToString } from 'react-dom/server';
 import { LeadMelodyHeaders, LeadMelodyGrid, LeadMarker } from './LeadMelodyGrid';
 import { stepCells } from '../../sequencerGrid';
 import { getMeter } from '../../../utils/meter';
+import { leadColumnCells } from './melodyGrid';
 
 describe('LeadMelodyGrid', () => {
   test('renders one loop-length option per divisor of the progression', () => {
@@ -55,6 +56,13 @@ describe('LeadMelodyGrid', () => {
     expect(html).toContain('id="btn-lead-clear"');
     expect(html).toContain('font-mono');
   });
+
+  test('the resolution select offers the three resolutions, in order', () => {
+    const html = renderToString(<LeadMelodyGrid />);
+    expect(html).toContain('id="select-lead-step-resolution"');
+    const options = [...html.matchAll(/<option value="(1\/(?:8|16|32))"/g)].map((m) => m[1]);
+    expect(options).toEqual(['1/8', '1/16', '1/32']);
+  });
 });
 
 describe('LeadMelodyGrid cells', () => {
@@ -86,6 +94,7 @@ describe('LeadMelodyHeaders', () => {
     cursor,
     selectedBar: Math.floor(cursor / meter.stepsPerBar),
     onSelectColumn: () => {},
+    columnsPerBar: meter.stepsPerBar,
   });
 
   test('renders one cell per column in both strips, numbering bars and beats', () => {
@@ -170,6 +179,46 @@ describe('LeadMelodyHeaders', () => {
     expect(html).not.toContain('text-white');
     expect(html).not.toContain('bg-black');
     expect(html).not.toContain('rgba(');
+  });
+
+  test('the DEV-371 contract holds at every stride, only the counts change', () => {
+    // The labels' CONTENT changes with the column count; their contract does
+    // not. Every column is a real button, every button is labelled, the
+    // selected bar and the cursor column are the pressed ones.
+    const at = (colsPerBar: number): string =>
+      renderToString(
+        <LeadMelodyHeaders
+          {...headerProps(colsPerBar, 0)}
+          columnsPerBar={colsPerBar}
+          cellsPerBar={leadColumnCells(meter, (16 * 2) / colsPerBar)}
+        />,
+      );
+
+    const eighths = at(8);
+    expect(eighths.split('<button').length - 1).toBe(16); // 8 bar + 8 beat
+    expect(eighths).toContain('aria-label="Bar 1"');
+    expect(eighths).toContain('aria-label="Bar 1 step 6"');
+    expect(eighths.split('aria-pressed="true"').length - 1).toBe(8 + 1);
+
+    const thirtyseconds = at(32);
+    expect(thirtyseconds.split('<button').length - 1).toBe(64);
+    expect(thirtyseconds).toContain('aria-label="Bar 1 step 32"');
+    expect(thirtyseconds.split('aria-pressed="true"').length - 1).toBe(32 + 1);
+  });
+
+  test('the cell width never moves, so the marker and the ruler cannot drift', () => {
+    // No zoom, on purpose: the marker's translateX and these buttons must
+    // agree on a stride in pixels, and a fixed width keeps that agreement
+    // free rather than making it a third thing to keep in sync.
+    const wide = renderToString(
+      <LeadMelodyHeaders
+        {...headerProps(32, 0)}
+        columnsPerBar={32}
+        cellsPerBar={leadColumnCells(meter, 1)}
+      />,
+    );
+    expect(wide.split('width:20px').length - 1).toBe(64);
+    expect(renderToString(<LeadMarker column={3} />)).toContain('translateX(60px)');
   });
 });
 
