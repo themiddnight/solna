@@ -108,9 +108,9 @@ describe('the lead step producer', () => {
     'utf8',
   );
 
-  test('is gated on leadClockActive, never on leadPlayer', () => {
-    expect(source).toContain('leadClockActive');
-    expect(source).not.toContain('leadPlayer');
+  test('is gated on leadMarkerFollowsClock, never on the lead player alone', () => {
+    expect(source).toContain('leadMarkerFollowsClock');
+    expect(source).not.toContain('useAppStore((s)');
   });
 
   test('is the only thing in the app that publishes a lead step', () => {

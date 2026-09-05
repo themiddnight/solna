@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAppStore } from '@/store/store';
-import { leadClockActive } from '@/store/leadRecord';
+import { leadMarkerFollowsClock } from '@/store/leadRecord';
 import { initPlaybackEngine, subscribePlaybackClock } from '@/audio/playback/playbackEngine';
 import { stepDurationSec } from '@/utils/musicTheory';
 import { getMeter } from '@/utils/meter';
@@ -36,12 +36,12 @@ export function leadMarkerPublishes(
  *
  * Split out of useLeadPlayback because the two answer different questions
  * and are gated differently. The scheduler runs while the LEAD plays; the
- * marker must run whenever the shared clock does, because the column it
- * shows is also where live capture writes (leadClockActive is the
- * recorder's own gate, in store/leadRecord.ts) — and with the lead stopped
- * but the metronome or another section running, capture was in time while
- * the marker sat frozen on leadCursor, pointing at a column nothing was
- * being written to.
+ * marker also has to run while capture is armed against somebody else's
+ * clock, because the column it shows is where that capture writes — with
+ * the lead stopped and the metronome or the drums running, capture was in
+ * time while the marker sat frozen on leadCursor, pointing at a column
+ * nothing was being written to. leadMarkerFollowsClock draws that line, and
+ * store/leadRecord.ts says why it is not simply the recorder's own gate.
  *
  * Widening the CONSUMER alone does not work and was tried: useLeadMarker's
  * predicate without a producer behind it froze the marker at a stale zero,
@@ -50,22 +50,23 @@ export function leadMarkerPublishes(
  *
  * Gated, not permanent: subscribeClock starts the shared clock's 25 ms
  * timer, so a subscriber that never left would keep the clock alive for the
- * life of the app. leadClockActive is false exactly when nothing is
- * running, so this hook only ever joins a clock that is already ticking and
- * never starts one — which is also acceptance criterion 3, that no step is
+ * life of the app. The predicate is false whenever nothing is running, so
+ * this hook only ever joins a clock that is already ticking and never
+ * starts one — which is also acceptance criterion 3, that no step is
  * published for the lead while nothing at all plays.
  *
  * Mounted beside useLeadPlayback in LeadMelodyGrid, which renders exactly
  * once. The cost is one more clock listener, not one more timer.
  */
 export function useLeadStepPublisher(): void {
-  const clockActive = useAppStore(leadClockActive);
+  const followsClock = useAppStore(leadMarkerFollowsClock);
 
   useEffect(() => {
-    if (!clockActive) {
-      // The marker owns this reset now. It fires when the CLOCK goes quiet,
-      // not when the lead player stops: with the drums still running, a
-      // rewind to 0 would park the marker somewhere the music is not.
+    if (!followsClock) {
+      // The marker owns this reset now, and it fires when the marker stops
+      // following the clock — not when the lead player stops. With the drums
+      // still running and Rec still armed, a rewind to 0 would park the
+      // marker somewhere the music is not.
       resetStep('lead');
       return;
     }
@@ -87,5 +88,5 @@ export function useLeadStepPublisher(): void {
         publishStepAt('lead', hit.column, time + hit.offsetSec);
       }
     });
-  }, [clockActive]);
+  }, [followsClock]);
 }

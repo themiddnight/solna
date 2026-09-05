@@ -32,6 +32,36 @@ export function leadClockActive(state: {
   );
 }
 
+/**
+ * Does the MARKER follow the clock right now?
+ *
+ * Wider than the lead player, narrower than leadClockActive, and neither by
+ * accident. DEV-377 merged the playhead and the write cursor into one mark,
+ * so it should track the clock when either of those meanings is live: the
+ * lead is sounding, or capture is armed against a clock that is running.
+ *
+ * The third case — a clock running with nothing armed and the lead silent —
+ * is what separates this from leadClockActive. recordLeadNote returns false
+ * while leadRecording is off, so nothing is written there at all, and a mark
+ * sweeping the grid would be animating a write head that does not exist.
+ * Turning the metronome on is not a transport start, and it should not look
+ * like one.
+ *
+ * The recorder keeps leadClockActive: its question is "is there music to
+ * play along to", which is about time, not about whether the user armed
+ * anything. Two questions, two predicates, sharing the one that answers the
+ * first.
+ */
+export function leadMarkerFollowsClock(state: {
+  metronomeActive: boolean;
+  sequencerPlayer: PlayerState;
+  chordsPlayer: PlayerState;
+  leadPlayer: PlayerState;
+  leadRecording: boolean;
+}): boolean {
+  return isPlayerActive(state.leadPlayer) || (state.leadRecording && leadClockActive(state));
+}
+
 /** The real live clock. Injectable so the bridge is testable without one. */
 export interface LeadRecordDeps {
   inputStep: () => number | null;

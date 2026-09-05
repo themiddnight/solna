@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore } from './store';
-import { startLeadRecordBridge, leadClockActive } from './leadRecord';
+import { startLeadRecordBridge, leadClockActive, leadMarkerFollowsClock } from './leadRecord';
 import { emitNoteInput, resetNoteInputListeners } from '../audio/playback/noteInputBus';
 import { getMeter } from '../utils/meter';
 import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '../utils/stepResolution';
@@ -280,5 +280,52 @@ describe('leadClockActive', () => {
 
   test('a player still stopping still owns the clock', () => {
     expect(leadClockActive(clockState({ leadPlayer: 'stopping' }))).toBe(true);
+  });
+});
+
+describe('leadMarkerFollowsClock', () => {
+  type MarkerState = Parameters<typeof leadMarkerFollowsClock>[0];
+  const markerState = (patch: Partial<MarkerState>): MarkerState => ({
+    sequencerPlayer: 'stopped',
+    chordsPlayer: 'stopped',
+    leadPlayer: 'stopped',
+    metronomeActive: false,
+    leadRecording: false,
+    ...patch,
+  });
+
+  test('the lead playing is enough on its own, armed or not', () => {
+    expect(leadMarkerFollowsClock(markerState({ leadPlayer: 'playing' }))).toBe(true);
+    expect(
+      leadMarkerFollowsClock(markerState({ leadPlayer: 'playing', leadRecording: true })),
+    ).toBe(true);
+  });
+
+  // The gap DEV-378 closes: something else is playing, capture is armed and
+  // in time, so the marker has a write column to show and must show it.
+  test('another section or the metronome counts once Rec is armed', () => {
+    expect(
+      leadMarkerFollowsClock(markerState({ metronomeActive: true, leadRecording: true })),
+    ).toBe(true);
+    expect(
+      leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing', leadRecording: true })),
+    ).toBe(true);
+    expect(
+      leadMarkerFollowsClock(markerState({ chordsPlayer: 'playing', leadRecording: true })),
+    ).toBe(true);
+  });
+
+  // ...and the line this predicate draws that leadClockActive does not: a
+  // running clock the lead is neither sounding on nor capturing from writes
+  // nothing (recordLeadNote returns false while leadRecording is off), so a
+  // marker sweeping the grid would animate a write head that does not exist.
+  test('a clock with nothing armed and the lead silent does not move it', () => {
+    expect(leadMarkerFollowsClock(markerState({ metronomeActive: true }))).toBe(false);
+    expect(leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing' }))).toBe(false);
+    expect(leadClockActive(markerState({ metronomeActive: true }))).toBe(true);
+  });
+
+  test('arming alone, with no clock anywhere, does not move it', () => {
+    expect(leadMarkerFollowsClock(markerState({ leadRecording: true }))).toBe(false);
   });
 });

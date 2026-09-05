@@ -1,5 +1,5 @@
 import { useAppStore } from '@/store/store';
-import { leadClockActive } from '@/store/leadRecord';
+import { leadMarkerFollowsClock } from '@/store/leadRecord';
 import { useCurrentStep } from '@/components/playbackStep';
 import { leadMarkerColumn } from './melodyGrid';
 
@@ -10,12 +10,12 @@ import { leadMarkerColumn } from './melodyGrid';
  * leadCursor stays in the store so a header click during playback still
  * takes effect the moment the transport stops.
  *
- * The live source is leadClockActive — any section playing, or the metronome
- * alone — and NOT `leadPlayer !== 'stopped'`, because this column is also
- * where live capture writes and the recorder uses that same predicate
- * (store/leadRecord.ts). With the narrower one, playing along to the drums
- * with the lead stopped put every captured note in time while the marker sat
- * on the cursor, pointing at a column nothing was being written to.
+ * The live source is leadMarkerFollowsClock, not `leadPlayer !== 'stopped'`:
+ * this column is also where live capture writes, so it has to track the
+ * clock while Rec is armed and anything at all is playing. With the narrower
+ * predicate, playing along to the drums with the lead stopped put every
+ * captured note in time while the marker sat on the cursor, pointing at a
+ * column nothing was being written to.
  *
  * This predicate is only safe because useLeadStepPublisher produces on the
  * same gate. Widening it alone was tried during DEV-374 and reverted: with
@@ -30,6 +30,6 @@ import { leadMarkerColumn } from './melodyGrid';
 export function useLeadMarkerColumn(columns: number): number {
   const currentStep = useCurrentStep('lead');
   const cursor = useAppStore((s) => s.leadCursor);
-  const clockActive = useAppStore(leadClockActive);
-  return leadMarkerColumn(clockActive, currentStep, cursor, columns);
+  const followsClock = useAppStore(leadMarkerFollowsClock);
+  return leadMarkerColumn(followsClock, currentStep, cursor, columns);
 }

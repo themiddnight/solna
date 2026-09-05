@@ -111,11 +111,12 @@ export function leadScheduleHits(
  * knob tweak reaches the next hit without re-subscribing.
  *
  * NOTES ONLY. The marker's column is published by useLeadStepPublisher, on
- * the wider leadClockActive gate, because that column is also where live
- * capture writes and capture runs whenever ANY section does (DEV-378). Do
- * not publish a lead step from here: two producers on one player id would
- * fight whenever the lead plays. Rewinding the marker is that hook's job
- * too, for the same reason — the lead stopping is not the clock stopping.
+ * the wider leadMarkerFollowsClock gate, because that column is also where
+ * live capture writes and capture can be armed against any section's clock
+ * (DEV-378). Do not publish a lead step from here: two producers on one
+ * player id would fight whenever the lead plays. Rewinding the marker is
+ * that hook's job too, for the same reason — the lead stopping is not
+ * necessarily the marker stopping.
  */
 export function useLeadPlayback(): { isPlaying: boolean } {
   const playerState = useAppStore((s) => s.leadPlayer);

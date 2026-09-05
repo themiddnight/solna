@@ -332,9 +332,10 @@ export const LeadMelodyGrid: React.FC = () => {
   //
   // Two hooks, two gates, on purpose. useLeadPlayback schedules NOTES and
   // owns the hard stop, so it runs while the lead plays. useLeadStepPublisher
-  // moves the MARKER, so it runs whenever any section does — that column is
-  // also the recorder's write head. Its `isPlaying` return is not what the
-  // marker uses; useLeadMarkerColumn reads the same wider gate.
+  // moves the MARKER, which also has to track somebody else's clock while Rec
+  // is armed, because that column is the recorder's write head. Its
+  // `isPlaying` return is not what the marker uses; useLeadMarkerColumn reads
+  // the same wider gate the publisher does.
   useLeadPlayback();
   useLeadStepPublisher();
   const meterId = useAppStore((s) => s.meterId);
