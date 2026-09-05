@@ -54,12 +54,35 @@ export function subscribePlaybackClock(
  * Returns 0 when there is no context yet, or when `time` has already passed.
  */
 export function playbackAudibleDelaySec(time: number): number {
-  const ctx = audioEngine.getAudioContext();
+  const now = playbackNowSec();
+  if (now === null) return 0;
+  return Math.max(0, time + playbackOutputLatencySec() - now);
+}
+
+/** The AudioContext's clock, or null when there is no context yet. */
+export function playbackNowSec(): number | null {
+  return audioEngine.getAudioContext()?.currentTime ?? null;
+}
+
+/**
+ * The delay between the context reaching a time and the sound leaving the
+ * speaker. Pure and separately exported because it is read in BOTH
+ * directions: playbackAudibleDelaySec adds it to hold a playhead back until
+ * the step is heard (DEV-376), and live lead capture subtracts it to place a
+ * press at the moment the player actually reacted to (DEV-374).
+ *
+ * outputLatency is unimplemented on some browsers; baseLatency is the
+ * conservative stand-in, and 0 is better than NaN in either case.
+ */
+export function outputLatencySec(
+  ctx: { outputLatency?: number; baseLatency?: number } | null | undefined,
+): number {
   if (!ctx) return 0;
-  // outputLatency is unimplemented on some browsers; baseLatency is the
-  // conservative stand-in, and 0 is better than NaN in either case.
-  const latency = ctx.outputLatency || ctx.baseLatency || 0;
-  return Math.max(0, time + latency - ctx.currentTime);
+  return ctx.outputLatency || ctx.baseLatency || 0;
+}
+
+export function playbackOutputLatencySec(): number {
+  return outputLatencySec(audioEngine.getAudioContext());
 }
 
 export const HARD_STOP_RELEASE = 0.02;
