@@ -2,13 +2,14 @@ import { getScaleNotesInOctave, ROOTS } from '../../../utils/musicTheory';
 import { MAX_STEPS_PER_BAR } from '../../../utils/meter';
 import type { LeadMelodyView } from '../../../store/types';
 import type { LeadNote } from '../../../audio/leadMelody';
+import { clockStepToGridColumn } from '@/audio/leadLiveRecord';
 
 // Declared in audio/leadStepRecord so the store can read it as well: step
 // entry follows the window when a recorded note falls outside it, and
 // store/ may not import components/.
 export { LEAD_WINDOW_OCTAVES } from '@/audio/leadStepRecord';
 
-/** Fixed cell width in px — the playhead's translateX stride. */
+/** Fixed cell width in px — the marker's translateX stride. */
 export const LEAD_CELL_WIDTH = 20;
 
 /**
@@ -191,4 +192,31 @@ export function leadCursorKeyTarget(
   const stride = shiftKey ? stepsPerBar : 1;
   const next = col + (key === 'ArrowRight' ? stride : -stride);
   return Math.min(columns - 1, Math.max(0, next));
+}
+
+/**
+ * The one column the grid marks: the clock while playing, the cursor while
+ * stopped. Kept as a pure function of both sources rather than as one stored
+ * value, because the running step lives outside zustand on purpose — holding
+ * it in React state re-rendered whole views 8-16 times a second, including
+ * views on hidden tabs (see the note at the top of components/playbackStep.ts),
+ * and writing it into leadCursor would add the persist serialiser to that.
+ */
+export function leadMarkerColumn(
+  isPlaying: boolean,
+  currentStep: number,
+  cursor: number,
+  columns: number,
+): number {
+  // Playing, the marker goes through clockStepToGridColumn — the SAME named
+  // conversion the recorder uses (decision 6) — not its own clamp. The two
+  // used to disagree (wrap vs. clamp) whenever a source landed outside
+  // [0, columns), which is exactly the "scattered pieces that each look
+  // correct in isolation" the named conversion exists to prevent.
+  if (isPlaying) return clockStepToGridColumn(currentStep, columns);
+  // Stopped, the source is the user-placed cursor, not a clock quantity, so
+  // it clamps to the visible edge rather than wrapping — landing on column 0
+  // via modulo would look like the user chose column 0, which they didn't.
+  if (!Number.isFinite(cursor)) return 0;
+  return Math.min(Math.max(0, columns - 1), Math.max(0, Math.round(cursor)));
 }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type React from 'react';
 import { renderToString } from 'react-dom/server';
-import { LeadMelodyHeaders, LeadMelodyGrid, LeadPlayhead } from './LeadMelodyGrid';
+import { LeadMelodyHeaders, LeadMelodyGrid, LeadMarker } from './LeadMelodyGrid';
 import { stepCells } from '../../sequencerGrid';
 import { getMeter } from '../../../utils/meter';
 
@@ -21,15 +21,24 @@ describe('LeadMelodyGrid', () => {
     expect(html).toContain('repeat(16, 20px)');
   });
 
-  test('the playhead overlay translates by step × cell width', () => {
-    expect(renderToString(<LeadPlayhead currentStep={3} />)).toContain('translateX(60px)'); // 3 × 20
-    expect(renderToString(<LeadPlayhead currentStep={0} />)).toContain('translateX(0px)');
+  test('the marker translates by column × cell width, from the ruler onward', () => {
+    // The stride is LEAD_CELL_WIDTH, the same constant the header buttons size
+    // themselves with — a marker that drifts from its own ruler is worse than
+    // two honest markers. `left` is the note-name column's width.
+    const html = renderToString(<LeadMarker column={3} />);
+    expect(html).toContain('translateX(60px)'); // 3 × 20
+    expect(html).toContain('left:44px');
+    expect(renderToString(<LeadMarker column={0} />)).toContain('translateX(0px)');
   });
 
-  test('a stopped lead player renders no playhead at all', () => {
-    // The store's lead player is 'stopped' by default, and LeadMelodyGrid now
-    // owns useLeadPlayback, so this is the real stopped rendering.
-    expect(renderToString(<LeadMelodyGrid />)).not.toContain('ring-inset ring-primary');
+  test('a stopped grid still draws the marker, parked on the cursor', () => {
+    // One marker, always. Stopped it is the cursor (0 by default under
+    // renderToString), playing it is the clock — but it never disappears, and
+    // the header strip no longer draws a second band of its own.
+    const html = renderToString(<LeadMelodyGrid />);
+    expect(html).toContain('ring-inset ring-primary');
+    expect(html).toContain('translateX(0px)');
+    expect(html).not.toContain('bg-secondary text-secondary-content');
   });
 
   test('no raw palette or absolute black/white classes leak in', () => {
@@ -96,11 +105,13 @@ describe('LeadMelodyHeaders', () => {
 
   test('the whole selected bar is pressed, and exactly one column is the cursor', () => {
     // The bar strip marks every column of the selected bar so the band reads
-    // as one target; the beat strip marks the single cursor column.
+    // as one target; the beat strip marks the single cursor column. The
+    // cursor's PIXELS belong to the marker now (DEV-377), so the strip carries
+    // only the a11y state.
     const html = renderToString(<LeadMelodyHeaders {...headerProps(32, 20)} />);
     expect(html.split('aria-pressed="true"').length - 1).toBe(meter.stepsPerBar + 1);
-    expect(html).toContain('bg-secondary text-secondary-content');
     expect(html).toContain('bg-primary/20 text-primary');
+    expect(html).not.toContain('bg-secondary');
   });
 
   test('a cursor in bar 1 does not light bar 0', () => {
@@ -117,6 +128,21 @@ describe('LeadMelodyHeaders', () => {
     expect(html.split('<button').length - 1).toBe(32);
     expect(html).toContain('aria-label="Bar 1"');
     expect(html).toContain('aria-label="Bar 1 step 1"');
+  });
+
+  test('both strips are a full grid row tall, and the DEV-371 contract survives it', () => {
+    const html = renderToString(<LeadMelodyHeaders {...headerProps(16, 5)} />);
+    // h-5 is the grid row cell's height (LeadMelodyCells and the note-name
+    // column both use it), so a bar or a beat is an easy pointer target.
+    expect(html.split('h-5 flex items-center justify-center').length - 1).toBe(32);
+    // Everything DEV-371 delivered, unchanged: every column is a real button,
+    // every button is labelled, the selected bar and the cursor column are the
+    // pressed ones, and the arrow-key handler is still on both strips.
+    expect(html.split('<button').length - 1).toBe(32);
+    expect(html).toContain('aria-label="Bar 1"');
+    expect(html).toContain('aria-label="Bar 1 step 6"');
+    expect(html.split('aria-pressed="true"').length - 1).toBe(meter.stepsPerBar + 1);
+    expect(html.split('width:20px').length - 1).toBe(32);
   });
 
   test('output is byte-identical to the same props rendered twice', () => {

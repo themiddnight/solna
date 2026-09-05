@@ -10,6 +10,7 @@ import {
   resolveLeadCellSpan,
   type LeadCellKind,
   leadCursorKeyTarget,
+  leadMarkerColumn,
 } from './melodyGrid';
 import type { LeadNote } from '../../../audio/leadMelody';
 
@@ -278,5 +279,49 @@ describe('leadCursorKeyTarget', () => {
   test('any other key is not ours — null, so the browser keeps its own behaviour', () => {
     expect(leadCursorKeyTarget(5, 'Enter', false, 16, 32)).toBeNull();
     expect(leadCursorKeyTarget(5, 'ArrowUp', false, 16, 32)).toBeNull();
+  });
+});
+
+describe('leadMarkerColumn', () => {
+  test('stopped, the marker is the cursor — the user placed it there', () => {
+    expect(leadMarkerColumn(false, 7, 3, 16)).toBe(3);
+  });
+
+  test('playing, the marker is the clock — and the cursor is untouched', () => {
+    expect(leadMarkerColumn(true, 7, 3, 16)).toBe(7);
+  });
+
+  test('stopping returns the marker to where the cursor was left', () => {
+    // Free, because leadCursor was never written during playback: there is
+    // no save-and-restore step here to get wrong.
+    expect(leadMarkerColumn(true, 11, 3, 16)).toBe(11);
+    expect(leadMarkerColumn(false, 11, 3, 16)).toBe(3);
+  });
+
+  test('stopped, a cursor outside the window clamps to the edge, not off the grid', () => {
+    // A meter or loop-length change can narrow the window under the cursor
+    // between one render and the next. The cursor is user-placed, not a
+    // clock quantity, so it clamps rather than wrapping.
+    expect(leadMarkerColumn(false, 0, 99, 16)).toBe(15);
+  });
+
+  test('playing, the live branch goes through clockStepToGridColumn, not its own clamp', () => {
+    // Decision 6 (one named conversion): the marker's live branch must agree
+    // with clockStepToGridColumn exactly, wrap semantics included, or the
+    // marker and the recorder's write column (store/leadRecord.ts) can point
+    // at different cells for the same clock step.
+    expect(leadMarkerColumn(true, 16, 0, 16)).toBe(0);
+    expect(leadMarkerColumn(true, -4, 0, 16)).toBe(12);
+  });
+
+  test('a grid with no columns has column 0 and nothing else', () => {
+    expect(leadMarkerColumn(false, 0, 5, 0)).toBe(0);
+    expect(leadMarkerColumn(true, 5, 0, 0)).toBe(0);
+  });
+
+  test('a non-finite cursor is column 0, never NaN pixels — stopped only', () => {
+    // currentStep never carries a non-finite value in practice (stepPublisher
+    // seeds it at 0), so this guard is specific to the stopped/cursor branch.
+    expect(leadMarkerColumn(false, 0, Number.NaN, 16)).toBe(0);
   });
 });

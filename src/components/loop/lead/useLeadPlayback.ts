@@ -14,6 +14,7 @@ import { stepDurationSec } from '../../../utils/musicTheory';
 import { arpStepFor, getMeter } from '../../../utils/meter';
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from '../../playerStop';
 import { publishStepAt, resetStep } from '../../playbackStep';
+import { clockStepToGridColumn } from '@/audio/leadLiveRecord';
 import type { PlayerState } from '../../../store/types';
 
 export interface LeadArming {
@@ -90,6 +91,25 @@ export function useLeadPlayback(): { isPlaying: boolean } {
       const stepsPerBar = getMeter(s.meterId).stepsPerBar;
       const melodyLength = s.leadLoopLength * stepsPerBar;
       const action = leadStepAction(playerState, step, armingRef.current, stepsPerBar);
+      // The ONE named conversion (decision 6), shared with the recorder
+      // (store/leadRecord.ts) and the marker's live branch (melodyGrid.ts) —
+      // not a fourth copy of `step % melodyLength`.
+      const stepInLoop = clockStepToGridColumn(step, melodyLength);
+
+      // Publish on EVERY dispatch while the transport runs, not only steps
+      // that actually sound. The OLD reasoning here was that while
+      // armed-but-not-yet-playing or during 'stopping' there is nothing for
+      // the melody grid playhead to track, so leaving the last published
+      // step in place was more correct than sweeping ahead of the audio.
+      // DEV-377 made this same column double as the marker AND the
+      // recorder's write head (leadClockActive in store/leadRecord.ts is the
+      // marker's live-source predicate now, not leadPlayer alone) — so a
+      // marker that stalls during pre-arm or stop no longer just looks idle,
+      // it points at the wrong column while capture is already quantising to
+      // the true clock step. Publishing unconditionally keeps the marker
+      // (and by extension the write head) honest for the whole time music is
+      // playing, not only for the steps the lead itself sounds.
+      publishStepAt('lead', stepInLoop, time);
 
       if (action === 'soft-stop') {
         playbackStopSource('synth', s.synthParams.release, time);
@@ -97,14 +117,8 @@ export function useLeadPlayback(): { isPlaying: boolean } {
         hardStop('lead');
         return;
       }
-      // Publish only for steps that actually sound: while armed-but-not-yet-
-      // playing, or during 'stopping', there is nothing for the melody grid
-      // playhead to track, so leaving the last published step in place is
-      // more correct than sweeping ahead of the audio.
       if (action !== 'play') return;
 
-      const stepInLoop = step % melodyLength;
-      publishStepAt('lead', stepInLoop, time);
       const sounding = leadSoundingNotes(s.leadMelodySteps, stepInLoop, stepsPerBar);
       const stepDur = stepDurationSec(s.bpm);
       const arpStep = arpStepFor(step, stepsPerBar);

@@ -26,7 +26,7 @@ import {
   leadStoredIndex,
   resolveLeadCellSpan,
 } from './melodyGrid';
-import { useCurrentStep } from '../../playbackStep';
+import { useLeadMarkerColumn } from './useLeadMarker';
 import { useLeadPlayback } from './useLeadPlayback';
 import { useLeadNoteResize } from './useLeadNoteResize';
 import { useLeadNotePaint } from './useLeadNotePaint';
@@ -36,18 +36,26 @@ import { Slider } from '@/components/ui/Slider';
 const LABEL_WIDTH = 44;
 
 /**
- * The moving column. Split out with an explicit prop so the geometry stays
- * unit-testable: LeadMelodyGrid owns useLeadPlayback now, and renderToString
- * cannot force a playing store state (zustand v5 serves
+ * The one marker. Not two: the selection cursor and the playback playhead
+ * both meant "this column", so they are drawn once, the way a DAW does —
+ * except that this marker is also the column pointer recording writes at.
+ *
+ * Split out with an explicit prop so the geometry stays unit-testable:
+ * renderToString cannot force a playing store state (zustand v5 serves
  * selector(api.getInitialState()) as the server snapshot — see
  * ui/BottomInputDock.tsx:9-21).
+ *
+ * It spans the header strips as well as the body, so it is offset by the
+ * note-name column's width and strides by LEAD_CELL_WIDTH — the same
+ * constant the header buttons size themselves with.
  */
-export const LeadPlayhead: React.FC<{ currentStep: number }> = ({ currentStep }) => (
+export const LeadMarker: React.FC<{ column: number }> = ({ column }) => (
   <div
     className="pointer-events-none absolute top-0 bottom-0 bg-primary/20 ring-1 ring-inset ring-primary"
     style={{
       width: LEAD_CELL_WIDTH,
-      transform: `translateX(${currentStep * LEAD_CELL_WIDTH}px)`,
+      left: LABEL_WIDTH,
+      transform: `translateX(${column * LEAD_CELL_WIDTH}px)`,
     }}
   />
 );
@@ -222,6 +230,11 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
 
   return (
     <>
+      {/* Both strips are h-5 — one grid row cell tall — so a bar and a beat
+          are pointer targets rather than 8px bands. The widths stay
+          LEAD_CELL_WIDTH, the same constant the marker's translateX strides
+          by: a marker that drifts from its own ruler is worse than two
+          honest markers. */}
       {/* Bar-number header — the whole bar's width selects that bar. */}
       <div className="flex">
         <div className="shrink-0" style={{ width: LABEL_WIDTH }} />
@@ -237,7 +250,11 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
                 aria-pressed={barIndex === selectedBar}
                 onClick={() => onSelectColumn(barIndex * stepsPerBar)}
                 onKeyDown={(e) => onKeyDown(e, col)}
-                className={`text-[8px] leading-none text-center font-bold ${
+                // bg-primary/20 text-primary now means "the selected bar for
+                // copy/paste" — it is a live selection tint, not a second
+                // marker. It sits under the DEV-377 marker on purpose: the
+                // marker is "this column", this strip is "this bar".
+                className={`h-5 flex items-center justify-center text-[8px] leading-none font-bold ${
                   barIndex === selectedBar
                     ? 'bg-primary/20 text-primary'
                     : 'text-base-content/60'
@@ -267,11 +284,10 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
                 aria-pressed={col === cursor}
                 onClick={() => onSelectColumn(col)}
                 onKeyDown={(e) => onKeyDown(e, col)}
-                className={`text-[9px] leading-none text-center ${
-                  col === cursor
-                    ? 'bg-secondary text-secondary-content'
-                    : 'text-base-content/50'
-                }`}
+                // aria-pressed stays: it is the button's SELECTION state, and
+                // DEV-371's contract does not change. Only the band goes —
+                // the marker is the one thing that says "this column" now.
+                className="h-5 flex items-center justify-center text-[9px] leading-none text-base-content/50"
                 style={{ width: LEAD_CELL_WIDTH }}
               >
                 {cell.isBeatStart ? cell.beatIndex + 1 : '\u00a0'}
@@ -289,9 +305,10 @@ export const LeadMelodyGrid: React.FC = () => {
   // 174 JSX nodes of the 1208-line SynthView reconciled 8x/sec to move one
   // translateX. LeadMelodyGrid is rendered exactly once (SynthView.tsx, in
   // both simple and pro mode), which is the requirement — useLeadPlayback
-  // subscribes the clock and owns the hard stop.
-  const { isPlaying } = useLeadPlayback();
-  const currentStep = useCurrentStep('lead');
+  // subscribes the clock and owns the hard stop. Its `isPlaying` return is
+  // NOT what the marker uses: useLeadMarkerColumn reads leadClockActive
+  // instead, which also counts the drums or the metronome running alone.
+  useLeadPlayback();
   const meterId = useAppStore((s) => s.meterId);
   const leadMelodySteps = useAppStore((s) => s.leadMelodySteps);
   const leadLoopLength = useAppStore((s) => s.leadLoopLength);
@@ -361,6 +378,7 @@ export const LeadMelodyGrid: React.FC = () => {
   );
 
   const columns = leadLoopLength * stepsPerBar;
+  const markerColumn = useLeadMarkerColumn(columns);
   // Clamped again HERE, not only on write: a meter or loop-length change can
   // narrow the window under a cursor that was legal when it was set.
   const cursor = clampLeadCursor(leadCursor, leadLoopLength, stepsPerBar);
@@ -489,7 +507,7 @@ export const LeadMelodyGrid: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto bg-base-200 p-3 rounded">
-          <div className="w-fit mx-auto">
+          <div className="w-fit mx-auto relative">
             <LeadMelodyHeaders
               cursor={cursor}
               selectedBar={selectedBar}
@@ -499,7 +517,7 @@ export const LeadMelodyGrid: React.FC = () => {
               cellsPerBar={cellsPerBar}
             />
 
-            {/* Body: note column + cells + playhead */}
+            {/* Body: note column + cells + marker */}
             <div className="flex">
               <div
                 className="sticky left-0 z-10 shrink-0 bg-panel"
@@ -518,7 +536,7 @@ export const LeadMelodyGrid: React.FC = () => {
                 ))}
               </div>
 
-              <div className="relative shrink-0">
+              <div className="shrink-0">
                 <LeadMelodyCells
                   meter={meter}
                   loopLength={leadLoopLength}
@@ -527,9 +545,12 @@ export const LeadMelodyGrid: React.FC = () => {
                   root={scaleRoot}
                   onResize={onResize}
                 />
-                {isPlaying && <LeadPlayhead currentStep={currentStep} />}
               </div>
             </div>
+
+            {/* Last child of the w-fit container, so it spans the ruler and
+                the grid body as one column. */}
+            <LeadMarker column={markerColumn} />
           </div>
         </div>
       </div>

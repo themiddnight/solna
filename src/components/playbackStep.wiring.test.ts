@@ -61,7 +61,9 @@ const WIRINGS: Array<{
       regex: /publishStepAt\(\s*'([^']+)'/,
     },
     consumer: {
-      file: 'src/components/loop/lead/LeadMelodyGrid.tsx',
+      // DEV-377: the marker's column is read by useLeadMarkerColumn, not by
+      // LeadMelodyGrid.tsx directly — the hook owns the useCurrentStep call.
+      file: 'src/components/loop/lead/useLeadMarker.ts',
       regex: /useCurrentStep\(\s*(?:'([^']+)'|(\w+))\s*\)/,
       expected: 'lead',
     },
@@ -80,21 +82,28 @@ const WIRINGS: Array<{
   },
 ];
 
-// Reordering this early-out after the publish call would fire the lead's
-// step publish during pre-arm and stopping too — silently, since nothing
-// else observes the call order. A manual grep confirmed the order once; this
-// pins it so a future edit can't reverse it back unnoticed.
-describe('useLeadPlayback publishes only after its action !== "play" early-out', () => {
-  test('the early-out return precedes the publishStepAt call in source order', () => {
+// DEV-377 made this same column double as the marker AND the recorder's
+// write head (leadClockActive in store/leadRecord.ts is the marker's
+// live-source predicate now, not leadPlayer alone), so the publish must
+// precede BOTH early-outs below — reordering it after either one would
+// stall the marker (and silently misrepresent the recorder's write column)
+// during pre-arm or 'stopping', exactly when a player is plainly playing
+// along to something. This pins the order so a future edit can't put the
+// publish back behind a gate unnoticed.
+describe('useLeadPlayback publishes the step before either early-out', () => {
+  test('publishStepAt precedes the soft-stop and non-play early-outs in source order', () => {
     const source = readFileSync(
       join(process.cwd(), 'src/components/loop/lead/useLeadPlayback.ts'),
       'utf8',
     );
-    const earlyOutIndex = source.indexOf("if (action !== 'play') return;");
     const publishIndex = source.indexOf("publishStepAt('lead', stepInLoop, time);");
-    expect(earlyOutIndex).toBeGreaterThan(-1);
+    const softStopIndex = source.indexOf("if (action === 'soft-stop')");
+    const notPlayIndex = source.indexOf("if (action !== 'play') return;");
     expect(publishIndex).toBeGreaterThan(-1);
-    expect(earlyOutIndex).toBeLessThan(publishIndex);
+    expect(softStopIndex).toBeGreaterThan(-1);
+    expect(notPlayIndex).toBeGreaterThan(-1);
+    expect(publishIndex).toBeLessThan(softStopIndex);
+    expect(publishIndex).toBeLessThan(notPlayIndex);
   });
 });
 
