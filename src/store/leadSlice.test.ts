@@ -530,12 +530,31 @@ describe('lead slice — step entry', () => {
     expect(at(0)).toEqual([]);
   });
 
-  test('recording declines while the transport plays — that is DEV-374', () => {
+  test('a column argument overrides the cursor — that is the live write head', () => {
+    arm();
+    useAppStore.getState().setLeadCursor(2);
+
+    expect(useAppStore.getState().recordLeadNote('C4', 9)).toBe(true);
+
+    expect(at(9)).toEqual([{ note: 'C4', len: 1 }]);
+    expect(at(2)).toEqual([]);
+    // The cursor is still the user's. The write head is a different thing.
+    expect(useAppStore.getState().leadCursor).toBe(2);
+  });
+
+  test('a column past the loop end is clamped, never written out of bounds', () => {
+    arm();
+    expect(useAppStore.getState().recordLeadNote('C4', 999)).toBe(true);
+    // 1-bar loop in 4/4 → columns 0..15.
+    expect(at(15)).toEqual([{ note: 'C4', len: 1 }]);
+  });
+
+  test('the transport playing no longer refuses the write — that is DEV-374', () => {
     arm();
     useAppStore.setState({ leadPlayer: 'playing' });
 
-    expect(useAppStore.getState().recordLeadNote('C4')).toBe(false);
-    expect(at(0)).toEqual([]);
+    expect(useAppStore.getState().recordLeadNote('C4', 4)).toBe(true);
+    expect(at(4)).toEqual([{ note: 'C4', len: 1 }]);
   });
 
   test('a note already at the cursor is a no-op, never a delete', () => {

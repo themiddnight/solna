@@ -167,14 +167,14 @@ export interface LeadSlice {
   leadRecording: boolean;
   setLeadRecording: (recording: boolean) => void;
   /**
-   * Write a PERFORMED note at the cursor, leaving the cursor where it is.
-   * Declines anything the grid cannot show — out-of-scale in scale-locked
-   * view, or an octave no legal window reaches — and follows the octave
-   * window when it can, so a recorded note is never invisible. Does nothing
-   * unless armed and the transport is stopped; capture against a running
-   * clock is DEV-374.
+   * Write a PERFORMED note at the given column, or at the cursor if omitted.
+   * The column is clamped to the live loop window either way; the cursor is
+   * never moved. Declines if not armed, or if the note is anything the grid
+   * cannot show — out-of-scale in scale-locked view, or an octave no legal
+   * window reaches. Follows the octave window when possible, so a recorded
+   * note is never invisible.
    */
-  recordLeadNote: (note: string) => boolean;
+  recordLeadNote: (note: string, column?: number) => boolean;
   toggleLeadNote: (stepIndex: number, note: string) => void;
   /**
    * Add or remove one drawn note. `'toggle'` is the click; `'draw'`/`'erase'`

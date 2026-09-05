@@ -115,12 +115,9 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
 
     // Returns whether it actually wrote, so a caller can tell a captured note
     // from one the grid refused.
-    recordLeadNote: (note) => {
+    recordLeadNote: (note, column) => {
       const state = get();
       if (!state.leadRecording) return false;
-      // Capture against a running clock is DEV-374. Until then a note played
-      // during playback auditions and nothing more.
-      if (state.leadPlayer !== 'stopped') return false;
 
       // Both guards exist to keep one promise: a recorded note is visible on
       // the grid the moment it is recorded. Storing what the grid cannot draw
@@ -141,12 +138,14 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
       if (octave === null) return false;
 
       const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-      const cursor = clampLeadCursor(state.leadCursor, state.leadLoopLength, stepsPerBar);
+      // Clamped whichever head it came from: a meter or loop-length change can
+      // narrow the window under a column that was legal when it was chosen.
+      const target = clampLeadCursor(column ?? state.leadCursor, state.leadLoopLength, stepsPerBar);
       if (octave !== state.leadMelodyOctave) set({ leadMelodyOctave: octave });
       // 'draw', never 'toggle': playing a note that is already at this column
       // must be a no-op, not a delete. A performer repeating a note expects
       // nothing to happen, not the note to vanish.
-      paintLeadNote(leadStoredIndexAt(cursor, stepsPerBar), note, 'draw');
+      paintLeadNote(leadStoredIndexAt(target, stepsPerBar), note, 'draw');
       return true;
     },
 
