@@ -288,47 +288,41 @@ export const useAppStore = create<AppStore>()(
         // v2 → v3
         const recoloured =
           version >= 3 ? deprojected : (migrateTrackColors(deprojected) as PersistedState);
-        // v4 → v5 (runs on EVERY older version, after the chain above)
-        const metered = (payload: PersistedState): PersistedState =>
-          version >= 5 ? payload : (migrateMeterAndStepWidth(payload) as PersistedState);
-        // v5 → v6 (single-loop wrap; forward-compat guard for a future v7)
-        const wrapped = (payload: PersistedState): PersistedState =>
-          version >= 6 ? payload : (wrapFlatStateIntoLoop(payload) as PersistedState);
-        // v6 → v7 (historical-key rename; no-op once the payload already uses
-        // the loop shape, which the wrap above always emits). Runs LAST so it
-        // also translates a v6 payload's two old keys.
-        const looped = (payload: PersistedState): PersistedState =>
-          version >= 7 ? payload : (renameRegionKeysToLoop(payload) as PersistedState);
-        // v7 → v8 (per-loop lead octave window + view mode). Runs after the
-        // rename so `loops` is already the current key.
-        const windowed = (payload: PersistedState): PersistedState =>
-          version >= 8 ? payload : (backfillLeadWindow(looped(payload)) as PersistedState);
-        // v8 → v9 (project identity). Runs LAST; a no-op on a v9 payload.
-        const identified = (payload: PersistedState): PersistedState =>
-          version >= 9 ? payload : (migrateAddProjectIdentity(windowed(payload)) as PersistedState);
-        // v9 -> v10 (lead note length + per-loop gate). Runs LAST, outside
-        // `identified`, so every older payload is already in loop shape.
-        const lengthened = (payload: PersistedState): PersistedState => {
-          const base = identified(payload);
-          return version >= 10 ? base : (migrateLeadNoteLength(base) as PersistedState);
-        };
-        // v10 -> v11 (lead melody in ticks + per-loop step resolution).
-        // Runs LAST, outside `lengthened`, so the melody it widens is
-        // already LeadNote[][] at the narrow stored width.
-        const ticked = (payload: PersistedState): PersistedState => {
-          const base = lengthened(payload);
-          return version >= 11 ? base : (migrateLeadStepResolution(base) as PersistedState);
-        };
-        if (version >= 2) return ticked(wrapped(metered(recoloured)));
+        let next: PersistedState = recoloured;
         // v1 arp fix (unchanged) …
-        const next = { ...recoloured } as Record<string, unknown>;
-        for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams']) {
-          const params = next[key];
-          if (params && typeof params === 'object' && !Array.isArray(params)) {
-            next[key] = { ...(params as object), arpActive: false };
+        if (version < 2) {
+          const fixed = { ...recoloured } as Record<string, unknown>;
+          for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams']) {
+            const params = fixed[key];
+            if (params && typeof params === 'object' && !Array.isArray(params)) {
+              fixed[key] = { ...(params as object), arpActive: false };
+            }
           }
+          next = fixed as unknown as PersistedState;
         }
-        return ticked(wrapped(metered(next as unknown as PersistedState)));
+        // One step per version, in version order — reading order IS run order,
+        // and a new version is one more line at the bottom. The order is load-
+        // bearing twice over: the wrap and the rename must precede everything
+        // that maps `loops`, and migrateLeadNoteLength must precede
+        // migrateLeadStepResolution (widening a pre-DEV-369 string[][] leaves a
+        // shape sanitize refuses — blank melody, no throw; see CLAUDE.md).
+        //
+        // v4 → v5 (meter + always-widest step rows)
+        if (version < 5) next = migrateMeterAndStepWidth(next) as PersistedState;
+        // v5 → v6 (single-loop wrap)
+        if (version < 6) next = wrapFlatStateIntoLoop(next) as PersistedState;
+        // v6 → v7 (historical-key rename; a no-op once the payload already uses
+        // the loop shape, which the wrap above always emits)
+        if (version < 7) next = renameRegionKeysToLoop(next) as PersistedState;
+        // v7 → v8 (per-loop lead octave window + view mode)
+        if (version < 8) next = backfillLeadWindow(next) as PersistedState;
+        // v8 → v9 (project identity)
+        if (version < 9) next = migrateAddProjectIdentity(next) as PersistedState;
+        // v9 → v10 (lead note length + per-loop gate)
+        if (version < 10) next = migrateLeadNoteLength(next) as PersistedState;
+        // v10 → v11 (lead melody in ticks + per-loop step resolution)
+        if (version < 11) next = migrateLeadStepResolution(next) as PersistedState;
+        return next;
       },
       // Runs on every hydration (also when nothing was stored): sanitize the
       // parsed payload (wrong-typed persisted values must never reach the

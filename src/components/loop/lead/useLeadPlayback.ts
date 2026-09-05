@@ -14,7 +14,7 @@ import { stepDurationSec } from '../../../utils/musicTheory';
 import { arpStepFor, getMeter } from '../../../utils/meter';
 import { TICKS_PER_SIXTEENTH, columnsPerBar, strideFor } from '@/utils/stepResolution';
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from '../../playerStop';
-import { clockStepToGridColumn, wrapColumn } from '@/audio/leadLiveRecord';
+import { clockStepToGridColumn, tickToColumn } from '@/audio/leadLiveRecord';
 import type { PlayerState } from '../../../store/types';
 
 export interface LeadArming {
@@ -98,7 +98,7 @@ export function leadScheduleHits(
   }
   const base = clockStep * TICKS_PER_SIXTEENTH;
   return leadDispatchTicks(clockStep, stride).map((t) => ({
-    column: wrapColumn(Math.floor(t / stride), columns),
+    column: tickToColumn(t, columns, stride),
     offsetSec: (t - base) * tickDurSec,
   }));
 }

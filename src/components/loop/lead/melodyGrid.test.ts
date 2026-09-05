@@ -12,6 +12,7 @@ import {
   resolveLeadCellSpan,
   type LeadCellKind,
   leadCursorKeyTarget,
+  leadCellEndsSpan,
   leadMarkerColumn,
 } from './melodyGrid';
 import type { LeadNote } from '../../../audio/leadMelody';
@@ -155,7 +156,6 @@ describe('resolveLeadCellSpan', () => {
     m[2] = [{ note: 'C4', len: 1 }]; // column 1 -> stored tick 2
     expect(resolveLeadCellSpan(rowKinds, 1, 16, stride, 'C4', m)).toEqual({
       spanStartIdx: 2,
-      spanLen: 1,
       spanCells: 1,
       endsSpan: true,
       startCol: 1,
@@ -168,7 +168,6 @@ describe('resolveLeadCellSpan', () => {
     m[0] = [{ note: 'C4', len: 3 }];
     expect(resolveLeadCellSpan(rowKinds, 1, 16, stride, 'C4', m)).toEqual({
       spanStartIdx: 0,
-      spanLen: 3,
       spanCells: 2,
       endsSpan: false,
       startCol: 0,
@@ -176,7 +175,6 @@ describe('resolveLeadCellSpan', () => {
     // The end cell of the same span both resolves to the same start and ends it.
     expect(resolveLeadCellSpan(rowKinds, 2, 16, stride, 'C4', m)).toEqual({
       spanStartIdx: 0,
-      spanLen: 3,
       spanCells: 2,
       endsSpan: true,
       startCol: 0,
@@ -196,7 +194,6 @@ describe('resolveLeadCellSpan', () => {
     m[52] = [{ note: 'C4', len: 3 }];
     expect(resolveLeadCellSpan(rowKinds, 8, 5, stride, 'C4', m)).toEqual({
       spanStartIdx: 52,
-      spanLen: 3,
       spanCells: 2,
       endsSpan: false,
       startCol: 7,
@@ -207,7 +204,6 @@ describe('resolveLeadCellSpan', () => {
     const rowKinds: LeadCellKind[] = ['none', 'none'];
     expect(resolveLeadCellSpan(rowKinds, 0, 16, stride, 'C4', emptyBar())).toEqual({
       spanStartIdx: -1,
-      spanLen: 0,
       spanCells: 1,
       endsSpan: false,
       startCol: -1,
@@ -272,6 +268,40 @@ describe('leadSpanClasses', () => {
     expect(leadSpanClasses('end', 'none')).toBe(
       'bg-primary text-primary-content border-l-0 rounded-r-xs',
     );
+  });
+});
+
+describe('leadCellEndsSpan', () => {
+  test('a one-cell note ends its own span, whatever follows that is not the same note', () => {
+    expect(leadCellEndsSpan('start', 'none')).toBe(true);
+    expect(leadCellEndsSpan('start', 'start')).toBe(true);
+  });
+
+  test('a start that continues does NOT end the span', () => {
+    expect(leadCellEndsSpan('start', 'body')).toBe(false);
+    expect(leadCellEndsSpan('start', 'end')).toBe(false);
+  });
+
+  test('an end cell always ends, a body cell never does, an empty cell never does', () => {
+    expect(leadCellEndsSpan('end', 'none')).toBe(true);
+    expect(leadCellEndsSpan('end', 'start')).toBe(true);
+    expect(leadCellEndsSpan('body', 'end')).toBe(false);
+    expect(leadCellEndsSpan('none', 'start')).toBe(false);
+  });
+
+  test('agrees with resolveLeadCellSpan on every cell of a span', () => {
+    // The renderer answers this from the two kinds it already has, rather
+    // than paying resolveLeadCellSpan's backward scan per cell — so the two
+    // answers must be the same answer, not two that happen to match today.
+    const rowKinds: LeadCellKind[] = ['start', 'body', 'end', 'none', 'start', 'none'];
+    const m = emptyBar();
+    m[0] = [{ note: 'C4', len: 3 }];
+    m[8] = [{ note: 'C4', len: 1 }];
+    for (let col = 0; col < rowKinds.length; col++) {
+      expect(leadCellEndsSpan(rowKinds[col], rowKinds[col + 1] ?? 'none')).toBe(
+        resolveLeadCellSpan(rowKinds, col, 16, TICKS_PER_SIXTEENTH, 'C4', m).endsSpan,
+      );
+    }
   });
 });
 
@@ -449,8 +479,8 @@ describe('leadCellKinds draws a note its audible width', () => {
   });
 });
 
-describe('resolveLeadCellSpan reports both units', () => {
-  test('the stored start, the tick length and the drawn cell count', () => {
+describe('resolveLeadCellSpan converts the stored length to cells', () => {
+  test('the stored start and the drawn cell count, from an 8-tick note at stride 4', () => {
     const previewed: LeadNote[][] = Array.from({ length: LEAD_TICKS_PER_BAR }, () => []);
     previewed[0] = [{ note: 'C4', len: 8 }];
     const rowKinds = leadCellKinds(previewed, ['C4'], 8, 16, 4).get('C4')!;
@@ -459,7 +489,9 @@ describe('resolveLeadCellSpan reports both units', () => {
     const span = resolveLeadCellSpan(rowKinds, 1, 16, 4, 'C4', previewed);
     expect(span.spanStartIdx).toBe(0);
     expect(span.startCol).toBe(0);
-    expect(span.spanLen).toBe(8);
+    // The stored 8 ticks leave here as 2 CELLS and never as ticks: the drag
+    // handle and the keyboard step both count cells, and the tick length is
+    // read back from the store on the write.
     expect(span.spanCells).toBe(2);
     expect(span.endsSpan).toBe(true);
   });

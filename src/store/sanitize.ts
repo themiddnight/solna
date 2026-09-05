@@ -123,30 +123,8 @@ export function asPositiveInteger(value: unknown, fallback: number): number {
 }
 
 /**
- * The TYPE GUARD: is this already a valid lead melody — rows of
- * { note: string; len: integer >= 1 }? It answers yes or no about the whole
- * matrix and repairs nothing; asLeadNoteMatrix below is what readers use.
- */
-export function isLeadNoteMatrix(value: unknown): value is LeadNote[][] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (row) =>
-        Array.isArray(row) &&
-        row.every(
-          (n) =>
-            typeof n === 'object' &&
-            n !== null &&
-            typeof (n as LeadNote).note === 'string' &&
-            Number.isInteger((n as LeadNote).len) &&
-            (n as LeadNote).len >= 1,
-        ),
-    )
-  );
-}
-
-/**
- * The COERCION readers use: the most of a stored melody that can honestly be
+ * The ONE answer to "is this a stored lead melody", and it is a coercion
+ * rather than a type guard: the most of a stored melody that can honestly be
  * kept. A note whose `len` is missing, fractional or below 1 has that one
  * field repaired (rounded, floored at one step) instead of costing the user
  * every other note in the melody — the spec's rule, and the same choice

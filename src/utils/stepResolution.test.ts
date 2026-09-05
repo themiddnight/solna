@@ -2,13 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import {
   DEFAULT_LEAD_STEP_RESOLUTION,
-  LEAD_STEP_RESOLUTIONS,
+  LEAD_STEP_STRIDES,
   LEAD_STEP_RESOLUTION_IDS,
   LEAD_TICKS_PER_BAR,
   TICKS_PER_SIXTEENTH,
+  clampColumn,
   columnsPerBar,
-  getLeadStepResolution,
   isLeadStepResolutionId,
+  leadNoteCells,
   strideFor,
 } from './stepResolution';
 import { MAX_STEPS_PER_BAR, METERS, METER_IDS } from './meter';
@@ -17,9 +18,9 @@ describe('the table', () => {
   test('stores at 1/32 and strides down to the active resolution', () => {
     expect(TICKS_PER_SIXTEENTH).toBe(2);
     expect(LEAD_TICKS_PER_BAR).toBe(MAX_STEPS_PER_BAR * TICKS_PER_SIXTEENTH);
-    expect(LEAD_STEP_RESOLUTIONS['1/8'].stride).toBe(4);
-    expect(LEAD_STEP_RESOLUTIONS['1/16'].stride).toBe(2);
-    expect(LEAD_STEP_RESOLUTIONS['1/32'].stride).toBe(1);
+    expect(LEAD_STEP_STRIDES['1/8']).toBe(4);
+    expect(LEAD_STEP_STRIDES['1/16']).toBe(2);
+    expect(LEAD_STEP_STRIDES['1/32']).toBe(1);
   });
 
   test('lists coarse to fine — the order the select shows', () => {
@@ -31,11 +32,10 @@ describe('the table', () => {
     // added to one and not the other is a select option that resolves to
     // the default, silently.
     expect([...LEAD_STEP_RESOLUTION_IDS].sort()).toEqual(
-      Object.keys(LEAD_STEP_RESOLUTIONS).sort(),
+      Object.keys(LEAD_STEP_STRIDES).sort(),
     );
     for (const id of LEAD_STEP_RESOLUTION_IDS) {
-      expect(LEAD_STEP_RESOLUTIONS[id].id).toBe(id);
-      expect(LEAD_STEP_RESOLUTIONS[id].label.length).toBeGreaterThan(0);
+      expect(strideFor(id)).toBe(LEAD_STEP_STRIDES[id]);
     }
   });
 
@@ -70,9 +70,10 @@ describe('isLeadStepResolutionId', () => {
   });
 });
 
-describe('getLeadStepResolution', () => {
+describe('strideFor', () => {
   test('resolves a known id', () => {
-    expect(getLeadStepResolution('1/32').stride).toBe(1);
+    expect(strideFor('1/32')).toBe(1);
+    expect(strideFor('1/8')).toBe(4);
   });
 
   test('falls back to the default rather than throwing', () => {
@@ -80,10 +81,63 @@ describe('getLeadStepResolution', () => {
     // future build, a corrupt payload or an empty string must not throw,
     // because this value feeds the scheduler and a throw there would
     // freeze the transport.
-    expect(getLeadStepResolution('1/12').id).toBe(DEFAULT_LEAD_STEP_RESOLUTION);
-    expect(getLeadStepResolution('').id).toBe(DEFAULT_LEAD_STEP_RESOLUTION);
-    expect(getLeadStepResolution(null).id).toBe(DEFAULT_LEAD_STEP_RESOLUTION);
-    expect(getLeadStepResolution(undefined).id).toBe(DEFAULT_LEAD_STEP_RESOLUTION);
+    const fallback = LEAD_STEP_STRIDES[DEFAULT_LEAD_STEP_RESOLUTION];
+    expect(strideFor('1/12')).toBe(fallback);
+    expect(strideFor('')).toBe(fallback);
+    expect(strideFor(null)).toBe(fallback);
+    expect(strideFor(undefined)).toBe(fallback);
+  });
+});
+
+describe('leadNoteCells', () => {
+  // The ONE copy of "what sounds is what is drawn": the scheduler's holdSec,
+  // the live recorder's captured length and the grid's drawn width all round
+  // ticks to whole cells through this.
+  test('rounds a tick length UP to whole cells', () => {
+    expect(leadNoteCells(8, 4)).toBe(2);
+    expect(leadNoteCells(5, 4)).toBe(2);
+    expect(leadNoteCells(9, 4)).toBe(3);
+    expect(leadNoteCells(3, 1)).toBe(3);
+  });
+
+  test('a note is never shorter than one cell, whatever the input', () => {
+    // A zero-cell note is neither audible nor drawable, and the grid would
+    // size it in zero or NaN pixels.
+    expect(leadNoteCells(0, 2)).toBe(1);
+    expect(leadNoteCells(-4, 2)).toBe(1);
+    expect(leadNoteCells(1, 0)).toBe(1);
+    expect(leadNoteCells(3, 0)).toBe(3);
+    expect(leadNoteCells(3, -1)).toBe(3);
+  });
+
+  test('a whole number of cells is left exactly alone', () => {
+    for (const stride of [1, 2, 4]) {
+      for (const cells of [1, 2, 7]) {
+        expect(leadNoteCells(cells * stride, stride)).toBe(cells);
+      }
+    }
+  });
+});
+
+describe('clampColumn', () => {
+  // Clamping, not wrapping: these columns are USER-placed positions, so
+  // modulo would land on column 0 and look like a choice the user made.
+  test('pulls a column onto the grid and rounds to a whole one', () => {
+    expect(clampColumn(5, 16)).toBe(5);
+    expect(clampColumn(5.4, 16)).toBe(5);
+    expect(clampColumn(5.6, 16)).toBe(6);
+    expect(clampColumn(-3, 16)).toBe(0);
+    expect(clampColumn(99, 16)).toBe(15);
+  });
+
+  test('answers 0 rather than propagating NaN', () => {
+    expect(clampColumn(Number.NaN, 16)).toBe(0);
+    expect(clampColumn(Number.POSITIVE_INFINITY, 16)).toBe(0);
+  });
+
+  test('a grid with no columns still has an answer', () => {
+    expect(clampColumn(4, 0)).toBe(0);
+    expect(clampColumn(4, -2)).toBe(0);
   });
 });
 

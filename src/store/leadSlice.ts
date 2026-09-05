@@ -9,6 +9,7 @@ import {
   pasteLeadBar,
   leadCoveringNoteIndex,
   leadStoredIndexAt,
+  leadStoredIndexAtTick,
   resizeLeadMelody,
   type LeadNote,
 } from '../audio/leadMelody';
@@ -21,6 +22,7 @@ import {
   isLeadStepResolutionId,
   strideFor,
 } from '../utils/stepResolution';
+import { clampFinite } from './sanitize';
 import type { AppStore, LeadSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -93,15 +95,19 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
       // creating a new one at the click point. More DAW-like, but one click
       // producing two notes is harder to explain, and nothing asks for it.)
       const target = covered ? coveringIdx : stepIndex;
-      return {
-        leadMelodySteps: state.leadMelodySteps.map((r, i) => {
-          if (i !== target) return r;
-          // The editor writes whole CELLS, and a cell is `stride` ticks. A
-          // literal 1 here would draw a note a fraction of a cell long the
-          // moment the resolution is anything but the finest.
-          return covered ? r.filter((n) => n.note !== note) : [...r, { note, len: stride }];
-        }),
-      };
+      const row = state.leadMelodySteps[target];
+      // No such slot, no edit. (The map this replaces expressed the same
+      // thing by matching no index — but it also rebuilt the whole stored
+      // array, once per cell of a drag stroke, to change one row.)
+      if (!row) return {};
+      const next = [...state.leadMelodySteps];
+      // The editor writes whole CELLS, and a cell is `stride` ticks. A
+      // literal 1 here would draw a note a fraction of a cell long the
+      // moment the resolution is anything but the finest.
+      next[target] = covered
+        ? row.filter((n) => n.note !== note)
+        : [...row, { note, len: stride }];
+      return { leadMelodySteps: next };
     });
 
   return {
@@ -222,12 +228,7 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
     // producing a silent note that still shows as drawn in the grid, and the
     // ceiling stops a note overlapping into the next step, which is the
     // overlap invariant 1 exists to prevent.
-    setLeadGate: (gate) =>
-      set({
-        leadGate: Number.isFinite(gate)
-          ? Math.min(1, Math.max(0.05, gate))
-          : DEFAULT_LEAD_GATE,
-      }),
+    setLeadGate: (gate) => set({ leadGate: clampFinite(gate, 0.05, 1, DEFAULT_LEAD_GATE) }),
     toggleLeadNote: (stepIndex, note) => paintLeadNote(stepIndex, note, 'toggle'),
 
     paintLeadNote,
@@ -274,9 +275,9 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
         // one and must go: leaving it would put two of a pitch on the same
         // span, audible the moment the loop is read at a finer grid.
         // "Quiet, not gone" protects a change of VIEW, never an explicit
-        // edit. Stride 1 makes leadStoredIndexAt the tick conversion.
+        // edit.
         for (let k = 1; k < nextLen; k++) {
-          const idx = leadStoredIndexAt(activePos * stride + k, stepsPerBar, 1);
+          const idx = leadStoredIndexAtTick(activePos * stride + k, stepsPerBar);
           const covered = next[idx];
           if (covered?.some((n) => n.note === note)) {
             next[idx] = covered.filter((n) => n.note !== note);

@@ -39,10 +39,21 @@ export function subscribeNoteInput(listener: NoteInputListener): () => void {
  * that throws must not be able to swallow a note the user played. Listeners
  * are copied before the walk so one that unsubscribes itself mid-emit cannot
  * derail delivery to the rest.
+ *
+ * Ordering alone is not enough, which is why each call is also isolated. The
+ * emit sits in the MIDDLE of its caller — synthPlaybackNoteOff is followed by
+ * the polyphony re-scale and the held-note bookkeeping in useInputDeck — so a
+ * subscriber that threw would leave the key stuck on screen and every
+ * remaining voice at the wrong level, and would rob the other subscribers of
+ * the event as well. A bus exists so one observer cannot break another.
  */
 export function emitNoteInput(event: NoteInputEvent): void {
   for (const listener of [...listeners]) {
-    listener(event);
+    try {
+      listener(event);
+    } catch {
+      // An observer's failure is not the performer's problem.
+    }
   }
 }
 

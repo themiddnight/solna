@@ -136,7 +136,11 @@ export type LeadMelodyView = 'scale-locked' | 'chromatic';
 export type LeadNotePaintMode = 'draw' | 'erase' | 'toggle';
 
 export interface LeadSlice {
-  /** Notes per step, stored at a fixed MAX_STEPS_PER_BAR per bar. The index is the step a note STARTS on. */
+  /**
+   * Notes per bar, stored at a fixed LEAD_TICKS_PER_BAR per bar and windowed
+   * to the active meter AND resolution. The index is the TICK a note STARTS
+   * on — not a 16th and not a visible column.
+   */
   leadMelodySteps: LeadNote[][];
   /** Loop length in bars; must divide Σ ChordItem.bars. */
   leadLoopLength: number;
@@ -191,8 +195,11 @@ export interface LeadSlice {
    */
   paintLeadNote: (stepIndex: number, note: string, mode: LeadNotePaintMode) => void;
   /**
-   * Set a drawn note's length. `stepIndex` is the STORED index; `len` counts
-   * ACTIVE steps. The one place the three length invariants are enforced.
+   * Set a drawn note's length. `stepIndex` is the STORED index and `len`
+   * counts TICKS — the same unit LeadNote.len is in, so a caller working in
+   * visible cells must multiply by the active stride first (LeadMelodyGrid
+   * and useLeadNoteResize both do). The one place the three length invariants
+   * are enforced.
    */
   setLeadNoteLength: (stepIndex: number, note: string, len: number) => void;
 }

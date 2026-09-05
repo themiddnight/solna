@@ -1,10 +1,17 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type React from 'react';
 import { renderToString } from 'react-dom/server';
-import { LeadMelodyHeaders, LeadMelodyGrid, LeadMarker } from './LeadMelodyGrid';
+import { LeadMelodyHeaders, LeadMelodyGrid, LeadMarker, LeadMarkerView } from './LeadMelodyGrid';
 import { stepCells } from '../../sequencerGrid';
 import { getMeter } from '../../../utils/meter';
 import { leadColumnCells } from './melodyGrid';
+
+const source = readFileSync(
+  join(process.cwd(), 'src/components/loop/lead/LeadMelodyGrid.tsx'),
+  'utf8',
+);
 
 describe('LeadMelodyGrid', () => {
   test('renders one loop-length option per divisor of the progression', () => {
@@ -26,10 +33,24 @@ describe('LeadMelodyGrid', () => {
     // The stride is LEAD_CELL_WIDTH, the same constant the header buttons size
     // themselves with — a marker that drifts from its own ruler is worse than
     // two honest markers. `left` is the note-name column's width.
-    const html = renderToString(<LeadMarker column={3} />);
+    const html = renderToString(<LeadMarkerView column={3} />);
     expect(html).toContain('translateX(60px)'); // 3 × 20
     expect(html).toContain('left:44px');
-    expect(renderToString(<LeadMarker column={0} />)).toContain('translateX(0px)');
+    expect(renderToString(<LeadMarkerView column={0} />)).toContain('translateX(0px)');
+  });
+
+  test('the marker subscribes the step itself, so a tick re-renders one div', () => {
+    // LeadMarker owns useLeadMarkerColumn; LeadMelodyGrid does not call it.
+    // Read from the grid's body, a published step (8-32/sec) reconciled the
+    // toolbar's two selects, the Slider, eight buttons and every pitch label
+    // to move one translateX — the same fix as moving the grid out of
+    // SynthView. Geometry stays on LeadMarkerView's explicit prop because
+    // renderToString cannot force a playing store state.
+    expect(renderToString(<LeadMarker columns={16} />)).toContain('translateX(0px)');
+    // Exactly one call site, and it is LeadMarker's. There is no DOM here to
+    // count renders with, so the subscription's LOCATION is what is pinned.
+    expect(source.match(/useLeadMarkerColumn\(/g) ?? []).toHaveLength(1);
+    expect(source).toContain('<LeadMarker columns={columns} />');
   });
 
   test('a stopped grid still draws the marker, parked on the cursor', () => {
@@ -88,7 +109,6 @@ describe('LeadMelodyHeaders', () => {
   const meter = getMeter('4/4');
   const cellsPerBar = stepCells(meter);
   const headerProps = (columns: number, cursor = 0): React.ComponentProps<typeof LeadMelodyHeaders> => ({
-    stepsPerBar: meter.stepsPerBar,
     columns,
     cellsPerBar,
     cursor,
@@ -218,7 +238,7 @@ describe('LeadMelodyHeaders', () => {
       />,
     );
     expect(wide.split('width:20px').length - 1).toBe(64);
-    expect(renderToString(<LeadMarker column={3} />)).toContain('translateX(60px)');
+    expect(renderToString(<LeadMarkerView column={3} />)).toContain('translateX(60px)');
   });
 });
 

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
   clockStepToGridColumn,
   createLeadLiveClock,
+  tickToColumn,
   heldStepLength,
   measuredStepDurationSec,
   pushClockAnchor,
@@ -192,6 +193,38 @@ describe('clockStepToGridColumn', () => {
 
   test('a loop with no columns has nowhere to land', () => {
     expect(clockStepToGridColumn(4, 0, 2)).toBe(0);
+  });
+});
+
+describe('tickToColumn', () => {
+  // The primitive under clockStepToGridColumn, and what leadScheduleHits
+  // reaches when it already holds a tick — a scheduler that floored and
+  // wrapped for itself would agree with the recorder only by coincidence.
+  test('a tick is a column: floor by the stride, then wrap', () => {
+    expect(tickToColumn(0, 16, 2)).toBe(0);
+    expect(tickToColumn(5, 16, 2)).toBe(2);
+    expect(tickToColumn(32, 16, 2)).toBe(0);
+    expect(tickToColumn(7, 8, 4)).toBe(1);
+  });
+
+  test('a negative tick wraps forward rather than escaping the grid', () => {
+    expect(tickToColumn(-2, 16, 2)).toBe(15);
+    expect(tickToColumn(-1, 32, 1)).toBe(31);
+  });
+
+  test('a loop with no columns, or no stride, has nowhere to land', () => {
+    expect(tickToColumn(4, 0, 2)).toBe(0);
+    expect(tickToColumn(4, 16, 0)).toBe(0);
+  });
+
+  test('clockStepToGridColumn is this, one 16th->tick multiply earlier', () => {
+    for (const stride of [1, 2, 4]) {
+      for (const step of [0, 1, 5, 17, -3]) {
+        expect(clockStepToGridColumn(step, 16, stride)).toBe(
+          tickToColumn(step * 2, 16, stride),
+        );
+      }
+    }
   });
 });
 

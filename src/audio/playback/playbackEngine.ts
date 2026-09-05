@@ -37,12 +37,6 @@ export function subscribePlaybackClock(
 }
 
 /**
- * Release time for a HARD stop: short enough to read as an instant cut, long
- * enough not to click. Lives beside playbackStopSource, which owns the
- * semantics — it was declared verbatim in both note-based playback hooks, and
- * a tuning constant for an audible fade must not have two copies to drift.
- */
-/**
  * How long from NOW until `time` is actually heard, in seconds.
  *
  * The clock is a lookahead scheduler: it hands listeners the future
@@ -85,6 +79,12 @@ export function playbackOutputLatencySec(): number {
   return outputLatencySec(audioEngine.getAudioContext());
 }
 
+/**
+ * Release time for a HARD stop: short enough to read as an instant cut, long
+ * enough not to click. Lives beside playbackStopSource, which owns the
+ * semantics — it was declared verbatim in both note-based playback hooks, and
+ * a tuning constant for an audible fade must not have two copies to drift.
+ */
 export const HARD_STOP_RELEASE = 0.02;
 
 /**

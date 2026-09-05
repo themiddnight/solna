@@ -20,6 +20,7 @@ import {
   LEAD_WINDOW_OCTAVES,
   isBlackKey,
   isRootNote,
+  leadCellEndsSpan,
   leadCellKinds,
   leadColumnCells,
   leadCursorKeyTarget,
@@ -28,7 +29,6 @@ import {
   resolveLeadCellSpan,
 } from './melodyGrid';
 import {
-  LEAD_STEP_RESOLUTIONS,
   LEAD_STEP_RESOLUTION_IDS,
   columnsPerBar,
   strideFor,
@@ -57,7 +57,7 @@ const LABEL_WIDTH = 44;
  * note-name column's width and strides by LEAD_CELL_WIDTH — the same
  * constant the header buttons size themselves with.
  */
-export const LeadMarker: React.FC<{ column: number }> = ({ column }) => (
+export const LeadMarkerView: React.FC<{ column: number }> = ({ column }) => (
   <div
     className="pointer-events-none absolute top-0 bottom-0 bg-primary/20 ring-1 ring-inset ring-primary"
     style={{
@@ -67,6 +67,20 @@ export const LeadMarker: React.FC<{ column: number }> = ({ column }) => (
     }}
   />
 );
+
+/**
+ * The marker, subscribed. The subscription lives HERE and not in
+ * LeadMelodyGrid for exactly the reason the grid itself lives here and not in
+ * SynthView (see the note on LeadMelodyGrid): a published step arrives 8-32
+ * times a second, and read from the grid's body it re-rendered the whole
+ * toolbar — two selects, a Slider, eight buttons and 14-24 pitch labels —
+ * to move one translateX. This component draws one div and nothing else, so
+ * that is all a step now costs.
+ */
+export const LeadMarker: React.FC<{ columns: number }> = ({ columns }) => {
+  const column = useLeadMarkerColumn(columns);
+  return <LeadMarkerView column={column} />;
+};
 
 // Memoized: props are stable across clock ticks, so the cells never re-render
 // when only the playhead moves.
@@ -124,21 +138,38 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
     >
       {rows.map((note) => {
         const rowKinds = kinds.get(note) ?? [];
+        // Constant for the whole ROW — both of these strip the octave with a
+        // regex, and the answer cannot change from column to column. Per cell
+        // it was rows x columns allocations (~6,100 at 4 bars / 1-32 /
+        // chromatic) for at most 24 distinct answers.
+        const inactive = isRootNote(note, root)
+          ? 'bg-primary/20'
+          : isBlackKey(note)
+            ? 'bg-roll-key-black'
+            : 'bg-roll-key-white';
+        // Lazily, and only from the handlers that read it: resolveLeadCellSpan
+        // scans backward for the span start and searches the stored row, which
+        // is the per-cell cost leadCellKinds' single pass exists to remove.
+        // Calling it per cell put it straight back — ~3,072 scans per render.
+        const spanAt = (col: number): ReturnType<typeof resolveLeadCellSpan> =>
+          resolveLeadCellSpan(rowKinds, col, stepsPerBar, stride, note, previewed);
         return (
           <React.Fragment key={note}>
             {Array.from({ length: columns }, (_, col) => {
               const barIndex = Math.floor(col / colsPerBar);
               const stepInBar = col - barIndex * colsPerBar;
-              const idx = leadStoredIndexAt(barIndex * colsPerBar + stepInBar, stepsPerBar, stride);
+              // The same conversion the paint controller's gap-fill uses, from
+              // the same callback: two copies of column -> stored index is two
+              // things to keep in step when the meter or the stride moves.
+              const idx = resolveStepIndex(col);
               const kind = rowKinds[col] ?? 'none';
-              const span = leadSpanClasses(kind, rowKinds[col + 1] ?? 'none');
+              const nextKind = rowKinds[col + 1] ?? 'none';
+              const span = leadSpanClasses(kind, nextKind);
+              // The same two kinds leadSpanClasses already needed answer this,
+              // so the grab handle costs nothing beyond a lookup the row loop
+              // has made anyway.
+              const endsSpan = leadCellEndsSpan(kind, nextKind);
               const cell = cellsPerBar[stepInBar];
-
-              const inactive = isRootNote(note, root)
-                ? 'bg-primary/20'
-                : isBlackKey(note)
-                  ? 'bg-roll-key-black'
-                  : 'bg-roll-key-white';
 
               const sep =
                 barIndex > 0 && stepInBar === 0
@@ -146,15 +177,6 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
                   : cell.isBeatStart && stepInBar > 0
                     ? 'border-l border-l-base-content/30'
                     : '';
-
-              const { spanStartIdx, spanCells, endsSpan, startCol } = resolveLeadCellSpan(
-                rowKinds,
-                col,
-                stepsPerBar,
-                stride,
-                note,
-                previewed,
-              );
 
               return (
                 <button
@@ -185,6 +207,7 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
                     // pointer moves over; the write counts TICKS, because
                     // that is what a length IS. The conversion happens once,
                     // here, at the boundary.
+                    const { spanStartIdx, spanCells } = spanAt(col);
                     const cells = spanCells + (e.key === 'ArrowRight' ? 1 : -1);
                     onResize(spanStartIdx, note, cells * stride);
                   }}
@@ -195,9 +218,10 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
                   {endsSpan && (
                     <span
                       aria-hidden="true"
-                      onPointerDown={(e) =>
-                        startResize(e, spanStartIdx, note, spanCells, columns - startCol, stride)
-                      }
+                      onPointerDown={(e) => {
+                        const { spanStartIdx, spanCells, startCol } = spanAt(col);
+                        startResize(e, spanStartIdx, note, spanCells, columns - startCol, stride);
+                      }}
                       // touch-none: without it a touch drag the browser
                       // turns into a scroll fires pointercancel, which now
                       // correctly discards — so the gesture would silently
@@ -229,10 +253,6 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
   onSelectColumn,
   columnsPerBar,
 }: {
-  // Accepted for prop-shape parity with the rest of the grid's header wiring
-  // (and the tests that construct this via a shared `headerProps` helper) —
-  // the strips group columns by `columnsPerBar` now, not the raw meter width.
-  stepsPerBar: number;
   columns: number;
   cellsPerBar: StepCell[];
   cursor: number;
@@ -335,7 +355,8 @@ export const LeadMelodyGrid: React.FC = () => {
   // moves the MARKER, which also has to track somebody else's clock while Rec
   // is armed, because that column is the recorder's write head. Its
   // `isPlaying` return is not what the marker uses; useLeadMarkerColumn reads
-  // the same wider gate the publisher does.
+  // the same wider gate the publisher does — from inside LeadMarker, so the
+  // published step re-renders one div rather than this whole body.
   useLeadPlayback();
   useLeadStepPublisher();
   const meterId = useAppStore((s) => s.meterId);
@@ -411,7 +432,6 @@ export const LeadMelodyGrid: React.FC = () => {
   );
 
   const columns = leadLoopLength * colsPerBar;
-  const markerColumn = useLeadMarkerColumn(columns);
   // Clamped again HERE, not only on write: a meter or loop-length change can
   // narrow the window under a cursor that was legal when it was set.
   const cursor = clampLeadCursor(leadCursor, leadLoopLength, stepsPerBar, stride);
@@ -485,7 +505,7 @@ export const LeadMelodyGrid: React.FC = () => {
             >
               {LEAD_STEP_RESOLUTION_IDS.map((id) => (
                 <option key={id} value={id}>
-                  {LEAD_STEP_RESOLUTIONS[id].label}
+                  {id}
                 </option>
               ))}
             </select>
@@ -559,7 +579,6 @@ export const LeadMelodyGrid: React.FC = () => {
               cursor={cursor}
               selectedBar={selectedBar}
               onSelectColumn={setLeadCursor}
-              stepsPerBar={stepsPerBar}
               columns={columns}
               cellsPerBar={cellsPerBar}
               columnsPerBar={colsPerBar}
@@ -601,7 +620,7 @@ export const LeadMelodyGrid: React.FC = () => {
 
             {/* Last child of the w-fit container, so it spans the ruler and
                 the grid body as one column. */}
-            <LeadMarker column={markerColumn} />
+            <LeadMarker columns={columns} />
           </div>
         </div>
       </div>

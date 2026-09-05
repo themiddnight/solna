@@ -10,7 +10,7 @@
  * whether the gesture worked.
  */
 
-import { TICKS_PER_SIXTEENTH } from '../utils/stepResolution';
+import { TICKS_PER_SIXTEENTH, leadNoteCells } from '../utils/stepResolution';
 
 /** One clock dispatch, as handed over by subscribePlaybackClock. */
 export interface ClockAnchor {
@@ -105,11 +105,24 @@ export function wrapColumn(column: number, columns: number): number {
 }
 
 /**
+ * A loop TICK as a grid column: tick -> column -> wrapped into the loop.
+ * THE primitive under clockStepToGridColumn and under every scheduler that
+ * already holds a tick — leadScheduleHits in useLeadPlayback.ts reaches it
+ * rather than keeping its own `wrapColumn(Math.floor(tick / stride), ...)`,
+ * because two copies of a floor-then-wrap agree only by coincidence.
+ */
+export function tickToColumn(tick: number, columns: number, stride: number): number {
+  if (!(columns > 0) || !(stride > 0)) return 0;
+  return wrapColumn(Math.floor(tick / stride), columns);
+}
+
+/**
  * A clock step as a grid column: 16th -> tick -> column -> wrapped into the
  * loop. THE named conversion — useLeadPlayback, leadRecord.ts and the
- * marker all reach it rather than each dividing by their own copy of the
- * stride, which is the "three scattered pieces of arithmetic that each look
- * correct in isolation" this function was created to prevent.
+ * marker all reach it (or the tickToColumn primitive it is one line of)
+ * rather than each dividing by their own copy of the stride, which is the
+ * "three scattered pieces of arithmetic that each look correct in
+ * isolation" this function was created to prevent.
  *
  * At 1/32 a quantiser that rounds to the nearest 16th can only ever produce
  * EVEN columns. That is correct and deliberate: the clock is the only time
@@ -121,9 +134,7 @@ export function clockStepToGridColumn(
   columns: number,
   stride: number,
 ): number {
-  if (!(columns > 0) || !(stride > 0)) return 0;
-  const tick = Math.round(clockStep) * TICKS_PER_SIXTEENTH;
-  return wrapColumn(Math.floor(tick / stride), columns);
+  return tickToColumn(Math.round(clockStep) * TICKS_PER_SIXTEENTH, columns, stride);
 }
 
 /**
@@ -134,9 +145,10 @@ export function clockStepToGridColumn(
  * truncation is setLeadNoteLength's (invariant 2).
  *
  * The editor writes whole cells, and UP is the only direction that agrees
- * with what the note already sounded and drew: resolveLeadStepTriggers and
- * leadNoteCells both ceil, so at 1/8 an odd-clock-step hold of 6 ticks was
- * heard and drawn as 8. Rounding down would shorten the capture, and
+ * with what the note already sounded and drew — which is why this counts
+ * cells with leadNoteCells, the same one the scheduler and the grid use,
+ * and multiplies back into ticks. At 1/8 an odd-clock-step hold of 6 ticks
+ * was heard and drawn as 8. Rounding down would shorten the capture, and
  * switching that loop to 1/32 later would shorten it again — the ratchet
  * the non-destructive rule exists to keep out of a change of view. Only
  * stride 4 can produce a sub-cell length at all; at 1/16 and 1/32 the raw
@@ -145,7 +157,7 @@ export function clockStepToGridColumn(
 export function heldStepLength(onStep: number, offStep: number, stride: number): number {
   const cell = stride > 0 ? stride : 1;
   const raw = Math.round(offStep - onStep) * TICKS_PER_SIXTEENTH;
-  return Math.max(cell, Math.ceil(raw / cell) * cell);
+  return leadNoteCells(raw, cell) * cell;
 }
 
 /** Everything the live clock needs from the outside world, as functions. */

@@ -135,11 +135,6 @@ export function createStepPublisher(): StepPublisher {
 /** The app-wide singleton. One clock, one publisher. */
 export const stepPublisher: StepPublisher = createStepPublisher();
 
-/** Convenience wrapper for clock callbacks. */
-export function publishStep(player: StepPlayerId, step: number): void {
-  stepPublisher.publish(player, step);
-}
-
 /**
  * What clock callbacks should call. `audibleTime` is the AudioContext time the
  * step will sound at — the third argument the clock hands every listener.

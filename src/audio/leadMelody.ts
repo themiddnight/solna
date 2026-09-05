@@ -2,7 +2,13 @@ import type { ArpMode, ArpRate } from '../types';
 import { buildArpSequence } from './arpeggiator';
 import { arpFiresOnStep, computeArpTriggers } from './arpSchedule';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
-import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH, columnsPerBar } from '../utils/stepResolution';
+import {
+  LEAD_TICKS_PER_BAR,
+  TICKS_PER_SIXTEENTH,
+  clampColumn,
+  columnsPerBar,
+  leadNoteCells,
+} from '../utils/stepResolution';
 import { remapNoteByScaleDegree, rootSemitone, transposeNoteBySemitones } from '../utils/musicTheory';
 
 /**
@@ -76,7 +82,7 @@ export function upgradeLeadMelodyV1(steps: string[][]): LeadNote[][] {
  * at its word read old bar 1 at half its beat when the surplus was exactly
  * 2x — LEAD_TICKS_PER_BAR being 2 * MAX_STEPS_PER_BAR made the old array
  * the exact width of the new one — and deleted the surplus bars outright
- * above that. Both results pass isLeadNoteMatrix, so nothing threw.
+ * above that. Both results pass asLeadNoteMatrix, so nothing threw.
  *
  * There is deliberately NO width-equality idempotence guard: each chain's
  * version gate already guarantees this runs exactly once, and the guard was
@@ -123,8 +129,13 @@ export interface LeadSounding {
  * The stored slot for a loop TICK. Bar-major at LEAD_TICKS_PER_BAR — the
  * one coordinate space that depends on neither meter nor resolution, which
  * is what makes a .solna body portable between both.
+ *
+ * Exported because every "walk the ticks a note covers" loop needs it —
+ * pasteLeadBar's here, setLeadNoteLength's swallow loop in the store. That
+ * one used to reach it as leadStoredIndexAt(tick, stepsPerBar, 1), a magic
+ * stride that only meant "please do not scale my argument".
  */
-function storedIndexAtTick(tickInLoop: number, stepsPerBar: number): number {
+export function leadStoredIndexAtTick(tickInLoop: number, stepsPerBar: number): number {
   const ticksPerBar = stepsPerBar * TICKS_PER_SIXTEENTH;
   const barIndex = Math.floor(tickInLoop / ticksPerBar);
   return barIndex * LEAD_TICKS_PER_BAR + (tickInLoop - barIndex * ticksPerBar);
@@ -138,11 +149,11 @@ function storedIndexAtTick(tickInLoop: number, stepsPerBar: number): number {
  * duplicate in components/loop/lead/melodyGrid.ts was deleted for this.
  */
 export function leadStoredIndexAt(column: number, stepsPerBar: number, stride: number): number {
-  return storedIndexAtTick(column * stride, stepsPerBar);
+  return leadStoredIndexAtTick(column * stride, stepsPerBar);
 }
 
 /**
- * The inverse of storedIndexAtTick: the loop TICK a stored slot sits on, or
+ * The inverse of leadStoredIndexAtTick: the loop TICK a stored slot sits on, or
  * -1 when the active METER cannot reach it. Deliberately blind to the
  * stride — a slot the current resolution cannot draw still occupies a real
  * tick, and the two length invariants are rules about STORAGE. Meter
@@ -245,11 +256,6 @@ export function leadCoveringNoteIndex(
   if (!covering) return -1;
   // age is ticks; the scan walked whole columns, so this division is exact.
   return leadStoredIndexAt(columnInLoop - covering.age / stride, stepsPerBar, stride);
-}
-
-/** The melody-loop position for an absolute clock step. */
-export function stepInLoopFor(step: number, melodyLength: number): number {
-  return step % melodyLength;
 }
 
 /** Positive divisors of totalBars, ascending (e.g. 4 → [1, 2, 4]). */
@@ -416,15 +422,13 @@ export function resolveLeadStepTriggers(
     return sounding
       .filter((s) => s.age === 0)
       .map((s) => {
-        // What SOUNDS is what is DRAWN: this is the same rounding the grid
-        // draws the note's width with. A note that showed as two cells but
-        // sounded for five ticks would reintroduce exactly the invisible
-        // state silent dormancy was chosen to avoid.
+        // What SOUNDS is what is DRAWN — the ONE copy of that rounding,
+        // which the grid renderer calls too.
         //
         // The ceil cannot overrun the loop end: startTick is on-grid and
         // the bar's ticks divide by the stride for every meter, so
         // melodyTicks - startTick is a whole number of cells.
-        const cells = Math.max(1, Math.ceil(leadAudibleLen(s, loop) / stride));
+        const cells = leadNoteCells(leadAudibleLen(s, loop), stride);
         return {
           note: s.note,
           timeOffsetSec: 0,
@@ -470,9 +474,7 @@ export function clampLeadCursor(
   stepsPerBar: number,
   stride: number,
 ): number {
-  if (!Number.isFinite(cursor)) return 0;
-  const lastColumn = Math.max(0, loopLength * columnsPerBar(stepsPerBar, stride) - 1);
-  return Math.min(lastColumn, Math.max(0, Math.round(cursor)));
+  return clampColumn(cursor, loopLength * columnsPerBar(stepsPerBar, stride));
 }
 
 /** The bar a cursor COLUMN falls in. */
@@ -519,8 +521,20 @@ export function pasteLeadBar(
   stepsPerBar: number,
   loopLength: number,
 ): LeadNote[][] {
-  const next = steps.map((row) => row.map((n) => ({ note: n.note, len: n.len })));
   const base = bar * LEAD_TICKS_PER_BAR;
+  // Rebuilt to at least the target bar's end, not `steps.map`: the target bar
+  // can sit past the stored width whenever leadLoopLength and the melody
+  // disagree (sanitizeLoops falls a rejected melody back to ONE default bar
+  // without touching leadLoopLength, and accepts a literal []). Writing
+  // next[base + i] onto a short array leaves HOLES — Array#map skips them, so
+  // a later paintLeadNote at one of those indices silently does nothing, and
+  // JSON.stringify turns them into `null`, which asLeadNoteMatrix refuses
+  // WHOLE: the melody comes back blank on the next reload. Padding here keeps
+  // every write landing on a real row.
+  const next: LeadNote[][] = Array.from(
+    { length: Math.max(steps.length, base + LEAD_TICKS_PER_BAR) },
+    (_, i) => (steps[i] ?? []).map((n) => ({ note: n.note, len: n.len })),
+  );
   const ticksPerBar = stepsPerBar * TICKS_PER_SIXTEENTH;
   const barStartTick = bar * ticksPerBar;
   const loopEndTicks = loopLength * ticksPerBar;
@@ -555,7 +569,7 @@ export function pasteLeadBar(
       // underneath it wherever it is stored, including slots the current
       // resolution cannot reach.
       for (let k = 1; k < n.len; k++) {
-        const covered = storedIndexAtTick(startTick + k, stepsPerBar);
+        const covered = leadStoredIndexAtTick(startTick + k, stepsPerBar);
         if (covered === base + i || !next[covered]) continue;
         next[covered] = next[covered].filter((x) => x.note !== n.note);
       }

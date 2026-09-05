@@ -259,12 +259,6 @@ class AudioEngine {
   }
 
   /**
-   * Subscribe to the shared 16th-note clock. The listener receives the exact
-   * audio-clock time each step should sound, so callers can schedule
-   * sample-accurately. Once started the clock runs continuously; re-subscribing
-   * never restarts the grid, so live changes stay glitch-free.
-   */
-  /**
    * Arms or disarms the CLICK. It does not start, stop or hold the clock.
    *
    * It used to do all three, which made the toggle a second transport: the
@@ -284,6 +278,12 @@ class AudioEngine {
     return this.metronomeEnabled;
   }
 
+  /**
+   * Subscribe to the shared 16th-note clock. The listener receives the exact
+   * audio-clock time each step should sound, so callers can schedule
+   * sample-accurately. Once started the clock runs continuously; re-subscribing
+   * never restarts the grid, so live changes stay glitch-free.
+   */
   subscribeClock(listener: (step: number, beat: number, time: number) => void): () => void {
     this.clockListeners.add(listener);
     this.ensureClockRunning();

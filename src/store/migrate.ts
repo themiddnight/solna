@@ -212,6 +212,32 @@ export function renameRegionKeysToLoop<T extends object>(state: T): T {
 }
 
 /**
+ * The traversal every per-loop persist step repeats: copy the payload, leave it
+ * untouched when `loops` is not an array, and map each loop that is a plain
+ * object through `fn` (anything else — null, a string, an array — passes
+ * through, for sanitize to refuse). Every step below is then only its field
+ * lines.
+ *
+ * File-local and unexported on purpose. The `.solna` chain in
+ * projectFormatMigrate.ts carries its own copy of the equivalent traversal and
+ * the two must NOT be merged: a project body is an external contract, the
+ * persist payload is private localStorage shape, and their version numbers move
+ * for different reasons (CLAUDE.md).
+ */
+function mapLoops<T extends object>(
+  state: T,
+  fn: (loop: Record<string, unknown>) => Record<string, unknown>,
+): T {
+  const next = { ...(state as Record<string, unknown>) };
+  if (!Array.isArray(next.loops)) return next as unknown as T;
+  next.loops = next.loops.map((loop) => {
+    if (!loop || typeof loop !== 'object' || Array.isArray(loop)) return loop;
+    return fn(loop as Record<string, unknown>);
+  });
+  return next as unknown as T;
+}
+
+/**
  * v7 -> v8: the lead melody's octave window and view mode became per-loop
  * fields. Every loop persisted before v8 lacks them, and `loadLoop` writes the
  * patch verbatim — so without this backfill activating an old loop would set
@@ -221,18 +247,11 @@ export function renameRegionKeysToLoop<T extends object>(state: T): T {
  * payload. Pure and non-mutating, like its siblings.
  */
 export function backfillLeadWindow<T extends object>(state: T): T {
-  const next = { ...(state as Record<string, unknown>) } as Record<string, unknown>;
-  if (!Array.isArray(next.loops)) return next as unknown as T;
-  next.loops = next.loops.map((loop) => {
-    if (!loop || typeof loop !== 'object') return loop;
-    const row = loop as Record<string, unknown>;
-    return {
-      ...row,
-      leadMelodyView: row.leadMelodyView ?? 'scale-locked',
-      leadMelodyOctave: row.leadMelodyOctave ?? 3,
-    };
-  });
-  return next as unknown as T;
+  return mapLoops(state, (row) => ({
+    ...row,
+    leadMelodyView: row.leadMelodyView ?? 'scale-locked',
+    leadMelodyOctave: row.leadMelodyOctave ?? 3,
+  }));
 }
 
 /**
@@ -252,25 +271,20 @@ export function migrateAddProjectIdentity<T extends object>(state: T): T {
  * loops are touched — persist `merge` writes loops[activeLoopId] over the
  * flat lead keys through loopStatePatch, so the flat mirror is rebuilt from
  * the upgraded loop. Must run BEFORE sanitizePersistedState (zustand runs
- * `migrate` before `merge`, and `merge` is where sanitize is called): the
- * new isLeadNoteMatrix guard rejects the v1 string shape, so a payload that
- * reached sanitize un-upgraded would blank the melody with no error.
+ * `migrate` before `merge`, and `merge` is where sanitize is called):
+ * asLeadNoteMatrix — the guard sanitizeLoops actually reads through — returns
+ * `undefined` for the v1 string shape rather than throwing, and the caller then
+ * falls back to the default melody. A payload that reached sanitize
+ * un-upgraded would come back blank, with no error.
  */
 export function migrateLeadNoteLength<T extends object>(state: T): T {
-  const next = { ...(state as Record<string, unknown>) } as Record<string, unknown>;
-  if (!Array.isArray(next.loops)) return next as unknown as T;
-  next.loops = next.loops.map((loop) => {
-    if (!loop || typeof loop !== 'object' || Array.isArray(loop)) return loop;
-    const row = loop as Record<string, unknown>;
-    return {
-      ...row,
-      leadMelodySteps: isLegacyLeadMelody(row.leadMelodySteps)
-        ? upgradeLeadMelodyV1(row.leadMelodySteps)
-        : row.leadMelodySteps,
-      leadGate: typeof row.leadGate === 'number' ? row.leadGate : DEFAULT_LEAD_GATE,
-    };
-  });
-  return next as unknown as T;
+  return mapLoops(state, (row) => ({
+    ...row,
+    leadMelodySteps: isLegacyLeadMelody(row.leadMelodySteps)
+      ? upgradeLeadMelodyV1(row.leadMelodySteps)
+      : row.leadMelodySteps,
+    leadGate: typeof row.leadGate === 'number' ? row.leadGate : DEFAULT_LEAD_GATE,
+  }));
 }
 
 /**
@@ -293,11 +307,7 @@ export function migrateLeadNoteLength<T extends object>(state: T): T {
  * projectFormatMigrate.ts. The two must NOT be refactored into one.
  */
 export function migrateLeadStepResolution<T extends object>(state: T): T {
-  const next = { ...(state as Record<string, unknown>) } as Record<string, unknown>;
-  if (!Array.isArray(next.loops)) return next as unknown as T;
-  next.loops = next.loops.map((loop) => {
-    if (!loop || typeof loop !== 'object' || Array.isArray(loop)) return loop;
-    const row = loop as Record<string, unknown>;
+  return mapLoops(state, (row) => {
     const bars = typeof row.leadLoopLength === 'number' ? row.leadLoopLength : 1;
     return {
       ...row,
@@ -310,5 +320,4 @@ export function migrateLeadStepResolution<T extends object>(state: T): T {
           : DEFAULT_LEAD_STEP_RESOLUTION,
     };
   });
-  return next as unknown as T;
 }

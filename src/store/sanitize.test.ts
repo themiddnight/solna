@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { asLeadNoteMatrix, clampFinite, isLeadNoteMatrix, sanitizeEffectsValue, sanitizeLoops, sanitizeSynthParams } from './sanitize';
+import { asLeadNoteMatrix, clampFinite, sanitizeEffectsValue, sanitizeLoops, sanitizeSynthParams } from './sanitize';
 import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
 import { createDefaultLoop } from './loopSlice';
 
@@ -71,26 +71,6 @@ describe('sanitize (shared by persist hydration and project import)', () => {
       expect(out.sequencerTracks).toEqual(loop.sequencerTracks);
       expect(out.customBassPattern).toEqual(['rest', 'root', 'octave']);
     });
-  });
-});
-
-describe('isLeadNoteMatrix', () => {
-  test('accepts rows of { note, len } and empty rows', () => {
-    expect(isLeadNoteMatrix([[{ note: 'C4', len: 1 }, { note: 'E4', len: 4 }], []])).toBe(true);
-    expect(isLeadNoteMatrix([])).toBe(true);
-  });
-
-  test('rejects the pre-DEV-369 string matrix — both chains upgrade BEFORE sanitize', () => {
-    expect(isLeadNoteMatrix([['C4', 'E4'], []])).toBe(false);
-  });
-
-  test('the type guard says NO to a half-typed note — asLeadNoteMatrix is what repairs it', () => {
-    expect(isLeadNoteMatrix([[{ note: 'C4', len: 1.5 }]])).toBe(false);
-    expect(isLeadNoteMatrix([[{ note: 'C4', len: 0 }]])).toBe(false);
-    expect(isLeadNoteMatrix([[{ note: 'C4' }]])).toBe(false);
-    expect(isLeadNoteMatrix([[{ len: 2 }]])).toBe(false);
-    expect(isLeadNoteMatrix([[null]])).toBe(false);
-    expect(isLeadNoteMatrix('C4')).toBe(false);
   });
 });
 

@@ -16,6 +16,7 @@ import {
 import type { AppStore } from './types';
 import type { LeadNote } from '../audio/leadMelody';
 import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
+import { MAX_STEPS_PER_BAR } from '../utils/meter';
 
 // ---------------------------------------------------------------------------
 // Fake browser environment (bun has none of these globals). The store module
@@ -1140,7 +1141,8 @@ describe('project identity migration wiring (v8 -> v9)', () => {
  * calling the two migrate functions by hand. migrate.test.ts covers the steps;
  * this covers `store.ts`'s composition of them, which is the part that can
  * regress silently: a widening that never runs leaves a 24-wide melody whose
- * `len` still counts 16ths, and isLeadNoteMatrix ACCEPTS that shape. Nothing
+ * `len` still counts 16ths, and asLeadNoteMatrix ACCEPTS that shape (it hands
+ * it straight back). Nothing
  * throws and nothing blanks — the back half of every bar just disappears and
  * every note is half as long.
  *
@@ -1176,6 +1178,41 @@ describe('lead step resolution migration wiring (v10 -> v11)', () => {
     expect(s.leadMelodySteps).toHaveLength(LEAD_TICKS_PER_BAR);
     expect(s.leadMelodySteps[0]).toEqual([{ note: 'C4', len: 2 }]);
     expect(s.leadStepResolution).toBe('1/16');
+  });
+
+  test('a version-10 payload is widened exactly once', async () => {
+    // The gate's own boundary, from the near side. v10 is the last version
+    // stored at the narrow width, so it is the payload the widening MUST run
+    // on — and exactly once: the step is deliberately not idempotent (applied
+    // twice it re-doubles the melody, MAX_STEPS_PER_BAR -> LEAD_TICKS_PER_BAR
+    // -> 2 * LEAD_TICKS_PER_BAR), so the `version < 11` gate is the only thing
+    // that makes it single-application. A payload at v11 never reaches
+    // `migrate` at all: zustand skips it when the stored version already
+    // matches, which is why the near side is the side worth pinning.
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    useAppStore.persist.clearStorage();
+    flushPersistedWrites();
+    const melody: LeadNote[][] = Array.from({ length: MAX_STEPS_PER_BAR }, () => []);
+    melody[0] = [{ note: 'C4', len: 1 }];
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 10,
+        state: {
+          loops: [
+            { id: 'loop-1', name: 'Loop 1', leadLoopLength: 1, leadMelodySteps: melody },
+          ],
+          activeLoopId: 'loop-1',
+        },
+      })
+    );
+    await useAppStore.persist.rehydrate();
+
+    const s = useAppStore.getState();
+    expect(s.loops[0].leadMelodySteps).toHaveLength(LEAD_TICKS_PER_BAR);
+    expect(s.loops[0].leadMelodySteps[0]).toEqual([{ note: 'C4', len: 2 }]);
+    expect(s.loops[0].leadStepResolution).toBe('1/16');
+    expect(s.leadMelodySteps).toHaveLength(LEAD_TICKS_PER_BAR);
   });
 });
 

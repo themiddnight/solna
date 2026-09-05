@@ -15,7 +15,6 @@ import {
   remapLeadMelodyByScale,
   resizeLeadMelody,
   resolveLeadStepTriggers,
-  stepInLoopFor,
   transposeLeadMelodyByRoot,
   upgradeLeadMelodyV1,
   upgradeLeadMelodyToTicks,
@@ -105,19 +104,6 @@ describe('resizeLeadMelody', () => {
     const m: LeadNote[][] = Array.from({ length: 48 }, () => [] as LeadNote[]);
     m[36] = [{ note: 'C4', len: 6 }];
     expect(resizeLeadMelody(m, 1, 16, 2)[36]).toEqual([{ note: 'C4', len: 6 }]);
-  });
-});
-
-describe('stepInLoopFor', () => {
-  test('wraps the absolute step into the melody loop', () => {
-    expect(stepInLoopFor(0, 32)).toBe(0);
-    expect(stepInLoopFor(16, 32)).toBe(16);
-    expect(stepInLoopFor(32, 32)).toBe(0);
-    expect(stepInLoopFor(33, 32)).toBe(1);
-  });
-  test('a short 1-bar loop repeats as an ostinato', () => {
-    expect(stepInLoopFor(48, 16)).toBe(0);
-    expect(stepInLoopFor(50, 16)).toBe(2);
   });
 });
 

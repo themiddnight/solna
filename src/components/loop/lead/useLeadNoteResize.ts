@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type React from 'react';
 import { useAppStore } from '@/store/store';
 import { LEAD_CELL_WIDTH, leadResizeLen } from './melodyGrid';
@@ -85,6 +85,31 @@ export function leadResizeCommit(
 }
 
 /**
+ * Whether a freshly computed preview is the one already on screen.
+ *
+ * A pointermove fires per frame, but a preview only CHANGES once the pointer
+ * has crossed a whole cell — at 20px, five to twelve moves out of every
+ * twelve resolve to the same length. Returning the previous object for those
+ * keeps the state from bumping, which is what keeps `previewed` memoized,
+ * leadCellKinds unrecomputed and every cell of the grid un-rendered.
+ *
+ * Pure and exported for the same reason leadResizeCommit is: the gesture it
+ * guards cannot be exercised here at all (no DOM), so the comparison has to
+ * be testable on its own or it has no coverage.
+ */
+export function leadPreviewUnchanged(
+  prev: LeadResizePreview | null,
+  next: LeadResizePreview,
+): boolean {
+  return (
+    prev !== null &&
+    prev.len === next.len &&
+    prev.stepIndex === next.stepIndex &&
+    prev.note === next.note
+  );
+}
+
+/**
  * Pointer plumbing for the note-resize drag; the arithmetic stays in
  * leadResizeLen. The preview length lives in LOCAL component state and is
  * committed to the store exactly ONCE, on pointerup. That is required by
@@ -104,7 +129,6 @@ export function useLeadNoteResize(): {
   ) => void;
 } {
   const [preview, setPreview] = useState<LeadResizePreview | null>(null);
-  const dragRef = useRef<LeadResizeDrag | null>(null);
 
   const startResize = useCallback(
     (
@@ -119,7 +143,15 @@ export function useLeadNoteResize(): {
       // toggle the note off the moment it starts.
       e.stopPropagation();
       e.preventDefault();
-      dragRef.current = {
+      // Each gesture owns its OWN drag object — no shared ref. A second
+      // pointer-down before the first gesture ended used to overwrite a
+      // shared dragRef, after which the first gesture's onEnd bailed on the
+      // pointerId check and never removed its own listeners: one dead
+      // pointermove handler on window per orphaned gesture, for the rest of
+      // the session. Closing over the drag means every handler tests the
+      // pointerId it was created for and tears down the listeners it added,
+      // which is the same principle useLeadNotePaint states in its comment.
+      const drag: LeadResizeDrag = {
         stepIndex,
         note,
         startLen,
@@ -135,25 +167,29 @@ export function useLeadNoteResize(): {
         leadResizeLen(drag.startLen, clientX - drag.startX, LEAD_CELL_WIDTH, drag.maxLen);
 
       const onMove = (ev: PointerEvent): void => {
-        const drag = dragRef.current;
-        if (!drag || ev.pointerId !== drag.pointerId) return;
+        if (ev.pointerId !== drag.pointerId) return;
         // Sticky: a gesture that has travelled stays a drag even if it comes
         // back to where it started, so a wobble out and back is not an erase.
         if (!drag.moved && leadResizeMoved(drag.startX, ev.clientX)) drag.moved = true;
-        setPreview({
+        const next = {
           stepIndex: drag.stepIndex,
           note: drag.note,
           len: lenAt(ev.clientX, drag) * drag.stride,
-        });
+        };
+        // Bail out INSIDE the updater: a new object every move would bump the
+        // state on every frame, and the grid would re-render for moves that
+        // resolve to the very same cell-quantised length.
+        setPreview((prev) => (leadPreviewUnchanged(prev, next) ? prev : next));
       };
-      const onEnd = (ev: PointerEvent): void => {
-        const drag = dragRef.current;
-        if (drag && ev.pointerId !== drag.pointerId) return;
-        dragRef.current = null;
+      const detach = (): void => {
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onEnd);
         window.removeEventListener('pointercancel', onEnd);
         setPreview(null);
+      };
+      const onEnd = (ev: PointerEvent): void => {
+        if (ev.pointerId !== drag.pointerId) return;
+        detach();
         // Whether this gesture commits — and what it commits — is
         // leadResizeCommit's decision, so it can be tested for real.
         const outcome = leadResizeCommit(drag, ev.type, ev.clientX);

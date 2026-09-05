@@ -28,18 +28,16 @@ export const LEAD_TICKS_PER_BAR = MAX_STEPS_PER_BAR * TICKS_PER_SIXTEENTH;
 
 export type LeadStepResolutionId = '1/8' | '1/16' | '1/32';
 
-export interface LeadStepResolution {
-  id: LeadStepResolutionId;
-  /** Display string for the melody grid's select. */
-  label: string;
-  /** How many stored ticks one column spans. */
-  stride: number;
-}
-
-export const LEAD_STEP_RESOLUTIONS: Record<LeadStepResolutionId, LeadStepResolution> = {
-  '1/8': { id: '1/8', label: '1/8', stride: 4 },
-  '1/16': { id: '1/16', label: '1/16', stride: 2 },
-  '1/32': { id: '1/32', label: '1/32', stride: 1 },
+/**
+ * How many stored ticks one column spans, per resolution. A bare stride
+ * table rather than a row type: the id IS its own display string, so a row
+ * would only carry a `label` equal to its own key and an `id` equal to it
+ * too — three copies of one fact to keep in agreement.
+ */
+export const LEAD_STEP_STRIDES: Record<LeadStepResolutionId, number> = {
+  '1/8': 4,
+  '1/16': 2,
+  '1/32': 1,
 };
 
 /** Declaration order — coarse to fine, the order the select lists them in. */
@@ -53,25 +51,21 @@ export const LEAD_STEP_RESOLUTION_IDS: LeadStepResolutionId[] = ['1/8', '1/16', 
 export const DEFAULT_LEAD_STEP_RESOLUTION: LeadStepResolutionId = '1/16';
 
 export function isLeadStepResolutionId(value: unknown): value is LeadStepResolutionId {
-  return typeof value === 'string' && Object.hasOwn(LEAD_STEP_RESOLUTIONS, value);
+  return typeof value === 'string' && Object.hasOwn(LEAD_STEP_STRIDES, value);
 }
 
 /**
- * Resolve a resolution id. Anything unknown — a persisted id from a future
- * build, a corrupt payload, an empty string — falls back to the default
- * rather than throwing: this value feeds the scheduler, and a throw there
- * would freeze the transport. Exactly getMeter's rule, for exactly the same
- * reason.
+ * The stride for an id — the only thing any caller ever wanted from the
+ * table, which is why there is no exported row resolver beside it.
+ *
+ * Anything unknown — a persisted id from a future build, a corrupt payload,
+ * an empty string — falls back to the default rather than throwing: this
+ * value feeds the scheduler, and a throw there would freeze the transport.
+ * Exactly getMeter's rule, for exactly the same reason.
  */
-export function getLeadStepResolution(id: string | null | undefined): LeadStepResolution {
-  return isLeadStepResolutionId(id)
-    ? LEAD_STEP_RESOLUTIONS[id]
-    : LEAD_STEP_RESOLUTIONS[DEFAULT_LEAD_STEP_RESOLUTION];
-}
-
-/** The stride alone, for the many call sites that want only the number. */
 export function strideFor(id: string | null | undefined): number {
-  return getLeadStepResolution(id).stride;
+  const resolved = isLeadStepResolutionId(id) ? id : DEFAULT_LEAD_STEP_RESOLUTION;
+  return LEAD_STEP_STRIDES[resolved];
 }
 
 /**
@@ -86,4 +80,44 @@ export function strideFor(id: string | null | undefined): number {
 export function columnsPerBar(stepsPerBar: number, stride: number): number {
   if (!(stride > 0) || !(stepsPerBar > 0)) return 1;
   return Math.max(1, Math.floor((stepsPerBar * TICKS_PER_SIXTEENTH) / stride));
+}
+
+/**
+ * How many CELLS a tick-counted length occupies — what SOUNDS is what is
+ * DRAWN, in ONE place. The scheduler (resolveLeadStepTriggers), the live
+ * recorder (heldStepLength) and the grid renderer (melodyGrid's
+ * leadNoteCells re-export) all round a tick count to whole cells, and a
+ * note that showed as two cells while sounding for five ticks reintroduces
+ * exactly the invisible state silent dormancy was chosen to avoid.
+ *
+ * It lives HERE and not in melodyGrid.ts because audio/ may never import
+ * components/ (CLAUDE.md, three-layer rule), and three prose comments
+ * claiming to hold three copies of `Math.max(1, Math.ceil(len / stride))`
+ * together is not a mechanism.
+ *
+ * Floors at one cell: a zero-length note is neither audible nor drawable,
+ * and rounding UP is the only direction that agrees with what the note
+ * already sounded and drew.
+ */
+export function leadNoteCells(len: number, stride: number): number {
+  const cell = stride > 0 ? stride : 1;
+  return Math.max(1, Math.ceil(len / cell));
+}
+
+/**
+ * Pull a column onto the grid: the shared clamp behind the lead cursor
+ * (clampLeadCursor), the stopped marker (leadMarkerColumn) and arrow-key
+ * navigation (leadCursorKeyTarget).
+ *
+ * Clamping, not wrapping, is the point of it: these three sources are all
+ * USER-placed positions rather than clock quantities, and landing on column
+ * 0 via modulo would look like the user chose column 0, which they didn't.
+ * A clock step wraps instead — see wrapColumn in audio/leadLiveRecord.ts.
+ *
+ * Non-finite input answers 0 rather than propagating NaN into a grid
+ * template that would then size every column in NaN pixels.
+ */
+export function clampColumn(column: number, columns: number): number {
+  if (!Number.isFinite(column)) return 0;
+  return Math.min(Math.max(0, columns - 1), Math.max(0, Math.round(column)));
 }

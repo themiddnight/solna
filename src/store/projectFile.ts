@@ -120,9 +120,10 @@ export function parseProjectFile(text: string): ProjectParseResult {
  * there at its original version.
  *
  * Same two steps as parseProjectFile, in the same order and for the same
- * reason: migrate, THEN sanitize. Reversing them hands a v1 melody to the
- * isLeadNoteMatrix guard as a matrix of strings, which blanks it with no
- * error and no exception (projectFormatMigrate.ts). The envelope is NOT
+ * reason: migrate, THEN sanitize. Reversing them hands a v1 melody to
+ * asLeadNoteMatrix as a matrix of strings; that guard returns `undefined`
+ * rather than throwing, so sanitizeLoops substitutes the default and the melody
+ * comes back blank with no error (projectFormatMigrate.ts). The envelope is NOT
  * re-validated — a body that got into the library came through parse or
  * through this build's own writer — and the version is restamped only after
  * the content it labels has actually been upgraded.

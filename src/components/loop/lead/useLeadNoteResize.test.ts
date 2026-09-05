@@ -5,6 +5,7 @@ import {
   LEAD_RESIZE_SLOP_PX,
   leadResizeCommit,
   leadResizeMoved,
+  leadPreviewUnchanged,
   useLeadNoteResize,
   type LeadResizeDrag,
 } from './useLeadNoteResize';
@@ -156,5 +157,45 @@ describe('useLeadNoteResize', () => {
   test('the preview converts cells to ticks too, not only the commit', () => {
     expect(source).toContain('len: startLen * stride');
     expect(source).toContain('len: lenAt(ev.clientX, drag) * drag.stride');
+  });
+
+  test('a repeated preview is dropped inside the updater, not after the state bumped', () => {
+    // The bail-out has to be the value setPreview RETURNS, not a guard read
+    // from a ref: React only skips the re-render when the updater hands back
+    // the identical object.
+    expect(source).toContain('setPreview((prev) => (leadPreviewUnchanged(prev, next) ? prev : next))');
+  });
+
+  test('each gesture owns its own drag — no shared ref to orphan listeners with', () => {
+    // A shared dragRef let a second pointer-down overwrite the first
+    // gesture's drag, after which the first gesture's onEnd bailed on the
+    // pointerId check and never removed its own window listeners. detachRef
+    // was the patch for that; closing over the drag removes the cause.
+    // Non-comment lines only — the history above is allowed to name them.
+    expect(source).not.toMatch(/^(?!.*\/\/).*dragRef/m);
+    expect(source).not.toContain('detachRef');
+    expect(source).not.toContain('useRef');
+    expect(source).toContain('const drag: LeadResizeDrag = {');
+  });
+});
+
+describe('leadPreviewUnchanged', () => {
+  const preview = { stepIndex: 4, note: 'C4', len: 6 };
+
+  test('the very first preview of a gesture always counts as a change', () => {
+    expect(leadPreviewUnchanged(null, preview)).toBe(false);
+  });
+
+  test('the same length on the same note of the same step is not a change', () => {
+    // At a 20px cell most pointermoves resolve to the length already drawn.
+    // Each one that got through re-ran leadCellKinds and re-rendered every
+    // cell of the grid for no visible difference.
+    expect(leadPreviewUnchanged({ ...preview }, preview)).toBe(true);
+  });
+
+  test('any of the three fields moving is a change', () => {
+    expect(leadPreviewUnchanged({ ...preview, len: 8 }, preview)).toBe(false);
+    expect(leadPreviewUnchanged({ ...preview, stepIndex: 5 }, preview)).toBe(false);
+    expect(leadPreviewUnchanged({ ...preview, note: 'D4' }, preview)).toBe(false);
   });
 });

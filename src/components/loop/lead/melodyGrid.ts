@@ -2,7 +2,12 @@ import { getScaleNotesInOctave, ROOTS } from '../../../utils/musicTheory';
 import type { LeadMelodyView } from '../../../store/types';
 import { leadStoredIndexAt, type LeadNote } from '../../../audio/leadMelody';
 import { wrapColumn } from '@/audio/leadLiveRecord';
-import { TICKS_PER_SIXTEENTH, columnsPerBar } from '@/utils/stepResolution';
+import {
+  TICKS_PER_SIXTEENTH,
+  clampColumn,
+  columnsPerBar,
+  leadNoteCells,
+} from '@/utils/stepResolution';
 import { beatIndexAt, isBeatBoundary, type Meter } from '@/utils/meter';
 import type { StepCell } from '@/components/sequencerGrid';
 
@@ -63,17 +68,13 @@ export function isRootNote(note: string, root: string): boolean {
  */
 export type LeadCellKind = 'none' | 'start' | 'body' | 'end';
 
-/**
- * How many CELLS a tick-counted note draws. The same expression
- * resolveLeadStepTriggers rounds holdSec with, deliberately: what sounds
- * must be what is drawn, or a note that showed as two cells while sounding
- * for five ticks reintroduces exactly the invisible state that silent
- * dormancy was chosen to avoid.
- */
-export function leadNoteCells(len: number, stride: number): number {
-  const cell = stride > 0 ? stride : 1;
-  return Math.max(1, Math.ceil(len / cell));
-}
+// How many CELLS a tick-counted note draws. Declared in utils/stepResolution
+// so audio/ can round holdSec with the SAME expression the renderer measures
+// the span with — what sounds must be what is drawn, and a rule kept in two
+// expressions agreeing by comment is how a note comes to show two cells while
+// sounding for five ticks. Re-exported here because this is where the grid
+// reaches for it.
+export { leadNoteCells };
 
 /**
  * One header descriptor per COLUMN rather than per 16th. `stepCells` in
@@ -139,6 +140,18 @@ export function leadCellKinds(
 }
 
 /**
+ * Whether this cell draws the span's right-edge grab handle. A one-cell note
+ * is a lone 'start', so it ends its own span — hence the `next` argument, the
+ * same one leadSpanClasses needs. Its own function because the renderer
+ * answers it for EVERY cell from the two kinds it already has, while
+ * resolveLeadCellSpan answers it as a by-product of a much more expensive
+ * lookup; one definition, so the two can never drift apart.
+ */
+export function leadCellEndsSpan(kind: LeadCellKind, next: LeadCellKind): boolean {
+  return kind === 'end' || (kind === 'start' && next !== 'body' && next !== 'end');
+}
+
+/**
  * Which span a cell belongs to, resolved back to the span's STORED start
  * index — not the cell's own column — plus the span's length and whether
  * this cell renders the span's right-edge grab handle. Kept pure and out of
@@ -150,6 +163,11 @@ export function leadCellKinds(
  * `startCol` is returned alongside `spanStartIdx` because the caller needs
  * it for `maxLen = columns - startCol` (loop end only, never the next note's
  * position — invariant 1) when starting a drag.
+ *
+ * This walks BACKWARD from `col` and searches the stored row, so it is the
+ * one thing leadCellKinds' single pass exists to keep out of the per-cell
+ * render path: call it lazily, from the gesture handlers that read it, never
+ * once per drawn cell.
  */
 export function resolveLeadCellSpan(
   rowKinds: readonly LeadCellKind[],
@@ -158,18 +176,20 @@ export function resolveLeadCellSpan(
   stride: number,
   note: string,
   previewed: readonly LeadNote[][],
-): { spanStartIdx: number; spanLen: number; spanCells: number; endsSpan: boolean; startCol: number } {
+): { spanStartIdx: number; spanCells: number; endsSpan: boolean; startCol: number } {
   const kind = rowKinds[col] ?? 'none';
   const startCol = kind === 'none' ? -1 : rowKinds.lastIndexOf('start', col);
   const spanStartIdx = startCol < 0 ? -1 : leadStoredIndexAt(startCol, stepsPerBar, stride);
+  // TICKS — what a length IS. Only ever leaves here as a CELL count, which is
+  // what the drag handle and the keyboard step both count in.
   const spanLen =
     startCol < 0 ? 0 : (previewed[spanStartIdx]?.find((n) => n.note === note)?.len ?? stride);
-  const nextKind = rowKinds[col + 1] ?? 'none';
-  const endsSpan =
-    kind === 'end' || (kind === 'start' && nextKind !== 'body' && nextKind !== 'end');
-  // Both units, because the caller needs both: the drag handle counts
-  // CELLS, and the write it eventually makes counts TICKS.
-  return { spanStartIdx, spanLen, spanCells: leadNoteCells(spanLen, stride), endsSpan, startCol };
+  return {
+    spanStartIdx,
+    spanCells: leadNoteCells(spanLen, stride),
+    endsSpan: leadCellEndsSpan(kind, rowKinds[col + 1] ?? 'none'),
+    startCol,
+  };
 }
 
 /**
@@ -232,7 +252,7 @@ export function leadCursorKeyTarget(
   if (key !== 'ArrowLeft' && key !== 'ArrowRight') return null;
   const jump = shiftKey ? colsPerBar : 1;
   const next = col + (key === 'ArrowRight' ? jump : -jump);
-  return Math.min(columns - 1, Math.max(0, next));
+  return clampColumn(next, columns);
 }
 
 /**
@@ -257,6 +277,5 @@ export function leadMarkerColumn(
   // Stopped, the source is the user-placed cursor, not a clock quantity, so
   // it clamps to the visible edge rather than wrapping — landing on column 0
   // via modulo would look like the user chose column 0, which they didn't.
-  if (!Number.isFinite(cursor)) return 0;
-  return Math.min(Math.max(0, columns - 1), Math.max(0, Math.round(cursor)));
+  return clampColumn(cursor, columns);
 }

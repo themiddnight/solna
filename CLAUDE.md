@@ -125,8 +125,9 @@ before a render has no effect unless the component reads the store the way
   `src/store/instantVibes.ts` — the single copy since the `audio/` fork was deleted.
 - **Tap Tempo and stereo VU are unbuilt**, not broken — see `docs/design.md` §4 item 3.
 - **The lead melody's two migration chains each run two upgrades, in order, before their sanitize
-  step.** `isLeadNoteMatrix` rejects the pre-DEV-369 `string[][]` shape, so a payload that reaches
-  sanitize un-upgraded comes back blank — no throw, no warning. Within a chain the note-length
+  step.** `asLeadNoteMatrix` — the guard both read paths go through — returns `undefined` for the
+  pre-DEV-369 `string[][]` shape instead of throwing, and sanitize then substitutes the default, so
+  a payload that reaches sanitize un-upgraded comes back blank — no throw, no warning. Within a chain the note-length
   upgrade runs first and the tick widening second, never the other way round: widening a
   `string[][]` payload would leave a shape sanitize still rejects. Persist upgrades live in
   `migrate` (before `merge`); `.solna` upgrades in `migrateProjectBody` (before `sanitizeContent`).

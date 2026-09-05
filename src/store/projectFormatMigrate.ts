@@ -8,13 +8,22 @@ import {
 import { DEFAULT_LEAD_STEP_RESOLUTION } from '../utils/stepResolution';
 
 /**
- * v1 -> v2: lead notes gain a length and each loop gains a gate. Shares only
- * the pure upgradeLeadMelodyV1 transform with the persist chain in
- * migrate.ts — the two must NOT be refactored into one function: a project
- * body is an external contract, the persist payload is private localStorage
- * shape, and their version numbers move for different reasons.
+ * The traversal every per-loop step of THIS chain repeats: reach `raw.content`,
+ * leave the body untouched unless it is a plain object whose `loops` is an
+ * array, and map each plain-object loop through `fn` (anything else passes
+ * through, for sanitizeContent to refuse). Each version step below is then only
+ * the field map it actually is.
+ *
+ * This is deliberately a SECOND copy of the same idea that mapLoops in
+ * migrate.ts carries, and the two must NOT be merged: a project body is an
+ * external contract (it has an envelope around `content`), the persist payload
+ * is private localStorage shape, and their version numbers move for different
+ * reasons (CLAUDE.md).
  */
-function upgradeLeadNotesV2(raw: Record<string, unknown>): Record<string, unknown> {
+function mapBodyLoops(
+  raw: Record<string, unknown>,
+  fn: (loop: Record<string, unknown>) => Record<string, unknown>,
+): Record<string, unknown> {
   const content = raw.content;
   if (typeof content !== 'object' || content === null || Array.isArray(content)) return raw;
   const c = content as Record<string, unknown>;
@@ -25,17 +34,27 @@ function upgradeLeadNotesV2(raw: Record<string, unknown>): Record<string, unknow
       ...c,
       loops: c.loops.map((loop) => {
         if (typeof loop !== 'object' || loop === null || Array.isArray(loop)) return loop;
-        const row = loop as Record<string, unknown>;
-        return {
-          ...row,
-          leadMelodySteps: isLegacyLeadMelody(row.leadMelodySteps)
-            ? upgradeLeadMelodyV1(row.leadMelodySteps)
-            : row.leadMelodySteps,
-          leadGate: typeof row.leadGate === 'number' ? row.leadGate : DEFAULT_LEAD_GATE,
-        };
+        return fn(loop as Record<string, unknown>);
       }),
     },
   };
+}
+
+/**
+ * v1 -> v2: lead notes gain a length and each loop gains a gate. Shares only
+ * the pure upgradeLeadMelodyV1 transform with the persist chain in
+ * migrate.ts — the two must NOT be refactored into one function: a project
+ * body is an external contract, the persist payload is private localStorage
+ * shape, and their version numbers move for different reasons.
+ */
+function upgradeLeadNotesV2(raw: Record<string, unknown>): Record<string, unknown> {
+  return mapBodyLoops(raw, (row) => ({
+    ...row,
+    leadMelodySteps: isLegacyLeadMelody(row.leadMelodySteps)
+      ? upgradeLeadMelodyV1(row.leadMelodySteps)
+      : row.leadMelodySteps,
+    leadGate: typeof row.leadGate === 'number' ? row.leadGate : DEFAULT_LEAD_GATE,
+  }));
 }
 
 /**
@@ -47,31 +66,19 @@ function upgradeLeadNotesV2(raw: Record<string, unknown>): Record<string, unknow
  * version numbers move for different reasons.
  */
 function upgradeLeadTicksV3(raw: Record<string, unknown>): Record<string, unknown> {
-  const content = raw.content;
-  if (typeof content !== 'object' || content === null || Array.isArray(content)) return raw;
-  const c = content as Record<string, unknown>;
-  if (!Array.isArray(c.loops)) return raw;
-  return {
-    ...raw,
-    content: {
-      ...c,
-      loops: c.loops.map((loop) => {
-        if (typeof loop !== 'object' || loop === null || Array.isArray(loop)) return loop;
-        const row = loop as Record<string, unknown>;
-        const bars = typeof row.leadLoopLength === 'number' ? row.leadLoopLength : 1;
-        return {
-          ...row,
-          leadMelodySteps: Array.isArray(row.leadMelodySteps)
-            ? upgradeLeadMelodyToTicks(row.leadMelodySteps as LeadNote[][], bars)
-            : row.leadMelodySteps,
-          leadStepResolution:
-            typeof row.leadStepResolution === 'string'
-              ? row.leadStepResolution
-              : DEFAULT_LEAD_STEP_RESOLUTION,
-        };
-      }),
-    },
-  };
+  return mapBodyLoops(raw, (row) => {
+    const bars = typeof row.leadLoopLength === 'number' ? row.leadLoopLength : 1;
+    return {
+      ...row,
+      leadMelodySteps: Array.isArray(row.leadMelodySteps)
+        ? upgradeLeadMelodyToTicks(row.leadMelodySteps as LeadNote[][], bars)
+        : row.leadMelodySteps,
+      leadStepResolution:
+        typeof row.leadStepResolution === 'string'
+          ? row.leadStepResolution
+          : DEFAULT_LEAD_STEP_RESOLUTION,
+    };
+  });
 }
 
 /**
@@ -92,10 +99,11 @@ function upgradeLeadTicksV3(raw: Record<string, unknown>): Record<string, unknow
  * half its beat. Do not restore a width guard here: the version gate already
  * does the job, and a width cannot tell the two shapes apart.
  *
- * This whole chain runs BEFORE sanitizeContent
- * (projectFile.ts:91-100) and must never be moved into or after it: the
- * isLeadNoteMatrix guard rejects the v1 string shape, so an un-upgraded body
- * would come back with a blank melody and no error.
+ * This whole chain runs BEFORE sanitizeContent (parseProjectFile in
+ * projectFile.ts) and must never be moved into or after it: asLeadNoteMatrix —
+ * the guard sanitizeLoops reads through — returns `undefined` for the v1 string
+ * shape rather than throwing, so an un-upgraded body would fall back to the
+ * default and come back with a blank melody and no error.
  */
 export function migrateProjectBody(
   raw: Record<string, unknown>,

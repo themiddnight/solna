@@ -53,13 +53,23 @@ describe('synthPlayback → note-input bus', () => {
     expect(events).toEqual([]);
   });
 
-  test('a throwing listener cannot swallow the note', () => {
+  test('a throwing listener cannot swallow the note, or the next listener', () => {
+    const events = heard();
     subscribeNoteInput(() => {
       throw new Error('subscriber blew up');
     });
-    // The engine call happens before the emit, so the sound is already
-    // scheduled by the time a listener can misbehave. The throw propagating
-    // is fine; a silent keyboard would not be.
-    expect(() => synthPlaybackNoteOn('C4', INITIAL_SYNTH_PARAMS)).toThrow();
+    const after: string[] = [];
+    subscribeNoteInput((e) => after.push(e.note));
+
+    // Two guarantees, not one. Ordering gives the first: the engine call
+    // happens before the emit, so the sound is already scheduled by the time
+    // a listener can misbehave. Ordering does NOT give the second — the emit
+    // sits in the MIDDLE of its callers (useInputDeck re-scales polyphony and
+    // clears the held-note set AFTER synthPlaybackNoteOff returns), so a
+    // propagating throw would leave the key stuck and the voices mis-levelled.
+    // Isolation per listener is what makes the bus safe to subscribe to.
+    expect(() => synthPlaybackNoteOn('C4', INITIAL_SYNTH_PARAMS)).not.toThrow();
+    expect(events.map((e) => e.note)).toEqual(['C4']);
+    expect(after).toEqual(['C4']);
   });
 });
