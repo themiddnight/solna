@@ -3,12 +3,14 @@
  * grid column, and "it came back up" into a length in steps.
  *
  * Everything here is a pure function over plain numbers — no AudioContext,
- * no store, no DOM, and no imports at all. That is not tidiness. There is no
+ * no store, no DOM, and one leaf import. That is not tidiness. There is no
  * DOM in this suite to press a key against, so anything left inside the
  * clock callback or the bus listener cannot be tested at all, and this
  * feature area's history is a fully green suite that proved nothing about
  * whether the gesture worked.
  */
+
+import { TICKS_PER_SIXTEENTH } from '../utils/stepResolution';
 
 /** One clock dispatch, as handed over by subscribePlaybackClock. */
 export interface ClockAnchor {
@@ -91,25 +93,59 @@ export function quantiseInputStep(
 }
 
 /**
- * How many steps the key was held for. Counted in STEPS, not seconds, so a
- * bpm change during the hold cannot change the answer. The loop-end
- * truncation is setLeadNoteLength's (invariant 2), not this function's.
+ * Wrap a column into the loop. Split out because the marker is handed a
+ * column that has ALREADY been converted by the publisher and must not be
+ * converted twice — one copy of the wrap with two entry points, rather than
+ * two copies that agree today by coincidence.
  */
-export function heldStepLength(onStep: number, offStep: number): number {
-  return Math.max(1, Math.round(offStep - onStep));
+export function wrapColumn(column: number, columns: number): number {
+  if (!(columns > 0) || !Number.isFinite(column)) return 0;
+  const c = Math.round(column);
+  return ((c % columns) + columns) % columns;
 }
 
 /**
- * A clock step as a grid column. Today the clock's 16th step and a grid
- * column are the same thing, so the resolution part is the identity and only
- * the loop wrap does any work — named anyway, because when DEV-375 makes the
- * step resolution adjustable there is then ONE place to change instead of
- * three scattered pieces of arithmetic that each look correct in isolation.
+ * A clock step as a grid column: 16th -> tick -> column -> wrapped into the
+ * loop. THE named conversion — useLeadPlayback, leadRecord.ts and the
+ * marker all reach it rather than each dividing by their own copy of the
+ * stride, which is the "three scattered pieces of arithmetic that each look
+ * correct in isolation" this function was created to prevent.
+ *
+ * At 1/32 a quantiser that rounds to the nearest 16th can only ever produce
+ * EVEN columns. That is correct and deliberate: the clock is the only time
+ * reference there is, and a performance cannot be captured finer than the
+ * grid the anchors describe.
  */
-export function clockStepToGridColumn(clockStep: number, columns: number): number {
-  if (!(columns > 0)) return 0;
-  const step = Math.round(clockStep);
-  return ((step % columns) + columns) % columns;
+export function clockStepToGridColumn(
+  clockStep: number,
+  columns: number,
+  stride: number,
+): number {
+  if (!(columns > 0) || !(stride > 0)) return 0;
+  const tick = Math.round(clockStep) * TICKS_PER_SIXTEENTH;
+  return wrapColumn(Math.floor(tick / stride), columns);
+}
+
+/**
+ * How long the key was held, in TICKS, rounded UP to a whole CELL with a
+ * floor of one, so a captured note is never shorter than the grid can draw
+ * and never ends inside a cell. Counted from raw clock steps, not seconds,
+ * so a bpm change during the hold cannot change the answer. The loop-end
+ * truncation is setLeadNoteLength's (invariant 2).
+ *
+ * The editor writes whole cells, and UP is the only direction that agrees
+ * with what the note already sounded and drew: resolveLeadStepTriggers and
+ * leadNoteCells both ceil, so at 1/8 an odd-clock-step hold of 6 ticks was
+ * heard and drawn as 8. Rounding down would shorten the capture, and
+ * switching that loop to 1/32 later would shorten it again — the ratchet
+ * the non-destructive rule exists to keep out of a change of view. Only
+ * stride 4 can produce a sub-cell length at all; at 1/16 and 1/32 the raw
+ * count is already a whole number of cells and this changes nothing.
+ */
+export function heldStepLength(onStep: number, offStep: number, stride: number): number {
+  const cell = stride > 0 ? stride : 1;
+  const raw = Math.round(offStep - onStep) * TICKS_PER_SIXTEENTH;
+  return Math.max(cell, Math.ceil(raw / cell) * cell);
 }
 
 /** Everything the live clock needs from the outside world, as functions. */

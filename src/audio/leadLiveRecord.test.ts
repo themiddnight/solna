@@ -7,6 +7,7 @@ import {
   measuredStepDurationSec,
   pushClockAnchor,
   quantiseInputStep,
+  wrapColumn,
 } from './leadLiveRecord';
 import { stepDurationSec } from '../utils/musicTheory';
 
@@ -84,12 +85,18 @@ describe('measuredStepDurationSec', () => {
     expect(measuredStepDurationSec(anchors)).not.toBeCloseTo(stepDurationSec(60), 10);
   });
 
-  test('the module cannot even reach the bpm-derived duration', () => {
+  test('the module still cannot reach the bpm-derived duration', () => {
     const src = readFileSync(new URL('./leadLiveRecord.ts', import.meta.url), 'utf8');
+    // The pin that matters is unchanged: measuring the step from the
+    // anchors is the whole reason a bpm change mid-take does not move the
+    // notes, and a bpm-derived constant would keep returning the old value
+    // with no error anywhere.
     expect(src).not.toContain('stepDurationSec');
-    // And nothing else either: the module is pure arithmetic, which is what
-    // makes it testable with no AudioContext and no DOM.
-    expect(src).not.toMatch(/^import /m);
+    // It may now reach the subdivision table, and nothing else. That leaf
+    // imports only meter.ts, so this module stays testable with no
+    // AudioContext, no store and no DOM.
+    const imports = [...src.matchAll(/^import .*? from '(.*?)';$/gm)].map((m) => m[1]);
+    expect(imports).toEqual(['../utils/stepResolution']);
   });
 
   test('one anchor, none, or a non-advancing pair has no answer', () => {
@@ -149,44 +156,94 @@ describe('quantiseInputStep', () => {
   });
 });
 
-describe('heldStepLength', () => {
-  test('is the number of steps the key was down', () => {
-    expect(heldStepLength(4, 8)).toBe(4);
-  });
-
-  test('a tap is one step, never zero — a zero-length note is invisible', () => {
-    expect(heldStepLength(4, 4)).toBe(1);
-  });
-
-  test('a release quantised earlier than the press is still one step', () => {
-    expect(heldStepLength(4, 3)).toBe(1);
-  });
-
-  test('counts straight across the loop seam, because the clock step never wraps', () => {
-    // Truncating at the loop end is setLeadNoteLength's job (invariant 2),
-    // not this function's; counting in raw clock steps is what makes the
-    // length immune to a bpm change during the hold.
-    expect(heldStepLength(14, 20)).toBe(6);
-  });
-});
-
 describe('clockStepToGridColumn', () => {
-  test('is the identity inside the first loop — today a clock step IS a column', () => {
-    expect(clockStepToGridColumn(0, 16)).toBe(0);
-    expect(clockStepToGridColumn(7, 16)).toBe(7);
+  test('at 1/16 a clock step is still a column, exactly as before', () => {
+    expect(clockStepToGridColumn(0, 16, 2)).toBe(0);
+    expect(clockStepToGridColumn(7, 16, 2)).toBe(7);
+    expect(clockStepToGridColumn(16, 16, 2)).toBe(0);
+    expect(clockStepToGridColumn(37, 16, 2)).toBe(5);
   });
 
-  test('wraps by the loop width, exactly as useLeadPlayback does', () => {
-    expect(clockStepToGridColumn(16, 16)).toBe(0);
-    expect(clockStepToGridColumn(37, 16)).toBe(5);
+  test('at 1/8 two clock steps share a column', () => {
+    // stride 4: tick = step * 2, column = tick / 4.
+    expect(clockStepToGridColumn(0, 8, 4)).toBe(0);
+    expect(clockStepToGridColumn(1, 8, 4)).toBe(0);
+    expect(clockStepToGridColumn(2, 8, 4)).toBe(1);
+    expect(clockStepToGridColumn(16, 8, 4)).toBe(0);
+  });
+
+  test('at 1/32 a clock step lands on an even column, always', () => {
+    // Correct and deliberate: a quantiser that rounds to the nearest 16th
+    // can only ever produce even columns. The clock is the only time
+    // reference there is, and a performance cannot be captured finer than
+    // the grid the anchors describe — half the 1/32 columns are reachable
+    // by drawing but not by recording, the same way a note played between
+    // two 16ths is captured on one of them today.
+    expect(clockStepToGridColumn(0, 32, 1)).toBe(0);
+    expect(clockStepToGridColumn(1, 32, 1)).toBe(2);
+    expect(clockStepToGridColumn(7, 32, 1)).toBe(14);
+    expect(clockStepToGridColumn(16, 32, 1)).toBe(0);
   });
 
   test('a negative step wraps forward rather than escaping the grid', () => {
-    expect(clockStepToGridColumn(-1, 16)).toBe(15);
+    expect(clockStepToGridColumn(-1, 16, 2)).toBe(15);
+    expect(clockStepToGridColumn(-1, 32, 1)).toBe(30);
   });
 
   test('a loop with no columns has nowhere to land', () => {
-    expect(clockStepToGridColumn(4, 0)).toBe(0);
+    expect(clockStepToGridColumn(4, 0, 2)).toBe(0);
+  });
+});
+
+describe('wrapColumn', () => {
+  test('is the wrap the conversion already did, named on its own', () => {
+    // The marker consumes a column the publisher already converted, so it
+    // must wrap and NOT convert again. One copy of the wrap, two entry
+    // points — not two copies that agree today by coincidence.
+    expect(wrapColumn(5, 16)).toBe(5);
+    expect(wrapColumn(16, 16)).toBe(0);
+    expect(wrapColumn(-1, 16)).toBe(15);
+    expect(wrapColumn(4, 0)).toBe(0);
+    expect(wrapColumn(Number.NaN, 16)).toBe(0);
+  });
+});
+
+describe('heldStepLength', () => {
+  test('returns TICKS: four clock steps held is eight ticks', () => {
+    expect(heldStepLength(4, 8, 2)).toBe(8);
+  });
+
+  test('a tap is one CELL, never one tick — a sub-cell note is undrawable', () => {
+    expect(heldStepLength(4, 4, 1)).toBe(1);
+    expect(heldStepLength(4, 4, 2)).toBe(2);
+    expect(heldStepLength(4, 4, 4)).toBe(4);
+  });
+
+  test('a release quantised earlier than the press is still one cell', () => {
+    expect(heldStepLength(4, 3, 4)).toBe(4);
+  });
+
+  test('rounds UP to a whole cell, so the recorder never writes a sub-cell length', () => {
+    // At 1/8 an odd clock-step hold is 1.5 cells. The editor writes whole
+    // cells, and UP is the only direction that agrees with what the note
+    // already sounded and drew: resolveLeadStepTriggers and leadNoteCells
+    // both ceil, so a 6-tick note at stride 4 was heard as 8 ticks. Rounding
+    // down would shorten the capture, and switching that loop to 1/32 later
+    // would shorten it again — the ratchet the non-destructive rule exists
+    // to keep out of view changes.
+    expect(heldStepLength(0, 3, 4)).toBe(8);
+    expect(heldStepLength(0, 5, 4)).toBe(12);
+    expect(heldStepLength(0, 7, 4)).toBe(16);
+    // Even strides can never produce a sub-cell length, and must not move.
+    expect(heldStepLength(0, 3, 2)).toBe(6);
+    expect(heldStepLength(0, 3, 1)).toBe(6);
+  });
+
+  test('counts straight across the loop seam, because the clock never wraps', () => {
+    // Truncating at the loop end is setLeadNoteLength's job (invariant 2),
+    // not this function's; counting in raw clock steps is what makes the
+    // length immune to a bpm change during the hold.
+    expect(heldStepLength(14, 20, 2)).toBe(12);
   });
 });
 
