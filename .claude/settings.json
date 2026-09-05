@@ -1,3 +1,23 @@
 {
-  "worktree": { "bgIsolation": "none" }
+  "worktree": {
+    "bgIsolation": "none"
+  },
+  "disableClaudeAiConnectors": true,
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "chrome-devtools-mcp@claude-plugins-official": true,
+    "linear@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "playwright@claude-plugins-official": false,
+    "railway@claude-plugins-official": false,
+    "github@claude-plugins-official": false,
+    "notion@claude-plugins-official": false,
+    "figma@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": false,
+    "typescript-lsp@claude-plugins-official": false,
+    "security-guidance@claude-plugins-official": false,
+    "skill-creator@claude-plugins-official": false,
+    "code-simplifier@claude-plugins-official": false,
+    "warp@claude-code-warp": false
+  }
 }
