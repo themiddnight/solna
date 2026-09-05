@@ -173,8 +173,14 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
       // 'draw', never 'toggle': playing a note that is already at this column
       // must be a no-op, not a delete. A performer repeating a note expects
       // nothing to happen, not the note to vanish.
+      const before = state.leadMelodySteps;
       paintLeadNote(leadStoredIndexAt(target, stepsPerBar, stride), note, 'draw');
-      return true;
+      // And a no-op must REPORT as one. 'draw' declines a column already
+      // covered by a note that started earlier, and the live recorder uses
+      // this answer to register a held note against that row — told true, it
+      // would hold a row that does not contain the pitch, and the note-off's
+      // setLeadNoteLength would silently find nothing to lengthen.
+      return get().leadMelodySteps !== before;
     },
 
     copySelectedLeadBar: () =>

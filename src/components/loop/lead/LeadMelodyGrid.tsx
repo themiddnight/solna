@@ -11,10 +11,7 @@ import {
   loopLengthDivisors,
   type LeadNote,
 } from '../../../audio/leadMelody';
-import {
-  initSynthPlayback,
-  synthPlaybackPreview,
-} from '../../../audio/playback/synthPlayback';
+import { previewSequencerNote } from '../../../audio/playback/presetPreview';
 import {
   LEAD_CELL_WIDTH,
   LEAD_WINDOW_OCTAVES,
@@ -421,12 +418,16 @@ export const LeadMelodyGrid: React.FC = () => {
     [leadMelodySteps, setLeadMelodySteps],
   );
 
-  // synthPlaybackPreview, not synthPlaybackNoteOn: hearing a cell you clicked
-  // is not performing a note, and the note-input bus must not see it.
+  // previewSequencerNote, not synthPlaybackNoteOn: hearing a cell you clicked
+  // is not performing a note, so the note-input bus must not see it — and it
+  // runs on the 'preview' bus, so its release cannot cut a key the player is
+  // holding at the same pitch. It calls audioEngine.init() itself.
   const previewNote = useCallback(
     (note: string) => {
-      initSynthPlayback();
-      synthPlaybackPreview(note, synthParams);
+      previewSequencerNote(note, synthParams, undefined, {
+        holdSec: 0.22,
+        releaseSec: synthParams.release,
+      });
     },
     [synthParams],
   );

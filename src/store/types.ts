@@ -185,6 +185,11 @@ export interface LeadSlice {
    * cannot show — out-of-scale in scale-locked view, or an octave no legal
    * window reaches. Follows the octave window when possible, so a recorded
    * note is never invisible.
+   *
+   * Returns whether it actually wrote, which is NOT the same as "was armed
+   * and legal": a column already covered by this pitch is a deliberate no-op
+   * and reports false, so a caller tracking held notes does not hold a row
+   * that never received one.
    */
   recordLeadNote: (note: string, column?: number) => boolean;
   toggleLeadNote: (stepIndex: number, note: string) => void;

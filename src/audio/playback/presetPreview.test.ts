@@ -3,6 +3,11 @@ import { audioEngine } from '../engine';
 import { freshEngine } from '../testFakes';
 import type { SynthParams, ChordItem } from '../../types';
 import { previewChordProgression, previewSequencerNote } from './presetPreview';
+import {
+  resetNoteInputListeners,
+  subscribeNoteInput,
+  type NoteInputEvent,
+} from './noteInputBus';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- tests deliberately
    reach private engine fields (sourceVoices) via casts, same as engine.test.ts. */
@@ -318,6 +323,38 @@ describe('progression audition streams instead of bursting', () => {
       previewProgression(sixteenChords.slice(0, 2), SYNTH, scheduler);
       expect(state.subscribed).toBe(0);
     } finally {
+      restore();
+    }
+  });
+});
+
+describe('a grid audition is not a performance', () => {
+  test('it sounds on the preview bus, never on the one holding the played keys', () => {
+    const { restore } = withFakeAudioEngine();
+    try {
+      previewSequencerNote('C4', SYNTH, 0.8, { holdSec: 0.22, releaseSec: 0.5 });
+
+      // The engine keys voices by `${source}:${note}`, so an audition on the
+      // 'synth' bus would seize — and then release — the very voice a player
+      // holding C4 is sounding. That is what this bus separation prevents.
+      expect(((audioEngine as any).sourceVoices.get('synth') as Set<unknown> | undefined)?.size ?? 0).toBe(0);
+      expect(((audioEngine as any).sourceVoices.get('preview') as Set<unknown>).size).toBe(1);
+    } finally {
+      restore();
+    }
+  });
+
+  test('it says nothing on the note-input bus, so an armed recorder ignores it', () => {
+    const { restore } = withFakeAudioEngine();
+    const events: NoteInputEvent[] = [];
+    subscribeNoteInput((e) => events.push(e));
+    try {
+      previewSequencerNote('C4', SYNTH, 0.8);
+      // Clicking a cell to hear what you drew is not performing a note. If it
+      // announced itself, recording and clicking would write the cell twice.
+      expect(events).toEqual([]);
+    } finally {
+      resetNoteInputListeners();
       restore();
     }
   });

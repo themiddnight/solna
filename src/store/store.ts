@@ -14,6 +14,7 @@ import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
 import { createLoopSlice } from './loopSlice';
 import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
+import { DEFAULT_LEAD_STEP_RESOLUTION } from '../utils/stepResolution';
 import {
   migrateLegacyPresets,
   migrateProjectTitleToVibeId,
@@ -41,6 +42,7 @@ import {
   sanitizeSynthParams,
   sanitizeEffectsValue,
   sanitizeLoops,
+  asLeadStepResolution,
   clampFinite,
   asBoolean,
   asString,
@@ -185,6 +187,10 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   sanitized.drumFilterCutoff = clampFinite(sanitized.drumFilterCutoff, 50, 12000, 12000);
   sanitized.drumFilterResonance = clampFinite(sanitized.drumFilterResonance, 0.1, 20, 0.7);
   sanitized.leadGate = clampFinite(sanitized.leadGate, 0.05, 1, DEFAULT_LEAD_GATE);
+  sanitized.leadStepResolution = asLeadStepResolution(
+    sanitized.leadStepResolution,
+    DEFAULT_LEAD_STEP_RESOLUTION,
+  );
   sanitized.drumFilterType = asFilterType(sanitized.drumFilterType, 'lowpass');
   sanitized.metronomeActive = asBoolean(sanitized.metronomeActive);
   sanitized.synthMuted = asBoolean(sanitized.synthMuted);

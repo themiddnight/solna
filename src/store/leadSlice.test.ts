@@ -610,8 +610,11 @@ describe('lead slice — step entry', () => {
     // 'draw', not 'toggle'. A performer repeating a note expects nothing to
     // happen, not the note they just played to disappear.
     arm();
-    useAppStore.getState().recordLeadNote('C4');
-    useAppStore.getState().recordLeadNote('C4');
+    expect(useAppStore.getState().recordLeadNote('C4')).toBe(true);
+    // ...and it SAYS it did nothing. The live recorder registers a held note
+    // per `true`, so a second press answered `true` would hold a row that
+    // never received the pitch, and its note-off would lengthen nothing.
+    expect(useAppStore.getState().recordLeadNote('C4')).toBe(false);
 
     expect(at(0)).toEqual([{ note: 'C4', len: CELL }]);
   });

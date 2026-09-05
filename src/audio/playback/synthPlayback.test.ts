@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import {
   synthPlaybackNoteOff,
   synthPlaybackNoteOn,
-  synthPlaybackPreview,
 } from './synthPlayback';
 import {
   resetNoteInputListeners,
@@ -44,14 +43,9 @@ describe('synthPlayback → note-input bus', () => {
     expect(events[0].note).toBe('C4');
   });
 
-  test('a PREVIEW is silent on the bus — clicking a grid cell must never record', () => {
-    // This is the whole reason preview has its own function. If it went
-    // through synthPlaybackNoteOn, arming the recorder and clicking a cell
-    // would write that cell twice.
-    const events = heard();
-    synthPlaybackPreview('C4', INITIAL_SYNTH_PARAMS, 1);
-    expect(events).toEqual([]);
-  });
+  // The matching half of this contract — that an AUDITION is silent on the
+  // bus — is pinned in presetPreview.test.ts, where previewSequencerNote now
+  // lives and where a fake engine makes the assertion non-vacuous.
 
   test('a throwing listener cannot swallow the note, or the next listener', () => {
     const events = heard();

@@ -6,7 +6,10 @@ import { createDefaultLoop } from './loopSlice';
 import { LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
 import type { Loop } from './types';
 import type { LeadNote } from '../audio/leadMelody';
-import { isLeadStepResolutionId } from '../utils/stepResolution';
+import {
+  isLeadStepResolutionId,
+  type LeadStepResolutionId,
+} from '../utils/stepResolution';
 
 // Type-guards for a parsed persisted payload AND for a parsed `.solna` file.
 // Wrong-typed values survive JSON.parse and would flow straight into engine
@@ -17,6 +20,18 @@ export const FILTER_TYPES = new Set(['lowpass', 'highpass', 'bandpass']);
 const LFO_TARGETS = new Set(['cutoff', 'pitch', 'volume']);
 const ARP_MODES = new Set(['up', 'down', 'updown', 'random']);
 const ARP_RATES = new Set(['4n', '8n', '16n', '32n']);
+
+/**
+ * A stored step-resolution id, or the fallback. Its own rule rather than an
+ * inline ternary because BOTH readers need it: the loop body below and the
+ * flat persisted key that store.ts sanitizes.
+ */
+export function asLeadStepResolution(
+  value: unknown,
+  fallback: LeadStepResolutionId,
+): LeadStepResolutionId {
+  return isLeadStepResolutionId(value) ? value : fallback;
+}
 
 /**
  * Synth params are written straight onto AudioParams, so a wrong-typed
@@ -260,9 +275,10 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
       bassOctave: clampFinite(r.bassOctave, 0, 8, fallback.bassOctave),
       leadMelodySteps: asLeadNoteMatrix(r.leadMelodySteps) ?? fallback.leadMelodySteps,
       leadLoopLength: asPositiveInteger(r.leadLoopLength, fallback.leadLoopLength),
-      leadStepResolution: isLeadStepResolutionId(r.leadStepResolution)
-        ? r.leadStepResolution
-        : fallback.leadStepResolution,
+      leadStepResolution: asLeadStepResolution(
+        r.leadStepResolution,
+        fallback.leadStepResolution,
+      ),
       leadMelodyView: r.leadMelodyView === 'chromatic' ? 'chromatic' : 'scale-locked',
       leadMelodyOctave: clampFinite(
         r.leadMelodyOctave, LEAD_OCTAVE_MIN, LEAD_OCTAVE_MAX, fallback.leadMelodyOctave,

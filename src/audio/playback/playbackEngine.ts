@@ -67,6 +67,12 @@ export function playbackNowSec(): number | null {
  *
  * outputLatency is unimplemented on some browsers; baseLatency is the
  * conservative stand-in, and 0 is better than NaN in either case.
+ *
+ * A reported 0 counts as unimplemented, deliberately — the `||`, not a `??`.
+ * No device actually delivers sound with zero latency, so a context claiming
+ * it is a context that never filled the field in; believing it would leave
+ * every playhead and every captured press uncorrected. Erring toward
+ * baseLatency costs a few ms in the one case the claim was true.
  */
 export function outputLatencySec(
   ctx: { outputLatency?: number; baseLatency?: number } | null | undefined,

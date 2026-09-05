@@ -204,11 +204,22 @@ export function previewSynthPreset(
   return handle;
 }
 
-/** Sequencer track audition (synth/bass rows): one note with a 0.5 s gate. */
+/**
+ * One-note audition: a sequencer row, or a melody-grid cell you clicked to
+ * hear what you drew. A 0.5 s gate by default; `holdSec` and `releaseSec`
+ * exist because the melody grid wants a shorter, drier blip, and giving it
+ * its own function was how it ended up auditioning on the 'synth' bus and
+ * cutting the player's held keys.
+ *
+ * Silent on the note-input bus by construction — it reaches the engine
+ * directly — which is what a grid click needs: clicking a cell is not
+ * performing a note, and an armed recorder must not write it a second time.
+ */
 export function previewSequencerNote(
   note: string,
   params: SynthParams,
   velocity = DEFAULT_VELOCITY,
+  { holdSec = 0.5, releaseSec = 0.3 }: { holdSec?: number; releaseSec?: number } = {},
 ): PreviewHandle {
   audioEngine.init();
   const ctx = audioEngine.getAudioContext();
@@ -217,6 +228,6 @@ export function previewSequencerNote(
   const handle = beginPreview();
   const start = ctx.currentTime;
   audioEngine.triggerSynthNoteOn(note, params, velocity, start, PREVIEW_SOURCE);
-  audioEngine.triggerSynthNoteOff(note, 0.3, start + 0.5, PREVIEW_SOURCE);
+  audioEngine.triggerSynthNoteOff(note, releaseSec, start + holdSec, PREVIEW_SOURCE);
   return handle;
 }

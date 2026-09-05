@@ -609,6 +609,28 @@ describe('persisted payload sanitization', () => {
     expect(s.customChordProgressions).toEqual(progressionsBefore);
   });
 
+  test('a corrupt flat leadStepResolution falls back to the default', async () => {
+    // Reachable only when `loops` fails validation, because a valid loops
+    // array re-applies its own resolution over the flat key. That is exactly
+    // the payload this guard is for: audio survives either way (strideFor
+    // falls back), but the controlled <select> would match no <option> and
+    // render blank, which no reload fixes.
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    useAppStore.setState({ leadStepResolution: '1/32' });
+
+    flushPersistedWrites();
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 11,
+        state: { leadStepResolution: 'garbage', loops: 'not an array' },
+      }),
+    );
+
+    await useAppStore.persist.rehydrate();
+    expect(useAppStore.getState().leadStepResolution).toBe('1/16');
+  });
+
   test('valid persisted values pass through; out-of-range numbers are clamped', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
     const partialEffects = { reverbWet: 0.9 };
