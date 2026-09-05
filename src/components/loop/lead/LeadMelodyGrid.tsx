@@ -35,6 +35,7 @@ import {
 } from '@/utils/stepResolution';
 import { useLeadMarkerColumn } from './useLeadMarker';
 import { useLeadPlayback } from './useLeadPlayback';
+import { useLeadStepPublisher } from './useLeadStepPublisher';
 import { useLeadNoteResize } from './useLeadNoteResize';
 import { useLeadNotePaint } from './useLeadNotePaint';
 import { Slider } from '@/components/ui/Slider';
@@ -326,11 +327,16 @@ export const LeadMelodyGrid: React.FC = () => {
   // Mounted here, not in SynthView: the step used to arrive as a prop, so all
   // 174 JSX nodes of the 1208-line SynthView reconciled 8x/sec to move one
   // translateX. LeadMelodyGrid is rendered exactly once (SynthView.tsx, in
-  // both simple and pro mode), which is the requirement — useLeadPlayback
-  // subscribes the clock and owns the hard stop. Its `isPlaying` return is
-  // NOT what the marker uses: useLeadMarkerColumn reads leadClockActive
-  // instead, which also counts the drums or the metronome running alone.
+  // both simple and pro mode), which is what lets either of these subscribe
+  // the shared clock at all.
+  //
+  // Two hooks, two gates, on purpose. useLeadPlayback schedules NOTES and
+  // owns the hard stop, so it runs while the lead plays. useLeadStepPublisher
+  // moves the MARKER, so it runs whenever any section does — that column is
+  // also the recorder's write head. Its `isPlaying` return is not what the
+  // marker uses; useLeadMarkerColumn reads the same wider gate.
   useLeadPlayback();
+  useLeadStepPublisher();
   const meterId = useAppStore((s) => s.meterId);
   const leadMelodySteps = useAppStore((s) => s.leadMelodySteps);
   const leadLoopLength = useAppStore((s) => s.leadLoopLength);

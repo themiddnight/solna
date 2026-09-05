@@ -1,4 +1,5 @@
 import { useAppStore } from '@/store/store';
+import { leadClockActive } from '@/store/leadRecord';
 import { useCurrentStep } from '@/components/playbackStep';
 import { leadMarkerColumn } from './melodyGrid';
 
@@ -9,15 +10,18 @@ import { leadMarkerColumn } from './melodyGrid';
  * leadCursor stays in the store so a header click during playback still
  * takes effect the moment the transport stops.
  *
- * The marker follows the clock only while the lead player is running, because
- * useLeadPlayback is the only thing that publishes a lead step and it
- * subscribes to the clock only then. The recorder's own gate is wider —
- * leadClockActive, which counts the metronome and the other sections — so
- * with the lead stopped but something else playing, capture is in time while
- * the marker is not. Widening this predicate without also widening the
- * producer just freezes the marker at a stale zero, which is worse than
- * leaving it on the cursor. Closing the gap properly needs a lead-step
- * producer gated on leadClockActive; that is DEV-378.
+ * The live source is leadClockActive — any section playing, or the metronome
+ * alone — and NOT `leadPlayer !== 'stopped'`, because this column is also
+ * where live capture writes and the recorder uses that same predicate
+ * (store/leadRecord.ts). With the narrower one, playing along to the drums
+ * with the lead stopped put every captured note in time while the marker sat
+ * on the cursor, pointing at a column nothing was being written to.
+ *
+ * This predicate is only safe because useLeadStepPublisher produces on the
+ * same gate. Widening it alone was tried during DEV-374 and reverted: with
+ * the producer still gated on the lead player, the marker froze at a stale
+ * zero — a position the user never chose — instead of on the cursor. If the
+ * producer is ever narrowed, narrow this with it.
  *
  * Note the renderToString trap: zustand serves the creation-time state as
  * the server snapshot, so a test that sets leadCursor and renders the grid
@@ -26,6 +30,6 @@ import { leadMarkerColumn } from './melodyGrid';
 export function useLeadMarkerColumn(columns: number): number {
   const currentStep = useCurrentStep('lead');
   const cursor = useAppStore((s) => s.leadCursor);
-  const isPlaying = useAppStore((s) => s.leadPlayer !== 'stopped');
-  return leadMarkerColumn(isPlaying, currentStep, cursor, columns);
+  const clockActive = useAppStore(leadClockActive);
+  return leadMarkerColumn(clockActive, currentStep, cursor, columns);
 }

@@ -14,7 +14,6 @@ import { stepDurationSec } from '../../../utils/musicTheory';
 import { arpStepFor, getMeter } from '../../../utils/meter';
 import { TICKS_PER_SIXTEENTH, columnsPerBar, strideFor } from '@/utils/stepResolution';
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from '../../playerStop';
-import { publishStepAt, resetStep } from '../../playbackStep';
 import { clockStepToGridColumn, wrapColumn } from '@/audio/leadLiveRecord';
 import type { PlayerState } from '../../../store/types';
 
@@ -110,6 +109,13 @@ export function leadScheduleHits(
  * arpeggiation (on = arp, off = block), never whether the melody runs. Notes
  * and params are read LIVE from the store inside the clock callback, so a
  * knob tweak reaches the next hit without re-subscribing.
+ *
+ * NOTES ONLY. The marker's column is published by useLeadStepPublisher, on
+ * the wider leadClockActive gate, because that column is also where live
+ * capture writes and capture runs whenever ANY section does (DEV-378). Do
+ * not publish a lead step from here: two producers on one player id would
+ * fight whenever the lead plays. Rewinding the marker is that hook's job
+ * too, for the same reason — the lead stopping is not the clock stopping.
  */
 export function useLeadPlayback(): { isPlaying: boolean } {
   const playerState = useAppStore((s) => s.leadPlayer);
@@ -126,10 +132,7 @@ export function useLeadPlayback(): { isPlaying: boolean } {
       useAppStore.subscribe(
         (s) => s.leadPlayer,
         (next, prev) => {
-          if (next === 'stopped') {
-            armingRef.current.armed = false;
-            resetStep('lead');
-          }
+          if (next === 'stopped') armingRef.current.armed = false;
           if (!shouldHardStopNow(prev, next, softStopPendingRef.current)) {
             if (next !== 'stopping') softStopPendingRef.current = false;
             return;
@@ -143,7 +146,6 @@ export function useLeadPlayback(): { isPlaying: boolean } {
   useEffect(() => {
     if (!isPlaying) {
       armingRef.current.armed = false;
-      resetStep('lead');
       return;
     }
 
@@ -158,23 +160,6 @@ export function useLeadPlayback(): { isPlaying: boolean } {
       const melodyTicks = s.leadLoopLength * stepsPerBar * TICKS_PER_SIXTEENTH;
       const action = leadStepAction(playerState, step, armingRef.current, stepsPerBar);
       const tickDur = stepDurationSec(s.bpm) / TICKS_PER_SIXTEENTH;
-      // The marker is the GRID's playhead, so it always follows columns —
-      // `false` here is "column-driven", not a claim about the arp.
-      const marks = leadScheduleHits(step, stride, columns, false, tickDur);
-
-      // Publish on EVERY dispatch while the transport runs, not only steps
-      // that actually sound — this column is the marker AND the recorder's
-      // write head (DEV-377), so a marker that stalls during pre-arm or
-      // stop points at the wrong column while capture is already quantising
-      // to the true clock step.
-      //
-      // One publish per fired column, each with its OWN audible time.
-      // DEV-376's deferred publish already takes an audible time per call,
-      // which is exactly what makes two publishes in one dispatch land at
-      // two different moments rather than both jumping at once.
-      for (const mark of marks) {
-        publishStepAt('lead', mark.column, time + mark.offsetSec);
-      }
 
       if (action === 'soft-stop') {
         playbackStopSource('synth', s.synthParams.release, time);

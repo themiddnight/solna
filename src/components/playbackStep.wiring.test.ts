@@ -57,7 +57,11 @@ const WIRINGS: Array<{
   {
     player: 'lead',
     producer: {
-      file: 'src/components/loop/lead/useLeadPlayback.ts',
+      // DEV-378: the lead's step producer is NOT the scheduler. The marker
+      // runs on leadClockActive (any section, or the metronome alone) while
+      // useLeadPlayback runs on the lead player, so they are separate hooks
+      // with separate gates.
+      file: 'src/components/loop/lead/useLeadStepPublisher.ts',
       regex: /publishStepAt\(\s*'([^']+)'/,
     },
     consumer: {
@@ -82,36 +86,14 @@ const WIRINGS: Array<{
   },
 ];
 
-// DEV-377 made this same column double as the marker AND the recorder's
-// write head (leadClockActive in store/leadRecord.ts is the marker's
-// live-source predicate now, not leadPlayer alone), so the publish must
-// precede BOTH early-outs below — reordering it after either one would
-// stall the marker (and silently misrepresent the recorder's write column)
-// during pre-arm or 'stopping', exactly when a player is plainly playing
-// along to something. This pins the order so a future edit can't put the
-// publish back behind a gate unnoticed.
-//
-// DEV-375 (task 8) moved the call from one publish per dispatch to a loop
-// over `marks` (one publish per on-grid tick the dispatch owns, each with
-// its own audible offset — see leadScheduleHits) — but that loop, like the
-// single call it replaced, still runs before both early-outs, so what this
-// pins is unchanged: source order, not call count.
-describe('useLeadPlayback publishes the step before either early-out', () => {
-  test('publishStepAt precedes the soft-stop and non-play early-outs in source order', () => {
-    const source = readFileSync(
-      join(process.cwd(), 'src/components/loop/lead/useLeadPlayback.ts'),
-      'utf8',
-    );
-    const publishIndex = source.indexOf("publishStepAt('lead', mark.column, time + mark.offsetSec);");
-    const softStopIndex = source.indexOf("if (action === 'soft-stop')");
-    const notPlayIndex = source.indexOf("if (action !== 'play') return;");
-    expect(publishIndex).toBeGreaterThan(-1);
-    expect(softStopIndex).toBeGreaterThan(-1);
-    expect(notPlayIndex).toBeGreaterThan(-1);
-    expect(publishIndex).toBeLessThan(softStopIndex);
-    expect(publishIndex).toBeLessThan(notPlayIndex);
-  });
-});
+// The publish used to live inside useLeadPlayback's clock callback, ahead of
+// that callback's two early-outs, and a test here pinned that source order so
+// the marker could not be stalled during pre-arm or 'stopping' by a later
+// edit moving it behind a gate. DEV-378 removed the arrangement instead of
+// re-pinning it: the publisher is its own hook now and its callback does
+// nothing but publish, so there is no gate left to fall behind. What replaced
+// this test is `the lead step producer` in useLeadStepPublisher.test.ts,
+// which fails if a second publish reappears in the scheduler.
 
 describe('playbackStep producer/consumer wiring', () => {
   for (const wiring of WIRINGS) {
