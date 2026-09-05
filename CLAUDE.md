@@ -53,6 +53,16 @@ shows it, never in a slice.
    are exempt — routing their per-frame analyser reads through the store would mean a store
    write on every animation frame and a re-render of every subscriber.
 
+**The lead melody stores at its own width, and only the lead melody does.** The sequencer,
+chord-rhythm and bass grids store every bar at the widest meter's `MAX_STEPS_PER_BAR` and window
+it to the active `stepsPerBar`. The lead runs the same non-destructive scheme on a second axis —
+it stores at the finest *step resolution* (`LEAD_TICKS_PER_BAR` in `utils/stepResolution.ts`) and
+*strides* to the active one — so a `leadMelodySteps` index is a tick, not a 16th, and a
+`LeadNote.len` counts ticks. Two consequences: a slot is dormant either because the meter cannot
+reach it or because the resolution cannot, and **both tests live in `leadActivePosAt` and nowhere
+else**; and a change of view never writes — an explicit edit writes, changing meter or resolution
+does not.
+
 **`persist` serialises on every `set()`; only the `localStorage` write is coalesced.** Every
 `set()` that touches a key returned by `partialize` re-serialises that slice on the spot. The
 write itself goes through `utils/coalescedStorage.ts`, which buffers it to an idle callback and
@@ -105,10 +115,15 @@ before a render has no effect unless the component reads the store the way
   project files; renaming them breaks saved projects. The table lives in
   `src/store/instantVibes.ts` — the single copy since the `audio/` fork was deleted.
 - **Tap Tempo and stereo VU are unbuilt**, not broken — see `docs/design.md` §4 item 3.
-- **The lead melody's two migration chains must run before their sanitize step.** `isLeadNoteMatrix`
-  rejects the pre-DEV-369 `string[][]` shape, so a v1 payload that reaches sanitize un-upgraded
-  comes back blank — no throw, no warning. Persist upgrades in `migrate` (before `merge`);
-  `.solna` upgrades in `migrateProjectBody` (before `sanitizeContent`). Never merge the two.
+- **The lead melody's two migration chains each run two upgrades, in order, before their sanitize
+  step.** `isLeadNoteMatrix` rejects the pre-DEV-369 `string[][]` shape, so a payload that reaches
+  sanitize un-upgraded comes back blank — no throw, no warning. Within a chain the note-length
+  upgrade runs first and the tick widening second, never the other way round: widening a
+  `string[][]` payload would leave a shape sanitize still rejects. Persist upgrades live in
+  `migrate` (before `merge`); `.solna` upgrades in `migrateProjectBody` (before `sanitizeContent`).
+  The two chains share the pure transforms and nothing else — **never merge them.** A persist
+  payload is private `localStorage` shape; a project body is an external contract; their versions
+  move for different reasons.
 
 ## Git conventions
 
