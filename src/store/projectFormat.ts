@@ -13,7 +13,7 @@ import type { AppStore, Loop, LoopStatePatch } from './types';
  * reshapes, this one only when the content contract changes. The persist
  * migration chain must never be used to read a project body.
  */
-export const PROJECT_FORMAT_VERSION = 2;
+export const PROJECT_FORMAT_VERSION = 3;
 
 export interface ProjectEnvelope {
   formatVersion: number;

@@ -36,6 +36,7 @@ function makeLoop(overrides: Partial<Loop> = {}): Loop {
     bassOctave: 2,
     leadMelodySteps: [[]],
     leadLoopLength: 1,
+    leadStepResolution: '1/16',
     leadMelodyView: 'scale-locked',
     leadMelodyOctave: 3,
     leadGate: DEFAULT_LEAD_GATE,

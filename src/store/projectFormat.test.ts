@@ -10,8 +10,9 @@ import {
 } from './projectFormat';
 import { migrateProjectBody } from './projectFormatMigrate';
 import { parseProjectFile } from './projectFile';
-import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
+import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
 import { LOOP_FLAT_KEYS } from './loop';
+import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 import { createDefaultLoop } from './loopSlice';
 import { INITIAL_EFFECTS } from './initialState';
 import { DEFAULT_BPM } from './transportSlice';
@@ -137,8 +138,8 @@ describe('factoryProjectContent / makeEnvelope', () => {
   });
 });
 
-describe('migrateProjectBody — v1 -> v2 (lead note length + gate)', () => {
-  test('upgrades every loop melody and seeds leadGate', () => {
+describe('migrateProjectBody — v1 -> the current format', () => {
+  test('upgrades every loop melody, seeds leadGate, and widens to ticks', () => {
     const migrated = migrateProjectBody(
       {
         content: {
@@ -147,14 +148,23 @@ describe('migrateProjectBody — v1 -> v2 (lead note length + gate)', () => {
         },
       },
       1,
-    ) as { content: { bpm: number; loops: { leadMelodySteps: unknown; leadGate: number }[] } };
+    ) as {
+      content: {
+        bpm: number;
+        loops: { leadMelodySteps: LeadNote[][]; leadGate: number; leadStepResolution: string }[];
+      };
+    };
 
-    expect(migrated.content.loops[0].leadMelodySteps).toEqual([
-      [{ note: 'C4', len: 1 }],
-      [],
-      [{ note: 'E4', len: 1 }, { note: 'G4', len: 1 }],
-    ]);
+    // Both lead steps ran, in order: string[][] -> LeadNote[][] at the narrow
+    // stored width, then widened so old slot i sits on tick 2i with a
+    // tick-counted length.
+    const melody = migrated.content.loops[0].leadMelodySteps;
+    expect(melody).toHaveLength(LEAD_TICKS_PER_BAR);
+    expect(melody[0]).toEqual([{ note: 'C4', len: 2 }]);
+    expect(melody[2]).toEqual([]);
+    expect(melody[4]).toEqual([{ note: 'E4', len: 2 }, { note: 'G4', len: 2 }]);
     expect(migrated.content.loops[0].leadGate).toBe(DEFAULT_LEAD_GATE);
+    expect(migrated.content.loops[0].leadStepResolution).toBe('1/16');
     expect(migrated.content.bpm).toBe(120);
   });
 
@@ -204,12 +214,21 @@ describe('a formatVersion-1 .solna file keeps its melody through the real import
 
     const loop: Loop = result.body.content.loops[0];
     expect(result.body.formatVersion).toBe(PROJECT_FORMAT_VERSION);
-    expect(loop.leadMelodySteps).toEqual([
-      [{ note: 'C4', len: 1 }, { note: 'E4', len: 1 }],
-      [],
-      [{ note: 'G4', len: 1 }],
+    // Widened on the way through: old slot i is tick 2i and `len` counts
+    // ticks. A blank melody here would be the silent-loss failure.
+    expect(loop.leadMelodySteps).toHaveLength(loop.leadLoopLength * LEAD_TICKS_PER_BAR);
+    expect(loop.leadMelodySteps[0]).toEqual([
+      { note: 'C4', len: 2 },
+      { note: 'E4', len: 2 },
     ]);
+    expect(loop.leadMelodySteps[4]).toEqual([{ note: 'G4', len: 2 }]);
     expect(loop.leadGate).toBe(DEFAULT_LEAD_GATE);
+    // No leadStepResolution assertion here on purpose: sanitizeContent
+    // hard-defaults the field to createDefaultLoop()'s value, so any
+    // assertion at THIS seam passes even with the migration's assignment
+    // deleted. The falsifiable coverage lives in projectFormatMigrate.test.ts
+    // (this chain) and migrate.test.ts (the persist chain), which call the
+    // steps directly on loop objects that never had the field.
     expect(result.body.content.bpm).toBe(118);
   });
 });

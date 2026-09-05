@@ -1,7 +1,14 @@
 import type { SynthPresetItem } from '../audio/synthPresets';
 import type { CustomChordProgressionItem } from '../types';
-import { DEFAULT_LEAD_GATE, isLegacyLeadMelody, upgradeLeadMelodyV1 } from '../audio/leadMelody';
+import {
+  DEFAULT_LEAD_GATE,
+  isLegacyLeadMelody,
+  upgradeLeadMelodyToTicks,
+  upgradeLeadMelodyV1,
+  type LeadNote,
+} from '../audio/leadMelody';
 import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
+import { DEFAULT_LEAD_STEP_RESOLUTION } from '../utils/stepResolution';
 import { padStepRow } from '../utils/patternAdapt';
 import { newLoopId, LOOP_FLAT_KEYS } from './loop';
 
@@ -261,6 +268,46 @@ export function migrateLeadNoteLength<T extends object>(state: T): T {
         ? upgradeLeadMelodyV1(row.leadMelodySteps)
         : row.leadMelodySteps,
       leadGate: typeof row.leadGate === 'number' ? row.leadGate : DEFAULT_LEAD_GATE,
+    };
+  });
+  return next as unknown as T;
+}
+
+/**
+ * v10 -> v11: the lead melody widens from MAX_STEPS_PER_BAR slots a bar to
+ * LEAD_TICKS_PER_BAR, `len` starts counting ticks, and every loop gains the
+ * resolution it was actually authored at.
+ *
+ * Runs AFTER migrateLeadNoteLength, never before: that step turns a
+ * pre-DEV-369 string[][] into LeadNote[][] at the narrow width, and widening
+ * an un-upgraded payload would leave a shape sanitize rejects — blank
+ * melody, no throw, no warning.
+ *
+ * Pure, but deliberately NOT a no-op on an already-widened payload: applied
+ * twice it re-doubles the melody. The `version >= 11` gate in store.ts's
+ * migrate is what guarantees single application. The width guard that used to
+ * make this self-idempotent is exactly what mistook two OLD bars for one NEW
+ * one — LEAD_TICKS_PER_BAR is 2 * MAX_STEPS_PER_BAR — so do not restore it.
+ *
+ * Shares only the pure transform with the .solna chain in
+ * projectFormatMigrate.ts. The two must NOT be refactored into one.
+ */
+export function migrateLeadStepResolution<T extends object>(state: T): T {
+  const next = { ...(state as Record<string, unknown>) } as Record<string, unknown>;
+  if (!Array.isArray(next.loops)) return next as unknown as T;
+  next.loops = next.loops.map((loop) => {
+    if (!loop || typeof loop !== 'object' || Array.isArray(loop)) return loop;
+    const row = loop as Record<string, unknown>;
+    const bars = typeof row.leadLoopLength === 'number' ? row.leadLoopLength : 1;
+    return {
+      ...row,
+      leadMelodySteps: Array.isArray(row.leadMelodySteps)
+        ? upgradeLeadMelodyToTicks(row.leadMelodySteps as LeadNote[][], bars)
+        : row.leadMelodySteps,
+      leadStepResolution:
+        typeof row.leadStepResolution === 'string'
+          ? row.leadStepResolution
+          : DEFAULT_LEAD_STEP_RESOLUTION,
     };
   });
   return next as unknown as T;

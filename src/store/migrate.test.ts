@@ -8,12 +8,14 @@ import {
   backfillLeadWindow,
   migrateAddProjectIdentity,
   migrateLeadNoteLength,
+  migrateLeadStepResolution,
   LEGACY_TRACK_COLOR_MAP,
 } from './migrate';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 import { LOOP_FLAT_KEYS } from './loop';
 import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
-import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
+import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
 
 describe('migrateProjectTitleToVibeId', () => {
   test('drops the legacy projectTitle and seeds a null selectedVibeId', () => {
@@ -347,5 +349,71 @@ describe('migrateLeadNoteLength (v9 -> v10)', () => {
 
   test('a payload with no loops array passes through untouched', () => {
     expect(migrateLeadNoteLength({ bpm: 118 } as never)).toEqual({ bpm: 118 } as never);
+  });
+});
+
+describe('migrateLeadStepResolution', () => {
+  const oldLoop = (): Record<string, unknown> => {
+    const steps: unknown[][] = Array.from({ length: MAX_STEPS_PER_BAR }, () => []);
+    steps[4] = [{ note: 'C4', len: 2 }];
+    return { id: 'loop-1', name: 'Loop 1', leadLoopLength: 1, leadMelodySteps: steps };
+  };
+
+  test('widens the melody and doubles the lengths', () => {
+    const out = migrateLeadStepResolution({ loops: [oldLoop()] }) as {
+      loops: { leadMelodySteps: LeadNote[][] }[];
+    };
+    expect(out.loops[0].leadMelodySteps).toHaveLength(LEAD_TICKS_PER_BAR);
+    expect(out.loops[0].leadMelodySteps[8]).toEqual([{ note: 'C4', len: 4 }]);
+  });
+
+  test('every loop without the field gets 1/16', () => {
+    // Not an arbitrary default: 1/16 is the resolution the melody actually
+    // WAS authored at, so with the doubling above an existing project opens
+    // with every note on the same beat, the same length and the same sound.
+    const out = migrateLeadStepResolution({ loops: [oldLoop()] }) as {
+      loops: { leadStepResolution: string }[];
+    };
+    expect(out.loops[0].leadStepResolution).toBe('1/16');
+  });
+
+  test('a payload with no loops is returned unharmed', () => {
+    expect(migrateLeadStepResolution({ bpm: 120 })).toEqual({ bpm: 120 });
+  });
+
+  test('a melody wider than leadLoopLength keeps every bar, at the right beat', () => {
+    // setLeadLoopLengthPreserve lowers leadLoopLength without resizing the
+    // melody, so this is an ordinary persisted state. At exactly 2x the old
+    // array is the same WIDTH as one new bar, which is what made trusting
+    // leadLoopLength re-read bar 0 at half its beat and bury bar 1.
+    const steps: unknown[][] = Array.from({ length: 2 * MAX_STEPS_PER_BAR }, () => []);
+    steps[4] = [{ note: 'C4', len: 2 }];
+    steps[MAX_STEPS_PER_BAR + 4] = [{ note: 'E4', len: 2 }];
+    const out = migrateLeadStepResolution({
+      loops: [{ id: 'loop-1', name: 'Loop 1', leadLoopLength: 1, leadMelodySteps: steps }],
+    }) as { loops: { leadMelodySteps: LeadNote[][] }[] };
+
+    expect(out.loops[0].leadMelodySteps).toHaveLength(2 * LEAD_TICKS_PER_BAR);
+    expect(out.loops[0].leadMelodySteps[8]).toEqual([{ note: 'C4', len: 4 }]);
+    expect(out.loops[0].leadMelodySteps[LEAD_TICKS_PER_BAR + 8]).toEqual([
+      { note: 'E4', len: 4 },
+    ]);
+  });
+
+  test('an old string[][] melody survives the WHOLE chain, not blank', () => {
+    // The trap, end to end: isLeadNoteMatrix rejects the pre-DEV-369 shape
+    // and hands back an EMPTY melody with no throw and no warning, so a
+    // payload that reaches sanitize un-upgraded loses the user's music on
+    // reload. The two lead steps must run in order — V1 first, ticks second.
+    const legacy = Array.from({ length: MAX_STEPS_PER_BAR }, () => [] as string[]);
+    legacy[2] = ['C4'];
+    const lengthened = migrateLeadNoteLength({
+      loops: [{ id: 'loop-1', name: 'Loop 1', leadLoopLength: 1, leadMelodySteps: legacy }],
+    });
+    const out = migrateLeadStepResolution(lengthened) as unknown as {
+      loops: { leadMelodySteps: LeadNote[][]; leadStepResolution: string }[];
+    };
+    expect(out.loops[0].leadMelodySteps[4]).toEqual([{ note: 'C4', len: 2 }]);
+    expect(out.loops[0].leadStepResolution).toBe('1/16');
   });
 });

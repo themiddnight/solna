@@ -14,6 +14,7 @@ import type { MeterId } from '../utils/meter';
 import type { SynthPresetItem, SynthPresetCategory } from '../audio/synthPresets';
 import type { BassStepChoice } from '../audio/bassPatterns';
 import type { LeadNote } from '../audio/leadMelody';
+import type { LeadStepResolutionId } from '../utils/stepResolution';
 import type { PlaybackScope } from './playbackScope';
 import type { ProjectSlice } from './projectSlice';
 
@@ -139,6 +140,12 @@ export interface LeadSlice {
   leadMelodySteps: LeadNote[][];
   /** Loop length in bars; must divide Σ ChordItem.bars. */
   leadLoopLength: number;
+  /**
+   * How fine this loop's melody grid is. Per loop, not global: a global
+   * flip would silence off-grid notes in every loop at once, so refining
+   * one melody would mute another the user was not looking at.
+   */
+  leadStepResolution: LeadStepResolutionId;
   /** Scale-locked or chromatic rows; persisted per loop. */
   leadMelodyView: LeadMelodyView;
   /** Lowest octave of the visible window; persisted per loop. */
@@ -149,6 +156,7 @@ export interface LeadSlice {
   setLeadLoopLength: (bars: number) => void;
   /** Like setLeadLoopLength but never resizes/trims the melody grid. */
   setLeadLoopLengthPreserve: (bars: number) => void;
+  setLeadStepResolution: (id: LeadStepResolutionId) => void;
   setLeadMelodyView: (view: LeadMelodyView) => void;
   setLeadMelodyOctave: (octave: number) => void;
   setLeadGate: (gate: number) => void;
@@ -307,6 +315,7 @@ export interface Loop {
   bassOctave: number;
   leadMelodySteps: LeadNote[][];
   leadLoopLength: number;
+  leadStepResolution: LeadStepResolutionId;
   leadMelodyView: LeadMelodyView;
   leadMelodyOctave: number;
   leadGate: number;

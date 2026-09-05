@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { createMemoryBackend, createProjectStore, QUOTA_MESSAGE } from './projectStore';
 import { PROJECT_FORMAT_VERSION, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
 import { createDefaultLoop } from './loopSlice';
-import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
+import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
+import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 
 const body = (name: string, now = 1000): ProjectBody => ({ ...makeEnvelope(name, now), content: factoryProjectContent() });
 
@@ -138,7 +139,10 @@ describe('get normalises the body it hands out', () => {
     expect(hit.ok).toBe(true);
     if (!hit.ok) return;
     expect(hit.value.formatVersion).toBe(PROJECT_FORMAT_VERSION);
-    expect(hit.value.content.loops[0].leadMelodySteps).toEqual([[{ note: 'C4', len: 1 }], []]);
+    // Both lead steps ran: string[][] -> LeadNote[][], then widened to ticks.
+    const melody = hit.value.content.loops[0].leadMelodySteps as LeadNote[][];
+    expect(melody).toHaveLength(LEAD_TICKS_PER_BAR);
+    expect(melody[0]).toEqual([{ note: 'C4', len: 2 }]);
     expect(hit.value.content.loops[0].leadGate).toBe(DEFAULT_LEAD_GATE);
   });
 

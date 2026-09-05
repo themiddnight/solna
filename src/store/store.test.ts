@@ -14,6 +14,8 @@ import {
   INITIAL_SYNTH_PARAMS,
 } from './initialState';
 import type { AppStore } from './types';
+import type { LeadNote } from '../audio/leadMelody';
+import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 
 // ---------------------------------------------------------------------------
 // Fake browser environment (bun has none of these globals). The store module
@@ -1098,7 +1100,7 @@ describe('project identity migration wiring (v8 -> v9)', () => {
     expect(s.projectBaselineHash).toBeNull();
   });
 
-  test('a version-1 payload still terminates in the v10 shape', async () => {
+  test('a version-1 payload still terminates in the v11 shape', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
     flushPersistedWrites();
@@ -1106,7 +1108,7 @@ describe('project identity migration wiring (v8 -> v9)', () => {
     await useAppStore.persist.rehydrate();
     expect(useAppStore.getState().currentProjectId).toBeNull();
     flushPersistedWrites();
-    expect(JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}').version).toBe(10);
+    expect(JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}').version).toBe(11);
   });
 
   test('a wrong-typed currentProjectId / projectBaselineHash is coerced to null', async () => {
@@ -1130,6 +1132,50 @@ describe('project identity migration wiring (v8 -> v9)', () => {
     expect(stored.state.currentProjectId).toBe('p-9');
     expect(stored.state.projectBaselineHash).toBe('h');
     expect('dirty' in partializeAppState(useAppStore.getState())).toBe(false);
+  });
+});
+
+/**
+ * The persist chain's lead steps, through the REAL wiring rather than by
+ * calling the two migrate functions by hand. migrate.test.ts covers the steps;
+ * this covers `store.ts`'s composition of them, which is the part that can
+ * regress silently: a widening that never runs leaves a 24-wide melody whose
+ * `len` still counts 16ths, and isLeadNoteMatrix ACCEPTS that shape. Nothing
+ * throws and nothing blanks — the back half of every bar just disappears and
+ * every note is half as long.
+ *
+ * A genuine v1 payload is FLAT (pre-loop-wrap), so the melody is a top-level
+ * key: wrapFlatStateIntoLoop is what turns it into loops[0], and it overwrites
+ * `loops` wholesale, so a v1 fixture carrying a `loops` array would not be a v1
+ * fixture at all.
+ */
+describe('lead step resolution migration wiring (v10 -> v11)', () => {
+  test('a version-1 payload with a real melody hydrates widened, not halved', async () => {
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    useAppStore.persist.clearStorage();
+    flushPersistedWrites();
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 1,
+        state: { bpm: 100, leadLoopLength: 1, leadMelodySteps: [['C4'], [], ['E4']] },
+      })
+    );
+    await useAppStore.persist.rehydrate();
+
+    const s = useAppStore.getState();
+    const stored = s.loops[0].leadMelodySteps as LeadNote[][];
+    // Both lead steps ran, in order: string[][] -> LeadNote[][] at the narrow
+    // stored width, then widened so old slot i sits on tick 2i with a
+    // tick-counted length.
+    expect(stored).toHaveLength(LEAD_TICKS_PER_BAR);
+    expect(stored[0]).toEqual([{ note: 'C4', len: 2 }]);
+    expect(stored[4]).toEqual([{ note: 'E4', len: 2 }]);
+    expect(s.loops[0].leadStepResolution).toBe('1/16');
+    // …and the flat mirror the melody grid actually reads agrees with it.
+    expect(s.leadMelodySteps).toHaveLength(LEAD_TICKS_PER_BAR);
+    expect(s.leadMelodySteps[0]).toEqual([{ note: 'C4', len: 2 }]);
+    expect(s.leadStepResolution).toBe('1/16');
   });
 });
 

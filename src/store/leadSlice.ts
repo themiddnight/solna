@@ -1,5 +1,5 @@
 import type { StoreApi } from 'zustand';
-import { MAX_STEPS_PER_BAR, getMeter } from '../utils/meter';
+import { getMeter } from '../utils/meter';
 import {
   DEFAULT_LEAD_GATE,
   clampLeadCursor,
@@ -14,6 +14,13 @@ import {
 } from '../audio/leadMelody';
 import { LEAD_WINDOW_OCTAVES, leadRecordOctave } from '../audio/leadStepRecord';
 import { isNoteInScale } from '../utils/musicTheory';
+import {
+  DEFAULT_LEAD_STEP_RESOLUTION,
+  LEAD_TICKS_PER_BAR,
+  TICKS_PER_SIXTEENTH,
+  isLeadStepResolutionId,
+  strideFor,
+} from '../utils/stepResolution';
 import type { AppStore, LeadSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -29,8 +36,9 @@ export const LEAD_OCTAVE_MIN = 1;
 export const LEAD_OCTAVE_MAX = 6;
 
 /**
- * Lead melody slice. `leadMelodySteps` is stored at a fixed MAX_STEPS_PER_BAR
- * width per bar (length leadLoopLength × 24) — the same non-destructive scheme
+ * Lead melody slice. `leadMelodySteps` is stored at a fixed LEAD_TICKS_PER_BAR
+ * width per bar (length leadLoopLength × the widest bar in ticks) — the same
+ * non-destructive scheme
  * as the chord/bass custom grids — and windowed to stepsPerBar at playback/UI
  * time. A loopLength change resizes by whole bars (trim/pad) via the pure
  * helper, so a meter switch never drops steps.
@@ -39,12 +47,15 @@ export const LEAD_OCTAVE_MAX = 6;
 function selectedBar(state: {
   leadCursor: number;
   leadLoopLength: number;
+  leadStepResolution: AppStore['leadStepResolution'];
   meterId: AppStore['meterId'];
 }): number {
   const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+  const stride = strideFor(state.leadStepResolution);
   return leadCursorBar(
-    clampLeadCursor(state.leadCursor, state.leadLoopLength, stepsPerBar),
+    clampLeadCursor(state.leadCursor, state.leadLoopLength, stepsPerBar, stride),
     stepsPerBar,
+    stride,
   );
 }
 
@@ -63,7 +74,8 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
   const paintLeadNote: LeadSlice['paintLeadNote'] = (stepIndex, note, mode) =>
     set((state) => {
       const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-      const stepInLoop = leadActivePosAt(stepIndex, stepsPerBar);
+      const stride = strideFor(state.leadStepResolution);
+      const stepInLoop = leadActivePosAt(stepIndex, stepsPerBar, stride);
       // A DORMANT slot has no active position, so "what covers it" has no
       // answer: the slot's own contents are the only honest test, and that
       // beats searching from a fictitious position in another bar — which
@@ -71,7 +83,7 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
       const coveringIdx =
         stepInLoop < 0
           ? (state.leadMelodySteps[stepIndex]?.some((n) => n.note === note) ? stepIndex : -1)
-          : leadCoveringNoteIndex(state.leadMelodySteps, stepInLoop, stepsPerBar, note);
+          : leadCoveringNoteIndex(state.leadMelodySteps, stepInLoop, stepsPerBar, stride, note);
       const covered = coveringIdx >= 0;
       if (mode === 'draw' && covered) return {};
       if (mode === 'erase' && !covered) return {};
@@ -84,14 +96,18 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
       return {
         leadMelodySteps: state.leadMelodySteps.map((r, i) => {
           if (i !== target) return r;
-          return covered ? r.filter((n) => n.note !== note) : [...r, { note, len: 1 }];
+          // The editor writes whole CELLS, and a cell is `stride` ticks. A
+          // literal 1 here would draw a note a fraction of a cell long the
+          // moment the resolution is anything but the finest.
+          return covered ? r.filter((n) => n.note !== note) : [...r, { note, len: stride }];
         }),
       };
     });
 
   return {
-    leadMelodySteps: Array.from({ length: MAX_STEPS_PER_BAR }, () => [] as LeadNote[]),
+    leadMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
     leadLoopLength: 1,
+    leadStepResolution: DEFAULT_LEAD_STEP_RESOLUTION,
     leadMelodyView: 'scale-locked',
     leadMelodyOctave: 3,
     leadGate: DEFAULT_LEAD_GATE,
@@ -105,13 +121,13 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
     // read, because a later meter or loop-length change can narrow the window
     // under a cursor that was legal when it was set.
     setLeadCursor: (cursor) =>
-      set((state) => ({
-        leadCursor: clampLeadCursor(
-          cursor,
-          state.leadLoopLength,
-          getMeter(state.meterId).stepsPerBar,
-        ),
-      })),
+      set((state) => {
+        const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+        const stride = strideFor(state.leadStepResolution);
+        return {
+          leadCursor: clampLeadCursor(cursor, state.leadLoopLength, stepsPerBar, stride),
+        };
+      }),
 
     // Returns whether it actually wrote, so a caller can tell a captured note
     // from one the grid refused.
@@ -138,14 +154,20 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
       if (octave === null) return false;
 
       const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+      const stride = strideFor(state.leadStepResolution);
       // Clamped whichever head it came from: a meter or loop-length change can
       // narrow the window under a column that was legal when it was chosen.
-      const target = clampLeadCursor(column ?? state.leadCursor, state.leadLoopLength, stepsPerBar);
+      const target = clampLeadCursor(
+        column ?? state.leadCursor,
+        state.leadLoopLength,
+        stepsPerBar,
+        stride,
+      );
       if (octave !== state.leadMelodyOctave) set({ leadMelodyOctave: octave });
       // 'draw', never 'toggle': playing a note that is already at this column
       // must be a no-op, not a delete. A performer repeating a note expects
       // nothing to happen, not the note to vanish.
-      paintLeadNote(leadStoredIndexAt(target, stepsPerBar), note, 'draw');
+      paintLeadNote(leadStoredIndexAt(target, stepsPerBar, stride), note, 'draw');
       return true;
     },
 
@@ -175,6 +197,7 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
           state.leadMelodySteps,
           leadLoopLength,
           getMeter(state.meterId).stepsPerBar,
+          strideFor(state.leadStepResolution),
         ),
       })),
     // Non-destructive clamp used by the LeadMelodyGrid auto-clamp: lowering the
@@ -183,6 +206,13 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
     // in the bars that fell out of the loop. The extra bars stay dormant and
     // play again if the loop length is raised back (resizeLeadMelody re-pads).
     setLeadLoopLengthPreserve: (leadLoopLength) => set({ leadLoopLength }),
+    // Never throws and never writes the melody: an unknown id falls back to
+    // the default, and a resolution change is a change of VIEW. An explicit
+    // edit writes; a change of view never does.
+    setLeadStepResolution: (id) =>
+      set({
+        leadStepResolution: isLeadStepResolutionId(id) ? id : DEFAULT_LEAD_STEP_RESOLUTION,
+      }),
     setLeadMelodyView: (leadMelodyView) => set({ leadMelodyView }),
     setLeadMelodyOctave: (octave) =>
       set({
@@ -217,21 +247,36 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
         if (!row || !row.some((n) => n.note === note)) return {};
 
         const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-        const activePos = leadActivePosAt(stepIndex, stepsPerBar);
+        const stride = strideFor(state.leadStepResolution);
+        const activePos = leadActivePosAt(stepIndex, stepsPerBar, stride);
         // Invariant 2 is measured against the loop end, which a dormant slot
         // has no position in: refuse rather than clamp against a fictitious
         // one. Nothing can reach this today (the grid renders active columns
         // only) and the melody survives untouched, as a meter change requires.
         if (activePos < 0) return {};
-        const maxLen = Math.max(1, state.leadLoopLength * stepsPerBar - activePos);
+        const maxLen = Math.max(
+          stride,
+          state.leadLoopLength * stepsPerBar * TICKS_PER_SIXTEENTH - activePos * stride,
+        );
+        // The editor writes whole CELLS, so the floor is one cell, not one
+        // tick — the same rule paintLeadNote follows. Sub-cell lengths stay
+        // REPRESENTABLE (a 1/32-authored note read at 1/8), they just are
+        // never created here.
         const nextLen = Number.isFinite(len)
-          ? Math.min(maxLen, Math.max(1, Math.round(len)))
-          : 1;
+          ? Math.min(maxLen, Math.max(stride, Math.round(len)))
+          : stride;
 
         const next = [...state.leadMelodySteps];
         next[stepIndex] = row.map((n) => (n.note === note ? { note, len: nextLen } : n));
+        // Walk TICKS, not columns — the same rule pasteLeadBar follows.
+        // Invariant 1 is a rule about STORAGE, so a same-pitch note on a
+        // tick the current resolution cannot reach is still underneath this
+        // one and must go: leaving it would put two of a pitch on the same
+        // span, audible the moment the loop is read at a finer grid.
+        // "Quiet, not gone" protects a change of VIEW, never an explicit
+        // edit. Stride 1 makes leadStoredIndexAt the tick conversion.
         for (let k = 1; k < nextLen; k++) {
-          const idx = leadStoredIndexAt(activePos + k, stepsPerBar);
+          const idx = leadStoredIndexAt(activePos * stride + k, stepsPerBar, 1);
           const covered = next[idx];
           if (covered?.some((n) => n.note === note)) {
             next[idx] = covered.filter((n) => n.note !== note);

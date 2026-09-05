@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore } from './store';
 import { startLeadRecordBridge, leadClockActive } from './leadRecord';
 import { emitNoteInput, resetNoteInputListeners } from '../audio/playback/noteInputBus';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { getMeter } from '../utils/meter';
+import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '../utils/stepResolution';
+import { leadStoredIndexAt } from '../audio/leadMelody';
 import type { LeadNote } from '../audio/leadMelody';
 
 let stop: (() => void) | null = null;
@@ -26,7 +28,7 @@ beforeEach(() => {
   clockRuns = 0;
   useAppStore.setState({
     meterId: '4/4',
-    leadMelodySteps: Array.from({ length: MAX_STEPS_PER_BAR }, () => [] as LeadNote[]),
+    leadMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
     leadLoopLength: 1,
     leadMelodyView: 'chromatic',
     leadMelodyOctave: 3,
@@ -51,10 +53,16 @@ afterEach(() => {
 const down = (note: string): void => emitNoteInput({ kind: 'on', note, velocity: 1 });
 const up = (note: string): void => emitNoteInput({ kind: 'off', note, velocity: 0 });
 const cursor = (): number => useAppStore.getState().leadCursor;
-const at = (col: number): string[] =>
-  useAppStore.getState().leadMelodySteps[col].map((n) => n.note).sort();
+// A grid COLUMN is not a stored slot: the melody is stored in 1/32 ticks, so
+// these helpers go through the one conversion rather than indexing raw.
+const storedAt = (col: number): LeadNote[] => {
+  const state = useAppStore.getState();
+  const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+  return state.leadMelodySteps[leadStoredIndexAt(col, stepsPerBar, TICKS_PER_SIXTEENTH)];
+};
+const at = (col: number): string[] => storedAt(col).map((n) => n.note).sort();
 const lenAt = (col: number, note: string): number | undefined =>
-  useAppStore.getState().leadMelodySteps[col].find((n) => n.note === note)?.len;
+  storedAt(col).find((n) => n.note === note)?.len;
 
 describe('leadRecord bridge', () => {
   test('a played note is written at the cursor, and the cursor stays put', () => {
@@ -139,14 +147,15 @@ describe('leadRecord bridge — live capture', () => {
     expect(cursor()).toBe(2);
   });
 
-  test('a held note is extended to the number of steps it was held for', () => {
+  test('a held note is extended to the number of TICKS it was held for, not steps', () => {
     play();
     liveStep = 4;
     down('C4');
     liveStep = 8;
     up('C4');
 
-    expect(lenAt(4, 'C4')).toBe(4);
+    // Four clock steps held is eight ticks (TICKS_PER_SIXTEENTH per step).
+    expect(lenAt(4, 'C4')).toBe(8);
   });
 
   test('a note still down when the transport stops must not later extend anything', () => {
@@ -159,7 +168,8 @@ describe('leadRecord bridge — live capture', () => {
     liveStep = 40;
     up('C4');
 
-    expect(lenAt(4, 'C4')).toBe(1);
+    // One CELL, which is TICKS_PER_SIXTEENTH ticks at the 1/16 grid.
+    expect(lenAt(4, 'C4')).toBe(TICKS_PER_SIXTEENTH);
   });
 
   test('a tap stays one step long', () => {
@@ -168,7 +178,8 @@ describe('leadRecord bridge — live capture', () => {
     down('C4');
     up('C4');
 
-    expect(lenAt(4, 'C4')).toBe(1);
+    // One CELL, which is TICKS_PER_SIXTEENTH ticks at the 1/16 grid.
+    expect(lenAt(4, 'C4')).toBe(TICKS_PER_SIXTEENTH);
   });
 
   test('a key repeat cannot re-date the note-on that is still held', () => {
@@ -180,7 +191,7 @@ describe('leadRecord bridge — live capture', () => {
     liveStep = 8;
     up('C4');
 
-    expect(lenAt(4, 'C4')).toBe(4);
+    expect(lenAt(4, 'C4')).toBe(8);
   });
 
   test('disarming Rec mid-hold must not still lengthen the note', () => {
@@ -192,7 +203,8 @@ describe('leadRecord bridge — live capture', () => {
     liveStep = 8;
     up('C4');
 
-    expect(lenAt(4, 'C4')).toBe(1);
+    // One CELL, which is TICKS_PER_SIXTEENTH ticks at the 1/16 grid.
+    expect(lenAt(4, 'C4')).toBe(TICKS_PER_SIXTEENTH);
   });
 
   test('the clock step wraps into the loop before it becomes a column', () => {

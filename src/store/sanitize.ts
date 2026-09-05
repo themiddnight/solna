@@ -6,6 +6,7 @@ import { createDefaultLoop } from './loopSlice';
 import { LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
 import type { Loop } from './types';
 import type { LeadNote } from '../audio/leadMelody';
+import { isLeadStepResolutionId } from '../utils/stepResolution';
 
 // Type-guards for a parsed persisted payload AND for a parsed `.solna` file.
 // Wrong-typed values survive JSON.parse and would flow straight into engine
@@ -281,6 +282,9 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
       bassOctave: clampFinite(r.bassOctave, 0, 8, fallback.bassOctave),
       leadMelodySteps: asLeadNoteMatrix(r.leadMelodySteps) ?? fallback.leadMelodySteps,
       leadLoopLength: asPositiveInteger(r.leadLoopLength, fallback.leadLoopLength),
+      leadStepResolution: isLeadStepResolutionId(r.leadStepResolution)
+        ? r.leadStepResolution
+        : fallback.leadStepResolution,
       leadMelodyView: r.leadMelodyView === 'chromatic' ? 'chromatic' : 'scale-locked',
       leadMelodyOctave: clampFinite(
         r.leadMelodyOctave, LEAD_OCTAVE_MIN, LEAD_OCTAVE_MAX, fallback.leadMelodyOctave,

@@ -2,10 +2,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 
 import { audioEngine } from '../audio/engine';
 import { createMemoryBackend, createProjectStore } from './projectStore';
 import { PROJECT_FORMAT_VERSION, buildProjectContent, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
-import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
+import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
 import { fingerprintContent } from './projectFingerprint';
 import { createDefaultLoop, DEFAULT_LOOP_ID } from './loopSlice';
 import { LOOP_FLAT_KEYS } from './loop';
+import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 import type { AppStore } from './types';
 
 class FakeLocalStorage {
@@ -428,11 +429,18 @@ function legacyV1Body(id: string): ProjectBody {
   } as unknown as ProjectBody;
 }
 
-const UPGRADED_MELODY = [
-  [{ note: 'C4', len: 1 }, { note: 'E4', len: 1 }],
-  [],
-  [{ note: 'G4', len: 1 }],
-];
+/**
+ * The same three v1 rows after BOTH lead steps: string[][] became LeadNote[][]
+ * at the narrow stored width, then widened to LEAD_TICKS_PER_BAR with old slot
+ * `i` on tick `2i` and every `len` counted in ticks. The default loop is one
+ * bar long, so that is the whole melody.
+ */
+const UPGRADED_MELODY: LeadNote[][] = (() => {
+  const bar: LeadNote[][] = Array.from({ length: LEAD_TICKS_PER_BAR }, () => []);
+  bar[0] = [{ note: 'C4', len: 2 }, { note: 'E4', len: 2 }];
+  bar[4] = [{ note: 'G4', len: 2 }];
+  return bar;
+})();
 
 describe('a formatVersion-1 body in the project library', () => {
   test('openProject keeps its melody — upgraded, gated and restamped', async () => {

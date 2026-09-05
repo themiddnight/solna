@@ -24,6 +24,7 @@ import {
   backfillLeadWindow,
   migrateAddProjectIdentity,
   migrateLeadNoteLength,
+  migrateLeadStepResolution,
   removeLegacyKeys,
   LEGACY_PERSIST_KEY,
 } from './migrate';
@@ -272,7 +273,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: PERSIST_KEY,
-      version: 10,
+      version: 11,
       storage: createJSONStorage<PersistedState>(() => persistStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
@@ -311,7 +312,14 @@ export const useAppStore = create<AppStore>()(
           const base = identified(payload);
           return version >= 10 ? base : (migrateLeadNoteLength(base) as PersistedState);
         };
-        if (version >= 2) return lengthened(wrapped(metered(recoloured)));
+        // v10 -> v11 (lead melody in ticks + per-loop step resolution).
+        // Runs LAST, outside `lengthened`, so the melody it widens is
+        // already LeadNote[][] at the narrow stored width.
+        const ticked = (payload: PersistedState): PersistedState => {
+          const base = lengthened(payload);
+          return version >= 11 ? base : (migrateLeadStepResolution(base) as PersistedState);
+        };
+        if (version >= 2) return ticked(wrapped(metered(recoloured)));
         // v1 arp fix (unchanged) …
         const next = { ...recoloured } as Record<string, unknown>;
         for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams']) {
@@ -320,7 +328,7 @@ export const useAppStore = create<AppStore>()(
             next[key] = { ...(params as object), arpActive: false };
           }
         }
-        return lengthened(wrapped(metered(next as unknown as PersistedState)));
+        return ticked(wrapped(metered(next as unknown as PersistedState)));
       },
       // Runs on every hydration (also when nothing was stored): sanitize the
       // parsed payload (wrong-typed persisted values must never reach the

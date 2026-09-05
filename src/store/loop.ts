@@ -20,6 +20,7 @@ export const LOOP_FLAT_KEYS = [
   'bassOctave',
   'leadMelodySteps',
   'leadLoopLength',
+  'leadStepResolution',
   'leadMelodyView',
   'leadMelodyOctave',
   'leadGate',

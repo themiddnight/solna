@@ -3,6 +3,7 @@ import { clampLeadCursor, leadStoredIndexAt } from '../audio/leadMelody';
 import { clockStepToGridColumn, heldStepLength } from '../audio/leadLiveRecord';
 import { leadLiveInputStep, startLeadLiveClock } from '../audio/playback/leadLiveClock';
 import { getMeter } from '../utils/meter';
+import { columnsPerBar, strideFor } from '../utils/stepResolution';
 import { isPlayerActive } from './transportSlice';
 import { useAppStore } from './store';
 import type { PlayerState } from './types';
@@ -48,6 +49,8 @@ interface HeldNote {
   onStep: number;
   /** Where the note went in, so note-off knows what to extend. */
   storedIndex: number;
+  /** The stride the note was captured at, so a resolution change mid-hold cannot re-scale its length. */
+  stride: number;
 }
 
 /**
@@ -96,7 +99,7 @@ export function startLeadRecordBridge(deps: LeadRecordDeps = REAL_CLOCK): () => 
       held.delete(event.note);
       const offStep = deps.inputStep();
       if (offStep === null) return;
-      const len = heldStepLength(entry.onStep, offStep);
+      const len = heldStepLength(entry.onStep, offStep, entry.stride);
       // setLeadNoteLength owns all three length invariants, including the
       // clamp against the loop end — so a note held across the seam is
       // truncated rather than wrapped, with no special case here.
@@ -105,7 +108,10 @@ export function startLeadRecordBridge(deps: LeadRecordDeps = REAL_CLOCK): () => 
       // that started while armed can still be held after Rec is turned off,
       // and its release must not reach back and lengthen a note that was
       // never meant to grow past its initial write.
-      if (len > 1 && useAppStore.getState().leadRecording) {
+      //
+      // > stride, not > 1: a one-cell note is already at that length, and
+      // calling the setter for it would be a write with nothing to write.
+      if (len > entry.stride && useAppStore.getState().leadRecording) {
         useAppStore.getState().setLeadNoteLength(entry.storedIndex, event.note, len);
       }
       return;
@@ -123,20 +129,23 @@ export function startLeadRecordBridge(deps: LeadRecordDeps = REAL_CLOCK): () => 
     if (held.has(event.note)) return;
 
     const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-    const rawColumn = clockStepToGridColumn(clockStep, state.leadLoopLength * stepsPerBar);
+    const stride = strideFor(state.leadStepResolution);
+    const columns = state.leadLoopLength * columnsPerBar(stepsPerBar, stride);
+    const rawColumn = clockStepToGridColumn(clockStep, columns, stride);
     // Clamped HERE, once, and the same value reused below: recordLeadNote
     // clamps again internally (defence in depth for its other caller, the
     // stopped-cursor path), but that must not be the only place it happens —
     // two independent clamps of the same raw column agree today only because
     // the wrap already puts rawColumn in range, which is luck, not a
     // guarantee.
-    const column = clampLeadCursor(rawColumn, state.leadLoopLength, stepsPerBar);
+    const column = clampLeadCursor(rawColumn, state.leadLoopLength, stepsPerBar, stride);
     // The note goes in at len 1 immediately, so it appears on the grid the
     // moment it is played; note-off extends it.
     if (!state.recordLeadNote(event.note, column)) return;
     held.set(event.note, {
       onStep: clockStep,
-      storedIndex: leadStoredIndexAt(column, stepsPerBar),
+      storedIndex: leadStoredIndexAt(column, stepsPerBar, stride),
+      stride,
     });
   });
 

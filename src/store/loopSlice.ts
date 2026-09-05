@@ -7,6 +7,7 @@ import { INITIAL_CHORDS, INITIAL_SEQUENCER_TRACKS, INITIAL_SYNTH_PARAMS } from '
 import { cloneLoop, fallbackActiveLoopId, newLoopId, nextLoopName } from './loop';
 import type { AppStore, Loop, LoopSlice } from './types';
 import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
+import { DEFAULT_LEAD_STEP_RESOLUTION, LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 
 type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
@@ -35,8 +36,9 @@ export function createDefaultLoop(): Loop {
     customBassPattern: new Array<BassStepChoice>(MAX_STEPS_PER_BAR).fill('rest'),
     bassFeel: 0.5,
     bassOctave: 2,
-    leadMelodySteps: Array.from({ length: MAX_STEPS_PER_BAR }, () => [] as LeadNote[]),
+    leadMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
     leadLoopLength: 1,
+    leadStepResolution: DEFAULT_LEAD_STEP_RESOLUTION,
     leadMelodyView: 'scale-locked',
     leadMelodyOctave: 3,
     leadGate: DEFAULT_LEAD_GATE,
