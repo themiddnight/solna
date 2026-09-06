@@ -105,3 +105,20 @@ export function playbackStopSource(
 ): void {
   audioEngine.stopSource(source, releaseTime, time);
 }
+
+/**
+ * The pitched buses the Chords player owns. Everything that silences the
+ * accompaniment silences ALL of them: one transport drives chord, bass and
+ * pad, so cutting a subset leaves the rest ringing — and a drone holds the
+ * longest note in the app. Declared beside playbackStopSource, which owns the
+ * semantics, so a fourth voice is one edit here instead of five hand-written
+ * triplets (loadLoop, projectSlice, instantVibes and the chord hook's two stop
+ * paths). Drums are fire-and-forget one-shots that hold no voices, so they are
+ * deliberately absent.
+ *
+ * Order is the audible one, low-risk to change but kept stable so test
+ * expectations on call order stay meaningful.
+ */
+export const ACCOMPANIMENT_SOURCES = ['chord', 'bass', 'pad'] as const;
+
+export type AccompanimentSource = (typeof ACCOMPANIMENT_SOURCES)[number];

@@ -211,11 +211,15 @@ export function arpEventsForStep(
 }
 
 // Held full-bar chord: strike every note together and release them together.
+// `source` is a parameter rather than a constant because the pad layer holds
+// its voicing exactly this way on its own bus — copying the body to make a
+// `playFullHoldPad` would leave two implementations to keep in step.
 export function playFullHoldChord(
   notes: string[],
   params: SynthParams,
   startTime: number,
   holdSec: number,
+  source: string,
 ): void {
   for (const n of notes) {
     audioEngine.triggerSynthNoteOn(
@@ -223,13 +227,13 @@ export function playFullHoldChord(
       params,
       DEFAULT_VELOCITY * equalPowerVelocityScale(notes.length),
       startTime,
-      "chord",
+      source,
     );
     audioEngine.triggerSynthNoteOff(
       n,
       params.release,
       startTime + holdSec,
-      "chord",
+      source,
     );
   }
 }
