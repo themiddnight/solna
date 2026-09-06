@@ -23,14 +23,17 @@ export function useSynthChannel(): SynthChannel {
   const synthParams = useAppStore((s) => s.synthParams);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
   const bassSynthParams = useAppStore((s) => s.bassSynthParams);
+  const padSynthParams = useAppStore((s) => s.padSynthParams);
   const setSynthParams = useAppStore((s) => s.setSynthParams);
   const setChordSynthParams = useAppStore((s) => s.setChordSynthParams);
   const setBassSynthParams = useAppStore((s) => s.setBassSynthParams);
+  const setPadSynthParams = useAppStore((s) => s.setPadSynthParams);
 
   const channel = resolveSynthControlChannel(controlTarget, {
     synth: { params: synthParams, setParams: setSynthParams },
     chord: { params: chordSynthParams, setParams: setChordSynthParams },
     bass: { params: bassSynthParams, setParams: setBassSynthParams },
+    pad: { params: padSynthParams, setParams: setPadSynthParams },
   });
 
   const tintClass = [

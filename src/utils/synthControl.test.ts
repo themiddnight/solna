@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { focusSynthTarget, resolveSynthControlChannel } from './synthControl';
+import { focusSynthTarget, resolveSynthControlChannel, SYNTH_TARGET_STYLES } from './synthControl';
 import type { SynthControlTarget, SynthParamChannel } from './synthControl';
 import type { SynthParams, ViewMode } from '../types';
 
@@ -43,16 +43,20 @@ describe('resolveSynthControlChannel', () => {
     synth: channel('synth-patch'),
     chord: channel('chord-patch'),
     bass: channel('bass-patch'),
+    pad: channel('pad-patch'),
   };
 
   test('routes each control target to its own param channel', () => {
     expect(resolveSynthControlChannel('synth', channels)).toBe(channels.synth);
     expect(resolveSynthControlChannel('chord', channels)).toBe(channels.chord);
     expect(resolveSynthControlChannel('bass', channels)).toBe(channels.bass);
+    expect(resolveSynthControlChannel('pad', channels)).toBe(channels.pad);
   });
 
   test('falls back to the synth channel for unknown targets', () => {
-    expect(resolveSynthControlChannel('pad' as SynthControlTarget, channels)).toBe(channels.synth);
+    expect(
+      resolveSynthControlChannel('unknown-target' as unknown as SynthControlTarget, channels)
+    ).toBe(channels.synth);
   });
 });
 
@@ -88,4 +92,13 @@ describe('focusSynthTarget', () => {
     focusSynthTarget('bass', nav);
     expect(nav.calls.map(([kind]) => kind)).toEqual(['target', 'tab']);
   });
+});
+
+test('the pad target carries its own module styling', () => {
+  const style = SYNTH_TARGET_STYLES.pad;
+  expect(style.label).toBe('Pad');
+  expect(style.tint).toBe('tint-pad');
+  expect(style.ring).toContain('module-pad');
+  expect(style.activeBtn).toContain('--color-module-pad');
+  expect(style.badge).toContain('--color-module-pad');
 });

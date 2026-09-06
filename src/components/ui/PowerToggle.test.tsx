@@ -48,6 +48,12 @@ describe('resolvePowerToggle', () => {
       '[--btn-color:var(--color-module-bass)] [--btn-fg:var(--color-module-bass-content)]',
     );
   });
+
+  test('the module-pad tone emits complete literal button-colour classes', () => {
+    const { className } = resolvePowerToggle(true, 'module-pad', false);
+    expect(className).toContain('[--btn-color:var(--color-module-pad)]');
+    expect(className).toContain('[--btn-fg:var(--color-module-pad-content)]');
+  });
 });
 
 describe('PowerToggle title/aria-label', () => {

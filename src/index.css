@@ -144,6 +144,8 @@
   --color-module-chord-content: var(--module-chord-content);
   --color-module-bass: var(--module-bass);
   --color-module-bass-content: var(--module-bass-content);
+  --color-module-pad: var(--module-pad);
+  --color-module-pad-content: var(--module-pad-content);
   --color-module-osc: var(--module-osc);
   --color-module-osc-content: var(--module-osc-content);
   --color-module-filter: var(--module-filter);
@@ -173,6 +175,9 @@
   --module-bass: #74A6E8;         /* steel blue 256° */
   --module-bass-content: #17100F;
   --module-bass-tint: #74A6E81A;  /* the same blue at 10% — see tint-bass */
+  --module-pad: #F0B265;          /* amber 40° */
+  --module-pad-content: #17100F;
+  --module-pad-tint: #F0B2651A;   /* the same amber at 10% — see tint-pad */
   --module-env-vcf: #AE96F5;      /* violet 294° */
   --module-env-vcf-content: #17100F;
   --module-arp: #DC8EE8;          /* orchid 322° */
@@ -217,6 +222,13 @@
   --module-bass: #3D6FBF;         /* steel blue 256° */
   --module-bass-content: #FFFFFF;
   --module-bass-tint: #3D6FBF1A;  /* the same blue at 10% — see tint-bass */
+  --module-pad: #8A4E1C;          /* amber 40°, darkened off --color-warning
+                                      (#A16207) — the starting hex read as the
+                                      same colour as the warning role in the
+                                      Chords tab; this sits ~10° lower in hue
+                                      and ~0.07 lower in OKLCH L */
+  --module-pad-content: #FFFFFF;
+  --module-pad-tint: #8A4E1C1A;   /* the same amber at 10% — see tint-pad */
   --module-env-vcf: #7C56D6;      /* violet 294° */
   --module-env-vcf-content: #FFFFFF;
   --module-arp: #A93FB0;          /* orchid 322° */
@@ -305,6 +317,10 @@
 
 @utility tint-bass {
   background-image: linear-gradient(var(--module-bass-tint), var(--module-bass-tint));
+}
+
+@utility tint-pad {
+  background-image: linear-gradient(var(--module-pad-tint), var(--module-pad-tint));
 }
 
 @layer base {

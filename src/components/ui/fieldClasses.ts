@@ -38,6 +38,20 @@ export const FIELD_SELECT = 'select select-sm font-semibold';
 export const FIELD_LANE = 'flex items-center h-8';
 
 /**
+ * The variant of `FIELD_LANE` a daisyUI `join` of `btn-xs` toggles sits in —
+ * the synth's Simple/Pro switch and all four of the pad module's toggle groups.
+ * The shell is what makes a row of 24px buttons occupy the same 32px lane a
+ * `select-sm` does, so its label lands on the shared baseline; `px-0.5` keeps
+ * the outer buttons off the border and `bg-base-200` sinks the group the way a
+ * segmented control reads.
+ *
+ * Composed from `FIELD_LANE` rather than repeating it: five copies of this
+ * exact string had already accumulated, which is one edit away from the same
+ * drift `FIELD_LABEL` exists to stop.
+ */
+export const JOIN_LANE = `join ${FIELD_LANE} bg-base-200 border border-base-300 rounded-box px-0.5`;
+
+/**
  * The count badge the Sounds and Progressions buttons carry.
  *
  * `sm:inline-flex`, never `sm:inline`: daisyUI centres a badge's content with

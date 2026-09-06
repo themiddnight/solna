@@ -116,6 +116,43 @@ export const MixChannel: React.FC<MixChannelProps> = ({
   </div>
 );
 
+/**
+ * The loop card's mixer strip, one row per channel, in the order they render.
+ *
+ * A table rather than five near-identical JSX blocks: the five differed only
+ * in these seven values, and the copies had already drifted (the drum bus
+ * caps at 1.0, the pitched buses at 1.5 — a fact that was three screens away
+ * from the four that shared a ceiling).
+ *
+ * `volumeKey`/`muteKey` index `LoopMixPatch` so a renamed store field fails
+ * here rather than silently writing a patch nothing reads. Beat sits last so
+ * the strip reads pitched layers first, rhythm after — the same story the
+ * header tabs tell — and its `idPrefix` stays `drum-` because these DOM ids
+ * track the store fields (`drumMuted`), not the label.
+ */
+type MixVolumeKey = {
+  [K in keyof LoopMixPatch]: LoopMixPatch[K] extends number ? K : never;
+}[keyof LoopMixPatch];
+type MixMuteKey = {
+  [K in keyof LoopMixPatch]: LoopMixPatch[K] extends boolean ? K : never;
+}[keyof LoopMixPatch];
+
+const LOOP_MIX_CHANNELS: ReadonlyArray<{
+  idPrefix: string;
+  label: string;
+  volumeKey: MixVolumeKey;
+  muteKey: MixMuteKey;
+  max: number;
+  tone: PowerToggleTone;
+  sliderAccent: string;
+}> = [
+  { idPrefix: 'synth', label: 'Lead', volumeKey: 'synthVolume', muteKey: 'synthMuted', max: 1.5, tone: 'primary', sliderAccent: 'text-primary' },
+  { idPrefix: 'chord', label: 'Chord', volumeKey: 'chordVolume', muteKey: 'chordMuted', max: 1.5, tone: 'module-chord', sliderAccent: 'text-module-chord' },
+  { idPrefix: 'bass', label: 'Bass', volumeKey: 'bassVolume', muteKey: 'bassMuted', max: 1.5, tone: 'module-bass', sliderAccent: 'text-module-bass' },
+  { idPrefix: 'pad', label: 'Pad', volumeKey: 'padVolume', muteKey: 'padMuted', max: 1.5, tone: 'module-pad', sliderAccent: 'text-module-pad' },
+  { idPrefix: 'drum', label: 'Beat', volumeKey: 'masterSequencerVolume', muteKey: 'drumMuted', max: 1.0, tone: 'accent', sliderAccent: 'text-accent' },
+];
+
 export interface SortableLoopCardProps {
   loop: Loop;
   index: number;
@@ -538,52 +575,24 @@ export const SortableLoopCard: React.FC<SortableLoopCardProps> = React.memo(
             </div>
           </div>
 
-          {/* 4-Channel Mixer Strip */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 pt-0.5">
-            <MixChannel
-              idPrefix={`synth-${loop.id}`}
-              label="Lead"
-              volume={loop.synthVolume}
-              muted={loop.synthMuted}
-              max={1.5}
-              tone="primary"
-              sliderAccent="text-primary"
-              onVolume={(v) => onSetMix(loop.id, { synthVolume: v })}
-              onToggleMute={() => onSetMix(loop.id, { synthMuted: !loop.synthMuted })}
-            />
-            <MixChannel
-              idPrefix={`drum-${loop.id}`}
-              label="Drum"
-              volume={loop.masterSequencerVolume}
-              muted={loop.drumMuted}
-              max={1.0}
-              tone="accent"
-              sliderAccent="text-accent"
-              onVolume={(v) => onSetMix(loop.id, { masterSequencerVolume: v })}
-              onToggleMute={() => onSetMix(loop.id, { drumMuted: !loop.drumMuted })}
-            />
-            <MixChannel
-              idPrefix={`chord-${loop.id}`}
-              label="Chord"
-              volume={loop.chordVolume}
-              muted={loop.chordMuted}
-              max={1.5}
-              tone="module-chord"
-              sliderAccent="text-module-chord"
-              onVolume={(v) => onSetMix(loop.id, { chordVolume: v })}
-              onToggleMute={() => onSetMix(loop.id, { chordMuted: !loop.chordMuted })}
-            />
-            <MixChannel
-              idPrefix={`bass-${loop.id}`}
-              label="Bass"
-              volume={loop.bassVolume}
-              muted={loop.bassMuted}
-              max={1.5}
-              tone="module-bass"
-              sliderAccent="text-module-bass"
-              onVolume={(v) => onSetMix(loop.id, { bassVolume: v })}
-              onToggleMute={() => onSetMix(loop.id, { bassMuted: !loop.bassMuted })}
-            />
+          {/* 5-Channel Mixer Strip */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 pt-0.5">
+            {LOOP_MIX_CHANNELS.map((ch) => (
+              <MixChannel
+                key={ch.idPrefix}
+                idPrefix={`${ch.idPrefix}-${loop.id}`}
+                label={ch.label}
+                volume={loop[ch.volumeKey]}
+                muted={loop[ch.muteKey]}
+                max={ch.max}
+                tone={ch.tone}
+                sliderAccent={ch.sliderAccent}
+                onVolume={(v) => onSetMix(loop.id, { [ch.volumeKey]: v })}
+                onToggleMute={() =>
+                  onSetMix(loop.id, { [ch.muteKey]: !loop[ch.muteKey] })
+                }
+              />
+            ))}
           </div>
         </div>
       </div>

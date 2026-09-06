@@ -109,7 +109,7 @@ interface AudioVisualizerProps {
    */
   onModeChange?: (mode: VisualizerMode) => void;
   /**
-   * Tap one source layer's bus (`'synth' | 'chord' | 'bass'`) instead of the
+   * Tap one source layer's bus (`'synth' | 'chord' | 'bass' | 'pad'`) instead of the
    * master output. The layer bus sits after the VCA but before the parallel
    * sends, so the trace is that patch alone rather than the finished mix —
    * which is what makes the Synth view's scope follow its Target selector.

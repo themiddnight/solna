@@ -149,6 +149,7 @@ describe('keyboard audition channel is always the main synth', () => {
     synth: channel('main-synth'),
     chord: channel('chord-synth'),
     bass: channel('bass-synth'),
+    pad: channel('pad-synth'),
   };
 
   test('the keyboard channel is always channels.synth, no matter which target is passed to the panel resolver', () => {

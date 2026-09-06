@@ -4,7 +4,7 @@ import { AUTOMATION_TABS, SONG_NAV_TABS } from './Header';
 
 describe('VIEW_META', () => {
   test('covers every view exactly once', () => {
-    expect(VIEW_ORDER).toEqual(['synth', 'sequencer', 'chords', 'arrange', 'effects']);
+    expect(VIEW_ORDER).toEqual(['synth', 'chords', 'sequencer', 'arrange', 'effects']);
     expect(Object.keys(VIEW_META).sort()).toEqual(
       ['arrange', 'chords', 'effects', 'sequencer', 'synth'],
     );
