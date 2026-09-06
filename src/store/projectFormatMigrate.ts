@@ -6,6 +6,7 @@ import {
   type LeadNote,
 } from '../audio/leadMelody';
 import { DEFAULT_LEAD_STEP_RESOLUTION } from '../utils/stepResolution';
+import { defaultPadState } from './initialState';
 
 /**
  * The traversal every per-loop step of THIS chain repeats: reach `raw.content`,
@@ -105,6 +106,25 @@ function upgradeLeadTicksV3(raw: Record<string, unknown>): Record<string, unknow
  * shape rather than throwing, so an un-upgraded body would fall back to the
  * default and come back with a blank melody and no error.
  */
+
+/**
+ * v3 -> v4: every loop gains the pad/drone layer's eight fields, with the pad
+ * MUTED — a project written before the layer existed must reopen sounding the
+ * way it sounded when it was closed.
+ *
+ * Shares only defaultPadState() with the persist chain's migratePadLayer, and
+ * must not be refactored into one function with it: a project body is an
+ * external contract, the persist payload is private localStorage shape, and
+ * their version numbers move for different reasons.
+ */
+function upgradePadLayerV4(raw: Record<string, unknown>): Record<string, unknown> {
+  return mapBodyLoops(raw, (loop) => ({
+    ...loop,
+    ...defaultPadState(),
+    padMuted: true,
+  }));
+}
+
 export function migrateProjectBody(
   raw: Record<string, unknown>,
   fromVersion: number,
@@ -112,5 +132,6 @@ export function migrateProjectBody(
   let next: Record<string, unknown> = { ...raw };
   if (fromVersion < 2) next = upgradeLeadNotesV2(next);
   if (fromVersion < 3) next = upgradeLeadTicksV3(next);
+  if (fromVersion < 4) next = upgradePadLayerV4(next);
   return next;
 }

@@ -7,6 +7,7 @@ import { createMusicContextSlice } from './musicContextSlice';
 import { createSynthSlice } from './synthSlice';
 import { createChordsSlice } from './chordsSlice';
 import { createBassSlice } from './bassSlice';
+import { createPadSlice } from './padSlice';
 import { createLeadSlice } from './leadSlice';
 import { createSequencerSlice } from './sequencerSlice';
 import { createEffectsSlice } from './effectsSlice';
@@ -26,6 +27,7 @@ import {
   migrateAddProjectIdentity,
   migrateLeadNoteLength,
   migrateLeadStepResolution,
+  migratePadLayer,
   removeLegacyKeys,
   LEGACY_PERSIST_KEY,
 } from './migrate';
@@ -268,6 +270,7 @@ export const useAppStore = create<AppStore>()(
         ...createSynthSlice(setWithLoopMirror),
         ...createChordsSlice(setWithLoopMirror),
         ...createBassSlice(setWithLoopMirror),
+        ...createPadSlice(setWithLoopMirror),
         ...createLeadSlice(setWithLoopMirror, get),
         ...createSequencerSlice(setWithLoopMirror),
         ...createEffectsSlice(setWithLoopMirror),
@@ -279,7 +282,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: PERSIST_KEY,
-      version: 11,
+      version: 12,
       storage: createJSONStorage<PersistedState>(() => persistStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
@@ -328,6 +331,8 @@ export const useAppStore = create<AppStore>()(
         if (version < 10) next = migrateLeadNoteLength(next) as PersistedState;
         // v10 → v11 (lead melody in ticks + per-loop step resolution)
         if (version < 11) next = migrateLeadStepResolution(next) as PersistedState;
+        // v11 -> v12 (pad/drone layer)
+        if (version < 12) next = migratePadLayer(next) as PersistedState;
         return next;
       },
       // Runs on every hydration (also when nothing was stored): sanitize the

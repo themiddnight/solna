@@ -1,5 +1,6 @@
 import { SynthParams, InstantVibe } from '../types';
 import { audioEngine } from '../audio/engine';
+import { ACCOMPANIMENT_SOURCES } from '../audio/playback/playbackEngine';
 import { applyPreset, presetById } from '../audio/synthPresets';
 import { useAppStore } from './store';
 import { INITIAL_SYNTH_PARAMS } from './initialState';
@@ -42,6 +43,10 @@ export function applyInstantVibeToStore(vibe: InstantVibe) {
   const finalChordSynthParams = resolveVibeSynthParams(vibe.chordPresetId);
   const finalBassSynthParams = resolveVibeSynthParams(vibe.bassPresetId);
   const finalSynthParams = resolveVibeSynthParams(vibe.synthPresetId);
+  // The pad's own settings and its resolved voice, carried together so the
+  // write block below reads one object instead of a vibe field and a parallel
+  // nullable params variable that must be null-checked in lockstep with it.
+  const pad = vibe.pad ? { ...vibe.pad, params: resolveVibeSynthParams(vibe.pad.presetId) } : null;
 
   // 0. Atomic swap: cut everything still scheduled BEFORE writing the new
   //    chords and patterns, otherwise the old progression's queued voices
@@ -65,8 +70,9 @@ export function applyInstantVibeToStore(vibe: InstantVibe) {
   // audio clock, and a stopped player may still be ringing out a preview.
   // Drums are fire-and-forget one-shots with no tracked voices — one already
   // scheduled hit can still land, which the spec accepts.
-  audioEngine.stopSource('chord', VIBE_SWAP_RELEASE);
-  audioEngine.stopSource('bass', VIBE_SWAP_RELEASE);
+  for (const source of ACCOMPANIMENT_SOURCES) {
+    audioEngine.stopSource(source, VIBE_SWAP_RELEASE);
+  }
 
   // 1. Context & BPM
   store.setBpm(vibe.bpm);
@@ -110,6 +116,24 @@ export function applyInstantVibeToStore(vibe: InstantVibe) {
   store.setBassFeel(vibe.bassFeel);
   store.setBassOctave(vibe.bassOctave);
   store.setBassSynthParams(finalBassSynthParams);
+
+  // A vibe without a pad mutes the layer and leaves the rest of its settings
+  // alone. Muting is reversible and resetting is not: Boom Bap -> Synthwave ->
+  // Boom Bap must not erase pad settings the user tuned by hand.
+  if (pad) {
+    store.setPadSynthParams(pad.params);
+    store.setPadMode(pad.mode);
+    store.setPadOctave(pad.octave);
+    store.setPadVoicing(pad.voicing);
+    store.setPadDroneDegree(pad.droneDegree);
+    store.setPadDroneIntervals(pad.droneIntervals);
+    store.setPadVolume(pad.volume);
+  }
+  // Mute is a toggle, not a setter, so it is expressed as "the state the vibe
+  // wants" and only touched when it differs — read live, because the setters
+  // above may have run in between.
+  const wantMuted = !pad;
+  if (useAppStore.getState().padMuted !== wantMuted) store.togglePadMuted();
 
   // 5. Main Synth Sound Preset
   store.setSynthParams(finalSynthParams);
@@ -164,6 +188,9 @@ export const INSTANT_VIBES: InstantVibe[] = [
 
     // Main Synth: Warm Keys / Whistle
     synthPresetId: 'factory-dream-keys',
+
+    // Pad: glue under the e-piano, not a foreground voice.
+    pad: { volume: 0.30, presetId: 'factory-warm-polypad', mode: 'pad', octave: 3, voicing: 'open5', droneDegree: 0, droneIntervals: [1, 5, 8] },
 
     effectChainId: 'lofi-tape-room',
     effects: requireEffectChain('lofi-tape-room'),
@@ -224,6 +251,9 @@ export const INSTANT_VIBES: InstantVibe[] = [
 
     // Main Synth: Hyper Saw Lead
     synthPresetId: 'factory-hyper-saw-lead',
+
+    // Pad: the sustained half of the genre's two-layer chord stack.
+    pad: { volume: 0.65, presetId: 'factory-string-ensemble', mode: 'pad', octave: 3, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
 
     effectChainId: 'synthwave-neon-hall',
     effects: requireEffectChain('synthwave-neon-hall'),
@@ -287,6 +317,9 @@ export const INSTANT_VIBES: InstantVibe[] = [
     // Main Synth: Cyber Pluck Lead
     synthPresetId: 'factory-pluck',
 
+    // Pad: supersaw holding under the trance-pluck stabs.
+    pad: { volume: 0.50, presetId: 'factory-neon-poly-saw', mode: 'pad', octave: 3, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
+
     effectChainId: 'edm-club-drive',
     effects: requireEffectChain('edm-club-drive'),
 
@@ -345,6 +378,9 @@ export const INSTANT_VIBES: InstantVibe[] = [
 
     // Main Synth: Ethereal Bell Pad
     synthPresetId: 'factory-celestial-shimmer',
+
+    // Pad: a pedal tone under the Lydian progression is the genre's gesture.
+    pad: { volume: 0.55, presetId: 'factory-dark-sub-pad', mode: 'drone', octave: 2, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
 
     effectChainId: 'ambient-cathedral-wash',
     effects: requireEffectChain('ambient-cathedral-wash'),
@@ -470,6 +506,9 @@ export const INSTANT_VIBES: InstantVibe[] = [
     // Main Synth: Pentatonic Bell Lead
     synthPresetId: 'factory-glocken-bell',
 
+    // Pad: the sustained shō of gagaku, a direct ancestor of drone music.
+    pad: { volume: 0.40, presetId: 'factory-warm-polypad', mode: 'drone', octave: 2, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
+
     effectChainId: 'zen-temple-air',
     effects: requireEffectChain('zen-temple-air'),
 
@@ -531,6 +570,9 @@ export const INSTANT_VIBES: InstantVibe[] = [
 
     // Main Synth: FM tine piano
     synthPresetId: 'factory-fm-tine-piano',
+
+    // Pad: same treatment as lofi-chill.
+    pad: { volume: 0.30, presetId: 'factory-warm-polypad', mode: 'pad', octave: 3, voicing: 'open5', droneDegree: 0, droneIntervals: [1, 5, 8] },
 
     effectChainId: 'lofi-tape-room',
     effects: requireEffectChain('lofi-tape-room'),

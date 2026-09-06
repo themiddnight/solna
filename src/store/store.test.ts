@@ -8,6 +8,7 @@ import { deriveChordNotes } from '../utils/musicTheory';
 import type { SynthPresetItem } from '../audio/synthPresets';
 import type { CustomChordProgressionItem } from '../types';
 import {
+  defaultPadState,
   INITIAL_CHORDS,
   INITIAL_EFFECTS,
   INITIAL_SEQUENCER_TRACKS,
@@ -1123,7 +1124,7 @@ describe('project identity migration wiring (v8 -> v9)', () => {
     expect(s.projectBaselineHash).toBeNull();
   });
 
-  test('a version-1 payload still terminates in the v11 shape', async () => {
+  test('a version-1 payload still terminates in the current persist shape', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
     flushPersistedWrites();
@@ -1131,7 +1132,7 @@ describe('project identity migration wiring (v8 -> v9)', () => {
     await useAppStore.persist.rehydrate();
     expect(useAppStore.getState().currentProjectId).toBeNull();
     flushPersistedWrites();
-    expect(JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}').version).toBe(11);
+    expect(JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}').version).toBe(12);
   });
 
   test('a wrong-typed currentProjectId / projectBaselineHash is coerced to null', async () => {
@@ -1235,6 +1236,58 @@ describe('lead step resolution migration wiring (v10 -> v11)', () => {
     expect(s.loops[0].leadMelodySteps[0]).toEqual([{ note: 'C4', len: 2 }]);
     expect(s.loops[0].leadStepResolution).toBe('1/16');
     expect(s.leadMelodySteps).toHaveLength(LEAD_TICKS_PER_BAR);
+  });
+});
+
+/**
+ * The persist chain's pad step, through the REAL wiring rather than by
+ * calling migratePadLayer by hand (migrate.test.ts covers the function
+ * itself). This is the test the review flagged as missing: without it,
+ * deleting `if (version < 12) next = migratePadLayer(next);` from store.ts's
+ * chain leaves every other test green — a loop missing the eight pad keys
+ * simply falls back to whatever loopStatePatch happens to write, and nothing
+ * here would have caught an unwired step.
+ */
+describe('pad layer migration wiring (v11 -> v12)', () => {
+  test('a version-11 payload with no pad keys hydrates with the pad muted', async () => {
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    useAppStore.persist.clearStorage();
+    flushPersistedWrites();
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 11,
+        state: {
+          loops: [{ id: 'loop-1', name: 'Loop 1', bassOctave: 2 }],
+          activeLoopId: 'loop-1',
+        },
+      })
+    );
+    await useAppStore.persist.rehydrate();
+
+    const s = useAppStore.getState();
+    expect(s.loops[0].padMuted).toBe(true);
+    expect(s.loops[0].padMode).toBe(defaultPadState().padMode);
+    expect(s.loops[0].padVoicing).toBe(defaultPadState().padVoicing);
+    expect(s.loops[0].padDroneIntervals).toEqual(defaultPadState().padDroneIntervals);
+    expect(s.loops[0].padVolume).toBe(defaultPadState().padVolume);
+    // …and the flat mirror the pad slice actually reads agrees with it.
+    expect(s.padMuted).toBe(true);
+  });
+
+  // The cheapest end-to-end proof that LOOP_FLAT_KEYS -> loopSync -> loops ->
+  // fingerprint is connected for the pad's fields specifically. It is the
+  // only test on the branch that would catch a pad key falling out of
+  // loopSync's mirror: setPadVolume writes the flat slice, loopSync must
+  // mirror it back into loops[] (a content key) for the dirty pass to ever
+  // see it.
+  test('editing a pad control marks the project dirty', async () => {
+    const { useAppStore, flushBeforeHide } = await getStore();
+    useAppStore.getState().newProject();
+    expect(useAppStore.getState().dirty).toBe(false);
+    useAppStore.getState().setPadVolume(0.42);
+    flushBeforeHide();
+    expect(useAppStore.getState().dirty).toBe(true);
   });
 });
 

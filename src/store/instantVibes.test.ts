@@ -1,10 +1,11 @@
-import { describe, test, expect, spyOn } from 'bun:test';
+import { describe, test, expect, spyOn, afterEach } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import { INSTANT_VIBES, applyInstantVibeToStore } from './instantVibes';
 import { RHYTHM_PATTERNS } from '../audio/rhythmPatterns';
 import { BASS_PATTERNS } from '../audio/bassPatterns';
 import { presetById } from '../audio/synthPresets';
 import { useAppStore } from './store';
+import { defaultPadState } from './initialState';
 
 describe('Instant Vibes Mode', () => {
   test('contains all 6 curated genre vibes with complete presets and feel settings', () => {
@@ -128,6 +129,9 @@ describe('vibe preset id resolution', () => {
       expect(`${vibe.id}=${presetById(vibe.bassPresetId)?.category}`).toBe(`${vibe.id}=Bass`);
     }
   });
+  // The pad-preset-category invariant lives in describe('vibe pad data', ...)
+  // below, alongside the other pad-authoring invariants, rather than here —
+  // one copy, not two.
 
   test('the 8x3 preset matrix is pinned exactly', () => {
     expect(INSTANT_VIBES.map((v) => ({
@@ -316,7 +320,7 @@ describe('applyInstantVibeToStore audible cut', () => {
   // queued chord and bass voices kept sounding over the new one. Asserting
   // the ORDER of store actions (the suite above) cannot see that: only an
   // assertion that the sources were actually silenced can.
-  test('silences the chord and bass buses, at the hard-stop release', () => {
+  test('silences the chord, bass and pad buses, at the hard-stop release', () => {
     const stopSource = spyOn(audioEngine, 'stopSource').mockImplementation(() => {});
     stopSource.mockClear();
 
@@ -326,6 +330,7 @@ describe('applyInstantVibeToStore audible cut', () => {
     const silenced = stopSource.mock.calls.map((c) => c[0]);
     expect(silenced).toContain('chord');
     expect(silenced).toContain('bass');
+    expect(silenced).toContain('pad');
     for (const call of stopSource.mock.calls) expect(call[1]).toBe(0.02);
 
     useAppStore.getState().hardStopAll();
@@ -479,5 +484,72 @@ describe('vibe meters', () => {
         expect(BASS_PATTERNS.find((p) => p.id === id)!.meter, `${v.id}/${id}`).toBe(v.meter);
       }
     }
+  });
+});
+
+describe('vibe pad data', () => {
+  // Mirrors the existing bassPresetId invariant at the top of this file.
+  test('every pad preset id resolves to a Pad-category preset', () => {
+    for (const vibe of INSTANT_VIBES) {
+      if (!vibe.pad) continue;
+      expect(`${vibe.id}=${presetById(vibe.pad.presetId)?.category}`).toBe(`${vibe.id}=Pad`);
+    }
+  });
+
+  // An empty set is legal at runtime — it means a silent drone — but in
+  // authored content it ships a layer that cannot make a sound, which is a
+  // data bug rather than a choice.
+  test('every vibe that ships a pad ships a non-empty interval set', () => {
+    for (const vibe of INSTANT_VIBES) {
+      if (!vibe.pad) continue;
+      expect(vibe.pad.droneIntervals.length).toBeGreaterThan(0);
+    }
+  });
+
+  // The optional shape is a real choice, not a field every entry fills.
+  test('the two boombap-pool vibes ship no pad', () => {
+    const byId = Object.fromEntries(INSTANT_VIBES.map((v) => [v.id, v]));
+    expect(byId['hiphop-groove'].pad).toBeUndefined();
+    expect(byId['afro-six-eight'].pad).toBeUndefined();
+  });
+});
+
+describe('applying a vibe writes its pad', () => {
+  // `useAppStore` is a process-wide singleton bun test shares across every
+  // file in this process, and both tests below deliberately leave pad state
+  // mutated (one leaves it muted, both leave lofi-chill's pad fields written)
+  // to assert on the result of applying a vibe. Restore every pad key after
+  // each test rather than patching individual fields inline, so a future
+  // assertion added to either test can't reintroduce a partial restore.
+  afterEach(() => {
+    useAppStore.setState({ ...defaultPadState() });
+    useAppStore.getState().hardStopAll();
+  });
+
+  test('a vibe with a pad unmutes and configures the layer', () => {
+    const vibe = INSTANT_VIBES.find((v) => v.pad)!;
+    applyInstantVibeToStore(vibe);
+    const s = useAppStore.getState();
+    expect(s.padMuted).toBe(false);
+    expect(s.padMode).toBe(vibe.pad!.mode);
+    expect(s.padVolume).toBe(vibe.pad!.volume);
+    expect(s.padOctave).toBe(vibe.pad!.octave);
+    expect(s.padVoicing).toBe(vibe.pad!.voicing);
+    expect(s.padDroneDegree).toBe(vibe.pad!.droneDegree);
+    expect(s.padDroneIntervals).toEqual(vibe.pad!.droneIntervals);
+    expect(s.padSynthParams.preset).toBe(presetById(vibe.pad!.presetId)!.name);
+  });
+
+  // Muting is reversible and resetting is not: Boom Bap -> Synthwave -> Boom
+  // Bap must not erase pad settings the user tuned by hand.
+  test('a vibe without a pad mutes the layer and leaves its settings alone', () => {
+    const withPad = INSTANT_VIBES.find((v) => v.pad)!;
+    const withoutPad = INSTANT_VIBES.find((v) => !v.pad)!;
+    applyInstantVibeToStore(withPad);
+    const octaveBefore = useAppStore.getState().padOctave;
+    applyInstantVibeToStore(withoutPad);
+    const s = useAppStore.getState();
+    expect(s.padMuted).toBe(true);
+    expect(s.padOctave).toBe(octaveBefore);
   });
 });

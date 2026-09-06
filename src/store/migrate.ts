@@ -10,6 +10,7 @@ import {
 import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
 import { DEFAULT_LEAD_STEP_RESOLUTION } from '../utils/stepResolution';
 import { padStepRow } from '../utils/patternAdapt';
+import { defaultPadState } from './initialState';
 import { newLoopId, LOOP_FLAT_KEYS } from './loop';
 
 // Legacy localStorage keys written by the pre-Zustand app:
@@ -320,4 +321,28 @@ export function migrateLeadStepResolution<T extends object>(state: T): T {
           : DEFAULT_LEAD_STEP_RESOLUTION,
     };
   });
+}
+
+/**
+ * The pad/drone layer's eight per-loop fields. Every loop persisted before it
+ * lacks them, and `loopStatePatch` writes each LOOP_FLAT_KEYS entry with no
+ * guard — so an unbackfilled loop does not fall back to the slice defaults, it
+ * writes `undefined` over them the moment it is activated.
+ *
+ * `padMuted` is overridden to `true` on purpose, against defaultPadState()'s
+ * `false`. A new project gets an audible pad because that is the point of
+ * shipping the layer; a project saved before the pad existed gets a silent one
+ * because its author never wrote a pad and a reopened project must sound the
+ * way it sounded when it was closed. Do not collapse these into one value —
+ * the change is inaudible in review and only migrate.test.ts would catch it.
+ *
+ * Shares only defaultPadState() — data — with the `.solna` chain's own step in
+ * projectFormatMigrate.ts. The two traversals must NOT be merged.
+ */
+export function migratePadLayer<T extends object>(state: T): T {
+  return mapLoops(state, (row) => ({
+    ...row,
+    ...defaultPadState(),
+    padMuted: true,
+  }));
 }

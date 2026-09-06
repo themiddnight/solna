@@ -15,8 +15,7 @@ export type ViewMode =
   | 'synth'
   | 'sequencer'
   | 'chords'
-  | 'effects'
-  | 'arrange';
+  | 'effects';
 
 export type Layer = 'loop' | 'song';
 
@@ -32,6 +31,36 @@ export function layerForTab(tab: ViewMode): Layer {
 }
 
 export type ArrangementTrackType = 'chords' | 'drums' | 'bass' | 'lead';
+
+/**
+ * The pad layer's two articulations. `pad` follows the chords; `drone` does not.
+ *
+ * The const array is the source of truth and the union derives from it, like
+ * PAD_INTERVALS below: sanitize builds its validation Set from this array, so a
+ * mode added here is accepted by `asPadMode` in the same edit. Hand-written
+ * Sets have no such link — a value the UI offers and the store holds would come
+ * back reverted on every reopen, with no type error and no failing build.
+ */
+export const PAD_MODES = ['pad', 'drone'] as const;
+export type PadMode = (typeof PAD_MODES)[number];
+
+/** How a chord is reduced before the pad plays it. Dormant in drone mode. */
+export const PAD_VOICINGS = ['triad', 'open5', 'root'] as const;
+export type PadVoicing = (typeof PAD_VOICINGS)[number];
+
+/**
+ * Intervals a drone may stack over its degree's root, in scale-degree-free
+ * interval numbers: 1 = unison, 4 = perfect fourth, 5 = perfect fifth,
+ * 8 = octave, 12 = perfect twelfth (an octave plus a fifth, 19 semitones).
+ *
+ * A literal union, not an enum: this file must keep importing nothing but the
+ * leaf `utils/meter`, and these values are persisted verbatim in `.solna`
+ * bodies, so the numbers are the contract.
+ */
+export type PadInterval = 1 | 4 | 5 | 8 | 12;
+
+/** Render order for the interval toggles, and the validation set for sanitize. */
+export const PAD_INTERVALS: readonly PadInterval[] = [1, 4, 5, 8, 12];
 
 export interface LeadNote {
   note: string;
@@ -279,6 +308,25 @@ export interface InstantVibe {
   bassOctave: number;
   /** Library reference into ALL_FACTORY_PRESETS; must resolve to category 'Bass'. */
   bassPresetId: string;
+
+  /**
+   * The pad layer, when the genre uses one.
+   *
+   * OPTIONAL here and required on `Loop`, deliberately: a vibe *chooses*
+   * whether to bring a pad, while a loop *always has* pad state. Absence
+   * carries the enabled/disabled meaning with no extra boolean, and two of the
+   * eight vibes exercise it.
+   */
+  pad?: {
+    volume: number;
+    /** Library reference into ALL_FACTORY_PRESETS; must resolve to category 'Pad'. */
+    presetId: string;
+    mode: PadMode;
+    octave: number;
+    voicing: PadVoicing;
+    droneDegree: number;
+    droneIntervals: readonly PadInterval[];
+  };
 
   // Lead / Melody Synthesizer (preset reference only — arp is the user's, not the vibe's)
   /** Library reference into ALL_FACTORY_PRESETS for the lead voice. */
