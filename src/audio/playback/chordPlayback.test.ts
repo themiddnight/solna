@@ -505,7 +505,7 @@ describe('full-hold chord scheduling', () => {
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
 
     const notes = ['C4', 'E4', 'G4', 'B4', 'D5', 'F5', 'A5'];
-    playFullHoldChord(notes, SYNTH, 10, 4);
+    playFullHoldChord(notes, SYNTH, 10, 4, 'chord');
 
     const scaled = 0.8 * equalPowerVelocityScale(7);
     for (const n of notes) {

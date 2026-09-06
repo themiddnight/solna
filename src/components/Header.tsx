@@ -23,8 +23,8 @@ import { sessionLabel } from "./project/projectManagerFlow";
  *  `lead` transport. */
 export const AUTOMATION_TABS: ReadonlyArray<{ view: ViewMode; module: PlayerModule }> = [
   { view: 'synth', module: 'lead' },
-  { view: 'sequencer', module: 'sequencer' },
   { view: 'chords', module: 'chords' },
+  { view: 'sequencer', module: 'sequencer' },
 ];
 
 /** The two song-layer tabs: the arrangement and the global master rack. */

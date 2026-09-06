@@ -78,7 +78,7 @@ describe('openProject', () => {
     expect(s.songLoopIndex).toBeNull();
   });
 
-  test('cuts the chord and bass voices BEFORE the state swap, like loadLoop', async () => {
+  test('cuts the chord, bass and pad voices BEFORE the state swap, like loadLoop', async () => {
     const p = stored('Cut', 78);
     const { useAppStore, slice } = await sliceWithBackend([p]);
     const order: string[] = [];
@@ -86,7 +86,7 @@ describe('openProject', () => {
     const unsub = useAppStore.subscribe((s, prev) => { if (s.bpm !== prev.bpm) order.push('set'); });
     await slice.openProject(p.id);
     unsub();
-    expect(order).toEqual(['chord@0.02', 'bass@0.02', 'set']);
+    expect(order).toEqual(['chord@0.02', 'bass@0.02', 'pad@0.02', 'set']);
   });
 
   test('a missing id is a not-found result, leaves the session untouched and cuts nothing', async () => {
@@ -119,7 +119,7 @@ describe('newProject', () => {
     expect(s.songLoopIndex).toBeNull();
   });
 
-  test('cuts the chord and bass voices before the reset, like Open', async () => {
+  test('cuts the chord, bass and pad voices before the reset, like Open', async () => {
     const { useAppStore, slice } = await sliceWithBackend();
     const order: string[] = [];
     stopSource.mockImplementation((source: string) => { order.push(source); });
@@ -127,7 +127,7 @@ describe('newProject', () => {
     useAppStore.setState({ bpm: 140 });
     slice.newProject();
     unsub();
-    expect(order).toEqual(['chord', 'bass', 'set']);
+    expect(order).toEqual(['chord', 'bass', 'pad', 'set']);
   });
 });
 

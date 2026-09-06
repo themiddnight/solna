@@ -32,6 +32,7 @@ import {
   barDurationSec,
 } from "../../../utils/musicTheory";
 import {
+  ACCOMPANIMENT_SOURCES,
   HARD_STOP_RELEASE,
   initPlaybackEngine,
   playbackNoteOff,
@@ -39,12 +40,21 @@ import {
   playbackStopSource,
   subscribePlaybackClock,
 } from "../../../audio/playback/playbackEngine";
+import type { AccompanimentSource } from "../../../audio/playback/playbackEngine";
 import { getMeter, type MeterId } from "../../../utils/meter";
 import { adaptStepEvents } from "../../../utils/eventAdapt";
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "../../playerStop";
 import type { PlayerState } from "../../../store/types";
 import type { ChordItem } from "../../../types";
 import { publishStepAt, resetStep } from "../../playbackStep";
+import {
+  applyPadVoicing,
+  padHoldSec,
+  padHoldsAcrossLoop,
+  resolveDroneNotes,
+  shouldArmPad,
+} from "../../../audio/playback/padPlayback";
+import { loopBars } from "../../../store/loop";
 
 /**
  * Where the chord+bass scheduler currently is on the shared grid. Kept as a
@@ -212,6 +222,52 @@ export function adaptBassPattern(pattern: BassPattern, stepsPerBar: number): Bas
 }
 
 /**
+ * Strikes the pad's voicing and schedules its release.
+ *
+ * Deliberately NOT folded into startChordPlan: that function has no access to
+ * `arming.chordIndex`, and threading a flag in would turn the builder of the
+ * chord/bass plan into the arm of three voices with two different lifetimes.
+ *
+ * The pad has no rhythm pattern, so it produces no BarInvariantEvent and needs
+ * no per-step emission — one arm is one note-on/note-off pair. This is why
+ * ChordPlan and emitChordPlanStep are untouched.
+ */
+function armPad(chord: ChordItem, isLoopStart: boolean, time: number): void {
+  const s = useAppStore.getState();
+  if (!shouldArmPad(s.padMode, isLoopStart)) return;
+
+  const stepsPerBar = activeStepsPerBar();
+  const barDur = barDurationSec(s.bpm, stepsPerBar);
+
+  const notes =
+    s.padMode === 'drone'
+      ? resolveDroneNotes(
+          s.padDroneDegree,
+          s.padDroneIntervals,
+          s.padOctave,
+          s.scaleRoot,
+          s.scaleType,
+        )
+      : applyPadVoicing(
+          generateBlockChordNotes(chord.quality, chord.root, s.padOctave),
+          s.padVoicing,
+        );
+  if (notes.length === 0) return;
+
+  const holdSec = padHoldSec(
+    s.padMode,
+    // No `|| 1` guard: padHoldSec already floors at one bar, so a malformed
+    // `bars: 0` cannot schedule a note-off at its own note-on.
+    chord.bars,
+    // Only a drone reads the loop's length, and loopBars walks the whole
+    // progression — pad mode arms on EVERY chord and must not pay for it.
+    padHoldsAcrossLoop(s.padMode) ? loopBars(s.chords) : 0,
+    barDur,
+  );
+  playFullHoldChord(notes, s.padSynthParams, time, holdSec, 'pad');
+}
+
+/**
  * Arms a chord: resolves its notes and pattern events, and fires the one-shot
  * voices of the full-hold patterns (those are single long voices that
  * updateSynthParams can already re-shape live, so they need no per-step work).
@@ -248,6 +304,7 @@ function startChordPlan(chord: ChordItem, startStep: number, time: number): Chor
         s.chordSynthParams,
         time,
         fullHoldDuration(totalBars, barDur, holdScale),
+        "chord",
       );
     } else {
       chordEvents = buildChordEvents(pattern, chordNotes, stepDur, holdScale);
@@ -388,6 +445,10 @@ function useChordPlaybackState() {
   const bassFeel = useAppStore((s) => s.bassFeel);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
+  // padSynthParams is deliberately NOT subscribed here: only `.release` is
+  // ever read, and only at the soft-stop, which reads it live from getState()
+  // exactly as armPad does. Subscribing would re-render this hook on every
+  // frame of a pad knob drag for a value nothing renders.
   const playerState = useAppStore((s) => s.chordsPlayer);
   const hardStop = useAppStore((s) => s.hardStop);
   return { chords, bpm, chordSynthParams, chordOctave, chordFeel, bassSynthParams, bassOctave, bassFeel, scaleRoot, scaleType, playerState, hardStop };
@@ -427,6 +488,7 @@ export function useChordPlayback() {
           chordSynthParams,
           startTime,
           fullHoldDuration(totalBars, barDur, holdScale),
+          "chord",
         );
         return;
       }
@@ -546,8 +608,9 @@ export function useChordPlayback() {
   // the store passed through 'stopped'). Zustand notifies synchronously on
   // every setState, so this sees every transition, in order.
   //
-  // Cut BOTH sources: the Chords player drives the bass line, so silencing
-  // 'chord' alone would leave the bass droning.
+  // Cut ALL THREE sources: the Chords player drives the bass line and the pad
+  // layer, so silencing 'chord' alone would leave the bass and the pad
+  // droning — and a drone holds the longest note in the app.
   useEffect(
     () =>
       useAppStore.subscribe(
@@ -582,8 +645,9 @@ export function useChordPlayback() {
             }
             return;
           }
-          playbackStopSource('chord', HARD_STOP_RELEASE);
-          playbackStopSource('bass', HARD_STOP_RELEASE);
+          for (const source of ACCOMPANIMENT_SOURCES) {
+            playbackStopSource(source, HARD_STOP_RELEASE);
+          }
         },
       ),
     [],
@@ -614,8 +678,19 @@ export function useChordPlayback() {
       // (not a timer) is what makes the cut land on the beat.
       if (action === 'soft-stop') {
         planRef.current = null;
-        playbackStopSource('chord', releasesRef.current.chord, time);
-        playbackStopSource('bass', releasesRef.current.bass, time);
+        // The pad's release is read LIVE, the way armPad reads the rest of
+        // the pad state: this hook does not subscribe to padSynthParams, so a
+        // value mirrored into releasesRef on render would go stale the moment
+        // a pad knob moved without re-rendering the hook. chord/bass stay on
+        // the ref because they are already subscribed for other reads —
+        // an inconsistency kept deliberately rather than widening either.
+        const releases: Record<AccompanimentSource, number> = {
+          ...releasesRef.current,
+          pad: useAppStore.getState().padSynthParams.release,
+        };
+        for (const source of ACCOMPANIMENT_SOURCES) {
+          playbackStopSource(source, releases[source], time);
+        }
         softStopPendingRef.current = true;
         hardStop('chords');
         return;
@@ -632,6 +707,7 @@ export function useChordPlayback() {
         const index = arming.chordIndex % liveChords.length;
         const chord = liveChords[index];
         planRef.current = startChordPlan(chord, step, time);
+        armPad(chord, index === 0, time);
         setPlayingIndex(index);
         setActiveChordId(chord.id);
         // The beat the chord was triggered on is what every beat counter measures

@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { INITIAL_CHORDS, INITIAL_SEQUENCER_TRACKS, INITIAL_SYNTH_PARAMS } from './initialState';
+import {
+  defaultPadState,
+  INITIAL_CHORDS,
+  INITIAL_SEQUENCER_TRACKS,
+  INITIAL_SYNTH_PARAMS,
+} from './initialState';
 import {
   cloneLoop,
   fallbackActiveLoopId,
@@ -51,6 +56,7 @@ function makeLoop(overrides: Partial<Loop> = {}): Loop {
     chordMuted: false,
     bassVolume: 1.0,
     bassMuted: false,
+    ...defaultPadState(),
     masterSequencerVolume: 0.8,
     drumMuted: false,
     ...overrides,

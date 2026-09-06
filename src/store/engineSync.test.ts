@@ -210,6 +210,53 @@ describe('engineSync meter bridge', () => {
     useAppStore.setState({ meterId: '4/4' });
   });
 
+  test('applyEngineSnapshot re-applies the pad bus gain and mute after the AudioContext exists', () => {
+    useAppStore.setState({ padVolume: 0.75, padMuted: true });
+    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
+    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    applyEngineSnapshot();
+    expect(setSourceGain).toHaveBeenCalledWith('pad', 0.75);
+    expect(setSourceMuted).toHaveBeenCalledWith('pad', true);
+    useAppStore.setState({ padVolume: 1, padMuted: false });
+  });
+
+  // The knob path, not the bus path. Without this subscription a filter/detune
+  // drag with the Synth view's Target set to Pad reshapes nothing that is
+  // already sounding — and a drone holds for a whole loop pass, so the knob
+  // looks dead for seconds at a time while chord and bass reshape instantly.
+  test('padSynthParams reaches updateSynthParams, in the snapshot and live', () => {
+    const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockClear();
+    applyEngineSnapshot();
+    expect(updateSynthParams).toHaveBeenCalledWith(
+      useAppStore.getState().padSynthParams,
+      'pad',
+    );
+
+    updateSynthParams.mockClear();
+    startEngineSync();
+    const next = { ...useAppStore.getState().padSynthParams, filterCutoff: 3210 };
+    useAppStore.getState().setPadSynthParams(next);
+    expect(updateSynthParams).toHaveBeenCalledWith(next, 'pad');
+  });
+
+  test('the pad bus is bootstrapped and then tracks the store', () => {
+    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
+    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    startEngineSync();
+
+    // fireImmediately: the current value is pushed at subscribe time.
+    expect(setSourceGain).toHaveBeenCalledWith('pad', useAppStore.getState().padVolume);
+    expect(setSourceMuted).toHaveBeenCalledWith('pad', useAppStore.getState().padMuted);
+
+    useAppStore.getState().setPadVolume(0.42);
+    expect(setSourceGain).toHaveBeenLastCalledWith('pad', 0.42);
+
+    const before = useAppStore.getState().padMuted;
+    useAppStore.getState().togglePadMuted();
+    expect(setSourceMuted).toHaveBeenLastCalledWith('pad', !before);
+    useAppStore.getState().togglePadMuted();
+  });
+
   test('a reverbDecay drag does not re-run updateEffects', () => {
     const updateEffects = spyOn(audioEngine, 'updateEffects').mockImplementation(() => {});
     const setReverbDecay = spyOn(audioEngine, 'setReverbDecay').mockImplementation(() => {});

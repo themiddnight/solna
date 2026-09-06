@@ -355,5 +355,12 @@ describe('SortableLoopCard', () => {
     expect(html).not.toContain('dark:');
     expect(html).not.toContain('rgba(');
   });
+
+  test('a loop card renders a pad mix channel', () => {
+    const html = renderToString(<SortableLoopCard {...baseProps} />);
+    expect(html).toContain('id="btn-mute-pad-loop-default-1"');
+    expect(html).toContain('id="slider-pad-loop-default-1"');
+    expect(html).toContain('Pad');
+  });
 });
 

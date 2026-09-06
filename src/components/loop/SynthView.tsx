@@ -44,7 +44,7 @@ import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { ViewHeader } from "../ui/ViewHeader";
 import { PanelCard } from "../ui/PanelCard";
 import { IconButton } from "../ui/IconButton";
-import { COUNT_BADGE } from "../ui/fieldClasses";
+import { COUNT_BADGE, JOIN_LANE } from "../ui/fieldClasses";
 
 // Re-exported for scripts/check-key-bindings.ts, which asserts that the synth
 // key bindings never collide with the drum-pad shortcuts. The table itself
@@ -55,17 +55,6 @@ import {
   SYNTH_TARGET_STYLES,
 } from "../../utils/synthControl";
 import type { SynthControlTarget } from "../../utils/synthControl";
-
-// The Target selector's border tint, keyed off the channel currently being
-// edited. Extracted from SynthView's JSX to keep the component body under the
-// ESLint complexity cap.
-function resolveTargetBorderClass(controlTarget: SynthControlTarget): string {
-  return controlTarget === "chord"
-    ? "border-module-chord"
-    : controlTarget === "bass"
-      ? "border-module-bass"
-      : "border-primary";
-}
 
 export const SynthView: React.FC = React.memo(() => {
   // Synth slice state + setters (named after the old props so the rest of the
@@ -88,36 +77,25 @@ export const SynthView: React.FC = React.memo(() => {
   const setChordVolume = useAppStore((s) => s.setChordVolume);
   const bassVolume = useAppStore((s) => s.bassVolume);
   const setBassVolume = useAppStore((s) => s.setBassVolume);
+  const padVolume = useAppStore((s) => s.padVolume);
+  const setPadVolume = useAppStore((s) => s.setPadVolume);
+  const padSynthParams = useAppStore((s) => s.padSynthParams);
+  const setPadSynthParams = useAppStore((s) => s.setPadSynthParams);
 
-  const activeTargetVolumeConfig = useMemo(() => {
+  // Only the value and its setter: everything else the fader wears
+  // (id prefix, accent, class list) is keyed off `controlTarget` at the call
+  // site, from SYNTH_TARGET_STYLES.
+  const activeTargetVolume = useMemo(() => {
     switch (controlTarget) {
       case "chord":
-        return {
-          idPrefix: "chord",
-          volume: chordVolume,
-          onVolumeChange: setChordVolume,
-          accentClass: "text-module-chord" as const,
-          sliderClassName:
-            "range range-xs text-module-chord [--range-thumb:var(--color-module-chord-content)]",
-        };
+        return { volume: chordVolume, onVolumeChange: setChordVolume };
       case "bass":
-        return {
-          idPrefix: "bass",
-          volume: bassVolume,
-          onVolumeChange: setBassVolume,
-          accentClass: "text-module-bass" as const,
-          sliderClassName:
-            "range range-xs text-module-bass [--range-thumb:var(--color-module-bass-content)]",
-        };
+        return { volume: bassVolume, onVolumeChange: setBassVolume };
+      case "pad":
+        return { volume: padVolume, onVolumeChange: setPadVolume };
       case "synth":
       default:
-        return {
-          idPrefix: "synth",
-          volume: synthVolume,
-          onVolumeChange: setSynthVolume,
-          accentClass: "text-primary" as const,
-          sliderClassName: "range range-xs range-primary",
-        };
+        return { volume: synthVolume, onVolumeChange: setSynthVolume };
     }
   }, [
     controlTarget,
@@ -127,6 +105,8 @@ export const SynthView: React.FC = React.memo(() => {
     setChordVolume,
     bassVolume,
     setBassVolume,
+    padVolume,
+    setPadVolume,
   ]);
 
   // Route the control panel (knobs, preset selects) to the selected
@@ -135,6 +115,7 @@ export const SynthView: React.FC = React.memo(() => {
     synth: { params: synthParams, setParams: onChangeSynthParams },
     chord: { params: chordSynthParams, setParams: onChangeChordSynthParams },
     bass: { params: bassSynthParams, setParams: onChangeBassSynthParams },
+    pad: { params: padSynthParams, setParams: setPadSynthParams },
   };
   const channel = resolveSynthControlChannel(controlTarget, channels);
   const params = channel.params;
@@ -270,7 +251,7 @@ export const SynthView: React.FC = React.memo(() => {
         actions={
           <>
             {/* Mode Switcher: Simple vs Pro */}
-            <div className="join flex items-center bg-base-200 border border-base-300 rounded-box px-0.5 h-8">
+            <div className={JOIN_LANE}>
               <button
                 id="btn-mode-simple"
                 onClick={() => handleToggleSynthViewMode("simple")}
@@ -360,7 +341,7 @@ export const SynthView: React.FC = React.memo(() => {
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           {/* Control Destination Selector */}
           <div
-            className={`join flex items-center gap-1 bg-base-200 border rounded-box p-1 shrink-0 ${resolveTargetBorderClass(controlTarget)}`}
+            className={`join flex items-center gap-1 bg-base-200 border rounded-box p-1 shrink-0 ${SYNTH_TARGET_STYLES[controlTarget].border}`}
           >
             <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold pl-1 pr-1 hidden sm:inline">
               Target:
@@ -385,12 +366,12 @@ export const SynthView: React.FC = React.memo(() => {
           {/* Target Volume Slider, dynamic to active target with matching tint */}
           <div className="flex-1 min-w-44 max-w-xs">
             <ChannelStrip
-              idPrefix={activeTargetVolumeConfig.idPrefix}
-              volume={activeTargetVolumeConfig.volume}
+              idPrefix={controlTarget}
+              volume={activeTargetVolume.volume}
               max={1.5}
-              accentClass={activeTargetVolumeConfig.accentClass}
-              sliderClassName={activeTargetVolumeConfig.sliderClassName}
-              onVolumeChange={activeTargetVolumeConfig.onVolumeChange}
+              accentClass={SYNTH_TARGET_STYLES[controlTarget].accent}
+              sliderClassName={SYNTH_TARGET_STYLES[controlTarget].slider}
+              onVolumeChange={activeTargetVolume.onVolumeChange}
             />
           </div>
 

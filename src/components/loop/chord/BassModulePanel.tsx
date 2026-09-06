@@ -15,11 +15,13 @@ import { getMeter } from "../../../utils/meter";
 import { stepCells } from "../../sequencerGrid";
 import { ChannelStrip } from "../../ui/ChannelStrip";
 import { FIELD_LABEL, FIELD_SELECT, SECTION_HEADER } from "../../ui/fieldClasses";
+import { SYNTH_TARGET_STYLES } from "../../../utils/synthControl";
 import { Slider } from "../../ui/Slider";
 import { PlayingStepRow, STEP_ROW_CLASS } from "../../ui/StepRow";
 import { PlayingStepHeader } from "../../ui/StepHeader";
 import { IconButton } from "../../ui/IconButton";
 import { AdjustSynthButton } from "./AdjustSynthButton";
+import { PresetSelect } from "./PresetSelect";
 import { bassStepLabel, nextBassStepChoice } from "./bassStepChoice";
 
 export interface BassModulePanelProps {
@@ -52,6 +54,14 @@ export const BassModulePanel: React.FC<BassModulePanelProps> = ({
   const setBassVolume = useAppStore((s) => s.setBassVolume);
 
   const chordCells = useMemo(() => stepCells(getMeter(meterId)), [meterId]);
+  const allPresets = useMemo(
+    () => getAllSynthPresets(customPresets),
+    [customPresets],
+  );
+  const presetGroups = useMemo(
+    () => getPresetsGroupedByCategory(allPresets),
+    [allPresets],
+  );
 
   return (
       <div className="mt-4 card bg-panel tint-bass border border-module-bass/30 p-4">
@@ -68,44 +78,23 @@ export const BassModulePanel: React.FC<BassModulePanelProps> = ({
           <AdjustSynthButton target="bass" className="text-module-bass" />
         </div>
         <div className="flex flex-row flex-wrap items-end gap-3">
-          <div>
-            <label className={FIELD_LABEL} htmlFor="select-bass-sound-preset">Bass Preset</label>
-            <select
-              id="select-bass-sound-preset"
-              value={bassSynthParams.preset ?? ""}
-              onChange={(e) => {
-                const preset = findPresetByName(
-                  e.target.value,
-                  getAllSynthPresets(customPresets),
-                );
-                if (!preset) return;
-                setBassSynthParams({
-                  ...bassSynthParams,
-                  ...preset.params,
-                  preset: preset.name,
-                });
-              }}
-              className={FIELD_SELECT}
-              title="Bass sound preset — any factory, bass, or saved preset, synced with the synth page"
-            >
-              <option value="">Bass Preset…</option>
-              {getPresetsGroupedByCategory(
-                getAllSynthPresets(customPresets),
-              ).map((group) => (
-                <optgroup key={group.category} label={group.label} className="font-bold">
-                  {group.presets.map((p) => (
-                    <option
-                      key={p.id}
-                      value={p.name}
-                      className={p.isFactory ? "" : "text-secondary"}
-                    >
-                      {!p.isFactory ? `★ ${p.name}` : p.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </div>
+          <PresetSelect
+            id="select-bass-sound-preset"
+            label="Bass Preset"
+            title="Bass sound preset — any factory, bass, or saved preset, synced with the synth page"
+            placeholder="Bass Preset…"
+            groups={presetGroups}
+            value={bassSynthParams.preset ?? ""}
+            onSelect={(name) => {
+              const preset = findPresetByName(name, allPresets);
+              if (!preset) return;
+              setBassSynthParams({
+                ...bassSynthParams,
+                ...preset.params,
+                preset: preset.name,
+              });
+            }}
+          />
 
           <div>
             <label className={FIELD_LABEL} htmlFor="select-bass-octave">Bass Octave</label>
@@ -199,10 +188,10 @@ export const BassModulePanel: React.FC<BassModulePanelProps> = ({
             label="Bass Level"
             volume={bassVolume}
             max={1.5}
-            accentClass="text-module-bass"
+            accentClass={SYNTH_TARGET_STYLES.bass.accent}
             onVolumeChange={setBassVolume}
             showReadout={false}
-            sliderClassName="range range-xs text-module-bass [--range-thumb:var(--color-module-bass-content)]"
+            sliderClassName={SYNTH_TARGET_STYLES.bass.slider}
           />
         </div>
 

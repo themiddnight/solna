@@ -58,6 +58,59 @@ describe('ChordView renders byte-identically with a memoized chordIds array', ()
   });
 });
 
+describe('ChordView accompaniment layout', () => {
+  const html = renderToString(<ChordView />);
+
+  test('the progression card comes first, then one card per layer', () => {
+    const at = (needle: string) => {
+      const i = html.indexOf(needle);
+      expect(i).toBeGreaterThan(-1);
+      return i;
+    };
+    // One source, three voices: the progression every layer reads, then chord,
+    // bass and pad voicing it — the same order the Arrange mixer strip uses.
+    const progression = at('Active Chord Progression Loop');
+    const chord = at('card bg-panel tint-chord');
+    const bass = at('card bg-panel tint-bass');
+    const pad = at('card bg-panel tint-pad');
+    expect(progression).toBeLessThan(chord);
+    expect(chord).toBeLessThan(bass);
+    expect(bass).toBeLessThan(pad);
+  });
+
+  test('the progression card is untinted, and the module cards are not', () => {
+    // Painting the progression `tint-chord` would claim it for one layer when
+    // bass and pad read it too. It carries no module colour of its own; the
+    // module tints start below it.
+    const progression = html.indexOf('Active Chord Progression Loop');
+    const shell = html.lastIndexOf('card bg-panel border border-base-300', progression);
+    expect(shell).toBeGreaterThan(-1);
+    // No module tint opens between that shell and the header text inside it.
+    expect(html.slice(shell, progression)).not.toContain('tint-');
+  });
+
+  test('the re-harmonize controls sit with the progression, not the chord layer', () => {
+    // Both call setChords. Their `Auto-Reharmonized to …` badge already lived
+    // in this header, so the button and its own read-out were in two
+    // different cards until they were brought together.
+    const progression = html.indexOf('Active Chord Progression Loop');
+    const chordCard = html.indexOf('card bg-panel tint-chord');
+    for (const id of ['btn-reharmonize-chord-progression', 'btn-toggle-auto-reharmonize']) {
+      const at = html.indexOf(id);
+      expect(at).toBeGreaterThan(progression);
+      expect(at).toBeLessThan(chordCard);
+    }
+  });
+
+  test('the auto-reharmonize label reflects the live flag', () => {
+    // React's static-server-renderer inserts a `<!-- -->` boundary comment
+    // between two sibling children that both resolve to plain strings (the
+    // literal "Auto-Reharmonize: " and the ternary result) so hydration can
+    // tell them apart.
+    expect(html).toContain('Auto-Reharmonize: <!-- -->');
+  });
+});
+
 describe('ChordView theming', () => {
   const html = renderToString(<ChordView />);
 

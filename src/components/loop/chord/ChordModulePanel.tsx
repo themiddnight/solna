@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Sparkles, Volume2 } from "lucide-react";
+import { Volume2 } from "lucide-react";
 import { useAppStore } from "../../../store/store";
 import { RHYTHM_STYLE_GROUPS } from "../../../audio/rhythmPatterns";
 import {
@@ -11,38 +11,39 @@ import { patternMeterTitle, patternOptionLabel } from "../../meterSelect";
 import { getMeter } from "../../../utils/meter";
 import { stepCells } from "../../sequencerGrid";
 import { ChannelStrip } from "../../ui/ChannelStrip";
-import { FIELD_LABEL, FIELD_SELECT } from "../../ui/fieldClasses";
+import { FIELD_LABEL, FIELD_SELECT, SECTION_HEADER } from "../../ui/fieldClasses";
+import { SYNTH_TARGET_STYLES } from "../../../utils/synthControl";
 import { Slider } from "../../ui/Slider";
 import { PlayingStepRow, STEP_ROW_CLASS } from "../../ui/StepRow";
 import { PlayingStepHeader } from "../../ui/StepHeader";
 import { IconButton } from "../../ui/IconButton";
+import { AdjustSynthButton } from "./AdjustSynthButton";
+import { PresetSelect } from "./PresetSelect";
 
 export interface ChordModulePanelProps {
   onPatternPreviewDown: (e: React.MouseEvent | React.TouchEvent) => void;
   onPatternPreviewUp: (e: React.MouseEvent | React.TouchEvent) => void;
-  autoReharmonize: boolean;
-  onToggleAutoReharmonize: () => void;
-  onReharmonize: () => void;
   /** Owned by ChordView, not this panel; passed through only to gate the PlayingStepRow ring. */
   isPlaying: boolean;
 }
 
 /**
- * The Chord Module's control row. Moved verbatim from ChordView.tsx.
+ * The chord layer's own card — sibling to BassModulePanel and PadModulePanel,
+ * and holding the same kind of controls they do: sound, register, comping
+ * rhythm, feel, level.
  *
- * Reads its own slice of the store; the four things it cannot derive — the two
- * pattern-preview handlers (which own ChordView's preview refs and the resolved
- * rhythm pattern), the auto-reharmonize toggle state and the Re-harmonize
- * action (which own ChordView's local toast and indicator state) — come in as
- * props. Those handlers are already stable useCallbacks / render-scope
- * functions in ChordView, exactly as before.
+ * What it deliberately does NOT hold is Re-harmonize / Auto-Reharmonize. Those
+ * two call `setChords` — they rewrite the progression every layer reads, not
+ * this layer's voice of it — so they live in ChordView's progression card,
+ * beside the `Auto-Reharmonized to …` badge that reports their effect.
+ *
+ * Reads its own slice of the store; the two pattern-preview handlers cannot be
+ * derived here (they own ChordView's preview refs and the resolved rhythm
+ * pattern) and come in as props, already stable useCallbacks in ChordView.
  */
 export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
   onPatternPreviewDown,
   onPatternPreviewUp,
-  autoReharmonize,
-  onToggleAutoReharmonize,
-  onReharmonize,
   isPlaying,
 }) => {
   const meterId = useAppStore((s) => s.meterId);
@@ -63,49 +64,48 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
   const customPresets = useAppStore((s) => s.customSynthPresets);
 
   const chordCells = useMemo(() => stepCells(getMeter(meterId)), [meterId]);
+  const allPresets = useMemo(
+    () => getAllSynthPresets(customPresets),
+    [customPresets],
+  );
+  const presetGroups = useMemo(
+    () => getPresetsGroupedByCategory(allPresets),
+    [allPresets],
+  );
 
   return (
-      <>
+      <div className="mt-4 card bg-panel tint-chord border border-module-chord/30 p-4">
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div>
+            <h3 className={SECTION_HEADER}>
+              Chord Module
+            </h3>
+            <p className="text-[10px] text-base-content/60">
+              How the chord layer voices the progression above: its sound,
+              register and comping rhythm.
+            </p>
+          </div>
+          <AdjustSynthButton target="chord" className="text-module-chord" />
+        </div>
         <div className="flex flex-row flex-wrap items-end gap-3">
           {/* Chord Sound Preset Select */}
-          <div>
-            <label className={FIELD_LABEL} htmlFor="select-chord-sound-preset">Chord Preset</label>
-            <select
-              id="select-chord-sound-preset"
-              value={chordSynthParams.preset ?? ""}
-              onChange={(e) => {
-                const preset = findPresetByName(
-                  e.target.value,
-                  getAllSynthPresets(customPresets),
-                );
-                if (!preset) return;
-                setChordSynthParams({
-                  ...chordSynthParams,
-                  ...preset.params,
-                  preset: preset.name,
-                });
-              }}
-              className={FIELD_SELECT}
-              title="Chord sound preset — factory and saved presets, synced with the synth page"
-            >
-              <option value="">Chord Preset…</option>
-              {getPresetsGroupedByCategory(
-                getAllSynthPresets(customPresets),
-              ).map((group) => (
-                <optgroup key={group.category} label={group.label} className="font-bold">
-                  {group.presets.map((p) => (
-                    <option
-                      key={p.id}
-                      value={p.name}
-                      className={p.isFactory ? "" : "text-secondary"}
-                    >
-                      {!p.isFactory ? `★ ${p.name}` : p.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </div>
+          <PresetSelect
+            id="select-chord-sound-preset"
+            label="Chord Preset"
+            title="Chord sound preset — factory and saved presets, synced with the synth page"
+            placeholder="Chord Preset…"
+            groups={presetGroups}
+            value={chordSynthParams.preset ?? ""}
+            onSelect={(name) => {
+              const preset = findPresetByName(name, allPresets);
+              if (!preset) return;
+              setChordSynthParams({
+                ...chordSynthParams,
+                ...preset.params,
+                preset: preset.name,
+              });
+            }}
+          />
 
           {/* Chord Octave Select */}
           <div>
@@ -202,35 +202,10 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
             label="Chord Level"
             volume={chordVolume}
             max={1.5}
-            accentClass="text-module-chord"
-            sliderClassName="range range-xs text-module-chord [--range-thumb:var(--color-module-chord-content)]"
+            accentClass={SYNTH_TARGET_STYLES.chord.accent}
+            sliderClassName={SYNTH_TARGET_STYLES.chord.slider}
             onVolumeChange={setChordVolume}
           />
-          {/* Option B Re-harmonize Button */}
-          <button
-            id="btn-reharmonize-chord-progression"
-            onClick={onReharmonize}
-            className="btn btn-sm btn-secondary btn-outline gap-1.5"
-            title="Option B: Diatonically snap current chord progression to active key and scale"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Re-harmonize</span>
-          </button>
-
-          {/* Auto-Reharmonize Toggle */}
-          <button
-            id="btn-toggle-auto-reharmonize"
-            onClick={onToggleAutoReharmonize}
-            className={`btn btn-sm gap-1.5 text-xs font-semibold btn-secondary ${
-              autoReharmonize ? "" : "btn-soft"
-            }`}
-            title="Toggle automatic re-harmonization when loading presets or changing scales"
-          >
-            <Sparkles
-              className={`w-3.5 h-3.5 ${autoReharmonize ? "text-base" : "text-secondary"}`}
-            />
-            <span>Auto-Reharmonize: {autoReharmonize ? "ON" : "OFF"}</span>
-          </button>
         </div>
 
         {/* Full-width step editor. It sits BELOW the field row rather than
@@ -269,6 +244,6 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
             </div>
           </div>
         )}
-      </>
+      </div>
   );
 };

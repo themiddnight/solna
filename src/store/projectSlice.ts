@@ -1,5 +1,6 @@
 import type { StoreApi } from 'zustand';
 import { audioEngine } from '../audio/engine';
+import { ACCOMPANIMENT_SOURCES } from '../audio/playback/playbackEngine';
 import type { AppStore, ProjectIdentityState } from './types';
 import {
   PROJECT_FORMAT_VERSION,
@@ -68,8 +69,9 @@ export const INSTALL_RELEASE = 0.02;
 export function createProjectSlice(set: Set, get: Get, projectStore: ProjectStore, now: () => number = Date.now): ProjectSlice {
   const install = (content: ProjectContent, identity: { id: string | null; name: string | null }): void => {
     get().hardStopAll();
-    audioEngine.stopSource('chord', INSTALL_RELEASE);
-    audioEngine.stopSource('bass', INSTALL_RELEASE);
+    for (const source of ACCOMPANIMENT_SOURCES) {
+      audioEngine.stopSource(source, INSTALL_RELEASE);
+    }
     const saved = identity.id !== null;
     set({
       ...applyProjectContent(content),

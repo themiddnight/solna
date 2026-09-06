@@ -3,7 +3,12 @@ import { BASS_PATTERNS, type BassStepChoice } from '../audio/bassPatterns';
 import { FACTORY_BASS_PRESETS } from '../audio/bassPresets';
 import { deriveChordNotes } from '../utils/musicTheory';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
-import { INITIAL_CHORDS, INITIAL_SEQUENCER_TRACKS, INITIAL_SYNTH_PARAMS } from './initialState';
+import {
+  defaultPadState,
+  INITIAL_CHORDS,
+  INITIAL_SEQUENCER_TRACKS,
+  INITIAL_SYNTH_PARAMS,
+} from './initialState';
 import { cloneLoop, fallbackActiveLoopId, newLoopId, nextLoopName } from './loop';
 import type { AppStore, Loop, LoopSlice } from './types';
 import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
@@ -36,6 +41,7 @@ export function createDefaultLoop(): Loop {
     customBassPattern: new Array<BassStepChoice>(MAX_STEPS_PER_BAR).fill('rest'),
     bassFeel: 0.5,
     bassOctave: 2,
+    ...defaultPadState(),
     leadMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
     leadLoopLength: 1,
     leadStepResolution: DEFAULT_LEAD_STEP_RESOLUTION,

@@ -8,6 +8,9 @@ import type {
   FilterType,
   KeyboardMode,
   InputPanelMode,
+  PadInterval,
+  PadMode,
+  PadVoicing,
 } from '../types';
 import type { SynthControlTarget } from '../utils/synthControl';
 import type { MeterId } from '../utils/meter';
@@ -123,6 +126,35 @@ export interface BassSlice {
   setBassOctave: (octave: number) => void;
   setBassVolume: (volume: number) => void;
   toggleBassMuted: () => void;
+}
+
+/**
+ * The pad/drone layer's per-loop state, declared once: the live slice (below)
+ * and the stored `Loop` are the same eight fields, and `defaultPadState()` in
+ * initialState.ts builds exactly them. Listing them a third time is how one
+ * copy quietly drifts from the others.
+ */
+export interface PadState {
+  padSynthParams: SynthParams;
+  padMode: PadMode;
+  padOctave: number;
+  padVoicing: PadVoicing;
+  padDroneDegree: number;
+  padDroneIntervals: PadInterval[];
+  padVolume: number;
+  padMuted: boolean;
+}
+
+export interface PadSlice extends PadState {
+  setPadSynthParams: (params: SynthParams) => void;
+  setPadMode: (mode: PadMode) => void;
+  setPadOctave: (octave: number) => void;
+  setPadVoicing: (voicing: PadVoicing) => void;
+  setPadDroneDegree: (degree: number) => void;
+  setPadDroneIntervals: (intervals: readonly PadInterval[]) => void;
+  togglePadDroneInterval: (interval: PadInterval) => void;
+  setPadVolume: (volume: number) => void;
+  togglePadMuted: () => void;
 }
 
 export type LeadMelodyView = 'scale-locked' | 'chromatic';
@@ -305,7 +337,7 @@ export interface PresetsSlice {
 }
 
 /** A full per-loop musical snapshot: identity + every per-loop field. */
-export interface Loop {
+export interface Loop extends PadState {
   id: string;
   name: string; // auto-named "Loop N"; ids are the stable handle
   repeatCount?: number; // default 1, number of times this loop plays before advancing in song mode
@@ -349,7 +381,7 @@ export interface Loop {
 /** The per-loop fields, without identity — what loadLoop writes to the flat slices. */
 export type LoopStatePatch = Omit<Loop, 'id' | 'name' | 'repeatCount'>;
 
-/** The per-loop mixer: the 8 volume/mute fields edited on each Arrange card. */
+/** The per-loop mixer: the 10 volume/mute fields edited on each Arrange card. */
 export type LoopMixPatch = Pick<
   Loop,
   | 'synthVolume'
@@ -358,6 +390,8 @@ export type LoopMixPatch = Pick<
   | 'chordMuted'
   | 'bassVolume'
   | 'bassMuted'
+  | 'padVolume'
+  | 'padMuted'
   | 'masterSequencerVolume'
   | 'drumMuted'
 >;
@@ -375,7 +409,7 @@ export interface LoopSlice {
   setLoopName: (id: string, name: string) => void;
   setLoopRepeatCount: (id: string, repeatCount: number) => void;
   setActiveLoop: (id: string) => void;
-  /** Edit a loop's 8 mixer fields in place; mirrors to the flat slices when active. */
+  /** Edit a loop's 10 mixer fields in place; mirrors to the flat slices when active. */
   setLoopMix: (id: string, patch: Partial<LoopMixPatch>) => void;
 }
 
@@ -391,6 +425,7 @@ export interface AppStore
     SynthSlice,
     ChordsSlice,
     BassSlice,
+    PadSlice,
     LeadSlice,
     SequencerSlice,
     EffectsSlice,

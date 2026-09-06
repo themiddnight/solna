@@ -71,9 +71,9 @@ import { ViewHeader } from "../ui/ViewHeader";
 import { ModuleHeader } from "../ui/ModuleHeader";
 import { COUNT_BADGE, HEADER_BADGE } from '../ui/fieldClasses';
 import { SortableChordCard } from "./chord/SortableChordCard";
-import { AdjustSynthButton } from "./chord/AdjustSynthButton";
 import { ChordModulePanel } from "./chord/ChordModulePanel";
 import { BassModulePanel } from "./chord/BassModulePanel";
+import { PadModulePanel } from "./chord/PadModulePanel";
 import { beatsPerBarFor, resolveBeatCounter } from "../../utils/playhead";
 
 import { CHORD_PROGRESSIONS } from "../../audio/data/chordProgressions";
@@ -156,6 +156,8 @@ export const ChordView: React.FC = React.memo(() => {
   const toggleChordMuted = useAppStore((s) => s.toggleChordMuted);
   const bassMuted = useAppStore((s) => s.bassMuted);
   const toggleBassMuted = useAppStore((s) => s.toggleBassMuted);
+  const padMuted = useAppStore((s) => s.padMuted);
+  const togglePadMuted = useAppStore((s) => s.togglePadMuted);
   const bpm = useAppStore((s) => s.bpm);
   const { playChordWithRhythm, playBassWithPattern, playingIndex, activeChordId, setActiveChordId, isPlaying } = useChordPlayback();
 
@@ -575,6 +577,13 @@ export const ChordView: React.FC = React.memo(() => {
               name="Bass"
               tone="module-bass"
             />
+            <PowerToggle
+              id="btn-mute-pad"
+              on={!padMuted}
+              onToggle={togglePadMuted}
+              name="Pad"
+              tone="module-pad"
+            />
             <div className="divider divider-horizontal mx-0" />
 
             {/* Quick Save Current Progression */}
@@ -628,8 +637,11 @@ export const ChordView: React.FC = React.memo(() => {
         onSubmit={handleQuickSaveSubmit}
       />
 
-      {/* Active Progression Blocks & Playable Chord Pads */}
-      <div className="card bg-panel tint-chord border border-module-chord/30 p-4 shadow-xl space-y-3">
+      {/* Active Progression Blocks & Playable Chord Pads. Deliberately NOT
+          tinted: chord, bass and pad all read this progression, so painting it
+          `tint-chord` would read as "the chord layer's" when it belongs to all
+          three. The module tints resume on the three cards below. */}
+      <div className="card bg-panel border border-base-300 p-4 shadow-xl space-y-3">
         <ModuleHeader
           className="flex-wrap gap-2"
           right={
@@ -642,7 +654,50 @@ export const ChordView: React.FC = React.memo(() => {
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Chord</span>
               </button>
-              <AdjustSynthButton target="chord" className="text-module-chord" />
+
+              {/* Option B Re-harmonize Button */}
+              <button
+                id="btn-reharmonize-chord-progression"
+                onClick={() => {
+                  const updated = snapProgressionToScale(chords, scaleRoot, scaleType, chordOctave);
+                  setChords(updated);
+                  setIsAutoReharmonizedIndicator(true);
+                  setSaveToast(`Re-harmonized progression to ${scaleRoot} ${scaleType} (Option B)!`);
+                  setTimeout(() => setSaveToast(null), 3000);
+                }}
+                className="btn btn-xs btn-secondary btn-outline gap-1.5"
+                title="Option B: Diatonically snap current chord progression to active key and scale"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Re-harmonize</span>
+              </button>
+
+              {/* Auto-Reharmonize Toggle */}
+              <button
+                id="btn-toggle-auto-reharmonize"
+                onClick={() => {
+                  // Turning this ON must not rewrite the current chords: a snap
+                  // here would reproduce the exact scramble this feature exists
+                  // to remove (e.g. key change made while OFF, then toggled back
+                  // ON would snap chords still sitting in the old key). Flipping
+                  // the flag only starts applying `applyKeyScaleChange` to
+                  // *future* key/scale changes; it is not itself a harmonize
+                  // action. The explicit "Re-harmonize" button is the
+                  // deliberate, user-requested snap — leave that one alone.
+                  const nextVal = !autoReharmonize;
+                  setAutoReharmonize(nextVal);
+                  if (!nextVal) setIsAutoReharmonizedIndicator(false);
+                }}
+                className={`btn btn-xs gap-1.5 font-semibold btn-secondary ${
+                  autoReharmonize ? "" : "btn-soft"
+                }`}
+                title="Toggle automatic re-harmonization when loading presets or changing scales"
+              >
+                <Sparkles
+                  className={`w-3.5 h-3.5 ${autoReharmonize ? "text-base" : "text-secondary"}`}
+                />
+                <span>Auto-Reharmonize: {autoReharmonize ? "ON" : "OFF"}</span>
+              </button>
             </div>
           }
         >
@@ -666,33 +721,6 @@ export const ChordView: React.FC = React.memo(() => {
             )}
           </div>
         </ModuleHeader>
-
-        <ChordModulePanel
-          onPatternPreviewDown={handleChordPatternPreviewMouseDown}
-          onPatternPreviewUp={handleChordPatternPreviewMouseUp}
-          autoReharmonize={autoReharmonize}
-          isPlaying={isPlaying}
-          onToggleAutoReharmonize={() => {
-            // Turning this ON must not rewrite the current chords: a snap here
-            // would reproduce the exact scramble this feature exists to
-            // remove (e.g. key change made while OFF, then toggled back ON
-            // would snap chords still sitting in the old key). Flipping the
-            // flag only starts applying `applyKeyScaleChange` to *future*
-            // key/scale changes; it is not itself a harmonize action. The
-            // explicit "Re-harmonize" button is the deliberate,
-            // user-requested snap — leave that one alone.
-            const nextVal = !autoReharmonize;
-            setAutoReharmonize(nextVal);
-            if (!nextVal) setIsAutoReharmonizedIndicator(false);
-          }}
-          onReharmonize={() => {
-            const updated = snapProgressionToScale(chords, scaleRoot, scaleType, chordOctave);
-            setChords(updated);
-            setIsAutoReharmonizedIndicator(true);
-            setSaveToast(`Re-harmonized progression to ${scaleRoot} ${scaleType} (Option B)!`);
-            setTimeout(() => setSaveToast(null), 3000);
-          }}
-        />
 
         {/* In-Scale & Borrowed Quick Add Palette */}
         <div className="bg-base-100 border border-base-300 rounded-box p-3 space-y-3">
@@ -894,12 +922,22 @@ export const ChordView: React.FC = React.memo(() => {
         </DndContext>
       </div>
 
+      {/* Chord Module Panel */}
+      <ChordModulePanel
+        onPatternPreviewDown={handleChordPatternPreviewMouseDown}
+        onPatternPreviewUp={handleChordPatternPreviewMouseUp}
+        isPlaying={isPlaying}
+      />
+
       {/* Bass Module Panel */}
       <BassModulePanel
         onPatternPreviewDown={handleBassPatternPreviewMouseDown}
         onPatternPreviewUp={handleBassPatternPreviewMouseUp}
         isPlaying={isPlaying}
       />
+
+      {/* Pad Module Panel */}
+      <PadModulePanel />
 
       {/* Full Chord Preset Library Sidebar Drawer */}
       <Suspense

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { canonicalContent, defaultContentFingerprint, fingerprintContent, isContentDirty } from './projectFingerprint';
 import { factoryProjectContent } from './projectFormat';
 import { createDefaultLoop } from './loopSlice';
+import { useAppStore } from './store';
 
 /** Rebuilds an object with its keys in reverse insertion order, recursively. */
 function reversedKeys<T>(value: T): T {
@@ -45,6 +46,32 @@ describe('fingerprintContent', () => {
 
   test('is a short token, not a copy of the content', () => {
     expect(fingerprintContent(factoryProjectContent()).length).toBeLessThan(32);
+  });
+
+  // padDroneIntervals is normalised (sorted) on write by
+  // togglePadDroneInterval, not by canonicalContent/fingerprintContent, which
+  // stringify array elements in place with no sort of their own. Assert on
+  // the fingerprint itself, since the fingerprint is what an unsaved-changes
+  // badge is keyed on: the SAME final interval set, reached by toggling in a
+  // different click order, must fingerprint identically.
+  test('interval order does not dirty the session', () => {
+    useAppStore.setState({ padDroneIntervals: [] });
+    useAppStore.getState().togglePadDroneInterval(5);
+    useAppStore.getState().togglePadDroneInterval(1);
+    useAppStore.getState().togglePadDroneInterval(8);
+    const forward = useAppStore.getState().padDroneIntervals;
+
+    useAppStore.setState({ padDroneIntervals: [] });
+    useAppStore.getState().togglePadDroneInterval(8);
+    useAppStore.getState().togglePadDroneInterval(1);
+    useAppStore.getState().togglePadDroneInterval(5);
+    const backward = useAppStore.getState().padDroneIntervals;
+
+    expect(forward).toEqual(backward); // both end up [1, 5, 8] — the sort worked
+    const base = factoryProjectContent();
+    const contentForward = { ...base, loops: [{ ...createDefaultLoop(), padDroneIntervals: forward }] };
+    const contentBackward = { ...base, loops: [{ ...createDefaultLoop(), padDroneIntervals: backward }] };
+    expect(fingerprintContent(contentForward)).toBe(fingerprintContent(contentBackward));
   });
 });
 

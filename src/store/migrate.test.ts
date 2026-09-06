@@ -16,6 +16,8 @@ import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 import { LOOP_FLAT_KEYS } from './loop';
 import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
 import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
+import { defaultPadState } from './initialState';
+import { migratePadLayer } from './migrate';
 
 describe('migrateProjectTitleToVibeId', () => {
   test('drops the legacy projectTitle and seeds a null selectedVibeId', () => {
@@ -415,5 +417,52 @@ describe('migrateLeadStepResolution', () => {
     };
     expect(out.loops[0].leadMelodySteps[4]).toEqual([{ note: 'C4', len: 2 }]);
     expect(out.loops[0].leadStepResolution).toBe('1/16');
+  });
+});
+
+describe('migratePadLayer', () => {
+  const PAD_KEYS = Object.keys(defaultPadState());
+
+  // THE FIRST OF THE THREE TESTS THAT KEEP THE DEFAULTS APART.
+  // A project written before the pad existed must reopen sounding the way it
+  // sounded when it was closed. defaultPadState() ships padMuted:false for new
+  // projects; the migration overrides it to true. If a later refactor collapses
+  // the two, this test is what goes red.
+  test('a pre-pad loop is backfilled with the pad muted', () => {
+    const out = migratePadLayer({ loops: [{ id: 'a', bassOctave: 2 }] }) as {
+      loops: Record<string, unknown>[];
+    };
+    expect(out.loops[0].padMuted).toBe(true);
+    expect(out.loops[0].padMode).toBe('pad');
+    expect(out.loops[0].bassOctave).toBe(2);
+  });
+
+  // Backfilling only the active loop is the easy mistake here: loopStatePatch
+  // writes every LOOP_FLAT_KEYS entry with no guard, so an unbackfilled loop
+  // writes `undefined` over the slice defaults the moment the user switches to
+  // it — and only then.
+  test('every loop is backfilled, not only the first', () => {
+    const out = migratePadLayer({
+      loops: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+    }) as { loops: Record<string, unknown>[] };
+    expect(out.loops).toHaveLength(4);
+    for (const loop of out.loops) {
+      for (const key of PAD_KEYS) expect(loop[key]).toBeDefined();
+      expect(loop.padMuted).toBe(true);
+    }
+  });
+
+  test('a loop that already carries pad state keeps nothing of its own', () => {
+    // The step runs exactly once, at one version boundary, on payloads that by
+    // definition predate the pad — so spreading over any stale value is right.
+    const out = migratePadLayer({
+      loops: [{ id: 'a', padVolume: 0.1, padMuted: false }],
+    }) as { loops: Record<string, unknown>[] };
+    expect(out.loops[0].padMuted).toBe(true);
+    expect(out.loops[0].padVolume).toBe(defaultPadState().padVolume);
+  });
+
+  test('a payload with no loops passes through untouched', () => {
+    expect(migratePadLayer({ bpm: 120 })).toEqual({ bpm: 120 });
   });
 });

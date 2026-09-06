@@ -1,6 +1,15 @@
 import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
 import { EFFECT_LIMITS, clampEffectValue, type EffectNumericKey } from '../audio/effectLimits';
-import type { SynthParams, ChordItem, SequencerTrack, FilterType } from '../types';
+import type {
+  SynthParams,
+  ChordItem,
+  SequencerTrack,
+  FilterType,
+  PadInterval,
+  PadMode,
+  PadVoicing,
+} from '../types';
+import { PAD_INTERVALS, PAD_MODES, PAD_VOICINGS } from '../types';
 import type { BassStepChoice } from '../audio/bassPatterns';
 import { createDefaultLoop } from './loopSlice';
 import { LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
@@ -127,6 +136,50 @@ export function asPatternMode(value: unknown, fallback: 'preset' | 'custom'): 'p
 
 export function asFilterType(value: unknown, fallback: FilterType): FilterType {
   return FILTER_TYPES.has(value as string) ? (value as FilterType) : fallback;
+}
+
+// Built from the const arrays the unions derive from, never re-typed here: a
+// hand-written set has no link to the union, so a value the UI offers and the
+// store holds would come back reverted on every reopen with no type error.
+const PAD_MODE_SET = new Set<string>(PAD_MODES);
+const PAD_VOICING_SET = new Set<string>(PAD_VOICINGS);
+const PAD_INTERVAL_SET = new Set<number>(PAD_INTERVALS);
+
+export function asPadMode(value: unknown, fallback: PadMode): PadMode {
+  return typeof value === 'string' && PAD_MODE_SET.has(value) ? (value as PadMode) : fallback;
+}
+
+export function asPadVoicing(value: unknown, fallback: PadVoicing): PadVoicing {
+  return typeof value === 'string' && PAD_VOICING_SET.has(value)
+    ? (value as PadVoicing)
+    : fallback;
+}
+
+/**
+ * The ONE normalisation of a drone selection: filter to union members,
+ * de-duplicate, sort ascending. Both the padSlice setters and the two readers
+ * (persist payload and `.solna` body) go through it, so a selection stored by
+ * an edit and one restored from disk are byte-identical.
+ *
+ * The sort is load-bearing: projectDirty fingerprints the content set, and an
+ * unsorted array gives one selection two `projectDirty` fingerprints — an
+ * unsaved-changes badge no edit caused.
+ */
+export function normalizePadIntervals(values: Iterable<unknown>): PadInterval[] {
+  const seen = new Set<PadInterval>();
+  for (const v of values) {
+    if (typeof v === 'number' && PAD_INTERVAL_SET.has(v)) seen.add(v as PadInterval);
+  }
+  return [...seen].sort((a, b) => a - b);
+}
+
+/**
+ * An empty result is a legal selection (a silent drone), so only a non-array
+ * falls back to the default; anything array-shaped is normalised.
+ */
+export function asPadIntervals(value: unknown, fallback: PadInterval[]): PadInterval[] {
+  if (!Array.isArray(value)) return fallback;
+  return normalizePadIntervals(value);
 }
 
 export function isPositiveInteger(value: unknown): value is number {
@@ -273,6 +326,14 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
       customBassPattern: asCheckedArray<BassStepChoice>(r.customBassPattern, isBassStepChoice, fallback.customBassPattern),
       bassFeel: clampFinite(r.bassFeel, 0, 1, fallback.bassFeel),
       bassOctave: clampFinite(r.bassOctave, 0, 8, fallback.bassOctave),
+      padSynthParams: sanitizeSynthParams(r.padSynthParams),
+      padMode: asPadMode(r.padMode, fallback.padMode),
+      padOctave: clampFinite(r.padOctave, 0, 8, fallback.padOctave),
+      padVoicing: asPadVoicing(r.padVoicing, fallback.padVoicing),
+      padDroneDegree: clampFinite(r.padDroneDegree, 0, 127, fallback.padDroneDegree),
+      padDroneIntervals: asPadIntervals(r.padDroneIntervals, fallback.padDroneIntervals),
+      padVolume: clampFinite(r.padVolume, 0, 1.5, fallback.padVolume),
+      padMuted: asBoolean(r.padMuted),
       leadMelodySteps: asLeadNoteMatrix(r.leadMelodySteps) ?? fallback.leadMelodySteps,
       leadLoopLength: asPositiveInteger(r.leadLoopLength, fallback.leadLoopLength),
       leadStepResolution: asLeadStepResolution(

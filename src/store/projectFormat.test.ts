@@ -17,6 +17,7 @@ import { createDefaultLoop } from './loopSlice';
 import { INITIAL_EFFECTS } from './initialState';
 import { DEFAULT_BPM } from './transportSlice';
 import type { Loop } from './types';
+import { defaultPadState } from './initialState';
 
 // A Loop literal typed against the interface: adding a field to `Loop`
 // without listing it in PROJECT_LOOP_KEYS fails the pinned test below.
@@ -231,4 +232,15 @@ describe('a formatVersion-1 .solna file keeps its melody through the real import
     // steps directly on loop objects that never had the field.
     expect(result.body.content.bpm).toBe(118);
   });
+});
+
+// THE THIRD OF THE THREE. A NEW project ships an audible pad — that is the
+// point of shipping the layer. Together with the two migration tests above,
+// this pins the deliberate asymmetry: collapsing defaultPadState() and the
+// migrations' `padMuted: true` override into one constant turns exactly one of
+// the three red.
+test('a factory project ships the pad audible', () => {
+  const content = factoryProjectContent();
+  expect(content.loops[0].padMuted).toBe(false);
+  expect(defaultPadState().padMuted).toBe(false);
 });

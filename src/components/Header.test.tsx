@@ -3,6 +3,7 @@ import React from 'react';
 import { renderToString } from 'react-dom/server';
 import { ProjectNameLabel, TabButton, AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS } from './Header';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
+import { VIEW_ORDER } from './viewMeta';
 
 /** The full opening tag of the element whose markup contains `needle` — pins the tag name, not text position. */
 function openTagContaining(html: string, needle: string): string {
@@ -88,8 +89,12 @@ describe('persistTheme', () => {
 });
 
 describe('header tab grouping', () => {
+  // The array order IS the left-to-right nav order, and each entry carries its
+  // own transport button, so a reorder here moves the play/stop buttons with
+  // their tabs. Pitched layers first (lead, then the accompaniment trio),
+  // rhythm last — the same order the Arrange mixer strip reads in.
   test('the three playable views carry a transport, synth driving the lead', () => {
-    expect(AUTOMATION_TABS.map((t) => t.view)).toEqual(['synth', 'sequencer', 'chords']);
+    expect(AUTOMATION_TABS.map((t) => t.view)).toEqual(['synth', 'chords', 'sequencer']);
     expect(AUTOMATION_TABS.every((t) => t.module !== undefined)).toBe(true);
     expect(AUTOMATION_TABS[0].module).toBe('lead');
   });
@@ -202,5 +207,26 @@ describe('ProjectNameLabel (song layer only)', () => {
       <ProjectNameLabel layer="song" currentProjectId="p1" currentProjectName="Lo-Fi Study Session" />
     );
     expect(openTagContaining(html, 'id="header-project-name"')).toMatch(/^<span/);
+  });
+});
+
+/**
+ * `viewMeta.VIEW_ORDER` exists for coverage, not for rendering — the nav is
+ * driven by `AUTOMATION_TABS` and `SONG_NAV_TABS`, so the two can only be kept
+ * in step by hand. This is that hand: the tabs the header actually renders,
+ * loop layer then song layer, must be VIEW_ORDER's five views, each exactly
+ * once. A view added to one and forgotten in the other fails here rather than
+ * going missing from the nav.
+ */
+describe('the header tabs cover every view', () => {
+  const rendered = [...AUTOMATION_TABS.map((t) => t.view), ...SONG_NAV_TABS];
+
+  test('loop tabs then song tabs are VIEW_ORDER, reordered by layer', () => {
+    expect([...rendered].sort()).toEqual([...VIEW_ORDER].sort());
+    expect(rendered).toEqual(['synth', 'chords', 'sequencer', 'arrange', 'effects']);
+  });
+
+  test('no view is rendered twice', () => {
+    expect(new Set(rendered).size).toBe(rendered.length);
   });
 });

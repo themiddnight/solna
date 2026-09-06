@@ -33,7 +33,7 @@ export function selectVibe(
  *
  * Applies through the same applyInstantVibeToStore a chip click uses. That is
  * deliberate and load-bearing: the synchronous
- * audioEngine.stopSource('chord'|'bass', 0.02) cut, the selective restart and
+ * audioEngine.stopSource('chord'|'bass'|'pad', 0.02) cut, the selective restart and
  * the bar-grid rewind all live in there, and a second apply path would have to
  * keep them in sync. This function makes no engine call of its own.
  */

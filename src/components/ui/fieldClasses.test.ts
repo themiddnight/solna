@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { COUNT_BADGE, FIELD_LABEL, FIELD_SELECT, SECTION_HEADER, STEP_BADGE } from './fieldClasses';
+import { COUNT_BADGE, FIELD_LABEL, FIELD_LANE, FIELD_SELECT, JOIN_LANE, SECTION_HEADER, STEP_BADGE } from './fieldClasses';
 import { ICON_BUTTON_BASE } from './IconButton';
 import { MODAL_BOX } from './Modal';
 import { MODULE_HEADER_ROW, MODULE_TITLE } from './ModuleHeader';
@@ -132,6 +132,33 @@ describe('field label token', () => {
     const offenders = sourceFiles('src')
       .filter((f) => !f.endsWith('Modal.tsx'))
       .filter((f) => readFileSync(f, 'utf8').includes(MODAL_BOX));
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * `JOIN_LANE` had five hand-written copies before it existed — the synth's
+   * mode switch and the pad module's four toggle groups. It must stay built on
+   * `FIELD_LANE` (that is what puts its label on the shared baseline), and no
+   * component may spell the shell out again.
+   */
+  test('no component hand-writes the join control lane', () => {
+    expect(JOIN_LANE.startsWith('join ')).toBe(true);
+    expect(JOIN_LANE).toContain(FIELD_LANE);
+    // Token-set, not substring: a copy that shuffles the class order is the
+    // same copy. Header's NAV_GROUP_CLASS is a different join shell (`p-1
+    // shrink-0`, no lane height) and is correctly not a superset of this one.
+    const lane = new Set(JOIN_LANE.split(' '));
+    const offenders = sourceFiles('src')
+      .filter((f) => !f.endsWith('fieldClasses.ts'))
+      .flatMap((f) => {
+        const strings = readFileSync(f, 'utf8').match(/["'`][^"'`\n]*\bjoin\b[^"'`\n]*["'`]/g) ?? [];
+        return strings
+          .filter((raw) => {
+            const tokens = new Set(raw.slice(1, -1).trim().split(/\s+/));
+            return [...lane].every((t) => tokens.has(t));
+          })
+          .map((raw) => `${f}: ${raw.slice(0, 70)}`);
+      });
     expect(offenders).toEqual([]);
   });
 });

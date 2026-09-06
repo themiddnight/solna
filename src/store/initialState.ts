@@ -1,4 +1,6 @@
 import type { SynthParams, SequencerTrack, ChordItem, MasterEffects, SongArrangement } from '../types';
+import { applyPreset, presetById } from '../audio/synthPresets';
+import type { PadState } from './types';
 
 // Moved verbatim from src/App.tsx — the app's original useState initial values.
 
@@ -276,3 +278,45 @@ export const INITIAL_ARRANGEMENT: SongArrangement = {
     },
   ],
 };
+
+/** The Pad-category factory preset a fresh pad starts from. */
+export const PAD_DEFAULT_PRESET_ID = 'factory-warm-polypad';
+
+const PAD_DEFAULT_PRESET = presetById(PAD_DEFAULT_PRESET_ID);
+
+/**
+ * Built the same way `createDefaultLoop` builds `bassSynthParams`: the shared
+ * synth defaults with a factory preset laid over them. Falls back to the bare
+ * defaults if the id ever stops resolving — initialState.test.ts is what makes
+ * that fallback loud instead of silent.
+ */
+export const INITIAL_PAD_SYNTH_PARAMS: SynthParams = PAD_DEFAULT_PRESET
+  ? applyPreset(INITIAL_SYNTH_PARAMS, PAD_DEFAULT_PRESET)
+  : INITIAL_SYNTH_PARAMS;
+
+/**
+ * Every pad key with its NEW-project value. Both migration chains call this
+ * and then override `padMuted` to `true`, because a project saved before the
+ * pad existed must reopen sounding the way it sounded when it was closed.
+ *
+ * Do NOT collapse that override into these defaults. Doing so gives every
+ * pre-existing project a voice its author never wrote, and nothing in the UI
+ * or the build would show it — three tests pin the distinction (see
+ * initialState.test.ts, migrate.test.ts and projectFormat.test.ts).
+ *
+ * A factory, not a constant: `padDroneIntervals` is an array, and a shared one
+ * seeded into the live store would let a single in-place sort or push poison
+ * every default.
+ */
+export function defaultPadState(): PadState {
+  return {
+    padSynthParams: INITIAL_PAD_SYNTH_PARAMS,
+    padMode: 'pad',
+    padOctave: 3,
+    padVoicing: 'triad',
+    padDroneDegree: 0,
+    padDroneIntervals: [1, 5, 8],
+    padVolume: 1.0,
+    padMuted: false,
+  };
+}

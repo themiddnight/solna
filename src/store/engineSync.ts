@@ -60,20 +60,36 @@ function effectsEqualExceptDecay(a: MasterEffects, b: MasterEffects): boolean {
   return true;
 }
 
+/**
+ * Every source bus the store owns, as `[volume field, mute field, engine
+ * source]`. Both the snapshot pass and the subscription block below are driven
+ * from this one table, on the `synthSources` precedent further down — the two
+ * used to be ten hand-written lines each, and a bus added to one and forgotten
+ * in the other is silent until the first apply.
+ *
+ * The field names are table data rather than a `${source}Volume` convention on
+ * purpose: 'sequencer' is irregular (`masterSequencerVolume` / `drumMuted`),
+ * and encoding that as a special case in the loop would cost more than
+ * spelling all ten names out.
+ */
+const SOURCE_BUSES = [
+  { source: 'synth', volume: 'synthVolume', muted: 'synthMuted' },
+  { source: 'chord', volume: 'chordVolume', muted: 'chordMuted' },
+  { source: 'bass', volume: 'bassVolume', muted: 'bassMuted' },
+  { source: 'pad', volume: 'padVolume', muted: 'padMuted' },
+  { source: 'sequencer', volume: 'masterSequencerVolume', muted: 'drumMuted' },
+] as const;
+
 function applySliceState(): void {
   const s = useAppStore.getState();
   audioEngine.setClockBpm(s.bpm);
   audioEngine.setMeter(getMeter(s.meterId));
   audioEngine.setMasterVolume(s.masterVolume);
   audioEngine.setMetronomeEnabled(s.metronomeActive);
-  audioEngine.setSourceGain('synth', s.synthVolume);
-  audioEngine.setSourceGain('chord', s.chordVolume);
-  audioEngine.setSourceGain('bass', s.bassVolume);
-  audioEngine.setSourceGain('sequencer', s.masterSequencerVolume);
-  audioEngine.setSourceMuted('synth', s.synthMuted);
-  audioEngine.setSourceMuted('chord', s.chordMuted);
-  audioEngine.setSourceMuted('bass', s.bassMuted);
-  audioEngine.setSourceMuted('sequencer', s.drumMuted);
+  for (const bus of SOURCE_BUSES) {
+    audioEngine.setSourceGain(bus.source, s[bus.volume]);
+    audioEngine.setSourceMuted(bus.source, s[bus.muted]);
+  }
   audioEngine.setDrumKit(DRUM_KITS[s.soundKit]);
   audioEngine.setDrumFilter(s.drumFilterCutoff, s.drumFilterResonance, s.drumFilterType);
   audioEngine.updateEffects(s.effects);
@@ -84,6 +100,7 @@ function applySliceState(): void {
   audioEngine.updateSynthParams(s.synthParams, 'synth');
   audioEngine.updateSynthParams(s.chordSynthParams, 'chord');
   audioEngine.updateSynthParams(s.bassSynthParams, 'bass');
+  audioEngine.updateSynthParams(s.padSynthParams, 'pad');
 }
 
 export function startEngineSync(): Stop {
@@ -116,15 +133,11 @@ export function startEngineSync(): Stop {
   subs.push(useAppStore.subscribe((s) => s.masterVolume, (v) => audioEngine.setMasterVolume(v), { fireImmediately: true }));
   subs.push(useAppStore.subscribe((s) => s.metronomeActive, (v) => audioEngine.setMetronomeEnabled(v), { fireImmediately: true }));
 
-  // synth + chords + bass + sequencer buses
-  subs.push(useAppStore.subscribe((s) => s.synthVolume, (v) => audioEngine.setSourceGain('synth', v), { fireImmediately: true }));
-  subs.push(useAppStore.subscribe((s) => s.chordVolume, (v) => audioEngine.setSourceGain('chord', v), { fireImmediately: true }));
-  subs.push(useAppStore.subscribe((s) => s.bassVolume, (v) => audioEngine.setSourceGain('bass', v), { fireImmediately: true }));
-  subs.push(useAppStore.subscribe((s) => s.masterSequencerVolume, (v) => audioEngine.setSourceGain('sequencer', v), { fireImmediately: true }));
-  subs.push(useAppStore.subscribe((s) => s.synthMuted, (v) => audioEngine.setSourceMuted('synth', v), { fireImmediately: true }));
-  subs.push(useAppStore.subscribe((s) => s.chordMuted, (v) => audioEngine.setSourceMuted('chord', v), { fireImmediately: true }));
-  subs.push(useAppStore.subscribe((s) => s.bassMuted, (v) => audioEngine.setSourceMuted('bass', v), { fireImmediately: true }));
-  subs.push(useAppStore.subscribe((s) => s.drumMuted, (v) => audioEngine.setSourceMuted('sequencer', v), { fireImmediately: true }));
+  // synth + chords + bass + pad + sequencer buses
+  for (const bus of SOURCE_BUSES) {
+    subs.push(useAppStore.subscribe((s) => s[bus.volume], (v) => audioEngine.setSourceGain(bus.source, v), { fireImmediately: true }));
+    subs.push(useAppStore.subscribe((s) => s[bus.muted], (v) => audioEngine.setSourceMuted(bus.source, v), { fireImmediately: true }));
+  }
 
   // sequencer slice: kit + drum-bus filter. The filter is watched as one
   // derived object compared with `shallow`, so the subscription fires once
@@ -189,6 +202,7 @@ export function startEngineSync(): Stop {
     ['synthParams', 'synth'],
     ['chordSynthParams', 'chord'],
     ['bassSynthParams', 'bass'],
+    ['padSynthParams', 'pad'],
   ] as const;
   for (const [field, source] of synthSources) {
     subs.push(
