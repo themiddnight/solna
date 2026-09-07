@@ -14,7 +14,7 @@ export const makeEngine = () => new (audioEngine.constructor as any)() as Engine
 // envelope of a voice that is already fully scheduled (the chord-rhythm
 // regression: all but the last hit of a multi-hit pattern were silenced).
 /** `cancelAndHold: false` stands in for Firefox, which has no cancelAndHoldAtTime. */
-export type FakeOpts = { cancelAndHold?: boolean };
+export interface FakeOpts { cancelAndHold?: boolean }
 
 export function fakeParam(opts: FakeOpts = {}) {
   const param = {

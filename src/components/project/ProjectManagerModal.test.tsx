@@ -1,8 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import React from 'react';
 import { renderToString } from 'react-dom/server';
 
-let ProjectManagerModal: React.FC;
+let ProjectManagerModal: typeof import('./ProjectManagerModal').ProjectManagerModal;
 let useAppStore: typeof import('@/store/store').useAppStore;
 
 /** The full opening tag of the element whose markup contains `needle` — pins disabled/attrs, not text position. */

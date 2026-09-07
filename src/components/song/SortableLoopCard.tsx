@@ -48,7 +48,7 @@ export function getActiveChordIndex(
   return chords.length - 1;
 }
 
-export type MixChannelProps = {
+export interface MixChannelProps {
   idPrefix: string;
   label: string;
   volume: number;
@@ -58,7 +58,7 @@ export type MixChannelProps = {
   sliderAccent: string;
   onVolume: (v: number) => void;
   onToggleMute: () => void;
-};
+}
 
 /** One compact mixer strip (mute + gain) inside a loop card. */
 export function MixChannel({
@@ -184,7 +184,7 @@ export interface SortableLoopCardProps {
   onSetMix: (id: string, patch: Partial<LoopMixPatch>) => void;
 }
 
-export const SortableLoopCard: React.FC<SortableLoopCardProps> = React.memo(
+export const SortableLoopCard = React.memo(
   function SortableLoopCard({
     loop,
     index,
@@ -209,7 +209,7 @@ export const SortableLoopCard: React.FC<SortableLoopCardProps> = React.memo(
     onSetRepeat,
     onTogglePlayLoop,
     onSetMix,
-  }) {
+  }: SortableLoopCardProps) {
     const [isEditingName, setIsEditingName] = useState(false);
     const [tempName, setTempName] = useState(loop.name);
 

@@ -14,7 +14,7 @@ import { clampEffects, clampEffectValue } from './effectLimits';
 import { IMPULSE_CACHE_SAMPLE_BUDGET, impulseSampleCount, keysToEvict } from './impulseBudget';
 import { IDLE_SUSPEND_MS, shouldSuspendWhenIdle } from './idleSuspend';
 
-type SynthVoice = {
+interface SynthVoice {
   oscs: OscillatorNode[];
   gains: GainNode[];
   filter: BiquadFilterNode;
@@ -83,7 +83,7 @@ type SynthVoice = {
    * this to re-derive the delay from the audio clock after a resume.
    */
   teardownAt?: number;
-};
+}
 
 /**
  * The TR-808's six inharmonically tuned square oscillators, expressed as
