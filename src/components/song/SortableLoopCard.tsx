@@ -16,6 +16,7 @@ import {
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Loop, LoopMixPatch } from '@/store/types';
+import { ChordItem } from '@/types';
 import { loopBars } from '@/store/loop';
 import { formatChordQuality } from '@/utils/musicTheory';
 import { getTonicSpelling } from '@/utils/noteSpelling';
@@ -184,6 +185,175 @@ export interface SortableLoopCardProps {
   onSetMix: (id: string, patch: Partial<LoopMixPatch>) => void;
 }
 
+/**
+ * The card's border/ring/tint, as one string. A card is soloed, or playing, or
+ * merely cued, or idle — one state, four looks — so the choice is a function of
+ * three booleans and reads better named than as a four-deep ternary inside the
+ * className template.
+ */
+function loopCardAccent({
+  isAuditioning,
+  isPlaying,
+  isActive,
+}: {
+  isAuditioning: boolean;
+  isPlaying: boolean;
+  isActive: boolean;
+}): string {
+  if (isAuditioning) return 'border-accent ring-2 ring-accent/60 bg-accent/5';
+  if (isPlaying) return 'border-primary ring-1 ring-primary bg-primary/5';
+  if (isActive) return 'border-primary/50 bg-base-200 ring-1 ring-primary/20';
+  return 'border-base-300 hover:border-base-content/20';
+}
+
+interface LoopSoloButtonProps {
+  loopId: string;
+  loopName: string;
+  isAuditioning: boolean;
+  disabled: boolean;
+  onToggle: (id: string) => void;
+}
+
+/**
+ * Play-only / stop for one loop. Every branch in it asks the same question —
+ * is this loop the one being auditioned — and answers it four times over
+ * (label, tint, tooltip, icon), which is four of the card's branches spent on
+ * one boolean.
+ */
+function LoopSoloButton({ loopId, loopName, isAuditioning, disabled, onToggle }: LoopSoloButtonProps) {
+  return (
+    <button
+      id={`btn-loop-play-${loopId}`}
+      type="button"
+      aria-label={isAuditioning ? `Stop ${loopName}` : `Play only ${loopName}`}
+      onClick={() => onToggle(loopId)}
+      disabled={disabled}
+      className={`btn btn-xs gap-1 font-bold shadow-xs transition-all ${
+        isAuditioning
+          ? 'btn-error text-error-content hover:brightness-110'
+          : 'btn-success text-success-content hover:brightness-110'
+      } disabled:opacity-30`}
+      title={isAuditioning ? 'Stop loop audition' : 'Play only this loop (isolated)'}
+    >
+      {isAuditioning ? (
+        <>
+          <Square className="w-3 h-3 fill-current" />
+          Stop
+        </>
+      ) : (
+        <>
+          <Play className="w-3 h-3 fill-current" />
+          Play
+        </>
+      )}
+    </button>
+  );
+}
+
+interface LoopStatusBadgeProps {
+  isAuditioning: boolean;
+  isPlaying: boolean;
+  isActive: boolean;
+  currentStepInLoop: number;
+  singleCycleSteps: number;
+  totalStepsInLoop: number;
+  currentRep: number;
+  repeatCount: number;
+}
+
+/**
+ * The card's one status badge: soloed, playing, cued, or nothing. Split out of
+ * SortableLoopCard because the three-way ternary and the repeat-count readout
+ * were four of the branches that put the card over the complexity ceiling, and
+ * none of them reads anything else the card holds.
+ */
+function LoopStatusBadge({
+  isAuditioning,
+  isPlaying,
+  isActive,
+  currentStepInLoop,
+  singleCycleSteps,
+  totalStepsInLoop,
+  currentRep,
+  repeatCount,
+}: LoopStatusBadgeProps) {
+  if (isAuditioning) {
+    return (
+      <span className="badge badge-sm badge-accent gap-1 font-mono uppercase font-bold shrink-0 animate-pulse">
+        <Play className="w-2.5 h-2.5 fill-current" />
+        {`Solo ${currentStepInLoop + 1}/${singleCycleSteps}`}
+      </span>
+    );
+  }
+  if (isPlaying) {
+    const position = `Playing ${currentStepInLoop + 1}/${totalStepsInLoop}`;
+    return (
+      <span className="badge badge-sm badge-primary gap-1 font-mono uppercase font-bold shrink-0 animate-pulse">
+        <Play className="w-2.5 h-2.5 fill-current" />
+        {repeatCount > 1 ? `${position} (Rep ${currentRep}/${repeatCount})` : position}
+      </span>
+    );
+  }
+  if (isActive) {
+    return (
+      <span className="badge badge-sm badge-outline badge-primary font-mono text-[10px] uppercase font-bold shrink-0">
+        Active Cue
+      </span>
+    );
+  }
+  return null;
+}
+
+interface LoopChordStripProps {
+  chords: ChordItem[] | undefined;
+  isPlaying: boolean;
+  activeChordIndex: number | null;
+}
+
+/**
+ * The progression readout, with the playing chord highlighted. Extracted for
+ * the same reason as LoopStatusBadge: every branch here is about one chord
+ * badge, so counting them against the whole card measured nothing.
+ */
+function LoopChordStrip({ chords, isPlaying, activeChordIndex }: LoopChordStripProps) {
+  if (!chords || chords.length === 0) {
+    return <span className="text-base-content/40 italic">No chords</span>;
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1 min-w-0">
+      {chords.map((chord, cIdx) => {
+        const isChordActive = isPlaying && cIdx === activeChordIndex;
+        return (
+          <span
+            key={chord.id || `${chord.root}-${cIdx}`}
+            className={`badge badge-sm gap-1 font-mono transition-all duration-150 ${
+              isChordActive
+                ? 'badge-primary font-bold ring-2 ring-primary/60 shadow-sm scale-105'
+                : 'bg-base-200 border border-base-300'
+            }`}
+            title={chord.notes?.length ? `Notes: ${chord.notes.join(', ')}` : undefined}
+          >
+            <span
+              className={
+                isChordActive ? 'text-primary-content font-bold' : 'font-bold text-base-content'
+              }
+            >
+              {`${chord.root}${formatChordQuality(chord.quality)}`}
+            </span>
+            <span
+              className={`text-[9px] ${
+                isChordActive ? 'text-primary-content/80' : 'text-base-content/50'
+              }`}
+            >
+              {`${chord.bars ?? 1}b`}
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export const SortableLoopCard = React.memo(
   function SortableLoopCard({
     loop,
@@ -276,15 +446,9 @@ export const SortableLoopCard = React.memo(
         ref={setNodeRef}
         style={style}
         onClick={handleCardClick}
-        className={`card card-border bg-base-200 border transition-all shadow-xs cursor-pointer ${
-          isAuditioning
-            ? 'border-accent ring-2 ring-accent/60 bg-accent/5'
-            : isPlaying
-            ? 'border-primary ring-1 ring-primary bg-primary/5'
-            : isActive
-            ? 'border-primary/50 bg-base-200 ring-1 ring-primary/20'
-            : 'border-base-300 hover:border-base-content/20'
-        }`}
+        className={`card card-border bg-base-200 border transition-all shadow-xs cursor-pointer ${loopCardAccent(
+          { isAuditioning, isPlaying, isActive },
+        )}`}
       >
         {/* Progress bar for playing loop */}
         <div className="w-full h-1 bg-base-300 overflow-hidden rounded-t-box">
@@ -326,31 +490,13 @@ export const SortableLoopCard = React.memo(
               </span>
 
               {/* Dedicated Play / Stop button for this specific loop */}
-              <button
-                id={`btn-loop-play-${loop.id}`}
-                type="button"
-                aria-label={isAuditioning ? `Stop ${loop.name}` : `Play only ${loop.name}`}
-                onClick={() => onTogglePlayLoop(loop.id)}
+              <LoopSoloButton
+                loopId={loop.id}
+                loopName={loop.name}
+                isAuditioning={isAuditioning}
                 disabled={playDisabled}
-                className={`btn btn-xs gap-1 font-bold shadow-xs transition-all ${
-                  isAuditioning
-                    ? 'btn-error text-error-content hover:brightness-110'
-                    : 'btn-success text-success-content hover:brightness-110'
-                } disabled:opacity-30`}
-                title={isAuditioning ? 'Stop loop audition' : 'Play only this loop (isolated)'}
-              >
-                {isAuditioning ? (
-                  <>
-                    <Square className="w-3 h-3 fill-current" />
-                    Stop
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3 h-3 fill-current" />
-                    Play
-                  </>
-                )}
-              </button>
+                onToggle={onTogglePlayLoop}
+              />
 
               {/* Editable Name or Display */}
               {isEditingName ? (
@@ -409,24 +555,16 @@ export const SortableLoopCard = React.memo(
                 {`${bars} ${bars === 1 ? 'bar' : 'bars'}`}
               </span>
 
-              {/* Status Badge */}
-              {isAuditioning ? (
-                <span className="badge badge-sm badge-accent gap-1 font-mono uppercase font-bold shrink-0 animate-pulse">
-                  <Play className="w-2.5 h-2.5 fill-current" />
-                  {`Solo ${currentStepInLoop + 1}/${singleCycleSteps}`}
-                </span>
-              ) : isPlaying ? (
-                <span className="badge badge-sm badge-primary gap-1 font-mono uppercase font-bold shrink-0 animate-pulse">
-                  <Play className="w-2.5 h-2.5 fill-current" />
-                  {repeatCount > 1
-                    ? `Playing ${currentStepInLoop + 1}/${totalStepsInLoop} (Rep ${currentRep}/${repeatCount})`
-                    : `Playing ${currentStepInLoop + 1}/${totalStepsInLoop}`}
-                </span>
-              ) : isActive ? (
-                <span className="badge badge-sm badge-outline badge-primary font-mono text-[10px] uppercase font-bold shrink-0">
-                  Active Cue
-                </span>
-              ) : null}
+              <LoopStatusBadge
+                isAuditioning={isAuditioning}
+                isPlaying={isPlaying}
+                isActive={isActive}
+                currentStepInLoop={currentStepInLoop}
+                singleCycleSteps={singleCycleSteps}
+                totalStepsInLoop={totalStepsInLoop}
+                currentRep={currentRep}
+                repeatCount={repeatCount}
+              />
             </div>
 
             {/* Action Buttons */}
@@ -536,45 +674,11 @@ export const SortableLoopCard = React.memo(
               <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50 shrink-0">
                 Progression:
               </span>
-              {loop.chords && loop.chords.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-1 min-w-0">
-                  {loop.chords.map((chord, cIdx) => {
-                    const isChordActive = isPlaying && cIdx === activeChordIndex;
-                    return (
-                      <span
-                        key={chord.id || `${chord.root}-${cIdx}`}
-                        className={`badge badge-sm gap-1 font-mono transition-all duration-150 ${
-                          isChordActive
-                            ? 'badge-primary font-bold ring-2 ring-primary/60 shadow-sm scale-105'
-                            : 'bg-base-200 border border-base-300'
-                        }`}
-                        title={chord.notes?.length ? `Notes: ${chord.notes.join(', ')}` : undefined}
-                      >
-                        <span
-                          className={
-                            isChordActive
-                              ? 'text-primary-content font-bold'
-                              : 'font-bold text-base-content'
-                          }
-                        >
-                          {`${chord.root}${formatChordQuality(chord.quality)}`}
-                        </span>
-                        <span
-                          className={`text-[9px] ${
-                            isChordActive
-                              ? 'text-primary-content/80'
-                              : 'text-base-content/50'
-                          }`}
-                        >
-                          {`${chord.bars ?? 1}b`}
-                        </span>
-                      </span>
-                    );
-                  })}
-                </div>
-              ) : (
-                <span className="text-base-content/40 italic">No chords</span>
-              )}
+              <LoopChordStrip
+                chords={loop.chords}
+                isPlaying={isPlaying}
+                activeChordIndex={activeChordIndex}
+              />
             </div>
           </div>
 
