@@ -16,7 +16,10 @@ import {
   getDiatonicChordForDegree,
   getScaleNotes,
   isNoteInScale,
+  parentDegreesFor,
   remapNoteByScaleDegree,
+  resolveDegreeQuality,
+  resolveParentDegreeQuality,
   rootSemitone,
   sixteenthNoteMs,
   snapProgressionToScale,
@@ -117,6 +120,27 @@ describe('formatChordLabel', () => {
     expect(formatChordQuality('min7')).toBe('m7');
     expect(formatChordQuality('minMaj7')).toBe('mM7');
   });
+
+  test('spells the root in the key when one is given', () => {
+    expect(formatChordLabel('A#', 'maj', { scaleRoot: 'A#', scaleType: 'Major' })).toBe('Bb');
+    expect(formatChordLabel('D#', 'min7', { scaleRoot: 'A#', scaleType: 'Major' })).toBe('Ebm7');
+    // F# major is F# G# A# B C# D# E#. Chroma 5 is its seventh degree and is
+    // written E#, never F — this is the case a sharp key gets wrong if the
+    // label reads the chromatic table instead of the key.
+    expect(formatChordLabel('F', 'maj', { scaleRoot: 'F#', scaleType: 'Major' })).toBe('E#');
+    // Chroma 4 is in no degree of F# major, so it falls back to the key's
+    // plain accidental. A sharp key falls back to a sharp name.
+    expect(formatChordLabel('E', 'maj', { scaleRoot: 'F#', scaleType: 'Major' })).toBe('E');
+  });
+
+  test('without a key it still writes the canonical sharp name', () => {
+    expect(formatChordLabel('A#', 'maj')).toBe('A#');
+    expect(formatChordLabel('D#', 'min7')).toBe('D#m7');
+  });
+
+  test('the quality suffix is untouched by spelling', () => {
+    expect(formatChordLabel('D#', 'maj7#5', { scaleRoot: 'A#', scaleType: 'Major' })).toBe('Ebmaj7#5');
+  });
 });
 
 describe('Hirajoshi', () => {
@@ -125,8 +149,6 @@ describe('Hirajoshi', () => {
     expect(scale).toBeDefined();
     expect(scale.category).toBe('World & Exotic');
     expect(scale.intervals).toEqual([0, 2, 3, 7, 8]);
-    expect(scale.triadQualities).toHaveLength(5);
-    expect(scale.seventhQualities).toHaveLength(5);
   });
 
   test('is a strict subset of natural minor, at degrees 1, 2, 3, 5, 6', () => {
@@ -142,12 +164,12 @@ describe('Hirajoshi', () => {
     expect(getScaleNotes('G', 'Hirajoshi')).toEqual(['G', 'A', 'A#', 'D', 'D#']);
   });
 
-  test('getDiatonicChordForDegree returns the authored table in C', () => {
+  test('getDiatonicChordForDegree returns the derived qualities in C', () => {
     const rows = [
       { root: 'C', triad: 'min', seventh: 'min7', degreeName: 'i' },
       { root: 'D', triad: 'dim', seventh: 'm7b5', degreeName: 'ii' },
       { root: 'D#', triad: 'maj', seventh: 'maj7', degreeName: 'III' },
-      { root: 'G', triad: 'sus4', seventh: '7sus4', degreeName: 'IV' },
+      { root: 'G', triad: 'min', seventh: 'min7', degreeName: 'iv' },
       { root: 'G#', triad: 'maj', seventh: 'maj7', degreeName: 'V' },
     ];
     rows.forEach((row, degree) => {
@@ -159,10 +181,12 @@ describe('Hirajoshi', () => {
     });
   });
 
-  test('degrees 0, 3 and 4 are fully in-scale triads, and every other chord adds exactly one outside tone', () => {
+  test('degrees 0 and 4 are fully in-scale triads; degree 3 moved off it with the sus4 -> min derivation', () => {
     // Pinned as counts so a future re-authoring that makes them worse fails.
-    const expectedTriadOutsiders = [0, 1, 1, 0, 0];
-    const expectedSeventhOutsiders = [1, 1, 1, 1, 0];
+    // Degree 3 was the fully-inside-the-five-notes sus4/7sus4; resolveDegreeQuality
+    // gives it min/min7 instead, which reaches outside like its neighbours.
+    const expectedTriadOutsiders = [0, 1, 1, 1, 0];
+    const expectedSeventhOutsiders = [1, 1, 1, 2, 0];
     for (let degree = 0; degree < 5; degree++) {
       for (const [use7ths, expected] of [
         [false, expectedTriadOutsiders[degree]],
@@ -378,5 +402,112 @@ describe('remapNoteByScaleDegree', () => {
   });
   test('no-op (same key and scale) is identity', () => {
     expect(remapNoteByScaleDegree('E4', 'C', 'Major', 'C', 'Major')).toBe('E4');
+  });
+});
+
+describe('resolveDegreeQuality', () => {
+  // The nine scales the derivation must reproduce EXACTLY, triads and sevenths,
+  // every degree. Harmonic Minor's `aug`/`maj7#5` at degree 2 falls out of the
+  // spelled stacking with no special case, which is the strongest single piece
+  // of evidence that this is the method the table was written from.
+  const REPRODUCED: Record<string, { triads: string[]; sevenths: string[] }> = {
+    'Major': {
+      triads: ['maj', 'min', 'min', 'maj', 'maj', 'min', 'dim'],
+      sevenths: ['maj7', 'min7', 'min7', 'maj7', '7', 'min7', 'm7b5'],
+    },
+    'Natural Minor': {
+      triads: ['min', 'dim', 'maj', 'min', 'min', 'maj', 'maj'],
+      sevenths: ['min7', 'm7b5', 'maj7', 'min7', 'min7', 'maj7', '7'],
+    },
+    'Harmonic Minor': {
+      triads: ['min', 'dim', 'aug', 'min', 'maj', 'maj', 'dim'],
+      sevenths: ['minMaj7', 'm7b5', 'maj7#5', 'min7', '7', 'maj7', 'dim7'],
+    },
+    'Dorian': {
+      triads: ['min', 'min', 'maj', 'maj', 'min', 'dim', 'maj'],
+      sevenths: ['min7', 'min7', 'maj7', '7', 'min7', 'm7b5', 'maj7'],
+    },
+    'Mixolydian': {
+      triads: ['maj', 'min', 'dim', 'maj', 'min', 'min', 'maj'],
+      sevenths: ['7', 'min7', 'm7b5', 'maj7', 'min7', 'min7', 'maj7'],
+    },
+    'Lydian': {
+      triads: ['maj', 'maj', 'min', 'dim', 'maj', 'min', 'min'],
+      sevenths: ['maj7', '7', 'min7', 'm7b5', 'maj7', 'min7', 'min7'],
+    },
+    'Phrygian': {
+      triads: ['min', 'maj', 'maj', 'min', 'dim', 'maj', 'min'],
+      sevenths: ['min7', 'maj7', '7', 'min7', 'm7b5', 'maj7', 'min7'],
+    },
+    // Degree 1 is the bIII at interval 3, which Natural Minor carries at its
+    // DEGREE 2. Indexing `degree % 7` into the parent — murva's method — would
+    // hand back Natural Minor's degree 1, the ii(dim), with nothing failing.
+    'Minor Pentatonic': {
+      triads: ['min', 'maj', 'min', 'min', 'maj'],
+      sevenths: ['min7', 'maj7', 'min7', 'min7', '7'],
+    },
+    'Major Pentatonic': {
+      triads: ['maj', 'min', 'min', 'maj', 'min'],
+      sevenths: ['maj7', 'min7', 'min7', '7', 'min7'],
+    },
+  };
+
+  test('reproduces nine of the eleven scales exactly', () => {
+    expect(Object.keys(REPRODUCED).length).toBe(9);
+    for (const [key, expected] of Object.entries(REPRODUCED)) {
+      const scale = SCALES[key];
+      expect(scale.intervals.map((_, d) => resolveDegreeQuality(key, d, false)), key).toEqual(expected.triads);
+      expect(scale.intervals.map((_, d) => resolveDegreeQuality(key, d, true)), key).toEqual(expected.sevenths);
+    }
+  });
+
+  // Degrees 2 and 3 lose their diminished chords because Natural Minor has no
+  // diminished triad at its 4th or 5th degree; resolveDegreeQuality stacks
+  // thirds over the PARENT's spelled notes, so blues' own colour never enters
+  // the derivation. Degrees 0 and 4 lose their dominant sevenths for the same
+  // reason — a `7` on the tonic is a blues idiom, and an idiom belongs in a
+  // progression's explicit `quality`, not in a scale's diatonic palette.
+  test('Blues changes at four degrees', () => {
+    expect(SCALES['Blues'].intervals.map((_, d) => resolveDegreeQuality('Blues', d, false)))
+      .toEqual(['min', 'maj', 'min', 'min', 'min', 'maj']);
+    expect(SCALES['Blues'].intervals.map((_, d) => resolveDegreeQuality('Blues', d, true)))
+      .toEqual(['min7', 'maj7', 'min7', 'min7', 'min7', '7']);
+  });
+
+  test('Hirajoshi changes at degree 3 and nowhere else', () => {
+    expect(SCALES['Hirajoshi'].intervals.map((_, d) => resolveDegreeQuality('Hirajoshi', d, false)))
+      .toEqual(['min', 'dim', 'maj', 'min', 'maj']);
+    expect(SCALES['Hirajoshi'].intervals.map((_, d) => resolveDegreeQuality('Hirajoshi', d, true)))
+      .toEqual(['min7', 'm7b5', 'maj7', 'min7', 'maj7']);
+  });
+
+  test('Blues degree 3 resolves through two equidistant parent degrees', () => {
+    const { parentKey, degrees } = parentDegreesFor('Blues', 3);
+    expect(parentKey).toBe('Natural Minor');
+    expect(degrees).toEqual([3, 4]);
+  });
+
+  test('an unmapped interval tuple throws rather than guessing', () => {
+    // Natural Minor has seven degrees; degree 7 does not exist and the parent
+    // lookup runs off the spelled note list.
+    expect(() => resolveParentDegreeQuality('Major', 99, false)).toThrow();
+  });
+
+  test('memoization returns the same answer, not a stale one', () => {
+    expect(resolveDegreeQuality('Hirajoshi', 3, false)).toBe('min');
+    expect(resolveDegreeQuality('Hirajoshi', 3, false)).toBe('min');
+    expect(resolveDegreeQuality('Hirajoshi', 3, true)).toBe('min7');
+  });
+
+  // getBorrowedChords filters candidates against the in-scale palette, and that
+  // palette is exactly what moved — so this is measured, not assumed. Blues
+  // loses `iv` because the derived palette now carries F min at degree 2.
+  // Hirajoshi is unchanged: nothing it gained collides with a candidate.
+  test('borrowed chords, measured after the derivation', () => {
+    expect(getBorrowedChords('C', 'Blues').map((b) => `${b.root} ${b.quality}`)).toEqual(['G# maj']);
+    expect(getBorrowedChords('C', 'Hirajoshi').map((b) => `${b.root} ${b.quality}`)).toEqual([
+      'F min',
+      'A# maj',
+    ]);
   });
 });

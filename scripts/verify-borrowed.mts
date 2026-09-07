@@ -1,8 +1,8 @@
 // Throwaway research script: audit borrowed-chord catalog for duplicates vs diatonic chords.
 // Run: bun run scripts/verify-borrowed.mts
 import { Chord, Note, Scale } from 'tonal';
+import { SCALES } from '../src/data/scales';
 import {
-  SCALES,
   getBorrowedChords,
   getDiatonicChordForDegree,
   getScaleNotes,

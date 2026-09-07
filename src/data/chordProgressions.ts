@@ -532,14 +532,16 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
     steps: [step(0, 1, 'min7'), step(3, 1, '7'), step(0, 1, 'min7'), step(1, 1, 'min7')],
   },
 
-  // --- Zen: Hirajoshi. Only degrees 0, 3 and 4 give triads that stay entirely
-  // inside the five notes, so the vamp below is built from exactly those.
+  // --- Zen: Hirajoshi, a five-note scale with two major-third gaps, so most of
+  // its diatonic chords reach outside it. That is a fact about the scale, not a
+  // defect: of the four progressions below only zen-bamboo-vamp was ever fully
+  // inside the five notes, and it no longer is.
   {
     id: 'zen-bamboo-vamp',
     name: 'Bamboo Vamp',
-    roman: 'i – IV – i – V',
+    roman: 'i – iv – i – V',
     description:
-      'Open-fourth koto sound over a minor tonic; every note it plays is inside the scale.',
+      'A minor tonic answered by its own iv and V — the plainest cadence Hirajoshi has.',
     category: 'Ambient & Zen',
     referenceScale: 'Hirajoshi',
     genres: ['zen'],
@@ -549,7 +551,7 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'zen-moonlit-koto',
     name: 'Moonlit Koto',
-    roman: 'i – V – IV – III',
+    roman: 'i – V – iv – III',
     description:
       'Descends through the half-step that gives Hirajoshi its melancholy, ending on the bright III.',
     category: 'Ambient & Zen',
@@ -573,9 +575,9 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'zen-temple-bell',
     name: 'Temple Bell',
-    roman: 'i – III – V – IV',
+    roman: 'i – III – V – iv',
     description:
-      'Rises through both major thirds before the open fourth settles it — not a rotation of the vamp.',
+      'Rises through both major thirds before the iv settles it — not a rotation of the vamp.',
     category: 'Ambient & Zen',
     referenceScale: 'Hirajoshi',
     genres: ['zen'],

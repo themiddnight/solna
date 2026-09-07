@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { progressionById, resolveProgression } from './chordProgressions';
-import { SCALES } from '@/data/scales';
-import { generateBlockChordNotes, ROOTS, rootSemitone } from '../utils/musicTheory';
+import { generateBlockChordNotes, resolveDegreeQuality, ROOTS, rootSemitone } from '../utils/musicTheory';
 
 /**
  * The 22 original interval-form templates, copied verbatim. `interval` is
@@ -120,7 +119,7 @@ describe('migration equivalence: degree form reproduces interval form', () => {
       if (!progression) continue;
       progression.steps.forEach((step, i) => {
         if (step.quality === undefined) {
-          expect(SCALES[progression.referenceScale].triadQualities[step.degree]).toBe(
+          expect(resolveDegreeQuality(progression.referenceScale, step.degree, false)).toBe(
             original.relativeChords[i].quality,
           );
         }
