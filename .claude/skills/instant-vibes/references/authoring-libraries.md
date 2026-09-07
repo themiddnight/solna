@@ -8,7 +8,7 @@ three existing presets fit, stop — reuse costs nothing and inherits tested dat
 - [Is it actually a gap?](#is-it-actually-a-gap)
 - [Authoring a chord progression](#authoring-a-chord-progression)
 - [Authoring a synth preset](#authoring-a-synth-preset)
-- [Adding a whole genre](#adding-a-whole-genre)
+- [Choosing what a vibe pools](#choosing-what-a-vibe-pools)
 
 ## Is it actually a gap?
 
@@ -32,7 +32,7 @@ Two more rules from that migration:
 
 ## Authoring a chord progression
 
-Entries live in `CHORD_PROGRESSIONS` (`src/audio/data/chordProgressions.ts`), appended
+Entries live in `CHORD_PROGRESSIONS` (`src/data/chordProgressions.ts`), appended
 before the closing `];`. Shape:
 
 ```ts
@@ -42,8 +42,8 @@ before the closing `];`. Shape:
   roman: 'Imaj7 – vim7 – iim7 – V7',
   description: '...',
   category: 'Lofi & R&B',      // ProgressionCategory, a closed union
-  referenceScale: 'Major',     // must equal VIBE_GENRE_SCALES[each tag]
-  genres: ['lofi'],
+  referenceScale: 'Major',     // the scale this was authored against; a vibe pooling it must play the same one
+  genres: ['lofi'],            // free-form browsing tag; nothing computes from it
   minScaleLength: 7,           // SCALES[referenceScale].intervals.length
   steps: [step(0, 1, 'maj7'), step(5, 1, 'min7'), step(1, 1, 'min7'), step(4, 1, '7')],
 }
@@ -74,31 +74,41 @@ produce — writing `I – vi – ii – V` over `maj7/min7/min7/7` steps tells 
 triads while sevenths play. Match the file's house style: lower-case for minor,
 `m7`/`maj7` suffixes, and `VII`/`III` written without a flat sign.
 
-### Genre convention tests you must satisfy
+### Research-backed conventions, pinned by hardcoded id lists
 
-These are research-backed, enforced in `chordProgressions.test.ts`, and are not
-negotiable by the new entry — if your idea conflicts, the idea changes:
+`src/audio/chordProgressions.test.ts`'s `describe('authoring conventions from the
+research')` pins these rules, and they are not negotiable by the new entry — if
+your idea conflicts, the idea changes:
 
-| genre | rule |
+| style | rule |
 |---|---|
-| `ambient` | every step `bars >= 4`, and no V-I — **including across the loop point** |
-| `lofi`, `boombap` | every step's quality matches `/7\|9\|11\|13/` — an extension on every chord |
-| `edm` | one uniform bar count per progression, and ≥3 of the tagged entries entirely 2-bar |
-| `zen` | playable on five notes — `minScaleLength: 5`, no degree above 4 |
+| ambient | every step `bars >= 4`, and no V-I — **including across the loop point** |
+| lofi, boombap | every step's quality matches `/7\|9\|11\|13/` — an extension on every chord |
+| edm | one uniform bar count per progression, and ≥3 of the five entirely 2-bar |
+| zen | playable on five notes — `minScaleLength: 5`, no degree above 4 |
+
+**These tests do not read `genres` at all.** Each one iterates a hardcoded id array
+in that file (`EDM_IDS`, `AMBIENT_IDS`, `EXTENSION_IDS`, `ZEN_IDS`) via a local
+`byIds()` helper. Tagging your new entry `genres: ['edm']` documents it for a human
+browsing the library; it does **not** enrol the entry in the `edm` convention test.
+If your entry should be held to one of these rules, add its id to the matching
+array in `chordProgressions.test.ts` by hand.
 
 Also: no entry may rely on degree wrapping, ids must be unique, and `minScaleLength`
 must equal the reference scale's real degree count. Hirajoshi has **5** degrees and
 the pentatonics 5-6 — never copy `7` as a default.
 
-Adding a tagged entry changes the computed dice pool of every vibe in that genre, so
-rerun the pool snippet from SKILL.md and update `variation.progressionIds`.
+A tag here is browsing metadata only — adding one to an entry does not join it to
+any vibe's dice pool. If a vibe should be able to roll it, add its id to that
+vibe's own `random.progressions` in `src/data/vibes.ts`.
 
 ## Authoring a synth preset
 
-`FACTORY_PRESETS` in `src/audio/synthPresets.ts`, or `FACTORY_BASS_PRESETS` in
-`src/audio/bassPresets.ts` for `category: 'Bass'`. Ids follow the file's convention:
-`factory-*` and `bass-*`. **Both id and name must be unique** across
-`ALL_FACTORY_PRESETS` — invariant tests pin each. Name uniqueness matters because
+One array now: append to `SYNTH_PRESETS` in `src/data/synthPresets.ts`, `category: 'Bass'`
+selecting the bass role. Ids follow the file's convention: `factory-*` for most, `bass-*` for
+the five that predate the merge. **Both id and name must be unique** across
+`SYNTH_PRESETS` — pinned by `src/data/synthPresets.test.ts` and
+`src/audio/presetRegistry.test.ts`. Name uniqueness matters because
 `resolveVibeSynthParams` stamps the resolved entry's `name` into `params.preset`, and
 the preset UI selects back by name.
 
@@ -143,18 +153,17 @@ Note what a data test cannot tell you: it pins numbers, not audible behaviour. N
 such a test for what it does ("pins a filter envelope that closes before the amp
 decay finishes"), not for a sound you have not heard.
 
-## Adding a whole genre
+## Choosing what a vibe pools
 
-`VibeGenre` (`src/types.ts:8`) is a closed union. Four coordinated edits:
+There is no genre union and no quota. A vibe's `random.progressions` is a taste
+call, bounded by two facts about the scale it plays: every member must have
+`referenceScale === vibe.scaleType`, and `minScaleLength` no greater than that
+scale's degree count. Two invariant tests enforce exactly that and nothing more.
 
-1. Extend the union.
-2. Add the anchor scale to `VIBE_GENRE_SCALES` — this becomes every such vibe's
-   `scaleType` forever, so choose it as a musical decision, not a convenience.
-3. Author **≥4** progressions tagged with it, each with `referenceScale` equal to the
-   anchor scale. Fewer fails `'every genre has at least four progressions'`.
-4. Extend `'the exact tagged set per genre is authored, not inferred'` in
-   `chordProgressions.test.ts` with the new genre's exact id list, in array order.
+`ChordProgression.genres` is a free-form `string[]` for human browsing. Nothing
+computes from it, so tagging a progression `kpop` widens no type and obliges no
+other file to change.
 
-Consider whether an existing genre can host the vibe first. Genre here means "which
-progressions may this vibe draw", not a marketing label — a moodier, slower entry in
-an existing genre is usually the honest answer, and it inherits a tested pool.
+Prefer reuse. A pool of existing progressions that suit the vibe is a better
+answer than four new ones, and `bun run report:library` will show you which
+entries nothing has claimed yet.

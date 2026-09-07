@@ -21,13 +21,16 @@ bun test -t "reverb decay"                 # one test by name
 bun run check:theme    # theme-token guard suite only
 bun run check:keys     # drum-pad vs synth key-binding collision check
 bun run check:drums    # drum-kit audible-separation check
-bun run verify         # test + lint + eslint + check:keys + check:drums + build (the gate)
+bun run check:contrast # drum-palette AA contrast floor (both themes)
+bun run verify         # test + lint + eslint + check:keys + check:drums + check:contrast + build (the gate)
 ```
 
 `bun run verify` is the completion gate — run it before claiming work is done. It runs
 `bun run eslint`, which must report zero errors; warnings are tolerated until the phase that
 fixes them flips the rule to `error` (see the ESLint rule matrix in
-`docs/superpowers/specs/2026-09-04-codebase-hygiene-and-restructure-design.md`).
+`docs/superpowers/specs/2026-09-04-codebase-hygiene-and-restructure-design.md`). `check:contrast`
+holds the drum palette above the AA floor in both themes; the closest pair sits a few thousandths
+above 4.5, so that step is a gate the palette can fail, not a report of what the palette is.
 
 ## Architecture
 
@@ -38,20 +41,114 @@ re-renders *every* mounted view, not just the visible one. High-frequency state 
 playback step, a value being dragged on a knob — must therefore stay local to the subtree that
 shows it, never in a slice.
 
-**Three layers, enforced by eslint `no-restricted-imports`:**
+**Four layers, enforced by eslint (`no-restricted-imports`, plus `no-restricted-globals` and
+`no-restricted-syntax` for the first):**
 
-1. `src/audio/` — never imports `store/` or `components/`. Pure DSP + a single `audioEngine`
-   singleton built on the **raw Web Audio API** (no Tone.js; `tonal` is used for theory only).
-   All engine setters no-op until `init()` creates the `AudioContext`.
-2. `src/store/` — never imports `components/`. One Zustand store composed from slices
+1. `src/data/` — **imports nothing at runtime, not even a sibling in `src/data/`.** Factory
+   content only: synth presets, drum kits, drum grids, chord progressions,
+   chord rhythms, bass patterns, effect chains, scales. It reads no impure global (`Math`,
+   `Date`, `crypto`, …),
+   declares no function, constructs no object with `new`, and holds no module-scope `let`/`var`;
+   it may declare types and `import type` from anywhere. Top-level `const` arrow helpers that are
+   shorthand for writing a literal — `step()`, `block()`, `strum()` — are allowed and must sit in
+   the same file as the table they build. **Every file is an independent leaf**, so the folder has
+   no evaluation graph and a reviewer with one file open has all of its inputs on screen.
+   `src/data/dataLayerPurity.test.ts` lints fixture sources through eslint's own API and is what
+   keeps that true across tool upgrades. The distinguishing test for what belongs: **adding an
+   entry must be an edit to that table and nothing else** — which is why `METERS`, `THEME_TOKENS`
+   and `VIEW_META` are registries and stay where the code that reads them lives.
+2. `src/audio/` — never imports `store/` or `components/`; may import `data/`. Pure DSP + a
+   single `audioEngine` singleton built on the **raw Web Audio API** (no Tone.js; `tonal` is used
+   for theory only). All engine setters no-op until `init()` creates the `AudioContext`.
+3. `src/store/` — never imports `components/`. One Zustand store composed from slices
    (`transport`, `musicContext`, `synth`, `chords`, `bass`, `sequencer`, `effects`, `ui`,
    `presets`, `loop`, `lead`, `project`), with `persist` (key `musibox_project_state_v1`, `partialize` +
    `migrate` in `store.ts`, legacy-key adoption in `migrate.ts`) and `subscribeWithSelector`.
    Bump the persist `version` and add a migration step whenever the persisted shape changes.
-3. `src/components/` — dumb views; must not import `audio/engine`. Only `AudioVisualizer.tsx`,
+4. `src/components/` — dumb views; must not import `audio/engine`. Only `AudioVisualizer.tsx`,
    `ui/VuMeter.tsx` and `ui/AmbientBackdrop.tsx` (read-only analyser consumers) and test files
    are exempt — routing their per-frame analyser reads through the store would mean a store
    write on every animation frame and a re-render of every subscriber.
+
+`src/utils/` stays outside the chain, above `data/`: it may read `data/` at runtime
+(`musicTheory.ts` imports `SCALES`), but nothing in `data/` may read it back except through an
+`import type` (e.g. `MeterId`), which is erased at compile.
+
+**A vibe is pure data, and every library id in it is written once.** `VIBES` in
+`src/data/vibes.ts` is a list of `VibeSpec` literals that name ids and nothing else;
+`resolveVibe` in `src/store/vibes.ts` turns them into a `ResolvedVibe` — the spec
+plus `chords`, `drumPattern` and `effects` — and `applyVibeToStore` writes that.
+**There is one drum-grid library, not one per consumer.** `DRUM_GRIDS` serves both
+the sequencer's grid menu and the vibes; an entry carries its own `name`, `meter`,
+`kit` and `rows`, so a vibe may reference any grid and the menu may offer any grid.
+**A drum grid determines the whole kit.** `replaceDrumPattern` looks a row up by
+the sequencer track's instrument name and **clears every track no row names** — so
+picking a grid gives you that grid, never that grid plus leftovers. It was
+`applyDrumPattern` and it merged, which was invisible while every grid declared
+every row the five tracks had and became a bug the moment `tom` and `crash` tracks
+existed. Clearing goes through `writeStepWindow`, so only the active window clears
+and the wider-meter padding survives. **Every row in a grid must name a voice a
+sequencer track can play.** The 53 `bass` cells 23 grids used to carry are deleted,
+not kept as authored intent: `bass` is not a drum voice — no `DRUM_KITS` field, no
+`triggerDrum` case, no track — and a row that cannot sound is not a rhythm.
+`drumGrids.test.ts` now rejects any row name no track plays, so re-adding one turns
+the suite red. Every grid still
+writes every row its origin group defines, empty or not, because a grid should
+state what it plays. Each entry also carries a `provenance` — a source URL or the literal `'authored'` —
+and the `'authored'` set is an allowlist in `drumGrids.test.ts`, so shipping an
+unsourced grid is a name a reviewer sees rather than the default when nobody
+looked. **Provenance governs editing, not just disclosure:** a grid carrying a source URL may be
+re-voiced — a hit moved from one row to another — because that does not change what the source says
+was played, but it may never be re-transcribed — a hit added or moved to a different step — without
+the URL becoming a lie. Only a `provenance: 'authored'` grid may gain or move a hit.
+The table resolves nothing at module scope, which is what lets the always-mounted
+`InstantVibesBar` import it eagerly with no resolver graph behind it; a single
+resolver call in that file would put four library modules back into the eager
+chunk and bring back the hand-duplicated chip table that was deleted with it.
+Each vibe's dice pool is its own explicit arrays (`random.progressions` and the
+rest), not the output of a filter over the shared library — so adding a
+progression never reaches into a vibe that did not ask for it.
+
+**Eleven drum voices, and the canonical order is written once.** `kick snare rimshot clap hihat
+openhat hitom lowtom ride crash bell` is the order `DRUM_TYPES` declares, and the `DrumKit`
+interface, `DEFAULT_DRUM_KIT`, `mergeDrumKit`, `INITIAL_SEQUENCER_TRACKS`, `DEFAULT_PADS` and
+`triggerDrum`'s dispatch all follow it, so a reviewer comparing any two of those lists is comparing
+sorted lists. `DrumKit.reference` does not exist — `reference` lives on `DRUM_KITS`'s value type
+instead, deliberately off the interface, so `keyof DrumKit` stays exactly the voice roster and
+never drifts into carrying documentation. `DRUM_ALIASES` is `{ closedhat: 'hihat' }` and nothing
+else: `triggerDrum` resolves an alias BEFORE its dispatch, so an alias pointing at a voice that has
+since gained its own case makes that case dead code with no error and no failing test — a guard
+asserts the table exhaustively (`toEqual`, not a subset check).
+
+**`mergeDrumKit` enumerates every voice by hand, deliberately.** Each voice has a differently
+shaped params type, so merging a partial kit against the default by looping over `DRUM_TYPES` would
+need a cast inside the loop — trading a compile error for a runtime hole the first time a partial
+kit is malformed.
+
+**`check:drums` asks two different questions, and neither can pass vacuously.** `PAIRWISE_PARAMS`
+asks whether two KITS differ, and its separation for a pair is a `max` over the list — so adding a
+parameter can only raise every pair's separation and make the floor easier to clear. New parameters
+therefore enter through `spread()`/`spreadDefined()`, never `PAIRWISE_PARAMS`; a voice that could
+collapse into a sibling voice inside one kit (a rimshot against that kit's own snare, a tom against
+its own sibling tom) is covered by the separate within-kit check instead, which asks whether two
+VOICES differ inside the same kit. `spread()` asserts `max >= factor * min`, which is vacuously
+true at `min = 0`, so a parameter that must never be zero carries its own explicit `> 0`
+assertion; `withinKit` fails CLOSED on a non-finite ratio — an unmeasurable pair is dropped, never
+treated as passing — plus a counted minimum, so a kit that goes entirely unmeasurable fails the
+count instead of silently clearing the floor. A `spread()` factor chosen after its values were
+measured is calibration, and its comment says so: from the commit that adds it, the factor is a
+floor, never lowered to make a retune easier.
+
+**The dice repoints the drum grid; it does not decorate one.** All five reroll axes
+are id pools now (`keys`, `progressions`, `chordRhythms`, `bassPatterns`,
+`drumGrids`), and three of the five use `pickDistinct` — `progressions` and
+`drumGrids` use plain `pick`, because neither has a `current` in the store to
+exclude and manufacturing one would fail silently. A rerolled vibe's `drumGridId`
+therefore always names the grid actually playing. The density catalogue and the
+kick-collision filter that used to sit behind this axis are deleted, deliberately:
+they constrained GENERATED rows, and authored grids are curated — a crash on beat 1
+over a kick on beat 1 is standard, not a clash, and porting the filter would reject
+grids for being correct.
 
 **The lead melody stores at its own width, and only the lead melody does.** The sequencer,
 chord-rhythm and bass grids store every bar at the widest meter's `MAX_STEPS_PER_BAR` and window
@@ -70,6 +167,16 @@ flushes on `pagehide`/`visibilitychange` — so the serialise cost is still per-
 anything driven by a pointer, a clock tick or an animation frame must not write persisted state
 directly. Consequence for tests and for reading `localStorage` in a live page: storage lags the
 store by up to one idle window; call `flushPersistedWrites()` before asserting on it.
+
+**A version stamped into persisted data is a contract, not a placeholder.** A migration step's
+guard (`if (version < N) …` in `store.ts`, its `.solna` sibling in `projectFormatMigrate.ts`) must
+not ship before what it produces is final — bumping the version and then continuing to change the
+migration's *output* across later commits leaves a session hydrated in that window stamped as
+already-migrated with the old, incomplete shape, and no later guard revisits it because the
+version check only ever looks backward. If a migration's output has to keep changing after its
+guard has shipped, bump the guard again rather than reusing the same version to now mean something
+different, and keep the transform idempotent so a session stranded by the interim contract
+self-heals the next time it runs.
 
 **The shared 16th clock runs if and only if a player holds a subscription.** `subscribeClock`
 starts the timer for the first listener and `stopClockTimer` ends it with the last, and nothing
@@ -119,10 +226,6 @@ before a render has no effect unless the component reads the store the way
 
 ## Traps recorded in the spec — don't "fix" these
 
-- **Instant Vibes ids drift from labels** (`cyber-dance` → "Cyber EDM", `ambient-chill` → "Deep
-  Ambient", `hiphop-groove` → "Boom Bap", `asian-zen` → "Zen Garden"). Ids are persisted in
-  project files; renaming them breaks saved projects. The table lives in
-  `src/store/instantVibes.ts` — the single copy since the `audio/` fork was deleted.
 - **Tap Tempo and stereo VU are unbuilt**, not broken — see `docs/design.md` §4 item 3.
 - **The lead melody's two migration chains each run two upgrades, in order, before their sanitize
   step.** `asLeadNoteMatrix` — the guard both read paths go through — returns `undefined` for the

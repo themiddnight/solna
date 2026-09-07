@@ -116,7 +116,7 @@ Typography is shared with murva: one sans face for everything, and monospace res
     The *pairing* is the rule, so `components/ui/Field.tsx` owns it and
     `FIELD_LABEL` / `FIELD_LANE` are its internals: the Drum Sound row
     hand-assembled the same `<div><label/><div lane/></div>` four times before
-    it existed. A lane with no label above it (the Pattern card's genre select,
+    it existed. A lane with no label above it (the Pattern card's drum-grid select,
     named by `aria-label` because its card title already says "Pattern") still
     uses `FIELD_LANE` directly — there the lane is load-bearing layout, since
     daisyUI's `.select` is `width: 100%` and would claim the whole flex row.
@@ -135,27 +135,14 @@ Typography is shared with murva: one sans face for everything, and monospace res
 Solna is structured into modular, single-responsibility React components:
 
 1. **`Header.tsx`**: Top navigation bar containing the Solna brand logo, project title, primary view tabs (`Synth`, `Beat Step`, `Chords`, `Master FX`), global Key/Scale selector, Project modal trigger, and the **Theme Toggle** button.
-2. **`InstantVibesBar.tsx`**: Quick-start genre and mood presets (`Lo-Fi Chill`, `Synthwave 80s`, `Cyber EDM`, `Deep Ambient`, `Boom Bap`, `Zen Garden`) allowing instant loading of complete harmonic and rhythmic templates.
-
-   > **Ids drift from display names — do not "fix" this.** Four vibe ids predate their current labels. Project files persist the id, so renaming an id silently breaks every saved project that references it.
-   >
-   > | id (persisted) | display name |
-   > |---|---|
-   > | `lofi-chill` | Lo-Fi Chill |
-   > | `synthwave-80s` | Synthwave 80s |
-   > | `cyber-dance` | **Cyber EDM** |
-   > | `ambient-chill` | **Deep Ambient** |
-   > | `hiphop-groove` | **Boom Bap** |
-   > | `asian-zen` | **Zen Garden** |
-   >
-   > The table lives in `src/store/instantVibes.ts`. It used to be duplicated in an `audio/` fork; that fork is gone, so there is one copy to keep correct.
+2. **`InstantVibesBar.tsx`**: Quick-start genre and mood presets (`Lo-Fi Chill`, `Synthwave 80s`, `Cyber EDM`, `Deep Ambient`, `Boom Bap`, `Zen Garden`, `Lo-Fi Waltz`, `Afro 6/8`) allowing instant loading of complete harmonic and rhythmic templates.
 3. **`TransportBar.tsx`**: Bottom sticky player controls featuring Play/Stop All, Tab Play, a BPM stepper (−/+ buttons around a `40`–`240` number input; there is **no** tap-tempo), a Metronome toggle, a **mono** 10-segment VU meter (green below segment 7, `warning` at 7-8, `error` at 9-10), and the Master Output volume fader. Its centre carries `PlayheadReadout`, not the visualizer — the canvas view moved to `EffectsRackView`'s Monitor section (item 7).
 
    > **Explicitly unbuilt.** Two features described in earlier revisions of this spec were never implemented and are recorded here as future work, not as shipped behaviour:
    > - **Tap Tempo** — a button that derives BPM from the interval between successive clicks. The BPM setter (`setBpm`) already exists in the store, so this is UI-only work.
    > - **Stereo VU** — the meter reads a single scalar level. Making it stereo requires a channel-split analyser in `src/audio/engine.ts` before any UI change is worthwhile.
 4. **`SimpleSynthPanel.tsx` / `SynthView.tsx` / `loop/synth/*Panel.tsx`**: Dual-mode synthesizer interface. Simple mode is 4 friendly macro knobs (`Tone`, `Space`, `Vibe`, `Punch`) in `SimpleSynthPanel`. Pro mode is five independent module panels under `components/loop/synth/` — `OscillatorPanel`, `FilterPanel`, `EnvelopePanel`, `LfoPanel`, `ArpeggiatorPanel`, in that order — each wearing its own identity token from §6.5. They take **no props**: each calls `useSynthChannel()` (`loop/synth/useSynthChannel.ts`), which resolves `params` / `onChangeParams` / `tintClass` for the active Synth-Chord-Bass target straight from the store, so `SynthView` renders `<OscillatorPanel />` with no wiring and its own re-renders no longer reconcile the knob JSX. `SynthView` keeps the mode switcher, the preset header, the target selector, the keyboard, the lead piano-roll and the lazily-loaded preset library.
-5. **`SequencerView.tsx`**: Multi-track step sequencer grid for drums, bass, synth, and percussion patterns with velocity and step probability editing.
+5. **`SequencerView.tsx`**: Multi-track step sequencer grid for drums, bass, synth, and percussion patterns with velocity and step probability editing. Seven tracks — kick, snare, hihat, openhat, clap, tom, crash — each on its own semantic theme token; `THEME_TOKENS` has eight non-surface entries, so the next two voices cannot each take a fresh one.
 6. **`ChordView.tsx` / `loop/chord/ChordModulePanel.tsx` / `loop/chord/BassModulePanel.tsx`**: Interactive chord progression builder. `ChordView` owns the sortable chord-card grid, the in-scale and borrowed quick-add palettes, the key/scale effects and the pattern-preview handlers; the two module cards own their own controls (preset, octave, pattern select + custom step grid, feel, level — plus Re-harmonize and Auto-Reharmonize on the chord card), read their own slice of the store, and take only what they cannot derive: the two preview handlers, and the chord card's auto-reharmonize state and Re-harmonize action. The grid is deliberately NOT extracted — it shares `handleMoveChord` / `removeChord` / `updateChord` and `SortableChordCard`'s memo contract too tightly to split without threading half of ChordView's state back in as props.
 7. **`EffectsRackView.tsx`**: Two sections. **FX Chain** is a two-column grid (room for a compressor or graphic EQ) holding Algorithmic Space Reverb, Stereo Echo Delay, Wave Distortion/Crunch, and a 3-Band Equalizer. **Monitor** holds `AudioVisualizer` (item 9), passed a `paused` prop tied to whether Master FX is the active tab — see item 9 for why that prop exists at all.
 8. **`ProjectModal.tsx`**: Project save / load / export / import dialog, rendered as a daisyUI `modal` with a `modal-box` and `modal-backdrop`.
@@ -183,7 +170,7 @@ Shared, presentation-only controls under `src/components/ui/`. These own the dai
   that module's own card — which is why `Chord Level` and `Re-harmonize` sit
   inside the chord card rather than the header. `SequencerView` was the last
   view to break this: its header had grown to seven controls, so the kit, filter
-  and level moved into `Drum Sound` and the genre picker, shift, Random and
+  and level moved into `Drum Sound` and the drum-grid picker, shift, Random and
   Clear moved onto the `Pattern` card, beside the grid they rewrite. Those
   pattern tools sit OUTSIDE that card's `overflow-x-auto`, so they stay put
   while a grid wider than the card scrolls under them.
@@ -197,7 +184,7 @@ Shared, presentation-only controls under `src/components/ui/`. These own the dai
 ## 5. Audio Engine & State Persistence
 
 - **Audio Synthesis**: Hand-rolled on the **raw Web Audio API** — a single `audioEngine` singleton (`src/audio/engine.ts`) owning the `AudioContext`, the voice pool, the parallel effect sends and the shared 16th-note clock. There is no Tone.js; `tonal` is a music-theory dependency only.
-- **State Management**: Zustand store (`src/store/`) managing transport, synth patches, chord progressions, drum patterns, and master effects in real-time.
+- **State Management**: Zustand store (`src/store/`) managing transport, synth patches, chord progressions, drum grids, and master effects in real-time.
 - **Persistence**: Local storage and project JSON export/import workflows allowing creators to save and load their musical sketches effortlessly.
 
 ### Resolved: the forked Instant Vibes module
@@ -211,11 +198,14 @@ reads `kick`/`snare`/`hihat`, and it named a `Velvet EP` preset that no longer
 exists anywhere in the codebase. Its test suite passed the whole time, on data
 nothing shipped.
 
-Both files are now deleted. `src/store/instantVibes.ts` is the only copy, and
-the two `no-restricted-imports` errors the fork raised (`audio/` must not import
-`store/`) are gone with it. The engine-init block and the extra effect
-parameters it carried (`delayTime`, `chorusWet`/`Rate`/`Depth`) were never
-audible and are recoverable from git history if they are ever wanted.
+Both files are now deleted. `src/store/instantVibes.ts` was the only copy from
+that point on — it has since been renamed `src/store/vibes.ts` and had its
+literal split out to `src/data/vibes.ts`, but there is still exactly one copy
+of the table. The two `no-restricted-imports` errors the fork raised (`audio/`
+must not import `store/`) are gone with it. The engine-init block and the
+extra effect parameters it carried (`delayTime`, `chorusWet`/`Rate`/`Depth`)
+were never audible and are recoverable from git history if they are ever
+wanted.
 
 ---
 

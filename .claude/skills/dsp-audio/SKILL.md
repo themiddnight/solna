@@ -153,7 +153,8 @@ context is created. Multi-field engine setters are subscribed as one encoded pri
 
 ## Drum kits
 
-`src/audio/drumKits.ts`: `DrumKit` has 7 types — `kick, snare, hihat, openhat, clap, tom, crash`.
+`src/data/drumKits.ts`: `DrumKit` has 7 types — `kick, snare, hihat, openhat, clap, tom, crash`.
+`mergeDrumKit` is in `src/audio/drumKits.ts`.
 `DRUM_KITS` holds `Partial<DrumKit>` overrides merged onto `DEFAULT_DRUM_KIT` by `mergeDrumKit()`.
 `triggerDrum(type, velocity, time?)` accepts aliases: `closedhat`→hihat, `lowtom`→tom, `ride`→crash.
 
@@ -166,9 +167,10 @@ Adding or editing a kit means running `bun run check:drums`. `bun run verify` in
 
 ## Synth presets
 
-`src/audio/synthPresets.ts` exports `FACTORY_PRESETS` / `ALL_FACTORY_PRESETS` (`SynthPresetItem`
-grouped by `SynthPresetCategory`). Presets are plain `SynthParams` data — they reach the engine
-only by being set into a store slice, which `engineSync.ts` forwards to `updateSynthParams`.
+`src/data/synthPresets.ts` exports `SYNTH_PRESETS` (29 entries, `SynthPresetItem` …); the lookups
+(`presetById`, `applyPreset`, `getAllSynthPresets`, `getPresetsGroupedByCategory`) are in
+`src/audio/presetRegistry.ts`. Presets are plain `SynthParams` data — they reach the engine only
+by being set into a store slice, which `engineSync.ts` forwards to `updateSynthParams`.
 
 ## Debugging checklist
 

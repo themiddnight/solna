@@ -46,6 +46,11 @@ singleton's constructor), plus `fakeCtx()`, `fakeNode()`, `fakeBufferSource()` a
 **refuses timelines containing `setTargetAtTime`** — an exponential approach has no exact closed
 form here, so assert on the recorded events instead of on a computed value.
 
+## Where a data/audio test lives
+
+A test that asserts only what is in a table belongs in `src/data/`; a test that asserts the
+result of a lookup, merge or derivation belongs in `src/audio/`.
+
 ## Invariant scripts
 
 Two scripts import straight from source and must keep passing:

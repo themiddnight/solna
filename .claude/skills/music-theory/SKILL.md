@@ -5,8 +5,9 @@ description: Use when touching notes, scales, keys, chord generation, bass/rhyth
 
 # Music Theory (solna)
 
-Everything theory-related lives in **`src/utils/musicTheory.ts`** (pure, no store/engine imports).
-`src/audio/` and `src/components/` both import from it; it imports neither.
+Theory *functions* live in **`src/utils/musicTheory.ts`** (pure, no store/engine imports); the
+`SCALES` table lives in `src/data/scales.ts`.
+`src/audio/` and `src/components/` both import from `musicTheory.ts`; it imports neither.
 
 ## Rule: use `tonal`, never hand-rolled math
 
@@ -85,13 +86,13 @@ snaps on demand; that is its deliberate, user-requested job.
 
 ## The progression library
 
-`src/audio/data/chordProgressions.ts` holds `CHORD_PROGRESSIONS` — 40 progressions as **scale
+`src/data/chordProgressions.ts` holds `CHORD_PROGRESSIONS` — 44 progressions as **scale
 degrees**, never semitones. A step is `{ degree, quality?, bars }`; an omitted `quality` means the
 scale's **triad** for that degree, never the seventh. `resolveProgression(p, root, scaleType, octave)`
 is the only way to turn one into `ChordItem`s.
 
 Each entry declares the `referenceScale` its degrees were authored in, `minScaleLength` (that scale's
-degree count), and `genres` — a tag is only legal when `referenceScale === VIBE_GENRE_SCALES[tag]`.
+degree count), and `genres` — a free-form browsing tag that nothing computes from.
 Callers must filter on `minScaleLength` themselves; `resolveProgression` wraps degrees and will not
 stop you.
 
@@ -102,7 +103,7 @@ fixture.
 
 ## Bass and rhythm patterns
 
-`src/audio/bassPatterns.ts` — `BASS_PATTERNS` (12, styles `Walking` / `Grooves` / `Minimal`) are lists of
+`src/data/bassPatterns.ts` — `BASS_PATTERNS` (16, styles `Walking` / `Grooves` / `Minimal`) are lists of
 `BassStep { step 0–15, note token, holdSteps, velocity, octaveShift, staccato, alternate }`.
 `resolveBassSteps(pattern, chords, chordIndex, octave, scaleRoot, scaleType, bpm, holdScale)` turns one bar
 into `ResolvedBassEvent[]`:
@@ -113,7 +114,7 @@ into `ResolvedBassEvent[]`:
   `approachDiatonicUp` walks to the next scale degree above via `SCALES[scaleType].intervals`.
 - `alternate: true` flips chromatic above/below on odd `chordIndex` — deterministic, not random.
 
-`src/audio/rhythmPatterns.ts` — `RHYTHM_PATTERNS` (15, 9 styles) are one-bar 16-step chord-comp patterns of
+`src/data/chordRhythms.ts` — `CHORD_RHYTHMS` (21, 9 styles) are one-bar 16-step chord-comp patterns of
 `RhythmHit`s, either `block` (all notes at once) or `strum` (cascade, `direction` + `spreadMs`). `note` +
 `octaveShift` isolate a single chord tone. `feelToHoldScale(feel)` maps the Feel knob to hold length;
 `equalPowerVelocityScale(n)` keeps thick chords from clipping.
