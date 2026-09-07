@@ -2,8 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { ChordPresetLibrary, isProgressionAvailable, templateAuditionClassName, customAuditionClassName } from './ChordPresetLibrary';
 import { INITIAL_SYNTH_PARAMS } from '../../store/initialState';
-import { CHORD_PROGRESSIONS, progressionById } from '../../audio/data/chordProgressions';
-import { SCALES } from '../../utils/musicTheory';
+import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
+import { progressionById } from '@/audio/chordProgressions';
+import { SCALES } from '@/data/scales';
 
 const noop = () => {};
 

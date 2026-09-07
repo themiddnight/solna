@@ -9,21 +9,40 @@ import { Slider } from './Slider';
  * `DEFAULT_PADS` — the shortcut codes here are the source of truth for the
  * drum half of the global key map.
  *
+ * The ten pads sit on the QWERTY bottom row, two rows of five, read
+ * left-to-right top-to-bottom in canonical voice order:
+ *   row 1  KeyZ=kick   KeyX=snare  KeyC=rimshot  KeyV=clap   KeyB=hihat
+ *   row 2  KeyN=openhat KeyM=hitom Comma=lowtom  Period=ride Slash=crash
+ * `bell` has no pad — see `PADLESS_VOICES` below — which frees `KeyQ`.
+ *
  * `color` holds the full gradient stops plus the matching content token; it is
- * spliced into a `bg-gradient-to-br` className below. Three semantic ramps
- * rotate primary -> secondary -> accent so neighbours stay distinguishable in
- * both the 4-column and the 8-column grid.
+ * spliced into a `bg-gradient-to-br` className below. Each pad carries its own
+ * `--color-drum-*` identity colour (`src/index.css`) instead of rotating
+ * across the three semantic ramps, so adjacency always guarantees a colour
+ * change.
  */
 export const DEFAULT_PADS: DrumPad[] = [
-  { id: 'kick', name: 'Kick Drum', note: 'kick', color: 'from-primary to-primary/60 text-primary-content', shortcut: 'KeyZ', volume: 0.9, pitch: 0, decay: 0.3 },
-  { id: 'snare', name: 'Snare Snap', note: 'snare', color: 'from-secondary to-secondary/60 text-secondary-content', shortcut: 'KeyX', volume: 0.85, pitch: 0, decay: 0.2 },
-  { id: 'hihat', name: 'Closed Hat', note: 'hihat', color: 'from-accent to-accent/60 text-accent-content', shortcut: 'KeyC', volume: 0.75, pitch: 0, decay: 0.05 },
-  { id: 'openhat', name: 'Open Hat', note: 'openhat', color: 'from-primary to-primary/60 text-primary-content', shortcut: 'KeyV', volume: 0.8, pitch: 0, decay: 0.35 },
-  { id: 'clap', name: 'Hand Clap', note: 'clap', color: 'from-secondary to-secondary/60 text-secondary-content', shortcut: 'KeyM', volume: 0.85, pitch: 0, decay: 0.2 },
-  { id: 'lowtom', name: 'Low Tom', note: 'tom', color: 'from-accent to-accent/60 text-accent-content', shortcut: 'Comma', volume: 0.8, pitch: 0, decay: 0.25 },
-  { id: 'hightom', name: 'High Tom', note: 'tom', color: 'from-primary to-primary/60 text-primary-content', shortcut: 'Period', volume: 0.8, pitch: 4, decay: 0.2 },
-  { id: 'crash', name: 'Crash Cymbal', note: 'crash', color: 'from-secondary to-secondary/60 text-secondary-content', shortcut: 'Slash', volume: 0.75, pitch: 0, decay: 0.8 },
+  { id: 'kick', name: 'Kick Drum', note: 'kick', color: 'from-drum-kick to-drum-kick/60 text-drum-kick-content', shortcut: 'KeyZ', volume: 0.9, pitch: 0, decay: 0.3 },
+  { id: 'snare', name: 'Snare Snap', note: 'snare', color: 'from-drum-snare to-drum-snare/60 text-drum-snare-content', shortcut: 'KeyX', volume: 0.85, pitch: 0, decay: 0.2 },
+  { id: 'rimshot', name: 'Rim Shot', note: 'rimshot', color: 'from-drum-rimshot to-drum-rimshot/60 text-drum-rimshot-content', shortcut: 'KeyC', volume: 0.8, pitch: 0, decay: 0.12 },
+  { id: 'clap', name: 'Hand Clap', note: 'clap', color: 'from-drum-clap to-drum-clap/60 text-drum-clap-content', shortcut: 'KeyV', volume: 0.85, pitch: 0, decay: 0.2 },
+  { id: 'hihat', name: 'Closed Hat', note: 'hihat', color: 'from-drum-hihat to-drum-hihat/60 text-drum-hihat-content', shortcut: 'KeyB', volume: 0.75, pitch: 0, decay: 0.05 },
+  { id: 'openhat', name: 'Open Hat', note: 'openhat', color: 'from-drum-openhat to-drum-openhat/60 text-drum-openhat-content', shortcut: 'KeyN', volume: 0.8, pitch: 0, decay: 0.35 },
+  { id: 'hitom', name: 'Hi Tom', note: 'hitom', color: 'from-drum-hitom to-drum-hitom/60 text-drum-hitom-content', shortcut: 'KeyM', volume: 0.8, pitch: 0, decay: 0.2 },
+  { id: 'lowtom', name: 'Low Tom', note: 'lowtom', color: 'from-drum-lowtom to-drum-lowtom/60 text-drum-lowtom-content', shortcut: 'Comma', volume: 0.8, pitch: 0, decay: 0.25 },
+  { id: 'ride', name: 'Ride Cymbal', note: 'ride', color: 'from-drum-ride to-drum-ride/60 text-drum-ride-content', shortcut: 'Period', volume: 0.75, pitch: 0, decay: 0.9 },
+  { id: 'crash', name: 'Crash Cymbal', note: 'crash', color: 'from-drum-crash to-drum-crash/60 text-drum-crash-content', shortcut: 'Slash', volume: 0.75, pitch: 0, decay: 0.8 },
 ];
+
+/**
+ * Voices with no pad. Ten pads fit one physical keyboard row (the QWERTY
+ * bottom row); an eleventh did not, so `bell` was dropped from the grid. It
+ * keeps its sequencer track, colour, kit entry and engine case — only the
+ * pad goes. `DrumPadGrid.test.tsx` asserts that `DEFAULT_PADS`'s notes,
+ * unioned with this list, equal `DRUM_TYPES` — so removing another voice
+ * from the pads without adding it here fails loudly instead of silently.
+ */
+export const PADLESS_VOICES = ['bell'] as const;
 
 export interface DrumPadGridProps {
   pads: DrumPad[];
@@ -41,7 +60,9 @@ export const DrumPadGrid: React.FC<DrumPadGridProps> = ({
   onPadVolumeChange,
 }) => {
   return (
-    <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-2.5">
+    // 5 columns matches the two-row, five-per-row keyboard map exactly (ten
+    // pads = 5+5, no ragged trailing row) at every width.
+    <div className="grid grid-cols-5 gap-2 sm:gap-2.5">
       {pads.map((pad) => {
         const isActive = activePadId === pad.id;
         return (

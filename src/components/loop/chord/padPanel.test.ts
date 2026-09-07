@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { CategoryPresetGroup } from '@/audio/synthPresets';
+import type { CategoryPresetGroup } from '@/audio/presetRegistry';
 import { droneDegreeButtons, padPresetGroups } from './padPanel';
 
 function group(category: string, presetNames: string[]): CategoryPresetGroup {

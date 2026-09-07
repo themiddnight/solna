@@ -16,16 +16,15 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { useAppStore } from "../../store/store";
+import type { SynthPresetItem, SynthPresetCategory } from "../../data/synthPresets";
+import { SYNTH_CATEGORIES } from "../../data/synthPresets";
 import {
-  SynthPresetItem,
-  SynthPresetCategory,
-  SYNTH_CATEGORIES,
   applyPreset,
   findPresetByName,
   getAllSynthPresets,
   getPresetsGroupedByCategory,
   getCategoryMeta,
-} from "../../audio/synthPresets";
+} from "../../audio/presetRegistry";
 // The drawer is never needed on first paint — PresetLibrary early-returns
 // null when closed — so it is code-split out of the main chunk.
 const SynthPresetLibrary = React.lazy(() =>

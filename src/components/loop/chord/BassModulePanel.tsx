@@ -1,15 +1,13 @@
 import React, { useMemo } from "react";
 import { Volume2 } from "lucide-react";
 import { useAppStore } from "../../../store/store";
-import {
-  BASS_STYLE_GROUPS,
-  type BassStepChoice,
-} from "../../../audio/bassPatterns";
+import { BASS_STYLE_GROUPS } from "../../../audio/bassPatterns";
+import { type BassStepChoice } from "@/data/bassPatterns";
 import {
   getAllSynthPresets,
   findPresetByName,
   getPresetsGroupedByCategory,
-} from "../../../audio/synthPresets";
+} from "../../../audio/presetRegistry";
 import { patternMeterTitle, patternOptionLabel } from "../../meterSelect";
 import { getMeter } from "../../../utils/meter";
 import { stepCells } from "../../sequencerGrid";

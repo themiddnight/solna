@@ -11,20 +11,24 @@ import {
 } from "../../../audio/playback/chordPlayback";
 import type { BarInvariantEvent } from "../../../audio/playback/chordPlayback";
 import {
-  RHYTHM_PATTERNS,
+  CHORD_RHYTHMS,
   RhythmPattern,
+} from "@/data/chordRhythms";
+import {
   customRhythmPattern,
   feelToHoldScale,
   fullHoldDuration,
-} from "../../../audio/rhythmPatterns";
+} from "../../../audio/chordRhythms";
 import {
-  BASS_PATTERNS,
-  BassPattern,
   customBassPattern,
   isApproachToken,
   resolveBassSteps,
-  type BassStepChoice,
 } from "../../../audio/bassPatterns";
+import {
+  BASS_PATTERNS,
+  BassPattern,
+  type BassStepChoice,
+} from "@/data/bassPatterns";
 import {
   STEPS_PER_BAR,
   generateBlockChordNotes,
@@ -162,7 +166,7 @@ export function isFullHoldBass(pattern: BassPattern, stepsPerBar: number): boole
 }
 
 function resolveRhythmPattern(id: string): RhythmPattern {
-  return RHYTHM_PATTERNS.find((p) => p.id === id) ?? RHYTHM_PATTERNS[0];
+  return CHORD_RHYTHMS.find((p) => p.id === id) ?? CHORD_RHYTHMS[0];
 }
 
 function resolveBassPattern(id: string): BassPattern {

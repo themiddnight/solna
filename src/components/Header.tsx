@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import { Layer, layerForTab, ViewMode } from "../types";
 import { defaultTabForLayer } from "../routing/tabRouting";
-import { ROOTS, SCALES } from "../utils/musicTheory";
+import { ROOTS } from "../utils/musicTheory";
+import { SCALES } from "@/data/scales";
 import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/storage";
 import { useAppStore } from "../store/store";
 import { useLiveStore } from "./ui/useLiveStore";

@@ -1,4 +1,4 @@
-import type { BassStepChoice } from '../../../audio/bassPatterns';
+import type { BassStepChoice } from '@/data/bassPatterns';
 
 const BASS_STEP_CYCLE: BassStepChoice[] = ['rest', 'root', 'third', 'fifth', 'seventh', 'octave'];
 

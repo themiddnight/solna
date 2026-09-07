@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { INSTANT_VIBES, applyInstantVibeToStore } from '../store/instantVibes';
+import { VIBES } from '../data/vibes';
+import { applyVibeToStore, resolveVibe } from '../store/vibes';
 import { audioEngine } from '../audio/engine';
 import { useAppStore } from '../store/store';
 import { startEngineSync, stopEngineSync } from '../store/engineSync';
@@ -23,18 +24,18 @@ describe('selectVibe', () => {
   test('does not start playback when transport is stopped', () => {
     useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped' });
 
-    selectVibe(INSTANT_VIBES[0], noop);
+    selectVibe(VIBES[0], noop);
 
     const state = useAppStore.getState();
     expect(state.sequencerPlayer).toBe('stopped');
     expect(state.chordsPlayer).toBe('stopped');
-    expect(state.selectedVibeId).toBe(INSTANT_VIBES[0].id);
+    expect(state.selectedVibeId).toBe(VIBES[0].id);
   });
 
   test('does not stop playback when transport is playing', () => {
     useAppStore.setState({ sequencerPlayer: 'playing', chordsPlayer: 'playing' });
 
-    selectVibe(INSTANT_VIBES[0], noop);
+    selectVibe(VIBES[0], noop);
 
     const state = useAppStore.getState();
     expect(state.sequencerPlayer).toBe('playing');
@@ -46,14 +47,14 @@ describe('selectedVibeId', () => {
   test('loading any vibe selects exactly that one vibe', () => {
     // The id is persisted, so a reload restores the highlight of whichever
     // vibe was loaded rather than a separate, hardcoded default.
-    for (const vibe of INSTANT_VIBES) {
+    for (const vibe of VIBES) {
       selectVibe(vibe, noop);
       expect(useAppStore.getState().selectedVibeId).toBe(vibe.id);
     }
   });
 
   test('vibe ids are unique, so at most one chip can ever match', () => {
-    const ids = INSTANT_VIBES.map((v) => v.id);
+    const ids = VIBES.map((v) => v.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
@@ -88,8 +89,8 @@ const swallow = { onToast: () => {} };
 
 describe('rerollVibe', () => {
   test('a reroll changes the music but never the genre anchor', () => {
-    const vibe = INSTANT_VIBES[0];
-    applyInstantVibeToStore(vibe);
+    const vibe = VIBES[0];
+    applyVibeToStore(resolveVibe(vibe));
     const before = useAppStore.getState();
     const authored = {
       scaleRoot: before.scaleRoot,
@@ -110,19 +111,19 @@ describe('rerollVibe', () => {
 
   test('the toast carries both lines', () => {
     let received: { headline: string; detail: string } | null = null;
-    rerollVibe(INSTANT_VIBES[0], { onToast: (t) => { received = t; } });
+    rerollVibe(VIBES[0], { onToast: (t) => { received = t; } });
     expect(received).not.toBeNull();
     expect(received!.headline.startsWith('🎲 ')).toBe(true);
     expect(received!.detail.includes(' · drums: ')).toBe(true);
   });
 
-  // Non-regression: the atomic-swap fix lives in applyInstantVibeToStore and a
+  // Non-regression: the atomic-swap fix lives in applyVibeToStore and a
   // reroll must inherit it rather than re-implement it.
   test('a reroll cuts the chord and bass sources synchronously', () => {
     const stopSource = spyOn(audioEngine, 'stopSource').mockImplementation(() => {}).mockClear();
     useAppStore.setState({ sequencerPlayer: 'playing', chordsPlayer: 'playing' });
 
-    rerollVibe(INSTANT_VIBES[0], swallow);
+    rerollVibe(VIBES[0], swallow);
 
     expect(stopSource).toHaveBeenCalledWith('chord', 0.02);
     expect(stopSource).toHaveBeenCalledWith('bass', 0.02);
@@ -134,7 +135,7 @@ describe('rerollVibe', () => {
 
   test('a reroll while stopped leaves both players stopped', () => {
     useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped' });
-    rerollVibe(INSTANT_VIBES[0], swallow);
+    rerollVibe(VIBES[0], swallow);
     const after = useAppStore.getState();
     expect(after.sequencerPlayer).toBe('stopped');
     expect(after.chordsPlayer).toBe('stopped');
@@ -143,7 +144,7 @@ describe('rerollVibe', () => {
   /**
    * A reroll rewinds the shared bar grid, and that is INTENDED.
    *
-   * applyInstantVibeToStore calls hardStopAll(), which takes engineSync's
+   * applyVibeToStore calls hardStopAll(), which takes engineSync's
    * transport flags to 0, then restarts the players that were running, which
    * takes them back up — and zustand's subscription is synchronous and not
    * React-batched, so the `flags !== 0 && prevFlags === 0` branch really runs.
@@ -157,7 +158,7 @@ describe('rerollVibe', () => {
     startEngineSync();
     const resetClock = spyOn(audioEngine, 'resetClock').mockImplementation(() => {}).mockClear();
 
-    rerollVibe(INSTANT_VIBES[0], swallow);
+    rerollVibe(VIBES[0], swallow);
 
     // Tear the subscription down BEFORE asserting: a failing expect would
     // otherwise leak a live engineSync into every later test in the file.
@@ -167,7 +168,7 @@ describe('rerollVibe', () => {
   });
 
   test('the chip stays highlighted after a reroll', () => {
-    rerollVibe(INSTANT_VIBES[0], swallow);
-    expect(useAppStore.getState().selectedVibeId).toBe(INSTANT_VIBES[0].id);
+    rerollVibe(VIBES[0], swallow);
+    expect(useAppStore.getState().selectedVibeId).toBe(VIBES[0].id);
   });
 });

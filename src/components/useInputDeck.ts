@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { equalPowerVelocityScale } from '../audio/rhythmPatterns';
+import { equalPowerVelocityScale } from '@/audio/chordRhythms';
 import { useArpPlayback, type ArpStateRef } from '../audio/playback/arpPlayback';
 import {
   applySynthPlaybackVelocityScale,

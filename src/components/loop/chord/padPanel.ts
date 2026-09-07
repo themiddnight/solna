@@ -1,5 +1,6 @@
-import { SCALES, getDiatonicChordForDegree } from '@/utils/musicTheory';
-import type { CategoryPresetGroup } from '@/audio/synthPresets';
+import { SCALES } from '@/data/scales';
+import { getDiatonicChordForDegree } from '@/utils/musicTheory';
+import type { CategoryPresetGroup } from '@/audio/presetRegistry';
 
 /**
  * One button per degree of the ACTIVE scale — five for Hirajoshi, seven for

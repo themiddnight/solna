@@ -3,6 +3,7 @@ import { renderToString } from 'react-dom/server';
 import { SequencerView } from './SequencerView';
 import { useAppStore } from '../../store/store';
 import { FIELD_LABEL, FIELD_LANE, FIELD_SELECT } from '../ui/fieldClasses';
+import { DRUM_TYPES } from '@/data/drumKits';
 
 describe('SequencerView theming', () => {
   const html = renderToString(<SequencerView />);
@@ -25,10 +26,10 @@ describe('SequencerView theming', () => {
     const patternCard = html.indexOf('>Pattern<');
     expect(soundCard).toBeGreaterThan(-1);
     expect(patternCard).toBeGreaterThan(-1);
-    // The kit belongs to the sound module; the genre picker and the three
+    // The kit belongs to the sound module; the grid picker and the three
     // destructive pattern tools belong to the pattern module.
     expect(html.indexOf('select-sequencer-sound-kit')).toBeGreaterThan(soundCard);
-    expect(html.indexOf('select-sequencer-genre')).toBeGreaterThan(patternCard);
+    expect(html.indexOf('select-sequencer-grid')).toBeGreaterThan(patternCard);
     expect(html.indexOf('btn-randomize-grid')).toBeGreaterThan(patternCard);
     expect(html.indexOf('btn-clear-grid')).toBeGreaterThan(patternCard);
     // Both cards come after the header, so nothing above them can be the header.
@@ -51,16 +52,16 @@ describe('SequencerView theming', () => {
     expect(lanes).toBe(4);
   });
 
-  test('the kit and genre selects use the shared stacked field label', () => {
+  test('the kit and grid selects use the shared stacked field label', () => {
     expect(html).toContain(FIELD_LABEL);
     expect(html).toContain(FIELD_SELECT);
     expect(html).toContain('>Kit</label>');
     expect(html).not.toContain('Pattern:');
     expect(html).not.toContain('Kit:');
-    // The genre select carries no visible label — the card it sits in is
+    // The grid select carries no visible label — the card it sits in is
     // already titled Pattern and it is that card's only field — so its
     // accessible name has to come from somewhere else.
-    expect(html).toContain('aria-label="Drum pattern genre"');
+    expect(html).toContain('aria-label="Drum grid"');
     expect(html).not.toContain('>Genre</label>');
   });
 
@@ -77,12 +78,10 @@ describe('SequencerView theming', () => {
     expect(html).toContain('text-accent');
   });
 
-  test('track dots render semantic token backgrounds', () => {
-    expect(html).toContain('bg-error');
-    expect(html).toContain('bg-warning');
-    expect(html).toContain('bg-success');
-    expect(html).toContain('bg-accent');
-    expect(html).toContain('bg-secondary');
+  test('track dots render the drum-namespace token for every voice', () => {
+    for (const voice of DRUM_TYPES) {
+      expect(html, `${voice} row colour`).toContain(`bg-drum-${voice}`);
+    }
   });
 
   test('the active-step shadow that used to read shadow-indigo-500/20 is now shadow-primary/20', () => {
@@ -109,14 +108,27 @@ describe('SequencerView theming', () => {
   });
 });
 
-describe('SequencerView genre options carry their meter', () => {
-  test('in 4/4 every genre is labelled with its own meter', () => {
+describe('SequencerView grid options carry their meter', () => {
+  test('in 4/4 every grid is labelled with its own meter', () => {
     useAppStore.setState({ meterId: '4/4' });
     const html = renderToString(<SequencerView />);
     expect(html).toContain('Synthwave · 4/4');
     expect(html).toContain('Boom Bap · 4/4');
-    // The value is still the bare genre key, so applyGenrePreset is unaffected.
-    expect(html).toContain('value="Synthwave"');
+    // The option's VALUE is the library id and its LABEL is the display name.
+    // They were the same string while the menu was keyed by genre name.
+    expect(html).toContain('value="synthwave"');
+    expect(html).toContain('value="boom-bap"');
+  });
+
+  test('the menu offers the vibe grids too, not just the sequencer genres', () => {
+    // The whole point of merging the two drum-grid tables: what an Instant Vibe
+    // is built from is now loadable from the sequencer, and a vibe may
+    // reference any of the 30.
+    useAppStore.setState({ meterId: '4/4' });
+    const html = renderToString(<SequencerView />);
+    expect(html).toContain('value="lofi-half-time-brush"');
+    expect(html).toContain('Lo-Fi Half-Time Brush · 4/4');
+    expect(html).toContain('value="afro-six-eight-bell"');
   });
 
   // There is no companion test here rendering a non-default active meter

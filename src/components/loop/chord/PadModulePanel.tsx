@@ -4,7 +4,7 @@ import {
   getAllSynthPresets,
   findPresetByName,
   getPresetsGroupedByCategory,
-} from "@/audio/synthPresets";
+} from "@/audio/presetRegistry";
 import { ChannelStrip } from "@/components/ui/ChannelStrip";
 import { FIELD_LABEL, FIELD_SELECT, JOIN_LANE, SECTION_HEADER } from "@/components/ui/fieldClasses";
 import { SYNTH_TARGET_STYLES } from "@/utils/synthControl";

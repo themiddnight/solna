@@ -1,35 +1,24 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Sparkles, Check, Dices } from 'lucide-react';
-import { VIBE_CHIPS, type VibeChip } from '../store/vibeChips';
+import { VIBES, type VibeSpec } from '../data/vibes';
 import { useAppStore } from '../store/store';
 
 /**
- * The vibe table plus the two actions, loaded on demand.
+ * The two vibe actions, loaded on demand.
  *
- * instantVibes.ts resolves every vibe's chords, drum pattern and effect chain
- * at module-evaluation time, so a static import here put ~45 KB of source
- * (instantVibes + vibeVariation + vibeDrumPatterns + vibeEffectChains) into
- * the eagerly-parsed main chunk for a bar that renders eight names and eight
- * emoji. None of it is needed until a chip is clicked.
+ * `VIBES` is imported eagerly above and costs one file: data/vibes.ts imports
+ * nothing at runtime, so its transitive graph is empty. What still must not be
+ * eager is `./vibeActions`, which reaches applyVibeToStore and from there
+ * audio/engine, playbackEngine and the four library resolvers. None of that is
+ * needed until a chip is clicked.
  *
  * The promise is cached, so the module is fetched and evaluated at most once.
  */
-let vibeActionsPromise: Promise<{
-  INSTANT_VIBES: import('../types').InstantVibe[];
-  selectVibe: typeof import('./vibeActions').selectVibe;
-  rerollVibe: typeof import('./vibeActions').rerollVibe;
-}> | null = null;
+let vibeActionsPromise: Promise<typeof import('./vibeActions')> | null = null;
 
 export function loadVibeActions() {
   if (!vibeActionsPromise) {
-    vibeActionsPromise = Promise.all([
-      import('./vibeActions'),
-      import('../store/instantVibes'),
-    ]).then(([actions, table]) => ({
-      INSTANT_VIBES: table.INSTANT_VIBES,
-      selectVibe: actions.selectVibe,
-      rerollVibe: actions.rerollVibe,
-    }));
+    vibeActionsPromise = import('./vibeActions');
   }
   return vibeActionsPromise;
 }
@@ -91,19 +80,15 @@ export const InstantVibesBar: React.FC = React.memo(() => {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleSelectVibe = async (chip: VibeChip) => {
-    const { INSTANT_VIBES, selectVibe } = await loadVibeActions();
-    const vibe = INSTANT_VIBES.find((v) => v.id === chip.id);
-    if (!vibe) return;
+  const handleSelectVibe = async (vibe: VibeSpec) => {
+    const { selectVibe } = await loadVibeActions();
     selectVibe(vibe, { onToast: (text) => setToast({ kind: 'load', text }) });
     scheduleToastClear(3000);
   };
 
-  const handleReroll = async (chip: VibeChip) => {
-    const { INSTANT_VIBES, rerollVibe } = await loadVibeActions();
-    const vibe = INSTANT_VIBES.find((v) => v.id === chip.id);
-    if (!vibe) return;
-    setRollingVibeId(chip.id);
+  const handleReroll = async (vibe: VibeSpec) => {
+    const { rerollVibe } = await loadVibeActions();
+    setRollingVibeId(vibe.id);
     try {
       rerollVibe(vibe, { onToast: (t) => setToast({ kind: 'reroll', ...t }) });
       // 400 ms of spin, then the icon settles; the toast holds longer because
@@ -129,7 +114,7 @@ export const InstantVibesBar: React.FC = React.memo(() => {
 
         {/* Horizontal Scrolling Vibe Buttons */}
         <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 px-1 no-scrollbar scroll-smooth flex-1 max-w-full">
-          {VIBE_CHIPS.map((vibe) => {
+          {VIBES.map((vibe) => {
             const isSelected = selectedVibeId === vibe.id;
 
             const chip = (
@@ -141,7 +126,7 @@ export const InstantVibesBar: React.FC = React.memo(() => {
                 title={`${vibe.name} (${vibe.bpm} BPM · ${vibe.scaleRoot} ${vibe.scaleType})`}
                 className={`btn btn-xs group gap-1.5 font-semibold whitespace-nowrap shrink-0 normal-case ${
                   isSelected
-                    ? `${vibe.hasVariation ? 'join-item ' : ''}btn-primary`
+                    ? `${vibe.random ? 'join-item ' : ''}btn-primary`
                     : 'btn-soft'
                 }`}
               >
@@ -156,7 +141,7 @@ export const InstantVibesBar: React.FC = React.memo(() => {
               </button>
             );
 
-            if (!isSelected || !vibe.hasVariation) {
+            if (!isSelected || !vibe.random) {
               return <React.Fragment key={vibe.id}>{chip}</React.Fragment>;
             }
 

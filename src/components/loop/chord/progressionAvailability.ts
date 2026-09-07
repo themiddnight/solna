@@ -1,5 +1,5 @@
-import type { ChordProgression } from '../../../audio/data/chordProgressions';
-import { SCALES } from '../../../utils/musicTheory';
+import type { ChordProgression } from '@/data/chordProgressions';
+import { SCALES } from '@/data/scales';
 
 /**
  * A progression is only offered in a scale that has at least as many degrees

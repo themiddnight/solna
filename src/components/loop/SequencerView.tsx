@@ -14,8 +14,8 @@ import { rotateStepWindow, writeStepWindow } from "../../utils/patternAdapt";
 import { ensureDrumEngine, triggerPad } from "../../audio/playback/drumPlayback";
 import { previewSequencerNote } from "../../audio/playback/presetPreview";
 import type { PreviewHandle } from "../../audio/playback/presetPreview";
-import { GENRE_PRESETS } from "../../audio/data/genrePresets";
-import { DRUM_KITS, GENRE_TO_KIT } from "../../audio/drumKits";
+import { DRUM_GRIDS } from "@/data/drumGrids";
+import { DRUM_KITS } from "@/data/drumKits";
 import { patternMeterTitle, patternOptionLabel } from "../meterSelect";
 import { Knob } from "../ui/Knob";
 import { ViewHeader } from "../ui/ViewHeader";
@@ -27,13 +27,18 @@ import { IconButton } from "../ui/IconButton";
 import { SequencerGrid } from "./sequencer/SequencerGrid";
 import type { SequencerTrack } from "../../types";
 
+// The kit roster never changes at runtime, so it is read once here rather than
+// re-keyed on every render — a Knob drag re-renders this view per pointermove.
+// Module-scope resolution is fine in `components/`; it is `src/data/` that may
+// not (CLAUDE.md, layer 1).
+const DRUM_KIT_NAMES = Object.keys(DRUM_KITS);
 
 export const SequencerView: React.FC = React.memo(() => {
   // Sequencer/transport/synth state + setters (named after the old props so the
   // rest of the component body is unchanged).
   const tracks = useAppStore((s) => s.sequencerTracks);
   const onChangeTracks = useAppStore((s) => s.setSequencerTracks);
-  const applyDrumPattern = useAppStore((s) => s.applyDrumPattern);
+  const replaceDrumPattern = useAppStore((s) => s.replaceDrumPattern);
   const meterId = useAppStore((s) => s.meterId);
   // getMeter returns the shared METERS[id] object, so `meter` is a stable
   // identity per meterId and this memo only rebuilds on a real meter change.
@@ -53,13 +58,18 @@ export const SequencerView: React.FC = React.memo(() => {
   const setDrumFilterResonance = useAppStore((s) => s.setDrumFilterResonance);
   const setDrumFilterType = useAppStore((s) => s.setDrumFilterType);
 
-  const [selectedGenre, setSelectedGenre] = useState<string>("Synthwave");
+  const [selectedGridId, setSelectedGridId] = useState<string>("synthwave");
   const previewRef = useRef<PreviewHandle | null>(null);
   useEffect(() => () => previewRef.current?.(), []);
 
+  // A grid names the kit it was written for, so picking one loads both. The
+  // menu offers all 30 — the sequencer's own 14 genre grids, the 7 grids the
+  // Instant Vibes are built from, and 9 sourced variants — which were split
+  // across separate tables until they merged.
   useEffect(() => {
-    onChangeSoundKit(GENRE_TO_KIT[selectedGenre] ?? selectedGenre);
-  }, [selectedGenre, onChangeSoundKit]);
+    const kit = DRUM_GRIDS[selectedGridId]?.kit;
+    if (kit) onChangeSoundKit(kit);
+  }, [selectedGridId, onChangeSoundKit]);
 
   // These are props of the memoized TrackRow, so their identity must be
   // stable. They read `sequencerTracks` LIVE from the store rather than from
@@ -131,15 +141,35 @@ export const SequencerView: React.FC = React.memo(() => {
     );
   };
 
-  const applyGenrePreset = (genre: string) => {
-    setSelectedGenre(genre);
-    const preset = GENRE_PRESETS[genre];
-    if (!preset) return;
-    // Apply-time adaptation: applyDrumPattern trims or loops each row to the
+  const applyDrumGrid = (id: string) => {
+    setSelectedGridId(id);
+    const grid = DRUM_GRIDS[id];
+    if (!grid) return;
+    // Apply-time adaptation: replaceDrumPattern trims or loops each row to the
     // active bar length and writes it into the window, so what the grid shows
     // is exactly what will sound.
-    applyDrumPattern(preset.rows);
+    replaceDrumPattern(grid.rows);
   };
+
+  // The grid `<option>` list is ~30 entries and each one formats two label
+  // strings, but the only render-varying input is the ACTIVE meter (the labels
+  // mark which grids match it). This component subscribes to the drum filter
+  // and volume values, and a Knob drag fires onChange per pointermove — so
+  // without this memo one drag rebuilds all thirty labels ~60x/s. Everything
+  // else the JSX reads (DRUM_GRIDS, the two label helpers) is module scope.
+  const gridOptions = useMemo(
+    () =>
+      Object.entries(DRUM_GRIDS).map(([id, grid]) => (
+        <option
+          key={id}
+          value={id}
+          title={patternMeterTitle(grid.name, grid.meter, meter.id)}
+        >
+          {patternOptionLabel(grid.name, grid.meter, meter.id)}
+        </option>
+      )),
+    [meter.id],
+  );
 
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
@@ -173,7 +203,7 @@ export const SequencerView: React.FC = React.memo(() => {
                 className={FIELD_SELECT}
                 title="Drum kit — the sounds each track plays"
               >
-                {Object.keys(DRUM_KITS).map((k) => (
+                {DRUM_KIT_NAMES.map((k) => (
                   <option key={k} value={k}>
                     {k}
                   </option>
@@ -273,22 +303,14 @@ export const SequencerView: React.FC = React.memo(() => {
                 the whole row and pushes the buttons onto a second line. */}
             <div className={FIELD_LANE}>
               <select
-                id="select-sequencer-genre"
-                value={selectedGenre}
-                onChange={(e) => applyGenrePreset(e.target.value)}
+                id="select-sequencer-grid"
+                value={selectedGridId}
+                onChange={(e) => applyDrumGrid(e.target.value)}
                 className={FIELD_SELECT}
-                aria-label="Drum pattern genre"
-                title="Loads that genre's drum pattern over the grid"
+                aria-label="Drum grid"
+                title="Loads that grid's drum pattern, and its kit, over the sequencer"
               >
-                {Object.entries(GENRE_PRESETS).map(([g, preset]) => (
-                  <option
-                    key={g}
-                    value={g}
-                    title={patternMeterTitle(g, preset.meter, meter.id)}
-                  >
-                    {patternOptionLabel(g, preset.meter, meter.id)}
-                  </option>
-                ))}
+                {gridOptions}
               </select>
             </div>
 

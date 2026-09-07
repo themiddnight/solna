@@ -3,11 +3,11 @@ import {
   getScaleNotes,
   rootSemitone,
   ROOTS,
-  SCALES,
   getDiatonicChordForDegree,
   formatChordLabel,
   generateBlockChordNotes,
 } from '../../utils/musicTheory';
+import { SCALES } from '@/data/scales';
 import { shortcutLabel } from '../../utils/keyboard';
 
 const KEYBOARD_OCTAVE_MIN = -2;

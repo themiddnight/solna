@@ -135,10 +135,11 @@
      bass 256° · env-vcf 294° · arp 322° · filter 356°
 
    Every adjacent pair is at least 28° apart. Two rules constrain the set:
-   the 20-60° amber band belongs to --color-primary alone, so osc is a pale
-   butter gold separated from the brand by lightness rather than hue; and no
-   module may reuse a semantic hex, which is what --module-filter and
-   --color-secondary used to do (both #FB7185). */
+   the 20-60° amber band belongs to --color-primary, with --module-pad as the
+   ONE recorded exception (it sits at 40° in both themes, darkened off
+   --color-warning in light) — no further colour, module or drum, may enter the
+   band; and no module may reuse a semantic hex, which is what --module-filter
+   and --color-secondary used to do (both #FB7185). */
 @theme {
   --color-module-chord: var(--module-chord);
   --color-module-chord-content: var(--module-chord-content);
@@ -160,6 +161,54 @@
   --color-module-arp-content: var(--module-arp-content);
 }
 
+/* Drum voice colours. Eleven sequencer tracks against eight semantic tokens is
+   three collisions by arithmetic, so the drum voices get their own namespace on
+   the same indirection pattern as the module colours above — and ALL eleven
+   move, not the four new ones, because a half-semantic sequencer would make the
+   families below unreadable.
+
+   Four families, four anchors 90° apart on the OKLCH wheel. Adjacent members
+   within a family sit no more than 14° apart; metals are the one family
+   spread around its anchor rather than stepped from it, at ±12°:
+
+     heads   kick 0° · snare 5° · rimshot 9° · clap 14°   (hue AND lightness,
+             each adjacent pair within 5°)
+     hats    hihat · openhat at 90°   — ONE hue: sharing it is what makes the
+             hi-hat choke group visible in the grid
+     toms    hitom · lowtom at 180°   — lightness only, hitom lighter, so high
+             and low read off brightness rather than colour
+     metals  ride 258° · crash 270° · bell 282°   (±12° around the crash
+             anchor; adjacent pairs are 12° apart, the full span is 24°)
+
+   The same two rules as the modules: no drum colour reuses a semantic hex, and
+   none enters the 20-60° amber band. The eleven need only be separable from
+   EACH OTHER — no drum colour and no module colour ever share a surface — so
+   they do not thread the module ladder's gaps. */
+@theme {
+  --color-drum-kick: var(--drum-kick);
+  --color-drum-kick-content: var(--drum-kick-content);
+  --color-drum-snare: var(--drum-snare);
+  --color-drum-snare-content: var(--drum-snare-content);
+  --color-drum-rimshot: var(--drum-rimshot);
+  --color-drum-rimshot-content: var(--drum-rimshot-content);
+  --color-drum-clap: var(--drum-clap);
+  --color-drum-clap-content: var(--drum-clap-content);
+  --color-drum-hihat: var(--drum-hihat);
+  --color-drum-hihat-content: var(--drum-hihat-content);
+  --color-drum-openhat: var(--drum-openhat);
+  --color-drum-openhat-content: var(--drum-openhat-content);
+  --color-drum-hitom: var(--drum-hitom);
+  --color-drum-hitom-content: var(--drum-hitom-content);
+  --color-drum-lowtom: var(--drum-lowtom);
+  --color-drum-lowtom-content: var(--drum-lowtom-content);
+  --color-drum-ride: var(--drum-ride);
+  --color-drum-ride-content: var(--drum-ride-content);
+  --color-drum-crash: var(--drum-crash);
+  --color-drum-crash-content: var(--drum-crash-content);
+  --color-drum-bell: var(--drum-bell);
+  --color-drum-bell-content: var(--drum-bell-content);
+}
+
 :root,
 [data-theme="solna-dark"] {
   /* L ~0.75 in OKLCH — bright enough to read on the near-black ember base. */
@@ -175,7 +224,8 @@
   --module-bass: #74A6E8;         /* steel blue 256° */
   --module-bass-content: #17100F;
   --module-bass-tint: #74A6E81A;  /* the same blue at 10% — see tint-bass */
-  --module-pad: #F0B265;          /* amber 40° */
+  --module-pad: #F0B265;          /* amber 40° — the ONE recorded exception to
+                                     the 20-60° band; see the comment above */
   --module-pad-content: #17100F;
   --module-pad-tint: #F0B2651A;   /* the same amber at 10% — see tint-pad */
   --module-env-vcf: #AE96F5;      /* violet 294° */
@@ -184,6 +234,32 @@
   --module-arp-content: #17100F;
   --module-filter: #F181AE;       /* rose 356° */
   --module-filter-content: #17100F;
+
+  /* L 0.66-0.86 in OKLCH; chroma is the sRGB ceiling at that L and hue, capped
+     at 0.16. Content is the ember ink at 5.5:1 or better throughout (floor is
+     kick at 5.559:1). */
+  --drum-kick: #DD628E;           /* L0.66 C0.160 h0   — heads, darkest: the lowest drum */
+  --drum-kick-content: #17100F;
+  --drum-snare: #F8789A;          /* L0.73 C0.160 h5 */
+  --drum-snare-content: #17100F;
+  --drum-rimshot: #FF9DAE;        /* L0.80 C0.118 h9 */
+  --drum-rimshot-content: #17100F;
+  --drum-clap: #FFBDC2;           /* L0.86 C0.076 h14  — heads, lightest */
+  --drum-clap-content: #17100F;
+  --drum-hihat: #E6B816;          /* L0.80 C0.160 h90  — hats share the hue */
+  --drum-hihat-content: #17100F;
+  --drum-openhat: #BA9300;        /* L0.68 C0.139 h90 */
+  --drum-openhat-content: #17100F;
+  --drum-hitom: #00E3C8;          /* L0.82 C0.149 h180 — toms: lightness only */
+  --drum-hitom-content: #17100F;
+  --drum-lowtom: #00AA95;         /* L0.66 C0.120 h180 */
+  --drum-lowtom-content: #17100F;
+  --drum-ride: #79AFFF;           /* L0.75 C0.129 h258 — metals, ±12° */
+  --drum-ride-content: #17100F;
+  --drum-crash: #8EA9FF;          /* L0.75 C0.128 h270 */
+  --drum-crash-content: #17100F;
+  --drum-bell: #A1A3FF;           /* L0.75 C0.132 h282 */
+  --drum-bell-content: #17100F;
 
   /* Canvas gradient — see the bg-canvas utility below. The three stops are
      literal, not mixed from the semantic roles: a sky has to be able to hold a
@@ -235,6 +311,32 @@
   --module-arp-content: #FFFFFF;
   --module-filter: #C13B70;       /* rose 356° */
   --module-filter-content: #FFFFFF;
+
+  /* L 0.42-0.66 — the dark set's lightness washes out on warm paper. Content is
+     white where the fill is dark and the ink colour where it is light; the worst
+     pair is hihat at 4.51:1. */
+  --drum-kick: #8B0F49;           /* L0.42 C0.160 h0 */
+  --drum-kick-content: #FFFFFF;
+  --drum-snare: #A82E57;          /* L0.50 C0.160 h5 */
+  --drum-snare-content: #FFFFFF;
+  --drum-rimshot: #C54866;        /* L0.58 C0.160 h9 */
+  --drum-rimshot-content: #FFFFFF;
+  --drum-clap: #E26274;           /* L0.66 C0.160 h14 */
+  --drum-clap-content: #2A1A20;
+  --drum-hihat: #A48100;          /* L0.62 C0.127 h90 */
+  --drum-hihat-content: #2A1A20;
+  --drum-openhat: #7A6000;        /* L0.50 C0.103 h90 */
+  --drum-openhat-content: #FFFFFF;
+  --drum-hitom: #00A38F;          /* L0.64 C0.116 h180 */
+  --drum-hitom-content: #2A1A20;
+  --drum-lowtom: #006D5F;         /* L0.48 C0.088 h180 */
+  --drum-lowtom-content: #FFFFFF;
+  --drum-ride: #3475D3;           /* L0.57 C0.160 h258 */
+  --drum-ride-content: #FFFFFF;
+  --drum-crash: #546ED4;          /* L0.57 C0.160 h270 */
+  --drum-crash-content: #FFFFFF;
+  --drum-bell: #6B67D2;           /* L0.57 C0.160 h282 */
+  --drum-bell-content: #FFFFFF;
 
   /* Same three hues and the same crossing height; only the lightness flips and
      the chroma comes down, because warm paper stains far sooner than ember.

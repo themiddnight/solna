@@ -9,14 +9,13 @@ import {
   Volume2,
 } from 'lucide-react';
 import type { SynthParams } from '../../types';
+import type { SynthPresetItem, SynthPresetCategory } from '../../data/synthPresets';
+import { SYNTH_CATEGORIES } from '../../data/synthPresets';
 import {
   getAllSynthPresets,
-  SynthPresetItem,
-  SynthPresetCategory,
-  SYNTH_CATEGORIES,
   getCategoryMeta,
   getPresetsGroupedByCategory,
-} from '../../audio/synthPresets';
+} from '../../audio/presetRegistry';
 import { useAppStore } from '../../store/store';
 import { INITIAL_SYNTH_PARAMS } from '../../store/initialState';
 import { PresetLibrary } from '../ui/PresetLibrary';

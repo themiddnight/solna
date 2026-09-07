@@ -15,8 +15,8 @@ import {
   resolvePlaybackBassPattern,
   resolvePlaybackRhythmPattern,
 } from './useChordPlayback';
-import { RHYTHM_PATTERNS, type RhythmPattern } from '../../../audio/rhythmPatterns';
-import { BASS_PATTERNS, type BassPattern, type BassStepChoice } from '../../../audio/bassPatterns';
+import { CHORD_RHYTHMS, type RhythmPattern } from '@/data/chordRhythms';
+import { BASS_PATTERNS, type BassPattern, type BassStepChoice } from '@/data/bassPatterns';
 import { useAppStore } from '../../../store/store';
 
 const BAR = 16;
@@ -281,7 +281,7 @@ describe('isFullHoldRhythm / isFullHoldBass measure the hold against the ACTIVE 
   });
 
   test('the two id short-circuits survive: they are full holds in every meter', () => {
-    const sustained = RHYTHM_PATTERNS.find((p) => p.id === 'sustained')!;
+    const sustained = CHORD_RHYTHMS.find((p) => p.id === 'sustained')!;
     const wholeNote = BASS_PATTERNS.find((p) => p.id === 'whole-note-root')!;
     for (const stepsPerBar of [12, 14, 16, 20, 24]) {
       expect(isFullHoldRhythm(sustained, stepsPerBar)).toBe(true);

@@ -1,12 +1,12 @@
 import React, { useMemo } from "react";
 import { Volume2 } from "lucide-react";
 import { useAppStore } from "../../../store/store";
-import { RHYTHM_STYLE_GROUPS } from "../../../audio/rhythmPatterns";
+import { CHORD_RHYTHM_STYLE_GROUPS } from '@/audio/chordRhythms';
 import {
   getAllSynthPresets,
   findPresetByName,
   getPresetsGroupedByCategory,
-} from "../../../audio/synthPresets";
+} from "../../../audio/presetRegistry";
 import { patternMeterTitle, patternOptionLabel } from "../../meterSelect";
 import { getMeter } from "../../../utils/meter";
 import { stepCells } from "../../sequencerGrid";
@@ -144,7 +144,7 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
                 title="Rhythm pattern for chord playback"
               >
                 <option value="custom">Custom…</option>
-                {RHYTHM_STYLE_GROUPS.map((group) => (
+                {CHORD_RHYTHM_STYLE_GROUPS.map((group) => (
                   <optgroup key={group.style} label={group.style}>
                     {group.patterns.map((p) => (
                       <option

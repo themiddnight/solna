@@ -49,11 +49,11 @@ import {
   stopChordPreviewSource,
 } from "../../audio/playback/chordPlayback";
 import { getMeter } from "../../utils/meter";
+import { SCALES } from "@/data/scales";
 import {
   deriveChordNotes,
   snapProgressionToScale,
   transposeProgression,
-  SCALES,
   getDiatonicChordForDegree,
   getBorrowedChords,
   formatChordLabel,
@@ -76,7 +76,7 @@ import { BassModulePanel } from "./chord/BassModulePanel";
 import { PadModulePanel } from "./chord/PadModulePanel";
 import { beatsPerBarFor, resolveBeatCounter } from "../../utils/playhead";
 
-import { CHORD_PROGRESSIONS } from "../../audio/data/chordProgressions";
+import { CHORD_PROGRESSIONS } from "@/data/chordProgressions";
 
 /**
  * Whether a run of the auto-harmonize effect should clear a stale "Auto-

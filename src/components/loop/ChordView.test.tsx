@@ -309,7 +309,7 @@ describe('shouldClearReharmonizeIndicator', () => {
 });
 
 import { nextBassStepChoice, bassStepLabel } from './chord/bassStepChoice';
-import type { BassStepChoice } from '../../audio/bassPatterns';
+import type { BassStepChoice } from '@/data/bassPatterns';
 
 describe('ChordView custom step grid helpers', () => {
   test('bass steps cycle rest → root → third → fifth → seventh → octave → rest', () => {
