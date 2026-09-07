@@ -22,6 +22,7 @@ import {
   leadColumnCells,
   leadCursorKeyTarget,
   leadPitchRows,
+  leadRowLabel,
   leadSpanClasses,
   resolveLeadCellSpan,
 } from './melodyGrid';
@@ -86,6 +87,7 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   loopLength,
   melody,
   rows,
+  rowLabels,
   root,
   onResize,
   stride,
@@ -96,6 +98,7 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   loopLength: number;
   melody: readonly LeadNote[][];
   rows: readonly string[];
+  rowLabels: readonly string[];
   root: string;
   onResize: (stepIndex: number, note: string, len: number) => void;
   stride: number;
@@ -133,7 +136,7 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
       className="grid shrink-0"
       style={{ gridTemplateColumns: `repeat(${columns}, ${LEAD_CELL_WIDTH}px)` }}
     >
-      {rows.map((note) => {
+      {rows.map((note, rowIndex) => {
         const rowKinds = kinds.get(note) ?? [];
         // Constant for the whole ROW — both of these strip the octave with a
         // regex, and the answer cannot change from column to column. Per cell
@@ -150,6 +153,11 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
         // Calling it per cell put it straight back — ~3,072 scans per render.
         const spanAt = (col: number): ReturnType<typeof resolveLeadCellSpan> =>
           resolveLeadCellSpan(rowKinds, col, stepsPerBar, stride, note, previewed);
+        // Computed once per row by the parent, which needs the same string
+        // for the note column beside this grid. Deriving it here as well made
+        // it three calls a row and put spelling knowledge — and two more
+        // props — inside a component that only draws cells.
+        const rowLabel = rowLabels[rowIndex];
         return (
           <React.Fragment key={note}>
             {Array.from({ length: columns }, (_, col) => {
@@ -179,7 +187,7 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
                 <button
                   key={`${note}-${col}`}
                   type="button"
-                  aria-label={note}
+                  aria-label={rowLabel}
                   aria-pressed={kind !== 'none'}
                   onClick={(e) => paint.onCellClick(e, idx, note)}
                   onPointerDown={(e) =>
@@ -389,6 +397,15 @@ export const LeadMelodyGrid: React.FC = () => {
     [leadMelodyView, scaleRoot, scaleType, leadMelodyOctave],
   );
 
+  // One label per row, computed here because both the note column and the cell
+  // grid render it. Each call rebuilds a tonal Scale behind the spelling cache,
+  // so a per-cell — or even a twice-per-row — derivation is work the row count
+  // already bounds.
+  const rowLabels = useMemo(
+    () => rows.map((note) => leadRowLabel(note, leadMelodyView, scaleRoot, scaleType)),
+    [rows, leadMelodyView, scaleRoot, scaleType],
+  );
+
   // Clamp loopLength down when the progression no longer divides it. Uses the
   // non-destructive setter: resizing here would trim the melody grid, so
   // deleting a chord on the Chord tab would permanently delete the drawn notes
@@ -591,15 +608,15 @@ export const LeadMelodyGrid: React.FC = () => {
                 className="sticky left-0 z-10 shrink-0 bg-panel"
                 style={{ width: LABEL_WIDTH }}
               >
-                {rows.map((note) => (
+                {rows.map((note, rowIndex) => (
                   <button
                     key={note}
                     type="button"
                     onClick={() => previewNote(note)}
-                    title={`Preview ${note}`}
+                    title={`Preview ${rowLabels[rowIndex]}`}
                     className="h-5 flex items-center justify-end pr-2 text-[10px] font-mono leading-none text-base-content/60 hover:text-base-content cursor-pointer"
                   >
-                    {note}
+                    {rowLabels[rowIndex]}
                   </button>
                 ))}
               </div>
@@ -610,6 +627,7 @@ export const LeadMelodyGrid: React.FC = () => {
                   loopLength={leadLoopLength}
                   melody={leadMelodySteps}
                   rows={rows}
+                  rowLabels={rowLabels}
                   root={scaleRoot}
                   onResize={onResize}
                   stride={stride}

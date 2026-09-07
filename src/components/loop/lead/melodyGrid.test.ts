@@ -7,6 +7,7 @@ import {
   leadColumnCells,
   leadNoteCells,
   leadPitchRows,
+  leadRowLabel,
   leadResizeLen,
   leadSpanClasses,
   resolveLeadCellSpan,
@@ -500,5 +501,28 @@ describe('resolveLeadCellSpan converts the stored length to cells', () => {
     const previewed: LeadNote[][] = Array.from({ length: LEAD_TICKS_PER_BAR }, () => []);
     const rowKinds = leadCellKinds(previewed, ['C4'], 8, 16, 4).get('C4')!;
     expect(resolveLeadCellSpan(rowKinds, 3, 16, 4, 'C4', previewed).spanStartIdx).toBe(-1);
+  });
+});
+
+describe('leadRowLabel', () => {
+  test('spells a scale-locked row in the key', () => {
+    expect(leadRowLabel('D#4', 'scale-locked', 'A#', 'Major')).toBe('Eb4');
+    expect(leadRowLabel('A#4', 'scale-locked', 'A#', 'Major')).toBe('Bb4');
+  });
+
+  test('leaves chromatic rows on the sharp names — the chromatic view is key-agnostic', () => {
+    expect(leadRowLabel('D#4', 'chromatic', 'A#', 'Major')).toBe('D#4');
+  });
+
+  test('the ROW ITSELF never changes, whatever the label says', () => {
+    // The row string is an IDENTITY: it keys `kinds`, it is the argument
+    // previewNote plays, it is the value written into LeadNote.note (which is
+    // persisted), and isRootNote compares it against a sharp ROOTS value. A
+    // spelled row name would write a spelled note into persisted state and
+    // would silently lose the tonic highlight.
+    const rows = leadPitchRows('scale-locked', 'A#', 'Major', 4, 1);
+    expect(rows).toContain('A#4');
+    expect(rows.some((r) => r.includes('b'))).toBe(false);
+    expect(isRootNote('A#4', 'A#')).toBe(true);
   });
 });

@@ -6,8 +6,8 @@ import {
 } from "lucide-react";
 import { Layer, layerForTab, ViewMode } from "../types";
 import { defaultTabForLayer } from "../routing/tabRouting";
-import { ROOTS } from "../utils/musicTheory";
 import { SCALES } from "@/data/scales";
+import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from "@/utils/noteSpelling";
 import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/storage";
 import { useAppStore } from "../store/store";
 import { useLiveStore } from "./ui/useLiveStore";
@@ -87,7 +87,7 @@ export const TabButton: React.FC<{
  * inside a dropdown below it — so each instance takes its own id prefix rather
  * than duplicating ids into the DOM (the hidden copy is still rendered).
  */
-const ScaleSelects: React.FC<{ idPrefix: string; stacked?: boolean }> = ({
+export const ScaleSelects: React.FC<{ idPrefix: string; stacked?: boolean }> = ({
   idPrefix,
   stacked,
 }) => {
@@ -103,13 +103,13 @@ const ScaleSelects: React.FC<{ idPrefix: string; stacked?: boolean }> = ({
         value={scaleRoot}
         onChange={(e) => setScaleRoot(e.target.value)}
         className={`select select-sm select-ghost font-bold text-primary ${
-          stacked ? 'w-full' : 'max-w-14'
+          stacked ? 'w-full' : 'min-w-24'
         }`}
         title="Root Note"
       >
-        {ROOTS.map((r) => (
-          <option key={r} value={r}>
-            {r}
+        {KEY_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
@@ -352,9 +352,9 @@ export const Header: React.FC = React.memo(() => {
               <summary
                 id="btn-scale-dropdown"
                 className="btn btn-sm btn-ghost gap-1 px-2 text-xs font-bold list-none bg-base-200/70 border border-base-300"
-                title={`Key & Scale — ${scaleRoot} ${SCALES[scaleType]?.name ?? scaleType}`}
+                title={`Key & Scale — ${formatKeyLabel(scaleRoot, scaleType, { long: true })}`}
               >
-                <span className="text-primary">{scaleRoot}</span>
+                <span className="text-primary">{getTonicSpelling(scaleRoot, scaleType)}</span>
                 {/* Dropped below 390px — the width at which brand + this group
                     stop sharing one row and the navbar grows a third one. The
                     cut is `max-[390px]` rather than `sm` so the 390px+ phones

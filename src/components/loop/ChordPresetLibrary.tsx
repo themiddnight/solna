@@ -15,6 +15,7 @@ import {
   snapProgressionToScale,
   formatChordLabel,
 } from '../../utils/musicTheory';
+import { formatKeyLabel, getTonicSpelling } from '@/utils/noteSpelling';
 import { isProgressionAvailable } from './chord/progressionAvailability';
 
 export { isProgressionAvailable };
@@ -86,6 +87,11 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   isOpen,
   onClose,
 }) => {
+  // Key-invariant for the whole render, and this list draws ~44 template cards
+  // plus every custom one: derived per card it was one object allocation and
+  // one spelling lookup per chord card rather than one of each per open.
+  const spellingKey = { scaleRoot, scaleType };
+  const tonic = getTonicSpelling(scaleRoot, scaleType);
   const customProgressions = useAppStore((s) => s.customChordProgressions);
   const saveProgression = useAppStore((s) => s.saveCustomChordProgression);
   const deleteProgression = useAppStore((s) => s.deleteCustomChordProgression);
@@ -303,7 +309,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
           <div className="flex items-center justify-between text-[11px] font-bold text-base-content/60 uppercase tracking-wider px-1">
             <span>Standard Library Templates ({filteredTemplates.length})</span>
             <span className="text-[10px] font-normal font-mono text-module-chord">
-              Key: {scaleRoot}
+              Key: {tonic}
             </span>
           </div>
         ),
@@ -328,7 +334,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   const renderTemplateCard = (e: ChordLibraryEntry) => {
     const progression = e.progression!;
     const resolvedChords = resolveFactoryChords(progression);
-    const previewNames = resolvedChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
+    const previewNames = resolvedChords.map((c) => formatChordLabel(c.root, c.quality, spellingKey)).join(' → ');
 
     return (
       <div className="card bg-base-200 border border-base-300 hover:border-module-chord/50 p-3 transition-all flex flex-col gap-2 group relative shadow-xs">
@@ -349,7 +355,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
               {progression.description}
             </p>
             <div className="text-[10px] font-mono text-base-content/50 mt-1">
-              In {scaleRoot}: <span className="text-base-content font-semibold">{previewNames}</span>
+              In {tonic}: <span className="text-base-content font-semibold">{previewNames}</span>
             </div>
           </div>
 
@@ -385,7 +391,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   const renderCustomCard = (e: ChordLibraryEntry) => {
     const chords = e.chords!;
     const resolvedCustom = resolveCustomChords(chords);
-    const previewNames = resolvedCustom.map((c) => formatChordLabel(c.root, c.quality)).join(' → ');
+    const previewNames = resolvedCustom.map((c) => formatChordLabel(c.root, c.quality, spellingKey)).join(' → ');
 
     return (
       <div className="card bg-base-200 border border-base-300 hover:border-secondary/50 p-3 transition-all flex flex-col gap-2 group relative shadow-xs">
@@ -413,7 +419,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
               </p>
             )}
             <div className="text-[10px] font-mono text-base-content/50 mt-1">
-              In {scaleRoot} {scaleType}: <span className="text-base-content font-semibold">{previewNames}</span>
+              In {formatKeyLabel(scaleRoot, scaleType)}: <span className="text-base-content font-semibold">{previewNames}</span>
             </div>
           </div>
 
@@ -498,7 +504,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
         isOpen={isOpen}
         onClose={onClose}
         title="Progression Library"
-        headerSubtitle={`Key of ${scaleRoot} • ${entries.length} Total Progressions`}
+        headerSubtitle={`Key of ${tonic} • ${entries.length} Total Progressions`}
         saveButton={{ label: 'Save Current', title: 'Save current chord progression' }}
         toast={toastMsg}
         toastPlacement="top"
@@ -523,7 +529,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
           variant: 'modal',
           chordsSummary: {
             count: currentChords.length,
-            text: currentChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → '),
+            text: currentChords.map((c) => formatChordLabel(c.root, c.quality, spellingKey)).join(' → '),
           },
         }}
         onSelect={applyEntry}

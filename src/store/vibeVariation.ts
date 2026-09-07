@@ -18,6 +18,7 @@ import type { VibeSpec } from '../data/vibes';
 import { progressionById } from '@/audio/chordProgressions';
 import { BASS_PATTERNS } from '@/data/bassPatterns';
 import { CHORD_RHYTHMS } from '@/data/chordRhythms';
+import { formatKeyLabel } from '@/utils/noteSpelling';
 import { DRUM_GRIDS } from '@/data/drumGrids';
 
 /**
@@ -157,7 +158,7 @@ export interface RerollToast {
  */
 export function formatVariationSummary(summary: VariationSummary): RerollToast {
   return {
-    headline: `🎲 ${summary.vibeName} — ${summary.scaleRoot} ${summary.scaleType} · ${summary.bpm} BPM`,
+    headline: `🎲 ${summary.vibeName} — ${formatKeyLabel(summary.scaleRoot, summary.scaleType)} · ${summary.bpm} BPM`,
     detail: [
       summary.progressionRoman,
       summary.rhythmName,

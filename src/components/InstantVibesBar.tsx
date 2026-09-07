@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Sparkles, Check, Dices } from 'lucide-react';
 import { VIBES, type VibeSpec } from '../data/vibes';
 import { useAppStore } from '../store/store';
+import { formatKeyLabel, getTonicSpelling } from '@/utils/noteSpelling';
 
 /**
  * The two vibe actions, loaded on demand.
@@ -44,6 +45,7 @@ export const InstantVibesBar: React.FC = React.memo(() => {
   const [rollingVibeId, setRollingVibeId] = useState<string | null>(null);
   const bpm = useAppStore((s) => s.bpm);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const scaleType = useAppStore((s) => s.scaleType);
 
   // Only one toast and one spin can be pending at a time. Without tracking
   // these, clicking a chip and then its dice within the chip's 3s toast
@@ -123,7 +125,7 @@ export const InstantVibesBar: React.FC = React.memo(() => {
                 onClick={() => handleSelectVibe(vibe)}
                 onMouseEnter={prefetch}
                 onFocus={prefetch}
-                title={`${vibe.name} (${vibe.bpm} BPM · ${vibe.scaleRoot} ${vibe.scaleType})`}
+                title={`${vibe.name} (${vibe.bpm} BPM · ${formatKeyLabel(vibe.scaleRoot, vibe.scaleType)})`}
                 className={`btn btn-xs group gap-1.5 font-semibold whitespace-nowrap shrink-0 normal-case ${
                   isSelected
                     ? `${vibe.random ? 'join-item ' : ''}btn-primary`
@@ -136,7 +138,7 @@ export const InstantVibesBar: React.FC = React.memo(() => {
                   {/* The loaded chip is the always-visible readout of what is
                       actually loaded: after a reroll the authored BPM is no
                       longer true, and there is no undo to fall back on. */}
-                  {isSelected ? `${scaleRoot} · ${bpm}` : vibe.bpm}
+                  {isSelected ? `${getTonicSpelling(scaleRoot, scaleType)} · ${bpm}` : vibe.bpm}
                 </span>
               </button>
             );

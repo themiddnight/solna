@@ -58,7 +58,7 @@ export const ORIGINAL_VIBE_CHORDS: Record<string, ChordItem[]> = {
   ],
   'zen-garden': [
     snapshotChord('zn1', 'G', 'min', 2, 4),
-    snapshotChord('zn2', 'D', 'sus4', 2, 4),
+    snapshotChord('zn2', 'D', 'min', 2, 4),
     snapshotChord('zn3', 'G', 'min', 2, 4),
     snapshotChord('zn4', 'D#', 'maj', 2, 4),
   ],

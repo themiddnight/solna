@@ -10,6 +10,7 @@ import {
   getChordKeyboardRows,
   getChromaticKeyboardNotes,
   ChromaticKeyboard,
+  KEYBOARD_NOTES,
   MELODY_KEYS,
   HOME_ROW_KEYS,
   TOP_ROW_KEYS,
@@ -325,5 +326,20 @@ describe('ChromaticKeyboard renders byte-identically once getChromaticKeyboardNo
       }),
     );
     expect(html.length).toBe(8270);
+  });
+});
+
+describe('scale-locked captions spell in the key', () => {
+  test('label spells, note stays sharp', () => {
+    const { topRow } = getScaleLockedKeyboardNotes('A#', 'Major', 0);
+    expect(topRow[0].note).toBe('A#4');
+    expect(topRow[0].label).toBe('Bb4');
+  });
+
+  test('KEYBOARD_NOTES is key-agnostic and stays sharp', () => {
+    // A binding table of 18 chromatic KeyboardEvent.codes, C3-F4, that
+    // scripts/check-key-bindings.ts pins. It does not change when the key does.
+    expect(KEYBOARD_NOTES.map((k) => k.note)).toContain('C#3');
+    expect(KEYBOARD_NOTES.every((k) => !k.note.includes('b'))).toBe(true);
   });
 });

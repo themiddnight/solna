@@ -5,6 +5,7 @@ import { ChromaticKeyboard, ScaleLockedKeyboard, ChordKeyboard } from './Keyboar
 import { DrumPadGrid } from './DrumPadGrid';
 import { SECTION_HEADER } from './fieldClasses';
 import { IconButton } from './IconButton';
+import { formatKeyLabel } from '@/utils/noteSpelling';
 import type { InputDeckDrumProps, InputDeckKeyboardProps } from '../useInputDeck';
 
 /** Reads one slice of the store with the LIVE state as the server snapshot too.
@@ -113,7 +114,7 @@ export const BottomInputDock: React.FC<BottomInputDockProps> = React.memo(({ key
                     className="badge badge-sm badge-outline text-[10px] font-semibold badge-base-content/60"
                     title="Active key and scale"
                   >
-                    {`${scaleRoot} ${scaleType}`}
+                    {formatKeyLabel(scaleRoot, scaleType)}
                   </span>
                 </div>
 

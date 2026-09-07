@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
-import { ProjectNameLabel, TabButton, AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS } from './Header';
+import { ProjectNameLabel, TabButton, AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS, ScaleSelects } from './Header';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
 import { VIEW_ORDER } from './viewMeta';
 
@@ -228,5 +228,13 @@ describe('the header tabs cover every view', () => {
 
   test('no view is rendered twice', () => {
     expect(new Set(rendered).size).toBe(rendered.length);
+  });
+});
+
+describe('key picker', () => {
+  test('offers the dual label while storing the sharp name', () => {
+    const html = renderToString(<ScaleSelects idPrefix="test" />);
+    expect(html).toContain('<option value="C#">C#/Db</option>');
+    expect(html).toContain('<option value="C">C</option>');
   });
 });

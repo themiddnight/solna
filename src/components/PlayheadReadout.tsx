@@ -14,6 +14,8 @@ export function PlayheadReadout({ className = '' }: { className?: string }) {
   const playheadChordIndex = useAppStore((s) => s.playheadChordIndex);
   const playheadChordStartBeat = useAppStore((s) => s.playheadChordStartBeat);
   const meterId = useAppStore((s) => s.meterId);
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const scaleType = useAppStore((s) => s.scaleType);
 
   const { now, next } = resolveNowNext(chords, playheadChordIndex);
   if (!now) return null;
@@ -30,11 +32,13 @@ export function PlayheadReadout({ className = '' }: { className?: string }) {
     beatsPerBar,
   });
 
+  const spellingKey = { scaleRoot, scaleType };
+
   return (
     <div className={`flex items-center justify-center gap-2 sm:gap-3 ${className}`}>
       <NowNextChord
-        now={formatChordLabel(now.root, now.quality)}
-        next={next ? formatChordLabel(next.root, next.quality) : null}
+        now={formatChordLabel(now.root, now.quality, spellingKey)}
+        next={next ? formatChordLabel(next.root, next.quality, spellingKey) : null}
       />
       <BeatDots totalBeats={counter.totalBeats} activeBeat={counter.activeBeat} beatsPerBar={beatsPerBar} />
     </div>

@@ -18,6 +18,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Loop, LoopMixPatch } from '../../store/types';
 import { loopBars } from '../../store/loop';
 import { formatChordQuality } from '../../utils/musicTheory';
+import { getTonicSpelling } from '@/utils/noteSpelling';
 import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
 import { Slider } from '../ui/Slider';
 
@@ -492,7 +493,7 @@ export const SortableLoopCard: React.FC<SortableLoopCardProps> = React.memo(
                 Key:
               </span>
               <span className="badge badge-sm badge-outline gap-1 font-mono">
-                <span className="font-bold text-primary">{loop.scaleRoot}</span>
+                <span className="font-bold text-primary">{getTonicSpelling(loop.scaleRoot, loop.scaleType)}</span>
                 <span className="text-base-content/70">{loop.scaleType}</span>
               </span>
             </div>

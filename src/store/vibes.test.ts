@@ -452,11 +452,18 @@ describe('vibe scales', () => {
       .toEqual(resolved.map((c) => ({ root: c.root, quality: c.quality, bars: c.bars, notes: c.notes })));
   });
 
-  test('every note Zen Garden plays is inside G Hirajoshi', () => {
+  test('every note Zen Garden plays is inside G Hirajoshi, except the iv chord borrowed from the parent', () => {
+    // zn2 is degree 3 (iv), which resolveDegreeQuality now derives as min from
+    // Natural Minor rather than the old fully-inside sus4 — see scales.ts's
+    // Hirajoshi comment. Its third, F, sits outside the five-note scale;
+    // every other Zen Garden chord stays entirely inside it.
     const zen = RESOLVED_VIBES.find((v) => v.id === 'zen-garden')!;
     for (const chord of zen.chords) {
-      for (const note of chord.notes) {
-        expect(isNoteInScale(note, 'G', 'Hirajoshi')).toBe(true);
+      const outside = chord.notes.filter((note) => !isNoteInScale(note, 'G', 'Hirajoshi'));
+      if (chord.root === 'D' && chord.quality === 'min') {
+        expect(outside).toEqual(['F4']);
+      } else {
+        expect(outside).toEqual([]);
       }
     }
   });

@@ -1,4 +1,5 @@
 import { getScaleNotesInOctave, ROOTS } from '../../../utils/musicTheory';
+import { spellNoteInKey } from '@/utils/noteSpelling';
 import type { LeadMelodyView } from '../../../store/types';
 import { leadStoredIndexAt, type LeadNote } from '../../../audio/leadMelody';
 import { wrapColumn } from '@/audio/leadLiveRecord';
@@ -43,6 +44,27 @@ export function leadPitchRows(
     }
   }
   return rows;
+}
+
+/**
+ * The LABEL for a pitch row — and only the label.
+ *
+ * `leadPitchRows` returns identities: LeadMelodyGrid uses those exact strings
+ * as `kinds.get(note)` map keys, as `previewNote(note)` arguments, and as the
+ * values written into `LeadNote.note`, which is persisted. `isRootNote`
+ * compares them against a sharp ROOTS value, so a flat row name also loses the
+ * tonic highlight. Spelling therefore lands here and nowhere else.
+ *
+ * Chromatic rows stay sharp: the chromatic view is a key-agnostic ladder of
+ * twelve semitones, not a reading of the key.
+ */
+export function leadRowLabel(
+  note: string,
+  view: LeadMelodyView,
+  root: string,
+  scaleType: string,
+): string {
+  return view === 'chromatic' ? note : spellNoteInKey(note, root, scaleType);
 }
 
 /**

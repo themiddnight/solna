@@ -485,6 +485,17 @@ describe('formatVariationSummary', () => {
     expect(headline).toBe('🎲 Lo-Fi Chill — F Major · 81 BPM');
   });
 
+  // The headline is toast text and nothing else — never stored, never compared
+  // — so it spells the key the way the chip beside it does. Left raw, a reroll
+  // onto A# read `A# Major` in the toast while the chip under it read `Bb`.
+  test('the headline spells the key, like every other rendered key name', () => {
+    expect(formatVariationSummary({ ...BASE, scaleRoot: 'A#' }).headline).toContain('— Bb Major ');
+    // The same pitch class, written the way each tonality writes it.
+    expect(formatVariationSummary({ ...BASE, scaleRoot: 'G#' }).headline).toContain('— Ab Major ');
+    expect(formatVariationSummary({ ...BASE, scaleRoot: 'G#', scaleType: 'Natural Minor' }).headline)
+      .toContain('— G# Natural Minor ');
+  });
+
   test('the detail is four dot-joined segments in a fixed order', () => {
     const { detail } = formatVariationSummary(BASE);
     expect(detail).toBe(

@@ -9,6 +9,7 @@ import {
 } from '../../utils/musicTheory';
 import { SCALES } from '@/data/scales';
 import { shortcutLabel } from '../../utils/keyboard';
+import { spellNoteInKey } from '@/utils/noteSpelling';
 
 const KEYBOARD_OCTAVE_MIN = -2;
 const KEYBOARD_OCTAVE_MAX = 2;
@@ -98,7 +99,8 @@ export function getScaleLockedKeyboardNotes(
 
   const noteAt = (step: number): ScaleKeyboardNote => {
     const note = scaleStepNote(tonicPitch, scaleSemitones, scaleLength, step);
-    return { note, label: note, key: "", isBlack: false };
+    // `note` is the identity the engine plays; `label` is what the cap reads.
+    return { note, label: spellNoteInKey(note, root, scaleType), key: '', isBlack: false };
   };
 
   const homeRow = HOME_ROW_KEYS.map((key, i) => ({
@@ -230,7 +232,7 @@ export function ScaleLockedKey({
   return (
     <KeyCap
       id={`key-${k.note}`}
-      ariaLabel={k.note}
+      ariaLabel={k.label}
       isActive={isActive}
       label={k.label}
       shortcutKey={k.key}
@@ -335,7 +337,7 @@ export function getChordKeyboardRows(
     );
     triadRow.push({
       key: HOME_ROW_KEYS[degree],
-      label: formatChordLabel(chordRoot, quality),
+      label: formatChordLabel(chordRoot, quality, { scaleRoot: root, scaleType }),
       notes: generateBlockChordNotes(quality, chordRoot, triadOctave),
     });
   }
@@ -351,7 +353,7 @@ export function getChordKeyboardRows(
   const melodyTonicPitch = rootChroma + 12 * (melodyTonicOctave + 1);
   const melodyRow: ChordKeyboardButton[] = MELODY_KEYS.map((key, i) => {
     const note = scaleStepNote(melodyTonicPitch, scaleSemitones, scaleLength, i);
-    return { key, label: note, notes: [note] };
+    return { key, label: spellNoteInKey(note, root, scaleType), notes: [note] };
   });
 
   return { triadRow, melodyRow };

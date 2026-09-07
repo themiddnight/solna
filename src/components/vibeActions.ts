@@ -9,6 +9,7 @@
 import type { VibeSpec } from '../data/vibes';
 import { applyVibeToStore, resolveVibe } from '../store/vibes';
 import { useAppStore } from '../store/store';
+import { formatKeyLabel } from '@/utils/noteSpelling';
 import {
   createDraw,
   formatVariationSummary,
@@ -21,7 +22,7 @@ export function selectVibe(
   deps: { onToast: (text: string) => void }
 ): void {
   applyVibeToStore(resolveVibe(vibe));
-  deps.onToast(`Loaded ${vibe.name} (${vibe.bpm} BPM · Key ${vibe.scaleRoot} ${vibe.scaleType})`);
+  deps.onToast(`Loaded ${vibe.name} (${vibe.bpm} BPM · Key ${formatKeyLabel(vibe.scaleRoot, vibe.scaleType)})`);
 }
 
 /**

@@ -58,6 +58,7 @@ import {
   getBorrowedChords,
   formatChordLabel,
 } from "../../utils/musicTheory";
+import { formatKeyLabel } from "@/utils/noteSpelling";
 import { isProgressionAvailable } from "./chord/progressionAvailability";
 
 // The drawer is never needed on first paint — PresetLibrary early-returns
@@ -143,6 +144,7 @@ export const ChordView: React.FC = React.memo(() => {
   const meterId = useAppStore((s) => s.meterId);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
+  const spellingKey = { scaleRoot, scaleType };
   const synthParams = useAppStore((s) => s.synthParams);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
   const rhythmId = useAppStore((s) => s.chordRhythmId);
@@ -662,7 +664,7 @@ export const ChordView: React.FC = React.memo(() => {
                   const updated = snapProgressionToScale(chords, scaleRoot, scaleType, chordOctave);
                   setChords(updated);
                   setIsAutoReharmonizedIndicator(true);
-                  setSaveToast(`Re-harmonized progression to ${scaleRoot} ${scaleType} (Option B)!`);
+                  setSaveToast(`Re-harmonized progression to ${formatKeyLabel(scaleRoot, scaleType)} (Option B)!`);
                   setTimeout(() => setSaveToast(null), 3000);
                 }}
                 className="btn btn-xs btn-secondary btn-outline gap-1.5"
@@ -715,7 +717,7 @@ export const ChordView: React.FC = React.memo(() => {
               >
                 <Sparkles className="w-3 h-3 text-secondary" />
                 <span>
-                  Auto-Reharmonized to {scaleRoot} {scaleType}
+                  Auto-Reharmonized to {formatKeyLabel(scaleRoot, scaleType)}
                 </span>
               </span>
             )}
@@ -728,7 +730,7 @@ export const ChordView: React.FC = React.memo(() => {
             <div className="flex items-center gap-1.5 text-module-chord font-medium">
               <Sparkles className="w-3.5 h-3.5 text-module-chord" />
               <span>
-                In-Scale Chords ({scaleRoot} {scaleType}):
+                In-Scale Chords ({formatKeyLabel(scaleRoot, scaleType)}):
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -756,13 +758,13 @@ export const ChordView: React.FC = React.memo(() => {
                   type="button"
                   onClick={() => addDiatonicChord(i)}
                   className="btn btn-xs btn-soft group gap-1.5 h-auto py-1 normal-case"
-                  title={`Click to add ${formatChordLabel(diatonic.root, diatonic.quality)} (${diatonic.degreeName})`}
+                  title={`Click to add ${formatChordLabel(diatonic.root, diatonic.quality, spellingKey)} (${diatonic.degreeName})`}
                 >
                   <span className="font-mono text-[10px] text-module-chord font-bold bg-base-300 px-1.5 py-0.5 rounded-selector">
                     {diatonic.degreeName}
                   </span>
                   <span className="font-mono font-semibold">
-                    {formatChordLabel(diatonic.root, diatonic.quality)}
+                    {formatChordLabel(diatonic.root, diatonic.quality, spellingKey)}
                   </span>
                   <span
                     role="button"
@@ -824,13 +826,13 @@ export const ChordView: React.FC = React.memo(() => {
                     addBorrowedChord(borrowed.root, borrowed.quality)
                   }
                   className="btn btn-xs btn-soft btn-secondary group gap-1.5 h-auto py-1 normal-case"
-                  title={`Click to add ${borrowed.label}: ${formatChordLabel(borrowed.root, borrowed.quality)}`}
+                  title={`Click to add ${borrowed.label}: ${formatChordLabel(borrowed.root, borrowed.quality, spellingKey)}`}
                 >
                   <span className="font-mono text-[10px] text-secondary font-bold bg-base-300 px-1.5 py-0.5 rounded-selector">
                     {borrowed.label}
                   </span>
                   <span className="font-mono font-semibold">
-                    {formatChordLabel(borrowed.root, borrowed.quality)}
+                    {formatChordLabel(borrowed.root, borrowed.quality, spellingKey)}
                   </span>
                   <span
                     role="button"
