@@ -23,13 +23,32 @@ Theory *functions* live in **`src/utils/musicTheory.ts`** (pure, no store/engine
 `tonal` takes **interval notation**, not `"N oct"` — octave N up is a perfect `(7N+1)`th (`8P`, `15P`, …).
 Both `shiftNoteOctave` and `src/audio/arpeggiator.ts` depend on this; don't "simplify" it.
 
-The one deliberately hand-authored table is `SCALES` — semitone intervals plus per-degree
-`triadQualities` / `seventhQualities`, which `tonal` does not provide. Chord *spelling* still goes
-through `tonal`.
+`SCALES` states `intervals` (a literal a reader can check by eye, pinned to `tonal` by
+`src/data/scales.test.ts`), the `tonal` scale name that spells it, its `tonality` spelling
+convention, and — for scales with fewer than seven degrees — the 7-note `parent` whose harmony it
+borrows. Per-degree chord qualities are **derived**, not stated:
+`resolveDegreeQuality(scaleType, degree, use7ths)` in `utils/musicTheory.ts` maps a degree to a
+parent degree **by semitone offset** (never by index — `degree % 7` would make Minor Pentatonic
+degree 1 resolve as the parent's ii°), stacks thirds over the parent's spelled note names and
+measures with `Interval.distance`. An unmapped interval tuple **throws**. There are **no
+overrides**: if the derivation is wrong for a scale the fix is the derivation or the `parent`, and
+a specific chord at a specific degree belongs in a `CHORD_PROGRESSIONS` step's explicit `quality`.
 
 ## Scales and roots
 
 `ROOTS` is 12 sharp-spelled pitch classes (`C … B`); every generated note name is sharp-spelled.
+
+**Sharp is the identity; spelling is a label.** `ROOTS` is twelve sharp-spelled pitch classes and
+every *generated* and every *stored* note name is one of them — `getScaleNotes`,
+`generateBlockChordNotes`, `getDiatonicChordForDegree`, `getBorrowedChords`,
+`transposeProgression`, `snapProgressionToScale`, `leadPitchRows`, `KEYBOARD_NOTES`. Display goes
+through `utils/noteSpelling.ts` instead: `spellScaleNotes(root, scaleType)`,
+`spellNoteInKey(note, root, scaleType)`, `getTonicSpelling`, `formatChordLabel`'s optional third
+parameter, and `KEY_OPTIONS` for the key picker. Nothing spelled is ever persisted, which is why
+the whole spelling change needed no persist-version and no `.solna` format bump. Two traps:
+`ui/Keyboard.tsx` does `ROOTS.indexOf()` on `getScaleNotes`' output, so a flat name there yields
+`-1` silently; and the lead grid's row strings are identities that key `kinds`, drive
+`previewNote` and are written into the persisted `LeadNote.note`, so only `leadRowLabel` spells.
 
 `SCALES` keys are the values persisted as `scaleType`, so **renaming a key breaks saved projects**
 (exported project JSON carries the string verbatim). The progression-library-degrees project only got
@@ -39,8 +58,10 @@ no users yet — don't take that as license to rename a key casually once it doe
 `Minor Pentatonic`, `Major Pentatonic`, `Blues`, `Hirajoshi`. Pentatonic/Blues/Hirajoshi have 5–6
 degrees, so never assume 7 — loop `SCALES[scaleType].intervals.length` (unknown key falls back to
 `Major`, which is how `'Pentatonic Major'` ran as Major for months without anyone hearing it).
-`Hirajoshi` is `[0, 2, 3, 7, 8]` with hand-authored qualities inherited from natural minor, except
-degree 3 which is `sus4` / `7sus4` — the open-fourth koto sound, and entirely inside the five notes.
+`Hirajoshi` is `[0, 2, 3, 7, 8]` with `parent: 'Natural Minor'` — a strict subset of it at degrees
+1, 2, 3, 5, 6. Degree 3 was once a hand-written `sus4` / `7sus4` deviation and is now `min` /
+`min7`: a five-note scale with two major-third gaps is one most of whose diatonic chords reach
+outside it, which is a fact about the scale, not a defect.
 
 Helpers: `getScaleNotes(root, scaleType)`, `isNoteInScale(note, root, scaleType)` (accepts `'C#4'` or `'A'`).
 
