@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { BASS_PATTERNS, BASS_STYLE_GROUPS, customBassPattern, resolveBassSteps } from './bassPatterns';
-import type { BassPattern, BassStepChoice } from './bassPatterns';
+import { BASS_STYLE_GROUPS, customBassPattern, resolveBassSteps } from './bassPatterns';
+import { BASS_PATTERNS } from '@/data/bassPatterns';
+import type { BassPattern, BassStepChoice } from '@/data/bassPatterns';
 import type { ChordItem } from '../types';
 import { getMeter } from '../utils/meter';
 import type { MeterId } from '../utils/meter';

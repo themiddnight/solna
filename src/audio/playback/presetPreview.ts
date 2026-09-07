@@ -1,7 +1,8 @@
 import { audioEngine } from '../engine';
 import { DEFAULT_VELOCITY } from '../constants';
 import type { SynthParams, ChordItem } from '../../types';
-import { applyPreset, type SynthPresetItem } from '../synthPresets';
+import { applyPreset } from '../presetRegistry';
+import type { SynthPresetItem } from '../../data/synthPresets';
 
 /**
  * One-shot previews for library entries (synth patches, chord templates,

@@ -1,7 +1,7 @@
 /**
  * Groups pattern rows by their `style` for the style-grouped select UIs,
  * preserving first-appearance order. Extracted because bassPatterns.ts and
- * rhythmPatterns.ts carried this same IIFE character for character.
+ * chordRhythms.ts carried this same IIFE character for character.
  */
 export function groupByStyle<T extends { style: string }>(
   items: readonly T[],

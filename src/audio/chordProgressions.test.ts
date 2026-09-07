@@ -1,22 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { Chord } from 'tonal';
-import {
-  CHORD_PROGRESSIONS,
-  VIBE_GENRE_SCALES,
-  progressionById,
-  resolveProgression,
-} from './chordProgressions';
-import type { VibeGenre } from '../../types';
-import {
-  deriveChordNotes,
-  SCALES,
-  TONAL_CHORD_ALIASES,
-} from '../../utils/musicTheory';
-
-const GENRES: VibeGenre[] = ['lofi', 'synthwave', 'edm', 'ambient', 'boombap', 'zen'];
-
-const idsFor = (genre: VibeGenre) =>
-  CHORD_PROGRESSIONS.filter((p) => p.genres.includes(genre)).map((p) => p.id);
+import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
+import { progressionById, resolveProgression } from './chordProgressions';
+import { SCALES } from '@/data/scales';
+import { deriveChordNotes, TONAL_CHORD_ALIASES } from '../utils/musicTheory';
 
 describe('CHORD_PROGRESSIONS structure', () => {
   test('ids are unique and non-empty, and every entry has steps', () => {
@@ -71,84 +58,35 @@ describe('CHORD_PROGRESSIONS structure', () => {
   });
 });
 
-describe('genre tagging', () => {
-  test('a genre tag is only used on its own scale', () => {
-    for (const p of CHORD_PROGRESSIONS) {
-      for (const genre of p.genres) {
-        expect(p.referenceScale).toBe(VIBE_GENRE_SCALES[genre]);
-      }
-    }
-  });
+// The tagged sets as authored today, written out. They used to be computed
+// from `genres`; that tag no longer constrains anything, so the conventions
+// below name the entries they are about. Adding a progression does not oblige
+// you to add it here — these pin conventions, not coverage.
+const EDM_IDS = ['pop-club-house', 'edm-cyber-drop', 'edm-neon-rise', 'edm-arena-sweep', 'edm-cyber-vamp'];
+const AMBIENT_IDS = ['ambient-still-water', 'ambient-lydian-drift', 'ambient-open-fourths', 'ambient-glass-horizon', 'ambient-lydian-halo'];
+const EXTENSION_IDS = [
+  'jazz-ii-v-i-vi', 'jazz-neosoul-butter', 'lofi-coffeehouse', 'lofi-bedroom-pop',
+  'lofi-rainy-window', 'lofi-tape-loop', 'lofi-morning-turnaround',
+  'cine-dorian-voyage', 'boombap-dusty-ii-v', 'boombap-crate-dig',
+  'boombap-head-nod', 'boombap-soul-piano',
+];
+const ZEN_IDS = ['zen-bamboo-vamp', 'zen-moonlit-koto', 'zen-still-pond', 'zen-temple-bell'];
 
-  test('every genre has at least four progressions', () => {
-    // Ruling R4: with three rhythm and three bass options per vibe, fewer than
-    // four progressions makes the harmony axis of a no-undo dice repetitive.
-    for (const genre of GENRES) {
-      expect(idsFor(genre).length).toBeGreaterThanOrEqual(4);
-    }
-  });
+const byIds = (ids: string[]) => ids.map((id) => progressionById(id)!);
 
-  test('the exact tagged set per genre is authored, not inferred', () => {
-    // B2 authors each vibe's progressionIds as this filter's output and pins
-    // it, so a tag added here without a decision breaks B2, not just this file.
-    expect(idsFor('lofi')).toEqual([
-      'jazz-ii-v-i-vi',
-      'jazz-neosoul-butter',
-      'lofi-coffeehouse',
-      'lofi-bedroom-pop',
-      'lofi-rainy-window',
-      'lofi-tape-loop',
-      'lofi-morning-turnaround',
-    ]);
-    expect(idsFor('synthwave')).toEqual([
-      'pop-club-house',
-      'cine-epic-ostinato',
-      'synthwave-midnight-drive',
-      'synthwave-neon-horizon',
-    ]);
-    expect(idsFor('edm')).toEqual([
-      'pop-club-house',
-      'edm-cyber-drop',
-      'edm-neon-rise',
-      'edm-arena-sweep',
-      'edm-cyber-vamp',
-    ]);
-    expect(idsFor('ambient')).toEqual([
-      'ambient-still-water',
-      'ambient-lydian-drift',
-      'ambient-open-fourths',
-      'ambient-glass-horizon',
-      'ambient-lydian-halo',
-    ]);
-    expect(idsFor('boombap')).toEqual([
-      'cine-dorian-voyage',
-      'boombap-dusty-ii-v',
-      'boombap-crate-dig',
-      'boombap-head-nod',
-      'boombap-soul-piano',
-    ]);
-    expect(idsFor('zen')).toEqual([
-      'zen-bamboo-vamp',
-      'zen-moonlit-koto',
-      'zen-still-pond',
-      'zen-temple-bell',
-    ]);
-  });
-});
-
-describe('genre conventions from the research', () => {
+describe('authoring conventions from the research', () => {
   test('edm entries hold every chord for the same number of bars, and at least three of the five are 2-bar', () => {
     // Not "always 2": pop-club-house is cross-tagged from the migrated set and
     // its bars are fixed at 1 by the migration proof, and edm-cyber-vamp is
-    // deliberately 1-bar too — it reproduces cyber-dance's original sound.
-    const edm = CHORD_PROGRESSIONS.filter((p) => p.genres.includes('edm'));
+    // deliberately 1-bar too — it reproduces cyber-edm's original sound.
+    const edm = byIds(EDM_IDS);
     const uniform = edm.map((p) => new Set(p.steps.map((s) => s.bars)));
     for (const bars of uniform) expect(bars.size).toBe(1);
     expect(edm.filter((p) => p.steps.every((s) => s.bars === 2)).length).toBeGreaterThanOrEqual(3);
   });
 
   test('ambient entries hold 4+ bars and avoid V-I, including across the loop point', () => {
-    for (const p of CHORD_PROGRESSIONS.filter((x) => x.genres.includes('ambient'))) {
+    for (const p of byIds(AMBIENT_IDS)) {
       for (const step of p.steps) expect(step.bars).toBeGreaterThanOrEqual(4);
       p.steps.forEach((step, i) => {
         const next = p.steps[(i + 1) % p.steps.length];
@@ -158,8 +96,7 @@ describe('genre conventions from the research', () => {
   });
 
   test('lofi and boombap entries write an extension on every step', () => {
-    for (const p of CHORD_PROGRESSIONS) {
-      if (!p.genres.includes('lofi') && !p.genres.includes('boombap')) continue;
+    for (const p of byIds(EXTENSION_IDS)) {
       for (const step of p.steps) {
         expect(step.quality).toBeDefined();
         expect(step.quality).toMatch(/7|9|11|13/);
@@ -168,7 +105,7 @@ describe('genre conventions from the research', () => {
   });
 
   test('zen entries are playable on a five-note scale', () => {
-    for (const p of CHORD_PROGRESSIONS.filter((x) => x.genres.includes('zen'))) {
+    for (const p of byIds(ZEN_IDS)) {
       expect(p.minScaleLength).toBe(5);
       expect(p.referenceScale).toBe('Hirajoshi');
     }

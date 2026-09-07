@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { RHYTHM_PATTERNS, customRhythmPattern, equalPowerVelocityScale, feelToHoldScale, fullHoldDuration } from './rhythmPatterns';
+import { customRhythmPattern, equalPowerVelocityScale, feelToHoldScale, fullHoldDuration } from './chordRhythms';
+import { CHORD_RHYTHMS } from '@/data/chordRhythms';
 import { getMeter } from '../utils/meter';
 import type { MeterId } from '../utils/meter';
 
@@ -71,13 +72,13 @@ const RHYTHM_METERS: [string, MeterId][] = [
   ['sixEightBallad', '6/8'],
 ];
 
-describe('RHYTHM_PATTERNS meter tags', () => {
+describe('CHORD_RHYTHMS meter tags', () => {
   test('every pattern is present, in order, with the meter it was written in', () => {
-    expect(RHYTHM_PATTERNS.map((p) => [p.id, p.meter])).toEqual(RHYTHM_METERS);
+    expect(CHORD_RHYTHMS.map((p) => [p.id, p.meter])).toEqual(RHYTHM_METERS);
   });
 
   test("no hit falls outside its own pattern's bar", () => {
-    for (const p of RHYTHM_PATTERNS) {
+    for (const p of CHORD_RHYTHMS) {
       const bar = getMeter(p.meter).stepsPerBar;
       for (const hit of p.hits) {
         expect(hit.step, `${p.id} hit step`).toBeGreaterThanOrEqual(0);
@@ -87,7 +88,7 @@ describe('RHYTHM_PATTERNS meter tags', () => {
   });
 
   test('no hold rings past its own bar line', () => {
-    for (const p of RHYTHM_PATTERNS) {
+    for (const p of CHORD_RHYTHMS) {
       const bar = getMeter(p.meter).stepsPerBar;
       for (const hit of p.hits) {
         expect(hit.step + (hit.holdSteps ?? 1), `${p.id} hold at step ${hit.step}`).toBeLessThanOrEqual(bar);
@@ -97,20 +98,20 @@ describe('RHYTHM_PATTERNS meter tags', () => {
 
   test('the three 3/4 patterns accent the [4,4,4] beat set, not [6,6]', () => {
     const onsets = (id: string) =>
-      RHYTHM_PATTERNS.find((p) => p.id === id)!.hits.map((h) => h.step);
+      CHORD_RHYTHMS.find((p) => p.id === id)!.hits.map((h) => h.step);
     expect(onsets('waltzOompah')).toEqual([0, 4, 8]);
     expect(onsets('waltzArpRoll')).toEqual([0, 4, 8]);
     expect(onsets('jazzWaltzComp')).toEqual([0, 6, 10]);
     // The jazz waltz leans away from beat one; if step 6 were the loudest hit
     // this would read as a 6/8 downbeat instead of a 3/4 anticipation.
-    const jazz = RHYTHM_PATTERNS.find((p) => p.id === 'jazzWaltzComp')!;
+    const jazz = CHORD_RHYTHMS.find((p) => p.id === 'jazzWaltzComp')!;
     expect(jazz.hits[0].velocity!).toBeGreaterThan(jazz.hits[1].velocity!);
     expect(jazz.hits[1].velocity!).toBeGreaterThan(jazz.hits[2].velocity!);
   });
 });
 
 describe('the 6/8 chord rhythms group in twos, not threes', () => {
-  const byId = (id: string) => RHYTHM_PATTERNS.find((p) => p.id === id)!;
+  const byId = (id: string) => CHORD_RHYTHMS.find((p) => p.id === id)!;
 
   test('compoundEighthPads plays all six eighths but accents only the two beats', () => {
     const p = byId('compoundEighthPads');

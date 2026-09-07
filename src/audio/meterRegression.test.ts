@@ -13,11 +13,10 @@ import { BEATS_PER_BAR, beatsPerBarFor } from '../utils/playhead';
 import { adaptStepRow } from '../utils/patternAdapt';
 import { adaptStepEvents } from '../utils/eventAdapt';
 import { stepCells } from '../components/sequencerGrid';
-import { GENRE_PRESETS } from './data/genrePresets';
-import { VIBE_DRUM_PATTERN_METERS } from './data/vibeDrumPatterns';
-import { RHYTHM_PATTERNS } from './rhythmPatterns';
-import { BASS_PATTERNS } from './bassPatterns';
-import { INSTANT_VIBES } from '../store/instantVibes';
+import { DRUM_GRIDS } from '@/data/drumGrids';
+import { CHORD_RHYTHMS } from '@/data/chordRhythms';
+import { BASS_PATTERNS } from '@/data/bassPatterns';
+import { VIBES } from '../data/vibes';
 
 /**
  * THE STAGE 1 ACCEPTANCE PIN.
@@ -90,7 +89,7 @@ describe('4/4 is byte-identical to the pre-meter behaviour', () => {
   });
 
   test('adapting any 4/4 row to a 16-step bar is the identity', () => {
-    for (const preset of Object.values(GENRE_PRESETS)) {
+    for (const preset of Object.values(DRUM_GRIDS)) {
       if (preset.meter !== '4/4') continue;
       for (const row of Object.values(preset.rows)) {
         expect(adaptStepRow(row, 16)).toEqual(row);
@@ -99,7 +98,7 @@ describe('4/4 is byte-identical to the pre-meter behaviour', () => {
   });
 
   test('adapting any shipped 4/4 rhythm or bass pattern to a 16-step bar is the identity', () => {
-    for (const p of RHYTHM_PATTERNS) {
+    for (const p of CHORD_RHYTHMS) {
       if (p.meter !== '4/4') continue;
       expect(adaptStepEvents(p.hits, 16, 16)).toEqual([...p.hits].sort((a, b) => a.step - b.step));
     }
@@ -122,42 +121,42 @@ describe('the 4/4 libraries Stage 1 shipped are untouched', () => {
     'offbeat-sub', 'walking-groove', 'driving-eighths', 'funk-octaves',
     'reggae-one-drop', 'arp-1357', 'half-time-legato', 'whole-note-root',
   ];
-  const FOUR_FOUR_DRUM_PATTERN_IDS = [
-    'lofi-half-time-brush', 'synthwave-four-on-floor', 'edm-offbeat-pump',
+  // One list since the two drum-grid tables merged, plus the sourced variants
+  // that arrived after: the sequencer's genre grids, the vibe grids, then the
+  // nine transcriptions — in DRUM_GRIDS order.
+  const FOUR_FOUR_GRID_IDS = [
+    'synthwave', 'house', 'trap', 'boom-bap', 'cyberpunk', 'dnb', 'dubstep',
+    'techno', 'funk', 'rock', 'reggae', 'lofi-hip-hop',
+    'lofi-half-time-brush', 'synthwave-four-on-floor',
     'ambient-sparse-drift', 'boombap-swung-break', 'zen-bamboo-pulse',
-  ];
-  const FOUR_FOUR_GENRES = [
-    'Synthwave', 'House', 'Trap', 'Boom Bap', 'Cyberpunk', 'DnB', 'Dubstep',
-    'Techno', 'Funk', 'Rock', 'Reggae', 'Lo-Fi Hip-Hop',
+    'techno-rolling', 'synthwave-attack', 'dubstep-halftime',
+    'trap-quarter-hat', 'boombap-8th-hat', 'lofi-ghost-kick',
+    'funky-drummer', 'rock-driving-8th', 'reggae-rockers',
   ];
   const FOUR_FOUR_VIBE_IDS = [
-    'lofi-chill', 'synthwave-80s', 'cyber-dance', 'ambient-chill',
-    'hiphop-groove', 'asian-zen',
+    'lofi-chill', 'synthwave-80s', 'cyber-edm', 'deep-ambient',
+    'boom-bap', 'zen-garden',
   ];
 
   test('the 45 patterns Stage 1 shipped are still there, still 4/4, still in order', () => {
-    expect(RHYTHM_PATTERNS.filter((p) => p.meter === '4/4').map((p) => p.id))
+    expect(CHORD_RHYTHMS.filter((p) => p.meter === '4/4').map((p) => p.id))
       .toEqual(FOUR_FOUR_RHYTHM_IDS);
     expect(BASS_PATTERNS.filter((p) => p.meter === '4/4').map((p) => p.id))
       .toEqual(FOUR_FOUR_BASS_IDS);
     expect(
-      Object.entries(VIBE_DRUM_PATTERN_METERS).filter(([, m]) => m === '4/4').map(([id]) => id),
-    ).toEqual(FOUR_FOUR_DRUM_PATTERN_IDS);
-    expect(
-      Object.entries(GENRE_PRESETS).filter(([, p]) => p.meter === '4/4').map(([g]) => g),
-    ).toEqual(FOUR_FOUR_GENRES);
-    expect(INSTANT_VIBES.filter((v) => v.meter === '4/4').map((v) => v.id))
+      Object.entries(DRUM_GRIDS).filter(([, g]) => g.meter === '4/4').map(([id]) => id),
+    ).toEqual(FOUR_FOUR_GRID_IDS);
+    expect(VIBES.filter((v) => v.meter === '4/4').map((v) => v.id))
       .toEqual(FOUR_FOUR_VIBE_IDS);
   });
 
   test('every non-4/4 pattern Stage 2 adds is 3/4 or 6/8 — nothing else is authored', () => {
     // 12/8, 5/4 and 7/8 stay served by trim/loop of 4/4 material, by decision.
     const authored: (MeterId | undefined)[] = [
-      ...RHYTHM_PATTERNS.map((p) => p.meter),
+      ...CHORD_RHYTHMS.map((p) => p.meter),
       ...BASS_PATTERNS.map((p) => p.meter),
-      ...Object.values(VIBE_DRUM_PATTERN_METERS),
-      ...Object.values(GENRE_PRESETS).map((p) => p.meter),
-      ...INSTANT_VIBES.map((v) => v.meter),
+      ...Object.values(DRUM_GRIDS).map((g) => g.meter),
+      ...VIBES.map((v) => v.meter),
     ];
     for (const m of authored) {
       expect(['4/4', '3/4', '6/8']).toContain(m);
@@ -165,7 +164,7 @@ describe('the 4/4 libraries Stage 1 shipped are untouched', () => {
   });
 
   test('every shipped row fits the widest storable bar', () => {
-    for (const preset of Object.values(GENRE_PRESETS)) {
+    for (const preset of Object.values(DRUM_GRIDS)) {
       for (const row of Object.values(preset.rows)) {
         expect(row.length).toBeLessThanOrEqual(MAX_STEPS_PER_BAR);
       }

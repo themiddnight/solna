@@ -1,8 +1,6 @@
 import { audioEngine, STEPS_PER_BAR } from "../engine";
-import {
-  RhythmPattern,
-  equalPowerVelocityScale,
-} from "../rhythmPatterns";
+import { equalPowerVelocityScale } from "../chordRhythms";
+import type { RhythmPattern } from "@/data/chordRhythms";
 import { buildArpSequence } from "../arpeggiator";
 import { arpFiresOnStep, computeArpTriggers } from "../arpSchedule";
 import { arpStepFor } from "../../utils/meter";

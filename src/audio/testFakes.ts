@@ -133,15 +133,22 @@ export function fakeBufferSource(opts: FakeOpts = {}) {
     // Records the args passed to start() so a test can read the noise read
     // offset (noiseStartOffset) without re-deriving it.
     _startArgs: [] as number[],
+    // Records the args passed to stop() so a test can pin that a choke really
+    // stops every source of a voice — the base fakeNode's stop() is a no-op.
+    _stopArgs: [] as number[],
   };
   node.start = (...args: number[]) => {
     node._startArgs = args;
+  };
+  node.stop = (...args: number[]) => {
+    node._stopArgs = args;
   };
   return node;
 }
 
 export function fakeCtx(opts: FakeOpts = {}) {
   const gains: ReturnType<typeof fakeNode>[] = [];
+  const filters: ReturnType<typeof fakeNode>[] = [];
   const bufferSources: ReturnType<typeof fakeBufferSource>[] = [];
   return {
     currentTime: 10,
@@ -155,7 +162,11 @@ export function fakeCtx(opts: FakeOpts = {}) {
       gains.push(g);
       return g;
     },
-    createBiquadFilter: () => fakeNode(opts),
+    createBiquadFilter: () => {
+      const f = fakeNode(opts);
+      filters.push(f);
+      return f;
+    },
     createAnalyser: () => ({ ...fakeNode(opts), fftSize: 2048, smoothingTimeConstant: 0.8 }),
     createBuffer: (_channels: number, length: number, sampleRate: number) => ({
       sampleRate,
@@ -171,6 +182,7 @@ export function fakeCtx(opts: FakeOpts = {}) {
     },
     resume: async () => {},
     _gains: gains,
+    _filters: filters,
     _bufferSources: bufferSources,
   };
 }

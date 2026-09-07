@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { progressionById, resolveProgression } from './chordProgressions';
-import { generateBlockChordNotes, ROOTS, rootSemitone, SCALES } from '../../utils/musicTheory';
+import { SCALES } from '@/data/scales';
+import { generateBlockChordNotes, ROOTS, rootSemitone } from '../utils/musicTheory';
 
 /**
  * The 22 original interval-form templates, copied verbatim. `interval` is
