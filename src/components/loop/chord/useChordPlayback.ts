@@ -454,13 +454,12 @@ function useChordPlaybackState() {
   // exactly as armPad does. Subscribing would re-render this hook on every
   // frame of a pad knob drag for a value nothing renders.
   const playerState = useAppStore((s) => s.chordsPlayer);
-  const hardStop = useAppStore((s) => s.hardStop);
-  return { chords, bpm, chordSynthParams, chordOctave, chordFeel, bassSynthParams, bassOctave, bassFeel, scaleRoot, scaleType, playerState, hardStop };
+  return { chords, bpm, chordSynthParams, chordOctave, chordFeel, bassSynthParams, bassOctave, bassFeel, scaleRoot, scaleType, playerState };
 }
 
 export function useChordPlayback() {
   const state = useChordPlaybackState();
-  const { chords, bpm, chordSynthParams, chordOctave, chordFeel, bassSynthParams, bassOctave, bassFeel, scaleRoot, scaleType, playerState, hardStop } = state;
+  const { chords, bpm, chordSynthParams, chordOctave, chordFeel, bassSynthParams, bassOctave, bassFeel, scaleRoot, scaleType, playerState } = state;
   const isPlaying = playerState !== 'stopped';
 
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
@@ -696,7 +695,11 @@ export function useChordPlayback() {
           playbackStopSource(source, releases[source], time);
         }
         softStopPendingRef.current = true;
-        hardStop('chords');
+        // Read the action live, the way the transition handler above does: the
+        // clock subscription is torn down and rebuilt only on isPlaying/chords,
+        // so a closed-over hardStop would have to join that dependency list and
+        // resubscribe the clock for a value that never changes.
+        useAppStore.getState().hardStop('chords');
         return;
       }
 

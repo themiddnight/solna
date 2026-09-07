@@ -57,7 +57,11 @@ export const InstantVibesBar = React.memo(function InstantVibesBar() {
 
   useEffect(() => {
     return () => {
+      // A pending timer id is written by a later click, never by this effect,
+      // so only the ref read at cleanup time can name the timer still armed.
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
       if (spinTimerRef.current) clearTimeout(spinTimerRef.current);
     };
   }, []);

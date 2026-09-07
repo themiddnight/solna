@@ -77,6 +77,10 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
       // (KEYBOARD_AUDITION_TARGET) for the lifetime of the hook; a future
       // caller that varies controlTarget mid-hold would need to close this gap.
       if (audioEngine.getAudioContext()) {
+        // Reading the LATEST ref at cleanup time is the whole point, per the
+        // note above; copying it into the effect body would restore the
+        // stale-target bug it fixes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
         const { controlTarget, params } = stateRef.current;
         audioEngine.releaseSoundingVoices(controlTarget, params.release);
       }

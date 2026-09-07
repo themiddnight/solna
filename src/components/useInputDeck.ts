@@ -258,10 +258,15 @@ export function useInputDeck(): {
   // released them now branches on the *new* mode and finds nothing to release.
   useEffect(() => {
     return () => {
+      // The notes to release are whichever are held WHEN the mode changes, so
+      // both refs must be read at cleanup time; a copy taken at effect setup
+      // would release the wrong set and clear the wrong map.
       const held = notesToReleaseOnKeyboardModeChange(
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
         arpStateRef.current.activeNotes,
       );
       held.forEach((note) => handleNoteOffRef.current(note));
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
       chordKeyNotesRef.current.clear();
     };
   }, [keyboardMode]);
