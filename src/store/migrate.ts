@@ -1,5 +1,5 @@
-import type { SynthPresetItem } from '../audio/synthPresets';
-import type { CustomChordProgressionItem } from '../types';
+import type { SynthPresetItem } from '../data/synthPresets';
+import type { CustomChordProgressionItem, SequencerTrack } from '../types';
 import {
   DEFAULT_LEAD_GATE,
   isLegacyLeadMelody,
@@ -10,11 +10,17 @@ import {
 import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
 import { DEFAULT_LEAD_STEP_RESOLUTION } from '../utils/stepResolution';
 import { padStepRow } from '../utils/patternAdapt';
-import { defaultPadState } from './initialState';
+import {
+  defaultPadState,
+  recolourDrumTracks,
+  renameDrumTrack,
+  renameSoundKit,
+  withDrumTracks,
+} from './initialState';
 import { newLoopId, LOOP_FLAT_KEYS } from './loop';
 
 // Legacy localStorage keys written by the pre-Zustand app:
-// - synth presets:   src/audio/synthPresets.ts (STORAGE_KEY)
+// - synth presets:   src/audio/presetRegistry.ts (STORAGE_KEY)
 // - chord progressions: src/components/loop/ChordPresetLibrary.tsx
 export const LEGACY_SYNTH_PRESETS_KEY = 'murva_synth_custom_presets_v1';
 export const LEGACY_CHORD_PROGRESSIONS_KEY = 'murva_chord_custom_progressions_v1';
@@ -345,4 +351,94 @@ export function migratePadLayer<T extends object>(state: T): T {
     ...defaultPadState(),
     padMuted: true,
   }));
+}
+
+/**
+ * v12 -> v13: every loop's sequencer gains the `lowtom` and `crash` tracks, so
+ * the 30 authored tom/crash rows in DRUM_GRIDS become audible. (This step
+ * shipped naming the row `tom`; Task 7 renamed the INITIAL_SEQUENCER_TRACKS
+ * entry to `lowtom`, and this step tracks that name because it only ever
+ * calls withDrumTracks against the current constant — see migrateDrumVoices
+ * below for the one-time rename a payload that already persisted a real `tom`
+ * row still needs.)
+ *
+ * Shares only the pure withDrumTracks transform with the .solna chain's
+ * upgradeDrumTracksV5 in projectFormatMigrate.ts, and must NOT be refactored
+ * into one function with it: a project body is an external contract, the
+ * persist payload is private localStorage shape, and their version numbers move
+ * for different reasons.
+ *
+ * INITIAL_SEQUENCER_TRACKS holds eleven canonical tracks. For any payload
+ * this app has written, the only ones a pre-v13 loop can be missing are the
+ * six that landed after it — `lowtom`, `crash`, `rimshot`, `hitom`, `ride`
+ * and `bell` — and all six canonical rows are authored with an empty bar
+ * (INITIAL_SEQUENCER_TRACKS.filter((t) => !t.steps.some(Boolean)) is exactly
+ * those six, evaluated, not counted by hand) — so a reopened session sounds
+ * exactly the way it sounded when it was closed, the same guarantee
+ * migratePadLayer buys with padMuted: true.
+ *
+ * That is a fact about those six rows, NOT about withDrumTracks: it appends
+ * ANY missing canonical track, and the other five carry factory beats (kick 4
+ * active steps, snare 2, hihat 8, openhat 1, clap 2). A payload missing more
+ * than those six — hand-edited, truncated, or written by a build that never
+ * had the full kit — is a repair case, and it gets those factory rows back
+ * audibly. Restoring a playable kit is the right answer there; silence is
+ * promised only for payloads this app actually wrote.
+ *
+ * The top-level branch is belt-and-braces. partializeAppState does not persist
+ * a top-level sequencerTracks, and wrapFlatStateIntoLoop (v5 -> v6) runs
+ * earlier in the chain, so a pre-v6 flat payload is already a loop by the time
+ * this sees it. A legacy or hand-written payload can still carry the key.
+ */
+export function migrateDrumTracks<T extends object>(state: T): T {
+  const mapped = mapLoops(state, (row) => ({
+    ...row,
+    sequencerTracks: Array.isArray(row.sequencerTracks)
+      ? withDrumTracks(row.sequencerTracks as SequencerTrack[])
+      : row.sequencerTracks,
+  }));
+  const next = { ...(mapped as Record<string, unknown>) };
+  if (Array.isArray(next.sequencerTracks)) {
+    next.sequencerTracks = withDrumTracks(next.sequencerTracks as SequencerTrack[]);
+  }
+  return next as unknown as T;
+}
+
+
+/**
+ * v13 -> v14: the drum kit is renamed end to end. At this commit that is two
+ * shape changes over the seven-voice roster; Task 8 grows the same roster to
+ * eleven and this step then also appends the four new voices, with no further
+ * version bump (the slice ships together):
+ *
+ *   1. the `tom` track becomes `lowtom`   -> renameDrumTrack, FIRST
+ *   2. loop.soundKit '909 Modern' -> 'Club Standard' -> renameSoundKit
+ *   3. rimshot / hitom / ride / bell are appended -> withDrumTracks
+ *   4. the seven factory colours move to bg-drum-* -> recolourDrumTracks, LAST
+ *
+ * renameDrumTrack runs before withDrumTracks as defence in depth, not because
+ * the reverse is unsafe — see renameDrumTrack's own docblock in
+ * initialState.ts: its blank-target repair branch makes the two orders
+ * produce byte-identical output. recolourDrumTracks must still run after the
+ * rename, since before it the row is still `tom` and keeps bg-primary.
+ *
+ * Shares only the three pure transforms with the .solna chain's
+ * upgradeDrumVoicesV6, and must NOT be refactored into one function with it: a
+ * project body is an external contract, the persist payload is private
+ * localStorage shape, and their version numbers move for different reasons.
+ *
+ * SOUND DOES NOT CHANGE. The renamed track keeps its steps; the renamed kit is
+ * the same object under a new key; a later task's appended tracks are
+ * authored with an empty bar. `loops` only — partializeAppState persists no
+ * top-level sequencerTracks and wrapFlatStateIntoLoop (v5 -> v6) has already
+ * run.
+ */
+export function migrateDrumVoices<T extends object>(state: T): T {
+  return mapLoops(state, (row) => {
+    const rekitted = renameSoundKit(row, '909 Modern', 'Club Standard');
+    if (!Array.isArray(rekitted.sequencerTracks)) return rekitted;
+    const tracks = rekitted.sequencerTracks as SequencerTrack[];
+    const shaped = withDrumTracks(renameDrumTrack(tracks, 'tom', 'lowtom'));
+    return { ...rekitted, sequencerTracks: recolourDrumTracks(shaped) };
+  });
 }

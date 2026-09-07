@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { resolveVibeSynthParams } from './instantVibes';
+import { resolveVibeSynthParams } from './vibes';
 import { INITIAL_SYNTH_PARAMS } from './initialState';
-import { presetById } from '../audio/synthPresets';
+import { presetById } from '../audio/presetRegistry';
 
 describe('resolveVibeSynthParams', () => {
   test('takes its sound from the resolved preset, not from a literal override', () => {
@@ -36,7 +36,7 @@ describe('resolveVibeSynthParams', () => {
 
   test('throws on an id no preset carries, so an authoring typo is never silent', () => {
     expect(() => resolveVibeSynthParams('factory-does-not-exist')).toThrow(
-      'InstantVibe references unknown synth preset id: factory-does-not-exist',
+      'Vibe references unknown synth preset id: factory-does-not-exist',
     );
   });
 });

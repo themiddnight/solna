@@ -6,7 +6,14 @@ import {
   type LeadNote,
 } from '../audio/leadMelody';
 import { DEFAULT_LEAD_STEP_RESOLUTION } from '../utils/stepResolution';
-import { defaultPadState } from './initialState';
+import {
+  defaultPadState,
+  recolourDrumTracks,
+  renameDrumTrack,
+  renameSoundKit,
+  withDrumTracks,
+} from './initialState';
+import type { SequencerTrack } from '../types';
 
 /**
  * The traversal every per-loop step of THIS chain repeats: reach `raw.content`,
@@ -82,7 +89,10 @@ function upgradeLeadTicksV3(raw: Record<string, unknown>): Record<string, unknow
   });
 }
 
-/**
+/* ===========================================================================
+ * ABOUT THE STEPS BELOW — a note on this section, not a docblock for the next
+ * function. (Written with a single `*` so no tool reads it as one.)
+ *
  * The `.solna` format migration chain. Separate from the persist chain in
  * store.ts on purpose (see projectFormat.ts): a project file is an external
  * contract, the persist payload is private.
@@ -105,7 +115,7 @@ function upgradeLeadTicksV3(raw: Record<string, unknown>): Record<string, unknow
  * the guard sanitizeLoops reads through — returns `undefined` for the v1 string
  * shape rather than throwing, so an un-upgraded body would fall back to the
  * default and come back with a blank melody and no error.
- */
+ * =========================================================================== */
 
 /**
  * v3 -> v4: every loop gains the pad/drone layer's eight fields, with the pad
@@ -125,6 +135,81 @@ function upgradePadLayerV4(raw: Record<string, unknown>): Record<string, unknown
   }));
 }
 
+/**
+ * v4 -> v5: every loop gains the `lowtom` and `crash` sequencer tracks, so a
+ * reopened project can play the lowtom and crash rows its drum grids always
+ * had. (This step shipped naming the row `tom`; Task 7 renamed the
+ * INITIAL_SEQUENCER_TRACKS entry to `lowtom`, and this step tracks that name
+ * because it only ever calls withDrumTracks against the current constant —
+ * see upgradeDrumVoicesV6 below for the one-time rename a body that already
+ * persisted a real `tom` row still needs.)
+ *
+ * Shares only the pure withDrumTracks transform with the persist chain's
+ * migrateDrumTracks, and must not be refactored into one function with it: a
+ * project body is an external contract, the persist payload is private
+ * localStorage shape, and their version numbers move for different reasons.
+ *
+ * `loops` only. A project body has no top-level sequencerTracks — the content
+ * set is PROJECT_CONTENT_KEYS and sequencerTracks is a per-loop field — so a
+ * top-level branch here would be dead code claiming a key exists.
+ *
+ * INITIAL_SEQUENCER_TRACKS holds eleven canonical tracks. A project this app
+ * wrote before v5 can only be missing the six that landed after it —
+ * `lowtom`, `crash`, `rimshot`, `hitom`, `ride` and `bell` — and all six
+ * canonical rows are authored with an empty bar
+ * (INITIAL_SEQUENCER_TRACKS.filter((t) => !t.steps.some(Boolean)) is exactly
+ * those six, evaluated, not counted by hand) — so it reopens sounding the way
+ * it sounded when it was closed. That is a fact about those six rows, NOT
+ * about withDrumTracks: it appends ANY missing canonical track, and the other
+ * five carry factory beats (kick 4 active steps, snare 2, hihat 8, openhat 1,
+ * clap 2). A hand-edited or truncated body missing more than those six is a
+ * repair case and gets the factory rows back audibly — a playable kit is the
+ * right answer there; silence is promised only for bodies this app wrote.
+ */
+function upgradeDrumTracksV5(raw: Record<string, unknown>): Record<string, unknown> {
+  return mapBodyLoops(raw, (loop) => ({
+    ...loop,
+    sequencerTracks: Array.isArray(loop.sequencerTracks)
+      ? withDrumTracks(loop.sequencerTracks as SequencerTrack[])
+      : loop.sequencerTracks,
+  }));
+}
+
+
+/**
+ * v5 -> v6: the drum kit is renamed end to end, in a project body. At this
+ * commit that is two shape changes over the seven-voice roster (rename +
+ * kit rename); Task 8 grows the same roster to eleven and this step then
+ * also appends the four new voices, with no further version bump.
+ *
+ * The same pure transforms as the persist chain's migrateDrumVoices, in the
+ * same order — renameDrumTrack before withDrumTracks before recolourDrumTracks
+ * last, as defence in depth, not because the reverse of the first two is
+ * unsafe: see renameDrumTrack's own docblock in initialState.ts, whose
+ * blank-target repair branch makes those two orders produce byte-identical
+ * output. Deliberately NOT the same function as migrateDrumVoices: a project body is
+ * an external contract, the persist payload is private localStorage shape,
+ * and their version numbers move for different reasons.
+ *
+ * `loops` only. A project body has no top-level sequencerTracks — the content
+ * set is PROJECT_CONTENT_KEYS and sequencerTracks is a per-loop field — so a
+ * top-level branch here would be dead code claiming a key exists.
+ *
+ * A project this app wrote reopens sounding the way it sounded when it was
+ * closed: the renamed row keeps its steps, 'Club Standard' is the same kit
+ * object '909 Modern' was, a later task's appended rows are empty, and a
+ * colour is not a sound.
+ */
+function upgradeDrumVoicesV6(raw: Record<string, unknown>): Record<string, unknown> {
+  return mapBodyLoops(raw, (loop) => {
+    const rekitted = renameSoundKit(loop, '909 Modern', 'Club Standard');
+    if (!Array.isArray(rekitted.sequencerTracks)) return rekitted;
+    const tracks = rekitted.sequencerTracks as SequencerTrack[];
+    const shaped = withDrumTracks(renameDrumTrack(tracks, 'tom', 'lowtom'));
+    return { ...rekitted, sequencerTracks: recolourDrumTracks(shaped) };
+  });
+}
+
 export function migrateProjectBody(
   raw: Record<string, unknown>,
   fromVersion: number,
@@ -133,5 +218,11 @@ export function migrateProjectBody(
   if (fromVersion < 2) next = upgradeLeadNotesV2(next);
   if (fromVersion < 3) next = upgradeLeadTicksV3(next);
   if (fromVersion < 4) next = upgradePadLayerV4(next);
+  if (fromVersion < 5) next = upgradeDrumTracksV5(next);
+  // 7, not 6, for the same reason the persist chain guards on 15: a project
+  // saved part-way through the drum slice carries a formatVersion whose upgrade
+  // had not yet learned the four new voices. The step is idempotent, so
+  // re-running it completes those bodies and is a no-op for every other.
+  if (fromVersion < 7) next = upgradeDrumVoicesV6(next);
   return next;
 }

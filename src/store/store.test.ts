@@ -2,10 +2,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 
 import type { StoreApi } from 'zustand';
 import { audioEngine } from '../audio/engine';
 import { createChordsSlice } from './chordsSlice';
-import { FACTORY_BASS_PRESETS } from '../audio/bassPresets';
-import { BASS_PATTERNS } from '../audio/bassPatterns';
+import { presetById } from '../audio/presetRegistry';
+import { DEFAULT_BASS_PRESET_ID } from './initialState';
+import { BASS_PATTERNS } from '@/data/bassPatterns';
 import { deriveChordNotes } from '../utils/musicTheory';
-import type { SynthPresetItem } from '../audio/synthPresets';
+import type { SynthPresetItem } from '../data/synthPresets';
 import type { CustomChordProgressionItem } from '../types';
 import {
   defaultPadState,
@@ -17,7 +18,7 @@ import {
 import type { AppStore } from './types';
 import type { LeadNote } from '../audio/leadMelody';
 import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { getMeter, MAX_STEPS_PER_BAR } from '../utils/meter';
 
 // ---------------------------------------------------------------------------
 // Fake browser environment (bun has none of these globals). The store module
@@ -181,7 +182,18 @@ describe('store defaults', () => {
     expect(s.keyboardMode).toBe('scale-locked');
     expect(s.synthParams).toEqual(INITIAL_SYNTH_PARAMS);
     expect(s.chordSynthParams).toEqual(INITIAL_SYNTH_PARAMS);
-    expect(s.bassSynthParams).toEqual({ ...INITIAL_SYNTH_PARAMS, ...FACTORY_BASS_PRESETS[0].params });
+    // Pinned by ID, never by index. `bass-deep-sine` was FACTORY_BASS_PRESETS[0]
+    // before the arrays merged; SYNTH_PRESETS[0] is `factory-cosmic-lead`, a
+    // Lead patch. Asserting the same index the slice reads makes this test agree
+    // with the bug instead of catching it — which is what it did, verbatim,
+    // until this line. Revert to an index and this must go red.
+    const defaultBassPreset = presetById(DEFAULT_BASS_PRESET_ID);
+    expect(defaultBassPreset).toBeDefined();
+    expect(defaultBassPreset!.category).toBe('Bass');
+    expect(s.bassSynthParams).toEqual({
+      ...INITIAL_SYNTH_PARAMS,
+      ...defaultBassPreset!.params,
+    });
     expect(s.chords).toEqual(INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)));
     expect(s.sequencerTracks).toEqual(INITIAL_SEQUENCER_TRACKS);
     expect(s.effects).toEqual(INITIAL_EFFECTS);
@@ -227,8 +239,8 @@ describe('transport semantics', () => {
   });
 });
 
-describe('applyDrumPattern', () => {
-  test('maps a 16-step pattern onto the matching track window and leaves others untouched', async () => {
+describe('replaceDrumPattern', () => {
+  test('maps a 16-step pattern onto the matching track window and clears the tracks it does not name', async () => {
     const { useAppStore } = await getStore();
     const initial = useAppStore.getState().sequencerTracks;
 
@@ -243,11 +255,11 @@ describe('applyDrumPattern', () => {
       .setSequencerTracks(initial.map((t, i) => (i === 0 ? { ...t, steps: seededSteps } : t)));
     const before = useAppStore.getState().sequencerTracks;
 
-    // Real callers (GENRE_PRESETS, VIBE_DRUM_PATTERNS) hand in a 16-step row —
+    // Real callers (DRUM_GRIDS, via the sequencer menu or a vibe) hand in a 16-step row —
     // the width of the default 4/4 window, not the 24-wide storage array.
     const newKickWindow = before[0].steps.slice(0, 16).map((v) => !v);
 
-    useAppStore.getState().applyDrumPattern({ kick: newKickWindow });
+    useAppStore.getState().replaceDrumPattern({ kick: newKickWindow });
     const after = useAppStore.getState().sequencerTracks;
 
     expect(after[0].instrument).toBe('kick');
@@ -257,14 +269,105 @@ describe('applyDrumPattern', () => {
     expect(after[0].steps.slice(16)).toEqual(before[0].steps.slice(16));
     expect(after[0].id).toBe(before[0].id); // rest of the track is preserved
     expect(after[0].volume).toBe(before[0].volume);
+    // WAS: `for (let i = 1; i < after.length; i++) expect(after[i]).toEqual(before[i]);`
+    // — the old merge contract, where an unnamed track was skipped. A grid
+    // determines the whole kit now, so an unnamed track is CLEARED. Rewritten,
+    // not deleted: this is the assertion that says what happens to the tracks
+    // the pattern is silent about, and something has to say it.
     for (let i = 1; i < after.length; i++) {
-      expect(after[i]).toEqual(before[i]);
+      expect(after[i].steps.slice(0, 16), after[i].instrument).toEqual(
+        new Array(16).fill(false),
+      );
+      // ...and only the window clears. Everything past stepsPerBar is the
+      // wider-meter content and survives, exactly as it does for a named row.
+      expect(after[i].steps.length, after[i].instrument).toBe(MAX_STEPS_PER_BAR);
+      expect(after[i].steps.slice(16), after[i].instrument).toEqual(
+        before[i].steps.slice(16),
+      );
+      expect(after[i].id).toBe(before[i].id);
+      expect(after[i].volume).toBe(before[i].volume);
+      expect(after[i].muted).toBe(before[i].muted);
+    }
+  });
+
+  test('a pattern naming only unknown instruments clears every track', async () => {
+    // WAS: "a pattern key with no matching instrument changes nothing".
+    // The sharpest statement of the new contract, and the one that would have
+    // caught the stale crash on its own: a grid with no `crash` row silences
+    // the crash, rather than leaving the previous grid's ringing under it.
+    const { useAppStore } = await getStore();
+    const before = useAppStore.getState().sequencerTracks;
+    useAppStore.getState().replaceDrumPattern({ cowbell: [true, false] });
+    const after = useAppStore.getState().sequencerTracks;
+    for (const [i, track] of after.entries()) {
+      // Non-vacuity guard, and it is not decorative: `before` is whatever the
+      // previous test left behind, so if the action ever truncated `steps` to
+      // the window BOTH sides of the slice(16) comparison would become [] and
+      // this loop would pass while user programming past the window was
+      // destroyed. That is the exact shape of the mutation that survived here
+      // before. Assert the width first, then the two halves mean something.
+      expect(track.steps.length, track.instrument).toBe(MAX_STEPS_PER_BAR);
+      expect(track.steps.slice(0, 16), track.instrument).toEqual(new Array(16).fill(false));
+      expect(track.steps.slice(16), track.instrument).toEqual(before[i].steps.slice(16));
+    }
+  });
+
+  test('clearing an unnamed track goes through writeStepWindow, so its padding survives', async () => {
+    // The failure this pins: `steps: new Array(stepsPerBar).fill(false)` looks
+    // correct, passes the window assertions above, and silently truncates every
+    // track to 16 — destroying the wider-meter content the non-destructive
+    // scheme stores past stepsPerBar. Seeded like the kick test above, on a
+    // track the pattern does NOT name.
+    const { useAppStore } = await getStore();
+    const initial = useAppStore.getState().sequencerTracks;
+    const seeded = initial[1].steps.map((v, i) => (i === 20 ? true : v));
+    useAppStore
+      .getState()
+      .setSequencerTracks(initial.map((t, i) => (i === 1 ? { ...t, steps: seeded } : t)));
+
+    useAppStore.getState().replaceDrumPattern({ kick: new Array(16).fill(true) });
+
+    const after = useAppStore.getState().sequencerTracks;
+    expect(after[1].steps.length).toBe(MAX_STEPS_PER_BAR);
+    expect(after[1].steps[20]).toBe(true);
+    expect(after[1].steps.slice(0, 16)).toEqual(new Array(16).fill(false));
+  });
+
+  test('at 3/4 the clear stops at step 12, not at MAX_STEPS_PER_BAR', async () => {
+    // Every other test here runs at 4/4, where the window (16) and the visible
+    // half of the storage array coincide closely enough that a clear path using
+    // MAX_STEPS_PER_BAR instead of stepsPerBar would stay green. At 3/4 the
+    // window is 12 and steps 12-23 are the user's programming for wider meters,
+    // so this is the meter at which that substitution becomes visible. Without
+    // this test a change from `stepsPerBar` to `MAX_STEPS_PER_BAR` in the clear
+    // path silently destroys programming in every meter narrower than 12/8.
+    const { useAppStore } = await getStore();
+    useAppStore.getState().setMeter('3/4');
+    expect(getMeter(useAppStore.getState().meterId).stepsPerBar).toBe(12);
+
+    // Fill EVERY cell of every track, so "cleared" and "preserved" are both
+    // reads of a `true` that had to be acted on — no cell is incidentally false.
+    useAppStore
+      .getState()
+      .setSequencerTracks(
+        useAppStore
+          .getState()
+          .sequencerTracks.map((t) => ({ ...t, steps: new Array(MAX_STEPS_PER_BAR).fill(true) })),
+      );
+
+    // Names the kick only: every other track takes the clear path.
+    useAppStore.getState().replaceDrumPattern({ kick: new Array(12).fill(false) });
+
+    for (const track of useAppStore.getState().sequencerTracks) {
+      expect(track.steps.length, track.instrument).toBe(MAX_STEPS_PER_BAR);
+      expect(track.steps.slice(0, 12), track.instrument).toEqual(new Array(12).fill(false));
+      // Steps 12-23 are outside the 3/4 window: untouched, still true.
+      expect(track.steps.slice(12), track.instrument).toEqual(
+        new Array(MAX_STEPS_PER_BAR - 12).fill(true),
+      );
     }
 
-    // A pattern key with no matching instrument changes nothing
-    const untouched = useAppStore.getState().sequencerTracks;
-    useAppStore.getState().applyDrumPattern({ cowbell: [true, false] });
-    expect(useAppStore.getState().sequencerTracks).toEqual(untouched);
+    useAppStore.getState().setMeter('4/4');
   });
 });
 
@@ -396,7 +499,7 @@ describe('persist partialize', () => {
       'hardStopAll',
       'setSelectedVibeId',
       'setChordOctave',
-      'applyDrumPattern',
+      'replaceDrumPattern',
       'setEffects',
       'setActiveTab',
       'setKeyboardMode',
@@ -711,7 +814,23 @@ describe('persisted payload sanitization', () => {
     // INITIAL_EFFECTS), so it must never reach the engine as undefined.
     expect(s.effects).toEqual({ ...INITIAL_EFFECTS, ...partialEffects });
     expect(s.chords).toEqual([{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] }]);
-    expect(s.sequencerTracks).toEqual([]);
+    // Was `[]`: this is a version-1 payload, so the v12 -> v13 backfill runs
+    // over it and withDrumTracks appends every canonical track missing from
+    // the empty list. Sanitize still passes the array through untouched — the
+    // change is the migration ahead of it, not the sanitizer.
+    expect(s.sequencerTracks.map((t) => t.instrument)).toEqual([
+      'kick',
+      'snare',
+      'rimshot',
+      'clap',
+      'hihat',
+      'openhat',
+      'hitom',
+      'lowtom',
+      'ride',
+      'crash',
+      'bell',
+    ]);
     expect(s.customSynthPresets).toEqual([]);
     expect(s.customChordProgressions).toEqual([]);
     expect(s.scaleRoot).toBe('D');
@@ -870,11 +989,35 @@ describe('sequencer track colour migration wiring (v2 -> v3)', () => {
     await useAppStore.persist.rehydrate();
     const colors = useAppStore.getState().sequencerTracks.map((t) => t.color);
     expect(colors).toEqual([
-      'bg-error',
-      'bg-warning',
+      // The v2 -> v3 remap (migrateTrackColors) keys on the track's OWN
+      // previous colour string through LEGACY_TRACK_COLOR_MAP, not on
+      // position or instrument: bg-rose-500/amber/emerald/cyan/purple become
+      // bg-error/warning/success/accent/secondary respectively, whichever
+      // track carries them. Here that lands kick on bg-error and snare on
+      // bg-warning — each its OWN legacy factory colour by coincidence of
+      // the fixture — so recolourDrumTracks (v13 -> v14) then moves both
+      // onto the drum namespace.
+      'bg-drum-kick',
+      'bg-drum-snare',
+      // rimshot has no entry in LEGACY_DRUM_TRACK_COLORS at all (it didn't
+      // exist pre-Task-8), so recolourDrumTracks takes the `!factory` branch
+      // and leaves its remapped bg-success untouched. clap and hihat DO have
+      // legacy entries (bg-secondary, bg-success) but the v2 -> v3 remap left
+      // them holding a DIFFERENT track's legacy colour (bg-accent,
+      // bg-secondary) — the `t.color !== factory` branch — so
+      // recolourDrumTracks leaves those two alone as well, for a different
+      // reason than rimshot's.
       'bg-success',
       'bg-accent',
       'bg-secondary',
+      // Appended by the v12 -> v13 backfill, already on the drum namespace
+      // because INITIAL_SEQUENCER_TRACKS carries it directly (Task 9).
+      'bg-drum-openhat',
+      'bg-drum-hitom',
+      'bg-drum-lowtom',
+      'bg-drum-ride',
+      'bg-drum-crash',
+      'bg-drum-bell',
     ]);
     // steps are the user's actual musical content — must survive untouched.
     expect(useAppStore.getState().sequencerTracks[0].steps).toEqual(
@@ -904,7 +1047,24 @@ describe('sequencer track colour migration wiring (v2 -> v3)', () => {
 
     await useAppStore.persist.rehydrate();
     const colors = useAppStore.getState().sequencerTracks.map((t) => t.color);
-    expect(colors).toEqual(['bg-error', 'bg-custom-brand']);
+    // Two tracks in, eleven out: withDrumTracks appends every missing
+    // canonical track, each already on the drum namespace. The kick's
+    // bg-error is its legacy factory colour, so recolourDrumTracks (v13 ->
+    // v14, which still runs from v3) moves it too; the user's bg-custom-brand
+    // snare is untouched, which is the thing this test was always about.
+    expect(colors).toEqual([
+      'bg-drum-kick',
+      'bg-custom-brand',
+      'bg-drum-rimshot',
+      'bg-drum-clap',
+      'bg-drum-hihat',
+      'bg-drum-openhat',
+      'bg-drum-hitom',
+      'bg-drum-lowtom',
+      'bg-drum-ride',
+      'bg-drum-crash',
+      'bg-drum-bell',
+    ]);
   });
 });
 
@@ -1132,7 +1292,7 @@ describe('project identity migration wiring (v8 -> v9)', () => {
     await useAppStore.persist.rehydrate();
     expect(useAppStore.getState().currentProjectId).toBeNull();
     flushPersistedWrites();
-    expect(JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}').version).toBe(12);
+    expect(JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}').version).toBe(15);
   });
 
   test('a wrong-typed currentProjectId / projectBaselineHash is coerced to null', async () => {
@@ -1288,6 +1448,89 @@ describe('pad layer migration wiring (v11 -> v12)', () => {
     useAppStore.getState().setPadVolume(0.42);
     flushBeforeHide();
     expect(useAppStore.getState().dirty).toBe(true);
+  });
+});
+
+describe('drum voices migration wiring (v13 -> v15)', () => {
+  // The only end-to-end case that actually exercises the v14 STEP, not just
+  // the v13 step ahead of it: seeded at version 1 (or any version < 13), the
+  // v12 -> v13 backfill already appends `lowtom` (INITIAL_SEQUENCER_TRACKS
+  // names it that now), so v14 has nothing left to do and its absence from
+  // the chain is invisible — deleting the wiring line, or weakening its guard
+  // to `version < 13` (which skips exactly the version-13 sessions the step
+  // exists for), both leave every other test green. Seeding at version 13
+  // with a real `tom` row is the only way to prove the wiring runs.
+  test('a version-13 payload renames tom to lowtom and the kit to Club Standard', async () => {
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    useAppStore.persist.clearStorage();
+    flushPersistedWrites();
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 13,
+        state: {
+          loops: [{
+            id: 'loop-1',
+            name: 'Loop 1',
+            soundKit: '909 Modern',
+            sequencerTracks: [
+              {
+                id: 'track-tom', name: 'My Tom', instrument: 'tom',
+                steps: [true, false, false, true], volume: 0.6, muted: false, color: 'bg-primary',
+              },
+            ],
+          }],
+          activeLoopId: 'loop-1',
+        },
+      })
+    );
+    await useAppStore.persist.rehydrate();
+
+    const s = useAppStore.getState();
+    const lowtom = s.sequencerTracks.find((t) => t.instrument === 'lowtom');
+    expect(lowtom?.steps).toEqual([true, false, false, true]);
+    expect(s.sequencerTracks.some((t) => t.instrument === 'tom')).toBe(false);
+    expect(s.soundKit).toBe('Club Standard');
+  });
+
+  // The reason the guard reads `version < 15` and not `< 14`. v14 was stamped on
+  // sessions hydrated part-way through the drum slice, while
+  // INITIAL_SEQUENCER_TRACKS still held seven voices and the colour transform was
+  // not yet wired — so such a session carries the v14 stamp AND a seven-track
+  // roster, and a `< 14` guard would never look at it again. This was found by
+  // the owner playing the app mid-slice and seeing seven tracks that no reload
+  // would fix. Narrowing the guard back to 14 turns this red.
+  test('a version-14 payload stranded at seven tracks is completed to eleven', async () => {
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    useAppStore.persist.clearStorage();
+    flushPersistedWrites();
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 14,
+        state: {
+          loops: [{
+            id: 'loop-1',
+            name: 'Loop 1',
+            soundKit: 'Club Standard',
+            sequencerTracks: ['kick', 'snare', 'clap', 'hihat', 'openhat', 'lowtom', 'crash'].map((v) => ({
+              id: `track-${v}`, name: v, instrument: v,
+              steps: [false, false, false, false], volume: 0.8, muted: false, color: 'bg-error',
+            })),
+          }],
+          activeLoopId: 'loop-1',
+        },
+      })
+    );
+    await useAppStore.persist.rehydrate();
+
+    const s = useAppStore.getState();
+    expect(s.sequencerTracks.length).toBe(11);
+    for (const voice of ['rimshot', 'hitom', 'ride', 'bell']) {
+      const appended = s.sequencerTracks.find((t) => t.instrument === voice);
+      expect(appended, voice).toBeDefined();
+      expect(appended?.steps.every((v) => v === false), voice).toBe(true);
+    }
   });
 });
 

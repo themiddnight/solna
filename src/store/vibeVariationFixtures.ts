@@ -38,9 +38,14 @@ export const lastDraw: VibeDraw = {
  * address the *eligible* list, so `pickDistinct` is scripted the same way as
  * `pick`. `int` treats the index as an offset from `min`.
  *
+ * `resolveVibeVariation` makes exactly SIX draws, in this order: scaleRoot,
+ * bpm, chordRhythmId, bassPatternId, progression, drumGrid — so a script for it
+ * is six entries long. It used to be five plus one per decoration layer, and
+ * varied per vibe; the drum axis is a single id pool now.
+ *
  * It throws when the script runs out rather than wrapping: a silent wrap would
  * let a change to the resolver's draw order pass a test that pins an exact
- * InstantVibe.
+ * ResolvedVibe.
  */
 export function scriptedDraw(indices: number[]): VibeDraw {
   let cursor = 0;

@@ -1,58 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { INSTANT_VIBES } from './instantVibes';
-import {
-  createDraw,
-  DECORATION_ORDER,
-  DRUM_DENSITIES,
-  DRUM_DENSITY_METER,
-  densityRowFor,
-  LAYER_LABELS,
-} from './vibeVariation';
-import { getMeter } from '../utils/meter';
-import type { DensityName } from '../types';
+import { VIBES } from '../data/vibes';
+import { resolveVibe } from './vibes';
+import { createDraw } from './vibeVariation';
 import { firstDraw, lastDraw, scriptedDraw } from './vibeVariationFixtures';
 
-function vibe(id: string) {
-  const found = INSTANT_VIBES.find((v) => v.id === id);
-  if (!found) throw new Error(`no vibe ${id}`);
-  return found;
-}
-
-describe('DRUM_DENSITIES', () => {
-  test('every row is one bar of sixteenths and holds only 0 or 1', () => {
-    for (const [name, row] of Object.entries(DRUM_DENSITIES)) {
-      expect(row.length).toBe(16);
-      for (const step of row) {
-        expect(step === 0 || step === 1).toBe(true);
-      }
-      // guards against a row authored as a nested array by mistake
-      expect(Array.isArray(row[0])).toBe(false);
-      expect(name.length).toBeGreaterThan(0);
-    }
-  });
-
-  test('`off` is silent — it is the fallback that keeps a filtered pool non-empty', () => {
-    expect(DRUM_DENSITIES.off.some((s) => s === 1)).toBe(false);
-  });
-
-  // Spec invariant 6b. Read from INSTANT_VIBES rather than a copied literal so
-  // an edit to either side fails: if these two drift, the reroll toast names a
-  // pattern the user is not hearing.
-  test('the two genre-named rows equal the authored hats they are named after', () => {
-    expect(DRUM_DENSITIES.lofi16ths).toEqual(vibe('lofi-chill').drumPattern.hihat);
-    expect(DRUM_DENSITIES.swung16ths).toEqual(vibe('hiphop-groove').drumPattern.hihat);
-  });
-});
-
-describe('decoration layer metadata', () => {
-  test('the draw order is fixed and covers exactly the four decoration layers', () => {
-    expect(DECORATION_ORDER).toEqual(['hihat', 'openhat', 'tom', 'crash']);
-  });
-
-  test('every layer has a toast label', () => {
-    expect(DECORATION_ORDER.map((l) => LAYER_LABELS[l])).toEqual(['hats', 'open', 'tom', 'crash']);
-  });
-});
+/**
+ * Every vibe, resolved once. The reroll itself takes and returns a plain
+ * VibeSpec; these are the authored SOUND each reroll is compared against —
+ * chords, drum rows and effects, none of which exist on a spec.
+ */
+const RESOLVED_VIBES = VIBES.map(resolveVibe);
 
 describe('createDraw', () => {
   // Three exact cases, not statistics: the bottom of the range, the middle,
@@ -134,60 +91,81 @@ describe('draw fixtures', () => {
   });
 });
 
-import { BASS_PATTERNS } from '../audio/bassPatterns';
-import { RHYTHM_PATTERNS } from '../audio/rhythmPatterns';
-import { CHORD_PROGRESSIONS, VIBE_GENRE_SCALES } from '../audio/data/chordProgressions';
-import { ROOTS, SCALES } from '../utils/musicTheory';
-import type { DecorationLayer } from '../types';
+import { BASS_PATTERNS } from '@/data/bassPatterns';
+import { CHORD_RHYTHMS } from '@/data/chordRhythms';
+import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
+import { ROOTS } from '../utils/musicTheory';
+import { SCALES } from '../data/scales';
+import { DRUM_GRIDS } from '@/data/drumGrids';
 
-const COLLISION_FILTERED: DecorationLayer[] = ['openhat', 'tom'];
-
-function scaleLength(scaleType: string): number {
-  return SCALES[scaleType]?.intervals.length ?? 7;
-}
-
-describe('authored variation data', () => {
-  test('every vibe ships a variation rule', () => {
-    for (const v of INSTANT_VIBES) {
-      expect(v.variation).toBeDefined();
+describe('authored random data', () => {
+  test('every vibe ships a random rule', () => {
+    for (const v of RESOLVED_VIBES) {
+      expect(v.random).toBeDefined();
     }
   });
 
   test('the dice can always land back on the vibe as authored', () => {
-    for (const v of INSTANT_VIBES) {
-      const r = v.variation!;
-      expect(r.keyPool).toContain(v.scaleRoot);
-      expect(r.bpmRange[0]).toBeLessThanOrEqual(r.bpmRange[1]);
-      expect(v.bpm).toBeGreaterThanOrEqual(r.bpmRange[0]);
-      expect(v.bpm).toBeLessThanOrEqual(r.bpmRange[1]);
-      expect(r.rhythmIds).toContain(v.chordRhythmId);
-      expect(r.bassPatternIds).toContain(v.bassPatternId);
+    for (const v of RESOLVED_VIBES) {
+      const r = v.random!;
+      expect(r.keys).toContain(v.scaleRoot);
+      expect(r.bpm[0]).toBeLessThanOrEqual(r.bpm[1]);
+      expect(v.bpm).toBeGreaterThanOrEqual(r.bpm[0]);
+      expect(v.bpm).toBeLessThanOrEqual(r.bpm[1]);
+      expect(r.chordRhythms).toContain(v.chordRhythmId);
+      expect(r.bassPatterns).toContain(v.bassPatternId);
+      // The axis the derived filter used to cover for free.
+      expect(r.progressions).toContain(v.progressionId);
     }
   });
 
   test('every id in every pool resolves', () => {
-    for (const v of INSTANT_VIBES) {
-      const r = v.variation!;
-      for (const root of r.keyPool) expect(ROOTS).toContain(root);
-      for (const id of r.rhythmIds) {
-        expect(RHYTHM_PATTERNS.some((p) => p.id === id)).toBe(true);
+    for (const v of RESOLVED_VIBES) {
+      const r = v.random!;
+      for (const root of r.keys) expect(ROOTS).toContain(root);
+      for (const id of r.chordRhythms) {
+        expect(CHORD_RHYTHMS.some((p) => p.id === id)).toBe(true);
       }
-      for (const id of r.bassPatternIds) {
+      for (const id of r.bassPatterns) {
         expect(BASS_PATTERNS.some((p) => p.id === id)).toBe(true);
       }
-      for (const id of r.progressionIds) {
-        const p = CHORD_PROGRESSIONS.find((c) => c.id === id);
-        expect(p).toBeDefined();
-        expect(p!.genres).toContain(r.genre);
-        expect(p!.minScaleLength).toBeLessThanOrEqual(scaleLength(v.scaleType));
+      for (const id of r.progressions) {
+        expect(CHORD_PROGRESSIONS.some((p) => p.id === id), `${v.id}/${id}`).toBe(true);
+      }
+    }
+  });
+
+  // Guard 1, replacing half of the deleted genre filter. The filter dropped a
+  // too-long progression SILENTLY; this fails the build. It matters most for
+  // zen-garden (Hirajoshi, 5 degrees), where a 7-degree progression would
+  // otherwise vanish from the pool with no signal at all.
+  test('every pooled progression fits the vibe\'s scale', () => {
+    for (const v of RESOLVED_VIBES) {
+      const degrees = SCALES[v.scaleType].intervals.length;
+      for (const id of v.random!.progressions) {
+        const p = CHORD_PROGRESSIONS.find((c) => c.id === id)!;
+        expect(p.minScaleLength, `${v.id}/${id}`).toBeLessThanOrEqual(degrees);
+      }
+    }
+  });
+
+  // Guard 2, replacing the other half. This is strictly more direct than
+  // the deleted `referenceScale === VIBE_GENRE_SCALES[genre]`: it names the
+  // property that actually matters — the progression was authored against
+  // the scale the vibe plays — instead of routing it through a genre table.
+  test('every pooled progression was authored against the vibe\'s own scale', () => {
+    for (const v of RESOLVED_VIBES) {
+      for (const id of v.random!.progressions) {
+        const p = CHORD_PROGRESSIONS.find((c) => c.id === id)!;
+        expect(p.referenceScale, `${v.id}/${id}`).toBe(v.scaleType);
       }
     }
   });
 
   test('every pool is non-empty and free of duplicates', () => {
-    for (const v of INSTANT_VIBES) {
-      const r = v.variation!;
-      const pools = [r.keyPool, r.rhythmIds, r.bassPatternIds, r.progressionIds];
+    for (const v of RESOLVED_VIBES) {
+      const r = v.random!;
+      const pools = [r.keys, r.chordRhythms, r.bassPatterns, r.progressions];
       for (const pool of pools) {
         expect(pool.length).toBeGreaterThan(0);
         expect(new Set(pool).size).toBe(pool.length);
@@ -195,106 +173,58 @@ describe('authored variation data', () => {
     }
   });
 
-  test('the vibe genre and its scale type agree with B1 VIBE_GENRE_SCALES', () => {
-    for (const v of INSTANT_VIBES) {
-      expect(v.scaleType).toBe(VIBE_GENRE_SCALES[v.variation!.genre]);
+  test('the dice can always land back on the vibe as authored — drums included', () => {
+    // The sibling assertions for keys, chord rhythms, bass patterns and
+    // progressions already exist in the test above. This is the fifth axis
+    // joining them, which is the whole point of the change: the drum axis is
+    // no longer special.
+    for (const v of VIBES) {
+      expect(v.random!.drumGrids, v.id).toContain(v.drumGridId);
     }
   });
 
-  // This is what catches drift when B1 adds or retags a progression: the field
-  // is data, but its value is the output of a rule, so the rule is recomputed.
-  test('progressionIds equals the full genre-and-scale-length filter', () => {
-    for (const v of INSTANT_VIBES) {
-      const r = v.variation!;
-      const expected = CHORD_PROGRESSIONS.filter(
-        (p) => p.genres.includes(r.genre) && p.minScaleLength <= scaleLength(v.scaleType),
-      ).map((p) => p.id);
-      expect([...r.progressionIds].sort()).toEqual([...expected].sort());
-      expect(r.progressionIds.length).toBeGreaterThanOrEqual(4);
-    }
-  });
-
-  test('densities has an entry for every layer in layers and no others', () => {
-    for (const v of INSTANT_VIBES) {
-      const { layers, densities } = v.variation!.drumDecoration;
-      expect([...Object.keys(densities)].sort()).toEqual([...layers].sort());
-      for (const layer of layers) {
-        const pool = densities[layer]!;
-        expect(pool.length).toBeGreaterThan(0);
-        expect(new Set(pool).size).toBe(pool.length);
-        for (const name of pool) expect(DRUM_DENSITIES[name]).toBeDefined();
+  test('every id in every drum pool resolves', () => {
+    for (const v of VIBES) {
+      for (const id of v.random!.drumGrids) {
+        expect(DRUM_GRIDS[id], `${v.id} -> ${id}`).toBeDefined();
       }
     }
   });
 
-  // Pins the relationship applyInstantVibeToStore relies on implicitly:
-  // re-clicking a chip restores the authored pattern only because every vibe
-  // declares all seven drum rows, so a reroll's merge (which only overwrites
-  // the decoration layers it draws) never leaves a stale row behind.
-  test('every layer the variation can draw is a key of that vibe\'s authored drumPattern', () => {
-    for (const v of INSTANT_VIBES) {
-      const { layers } = v.variation!.drumDecoration;
-      const patternKeys = Object.keys(v.drumPattern);
-      for (const layer of layers) {
-        expect(patternKeys).toContain(layer);
-      }
-    }
-  });
-
-  test('after the kick-collision filter, openhat and tom still have a candidate', () => {
-    for (const v of INSTANT_VIBES) {
-      const { layers, densities } = v.variation!.drumDecoration;
-      const kick = v.drumPattern.kick;
-      const stepsPerBar = getMeter(v.meter).stepsPerBar;
-      for (const layer of layers) {
-        if (!COLLISION_FILTERED.includes(layer)) continue;
-        const survivors = eligibleDensities(layer, densities[layer]!, kick, stepsPerBar);
-        expect(survivors.length, `${v.id}/${layer}`).toBeGreaterThan(0);
-      }
-    }
-  });
-
-  // Pins the one measured cost of the collision filter, so a later kick edit
-  // that quietly empties more of the pool shows up as a failing count.
-  test('the filter removes exactly one candidate across all authored data', () => {
-    let removed = 0;
-    for (const v of INSTANT_VIBES) {
-      const { layers, densities } = v.variation!.drumDecoration;
-      const kick = v.drumPattern.kick;
-      const stepsPerBar = getMeter(v.meter).stepsPerBar;
-      for (const layer of layers) {
-        if (!COLLISION_FILTERED.includes(layer)) continue;
-        removed +=
-          densities[layer]!.length -
-          eligibleDensities(layer, densities[layer]!, kick, stepsPerBar).length;
-      }
-    }
-    // hiphop-groove's kick hits step 6, which is `and2and4`'s first hit.
-    expect(removed).toBe(1);
-  });
-
-  test('no vibe lists a candidate that is silent in that vibe\'s own meter', () => {
-    // `off` is the deliberate silent member of every pool. Any OTHER candidate
-    // that adapts to an all-zero row is a duplicate of `off` — the pool looks
-    // bigger than it is and the dice has fewer real outcomes than authored.
-    for (const v of INSTANT_VIBES) {
-      const stepsPerBar = getMeter(v.meter).stepsPerBar;
-      for (const [layer, candidates] of Object.entries(v.variation!.drumDecoration.densities)) {
-        for (const name of candidates as DensityName[]) {
-          if (name === 'off') continue;
-          const sounds = densityRowFor(name, stepsPerBar).some((s) => s === 1);
-          expect(sounds, `${v.id}/${layer}/${name} is silent in ${v.meter}`).toBe(true);
-        }
-      }
-    }
+  test('a pool may cross meters, and four members do — deliberately', () => {
+    // NOT an invariant, a record of a taste decision. Trim-or-loop is the
+    // project's documented rule for a pattern whose meter differs from the
+    // transport's, and the sequencer, chord and bass menus already surface it.
+    // Forcing same-meter membership in the dice alone would make the dice
+    // stricter than the menu three inches from it.
+    //
+    // Two of the four differ only in ACCENT GROUPING: 3/4 and 6/8 are both
+    // twelve steps, so `waltz` in a 6/8 pool and `afro-6-8` in a 3/4 pool are
+    // adapted by nothing at all. The other two are the real trim cases, and
+    // both were measured rather than assumed: lofi-ghost-kick lands as
+    // kick 0,8 / snare 4 / hihat 0,2,4,6,8,10, and reggae-rockers as
+    // kick 0,4,8 / snare 8 / hihat 0,2,4,6,8,10 with its openhat 14 trimmed
+    // away entirely. Both are real twelve-step rhythms.
+    const crossMeter = VIBES.flatMap((v) =>
+      v.random!.drumGrids
+        .filter((id) => DRUM_GRIDS[id].meter !== v.meter)
+        .map((id) => `${v.id}=${id}`),
+    );
+    expect(crossMeter.sort()).toEqual([
+      'afro-six-eight=reggae-rockers',
+      'afro-six-eight=waltz',
+      'lofi-waltz=afro-6-8',
+      'lofi-waltz=lofi-ghost-kick',
+    ]);
   });
 });
 
-import { eligibleDensities, resolveVibeVariation } from './vibeVariation';
+import { resolveVibeVariation, type VibeDraw } from './vibeVariation';
+import type { VibeSpec } from '../data/vibes';
 import { getScaleNotes } from '../utils/musicTheory';
-import { progressionById } from '../audio/data/chordProgressions';
+import { progressionById } from '@/audio/chordProgressions';
 
-function authoredCurrent(v: (typeof INSTANT_VIBES)[number]) {
+function authoredCurrent(v: VibeSpec) {
   return {
     scaleRoot: v.scaleRoot,
     chordRhythmId: v.chordRhythmId,
@@ -303,33 +233,47 @@ function authoredCurrent(v: (typeof INSTANT_VIBES)[number]) {
 }
 
 /**
+ * One reroll, end to end — the two steps rerollVibe performs in that order.
+ *
+ * resolveVibeVariation draws IDS and returns a VibeSpec; resolveVibe is the one
+ * place those ids become chords, rows and effects. Assertions about what a
+ * reroll SOUNDS like therefore have to run the same pair the app runs, which is
+ * the point of the split: there is no second resolver to test against.
+ */
+function variation(
+  v: VibeSpec,
+  current: { scaleRoot: string; chordRhythmId: string; bassPatternId: string },
+  draw: VibeDraw,
+) {
+  const { spec, summary } = resolveVibeVariation(v, current, draw);
+  return { spec, summary, vibe: resolveVibe(spec) };
+}
+
+/**
  * Every combination the resolver can produce for one vibe, by exhaustive
  * enumeration — every pool is a small finite list, so no sampling is needed.
  * Memoised: seven tests iterate the same product and recomputing it each time
  * would run resolveProgression tens of thousands of times for no extra cover.
  */
-const drawCache = new Map<string, ReturnType<typeof resolveVibeVariation>[]>();
+const drawCache = new Map<string, ReturnType<typeof variation>[]>();
 
-function allDraws(v: (typeof INSTANT_VIBES)[number]) {
+function allDraws(v: (typeof RESOLVED_VIBES)[number]) {
   const cached = drawCache.get(v.id);
   if (cached) return cached;
-  const r = v.variation!;
+  const r = v.random!;
   const cur = authoredCurrent(v);
-  const keys = r.keyPool.filter((k) => k !== cur.scaleRoot);
-  const rhythms = r.rhythmIds.filter((k) => k !== cur.chordRhythmId);
-  const basses = r.bassPatternIds.filter((k) => k !== cur.bassPatternId);
-  const out: ReturnType<typeof resolveVibeVariation>[] = [];
+  const keys = r.keys.filter((k) => k !== cur.scaleRoot);
+  const rhythms = r.chordRhythms.filter((k) => k !== cur.chordRhythmId);
+  const basses = r.bassPatterns.filter((k) => k !== cur.bassPatternId);
+  const out: ReturnType<typeof variation>[] = [];
   for (let ki = 0; ki < keys.length; ki++) {
-    for (let bi = 0; bi < r.bpmRange[1] - r.bpmRange[0] + 1; bi++) {
+    for (let bi = 0; bi < r.bpm[1] - r.bpm[0] + 1; bi++) {
       for (let ri = 0; ri < rhythms.length; ri++) {
         for (let si = 0; si < basses.length; si++) {
-          for (let pi = 0; pi < r.progressionIds.length; pi++) {
-            const drumIdx = DECORATION_ORDER.filter((l) =>
-              r.drumDecoration.layers.includes(l),
-            ).map(() => 0);
-            out.push(
-              resolveVibeVariation(v, cur, scriptedDraw([ki, bi, ri, si, pi, ...drumIdx])),
-            );
+          for (let pi = 0; pi < r.progressions.length; pi++) {
+            for (let di = 0; di < r.drumGrids.length; di++) {
+              out.push(variation(v, cur, scriptedDraw([ki, bi, ri, si, pi, di])));
+            }
           }
         }
       }
@@ -339,30 +283,9 @@ function allDraws(v: (typeof INSTANT_VIBES)[number]) {
   return out;
 }
 
-describe('eligibleDensities', () => {
-  test('openhat and tom drop every candidate that doubles a kick step', () => {
-    const kick = [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0]; // hiphop-groove
-    expect(eligibleDensities('openhat', ['off', 'pickup', 'and2and4'], kick, 16)).toEqual([
-      'off',
-      'pickup',
-    ]);
-    expect(eligibleDensities('tom', ['off', 'midBar'], kick, 16)).toEqual(['off']);
-  });
-
-  test('hihat and crash are exempt — closed hats double the kick by design', () => {
-    const kick = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]; // lofi-chill
-    expect(eligibleDensities('hihat', ['lofi16ths', 'eighths', 'swung16ths'], kick, 16)).toEqual([
-      'lofi16ths',
-      'eighths',
-      'swung16ths',
-    ]);
-    expect(eligibleDensities('crash', ['off', 'downbeat'], kick, 16)).toEqual(['off', 'downbeat']);
-  });
-});
-
 describe('resolveVibeVariation', () => {
   test('genre identity is copied verbatim under every draw', () => {
-    for (const v of INSTANT_VIBES) {
+    for (const v of RESOLVED_VIBES) {
       for (const { vibe: out } of allDraws(v)) {
         expect(out.scaleType).toBe(v.scaleType);
         expect(out.id).toBe(v.id);
@@ -382,55 +305,8 @@ describe('resolveVibeVariation', () => {
     }
   });
 
-  test('the drum skeleton is never rerolled', () => {
-    for (const v of INSTANT_VIBES) {
-      for (const { vibe: out } of allDraws(v)) {
-        expect(out.drumPattern.kick).toEqual(v.drumPattern.kick);
-        expect(out.drumPattern.snare).toEqual(v.drumPattern.snare);
-        if (v.drumPattern.clap) expect(out.drumPattern.clap).toEqual(v.drumPattern.clap);
-      }
-    }
-  });
-
-  test('no drawn openhat or tom row shares a step with the authored kick', () => {
-    for (const v of INSTANT_VIBES) {
-      for (const { vibe: out } of allDraws(v)) {
-        for (const layer of ['openhat', 'tom'] as const) {
-          if (!v.variation!.drumDecoration.layers.includes(layer)) continue;
-          const row = out.drumPattern[layer];
-          for (let i = 0; i < 16; i++) {
-            expect(row[i] === 1 && v.drumPattern.kick[i] === 1).toBe(false);
-          }
-        }
-      }
-    }
-  });
-
-  // The test above ("no drawn openhat or tom row shares a step with the
-  // authored kick") is a tautology against `allDraws`: every drum-layer index
-  // in that fixture is scripted to 0, and every vibe's openhat/tom pool
-  // begins with `off`, so it only ever inspects an all-zero row. This test
-  // fails if `eligibleDensities`'s filtering is bypassed: hiphop-groove's
-  // openhat pool is `['off', 'pickup', 'and2and4']` (3 candidates), but the
-  // kick hits step 6 — exactly where `and2and4` hits — so the collision
-  // filter narrows it to `['off', 'pickup']` (2 candidates) before the draw.
-  // A script that requests index 2 is therefore out of range only because the
-  // filter ran; with the filter bypassed, index 2 would resolve to
-  // 'and2and4' and this would not throw.
-  test('the collision filter actually narrows the pool — a script requesting the collision-only index throws', () => {
-    const groove = vibe('hiphop-groove');
-    expect(() =>
-      resolveVibeVariation(
-        groove,
-        authoredCurrent(groove),
-        // scaleRoot, bpm, chordRhythmId, bassPatternId, progressionId, hihat, openhat, tom, crash
-        scriptedDraw([0, 0, 0, 0, 0, 0, 2, 0, 0]),
-      ),
-    ).toThrow('index 2 out of range for 2 candidates');
-  });
-
   test('key, comp rhythm and bass pattern always move off the current value', () => {
-    for (const v of INSTANT_VIBES) {
+    for (const v of RESOLVED_VIBES) {
       const cur = authoredCurrent(v);
       for (const { vibe: out } of allDraws(v)) {
         expect(out.scaleRoot).not.toBe(cur.scaleRoot);
@@ -441,16 +317,16 @@ describe('resolveVibeVariation', () => {
   });
 
   test('bpm stays inside the range', () => {
-    for (const v of INSTANT_VIBES) {
+    for (const v of RESOLVED_VIBES) {
       for (const { vibe: out } of allDraws(v)) {
-        expect(out.bpm).toBeGreaterThanOrEqual(v.variation!.bpmRange[0]);
-        expect(out.bpm).toBeLessThanOrEqual(v.variation!.bpmRange[1]);
+        expect(out.bpm).toBeGreaterThanOrEqual(v.random!.bpm[0]);
+        expect(out.bpm).toBeLessThanOrEqual(v.random!.bpm[1]);
       }
     }
   });
 
   test('chords are resolved in the drawn key and never collapse', () => {
-    for (const v of INSTANT_VIBES) {
+    for (const v of RESOLVED_VIBES) {
       for (const { vibe: out, summary } of allDraws(v)) {
         const scaleNotes = getScaleNotes(out.scaleRoot, v.scaleType);
         for (const chord of out.chords) {
@@ -465,81 +341,123 @@ describe('resolveVibeVariation', () => {
   });
 
   test('the summary reports what was actually written', () => {
-    for (const v of INSTANT_VIBES) {
+    for (const v of RESOLVED_VIBES) {
       for (const { vibe: out, summary } of allDraws(v)) {
         expect(summary.vibeName).toBe(v.name);
         expect(summary.scaleRoot).toBe(out.scaleRoot);
         expect(summary.scaleType).toBe(out.scaleType);
         expect(summary.bpm).toBe(out.bpm);
         expect(summary.rhythmName).toBe(
-          RHYTHM_PATTERNS.find((p) => p.id === out.chordRhythmId)!.name,
+          CHORD_RHYTHMS.find((p) => p.id === out.chordRhythmId)!.name,
         );
         expect(summary.bassPatternName).toBe(
           BASS_PATTERNS.find((p) => p.id === out.bassPatternId)!.name,
         );
-        const stepsPerBar = getMeter(v.meter).stepsPerBar;
-        for (const { layer, density } of summary.drums) {
-          // Independent of densityRowFor: restates the trim/loop rule inline
-          // against the DRUM_DENSITIES catalogue constant, rather than calling
-          // the production helper that produced `out.drumPattern[layer]` in
-          // the first place — a self-referential comparison would pass no
-          // matter what densityRowFor computed.
-          const source = DRUM_DENSITIES[density];
-          const expected = Array.from({ length: stepsPerBar }, (_, i) => source[i % source.length]);
-          expect(out.drumPattern[layer]).toEqual(expected);
-        }
-        expect(summary.drums.map((d) => d.layer)).toEqual(
-          DECORATION_ORDER.filter((l) => v.variation!.drumDecoration.layers.includes(l)),
-        );
+        // Independent of the resolver: reads the library entry the summary
+        // names and compares it against the rows that were actually written,
+        // rather than comparing the resolver's output with itself.
+        expect(summary.drumGridId).toBe(out.drumGridId);
+        expect(summary.drumGridName).toBe(DRUM_GRIDS[summary.drumGridId].name);
+        expect(out.drumPattern).toEqual(DRUM_GRIDS[summary.drumGridId].rows);
       }
     }
   });
 
   test('a scripted draw produces one exact, nameable vibe', () => {
-    const lofi = INSTANT_VIBES.find((v) => v.id === 'lofi-chill')!;
-    const r = lofi.variation!;
+    const lofi = RESOLVED_VIBES.find((v) => v.id === 'lofi-chill')!;
+    const r = lofi.random!;
     // eligible keys exclude 'C': ['D','D#','F','G','A'] -> index 2 is 'F'
     // bpm offset 3 from 78 -> 81
     // eligible rhythms exclude 'lofiSwing': ['syncopatedPush','bassPlusStrum'] -> 0
     // eligible basses exclude 'dilla-sub': ['walking-groove','half-time-legato'] -> 0
-    // progression index 0; then hihat/openhat/tom/crash all index 0
-    const { vibe: out, summary } = resolveVibeVariation(
+    // progression index 0; then one drum-grid index, 0
+    const { vibe: out, summary } = variation(
       lofi,
       authoredCurrent(lofi),
-      scriptedDraw([2, 3, 0, 0, 0, 0, 0, 0, 0]),
+      scriptedDraw([2, 3, 0, 0, 0, 0]),
     );
     expect(out.scaleRoot).toBe('F');
     expect(out.bpm).toBe(81);
     expect(out.chordRhythmId).toBe('syncopatedPush');
     expect(out.bassPatternId).toBe('walking-groove');
-    expect(summary.progressionName).toBe(progressionById(r.progressionIds[0])!.name);
-    expect(summary.progressionRoman).toBe(progressionById(r.progressionIds[0])!.roman);
-    expect(out.drumPattern.hihat).toEqual(DRUM_DENSITIES.lofi16ths);
-    expect(out.drumPattern.openhat).toEqual(DRUM_DENSITIES.off);
-    expect(out.drumPattern.tom).toEqual(DRUM_DENSITIES.off);
-    expect(out.drumPattern.crash).toEqual(DRUM_DENSITIES.off);
+    expect(summary.progressionName).toBe(progressionById(r.progressions[0])!.name);
+    expect(summary.progressionRoman).toBe(progressionById(r.progressions[0])!.roman);
+    expect(out.drumGridId).toBe(r.drumGrids[0]);
   });
 
-  test('the catalogue rows are copied, not aliased into the vibe', () => {
-    const lofi = INSTANT_VIBES.find((v) => v.id === 'lofi-chill')!;
-    const { vibe: out } = resolveVibeVariation(
-      lofi,
-      authoredCurrent(lofi),
-      scriptedDraw([0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    );
-    expect(out.drumPattern.hihat).not.toBe(DRUM_DENSITIES.lofi16ths);
+  test('the drawn grid is what plays, and drumGridId names it', () => {
+    const authored = resolveVibe(VIBES.find((v) => v.id === 'lofi-chill')!);
+    const { vibe: out, summary } = variation(authored, authoredCurrent(authored), firstDraw);
+    // The old contract let drumGridId and drumPattern legitimately disagree.
+    // They cannot any more, and this is the test that says so.
+    expect(out.drumPattern).toEqual(DRUM_GRIDS[out.drumGridId].rows);
+    expect(summary.drumGridId).toBe(out.drumGridId);
+    expect(summary.drumGridName).toBe(DRUM_GRIDS[out.drumGridId].name);
+  });
+
+  test('the library rows are copied, not aliased into the vibe', () => {
+    const authored = resolveVibe(VIBES.find((v) => v.id === 'lofi-chill')!);
+    const { vibe: out } = variation(authored, authoredCurrent(authored), firstDraw);
+    expect(out.drumPattern.kick).not.toBe(DRUM_GRIDS[out.drumGridId].rows.kick);
+  });
+
+  test('the drum axis is a plain pick, so every pool member is reachable', () => {
+    // pickDistinct would make this test impossible to write: the vibe's own
+    // grid would be permanently excluded. Plain pick means every member is
+    // reachable INCLUDING the authored one, which is what makes pool
+    // invariant 1 true in the app and not only in the invariant test.
+    // scriptedDraw indexes the raw pool, since there is no `current` to skip.
+    for (const spec of VIBES) {
+      const pool = spec.random!.drumGrids;
+      const landed = pool.map((_, di) => {
+        const { spec: next } = resolveVibeVariation(
+          spec,
+          authoredCurrent(spec),
+          scriptedDraw([0, 0, 0, 0, 0, di]),
+        );
+        return next.drumGridId;
+      });
+      expect(landed, spec.id).toEqual(pool);
+    }
   });
 
   test('the returned vibe\'s progressionId always names the progression its chords came from', () => {
-    for (const v of INSTANT_VIBES) {
+    // Structural now rather than incidental: the reroll writes an id and
+    // resolveVibe derives the chords from that same id, so the pair cannot
+    // disagree without resolveVibe itself being wrong. It used to be a live
+    // risk — the reroll resolved chords of its own and patched them over what
+    // resolveVibe had produced.
+    for (const v of RESOLVED_VIBES) {
       for (const { vibe: out, summary } of allDraws(v)) {
         expect(out.progressionId).toBe(summary.progressionId);
       }
     }
   });
 
-  test('a vibe with no variation rule throws rather than silently doing nothing', () => {
-    const bare = { ...INSTANT_VIBES[0], variation: undefined };
+  test('a reroll returns ids only, and touches exactly the six it draws', () => {
+    // The contract that replaces the patched ResolvedVibe: everything outside
+    // these six keys is the authored spec, by identity, and no resolved field
+    // rides along to disagree with an id beside it.
+    const DRAWN = [
+      'scaleRoot',
+      'bpm',
+      'chordRhythmId',
+      'bassPatternId',
+      'progressionId',
+      'drumGridId',
+    ];
+    for (const spec of VIBES) {
+      const { spec: next } = resolveVibeVariation(spec, authoredCurrent(spec), lastDraw);
+      expect(Object.keys(next).sort(), spec.id).toEqual(Object.keys(spec).sort());
+      for (const key of Object.keys(spec) as (keyof VibeSpec)[]) {
+        if (DRAWN.includes(key)) continue;
+        expect(next[key], `${spec.id}/${key}`).toBe(spec[key]);
+      }
+    }
+  });
+
+  test('a vibe with no random rule throws rather than silently doing nothing', () => {
+    const bare = { ...RESOLVED_VIBES[0], random: undefined };
     expect(() => resolveVibeVariation(bare, authoredCurrent(bare), firstDraw)).toThrow();
   });
 });
@@ -557,149 +475,35 @@ const BASE: VariationSummary = {
   progressionRoman: 'vim9 – IVmaj7 – ii9 – V7',
   rhythmName: 'Syncopated Soul Push',
   bassPatternName: 'Soulful Walking Bass',
-  drums: [],
+  drumGridId: 'lofi-half-time-brush',
+  drumGridName: 'Lo-Fi Half-Time Brush',
 };
 
 describe('formatVariationSummary', () => {
   test('the headline names the vibe, the key and the tempo', () => {
-    const { headline } = formatVariationSummary({
-      ...BASE,
-      drums: [{ layer: 'hihat', density: 'eighths' }],
-    });
+    const { headline } = formatVariationSummary(BASE);
     expect(headline).toBe('🎲 Lo-Fi Chill — F Major · 81 BPM');
   });
 
   test('the detail is four dot-joined segments in a fixed order', () => {
-    const { detail } = formatVariationSummary({
-      ...BASE,
-      drums: [
-        { layer: 'hihat', density: 'eighths' },
-        { layer: 'crash', density: 'downbeat' },
-      ],
-    });
+    const { detail } = formatVariationSummary(BASE);
     expect(detail).toBe(
       'vim9 – IVmaj7 – ii9 – V7 · Syncopated Soul Push · Soulful Walking Bass · ' +
-        'drums: hats eighths, crash downbeat',
+        'drums: Lo-Fi Half-Time Brush',
     );
   });
 
-  test('layers drawn as off are omitted, in DECORATION_ORDER', () => {
-    const { detail } = formatVariationSummary({
-      ...BASE,
-      drums: [
-        { layer: 'hihat', density: 'swung16ths' },
-        { layer: 'openhat', density: 'off' },
-        { layer: 'tom', density: 'fillTail' },
-        { layer: 'crash', density: 'off' },
-      ],
-    });
-    expect(detail.endsWith('drums: hats swung16ths, tom fillTail')).toBe(true);
-  });
-
-  test('an all-off draw reads `drums: bare` rather than an empty segment', () => {
-    const { detail } = formatVariationSummary({
-      ...BASE,
-      drums: [
-        { layer: 'hihat', density: 'off' },
-        { layer: 'openhat', density: 'off' },
-        { layer: 'tom', density: 'off' },
-        { layer: 'crash', density: 'off' },
-      ],
-    });
-    expect(detail).toBe(
-      'vim9 – IVmaj7 – ii9 – V7 · Syncopated Soul Push · Soulful Walking Bass · drums: bare',
+  test('the drum segment is the grid a listener can find in the menu', () => {
+    // It used to read `drums: closed hat swung16ths, open hat pickup`, built
+    // from layer labels and density names — accurate and unactionable. A grid
+    // name is something you can go and select.
+    expect(formatVariationSummary(BASE).detail.split(' · ')[3]).toBe(
+      'drums: Lo-Fi Half-Time Brush',
     );
   });
 
   test('the roman numeral is printed verbatim, not reformatted', () => {
     const { detail } = formatVariationSummary({ ...BASE, progressionRoman: 'i – VII – VI – VII' });
     expect(detail.startsWith('i – VII – VI – VII · ')).toBe(true);
-  });
-});
-
-describe('DRUM_DENSITIES is a 4/4 catalogue, adapted to the vibe it decorates', () => {
-  test('the catalogue declares the meter its rows were authored in', () => {
-    expect(DRUM_DENSITY_METER).toBe('4/4');
-    for (const row of Object.values(DRUM_DENSITIES)) {
-      expect(row.length).toBe(getMeter(DRUM_DENSITY_METER).stepsPerBar);
-    }
-  });
-
-  test('densityRowFor is the identity in 4/4 — the byte-identical path', () => {
-    for (const name of Object.keys(DRUM_DENSITIES) as DensityName[]) {
-      expect(densityRowFor(name, 16)).toEqual(DRUM_DENSITIES[name]);
-      // A copy, never the module's own array: a drawn row flows into store state.
-      expect(densityRowFor(name, 16)).not.toBe(DRUM_DENSITIES[name]);
-    }
-  });
-
-  test('densityRowFor trims to a shorter bar and loops into a longer one', () => {
-    expect(densityRowFor('quarters', 12)).toEqual([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]);
-    expect(densityRowFor('eighths', 12)).toEqual([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
-    // downbeat's only hit is step 0 of the 16-step source; adaptStepRow's loop
-    // rule is out[i] = source[i % source.length] (pinned by
-    // patternAdapt.test.ts's 'wraps once and a half' case), so the repeat lands
-    // at step 16 — one full 16-step cycle — not at step 12.
-    expect(densityRowFor('downbeat', 24)).toEqual([
-      1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      1, 0, 0, 0, 0, 0, 0, 0,
-    ]);
-  });
-
-  test('THE TRAP: pickup and fillTail lose every hit in a 12-step bar', () => {
-    // Both are authored as end-of-bar figures (steps 14, and 13+15). Trimmed to
-    // 12 they are silent, i.e. a duplicate of `off`. A 3/4 or 6/8 vibe that
-    // lists either as a candidate has a smaller real pool than it looks.
-    expect(densityRowFor('pickup', 12).some((s) => s === 1)).toBe(false);
-    expect(densityRowFor('fillTail', 12).some((s) => s === 1)).toBe(false);
-    // ...but they are alive in the 16-step bar they were written for.
-    expect(densityRowFor('pickup', 16).some((s) => s === 1)).toBe(true);
-    expect(densityRowFor('fillTail', 16).some((s) => s === 1)).toBe(true);
-  });
-
-  test('eligibleDensities compares the ADAPTED row against the kick', () => {
-    // A 3/4 kick on beat one only. `quarters` adapted to 12 hits step 0 too.
-    const kick = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    expect(eligibleDensities('tom', ['off', 'quarters', 'midBar'], kick, 12)).toEqual([
-      'off',
-      'midBar',
-    ]);
-    // hihat and crash are exempt from the filter and keep every candidate.
-    expect(eligibleDensities('hihat', ['off', 'quarters', 'midBar'], kick, 12)).toEqual([
-      'off',
-      'quarters',
-      'midBar',
-    ]);
-  });
-
-  // The two `stepsPerBar = 12` (or 16) cases above cannot distinguish an
-  // adapted comparison from a raw one: collidesWithKick only ever reads
-  // indices 0..kick.length-1, so for a TRIM target the discarded tail sits
-  // where the kick has nothing to compare against anyway. Only the LOOP
-  // direction (stepsPerBar > 16) creates a collision opportunity — at an
-  // index the raw 16-length row does not even have — that a bug ignoring
-  // stepsPerBar would miss.
-  test('eligibleDensities catches a collision that only exists in the LOOPED tail', () => {
-    // Kick hits only step 16 — beyond the raw 16-step catalogue, inside the
-    // wrapped portion of a 20-step bar.
-    const kick = [
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      1, 0, 0, 0,
-    ];
-    // quarters = [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0]; looped to 20, steps
-    // 16-19 repeat steps 0-3, so step 16 is a hit -> collides with the kick.
-    // midBar's only hit (step 6) loops to step 6 again, never touching 16-19.
-    expect(eligibleDensities('tom', ['off', 'quarters', 'midBar'], kick, 20)).toEqual([
-      'off',
-      'midBar',
-    ]);
-  });
-
-  test('in 4/4 eligibleDensities returns exactly what it returned before', () => {
-    const kick = [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0]; // boombap-swung-break
-    expect(eligibleDensities('openhat', ['off', 'pickup', 'and2and4'], kick, 16)).toEqual([
-      'off',
-      'pickup',
-    ]);
   });
 });

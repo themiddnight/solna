@@ -14,8 +14,8 @@ import type {
 } from '../types';
 import type { SynthControlTarget } from '../utils/synthControl';
 import type { MeterId } from '../utils/meter';
-import type { SynthPresetItem, SynthPresetCategory } from '../audio/synthPresets';
-import type { BassStepChoice } from '../audio/bassPatterns';
+import type { SynthPresetItem, SynthPresetCategory } from '../data/synthPresets';
+import type { BassStepChoice } from '@/data/bassPatterns';
 import type { LeadNote } from '../audio/leadMelody';
 import type { LeadStepResolutionId } from '../utils/stepResolution';
 import type { PlaybackScope } from './playbackScope';
@@ -249,7 +249,19 @@ export interface SequencerSlice {
   drumFilterCutoff: number;
   drumFilterResonance: number;
   drumFilterType: FilterType;
-  applyDrumPattern: (pattern: Record<string, boolean[]>) => void;
+  /**
+   * Write a whole drum grid onto the sequencer.
+   *
+   * REPLACES, it does not merge. A track whose instrument the pattern does not
+   * name has its active window CLEARED — a drum grid determines the whole kit,
+   * so picking "Techno" gives you techno and not techno plus leftovers.
+   *
+   * It was `applyDrumPattern` and it skipped unnamed tracks. That was invisible
+   * while every grid declared every row the five tracks had; it became a bug
+   * the moment `tom` and `crash` tracks existed, because the 14 sequencer genre
+   * grids declare no `crash` and a vibe's crash would ring on underneath one.
+   */
+  replaceDrumPattern: (pattern: Record<string, boolean[]>) => void;
   setSequencerTracks: (tracks: SequencerTrack[]) => void;
   setSoundKit: (kit: string) => void;
   setMasterSequencerVolume: (volume: number) => void;

@@ -1,6 +1,6 @@
-import { BASS_PATTERNS } from '../audio/bassPatterns';
-import { DRUM_KITS } from '../audio/drumKits';
-import { RHYTHM_PATTERNS } from '../audio/rhythmPatterns';
+import { BASS_PATTERNS } from '@/data/bassPatterns';
+import { DRUM_KITS } from '@/data/drumKits';
+import { CHORD_RHYTHMS } from '@/data/chordRhythms';
 import type { MasterEffects } from '../types';
 import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
 import { createDefaultLoop } from './loopSlice';
@@ -53,12 +53,12 @@ export function sanitizeContent(raw: unknown): ProjectContent {
 
 /**
  * Soft references a loop carries by id or name. The file is still valid when
- * one is unknown — the resolution paths already degrade (RHYTHM_PATTERNS[0],
+ * one is unknown — the resolution paths already degrade (CHORD_RHYTHMS[0],
  * BASS_PATTERNS[0], the default kit) — so this only names them for a notice.
  * SynthParams.preset is a label nobody resolves and is not checked.
  */
 export function unknownLibraryReferences(content: ProjectContent): string[] {
-  const rhythmIds = new Set(RHYTHM_PATTERNS.map((p) => p.id));
+  const rhythmIds = new Set(CHORD_RHYTHMS.map((p) => p.id));
   const bassIds = new Set(BASS_PATTERNS.map((p) => p.id));
   const found = new Set<string>();
   for (const loop of content.loops) {

@@ -1,9 +1,9 @@
 /**
  * A golden snapshot of every Instant Vibe's `effects` block, originally
  * captured before the vibe-effects-from-library plan replaced each
- * vibe's inline block with `effectChainId` + `effectChainById`. That
+ * vibe's inline block with `effectChainId` + `requireEffectChain`. That
  * migration is long done; this fixture's ongoing job is to pin the resolved
- * mix so `instantVibesEffects.test.ts` fails loudly if a VIBE_EFFECT_CHAINS
+ * mix so `instantVibesEffects.test.ts` fails loudly if an EFFECT_CHAINS
  * entry, or a vibe's `effectChainId`, changes what actually plays.
  * Deliberately duplicates the number literals that used to live in
  * `instantVibes.ts` and imports nothing from that file — or from the
@@ -44,7 +44,7 @@ export const ORIGINAL_VIBE_EFFECTS: Record<string, Partial<MasterEffects>> = {
     eqMid: 1,
     eqHigh: 4,
   },
-  'cyber-dance': {
+  'cyber-edm': {
     reverbWet: 0.36,
     reverbDecay: 2.8,
     delayWet: 0.32,
@@ -55,7 +55,7 @@ export const ORIGINAL_VIBE_EFFECTS: Record<string, Partial<MasterEffects>> = {
     eqMid: 0,
     eqHigh: 4,
   },
-  'ambient-chill': {
+  'deep-ambient': {
     reverbWet: 0.68,
     reverbDecay: 5.8,
     delayWet: 0.48,
@@ -65,7 +65,7 @@ export const ORIGINAL_VIBE_EFFECTS: Record<string, Partial<MasterEffects>> = {
     eqMid: -1,
     eqHigh: 2,
   },
-  'hiphop-groove': {
+  'boom-bap': {
     reverbWet: 0.30,
     reverbDecay: 2.0,
     delayWet: 0.20,
@@ -75,7 +75,7 @@ export const ORIGINAL_VIBE_EFFECTS: Record<string, Partial<MasterEffects>> = {
     eqMid: 1,
     eqHigh: 0,
   },
-  'asian-zen': {
+  'zen-garden': {
     reverbWet: 0.58,
     reverbDecay: 4.4,
     delayWet: 0.42,

@@ -12,8 +12,23 @@ import type { AppStore, Loop, LoopStatePatch } from './types';
  * persist `version` in store.ts: that one bumps for private localStorage
  * reshapes, this one only when the content contract changes. The persist
  * migration chain must never be used to read a project body.
+ *
+ * v5 adds the `tom` and `crash` sequencer tracks to every loop. It moved in
+ * the same change as persist v13 and by coincidence only — the two numbers
+ * answer different questions and must never be assumed to track each other.
+ *
+ * v6 is the eleven-voice kit: `tom` becomes `lowtom`, `rimshot`/`hitom`/`ride`/
+ * `bell` are appended silent, and the `909 Modern` kit name becomes
+ * `Club Standard`.
+ *
+ * v7 introduces NO new transform. It re-runs v6's: bodies were saved stamped 6
+ * part-way through the drum slice, while `INITIAL_SEQUENCER_TRACKS` still held
+ * seven voices, so `upgradeDrumVoicesV6` guards on `fromVersion < 7` rather
+ * than `< 6` to reach them. Bumping the stamp instead of redefining what 6
+ * means is the rule in CLAUDE.md ("a version stamped into persisted data is a
+ * contract"); the step is idempotent, so re-running it is a no-op elsewhere.
  */
-export const PROJECT_FORMAT_VERSION = 4;
+export const PROJECT_FORMAT_VERSION = 7;
 
 export interface ProjectEnvelope {
   formatVersion: number;

@@ -1,10 +1,10 @@
 import type { StoreApi } from 'zustand';
-import { BASS_PATTERNS, type BassStepChoice } from '../audio/bassPatterns';
-import { FACTORY_BASS_PRESETS } from '../audio/bassPresets';
+import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
 import { deriveChordNotes } from '../utils/musicTheory';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import {
   defaultPadState,
+  INITIAL_BASS_SYNTH_PARAMS,
   INITIAL_CHORDS,
   INITIAL_SEQUENCER_TRACKS,
   INITIAL_SYNTH_PARAMS,
@@ -29,7 +29,7 @@ export function createDefaultLoop(): Loop {
     scaleType: 'Natural Minor',
     synthParams: INITIAL_SYNTH_PARAMS,
     chordSynthParams: INITIAL_SYNTH_PARAMS,
-    bassSynthParams: { ...INITIAL_SYNTH_PARAMS, ...FACTORY_BASS_PRESETS[0].params },
+    bassSynthParams: INITIAL_BASS_SYNTH_PARAMS,
     chords: INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)),
     chordRhythmId: 'sustained',
     chordRhythmMode: 'preset',

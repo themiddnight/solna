@@ -10,7 +10,7 @@ import type {
   PadVoicing,
 } from '../types';
 import { PAD_INTERVALS, PAD_MODES, PAD_VOICINGS } from '../types';
-import type { BassStepChoice } from '../audio/bassPatterns';
+import type { BassStepChoice } from '@/data/bassPatterns';
 import { createDefaultLoop } from './loopSlice';
 import { LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
 import type { Loop } from './types';

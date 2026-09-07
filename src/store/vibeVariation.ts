@@ -1,71 +1,24 @@
-import type { DecorationLayer, DensityName, DrumDecorationRule, InstantVibe } from '../types';
-import { progressionById, resolveProgression } from '../audio/data/chordProgressions';
-import { BASS_PATTERNS } from '../audio/bassPatterns';
-import { RHYTHM_PATTERNS } from '../audio/rhythmPatterns';
-import { getMeter, type MeterId } from '../utils/meter';
-import { adaptStepRow } from '../utils/patternAdapt';
-
 /**
- * One bar of sixteenths, step 0 = beat 1. Every row is either a regular
- * subdivision of the bar or a fixed one-bar figure in a genre's idiom. None is
- * generated: a per-step coin flip produces rows with no relationship to the
- * pulse, which is exactly what this catalogue exists to prevent.
- */
-export const DRUM_DENSITIES: Record<DensityName, number[]> = {
-  off:          [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  downbeat:     [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  halves:       [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-  backbeat:     [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-  quarters:     [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
-  offbeat8ths:  [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0],
-  and2and4:     [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0],
-  eighths:      [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-  // Verified byte-for-byte against hiphop-groove's authored hihat row.
-  swung16ths:   [1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0],
-  // Verified byte-for-byte against lofi-chill's authored hihat row.
-  lofi16ths:    [1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1],
-  sixteenths:   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-  pickup:       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
-  midBar:       [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  lateFill:     [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0],
-  fillTail:     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
-};
-
-/**
- * The meter every row above was authored in. Explicit rather than implied by
- * the row length: 3/4 and 6/8 are both 12 steps and differ only in accent
- * grouping, so a bare length is not a sufficient tag anywhere in this codebase.
- */
-export const DRUM_DENSITY_METER: MeterId = '4/4';
-
-/**
- * A catalogue row adapted to the bar it is about to decorate, using the same
- * trim/loop rule as every other pattern in the app (utils/patternAdapt.ts).
- * Always a fresh array: the drawn row flows into a vibe and then into store
- * state, and the catalogue must stay authoritative and immutable.
+ * Rerolling a vibe: an id drawn from each of the vibe's own pools, plus a BPM.
  *
- * BEWARE: `pickup` (step 14) and `fillTail` (steps 13, 15) are end-of-bar
- * figures and trim to silence in any bar shorter than 15 steps — i.e. they
- * become a duplicate of `off` in 3/4, 6/8 and 7/8. An invariant test pins that,
- * and no vibe should list them as a candidate in those meters.
+ * There is no generation here and there never was — every axis picks an id out
+ * of a list a human wrote. The drum axis was the exception until it became a
+ * pool like the other four: it used to hold a catalogue of named density rows
+ * and a kick-collision filter, both of which existed to make GENERATED rows
+ * musical. Authored grids are curated, so both are deleted; a crash on beat 1
+ * over a kick on beat 1 is standard, and filtering it out would reject a grid
+ * for being correct.
+ *
+ * Nothing here turns an id into a value: a reroll produces a VibeSpec, and
+ * `resolveVibe` stays the one place a vibe's library ids become chords, rows
+ * and effects. The two library lookups below read a NAME for the toast and
+ * nothing else.
  */
-export function densityRowFor(name: DensityName, stepsPerBar: number): number[] {
-  return adaptStepRow(DRUM_DENSITIES[name], stepsPerBar);
-}
-
-/**
- * The order layers are drawn in and printed in. Fixed so a scripted draw can
- * name an exact combination and the toast reads the same way every time.
- */
-export const DECORATION_ORDER: DecorationLayer[] = ['hihat', 'openhat', 'tom', 'crash'];
-
-/** Short names for the toast's drum segment. */
-export const LAYER_LABELS: Record<DecorationLayer, string> = {
-  hihat: 'hats',
-  openhat: 'open',
-  tom: 'tom',
-  crash: 'crash',
-};
+import type { VibeSpec } from '../data/vibes';
+import { progressionById } from '@/audio/chordProgressions';
+import { BASS_PATTERNS } from '@/data/bassPatterns';
+import { CHORD_RHYTHMS } from '@/data/chordRhythms';
+import { DRUM_GRIDS } from '@/data/drumGrids';
 
 /**
  * The randomness boundary. Every function that varies a vibe takes one of
@@ -96,20 +49,10 @@ export interface VariationSummary {
   progressionRoman: string;
   rhythmName: string;
   bassPatternName: string;
-  drums: Array<{ layer: DecorationLayer; density: DensityName }>;
-}
-
-/**
- * Layers whose candidates are filtered against the authored kick. An open
- * hi-hat's decay smears the kick's attack and a tom occupies the kick's
- * register, so neither may double it. `hihat` and `crash` are deliberately
- * exempt: closed hats are short and quiet and routinely double the kick, and a
- * crash on a kick downbeat is the standard accent, not a clash.
- */
-const COLLISION_FILTERED: DecorationLayer[] = ['openhat', 'tom'];
-
-function collidesWithKick(row: number[], kick: number[]): boolean {
-  return row.some((hit, i) => hit === 1 && kick[i] === 1);
+  /** The grid the dice landed on. Unambiguous where two grids share a name. */
+  drumGridId: string;
+  /** Its display name — what to look for in the sequencer's grid menu. */
+  drumGridName: string;
 }
 
 /**
@@ -121,120 +64,82 @@ export function eligibleFor<T>(items: T[], current: T): T[] {
 }
 
 /**
- * The candidates a layer may actually be drawn from. Can never return an empty
- * list for a well-authored vibe: `off` is a member of every filtered pool and
- * collides with nothing. An invariant test pins that for all six vibes.
- */
-export function eligibleDensities(
-  layer: DecorationLayer,
-  candidates: DensityName[],
-  kick: number[],
-  stepsPerBar: number,
-): DensityName[] {
-  if (!COLLISION_FILTERED.includes(layer)) return candidates;
-  return candidates.filter((name) => !collidesWithKick(densityRowFor(name, stepsPerBar), kick));
-}
-
-function rollDecoration(
-  authored: Record<string, number[]>,
-  rule: DrumDecorationRule,
-  draw: VibeDraw,
-  stepsPerBar: number,
-): { drumPattern: Record<string, number[]>; drums: VariationSummary['drums'] } {
-  const drumPattern: Record<string, number[]> = { ...authored };
-  const drums: VariationSummary['drums'] = [];
-  const kick = authored.kick ?? [];
-
-  for (const layer of DECORATION_ORDER) {
-    if (!rule.layers.includes(layer)) continue;
-    const candidates = rule.densities[layer];
-    if (!candidates || candidates.length === 0) {
-      throw new Error(`DrumDecorationRule: layer "${layer}" is listed with no densities`);
-    }
-    const eligible = eligibleDensities(layer, candidates, kick, stepsPerBar);
-    if (eligible.length === 0) {
-      throw new Error(`DrumDecorationRule: every "${layer}" candidate collides with the kick`);
-    }
-    const density = draw.pick(eligible);
-    // Adapted to the vibe's own bar, so every row of the returned pattern has
-    // the same length. densityRowFor already returns a fresh array.
-    drumPattern[layer] = densityRowFor(density, stepsPerBar);
-    drums.push({ layer, density });
-  }
-
-  return { drumPattern, drums };
-}
-
-/**
- * Rerolls a vibe into a different piece of music in the same genre.
+ * Rerolls a vibe into a different piece of music from its own pools.
  *
- * Starts from the AUTHORED vibe every time — never from the current store — so
+ * Takes a VibeSpec and returns a VibeSpec: a reroll is an ID-LEVEL operation,
+ * so the caller resolves the result through `resolveVibe` exactly as a chip
+ * click does, and applies it through the same `applyVibeToStore`. There is
+ * deliberately no second resolve path and no second apply path — the first
+ * kept a drawn `progressionId` able to disagree with the `chords` beside it,
+ * the second is what keeps the hard-stop-on-swap fix from regressing.
+ *
+ * Starts from the AUTHORED spec every time — never from the current store — so
  * rerolls never compound, and overwrites exactly six fields: scaleRoot, bpm,
- * chordRhythmId, bassPatternId, chords and the decoration rows of drumPattern.
- * `scaleType` is copied, never drawn: it is the genre anchor.
+ * chordRhythmId, bassPatternId, progressionId and drumGridId. `scaleType` is
+ * copied, never drawn: it is the genre anchor. The drawn key is written to the
+ * spec, which is what makes `resolveVibe` resolve the progression into it.
  *
  * Draw order is part of the contract, because a scripted draw depends on it:
- * scaleRoot, bpm, chordRhythmId, bassPatternId, progression, then the layers
- * of DECORATION_ORDER that the rule lists.
- *
- * The returned value is a whole InstantVibe, so the caller applies it through
- * the existing applyInstantVibeToStore. There is deliberately no second apply
- * path: that is what keeps the hard-stop-on-swap fix from regressing.
+ * scaleRoot, bpm, chordRhythmId, bassPatternId, progression, drumGrid.
  */
 export function resolveVibeVariation(
-  vibe: InstantVibe,
+  vibe: VibeSpec,
   current: { scaleRoot: string; chordRhythmId: string; bassPatternId: string },
   draw: VibeDraw,
-): { vibe: InstantVibe; summary: VariationSummary } {
-  const rule = vibe.variation;
+): { spec: VibeSpec; summary: VariationSummary } {
+  const rule = vibe.random;
   if (!rule) {
-    throw new Error(`Vibe "${vibe.id}" has no variation rule and cannot be rerolled`);
+    throw new Error(`Vibe "${vibe.id}" has no random rule and cannot be rerolled`);
   }
 
-  const scaleRoot = draw.pickDistinct(rule.keyPool, current.scaleRoot);
-  const bpm = draw.int(rule.bpmRange[0], rule.bpmRange[1]);
-  const chordRhythmId = draw.pickDistinct(rule.rhythmIds, current.chordRhythmId);
-  const bassPatternId = draw.pickDistinct(rule.bassPatternIds, current.bassPatternId);
+  const scaleRoot = draw.pickDistinct(rule.keys, current.scaleRoot);
+  const bpm = draw.int(rule.bpm[0], rule.bpm[1]);
+  const chordRhythmId = draw.pickDistinct(rule.chordRhythms, current.chordRhythmId);
+  const bassPatternId = draw.pickDistinct(rule.bassPatterns, current.bassPatternId);
 
-  const progressionId = draw.pick(rule.progressionIds);
+  const progressionId = draw.pick(rule.progressions);
+
+  // PLAIN pick, following progressions one line above — not pickDistinct like
+  // keys/chordRhythms/bassPatterns. Those three have a `current` to exclude;
+  // the playing grid id is not in the store at all (SequencerView holds it in a
+  // useState and applyVibeToStore never writes it). Manufacturing one would
+  // mean a second source of truth that two callers must remember to write, and
+  // the failure is SILENT: miss a writer and pickDistinct excludes the wrong
+  // id, leaving "the dice can land back on the vibe as authored" true in the
+  // test and false in the app. The cost is that two rolls in a row can repeat a
+  // grid, at the same odds the progression axis already accepts.
+  const drumGridId = draw.pick(rule.drumGrids);
+
+  // Display lookups only — an id that resolves to nothing falls back to the id
+  // itself, the way the rhythm and bass names below already do, because the
+  // caller's `resolveVibe` is the one place an unknown id is an error. A second
+  // throw site here would report the same fault in a second message format.
   const progression = progressionById(progressionId);
-  if (!progression) {
-    throw new Error(`Vibe "${vibe.id}" lists unknown progression "${progressionId}"`);
-  }
-  // Resolved from degrees straight into the drawn key. B2 never transposes, so
-  // it cannot hit the auto-harmonize collapse bug at all.
-  const chords = resolveProgression(progression, scaleRoot, vibe.scaleType, vibe.chordOctave);
-
-  const stepsPerBar = getMeter(vibe.meter).stepsPerBar;
-  const { drumPattern, drums } = rollDecoration(
-    vibe.drumPattern,
-    rule.drumDecoration,
-    draw,
-    stepsPerBar,
-  );
 
   return {
-    vibe: {
+    spec: {
       ...vibe,
       scaleRoot,
       bpm,
       chordRhythmId,
       bassPatternId,
-      progressionId: progression.id,
-      chords,
-      drumPattern,
+      progressionId,
+      drumGridId,
     },
     summary: {
       vibeName: vibe.name,
       scaleRoot,
       scaleType: vibe.scaleType,
       bpm,
-      progressionId: progression.id,
-      progressionName: progression.name,
-      progressionRoman: progression.roman,
-      rhythmName: RHYTHM_PATTERNS.find((p) => p.id === chordRhythmId)?.name ?? chordRhythmId,
+      progressionId,
+      progressionName: progression?.name ?? progressionId,
+      progressionRoman: progression?.roman ?? progressionId,
+      rhythmName: CHORD_RHYTHMS.find((p) => p.id === chordRhythmId)?.name ?? chordRhythmId,
       bassPatternName: BASS_PATTERNS.find((p) => p.id === bassPatternId)?.name ?? bassPatternId,
-      drums,
+      drumGridId,
+      // The table directly, not drumGridById: that helper deep-copies every row
+      // on the way out, and the toast wants one string.
+      drumGridName: DRUM_GRIDS[drumGridId]?.name ?? drumGridId,
     },
   };
 }
@@ -251,19 +156,17 @@ export interface RerollToast {
  * helper follows.
  */
 export function formatVariationSummary(summary: VariationSummary): RerollToast {
-  const active = summary.drums.filter((d) => d.density !== 'off');
-  const drumSegment =
-    active.length === 0
-      ? 'drums: bare'
-      : `drums: ${active.map((d) => `${LAYER_LABELS[d.layer]} ${d.density}`).join(', ')}`;
-
   return {
     headline: `🎲 ${summary.vibeName} — ${summary.scaleRoot} ${summary.scaleType} · ${summary.bpm} BPM`,
     detail: [
       summary.progressionRoman,
       summary.rhythmName,
       summary.bassPatternName,
-      drumSegment,
+      // The grid's display name, not a layer/density list. Shorter AND more
+      // useful: a listener who hears the drums change can now be told what to
+      // look for in the sequencer's grid menu. There is no `drums: bare` case
+      // any more — a reroll always lands on a grid.
+      `drums: ${summary.drumGridName}`,
     ].join(' · '),
   };
 }

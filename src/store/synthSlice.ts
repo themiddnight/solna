@@ -1,6 +1,5 @@
 import type { StoreApi } from 'zustand';
-import { INITIAL_SYNTH_PARAMS } from './initialState';
-import { FACTORY_BASS_PRESETS } from '../audio/bassPresets';
+import { INITIAL_BASS_SYNTH_PARAMS, INITIAL_SYNTH_PARAMS } from './initialState';
 import type { AppStore, SynthSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -13,7 +12,7 @@ export function createSynthSlice(set: Set): SynthSlice {
   return {
     synthParams: INITIAL_SYNTH_PARAMS,
     chordSynthParams: INITIAL_SYNTH_PARAMS,
-    bassSynthParams: { ...INITIAL_SYNTH_PARAMS, ...FACTORY_BASS_PRESETS[0].params },
+    bassSynthParams: INITIAL_BASS_SYNTH_PARAMS,
     controlTarget: 'synth',
     synthVolume: 1.0,
     synthMuted: false,

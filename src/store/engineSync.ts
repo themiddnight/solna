@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { startLeadRecordBridge } from './leadRecord';
 import { shallow } from 'zustand/shallow';
 import { audioEngine } from '../audio/engine';
-import { DRUM_KITS } from '../audio/drumKits';
+import { DRUM_KITS } from '@/data/drumKits';
 import { useAppStore } from './store';
 import { isPlayerActive } from './transportSlice';
 import { getMeter } from '../utils/meter';

@@ -7,8 +7,8 @@ import type { AppStore, SequencerSlice } from './types';
 type Set = StoreApi<AppStore>['setState'];
 
 /**
- * Sequencer slice. `applyDrumPattern` maps the drum-pattern hits onto the
- * matching tracks by instrument, mirroring handleApplyDrumPattern in App.tsx.
+ * Sequencer slice. `replaceDrumPattern` writes a whole grid: matching tracks
+ * take their row, every other track is cleared in its window.
  */
 export function createSequencerSlice(set: Set): SequencerSlice {
   return {
@@ -25,16 +25,26 @@ export function createSequencerSlice(set: Set): SequencerSlice {
     // target"): the user edits this grid, so an incoming pattern is adapted to
     // the active bar length HERE and materialised into state. Trimming at
     // playback instead would make the UI lie, showing steps that never sound.
-    applyDrumPattern: (pattern) =>
+    //
+    // REPLACES, does not merge. A track the pattern does not name is cleared,
+    // because a drum grid determines the whole kit. Clearing goes through
+    // writeStepWindow like every other write, so it clears only the ACTIVE
+    // WINDOW and the padding past stepsPerBar — the wider-meter content —
+    // survives. Assigning `new Array(stepsPerBar).fill(false)` straight to
+    // `steps` would pass every window assertion and silently truncate the
+    // track; store.test.ts seeds a `true` at index 20 to catch exactly that.
+    replaceDrumPattern: (pattern) =>
       set((state) => {
         const stepsPerBar = getMeter(state.meterId).stepsPerBar;
         return {
           sequencerTracks: state.sequencerTracks.map((track) => {
             const row = pattern[track.instrument];
-            if (!row) return track;
+            const next = row
+              ? adaptStepRow(row, stepsPerBar)
+              : new Array(stepsPerBar).fill(false);
             return {
               ...track,
-              steps: writeStepWindow(track.steps, stepsPerBar, adaptStepRow(row, stepsPerBar)),
+              steps: writeStepWindow(track.steps, stepsPerBar, next),
             };
           }),
         };

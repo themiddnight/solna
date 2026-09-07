@@ -38,25 +38,25 @@ export const ORIGINAL_VIBE_CHORDS: Record<string, ChordItem[]> = {
     snapshotChord('sw3', 'C', 'maj', 1, 4),
     snapshotChord('sw4', 'G', 'maj', 1, 4),
   ],
-  'cyber-dance': [
+  'cyber-edm': [
     snapshotChord('cy1', 'F', 'min', 1, 4),
     snapshotChord('cy2', 'D#', 'maj', 1, 4),
     snapshotChord('cy3', 'C#', 'maj', 1, 4),
     snapshotChord('cy4', 'C', 'min', 1, 4),
   ],
-  'ambient-chill': [
+  'deep-ambient': [
     snapshotChord('am1', 'D', 'maj7', 4, 4),
     snapshotChord('am2', 'E', 'maj', 4, 4),
     snapshotChord('am3', 'F#', 'min7', 4, 4),
     snapshotChord('am4', 'G#', 'm7b5', 4, 4),
   ],
-  'hiphop-groove': [
+  'boom-bap': [
     snapshotChord('bb1', 'E', 'min7', 1, 4),
     snapshotChord('bb2', 'A', '7', 1, 4),
     snapshotChord('bb3', 'D', 'maj7', 1, 4),
     snapshotChord('bb4', 'G', 'maj7', 1, 4),
   ],
-  'asian-zen': [
+  'zen-garden': [
     snapshotChord('zn1', 'G', 'min', 2, 4),
     snapshotChord('zn2', 'D', 'sus4', 2, 4),
     snapshotChord('zn3', 'G', 'min', 2, 4),

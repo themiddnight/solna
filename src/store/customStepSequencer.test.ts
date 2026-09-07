@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore } from './store';
-import { applyInstantVibeToStore, INSTANT_VIBES } from './instantVibes';
-import type { BassStepChoice } from '../audio/bassPatterns';
+import { VIBES } from '../data/vibes';
+import { applyVibeToStore, resolveVibe } from './vibes';
+import type { BassStepChoice } from '@/data/bassPatterns';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 
 /** Reset the four new fields to their factory defaults so tests never leak. */
@@ -82,11 +83,11 @@ describe('custom step sequencer — non-destructive across meter change', () => 
 describe('custom step sequencer — instant vibes reset the mode', () => {
   beforeEach(resetCustomFields);
 
-  test('applyInstantVibeToStore returns both modes to preset', () => {
+  test('applyVibeToStore returns both modes to preset', () => {
     const s = useAppStore.getState();
     s.setChordRhythmMode('custom');
     s.setBassPatternMode('custom');
-    applyInstantVibeToStore(INSTANT_VIBES[0]);
+    applyVibeToStore(resolveVibe(VIBES[0]));
     expect(useAppStore.getState().chordRhythmMode).toBe('preset');
     expect(useAppStore.getState().bassPatternMode).toBe('preset');
   });

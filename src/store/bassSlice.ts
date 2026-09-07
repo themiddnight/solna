@@ -1,5 +1,5 @@
 import type { StoreApi } from 'zustand';
-import { BASS_PATTERNS, type BassStepChoice } from '../audio/bassPatterns';
+import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import type { AppStore, BassSlice } from './types';
 

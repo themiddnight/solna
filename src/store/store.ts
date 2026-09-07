@@ -28,6 +28,8 @@ import {
   migrateLeadNoteLength,
   migrateLeadStepResolution,
   migratePadLayer,
+  migrateDrumTracks,
+  migrateDrumVoices,
   removeLegacyKeys,
   LEGACY_PERSIST_KEY,
 } from './migrate';
@@ -282,7 +284,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: PERSIST_KEY,
-      version: 12,
+      version: 15,
       storage: createJSONStorage<PersistedState>(() => persistStorage),
       partialize: partializeAppState,
       // Old-version persisted data: adopt the legacy localStorage presets
@@ -333,6 +335,21 @@ export const useAppStore = create<AppStore>()(
         if (version < 11) next = migrateLeadStepResolution(next) as PersistedState;
         // v11 -> v12 (pad/drone layer)
         if (version < 12) next = migratePadLayer(next) as PersistedState;
+        // v12 -> v13 (tom + crash sequencer tracks)
+        if (version < 13) next = migrateDrumTracks(next) as PersistedState;
+        // v13 -> v15 (eleven drum voices: tom -> lowtom, four appended, kit
+        // rename, drum track colours).
+        //
+        // The guard says 15, not 14, and that is deliberate. v14 was stamped on
+        // sessions part-way through the drum slice, while INITIAL_SEQUENCER_TRACKS
+        // still held seven voices and the colour transform was not yet wired — so
+        // a session hydrated in that window carries the v14 stamp with a
+        // seven-track roster, and a `version < 14` guard would never touch it
+        // again. `migrateDrumVoices` is idempotent (its rename is a no-op once
+        // applied, its append adds only what is missing, its recolour rewrites
+        // only a still-factory colour), so re-running it completes those sessions
+        // and changes nothing for the rest.
+        if (version < 15) next = migrateDrumVoices(next) as PersistedState;
         return next;
       },
       // Runs on every hydration (also when nothing was stored): sanitize the
