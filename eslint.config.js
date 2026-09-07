@@ -68,10 +68,17 @@ export default tseslint.config(
         // Decision D2, `../../` ban: the path-scoped layering blocks below
         // override only `no-restricted-imports` for their files, so a second
         // copy of that rule here would be shadowed the same way the original
-        // one was. `no-restricted-syntax` is untouched by those blocks, so
-        // this entry reaches every file, including src/audio, src/store and
-        // src/components. Two or more `../` levels are banned; a single
-        // `../` (same-folder-ish) is left alone.
+        // one was.
+        //
+        // `no-restricted-syntax` reaches every file EXCEPT `src/data/**`. That
+        // one block sets the rule itself, and `no-restricted-syntax` is not
+        // additive — a block that sets it REPLACES this entry — so the data
+        // block re-declares all five objects below verbatim, at 'error'. The
+        // same is true of `no-restricted-globals` above. If you add an entry
+        // here, add it there too; nothing checks that for you except
+        // src/data/dataLayerPurity.test.ts.
+        //
+        // Two or more `../` levels are banned; a single `../` is left alone.
         {
           selector: "ImportDeclaration[source.value=/^\\.\\.\\/\\.\\.\\//]",
           message: 'Cross-folder imports use the `@/` alias (decision D2); relative paths only within one folder.',
@@ -130,6 +137,114 @@ export default tseslint.config(
           patterns: [
             { group: ['**/audio/engine'], message: 'components must not import audio/engine (layering rule 3)' },
           ],
+        },
+      ],
+    },
+  },
+  {
+    // Layering rule 0: src/data/ holds literals and nothing else.
+    //
+    // Every file here is an INDEPENDENT LEAF — it imports nothing at runtime,
+    // not even a sibling in this folder, so the folder has no evaluation graph
+    // and no temporal-dead-zone failure mode. That is what lets a reviewer read
+    // a 900-line table diff as content: nothing outside the open file can
+    // influence what it evaluates to.
+    //
+    // Test files are excluded: a test necessarily imports bun:test at runtime,
+    // and the rule is about the tables, not about what asserts on them.
+    files: ['src/data/**/*.{ts,tsx}'],
+    ignores: ['src/data/**/*.test.{ts,tsx}'],
+    rules: {
+      // The import ban. The base rule MUST be off for the TS-aware one to run —
+      // measured: without this line the variant below never fires at all.
+      'no-restricted-imports': 'off',
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**'],
+              message: 'src/data/ holds literals: `import type` only.',
+              allowTypeImports: true,
+            },
+          ],
+        },
+      ],
+
+      // The impure-global ban. `no-restricted-globals` is scope-aware: it fires
+      // on a GLOBAL reference and stays silent on a local binding that shadows
+      // the name, so a table field or helper parameter called `performance` is
+      // untouched. An `Identifier[name='Math']` syntax selector would flag both.
+      // The list is a floor, not a ceiling — add to it rather than arguing
+      // about whether a given global counts.
+      //
+      // This REPLACES the global no-restricted-globals entry (:46-51), so its
+      // three native-prompt bans are re-declared verbatim at the end.
+      'no-restricted-globals': [
+        'error',
+        ...[
+          'Math', 'Date', 'crypto', 'fetch', 'performance', 'process', 'globalThis',
+          'localStorage', 'sessionStorage', 'window', 'document',
+        ].map((name) => ({ name, message: 'src/data/ is pure: no impure globals.' })),
+        { name: 'confirm', message: 'Use ui/ConfirmDialog — confirm() blocks the main thread and cannot be themed.' },
+        { name: 'alert', message: 'Use an inline role="alert" notice — alert() blocks the main thread and cannot be themed.' },
+        { name: 'prompt', message: 'Use ui/Modal with a form — prompt() blocks the main thread and cannot be themed.' },
+      ],
+
+      // This REPLACES the global no-restricted-syntax entry (:58-87), so its
+      // React.FC and `../../` bans are re-declared verbatim first — at 'error'
+      // here, where the global entry is 'warn'. Neither is reachable in
+      // practice (no JSX in a table, and `@/` covers cross-folder), but leaving
+      // them out would silently un-ban `../../` in the one folder where every
+      // import is a type import.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "TSTypeReference[typeName.name='FC']",
+          message: 'Use `export function X(props: XProps)` instead of React.FC (decision D1).',
+        },
+        {
+          selector: "TSTypeReference[typeName.type='TSQualifiedName'][typeName.right.name='FC']",
+          message: 'Use `export function X(props: XProps)` instead of React.FC (decision D1).',
+        },
+        {
+          selector: "ImportDeclaration[source.value=/^\\.\\.\\/\\.\\.\\//]",
+          message: 'Cross-folder imports use the `@/` alias (decision D2); relative paths only within one folder.',
+        },
+        {
+          selector: "ExportNamedDeclaration[source.value=/^\\.\\.\\/\\.\\.\\//]",
+          message: 'Cross-folder imports use the `@/` alias (decision D2); relative paths only within one folder.',
+        },
+        {
+          selector: "ExportAllDeclaration[source.value=/^\\.\\.\\/\\.\\.\\//]",
+          message: 'Cross-folder imports use the `@/` alias (decision D2); relative paths only within one folder.',
+        },
+        {
+          selector: 'NewExpression',
+          message: 'src/data/ holds literals: write the literal, not a constructed object.',
+        },
+        {
+          selector: 'FunctionDeclaration',
+          message: 'src/data/ holds literals: only top-level `const` arrow helpers.',
+        },
+        {
+          selector: 'FunctionExpression',
+          message: 'src/data/ holds literals: only top-level `const` arrow helpers.',
+        },
+        { selector: 'ClassDeclaration', message: 'src/data/ holds literals, not classes.' },
+        { selector: 'ClassExpression', message: 'src/data/ holds literals, not classes.' },
+        // Two selectors, not one: `export let n = 0` is a child of
+        // ExportNamedDeclaration, not of Program. Escalating `prefer-const`
+        // does NOT substitute — it only fires on a binding that is never
+        // reassigned, so `let n = 0; n++` is the one case it deliberately
+        // allows, and that is the exact case this ban exists to catch.
+        {
+          selector: 'Program > VariableDeclaration[kind=/^(let|var)$/]',
+          message: 'src/data/ is stateless: module-scope bindings must be `const`.',
+        },
+        {
+          selector: 'ExportNamedDeclaration > VariableDeclaration[kind=/^(let|var)$/]',
+          message: 'src/data/ is stateless: module-scope bindings must be `const`.',
         },
       ],
     },
