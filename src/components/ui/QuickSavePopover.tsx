@@ -32,7 +32,7 @@ export function isDismissKey(e: Pick<KeyboardEvent, 'key'>): boolean {
   return e.key === 'Escape';
 }
 
-export const QuickSavePopover: React.FC<QuickSavePopoverProps> = ({
+export function QuickSavePopover({
   open,
   onClose,
   heading,
@@ -48,7 +48,7 @@ export const QuickSavePopover: React.FC<QuickSavePopoverProps> = ({
   inputClassName = "input input-sm flex-1",
   selectClassName = "select select-sm",
   buttonClassName = "",
-}) => {
+}: QuickSavePopoverProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
 
@@ -131,4 +131,4 @@ export const QuickSavePopover: React.FC<QuickSavePopoverProps> = ({
       </form>
     </div>
   );
-};
+}

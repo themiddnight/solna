@@ -201,10 +201,10 @@ describe('SequencerGrid', () => {
   // the publisher's value actually reaches the grid, the same way
   // StepRow.test.tsx proves PlayingStepRow's gated ring with a literal prop.
   test('reads the playhead from the step publisher', () => {
-    const Probe: React.FC = () => {
+    function Probe() {
       const currentStep = useCurrentStep('sequencer');
       return <StepHeader cells={cells} currentStep={currentStep} isPlaying />;
-    };
+    }
     stepPublisher.reset('sequencer');
     const atZero = renderToString(<Probe />);
     stepPublisher.publish('sequencer', 7);

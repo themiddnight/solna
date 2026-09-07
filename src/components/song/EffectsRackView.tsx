@@ -15,7 +15,7 @@ import {
   reverbDecayDescriptor,
 } from "../fxDescriptors";
 
-export const EffectsRackView: React.FC = React.memo(() => {
+export const EffectsRackView = React.memo(function EffectsRackView() {
   const effects = useAppStore((s) => s.effects);
   const setEffects = useAppStore((s) => s.setEffects);
   const activeTab = useAppStore((s) => s.activeTab);

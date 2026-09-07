@@ -50,7 +50,7 @@ export const editLoop = (id: string) => {
  * looping). Clicking a row selects it as active (loadLoop), which while
  * playing jumps the song/loop to that loop.
  */
-export const ArrangeView: React.FC = React.memo(() => {
+export const ArrangeView = React.memo(function ArrangeView() {
   const loops = useAppStore((s) => s.loops);
   const activeLoopId = useAppStore((s) => s.activeLoopId);
   const songLoopIndex = useAppStore((s) => s.songLoopIndex);

@@ -13,7 +13,7 @@ import { useSynthChannel } from "./useSynthChannel";
  * §6.5); the tokens are named in the class strings that moved with the
  * markup.
  */
-export const EnvelopePanel: React.FC = () => {
+export function EnvelopePanel() {
   const { params, onChangeParams, tintClass } = useSynthChannel();
   // 3. Envelope ADSR
   return (
@@ -161,4 +161,4 @@ export const EnvelopePanel: React.FC = () => {
             </div>
           </PanelCard>
   );
-};
+}

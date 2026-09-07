@@ -25,7 +25,7 @@ import {
 
 const EXPORT_TIP = 'Export the session to keep your work';
 
-export const ProjectManagerModal: React.FC = () => {
+export function ProjectManagerModal() {
   const isOpen = useLiveStore((s) => s.isProjectManagerOpen);
   const setIsOpen = useLiveStore((s) => s.setIsProjectManagerOpen);
   const currentProjectId = useLiveStore((s) => s.currentProjectId);
@@ -233,4 +233,4 @@ export const ProjectManagerModal: React.FC = () => {
       )}
     </>
   );
-};
+}

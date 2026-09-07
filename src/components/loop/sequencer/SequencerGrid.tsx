@@ -28,13 +28,13 @@ export interface SequencerGridProps {
  * column highlight is per-step data each row needs. What this component
  * removes is everything ABOVE the grid re-rendering with them.
  */
-export const SequencerGrid: React.FC<SequencerGridProps> = ({
+export function SequencerGrid({
   tracks,
   cells,
   onToggleStep,
   onToggleMute,
   onPreview,
-}) => {
+}: SequencerGridProps) {
   useSequencerPlayback();
   const currentStep = useCurrentStep('sequencer');
   const isPlaying = useAppStore((s) => s.sequencerPlayer !== 'stopped');
@@ -64,4 +64,4 @@ export const SequencerGrid: React.FC<SequencerGridProps> = ({
       </div>
     </div>
   );
-};
+}

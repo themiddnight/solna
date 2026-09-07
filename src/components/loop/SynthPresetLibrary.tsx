@@ -44,14 +44,14 @@ interface SynthLibraryEntry extends PresetLibraryEntry {
   preset: SynthPresetItem;
 }
 
-export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
+export function SynthPresetLibrary({
   currentParams,
   onSelectPreset,
   target,
   showSoundBadges = true,
   isOpen,
   onClose,
-}) => {
+}: SynthPresetLibraryProps) {
   const customPresets = useAppStore((s) => s.customSynthPresets);
   const savePreset = useAppStore((s) => s.saveCustomPreset);
   const deletePreset = useAppStore((s) => s.deleteCustomPreset);
@@ -465,4 +465,4 @@ export const SynthPresetLibrary: React.FC<SynthPresetLibraryProps> = ({
       )}
     </>
   );
-};
+}

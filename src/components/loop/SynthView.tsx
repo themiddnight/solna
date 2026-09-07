@@ -55,7 +55,7 @@ import {
 } from "@/utils/synthControl";
 import type { SynthControlTarget } from "@/utils/synthControl";
 
-export const SynthView: React.FC = React.memo(() => {
+export const SynthView = React.memo(function SynthView() {
   // Synth slice state + setters (named after the old props so the rest of the
   // component body is unchanged).
   const controlTarget = useAppStore((s) => s.controlTarget);

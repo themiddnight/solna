@@ -18,7 +18,7 @@ export interface VuMeterProps {
  * analyser read through the store would mean a store write every animation
  * frame and a re-render of every subscriber.
  */
-export const VuMeter: React.FC<VuMeterProps> = React.memo(({ isPlaying }) => {
+export const VuMeter = React.memo(function VuMeter({ isPlaying }: VuMeterProps) {
   const [segment, setSegment] = useState(0);
   const segmentRef = useRef(0);
 

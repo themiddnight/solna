@@ -12,7 +12,7 @@ interface DrumPadsProps {
  *  owned upstream by `useInputDeck` and forwarded via `drumProps`, so the
  *  card's volume sliders drive the same state as the dock's Drums tab and the
  *  QWERTY drum listener. */
-export const DrumPads: React.FC<DrumPadsProps> = ({ drumProps }) => {
+export function DrumPads({ drumProps }: DrumPadsProps) {
   return (
     <PanelCard>
       <div className="card-body p-3 sm:p-4">
@@ -20,4 +20,4 @@ export const DrumPads: React.FC<DrumPadsProps> = ({ drumProps }) => {
       </div>
     </PanelCard>
   );
-};
+}

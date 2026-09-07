@@ -67,7 +67,7 @@ export interface PlayerTransportProps {
   showLabel?: boolean;
 }
 
-export const PlayerTransport: React.FC<PlayerTransportProps> = ({
+export function PlayerTransport({
   state,
   onPlay,
   onSoftStop,
@@ -79,7 +79,7 @@ export const PlayerTransport: React.FC<PlayerTransportProps> = ({
   id,
   unwrapped = false,
   showLabel = false,
-}) => {
+}: PlayerTransportProps) {
   const buttons = resolveTransportButtons(state);
   const MainIcon = buttons.main.icon === 'play' ? Play : Square;
   const sizeClass = size === 'xs' ? 'btn-xs' : 'btn-sm';
@@ -119,4 +119,4 @@ export const PlayerTransport: React.FC<PlayerTransportProps> = ({
   if (unwrapped) return buttonsMarkup;
 
   return <div className="join">{buttonsMarkup}</div>;
-};
+}

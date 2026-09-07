@@ -29,28 +29,30 @@ export interface StepHeaderProps {
  * Step-number strip above the sequencer lanes. Memoized so the header is the
  * only thing that reconciles when nothing but the transport moved.
  */
-export const StepHeader: React.FC<StepHeaderProps> = React.memo(
-  ({ cells, currentStep, isPlaying, className = DRUM_HEADER_CLASS }) => (
-    <div className={className}>
-      {cells.map((cell) => {
-        const isCurrent = currentStep === cell.index && isPlaying;
-        return (
-          <div
-            key={cell.index}
-            className={`flex-1 text-center tabular-nums text-[10px] py-1 rounded transition-all ${
-              isCurrent
-                ? "bg-primary text-primary-content font-bold shadow-md shadow-primary/50"
-                : cell.isBeatStart
-                  ? "text-accent font-bold bg-base-300/40"
-                  : "text-base-content/50"
-            }`}
-          >
-            {cell.label}
-          </div>
-        );
-      })}
-    </div>
-  ),
+export const StepHeader = React.memo(
+  function StepHeader({ cells, currentStep, isPlaying, className = DRUM_HEADER_CLASS }: StepHeaderProps) {
+    return (
+      <div className={className}>
+        {cells.map((cell) => {
+          const isCurrent = currentStep === cell.index && isPlaying;
+          return (
+            <div
+              key={cell.index}
+              className={`flex-1 text-center tabular-nums text-[10px] py-1 rounded transition-all ${
+                isCurrent
+                  ? "bg-primary text-primary-content font-bold shadow-md shadow-primary/50"
+                  : cell.isBeatStart
+                    ? "text-accent font-bold bg-base-300/40"
+                    : "text-base-content/50"
+              }`}
+            >
+              {cell.label}
+            </div>
+          );
+        })}
+      </div>
+    );
+  },
 );
 
 /**
@@ -59,9 +61,7 @@ export const StepHeader: React.FC<StepHeaderProps> = React.memo(
  * the step — ChordModulePanel must not re-render 8x/sec just to move a number
  * strip, which is the whole reason the row subscribes at the leaf.
  */
-export const PlayingStepHeader: React.FC<
-  Omit<StepHeaderProps, 'currentStep'> & { player: StepPlayerId }
-> = ({ player, ...rest }) => {
+export function PlayingStepHeader({ player, ...rest }: Omit<StepHeaderProps, 'currentStep'> & { player: StepPlayerId }) {
   const currentStep = useCurrentStep(player);
   return <StepHeader {...rest} currentStep={currentStep} />;
-};
+}

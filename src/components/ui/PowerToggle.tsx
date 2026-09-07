@@ -85,10 +85,10 @@ export interface PowerToggleProps {
  * The app's single on/off affordance. One icon everywhere: `Power` means
  * on/off, and `Volume2`/`VolumeX` are reserved for actual level controls.
  */
-export const PowerToggle: React.FC<PowerToggleProps> = ({
+export function PowerToggle({
   on, onToggle, name, tone, iconOnly = false, size = 'sm', id,
   verb = { on: 'Turn on', off: 'Turn off' },
-}) => {
+}: PowerToggleProps) {
   const { className, label } = resolvePowerToggle(on, tone, iconOnly);
   // The button's accessible name is set explicitly rather than left to fall
   // back to visible text, since the icon-only variant has no visible text at
@@ -113,4 +113,4 @@ export const PowerToggle: React.FC<PowerToggleProps> = ({
       {!iconOnly && <span>{accessibleName}</span>}
     </button>
   );
-};
+}

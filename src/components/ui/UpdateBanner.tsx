@@ -21,11 +21,11 @@ interface UpdateBannerProps {
  * reloading stops the sound: the whole reason this app prompts instead of
  * updating itself is that a silent reload would cut a loop off mid-bar.
  */
-export const UpdateBanner: React.FC<UpdateBannerProps> = ({
+export function UpdateBanner({
   open,
   onReload,
   onDismiss,
-}) => {
+}: UpdateBannerProps) {
   if (!open) return null;
 
   return (
@@ -59,4 +59,4 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({
       </button>
     </div>
   );
-};
+}

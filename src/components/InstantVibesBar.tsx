@@ -34,7 +34,7 @@ function scheduleTimeout(
   ref.current = setTimeout(fn, ms);
 }
 
-export const InstantVibesBar: React.FC = React.memo(() => {
+export const InstantVibesBar = React.memo(function InstantVibesBar() {
   const selectedVibeId = useAppStore((s) => s.selectedVibeId);
 
   type VibeToast =

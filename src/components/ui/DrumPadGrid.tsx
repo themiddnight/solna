@@ -53,12 +53,12 @@ export interface DrumPadGridProps {
 
 /** The presentational pad grid, shared by the in-page DrumPads card and the
  *  dock's Drums tab. Owns no state; every interaction is lifted to the parent. */
-export const DrumPadGrid: React.FC<DrumPadGridProps> = ({
+export function DrumPadGrid({
   pads,
   activePadId,
   onTriggerPad,
   onPadVolumeChange,
-}) => {
+}: DrumPadGridProps) {
   return (
     // 5 columns matches the two-row, five-per-row keyboard map exactly (ten
     // pads = 5+5, no ragged trailing row) at every width.
@@ -106,4 +106,4 @@ export const DrumPadGrid: React.FC<DrumPadGridProps> = ({
       })}
     </div>
   );
-};
+}

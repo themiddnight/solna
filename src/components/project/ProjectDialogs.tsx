@@ -4,13 +4,15 @@ import { Modal } from '../ui/Modal';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { isValidProjectName } from './projectManagerFlow';
 
-export const NamePromptDialog: React.FC<{
+interface NamePromptDialogProps {
   title: string;
   initial: string;
   confirmLabel: string;
   onConfirm: (name: string) => void;
   onCancel: () => void;
-}> = ({ title, initial, confirmLabel, onConfirm, onCancel }) => {
+}
+
+export function NamePromptDialog({ title, initial, confirmLabel, onConfirm, onCancel }: NamePromptDialogProps) {
   const [name, setName] = useState(initial);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -42,55 +44,71 @@ export const NamePromptDialog: React.FC<{
       </form>
     </Modal>
   );
-};
+}
 
-export const DirtyGuardDialog: React.FC<{
+interface DirtyGuardDialogProps {
   onDiscard: () => void;
   onCancel: () => void;
   onSaveAndContinue: () => void;
-}> = ({ onDiscard, onCancel, onSaveAndContinue }) => (
-  <Modal open onClose={onCancel} title="Unsaved changes" boxClassName="space-y-4">
-    <p className="text-sm">This session has unsaved changes. Save them before continuing?</p>
-    <div className="modal-action">
-      <button type="button" className="btn btn-ghost text-error" onClick={onDiscard}>Discard</button>
-      {/* eslint-disable-next-line jsx-a11y/no-autofocus -- Cancel is the safe initial focus target for a dialog raised by an action that would lose work. */}
-      <button type="button" className="btn" onClick={onCancel} autoFocus>Cancel</button>
-      <button type="button" className="btn btn-primary" onClick={onSaveAndContinue}>Save &amp; Continue</button>
-    </div>
-  </Modal>
-);
+}
 
-export const DeleteConfirmDialog: React.FC<{ name: string; onConfirm: () => void; onCancel: () => void }> = ({ name, onConfirm, onCancel }) => (
-  <ConfirmDialog
-    title="Delete project"
-    message={<>Delete <strong>{name}</strong>? This cannot be undone.</>}
-    confirmLabel="Delete"
-    danger
-    onConfirm={onConfirm}
-    onCancel={onCancel}
-  />
-);
+export function DirtyGuardDialog({ onDiscard, onCancel, onSaveAndContinue }: DirtyGuardDialogProps) {
+  return (
+    <Modal open onClose={onCancel} title="Unsaved changes" boxClassName="space-y-4">
+      <p className="text-sm">This session has unsaved changes. Save them before continuing?</p>
+      <div className="modal-action">
+        <button type="button" className="btn btn-ghost text-error" onClick={onDiscard}>Discard</button>
+        {/* eslint-disable-next-line jsx-a11y/no-autofocus -- Cancel is the safe initial focus target for a dialog raised by an action that would lose work. */}
+        <button type="button" className="btn" onClick={onCancel} autoFocus>Cancel</button>
+        <button type="button" className="btn btn-primary" onClick={onSaveAndContinue}>Save &amp; Continue</button>
+      </div>
+    </Modal>
+  );
+}
 
-export const ImportConflictDialog: React.FC<{
+interface DeleteConfirmDialogProps {
+  name: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+export function DeleteConfirmDialog({ name, onConfirm, onCancel }: DeleteConfirmDialogProps) {
+  return (
+    <ConfirmDialog
+      title="Delete project"
+      message={<>Delete <strong>{name}</strong>? This cannot be undone.</>}
+      confirmLabel="Delete"
+      danger
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
+  );
+}
+
+interface ImportConflictDialogProps {
   existing: ProjectMeta;
   incoming: ProjectMeta;
   onOverwrite: () => void;
   onCopy: () => void;
   onCancel: () => void;
-}> = ({ existing, incoming, onOverwrite, onCopy, onCancel }) => (
-  <Modal open onClose={onCancel} title="Import project" boxClassName="space-y-4">
-    <p className="text-sm">A project with this id already exists.</p>
-    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-      <dt className="opacity-60">existing</dt>
-      <dd>{existing.name} — {new Date(existing.updatedAt).toLocaleString()}</dd>
-      <dt className="opacity-60">in file</dt>
-      <dd>{incoming.name} — {new Date(incoming.updatedAt).toLocaleString()}</dd>
-    </dl>
-    <div className="modal-action">
-      {/* eslint-disable-next-line jsx-a11y/no-autofocus -- Cancel is the safe initial focus target for a dialog raised by an action that would lose work. */}
-      <button type="button" className="btn" onClick={onCancel} autoFocus>Cancel</button>
-      <button type="button" className="btn" onClick={onCopy}>Import as Copy</button>
-      <button type="button" className="btn btn-error" onClick={onOverwrite}>Overwrite</button>
-    </div>
-  </Modal>
-);
+}
+
+export function ImportConflictDialog({ existing, incoming, onOverwrite, onCopy, onCancel }: ImportConflictDialogProps) {
+  return (
+    <Modal open onClose={onCancel} title="Import project" boxClassName="space-y-4">
+      <p className="text-sm">A project with this id already exists.</p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dt className="opacity-60">existing</dt>
+        <dd>{existing.name} — {new Date(existing.updatedAt).toLocaleString()}</dd>
+        <dt className="opacity-60">in file</dt>
+        <dd>{incoming.name} — {new Date(incoming.updatedAt).toLocaleString()}</dd>
+      </dl>
+      <div className="modal-action">
+        {/* eslint-disable-next-line jsx-a11y/no-autofocus -- Cancel is the safe initial focus target for a dialog raised by an action that would lose work. */}
+        <button type="button" className="btn" onClick={onCancel} autoFocus>Cancel</button>
+        <button type="button" className="btn" onClick={onCopy}>Import as Copy</button>
+        <button type="button" className="btn btn-error" onClick={onOverwrite}>Overwrite</button>
+      </div>
+    </Modal>
+  );
+}

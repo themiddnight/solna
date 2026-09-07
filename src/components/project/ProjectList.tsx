@@ -15,8 +15,14 @@ export interface ProjectListProps {
   onDelete: (project: ProjectMeta) => void;
 }
 
+interface InlineNameProps {
+  name: string;
+  disabled: boolean;
+  onCommit: (name: string) => void;
+}
+
 /** Click the name to rename in place. Enter/blur commit, Escape cancels. */
-const InlineName: React.FC<{ name: string; disabled: boolean; onCommit: (name: string) => void }> = ({ name, disabled, onCommit }) => {
+function InlineName({ name, disabled, onCommit }: InlineNameProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
   const commit = () => {
@@ -54,9 +60,9 @@ const InlineName: React.FC<{ name: string; disabled: boolean; onCommit: (name: s
       }}
     />
   );
-};
+}
 
-export const ProjectList: React.FC<ProjectListProps> = ({ projects, currentProjectId, now, disabled, onOpen, onRename, onExport, onDelete }) => {
+export function ProjectList({ projects, currentProjectId, now, disabled, onOpen, onRename, onExport, onDelete }: ProjectListProps) {
   if (projects.length === 0) {
     return (
       <p className="text-sm text-base-content/70 rounded-box border border-dashed border-base-300 p-4">
@@ -98,4 +104,4 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, currentProje
       ))}
     </ul>
   );
-};
+}

@@ -20,13 +20,15 @@ export interface FieldProps {
  * row, and its indentation had already come apart. The pairing is the rule, so
  * the pairing is what this owns; the tokens are its internals.
  */
-export const Field: React.FC<FieldProps> = ({ label, htmlFor, children }) => (
-  <div>
-    {label !== undefined && (
-      <label className={FIELD_LABEL} htmlFor={htmlFor}>
-        {label}
-      </label>
-    )}
-    <div className={FIELD_LANE}>{children}</div>
-  </div>
-);
+export function Field({ label, htmlFor, children }: FieldProps) {
+  return (
+    <div>
+      {label !== undefined && (
+        <label className={FIELD_LABEL} htmlFor={htmlFor}>
+          {label}
+        </label>
+      )}
+      <div className={FIELD_LANE}>{children}</div>
+    </div>
+  );
+}

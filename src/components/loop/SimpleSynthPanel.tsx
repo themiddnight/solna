@@ -11,8 +11,8 @@ interface SimpleSynthPanelProps {
   tintClass?: string;
 }
 
-export const SimpleSynthPanel: React.FC<SimpleSynthPanelProps> = React.memo(
-  ({ params, onChangeParams, tintClass = "" }) => {
+export const SimpleSynthPanel = React.memo(
+  function SimpleSynthPanel({ params, onChangeParams, tintClass = "" }: SimpleSynthPanelProps) {
     // Macro 1: Tone (Brightness) -> Cutoff
     const cutoffValue = params.filterCutoff ?? 4000;
     const toneLabel =

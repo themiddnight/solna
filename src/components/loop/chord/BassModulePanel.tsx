@@ -29,11 +29,11 @@ export interface BassModulePanelProps {
   isPlaying: boolean;
 }
 
-export const BassModulePanel: React.FC<BassModulePanelProps> = ({
+export function BassModulePanel({
   onPatternPreviewDown,
   onPatternPreviewUp,
   isPlaying,
-}) => {
+}: BassModulePanelProps) {
   const meterId = useAppStore((s) => s.meterId);
   const bassSynthParams = useAppStore((s) => s.bassSynthParams);
   const setBassSynthParams = useAppStore((s) => s.setBassSynthParams);
@@ -227,4 +227,4 @@ export const BassModulePanel: React.FC<BassModulePanelProps> = ({
         )}
       </div>
   );
-};
+}

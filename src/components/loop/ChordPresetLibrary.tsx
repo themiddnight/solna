@@ -77,7 +77,7 @@ const BASE_CHORD_CATEGORIES: PresetCategory[] = [
   { id: 'Ambient & Zen', label: 'Ambient & Zen', badgeClass: 'badge badge-primary', description: '' },
 ];
 
-export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
+export function ChordPresetLibrary({
   currentChords,
   scaleRoot,
   scaleType,
@@ -86,7 +86,7 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
   onApplyChords,
   isOpen,
   onClose,
-}) => {
+}: ChordPresetLibraryProps) {
   // Key-invariant for the whole render, and this list draws ~44 template cards
   // plus every custom one: derived per card it was one object allocation and
   // one spelling lookup per chord card rather than one of each per open.
@@ -554,4 +554,4 @@ export const ChordPresetLibrary: React.FC<ChordPresetLibraryProps> = ({
       )}
     </>
   );
-};
+}

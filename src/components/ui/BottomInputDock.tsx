@@ -40,7 +40,7 @@ interface BottomInputDockProps {
   drumProps: InputDeckDrumProps;
 }
 
-export const BottomInputDock: React.FC<BottomInputDockProps> = React.memo(({ keyboardProps, drumProps }: BottomInputDockProps) => {
+export const BottomInputDock = React.memo(function BottomInputDock({ keyboardProps, drumProps }: BottomInputDockProps) {
   const isOpen = useLiveStore((s) => s.isInputPanelOpen);
   const setIsOpen = useLiveStore((s) => s.setIsInputPanelOpen);
   const mode = useLiveStore((s) => s.inputPanelMode);

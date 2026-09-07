@@ -41,11 +41,11 @@ export interface ChordModulePanelProps {
  * derived here (they own ChordView's preview refs and the resolved rhythm
  * pattern) and come in as props, already stable useCallbacks in ChordView.
  */
-export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
+export function ChordModulePanel({
   onPatternPreviewDown,
   onPatternPreviewUp,
   isPlaying,
-}) => {
+}: ChordModulePanelProps) {
   const meterId = useAppStore((s) => s.meterId);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
   const setChordSynthParams = useAppStore((s) => s.setChordSynthParams);
@@ -246,4 +246,4 @@ export const ChordModulePanel: React.FC<ChordModulePanelProps> = ({
         )}
       </div>
   );
-};
+}

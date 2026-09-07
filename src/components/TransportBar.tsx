@@ -21,7 +21,7 @@ export function songModeLabel(
   return loop ? `Song · ${loop.name}` : null;
 }
 
-export const TransportBar: React.FC = React.memo(() => {
+export const TransportBar = React.memo(function TransportBar() {
   // Transport slice
   const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
   const chordsPlayer = useAppStore((s) => s.chordsPlayer);

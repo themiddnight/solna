@@ -23,7 +23,7 @@ export interface ViewHeaderProps {
  * the synth's signal stages (design.md 6.5) — ChordView used to tint this chip
  * `module-chord`, which is the violation this component removes.
  */
-export const ViewHeader: React.FC<ViewHeaderProps> = ({ view, badge, actions, children }) => {
+export function ViewHeader({ view, badge, actions, children }: ViewHeaderProps) {
   const { icon: Icon, title } = VIEW_META[view];
   return (
     <PanelCard className="relative">
@@ -46,4 +46,4 @@ export const ViewHeader: React.FC<ViewHeaderProps> = ({ view, badge, actions, ch
       </div>
     </PanelCard>
   );
-};
+}

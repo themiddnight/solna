@@ -4,7 +4,7 @@ import { SynthView } from './SynthView';
 import { ChordView } from './ChordView';
 import { SequencerView } from './SequencerView';
 
-export const LoopPage: React.FC = React.memo(() => {
+export const LoopPage = React.memo(function LoopPage() {
   const activeTab = useAppStore((s) => s.activeTab);
   return (
     <>

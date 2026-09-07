@@ -41,6 +41,10 @@ import { Slider } from '@/components/ui/Slider';
 /** Fixed width (px) of the note-name column, shared by the header spacer. */
 const LABEL_WIDTH = 44;
 
+interface LeadMarkerViewProps {
+  column: number;
+}
+
 /**
  * The one marker. Not two: the selection cursor and the playback playhead
  * both meant "this column", so they are drawn once, the way a DAW does —
@@ -55,16 +59,22 @@ const LABEL_WIDTH = 44;
  * note-name column's width and strides by LEAD_CELL_WIDTH — the same
  * constant the header buttons size themselves with.
  */
-export const LeadMarkerView: React.FC<{ column: number }> = ({ column }) => (
-  <div
-    className="pointer-events-none absolute top-0 bottom-0 bg-primary/20 ring-1 ring-inset ring-primary"
-    style={{
-      width: LEAD_CELL_WIDTH,
-      left: LABEL_WIDTH,
-      transform: `translateX(${column * LEAD_CELL_WIDTH}px)`,
-    }}
-  />
-);
+export function LeadMarkerView({ column }: LeadMarkerViewProps) {
+  return (
+    <div
+      className="pointer-events-none absolute top-0 bottom-0 bg-primary/20 ring-1 ring-inset ring-primary"
+      style={{
+        width: LEAD_CELL_WIDTH,
+        left: LABEL_WIDTH,
+        transform: `translateX(${column * LEAD_CELL_WIDTH}px)`,
+      }}
+    />
+  );
+}
+
+interface LeadMarkerProps {
+  columns: number;
+}
 
 /**
  * The marker, subscribed. The subscription lives HERE and not in
@@ -75,10 +85,10 @@ export const LeadMarkerView: React.FC<{ column: number }> = ({ column }) => (
  * to move one translateX. This component draws one div and nothing else, so
  * that is all a step now costs.
  */
-export const LeadMarker: React.FC<{ columns: number }> = ({ columns }) => {
+export function LeadMarker({ columns }: LeadMarkerProps) {
   const column = useLeadMarkerColumn(columns);
   return <LeadMarkerView column={column} />;
-};
+}
 
 // Memoized: props are stable across clock ticks, so the cells never re-render
 // when only the playhead moves.
@@ -348,7 +358,7 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
   );
 });
 
-export const LeadMelodyGrid: React.FC = () => {
+export function LeadMelodyGrid() {
   // Mounted here, not in SynthView: the step used to arrive as a prop, so all
   // 174 JSX nodes of the 1208-line SynthView reconciled 8x/sec to move one
   // translateX. LeadMelodyGrid is rendered exactly once (SynthView.tsx, in
@@ -645,4 +655,4 @@ export const LeadMelodyGrid: React.FC = () => {
       </div>
     </div>
   );
-};
+}

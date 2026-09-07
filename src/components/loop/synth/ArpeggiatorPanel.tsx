@@ -12,7 +12,7 @@ import { useSynthChannel } from "./useSynthChannel";
  * with no wiring. Its identity colour is `module-arp` (docs/design.md
  * §6.5); the token is named in the class strings that moved with the markup.
  */
-export const ArpeggiatorPanel: React.FC = () => {
+export function ArpeggiatorPanel() {
   const { params, onChangeParams, tintClass } = useSynthChannel();
   // 5. Arpeggiator
   return (
@@ -115,4 +115,4 @@ export const ArpeggiatorPanel: React.FC = () => {
             </div>
           </PanelCard>
   );
-};
+}

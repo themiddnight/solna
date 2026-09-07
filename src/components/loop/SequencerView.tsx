@@ -33,7 +33,7 @@ import type { SequencerTrack } from "@/types";
 // not (CLAUDE.md, layer 1).
 const DRUM_KIT_NAMES = Object.keys(DRUM_KITS);
 
-export const SequencerView: React.FC = React.memo(() => {
+export const SequencerView = React.memo(function SequencerView() {
   // Sequencer/transport/synth state + setters (named after the old props so the
   // rest of the component body is unchanged).
   const tracks = useAppStore((s) => s.sequencerTracks);

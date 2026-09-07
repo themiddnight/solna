@@ -125,7 +125,7 @@ interface AudioVisualizerProps {
   variant?: 'panel' | 'inline';
 }
 
-export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
+export const AudioVisualizer = React.memo(function AudioVisualizer({
   mode: initialMode = 'wave',
   className = '',
   height = 40,
@@ -134,7 +134,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
   onModeChange,
   source,
   variant = 'panel',
-}) => {
+}: AudioVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [internalMode, setInternalMode] = useState<VisualizerMode>(initialMode);

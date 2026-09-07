@@ -27,7 +27,7 @@ interface ChannelStripProps {
   max: number;
 }
 
-export const ChannelStrip: React.FC<ChannelStripProps> = ({
+export function ChannelStrip({
   idPrefix,
   label,
   volume,
@@ -36,7 +36,7 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
   showReadout = true,
   sliderClassName = "range range-xs range-accent",
   max,
-}) => {
+}: ChannelStripProps) {
   // idPrefix is the layer slug ("chord"/"bass"); the original tooltip reads
   // "Chord Layer Gain: X%" / "Bass Layer Gain: X%".
   const layerName = idPrefix.charAt(0).toUpperCase() + idPrefix.slice(1);
@@ -65,4 +65,4 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
       </div>
     </div>
   );
-};
+}

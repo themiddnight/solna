@@ -46,6 +46,13 @@ export function layerToggleTarget(current: Layer, target: Layer): ViewMode | nul
   return current === target ? null : defaultTabForLayer(target);
 }
 
+interface TabButtonProps {
+  view: ViewMode;
+  activeTab: ViewMode;
+  onSelect: (view: ViewMode) => void;
+  labelClassName?: string;
+}
+
 /**
  * One view-switch button. Deliberately NOT daisyUI's `tab` component: an
  * automation group joins this button to a transport control, and daisyUI's
@@ -55,12 +62,7 @@ export function layerToggleTarget(current: Layer, target: Layer): ViewMode | nul
  *
  * Icon and label come from VIEW_META, never from a local literal.
  */
-export const TabButton: React.FC<{
-  view: ViewMode;
-  activeTab: ViewMode;
-  onSelect: (view: ViewMode) => void;
-  labelClassName?: string;
-}> = ({ view, activeTab, onSelect, labelClassName }) => {
+export function TabButton({ view, activeTab, onSelect, labelClassName }: TabButtonProps) {
   const isActive = activeTab === view;
   const { icon: Icon, tabLabel } = VIEW_META[view];
 
@@ -80,17 +82,22 @@ export const TabButton: React.FC<{
       <span className={labelClassName ?? 'truncate hidden xl:inline'}>{tabLabel}</span>
     </button>
   );
-};
+}
+
+interface ScaleSelectsProps {
+  idPrefix: string;
+  stacked?: boolean;
+}
 
 /**
  * The two master scale selects. They render twice — inline from `md` up, and
  * inside a dropdown below it — so each instance takes its own id prefix rather
  * than duplicating ids into the DOM (the hidden copy is still rendered).
  */
-export const ScaleSelects: React.FC<{ idPrefix: string; stacked?: boolean }> = ({
+export function ScaleSelects({
   idPrefix,
   stacked,
-}) => {
+}: ScaleSelectsProps) {
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const setScaleRoot = useAppStore((s) => s.setScaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
@@ -130,7 +137,13 @@ export const ScaleSelects: React.FC<{ idPrefix: string; stacked?: boolean }> = (
       </select>
     </>
   );
-};
+}
+
+interface ProjectNameLabelProps {
+  layer: Layer;
+  currentProjectId: string | null;
+  currentProjectName: string | null;
+}
 
 /**
  * The current project's name, song layer only. Takes `layer` as a prop
@@ -140,11 +153,7 @@ export const ScaleSelects: React.FC<{ idPrefix: string; stacked?: boolean }> = (
  * never reflects a test's `setState` (see .claude/rules/testing.md) — there is
  * no way to reach the song layer through a rendered `<Header />` in a test.
  */
-export const ProjectNameLabel: React.FC<{
-  layer: Layer;
-  currentProjectId: string | null;
-  currentProjectName: string | null;
-}> = ({ layer, currentProjectId, currentProjectName }) => {
+export function ProjectNameLabel({ layer, currentProjectId, currentProjectName }: ProjectNameLabelProps) {
   if (layer !== 'song') return null;
   const label = sessionLabel(currentProjectId, currentProjectName);
   return (
@@ -158,7 +167,7 @@ export const ProjectNameLabel: React.FC<{
       {label}
     </span>
   );
-};
+}
 
 /** Shared shell for every header group: the daisyUI join plus this app's chrome. */
 const NAV_GROUP_CLASS =
@@ -196,7 +205,7 @@ export function persistTheme(theme: SolnaTheme, storage?: Pick<Storage, 'setItem
   persistGuardedStorageValue(THEME_STORAGE_KEY, theme, storage);
 }
 
-export const Header: React.FC = React.memo(() => {
+export const Header = React.memo(function Header() {
   const activeTab = useAppStore((s) => s.activeTab);
   const layer = layerForTab(activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);

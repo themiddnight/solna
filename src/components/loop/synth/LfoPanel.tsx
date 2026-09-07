@@ -12,7 +12,7 @@ import { useSynthChannel } from "./useSynthChannel";
  * with no wiring. Its identity colour is `module-lfo` (docs/design.md
  * §6.5); the token is named in the class strings that moved with the markup.
  */
-export const LfoPanel: React.FC = () => {
+export function LfoPanel() {
   const { params, onChangeParams, tintClass } = useSynthChannel();
   // 4. LFO & Master Pitch
   return (
@@ -94,4 +94,4 @@ export const LfoPanel: React.FC = () => {
             </div>
           </PanelCard>
   );
-};
+}

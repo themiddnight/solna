@@ -16,7 +16,7 @@ const AVAILABLE_TARGETS = [
   { key: 'notes', label: 'Keyboard Notes (Note On/Off)' },
 ];
 
-export const MidiSettingsModal: React.FC = () => {
+export function MidiSettingsModal() {
   const isOpen = useAppStore((s) => s.isMidiSettingsOpen);
   const setIsOpen = useAppStore((s) => s.setIsMidiSettingsOpen);
   const midiMappings = useAppStore((s) => s.midiMappings);
@@ -278,4 +278,4 @@ export const MidiSettingsModal: React.FC = () => {
       </div>
     </Modal>
   );
-};
+}

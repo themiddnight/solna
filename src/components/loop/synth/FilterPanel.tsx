@@ -12,7 +12,7 @@ import { useSynthChannel } from "./useSynthChannel";
  * wiring. Its identity colour is `module-filter` (docs/design.md §6.5); the
  * token is named in the class strings that moved with the markup.
  */
-export const FilterPanel: React.FC = () => {
+export function FilterPanel() {
   const { params, onChangeParams, tintClass } = useSynthChannel();
   // 2. Filter Section
   return (
@@ -93,4 +93,4 @@ export const FilterPanel: React.FC = () => {
             </div>
           </PanelCard>
   );
-};
+}

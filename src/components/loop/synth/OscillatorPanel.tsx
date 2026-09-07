@@ -12,7 +12,7 @@ import { useSynthChannel } from "./useSynthChannel";
  * with no wiring. Its identity colour is `module-osc` (docs/design.md
  * §6.5); the token is named in the class strings that moved with the markup.
  */
-export const OscillatorPanel: React.FC = () => {
+export function OscillatorPanel() {
   const { params, onChangeParams, tintClass } = useSynthChannel();
   // 1. Oscillators Section
   return (
@@ -88,4 +88,4 @@ export const OscillatorPanel: React.FC = () => {
             </div>
           </PanelCard>
   );
-};
+}

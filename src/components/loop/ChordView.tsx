@@ -133,7 +133,7 @@ export function applyKeyScaleChange(
   return next;
 }
 
-export const ChordView: React.FC = React.memo(() => {
+export const ChordView = React.memo(function ChordView() {
   // ChordView reads the store directly: every value below replaces one of
   // the ~34 props it used to receive from App.tsx.
   const chords = useAppStore((s) => s.chords);

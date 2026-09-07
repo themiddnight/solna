@@ -10,7 +10,7 @@ export const onSelectLoop = (id: string) => loadLoop(id);
  * same atomic loadLoop swap as the Arrange tab, so it changes WHICH loop the
  * editing tabs target.
  */
-export const LoopSelector: React.FC = () => {
+export function LoopSelector() {
   const loops = useAppStore((s) => s.loops);
   const activeLoopId = useAppStore((s) => s.activeLoopId);
   return (
@@ -28,4 +28,4 @@ export const LoopSelector: React.FC = () => {
       ))}
     </select>
   );
-};
+}

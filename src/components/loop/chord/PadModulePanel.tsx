@@ -69,7 +69,7 @@ function PadToggleButton({
   );
 }
 
-export const PadModulePanel: React.FC = () => {
+export function PadModulePanel() {
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
   const padSynthParams = useAppStore((s) => s.padSynthParams);
@@ -260,4 +260,4 @@ export const PadModulePanel: React.FC = () => {
       </div>
     </div>
   );
-};
+}

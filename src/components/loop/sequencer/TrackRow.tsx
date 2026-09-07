@@ -32,8 +32,8 @@ const IS_ON = (value: boolean) => value === true;
  * differences that kept them apart — the pulse overlay and the per-step DOM id
  * — are now StepRow props.
  */
-export const TrackRow: React.FC<TrackRowProps> = React.memo(
-  ({ track, cells, currentStep, isPlaying, onToggleStep, onToggleMute, onPreview }) => {
+export const TrackRow = React.memo(
+  function TrackRow({ track, cells, currentStep, isPlaying, onToggleStep, onToggleMute, onPreview }: TrackRowProps) {
     // Derived from track.id, so they are memoized on it: StepRow is not itself
     // memoized today, so this is not load-bearing yet — it is what makes
     // wrapping StepRow in React.memo later a one-line change instead of a

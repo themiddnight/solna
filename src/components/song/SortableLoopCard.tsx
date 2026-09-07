@@ -61,7 +61,7 @@ export type MixChannelProps = {
 };
 
 /** One compact mixer strip (mute + gain) inside a loop card. */
-export const MixChannel: React.FC<MixChannelProps> = ({
+export function MixChannel({
   idPrefix,
   label,
   volume,
@@ -71,51 +71,53 @@ export const MixChannel: React.FC<MixChannelProps> = ({
   sliderAccent,
   onVolume,
   onToggleMute,
-}) => (
-  <div
-    className={`flex flex-col gap-1 p-2 rounded-box bg-base-100 border border-base-300/60 transition-opacity ${
-      muted ? 'opacity-50' : 'opacity-100'
-    }`}
-  >
-    <div className="flex items-center justify-between gap-1">
-      <div className="flex items-center gap-1.5 min-w-0">
-        {muted ? (
-          <VolumeX className="w-3 h-3 text-base-content/40 shrink-0" />
-        ) : (
-          <Volume2 className="w-3 h-3 text-base-content/70 shrink-0" />
-        )}
-        <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/70 truncate">
-          {label}
+}: MixChannelProps) {
+  return (
+    <div
+      className={`flex flex-col gap-1 p-2 rounded-box bg-base-100 border border-base-300/60 transition-opacity ${
+        muted ? 'opacity-50' : 'opacity-100'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-1">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {muted ? (
+            <VolumeX className="w-3 h-3 text-base-content/40 shrink-0" />
+          ) : (
+            <Volume2 className="w-3 h-3 text-base-content/70 shrink-0" />
+          )}
+          <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/70 truncate">
+            {label}
+          </span>
+        </div>
+        <PowerToggle
+          id={`btn-mute-${idPrefix}`}
+          on={!muted}
+          onToggle={onToggleMute}
+          name={`${label} mute`}
+          tone={tone}
+          size="xs"
+          iconOnly
+          verb={{ on: 'Unmute', off: 'Mute' }}
+        />
+      </div>
+      <div className="flex items-center gap-1.5 mt-0.5">
+        <Slider
+          id={`slider-${idPrefix}`}
+          min={0}
+          max={max}
+          step={0.05}
+          value={volume}
+          onChange={onVolume}
+          className={`range range-xs ${sliderAccent} w-full`}
+          title={`${label} gain`}
+        />
+        <span className="text-[10px] font-mono w-8 text-right shrink-0 text-base-content/80">
+          {Math.round(volume * 100)}%
         </span>
       </div>
-      <PowerToggle
-        id={`btn-mute-${idPrefix}`}
-        on={!muted}
-        onToggle={onToggleMute}
-        name={`${label} mute`}
-        tone={tone}
-        size="xs"
-        iconOnly
-        verb={{ on: 'Unmute', off: 'Mute' }}
-      />
     </div>
-    <div className="flex items-center gap-1.5 mt-0.5">
-      <Slider
-        id={`slider-${idPrefix}`}
-        min={0}
-        max={max}
-        step={0.05}
-        value={volume}
-        onChange={onVolume}
-        className={`range range-xs ${sliderAccent} w-full`}
-        title={`${label} gain`}
-      />
-      <span className="text-[10px] font-mono w-8 text-right shrink-0 text-base-content/80">
-        {Math.round(volume * 100)}%
-      </span>
-    </div>
-  </div>
-);
+  );
+}
 
 /**
  * The loop card's mixer strip, one row per channel, in the order they render.

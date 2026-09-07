@@ -24,13 +24,13 @@ interface WordmarkProps {
  * `sm` the text is hidden and this is the whole target, so it is a
  * requirement, not polish. Typography mirrors murva's Wordmark.
  */
-export const Wordmark: React.FC<WordmarkProps> = ({
+export function Wordmark({
   markOnly = false,
   className = "",
   textClassName = "",
   onClick,
   dirty = false,
-}) => {
+}: WordmarkProps) {
   return (
     <button
       type="button"
@@ -63,4 +63,4 @@ export const Wordmark: React.FC<WordmarkProps> = ({
       )}
     </button>
   );
-};
+}
