@@ -4,7 +4,6 @@ import {
   MAX_BPM,
   MIN_BPM,
   ROOTS,
-  SCALES,
   STEPS_PER_BAR,
   TONAL_CHORD_ALIASES,
   barDurationSec,
@@ -25,6 +24,7 @@ import {
   transposeNoteBySemitones,
   transposeProgression,
 } from './musicTheory';
+import { SCALES } from '@/data/scales';
 import type { ChordItem } from '../types';
 
 const SCALE_KEYS = Object.keys(SCALES);

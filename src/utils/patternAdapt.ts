@@ -2,7 +2,7 @@ import { MAX_STEPS_PER_BAR } from './meter';
 
 /**
  * Array-shaped pattern adaptation: the drum rows, which are dense per-step
- * arrays (`boolean[]` in GENRE_PRESETS, `number[]` in VIBE_DRUM_PATTERNS).
+ * arrays (`boolean[]` throughout DRUM_GRIDS).
  * The event-shaped siblings (RhythmHit[]/BassStep[]) live in eventAdapt.ts.
  *
  * Two rules, and only two (see the spec, "Pattern adaptation"):

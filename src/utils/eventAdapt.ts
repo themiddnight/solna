@@ -1,6 +1,6 @@
 /**
  * Event-shaped pattern adaptation: the sparse, positioned patterns —
- * `RhythmHit[]` (audio/rhythmPatterns.ts) and `BassStep[]`
+ * `RhythmHit[]` (data/chordRhythms.ts) and `BassStep[]`
  * (audio/bassPatterns.ts). The dense drum-row siblings live in patternAdapt.ts.
  *
  * Structurally typed on `{ step, holdSteps? }` on purpose: utils/ must not

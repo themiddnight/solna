@@ -29,6 +29,7 @@ declare module 'bun:test' {
     toEqual(expected: unknown): void;
     toBe(expected: unknown): void;
     toContain(expected: unknown): void;
+    toContainEqual(expected: unknown): void;
     toBeCloseTo(expected: number, numDigits?: number): void;
     toHaveLength(length: number): void;
     toBeTruthy(): void;
