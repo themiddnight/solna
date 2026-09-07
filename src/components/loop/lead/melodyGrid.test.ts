@@ -6,6 +6,9 @@ import {
   leadCellKinds,
   leadColumnCells,
   leadNoteCells,
+  leadNotesInWindow,
+  leadOutOfScaleRows,
+  leadRowLabelTone,
   leadPitchRows,
   leadRowLabel,
   leadResizeLen,
@@ -524,5 +527,129 @@ describe('leadRowLabel', () => {
     expect(rows).toContain('A#4');
     expect(rows.some((r) => r.includes('b'))).toBe(false);
     expect(isRootNote('A#4', 'A#')).toBe(true);
+  });
+});
+
+describe('leadNotesInWindow', () => {
+  const stride = TICKS_PER_SIXTEENTH;
+
+  test('collects every note name drawn in the window', () => {
+    const m = emptyBar();
+    m[0] = [{ note: 'C4', len: 2 }];
+    m[4] = [{ note: 'F#4', len: 2 }, { note: 'A4', len: 2 }];
+    expect([...leadNotesInWindow(m, 16, 16, stride)].sort()).toEqual(['A4', 'C4', 'F#4']);
+  });
+
+  test('a note the resolution cannot reach is not in the window', () => {
+    const m = emptyBar();
+    // Stride 2 visits even ticks only, so tick 1 is dormant — leadCellKinds
+    // never looks it up either, which is exactly the row that must not appear.
+    m[1] = [{ note: 'F#4', len: 2 }];
+    expect(leadNotesInWindow(m, 16, 16, stride).has('F#4')).toBe(false);
+  });
+
+  test('a note past the last column is not in the window', () => {
+    const m = emptyBar();
+    m[20] = [{ note: 'F#4', len: 2 }]; // column 10, beyond a 4-column window
+    expect(leadNotesInWindow(m, 4, 16, stride).has('F#4')).toBe(false);
+  });
+
+  test('an empty melody yields an empty set', () => {
+    expect(leadNotesInWindow(emptyBar(), 16, 16, stride).size).toBe(0);
+  });
+});
+
+describe('leadPitchRows — borrowed rows', () => {
+  test('an out-of-scale note gets a row at its own pitch position', () => {
+    expect(leadPitchRows('scale-locked', 'C', 'Major', 4, 1, new Set(['F#4']))).toEqual([
+      'B4', 'A4', 'G4', 'F#4', 'F4', 'E4', 'D4', 'C4',
+    ]);
+  });
+
+  test('a note already in the scale adds no second row', () => {
+    expect(leadPitchRows('scale-locked', 'C', 'Major', 4, 1, new Set(['G4', 'C4']))).toEqual(
+      leadPitchRows('scale-locked', 'C', 'Major', 4, 1),
+    );
+  });
+
+  test('no extras is the same list as before extras existed', () => {
+    expect(leadPitchRows('scale-locked', 'C', 'Major', 3, 2, new Set())).toEqual(
+      leadPitchRows('scale-locked', 'C', 'Major', 3, 2),
+    );
+  });
+
+  test('the window is the span the scale rows cover, not the octave label', () => {
+    // D major at octave 4 runs D4..C#5, so C5 is inside the window and C4 —
+    // whose octave label IS 4 — sits below its lowest row and is dropped.
+    expect(leadPitchRows('scale-locked', 'D', 'Major', 4, 1, new Set(['C4', 'C5']))).toEqual([
+      'C#5', 'C5', 'B4', 'A4', 'G4', 'F#4', 'E4', 'D4',
+    ]);
+  });
+
+  test('a note far outside the window is dropped at both ends', () => {
+    const base = leadPitchRows('scale-locked', 'C', 'Major', 4, 1);
+    expect(leadPitchRows('scale-locked', 'C', 'Major', 4, 1, new Set(['F#7', 'F#1']))).toEqual(
+      base,
+    );
+  });
+
+  test('chromatic rows ignore extras — all twelve are already there', () => {
+    expect(leadPitchRows('chromatic', 'C', 'Major', 3, 1, new Set(['C7']))).toEqual(
+      leadPitchRows('chromatic', 'C', 'Major', 3, 1),
+    );
+  });
+});
+
+describe('leadSpanClasses — out of scale', () => {
+  test('an out-of-scale note is drawn in the accent role, not the primary one', () => {
+    expect(leadSpanClasses('start', 'none', true)).toBe(
+      'bg-accent text-accent-content rounded-l-xs rounded-r-xs',
+    );
+  });
+
+  test('the corner and seam rules are the same in either role', () => {
+    expect(leadSpanClasses('body', 'end', true)).toBe(
+      'bg-accent text-accent-content border-l-0 border-r-0',
+    );
+    expect(leadSpanClasses('none', 'start', true)).toBe('');
+  });
+
+  test('omitting the flag keeps the in-scale role', () => {
+    expect(leadSpanClasses('start', 'none')).toBe(leadSpanClasses('start', 'none', false));
+  });
+});
+
+describe('leadOutOfScaleRows', () => {
+  test('flags the rows whose pitch class the scale does not contain', () => {
+    expect(leadOutOfScaleRows(['B4', 'A#4', 'A4'], 'C', 'Major')).toEqual([false, true, false]);
+  });
+
+  test('the answer is a pitch class, so every octave of a row agrees', () => {
+    expect(leadOutOfScaleRows(['F#5', 'F#4', 'F#3'], 'C', 'Major')).toEqual([true, true, true]);
+    expect(leadOutOfScaleRows(['F#5', 'F#4', 'F#3'], 'G', 'Major')).toEqual([
+      false, false, false,
+    ]);
+  });
+
+  test('a scale-locked row list is all in scale until a note is borrowed', () => {
+    const rows = leadPitchRows('scale-locked', 'C', 'Major', 4, 1);
+    expect(leadOutOfScaleRows(rows, 'C', 'Major')).toEqual(rows.map(() => false));
+    const borrowed = leadPitchRows('scale-locked', 'C', 'Major', 4, 1, new Set(['F#4']));
+    expect(leadOutOfScaleRows(borrowed, 'C', 'Major').filter(Boolean)).toHaveLength(1);
+  });
+
+  test('a chromatic list flags the five semitones a 7-note scale leaves out', () => {
+    const rows = leadPitchRows('chromatic', 'C', 'Major', 4, 1);
+    expect(leadOutOfScaleRows(rows, 'C', 'Major').filter(Boolean)).toHaveLength(5);
+  });
+});
+
+describe('leadRowLabelTone', () => {
+  test('an out-of-scale row label names the same accent role its notes do', () => {
+    expect(leadRowLabelTone(true)).toBe('text-accent/80 hover:text-accent');
+  });
+
+  test('an in-scale row label keeps the muted base tone', () => {
+    expect(leadRowLabelTone(false)).toBe('text-base-content/60 hover:text-base-content');
   });
 });

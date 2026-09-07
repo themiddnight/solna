@@ -188,6 +188,20 @@ reach it or because the resolution cannot, and **both tests live in `leadActiveP
 else**; and a change of view never writes — an explicit edit writes, changing meter or resolution
 does not.
 
+**A scale-locked lead grid borrows a row; it never hides a note.** A note outside the key is
+never deleted by a view change — before, it simply had no row to be drawn on, so switching to
+scale-locked made it invisible. `leadPitchRows` now takes the set `leadNotesInWindow` returns —
+the notes the ACTIVE window actually draws, walked in leadCellKinds' own coordinate space — and
+merges any that are out of scale back in as rows. Two consequences. A borrowed row is **derived,
+not stored**: erase its last note and the row goes with it, and a note the resolution or the loop
+length cannot reach conjures no row, because an empty row whose note is invisible reads as a bug
+rather than as preservation. And the window a borrowed row is bounded by is **the span the scale
+rows cover, not the octave suffix** — a scale spills into the next octave label (D major at
+octave 4 runs D4..C#5), so bounding by suffix would admit a C4 that sits below the grid's own
+lowest row. Out-of-scale rows name `--color-accent` in both views — `leadSpanClasses`' third
+argument for the notes, `leadRowLabelTone` for the label — so in chromatic view the accent
+labels also read as the semitones the key leaves out.
+
 **`persist` serialises on every `set()`; only the `localStorage` write is coalesced.** Every
 `set()` that touches a key returned by `partialize` re-serialises that slice on the spot. The
 write itself goes through `utils/coalescedStorage.ts`, which buffers it to an idle callback and

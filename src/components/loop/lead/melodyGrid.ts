@@ -1,4 +1,4 @@
-import { getScaleNotesInOctave, ROOTS } from '@/utils/musicTheory';
+import { getScaleNotesInOctave, isNoteInScale, ROOTS } from '@/utils/musicTheory';
 import { spellNoteInKey } from '@/utils/noteSpelling';
 import type { LeadMelodyView } from '@/store/types';
 import { leadStoredIndexAt, type LeadNote } from '@/audio/leadMelody';
@@ -32,6 +32,7 @@ export function leadPitchRows(
   scaleType: string,
   lowestOctave: number,
   octaveCount: number,
+  borrowedNotes?: ReadonlySet<string>,
 ): string[] {
   const rows: string[] = [];
   for (let oct = lowestOctave + octaveCount - 1; oct >= lowestOctave; oct--) {
@@ -43,7 +44,56 @@ export function leadPitchRows(
       rows.push(notes[i]);
     }
   }
-  return rows;
+  // Chromatic already draws all twelve, so a borrowed row is a scale-locked
+  // concept only and passing a set there is a no-op rather than an error.
+  if (view === 'chromatic' || !borrowedNotes?.size) return rows;
+  return mergeBorrowedRows(rows, borrowedNotes);
+}
+
+/**
+ * A row name's absolute semitone: the key the merged list sorts by, and the
+ * measure a borrowed row is bounded against. Rows are ROOTS-spelled by
+ * contract (see leadRowLabel), so the pitch class is a plain ROOTS index;
+ * anything that is not parses to NaN and is dropped rather than sorted to an
+ * arbitrary position.
+ */
+function noteSemitone(note: string): number {
+  const match = /^([A-G]#?)(-?\d+)$/.exec(note);
+  if (!match) return Number.NaN;
+  const pitchClass = (ROOTS as readonly string[]).indexOf(match[1]);
+  return pitchClass < 0 ? Number.NaN : pitchClass + Number(match[2]) * 12;
+}
+
+/**
+ * Scale rows plus the out-of-scale notes that are actually drawn, ordered
+ * highest first.
+ *
+ * The window a borrowed row must fall inside is **the span the scale rows
+ * cover**, not the octave suffix: a scale's degrees spill into the next octave
+ * label (D major at octave 4 runs D4..C#5), so bounding by suffix would admit
+ * a C4 that sits below the grid's own lowest row and place it above one.
+ *
+ * The whole list is re-sorted by semitone rather than each note being spliced
+ * into its octave band. That is not a behaviour change for the base list: the
+ * bands the loop above concatenates are already globally descending, because a
+ * band's top sits at most eleven semitones above its root and the next band's
+ * root is twelve below.
+ */
+function mergeBorrowedRows(rows: readonly string[], borrowed: ReadonlySet<string>): string[] {
+  if (!rows.length) return [...rows];
+  const highest = noteSemitone(rows[0]);
+  const lowest = noteSemitone(rows[rows.length - 1]);
+  const seen = new Set(rows);
+  const merged = [...rows];
+  for (const note of borrowed) {
+    if (seen.has(note)) continue;
+    const semitone = noteSemitone(note);
+    if (!(semitone >= lowest && semitone <= highest)) continue;
+    seen.add(note);
+    merged.push(note);
+  }
+  if (merged.length === rows.length) return merged;
+  return merged.sort((a, b) => noteSemitone(b) - noteSemitone(a));
 }
 
 /**
@@ -75,6 +125,37 @@ export function leadRowLabel(
 export function isBlackKey(note: string): boolean {
   const pitchClass = note.replace(/\d+$/, '');
   return pitchClass.includes('#') || pitchClass.includes('b');
+}
+
+/**
+ * One flag per row: does the active scale contain this row's pitch class?
+ *
+ * Answered for the whole list at once, and by the grid's PARENT, because both
+ * things that read it — the note-name column and the cell grid — need the same
+ * answer and `isNoteInScale` builds a tonal note behind each call. Per cell it
+ * would be rows x columns calls for at most one answer per row.
+ *
+ * It is a question about the row, not about the view: in chromatic view it
+ * flags the semitones the key leaves out, and in scale-locked view it flags
+ * exactly the borrowed rows leadPitchRows merged in.
+ */
+export function leadOutOfScaleRows(
+  rows: readonly string[],
+  root: string,
+  scaleType: string,
+): boolean[] {
+  return rows.map((note) => !isNoteInScale(note, root, scaleType));
+}
+
+/**
+ * The colour half of a row label's classes. A borrowed row names the same
+ * accent role its notes are drawn in (leadSpanClasses), so the label and the
+ * cells state the same thing — the row is outside the key.
+ */
+export function leadRowLabelTone(outOfScale: boolean): string {
+  return outOfScale
+    ? 'text-accent/80 hover:text-accent'
+    : 'text-base-content/60 hover:text-base-content';
 }
 
 /** True when `note`'s pitch class is the active tonic (`scaleRoot`). */
@@ -162,6 +243,30 @@ export function leadCellKinds(
 }
 
 /**
+ * The set of note names a window actually DRAWS — the same walk leadCellKinds
+ * makes, answering the question one step earlier: which rows must exist.
+ *
+ * It shares that walk's coordinate space on purpose. A note the resolution
+ * cannot reach or one past the last column is dormant, never looked up and
+ * never drawn, so it must not conjure a borrowed row either: an empty row
+ * whose note is invisible reads as a bug, not as preservation.
+ */
+export function leadNotesInWindow(
+  melody: readonly LeadNote[][],
+  columns: number,
+  stepsPerBar: number,
+  stride: number,
+): Set<string> {
+  const notes = new Set<string>();
+  for (let col = 0; col < columns; col++) {
+    const row = melody[leadStoredIndexAt(col, stepsPerBar, stride)];
+    if (!row) continue;
+    for (const n of row) notes.add(n.note);
+  }
+  return notes;
+}
+
+/**
  * Whether this cell draws the span's right-edge grab handle. A one-cell note
  * is a lone 'start', so it ends its own span — hence the `next` argument, the
  * same one leadSpanClasses needs. Its own function because the renderer
@@ -238,9 +343,15 @@ export function leadResizeLen(
  * right corners. A one-step note is a lone 'start', so it is also the end of
  * its span — hence the `next` argument.
  */
-export function leadSpanClasses(kind: LeadCellKind, next: LeadCellKind): string {
+export function leadSpanClasses(
+  kind: LeadCellKind,
+  next: LeadCellKind,
+  outOfScale = false,
+): string {
   if (kind === 'none') return '';
-  const parts = ['bg-primary text-primary-content'];
+  const parts = [
+    outOfScale ? 'bg-accent text-accent-content' : 'bg-primary text-primary-content',
+  ];
   // A seam between two cells of one note is TWO borders, not one: the left of
   // the later cell and the right of the earlier one. Dropping only the left
   // left a visible grid line down the middle of every long note.

@@ -21,8 +21,11 @@ import {
   leadCellKinds,
   leadColumnCells,
   leadCursorKeyTarget,
+  leadNotesInWindow,
+  leadOutOfScaleRows,
   leadPitchRows,
   leadRowLabel,
+  leadRowLabelTone,
   leadSpanClasses,
   resolveLeadCellSpan,
 } from './melodyGrid';
@@ -98,6 +101,7 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   melody,
   rows,
   rowLabels,
+  outOfScale,
   root,
   onResize,
   stride,
@@ -109,6 +113,7 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   melody: readonly LeadNote[][];
   rows: readonly string[];
   rowLabels: readonly string[];
+  outOfScale: readonly boolean[];
   root: string;
   onResize: (stepIndex: number, note: string, len: number) => void;
   stride: number;
@@ -168,6 +173,9 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
         // it three calls a row and put spelling knowledge — and two more
         // props — inside a component that only draws cells.
         const rowLabel = rowLabels[rowIndex];
+        // Constant for the whole row, like `inactive` above and for the same
+        // reason: the parent already answered it once per row.
+        const rowOutOfScale = outOfScale[rowIndex];
         return (
           <React.Fragment key={note}>
             {Array.from({ length: columns }, (_, col) => {
@@ -179,7 +187,7 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
               const idx = resolveStepIndex(col);
               const kind = rowKinds[col] ?? 'none';
               const nextKind = rowKinds[col + 1] ?? 'none';
-              const span = leadSpanClasses(kind, nextKind);
+              const span = leadSpanClasses(kind, nextKind, rowOutOfScale);
               // The same two kinds leadSpanClasses already needed answer this,
               // so the grab handle costs nothing beyond a lookup the row loop
               // has made anyway.
@@ -401,10 +409,37 @@ export function LeadMelodyGrid() {
   const colsPerBar = columnsPerBar(stepsPerBar, stride);
   const cellsPerBar = useMemo(() => leadColumnCells(meter, stride), [meter, stride]);
 
+  const columns = leadLoopLength * colsPerBar;
+
+  // The rows a scale-locked view would otherwise drop. A note outside the key
+  // is never deleted — it just had no row to be drawn on, so switching to
+  // scale-locked hid it. Borrowing the row back is derived, not stored: erase
+  // the last note on a borrowed row and the row goes with it, exactly as an
+  // in-scale row keeps its place because the scale still names it.
+  const borrowedNotes = useMemo(
+    () => leadNotesInWindow(leadMelodySteps, columns, stepsPerBar, stride),
+    [leadMelodySteps, columns, stepsPerBar, stride],
+  );
+
   const rows = useMemo(
     () =>
-      leadPitchRows(leadMelodyView, scaleRoot, scaleType, leadMelodyOctave, LEAD_WINDOW_OCTAVES),
-    [leadMelodyView, scaleRoot, scaleType, leadMelodyOctave],
+      leadPitchRows(
+        leadMelodyView,
+        scaleRoot,
+        scaleType,
+        leadMelodyOctave,
+        LEAD_WINDOW_OCTAVES,
+        borrowedNotes,
+      ),
+    [leadMelodyView, scaleRoot, scaleType, leadMelodyOctave, borrowedNotes],
+  );
+
+  // Memoized beside rowLabels and for the same reason: both readers — the note
+  // column here and the cell grid below — need one answer per row, and
+  // isNoteInScale builds a tonal note behind every call.
+  const outOfScale = useMemo(
+    () => leadOutOfScaleRows(rows, scaleRoot, scaleType),
+    [rows, scaleRoot, scaleType],
   );
 
   // One label per row, computed here because both the note column and the cell
@@ -459,7 +494,6 @@ export function LeadMelodyGrid() {
     [synthParams],
   );
 
-  const columns = leadLoopLength * colsPerBar;
   // Clamped again HERE, not only on write: a meter or loop-length change can
   // narrow the window under a cursor that was legal when it was set.
   const cursor = clampLeadCursor(leadCursor, leadLoopLength, stepsPerBar, stride);
@@ -624,7 +658,7 @@ export function LeadMelodyGrid() {
                     type="button"
                     onClick={() => previewNote(note)}
                     title={`Preview ${rowLabels[rowIndex]}`}
-                    className="h-5 flex items-center justify-end pr-2 text-[10px] font-mono leading-none text-base-content/60 hover:text-base-content cursor-pointer"
+                    className={`h-5 flex items-center justify-end pr-2 text-[10px] font-mono leading-none cursor-pointer ${leadRowLabelTone(outOfScale[rowIndex])}`}
                   >
                     {rowLabels[rowIndex]}
                   </button>
@@ -638,6 +672,7 @@ export function LeadMelodyGrid() {
                   melody={leadMelodySteps}
                   rows={rows}
                   rowLabels={rowLabels}
+                  outOfScale={outOfScale}
                   root={scaleRoot}
                   onResize={onResize}
                   stride={stride}
