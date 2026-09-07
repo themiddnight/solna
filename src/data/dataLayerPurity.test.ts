@@ -9,9 +9,10 @@
  * option, a changed `allowTypeImports` default, a selector that stops matching.
  *
  * Severity is asserted, not just presence. `bun run verify` tolerates warnings,
- * and the global `no-restricted-syntax` entry this block replaces is 'warn', so
- * a block that landed at the wrong severity would pass a presence-only test and
- * enforce nothing.
+ * so a block that landed at 'warn' would pass a presence-only test and enforce
+ * nothing. The global `no-restricted-syntax` entry this block replaces is now
+ * 'error' too, but that is the global entry's business: this block sets its own
+ * severity and nothing propagates one to the other.
  */
 import { describe, expect, test } from 'bun:test';
 import { ESLint } from 'eslint';
@@ -164,10 +165,10 @@ describe('src/data/ stateless-literal ban', () => {
 });
 
 describe('src/data/ inherits the global bans it replaces', () => {
-  // The block replaces the global no-restricted-syntax entry (eslint.config.js
-  // :58-87), which carries the React.FC and `../../` bans. Those are as true
-  // inside src/data/ as anywhere, and the replacement must re-declare them —
-  // at 'error' here, where the global entry is 'warn'.
+  // The block replaces the global no-restricted-syntax entry, which carries
+  // the React.FC and `../../` bans. Those are as true inside src/data/ as
+  // anywhere, and the replacement must re-declare them — at 'error', which a
+  // replacement block does not inherit.
   test('a ../../ import is an error, not a warning', async () => {
     expect(
       await guardedMessages(

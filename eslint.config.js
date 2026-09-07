@@ -35,11 +35,12 @@ export default tseslint.config(
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
       // Decision D1: `interface XProps`, never `type XProps = {...}`.
-      '@typescript-eslint/consistent-type-definitions': ['warn', 'interface'],
+      '@typescript-eslint/consistent-type-definitions': ['error', 'interface'],
       // Phase 2 moved this ban out of no-restricted-syntax: one rule id has one
       // severity, and that rule still carries the React.FC and ../../ bans,
-      // which stay `warn` until Phase 3. Splitting the confirm ban into the two
-      // rules below is what makes it expressible at `error` on its own.
+      // which were `warn` at the time. Splitting the confirm ban into the two
+      // rules below is what made it expressible at `error` on its own; the
+      // split stands because the three bans still have separate lives.
       //
       // Native prompts block the main thread — the transport's clock lives
       // there — and cannot be themed. Use ui/ConfirmDialog or ui/Modal.
@@ -55,8 +56,12 @@ export default tseslint.config(
         { object: 'window', property: 'alert', message: 'Use an inline role="alert" notice — window.alert blocks the main thread and cannot be themed.' },
         { object: 'window', property: 'prompt', message: 'Use ui/Modal with a form — window.prompt blocks the main thread and cannot be themed.' },
       ],
+      // Per decision D5 both bans landed as `warn` and flipped to `error` in
+      // the change that emptied them: there are zero React.FC components and
+      // zero `../../` specifiers left, so a new one is a mistake, not a
+      // leftover.
       'no-restricted-syntax': [
-        'warn',
+        'error',
         {
           selector: "TSTypeReference[typeName.name='FC']",
           message: 'Use `export function X(props: XProps)` instead of React.FC (decision D1).',
@@ -191,12 +196,11 @@ export default tseslint.config(
         { name: 'prompt', message: 'Use ui/Modal with a form — prompt() blocks the main thread and cannot be themed.' },
       ],
 
-      // This REPLACES the global no-restricted-syntax entry (:58-87), so its
-      // React.FC and `../../` bans are re-declared verbatim first — at 'error'
-      // here, where the global entry is 'warn'. Neither is reachable in
-      // practice (no JSX in a table, and `@/` covers cross-folder), but leaving
-      // them out would silently un-ban `../../` in the one folder where every
-      // import is a type import.
+      // This REPLACES the global no-restricted-syntax entry above, so its
+      // React.FC and `../../` bans are re-declared verbatim first. Both are now
+      // 'error' globally too, so the severities agree — but the re-declaration
+      // is still load-bearing: leaving them out would silently un-ban `../../`
+      // in the one folder where every import is a type import.
       'no-restricted-syntax': [
         'error',
         {

@@ -26,9 +26,14 @@ bun run verify         # test + lint + eslint + check:keys + check:drums + check
 ```
 
 `bun run verify` is the completion gate — run it before claiming work is done. It runs
-`bun run eslint`, which must report zero errors; warnings are tolerated until the phase that
-fixes them flips the rule to `error` (see the ESLint rule matrix in
-`docs/superpowers/specs/2026-09-04-codebase-hygiene-and-restructure-design.md`). `check:contrast`
+`bun run eslint`, which currently reports **nothing at all** — no errors and no warnings — and
+that is the state to keep it in. Per decision D5 a new rule lands as `warn` and flips to
+`error` in the change that empties it, which is why the `React.FC` ban, the `../../` ban and
+`consistent-type-definitions` are now errors (see the ESLint rule matrix in
+`docs/superpowers/specs/2026-09-04-codebase-hygiene-and-restructure-design.md`).
+`react-hooks/exhaustive-deps` and `complexity` stay at `warn` deliberately: both have
+legitimate exceptions, so each remaining one carries a line disable naming its reason rather
+than a rule relaxed for everybody. `check:contrast`
 holds the drum palette above the AA floor in both themes; the closest pair sits a few thousandths
 above 4.5, so that step is a gate the palette can fail, not a report of what the palette is.
 
