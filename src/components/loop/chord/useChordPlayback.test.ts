@@ -17,7 +17,7 @@ import {
 } from './useChordPlayback';
 import { CHORD_RHYTHMS, type RhythmPattern } from '@/data/chordRhythms';
 import { BASS_PATTERNS, type BassPattern, type BassStepChoice } from '@/data/bassPatterns';
-import { useAppStore } from '../../../store/store';
+import { useAppStore } from '@/store/store';
 
 const BAR = 16;
 

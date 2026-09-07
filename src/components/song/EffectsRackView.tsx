@@ -1,7 +1,7 @@
 import React from "react";
 import { Waves, Activity, Sparkles, Sliders } from "lucide-react";
-import { MasterEffects } from "../../types";
-import { useAppStore } from "../../store/store";
+import { MasterEffects } from "@/types";
+import { useAppStore } from "@/store/store";
 import { Knob } from "../ui/Knob";
 import { PowerToggle } from "../ui/PowerToggle";
 import { ViewHeader } from "../ui/ViewHeader";

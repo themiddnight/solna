@@ -30,8 +30,8 @@ import {
   sortableKeyboardCoordinates,
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
-import { ChordItem, CustomChordProgressionItem } from "../../types";
-import { useAppStore } from "../../store/store";
+import { ChordItem, CustomChordProgressionItem } from "@/types";
+import { useAppStore } from "@/store/store";
 import {
   useChordPlayback,
   resolvePlaybackRhythmPattern,
@@ -47,8 +47,8 @@ import {
   startPatternLoop,
   stopBassPreviewSource,
   stopChordPreviewSource,
-} from "../../audio/playback/chordPlayback";
-import { getMeter } from "../../utils/meter";
+} from "@/audio/playback/chordPlayback";
+import { getMeter } from "@/utils/meter";
 import { SCALES } from "@/data/scales";
 import {
   deriveChordNotes,
@@ -57,7 +57,7 @@ import {
   getDiatonicChordForDegree,
   getBorrowedChords,
   formatChordLabel,
-} from "../../utils/musicTheory";
+} from "@/utils/musicTheory";
 import { formatKeyLabel } from "@/utils/noteSpelling";
 import { isProgressionAvailable } from "./chord/progressionAvailability";
 
@@ -75,7 +75,7 @@ import { SortableChordCard } from "./chord/SortableChordCard";
 import { ChordModulePanel } from "./chord/ChordModulePanel";
 import { BassModulePanel } from "./chord/BassModulePanel";
 import { PadModulePanel } from "./chord/PadModulePanel";
-import { beatsPerBarFor, resolveBeatCounter } from "../../utils/playhead";
+import { beatsPerBarFor, resolveBeatCounter } from "@/utils/playhead";
 
 import { CHORD_PROGRESSIONS } from "@/data/chordProgressions";
 

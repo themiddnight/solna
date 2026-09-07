@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { SequencerView } from './SequencerView';
-import { useAppStore } from '../../store/store';
+import { useAppStore } from '@/store/store';
 import { FIELD_LABEL, FIELD_LANE, FIELD_SELECT } from '../ui/fieldClasses';
 import { DRUM_TYPES } from '@/data/drumKits';
 
@@ -160,7 +160,7 @@ describe('SequencerView grid options carry their meter', () => {
 import { SequencerGrid } from './sequencer/SequencerGrid';
 import { stepPublisher } from '../playbackStep';
 import { stepCells } from '../sequencerGrid';
-import { getMeter } from '../../utils/meter';
+import { getMeter } from '@/utils/meter';
 import { StepHeader } from '../ui/StepHeader';
 import { TrackRow } from './sequencer/TrackRow';
 import { useCurrentStep } from '../playbackStep';

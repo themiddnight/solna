@@ -1,6 +1,6 @@
 import React from "react";
 import { Sparkles, Sun, Flame, Waves, Compass } from "lucide-react";
-import { SynthParams } from "../../types";
+import { SynthParams } from "@/types";
 import { Knob } from "../ui/Knob";
 import { PanelCard } from "../ui/PanelCard";
 

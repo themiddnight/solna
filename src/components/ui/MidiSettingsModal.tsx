@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sliders, Radio, Trash2, Plus, RotateCcw } from 'lucide-react';
-import { useAppStore } from '../../store/store';
-import type { MidiMapping } from '../../store/types';
+import { useAppStore } from '@/store/store';
+import type { MidiMapping } from '@/store/types';
 import { SECTION_HEADER } from './fieldClasses';
 import { IconButton } from './IconButton';
 import { Modal } from './Modal';

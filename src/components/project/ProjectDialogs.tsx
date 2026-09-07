@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { ProjectMeta } from '../../store/projectFormat';
+import type { ProjectMeta } from '@/store/projectFormat';
 import { Modal } from '../ui/Modal';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { isValidProjectName } from './projectManagerFlow';

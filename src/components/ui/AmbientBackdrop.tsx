@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { audioEngine } from '../../audio/engine';
-import { useAppStore } from '../../store/store';
-import { aggregatePlayerState } from '../../store/transportSlice';
+import { audioEngine } from '@/audio/engine';
+import { useAppStore } from '@/store/store';
+import { aggregatePlayerState } from '@/store/transportSlice';
 import {
   createThemePalette,
   rgbToCss,
   subscribeToThemeChange,
   type Rgb,
   type ThemeToken,
-} from '../../utils/themeColor';
+} from '@/utils/themeColor';
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 

@@ -1,5 +1,5 @@
 import { audioEngine } from "../engine";
-import type { SynthParams } from "../../types";
+import type { SynthParams } from "@/types";
 
 // Engine bridge for the component-layer playback hooks (layering rules 1+3):
 // the store-reading hooks (useChordPlayback, useSequencerPlayback) moved out

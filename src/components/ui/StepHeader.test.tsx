@@ -3,7 +3,7 @@ import { renderToString } from 'react-dom/server';
 import { StepHeader } from './StepHeader';
 import { STEP_ROW_CLASS } from './StepRow';
 import { stepCells } from '../sequencerGrid';
-import { getMeter } from '../../utils/meter';
+import { getMeter } from '@/utils/meter';
 
 const cells = stepCells(getMeter('4/4'));
 

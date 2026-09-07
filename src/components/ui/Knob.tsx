@@ -12,8 +12,8 @@ import {
   snapToStep,
   tToValue,
   valueToT,
-} from '../../utils/knob';
-import type { KeyDir, KnobIndicator, KnobScale, KnobSize } from '../../utils/knob';
+} from '@/utils/knob';
+import type { KeyDir, KnobIndicator, KnobScale, KnobSize } from '@/utils/knob';
 
 export type { KnobIndicator, KnobScale, KnobSize };
 

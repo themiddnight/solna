@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
 import { SynthView } from './SynthView';
-import { resolveSynthControlChannel } from '../../utils/synthControl';
-import type { SynthParamChannel } from '../../utils/synthControl';
-import type { SynthParams } from '../../types';
+import { resolveSynthControlChannel } from '@/utils/synthControl';
+import type { SynthParamChannel } from '@/utils/synthControl';
+import type { SynthParams } from '@/types';
 
 // A black key is half its own width left of the white-key boundary it
 // straddles, so its offset is (white keys before it) strides minus half a black

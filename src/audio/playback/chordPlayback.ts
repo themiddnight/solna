@@ -3,15 +3,15 @@ import { equalPowerVelocityScale } from "../chordRhythms";
 import type { RhythmPattern } from "@/data/chordRhythms";
 import { buildArpSequence } from "../arpeggiator";
 import { arpFiresOnStep, computeArpTriggers } from "../arpSchedule";
-import { arpStepFor } from "../../utils/meter";
+import { arpStepFor } from "@/utils/meter";
 import {
   deriveChordNotes,
   getDiatonicChordForDegree,
   shiftNoteOctave,
   barDurationSec,
-} from "../../utils/musicTheory";
+} from "@/utils/musicTheory";
 import { DEFAULT_VELOCITY } from "../constants";
-import type { ChordItem, SynthParams } from "../../types";
+import type { ChordItem, SynthParams } from "@/types";
 
 /**
  * One note of a chord's rhythm pattern, positioned on the 16th grid rather

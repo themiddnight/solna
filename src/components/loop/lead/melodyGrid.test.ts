@@ -16,7 +16,7 @@ import {
   leadCellEndsSpan,
   leadMarkerColumn,
 } from './melodyGrid';
-import type { LeadNote } from '../../../audio/leadMelody';
+import type { LeadNote } from '@/audio/leadMelody';
 import { columnsPerBar, LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
 import { getMeter } from '@/utils/meter';
 

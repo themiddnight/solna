@@ -1,9 +1,9 @@
 import { describe, expect, test, spyOn } from 'bun:test';
-import { audioEngine } from '../../audio/engine';
-import type { ChordItem, SynthParams } from '../../types';
-import { equalPowerVelocityScale } from '../../audio/chordRhythms';
+import { audioEngine } from '@/audio/engine';
+import type { ChordItem, SynthParams } from '@/types';
+import { equalPowerVelocityScale } from '@/audio/chordRhythms';
 import type { RhythmPattern } from '@/data/chordRhythms';
-import { arpStepFor } from '../../utils/meter';
+import { arpStepFor } from '@/utils/meter';
 import {
   arpEventsForStep,
   buildChordEvents,

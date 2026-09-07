@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { SimpleSynthPanel } from './SimpleSynthPanel';
-import type { SynthParams } from '../../types';
+import type { SynthParams } from '@/types';
 
 const params = {
   filterCutoff: 4000,

@@ -1,6 +1,6 @@
 import React, { useSyncExternalStore } from 'react';
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useAppStore } from '../../store/store';
+import { useAppStore } from '@/store/store';
 import { ChromaticKeyboard, ScaleLockedKeyboard, ChordKeyboard } from './Keyboard';
 import { DrumPadGrid } from './DrumPadGrid';
 import { SECTION_HEADER } from './fieldClasses';

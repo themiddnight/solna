@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MoreVertical } from 'lucide-react';
-import type { ProjectMeta } from '../../store/projectFormat';
-import { formatRelativeTime } from '../../utils/relativeTime';
+import type { ProjectMeta } from '@/store/projectFormat';
+import { formatRelativeTime } from '@/utils/relativeTime';
 import { isValidProjectName } from './projectManagerFlow';
 
 export interface ProjectListProps {

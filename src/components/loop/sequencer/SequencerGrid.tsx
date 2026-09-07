@@ -1,11 +1,11 @@
 import React from 'react';
-import { useAppStore } from '../../../store/store';
-import { useSequencerPlayback } from '../../useSequencerPlayback';
-import { useCurrentStep } from '../../playbackStep';
-import { StepHeader } from '../../ui/StepHeader';
+import { useAppStore } from '@/store/store';
+import { useSequencerPlayback } from '@/components/useSequencerPlayback';
+import { useCurrentStep } from '@/components/playbackStep';
+import { StepHeader } from '@/components/ui/StepHeader';
 import { TrackRow } from './TrackRow';
-import type { StepCell } from '../../sequencerGrid';
-import type { SequencerTrack } from '../../../types';
+import type { StepCell } from '@/components/sequencerGrid';
+import type { SequencerTrack } from '@/types';
 
 export interface SequencerGridProps {
   tracks: SequencerTrack[];

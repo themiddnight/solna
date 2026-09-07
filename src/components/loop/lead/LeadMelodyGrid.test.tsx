@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import type React from 'react';
 import { renderToString } from 'react-dom/server';
 import { LeadMelodyHeaders, LeadMelodyGrid, LeadMarker, LeadMarkerView } from './LeadMelodyGrid';
-import { stepCells } from '../../sequencerGrid';
-import { getMeter } from '../../../utils/meter';
+import { stepCells } from '@/components/sequencerGrid';
+import { getMeter } from '@/utils/meter';
 import { leadColumnCells } from './melodyGrid';
 
 const source = readFileSync(

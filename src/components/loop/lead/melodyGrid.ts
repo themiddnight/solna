@@ -1,7 +1,7 @@
-import { getScaleNotesInOctave, ROOTS } from '../../../utils/musicTheory';
+import { getScaleNotesInOctave, ROOTS } from '@/utils/musicTheory';
 import { spellNoteInKey } from '@/utils/noteSpelling';
-import type { LeadMelodyView } from '../../../store/types';
-import { leadStoredIndexAt, type LeadNote } from '../../../audio/leadMelody';
+import type { LeadMelodyView } from '@/store/types';
+import { leadStoredIndexAt, type LeadNote } from '@/audio/leadMelody';
 import { wrapColumn } from '@/audio/leadLiveRecord';
 import {
   TICKS_PER_SIXTEENTH,

@@ -1,6 +1,6 @@
-import { useAppStore } from "../../../store/store";
-import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from "../../../utils/synthControl";
-import type { SynthParams } from "../../../types";
+import { useAppStore } from "@/store/store";
+import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from "@/utils/synthControl";
+import type { SynthParams } from "@/types";
 
 export interface SynthChannel {
   params: SynthParams;

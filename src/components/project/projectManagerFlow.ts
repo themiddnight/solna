@@ -1,5 +1,5 @@
-import type { ProjectBody, ProjectMeta } from '../../store/projectFormat';
-import type { ProjectStoreStatus } from '../../store/projectStore';
+import type { ProjectBody, ProjectMeta } from '@/store/projectFormat';
+import type { ProjectStoreStatus } from '@/store/projectStore';
 
 export type ImportMode = 'new' | 'overwrite' | 'copy';
 

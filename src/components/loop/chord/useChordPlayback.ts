@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAppStore } from "../../../store/store";
+import { useAppStore } from "@/store/store";
 import {
   arpEventsForStep,
   buildChordEvents,
@@ -8,8 +8,8 @@ import {
   eventsForStep,
   playFullHoldChord,
   scheduleWholeChord,
-} from "../../../audio/playback/chordPlayback";
-import type { BarInvariantEvent } from "../../../audio/playback/chordPlayback";
+} from "@/audio/playback/chordPlayback";
+import type { BarInvariantEvent } from "@/audio/playback/chordPlayback";
 import {
   CHORD_RHYTHMS,
   RhythmPattern,
@@ -18,12 +18,12 @@ import {
   customRhythmPattern,
   feelToHoldScale,
   fullHoldDuration,
-} from "../../../audio/chordRhythms";
+} from "@/audio/chordRhythms";
 import {
   customBassPattern,
   isApproachToken,
   resolveBassSteps,
-} from "../../../audio/bassPatterns";
+} from "@/audio/bassPatterns";
 import {
   BASS_PATTERNS,
   BassPattern,
@@ -34,7 +34,7 @@ import {
   generateBlockChordNotes,
   stepDurationSec,
   barDurationSec,
-} from "../../../utils/musicTheory";
+} from "@/utils/musicTheory";
 import {
   ACCOMPANIMENT_SOURCES,
   HARD_STOP_RELEASE,
@@ -43,22 +43,22 @@ import {
   playbackNoteOn,
   playbackStopSource,
   subscribePlaybackClock,
-} from "../../../audio/playback/playbackEngine";
-import type { AccompanimentSource } from "../../../audio/playback/playbackEngine";
-import { getMeter, type MeterId } from "../../../utils/meter";
-import { adaptStepEvents } from "../../../utils/eventAdapt";
-import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "../../playerStop";
-import type { PlayerState } from "../../../store/types";
-import type { ChordItem } from "../../../types";
-import { publishStepAt, resetStep } from "../../playbackStep";
+} from "@/audio/playback/playbackEngine";
+import type { AccompanimentSource } from "@/audio/playback/playbackEngine";
+import { getMeter, type MeterId } from "@/utils/meter";
+import { adaptStepEvents } from "@/utils/eventAdapt";
+import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "@/components/playerStop";
+import type { PlayerState } from "@/store/types";
+import type { ChordItem } from "@/types";
+import { publishStepAt, resetStep } from "@/components/playbackStep";
 import {
   applyPadVoicing,
   padHoldSec,
   padHoldsAcrossLoop,
   resolveDroneNotes,
   shouldArmPad,
-} from "../../../audio/playback/padPlayback";
-import { loopBars } from "../../../store/loop";
+} from "@/audio/playback/padPlayback";
+import { loopBars } from "@/store/loop";
 
 /**
  * Where the chord+bass scheduler currently is on the shared grid. Kept as a

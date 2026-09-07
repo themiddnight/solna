@@ -1,8 +1,8 @@
 import React from "react";
 import { Volume2 } from "lucide-react";
-import { Knob } from "../../ui/Knob";
-import { ModuleHeader } from "../../ui/ModuleHeader";
-import { PanelCard } from "../../ui/PanelCard";
+import { Knob } from "@/components/ui/Knob";
+import { ModuleHeader } from "@/components/ui/ModuleHeader";
+import { PanelCard } from "@/components/ui/PanelCard";
 import { useSynthChannel } from "./useSynthChannel";
 
 /**

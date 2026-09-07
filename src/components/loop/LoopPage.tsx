@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAppStore } from '../../store/store';
+import { useAppStore } from '@/store/store';
 import { SynthView } from './SynthView';
 import { ChordView } from './ChordView';
 import { SequencerView } from './SequencerView';

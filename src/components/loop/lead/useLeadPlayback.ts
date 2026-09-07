@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { useAppStore } from '../../../store/store';
-import { leadSoundingNotes, resolveLeadStepTriggers } from '../../../audio/leadMelody';
+import { useAppStore } from '@/store/store';
+import { leadSoundingNotes, resolveLeadStepTriggers } from '@/audio/leadMelody';
 import {
   HARD_STOP_RELEASE,
   initPlaybackEngine,
@@ -8,14 +8,14 @@ import {
   playbackNoteOn,
   playbackStopSource,
   subscribePlaybackClock,
-} from '../../../audio/playback/playbackEngine';
-import { DEFAULT_VELOCITY } from '../../../audio/constants';
-import { stepDurationSec } from '../../../utils/musicTheory';
-import { arpStepFor, getMeter } from '../../../utils/meter';
+} from '@/audio/playback/playbackEngine';
+import { DEFAULT_VELOCITY } from '@/audio/constants';
+import { stepDurationSec } from '@/utils/musicTheory';
+import { arpStepFor, getMeter } from '@/utils/meter';
 import { TICKS_PER_SIXTEENTH, columnsPerBar, strideFor } from '@/utils/stepResolution';
-import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from '../../playerStop';
+import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from '@/components/playerStop';
 import { clockStepToGridColumn, tickToColumn } from '@/audio/leadLiveRecord';
-import type { PlayerState } from '../../../store/types';
+import type { PlayerState } from '@/store/types';
 
 export interface LeadArming {
   armed: boolean;

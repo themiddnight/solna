@@ -15,7 +15,7 @@ import {
   HOME_ROW_KEYS,
   TOP_ROW_KEYS,
 } from './Keyboard';
-import { ROOTS } from '../../utils/musicTheory';
+import { ROOTS } from '@/utils/musicTheory';
 
 const pitchOf = (note: string): number => {
   const match = note.match(/^([A-G][#b]?)(-?\d+)$/);

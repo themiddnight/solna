@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 import { DeleteConfirmDialog, DirtyGuardDialog, ImportConflictDialog, NamePromptDialog } from './ProjectDialogs';
-import { makeEnvelope } from '../../store/projectFormat';
+import { makeEnvelope } from '@/store/projectFormat';
 
 const noop = () => {};
 

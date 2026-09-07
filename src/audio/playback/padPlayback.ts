@@ -1,6 +1,6 @@
 import { transpose } from 'tonal';
-import { getDiatonicChordForDegree } from '../../utils/musicTheory';
-import type { PadInterval, PadMode, PadVoicing } from '../../types';
+import { getDiatonicChordForDegree } from '@/utils/musicTheory';
+import type { PadInterval, PadMode, PadVoicing } from '@/types';
 
 /**
  * Interval names for `tonal`. `12P` is a perfect twelfth — one interval name,

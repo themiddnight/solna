@@ -1,13 +1,13 @@
 import React from "react";
-import { FIELD_LABEL } from '../../ui/fieldClasses';
+import { FIELD_LABEL } from '@/components/ui/fieldClasses';
 import { GripVertical, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChordItem } from "../../../types";
-import { ROOTS, formatChordQuality } from "../../../utils/musicTheory";
-import { BEATS_PER_BAR } from "../../../utils/playhead";
-import { BeatDots } from "../../ui/BeatDots";
-import { IconButton } from "../../ui/IconButton";
+import { ChordItem } from "@/types";
+import { ROOTS, formatChordQuality } from "@/utils/musicTheory";
+import { BEATS_PER_BAR } from "@/utils/playhead";
+import { BeatDots } from "@/components/ui/BeatDots";
+import { IconButton } from "@/components/ui/IconButton";
 
 export interface SortableChordCardProps {
   chord: ChordItem;

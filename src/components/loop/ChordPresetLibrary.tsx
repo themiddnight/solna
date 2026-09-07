@@ -1,20 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Music, Play, Sparkles, Trash2, Upload } from 'lucide-react';
-import type { ChordItem, SynthParams, CustomChordProgressionItem } from '../../types';
-import { useAppStore } from '../../store/store';
+import type { ChordItem, SynthParams, CustomChordProgressionItem } from '@/types';
+import { useAppStore } from '@/store/store';
 import { CHORD_PROGRESSIONS, type ChordProgression } from '@/data/chordProgressions';
 import { resolveProgression } from '@/audio/chordProgressions';
 import { PresetLibrary } from '../ui/PresetLibrary';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { IconButton } from '../ui/IconButton';
 import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from '../ui/PresetLibrary';
-import { previewChordProgression } from '../../audio/playback/presetPreview';
-import type { PreviewHandle } from '../../audio/playback/presetPreview';
+import { previewChordProgression } from '@/audio/playback/presetPreview';
+import type { PreviewHandle } from '@/audio/playback/presetPreview';
 import {
   generateBlockChordNotes,
   snapProgressionToScale,
   formatChordLabel,
-} from '../../utils/musicTheory';
+} from '@/utils/musicTheory';
 import { formatKeyLabel, getTonicSpelling } from '@/utils/noteSpelling';
 import { isProgressionAvailable } from './chord/progressionAvailability';
 

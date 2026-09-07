@@ -1,6 +1,6 @@
 import { audioEngine } from "../engine";
 import { emitNoteInput } from "./noteInputBus";
-import type { SynthParams } from "../../types";
+import type { SynthParams } from "@/types";
 
 // Thin engine bridge for SynthView's keyboard/arp handlers (layering rule 3):
 // the view never touches audio/engine directly. The handlers keep all their

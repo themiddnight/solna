@@ -1,6 +1,6 @@
 import React from 'react';
-import { loadLoop } from '../../store/loadLoop';
-import { useAppStore } from '../../store/store';
+import { loadLoop } from '@/store/loadLoop';
+import { useAppStore } from '@/store/store';
 
 /** Pure handler behind the dropdown, exported for a store-driven test. */
 export const onSelectLoop = (id: string) => loadLoop(id);

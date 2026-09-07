@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAppStore } from '../../store/store';
+import { useAppStore } from '@/store/store';
 import { ArrangeView } from './ArrangeView';
 import { EffectsRackView } from './EffectsRackView';
 

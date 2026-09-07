@@ -15,16 +15,16 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { useAppStore } from "../../store/store";
-import type { SynthPresetItem, SynthPresetCategory } from "../../data/synthPresets";
-import { SYNTH_CATEGORIES } from "../../data/synthPresets";
+import { useAppStore } from "@/store/store";
+import type { SynthPresetItem, SynthPresetCategory } from "@/data/synthPresets";
+import { SYNTH_CATEGORIES } from "@/data/synthPresets";
 import {
   applyPreset,
   findPresetByName,
   getAllSynthPresets,
   getPresetsGroupedByCategory,
   getCategoryMeta,
-} from "../../audio/presetRegistry";
+} from "@/audio/presetRegistry";
 // The drawer is never needed on first paint — PresetLibrary early-returns
 // null when closed — so it is code-split out of the main chunk.
 const SynthPresetLibrary = React.lazy(() =>
@@ -52,8 +52,8 @@ export { KEYBOARD_NOTES } from "../ui/Keyboard";
 import {
   resolveSynthControlChannel,
   SYNTH_TARGET_STYLES,
-} from "../../utils/synthControl";
-import type { SynthControlTarget } from "../../utils/synthControl";
+} from "@/utils/synthControl";
+import type { SynthControlTarget } from "@/utils/synthControl";
 
 export const SynthView: React.FC = React.memo(() => {
   // Synth slice state + setters (named after the old props so the rest of the

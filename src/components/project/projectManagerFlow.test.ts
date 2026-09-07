@@ -10,7 +10,7 @@ import {
   sessionLabel,
   storageDisabled,
 } from './projectManagerFlow';
-import { factoryProjectContent, makeEnvelope } from '../../store/projectFormat';
+import { factoryProjectContent, makeEnvelope } from '@/store/projectFormat';
 
 const body = { ...makeEnvelope('File', 2000), content: factoryProjectContent() };
 

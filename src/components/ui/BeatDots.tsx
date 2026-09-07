@@ -1,4 +1,4 @@
-import { BEATS_PER_BAR, groupBeats } from '../../utils/playhead';
+import { BEATS_PER_BAR, groupBeats } from '@/utils/playhead';
 
 export type BeatDotsTone = 'chord' | 'contrast';
 

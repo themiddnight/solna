@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ViewMode } from '../../types';
+import type { ViewMode } from '@/types';
 import { VIEW_META } from '../viewMeta';
 import { HEADER_BADGE } from './fieldClasses';
 import { PanelCard } from './PanelCard';

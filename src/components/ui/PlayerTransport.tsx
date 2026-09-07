@@ -1,7 +1,7 @@
 import React from 'react';
 import { Play, Square, X } from 'lucide-react';
 import { IconButton } from './IconButton';
-import type { PlayerState } from '../../store/types';
+import type { PlayerState } from '@/store/types';
 
 export interface TransportButtons {
   main: {

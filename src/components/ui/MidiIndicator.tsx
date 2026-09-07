@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Radio } from "lucide-react";
-import { useAppStore } from "../../store/store";
+import { useAppStore } from "@/store/store";
 
 export const MidiIndicator: React.FC = React.memo(() => {
   const midiActivityTimestamp = useAppStore((s) => s.midiActivityTimestamp);

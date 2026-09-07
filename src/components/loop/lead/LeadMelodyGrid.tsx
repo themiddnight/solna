@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { useAppStore } from '../../../store/store';
-import { loopBars } from '../../../store/loop';
-import { getMeter, type Meter } from '../../../utils/meter';
-import { type StepCell } from '../../sequencerGrid';
+import { useAppStore } from '@/store/store';
+import { loopBars } from '@/store/loop';
+import { getMeter, type Meter } from '@/utils/meter';
+import { type StepCell } from '@/components/sequencerGrid';
 import {
   clampLeadCursor,
   clampLeadLoopLength,
@@ -10,8 +10,8 @@ import {
   leadStoredIndexAt,
   loopLengthDivisors,
   type LeadNote,
-} from '../../../audio/leadMelody';
-import { previewSequencerNote } from '../../../audio/playback/presetPreview';
+} from '@/audio/leadMelody';
+import { previewSequencerNote } from '@/audio/playback/presetPreview';
 import {
   LEAD_CELL_WIDTH,
   LEAD_WINDOW_OCTAVES,

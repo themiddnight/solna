@@ -8,24 +8,24 @@ import {
   Upload,
   Volume2,
 } from 'lucide-react';
-import type { SynthParams } from '../../types';
-import type { SynthPresetItem, SynthPresetCategory } from '../../data/synthPresets';
-import { SYNTH_CATEGORIES } from '../../data/synthPresets';
+import type { SynthParams } from '@/types';
+import type { SynthPresetItem, SynthPresetCategory } from '@/data/synthPresets';
+import { SYNTH_CATEGORIES } from '@/data/synthPresets';
 import {
   getAllSynthPresets,
   getCategoryMeta,
   getPresetsGroupedByCategory,
-} from '../../audio/presetRegistry';
-import { useAppStore } from '../../store/store';
-import { INITIAL_SYNTH_PARAMS } from '../../store/initialState';
+} from '@/audio/presetRegistry';
+import { useAppStore } from '@/store/store';
+import { INITIAL_SYNTH_PARAMS } from '@/store/initialState';
 import { PresetLibrary } from '../ui/PresetLibrary';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { IconButton } from '../ui/IconButton';
 import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from '../ui/PresetLibrary';
-import { previewSynthPreset } from '../../audio/playback/presetPreview';
-import type { PreviewHandle } from '../../audio/playback/presetPreview';
-import { SYNTH_TARGET_STYLES } from '../../utils/synthControl';
-import type { SynthControlTarget } from '../../utils/synthControl';
+import { previewSynthPreset } from '@/audio/playback/presetPreview';
+import type { PreviewHandle } from '@/audio/playback/presetPreview';
+import { SYNTH_TARGET_STYLES } from '@/utils/synthControl';
+import type { SynthControlTarget } from '@/utils/synthControl';
 
 interface SynthPresetLibraryProps {
   currentParams: SynthParams;

@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { TrackRow } from './TrackRow';
-import { stepCells } from '../../sequencerGrid';
-import { getMeter } from '../../../utils/meter';
-import type { SequencerTrack } from '../../../types';
+import { stepCells } from '@/components/sequencerGrid';
+import { getMeter } from '@/utils/meter';
+import type { SequencerTrack } from '@/types';
 
 const cells = stepCells(getMeter('4/4'));
 

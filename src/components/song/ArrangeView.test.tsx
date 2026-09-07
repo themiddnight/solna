@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { loopStatePatch } from '../../store/loop';
-import { createDefaultLoop } from '../../store/loopSlice';
-import { useAppStore } from '../../store/store';
+import { loopStatePatch } from '@/store/loop';
+import { createDefaultLoop } from '@/store/loopSlice';
+import { useAppStore } from '@/store/store';
 import { ArrangeView, buildEditRoute, editLoop } from './ArrangeView';
 import { loopIdKeyOf } from './loopIdKey';
 import { getActiveChordIndex, SortableLoopCard } from './SortableLoopCard';

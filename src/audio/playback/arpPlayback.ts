@@ -2,10 +2,10 @@ import { useEffect } from 'react';
 import { audioEngine } from '../engine';
 import { buildArpSequence } from '../arpeggiator';
 import { arpFiresOnStep, computeArpTriggers } from '../arpSchedule';
-import { stepDurationSec } from '../../utils/musicTheory';
-import { arpStepFor } from '../../utils/meter';
-import type { SynthParams } from '../../types';
-import type { SynthControlTarget } from '../../utils/synthControl';
+import { stepDurationSec } from '@/utils/musicTheory';
+import { arpStepFor } from '@/utils/meter';
+import type { SynthParams } from '@/types';
+import type { SynthControlTarget } from '@/utils/synthControl';
 
 // The rate table and trigger math live in audio/arpSchedule.ts so the chord
 // scheduler can share them without pulling this React hook into its module.

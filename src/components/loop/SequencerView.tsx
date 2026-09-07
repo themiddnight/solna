@@ -7,13 +7,13 @@ import {
   Sparkles,
   Disc3,
 } from "lucide-react";
-import { useAppStore } from "../../store/store";
-import { getMeter } from "../../utils/meter";
+import { useAppStore } from "@/store/store";
+import { getMeter } from "@/utils/meter";
 import { sequencerMeterBadge, stepCells } from "../sequencerGrid";
-import { rotateStepWindow, writeStepWindow } from "../../utils/patternAdapt";
-import { ensureDrumEngine, triggerPad } from "../../audio/playback/drumPlayback";
-import { previewSequencerNote } from "../../audio/playback/presetPreview";
-import type { PreviewHandle } from "../../audio/playback/presetPreview";
+import { rotateStepWindow, writeStepWindow } from "@/utils/patternAdapt";
+import { ensureDrumEngine, triggerPad } from "@/audio/playback/drumPlayback";
+import { previewSequencerNote } from "@/audio/playback/presetPreview";
+import type { PreviewHandle } from "@/audio/playback/presetPreview";
 import { DRUM_GRIDS } from "@/data/drumGrids";
 import { DRUM_KITS } from "@/data/drumKits";
 import { patternMeterTitle, patternOptionLabel } from "../meterSelect";
@@ -25,7 +25,7 @@ import { FIELD_LANE, FIELD_SELECT, SECTION_HEADER } from "../ui/fieldClasses";
 import { Field } from "../ui/Field";
 import { IconButton } from "../ui/IconButton";
 import { SequencerGrid } from "./sequencer/SequencerGrid";
-import type { SequencerTrack } from "../../types";
+import type { SequencerTrack } from "@/types";
 
 // The kit roster never changes at runtime, so it is read once here rather than
 // re-keyed on every render — a Knob drag re-renders this view per pointermove.

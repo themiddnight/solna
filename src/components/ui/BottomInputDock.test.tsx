@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { BottomInputDock } from './BottomInputDock';
-import { useAppStore } from '../../store/store';
+import { useAppStore } from '@/store/store';
 import { DEFAULT_PADS } from './DrumPadGrid';
 import { getChordKeyboardRows, getScaleLockedKeyboardNotes } from './Keyboard';
 

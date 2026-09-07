@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { ChordView } from './ChordView';
-import { useAppStore } from '../../store/store';
+import { useAppStore } from '@/store/store';
 import { COUNT_BADGE } from '../ui/fieldClasses';
 
 describe('ChordView preview UI', () => {
@@ -218,8 +218,8 @@ describe('ChordView pattern selects carry each pattern\'s meter', () => {
 });
 
 import { applyKeyScaleChange, shouldClearReharmonizeIndicator } from './ChordView';
-import { deriveChordNotes } from '../../utils/musicTheory';
-import type { ChordItem } from '../../types';
+import { deriveChordNotes } from '@/utils/musicTheory';
+import type { ChordItem } from '@/types';
 
 const chord = (id: string, root: string, quality: string): ChordItem =>
   deriveChordNotes({ id, root, quality, bars: 1, notes: [] }, 4);

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { audioEngine } from "../../audio/engine";
-import { isSegmentActive, VU_SEGMENT_COUNT, vuSegment } from "../../utils/vuMeter";
+import { audioEngine } from "@/audio/engine";
+import { isSegmentActive, VU_SEGMENT_COUNT, vuSegment } from "@/utils/vuMeter";
 
 export interface VuMeterProps {
   /** Whether anything is sounding; the rAF loop runs only while true. */

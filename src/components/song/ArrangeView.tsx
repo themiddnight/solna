@@ -15,14 +15,14 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { loadLoop } from '../../store/loadLoop';
-import { loopPlayButton, soloLoopId } from '../../store/playbackScope';
-import { loopBars } from '../../store/loop';
-import { aggregatePlayerState } from '../../store/transportSlice';
-import { useAppStore } from '../../store/store';
-import { buildRouteUrl } from '../../routing/tabRouting';
-import { getMeter } from '../../utils/meter';
-import { subscribePlaybackClock } from '../../audio/playback/playbackEngine';
+import { loadLoop } from '@/store/loadLoop';
+import { loopPlayButton, soloLoopId } from '@/store/playbackScope';
+import { loopBars } from '@/store/loop';
+import { aggregatePlayerState } from '@/store/transportSlice';
+import { useAppStore } from '@/store/store';
+import { buildRouteUrl } from '@/routing/tabRouting';
+import { getMeter } from '@/utils/meter';
+import { subscribePlaybackClock } from '@/audio/playback/playbackEngine';
 import { ViewHeader } from '../ui/ViewHeader';
 import { SortableLoopCard } from './SortableLoopCard';
 import { arrangeCycleSteps, arrangeStep } from './arrangeStep';

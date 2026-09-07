@@ -1,9 +1,9 @@
 import React from "react";
 import { Sliders } from "lucide-react";
-import { Knob } from "../../ui/Knob";
-import { ModuleHeader } from "../../ui/ModuleHeader";
-import { PanelCard } from "../../ui/PanelCard";
-import { FIELD_LABEL } from "../../ui/fieldClasses";
+import { Knob } from "@/components/ui/Knob";
+import { ModuleHeader } from "@/components/ui/ModuleHeader";
+import { PanelCard } from "@/components/ui/PanelCard";
+import { FIELD_LABEL } from "@/components/ui/fieldClasses";
 import { useSynthChannel } from "./useSynthChannel";
 
 /**

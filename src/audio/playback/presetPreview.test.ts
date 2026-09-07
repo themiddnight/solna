@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { audioEngine } from '../engine';
 import { freshEngine } from '../testFakes';
-import type { SynthParams, ChordItem } from '../../types';
+import type { SynthParams, ChordItem } from '@/types';
 import { previewChordProgression, previewSequencerNote } from './presetPreview';
 import {
   resetNoteInputListeners,

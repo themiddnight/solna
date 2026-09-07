@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { useAppStore } from '../../store/store';
-import type { AppStore } from '../../store/types';
+import { useAppStore } from '@/store/store';
+import type { AppStore } from '@/store/types';
 
 /**
  * Reads the store through useSyncExternalStore with getState() served for

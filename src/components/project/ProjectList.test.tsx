@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 import { ProjectList } from './ProjectList';
-import { makeEnvelope } from '../../store/projectFormat';
+import { makeEnvelope } from '@/store/projectFormat';
 
 const noop = () => {};
 const NOW = 1_700_000_000_000;

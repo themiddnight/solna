@@ -6,9 +6,9 @@ import {
   getDiatonicChordForDegree,
   formatChordLabel,
   generateBlockChordNotes,
-} from '../../utils/musicTheory';
+} from '@/utils/musicTheory';
 import { SCALES } from '@/data/scales';
-import { shortcutLabel } from '../../utils/keyboard';
+import { shortcutLabel } from '@/utils/keyboard';
 import { spellNoteInKey } from '@/utils/noteSpelling';
 
 const KEYBOARD_OCTAVE_MIN = -2;

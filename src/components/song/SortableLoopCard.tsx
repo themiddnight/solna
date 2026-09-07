@@ -15,9 +15,9 @@ import {
 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Loop, LoopMixPatch } from '../../store/types';
-import { loopBars } from '../../store/loop';
-import { formatChordQuality } from '../../utils/musicTheory';
+import { Loop, LoopMixPatch } from '@/store/types';
+import { loopBars } from '@/store/loop';
+import { formatChordQuality } from '@/utils/musicTheory';
 import { getTonicSpelling } from '@/utils/noteSpelling';
 import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
 import { Slider } from '../ui/Slider';

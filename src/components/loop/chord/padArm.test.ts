@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { shouldArmPad } from '../../../audio/playback/padPlayback';
+import { shouldArmPad } from '@/audio/playback/padPlayback';
 
 describe('shouldArmPad', () => {
   // Pad mode re-strikes the voicing on every chord; the outgoing chord's

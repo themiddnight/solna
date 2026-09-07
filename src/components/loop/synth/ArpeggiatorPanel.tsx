@@ -1,9 +1,9 @@
 import React from "react";
 import { Sparkles } from "lucide-react";
-import { ModuleHeader } from "../../ui/ModuleHeader";
-import { PanelCard } from "../../ui/PanelCard";
-import { FIELD_LABEL } from "../../ui/fieldClasses";
-import { initSynthPlayback } from "../../../audio/playback/synthPlayback";
+import { ModuleHeader } from "@/components/ui/ModuleHeader";
+import { PanelCard } from "@/components/ui/PanelCard";
+import { FIELD_LABEL } from "@/components/ui/fieldClasses";
+import { initSynthPlayback } from "@/audio/playback/synthPlayback";
 import { useSynthChannel } from "./useSynthChannel";
 
 /**

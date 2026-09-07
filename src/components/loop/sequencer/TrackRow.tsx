@@ -1,10 +1,10 @@
 import React, { useCallback } from "react";
 import { Play } from "lucide-react";
-import type { SequencerTrack } from "../../../types";
-import type { StepCell } from "../../sequencerGrid";
-import { PowerToggle } from "../../ui/PowerToggle";
-import { StepRow } from "../../ui/StepRow";
-import { IconButton } from "../../ui/IconButton";
+import type { SequencerTrack } from "@/types";
+import type { StepCell } from "@/components/sequencerGrid";
+import { PowerToggle } from "@/components/ui/PowerToggle";
+import { StepRow } from "@/components/ui/StepRow";
+import { IconButton } from "@/components/ui/IconButton";
 
 export interface TrackRowProps {
   track: SequencerTrack;

@@ -3,7 +3,7 @@ import { renderToString } from 'react-dom/server';
 import { StepRow, PlayingStepRow } from './StepRow';
 import { stepPublisher } from '../playbackStep';
 import { stepCells } from '../sequencerGrid';
-import { getMeter } from '../../utils/meter';
+import { getMeter } from '@/utils/meter';
 import type { BassStepChoice } from '@/data/bassPatterns';
 
 describe('StepRow — boolean grid', () => {

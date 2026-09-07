@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { createDefaultLoop } from '../../store/loopSlice';
+import { createDefaultLoop } from '@/store/loopSlice';
 import { getActiveChordIndex, SortableLoopCard } from './SortableLoopCard';
 
 describe('getActiveChordIndex', () => {

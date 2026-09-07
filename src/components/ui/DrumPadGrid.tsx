@@ -1,7 +1,7 @@
 import React from 'react';
 import { Volume2 } from 'lucide-react';
-import { shortcutLabel } from '../../utils/keyboard';
-import type { DrumPad } from '../../types';
+import { shortcutLabel } from '@/utils/keyboard';
+import type { DrumPad } from '@/types';
 import { Slider } from './Slider';
 
 /**

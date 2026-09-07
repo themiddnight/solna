@@ -3,7 +3,7 @@ import React from 'react';
 import { renderToString } from 'react-dom/server';
 
 let ProjectManagerModal: React.FC;
-let useAppStore: typeof import('../../store/store').useAppStore;
+let useAppStore: typeof import('@/store/store').useAppStore;
 
 /** The full opening tag of the element whose markup contains `needle` — pins disabled/attrs, not text position. */
 function openTagContaining(html: string, needle: string): string {
@@ -16,7 +16,7 @@ function openTagContaining(html: string, needle: string): string {
 
 beforeAll(async () => {
   Object.defineProperty(globalThis, 'window', { value: globalThis, configurable: true });
-  ({ useAppStore } = await import('../../store/store'));
+  ({ useAppStore } = await import('@/store/store'));
   ({ ProjectManagerModal } = await import('./ProjectManagerModal'));
 });
 

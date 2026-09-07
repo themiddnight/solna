@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { SynthPresetLibrary } from './SynthPresetLibrary';
-import { INITIAL_SYNTH_PARAMS } from '../../store/initialState';
+import { INITIAL_SYNTH_PARAMS } from '@/store/initialState';
 
 const noop = () => {};
 

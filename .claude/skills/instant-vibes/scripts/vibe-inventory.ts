@@ -12,14 +12,14 @@
  *
  * `bun run report:library` is the companion: it lists what NOTHING references.
  */
-import { CHORD_PROGRESSIONS } from '../../../../src/data/chordProgressions';
-import { SYNTH_PRESETS } from '../../../../src/data/synthPresets';
-import { CHORD_RHYTHMS } from '../../../../src/data/chordRhythms';
-import { BASS_PATTERNS } from '../../../../src/data/bassPatterns';
-import { DRUM_GRIDS } from '../../../../src/data/drumGrids';
-import { EFFECT_CHAINS } from '../../../../src/data/effectChains';
-import { VIBES } from '../../../../src/data/vibes';
-import { SCALES } from '../../../../src/data/scales';
+import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
+import { SYNTH_PRESETS } from '@/data/synthPresets';
+import { CHORD_RHYTHMS } from '@/data/chordRhythms';
+import { BASS_PATTERNS } from '@/data/bassPatterns';
+import { DRUM_GRIDS } from '@/data/drumGrids';
+import { EFFECT_CHAINS } from '@/data/effectChains';
+import { VIBES } from '@/data/vibes';
+import { SCALES } from '@/data/scales';
 
 const arg = process.argv[2];
 

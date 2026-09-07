@@ -1,23 +1,23 @@
 import React, { useMemo } from "react";
 import { Volume2 } from "lucide-react";
-import { useAppStore } from "../../../store/store";
-import { BASS_STYLE_GROUPS } from "../../../audio/bassPatterns";
+import { useAppStore } from "@/store/store";
+import { BASS_STYLE_GROUPS } from "@/audio/bassPatterns";
 import { type BassStepChoice } from "@/data/bassPatterns";
 import {
   getAllSynthPresets,
   findPresetByName,
   getPresetsGroupedByCategory,
-} from "../../../audio/presetRegistry";
-import { patternMeterTitle, patternOptionLabel } from "../../meterSelect";
-import { getMeter } from "../../../utils/meter";
-import { stepCells } from "../../sequencerGrid";
-import { ChannelStrip } from "../../ui/ChannelStrip";
-import { FIELD_LABEL, FIELD_SELECT, SECTION_HEADER } from "../../ui/fieldClasses";
-import { SYNTH_TARGET_STYLES } from "../../../utils/synthControl";
-import { Slider } from "../../ui/Slider";
-import { PlayingStepRow, STEP_ROW_CLASS } from "../../ui/StepRow";
-import { PlayingStepHeader } from "../../ui/StepHeader";
-import { IconButton } from "../../ui/IconButton";
+} from "@/audio/presetRegistry";
+import { patternMeterTitle, patternOptionLabel } from "@/components/meterSelect";
+import { getMeter } from "@/utils/meter";
+import { stepCells } from "@/components/sequencerGrid";
+import { ChannelStrip } from "@/components/ui/ChannelStrip";
+import { FIELD_LABEL, FIELD_SELECT, SECTION_HEADER } from "@/components/ui/fieldClasses";
+import { SYNTH_TARGET_STYLES } from "@/utils/synthControl";
+import { Slider } from "@/components/ui/Slider";
+import { PlayingStepRow, STEP_ROW_CLASS } from "@/components/ui/StepRow";
+import { PlayingStepHeader } from "@/components/ui/StepHeader";
+import { IconButton } from "@/components/ui/IconButton";
 import { AdjustSynthButton } from "./AdjustSynthButton";
 import { PresetSelect } from "./PresetSelect";
 import { bassStepLabel, nextBassStepChoice } from "./bassStepChoice";
