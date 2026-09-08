@@ -163,6 +163,9 @@ export interface SequencerTrack {
   name: string;
   instrument: string;
   color: string;
+  /** DECIBELS, relative: unity is 0, the range is -60..+12. A LEVEL a fader
+   *  owns, not a velocity: it becomes a per-instrument GainNode in the drum
+   *  path, fed from engineSync via setDrumTrackGain. */
   volume: number;
   muted: boolean;
   steps: boolean[];
@@ -200,6 +203,39 @@ export interface MasterEffects {
   eqMid: number;
   eqHigh: number;
   eqBypass?: boolean;
+
+  /**
+   * The two master dynamics stages (DEV-385). They are REQUIRED booleans named
+   * `*Enabled`, not the optional `*Bypass?` the parallel sends use, for three
+   * reasons that are all load-bearing:
+   *
+   *  1. `*Bypass?` reads absent-as-active. These default OFF, so an optional
+   *     flag could not express the default without every payload carrying it.
+   *  2. `*Bypass` means "force the wet send to 0" (see engine.updateEffects). A
+   *     series stage cannot be bypassed that way — wet 0 on a compressor is
+   *     silence, not passthrough — so these drive a real graph rewire instead,
+   *     and a different name keeps that difference visible at the call site.
+   *  3. `compressorBypass` is a DEAD legacy key that sanitizeEffectsValue
+   *     deletes from old payloads. Reusing the name would make the sanitizer
+   *     delete the live field.
+   *
+   * knee is deliberately NOT here: it stays a fixed engine constant (30 for the
+   * compressor, 0 for the limiter — the hard knee is what makes the limiter a
+   * limiter), so the stored surface is only what the UI actually offers.
+   */
+  compressorEnabled: boolean;
   compressorThreshold: number;
+  compressorRatio: number;
+  /** Seconds. */
+  compressorAttack: number;
+  /** Seconds. */
+  compressorRelease: number;
+  limiterEnabled: boolean;
+  limiterThreshold: number;
+  limiterRatio: number;
+  /** Seconds. */
+  limiterAttack: number;
+  /** Seconds. */
+  limiterRelease: number;
 }
 
