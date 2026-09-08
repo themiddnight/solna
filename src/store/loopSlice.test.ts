@@ -320,6 +320,24 @@ describe('a cursor move carries the scope with it', () => {
 });
 
 describe('deleteLoop never leaves the scope naming a loop that is gone', () => {
+  // Same reset as 'a cursor move carries the scope with it' above, and for
+  // the same reason: this block also calls soloLoop against the shared
+  // singleton store, and soloLoop is a no-op once the scope already names a
+  // DIFFERENT loop (or already names 'song') — a scope or player state left
+  // behind by one test would silently satisfy the next test's assertions
+  // without that test's own setup doing any work.
+  const resetScope = () => {
+    useAppStore.setState({
+      sequencerPlayer: 'stopped',
+      chordsPlayer: 'stopped',
+      leadPlayer: 'stopped',
+      songLoopIndex: null,
+      playbackScope: SCOPE_NONE,
+    });
+  };
+  beforeEach(resetScope);
+  afterEach(resetScope);
+
   test('deleting the loop that is playing stops playback and clears the scope', () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
     useAppStore.setState({
