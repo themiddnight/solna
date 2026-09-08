@@ -20,6 +20,14 @@ export type ViewMode =
 
 export type Layer = 'loop' | 'song';
 
+/**
+ * Pattern's three segments. A second axis alongside `ViewMode`, not three more
+ * view ids: the URL carries the tab, and a segment is a position inside one
+ * tab. Kept here rather than in store/types.ts because both the store and the
+ * components read it, exactly as `ViewMode` is.
+ */
+export type PatternSegment = 'lead' | 'accompaniment' | 'beat';
+
 export const LOOP_TABS: readonly ViewMode[] = ['sound', 'pattern'];
 export const SONG_TABS: readonly ViewMode[] = ['arrange', 'master'];
 

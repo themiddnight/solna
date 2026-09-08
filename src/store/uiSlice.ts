@@ -38,11 +38,14 @@ export function persistKeyboardMode(mode: KeyboardMode, storage?: Pick<Storage, 
  * persist blob (partializeAppState) — the active tab lives in the URL query
  * (?tab=...) instead, and the keyboard mode is persisted separately to its
  * own localStorage key (like the theme), since an input mode has no business
- * travelling with a saved/exported song.
+ * travelling with a saved/exported song. The Pattern segment is a sibling of
+ * it: also transient, but not in the URL, because a segment is a position
+ * inside a tab rather than a route.
  */
 export function createUiSlice(set: Set): UiSlice {
   return {
     activeTab: 'sound',
+    patternSegment: 'lead',
     keyboardMode: readStoredKeyboardMode() ?? 'scale-locked',
     midiActivityTimestamp: null,
     midiMappings: DEFAULT_MIDI_MAPPINGS,
@@ -54,6 +57,7 @@ export function createUiSlice(set: Set): UiSlice {
     selectedMidiInputId: 'all',
 
     setActiveTab: (activeTab) => set({ activeTab }),
+    setPatternSegment: (patternSegment) => set({ patternSegment }),
     setKeyboardMode: (keyboardMode) => {
       persistKeyboardMode(keyboardMode);
       set({ keyboardMode });

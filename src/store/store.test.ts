@@ -479,6 +479,7 @@ describe('persist partialize', () => {
 
     const excludedKeys = [
       'activeTab',
+      'patternSegment',
       'keyboardMode',
       'isInputPanelOpen',
       'inputPanelMode',
@@ -1531,5 +1532,20 @@ describe('flushBeforeHide', () => {
     // Untitled after New: the baseline stays null; dirty came from the default-project comparison.
     expect(stored.state.projectBaselineHash).toBeNull();
     expect(stored.state.currentProjectId).toBeNull();
+  });
+});
+
+describe('patternSegment', () => {
+  test('starts on lead — the segment a new loop is most likely to be opened for', async () => {
+    const { useAppStore } = await getStore();
+    expect(useAppStore.getState().patternSegment).toBe('lead');
+  });
+
+  test('the setter moves it and nothing else', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.getState().setPatternSegment('beat');
+    expect(useAppStore.getState().patternSegment).toBe('beat');
+    expect(useAppStore.getState().activeTab).toBe('sound');
+    useAppStore.getState().setPatternSegment('lead');
   });
 });

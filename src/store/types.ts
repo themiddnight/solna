@@ -4,6 +4,7 @@ import type {
   SequencerTrack,
   MasterEffects,
   ViewMode,
+  PatternSegment,
   CustomChordProgressionItem,
   FilterType,
   KeyboardMode,
@@ -312,6 +313,11 @@ export interface EffectsSlice {
 export interface UiSlice {
   // All ui state is transient (not persisted); the active tab comes from the URL query.
   activeTab: ViewMode;
+  // Which of Pattern's three segments is showing. Transient like activeTab —
+  // a session position, not composition data (see partializeAppState in
+  // store.ts). Click-rate, so it is safe in a slice even though every mounted
+  // view re-renders on a slice write.
+  patternSegment: PatternSegment;
   // The synth keyboard's input mode. Transient by design: an input
   // preference, not composition data, so it does not travel with saved
   // projects (see partializeAppState in store.ts).
@@ -327,6 +333,7 @@ export interface UiSlice {
   midiLearnTargetId: string | null;
   selectedMidiInputId: string;
   setActiveTab: (tab: ViewMode) => void;
+  setPatternSegment: (segment: PatternSegment) => void;
   setKeyboardMode: (mode: KeyboardMode) => void;
   triggerMidiActivity: () => void;
   setMidiMappings: (mappings: MidiMapping[]) => void;
