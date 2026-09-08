@@ -31,6 +31,10 @@ export const VIEW_META: Record<ViewMode, ViewMeta> = {
   sound: { icon: Sliders, tabLabel: 'Sound', title: 'Sound' },
   // Takes `Grid` from the old `sequencer` view. All three Pattern segments are
   // step grids, so the icon that named one of them now names all three.
+  // `title` is dead data by design: PatternView renders no tab-level
+  // ViewHeader, because one would duplicate the segment row directly beneath
+  // it. viewMeta.test.ts still enforces title uniqueness over it — that's
+  // fine, this string just never reaches the screen.
   pattern: { icon: Grid, tabLabel: 'Pattern', title: 'Pattern' },
   arrange: { icon: LayoutList, tabLabel: 'Arrange', title: 'Arrangement' },
   // Was `Sliders`, identical to the synth tab's — see viewMeta.test.ts.

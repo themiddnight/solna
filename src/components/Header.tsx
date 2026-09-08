@@ -17,7 +17,7 @@ import { LoopSelector } from "./loop/LoopSelector";
 import { VIEW_META, PATTERN_SEGMENTS } from "./viewMeta";
 import { sessionLabel } from "./project/projectManagerFlow";
 
-/** The three loop-layer tabs. Playback is the transport bar's single Play —
+/** The two loop-layer tabs. Playback is the transport bar's single Play —
  *  see docs/superpowers/plans/2026-09-08-one-transport.md — so a tab no longer
  *  owns a PlayerModule and no longer carries its own play/stop pair. */
 export const AUTOMATION_TABS: readonly ViewMode[] = ['sound', 'pattern'];

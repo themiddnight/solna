@@ -211,8 +211,7 @@ describe('TabButton rendering', () => {
 // ProjectNameLabel takes `layer` as a plain prop rather than reading
 // `activeTab` itself (see the comment on the component): Header's own
 // `activeTab` read is a plain `useAppStore` selector, which under
-// `renderToString` always serves the store's CREATION-time value ('synth',
-// a loop tab) regardless of `setState` — there is no way to reach the song
+// `renderToString` always serves the store's CREATION-time value ('sound',\n// a loop tab) regardless of `setState` — there is no way to reach the song
 // layer through a rendered `<Header />` in this suite. Testing the label via
 // its own props, the same way `TabButton` above is tested standalone, avoids
 // that trap entirely.
@@ -253,7 +252,7 @@ describe('ProjectNameLabel (song layer only)', () => {
  * `viewMeta.VIEW_ORDER` exists for coverage, not for rendering — the nav is
  * driven by `AUTOMATION_TABS` and `SONG_NAV_TABS`, so the two can only be kept
  * in step by hand. This is that hand: the tabs the header actually renders,
- * loop layer then song layer, must be VIEW_ORDER's five views, each exactly
+ * loop layer then song layer, must be VIEW_ORDER's four views, each exactly
  * once. A view added to one and forgotten in the other fails here rather than
  * going missing from the nav.
  */

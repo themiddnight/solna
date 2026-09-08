@@ -230,11 +230,6 @@ export const SoundView = React.memo(function SoundView() {
 
   const totalPresetsCount = allPresets.length;
 
-  // Explicit rather than Object.keys(SYNTH_TARGET_STYLES): the row below
-  // needs synth separated from chord/bass/pad to frame the latter three, so
-  // it no longer derives the target list from the record. synthControl.ts
-  // pins the keys to synth/chord/bass/pad in this order; a fifth target
-  // added there would silently not render here.
   const renderTargetChip = (target: SynthControlTarget) => (
     <button
       key={target}
@@ -247,6 +242,14 @@ export const SoundView = React.memo(function SoundView() {
     >
       {SYNTH_TARGET_STYLES[target].label}
     </button>
+  );
+
+  // Derived from SYNTH_TARGET_STYLES, not hand-listed: every target that
+  // isn't the lead ('synth') one goes in the framed Accompaniment group, so
+  // a fifth target added to that record renders here automatically instead
+  // of silently not.
+  const accompanimentTargets = (Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]).filter(
+    (target) => target !== 'synth',
   );
 
   return (
@@ -363,7 +366,7 @@ export const SoundView = React.memo(function SoundView() {
                 dropped from this whole row; gap-1 (already on the row and
                 the frame) carries the spacing join used to. */}
             <GroupFrame label="Accompaniment" className="flex items-center gap-1">
-              {(['chord', 'bass', 'pad'] as SynthControlTarget[]).map(renderTargetChip)}
+              {accompanimentTargets.map(renderTargetChip)}
             </GroupFrame>
           </div>
 

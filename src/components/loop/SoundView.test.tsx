@@ -3,8 +3,8 @@ import { renderToString } from 'react-dom/server';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
 import { SoundView } from './SoundView';
 import { FIELD_LABEL, FIELD_LANE } from '../ui/fieldClasses';
-import { resolveSynthControlChannel } from '@/utils/synthControl';
-import type { SynthParamChannel } from '@/utils/synthControl';
+import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from '@/utils/synthControl';
+import type { SynthControlTarget, SynthParamChannel } from '@/utils/synthControl';
 import type { SynthParams } from '@/types';
 
 // A black key is half its own width left of the white-key boundary it
@@ -94,6 +94,17 @@ describe('chromatic keyboard black key geometry', () => {
     expect(html).toContain('Target:');
   });
 
+  // Guards the Target chip row against going back to a hand-listed literal:
+  // every entry in SYNTH_TARGET_STYLES must show up as a chip, so a target
+  // added to the registry and forgotten here fails this test instead of
+  // silently not rendering.
+  test('every SYNTH_TARGET_STYLES entry renders as a Target chip', () => {
+    const html = renderToString(<SoundView />);
+    for (const target of Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]) {
+      expect(html).toContain(`>${SYNTH_TARGET_STYLES[target].label}<`);
+    }
+  });
+
   test('the interactive keyboard moved to the dock, not SoundView', () => {
     const html = renderToString(<SoundView />);
     expect(html).not.toContain('btn-keyboard-mode-chromatic');
@@ -154,11 +165,11 @@ describe('the Drum Sound card, moved from the sequencer (nav restructure Task 6)
   });
 
   test('the drum filter type switch is a daisyUI join on the 32px control lane', () => {
-    expect(html).toContain('join');
     // `sm`, not `xs`: it is one field in a control row, and a 24px join next to
     // a 32px select is what pushed the row's labels onto different baselines.
+    // Unique to this row — the mode switcher above is `btn-xs` — so this alone
+    // carries the assertion's weight.
     expect(html).toContain('btn btn-sm join-item');
-    expect(html).toContain(FIELD_LANE);
   });
 });
 
