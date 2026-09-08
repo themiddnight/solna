@@ -215,11 +215,22 @@ the ui slice, is absent from `partializeAppState` and `PROJECT_CONTENT_KEYS`, an
 `LoopMixPatch` — mute is arrangement intent and stays per loop; solo exists only to hear something
 while editing it. It is a **set, not a radio** (soloing Drums then Lead sounds both — with the
 per-module play buttons gone, "write a lead over just the drums" is only expressible that way),
-**solo beats mute**, and its scope is the whole loop. It is **cleared by navigation** — any change
-of `activeTab`, `patternSegment` or `activeLoopId`, watched by the single subscription in
-`store/soloNav.ts` rather than by a clear inside each writer of `activeLoopId`. That
-clearing is the feature, not a rough edge: a control that can silence a track must not keep doing
-so once the user has stopped looking at it, so do not "fix" it into stickiness. Effective
+**solo beats mute**, and its scope is the whole loop. It is **cleared by a Pattern-segment change,
+by leaving the Loop layer, or by changing the active loop** — a change of `patternSegment`, of the
+LAYER (derived from `activeTab` via `layerForTab`), or of `activeLoopId`, watched by the single
+subscription in `store/soloNav.ts` rather than by a clear inside each writer of `activeLoopId`. A
+tab change between Sound and Pattern does **not** clear it: Sound and Pattern are the two halves of
+editing one loop and the user crosses between them constantly, so a solo set that survives that
+crossing is the working state, while a Pattern-segment change is a change of subject and still
+clears. Consequence, on the record: because the Sound ↔ Pattern hop survives, a set spanning Drums
+and the melodic tracks IS buildable — solo Drums in Beat, hop to Sound, then add lead/chord/bass/pad
+one at a time via the control target, since a target change doesn't clear either. What still empties
+the set is a Pattern-segment change, leaving the Loop layer, changing the active loop, or swapping
+the project. That
+clearing rule is the feature, not a rough edge: a control that can silence a track must not keep
+doing so once the user has left the loop it was set in or moved to a different thing to edit, so do
+not "fix" it into stickiness — and do not "fix" the Sound/Pattern survival back into clearing on
+every tab change either. Effective
 audibility is computed **only** in `engineSync.ts`, off the same `SOURCE_BUSES` table that drives
 the snapshot and the subscriptions, using `isTrackAudible` from `store/trackAudibility.ts` —
 `src/components/` may not import `audio/engine`, so a view may never compute it. Solo moves the

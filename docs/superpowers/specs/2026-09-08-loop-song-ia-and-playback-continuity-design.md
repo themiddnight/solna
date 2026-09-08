@@ -121,8 +121,16 @@ at a rough edge, and must not "fix" it into stickiness.
 - **Solo beats mute.** A track muted in `LoopMixPatch` sounds when soloed.
 - **Scope is the whole loop.** Soloing the drums silences chord, bass, pad and lead — there is
   one solo set in the system, never a solo nested inside a group.
-- **Cleared by navigation**: changing tab, Pattern segment, layer, or active loop empties the
-  set. Crossing from Loop to Song is a tab change, so a solo can never leak into song playback.
+- **Cleared by navigation**: changing Pattern segment, changing LAYER (Loop ↔ Song), or changing
+  the active loop empties the set. A Sound ↔ Pattern tab change does **not** clear it: Sound and
+  Pattern are the two halves of editing one loop and the user crosses between them constantly, so
+  a solo set that survives that crossing is the working state — a Pattern-segment change is a
+  change of subject and still clears. Consequence, on the record: because the Sound ↔ Pattern hop
+  survives, a set spanning Drums and the melodic tracks IS buildable — solo Drums in Beat, hop to
+  Sound, then add lead/chord/bass/pad one at a time via the control target, since a target change
+  doesn't clear either. What still empties the set is a Pattern-segment change, leaving the Loop
+  layer, changing the active loop, or swapping the project. Crossing from Loop to Song is still a layer
+  change, so a solo can never leak into song playback.
 
 **Two hard constraints, to be written into the implementation plan as prohibitions rather than
 left to judgement:**
