@@ -283,3 +283,35 @@ rename with nothing to invent.
   mute off.
 - `viewMeta.test.ts` extends to the four views and three segments, keeping labels and icons
   distinct.
+
+## What Phase 1 learned that Phase 3 must carry
+
+Phase 1 (`docs/superpowers/plans/2026-09-08-one-transport.md`) shipped as
+`refactor/one-transport`. Three things it discovered contradict what this spec assumed when it
+was written, and Phase 3 inherits all three.
+
+**The scope is not yet ground truth, and this spec's §6 assumes it is.** Two store paths restart
+players without setting a scope: `loadLoop.ts`'s non-boundary branch and `vibes.ts`'s
+`applyVibeToStore`. Both capture which players were active, call `hardStopAll()` — which resets
+the scope to `none` — and then restart with `play(module)`, which sets no scope. Pressing the
+transport Play on the loop layer and then switching loops, or clicking a vibe, therefore leaves
+players `'playing'` under a `none` scope. Phase 1 documented this at the `PlaybackScope` type
+rather than closing it, because closing it means deciding what a loop switch should leave
+sounding — which is §6's own question. `playbackScope.test.ts` carries a source-scan guard that
+fails the suite if a third caller of `play(module)` appears, so the hole cannot silently widen
+while Phase 3 is being written.
+
+**Two more scope/`activeLoopId` desynchronisations wait behind the layer-crossing hard stop that
+§6 deletes.** `loopSlice.ts`'s `addLoop` and `duplicateLoop` both move `activeLoopId` without
+touching the scope or the players. Today that is unreachable on the loop layer only because
+crossing the layer boundary hard-stops everything; once §6 relaxes that, they become reachable
+producers of a `solo{some other loop}` scope while the loop layer edits a different loop. In that
+state the master Play renders enabled and does nothing, because `toggle-loop` returns the scope
+unchanged and `soloLoop` early-returns on an unchanged reference. §6's `focus-loop` action is the
+right place to answer this, but it must be checked against these two writers, not only against
+`songMode`'s reconcile.
+
+**Per-module monitoring has no interim replacement.** Phase 1 removed the three per-tab play
+buttons; §4's track solo, which replaces them, is Phase 4. Between the two, auditioning one
+layer alone is only possible by editing the loop's persisted mix. That is acceptable inside the
+epic and is not acceptable in a release: Phase 1 must not reach users without Phase 4.
