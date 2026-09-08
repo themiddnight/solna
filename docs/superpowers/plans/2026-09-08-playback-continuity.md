@@ -4,7 +4,7 @@
 
 **Goal:** Make crossing the Loop/Song boundary preserve playback exactly when what sounds afterwards is the loop now in focus — and make the `PlaybackScope` the ground truth that decision reads.
 
-**Architecture:** `songMode.reconcile()` stops hard-stopping every player on a layer boundary. Instead it dispatches a new `focus-loop` scope action and executes a stop only when that transition lands on `none` with players playing. That only works if the scope always says what is sounding, so the phase first closes the three places where the cursor and the scope can drift apart (`loadLoop`, `vibes`, `addLoop`/`duplicateLoop`) and one where the scope can outlive its loop (`deleteLoop`).
+**Architecture:** `songMode.reconcile()` stops hard-stopping every player on a layer boundary. Instead it dispatches a new `focus-loop` scope action and executes a stop only when that transition lands on `none` with players playing. That only works if the scope always says what is sounding, so the phase first closes the three places where the cursor and the scope can drift apart (`loadLoop`, `vibes`, `addLoop`/`duplicateLoop`) and one where the scope can outlive its loop (`deleteLoop`). **Task 7 then gives the arrangement an ending**: the song stops after its last loop instead of wrapping forever, which is the same ground-truth argument applied to the one transition the scope could not describe — the advance decision's `null` meant both "not a boundary" and "nowhere to go".
 
 **Tech Stack:** TypeScript, React 19, Zustand (`subscribeWithSelector` + `persist`), Bun test runner, Vite, Tailwind + daisyUI.
 
@@ -43,7 +43,7 @@
 
 ## Why this order
 
-The six tasks are ordered by dependency, and the order is the argument:
+The first six tasks are ordered by dependency, and the order is the argument:
 
 1. **Rename first** (`'solo'` → `'loop'`) because it is a mechanical rename that touches every file the later tasks edit. Doing it last would mean re-editing all of them; doing it in Phase 4 would mean renaming *in a codebase where both meanings of "solo" are live*, which is exactly when a mechanical rename stops being mechanical.
 2. **Close `loadLoop` / `vibes`**, and 3. **close `addLoop` / `duplicateLoop`**, before anything reads the scope as ground truth. Everything in §6 decides what survives a navigation *from the scope alone*. A player playing under a `none` scope, or a `loop{X}` scope while the Loop layer edits `Y`, makes that decision wrong — and Task 5 turns a wrong decision into an audible hard stop or a stuck note.
@@ -52,6 +52,8 @@ The six tasks are ordered by dependency, and the order is the argument:
 6. **`deleteLoop`** closes the last way the scope can name something that is not there.
 
 Tasks 4 and 5 could in principle be one task; they are split because a reviewer can meaningfully reject the reducer table while accepting the reconcile wiring, and because Task 4's deliverable (a total pure function) is testable with no store at all.
+
+**Task 7 was added at the user's request during execution and is not part of spec §6.** The spec covers what survives a *navigation*; Task 7 is about what happens when the arrangement reaches its own end, which §6 never asks. It is last because it edits the clock-subscription callback and the branch below it inside `startSongModeSync` — the function Task 5 rewrites the top half of — so it must be written against the post-Task-5 shape. It depends on nothing else in the phase.
 
 ---
 
@@ -1577,6 +1579,395 @@ git commit -m "fix(loops): deleting the scoped loop stops playback and clears th
 
 ---
 
+### Task 7: the song has an ending
+
+**Added at the user's request during execution; not part of spec §6.** Today the arrangement never finishes: `nextLoopIndex` wraps to 0 after the last loop, so a song plays until someone presses Stop. It should stop on its own when the last loop's last repeat completes.
+
+**The type is the reason this is a task and not a one-line edit.** `songAdvanceTarget` returns `string | null`, and `null` already means "this tick is not a transition boundary" — every non-boundary step, loop mode, an out-of-range cursor. "The song is over" is a *different* answer that would have to be spelled the same way, and a caller that cannot tell the two apart cannot stop on one and do nothing on the other. So the return type becomes a three-way discriminated union — `hold`, `advance`, `end` — and the caller does the stopping. `type` for the union, per the Global Constraints; the shape is the one `PlaybackScope` already uses in this repo, down to the frozen singletons (`SCOPE_NONE`/`SCOPE_SONG` → `SONG_HOLD`/`SONG_END`).
+
+**A single-loop arrangement ends too, and the existing exception for it is deleted.** `songAdvanceTarget` ends with `return target === loop.id ? null : target` and a comment saying a single-loop arrangement must loop in place because reloading the loop it is already in would hard-stop the players and reset the shared clock every pass. That reason is technical and it evaporates here: the answer for the last loop is no longer "reload it", it is "stop", and stopping reloads nothing. The reason to *want* it gone is the user's, and it is a separation of duties rather than mere consistency: **audition play already exists for "loop one thing forever"** — press a loop card's play button, or the master Play on the Loop layer, and it repeats until you stop it. Song mode does not need to carry that job as well. Song means a piece with an ending; Audition means listening on repeat. Keeping the exception would mean the same button does two different things depending on how many loops happen to be in the arrangement.
+
+**After the ending the cursor returns to the first loop**, so the next press of Play starts the song from the top. The mechanism is not `songLoopIndex` — `reconcile` derives the cursor on entry from `enterSongIndex(loops, activeLoopId)` and this task must not change that (an existing test, `re-entering song mode re-enters at the active loop`, pins it). Returning to the top therefore means moving **`activeLoopId`**, which may only move through `loadLoop`, so the flat slices and `loops[]` can never disagree.
+
+**The ending is a soft stop — and `softStopAll()` is checked, not assumed.** In this codebase `softStopAll()` moves each `'playing'` player to `'stopping'` and dispatches `stop-all` (scope → `SCOPE_NONE`) in one `set()`. It silences nothing by itself: each playback hook watches its own player field, sees `'stopping'`, and on the next bar line (`isSoftStopBoundary` in `src/components/playerStop.ts`) releases with the *preset's own release time* — `useLeadPlayback` calls `playbackStopSource('synth', s.synthParams.release, time)` — then hard-stops itself with `softStopPendingRef` set so the hard-stop handler does not re-cut the tail at `HARD_STOP_RELEASE`. That is exactly "notes release naturally", so `softStopAll()` is the right call and `hardStopAll()` (which cuts every accompaniment source at 20 ms) is not.
+
+**The timing that falls out of that, and why the call is synchronous.** The bar line each hook releases on is the boundary step itself, *provided* songMode's clock callback runs before the hooks' on that step. It does: `audioEngine.subscribeClock` stores listeners in a `Set` and dispatches with `forEach`, so insertion order wins, and songMode subscribes inside `reconcile` — a synchronous store subscriber on the `set()` that flips the players to `'playing'` — while every playback hook subscribes in a `useEffect`, after React commits that same transition. So `softStopAll()` is called **synchronously** in the callback, not deferred like the advance: deferring it to a microtask would put it after all three hooks had already processed the boundary step, and the song would play one extra bar every time. (Deleting a listener from a `Set` during its own `forEach` is defined behaviour and skips only the deleted entry, so the teardown below is safe from inside the dispatch.)
+
+**The clock, traced.** Two subscriptions matter and they end at different moments.
+
+- *songMode's advance subscription* would otherwise survive the ending, and that is a bug this task has to fix rather than inherit: `reconcile`'s tail is `else if (layer !== 'song' || s.playbackScope.kind === 'loop')`, and after the end the state is *song layer, not playing, scope `none`* — which matches **neither** branch, so the cursor would stay set and the advance listener would stay registered with nothing playing. `audioEngine.subscribeClock` only calls `stopClockTimer()` when the **last** listener goes, so a retained listener keeps the shared 16th clock timer running forever and blocks idle suspend, in direct breach of `CLAUDE.md`'s "the shared clock runs if and only if a player holds a subscription". The fix is to turn that `else if` into a plain `else`. It is a superset of the branch it replaces — the only state it newly catches is "song layer, nothing playing" — so Task 5's comment pointing at "the `layer !== 'song'` branch at the bottom of this function" stays true, and the same edit also closes the identical leak after a user-initiated Stop on the Song layer.
+- *the playback hooks' subscriptions* end normally: each hook's clock effect is keyed on `isPlaying`, so when React commits the `'stopped'` state its cleanup unsubscribes, and the last of those three is what drops `clockListeners` to zero and stops the timer. Nothing in this task needs to force that.
+
+**What the scope becomes: `none`.** `softStopAll()` dispatches `stop-all`, so the ending leaves no `song` scope behind — Phase 3's premise, that the scope alone answers "what is sounding", survives the one transition that ends playback without a click.
+
+**Interaction with Task 5 — no shared lines, but the same function.** Task 5 rewrites the doc comment, the boundary block and the store subscription's selector at the top of `startSongModeSync`. Task 7 edits the clock-subscription callback *inside* the `layer === 'song'` branch and the `else if` below it. The two do not overlap, but Task 5 renumbers everything, **so this task cites no line numbers — anchor every edit on the quoted code**.
+
+**Interaction with Task 2, which has already landed.** `loadLoop`'s default path now asks `restartAfterStop` what comes back, and its `wasPlaying` is `player !== 'stopped'` — which is *true* for a `'stopping'` player. A plain `loadLoop(firstId)` at the ending would therefore hard-stop mid-release and cut every accompaniment source at `LOAD_LOOP_RELEASE` (20 ms), truncating the tail the soft stop just asked for. The rewind uses the **`atBoundary` seamless path** instead, which touches no player state at all, drops only the voices *scheduled to start* at or after the boundary, and re-anchors the grid. Read `loadLoop`'s doc comment before writing the step and confirm `dropVoicesScheduledFrom` is start-time based (the comment says the notes "queued PAST the boundary are dropped"); if it turns out to truncate voices already sounding, drop the rewind from the boundary callback and say so in the commit rather than reaching for the default path.
+
+**Files:**
+- Modify: `src/store/songMode.ts` — delete `nextLoopIndex`; replace `songAdvanceTarget` with `songAdvanceDecision` plus the `SongAdvance` union and its two singletons; the `end` branch in the clock-subscription callback inside `startSongModeSync`; the `else if` at the bottom of `reconcile`
+- Test: `src/store/songMode.test.ts` — the `nextLoopIndex` test and all five `songAdvanceTarget` tests; two new coordinator tests
+
+**Interfaces:**
+- Consumes: `loadLoop(id, { atBoundary })`, `aggregatePlayerState`, `softStopAll()` from the transport slice. Nothing from Tasks 1-6 beyond the post-Task-5 shape of `startSongModeSync`.
+- Produces:
+  - `type SongAdvance = { kind: 'hold' } | { kind: 'advance'; loopId: string } | { kind: 'end' }`
+  - `const SONG_HOLD: SongAdvance`, `const SONG_END: SongAdvance` (frozen singletons)
+  - `songAdvanceDecision(loops: readonly Loop[], songLoopIndex: number | null, step: number, stepsPerBar: number): SongAdvance`
+- Removed: `nextLoopIndex`, `songAdvanceTarget`.
+
+- [ ] **Step 1: Replace the pure-helper tests**
+
+In `src/store/songMode.test.ts`, delete the `nextLoopIndex wraps to 0 after the last loop` test and all five `songAdvanceTarget` tests (they run from `songAdvanceTarget returns the next loop id exactly on the boundary` through `songAdvanceTarget dwells an empty loop one bar then advances`), and put this in their place inside the same `describe('song mode pure helpers')` block:
+
+```ts
+  test('songAdvanceDecision advances exactly on the boundary and holds everywhere else', () => {
+    const loops = [shortLoop('a', 4), shortLoop('b', 2), shortLoop('c', 1)];
+    expect(songAdvanceDecision(loops, 0, 63, 16)).toBe(SONG_HOLD);
+    expect(songAdvanceDecision(loops, 0, 64, 16)).toEqual({ kind: 'advance', loopId: 'b' });
+    expect(songAdvanceDecision(loops, 1, 31, 16)).toBe(SONG_HOLD);
+    expect(songAdvanceDecision(loops, 1, 32, 16)).toEqual({ kind: 'advance', loopId: 'c' });
+  });
+
+  test('songAdvanceDecision ENDS the song after the last loop instead of wrapping', () => {
+    const loops = [shortLoop('a', 4), shortLoop('b', 2)];
+    // The song has an ending: the last slot does not wrap back to the top.
+    expect(songAdvanceDecision(loops, 1, 32, 16)).toBe(SONG_END);
+    // ...and only on its own boundary. A mid-loop step still holds.
+    expect(songAdvanceDecision(loops, 1, 31, 16)).toBe(SONG_HOLD);
+  });
+
+  test('songAdvanceDecision ends a SINGLE-loop arrangement too', () => {
+    // The old rule made this the one arrangement that played forever, for a
+    // technical reason (reloading the loop we are already in would hard-stop
+    // the players and rewind the clock every pass) that stopping does not
+    // have. Auditioning a card is the feature for "loop one thing forever";
+    // song mode is the feature for a piece with an ending.
+    const loops = [shortLoop('a', 4)];
+    expect(songAdvanceDecision(loops, 0, 64, 16)).toBe(SONG_END);
+  });
+
+  test('songAdvanceDecision multiplies loop length by repeatCount before deciding', () => {
+    const loopA = { ...shortLoop('a', 2), repeatCount: 3 }; // 2 bars x 16 steps x 3 repeats
+    const loopB = { ...shortLoop('b', 1), repeatCount: 2 }; // 1 bar x 16 steps x 2 repeats
+    const loops = [loopA, loopB];
+    expect(songAdvanceDecision(loops, 0, 32, 16)).toBe(SONG_HOLD); // after rep 1
+    expect(songAdvanceDecision(loops, 0, 64, 16)).toBe(SONG_HOLD); // after rep 2
+    expect(songAdvanceDecision(loops, 0, 95, 16)).toBe(SONG_HOLD);
+    expect(songAdvanceDecision(loops, 0, 96, 16)).toEqual({ kind: 'advance', loopId: 'b' });
+    // The last loop's repeats are counted before the ending, too.
+    expect(songAdvanceDecision(loops, 1, 16, 16)).toBe(SONG_HOLD); // after rep 1
+    expect(songAdvanceDecision(loops, 1, 32, 16)).toBe(SONG_END); // after rep 2
+  });
+
+  test('songAdvanceDecision holds on step 0, in loop mode and on an out-of-range cursor', () => {
+    // Every one of these was `null` before, indistinguishable from the ending.
+    const loops = [shortLoop('a', 4)];
+    expect(songAdvanceDecision(loops, null, 64, 16)).toBe(SONG_HOLD);
+    expect(songAdvanceDecision(loops, 0, 0, 16)).toBe(SONG_HOLD);
+    expect(songAdvanceDecision(loops, 99, 64, 16)).toBe(SONG_HOLD);
+    expect(songAdvanceDecision([], 0, 64, 16)).toBe(SONG_HOLD);
+  });
+
+  test('songAdvanceDecision dwells an empty loop one bar then advances', () => {
+    const empty: Loop = {
+      ...createDefaultLoop(),
+      id: 'empty',
+      name: 'Empty',
+      chords: [],
+    };
+    const loops = [empty, shortLoop('b', 1)];
+    expect(songAdvanceDecision(loops, 0, 0, 16)).toBe(SONG_HOLD); // step 0
+    expect(songAdvanceDecision(loops, 0, 15, 16)).toBe(SONG_HOLD); // mid-bar
+    expect(songAdvanceDecision(loops, 0, 16, 16)).toEqual({ kind: 'advance', loopId: 'b' });
+  });
+```
+
+Change the import block from `./songMode` so it reads `enterSongIndex, loopLengthSteps, SONG_END, SONG_HOLD, songAdvanceDecision, startSongModeSync` — `nextLoopIndex` and `songAdvanceTarget` are gone.
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `bun test src/store/songMode.test.ts`
+Expected: FAIL — `songAdvanceDecision`, `SONG_HOLD` and `SONG_END` are not exported from `./songMode`.
+
+- [ ] **Step 3: Replace the pure function**
+
+In `src/store/songMode.ts`, delete `nextLoopIndex` entirely (`songAdvanceTarget` is its only caller — confirm with `grep -rn "nextLoopIndex" src` first, and if anything else turns up, stop and keep it). A helper documented as "wrapping to the top (the song loops)" describes behaviour the arrangement no longer has, and leaving it exported with a test pinning it would make the wrap look like a rule that is still in force somewhere.
+
+Replace `songAdvanceTarget` (from its doc comment through its closing brace) with:
+
+```ts
+/**
+ * What the arrangement does at this clock step.
+ *
+ * Three answers, not two, and the third is why this is a union: `hold` is
+ * "not a transition boundary" — every non-boundary step, loop mode, an
+ * out-of-range cursor — while `end` is "the song is over". The old
+ * `string | null` return spelled both of them `null`, so the caller could not
+ * stop on one and do nothing on the other, and the arrangement could only
+ * ever wrap.
+ */
+export type SongAdvance =
+  | { kind: 'hold' }
+  | { kind: 'advance'; loopId: string }
+  | { kind: 'end' };
+
+/** Nothing happens on this step. */
+export const SONG_HOLD: SongAdvance = Object.freeze({ kind: 'hold' });
+
+/** The last loop's last repeat just completed: the song is over. */
+export const SONG_END: SongAdvance = Object.freeze({ kind: 'end' });
+
+/**
+ * The decision for one clock step. `step` is measured from the shared clock's
+ * reset origin — every advance re-anchors the grid at the boundary, so each
+ * loop's boundary is `loopLength` steps from 0 (the same alignment the Instant
+ * Vibe swap relies on).
+ *
+ * The last slot ENDS the song; it does not wrap. A single-loop arrangement is
+ * no exception, and the exception that used to be here — "reloading the loop
+ * we are already in would hard-stop the players and reset the shared clock on
+ * every pass" — was answering a question this no longer asks: ending reloads
+ * nothing. The user-facing reason is a separation of duties. Auditioning a
+ * loop card already means "loop one thing forever"; song mode means a piece
+ * with an ending, and one arrangement size must not silently switch which of
+ * the two the Play button does.
+ */
+export function songAdvanceDecision(
+  loops: readonly Loop[],
+  songLoopIndex: number | null,
+  step: number,
+  stepsPerBar: number,
+): SongAdvance {
+  if (songLoopIndex === null) return SONG_HOLD;
+  const loop = loops[songLoopIndex];
+  if (!loop) return SONG_HOLD;
+  const length = loopLengthSteps(loop.chords, stepsPerBar);
+  // A loop with no chords is a silent bar, not a dead end: dwell it for one
+  // bar so the song keeps flowing instead of freezing (a 0 length can never
+  // hit the `step % length === 0` boundary).
+  const effectiveLength = Math.max(length, stepsPerBar);
+  const repeats = Math.max(1, loop.repeatCount ?? 1);
+  const totalSteps = effectiveLength * repeats;
+  if (step <= 0 || step % totalSteps !== 0) return SONG_HOLD;
+  const next = loops[songLoopIndex + 1];
+  return next ? { kind: 'advance', loopId: next.id } : SONG_END;
+}
+```
+
+- [ ] **Step 4: Run the pure tests to verify they pass**
+
+Run: `bun test src/store/songMode.test.ts -t "song mode pure helpers"`
+Expected: PASS. The coordinator tests still fail to compile until Step 5 updates the call site.
+
+- [ ] **Step 5: Teach the caller to end the song**
+
+Still in `src/store/songMode.ts`, inside `startSongModeSync`'s clock subscription, replace the `songAdvanceTarget` call and the `if (target === null) return;` line that follows it with the decision switch below, keeping the existing deferral comment attached to the `advance` case (it explains the microtask and the `time` argument and is still exactly right):
+
+```ts
+          const decision = songAdvanceDecision(
+            cur.loops,
+            cur.songLoopIndex,
+            step,
+            getMeter(cur.meterId).stepsPerBar,
+          );
+          if (decision.kind === 'hold') return;
+          if (decision.kind === 'end') {
+            // The song has an ending. SOFT stop, not hard: each playback hook
+            // sees 'stopping', reaches this same boundary step's bar line and
+            // releases with its preset's own release time, so the last chord
+            // rings out instead of being cut at HARD_STOP_RELEASE.
+            //
+            // Synchronous, deliberately — the opposite of the advance below.
+            // This callback is registered before every playback hook's (it
+            // subscribes from reconcile, a synchronous store subscriber on the
+            // set() that starts the players; the hooks subscribe in a useEffect
+            // after React commits it), and the engine dispatches its listener
+            // Set in insertion order. So the hooks see 'stopping' on THIS step
+            // and stop here. Deferring it to a microtask would put it after all
+            // three had already played the step, and the song would run one bar
+            // past its own ending.
+            //
+            // softStopAll also dispatches 'stop-all', so the scope goes to
+            // `none` in the same set(): a finished song leaves no `song` scope
+            // behind for Phase 3's "the scope says what is sounding" to trip
+            // over. That set() re-enters reconcile synchronously, which is what
+            // drops the cursor and this very subscription (see the `else` at
+            // the bottom of reconcile) — deleting a listener from a Set inside
+            // its own forEach skips only that listener, so the remaining hooks
+            // still get this step.
+            cur.softStopAll();
+            // Back to the top, so the next Play starts the song from loop 1:
+            // reconcile derives its cursor from activeLoopId (enterSongIndex),
+            // so the cursor only really moves when the CONTENT does, and
+            // content only moves through loadLoop. The seamless path, because
+            // the default one would hard-stop mid-release and cut every
+            // accompaniment source at LOAD_LOOP_RELEASE — undoing the soft stop
+            // one line above (loadLoop's wasPlaying counts a 'stopping' player
+            // as active). Deferred for the reason the advance is: loadLoop
+            // re-anchors the grid, and doing that inside the clock's own
+            // dispatch collides with the step being dispatched.
+            const firstId = cur.loops[0]?.id;
+            if (firstId !== undefined && firstId !== cur.activeLoopId) {
+              queueMicrotask(() => loadLoop(firstId, { atBoundary: time }));
+            }
+            return;
+          }
+```
+
+and change the deferred advance call itself from `loadLoop(target, ...)` to:
+
+```ts
+          queueMicrotask(() => loadLoop(decision.loopId, { atBoundary: time }));
+```
+
+- [ ] **Step 6: Close the clock leak in `reconcile`'s tail**
+
+Still in `src/store/songMode.ts`, change the bottom branch of `reconcile` from `} else if (layer !== 'song' || s.playbackScope.kind === 'loop') {` to a plain `} else {`, and extend the comment inside it:
+
+```ts
+    } else {
+      // soloLoop nulls songLoopIndex in the same set() that flips the scope,
+      // so by the time this runs it is often already null — guard the write,
+      // not the unsubscribe: the clock must still be torn down here rather
+      // than left for the callback's own kind==='loop' early-return to no-op
+      // tick after tick.
+      //
+      // A plain `else`, not `layer !== 'song' || scope.kind === 'loop'`: that
+      // condition missed the state a finished song lands in — song layer, not
+      // playing, scope `none` — which matched NEITHER branch, so the advance
+      // subscription survived with nothing playing. subscribeClock only stops
+      // the timer when its LAST listener goes, so one retained listener keeps
+      // the shared 16th clock running and blocks idle suspend, against
+      // CLAUDE.md's "the clock runs if and only if a player holds a
+      // subscription". The same gap swallowed a user-initiated Stop on the
+      // Song layer. The only state this newly catches is "song layer, nothing
+      // playing", which wants exactly this: no cursor, no advance listener.
+      if (s.songLoopIndex !== null) s.setSongLoopIndex(null);
+      stopClock();
+    }
+```
+
+- [ ] **Step 7: Write the store-level tests**
+
+Append these inside `describe('song mode coordinator')` in `src/store/songMode.test.ts`. They assert on **player state**, because "did not advance" and "stopped" are indistinguishable from the decision value alone:
+
+```ts
+  test('the arrangement STOPS at its end instead of wrapping to the top', async () => {
+    const loopA = shortLoop('a', 4); // 64 steps
+    const loopB = shortLoop('b', 2); // 32 steps
+    useAppStore.setState({ loops: [loopA, loopB], activeLoopId: 'a' });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+
+    useAppStore.getState().playAll();
+    expect(clock.count).toBe(1);
+
+    // End of loop A: advance to B, still playing.
+    clock.tick(64, 4.5);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useAppStore.getState().activeLoopId).toBe('b');
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+
+    // End of loop B: the song is over.
+    clock.tick(32, 9.25);
+
+    const s = useAppStore.getState();
+    // A SOFT stop: 'stopping' is the terminal state here because no playback
+    // hook is mounted in a store test to carry it to 'stopped' at the bar
+    // line. In the app those hooks release with the preset's own release time
+    // and then hard-stop themselves.
+    expect(s.sequencerPlayer).toBe('stopping');
+    expect(s.chordsPlayer).toBe('stopping');
+    expect(s.leadPlayer).toBe('stopping');
+    // No `song` scope survives the ending, and no advance subscription either.
+    expect(s.playbackScope).toEqual({ kind: 'none' });
+    expect(s.songLoopIndex).toBe(null);
+    expect(clock.count).toBe(0);
+
+    // The cursor is back at the top, so the next Play starts the song there.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useAppStore.getState().activeLoopId).toBe('a');
+    stop();
+  });
+
+  test('a single-loop arrangement ends too, after its repeats', () => {
+    // Audition play is the feature for "loop one thing forever"; song mode is
+    // a piece with an ending, at every arrangement size.
+    useAppStore.setState({
+      loops: [{ ...shortLoop('a', 2), repeatCount: 2 }], // 2 bars x 2 repeats = 64 steps
+      activeLoopId: 'a',
+    });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+
+    useAppStore.getState().playAll();
+    clock.tick(32, 2.0); // end of repeat 1 — keeps going
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+
+    clock.tick(64, 4.0); // end of repeat 2 — the song is over
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('stopping');
+    expect(s.playbackScope).toEqual({ kind: 'none' });
+    expect(clock.count).toBe(0);
+    // The sole loop is already the first one, so nothing is reloaded and the
+    // cursor is where it was.
+    expect(s.activeLoopId).toBe('a');
+    stop();
+  });
+
+  test('after the song ends, Play starts it again from the top', async () => {
+    const loopA = shortLoop('a', 4); // 64 steps
+    const loopB = shortLoop('b', 2); // 32 steps
+    useAppStore.setState({ loops: [loopA, loopB], activeLoopId: 'a' });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+
+    useAppStore.getState().playAll();
+    clock.tick(64, 4.5);
+    await new Promise((r) => setTimeout(r, 0));
+    clock.tick(32, 9.25);
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Stand in for the playback hooks, which are what carry 'stopping' to
+    // 'stopped' at the bar line in the app and are not mounted here.
+    useAppStore.getState().hardStopAll();
+
+    useAppStore.getState().playAll();
+
+    const s = useAppStore.getState();
+    expect(s.songLoopIndex).toBe(0);
+    expect(s.activeLoopId).toBe('a');
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(clock.count).toBe(1);
+    stop();
+  });
+```
+
+- [ ] **Step 8: Run the song-mode suite**
+
+Run: `bun test src/store/songMode.test.ts`
+Expected: PASS, all of it. Read any pre-existing failure before editing the test that produced it — in particular `re-entering song mode re-enters at the active loop` and `a user-initiated Stop still clears the song scope after a boundary crossing` are both about states this task deliberately did not change, so a failure there means the `else` in Step 6 caught something it should not have.
+
+- [ ] **Step 9: Run the whole suite**
+
+Run: `bun test`
+Expected: PASS. Nothing outside `songMode.ts` imported `songAdvanceTarget` or `nextLoopIndex` (Step 3's grep proved it), and no component reads the advance decision.
+
+- [ ] **Step 10: Verify and commit**
+
+```bash
+bun run verify
+git add src/store/songMode.ts src/store/songMode.test.ts
+git commit -m "feat(song): the arrangement ends after its last loop instead of wrapping"
+```
+
+---
+
 ## Manual check before opening the PR
 
 `bun run verify` does not press buttons, and this phase is the one where that matters: every failure mode below is **audible** — silence where the music should have carried, a hard stop the user did not ask for, or a note left ringing with a transport that shows Play. None of them shows up in the type checker or in a rendered-markup assertion.
@@ -1600,3 +1991,11 @@ Run `bun run dev`, turn the volume up enough to hear a tail, and work through th
 
 8. **Add a loop mid-playback.** On Loop › Sound press Play, cross to Arrange, press `+`, cross back to Loop. Audio continues and the master button shows Stop. Press it — playback must actually stop on that one click.
 9. **Metronome alone.** With everything stopped, toggle the metronome. Nothing should sound and no playhead should move: the metronome is a click, not a transport (`CLAUDE.md`, "The shared 16th clock runs if and only if a player holds a subscription"). This phase touches who starts and stops players, so it is worth re-confirming the clock still ends with the last player.
+
+**Task 7's ending — the three that only ears can check:**
+
+10. **A multi-loop song plays to its end and stops.** Build an arrangement of three short loops (two bars each is enough; drop the repeats to 1 so the wait is short) and press the master Play on Arrange. It advances through all three, and **at the end of the last one it stops by itself** — no fourth pass, no wrap back to loop 1. Listen to *how* it stops: the final chord should ring out its own release, not be chopped. Then check the two things that are invisible: the master button offers Play, and the Arrange selection has jumped back to loop 1.
+11. **A single-loop arrangement ends after its repeats.** Delete down to one loop, set its repeat count to 2, press Play on Arrange. It plays twice and stops. This is the behaviour that used to be an explicit exception — if it loops a third time, the deleted `return target === loop.id ? null : target` came back. Then press a loop card's own play button and confirm the audition *does* still repeat forever: that is the separation of duties this ending relies on, and it is the thing that would make the change a regression if it broke.
+12. **Play again after an ending starts from the top.** Immediately after check 10 or 11 finishes on its own, press the master Play once. The song starts at loop 1 — not at the loop it ended on — and it must start on the first press (a press that does nothing means the ending left a scope behind). Do it once more from the *end of the song* rather than from a manual Stop, since that is the path with no click in it.
+
+**One timing detail to listen for in checks 10 and 11:** the stop must land at the end of the last loop, not one bar later. An extra bar means the soft stop reached the playback hooks after they had already played the boundary step — i.e. the ending got deferred instead of being called synchronously in the clock callback.
