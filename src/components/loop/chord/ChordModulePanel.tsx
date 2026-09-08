@@ -10,9 +10,7 @@ import {
 import { patternMeterTitle, patternOptionLabel } from "@/components/meterSelect";
 import { getMeter } from "@/utils/meter";
 import { stepCells } from "@/components/sequencerGrid";
-import { ChannelStrip } from "@/components/ui/ChannelStrip";
 import { FIELD_LABEL, FIELD_SELECT, SECTION_HEADER } from "@/components/ui/fieldClasses";
-import { SYNTH_TARGET_STYLES } from "@/utils/synthControl";
 import { Slider } from "@/components/ui/Slider";
 import { PlayingStepRow, STEP_ROW_CLASS } from "@/components/ui/StepRow";
 import { PlayingStepHeader } from "@/components/ui/StepHeader";
@@ -59,8 +57,6 @@ export function ChordModulePanel({
   const setChordRhythmMode = useAppStore((s) => s.setChordRhythmMode);
   const customChordRhythm = useAppStore((s) => s.customChordRhythm);
   const setCustomChordRhythm = useAppStore((s) => s.setCustomChordRhythm);
-  const chordVolume = useAppStore((s) => s.chordVolume);
-  const setChordVolume = useAppStore((s) => s.setChordVolume);
   const customPresets = useAppStore((s) => s.customSynthPresets);
 
   const chordCells = useMemo(() => stepCells(getMeter(meterId)), [meterId]);
@@ -195,16 +191,6 @@ export function ChordModulePanel({
               </span>
             </div>
           </div>
-
-          {/* Chord Layer Volume Slider */}
-          <ChannelStrip
-            idPrefix="chord"
-            label="Chord Level"
-            volumeDb={chordVolume}
-            accentClass={SYNTH_TARGET_STYLES.chord.accent}
-            sliderClassName={SYNTH_TARGET_STYLES.chord.slider}
-            onVolumeDbChange={setChordVolume}
-          />
         </div>
 
         {/* Full-width step editor. It sits BELOW the field row rather than

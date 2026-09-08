@@ -66,7 +66,6 @@ import { isProgressionAvailable } from "./chord/progressionAvailability";
 const ChordPresetLibrary = React.lazy(() =>
   import("./ChordPresetLibrary").then((m) => ({ default: m.ChordPresetLibrary })),
 );
-import { PowerToggle } from "../ui/PowerToggle";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { SegmentHeader } from "../ui/SegmentHeader";
 import { ModuleHeader } from "../ui/ModuleHeader";
@@ -154,12 +153,6 @@ export const ChordView = React.memo(function ChordView() {
   const customChordRhythm = useAppStore((s) => s.customChordRhythm);
   const bassPatternMode = useAppStore((s) => s.bassPatternMode);
   const customBassPattern = useAppStore((s) => s.customBassPattern);
-  const chordMuted = useAppStore((s) => s.chordMuted);
-  const toggleChordMuted = useAppStore((s) => s.toggleChordMuted);
-  const bassMuted = useAppStore((s) => s.bassMuted);
-  const toggleBassMuted = useAppStore((s) => s.toggleBassMuted);
-  const padMuted = useAppStore((s) => s.padMuted);
-  const togglePadMuted = useAppStore((s) => s.togglePadMuted);
   const bpm = useAppStore((s) => s.bpm);
   const { playChordWithRhythm, playBassWithPattern, playingIndex, activeChordId, setActiveChordId, isPlaying } = useChordPlayback();
 
@@ -565,29 +558,6 @@ export const ChordView = React.memo(function ChordView() {
         segment="accompaniment"
         actions={
           <>
-            <PowerToggle
-              id="btn-mute-chord"
-              on={!chordMuted}
-              onToggle={toggleChordMuted}
-              name="Chord"
-              tone="module-chord"
-            />
-            <PowerToggle
-              id="btn-mute-bass"
-              on={!bassMuted}
-              onToggle={toggleBassMuted}
-              name="Bass"
-              tone="module-bass"
-            />
-            <PowerToggle
-              id="btn-mute-pad"
-              on={!padMuted}
-              onToggle={togglePadMuted}
-              name="Pad"
-              tone="module-pad"
-            />
-            <div className="divider divider-horizontal mx-0" />
-
             {/* Quick Save Current Progression */}
             <button
               id="btn-quick-save-chord-progression"

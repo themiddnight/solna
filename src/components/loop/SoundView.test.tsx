@@ -106,6 +106,12 @@ describe('chromatic keyboard black key geometry', () => {
  * The Drum Sound card (kit, filter, level) moved here from the sequencer's
  * Beat segment (nav restructure Task 6). These three regression guards moved
  * with it, verbatim in what they assert — only the render target changed.
+ *
+ * Task 7 then moved the LEVEL out of the card and into the one Mixer, which is
+ * the only reason two of the three read differently now: the drum bus fader is
+ * still rendered by this view (so the dB guard still belongs here) but wears
+ * SoundMixer's `drum` id prefix, and the card's field row is one field
+ * shorter.
  */
 describe('the Drum Sound card, moved from the sequencer (nav restructure Task 6)', () => {
   const html = renderToString(<SoundView />);
@@ -117,24 +123,33 @@ describe('the Drum Sound card, moved from the sequencer (nav restructure Task 6)
     // DEV-383: masterSequencerVolume's factory default is DEFAULT_BUS_TRIM_DB
     // (-6 dB), not unity — this view renders the store's creation-time
     // snapshot with no explicit setState, so the tooltip reflects that.
-    expect(html).toContain('title="Drums Layer Gain: -6.0 dB"');
+    // `Drum`, not `Drums`: the fader is SoundMixer's row now (idPrefix 'drum',
+    // which tracks the store field `drumMuted`), no longer the card's own
+    // "Drum Level" strip. Same view, same bus, same dB contract.
+    expect(html).toContain('title="Drum Layer Gain: -6.0 dB"');
     expect(html).toContain('step="0.005"');
   });
 
-  // The regression this row was rebuilt for: five fields whose controls were
-  // 24, 30, 32 and 48px tall bottom-aligned into five different label heights.
-  // Nothing renders after this card in SoundView (the preset drawer's
-  // Suspense/lazy content is null while closed), so slicing from the card's
-  // own heading to the end of the string covers exactly the card — confirmed
-  // by rendering SoundView and checking FIELD_LABEL/FIELD_LANE occur zero
-  // times before that heading and exactly 5/4 times from it onward.
+  // The regression this row was rebuilt for: fields whose controls were 24, 32
+  // and 48px tall bottom-aligned into different label heights.
+  //
+  // The slice is bounded at BOTH ends on purpose. It used to run to the end of
+  // the string, which was only correct while nothing rendered after this card
+  // (the preset drawer's Suspense/lazy content is null while closed). SoundMixer
+  // now renders below it and contributes five ChannelStrip FIELD_LABELs, so an
+  // open-ended slice would count the mixer's fields as the card's and the
+  // numbers below would stop meaning "this row". `>Mixer<` is the mixer's
+  // SECTION_HEADER span, i.e. the first byte after the card.
   test('every field in a control row shares one label line and one control lane', () => {
-    const soundRow = html.slice(html.indexOf('Drum Sound'));
+    const start = html.indexOf('Drum Sound');
+    const end = html.indexOf('>Mixer<');
+    expect(end).toBeGreaterThan(start);
+    const soundRow = html.slice(start, end);
     const labels = soundRow.split(FIELD_LABEL).length - 1;
     const lanes = soundRow.split(FIELD_LANE).length - 1;
-    // Kit, Filter, Cutoff, Res each own a label + lane; Drum Level's label and
-    // 32px shell come from ChannelStrip, which sits on the same line already.
-    expect(labels).toBe(5);
+    // Kit, Filter, Cutoff, Res each own a label + lane. The fifth label was
+    // "Drum Level"'s, from the ChannelStrip that is now a Mixer row.
+    expect(labels).toBe(4);
     expect(lanes).toBe(4);
   });
 

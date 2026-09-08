@@ -39,8 +39,8 @@ import { FilterPanel } from "./synth/FilterPanel";
 import { EnvelopePanel } from "./synth/EnvelopePanel";
 import { LfoPanel } from "./synth/LfoPanel";
 import { ArpeggiatorPanel } from "./synth/ArpeggiatorPanel";
+import { SoundMixer } from "./SoundMixer";
 import { Knob } from "../ui/Knob";
-import { ChannelStrip } from "../ui/ChannelStrip";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { ViewHeader } from "../ui/ViewHeader";
 import { PanelCard } from "../ui/PanelCard";
@@ -84,55 +84,16 @@ export const SoundView = React.memo(function SoundView() {
   const onChangeSynthParams = useAppStore((s) => s.setSynthParams);
   const onChangeChordSynthParams = useAppStore((s) => s.setChordSynthParams);
   const onChangeBassSynthParams = useAppStore((s) => s.setBassSynthParams);
-  const synthVolume = useAppStore((s) => s.synthVolume);
-  const setSynthVolume = useAppStore((s) => s.setSynthVolume);
-  const chordVolume = useAppStore((s) => s.chordVolume);
-  const setChordVolume = useAppStore((s) => s.setChordVolume);
-  const bassVolume = useAppStore((s) => s.bassVolume);
-  const setBassVolume = useAppStore((s) => s.setBassVolume);
-  const padVolume = useAppStore((s) => s.padVolume);
-  const setPadVolume = useAppStore((s) => s.setPadVolume);
   const padSynthParams = useAppStore((s) => s.padSynthParams);
   const setPadSynthParams = useAppStore((s) => s.setPadSynthParams);
   const soundKit = useAppStore((s) => s.soundKit);
   const onChangeSoundKit = useAppStore((s) => s.setSoundKit);
-  const masterSequencerVolume = useAppStore((s) => s.masterSequencerVolume);
-  const setMasterSequencerVolume = useAppStore(
-    (s) => s.setMasterSequencerVolume,
-  );
   const drumFilterCutoff = useAppStore((s) => s.drumFilterCutoff);
   const drumFilterResonance = useAppStore((s) => s.drumFilterResonance);
   const drumFilterType = useAppStore((s) => s.drumFilterType);
   const setDrumFilterCutoff = useAppStore((s) => s.setDrumFilterCutoff);
   const setDrumFilterResonance = useAppStore((s) => s.setDrumFilterResonance);
   const setDrumFilterType = useAppStore((s) => s.setDrumFilterType);
-
-  // Only the value and its setter: everything else the fader wears
-  // (id prefix, accent, class list) is keyed off `controlTarget` at the call
-  // site, from SYNTH_TARGET_STYLES.
-  const activeTargetVolume = useMemo(() => {
-    switch (controlTarget) {
-      case "chord":
-        return { volume: chordVolume, onVolumeChange: setChordVolume };
-      case "bass":
-        return { volume: bassVolume, onVolumeChange: setBassVolume };
-      case "pad":
-        return { volume: padVolume, onVolumeChange: setPadVolume };
-      case "synth":
-      default:
-        return { volume: synthVolume, onVolumeChange: setSynthVolume };
-    }
-  }, [
-    controlTarget,
-    synthVolume,
-    setSynthVolume,
-    chordVolume,
-    setChordVolume,
-    bassVolume,
-    setBassVolume,
-    padVolume,
-    setPadVolume,
-  ]);
 
   // Route the control panel (knobs, preset selects) to the selected
   // destination.
@@ -362,7 +323,7 @@ export const SoundView = React.memo(function SoundView() {
             read that same params object, so folding this into the Simple-only
             preset bar would silently strand Pro mode on whatever target was
             last picked. */}
-        {/* Row 1: Control Destination / Target Selector + Dynamic Target Volume Slider */}
+        {/* Row 1: Control Destination / Target Selector */}
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           {/* Control Destination Selector */}
           <div
@@ -388,16 +349,6 @@ export const SoundView = React.memo(function SoundView() {
             ))}
           </div>
 
-          {/* Target Volume Slider, dynamic to active target with matching tint */}
-          <div className="flex-1 min-w-44 max-w-xs">
-            <ChannelStrip
-              idPrefix={controlTarget}
-              volumeDb={activeTargetVolume.volume}
-              accentClass={SYNTH_TARGET_STYLES[controlTarget].accent}
-              sliderClassName={SYNTH_TARGET_STYLES[controlTarget].slider}
-              onVolumeDbChange={activeTargetVolume.onVolumeChange}
-            />
-          </div>
 
           {/* Per-target oscilloscope, the way a hardware synth puts a scope
               beside the section you are editing. It taps the TARGET layer's
@@ -701,10 +652,11 @@ export const SoundView = React.memo(function SoundView() {
         </div>
       )}
 
-      {/* Drum Sound — kit, filter and level. Moved here from the sequencer:
-          all of it changes how the kit SOUNDS and none of it changes a note,
-          which is the Sound/Pattern boundary rule. The grid that picks these
-          notes lives on Pattern › Beat. */}
+      {/* Drum Sound — kit and filter. Moved here from the sequencer: all of it
+          changes how the kit SOUNDS and none of it changes a note, which is the
+          Sound/Pattern boundary rule. The grid that picks these notes lives on
+          Pattern › Beat. The bus level left this card for the Mixer below, so
+          that the drum bus is balanced against the other four and not alone. */}
       <PanelCard>
         <div className="card-body p-3 sm:p-4">
         <div className="flex items-center justify-between flex-wrap gap-2.5">
@@ -716,8 +668,8 @@ export const SoundView = React.memo(function SoundView() {
           </div>
 
           {/* items-start + a shared lane per field: bottom-aligning controls of
-              four different heights (32px select, 24px join, 48px knob, 30px
-              fader) put these five labels on five different baselines. */}
+              three different heights (32px select, 24px join, 48px knob) put
+              these labels on different baselines. */}
           <div className="flex items-start gap-5 flex-wrap">
             <Field label="Kit" htmlFor="select-sequencer-sound-kit">
               <select
@@ -787,19 +739,14 @@ export const SoundView = React.memo(function SoundView() {
                 onChange={setDrumFilterResonance}
               />
             </Field>
-
-            <ChannelStrip
-              idPrefix="drums"
-              label="Drum Level"
-              volumeDb={masterSequencerVolume}
-              accentClass="text-primary"
-              sliderClassName="range range-xs range-primary"
-              onVolumeDbChange={setMasterSequencerVolume}
-            />
           </div>
         </div>
         </div>
       </PanelCard>
+
+      {/* The one mixer: every layer's level and mute, including the drum bus
+          whose level used to be a lone strip in the card above. */}
+      <SoundMixer />
 
       {/* Preset Library Sidebar Drawer / Modal */}
       <Suspense

@@ -5,7 +5,6 @@ import {
   findPresetByName,
   getPresetsGroupedByCategory,
 } from "@/audio/presetRegistry";
-import { ChannelStrip } from "@/components/ui/ChannelStrip";
 import { FIELD_LABEL, FIELD_SELECT, JOIN_LANE, SECTION_HEADER } from "@/components/ui/fieldClasses";
 import { SYNTH_TARGET_STYLES } from "@/utils/synthControl";
 import { PAD_INTERVALS } from "@/types";
@@ -85,8 +84,6 @@ export function PadModulePanel() {
   const setPadDroneDegree = useAppStore((s) => s.setPadDroneDegree);
   const padDroneIntervals = useAppStore((s) => s.padDroneIntervals);
   const togglePadDroneInterval = useAppStore((s) => s.togglePadDroneInterval);
-  const padVolume = useAppStore((s) => s.padVolume);
-  const setPadVolume = useAppStore((s) => s.setPadVolume);
 
   const presetName = padSynthParams.preset ?? "";
   const allPresets = useMemo(
@@ -246,16 +243,6 @@ export function PadModulePanel() {
             </div>
           </div>
         )}
-
-        <ChannelStrip
-          idPrefix="pad"
-          label="Pad Level"
-          volumeDb={padVolume}
-          accentClass={SYNTH_TARGET_STYLES.pad.accent}
-          onVolumeDbChange={setPadVolume}
-          showReadout={false}
-          sliderClassName={SYNTH_TARGET_STYLES.pad.slider}
-        />
       </div>
     </div>
   );
