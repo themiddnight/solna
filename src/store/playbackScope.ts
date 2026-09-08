@@ -13,8 +13,9 @@ import type { Layer } from '../types';
  *   song — Play All owns the transport. Every loop-card button is disabled.
  *   loop — one loop is auditioned alone (a SOLO LOOP). Song advance is
  *          suppressed; that card shows Stop and every other card button is
- *          disabled. Unrelated to the per-track solo Phase 4 adds, which
- *          lives in the ui slice and never touches this union.
+ *          disabled. Unrelated to TRACK SOLO (`soloTracks` in the ui slice,
+ *          formula in store/trackAudibility.ts), which is a set of source
+ *          buses, is never persisted, and never touches this union.
  *
  * The three are mutually exclusive by construction, which is the whole point:
  * the old `auditionLoopId: string | null` could sit non-null underneath a
@@ -47,8 +48,9 @@ import type { Layer } from '../types';
 export type PlaybackScope =
   | { kind: 'none' }
   | { kind: 'song' }
-  /** One loop auditioned alone — a SOLO LOOP. Phase 4's per-track solo is a
-   *  different feature in a different slice and never appears here. */
+  /** One loop auditioned alone — a SOLO LOOP. Track solo (`soloTracks` in the
+   *  ui slice) is a different feature in a different slice and never appears
+   *  here. */
   | { kind: 'loop'; loopId: string };
 
 export type PlaybackScopeAction =
@@ -131,8 +133,9 @@ export function playbackScopeReducer(
 
 /**
  * The id of the loop the scope names, or null. The one accessor views should
- * need. Named for the SCOPE, not for "solo", because Phase 4 introduces a
- * per-track solo that has nothing to do with this value.
+ * need. Named for the SCOPE, not for "solo", because track solo (`soloTracks`
+ * in the ui slice) has nothing to do with this value — a reader grepping
+ * `solo` would otherwise get two unrelated features.
  */
 export function scopedLoopId(scope: PlaybackScope): string | null {
   return scope.kind === 'loop' ? scope.loopId : null;

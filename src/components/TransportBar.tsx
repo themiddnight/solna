@@ -1,7 +1,9 @@
 import React from "react";
-import { Volume2, Clock, Plus, Minus } from "lucide-react";
+import { Volume2, Clock, Plus, Minus, X } from "lucide-react";
 import { IconButton } from "./ui/IconButton";
 import { useAppStore } from "../store/store";
+import { soloChipLabel } from "@/store/trackAudibility";
+import { useLiveStore } from "./ui/useLiveStore";
 import { VolumeFader } from "@/components/ui/VolumeFader";
 import { PlayerTransport } from "./ui/PlayerTransport";
 import { PlayheadReadout } from "./PlayheadReadout";
@@ -48,6 +50,11 @@ export const TransportBar = React.memo(function TransportBar() {
   const activeLoopName = useAppStore(
     (s) => s.loops.find((loop) => loop.id === s.activeLoopId)?.name ?? '',
   );
+  // Live reads (useLiveStore, not useAppStore): under renderToString a plain
+  // useAppStore selector serves creation-time state, so the chip's test could
+  // never latch a solo. Same reason Header.tsx reads its dirty flag this way.
+  const soloTracks = useLiveStore((s) => s.soloTracks);
+  const clearSoloTracks = useLiveStore((s) => s.clearSoloTracks);
 
   const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer);
   const layer = layerForTab(activeTab);
@@ -61,6 +68,7 @@ export const TransportBar = React.memo(function TransportBar() {
   // true aggregate — not the takeover-driven display state.
   const isPlaying = aggregate !== 'stopped';
   const songLabel = songModeLabel(songLoopIndex, loops);
+  const soloLabel = soloChipLabel(soloTracks);
   const onPlay = () => {
     if (masterPlayTarget(layer) === 'song') {
       playAll();
@@ -119,6 +127,29 @@ export const TransportBar = React.memo(function TransportBar() {
             title="Song mode: loops play in order in the song layer"
           >
             {songLabel}
+          </span>
+        )}
+
+        {/* Track solo is session-only and clears itself on any navigation, so
+            this chip is short-lived by construction. It still renders at EVERY
+            width, unlike the song badge above: it is the only global "something
+            is being silenced, and here is how to stop" affordance, so the names
+            truncate rather than the chip disappearing. */}
+        {soloLabel && (
+          <span
+            id="badge-track-solo"
+            className="badge badge-sm badge-warning font-bold gap-1 max-w-32 sm:max-w-none"
+            title="Track solo — cleared when you change tab, segment or loop"
+          >
+            <span className="truncate">{soloLabel}</span>
+            <IconButton
+              label="Clear solo"
+              icon={<X className="w-3 h-3" />}
+              size="xs"
+              variant="ghost"
+              className="btn-circle"
+              onClick={clearSoloTracks}
+            />
           </span>
         )}
 
