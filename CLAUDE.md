@@ -217,7 +217,7 @@ while editing it. It is a **set, not a radio** (soloing Drums then Lead sounds b
 per-module play buttons gone, "write a lead over just the drums" is only expressible that way),
 **solo beats mute**, and its scope is the whole loop. It is **cleared by navigation** — any change
 of `activeTab`, `patternSegment` or `activeLoopId`, watched by the single subscription in
-`store/soloNav.ts` rather than by a clear inside each of `activeLoopId`'s six-plus writers. That
+`store/soloNav.ts` rather than by a clear inside each writer of `activeLoopId`. That
 clearing is the feature, not a rough edge: a control that can silence a track must not keep doing
 so once the user has stopped looking at it, so do not "fix" it into stickiness. Effective
 audibility is computed **only** in `engineSync.ts`, off the same `SOURCE_BUSES` table that drives

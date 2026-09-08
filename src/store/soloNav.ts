@@ -24,6 +24,14 @@ import type { AppStore } from './types';
  * already empty (reaching the Song layer was a tab change), and a solo that
  * survived a loop boundary would be silencing tracks in a loop nobody soloed
  * anything in.
+ *
+ * Changing the Sound view's control target does NOT clear the solo set,
+ * deliberately. Solo is a set, not a radio (spec §4): with one solo button on
+ * Sound following the active target, clearing on a target change would make a
+ * two-track solo set unbuildable on that surface — each new solo would erase
+ * the last — which would silently delete the "write a lead over just the
+ * drums" workflow the spec calls load-bearing. The transport bar's
+ * `SOLO · … ×` chip is what keeps a solo set on another target visible.
  */
 export const SOLO_NAV_KEYS = ['activeTab', 'patternSegment', 'activeLoopId'] as const;
 
