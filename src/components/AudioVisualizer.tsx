@@ -156,8 +156,7 @@ export const AudioVisualizer = React.memo(function AudioVisualizer({
 
   // Analyser scratch buffers. The render loop runs 60x/sec, so allocating
   // these per frame would hand the GC ~1.5KB every frame, per instance —
-  // they are reused and only reallocated when the analyser's size changes,
-  // the same guard `AudioEngine.getAudioLevel` uses for its own buffer.
+  // they are reused and only reallocated when the analyser's size changes.
   const freqBufRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const timeBufRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
 

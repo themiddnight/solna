@@ -13,6 +13,7 @@ export interface SequencerGridProps {
   onToggleStep: (trackId: string, stepIndex: number) => void;
   onToggleMute: (trackId: string) => void;
   onPreview: (track: SequencerTrack) => void;
+  onVolumeChange: (trackId: string, db: number) => void;
 }
 
 /**
@@ -34,6 +35,7 @@ export function SequencerGrid({
   onToggleStep,
   onToggleMute,
   onPreview,
+  onVolumeChange,
 }: SequencerGridProps) {
   useSequencerPlayback();
   const currentStep = useCurrentStep('sequencer');
@@ -59,6 +61,7 @@ export function SequencerGrid({
             onToggleStep={onToggleStep}
             onToggleMute={onToggleMute}
             onPreview={onPreview}
+            onVolumeChange={onVolumeChange}
           />
         ))}
       </div>

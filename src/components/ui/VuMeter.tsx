@@ -1,70 +1,47 @@
-import React, { useEffect, useRef, useState } from "react";
+import React from "react";
 import { audioEngine } from "@/audio/engine";
-import { isSegmentActive, VU_SEGMENT_COUNT, vuSegment } from "@/utils/vuMeter";
+import { formatDb } from "@/utils/gainUnits";
+import { MeterBar } from "./MeterBar";
+import { useMeterLevel } from "./useMeterLevel";
 
 export interface VuMeterProps {
-  /** Whether anything is sounding; the rAF loop runs only while true. */
+  /** Whether anything is sounding; the meter parks on the offscreen tier when false. */
   isPlaying: boolean;
 }
 
 /**
- * Master output level meter. Owns its own rAF loop and its own state so a
- * level change re-renders ten <div>s instead of the whole TransportBar —
- * the meter has VU_SEGMENT_COUNT + 1 observable states, and it now commits
- * only when the quantized segment count actually moves.
+ * Master output level meter: true dBFS peak with a decaying peak-hold, read from the engine's
+ * dedicated level analyser (post-fader, pre-dynamics) on the shared meter scheduler.
  *
- * Reads audioEngine directly (layering rule 3 exemption, alongside
- * AudioVisualizer / TransportBar / AmbientBackdrop): routing a per-frame
- * analyser read through the store would mean a store write every animation
- * frame and a re-render of every subscriber.
+ * It reads `audioEngine` directly — the layering rule 3 exemption it has always held, alongside
+ * AudioVisualizer and AmbientBackdrop. `useMeterLevel` itself takes the analyser as a parameter
+ * and imports nothing from `audio/`, so the exemption stops here and the list does not grow.
+ *
+ * `isPlaying` selects the tier rather than tearing the registration down: `offscreen` never
+ * ticks, so a stopped transport does no analyser reads at all. `useMeterLevel`'s effect resets
+ * to `SILENT_LEVEL` synchronously whenever `tier` changes, so the bar clears the instant
+ * playback stops rather than freezing at its last reading — a frozen level would claim sound is
+ * still happening when it is not, which is worse than a bar that goes empty.
+ *
+ * Nothing here touches a zustand slice. A store write per tick would re-render all four mounted
+ * tab views.
  */
 export const VuMeter = React.memo(function VuMeter({ isPlaying }: VuMeterProps) {
-  const [segment, setSegment] = useState(0);
-  const segmentRef = useRef(0);
-
-  useEffect(() => {
-    if (!isPlaying) {
-      segmentRef.current = 0;
-      setSegment(0);
-      return;
-    }
-    let animId: number;
-    const updateMeter = () => {
-      const next = vuSegment(audioEngine.getAudioLevel());
-      if (next !== segmentRef.current) {
-        segmentRef.current = next;
-        setSegment(next);
-      }
-      animId = requestAnimationFrame(updateMeter);
-    };
-    animId = requestAnimationFrame(updateMeter);
-    return () => cancelAnimationFrame(animId);
-  }, [isPlaying]);
+  // Resolved on each render rather than in a ref: before the first user click there is no
+  // AudioContext and this is null, and the hook re-registers when the node finally appears.
+  const analyser = audioEngine.getMasterLevelAnalyser();
+  // A fresh object literal each render is fine: useMeterLevel destructures it and keys its
+  // effect on the individual fields, so the object's identity is never read.
+  const level = useMeterLevel(analyser, { tier: isPlaying ? "master" : "offscreen" });
 
   return (
     <div className="hidden sm:flex items-center gap-1 bg-base-200 border border-base-300 p-1.5 rounded-box">
-      <div className="w-14 h-2 bg-base-300 rounded-xs overflow-hidden flex gap-0.5 p-0.5">
-        {Array.from({ length: VU_SEGMENT_COUNT }).map((_, i) => {
-          const active = isSegmentActive(segment, i);
-          const isRed = i >= 8;
-          const isYellow = i >= 6 && i < 8;
-
-          return (
-            <div
-              key={i}
-              className={`flex-1 rounded-xs transition-colors duration-75 ${
-                active
-                  ? isRed
-                    ? "bg-error"
-                    : isYellow
-                      ? "bg-warning"
-                      : "bg-success"
-                  : "bg-base-300/50"
-              }`}
-            />
-          );
-        })}
-      </div>
+      <MeterBar
+        peakDbfs={level.peakDbfs}
+        heldPeakDbfs={level.heldPeakDbfs}
+        className="w-14"
+        title={`Master peak: ${formatDb(level.peakDbfs)}`}
+      />
     </div>
   );
 });

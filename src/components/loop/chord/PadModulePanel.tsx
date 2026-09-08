@@ -250,10 +250,9 @@ export function PadModulePanel() {
         <ChannelStrip
           idPrefix="pad"
           label="Pad Level"
-          volume={padVolume}
-          max={1.5}
+          volumeDb={padVolume}
           accentClass={SYNTH_TARGET_STYLES.pad.accent}
-          onVolumeChange={setPadVolume}
+          onVolumeDbChange={setPadVolume}
           showReadout={false}
           sliderClassName={SYNTH_TARGET_STYLES.pad.slider}
         />

@@ -366,11 +366,10 @@ export const SynthView = React.memo(function SynthView() {
           <div className="flex-1 min-w-44 max-w-xs">
             <ChannelStrip
               idPrefix={controlTarget}
-              volume={activeTargetVolume.volume}
-              max={1.5}
+              volumeDb={activeTargetVolume.volume}
               accentClass={SYNTH_TARGET_STYLES[controlTarget].accent}
               sliderClassName={SYNTH_TARGET_STYLES[controlTarget].slider}
-              onVolumeChange={activeTargetVolume.onVolumeChange}
+              onVolumeDbChange={activeTargetVolume.onVolumeChange}
             />
           </div>
 

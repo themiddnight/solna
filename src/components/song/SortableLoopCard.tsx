@@ -21,7 +21,7 @@ import { loopBars } from '@/store/loop';
 import { formatChordQuality } from '@/utils/musicTheory';
 import { getTonicSpelling } from '@/utils/noteSpelling';
 import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
-import { Slider } from '../ui/Slider';
+import { VolumeFader } from '../ui/VolumeFader';
 
 /**
  * Calculates which chord index in the progression is active given current step in loop.
@@ -52,12 +52,13 @@ export function getActiveChordIndex(
 export interface MixChannelProps {
   idPrefix: string;
   label: string;
-  volume: number;
+  /** DECIBELS: unity is 0, the range is -60..+12 — same as ChannelStrip's
+   *  `volumeDb`, renamed to match for the same reason. */
+  volumeDb: number;
   muted: boolean;
-  max: number;
   tone: PowerToggleTone;
   sliderAccent: string;
-  onVolume: (v: number) => void;
+  onVolumeDbChange: (db: number) => void;
   onToggleMute: () => void;
 }
 
@@ -65,12 +66,11 @@ export interface MixChannelProps {
 export function MixChannel({
   idPrefix,
   label,
-  volume,
+  volumeDb,
   muted,
-  max,
   tone,
   sliderAccent,
-  onVolume,
+  onVolumeDbChange,
   onToggleMute,
 }: MixChannelProps) {
   return (
@@ -102,19 +102,18 @@ export function MixChannel({
         />
       </div>
       <div className="flex items-center gap-1.5 mt-0.5">
-        <Slider
+        {/* The same fader the channel strips and the transport bar use, so
+            these five agree with them about where unity sits, what the bottom
+            of the travel means and how a level is spelled. There is no per-bus
+            `max` any more: every bus shares the -60..+12 dB range, and a
+            per-bus ceiling would make the same position mean two levels. */}
+        <VolumeFader
           id={`slider-${idPrefix}`}
-          min={0}
-          max={max}
-          step={0.05}
-          value={volume}
-          onChange={onVolume}
+          label={`${label} gain`}
+          valueDb={volumeDb}
+          onChangeDb={onVolumeDbChange}
           className={`range range-xs ${sliderAccent} w-full`}
-          title={`${label} gain`}
         />
-        <span className="text-[10px] font-mono w-8 text-right shrink-0 text-base-content/80">
-          {Math.round(volume * 100)}%
-        </span>
       </div>
     </div>
   );
@@ -146,15 +145,14 @@ const LOOP_MIX_CHANNELS: ReadonlyArray<{
   label: string;
   volumeKey: MixVolumeKey;
   muteKey: MixMuteKey;
-  max: number;
   tone: PowerToggleTone;
   sliderAccent: string;
 }> = [
-  { idPrefix: 'synth', label: 'Lead', volumeKey: 'synthVolume', muteKey: 'synthMuted', max: 1.5, tone: 'primary', sliderAccent: 'text-primary' },
-  { idPrefix: 'chord', label: 'Chord', volumeKey: 'chordVolume', muteKey: 'chordMuted', max: 1.5, tone: 'module-chord', sliderAccent: 'text-module-chord' },
-  { idPrefix: 'bass', label: 'Bass', volumeKey: 'bassVolume', muteKey: 'bassMuted', max: 1.5, tone: 'module-bass', sliderAccent: 'text-module-bass' },
-  { idPrefix: 'pad', label: 'Pad', volumeKey: 'padVolume', muteKey: 'padMuted', max: 1.5, tone: 'module-pad', sliderAccent: 'text-module-pad' },
-  { idPrefix: 'drum', label: 'Beat', volumeKey: 'masterSequencerVolume', muteKey: 'drumMuted', max: 1.0, tone: 'accent', sliderAccent: 'text-accent' },
+  { idPrefix: 'synth', label: 'Lead', volumeKey: 'synthVolume', muteKey: 'synthMuted', tone: 'primary', sliderAccent: 'text-primary' },
+  { idPrefix: 'chord', label: 'Chord', volumeKey: 'chordVolume', muteKey: 'chordMuted', tone: 'module-chord', sliderAccent: 'text-module-chord' },
+  { idPrefix: 'bass', label: 'Bass', volumeKey: 'bassVolume', muteKey: 'bassMuted', tone: 'module-bass', sliderAccent: 'text-module-bass' },
+  { idPrefix: 'pad', label: 'Pad', volumeKey: 'padVolume', muteKey: 'padMuted', tone: 'module-pad', sliderAccent: 'text-module-pad' },
+  { idPrefix: 'drum', label: 'Beat', volumeKey: 'masterSequencerVolume', muteKey: 'drumMuted', tone: 'accent', sliderAccent: 'text-accent' },
 ];
 
 export interface SortableLoopCardProps {
@@ -689,12 +687,11 @@ export const SortableLoopCard = React.memo(
                 key={ch.idPrefix}
                 idPrefix={`${ch.idPrefix}-${loop.id}`}
                 label={ch.label}
-                volume={loop[ch.volumeKey]}
+                volumeDb={loop[ch.volumeKey]}
                 muted={loop[ch.muteKey]}
-                max={ch.max}
                 tone={ch.tone}
                 sliderAccent={ch.sliderAccent}
-                onVolume={(v) => onSetMix(loop.id, { [ch.volumeKey]: v })}
+                onVolumeDbChange={(v) => onSetMix(loop.id, { [ch.volumeKey]: v })}
                 onToggleMute={() =>
                   onSetMix(loop.id, { [ch.muteKey]: !loop[ch.muteKey] })
                 }

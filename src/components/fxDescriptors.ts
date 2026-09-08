@@ -28,3 +28,30 @@ export function distortionDriveDescriptor(amount: number): string {
   if (amount < 0.65) return 'Crunch';
   return 'Fuzz';
 }
+
+/**
+ * Compressor ratio, 1:1 - 20:1. A ratio number says nothing about what you
+ * will hear until you already know compressors, which is exactly the case a
+ * descriptor is for. The limiter's ratio deliberately has NO descriptor: at
+ * 4:1 and above with a hard knee it is a limiter at every setting, so a word
+ * would be noise.
+ */
+export function compressorRatioDescriptor(ratio: number): string {
+  if (ratio < 3) return 'Gentle';
+  if (ratio < 8) return 'Firm';
+  return 'Squash';
+}
+
+/** Attack for either dynamics stage, in SECONDS (the knobs read out in ms). */
+export function dynamicsAttackDescriptor(seconds: number): string {
+  if (seconds < 0.01) return 'Snap';
+  if (seconds < 0.05) return 'Quick';
+  return 'Relaxed';
+}
+
+/** Release for either dynamics stage, in SECONDS (the knobs read out in ms). */
+export function dynamicsReleaseDescriptor(seconds: number): string {
+  if (seconds < 0.1) return 'Tight';
+  if (seconds < 0.4) return 'Natural';
+  return 'Slow';
+}
