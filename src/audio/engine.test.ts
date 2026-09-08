@@ -1,11 +1,25 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { INITIAL_EFFECTS } from '../store/initialState';
-import type { SynthParams } from '../types';
+import type { MasterEffects, SynthParams } from '../types';
 import { ENV_FLOOR } from './constants';
 import { DRUM_ALIASES, METAL_BAND_B_HZ, METAL_RATIOS } from './engine';
 import { DEFAULT_DRUM_KIT, DRUM_TYPES } from '@/data/drumKits';
 import { mergeDrumKit } from './drumKits';
 import { fakeNode, fakeParam, freshEngine, makeEngine } from './testFakes';
+import { FADER_MAX_DB, MAX_FADER_GAIN, dbToGain, toDecibels } from '../utils/gainUnits';
+import { NEUTRAL_TRIM_GAIN, synthTrimGainFor } from './trims';
+
+/** A minimal, deliberately plain patch that differs only in its `preset` name. */
+function trimTestParams(preset: string): SynthParams {
+  return {
+    oscType: 'sawtooth', subOscVolume: 0, noiseVolume: 0, detune: 0,
+    filterType: 'lowpass', filterCutoff: 4000, filterResonance: 0,
+    filterEnvAmount: 0, attack: 0.02, decay: 0.4, sustain: 0.6, release: 0.5,
+    filterAttack: 0.02, filterDecay: 0.4, filterSustain: 0, filterRelease: 0.5,
+    lfoRate: 3.5, lfoDepth: 0, lfoTarget: 'cutoff', octave: 0,
+    arpActive: false, arpMode: 'up', arpRate: '16n', arpOctaves: 1, preset,
+  };
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- tests deliberately
    reach private fields (ctx, buses, activeVoices) via casts. */
@@ -18,6 +32,21 @@ function masterChainCtx() {
     (n as any)._connectTargets = [] as unknown[];
     (n as any).connect = (target: unknown) => {
       (n as any)._connectTargets.push(target);
+    };
+    // rewireMasterDynamics calls disconnect() with no argument and then
+    // re-makes exactly the edges the topology needs, so the fake has to forget
+    // its outgoing edges too. fakeNode's inherited disconnect clears
+    // `connectedTo`, which this override does not use — without this, a
+    // "bypassed" assertion would read every edge the graph has EVER had.
+    // The COUNT matters as much as the clearing: rewireMasterDynamics returns
+    // early when the topology is unchanged, and because this fake forgets its
+    // edges on every disconnect, an edge assertion alone cannot tell a guarded
+    // rewire from an unguarded one that tore the tail down and rebuilt it
+    // identically. Counting teardowns is what distinguishes them.
+    (n as any)._disconnects = 0;
+    (n as any).disconnect = () => {
+      (n as any)._disconnects += 1;
+      (n as any)._connectTargets.length = 0;
     };
     (n as any)._type = type;
     return n;
@@ -52,6 +81,18 @@ function masterChainCtx() {
     }),
     resume: async () => {},
   };
+}
+
+/**
+ * A full effects payload minus reverbDecay, which updateEffects deliberately
+ * refuses (it is owned by setReverbDecay). Built by deletion rather than by
+ * spelling every key so the tests never drift from INITIAL_EFFECTS, and
+ * without the excess-property error a literal spread would raise.
+ */
+function fxWith(overrides: Partial<MasterEffects>): Omit<MasterEffects, 'reverbDecay'> {
+  const next = { ...INITIAL_EFFECTS, ...overrides } as Record<string, unknown>;
+  delete next.reverbDecay;
+  return next as unknown as Omit<MasterEffects, 'reverbDecay'>;
 }
 
 const SYNTH: SynthParams = {
@@ -421,6 +462,9 @@ describe('drum bus filter', () => {
     const kit = (engine as any).drumKit;
 
     for (const type of ['kick', 'lowtom'] as const) {
+      // Pre-warm the per-track fader so it does not itself land in `gains`
+      // below — DEV-386's node is created lazily on first use.
+      const track = (engine as any).drumTrackGain(type);
       const before = ctx._gains.length;
       engine.triggerDrum(type, 0.8, ctx.currentTime);
       const gains = ctx._gains.slice(before);
@@ -428,13 +472,15 @@ describe('drum bus filter', () => {
       // Never dryGain — for this one voice alone, not just in aggregate.
       for (const g of gains) expect(g.connectedTo, `${type} voice`).not.toContain(dryGain);
 
-      // The dry envelope is IDENTIFIED by connecting to `filter` — a routing
-      // bug that redirects the dry path to `sendFilter` instead (making the
-      // voice reverb-only, with no dry signal) leaves nothing satisfying this
+      // The dry envelope is IDENTIFIED by connecting to the per-track fader
+      // (DEV-386 interposes it ahead of `filter`) — a routing bug that
+      // redirects the dry path to `sendFilter` instead (making the voice
+      // reverb-only, with no dry signal) leaves nothing satisfying this
       // filter, so `dryEnvelopes` comes back empty and the length assertion
-      // catches it. This is why membership in {filter, sendFilter} is not
+      // catches it. This is why membership in {track, sendFilter} is not
       // enough: that would accept a dry path aimed at either one.
-      const dryEnvelopes = gains.filter((g) => g.connectedTo.includes(filter));
+      expect(track.connectedTo, `${type} track fader`).toContain(filter);
+      const dryEnvelopes = gains.filter((g) => g.connectedTo.includes(track));
       expect(dryEnvelopes, `${type} dry envelope`).toHaveLength(1);
       const dryEnv = dryEnvelopes[0];
 
@@ -561,7 +607,7 @@ describe('releaseSoundingVoices', () => {
 });
 
 describe('master chain', () => {
-  test('seeds masterGain at unity and inserts a ratio-20 limiter between masterGain and the analyser', () => {
+  test('both dynamics stages default OFF, so masterGain reaches the destination directly', () => {
     const engine = makeEngine();
     const ctx = masterChainCtx();
     (engine as any).ctx = ctx;
@@ -570,26 +616,260 @@ describe('master chain', () => {
     const masterGain = (engine as any).masterGain;
     const limiter = (engine as any).limiter;
     const analyser = (engine as any).analyser;
+    const levelAnalyser = (engine as any).levelAnalyser;
     const compressor = (engine as any).compressor;
+    const eqHigh = (engine as any).eqHighNode;
 
     // masterGain is the user's master trim and nothing else: engineSync pushes
     // masterVolume with fireImmediately, so any "staging" value seeded here is
-    // overwritten before the first frame. The -3 dB limiter is the real ceiling.
+    // overwritten before the first frame.
     expect(masterGain.gain.value).toBe(1);
-    expect(limiter).toBeDefined();
-    if (!limiter) return;
 
+    // NOTHING owns headroom by default, and that is the intended state
+    // (DEV-385): both stages exist as nodes but neither is in the path, so the
+    // mix reaches the destination exactly as the user made it.
+    expect(eqHigh._connectTargets).toEqual([masterGain]);
+    expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, ctx.destination]);
+    expect(compressor._connectTargets).toEqual([]);
+    expect(limiter._connectTargets).toEqual([]);
+    // BOTH taps are SENDS with no onward output (DEV-384), so each reads the
+    // post-fader, pre-dynamics mix and feeds nothing. levelAnalyser is the one
+    // getMasterLevelAnalyser() returns — it IS the meter, and asserting only
+    // `analyser` here would leave this test green with every meter at -inf.
+    expect(analyser._connectTargets).toEqual([]);
+    expect(levelAnalyser._connectTargets).toEqual([]);
+
+    // The nodes are still seeded with the app's historical values, so
+    // switching a stage on reproduces what the app used to do invisibly.
+    expect(compressor.threshold.value).toBe(-12);
+    expect(compressor.knee.value).toBe(30);
+    expect(compressor.ratio.value).toBe(4);
+    expect(compressor.attack.value).toBeCloseTo(0.003, 6);
+    expect(compressor.release.value).toBeCloseTo(0.25, 6);
     expect(limiter.threshold.value).toBe(-3);
+    expect(limiter.knee.value).toBe(0);
     expect(limiter.ratio.value).toBe(20);
-    expect(limiter.knee.value <= 6).toBe(true);
     expect(limiter.attack.value).toBeCloseTo(0.003, 6);
-    expect(limiter.release.value <= 0.25).toBe(true);
+    expect(limiter.release.value).toBeCloseTo(0.15, 6);
+  });
 
-    // Wiring: compressor → masterGain → limiter → analyser → destination.
-    expect(masterGain._connectTargets).toEqual([limiter]);
-    expect(limiter._connectTargets).toEqual([analyser]);
-    expect(analyser._connectTargets).toEqual([ctx.destination]);
-    expect(compressor._connectTargets).toEqual([masterGain]);
+  test('engaging both stages inserts compressor then limiter AFTER the meter tap', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+
+    engine.updateEffects(fxWith({ compressorEnabled: true, limiterEnabled: true }));
+
+    const masterGain = (engine as any).masterGain;
+    const limiter = (engine as any).limiter;
+    const analyser = (engine as any).analyser;
+    const levelAnalyser = (engine as any).levelAnalyser;
+    const compressor = (engine as any).compressor;
+
+    expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, compressor]);
+    expect(compressor._connectTargets).toEqual([limiter]);
+    expect(limiter._connectTargets).toEqual([ctx.destination]);
+    // NEITHER tap moved, and neither is in series: an honest meter still reads
+    // the mix the user made, not the squashed output. DEV-384 put both here and
+    // DEV-385 must not undo either.
+    expect(analyser._connectTargets).toEqual([]);
+    expect(levelAnalyser._connectTargets).toEqual([]);
+  });
+
+  test('the limiter alone sits directly after masterGain, with no idle compressor in the path', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+
+    engine.updateEffects(fxWith({ compressorEnabled: false, limiterEnabled: true }));
+
+    const masterGain = (engine as any).masterGain;
+    const limiter = (engine as any).limiter;
+    const analyser = (engine as any).analyser;
+    const levelAnalyser = (engine as any).levelAnalyser;
+    const compressor = (engine as any).compressor;
+
+    expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, limiter]);
+    expect(limiter._connectTargets).toEqual([ctx.destination]);
+    expect(compressor._connectTargets).toEqual([]);
+    expect(analyser._connectTargets).toEqual([]);
+    expect(levelAnalyser._connectTargets).toEqual([]);
+  });
+
+  test('toggling the stages on and off again leaves no orphaned nodes', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+
+    const masterGain = (engine as any).masterGain;
+    const compressorBefore = (engine as any).compressor;
+    const limiterBefore = (engine as any).limiter;
+    const analyser = (engine as any).analyser;
+    const levelAnalyser = (engine as any).levelAnalyser;
+
+    engine.updateEffects(fxWith({ compressorEnabled: true, limiterEnabled: true }));
+    engine.updateEffects(fxWith({ compressorEnabled: true, limiterEnabled: false }));
+    engine.updateEffects(fxWith({ compressorEnabled: false, limiterEnabled: false }));
+
+    // Node IDENTITY is stable across every rewire: a rewire reconnects, it
+    // never rebuilds. A rebuilt node would leave the old one alive, still fed
+    // by whatever pointed at it — the orphan this test exists to forbid.
+    expect((engine as any).compressor).toBe(compressorBefore);
+    expect((engine as any).limiter).toBe(limiterBefore);
+
+    // Back to the default topology, with no leftover edge from the round trip.
+    expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, ctx.destination]);
+    expect(compressorBefore._connectTargets).toEqual([]);
+    expect(limiterBefore._connectTargets).toEqual([]);
+    expect(analyser._connectTargets).toEqual([]);
+    expect(levelAnalyser._connectTargets).toEqual([]);
+
+    // Every edge below the fader, collected: exactly the two taps and the output.
+    const edges = [masterGain, compressorBefore, limiterBefore, analyser, levelAnalyser].flatMap(
+      (n: any) => n._connectTargets as unknown[],
+    );
+    expect(edges).toEqual([analyser, levelAnalyser, ctx.destination]);
+  });
+
+  test('a full toggle cycle never drops the meter tap', () => {
+    // This test exists because a rewire that drops the meter's tap is
+    // otherwise INVISIBLE. rewireMasterDynamics calls masterGain.disconnect(),
+    // which takes both observe-only sends with it; forgetting to re-make
+    // levelAnalyser throws nothing, orphans nothing, and leaves the audio path
+    // audibly perfect — the only symptom is VuMeter and AmbientBackdrop pinned
+    // at -inf, which no graph assertion above would notice if it named only
+    // `analyser`. A cross-plan review caught exactly that defect in this plan,
+    // so the guard is a test rather than a comment.
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+
+    const masterGain = (engine as any).masterGain;
+    const levelAnalyser = (engine as any).levelAnalyser;
+    const taps = () => masterGain._connectTargets as unknown[];
+
+    // Seeded topology: the tap is there before anything is toggled.
+    expect(taps()).toContain(levelAnalyser);
+
+    engine.updateEffects(fxWith({ compressorEnabled: true, limiterEnabled: false }));
+    // The rewire really RAN — masterGain now feeds the compressor instead of
+    // the destination — and the tap survived it. Without this first assertion
+    // the test would also pass against an engine that never rewires at all,
+    // which is the one state it must not be green in.
+    expect(taps()).toContain((engine as any).compressor);
+    expect(taps()).toContain(levelAnalyser);
+    // Still a SEND after the rewire — in the tap list, not spliced into series.
+    expect(levelAnalyser._connectTargets).toEqual([]);
+
+    engine.updateEffects(fxWith({ compressorEnabled: false, limiterEnabled: false }));
+    expect(taps()).toContain(ctx.destination);
+    expect(taps()).not.toContain((engine as any).compressor);
+    expect(taps()).toContain(levelAnalyser);
+    expect(levelAnalyser._connectTargets).toEqual([]);
+
+    // getMasterLevelAnalyser() still hands out that same live node, so the
+    // meter reads the node the graph is actually feeding.
+    expect(engine.getMasterLevelAnalyser()).toBe(levelAnalyser);
+  });
+
+  test('a rewire before init() is a no-op, and an unchanged topology tears nothing down', () => {
+    // Two properties that share a setup. First: every engine setter no-ops
+    // until init() creates the AudioContext, and rewireMasterDynamics is no
+    // exception — it touches six nodes that do not exist yet.
+    const engine = makeEngine();
+    expect(() => (engine as any).rewireMasterDynamics(true, true)).not.toThrow();
+    expect((engine as any).dynamicsTopology).toBe('unbuilt');
+
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+
+    const masterGain = (engine as any).masterGain;
+    const analyser = (engine as any).analyser;
+    const levelAnalyser = (engine as any).levelAnalyser;
+    const compressor = (engine as any).compressor;
+    const limiter = (engine as any).limiter;
+    const teardowns = () =>
+      masterGain._disconnects + compressor._disconnects + limiter._disconnects;
+
+    // Second: engineSync pushes the WHOLE effects object, so updateEffects
+    // runs on any effects change at all — every frame of a delay-knob drag
+    // included. The `topology === this.dynamicsTopology` early return is what
+    // stops each of those from ripping the master tail apart and rebuilding it
+    // mid-audio. Counting teardowns is the only way to see that: the edges
+    // come out identical either way, so an edge assertion alone would stay
+    // green with the guard deleted.
+    // limiterEnabled is pinned false here, explicitly: this test isolates the
+    // compressor-only 'c' topology, and since DEV-383 INITIAL_EFFECTS itself
+    // defaults limiterEnabled true, so fxWith's spread would otherwise fold
+    // the limiter into the topology under test.
+    engine.updateEffects(fxWith({ compressorEnabled: true, limiterEnabled: false, delayWet: 0.1 }));
+    const afterRealChange = teardowns();
+    expect(afterRealChange).toBeGreaterThan(0); // the topology DID change here
+
+    engine.updateEffects(fxWith({ compressorEnabled: true, limiterEnabled: false, delayWet: 0.9 }));
+    expect(teardowns()).toBe(afterRealChange); // …and did not here
+
+    // And the graph is still exactly one set of edges, not a doubled one.
+    expect((engine as any).dynamicsTopology).toBe('c');
+    expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, compressor]);
+    expect(compressor._connectTargets).toEqual([ctx.destination]);
+  });
+
+  test('an engaged stage receives its stored parameters', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+
+    engine.updateEffects(
+      fxWith({
+        compressorEnabled: true,
+        compressorThreshold: -20,
+        compressorRatio: 8,
+        limiterEnabled: true,
+        limiterThreshold: -6,
+      }),
+    );
+
+    const compressor = (engine as any).compressor;
+    const limiter = (engine as any).limiter;
+    // fakeParam records setTargetAtTime calls as { v, t, tc }; asserting on the
+    // recorded VALUES rather than on an index keeps the test free of both
+    // ordering assumptions and index-signature typing.
+    const values = (param: { targets: { v: number }[] }) => param.targets.map((e) => e.v);
+
+    expect(values(compressor.threshold)).toContain(-20);
+    expect(values(compressor.ratio)).toContain(8);
+    expect(values(compressor.attack)).toContain(0.003);
+    expect(values(compressor.release)).toContain(0.25);
+    expect(values(limiter.threshold)).toContain(-6);
+    expect(values(limiter.ratio)).toContain(20);
+  });
+
+  test('the level analyser has a longer window than the spectrum analyser', () => {
+    const engine = makeEngine();
+    (engine as any).ctx = masterChainCtx();
+    (engine as any).setupMasterChain();
+
+    // AudioVisualizer draws from `analyser.frequencyBinCount`, so its fftSize
+    // is fixed at 256 and the level read gets its own, longer, node instead.
+    expect((engine as any).analyser.fftSize).toBe(256);
+    expect((engine as any).levelAnalyser.fftSize).toBe(2048);
+  });
+
+  test('getMasterLevelAnalyser is null before init and the level node after', () => {
+    const engine = makeEngine();
+    expect(engine.getMasterLevelAnalyser()).toBeNull();
+
+    (engine as any).ctx = masterChainCtx();
+    (engine as any).setupMasterChain();
+
+    expect(engine.getMasterLevelAnalyser()).toBe((engine as any).levelAnalyser);
   });
 
   test('rebuilding the master chain drops impulses built against the dead context', () => {
@@ -619,6 +899,25 @@ describe('master chain', () => {
     expect(send.type).toBe(bus.type);
     expect(send.frequency.value).toBe(bus.frequency.value);
     expect(send.Q.value).toBe(bus.Q.value);
+  });
+
+  test('reports each stage\'s live gain reduction, and 0 before the context exists', () => {
+    const engine = makeEngine();
+
+    // Every getter must survive the pre-init state: no AudioContext means no
+    // nodes, and the readout has to render 0 rather than throw.
+    expect(engine.getCompressorReduction()).toBe(0);
+    expect(engine.getLimiterReduction()).toBe(0);
+
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+
+    (engine as any).compressor.reduction = -4.25;
+    (engine as any).limiter.reduction = -0.5;
+
+    expect(engine.getCompressorReduction()).toBe(-4.25);
+    expect(engine.getLimiterReduction()).toBe(-0.5);
   });
 });
 
@@ -772,8 +1071,16 @@ describe('live effect knobs', () => {
   test('updateEffects sets the compressor threshold from the effects value', () => {
     const { engine, ctx } = freshEngine();
     // fakeParam records setTargetAtTime targets, so assert the recorded target.
+    // The stub carries all four params because updateEffects now writes the
+    // whole compressor stage (DEV-385), not the threshold alone — a stub with
+    // only `threshold` would throw rather than fail an assertion.
     const threshold = fakeParam();
-    (engine as any).compressor = { threshold };
+    (engine as any).compressor = {
+      threshold,
+      ratio: fakeParam(),
+      attack: fakeParam(),
+      release: fakeParam(),
+    };
 
     engine.updateEffects({ ...INITIAL_EFFECTS, compressorThreshold: -20 });
 
@@ -1576,6 +1883,9 @@ describe('drum reverb sends', () => {
   test('a kit with reverbSend 0 creates no send node at all', () => {
     const { engine, ctx } = drumEngine();
     engine.setDrumKit({ clap: { ...(engine as any).drumKit.clap, reverbSend: 0 } });
+    // Pre-warm the per-track fader so the count below reflects only what THIS
+    // hit creates — DEV-386's track gain node is created lazily on first use.
+    (engine as any).drumTrackGain('clap');
     const before = ctx._gains.length;
 
     engine.triggerDrum('clap', 1.0);
@@ -1867,6 +2177,10 @@ describe('snare pair and rimshot', () => {
   test('a snare schedules TWO body oscillators plus its noise', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).drumKit = DEFAULT_DRUM_KIT;
+    // Pre-warm the per-track fader so `made.gain`'s order is the two body
+    // envelopes only — DEV-386's track gain node is created lazily on first
+    // use and would otherwise land between them.
+    (engine as any).drumTrackGain('snare');
     const made = recordNodes(ctx);
     engine.triggerDrum('snare', 1);
     expect(made.osc).toHaveLength(2);
@@ -1889,6 +2203,8 @@ describe('snare pair and rimshot', () => {
   test('rimshot runs the same path off its own params, with almost no noise', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).drumKit = DEFAULT_DRUM_KIT;
+    // Pre-warm for the same reason the snare test above does.
+    (engine as any).drumTrackGain('rimshot');
     const made = recordNodes(ctx);
     engine.triggerDrum('rimshot', 1);
     expect(made.osc.map((o) => o.frequency.events[0].v)).toEqual([455, 1667]);
@@ -1906,6 +2222,10 @@ describe('snare pair and rimshot', () => {
 describe('drum aliases and unknown types', () => {
   test('closedhat resolves to its canonical voice', () => {
     const { engine, ctx } = freshEngine();
+    // Both names resolve to the same instrument, so pre-warm its track fader
+    // once: otherwise the FIRST iteration alone creates DEV-386's lazily-built
+    // gain node and its count would not equal the second's.
+    (engine as any).drumTrackGain('hihat');
     const counts: Record<string, number> = {};
     for (const type of ['hihat', 'closedhat']) {
       const before = ctx._gains.length;
@@ -1987,10 +2307,14 @@ describe('drum aliases and unknown types', () => {
     engine.triggerDrum('lowtom', 1.0);
 
     // The tom now also feeds the reverb send, so a plain index no longer
-    // names the envelope reliably — select it by what it is connected to
-    // (the dry bus filter) instead of by position.
-    const env = ctx._gains.slice(before).find((g) => g.connectedTo.includes(filter))!;
+    // names the envelope reliably — select it by what it is connected to.
+    // DEV-386 interposes the per-track fader between the envelope and
+    // `filter`, so identify it via that persistent node rather than `filter`
+    // directly.
+    const track = (engine as any).drumTrackGain('lowtom');
+    const env = ctx._gains.slice(before).find((g) => g.connectedTo.includes(track))!;
     expect(env).toBeDefined();
+    expect(track.connectedTo).toContain(filter);
     expect(env.gain.value).toBeCloseTo(DEFAULT_DRUM_KIT.lowtom.gain, 9);
     expect(env.gain.value).not.toBeCloseTo(DEFAULT_DRUM_KIT.kick.gain, 9);
   });
@@ -2123,6 +2447,9 @@ describe('ride and bell', () => {
     const { engine, ctx } = freshEngine();
     const kit = mergeDrumKit({ ride: { ...DEFAULT_DRUM_KIT.ride, ping: 0.8, metal: 1 } });
     (engine as any).drumKit = kit;
+    // Pre-warm the track fader so it does not land in `made.gain` as a third
+    // unautomated node below.
+    (engine as any).drumTrackGain('ride');
     const made = recordNodes(ctx);
     engine.triggerDrum('ride', 1);
     const r = kit.ride;
@@ -2149,6 +2476,8 @@ describe('ride and bell', () => {
     const { engine, ctx } = freshEngine();
     const kit = mergeDrumKit({ ride: { ...DEFAULT_DRUM_KIT.ride, ping: 1, metal: 1 } });
     (engine as any).drumKit = kit;
+    // Pre-warm for the same reason the ping=0.8 test above does.
+    (engine as any).drumTrackGain('ride');
     const made = recordNodes(ctx);
     engine.triggerDrum('ride', 1);
     const r = kit.ride;
@@ -2178,8 +2507,13 @@ describe('ride and bell', () => {
     // unambiguous.
     const env = made.gain.find((g) => bp!.connectedTo.includes(g));
     expect(env, 'bandpass must feed an envelope gain').toBeDefined();
-    expect(env!.connectedTo, 'the envelope must feed the dry bus').toContain(dryBus);
-    const send = env!.connectedTo.find((n: unknown) => n !== dryBus);
+    // DEV-386 interposes the per-track fader between the envelope and the
+    // dry bus, so the envelope now feeds THAT persistent node rather than
+    // `dryBus` directly — confirm both hops.
+    const track = (engine as any).drumTrackGain('bell');
+    expect(env!.connectedTo, 'the envelope must feed the track fader').toContain(track);
+    expect(track.connectedTo, 'the track fader must feed the dry bus').toContain(dryBus);
+    const send = env!.connectedTo.find((n: unknown) => n !== track);
     expect(send, 'the envelope must also feed a reverb-send gain').toBeDefined();
     expect((send as { connectedTo: unknown[] }).connectedTo, 'the send must reach the shared reverb-send bus')
       .toContain(sendBus);
@@ -2405,7 +2739,7 @@ describe('the hi-hat choke group', () => {
 });
 
 describe('source bus level control', () => {
-  test('setSourceGain ramps instead of stepping, and clamps to 0..1.5', () => {
+  test('setSourceGain ramps instead of stepping, and clamps to 0..MAX_FADER_GAIN', () => {
     const { engine, ctx } = freshEngine();
     engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'chord');
     const bus = (engine as any).sourceBuses.get('chord');
@@ -2413,8 +2747,12 @@ describe('source bus level control', () => {
     engine.setSourceGain('chord', 0.4);
     expect(bus.gain.targets.at(-1)).toEqual({ v: 0.4, t: ctx.currentTime, tc: 0.01 });
 
+    // The fader's own top reaches the bus. This used to clamp at 1.5 (+3.5 dB).
+    engine.setSourceGain('chord', dbToGain(toDecibels(FADER_MAX_DB)));
+    expect(bus.gain.targets.at(-1)!.v).toBeCloseTo(3.9810717, 6);
+
     engine.setSourceGain('chord', 99);
-    expect(bus.gain.targets.at(-1)!.v).toBe(1.5);
+    expect(bus.gain.targets.at(-1)!.v).toBe(MAX_FADER_GAIN);
     engine.setSourceGain('chord', -5);
     expect(bus.gain.targets.at(-1)!.v).toBe(0);
   });
@@ -2446,13 +2784,22 @@ describe('source bus level control', () => {
 });
 
 describe('master volume', () => {
-  test('clamps to 0..1', () => {
+  test('clamps to 0..MAX_FADER_GAIN, so the fader top is reachable', () => {
     const { engine, ctx } = freshEngine();
     const masterGain = fakeNode();
     (engine as any).masterGain = masterGain;
 
-    engine.setMasterVolume(2);
-    expect(masterGain.gain.targets.at(-1)).toEqual({ v: 1, t: ctx.currentTime, tc: 0.05 });
+    // The whole fader range reaches the node. This used to clamp at 1 (0 dB),
+    // which made every one of the master fader's boost positions do nothing.
+    engine.setMasterVolume(dbToGain(toDecibels(FADER_MAX_DB)));
+    expect(masterGain.gain.targets.at(-1)!.v).toBeCloseTo(3.9810717, 6);
+
+    engine.setMasterVolume(99);
+    expect(masterGain.gain.targets.at(-1)).toEqual({
+      v: MAX_FADER_GAIN,
+      t: ctx.currentTime,
+      tc: 0.05,
+    });
     engine.setMasterVolume(-1);
     expect(masterGain.gain.targets.at(-1)!.v).toBe(0);
     engine.setMasterVolume(0.7);
@@ -3238,6 +3585,7 @@ describe('metallic oscillator bank', () => {
     const { engine, ctx } = freshEngine();
     const made = recordNodes(ctx);
     (engine as any).metallicBurst({
+      voice: 'metallic-bank-test-voice',
       tone: 200, peak: 0.5, t: 10, highpass: 7000,
       bandA: { freq: 7100, q: 1.0, level: 1.0, attack: 0, decay: 0.05 },
       bandB: { freq: 3440, q: 1.2, level: 0.25, attack: 0, decay: 0.2 },
@@ -3270,6 +3618,7 @@ describe('metallic oscillator bank', () => {
     const { engine, ctx } = freshEngine();
     const made = recordNodes(ctx);
     (engine as any).metallicBurst({
+      voice: 'metallic-bank-test-voice',
       tone: 200, peak: 0.37, t: 10, highpass: 7000,
       bandA: { freq: 7100, q: 1, level: 1, attack: 0, decay: 0.05 },
       bandB: { freq: 3440, q: 1.2, level: 0.25, attack: 0, decay: 0.2 },
@@ -3286,8 +3635,14 @@ describe('metallic oscillator bank', () => {
     // never connected) and nearly again in the hat's Q, and it stayed green
     // because nothing read a node's actual `connect()` targets back.
     const { engine, ctx } = freshEngine();
+    // metallicBurst is called directly, not through triggerDrum, so it names
+    // its own voice in the options object — the routing is a parameter now,
+    // not a field triggerDrum had to have set first. Its track fader is
+    // pre-warmed so it does not land in `made.gain`.
+    (engine as any).drumTrackGain('metallic-bank-test-voice');
     const made = recordNodes(ctx);
     (engine as any).metallicBurst({
+      voice: 'metallic-bank-test-voice',
       tone: 200, peak: 0.5, t: 10, highpass: 7000,
       bandA: { freq: 7100, q: 1.0, level: 1.0, attack: 0, decay: 0.05 },
       bandB: { freq: 3440, q: 1.2, level: 0.25, attack: 0, decay: 0.2 },
@@ -3321,14 +3676,20 @@ describe('metallic oscillator bank', () => {
     // ...which reaches the output gain...
     expect(hp.connectedTo).toEqual([out]);
 
-    // ...which reaches onward, through wireDrumVoice, to the drum bus.
-    expect(out.connectedTo).toEqual([(engine as any).drumBusFilter]);
+    // ...which reaches onward, through wireDrumVoice, to the drum bus — via
+    // the pre-warmed per-track fader DEV-386 interposes ahead of it.
+    const track = (engine as any).drumTrackGain('metallic-bank-test-voice');
+    expect(out.connectedTo).toEqual([track]);
+    expect(track.connectedTo).toContain((engine as any).drumBusFilter);
   });
 
   test('every node the bank creates is disconnected by onended', () => {
     const { engine, ctx } = freshEngine();
+    // See the previous test's comment on why an explicit name is used.
+    (engine as any).drumTrackGain('metallic-bank-test-voice');
     const made = recordNodes(ctx);
     (engine as any).metallicBurst({
+      voice: 'metallic-bank-test-voice',
       tone: 200, peak: 0.5, t: 10, highpass: 7000,
       bandA: { freq: 7100, q: 1, level: 1, attack: 0, decay: 0.05 },
       bandB: { freq: 3440, q: 1.2, level: 0.25, attack: 0, decay: 0.2 },
@@ -3341,8 +3702,12 @@ describe('metallic oscillator bank', () => {
 
   test('one bank hit stays under the node ceiling', () => {
     const { engine, ctx } = freshEngine();
+    // See the first bank test's comment on why an explicit name is used; the
+    // ceiling counts THIS hit's nodes.
+    (engine as any).drumTrackGain('metallic-bank-test-voice');
     const made = recordNodes(ctx);
     (engine as any).metallicBurst({
+      voice: 'metallic-bank-test-voice',
       tone: 205.3, peak: 0.4, t: 10, highpass: 7000, reverbSend: 0.3,
       bandA: { freq: 7100, q: 1, level: 1, attack: 0, decay: 0.05 },
       bandB: { freq: 3440, q: 1.2, level: 0.25, attack: 0, decay: 0.05 },
@@ -3451,6 +3816,8 @@ describe('metal crossfades the hat between bank and noise', () => {
       hihat: { filter: 8000, topCut: 12000, decay: 0.05, gain: 0.4, metal: 0.5 },
       openhat: { filter: 6000, topCut: 12000, decay: 0.3, gain: 0.4, metal: 0.5 },
     };
+    // Pre-warm the openhat track fader so it does not land in `made.gain`.
+    (engine as any).drumTrackGain('openhat');
     const made = recordNodes(ctx);
     engine.triggerDrum('openhat', 1);
     const openGains = [...made.gain];
@@ -3528,6 +3895,9 @@ describe("the crash's metal crossfade is pinned end to end", () => {
       ...DEFAULT_DRUM_KIT,
       crash: { filter: 6000, decay: 1.0, gain: 0.5, reverbSend: 0.4, metal: 0.6 },
     };
+    // Pre-warm the crash track fader so `made.gain`'s creation order below
+    // is unchanged by DEV-386's lazily-built per-track node.
+    (engine as any).drumTrackGain('crash');
     const made = recordNodes(ctx);
     engine.triggerDrum('crash', 1);
 
@@ -3577,10 +3947,14 @@ describe("the crash's metal crossfade is pinned end to end", () => {
     expect(envA.connectedTo).toEqual([hp]);
     expect(envB.connectedTo).toEqual([hp]);
     expect(hp.connectedTo).toEqual([out]);
-    expect(out.connectedTo).toEqual([(engine as any).drumBusFilter, bankSend]);
+    // Both the bank's `out` and the noise burst's envelope route through the
+    // same pre-warmed per-track fader (DEV-386) ahead of the drum bus.
+    const track = (engine as any).drumTrackGain('crash');
+    expect(out.connectedTo).toEqual([track, bankSend]);
     expect(bankSend.connectedTo).toEqual([(engine as any).drumSendFilter]);
-    expect(noiseEnv.connectedTo).toEqual([(engine as any).drumBusFilter, noiseSend]);
+    expect(noiseEnv.connectedTo).toEqual([track, noiseSend]);
     expect(noiseSend.connectedTo).toEqual([(engine as any).drumSendFilter]);
+    expect(track.connectedTo).toContain((engine as any).drumBusFilter);
   });
 
   test('crash metal 0 runs no bank; crash metal 1 runs no noise — metal actually gates the branch', () => {
@@ -3605,5 +3979,212 @@ describe("the crash's metal crossfade is pinned end to end", () => {
     expect(made1.osc).toHaveLength(6);
     expect(made1.noise).toHaveLength(0);
     expect(made1.biquad).toHaveLength(3); // band A, band B, highpass only
+  });
+});
+
+describe('getAudioLevel removal', () => {
+  test('getAudioLevel is gone — a spectrum average was never a level', () => {
+    const engine = makeEngine();
+    expect((engine as any).getAudioLevel).toBeUndefined();
+  });
+});
+
+describe('per-track drum gain', () => {
+  test('a track gain node sits between the voice envelope and the drum bus', () => {
+    const { engine } = freshEngine();
+    engine.setDrumTrackGain('kick', 0.5);
+    engine.triggerDrum('kick', 0.8, 0);
+    // The node exists, is cached per instrument, and carries the level the
+    // setter was given — not the velocity the trigger was given.
+    expect(engine.__drumTrackGainValueForTests('kick')).toBeCloseTo(0.5, 8);
+  });
+
+  test('an unset instrument plays at unity, not silence', () => {
+    const { engine } = freshEngine();
+    engine.triggerDrum('snare', 0.8, 0);
+    expect(engine.__drumTrackGainValueForTests('snare')).toBeCloseTo(1, 8);
+  });
+
+  test('the setter accepts a gain above 1 — a fader may boost, a velocity may not', () => {
+    const { engine } = freshEngine();
+    engine.setDrumTrackGain('hihat', 3.9810717);
+    expect(engine.__drumTrackGainValueForTests('hihat')).toBeGreaterThan(1);
+  });
+
+  test('the node is reused across hits rather than rebuilt per voice', () => {
+    const { engine } = freshEngine();
+    engine.setDrumTrackGain('clap', 0.25);
+    engine.triggerDrum('clap', 0.8, 0);
+    engine.triggerDrum('clap', 0.8, 0.5);
+    expect(engine.__drumTrackGainCountForTests()).toBe(1);
+  });
+
+  test('an unknown instrument is ignored, not minted as an orphan node', () => {
+    // Decision, DEV-386 fix round 1: a name outside DRUM_TYPES will never be
+    // resolved by triggerDrum's dispatch, so a node built for it would live
+    // forever with nothing feeding it. See setDrumTrackGain's own comment.
+    const { engine } = freshEngine();
+    engine.setDrumTrackGain('cowbell-typo', 0.5);
+    // Read via the count, not the value reader: __drumTrackGainValueForTests
+    // itself calls the lazy accessor and would create a node as a side
+    // effect of asking — the setter's own no-op is what this pins.
+    expect(engine.__drumTrackGainCountForTests()).toBe(0);
+  });
+
+  test('the reverb send is seeded from the track fader × the kit reverbSend, not reverbSend alone', () => {
+    // Must-fix 2 (DEV-386 fix round 1): dropping the `* track.gain.value`
+    // factor from the send seed in wireDrumVoice is the exact regression this
+    // guards — the whole reason the track fader sits ahead of the wet/dry
+    // split is that pulling a track down must move its reverb tail with it.
+    const { engine, ctx } = freshEngine();
+    const sendFilter = (engine as any).drumSendFilter;
+    const kit = (engine as any).drumKit;
+    engine.setDrumTrackGain('kick', 0.5);
+    const before = ctx._gains.length;
+    engine.triggerDrum('kick', 0.8, 0);
+    const send = ctx._gains.slice(before).find((g) => g.connectedTo.includes(sendFilter));
+    expect(send, 'kick send gain').toBeDefined();
+    expect(send!.gain.value).toBeCloseTo(kit.kick.reverbSend * 0.5, 9);
+    // Sanity: the factor is doing real work — a pulled-down track's send is
+    // measurably quieter than the kit's raw authored reverbSend.
+    expect(send!.gain.value).toBeLessThan(kit.kick.reverbSend);
+  });
+
+  test('the persistent track node carries exactly one outgoing edge, and repeated hits never add more', () => {
+    // Must-fix 3 (DEV-386 fix round 1): the persistent per-track node must
+    // connect to drumBusFilter once and only once, forever — the wet send is
+    // deliberately NOT routed through it (seeded instead), because a second
+    // edge here (e.g. `track.connect(send)`) would never be severed by
+    // release(), which only disconnects the send's own outgoing edges.
+    const { engine } = freshEngine();
+    const filter = (engine as any).drumBusFilter;
+    engine.triggerDrum('kick', 0.8, 0);
+    const track = (engine as any).drumTrackGain('kick');
+    expect(track.connectedTo).toEqual([filter]);
+    for (let i = 0; i < 50; i += 1) engine.triggerDrum('kick', 0.8, i * 0.05);
+    expect(track.connectedTo).toEqual([filter]);
+  });
+});
+
+// DEV-387 must-fix 2: nothing else in the suite asserts the measured trim
+// actually reaches a rendered peak — moving it inside `clampVelocity(...)`
+// left the shipped suite green at 253/253. These mock the table (still empty
+// in src/data/trimTable.ts at Task 7) so the assertion holds today AND once
+// Task 11 fills it, rather than depending on any specific committed number.
+describe('calibration trim reaches the rendered peak (DEV-387)', () => {
+  afterEach(() => {
+    // mock.restore() does not undo mock.module() (Bun's own documented
+    // caveat) — reapply the shipped, still-empty shape defensively. Bun
+    // 1.3.14 scopes mock.module() to this file, verified empirically, but
+    // that scoping is not a documented guarantee, so this reset stays in
+    // case a later Bun version widens it back to the whole module registry.
+    mock.module('@/data/trimTable', () => ({ DRUM_TRIMS: {}, PRESET_TRIMS: {} }));
+  });
+
+  test('a +6 dB kit trim scales EVERY voice in the kit, by exactly that many dB', () => {
+    // DEV-387: DRUM_TRIMS is keyed by kit name, one entry per kit — see the
+    // comment on it in src/data/trimTable.ts. A kit's voices are not
+    // independent, so the trim is not "only its named voice" anymore; it is
+    // the whole kit, uniformly, which is what this test now proves.
+    mock.module('@/data/trimTable', () => ({
+      DRUM_TRIMS: {
+        'Retro Drive': { measuredDbfs: -24, trimDb: 6, configHash: 'x' },
+      },
+      PRESET_TRIMS: {},
+    }));
+
+    const { engine: trimmed, ctx: trimmedCtx } = freshEngine();
+    trimmed.setDrumKit(undefined, 'Retro Drive');
+    const { engine: plain, ctx: plainCtx } = freshEngine();
+    plain.setDrumKit(undefined, 'No Such Kit');
+
+    const kickBefore = { trimmed: trimmedCtx._gains.length, plain: plainCtx._gains.length };
+    trimmed.triggerDrum('kick', 1.0);
+    plain.triggerDrum('kick', 1.0);
+    const trimmedKickPeak = trimmedCtx._gains[kickBefore.trimmed].gain.events[0].v;
+    const plainKickPeak = plainCtx._gains[kickBefore.plain].gain.events[0].v;
+    // This is the case the brief calls load-bearing: clampVelocity(1) is 1,
+    // so a boost that lands INSIDE the clamp is discarded and this ratio
+    // would silently read 1 instead of dbToGain(6).
+    expect(trimmedKickPeak / plainKickPeak).toBeCloseTo(dbToGain(toDecibels(6)), 6);
+    expect(trimmedKickPeak).toBeGreaterThan(plainKickPeak);
+
+    // A DIFFERENT voice in the SAME kit gets the identical scale factor — the
+    // kit's own internal kick/snare balance is preserved, not closed.
+    const snareBefore = { trimmed: trimmedCtx._gains.length, plain: plainCtx._gains.length };
+    trimmed.triggerDrum('snare', 1.0);
+    plain.triggerDrum('snare', 1.0);
+    const trimmedSnarePeak = trimmedCtx._gains[snareBefore.trimmed].gain.events[0].v;
+    const plainSnarePeak = plainCtx._gains[snareBefore.plain].gain.events[0].v;
+    expect(trimmedSnarePeak / plainSnarePeak).toBeCloseTo(dbToGain(toDecibels(6)), 6);
+  });
+
+  test('a -6 dB trim attenuates by the same law regardless of which voice fires, and a kit with no entry stays neutral', () => {
+    mock.module('@/data/trimTable', () => ({
+      DRUM_TRIMS: {
+        'Retro Drive': { measuredDbfs: -12, trimDb: -6, configHash: 'x' },
+      },
+      PRESET_TRIMS: {},
+    }));
+
+    const { engine: trimmed, ctx: trimmedCtx } = freshEngine();
+    trimmed.setDrumKit(undefined, 'Retro Drive');
+    const { engine: plain, ctx: plainCtx } = freshEngine();
+    // No kit name at all — the untrimmed default, same as freshEngine() ships.
+    plain.setDrumKit();
+
+    const before = { trimmed: trimmedCtx._gains.length, plain: plainCtx._gains.length };
+    trimmed.triggerDrum('snare', 1.0);
+    plain.triggerDrum('snare', 1.0);
+    const trimmedPeak = trimmedCtx._gains[before.trimmed].gain.events[0].v;
+    const plainPeak = plainCtx._gains[before.plain].gain.events[0].v;
+    expect(trimmedPeak / plainPeak).toBeCloseTo(dbToGain(toDecibels(-6)), 6);
+    expect(trimmedPeak).toBeLessThan(plainPeak);
+  });
+
+  test('a voice\'s peak gain carries its own preset\'s calibration trim, derived from params.preset', () => {
+    // The trim is no longer pushed ahead of the note: triggerSynthNoteOn reads
+    // `params.preset` and looks the trim up itself, so a source can never be
+    // playing one patch at another patch's level. Two triggers on the SAME
+    // source, differing only in `preset`, must therefore differ in peak by
+    // exactly the table's ratio — which the old per-source map could not
+    // express at all, since the second trigger would have inherited the first
+    // patch's entry until something remembered to overwrite it.
+    const { engine, ctx } = freshEngine();
+    const base = trimTestParams('Cosmic Lead');
+    const trimmed = synthTrimGainFor('Cosmic Lead');
+    expect(trimmed).not.toBe(NEUTRAL_TRIM_GAIN);
+
+    const aBefore = ctx._gains.length;
+    engine.triggerSynthNoteOn('C4', base, 0.5, undefined, 'synth');
+    const aPeak = ctx._gains[aBefore].gain.ramps[0].v;
+
+    // A name no factory preset has: neutral, on the same source, immediately
+    // after a trimmed note on it.
+    const bBefore = ctx._gains.length;
+    engine.triggerSynthNoteOn('E4', trimTestParams('A Name No Factory Preset Has'), 0.5, undefined, 'synth');
+    const bPeak = ctx._gains[bBefore].gain.ramps[0].v;
+
+    expect(aPeak / bPeak).toBeCloseTo(trimmed, 6);
+  });
+
+  test('setPresetTrim overrides the derived trim for one source (calibration harness only)', () => {
+    // 'Test' is not a factory preset name, so the derived trim is neutral on
+    // both sources and the whole ratio below is the override's doing.
+    const { engine, ctx } = freshEngine();
+    const params = trimTestParams('Test');
+
+    engine.setPresetTrim('synth', 2);
+    const synthBefore = ctx._gains.length;
+    engine.triggerSynthNoteOn('C4', params, 0.5, undefined, 'synth');
+    const synthPeak = ctx._gains[synthBefore].gain.ramps[0].v;
+
+    // 'bass' was never told about a trim, so it stays neutral even though the
+    // engine now carries a non-neutral entry for 'synth' in the same map.
+    const bassBefore = ctx._gains.length;
+    engine.triggerSynthNoteOn('C4', params, 0.5, undefined, 'bass');
+    const bassPeak = ctx._gains[bassBefore].gain.ramps[0].v;
+
+    expect(synthPeak / bassPeak).toBeCloseTo(2, 6);
   });
 });

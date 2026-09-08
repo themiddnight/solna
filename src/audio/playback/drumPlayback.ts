@@ -16,6 +16,13 @@ export function ensureDrumEngine(): void {
  * Assumes the AudioContext already exists — call ensureDrumEngine() on the
  * gesture that starts playback, not per hit.
  */
-export function triggerPad(instrument: string, volume: number, time?: number): void {
-  audioEngine.triggerDrum(instrument, volume, time);
+/**
+ * `velocity` is a per-hit PERFORMANCE attribute in 0..1 (see the Velocity
+ * brand in utils/gainUnits.ts), never a level. The Beat fader reaches the
+ * drums exactly once, on the sequencer source bus, through engineSync's
+ * setSourceGain('sequencer', …) — passing it here as well is what made drum
+ * output proportional to the fader's square.
+ */
+export function triggerPad(instrument: string, velocity: number, time?: number): void {
+  audioEngine.triggerDrum(instrument, velocity, time);
 }

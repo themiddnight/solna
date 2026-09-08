@@ -1,5 +1,6 @@
 import { SynthParams, MasterEffects, FilterType } from '../types';
 import { noteFrequency, clampBpm, stepDurationSec, STEPS_PER_BAR } from '../utils/musicTheory';
+import { MAX_FADER_GAIN } from '../utils/gainUnits';
 import {
   beatIndexAt,
   getMeter,
@@ -8,11 +9,14 @@ import {
   type Meter,
 } from '../utils/meter';
 import { DEFAULT_VELOCITY, ENV_FLOOR, SILENCE, clampCutoff, clampVelocity } from './constants';
+import { random } from './rng';
 import { mergeDrumKit } from './drumKits';
-import type { DrumKit, HatParams, SnareParams } from '@/data/drumKits';
+import type { DrumKit, DrumType, HatParams, SnareParams } from '@/data/drumKits';
+import { DRUM_TYPES } from '@/data/drumKits';
 import { clampEffects, clampEffectValue } from './effectLimits';
 import { IMPULSE_CACHE_SAMPLE_BUDGET, impulseSampleCount, keysToEvict } from './impulseBudget';
 import { IDLE_SUSPEND_MS, shouldSuspendWhenIdle } from './idleSuspend';
+import { NEUTRAL_TRIM_GAIN, drumTrimGainFor, synthTrimGainFor } from './trims';
 
 interface SynthVoice {
   oscs: OscillatorNode[];
@@ -214,8 +218,26 @@ class AudioEngine {
   // Master bus nodes
   private masterGain: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
+  /**
+   * Second master analyser, for LEVEL rather than spectrum. Separate from `analyser` because
+   * AudioVisualizer draws from that node's 128 frequency bins and changing its fftSize would
+   * silently rescale every bar it draws — while a peak read wants a long window: 256 samples is
+   * ~5ms at 48kHz, under a third of a 60Hz tick, so short-window peaks would be missed.
+   */
+  private levelAnalyser: AnalyserNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
+
+  /**
+   * Which master dynamics stages are currently WIRED IN, as a short code:
+   * '' (neither), 'c', 'l' or 'cl'. rewireMasterDynamics compares against it
+   * so a repeated updateEffects — and there is one per effects change — does
+   * not tear the master tail down and rebuild it for nothing.
+   *
+   * Seeded to the sentinel 'unbuilt', which no toggle combination can produce,
+   * so setupMasterChain's own seeding call always runs.
+   */
+  private dynamicsTopology = 'unbuilt';
 
   // Effect nodes
   private reverbNode: ConvolverNode | null = null;
@@ -298,6 +320,21 @@ class AudioEngine {
   // Voice gains connect here instead of straight to dry/effects, so a whole layer
   // (e.g. bass) can be muted or leveled with one click-free ramp.
   private sourceBuses = new Map<string, GainNode>();
+  /**
+   * instrument -> its persistent track fader, created lazily on first use and
+   * cleared with sourceBuses. A GainNode, not a velocity multiplier: a
+   * velocity is a per-hit performance attribute, and the 0..1 rule governs
+   * the INPUT parameter, not whatever a caller derives from the clamped
+   * result — see `hitLevel` in `triggerDrum`. A fader routed through it
+   * could not express the +12 dB the range promises, and it could not move
+   * an already-sounding tail.
+   */
+  private drumTrackGains = new Map<string, GainNode>();
+
+  /** Seed levels, kept even before the AudioContext exists so the setter
+   *  no-ops safely like every other and applyEngineSnapshot re-applies. */
+  private drumTrackLevels = new Map<string, number>();
+
   // One analyser per source bus, for per-layer scopes (the Synth view's
   // oscilloscope follows its Target selector). Cleared with sourceBuses in
   // setupMasterChain — an AnalyserNode belongs to the context that made it.
@@ -310,7 +347,6 @@ class AudioEngine {
   private clickBufferLow: AudioBuffer | null = null;
   private metronomeEnabled = false;
   private noiseBuffer: AudioBuffer | null = null;
-  private levelBuffer: Uint8Array<ArrayBuffer> | null = null;
 
   // Shared lookahead clock (Tone.js-style): one master 16th-note grid on the
   // audio timeline that every player subscribes to, so they cannot drift apart.
@@ -346,6 +382,43 @@ class AudioEngine {
   }
 
   private drumKit: DrumKit = mergeDrumKit();
+
+  /**
+   * The calibration trim for the CURRENT kit, as a single linear gain — per KIT,
+   * not per voice, because a drum kit's voices are not independent (see the
+   * comment on `DRUM_TRIMS` in src/data/trimTable.ts). Resolved once in
+   * setDrumKit, read once per hit. NEUTRAL_TRIM_GAIN until a kit name arrives or
+   * the kit has no committed entry — which is why no existing engine test's
+   * absolute peak assertion moves.
+   */
+  private drumTrimGain: number = NEUTRAL_TRIM_GAIN;
+
+  /**
+   * A per-source OVERRIDE of the derived synth trim, as a linear gain, and the
+   * only reason this map still exists.
+   *
+   * The trim itself is no longer pushed: `triggerSynthNoteOn` derives it from
+   * `params.preset`, which every caller already holds at the line that reads
+   * it, so a source can no longer carry a trim that disagrees with the patch it
+   * is playing. That used to be pushed from eleven call sites — four in
+   * `applySliceState`, one per synth-params subscription, and three in
+   * `presetPreview` purely because all three preview functions share one
+   * PREVIEW_SOURCE and a persistent map would otherwise hand an audition the
+   * PREVIOUS audition's trim. None of those exist any more, and the staleness
+   * they defended against is structurally impossible rather than merely
+   * defended: there is no window in which the map and `params.preset` can
+   * disagree, because the trim is computed from `params.preset` itself.
+   *
+   * What remains is the offline calibration harness
+   * (`scripts/calibration/renderOffline.ts`), which is the one caller that
+   * legitimately needs a trim OTHER than the derived one: it renders each
+   * preset UNTRIMMED to measure the level the trim table is then computed
+   * from, and a derivation it cannot switch off would make that measurement
+   * circular. It sets the override on its own `'calibration'` source. Nothing
+   * in the app writes this map, so an entry is only ever the harness saying
+   * "ignore the table for this render".
+   */
+  private presetTrims = new Map<string, number>();
 
   /**
    * Hat voices that are still sounding, keyed by voice name — so only `hihat`
@@ -663,21 +736,38 @@ class AudioEngine {
     // impulses built against the old one must not survive into the new graph.
     // Do NOT write new code that relies on these running.
     this.sourceBuses.clear();
+    this.drumTrackGains.clear();
     this.sourceAnalysers.clear();
+    this.levelAnalyser = null;
     this.impulseCache.clear();
     this.reverbDecay = 2.0;
 
     // Master output & analyser. masterGain is the USER's master trim and
     // nothing else: engineSync subscribes masterVolume with fireImmediately,
     // so it is overwritten before the first frame — a "staging ceiling" seeded
-    // here would be a comment describing a value that never applies. Headroom
-    // is owned by the compressor (-12 dB, 4:1) and the limiter (-3 dB, 20:1).
+    // here would be a comment describing a value that never applies.
+    //
+    // BOTH DYNAMICS STAGES ARE EXPLICIT, TOGGLEABLE MASTER FX — neither is
+    // wired in unconditionally the way the pre-DEV-385 compressor was, and
+    // neither sits between the meter tap and the reading. The compressor
+    // defaults OFF. The limiter defaults ON as of DEV-383, because the five
+    // source buses now start at −6 dB and the measured sum still peaks above
+    // 0 dBFS on the densest presets; at its −3 dB threshold it catches those
+    // occasional overs and does nothing at all the rest of the time, so the
+    // meter still reports the mix the user made. A user who wants the raw sum
+    // switches it off in the Effects view.
     this.masterGain = this.ctx.createGain();
     this.masterGain.gain.value = 1.0;
 
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 256;
     this.analyser.smoothingTimeConstant = 0.8;
+
+    // Level analyser: long window, no smoothing. `smoothingTimeConstant` only affects frequency
+    // reads, but it is pinned at 0 here so the node states what it is for.
+    this.levelAnalyser = this.ctx.createAnalyser();
+    this.levelAnalyser.fftSize = 2048;
+    this.levelAnalyser.smoothingTimeConstant = 0;
 
     // Master Compressor
     this.compressor = this.ctx.createDynamicsCompressor();
@@ -687,10 +777,15 @@ class AudioEngine {
     this.compressor.attack.value = 0.003;
     this.compressor.release.value = 0.25;
 
-    // Master limiter — mostly-idle safety net (Web Audio has no dedicated
-    // limiter; a max-ratio compressor with a hard-ish knee is the standard
-    // stand-in). Only catches overs above −3 dB; staging above should keep
-    // its gain reduction near zero.
+    // Master limiter — an opt-in, mostly-idle safety net (Web Audio has no
+    // dedicated limiter; a max-ratio compressor with a hard knee is the
+    // standard stand-in). These are SEED VALUES OF A STAGE THAT DEFAULTS ON as
+    // of DEV-383 — it is wired into the path on a fresh session, and only the
+    // user switching it off in the Effects view takes it back out. It catches
+    // overs above −3 dB, and the DEV-383 bus staging above should keep its gain
+    // reduction near zero. updateEffects overwrites all four of these from
+    // stored state; knee is the one that stays, because a soft-kneed limiter
+    // stops being a limiter.
     this.limiter = this.ctx.createDynamicsCompressor();
     this.limiter.threshold.value = -3;
     this.limiter.knee.value = 0;
@@ -776,11 +871,90 @@ class AudioEngine {
 
     this.eqLowNode.connect(this.eqMidNode);
     this.eqMidNode.connect(this.eqHighNode);
-    this.eqHighNode.connect(this.compressor);
-    this.compressor.connect(this.masterGain);
-    this.masterGain.connect(this.limiter);
-    this.limiter.connect(this.analyser);
-    this.analyser.connect(this.ctx.destination);
+    this.eqHighNode.connect(this.masterGain);
+
+    // Everything below masterGain is owned by rewireMasterDynamics — including
+    // BOTH analyser taps, which it re-makes on every pass. Seeding through it
+    // rather than around it means the graph has exactly one builder, so the
+    // first updateEffects can never find a topology it did not construct.
+    this.dynamicsTopology = 'unbuilt';
+    this.rewireMasterDynamics(false, false);
+  }
+
+  /**
+   * Rebuilds the master tail below masterGain for the requested pair of
+   * dynamics stages.
+   *
+   * A series stage cannot be bypassed the way the parallel SENDS are. Reverb,
+   * delay and distortion bypass by forcing their send gain to 0 (see
+   * updateEffects) because a send is ADDED to a dry path that always passes.
+   * A compressor is in the path: forcing anything about it to zero gives
+   * silence, not passthrough. A dry/wet crossfade around it would restore
+   * passthrough but would leave the node connected and processing, which is
+   * precisely the invisible, unavoidable staging DEV-385 exists to remove. So
+   * the bypass is a real reconnect.
+   *
+   * The three nodes are created ONCE in setupMasterChain and never re-created,
+   * so a rewire cannot orphan one: it drops every outgoing edge of the three,
+   * then re-makes exactly the edges the topology needs.
+   *
+   * THE TWO ANALYSER SENDS ARE PART OF THAT. masterGain.disconnect() drops
+   * both of DEV-384's observe-only taps along with the audio edge, and neither
+   * has an output of its own to put it back. `analyser` is the 128-bin
+   * spectrum node AudioVisualizer draws; `levelAnalyser` is the node
+   * getMasterLevelAnalyser() hands to useMeterLevel — it IS the meter behind
+   * VuMeter and AmbientBackdrop. Re-making only the first is a silent failure:
+   * no throw, no orphan, audio unchanged, every dBFS reading -inf forever.
+   *
+   * NOTE — switching a stage while it is actively reducing gain can click: the
+   * sample stream jumps from the reduced output to the raw one. Accepted, not
+   * worked around. It is a discrete user action on a safety net, the jump is
+   * zero whenever the net is idle (which is the common case), and the fix —
+   * mute masterGain, rewire on a timer, unmute — would make the topology
+   * change unobservable synchronously and put every graph test on a timer.
+   */
+  private rewireMasterDynamics(compressorOn: boolean, limiterOn: boolean): void {
+    if (
+      !this.ctx ||
+      !this.masterGain ||
+      !this.compressor ||
+      !this.limiter ||
+      !this.analyser ||
+      !this.levelAnalyser
+    ) {
+      return;
+    }
+
+    const topology = `${compressorOn ? 'c' : ''}${limiterOn ? 'l' : ''}`;
+    if (topology === this.dynamicsTopology) return;
+
+    this.masterGain.disconnect();
+    this.compressor.disconnect();
+    this.limiter.disconnect();
+
+    // BOTH observe-only taps are re-made FIRST and unconditionally, in the
+    // order DEV-384 wired them. Each hangs off masterGain with no onward
+    // output, so the disconnect above just dropped both and nothing else would
+    // put either back — and both must stay AHEAD of the two stages, or they
+    // would report post-squash audio instead of the mix the user made.
+    // levelAnalyser is not optional decoration: it is the node
+    // getMasterLevelAnalyser() returns, so dropping it silently kills VuMeter
+    // and AmbientBackdrop while leaving the audio path perfect.
+    this.masterGain.connect(this.analyser);
+    this.masterGain.connect(this.levelAnalyser);
+
+    const stages: DynamicsCompressorNode[] = [];
+    if (compressorOn) stages.push(this.compressor);
+    if (limiterOn) stages.push(this.limiter);
+
+    let node: AudioNode = this.masterGain;
+    for (const stage of stages) {
+      node.connect(stage);
+      node = stage;
+    }
+    node.connect(this.ctx.destination);
+
+    this.dynamicsTopology = topology;
   }
 
   private makeDistortionCurve(amount = 20): Float32Array<ArrayBuffer> {
@@ -815,8 +989,8 @@ class AudioEngine {
 
     for (let i = 0; i < length; i++) {
       const n = length - i;
-      left[i] = (Math.random() * 2 - 1) * Math.pow(n / length, curve);
-      right[i] = (Math.random() * 2 - 1) * Math.pow(n / length, curve);
+      left[i] = (random() * 2 - 1) * Math.pow(n / length, curve);
+      right[i] = (random() * 2 - 1) * Math.pow(n / length, curve);
     }
     return impulse;
   }
@@ -995,7 +1169,13 @@ class AudioEngine {
     const subGain = this.ctx.createGain();
     subGain.gain.value = params.subOscVolume;
 
-    const peakGain = velocity * 0.4 * scaleFactor;
+    // Derived here, not pushed ahead of time: `params` is in hand and
+    // `params.preset` is the exact key `synthTrimGainFor` wants, so the trim is
+    // a pure function of the note being played rather than per-source state a
+    // caller had to remember to refresh. `presetTrims` is consulted only as an
+    // explicit override and is empty in the app — see that field's docblock.
+    const trim = this.presetTrims.get(source) ?? synthTrimGainFor(params.preset);
+    const peakGain = velocity * 0.4 * scaleFactor * trim;
     gainNode.gain.setValueAtTime(ENV_FLOOR, now);
     gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain), now + attack);
     gainNode.gain.exponentialRampToValueAtTime(Math.max(ENV_FLOOR, peakGain * params.sustain), now + attack + params.decay);
@@ -1419,7 +1599,85 @@ class AudioEngine {
     const now = this.ctx.currentTime;
     const isMuted = this.sourceMuted.get(source);
     bus.gain.cancelScheduledValues(now);
-    bus.gain.setTargetAtTime(isMuted ? 0 : Math.max(0, Math.min(1.5, volume)), now, 0.01);
+    // Derived from the fader range (MAX_FADER_GAIN is dbToGain(FADER_MAX_DB)),
+    // not an independent literal. It used to be 1.5 — +3.5 dB — so a fader
+    // that displayed +12 dB stopped responding two-thirds of the way up.
+    bus.gain.setTargetAtTime(isMuted ? 0 : Math.max(0, Math.min(MAX_FADER_GAIN, volume)), now, 0.01);
+  }
+
+  /**
+   * Overrides the derived preset trim for one source, as a LINEAR gain.
+   *
+   * CALIBRATION HARNESS ONLY. `triggerSynthNoteOn` derives the trim from
+   * `params.preset` on its own; the app never calls this, and adding a call
+   * from `engineSync` or `presetPreview` would re-create the eleven-call-site
+   * push this replaced. The harness needs it because its untrimmed render pass
+   * must measure a preset with the table switched OFF (`setPresetTrim(…, 1)`),
+   * which no derivation can express. See `presetTrims`.
+   */
+  setPresetTrim(source: string, trimGain: number): void {
+    this.presetTrims.set(source, trimGain);
+  }
+
+  private drumTrackGain(instrument: string): GainNode | null {
+    if (!this.ctx || !this.drumBusFilter) return null;
+    let node = this.drumTrackGains.get(instrument);
+    if (!node) {
+      node = this.ctx.createGain();
+      node.gain.value = this.drumTrackLevels.get(instrument) ?? 1;
+      node.connect(this.drumBusFilter);
+      this.drumTrackGains.set(instrument, node);
+    }
+    return node;
+  }
+
+  /**
+   * Per-track drum level, LINEAR — the store holds it in dB and engineSync
+   * converts, exactly like setSourceGain. New setter; no existing signature
+   * moved for DEV-386. Ramped, not stepped, for the same click-free reason
+   * setSourceGain ramps.
+   *
+   * Unknown instrument names are IGNORED, deliberately (decision, DEV-386
+   * fix round 1): a name outside DRUM_TYPES will never be resolved by
+   * triggerDrum's dispatch, so no voice will ever route through a node built
+   * for it. Minting one anyway — the earlier behaviour — allocates a GainNode
+   * wired to drumBusFilter that lives forever with nothing feeding it, for
+   * every typo'd or future non-drum sequencer track instrument. Silently
+   * dropping the write (not throwing) matches every other engine setter's
+   * fail-safe posture.
+   *
+   * Keyed by INSTRUMENT, not by trigger source — wireDrumVoice inserts the
+   * same node for every path that ends up calling triggerDrum for that
+   * voice. A sequencer track's fader therefore also attenuates that
+   * instrument's drum-pad hits and any live MIDI trigger for it, not only
+   * its own sequencer steps. That is how a channel fader behaves in a real
+   * mixer (one fader per strip, not one per source), so it is left as is —
+   * but it is easy to miss reading only the sequencer call site, hence this
+   * note.
+   */
+  setDrumTrackGain(instrument: string, gain: number): void {
+    if (!DRUM_TYPES.includes(instrument as DrumType)) return;
+    this.drumTrackLevels.set(instrument, gain);
+    if (!this.ctx) return;
+    const node = this.drumTrackGain(instrument);
+    if (!node) return;
+    const now = this.ctx.currentTime;
+    node.gain.cancelScheduledValues(now);
+    node.gain.setTargetAtTime(Math.max(0, gain), now, 0.01);
+  }
+
+  /**
+   * Test-only readers, in the __forTests style the engine already uses.
+   * A PURE read: it must never mint the node it is asked about, or a test
+   * that reads before anything else touches the instrument would silently
+   * construct its own subject and pass regardless of real behaviour.
+   */
+  __drumTrackGainValueForTests(instrument: string): number | undefined {
+    return this.drumTrackGains.get(instrument)?.gain.value;
+  }
+
+  __drumTrackGainCountForTests(): number {
+    return this.drumTrackGains.size;
   }
 
   /**
@@ -1666,8 +1924,9 @@ class AudioEngine {
     }
   }
 
-  setDrumKit(kit?: Partial<DrumKit>): void {
+  setDrumKit(kit?: Partial<DrumKit>, kitName?: string): void {
     this.drumKit = mergeDrumKit(kit);
+    this.drumTrimGain = drumTrimGainFor(kitName);
   }
 
   /** Live drum-bus filter control (SequencerView "Drum Filter" card). */
@@ -1700,16 +1959,40 @@ class AudioEngine {
   }
 
   /**
-   * Dry through drumBusFilter, wet through a per-voice send gain into
-   * drumSendFilter. `reverbSend` is the kit's authored LEVEL (0.15..0.5 across
-   * kits); it used to be tested as a boolean and the send ran at full voice
-   * level, so the whole spread was inaudible.
+   * Dry through the track fader into drumBusFilter, wet through a per-voice
+   * send gain into drumSendFilter. `reverbSend` is the kit's authored LEVEL
+   * (0.15..0.5 across kits); it used to be tested as a boolean and the send
+   * ran at full voice level, so the whole spread was inaudible.
+   *
+   * The track fader sits BEFORE the wet/dry split: a track fader must move the
+   * reverb with the dry signal, or pulling a track down leaves its tail up.
+   * The dry path routes THROUGH the node; the wet send's gain is seeded from
+   * the same node's current value instead of being routed through it, because
+   * the track node is persistent and the send is per-voice — release()
+   * disconnects the send's OUTGOING edges, never the incoming edge from a
+   * persistent node, so routing the wet would leak one edge per hit forever.
+   * Seeding is exact for a one-shot whose whole tail is shorter than the time
+   * it takes to move a fader.
+   *
+   * `voice` is threaded in as a parameter rather than read from a field the
+   * caller set first, and every voice builder between here and `triggerDrum`
+   * carries it for the same reason. It used to be an `activeDrumVoice` field
+   * whose docblock admitted its own invariant was unenforced: any path that
+   * reached `drumTone`/`drumNoiseBurst`/`metallicBurst` without going through
+   * `triggerDrum` first routed its dry signal onto whichever instrument
+   * triggered LAST — wrong fader, no throw, no failing test, and since the
+   * field was never cleared the wrong answer was the default rather than an
+   * obvious empty one. As a parameter the mistake is not merely unlikely, it
+   * does not typecheck: there is no value to inherit and none to forget to set.
+   * It must be the ALIAS-RESOLVED name (`triggerDrum` resolves DRUM_ALIASES
+   * before its dispatch), because that is the key `drumTrackGains` is keyed by.
    */
-  private wireDrumVoice(env: GainNode, reverbSend = 0): GainNode | null {
-    env.connect(this.drumBusFilter!);
+  private wireDrumVoice(env: GainNode, reverbSend = 0, voice: string): GainNode | null {
+    const track = this.drumTrackGain(voice);
+    env.connect(track ?? this.drumBusFilter!);
     if (reverbSend <= 0 || !this.drumSendFilter) return null;
     const send = this.ctx!.createGain();
-    send.gain.value = reverbSend;
+    send.gain.value = reverbSend * (track ? track.gain.value : 1);
     env.connect(send);
     send.connect(this.drumSendFilter);
     return send;
@@ -1746,6 +2029,8 @@ class AudioEngine {
     t: number;
     stopAt?: number;
     reverbSend?: number;
+    /** The alias-resolved voice whose track fader this component belongs to. */
+    voice: string;
   }): void {
     const osc = this.ctx!.createOscillator();
     if (o.type) osc.type = o.type;
@@ -1755,7 +2040,7 @@ class AudioEngine {
     }
     const env = this.drumEnv(o.peak, o.decay, o.t);
     osc.connect(env);
-    const send = this.wireDrumVoice(env, o.reverbSend);
+    const send = this.wireDrumVoice(env, o.reverbSend, o.voice);
     osc.start(o.t);
     osc.stop(o.stopAt ?? o.t + o.decay + 0.02);
     osc.onended = () => this.release(osc, env, send);
@@ -1904,6 +2189,8 @@ class AudioEngine {
     stopPad?: number;
     reverbSend?: number;
     shape?: (gain: AudioParam) => void;
+    /** The alias-resolved voice whose track fader this component belongs to. */
+    voice: string;
   }): { env: GainNode; noise: AudioBufferSourceNode; stopAt: number } {
     const noise = this.createNoiseNode();
     const filter = this.ctx!.createBiquadFilter();
@@ -1933,7 +2220,7 @@ class AudioEngine {
     } else {
       filter.connect(env);
     }
-    const send = this.wireDrumVoice(env, o.reverbSend);
+    const send = this.wireDrumVoice(env, o.reverbSend, o.voice);
     const stopAt = o.t + o.decay + (o.stopPad ?? 0.01);
     noise.start(o.t, this.noiseStartOffset());
     noise.stop(stopAt);
@@ -1941,23 +2228,28 @@ class AudioEngine {
     return { env, noise, stopAt };
   }
 
-  /** The two-partial body plus noise shared by `snare` and `rimshot`. */
-  private snareVoice(s: SnareParams, v: number, now: number): void {
+  /**
+   * The two-partial body plus noise shared by `snare` and `rimshot`. `voice`
+   * says WHICH of those two is being built: the params alone cannot, since a
+   * rimshot is a preset over this same path, and the two have separate track
+   * faders.
+   */
+  private snareVoice(s: SnareParams, v: number, now: number, voice: string): void {
     this.drumTone({
       type: 'triangle', freq: s.bodyFreqStart, freqEnd: s.bodyFreqEnd,
       pitchTime: s.bodyTime, peak: v * s.bodyGain, decay: s.bodyDecay,
-      t: now, stopAt: now + s.bodyDecay + 0.05,
+      t: now, stopAt: now + s.bodyDecay + 0.05, voice,
     });
     // The second partial: the (0,1) head mode is a PAIR, and every machine
     // that copies it uses two oscillators (research §2.1).
     this.drumTone({
       type: 'triangle', freq: s.bodyFreqStart2, freqEnd: s.bodyFreqEnd2,
       pitchTime: s.bodyTime, peak: v * s.bodyGain2, decay: s.bodyDecay,
-      t: now, stopAt: now + s.bodyDecay + 0.05,
+      t: now, stopAt: now + s.bodyDecay + 0.05, voice,
     });
     this.drumNoiseBurst({
       filterType: 'highpass', freq: s.noiseFilter, peak: v * s.noiseGain,
-      decay: s.noiseDecay, t: now, stopPad: 0.03, reverbSend: s.reverbSend,
+      decay: s.noiseDecay, t: now, stopPad: 0.03, reverbSend: s.reverbSend, voice,
     });
   }
 
@@ -1982,6 +2274,8 @@ class AudioEngine {
     bandA: { freq: number; q: number; level: number; attack: number; decay: number };
     bandB: { freq: number; q: number; level: number; attack: number; decay: number };
     reverbSend?: number;
+    /** The alias-resolved voice whose track fader this bank belongs to. */
+    voice: string;
   }): { out: GainNode; stopAt: number } | null {
     if (!this.ctx || o.peak <= 0) return null;
     const ctx = this.ctx;
@@ -1991,7 +2285,7 @@ class AudioEngine {
 
     const out = ctx.createGain();
     out.gain.value = o.peak;
-    const send = this.wireDrumVoice(out, o.reverbSend);
+    const send = this.wireDrumVoice(out, o.reverbSend, o.voice);
 
     // Bandpass filters are created before the highpass so the graph reads,
     // in creation order, as "the two bands, then the shared tail" — the
@@ -2056,7 +2350,7 @@ class AudioEngine {
    * step are perfectly correlated and sum at +6 dB instead of +3.
    */
   private noiseStartOffset(): number {
-    return Math.random() * (this.noiseBuffer?.duration ?? 0);
+    return random() * (this.noiseBuffer?.duration ?? 0);
   }
 
   /**
@@ -2073,7 +2367,7 @@ class AudioEngine {
       const t = k[voice];
       this.drumTone({
         freq: t.freqStart, freqEnd: t.freqEnd, pitchTime: t.pitchTime,
-        peak: v * t.gain, decay: t.decay, t: now, reverbSend: t.reverbSend,
+        peak: v * t.gain, decay: t.decay, t: now, reverbSend: t.reverbSend, voice,
       });
       return;
     }
@@ -2085,13 +2379,13 @@ class AudioEngine {
       // later. A crash is the opposite trade - a faster bloom that collapses.
       if (r.metal > 0) {
         this.metallicBurst({
-          tone: r.tone, peak: peak * r.metal * r.ping, t: now,
+          tone: r.tone, peak: peak * r.metal * r.ping, t: now, voice,
           highpass: r.bodyFilter, reverbSend: r.reverbSend,
           bandA: { freq: r.pingFilter, q: RIDE_PING_Q, level: 1, attack: 0, decay: r.pingDecay },
           bandB: { freq: r.bodyFilter, q: RIDE_BODY_Q, level: RIDE_BODY_LEVEL, attack: 0, decay: r.pingDecay * 1.6 },
         });
         this.metallicBurst({
-          tone: r.tone, peak: peak * r.metal * (1 - r.ping), t: now,
+          tone: r.tone, peak: peak * r.metal * (1 - r.ping), t: now, voice,
           highpass: r.washFilter * 0.5, reverbSend: r.reverbSend,
           bandA: { freq: r.washFilter, q: RIDE_WASH_Q, level: 1, attack: RIDE_WASH_ATTACK, decay: r.washDecay },
           bandB: { freq: METAL_BAND_B_HZ, q: 0.9, level: 0.35, attack: RIDE_WASH_ATTACK, decay: r.washDecay * 0.7 },
@@ -2101,12 +2395,12 @@ class AudioEngine {
         // The stick, and the noise half of the bed (§2.3's 10% / 5% layers).
         this.drumNoiseBurst({
           filterType: 'bandpass', freq: r.pingFilter, q: RIDE_PING_Q,
-          peak: peak * (1 - r.metal) * r.ping, decay: r.pingDecay, t: now,
+          peak: peak * (1 - r.metal) * r.ping, decay: r.pingDecay, t: now, voice,
         });
         this.drumNoiseBurst({
           filterType: 'bandpass', freq: r.washFilter, q: RIDE_WASH_Q,
           peak: peak * (1 - r.metal) * (1 - r.ping), decay: r.washDecay,
-          t: now, stopPad: 0.1, reverbSend: r.reverbSend,
+          t: now, stopPad: 0.1, reverbSend: r.reverbSend, voice,
         });
       }
       return;
@@ -2121,7 +2415,7 @@ class AudioEngine {
     bp.Q.value = BELL_Q;
     const env = this.drumEnv(v * b.gain, b.decay, now);
     bp.connect(env);
-    const send = this.wireDrumVoice(env, b.reverbSend);
+    const send = this.wireDrumVoice(env, b.reverbSend, voice);
     const oscs = [b.freq1, b.freq2].map((freq) => {
       const osc = this.ctx!.createOscillator();
       osc.type = 'square';
@@ -2141,10 +2435,20 @@ class AudioEngine {
     // comment in triggerSynthNoteOn.
     this.wakeIfIdle();
     const now = time ?? this.ctx.currentTime;
-    const v = clampVelocity(velocity);
     const k = this.drumKit;
     const name = type.toLowerCase();
     const resolved = DRUM_ALIASES[name] ?? name;
+    // The measured trim lands on hitLevel, BEFORE the per-voice authored `gain`,
+    // so DRUM_KITS keeps stating what a reviewer tuned by ear. `clampVelocity`
+    // bounds only its own argument to 0..1 (see `clampVelocity`'s and
+    // `Velocity`'s docs) — the trim multiplies AFTER that clamp, deliberately,
+    // so a calibration boost is not silently discarded the way it would be if
+    // it landed inside `clampVelocity(...)` instead. That is why hitLevel can
+    // exceed 1 and is named for what it now is (a per-hit level), not a velocity.
+    // `drumTrimGain` is the same number for every voice in the current kit — see
+    // the comment on that field — so it multiplies in directly with no per-voice
+    // lookup.
+    const hitLevel = clampVelocity(velocity) * this.drumTrimGain;
 
     // Pulled out of the switch below (not merely refactored into it) because
     // every `case` clause counts toward this method's cyclomatic complexity
@@ -2158,7 +2462,7 @@ class AudioEngine {
     // sort last (canonical order, decision 1) — only 'crash' has a `case`
     // below.
     if (isNonSwitchVoice(resolved)) {
-      this.triggerNonSwitchVoice(resolved, v, now);
+      this.triggerNonSwitchVoice(resolved, hitLevel, now);
       return;
     }
 
@@ -2167,29 +2471,30 @@ class AudioEngine {
         const d = k.kick;
         this.drumTone({
           freq: d.freqStart, freqEnd: d.freqEnd, pitchTime: d.pitchTime,
-          peak: v * d.gain, decay: d.decay, t: now, reverbSend: d.reverbSend,
+          peak: hitLevel * d.gain, decay: d.decay, t: now, reverbSend: d.reverbSend,
+          voice: resolved,
         });
         if (d.clickFreq && d.clickLevel) {
           // No send: the click is the beater transient and its whole job is to
           // stay dry. A click through a reverb is a slap.
           this.drumTone({
-            freq: d.clickFreq, peak: v * d.clickLevel, decay: d.clickDecay ?? 0.01,
-            t: now, stopAt: now + d.decay + 0.02,
+            freq: d.clickFreq, peak: hitLevel * d.clickLevel, decay: d.clickDecay ?? 0.01,
+            t: now, stopAt: now + d.decay + 0.02, voice: resolved,
           });
         }
         break;
       }
       case 'snare':
-        this.snareVoice(k.snare, v, now);
+        this.snareVoice(k.snare, hitLevel, now, resolved);
         break;
       case 'rimshot':
         // Decision 31: a rimshot is a PRESET over the snare path, not a third
         // synthesis path - two inharmonic tones with almost no noise.
-        this.snareVoice(k.rimshot, v, now);
+        this.snareVoice(k.rimshot, hitLevel, now, resolved);
         break;
       case 'clap': {
         const c = k.clap;
-        const peak = v * c.gain;
+        const peak = hitLevel * c.gain;
         // Three DECAYING bursts plus a distinct tail, ~10 ms apart. The old
         // schedule was three plateaus at 1.0, 0.25 and 1.1 - setValueAtTime
         // HOLDS a value, so it was a chopped-noise gate whose loudest event
@@ -2199,7 +2504,7 @@ class AudioEngine {
         const floor = Math.max(ENV_FLOOR, peak * 0.05);
         this.drumNoiseBurst({
           filterType: 'bandpass', freq: c.filter, q: 1.5, peak, decay: c.decay,
-          t: now, stopPad: 0.02, reverbSend: c.reverbSend,
+          t: now, stopPad: 0.02, reverbSend: c.reverbSend, voice: resolved,
           shape: (gain) => {
             gain.exponentialRampToValueAtTime(floor, now + 0.008);
             gain.setValueAtTime(peak * 0.85, now + 0.01);
@@ -2216,7 +2521,7 @@ class AudioEngine {
         this.chokeHats(now, HIHAT_CHOKE_RELEASE);
         // Closed hat: both bands at the kit's decay, band B low in the mix -
         // a hat taps mostly the high path (§2.1).
-        this.triggerHatVoice('hihat', h, v * h.gain, now, 0.25, 1);
+        this.triggerHatVoice('hihat', h, hitLevel * h.gain, now, 0.25, 1);
         break;
       }
       // 'hitom' and 'lowtom' would sort here (canonical order, decision 1) —
@@ -2232,16 +2537,17 @@ class AudioEngine {
         // The low band rings 1.8x longer than the high one (§2.2: 180 ms vs
         // 320 ms). That ratio is the open hat's falling centroid; it is not a
         // longer copy of the closed hat.
-        this.triggerHatVoice('openhat', h, v * h.gain, now, 0.45, 1.8);
+        this.triggerHatVoice('openhat', h, hitLevel * h.gain, now, 0.45, 1.8);
         break;
       }
       case 'crash': {
         const cr = k.crash;
-        const peak = v * cr.gain;
+        const peak = hitLevel * cr.gain;
         if (cr.metal < 1) {
           this.drumNoiseBurst({
             filterType: 'bandpass', freq: cr.filter, q: 0.8, peak: peak * (1 - cr.metal),
             decay: cr.decay, t: now, stopPad: 0.1, reverbSend: cr.reverbSend,
+            voice: resolved,
           });
         }
         if (cr.metal > 0) {
@@ -2249,7 +2555,7 @@ class AudioEngine {
           // attack is smoothed - that 8 ms is the difference between a cymbal
           // that bloomed and a burst of noise that switched on (§2.5).
           this.metallicBurst({
-            tone: METAL_TONE_CRASH, peak: peak * cr.metal, t: now,
+            tone: METAL_TONE_CRASH, peak: peak * cr.metal, t: now, voice: resolved,
             highpass: cr.filter * 0.5, reverbSend: cr.reverbSend,
             bandA: {
               freq: METAL_BAND_A_HZ, q: 0.7, level: 1, attack: 0.008,
@@ -2287,7 +2593,7 @@ class AudioEngine {
     if (h.metal < 1) {
       const hat = this.drumNoiseBurst({
         filterType: 'highpass', freq: h.filter, q: HAT_Q, topCut: h.topCut,
-        peak: peak * (1 - h.metal), decay: h.decay, t: now,
+        peak: peak * (1 - h.metal), decay: h.decay, t: now, voice: voiceName,
       });
       envs.push(hat.env);
       peaks.push(peak * (1 - h.metal));
@@ -2297,6 +2603,7 @@ class AudioEngine {
     if (h.metal > 0) {
       const bank = this.metallicBurst({
         tone: METAL_TONE_HAT, peak: peak * h.metal, t: now, highpass: h.filter,
+        voice: voiceName,
         bandA: { freq: METAL_BAND_A_HZ, q: 1.0, level: 1, attack: 0, decay: h.decay },
         bandB: {
           freq: METAL_BAND_B_HZ, q: 1.2, level: bandBLevel, attack: 0,
@@ -2370,7 +2677,7 @@ class AudioEngine {
       const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
       const data = buffer.getChannelData(0);
       for (let i = 0; i < bufferSize; i++) {
-        data[i] = Math.random() * 2 - 1;
+        data[i] = random() * 2 - 1;
       }
       this.noiseBuffer = buffer;
     }
@@ -2428,9 +2735,28 @@ class AudioEngine {
     const eqMid = fx.eqBypass ? 0 : fx.eqMid;
     const eqHigh = fx.eqBypass ? 0 : fx.eqHigh;
 
+    // Both dynamics stages are max-ratio-or-not DynamicsCompressorNodes; the
+    // "limiter" is a max-ratio compressor with a HARD KNEE, which is the
+    // standard Web Audio stand-in for a dedicated limiter (the API has none).
+    // knee is not stored state: 30 and 0 are set once in setupMasterChain,
+    // because a soft-kneed limiter stops being a limiter.
     if (this.compressor) {
       this.compressor.threshold.setTargetAtTime(fx.compressorThreshold, this.ctx.currentTime, 0.05);
+      this.compressor.ratio.setTargetAtTime(fx.compressorRatio, this.ctx.currentTime, 0.05);
+      this.compressor.attack.setTargetAtTime(fx.compressorAttack, this.ctx.currentTime, 0.05);
+      this.compressor.release.setTargetAtTime(fx.compressorRelease, this.ctx.currentTime, 0.05);
     }
+
+    if (this.limiter) {
+      this.limiter.threshold.setTargetAtTime(fx.limiterThreshold, this.ctx.currentTime, 0.05);
+      this.limiter.ratio.setTargetAtTime(fx.limiterRatio, this.ctx.currentTime, 0.05);
+      this.limiter.attack.setTargetAtTime(fx.limiterAttack, this.ctx.currentTime, 0.05);
+      this.limiter.release.setTargetAtTime(fx.limiterRelease, this.ctx.currentTime, 0.05);
+    }
+
+    // Parameters first, topology second: a stage that is about to be inserted
+    // should already hold its own settings when the signal reaches it.
+    this.rewireMasterDynamics(fx.compressorEnabled, fx.limiterEnabled);
 
     if (this.reverbGain) this.reverbGain.gain.setTargetAtTime(reverbWet, this.ctx.currentTime, 0.05);
     if (this.delayGain) this.delayGain.gain.setTargetAtTime(delayWet, this.ctx.currentTime, 0.05);
@@ -2443,7 +2769,15 @@ class AudioEngine {
 
   setMasterVolume(vol: number): void {
     if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setTargetAtTime(Math.max(0, Math.min(1, vol)), this.ctx.currentTime, 0.05);
+      // The ceiling is DERIVED from the fader range (MAX_FADER_GAIN is
+      // dbToGain(FADER_MAX_DB)), never an independent literal: it used to be
+      // `1`, which is 0 dB, so a fader that displayed +12 dB silently stopped
+      // responding at unity. A derived ceiling cannot drift from the control.
+      this.masterGain.gain.setTargetAtTime(
+        Math.max(0, Math.min(MAX_FADER_GAIN, vol)),
+        this.ctx.currentTime,
+        0.05,
+      );
     }
   }
 
@@ -2456,10 +2790,46 @@ class AudioEngine {
   }
 
   /**
+   * Live gain reduction of each master dynamics stage, in dB — always <= 0,
+   * where 0 means the stage is passing the signal untouched.
+   *
+   * Read per frame by components/ui/GainReductionMeter through the shared
+   * meter scheduler, and NEVER through the store: a store write per animation
+   * frame would re-render every mounted view, and all four views stay mounted.
+   *
+   * A disengaged stage is disconnected (rewireMasterDynamics), so its
+   * `reduction` sits at 0 and the readout reads as "doing nothing", which is
+   * exactly true. Returns 0 before init(), when there is no node at all.
+   */
+  getCompressorReduction(): number {
+    return this.compressor?.reduction ?? 0;
+  }
+
+  /** The limiter's live gain reduction in dB; see getCompressorReduction. */
+  getLimiterReduction(): number {
+    return this.limiter?.reduction ?? 0;
+  }
+
+  /**
+   * Analyser for LEVEL metering — a long-window time-domain tap off masterGain, post-fader and
+   * PRE-DYNAMICS: it sits ahead of both the compressor and the limiter, neither of which is even
+   * in the path unless the user switches it on (DEV-385). Callers read it with `getFloatTimeDomainData` and turn samples into dBFS via
+   * `src/utils/meterLevel.ts`; the engine deliberately computes no dB itself, so there is one
+   * definition of the level maths and it lives where it can be unit-tested.
+   *
+   * A spectrum average is not a level: it moves with a patch's brightness, not its loudness, and
+   * it has no dB meaning at all.
+   */
+  getMasterLevelAnalyser(): AnalyserNode | null {
+    return this.levelAnalyser;
+  }
+
+  /**
    * Analyser tapping one source layer's bus — after the VCA and tremolo,
    * before the parallel sends and the master chain. That is deliberately a
-   * different picture from `getAnalyser()`, which sits post-limiter and so
-   * shows the finished mix: a per-layer scope is what lets the Synth view
+   * different picture from `getAnalyser()`, which is an observe-only send off
+   * `masterGain` — post-fader, pre-dynamics — and so shows every layer summed
+   * with the effect returns: a per-layer scope is what lets the Synth view
    * show the patch being edited rather than everything at once.
    *
    * Created on demand and kept, so repeated calls hand back the same node.
@@ -2491,21 +2861,6 @@ class AudioEngine {
     if (this.analyser) {
       this.analyser.getByteTimeDomainData(array);
     }
-  }
-
-  getAudioLevel(): number {
-    if (!this.analyser) return 0;
-    const binCount = this.analyser.frequencyBinCount;
-    if (!this.levelBuffer || this.levelBuffer.length !== binCount) {
-      this.levelBuffer = new Uint8Array(binCount);
-    }
-    const data = this.levelBuffer;
-    this.analyser.getByteFrequencyData(data);
-    let sum = 0;
-    for (let i = 0; i < data.length; i++) {
-      sum += data[i];
-    }
-    return sum / (data.length * 255);
   }
 
 }

@@ -1,5 +1,6 @@
 import { Note, transpose } from 'tonal';
 import type { ArpMode } from '../types';
+import { random } from './rng';
 
 /**
  * Expand the currently held notes into the note order the arpeggiator plays.
@@ -45,7 +46,7 @@ export function buildArpSequenceUncached(
     return [...expanded, ...rev];
   }
 
-  if (mode === 'random') return [...expanded].sort(() => Math.random() - 0.5);
+  if (mode === 'random') return [...expanded].sort(() => random() - 0.5);
 
   return [...expanded];
 }

@@ -327,11 +327,11 @@ export const SYNTH_PRESETS: SynthPresetItem[] = [
     params: {
       oscType: 'square',
       subOscVolume: 0.6,
-      noiseVolume: 0.1,
+      noiseVolume: 0.5,
       detune: 18,
       filterType: 'bandpass',
       filterCutoff: 1100,
-      filterResonance: 6.0,
+      filterResonance: 2.5,
       filterEnvAmount: 400,
       attack: 0.8,
       decay: 1.5,

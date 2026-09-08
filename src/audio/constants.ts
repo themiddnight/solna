@@ -23,7 +23,10 @@ export function clampCutoff(hz: number): number {
   return Math.min(20000, Math.max(20, hz));
 }
 
-/** Velocity is a 0..1 scalar; a caller passing 3 would blow past the limiter. */
+/** Velocity is a 0..1 scalar; a caller passing 3 clips at `ctx.destination`. The
+ *  master limiter (default ON since DEV-383) only catches the summed mix near
+ *  full scale — it does not validate one voice's velocity multiplier, so this
+ *  clamp is still the only guard against an out-of-range value there is. */
 export function clampVelocity(v: number): number {
   if (!Number.isFinite(v)) return DEFAULT_VELOCITY;
   return Math.min(1, Math.max(0, v));

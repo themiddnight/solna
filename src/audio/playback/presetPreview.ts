@@ -134,6 +134,12 @@ export function previewChordProgression(
   const ctx = audioEngine.getAudioContext();
   if (!ctx) return NOOP;
 
+  // No trim to set. All three preview functions share PREVIEW_SOURCE, so while
+  // the trim lived in a persistent per-source map each of them had to overwrite
+  // it or inherit the previous audition's patch trim — three call sites whose
+  // only job was to undo each other. The engine derives the trim from the
+  // `params` handed to triggerSynthNoteOn now, so a shared bus carries no trim
+  // at all and there is nothing for an earlier audition to leave behind.
   const clock = scheduler ?? liveScheduler(ctx);
   const startTime = clock.now();
   let unsubscribe: (() => void) | null = null;
@@ -200,6 +206,10 @@ export function previewSynthPreset(
   const testParams = applyPreset(currentParams, preset);
   const handle = beginPreview();
   const start = ctx.currentTime;
+  // An audition at the wrong level is exactly what calibration is for, and the
+  // preview bus is a source like any other — so it gets the trim too. It gets it
+  // from `testParams.preset`, which applyPreset just stamped: the engine reads
+  // that on the trigger below rather than from anything this file has to push.
   audioEngine.triggerSynthNoteOn('C4', testParams, 0.85, start, PREVIEW_SOURCE);
   audioEngine.triggerSynthNoteOff('C4', testParams.release || 0.4, start + 0.45, PREVIEW_SOURCE);
   return handle;

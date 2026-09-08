@@ -13,6 +13,14 @@
 // the current value" — adding distortionWet to a chain that omits it today would be
 // a sound change, which this refactor forbids.
 //
+// compressorThreshold is a value held ready, not part of the sound as it plays.
+// Master dynamics became an explicit, default-OFF stage (DEV-385): the compressor
+// is bypassed by rewiring, so a chain's threshold configures a node with no input
+// edges until the user switches the stage on. These values are kept, not deleted —
+// they are what each vibe asks for the moment its compressor is engaged — but a
+// vibe now sounds uncompressed by default, which is a deliberate change from when
+// the compressor was always on.
+//
 // Layering: this file imports nothing at runtime — src/data/ files never do —
 // so it can be read, reviewed or copied into a fixture in isolation.
 

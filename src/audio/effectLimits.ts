@@ -20,7 +20,14 @@ export type EffectNumericKey =
   | 'eqLow'
   | 'eqMid'
   | 'eqHigh'
-  | 'compressorThreshold';
+  | 'compressorThreshold'
+  | 'compressorRatio'
+  | 'compressorAttack'
+  | 'compressorRelease'
+  | 'limiterThreshold'
+  | 'limiterRatio'
+  | 'limiterAttack'
+  | 'limiterRelease';
 
 export const EFFECT_LIMITS: Record<
   EffectNumericKey,
@@ -39,6 +46,17 @@ export const EFFECT_LIMITS: Record<
   eqMid: { min: -24, max: 24, fallback: 0 },
   eqHigh: { min: -24, max: 24, fallback: 3 },
   compressorThreshold: { min: -60, max: 0, fallback: -12 },
+  // The four-per-stage dynamics ranges are the Web Audio AudioParam ranges for
+  // DynamicsCompressorNode, not UI ranges: clamping to what the node itself
+  // accepts means a clamped value is always a legal write, and the knobs are
+  // free to offer a narrower, more musical span on top (see EffectsRackView).
+  compressorRatio: { min: 1, max: 20, fallback: 4 },
+  compressorAttack: { min: 0, max: 1, fallback: 0.003 },
+  compressorRelease: { min: 0, max: 1, fallback: 0.25 },
+  limiterThreshold: { min: -60, max: 0, fallback: -3 },
+  limiterRatio: { min: 1, max: 20, fallback: 20 },
+  limiterAttack: { min: 0, max: 1, fallback: 0.003 },
+  limiterRelease: { min: 0, max: 1, fallback: 0.15 },
 };
 
 export function clampEffectValue(key: EffectNumericKey, value: unknown): number {
