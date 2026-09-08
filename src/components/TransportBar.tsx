@@ -94,14 +94,23 @@ export const TransportBar = React.memo(function TransportBar() {
           onSoftStop={softStopAll}
           onHardStop={hardStopAll}
           showLabel
+          describedBy="label-transport-play-target"
         />
 
         {/* What Play will start: 'Song' on the song layer, the loop being
-            edited on the loop layer. Hidden below `sm` alongside this row's
-            other ancillary text (BPM/Meter) rather than the `md` the song
-            badge uses below — this is the reason a click does one of two
-            different things, so it earns the wider breakpoint. */}
-        <span className="text-xs text-base-content/70 truncate max-w-20 sm:max-w-32 min-w-0 hidden sm:inline">
+            edited on the loop layer. Visible at every width — a click does
+            one of two different things and the single Play button gives no
+            other clue below `sm`, where the button's own text label hides.
+            `id` ties it to the button via `aria-describedby` below, which
+            also reaches assistive tech that never sees this text visually
+            (it stays out of natural reading order, so it augments rather
+            than duplicates the button's own accessible name). `max-w-20` is
+            the live narrow-width cap now that this always renders; `sm:max-w-32`
+            widens it once the song badge and BPM/meter controls have room too. */}
+        <span
+          id="label-transport-play-target"
+          className="text-xs text-base-content/70 truncate max-w-20 sm:max-w-32 min-w-0"
+        >
           {playTargetLabel(layer, activeLoopName)}
         </span>
 

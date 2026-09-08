@@ -65,6 +65,13 @@ export interface PlayerTransportProps {
    */
   unwrapped?: boolean;
   showLabel?: boolean;
+  /**
+   * Id of an element (e.g. a play-target label) whose text describes what
+   * this transport's main button will start. Forwarded as `aria-describedby`
+   * so assistive tech reaches that text even where it is visually hidden or
+   * lives outside this component. Optional so no other call site changes.
+   */
+  describedBy?: string;
 }
 
 export function PlayerTransport({
@@ -79,6 +86,7 @@ export function PlayerTransport({
   id,
   unwrapped = false,
   showLabel = false,
+  describedBy,
 }: PlayerTransportProps) {
   const buttons = resolveTransportButtons(state);
   const MainIcon = buttons.main.icon === 'play' ? Play : Square;
@@ -91,6 +99,7 @@ export function PlayerTransport({
         onClick={state === 'playing' ? onSoftStop : onPlay}
         disabled={buttons.main.disabled}
         title={buttons.main.label}
+        aria-describedby={describedBy}
         className={`btn ${sizeClass} join-item gap-1.5 font-bold text-xs ${buttons.main.className}`}
       >
         <MainIcon className="w-3.5 h-3.5 fill-current shrink-0" />
