@@ -14,7 +14,7 @@ import { useLiveStore } from "./ui/useLiveStore";
 import { IconButton } from "./ui/IconButton";
 import { Wordmark } from "./ui/Wordmark";
 import { LoopSelector } from "./loop/LoopSelector";
-import { VIEW_META } from "./viewMeta";
+import { VIEW_META, PATTERN_SEGMENTS } from "./viewMeta";
 import { sessionLabel } from "./project/projectManagerFlow";
 
 /** The three loop-layer tabs. Playback is the transport bar's single Play —
@@ -75,6 +75,52 @@ export function TabButton({ view, activeTab, onSelect, labelClassName }: TabButt
       <Icon className="w-4 h-4 shrink-0" />
       <span className={labelClassName ?? 'truncate hidden xl:inline'}>{tabLabel}</span>
     </button>
+  );
+}
+
+
+/**
+ * Pattern's three segments. Defined here, with the other nav chrome, so it
+ * shares NAV_GROUP_CLASS and the join + btn + btn-active idiom with the tab
+ * buttons above it — a segment row built from its own classes would drift out
+ * of visual step with the tabs on the first restyle.
+ *
+ * It is RENDERED by PatternView, not by Header: the spec puts the row on its
+ * own line under the vibes bar, and mounting it inside the branch that already
+ * gates on `activeTab === 'pattern'` makes "only on Pattern" structural rather
+ * than a second comparison that could disagree with the first.
+ *
+ * Unlike TabButton the labels are never hidden. There are only three of them
+ * and they carry the whole of the user's sense of where they are inside the
+ * tab; the tab buttons can afford icon-only below `xl` because the view header
+ * underneath repeats the name, and here the view header IS per segment.
+ */
+export function PatternSegmentRow() {
+  const patternSegment = useAppStore((s) => s.patternSegment);
+  const setPatternSegment = useAppStore((s) => s.setPatternSegment);
+
+  return (
+    <div className={`${NAV_GROUP_CLASS} inline-flex items-center`}>
+      {PATTERN_SEGMENTS.map(({ id, label, icon: Icon }) => {
+        const isActive = patternSegment === id;
+        return (
+          <button
+            key={id}
+            id={`segment-${id}`}
+            type="button"
+            aria-current={isActive ? 'page' : undefined}
+            onClick={() => setPatternSegment(id)}
+            className={`btn btn-sm join-item min-w-0 px-2 sm:px-3 gap-1 sm:gap-1.5 text-xs font-bold ${
+              isActive ? 'btn-active btn-primary' : 'btn-ghost'
+            }`}
+            title={label}
+          >
+            <Icon className="w-4 h-4 shrink-0" />
+            <span className="truncate">{label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

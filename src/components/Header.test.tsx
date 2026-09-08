@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
-import { ProjectNameLabel, TabButton, AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS, ScaleSelects } from './Header';
+import { ProjectNameLabel, TabButton, PatternSegmentRow, AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS, ScaleSelects } from './Header';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
 import { VIEW_ORDER } from './viewMeta';
 
@@ -89,13 +89,62 @@ describe('persistTheme', () => {
 });
 
 describe('header tab grouping', () => {
-  test('arrange and master fx stand alone, with no transport', () => {
+  test('the loop layer has exactly two tabs', () => {
+    expect(AUTOMATION_TABS).toEqual(['sound', 'pattern']);
+  });
+
+  test('the song layer has arrange and the master rack', () => {
     expect(SONG_NAV_TABS).toEqual(['arrange', 'master']);
   });
 
   test('every tab view is still reachable', () => {
     const views = [...SONG_NAV_TABS, ...AUTOMATION_TABS].sort();
     expect(views).toEqual(['arrange', 'master', 'pattern', 'sound']);
+  });
+
+  test('the two layer groups are disjoint', () => {
+    const overlap = AUTOMATION_TABS.filter((view) => SONG_NAV_TABS.includes(view));
+    expect(overlap).toEqual([]);
+  });
+});
+
+/**
+ * The segment row renders through the same join + btn + btn-active idiom as
+ * TabButton, so a substring covering several classes at once is what proves
+ * they sit on the SAME element (see .claude/rules/testing.md).
+ *
+ * The active segment cannot be varied from a test: PatternSegmentRow reads
+ * `patternSegment` with a plain useAppStore selector, and under renderToString
+ * zustand serves the store's CREATION-time value ('lead'). So this asserts the
+ * default-active case and the two inactive cases, which is the whole matrix
+ * reachable without a DOM.
+ */
+describe('PatternSegmentRow', () => {
+  const html = renderToString(<PatternSegmentRow />);
+
+  test('renders one button per segment, in registry order', () => {
+    expect(html).toContain('id="segment-lead"');
+    expect(html).toContain('id="segment-accompaniment"');
+    expect(html).toContain('id="segment-beat"');
+    expect(html.indexOf('segment-lead')).toBeLessThan(html.indexOf('segment-accompaniment'));
+    expect(html.indexOf('segment-accompaniment')).toBeLessThan(html.indexOf('segment-beat'));
+  });
+
+  test('the active segment is the primary-filled join item, the others are ghosts', () => {
+    expect(html).toContain('btn btn-sm join-item');
+    expect(html).toContain('btn-active btn-primary');
+    expect(html).toContain('btn-ghost');
+  });
+
+  test('every segment label is readable at every width — no xl-only labels here', () => {
+    expect(html).toContain('Lead');
+    expect(html).toContain('Accompaniment');
+    expect(html).toContain('Beat');
+    expect(html).not.toContain('hidden xl:inline');
+  });
+
+  test('marks exactly one button as the current page', () => {
+    expect(html.split('aria-current="page"').length - 1).toBe(1);
   });
 });
 
@@ -229,13 +278,3 @@ describe('key picker', () => {
   });
 });
 
-describe('nav tab groups', () => {
-  test('lists loop-layer views as plain view ids, with no player module attached', () => {
-    expect(AUTOMATION_TABS).toEqual(['sound', 'pattern']);
-  });
-
-  test('keeps the two layer groups disjoint', () => {
-    const overlap = AUTOMATION_TABS.filter((view) => SONG_NAV_TABS.includes(view));
-    expect(overlap).toEqual([]);
-  });
-});
