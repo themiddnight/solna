@@ -40,9 +40,12 @@ above 4.5, so that step is a gate the palette can fail, not a report of what the
 
 ## Architecture
 
-Single-page audio workstation ("Solna"): four tab views (Synth, Sequencer, Chords, Effects) that
-stay mounted simultaneously (`activeTab` toggles `block`/`hidden` in `App.tsx`) so audio never
-stops when switching tabs. **Consequence:** state that lives in a store slice or high in the tree
+Single-page audio workstation ("Solna"): two layers (Loop, Song) holding four tab views between
+them — Sound and Pattern on the loop layer, Arrange and Master on the song layer — plus Pattern's
+own three segments (Lead, Accompaniment, Beat). **Every one of them stays mounted
+simultaneously**, gated `block`/`hidden` at three levels: `App.tsx` on the layer
+(`isSongLayer(activeTab)`), `LoopPage.tsx` on `activeTab`, `PatternView.tsx` on `patternSegment`.
+Audio therefore never stops when switching tabs. **Consequence:** state that lives in a store slice or high in the tree
 re-renders *every* mounted view, not just the visible one. High-frequency state — the current
 playback step, a value being dragged on a knob — must therefore stay local to the subtree that
 shows it, never in a slice.
@@ -301,8 +304,9 @@ reading is never capped by either regardless of which is engaged. The compressor
 the limiter defaults on (DEV-383) but only catches occasional peaks at its -3 dB threshold given
 the -6 dB source-bus default, so the `over` zone stays reachable in the common case. Every meter ticks through
 `utils/meterScheduler.ts` — one rAF loop, a tier per registration, and an `IntersectionObserver`
-per element. That last part is not an optimisation here: all four tab views stay mounted, so a
-meter with no visibility gate reads its analyser forever on a tab nobody is looking at. **No
+per element. That last part is not an optimisation here: every tab view AND every Pattern segment
+stays mounted, so a meter with no visibility gate reads its analyser forever on a surface nobody
+is looking at. **No
 meter value may enter a zustand slice** — a write per tick re-renders every mounted view — and
 the numbers (`-24`/`-6`/`-1` zones, the `0/5/30/100` piecewise scale, 14 dB/s decay, a −60 dBFS
 display floor) are an interop contract with murva recorded in

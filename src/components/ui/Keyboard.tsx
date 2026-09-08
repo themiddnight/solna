@@ -10,6 +10,7 @@ import {
 import { SCALES } from '@/data/scales';
 import { shortcutLabel } from '@/utils/keyboard';
 import { spellNoteInKey } from '@/utils/noteSpelling';
+import { GROUP_LABEL } from './fieldClasses';
 
 const KEYBOARD_OCTAVE_MIN = -2;
 const KEYBOARD_OCTAVE_MAX = 2;
@@ -428,7 +429,7 @@ export function ChordKeyboard({
   return (
     <div className="flex items-center justify-center gap-14">
       <div className="flex flex-col items-center gap-1">
-        <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold">
+        <span className={GROUP_LABEL}>
           Chords
         </span>
         <div className="flex gap-0.5 justify-center-safe">

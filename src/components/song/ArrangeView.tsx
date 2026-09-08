@@ -104,13 +104,15 @@ export const ArrangeView = React.memo(function ArrangeView() {
   const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
-    // Gated on the tab, not just on isPlaying: SongPage.tsx:10 keeps this view
+    // Gated on the tab, not just on isPlaying: SongPage keeps this view
     // mounted behind `hidden` while the user is on any other tab, so without
     // this the clock drove a setState 8-16x/sec into an invisible list. Same
-    // idiom (and same reason) as the AudioVisualizer `paused` gates at
-    // EffectsRackView.tsx:299 and SoundView.tsx:418 — see
-    // AudioVisualizer.tsx:603-612 for why gating inside the callback is not
-    // enough.
+    // idiom (and same reason) as the `paused={activeTab !== …}` props
+    // EffectsRackView and SoundView hand their AudioVisualizers — and see
+    // AudioVisualizer's own rAF effect, which returns on `paused` BEFORE
+    // requesting a frame, for why gating inside the callback is not enough.
+    // Named by symbol, not by line: the three line numbers this comment used
+    // to carry had all gone stale except one.
     if (!isPlaying || activeTab !== 'arrange') {
       setCurrentStep(0);
       return;

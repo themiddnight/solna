@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { PATTERN_SEGMENTS, VIEW_META, VIEW_ORDER } from './viewMeta';
-import { AUTOMATION_TABS, SONG_NAV_TABS } from './Header';
+import { PATTERN_SEGMENT_IDS } from '../types';
+import { LOOP_TABS, SONG_TABS } from '../types';
 
 describe('VIEW_META', () => {
   test('covers every view exactly once', () => {
@@ -39,7 +40,7 @@ describe('VIEW_META', () => {
   });
 
   test('Header covers every view across its two tab groups', () => {
-    const covered = [...SONG_NAV_TABS, ...AUTOMATION_TABS].sort();
+    const covered = [...SONG_TABS, ...LOOP_TABS].sort();
     expect(covered).toEqual(['arrange', 'master', 'pattern', 'sound']);
   });
 });
@@ -47,6 +48,19 @@ describe('VIEW_META', () => {
 describe('PATTERN_SEGMENTS', () => {
   test('lists the three segments in the order the row renders them', () => {
     expect(PATTERN_SEGMENTS.map((s) => s.id)).toEqual(['lead', 'accompaniment', 'beat']);
+  });
+
+  /**
+   * Coverage, not order — the assertion above pins the list against itself and
+   * would stay green if the `PatternSegment` union grew a member this table
+   * never gained. Unlike VIEW_META this is a list rather than a
+   * `Record<PatternSegment, …>`, so nothing in the type system says the two
+   * agree; a missing segment is a `SegmentHeader` throw and a blank Pattern
+   * tab at runtime. `PATTERN_SEGMENT_IDS` is what the union is derived FROM,
+   * so comparing against it is comparing against the union itself.
+   */
+  test('covers every PatternSegment the union allows', () => {
+    expect(PATTERN_SEGMENTS.map((s) => s.id).sort()).toEqual([...PATTERN_SEGMENT_IDS].sort());
   });
 
   test('every segment has its own icon, and none collides with a view icon', () => {

@@ -558,6 +558,31 @@ git commit -m "feat(solo): session-only solo set in the ui slice, with a never-p
 
 ## Task 3: Cleared by navigation — one subscription, not one clear per writer
 
+> **SUPERSEDED IN THE SHIPPED BRANCH — read `src/store/soloNav.ts` for the rule that landed.**
+> This task was written against a "any tab change clears" rule and was narrowed during review.
+> What shipped watches **`layer`** (derived from `activeTab` via `layerForTab`) instead of the raw
+> tab, so `SOLO_NAV_KEYS` is `['layer', 'patternSegment', 'activeLoopId']`, not the
+> `['activeTab', …]` written below, and the **Sound ↔ Pattern tab change deliberately does NOT
+> clear** the set — Sound and Pattern are the two halves of editing one loop and a user crosses
+> between them constantly. A Pattern-*segment* change still clears, and so do leaving the Loop
+> layer, changing the active loop, and swapping the project. Consequence, also not in the text
+> below: because that hop survives, a solo set spanning Drums and the melodic tracks IS buildable.
+> The tests quoted below ("changing tab clears it", the `SOLO_NAV_KEYS` equality) are the
+> pre-narrowing versions; `src/store/soloNav.test.ts` holds the ones that ship. The narrowing is
+> recorded in CLAUDE.md's track-solo section and in `docs/design.md`.
+>
+> Task 5's `SoloButtonProps` below is likewise pre-review: the shipped component also takes an
+> optional `id`, because every view stays mounted and the Sound view's target-following button
+> would otherwise share a DOM id with the per-surface button for the same track. It takes no
+> `className` — nothing ever passed one, and a per-call-site style override on a control that must
+> look the same at all six placements is not something to leave open.
+>
+> `soloNavUnchanged` in the Produces list below no longer exists either: the subscription passes
+> zustand's own `shallow` as its `equalityFn`, which compares whatever keys the selector returned
+> and so stays bound to `SOLO_NAV_SOURCES` without naming a field. `soloNavSignature` builds its
+> object with a plain loop rather than `Object.fromEntries(SOLO_NAV_KEYS.map(...))`, because it
+> runs on every store `set()` for the life of the session.
+
 **Files:**
 - Create: `src/store/soloNav.ts`
 - Test: `src/store/soloNav.test.ts`
@@ -1752,7 +1777,7 @@ git commit -m "feat(solo): transport solo chip, and retire the Phase 4 forward r
 | Solo is a set, not a radio | 1 (`toggleSolo`, additive tests), 2 (store-level), 4 (engine-level) |
 | Solo beats mute | 1, 4 |
 | Scope is the whole loop; one solo set in the system | 1 (`isTrackAudible` covers all five from one array), 2 (one field) |
-| Cleared by navigation: tab, segment, layer, active loop | 3 |
+| Cleared by navigation: segment, layer, active loop (narrowed in review — the Sound ↔ Pattern tab change survives) | 3 |
 | Prohibition 1 — not in `LoopMixPatch` / `partializeAppState` / `PROJECT_CONTENT_KEYS` | Global Constraints + 2 (guard test) |
 | Prohibition 2 — audibility computed in `engineSync.ts`, never in a component | Global Constraints + 4 |
 | Out of scope: solo does not start playback | 2 (explicit test) |

@@ -92,3 +92,16 @@ export const STEP_BADGE = 'badge badge-sm badge-outline tabular-nums';
  * it just sits in a card body rather than the header.
  */
 export const HEADER_BADGE = 'badge badge-sm badge-outline text-[10px] font-semibold tabular-nums';
+
+/**
+ * The micro-label that names a GROUP rather than a field: the caps line above
+ * a GroupFrame, the keyboard's octave caption, the Sound view's "Target:".
+ *
+ * Smaller and dimmer than SECTION_HEADER, which names a whole card, and unlike
+ * FIELD_LABEL it is uppercase — design.md §3 assigns the casing by role, and
+ * three literal copies of this exact string had already appeared before it was
+ * a constant. The loop card's three caps captions wear `font-bold` rather than
+ * `font-semibold` and stay their own literals: matching them here would change
+ * how they look, which is a design call and not a cleanup.
+ */
+export const GROUP_LABEL = 'text-[10px] uppercase tracking-wider text-base-content/50 font-semibold';

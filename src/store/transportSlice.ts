@@ -72,12 +72,17 @@ function allPlayersPatch(
   return patch;
 }
 
-/** Which players an internal stop-and-restart has to bring back. */
-export interface WasActivePlayers {
-  sequencer: boolean;
-  chords: boolean;
-  lead: boolean;
-}
+/**
+ * Which players an internal stop-and-restart has to bring back.
+ *
+ * `Record<PlayerModule, boolean>` rather than a hand-listed interface, and
+ * every function below walks `FIELD` rather than the three names: a fourth
+ * player module then reaches capture, restart and the any-active fold in one
+ * edit. Spelling the roster out here again is how the OR-fold that decides
+ * "was anything playing" would have kept compiling while silently ignoring
+ * the new module.
+ */
+export type WasActivePlayers = Record<PlayerModule, boolean>;
 
 /** None of them — the patch for a stop-and-restart that decides not to restart. */
 export const NO_PLAYERS_ACTIVE: WasActivePlayers = Object.freeze({
@@ -85,6 +90,24 @@ export const NO_PLAYERS_ACTIVE: WasActivePlayers = Object.freeze({
   chords: false,
   lead: false,
 });
+
+/**
+ * The players a stop-and-restart must bring back, read BEFORE the hardStopAll
+ * that clears them. `stopping` counts as active: it still owns scheduled
+ * sound, and the user changed loop or vibe — they did not cancel.
+ */
+export function captureActivePlayers(state: AppStore): WasActivePlayers {
+  const captured = {} as WasActivePlayers;
+  (Object.keys(FIELD) as PlayerModule[]).forEach((module) => {
+    captured[module] = isPlayerActive(state[FIELD[module]]);
+  });
+  return captured;
+}
+
+/** Whether a capture holds anything at all — restartAfterStop's `wasPlaying`. */
+export function anyPlayerActive(wasActive: WasActivePlayers): boolean {
+  return (Object.keys(FIELD) as PlayerModule[]).some((module) => wasActive[module]);
+}
 
 /**
  * The players a restart brings back, and the scope that goes with them, as
@@ -102,12 +125,11 @@ export function restartPlayersPatch(
   wasActive: WasActivePlayers,
   scope: PlaybackScope,
 ): Partial<AppStore> {
-  return {
-    ...(wasActive.sequencer ? { sequencerPlayer: 'playing' as const } : {}),
-    ...(wasActive.chords ? { chordsPlayer: 'playing' as const } : {}),
-    ...(wasActive.lead ? { leadPlayer: 'playing' as const } : {}),
-    playbackScope: scope,
-  };
+  const patch: Partial<AppStore> = { playbackScope: scope };
+  (Object.keys(FIELD) as PlayerModule[]).forEach((module) => {
+    if (wasActive[module]) patch[FIELD[module]] = 'playing';
+  });
+  return patch;
 }
 
 /**

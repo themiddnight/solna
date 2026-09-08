@@ -2,6 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **VOCABULARY NOTE — this file predates two renames, and one of them now means something else.**
+> Everything below spells the scope kind `'solo'`: `{ kind: 'solo', loopId }`, "a soloing Arrange
+> card". Phase 3 Task 1 renamed that kind to **`'loop'`**
+> (`{ kind: 'loop', loopId }`, `scopedLoopId()`, "AUDITION" on the card badge) precisely because
+> Phase 4 then added **track solo** — a different feature in a different slice (`soloTracks` in the
+> ui slice, formula in `src/store/trackAudibility.ts`) — and one screen must not use the same word
+> for playing one loop alone and for hearing one track alone. Read every `'solo'` below as the
+> playback scope, never as `soloTracks`; `src/store/playbackScope.ts` is the shipped spelling.
+> The store action is still called `soloLoop` — that name did not move, because two components
+> call it. `transportDisplayState`'s shipped doc comment is the post-rename wording of the one
+> quoted in Task 1.
+
 **Goal:** Collapse the three per-tab play/stop buttons into the transport bar's single Play, so that starting playback always records what is sounding in `playbackScope`.
 
 **Architecture:** The master Play becomes layer-aware. On the Song layer it keeps calling `playAll()` (scope → `song`). On the Loop layer it calls the existing `soloLoop(activeLoopId)` (scope → `solo{activeLoopId}`), which already starts every player and clears the song cursor in one `set()`. No new store action is added. The decision itself is extracted as a pure function next to the component, following the repo's existing `playerStop.ts` / `playbackStep.ts` precedent, because the repo has no testing-library setup and React behaviour is tested through `renderToString`.

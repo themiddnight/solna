@@ -1,4 +1,6 @@
 import React from 'react';
+import { cx } from './cx';
+import { GROUP_LABEL } from './fieldClasses';
 
 export interface GroupFrameProps {
   /**
@@ -25,9 +27,9 @@ export interface GroupFrameProps {
  */
 export function GroupFrame({ label, className, children }: GroupFrameProps) {
   return (
-    <div className={`border border-base-300 rounded-box p-1 ${className ?? ''}`}>
+    <div className={cx('border border-base-300 rounded-box p-1', className)}>
       {label !== undefined && (
-        <span className="block text-[10px] uppercase tracking-wider text-base-content/50 font-semibold px-1 pb-0.5">
+        <span className={cx('block px-1 pb-0.5', GROUP_LABEL)}>
           {label}
         </span>
       )}

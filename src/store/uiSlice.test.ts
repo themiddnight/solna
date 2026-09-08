@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { createUiSlice, persistKeyboardMode, readStoredKeyboardMode } from './uiSlice';
 import { buildProjectContent, PROJECT_CONTENT_KEYS } from './projectFormat';
 import { partializeAppState, useAppStore } from './store';
+import { SCOPE_NONE } from './playbackScope';
 
 // Storage access itself can throw (Safari private browsing, "block all
 // cookies", some embedded webviews) — not merely return null. These stubs
@@ -111,8 +112,17 @@ describe('track solo state', () => {
     useAppStore.setState({ soloTracks: [] });
   });
 
+  // Restores everything this block writes, not just soloTracks: the transport
+  // fields below are only at their defaults by luck otherwise, and bun runs the
+  // next test file against this same store instance.
   afterEach(() => {
-    useAppStore.setState({ soloTracks: [] });
+    useAppStore.setState({
+      soloTracks: [],
+      sequencerPlayer: 'stopped',
+      chordsPlayer: 'stopped',
+      leadPlayer: 'stopped',
+      playbackScope: SCOPE_NONE,
+    });
   });
 
   test('starts empty', () => {
@@ -143,11 +153,17 @@ describe('track solo state', () => {
     expect(useAppStore.getState().soloTracks).toBe(before);
   });
 
+  // `playbackScope` is asserted here, so it is ARRANGED here: bun shares the
+  // store singleton across test files, so a `loop` scope left behind by an
+  // earlier file would fail this test for a reason that has nothing to do with
+  // solo. Same for the three player fields — set to what the assertion needs
+  // rather than trusted to still be at their defaults.
   test('solo does not start playback: pressing it with the transport stopped is silent', () => {
     useAppStore.setState({
       sequencerPlayer: 'stopped',
       chordsPlayer: 'stopped',
       leadPlayer: 'stopped',
+      playbackScope: SCOPE_NONE,
     });
     useAppStore.getState().toggleSoloTrack('drums');
     const s = useAppStore.getState();

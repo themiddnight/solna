@@ -1,4 +1,5 @@
 import { AudioWaveform, Drum, Grid, Layers, LayoutList, Music, Sliders, type LucideIcon } from 'lucide-react';
+import { LOOP_TABS, SONG_TABS } from '../types';
 import type { PatternSegment, ViewMode } from '../types';
 
 /**
@@ -16,13 +17,14 @@ export interface ViewMeta {
 }
 
 /**
- * Every view exactly once, in the order the nav happens to show them — but the
- * nav does NOT read this. `Header`'s `AUTOMATION_TABS` and `SONG_NAV_TABS` are
- * what actually render, so reordering here alone moves nothing on screen; keep
- * the two in step by hand. What this list is for is coverage: the tests below
- * iterate it to prove every view has a distinct icon and a unique label.
+ * Every view exactly once, loop layer first — the same two lists the nav and
+ * the router read, concatenated, rather than a third literal of the same
+ * roster. What this is for is coverage: the tests below iterate it to prove
+ * every view has a distinct icon and a unique label, and a view that reached
+ * `ViewMode` without reaching this list would have slipped both checks with
+ * nothing failing.
  */
-export const VIEW_ORDER = ['sound', 'pattern', 'arrange', 'master'] as const;
+export const VIEW_ORDER = [...LOOP_TABS, ...SONG_TABS] as const;
 
 export const VIEW_META: Record<ViewMode, ViewMeta> = {
   // Keeps `Sliders` from the old `synth` view: the tab is still the synth

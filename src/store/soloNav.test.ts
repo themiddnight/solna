@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore } from './store';
-import { SOLO_NAV_KEYS, soloNavSignature, soloNavUnchanged, startSoloNavClear } from './soloNav';
+import { SOLO_NAV_KEYS, soloNavSignature, startSoloNavClear } from './soloNav';
 
 let stop: (() => void) | null = null;
 
@@ -213,15 +213,5 @@ describe('solo is cleared by navigation', () => {
     expect(useAppStore.getState().soloTracks).toEqual(['drums']);
     useAppStore.getState().setActiveTab('pattern');
     expect(useAppStore.getState().soloTracks).toEqual(['drums']);
-  });
-});
-
-describe('soloNavUnchanged', () => {
-  test('compares all three fields', () => {
-    const base = { layer: 'loop', patternSegment: 'lead', activeLoopId: 'a' } as const;
-    expect(soloNavUnchanged(base, { ...base })).toBe(true);
-    expect(soloNavUnchanged(base, { ...base, layer: 'song' })).toBe(false);
-    expect(soloNavUnchanged(base, { ...base, patternSegment: 'beat' })).toBe(false);
-    expect(soloNavUnchanged(base, { ...base, activeLoopId: 'b' })).toBe(false);
   });
 });

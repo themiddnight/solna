@@ -133,7 +133,17 @@ function makeFakeClock() {
       };
     },
     tick: (step: number, time = 0) => {
-      for (const cb of [...cbs]) cb(step, step, time);
+      // Iterate a copy, but re-check membership before each call. The real
+      // engine keeps its listeners in a Set and dispatches with forEach, where
+      // a listener unsubscribed by an EARLIER listener in the same dispatch is
+      // never called — and the ending path does exactly that (softStopAll
+      // re-enters reconcile, which tears the advance subscription down). A
+      // plain copy would call it anyway and quietly make the fake more
+      // forgiving than the thing it stands in for.
+      for (const cb of [...cbs]) {
+        if (!cbs.includes(cb)) continue;
+        cb(step, step, time);
+      }
     },
   };
 }
@@ -145,6 +155,14 @@ const resetState = () => {
     activeLoopId: loop.id,
     ...loopStatePatch(loop),
     activeTab: 'sound',
+    // ARRANGED, not assumed. Every coordinator test below ticks the fake clock
+    // at 16-step bar multiples (32, 64, 96) because songAdvanceDecision reads
+    // getMeter(cur.meterId).stepsPerBar LIVE from the store. bun shares one
+    // process and one store singleton across test files, and several siblings
+    // drive setMeter('12/8') without restoring it — under a 24-step bar not one
+    // of those ticks lands on a boundary and seven tests here fail for a reason
+    // that has nothing to do with song mode.
+    meterId: '4/4',
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
@@ -157,12 +175,32 @@ beforeEach(resetState);
 afterEach(resetState);
 
 describe('song mode coordinator', () => {
+  // Every test below ends with its own stop(), which is the readable form —
+  // but a FAILING assertion skips it, and a leaked coordinator keeps
+  // subscribing to the shared store: its reconcile then hard-stops players,
+  // nulls the cursor and steals clock subscriptions inside every later test's
+  // setState, in this file and (bun shares the process) in every file after it.
+  // One real failure would cascade into a dozen fake ones. Registered on the
+  // INNER describe so it drains before the module-level afterEach(resetState)
+  // navigates the store one last time.
+  const liveSyncs: Array<() => void> = [];
+  const startSync = (deps: Parameters<typeof startSongModeSync>[0]) => {
+    const stop = startSongModeSync(deps);
+    liveSyncs.push(stop);
+    return stop;
+  };
+  afterEach(() => {
+    // stop() is idempotent (unsubStore is a no-op on a second call, stopClock
+    // guards its null), so draining here never conflicts with a test's own.
+    while (liveSyncs.length > 0) liveSyncs.pop()?.();
+  });
+
   test('entering song mode keeps the active loop and subscribes the clock', () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
     useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
 
     // playAll(), not play('sequencer'): starting the song is what this models,
     // and only playAll establishes the `song` scope the advance requires.
@@ -191,7 +229,7 @@ describe('song mode coordinator', () => {
     });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
 
     useAppStore.getState().playAll();
     expect(useAppStore.getState().songLoopIndex).toBe(0);
@@ -231,7 +269,7 @@ describe('song mode coordinator', () => {
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
     const resetClock = spyOn(audioEngine, 'resetClock');
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
     try {
       useAppStore.getState().playAll();
       resetClock.mockClear();
@@ -257,7 +295,7 @@ describe('song mode coordinator', () => {
     useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
 
     useAppStore.getState().playAll();
     clock.tick(64);
@@ -273,7 +311,7 @@ describe('song mode coordinator', () => {
     useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
     useAppStore.getState().playAll();
     expect(clock.count).toBe(1);
 
@@ -300,7 +338,7 @@ describe('song mode coordinator', () => {
     });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
     useAppStore.getState().playAll();
     // Enters at the active loop (index 1), not the top.
     expect(useAppStore.getState().songLoopIndex).toBe(1);
@@ -327,7 +365,7 @@ describe('song mode coordinator', () => {
     useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
     useAppStore.setState({ activeTab: 'sound', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
     // The Loop layer's master Play is soloLoop(activeLoopId) — see Phase 1.
     useAppStore.getState().soloLoop('loop-default-1');
     expect(useAppStore.getState().sequencerPlayer).toBe('playing');
@@ -349,7 +387,7 @@ describe('song mode coordinator', () => {
     useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
     useAppStore.getState().soloLoop('loop-default-1');
     // Opening the loop that is already auditioning: the card select reloads
     // the same id, which restartAfterStop keeps playing (Task 2).
@@ -375,7 +413,7 @@ describe('song mode coordinator', () => {
     });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
     useAppStore.getState().soloLoop('loop-default-1');
 
     // The clickable path: pick loop B on Arrange, then walk into the editor.
@@ -399,7 +437,7 @@ describe('song mode coordinator', () => {
     useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
     useAppStore.getState().playAll();
     expect(clock.count).toBe(1);
 
@@ -434,7 +472,7 @@ describe('song mode coordinator', () => {
     });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
 
     useAppStore.setState({ sequencerPlayer: 'playing', playbackScope: { kind: 'none' } });
 
@@ -461,7 +499,7 @@ describe('song mode coordinator', () => {
     });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
     useAppStore.getState().soloLoop('loop-default-1');
 
     useAppStore.setState({ activeLoopId: 'loop-b' });
@@ -485,7 +523,7 @@ describe('song mode coordinator', () => {
     });
     useAppStore.setState({ activeTab: 'sound', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
     useAppStore.getState().soloLoop('loop-default-1');
 
     // The header's loop selector on the loop layer: loadLoop re-points the
@@ -503,7 +541,7 @@ describe('song mode coordinator', () => {
     useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
     useAppStore.getState().playAll();
     expect(clock.count).toBe(1);
 
@@ -528,7 +566,7 @@ describe('song mode coordinator', () => {
       songLoopIndex: null,
     });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
     useAppStore.getState().soloLoop('loop-default-1');
 
     // When the scope is loop, songLoopIndex remains null
@@ -548,7 +586,7 @@ describe('song mode coordinator', () => {
       songLoopIndex: null,
     });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
 
     // 2. Play one loop from its card.
     useAppStore.getState().soloLoop('loop-default-1');
@@ -589,7 +627,7 @@ describe('song mode coordinator', () => {
       songLoopIndex: null,
     });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
 
     // 1. "Refresh the page, press Play All first thing" — works from a clean state.
     useAppStore.getState().playAll();
@@ -631,7 +669,7 @@ describe('song mode coordinator', () => {
     useAppStore.setState({ loops: [loopA, loopB], activeLoopId: 'a' });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
 
     useAppStore.getState().playAll();
     expect(clock.count).toBe(1);
@@ -679,7 +717,7 @@ describe('song mode coordinator', () => {
     // signature (loadLoop calls it on every atBoundary load and on nothing
     // else), so spying it is what makes "nothing is reloaded" a real claim.
     const resetClock = spyOn(audioEngine, 'resetClock');
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
     try {
       useAppStore.getState().playAll();
       resetClock.mockClear();
@@ -710,7 +748,7 @@ describe('song mode coordinator', () => {
     useAppStore.setState({ loops: [loopA, loopB], activeLoopId: 'a' });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
 
     useAppStore.getState().playAll();
     clock.tick(64, 4.5);
@@ -753,7 +791,7 @@ describe('song mode coordinator', () => {
     });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
 
     useAppStore.getState().playAll();
     const first = clock.current;
@@ -788,7 +826,7 @@ describe('song mode coordinator', () => {
     });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
-    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    const stop = startSync({ subscribeClock: clock.subscribe });
 
     // Audition loop A from its card on Arrange (or arrive from the Loop layer
     // still playing it — spec §6 row 1). The players run under a `loop` scope,

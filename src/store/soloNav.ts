@@ -1,4 +1,5 @@
 import React from 'react';
+import { shallow } from 'zustand/shallow';
 import { useAppStore } from './store';
 import { layerForTab } from '../types';
 import type { AppStore } from './types';
@@ -78,20 +79,24 @@ export type SoloNavSignature = {
 /**
  * Built by iterating `SOLO_NAV_KEYS` and calling each key's source function —
  * see the type above for why a hand-listed `Pick` no longer fits.
+ *
+ * A plain loop rather than `Object.fromEntries(SOLO_NAV_KEYS.map(...))`: this
+ * runs on EVERY store `set()`, since the subscription below is mounted at the
+ * app root for the life of the session. The map form allocated one array plus
+ * a two-element tuple per key on every knob tick and every clock-driven write,
+ * for an object of three strings. The loop keeps the same derived-from-the-
+ * table property with one allocation.
  */
 export function soloNavSignature(state: AppStore): SoloNavSignature {
-  return Object.fromEntries(
-    SOLO_NAV_KEYS.map((key) => [key, SOLO_NAV_SOURCES[key](state)]),
-  ) as SoloNavSignature;
-}
-
-/**
- * Also driven by `SOLO_NAV_KEYS`, for the same reason: `shallow` would work
- * here too, but hand-listing the watched fields a second time is exactly the
- * kind of duplicate the table exists to prevent.
- */
-export function soloNavUnchanged(a: SoloNavSignature, b: SoloNavSignature): boolean {
-  return SOLO_NAV_KEYS.every((key) => a[key] === b[key]);
+  // The accumulator is widened and cast once at the end, exactly as the
+  // `Object.fromEntries` form was: writing through a union of mapped-type keys
+  // narrows the value slot to `never`, and the alternative — an object literal
+  // naming the three fields — is the drift this table exists to prevent.
+  const signature: Record<string, unknown> = {};
+  for (const key of SOLO_NAV_KEYS) {
+    signature[key] = SOLO_NAV_SOURCES[key](state);
+  }
+  return signature as SoloNavSignature;
 }
 
 /**
@@ -99,14 +104,35 @@ export function soloNavUnchanged(a: SoloNavSignature, b: SoloNavSignature): bool
  *
  * The listener runs synchronously inside the navigating set()'s own
  * notification pass, so there is no frame in which the stale solo is audible.
- * clearSoloTracks is reference-stable on an already-empty set, so a navigation
- * with no solo latched notifies nothing further.
+ *
+ * The emptiness test is HERE and not only inside clearSoloTracks, because the
+ * action's own guard returns `{}` and zustand still treats that as a state
+ * change: it builds a new state object, runs every listener, and — through
+ * persist, which wraps the slice `set` — re-runs partialize and JSON.stringify
+ * over the whole persisted slice including `loops[]`. Nothing is soloed on the
+ * overwhelming majority of navigations, so calling unconditionally doubled the
+ * notification and serialise cost of every tab, segment and loop change to
+ * write a value that was already correct.
+ *
+ * With this test in front of it, the guard inside `clearSoloTracks` no longer
+ * stops anything on this path — the nested hop soloNav.test.ts's "never
+ * watches soloTracks itself" docblock describes would now terminate HERE, on
+ * the second pass reading an empty set. It stays in the action anyway, as
+ * reference stability for any caller that does not test first; its only other
+ * caller today is the transport chip, which renders only while the set is
+ * non-empty.
  */
 export function startSoloNavClear(): () => void {
   return useAppStore.subscribe(
     soloNavSignature,
-    () => useAppStore.getState().clearSoloTracks(),
-    { equalityFn: soloNavUnchanged },
+    () => {
+      const state = useAppStore.getState();
+      if (state.soloTracks.length > 0) state.clearSoloTracks();
+    },
+    // zustand's own `shallow`, not a hand-written comparison: it compares the
+    // keys the selector actually returned, so it stays bound to
+    // SOLO_NAV_SOURCES without naming a single field.
+    { equalityFn: shallow },
   );
 }
 

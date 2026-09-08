@@ -5,7 +5,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { Layer, layerForTab, ViewMode } from "../types";
-import { defaultTabForLayer } from "../routing/tabRouting";
+import { defaultTabForLayer, tabsForLayer } from "../routing/tabRouting";
 import { SCALES } from "@/data/scales";
 import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from "@/utils/noteSpelling";
 import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/storage";
@@ -16,14 +16,6 @@ import { Wordmark } from "./ui/Wordmark";
 import { LoopSelector } from "./loop/LoopSelector";
 import { VIEW_META, PATTERN_SEGMENTS } from "./viewMeta";
 import { sessionLabel } from "./project/projectManagerFlow";
-
-/** The two loop-layer tabs. Playback is the transport bar's single Play —
- *  see docs/superpowers/plans/2026-09-08-one-transport.md — so a tab no longer
- *  owns a PlayerModule and no longer carries its own play/stop pair. */
-export const AUTOMATION_TABS: readonly ViewMode[] = ['sound', 'pattern'];
-
-/** The two song-layer tabs: the arrangement and the global master rack. */
-export const SONG_NAV_TABS: readonly ViewMode[] = ['arrange', 'master'];
 
 /** The two layers in toggle order. Labels are user-facing copy. */
 export const LAYER_META: ReadonlyArray<{ layer: Layer; label: string }> = [
@@ -327,37 +319,28 @@ export const Header = React.memo(function Header() {
         </div>
       </div>
 
-      {/* Primary navigation: View tabs and module transports */}
+      {/* Primary navigation: the active layer's tabs.
+          ONE branch over `tabsForLayer`, the same function the router validates
+          a URL with, so the nav and the routes cannot name different tabs. The
+          two layers rendered identical markup for everything except the song
+          tabs' `labelClassName`, and keeping them apart meant restyling a tab
+          button in two places. */}
       <nav className="flex items-center justify-center order-3 md:order-2 w-full md:w-auto shrink-0">
-        {layer === 'loop' && (
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {AUTOMATION_TABS.map((view) => (
-              <div
-                key={view}
-                className={`${NAV_GROUP_CLASS} flex items-center`}
-              >
-                <TabButton view={view} activeTab={activeTab} onSelect={setActiveTab} />
-              </div>
-            ))}
-          </div>
-        )}
-        {layer === 'song' && (
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {SONG_NAV_TABS.map((view) => (
-              <div
-                key={view}
-                className={`${NAV_GROUP_CLASS} flex items-center`}
-              >
-                <TabButton
-                  view={view}
-                  activeTab={activeTab}
-                  onSelect={setActiveTab}
-                  labelClassName="truncate sm:inline"
-                />
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {tabsForLayer(layer).map((view) => (
+            <div
+              key={view}
+              className={`${NAV_GROUP_CLASS} flex items-center`}
+            >
+              <TabButton
+                view={view}
+                activeTab={activeTab}
+                onSelect={setActiveTab}
+                labelClassName={layer === 'song' ? 'truncate sm:inline' : undefined}
+              />
+            </div>
+          ))}
+        </div>
       </nav>
 
       {/* Loop Selector, Key/Scale & Theme Actions */}

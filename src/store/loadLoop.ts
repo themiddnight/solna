@@ -1,11 +1,10 @@
 import { audioEngine } from '../audio/engine';
 import { ACCOMPANIMENT_SOURCES } from '../audio/playback/playbackEngine';
 import { padHoldsAcrossLoop } from '../audio/playback/padPlayback';
-import { layerForTab } from '../types';
 import { loopStatePatch } from './loop';
-import { restartAfterStop } from './playbackScope';
 import { useAppStore } from './store';
-import { NO_PLAYERS_ACTIVE, restartPlayersPatch } from './transportSlice';
+import { commitRestartAfterStop } from './stopAndRestart';
+import { captureActivePlayers } from './transportSlice';
 
 /** Same instant-but-clickless release the vibe swap and hard stop use. */
 export const LOAD_LOOP_RELEASE = 0.02;
@@ -105,18 +104,10 @@ export function loadLoop(id: string, opts: { atBoundary?: number } = {}): void {
     return;
   }
 
-  // Captured BEFORE hardStopAll, which resets the scope to `none`.
+  // Captured BEFORE hardStopAll, which resets the scope to `none` and stops
+  // every player.
   const scopeBefore = store.playbackScope;
-  const wasActive = {
-    sequencer: store.sequencerPlayer !== 'stopped',
-    chords: store.chordsPlayer !== 'stopped',
-    lead: store.leadPlayer !== 'stopped',
-  };
-  const wasPlaying = wasActive.sequencer || wasActive.chords || wasActive.lead;
-  // The layer decides which user action this is: switching the loop being
-  // EDITED (loop layer, seamless) or picking a different loop to work on from
-  // Arrange while one is auditioning (song layer, stops). See restartAfterStop.
-  const decision = restartAfterStop(scopeBefore, id, layerForTab(store.activeTab), wasPlaying);
+  const wasActive = captureActivePlayers(store);
   store.hardStopAll();
   for (const source of ACCOMPANIMENT_SOURCES) {
     audioEngine.stopSource(source, LOAD_LOOP_RELEASE);
@@ -124,22 +115,20 @@ export function loadLoop(id: string, opts: { atBoundary?: number } = {}): void {
 
   useAppStore.setState({ ...loopStatePatch(loop), activeLoopId: id, songLoopIndex });
 
-  // Restart what the decision allows, WITH the scope it should leave behind.
+  // Restart what the decision allows, WITH the scope it should leave behind —
+  // see commitRestartAfterStop for the rule and the no-op guard. The layer it
+  // reads decides which user action this is: switching the loop being EDITED
+  // (loop layer, seamless) or picking a different loop to work on from Arrange
+  // while one is auditioning (song layer, stops).
+  //
   // The playback hooks arm on the next bar line for the active meter, so a
   // restart lands on beat 1 with no alignment code (the same guarantee the
-  // Instant Vibe swap relies on). Declining to restart needs no extra work:
-  // hardStopAll above already silenced everything, so the patch just carries
-  // SCOPE_NONE and the transport is genuinely stopped.
+  // Instant Vibe swap relies on).
   //
-  // One set(), not three play(module) calls: play(module) sets no scope, so
-  // the old form left players 'playing' under the `none` scope hardStopAll
-  // had just written — the hole Phase 1 documented at PlaybackScope and this
-  // closes. It stays a SEPARATE set() from the content patch above, though,
-  // and deliberately: the content patch must reach engineSync's per-value
-  // subscriptions BEFORE the transport's stopped->playing transition, which
-  // is what re-anchors the clock. Folding the two together would leave that
-  // ordering to subscriber registration order.
-  useAppStore.setState(
-    restartPlayersPatch(decision.restart ? wasActive : NO_PLAYERS_ACTIVE, decision.scope),
-  );
+  // It stays a SEPARATE set() from the content patch above, deliberately: the
+  // content patch must reach engineSync's per-value subscriptions BEFORE the
+  // transport's stopped->playing transition, which is what re-anchors the
+  // clock. Folding the two together would leave that ordering to subscriber
+  // registration order.
+  commitRestartAfterStop(scopeBefore, id, wasActive);
 }

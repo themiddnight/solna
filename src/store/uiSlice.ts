@@ -62,10 +62,12 @@ export function createUiSlice(set: Set): UiSlice {
     setPatternSegment: (patternSegment) => set({ patternSegment }),
     toggleSoloTrack: (track) =>
       set((state) => ({ soloTracks: toggleSolo(state.soloTracks, track) })),
-    // Guarded on emptiness so the array reference is stable: soloNav.ts calls
-    // this on EVERY navigation, and handing every `soloTracks` subscriber a
-    // fresh [] on each tab click would re-run engineSync's five audibility
-    // listeners for a value that did not change.
+    // Guarded on emptiness so the array reference is stable: a fresh [] would
+    // hand every `soloTracks` subscriber a new reference for a value that did
+    // not change. It does NOT make the call free — zustand treats a `{}`
+    // partial as a state change and still notifies everyone and re-serialises
+    // the persisted slice — which is why startSoloNavClear tests emptiness on
+    // its side too, before calling at all.
     clearSoloTracks: () =>
       set((state) => (state.soloTracks.length === 0 ? {} : { soloTracks: [] })),
     setKeyboardMode: (keyboardMode) => {

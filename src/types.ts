@@ -12,11 +12,7 @@
  * slice), not three more view ids: the router validates exactly one query key,
  * and a segment is a within-tab position, not a route.
  */
-export type ViewMode =
-  | 'sound'
-  | 'pattern'
-  | 'arrange'
-  | 'master';
+export type ViewMode = (typeof LOOP_TABS)[number] | (typeof SONG_TABS)[number];
 
 export type Layer = 'loop' | 'song';
 
@@ -25,14 +21,49 @@ export type Layer = 'loop' | 'song';
  * view ids: the URL carries the tab, and a segment is a position inside one
  * tab. Kept here rather than in store/types.ts because both the store and the
  * components read it, exactly as `ViewMode` is.
+ *
+ * The const array is the source of truth and the union derives from it, the
+ * `PAD_MODES` pattern below. That is what gives `PATTERN_SEGMENTS` in
+ * components/viewMeta.ts something to be checked against: that table is a LIST,
+ * not a `Record<PatternSegment, …>` like `VIEW_META`, so the compiler cannot
+ * see a segment it is missing — `SegmentHeader` would throw at render and
+ * `PatternView` would show a blank tab. viewMeta.test.ts closes that by
+ * comparing the table's ids to this array.
  */
-export type PatternSegment = 'lead' | 'accompaniment' | 'beat';
+export const PATTERN_SEGMENT_IDS = ['lead', 'accompaniment', 'beat'] as const;
+export type PatternSegment = (typeof PATTERN_SEGMENT_IDS)[number];
 
-export const LOOP_TABS: readonly ViewMode[] = ['sound', 'pattern'];
-export const SONG_TABS: readonly ViewMode[] = ['arrange', 'master'];
+/**
+ * The two tabs of each layer, and — through `ViewMode` above — the roster of
+ * every view id there is.
+ *
+ * `as const` and the union derived from THEM, not the reverse: a tab that
+ * exists in `ViewMode` but in neither list is a tab the router refuses and the
+ * nav gives no button, which is a broken view with no type error anywhere.
+ * Deriving the union makes that shape unwritable, the same `PAD_MODES` rule
+ * `PATTERN_SEGMENT_IDS` above follows.
+ */
+export const LOOP_TABS = ['sound', 'pattern'] as const;
+export const SONG_TABS = ['arrange', 'master'] as const;
+
+/**
+ * Derived from `SONG_TABS`, never a second literal. A hand-written
+ * `tab === 'arrange' || tab === 'master'` was a third copy of the split, and
+ * the one no test would have caught: a tab added to `SONG_TABS` gets a nav
+ * button and a valid route in the same edit, but `layerForTab` would still
+ * call it a LOOP tab — so `LoopPage` would render nothing for it, the master
+ * Play would run `soloLoop` instead of `playAll`, and `soloNav` would clear
+ * the track solo on the way in.
+ *
+ * A module-scope Set rather than `SONG_TABS.includes(tab)`: `layerForTab` runs
+ * on every store `set()` (soloNav's root subscription reads it) and in the
+ * render body of Header, TransportBar and SoundView, so the derivation is kept
+ * and the linear scan is not.
+ */
+const SONG_TAB_SET: ReadonlySet<string> = new Set(SONG_TABS);
 
 export function isSongLayer(tab: ViewMode): boolean {
-  return tab === 'arrange' || tab === 'master';
+  return SONG_TAB_SET.has(tab);
 }
 
 export function layerForTab(tab: ViewMode): Layer {

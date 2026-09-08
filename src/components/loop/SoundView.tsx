@@ -50,6 +50,7 @@ import { PanelCard } from "../ui/PanelCard";
 import { IconButton } from "../ui/IconButton";
 import { Field } from "../ui/Field";
 import {
+  GROUP_LABEL,
   COUNT_BADGE,
   JOIN_LANE,
   FIELD_SELECT,
@@ -73,6 +74,130 @@ import { GroupFrame } from "../ui/GroupFrame";
 // not (CLAUDE.md, layer 1).
 const DRUM_KIT_NAMES = Object.keys(DRUM_KITS);
 
+// Derived from SYNTH_TARGET_STYLES, not hand-listed: every target that isn't
+// the lead ('synth') one goes in the framed Accompaniment group, so a fifth
+// target added to that record renders here automatically instead of silently
+// not. Module scope for the same reason DRUM_KIT_NAMES above is: the record is
+// static, and this view re-renders per pointermove during a Knob drag.
+const ACCOMPANIMENT_TARGETS = (Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]).filter(
+  (target) => target !== 'synth',
+);
+
+/**
+ * Drum kit and drum filter, as their own memoised subtree.
+ *
+ * The eight store reads live HERE rather than at the top of SoundView, for the
+ * same reason SoundMixer's MixerRow owns its own: every view stays mounted, so
+ * a subscription at the top of this file re-renders the WHOLE view — the
+ * header, the preset chips, the target row and all five synth panels, none of
+ * which are memoised — on every pointermove of these two knobs. Scoped here, a
+ * cutoff drag reconciles this card alone.
+ */
+const DrumSoundCard = React.memo(function DrumSoundCard() {
+  const soundKit = useAppStore((s) => s.soundKit);
+  const onChangeSoundKit = useAppStore((s) => s.setSoundKit);
+  const drumFilterCutoff = useAppStore((s) => s.drumFilterCutoff);
+  const drumFilterResonance = useAppStore((s) => s.drumFilterResonance);
+  const drumFilterType = useAppStore((s) => s.drumFilterType);
+  const setDrumFilterCutoff = useAppStore((s) => s.setDrumFilterCutoff);
+  const setDrumFilterResonance = useAppStore((s) => s.setDrumFilterResonance);
+  const setDrumFilterType = useAppStore((s) => s.setDrumFilterType);
+
+  /* Drum Sound — kit and filter. Moved here from the sequencer: all of it
+      changes how the kit SOUNDS and none of it changes a note, which is the
+      Sound/Pattern boundary rule. The grid that picks these notes lives on
+      Pattern › Beat. The bus level left this card for the Mixer below, so
+      that the drum bus is balanced against the other four and not alone. **/
+  return (
+    <PanelCard>
+      <div className="card-body p-3 sm:p-4">
+      <div className="flex items-center justify-between flex-wrap gap-2.5">
+        <div className="flex items-center gap-2">
+          <Disc3 className="w-3.5 h-3.5 text-secondary" />
+          <span className={SECTION_HEADER}>
+            Drum Sound
+          </span>
+        </div>
+
+        {/* items-start + a shared lane per field: bottom-aligning controls of
+            three different heights (32px select, 24px join, 48px knob) put
+            these labels on different baselines. */}
+        <div className="flex items-start gap-5 flex-wrap">
+          <Field label="Kit" htmlFor="select-sequencer-sound-kit">
+            <select
+              id="select-sequencer-sound-kit"
+              value={soundKit}
+              onChange={(e) => onChangeSoundKit(e.target.value)}
+              className={FIELD_SELECT}
+              title="Drum kit — the sounds each track plays"
+            >
+              {DRUM_KIT_NAMES.map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Filter">
+            <div className="join">
+              {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
+                <button
+                  key={t}
+                  id={`btn-drum-filter-${t}`}
+                  onClick={() => setDrumFilterType(t)}
+                  className={`btn btn-sm join-item text-[10px] font-semibold uppercase ${
+                    drumFilterType === t ? "btn-secondary" : "btn-ghost"
+                  }`}
+                >
+                  {t === "lowpass" ? "LPF" : t === "bandpass" ? "BPF" : "HPF"}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          {/* `size="sm"` (36px), not the app-wide default 48px: every other
+              knob is the main content of its own card, these two are one
+              field in a row. No `label` — the stacked one above says it, so
+              the knob renders its value readout alone. */}
+          <Field label="Cutoff">
+            <Knob
+              id="knob-drum-filter-cutoff"
+              size="sm"
+              color="text-secondary"
+              layout="horizontal"
+              value={drumFilterCutoff}
+              min={50}
+              max={12000}
+              step={10}
+              scale="log"
+              format={(v) => `${Math.round(v)} Hz`}
+              onChange={setDrumFilterCutoff}
+            />
+          </Field>
+
+          <Field label="Res">
+            <Knob
+              id="knob-drum-filter-resonance"
+              size="sm"
+              color="text-secondary"
+              layout="horizontal"
+              value={drumFilterResonance}
+              min={0.1}
+              max={20}
+              step={0.1}
+              scale="linear"
+              format={(v) => v.toFixed(1)}
+              onChange={setDrumFilterResonance}
+            />
+          </Field>
+        </div>
+      </div>
+      </div>
+    </PanelCard>
+  );
+});
+
 export const SoundView = React.memo(function SoundView() {
   // Synth slice state + setters (named after the old props so the rest of the
   // component body is unchanged).
@@ -93,14 +218,6 @@ export const SoundView = React.memo(function SoundView() {
   const onChangeBassSynthParams = useAppStore((s) => s.setBassSynthParams);
   const padSynthParams = useAppStore((s) => s.padSynthParams);
   const setPadSynthParams = useAppStore((s) => s.setPadSynthParams);
-  const soundKit = useAppStore((s) => s.soundKit);
-  const onChangeSoundKit = useAppStore((s) => s.setSoundKit);
-  const drumFilterCutoff = useAppStore((s) => s.drumFilterCutoff);
-  const drumFilterResonance = useAppStore((s) => s.drumFilterResonance);
-  const drumFilterType = useAppStore((s) => s.drumFilterType);
-  const setDrumFilterCutoff = useAppStore((s) => s.setDrumFilterCutoff);
-  const setDrumFilterResonance = useAppStore((s) => s.setDrumFilterResonance);
-  const setDrumFilterType = useAppStore((s) => s.setDrumFilterType);
 
   // Route the control panel (knobs, preset selects) to the selected
   // destination.
@@ -250,14 +367,6 @@ export const SoundView = React.memo(function SoundView() {
     </button>
   );
 
-  // Derived from SYNTH_TARGET_STYLES, not hand-listed: every target that
-  // isn't the lead ('synth') one goes in the framed Accompaniment group, so
-  // a fifth target added to that record renders here automatically instead
-  // of silently not.
-  const accompanimentTargets = (Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]).filter(
-    (target) => target !== 'synth',
-  );
-
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Synth Lab Header: Mode Switcher + Save Current & Full Presets Library */}
@@ -358,7 +467,7 @@ export const SoundView = React.memo(function SoundView() {
           <div
             className={`flex items-center gap-1 bg-base-200 border rounded-box p-1 shrink-0 ${SYNTH_TARGET_STYLES[controlTarget].border}`}
           >
-            <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold pl-1 pr-1 hidden sm:inline">
+            <span className={`${GROUP_LABEL} pl-1 pr-1 hidden sm:inline`}>
               Target:
             </span>
             {renderTargetChip('synth')}
@@ -372,7 +481,7 @@ export const SoundView = React.memo(function SoundView() {
                 dropped from this whole row; gap-1 (already on the row and
                 the frame) carries the spacing join used to. */}
             <GroupFrame label="Accompaniment" className="flex items-center gap-1">
-              {accompanimentTargets.map(renderTargetChip)}
+              {ACCOMPANIMENT_TARGETS.map(renderTargetChip)}
             </GroupFrame>
           </div>
 
@@ -380,9 +489,17 @@ export const SoundView = React.memo(function SoundView() {
               layer at a time, so five buttons here would be four controls for
               layers this view is not editing. It sits beside the Target chips
               rather than in the view header because "it follows the target" is
-              only legible next to the target. Session-only: any tab, segment or
-              loop change empties it (store/soloNav.ts). */}
-          <SoloButton track={soloTrackForControlTarget(controlTarget)} size="sm" />
+              only legible next to the target. Session-only, and cleared by
+              LEAVING the loop layer, by a Pattern-segment change, or by a
+              change of active loop — NOT by the Sound <-> Pattern tab change
+              this button lives on, nor by a change of target (both of which a
+              set has to survive to be buildable here at all). store/soloNav.ts
+              owns that rule and says why. */}
+          <SoloButton
+            id="btn-solo-target"
+            track={soloTrackForControlTarget(controlTarget)}
+            size="sm"
+          />
 
           {/* Per-target oscilloscope, the way a hardware synth puts a scope
               beside the section you are editing. It taps the TARGET layer's
@@ -686,97 +803,7 @@ export const SoundView = React.memo(function SoundView() {
         </div>
       )}
 
-      {/* Drum Sound — kit and filter. Moved here from the sequencer: all of it
-          changes how the kit SOUNDS and none of it changes a note, which is the
-          Sound/Pattern boundary rule. The grid that picks these notes lives on
-          Pattern › Beat. The bus level left this card for the Mixer below, so
-          that the drum bus is balanced against the other four and not alone. */}
-      <PanelCard>
-        <div className="card-body p-3 sm:p-4">
-        <div className="flex items-center justify-between flex-wrap gap-2.5">
-          <div className="flex items-center gap-2">
-            <Disc3 className="w-3.5 h-3.5 text-secondary" />
-            <span className={SECTION_HEADER}>
-              Drum Sound
-            </span>
-          </div>
-
-          {/* items-start + a shared lane per field: bottom-aligning controls of
-              three different heights (32px select, 24px join, 48px knob) put
-              these labels on different baselines. */}
-          <div className="flex items-start gap-5 flex-wrap">
-            <Field label="Kit" htmlFor="select-sequencer-sound-kit">
-              <select
-                id="select-sequencer-sound-kit"
-                value={soundKit}
-                onChange={(e) => onChangeSoundKit(e.target.value)}
-                className={FIELD_SELECT}
-                title="Drum kit — the sounds each track plays"
-              >
-                {DRUM_KIT_NAMES.map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Filter">
-              <div className="join">
-                {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
-                  <button
-                    key={t}
-                    id={`btn-drum-filter-${t}`}
-                    onClick={() => setDrumFilterType(t)}
-                    className={`btn btn-sm join-item text-[10px] font-semibold uppercase ${
-                      drumFilterType === t ? "btn-secondary" : "btn-ghost"
-                    }`}
-                  >
-                    {t === "lowpass" ? "LPF" : t === "bandpass" ? "BPF" : "HPF"}
-                  </button>
-                ))}
-              </div>
-            </Field>
-
-            {/* `size="sm"` (36px), not the app-wide default 48px: every other
-                knob is the main content of its own card, these two are one
-                field in a row. No `label` — the stacked one above says it, so
-                the knob renders its value readout alone. */}
-            <Field label="Cutoff">
-              <Knob
-                id="knob-drum-filter-cutoff"
-                size="sm"
-                color="text-secondary"
-                layout="horizontal"
-                value={drumFilterCutoff}
-                min={50}
-                max={12000}
-                step={10}
-                scale="log"
-                format={(v) => `${Math.round(v)} Hz`}
-                onChange={setDrumFilterCutoff}
-              />
-            </Field>
-
-            <Field label="Res">
-              <Knob
-                id="knob-drum-filter-resonance"
-                size="sm"
-                color="text-secondary"
-                layout="horizontal"
-                value={drumFilterResonance}
-                min={0.1}
-                max={20}
-                step={0.1}
-                scale="linear"
-                format={(v) => v.toFixed(1)}
-                onChange={setDrumFilterResonance}
-              />
-            </Field>
-          </div>
-        </div>
-        </div>
-      </PanelCard>
+      <DrumSoundCard />
 
       {/* The one mixer: every layer's level and mute, including the drum bus
           whose level used to be a lone strip in the card above. */}

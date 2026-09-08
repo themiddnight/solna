@@ -259,4 +259,17 @@ describe('SoundView track solo', () => {
     expect(html).toContain('aria-label="Solo Chord"');
     expect(html).not.toContain('aria-label="Solo Lead"');
   });
+
+  /**
+   * Every view stays mounted (App.tsx and PatternView both gate with
+   * block/hidden), so this button shares the document with the per-surface
+   * solo for whichever track the target names. It therefore carries its own
+   * id rather than `btn-solo-<track>`, which would be a duplicate id in the
+   * live page for every possible target.
+   */
+  test('carries the target-row id, never the per-surface one', () => {
+    const html = renderToString(<SoundView />);
+    expect(html).toContain('id="btn-solo-target"');
+    expect(html).not.toContain('id="btn-solo-lead"');
+  });
 });

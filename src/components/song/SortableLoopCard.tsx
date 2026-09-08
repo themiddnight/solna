@@ -21,6 +21,7 @@ import { loopBars } from '@/store/loop';
 import { formatChordQuality } from '@/utils/musicTheory';
 import { getTonicSpelling } from '@/utils/noteSpelling';
 import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
+import { MIX_LAYERS } from '../mixLayers';
 import { VolumeFader } from '../ui/VolumeFader';
 
 /**
@@ -118,50 +119,6 @@ export function MixChannel({
     </div>
   );
 }
-
-/**
- * The loop card's mixer strip, one row per channel, in the order they render.
- *
- * A table rather than five near-identical JSX blocks: the five differed only
- * in these seven values, and the copies had already drifted (the drum bus
- * caps at 1.0, the pitched buses at 1.5 — a fact that was three screens away
- * from the four that shared a ceiling).
- *
- * `volumeKey`/`muteKey` index `LoopMixPatch` so a renamed store field fails
- * here rather than silently writing a patch nothing reads. Beat sits last so
- * the strip reads pitched layers first, rhythm after — the same story the
- * header tabs tell — and its `idPrefix` stays `drum-` because these DOM ids
- * track the store fields (`drumMuted`), not the label.
- *
- * The live-value twin of this table is MIXER_CHANNELS in
- * loop/SoundMixer.tsx: same five layers, same order, same labels and tones.
- * They must not be merged — this one writes a per-loop LoopMixPatch (an
- * arrangement override) through setLoopMix, on whichever loop the card is
- * for; that one writes the live store root through the ordinary slice
- * actions, for the loop you are currently editing, and loopSync's mirroring
- * `set` carries it into loops[] from there.
- */
-type MixVolumeKey = {
-  [K in keyof LoopMixPatch]: LoopMixPatch[K] extends number ? K : never;
-}[keyof LoopMixPatch];
-type MixMuteKey = {
-  [K in keyof LoopMixPatch]: LoopMixPatch[K] extends boolean ? K : never;
-}[keyof LoopMixPatch];
-
-const LOOP_MIX_CHANNELS: ReadonlyArray<{
-  idPrefix: string;
-  label: string;
-  volumeKey: MixVolumeKey;
-  muteKey: MixMuteKey;
-  tone: PowerToggleTone;
-  sliderAccent: string;
-}> = [
-  { idPrefix: 'synth', label: 'Lead', volumeKey: 'synthVolume', muteKey: 'synthMuted', tone: 'primary', sliderAccent: 'text-primary' },
-  { idPrefix: 'chord', label: 'Chord', volumeKey: 'chordVolume', muteKey: 'chordMuted', tone: 'module-chord', sliderAccent: 'text-module-chord' },
-  { idPrefix: 'bass', label: 'Bass', volumeKey: 'bassVolume', muteKey: 'bassMuted', tone: 'module-bass', sliderAccent: 'text-module-bass' },
-  { idPrefix: 'pad', label: 'Pad', volumeKey: 'padVolume', muteKey: 'padMuted', tone: 'module-pad', sliderAccent: 'text-module-pad' },
-  { idPrefix: 'drum', label: 'Beat', volumeKey: 'masterSequencerVolume', muteKey: 'drumMuted', tone: 'accent', sliderAccent: 'text-accent' },
-];
 
 export interface SortableLoopCardProps {
   loop: Loop;
@@ -691,7 +648,14 @@ export const SortableLoopCard = React.memo(
 
           {/* 5-Channel Mixer Strip */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 pt-0.5">
-            {LOOP_MIX_CHANNELS.map((ch) => (
+            {/* The card's mixer strip: one row per layer, in table order.
+                MIX_LAYERS is shared with loop/SoundMixer.tsx so the five
+                labels, tones, colours and store fields are written once. The
+                two surfaces' WRITERS stay separate and must — this one writes
+                a per-loop LoopMixPatch override through setLoopMix, on
+                whichever loop the card is for, while the mixer writes the live
+                store root through the ordinary slice actions. */}
+            {MIX_LAYERS.map((ch) => (
               <MixChannel
                 key={ch.idPrefix}
                 idPrefix={`${ch.idPrefix}-${loop.id}`}
@@ -699,7 +663,7 @@ export const SortableLoopCard = React.memo(
                 volumeDb={loop[ch.volumeKey]}
                 muted={loop[ch.muteKey]}
                 tone={ch.tone}
-                sliderAccent={ch.sliderAccent}
+                sliderAccent={ch.accentClass}
                 onVolumeDbChange={(v) => onSetMix(loop.id, { [ch.volumeKey]: v })}
                 onToggleMute={() =>
                   onSetMix(loop.id, { [ch.muteKey]: !loop[ch.muteKey] })

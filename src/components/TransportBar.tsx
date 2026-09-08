@@ -13,7 +13,7 @@ import { aggregatePlayerState, isHardStopEnabled, transportDisplayState } from "
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 import type { Loop } from '../store/types';
 import { layerForTab } from '@/types';
-import { masterPlayTarget, playTargetLabel } from './transportAction';
+import { playTargetLabel } from './transportAction';
 
 /** The song-mode badge: present only while a song position exists. */
 export function songModeLabel(
@@ -47,9 +47,7 @@ export const TransportBar = React.memo(function TransportBar() {
   const playbackScope = useAppStore((s) => s.playbackScope);
   const activeTab = useAppStore((s) => s.activeTab);
   const activeLoopId = useAppStore((s) => s.activeLoopId);
-  const activeLoopName = useAppStore(
-    (s) => s.loops.find((loop) => loop.id === s.activeLoopId)?.name ?? '',
-  );
+
   // Live reads (useLiveStore, not useAppStore): under renderToString a plain
   // useAppStore selector serves creation-time state, so the chip's test could
   // never latch a solo. Same reason Header.tsx reads its dirty flag this way.
@@ -58,6 +56,12 @@ export const TransportBar = React.memo(function TransportBar() {
 
   const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer);
   const layer = layerForTab(activeTab);
+  // Derived in the render body, not in a selector: a zustand selector runs on
+  // every store set() — including every pointermove of a knob drag, which does
+  // not re-render this bar at all — whereas `loops` and `activeLoopId` are
+  // already subscribed above, so scanning here costs one pass per render of
+  // THIS component instead.
+  const activeLoopName = loops.find((loop) => loop.id === activeLoopId)?.name ?? '';
   // On the song layer a solo-looping card leaves the master button offering
   // Play (a one-click takeover). On the loop layer the button owns the solo
   // loop of the loop being edited. Hard stop stays live off the REAL player
@@ -69,8 +73,12 @@ export const TransportBar = React.memo(function TransportBar() {
   const isPlaying = aggregate !== 'stopped';
   const songLabel = songModeLabel(songLoopIndex, loops);
   const soloLabel = soloChipLabel(soloTracks);
+  // The layer IS the choice: playAll() on song, soloLoop(activeLoopId) on loop.
+  // It went through a `masterPlayTarget(layer)` helper that returned its own
+  // argument — a function, a test and an import proving a ternary copied the
+  // `Layer` union.
   const onPlay = () => {
-    if (masterPlayTarget(layer) === 'song') {
+    if (layer === 'song') {
       playAll();
       return;
     }

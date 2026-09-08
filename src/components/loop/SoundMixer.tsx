@@ -1,109 +1,64 @@
 import React from 'react';
 import { useAppStore } from '@/store/store';
 import { SYNTH_TARGET_STYLES } from '@/utils/synthControl';
-import type { LoopMixPatch } from '@/store/types';
 import { PanelCard } from '../ui/PanelCard';
 import { ChannelStrip } from '../ui/ChannelStrip';
-import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
+import { PowerToggle } from '../ui/PowerToggle';
+import { MIX_LAYERS, type MixLayer, type MixLayerId } from '../mixLayers';
 import { SECTION_HEADER } from '../ui/fieldClasses';
 import { GroupFrame } from '../ui/GroupFrame';
 
-// volumeKey/muteKey index LoopMixPatch — the same ten-field type
-// SortableLoopCard.tsx's twin table (LOOP_MIX_CHANNELS) indexes — so a
-// renamed or removed store field fails here rather than leaving this table
-// self-consistent but wrong. setVolumeKey/toggleKey stay hand-written unions:
-// LoopMixPatch carries no setters, only the ten live values a loop's mix
-// override touches.
-type MixVolumeKey = {
-  [K in keyof LoopMixPatch]: LoopMixPatch[K] extends number ? K : never;
-}[keyof LoopMixPatch];
-type MixMuteKey = {
-  [K in keyof LoopMixPatch]: LoopMixPatch[K] extends boolean ? K : never;
-}[keyof LoopMixPatch];
-
-export interface MixerChannel {
-  idPrefix: string;
-  label: string;
-  volumeKey: MixVolumeKey;
+/**
+ * A mix layer plus the two things only THIS surface has: the slice actions it
+ * writes through, and the slider class its ChannelStrip wears.
+ *
+ * `Record<MixLayerId, …>` rather than a second five-row array: the compiler
+ * then refuses a sixth layer that has a label and a store field but no way to
+ * write it, which two parallel arrays joined by position could not.
+ */
+const MIXER_WRITERS: Record<MixLayerId, {
   setVolumeKey:
     | 'setSynthVolume' | 'setChordVolume' | 'setBassVolume' | 'setPadVolume'
     | 'setMasterSequencerVolume';
-  muteKey: MixMuteKey;
   toggleKey:
     | 'toggleSynthMuted' | 'toggleChordMuted' | 'toggleBassMuted' | 'togglePadMuted'
     | 'toggleDrumMuted';
-  tone: PowerToggleTone;
-  /** Icon tint. Typed as ChannelStrip's `accentClass` (KnobColor) accepts it. */
-  accentClass: 'text-primary' | 'text-module-chord' | 'text-module-bass' | 'text-module-pad' | 'text-accent';
   sliderClassName: string;
-}
+}> = {
+  synth: { setVolumeKey: 'setSynthVolume', toggleKey: 'toggleSynthMuted', sliderClassName: SYNTH_TARGET_STYLES.synth.slider },
+  chord: { setVolumeKey: 'setChordVolume', toggleKey: 'toggleChordMuted', sliderClassName: SYNTH_TARGET_STYLES.chord.slider },
+  bass: { setVolumeKey: 'setBassVolume', toggleKey: 'toggleBassMuted', sliderClassName: SYNTH_TARGET_STYLES.bass.slider },
+  pad: { setVolumeKey: 'setPadVolume', toggleKey: 'togglePadMuted', sliderClassName: SYNTH_TARGET_STYLES.pad.slider },
+  // The drum bus has no SynthControlTarget entry — it is not a synth voice —
+  // so its slider class is a literal.
+  drum: { setVolumeKey: 'setMasterSequencerVolume', toggleKey: 'toggleDrumMuted', sliderClassName: 'range range-xs range-accent' },
+};
+
+export type MixerChannel = MixLayer & (typeof MIXER_WRITERS)[MixLayerId];
 
 /**
- * The five layers, in the canonical order, bound to the LIVE slice fields —
- * the levels the engine is using right now.
+ * The five layers, in canonical order, bound to the LIVE slice fields — the
+ * levels the engine is using right now.
  *
- * This deliberately mirrors LOOP_MIX_CHANNELS in song/SortableLoopCard.tsx:
- * same five layers, same order, same labels and tones. The two are NOT
- * interchangeable and must never be merged. That one writes a per-loop
- * LoopMixPatch — an arrangement override stored on a loop; this one writes the
- * live store root through the ordinary slice actions, and store/loopSync.ts's
- * mirroring `set` carries every one of these ten fields into
- * loops[activeLoopId] in the same update. Nothing here may call setLoopMix:
- * that would write the same fields twice, and on whichever loop it was handed.
+ * The layers themselves come from components/mixLayers.ts, which an Arrange
+ * loop card reads too; only the writer columns are added here. Nothing on this
+ * surface may call setLoopMix: that would write the same fields twice, and on
+ * whichever loop it was handed. store/loopSync.ts's mirroring `set` carries
+ * every one of these ten fields into loops[activeLoopId] in the same update.
  *
  * Two of these ten controls are new rather than moved: synthMuted and
  * drumMuted have existed in the store and been honoured by the audio path
- * (engineSync.ts's LAYER_BUSES) since before this file, with no UI anywhere
+ * (engineSync.ts's SOURCE_BUSES) since before this file, with no UI anywhere
  * except the Arrange loop cards.
  */
-export const MIXER_CHANNELS: ReadonlyArray<MixerChannel> = [
-  {
-    idPrefix: 'synth', label: 'Lead',
-    volumeKey: 'synthVolume', setVolumeKey: 'setSynthVolume',
-    muteKey: 'synthMuted', toggleKey: 'toggleSynthMuted',
-    tone: 'primary',
-    accentClass: SYNTH_TARGET_STYLES.synth.accent,
-    sliderClassName: SYNTH_TARGET_STYLES.synth.slider,
-  },
-  {
-    idPrefix: 'chord', label: 'Chord',
-    volumeKey: 'chordVolume', setVolumeKey: 'setChordVolume',
-    muteKey: 'chordMuted', toggleKey: 'toggleChordMuted',
-    tone: 'module-chord',
-    accentClass: SYNTH_TARGET_STYLES.chord.accent,
-    sliderClassName: SYNTH_TARGET_STYLES.chord.slider,
-  },
-  {
-    idPrefix: 'bass', label: 'Bass',
-    volumeKey: 'bassVolume', setVolumeKey: 'setBassVolume',
-    muteKey: 'bassMuted', toggleKey: 'toggleBassMuted',
-    tone: 'module-bass',
-    accentClass: SYNTH_TARGET_STYLES.bass.accent,
-    sliderClassName: SYNTH_TARGET_STYLES.bass.slider,
-  },
-  {
-    idPrefix: 'pad', label: 'Pad',
-    volumeKey: 'padVolume', setVolumeKey: 'setPadVolume',
-    muteKey: 'padMuted', toggleKey: 'togglePadMuted',
-    tone: 'module-pad',
-    accentClass: SYNTH_TARGET_STYLES.pad.accent,
-    sliderClassName: SYNTH_TARGET_STYLES.pad.slider,
-  },
-  {
-    // The drum bus has no SynthControlTarget entry — it is not a synth voice —
-    // so its two classes are literals here. `accent` matches the tone
-    // SortableLoopCard gives the same row, and is deliberately NOT the
-    // `primary` the old standalone "Drum Level" strip wore: primary is Lead's
-    // tone, and the two rows now sit in one grid where they must not read as
-    // the same layer.
-    idPrefix: 'drum', label: 'Beat',
-    volumeKey: 'masterSequencerVolume', setVolumeKey: 'setMasterSequencerVolume',
-    muteKey: 'drumMuted', toggleKey: 'toggleDrumMuted',
-    tone: 'accent',
-    accentClass: 'text-accent',
-    sliderClassName: 'range range-xs range-accent',
-  },
-];
+export const MIXER_CHANNELS: ReadonlyArray<MixerChannel> = MIX_LAYERS.map((layer) => ({
+  ...layer,
+  ...MIXER_WRITERS[layer.idPrefix],
+}));
+
+const MIXER_LEAD = MIXER_CHANNELS.filter((c) => c.group === 'lead');
+const MIXER_ACCOMPANIMENT = MIXER_CHANNELS.filter((c) => c.group === 'accompaniment');
+const MIXER_BEAT = MIXER_CHANNELS.filter((c) => c.group === 'beat');
 
 /**
  * One row = one layer. The store subscriptions live HERE, not in SoundMixer:
@@ -153,18 +108,22 @@ export const SoundMixer = React.memo(function SoundMixer() {
     <PanelCard>
       <div className="card-body p-3 sm:p-4 gap-3">
         <span className={SECTION_HEADER}>Mixer</span>
+        {/* Grouped by the layer's own `group` column, not by index range: a
+            sixth layer inserted anywhere but the end would fall outside
+            `slice(1, 4)` and simply not render, with the order test still
+            green. Every layer names its frame, so every layer reaches one. */}
         <div className="flex flex-col gap-2">
-          <MixerRow channel={MIXER_CHANNELS[0]} />
-          {/* Indices, not a filter: SoundMixer.test.tsx pins MIXER_CHANNELS'
-              order and length, so [0] is Lead, [1..3] are the accompaniment
-              three and [4] is Beat. A filter would silently drop a row that got
-              renamed; a bad index fails the suite. */}
+          {MIXER_LEAD.map((channel) => (
+            <MixerRow key={channel.idPrefix} channel={channel} />
+          ))}
           <GroupFrame label="Accompaniment" className="flex flex-col gap-2">
-            {MIXER_CHANNELS.slice(1, 4).map((channel) => (
+            {MIXER_ACCOMPANIMENT.map((channel) => (
               <MixerRow key={channel.idPrefix} channel={channel} />
             ))}
           </GroupFrame>
-          <MixerRow channel={MIXER_CHANNELS[4]} />
+          {MIXER_BEAT.map((channel) => (
+            <MixerRow key={channel.idPrefix} channel={channel} />
+          ))}
         </div>
       </div>
     </PanelCard>

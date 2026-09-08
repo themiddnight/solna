@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
-import { ProjectNameLabel, TabButton, PatternSegmentRow, AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS, ScaleSelects } from './Header';
+import { ProjectNameLabel, TabButton, PatternSegmentRow, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, ScaleSelects } from './Header';
+import { LOOP_TABS, SONG_TABS } from '../types';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
 import { VIEW_ORDER } from './viewMeta';
 
@@ -90,20 +91,26 @@ describe('persistTheme', () => {
 
 describe('header tab grouping', () => {
   test('the loop layer has exactly two tabs', () => {
-    expect(AUTOMATION_TABS).toEqual(['sound', 'pattern']);
+    expect(LOOP_TABS).toEqual(['sound', 'pattern']);
   });
 
   test('the song layer has arrange and the master rack', () => {
-    expect(SONG_NAV_TABS).toEqual(['arrange', 'master']);
+    expect(SONG_TABS).toEqual(['arrange', 'master']);
   });
 
   test('every tab view is still reachable', () => {
-    const views = [...SONG_NAV_TABS, ...AUTOMATION_TABS].sort();
+    const views = [...SONG_TABS, ...LOOP_TABS].sort();
     expect(views).toEqual(['arrange', 'master', 'pattern', 'sound']);
   });
 
+  // Widened to string on purpose: now that both lists are `as const`, asking
+  // whether a loop tab is a song tab is a TYPE error, so the runtime check has
+  // to be written against the values rather than the literal types. The
+  // compiler catching it first is the point — this stays as the assertion that
+  // survives if either list is ever widened back.
   test('the two layer groups are disjoint', () => {
-    const overlap = AUTOMATION_TABS.filter((view) => SONG_NAV_TABS.includes(view));
+    const songTabs: readonly string[] = SONG_TABS;
+    const overlap = LOOP_TABS.filter((view) => songTabs.includes(view));
     expect(overlap).toEqual([]);
   });
 });
@@ -251,14 +258,14 @@ describe('ProjectNameLabel (song layer only)', () => {
 
 /**
  * `viewMeta.VIEW_ORDER` exists for coverage, not for rendering — the nav is
- * driven by `AUTOMATION_TABS` and `SONG_NAV_TABS`, so the two can only be kept
+ * driven by `LOOP_TABS` and `SONG_TABS`, so the two can only be kept
  * in step by hand. This is that hand: the tabs the header actually renders,
  * loop layer then song layer, must be VIEW_ORDER's four views, each exactly
  * once. A view added to one and forgotten in the other fails here rather than
  * going missing from the nav.
  */
 describe('the header tabs cover every view', () => {
-  const rendered = [...AUTOMATION_TABS, ...SONG_NAV_TABS];
+  const rendered = [...LOOP_TABS, ...SONG_TABS];
 
   test('loop tabs then song tabs are VIEW_ORDER, reordered by layer', () => {
     expect([...rendered].sort()).toEqual([...VIEW_ORDER].sort());

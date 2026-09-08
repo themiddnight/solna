@@ -1596,7 +1596,25 @@ git commit -m "fix(loops): deleting the scoped loop stops playback and clears th
 
 **The ending is a soft stop — and `softStopAll()` is checked, not assumed.** In this codebase `softStopAll()` moves each `'playing'` player to `'stopping'` and dispatches `stop-all` (scope → `SCOPE_NONE`) in one `set()`. It silences nothing by itself: each playback hook watches its own player field, sees `'stopping'`, and on the next bar line (`isSoftStopBoundary` in `src/components/playerStop.ts`) releases with the *preset's own release time* — `useLeadPlayback` calls `playbackStopSource('synth', s.synthParams.release, time)` — then hard-stops itself with `softStopPendingRef` set so the hard-stop handler does not re-cut the tail at `HARD_STOP_RELEASE`. That is exactly "notes release naturally", so `softStopAll()` is the right call and `hardStopAll()` (which cuts every accompaniment source at 20 ms) is not.
 
-**The timing that falls out of that, and why the call is synchronous.** The bar line each hook releases on is the boundary step itself, *provided* songMode's clock callback runs before the hooks' on that step. It does: `audioEngine.subscribeClock` stores listeners in a `Set` and dispatches with `forEach`, so insertion order wins, and songMode subscribes inside `reconcile` — a synchronous store subscriber on the `set()` that flips the players to `'playing'` — while every playback hook subscribes in a `useEffect`, after React commits that same transition. So `softStopAll()` is called **synchronously** in the callback, not deferred like the advance: deferring it to a microtask would put it after all three hooks had already processed the boundary step, and the song would play one extra bar every time. (Deleting a listener from a `Set` during its own `forEach` is defined behaviour and skips only the deleted entry, so the teardown below is safe from inside the dispatch.)
+**The timing that falls out of that, and why the call is synchronous.** The bar line each hook releases on is the boundary step itself, *provided* songMode's clock callback runs before the hooks' on that step. It usually does: `audioEngine.subscribeClock` stores listeners in a `Set` and dispatches with `forEach`, so insertion order wins, and songMode subscribes inside `reconcile` — a synchronous store subscriber on the `set()` that flips the players to `'playing'` — while every playback hook subscribes in a `useEffect`, after React commits that same transition. So `softStopAll()` is called **synchronously** in the callback, not deferred like the advance: deferring it to a microtask would put it after all three hooks had already processed the boundary step, and the song would play one extra bar every time. (Deleting a listener from a `Set` during its own `forEach` is defined behaviour and skips only the deleted entry, so the teardown below is safe from inside the dispatch.)
+
+> **CORRECTED AFTER THIS SHIPPED — "it does" is "it usually does". Read the `KNOWN ISSUE`
+> block in `src/store/songMode.ts`'s `end` branch, which is authoritative.**
+> The paragraph above states the registration order as a guarantee. It is not one: two reachable
+> paths re-register songMode's advance subscription *behind* the playback hooks', and both are
+> pinned by characterization tests in `src/store/songMode.test.ts`.
+> (1) Any **mid-song `loadLoop` default path** — picking another loop card on Arrange, an Instant
+> Vibe — makes three `set()`s in one tick, and the middle state ("song layer, not playing") reaches
+> the `else` at the bottom of `reconcile` and drops this subscription; the restart re-adds it at the
+> END of the `Set`, while the hooks do not move (their clock effects are keyed on `isPlaying` and
+> the rendered state goes `'playing' -> 'playing'`).
+> (2) The **one-click takeover** — audition a loop card, then press the master Play — establishes the
+> `song` scope with the players ALREADY playing, so songMode subscribes after the hooks did. That
+> path predates this ending.
+> Making the call synchronous is still right and still necessary; it is simply not sufficient on its
+> own. The real fix is to stop depending on listener order at all — decide the ending one step early,
+> or publish the ending step for the hooks' own step actions to consult — and it is a follow-up,
+> because either option changes this function's contract or the three hooks.
 
 **The clock, traced.** Two subscriptions matter and they end at different moments.
 
@@ -2003,4 +2021,7 @@ Run `bun run dev`, turn the volume up enough to hear a tail, and work through th
 11. **A single-loop arrangement ends after its repeats.** Delete down to one loop, set its repeat count to 2, press Play on Arrange. It plays twice and stops. This is the behaviour that used to be an explicit exception — if it loops a third time, the deleted `return target === loop.id ? null : target` came back. Then press a loop card's own play button and confirm the audition *does* still repeat forever: that is the separation of duties this ending relies on, and it is the thing that would make the change a regression if it broke.
 12. **Play again after an ending starts from the top.** Immediately after check 10 or 11 finishes on its own, press the master Play once. The song starts at loop 1 — not at the loop it ended on — and it must start on the first press (a press that does nothing means the ending left a scope behind). Do it once more from the *end of the song* rather than from a manual Stop, since that is the path with no click in it.
 
-**One timing detail to listen for in checks 10 and 11:** the stop must land at the end of the last loop, not one bar later. An extra bar means the soft stop reached the playback hooks after they had already played the boundary step — i.e. the ending got deferred instead of being called synchronously in the clock callback.
+**One timing detail to listen for in checks 10 and 11:** the stop must land at the end of the last loop, not one bar later. An extra bar means the soft stop reached the playback hooks after they had already played the boundary step. That has **two** possible causes, and the second is a known open issue rather than a regression — do not "fix" the first when you are hearing the second:
+
+- the ending got deferred instead of being called synchronously in the clock callback (a regression; check the `end` branch is not wrapped in `queueMicrotask`); or
+- songMode's advance subscription was registered *behind* the playback hooks' — see the `KNOWN ISSUE` block in `src/store/songMode.ts` and the correction under Task 7 above. Reach it by pressing a loop card's play on Arrange and *then* the master Play (the one-click takeover), or by switching loops mid-song. In that case a **multi-loop** song's overrun is one extra bar of **drums alone**, because the rewind's `atBoundary` `loadLoop` retroactively cancels the other four sources; only a **single-loop** song (no rewind) gets the full-band extra bar. A clean run from a stopped transport — press master Play first, touch nothing — is the case that must be exact.

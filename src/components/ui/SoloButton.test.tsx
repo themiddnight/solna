@@ -42,4 +42,17 @@ describe('SoloButton', () => {
     useAppStore.setState({ soloTracks: [] });
     expect(renderToString(<SoloButton track="pad" />)).toContain('id="btn-solo-pad"');
   });
+
+  /**
+   * Every view stays mounted, so the Sound view's target-following button and
+   * the per-surface button for that same track are in the document together.
+   * Without the override they would share `btn-solo-pad` (or lead/chord/bass,
+   * whichever the target is) and the id would name whichever rendered first.
+   */
+  test('an explicit id wins, so a second placement of the same track is distinct', () => {
+    useAppStore.setState({ soloTracks: [] });
+    const html = renderToString(<SoloButton track="pad" id="btn-solo-target" />);
+    expect(html).toContain('id="btn-solo-target"');
+    expect(html).not.toContain('id="btn-solo-pad"');
+  });
 });
