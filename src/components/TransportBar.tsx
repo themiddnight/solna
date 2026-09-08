@@ -51,11 +51,10 @@ export const TransportBar = React.memo(function TransportBar() {
 
   const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer);
   const layer = layerForTab(activeTab);
-  // On the song layer a soloing loop leaves the master button offering Play
-  // (a one-click takeover). On the loop layer the button owns the solo of the
-  // loop it is editing, so that one reports its real state. Hard stop stays
-  // live off the REAL player states, so soloing audio always has a visible
-  // global kill even if the card is scrolled away.
+  // On the song layer a solo-looping card leaves the master button offering
+  // Play (a one-click takeover). On the loop layer the button owns the solo
+  // loop of the loop being edited. Hard stop stays live off the REAL player
+  // states, so sounding audio always has a visible global kill.
   const displayState = transportDisplayState(playbackScope, aggregate, layer, activeLoopId);
   const hardStopDisabled = !isHardStopEnabled(sequencerPlayer, chordsPlayer, leadPlayer);
   // The meter loop only needs to know whether anything is sounding, off the

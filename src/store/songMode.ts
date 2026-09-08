@@ -100,14 +100,14 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
 
     const playing =
       aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
-    if (layer === 'song' && playing && s.playbackScope.kind !== 'solo') {
+    if (layer === 'song' && playing && s.playbackScope.kind !== 'loop') {
       if (s.songLoopIndex === null) {
         useAppStore.setState({ songLoopIndex: enterSongIndex(s.loops, s.activeLoopId) });
       }
       if (!unsubClock) {
         unsubClock = subscribeClock((step, _beat, time) => {
           const cur = useAppStore.getState();
-          if (cur.songLoopIndex === null || cur.playbackScope.kind === 'solo') return;
+          if (cur.songLoopIndex === null || cur.playbackScope.kind === 'loop') return;
           if (aggregatePlayerState(cur.sequencerPlayer, cur.chordsPlayer, cur.leadPlayer) !== 'playing')
             return;
           const target = songAdvanceTarget(
@@ -131,11 +131,11 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
           queueMicrotask(() => loadLoop(target, { atBoundary: time }));
         });
       }
-    } else if (layer !== 'song' || s.playbackScope.kind === 'solo') {
+    } else if (layer !== 'song' || s.playbackScope.kind === 'loop') {
       // soloLoop nulls songLoopIndex in the same set() that flips the scope,
       // so by the time this runs it is often already null — guard the write,
       // not the unsubscribe: the clock must still be torn down here rather
-      // than left for the callback's own kind==='solo' early-return to no-op
+      // than left for the callback's own kind==='loop' early-return to no-op
       // tick after tick.
       if (s.songLoopIndex !== null) s.setSongLoopIndex(null);
       stopClock();

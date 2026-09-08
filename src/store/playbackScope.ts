@@ -3,10 +3,12 @@
  *
  *   none — unscoped. Nothing owns the transport; song advance is still allowed
  *          (a per-module play in the song layer runs the arrangement), but no
- *          card is soloing and no card button is disabled.
+ *          card is auditioning and no card button is disabled.
  *   song — Play All owns the transport. Every loop-card button is disabled.
- *   solo — one loop is auditioned in isolation. Song advance is suppressed;
- *          that card shows Stop and every other card button is disabled.
+ *   loop — one loop is auditioned alone (a SOLO LOOP). Song advance is
+ *          suppressed; that card shows Stop and every other card button is
+ *          disabled. Unrelated to the per-track solo Phase 4 adds, which
+ *          lives in the ui slice and never touches this union.
  *
  * The three are mutually exclusive by construction, which is the whole point:
  * the old `auditionLoopId: string | null` could sit non-null underneath a
@@ -35,7 +37,7 @@
  *     `wasActive`, calls `store.hardStopAll()` (:107), and restarts with
  *     `store.play('sequencer' | 'chords' | 'lead')` (:194-196). Reachable in
  *     two clicks from the loop layer: press the transport Play (scope
- *     solo{loopId}, players playing), then click any vibe in the
+ *     loop{loopId}, players playing), then click any vibe in the
  *     always-mounted InstantVibesBar.
  *
  * Phase 3 must close both holes before it treats the scope as ground truth.
@@ -48,10 +50,12 @@
 export type PlaybackScope =
   | { kind: 'none' }
   | { kind: 'song' }
-  | { kind: 'solo'; loopId: string };
+  /** One loop auditioned alone — a SOLO LOOP. Phase 4's per-track solo is a
+   *  different feature in a different slice and never appears here. */
+  | { kind: 'loop'; loopId: string };
 
 export type PlaybackScopeAction =
-  /** Master transport Play — starts the song, and TAKES OVER from a solo. */
+  /** Master transport Play — starts the song, and TAKES OVER from a solo loop. */
   | { type: 'play-all' }
   /** Master transport soft or hard stop. */
   | { type: 'stop-all' }
@@ -75,7 +79,7 @@ export const SCOPE_SONG: PlaybackScope = Object.freeze({ kind: 'song' as const }
  * be clicked), but the reducer still answers them — with identity, never a
  * new state — so a stray programmatic call can never produce a scope the UI
  * offers no exit from: while `kind === 'song'` every card button is disabled,
- * so `toggle-loop` is a no-op; while `kind === 'solo'` every other card is
+ * so `toggle-loop` is a no-op; while `kind === 'loop'` every other card is
  * disabled, so `toggle-loop` for a different id is also a no-op. This holds
  * for the WHOLE arrangement, not just up to the first loop boundary: song
  * advance reloads the next loop via loadLoop, which hard-stops and restarts
@@ -89,15 +93,15 @@ export function playbackScopeReducer(
 ): PlaybackScope {
   switch (action.type) {
     case 'play-all':
-      // Takeover: from a solo this is one click, not two. Disabling the
+      // Takeover: from a solo loop this is one click, not two. Disabling the
       // transport instead would leave audio sounding with no visible global
-      // stop once the soloing card scrolls out of view.
+      // stop once the auditioning card scrolls out of view.
       return scope.kind === 'song' ? scope : SCOPE_SONG;
     case 'stop-all':
     case 'layer-change':
       return scope.kind === 'none' ? scope : SCOPE_NONE;
     case 'toggle-loop':
-      if (scope.kind === 'solo') {
+      if (scope.kind === 'loop') {
         // Same card again = stop. A different card is unreachable (disabled).
         return scope.loopId === action.loopId ? SCOPE_NONE : scope;
       }
@@ -106,24 +110,28 @@ export function playbackScopeReducer(
       // restarts song advance drives through loadLoop (see the reducer's
       // own doc comment above).
       if (scope.kind === 'song') return scope;
-      return { kind: 'solo', loopId: action.loopId };
+      return { kind: 'loop', loopId: action.loopId };
   }
 }
 
-/** The soloing loop's id, or null. The one accessor views should need. */
-export function soloLoopId(scope: PlaybackScope): string | null {
-  return scope.kind === 'solo' ? scope.loopId : null;
+/**
+ * The id of the loop the scope names, or null. The one accessor views should
+ * need. Named for the SCOPE, not for "solo", because Phase 4 introduces a
+ * per-track solo that has nothing to do with this value.
+ */
+export function scopedLoopId(scope: PlaybackScope): string | null {
+  return scope.kind === 'loop' ? scope.loopId : null;
 }
 
 /**
  * Whether a loop card's own play/stop button is disabled, derived from the
  * scope alone. Pure so it can be tested without a DOM. The button's Play/Stop
- * FACE is derived separately in ArrangeView from isPlaying + soloLoopId(),
- * which also accounts for a soloing player mid-release ('stopping') — a
+ * FACE is derived separately in ArrangeView from isPlaying + scopedLoopId(),
+ * which also accounts for an auditioning player mid-release ('stopping') — a
  * distinction this function's scope-only view cannot make.
  */
 export function loopPlayButton(scope: PlaybackScope, loopId: string): { disabled: boolean } {
   if (scope.kind === 'song') return { disabled: true };
-  if (scope.kind === 'solo') return { disabled: scope.loopId !== loopId };
+  if (scope.kind === 'loop') return { disabled: scope.loopId !== loopId };
   return { disabled: false };
 }

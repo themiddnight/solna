@@ -237,7 +237,7 @@ describe('SortableLoopCard', () => {
     expect(html).toContain('Am7');
   });
 
-  test('renders solo audition state with Stop button when isAuditioning is true', () => {
+  test('renders the audition state with Stop button when isAuditioning is true', () => {
     const html = renderToString(
       <SortableLoopCard
         loop={defaultLoop}
@@ -264,7 +264,7 @@ describe('SortableLoopCard', () => {
 
     expect(html).toContain('id="btn-loop-play-loop-default-1"');
     expect(html).toContain('Stop');
-    expect(html).toContain('Solo 5/16');
+    expect(html).toContain('Audition 5/16');
     expect(html).toContain('border-accent');
   });
 
@@ -317,14 +317,14 @@ describe('SortableLoopCard', () => {
     expect(button).not.toContain('disabled=""');
   });
 
-  test('the soloing card shows Stop and the SOLO badge, and is not disabled', () => {
+  test('the auditioning card shows Stop and the AUDITION badge, and is not disabled', () => {
     const html = renderToString(<SortableLoopCard {...baseProps} isPlaying isAuditioning />);
     expect(html).toContain('badge badge-sm badge-accent');
-    expect(html).toContain('Solo ');
+    expect(html).toContain('Audition ');
     expect(html).toContain('btn btn-xs gap-1 font-bold shadow-xs transition-all btn-error');
   });
 
-  test('a non-soloing card shows no SOLO badge', () => {
+  test('a card that is not auditioning shows no AUDITION badge', () => {
     const html = renderToString(<SortableLoopCard {...baseProps} isPlaying />);
     expect(html).not.toContain('badge-accent');
   });
