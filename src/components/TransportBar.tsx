@@ -11,6 +11,7 @@ import { aggregatePlayerState, isHardStopEnabled, transportDisplayState } from "
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 import type { Loop } from '../store/types';
 import { layerForTab } from '@/types';
+import { masterPlayTarget } from './transportAction';
 
 /** The song-mode badge: present only while a song position exists. */
 export function songModeLabel(
@@ -28,6 +29,7 @@ export const TransportBar = React.memo(function TransportBar() {
   const chordsPlayer = useAppStore((s) => s.chordsPlayer);
   const leadPlayer = useAppStore((s) => s.leadPlayer);
   const playAll = useAppStore((s) => s.playAll);
+  const soloLoop = useAppStore((s) => s.soloLoop);
   const softStopAll = useAppStore((s) => s.softStopAll);
   const hardStopAll = useAppStore((s) => s.hardStopAll);
   const bpm = useAppStore((s) => s.bpm);
@@ -57,6 +59,13 @@ export const TransportBar = React.memo(function TransportBar() {
   // true aggregate — not the takeover-driven display state.
   const isPlaying = aggregate !== 'stopped';
   const songLabel = songModeLabel(songLoopIndex, loops);
+  const onPlay = () => {
+    if (masterPlayTarget(layer) === 'song') {
+      playAll();
+      return;
+    }
+    soloLoop(activeLoopId);
+  };
 
   const handleToggleMetronome = () => {
     // Engine mirror happens via useEngineSync (one render later)
@@ -78,7 +87,7 @@ export const TransportBar = React.memo(function TransportBar() {
           size="sm"
           showHardStop
           hardStopDisabled={hardStopDisabled}
-          onPlay={playAll}
+          onPlay={onPlay}
           onSoftStop={softStopAll}
           onHardStop={hardStopAll}
           showLabel
