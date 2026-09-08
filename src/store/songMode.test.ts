@@ -278,22 +278,138 @@ describe('song mode coordinator', () => {
     stop();
   });
 
-  test('boundary loop→song while playing hard-stops the players and re-enters from the active loop', () => {
+  // §6's table, one test per row, asserted on PLAYER STATE — the spec's test
+  // obligations require that rather than assertions on the scope alone.
+  test('row 1 — loop layer playing loop L, cross to the song layer: continues', () => {
     useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
     useAppStore.setState({ activeTab: 'sound', songLoopIndex: null });
     const clock = makeFakeClock();
     const stop = startSongModeSync({ subscribeClock: clock.subscribe });
-    useAppStore.getState().playAll();
+    // The Loop layer's master Play is soloLoop(activeLoopId) — see Phase 1.
+    useAppStore.getState().soloLoop('loop-default-1');
     expect(useAppStore.getState().sequencerPlayer).toBe('playing');
 
-    // Cross the loop/song boundary: nothing keeps looping across the layer edge.
     useAppStore.getState().setActiveTab('arrange');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.chordsPlayer).toBe('playing');
+    expect(s.leadPlayer).toBe('playing');
+    // Carried as the solo loop of L: no song cursor, no advance subscription.
+    expect(scopedLoopId(s.playbackScope)).toBe('loop-default-1');
+    expect(s.songLoopIndex).toBe(null);
+    expect(clock.count).toBe(0);
+    stop();
+  });
+
+  test('row 2 — song layer solo-looping L, open L to edit: continues', () => {
+    useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    useAppStore.getState().soloLoop('loop-default-1');
+    // Opening the loop that is already auditioning: the card select reloads
+    // the same id, which restartAfterStop keeps playing (Task 2).
+    loadLoop('loop-default-1');
+
+    useAppStore.getState().setActiveTab('sound');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(scopedLoopId(s.playbackScope)).toBe('loop-default-1');
+    stop();
+  });
+
+  test('row 3 — song layer solo-looping L, open a DIFFERENT loop to edit: stops', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+    });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    // The clickable path: pick loop B on Arrange, then walk into the editor.
+    // The audition stops at the pick (Task 2's song-layer rule) and the
+    // crossing then has nothing left to stop.
+    loadLoop('loop-b');
+    expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
+
+    useAppStore.getState().setActiveTab('sound');
+
     const s = useAppStore.getState();
     expect(s.sequencerPlayer).toBe('stopped');
     expect(s.chordsPlayer).toBe('stopped');
     expect(s.leadPlayer).toBe('stopped');
-    // The song cursor is re-established from the active loop, never carried over.
-    expect(s.songLoopIndex).toBe(0);
+    expect(s.playbackScope).toEqual({ kind: 'none' });
+    expect(s.activeLoopId).toBe('loop-b');
+    stop();
+  });
+
+  test('row 4 — song layer playing the song, open any loop to edit: stops', () => {
+    useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    useAppStore.getState().playAll();
+    expect(clock.count).toBe(1);
+
+    useAppStore.getState().setActiveTab('sound');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('stopped');
+    expect(s.songLoopIndex).toBe(null);
+    expect(s.playbackScope).toEqual({ kind: 'none' });
+    expect(clock.count).toBe(0);
+    stop();
+  });
+
+  // The safety net, and the only place focus-loop's mismatch row is exercised
+  // directly. Every UI path that moves activeLoopId now carries the scope with
+  // it (loadLoop, addLoop, duplicateLoop, deleteLoop), so this state is
+  // constructed rather than clicked: it pins what happens if a future writer
+  // forgets.
+  test('a scope that disagrees with the cursor is stopped on arrival at the loop layer', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+    });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    useAppStore.setState({ activeLoopId: 'loop-b' });
+    useAppStore.getState().setActiveTab('sound');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('stopped');
+    expect(s.playbackScope).toEqual({ kind: 'none' });
+    stop();
+  });
+
+  test('switching the edited loop ON THE LOOP LAYER keeps playing, under the new loop', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+    });
+    useAppStore.setState({ activeTab: 'sound', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    // The header's loop selector on the loop layer: loadLoop re-points the
+    // scope (Task 2), so reconcile's focus-loop dispatch is a no-op and
+    // nothing stops.
+    loadLoop('loop-b');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(scopedLoopId(s.playbackScope)).toBe('loop-b');
     stop();
   });
 

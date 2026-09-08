@@ -5,6 +5,7 @@ import type { Layer } from '../types';
 import { getMeter } from '../utils/meter';
 import { loadLoop } from './loadLoop';
 import { loopBars } from './loop';
+import { playbackScopeReducer } from './playbackScope';
 import { useAppStore } from './store';
 import { aggregatePlayerState } from './transportSlice';
 import type { Loop } from './types';
@@ -64,17 +65,25 @@ export interface SongModeDeps {
 /**
  * Store-level song-mode coordinator (not a component — mirrors engineSync's
  * shape). Play mode is keyed on the LAYER, not the tab: the song layer is
- * {arrange, effects} (see `isSongLayer` in ../types), everything else is loop
- * mode. Crossing the loop/song boundary is a HARD STOP — all players are
- * silenced and the song cursor is dropped; the layer never "detaches but keeps
- * looping" the way SP3's Arrange-only rule did. Entering the song layer never
- * auto-starts a song: song mode is entered only when a player is already
- * `playing`, and the cursor is established from the active loop's index
- * (`enterSongIndex`) rather than restarting from the top.
+ * {arrange, master} (see `isSongLayer` in ../types), everything else is loop
+ * mode.
+ *
+ * Crossing the boundary is NO LONGER an unconditional hard stop. Playback
+ * survives a navigation if and only if what sounds afterwards is exactly the
+ * loop now in focus — so entering the SONG layer never stops anything (a
+ * solo loop is simply carried in and rendered as that card's Stop), and
+ * arriving at the LOOP layer stops only when the focus-loop transition lands
+ * on SCOPE_NONE with players playing. See the comment inside reconcile for
+ * what that reverses and why the old stop must not be restored.
+ *
+ * Entering the song layer never auto-starts a song: song mode is entered only
+ * when a player is already `playing`, and the cursor is established from the
+ * active loop's index (`enterSongIndex`) rather than restarting from the top.
  */
 export function startSongModeSync(deps: SongModeDeps = {}): () => void {
   const subscribeClock = deps.subscribeClock ?? subscribePlaybackClock;
   let prevLayer: Layer | null = null;
+  let prevLoopId: string | null = null;
   let unsubClock: (() => void) | null = null;
 
   const stopClock = () => {
@@ -87,16 +96,58 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
   const reconcile = () => {
     const s = useAppStore.getState();
     const layer = layerForTab(s.activeTab);
-    if (prevLayer !== null && prevLayer !== layer) {
-      s.hardStopAll();
-      s.setSongLoopIndex(null);
-      // hardStopAll dispatches 'stop-all', which resets the scope to 'none' —
-      // the reducer's layer-change rows are the same transition, so crossing a
-      // layer boundary can never preserve a solo.
-      stopClock();
-      unsubClock = null;
-    }
+    // The Loop layer's focus changed: either we just arrived on it, or the
+    // active loop moved while we were already there. Entering the SONG layer
+    // is deliberately not a focus change — see the invariant below.
+    const focusChanged =
+      layer === 'loop' && (prevLayer !== layer || prevLoopId !== s.activeLoopId);
+
+    // Update both cursors BEFORE any side effect. hardStopAll below notifies
+    // subscribers synchronously and re-enters this function; a re-entrant
+    // pass that still saw the old cursors would run the same transition a
+    // second time.
     prevLayer = layer;
+    prevLoopId = s.activeLoopId;
+
+    if (focusChanged) {
+      // INVARIANT: playback survives a navigation if and only if what sounds
+      // afterwards is exactly the loop now in focus. The scope answers that
+      // on its own, so the DECISION is the reducer's (focus-loop) and the
+      // code here is only its execution.
+      //
+      // This REVERSES the rule that used to live here — "crossing a layer
+      // boundary can never preserve a solo". That was never a UX decision:
+      // per docs/superpowers/plans/2026-09-01-playback-scope-redesign.md the
+      // layer-change clear was one of only two ways a stuck auditionLoopId
+      // could ever be cleared, a cleanup mechanism from before this union
+      // existed. The reducer now makes a stuck scope unreachable by
+      // construction and every writer of activeLoopId carries the scope with
+      // it (loadLoop, addLoop, duplicateLoop, deleteLoop), so the old
+      // unconditional stop was redundant safety, not the safety itself.
+      // Do not restore it as a fix: it deletes the Loop->Song carry-over
+      // this whole phase exists to build.
+      const next = playbackScopeReducer(s.playbackScope, {
+        type: 'focus-loop',
+        loopId: s.activeLoopId,
+      });
+      if (next !== s.playbackScope) {
+        // SCOPE_NONE is the only non-identity result: what was sounding is
+        // not the loop now in focus.
+        const wasPlaying =
+          aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
+        if (wasPlaying) {
+          // hardStopAll stops the players AND dispatches 'stop-all' — the
+          // same SCOPE_NONE — in one set(), so the two are never observed
+          // disagreeing.
+          s.hardStopAll();
+        } else {
+          useAppStore.setState({ playbackScope: next });
+        }
+        // songLoopIndex and the advance subscription are NOT dropped here:
+        // the `layer !== 'song'` branch at the bottom of this function
+        // already does both, and this path always has layer === 'loop'.
+      }
+    }
 
     const playing =
       aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
@@ -146,6 +197,9 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
   const unsubStore = useAppStore.subscribe(
     (state) => ({
       tab: state.activeTab,
+      // Watched because a cursor move on the Loop layer is a focus change:
+      // reconcile must dispatch focus-loop for it, not only for a tab change.
+      loop: state.activeLoopId,
       seq: state.sequencerPlayer,
       chords: state.chordsPlayer,
       lead: state.leadPlayer,
@@ -155,6 +209,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
     {
       equalityFn: (a, b) =>
         a.tab === b.tab &&
+        a.loop === b.loop &&
         a.seq === b.seq &&
         a.chords === b.chords &&
         a.lead === b.lead &&
