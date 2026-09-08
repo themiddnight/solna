@@ -175,6 +175,30 @@ export function restartAfterStop(
 }
 
 /**
+ * Move the scope with the EDIT CURSOR for a cursor move that changes no
+ * sound. addLoop and duplicateLoop are the two: each makes the new loop a
+ * copy of the loop that was already active, so the flat slices — and
+ * therefore what is audible — are unchanged, which is exactly why neither
+ * calls loadLoop. Leaving the scope on the old id would point it at a loop
+ * that is no longer in focus, and the master Play would then render enabled
+ * and do nothing (soloLoop early-returns on an unchanged scope reference).
+ *
+ * Distinct from restartAfterStop above, which answers a different question.
+ * That one runs after an internal hard stop and has to decide whether
+ * anything comes back at all — including the song-layer case where picking a
+ * DIFFERENT loop stops the audition. Nothing stops here, because nothing
+ * about the sound changed: a copy of what is already playing is still what
+ * is already playing. `none` stays `none` (claiming a scope with nothing
+ * playing breaks "none means stopped" as surely as playing under `none`
+ * does), and `song` stays `song` (an arrangement is not one loop, and adding
+ * a loop to it must not convert it into one).
+ */
+export function rescopeToLoop(scope: PlaybackScope, loopId: string): PlaybackScope {
+  if (scope.kind !== 'loop' || scope.loopId === loopId) return scope;
+  return { kind: 'loop', loopId };
+}
+
+/**
  * Whether a loop card's own play/stop button is disabled, derived from the
  * scope alone. Pure so it can be tested without a DOM. The button's Play/Stop
  * FACE is derived separately in ArrangeView from isPlaying + scopedLoopId(),

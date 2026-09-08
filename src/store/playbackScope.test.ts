@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import {
   loopPlayButton,
   playbackScopeReducer,
+  rescopeToLoop,
   restartAfterStop,
   SCOPE_NONE,
   SCOPE_SONG,
@@ -243,5 +244,23 @@ describe('loopPlayButton', () => {
   test('loop: the auditioning card is enabled, the others are disabled', () => {
     expect(loopPlayButton(LOOP_A, 'A')).toEqual({ disabled: false });
     expect(loopPlayButton(LOOP_A, 'B')).toEqual({ disabled: true });
+  });
+});
+
+describe('rescopeToLoop — the scope follows a cursor move that changes no sound', () => {
+  test('a loop scope re-points at the new cursor', () => {
+    expect(rescopeToLoop(LOOP_A, 'B')).toEqual({ kind: 'loop', loopId: 'B' });
+  });
+
+  test('the same id returns the identical object (songMode compares by ===)', () => {
+    expect(rescopeToLoop(LOOP_A, 'A')).toBe(LOOP_A);
+  });
+
+  test('a song scope is untouched: the arrangement is not one loop', () => {
+    expect(rescopeToLoop(SCOPE_SONG, 'B')).toBe(SCOPE_SONG);
+  });
+
+  test('a stopped transport stays stopped — this never claims a scope', () => {
+    expect(rescopeToLoop(SCOPE_NONE, 'B')).toBe(SCOPE_NONE);
   });
 });

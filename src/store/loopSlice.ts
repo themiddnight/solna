@@ -11,6 +11,7 @@ import {
 } from './initialState';
 import { cloneLoop, fallbackActiveLoopId, newLoopId, nextLoopName } from './loop';
 import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
+import { rescopeToLoop } from './playbackScope';
 import type { AppStore, Loop, LoopSlice } from './types';
 import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
 import { DEFAULT_LEAD_STEP_RESOLUTION, LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
@@ -77,7 +78,7 @@ export function createLoopSlice(set: Set, get: Get): LoopSlice {
 
     // A new loop is a copy of the active loop (default), appended. Content
     // is identical to what the flat slices already hold, so no loadLoop call
-    // is needed — only the cursor moves.
+    // is needed — the cursor and the scope move, nothing else.
     addLoop: () => {
       const state = get();
       const source =
@@ -87,7 +88,17 @@ export function createLoopSlice(set: Set, get: Get): LoopSlice {
         id: newLoopId(),
         name: nextLoopName(state.loops),
       };
-      set({ loops: [...state.loops, loop], activeLoopId: loop.id });
+      // The scope moves with the cursor: the new loop is a copy of the active
+      // one, so the audio is unchanged and must keep playing — but under an id
+      // that names the loop now in focus. Left behind, the scope would point
+      // at the old loop and the master Play would render enabled and do
+      // nothing (soloLoop early-returns on an unchanged scope reference).
+      // rescopeToLoop leaves `song` and `none` alone.
+      set({
+        loops: [...state.loops, loop],
+        activeLoopId: loop.id,
+        playbackScope: rescopeToLoop(state.playbackScope, loop.id),
+      });
       return loop.id;
     },
 
@@ -109,7 +120,17 @@ export function createLoopSlice(set: Set, get: Get): LoopSlice {
         clone,
         ...state.loops.slice(index + 1),
       ];
-      set(cloneActive ? { loops, activeLoopId: clone.id } : { loops });
+      // Same rule as addLoop: only the auto-activated branch moves the cursor,
+      // so only it moves the scope.
+      set(
+        cloneActive
+          ? {
+              loops,
+              activeLoopId: clone.id,
+              playbackScope: rescopeToLoop(state.playbackScope, clone.id),
+            }
+          : { loops },
+      );
       return cloneActive ? null : clone.id;
     },
 
