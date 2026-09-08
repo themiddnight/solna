@@ -109,6 +109,7 @@ export function PatternSegmentRow() {
             id={`segment-${id}`}
             type="button"
             aria-current={isActive ? 'page' : undefined}
+            aria-label={label}
             onClick={() => setPatternSegment(id)}
             className={`btn btn-sm join-item min-w-0 px-2 sm:px-3 gap-1 sm:gap-1.5 text-xs font-bold ${
               isActive ? 'btn-active btn-primary' : 'btn-ghost'
