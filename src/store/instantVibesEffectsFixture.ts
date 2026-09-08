@@ -11,6 +11,12 @@
  * it is meant to be checked against. It is a snapshot, not a re-derivation,
  * and that independence is the whole proof.
  *
+ * One caveat on "what actually plays": since DEV-385 the master dynamics stage
+ * defaults OFF and is bypassed by rewiring, so `compressorThreshold` here pins a
+ * value held ready for a stage the user has to engage, not audible compression.
+ * The pin is still worth having — it is what the vibe asks for once the stage is
+ * on — it just no longer describes the default sound.
+ *
  * Keyed by vibe id, not by library chain id: the point of comparison is
  * "what this vibe sounded like before", so the library's own naming must not
  * leak in here.

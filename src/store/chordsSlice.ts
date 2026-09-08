@@ -1,5 +1,6 @@
 import type { StoreApi } from 'zustand';
 import { INITIAL_CHORDS } from './initialState';
+import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
 import { deriveChordNotes } from '../utils/musicTheory';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import type { AppStore, ChordsSlice } from './types';
@@ -22,7 +23,7 @@ export function createChordsSlice(set: Set): ChordsSlice {
     chordFeel: 0.5,
     chordOctave: 4,
     chordMuted: false,
-    chordVolume: 1.0,
+    chordVolume: DEFAULT_BUS_TRIM_DB,
 
     setChords: (chords) => set({ chords }),
     setChordRhythmId: (chordRhythmId) => set({ chordRhythmId }),

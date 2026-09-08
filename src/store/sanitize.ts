@@ -10,7 +10,10 @@ import type {
   PadVoicing,
 } from '../types';
 import { PAD_INTERVALS, PAD_MODES, PAD_VOICINGS } from '../types';
-import type { BassStepChoice } from '@/data/bassPatterns';
+import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
+import { DRUM_KITS, DRUM_TYPES } from '@/data/drumKits';
+import { CHORD_RHYTHMS } from '@/data/chordRhythms';
+import { SCALES } from '@/data/scales';
 import { createDefaultLoop } from './loopSlice';
 import { LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
 import type { Loop } from './types';
@@ -19,6 +22,8 @@ import {
   isLeadStepResolutionId,
   type LeadStepResolutionId,
 } from '../utils/stepResolution';
+import { ROOTS } from '../utils/musicTheory';
+import { asFaderDb } from './levelUnits';
 
 // Type-guards for a parsed persisted payload AND for a parsed `.solna` file.
 // Wrong-typed values survive JSON.parse and would flow straight into engine
@@ -99,8 +104,42 @@ export function sanitizeEffectsValue(effects: unknown): unknown {
   }
 
   if (result && typeof result === 'object') {
+    // The two dynamics toggles are the only BOOLEAN fields with a meaningful
+    // default, so they follow the same rule every other key here does —
+    // missing or the wrong type gets the default, a real boolean passes
+    // through. Persisted JSON is untrusted input, so a truthy STRING must
+    // never insert a node into the master chain; it falls back to the
+    // default like any other malformed value rather than being coerced.
+    //
+    // `=== true` alone was the bug: it reads a missing key as `false`, which
+    // matched the default only while BOTH stages defaulted off. DEV-383
+    // defaults `limiterEnabled` to `true`, so a .solna body or persist
+    // payload written before DEV-385 — carrying neither key — would have
+    // loaded limiter-OFF while a brand-new project of the same content
+    // loaded limiter-ON. Reading the default from INITIAL_EFFECTS is what
+    // keeps the two agreeing without a `formatVersion` bump: an old body
+    // still sanitizes to the object a new one would.
+    //
+    // The key list is DERIVED from INITIAL_EFFECTS rather than written out,
+    // matching the numeric loop directly above (which derives its keys from
+    // EFFECT_LIMITS). A hand-written `['compressorEnabled', 'limiterEnabled']`
+    // would reproduce this exact bug the day a third stage's `*Enabled` field
+    // is added to MasterEffects and not to the literal — no type error, no
+    // failing test, just a stage that silently reads as off.
+    const flags = result as Record<string, unknown>;
+    for (const [key, fallback] of Object.entries(INITIAL_EFFECTS)) {
+      if (typeof fallback !== 'boolean') continue;
+      if (typeof flags[key] !== 'boolean') flags[key] = fallback;
+    }
+  }
+
+  if (result && typeof result === 'object') {
+    // Fields removed from MasterEffects must not resurrect from old payloads.
+    // `compressorRatio` has LEFT this list: DEV-385 makes the name real.
+    // `compressorBypass` stays dead — DEV-385 deliberately spells the toggle
+    // `compressorEnabled` instead, so this delete is still correct.
     const fx = result as Record<string, unknown>;
-    for (const key of ['chorusRate', 'chorusDepth', 'chorusWet', 'compressorRatio', 'compressorBypass', 'delayTime', 'distortionDrive']) {
+    for (const key of ['chorusRate', 'chorusDepth', 'chorusWet', 'compressorBypass', 'delayTime', 'distortionDrive']) {
       delete fx[key];
     }
   }
@@ -134,9 +173,56 @@ export function asPatternMode(value: unknown, fallback: 'preset' | 'custom'): 'p
   return isPatternMode(value) ? value : fallback;
 }
 
-export function asFilterType(value: unknown, fallback: FilterType): FilterType {
-  return FILTER_TYPES.has(value as string) ? (value as FilterType) : fallback;
-}
+/**
+ * The two shapes every "is this value a member of a known set" check in this
+ * file takes. They were ten hand-written one-liners differing only by which
+ * Set they closed over; a factory each means the semantics — a non-string is
+ * never a member, and a non-member gets the fallback rather than being
+ * deleted — are stated once instead of ten times.
+ *
+ * `memberOr` takes its type parameter at CONSTRUCTION, not per call: inferring
+ * it from `fallback` would narrow the return type to the literal a caller
+ * happened to pass (`asPadMode(v, 'up')` returning `'up'` rather than
+ * `PadMode`), which reads as a stricter guarantee than the check makes.
+ */
+const memberTest =
+  (set: ReadonlySet<string>) =>
+  (value: unknown): boolean =>
+    typeof value === 'string' && set.has(value);
+
+const memberOr =
+  <T extends string>(isMember: (value: unknown) => boolean) =>
+  (value: unknown, fallback: T): T =>
+    isMember(value) ? (value as T) : fallback;
+
+export const asFilterType = memberOr<FilterType>(memberTest(FILTER_TYPES));
+
+// Five persisted ids/labels that each name a real library entry, not just a
+// string: the deleted migrateDrumVoices step used to carry a rename
+// ('909 Modern' -> 'Club Standard'), so a session written before that rename
+// landed can hold a soundKit the current DRUM_KITS table no longer has, and
+// nothing short of a membership check catches it — a bare `typeof ===
+// 'string'` lets it through to resolve to nothing and silently play the
+// default kit. Same reasoning for a stale scale/root/rhythm/bass-pattern id.
+// Built from the tables themselves (never re-typed), so a table edit updates
+// the allowed set with no second place to touch.
+const ROOT_SET = new Set<string>(ROOTS);
+const SCALE_TYPE_SET = new Set(Object.keys(SCALES));
+const CHORD_RHYTHM_ID_SET = new Set(CHORD_RHYTHMS.map((p) => p.id));
+const BASS_PATTERN_ID_SET = new Set(BASS_PATTERNS.map((p) => p.id));
+const SOUND_KIT_SET = new Set(Object.keys(DRUM_KITS));
+
+export const isRootNote = memberTest(ROOT_SET);
+export const isScaleType = memberTest(SCALE_TYPE_SET);
+export const isChordRhythmId = memberTest(CHORD_RHYTHM_ID_SET);
+export const isBassPatternId = memberTest(BASS_PATTERN_ID_SET);
+const isSoundKit = memberTest(SOUND_KIT_SET);
+
+export const asRootNote = memberOr<string>(isRootNote);
+export const asScaleType = memberOr<string>(isScaleType);
+export const asChordRhythmId = memberOr<string>(isChordRhythmId);
+export const asBassPatternId = memberOr<string>(isBassPatternId);
+export const asSoundKit = memberOr<string>(isSoundKit);
 
 // Built from the const arrays the unions derive from, never re-typed here: a
 // hand-written set has no link to the union, so a value the UI offers and the
@@ -145,15 +231,8 @@ const PAD_MODE_SET = new Set<string>(PAD_MODES);
 const PAD_VOICING_SET = new Set<string>(PAD_VOICINGS);
 const PAD_INTERVAL_SET = new Set<number>(PAD_INTERVALS);
 
-export function asPadMode(value: unknown, fallback: PadMode): PadMode {
-  return typeof value === 'string' && PAD_MODE_SET.has(value) ? (value as PadMode) : fallback;
-}
-
-export function asPadVoicing(value: unknown, fallback: PadVoicing): PadVoicing {
-  return typeof value === 'string' && PAD_VOICING_SET.has(value)
-    ? (value as PadVoicing)
-    : fallback;
-}
+export const asPadMode = memberOr<PadMode>(memberTest(PAD_MODE_SET));
+export const asPadVoicing = memberOr<PadVoicing>(memberTest(PAD_VOICING_SET));
 
 /**
  * The ONE normalisation of a drone selection: filter to union members,
@@ -201,11 +280,12 @@ export function asPositiveInteger(value: unknown, fallback: number): number {
  *
  * The SHAPE, unlike `len`, stays all-or-nothing: `undefined` means "not a
  * melody at all" and the caller falls back to its default. That is what keeps
- * the v1 `string[][]` matrix refused whole — coercing it would hand back rows
- * of empty arrays wearing a valid face, i.e. exactly the silently blanked
- * melody the upgrade-before-sanitize ordering exists to prevent (both chains
- * upgrade first; see projectFormatMigrate.ts and the persist migrate/merge
- * order in store.ts).
+ * the v1 `string[][]` matrix refused whole — a bare string entry fails the
+ * `typeof entry !== 'object'` check above and the whole value returns
+ * `undefined`, rather than being coerced into rows of empty arrays wearing a
+ * valid face. An explicit fallback to the default melody is the honest
+ * result for a shape this function does not recognise; a blanked melody that
+ * LOOKS like a deliberate empty one is not.
  */
 export function asLeadNoteMatrix(value: unknown): LeadNote[][] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -252,8 +332,10 @@ function asCheckedArray<T>(value: unknown, isElement: (v: unknown) => boolean, f
  * A chord is read by deriveChordNotes and played straight out of `notes`, so
  * every field the chord path dereferences must be the right type — a missing
  * `notes` array is a crash in the chord scheduler, not a wrong sound.
+ * Exported so `store.ts` can apply the same element check to the flat
+ * top-level `chords` key (a pre-loop-wrap shape sanitizeLoops never sees).
  */
-function isChordItem(value: unknown): boolean {
+export function isChordItem(value: unknown): boolean {
   if (!isPlainObject(value)) return false;
   return (
     typeof value.id === 'string' &&
@@ -266,14 +348,55 @@ function isChordItem(value: unknown): boolean {
   );
 }
 
+// `instrument` must name a real drum voice, not just be a string: a value
+// outside DRUM_TYPES (an old `tom` row from before the v6 rename, a typo, a
+// hand-edited file) matches no `triggerDrum` case and would otherwise sit in
+// the array as a silently dead row. This is a plain validation rule, not a
+// version check — it rejects a bad instrument name from ANY source, on both
+// the persist and `.solna` read paths that share this function.
+const DRUM_INSTRUMENT_SET = new Set<string>(DRUM_TYPES);
+
 /** The engine reads `instrument` and indexes `steps`; the rest is presentation. */
 function isSequencerTrack(value: unknown): boolean {
   if (!isPlainObject(value)) return false;
   return (
     typeof value.instrument === 'string' &&
+    DRUM_INSTRUMENT_SET.has(value.instrument) &&
     Array.isArray(value.steps) &&
     value.steps.every((s) => typeof s === 'boolean')
   );
+}
+
+/**
+ * `sequencerTracks` is a SET keyed by `instrument`, not a sequence — dropping
+ * one invalid row loses one voice and shifts nothing else, unlike
+ * `chords`/`customChordRhythm` where a per-element drop would rewrite the
+ * music (see `asCheckedArray`'s docblock, which is why THAT function stays
+ * all-or-nothing and this one does not reuse it). So this filters per-row: a
+ * row naming an instrument outside the drum-voice roster (a pre-rename
+ * `tom`, a typo, a hand-edited file) is DROPPED, never defaulted — inventing
+ * a track for a name nobody recognises has no meaning, and a short roster is
+ * already an outcome this app accepts (DEV-388 deleted the version-gated
+ * auto-completion that used to backfill a short roster to the full
+ * eleven-voice kit). An EMPTY roster is not a short one, though: nothing in
+ * the UI can add a track back (`replaceDrumPattern` only maps over tracks
+ * that already exist), so a loop whose every row was stale would otherwise
+ * be permanently drumless with no recovery. `value` not being an array at
+ * all is the same failure (no set to filter) and both fall back to
+ * `fallback` whole. Exported so `store.ts`'s `sanitizeFlatSequencerTracks`
+ * (the flat top-level key, a pre-loop-wrap shape this function never sees)
+ * applies the same rule.
+ */
+export function sanitizeSequencerTracks(
+  value: unknown,
+  fallback: SequencerTrack[],
+): SequencerTrack[] {
+  if (!Array.isArray(value)) return fallback;
+  const filtered = (value as unknown[]).filter(isSequencerTrack).map((track) => {
+    const t = track as SequencerTrack;
+    return { ...t, volume: asFaderDb(t.volume) };
+  });
+  return filtered.length > 0 ? filtered : fallback;
 }
 
 // Exhaustive by construction: a new BassStepChoice member fails to compile
@@ -282,7 +405,8 @@ const BASS_STEP_CHOICES: Record<BassStepChoice, true> = {
   rest: true, root: true, third: true, fifth: true, seventh: true, octave: true,
 };
 
-function isBassStepChoice(value: unknown): boolean {
+// Exported for the same reason as isChordItem: store.ts's flat `customBassPattern` key.
+export function isBassStepChoice(value: unknown): boolean {
   return typeof value === 'string' && Object.hasOwn(BASS_STEP_CHOICES, value);
 }
 
@@ -310,18 +434,18 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
       id: typeof r.id === 'string' && r.id.length > 0 ? r.id : `loop-${loops.length}`,
       name: typeof r.name === 'string' && r.name.length > 0 ? r.name : `Loop ${loops.length + 1}`,
       repeatCount: clampFinite(asPositiveInteger(r.repeatCount, fallback.repeatCount ?? 1), 1, 32, 1),
-      scaleRoot: asString(r.scaleRoot, fallback.scaleRoot),
-      scaleType: asString(r.scaleType, fallback.scaleType),
+      scaleRoot: asRootNote(r.scaleRoot, fallback.scaleRoot),
+      scaleType: asScaleType(r.scaleType, fallback.scaleType),
       synthParams: sanitizeSynthParams(r.synthParams),
       chordSynthParams: sanitizeSynthParams(r.chordSynthParams),
       bassSynthParams: sanitizeSynthParams(r.bassSynthParams),
       chords: asCheckedArray<ChordItem>(r.chords, isChordItem, fallback.chords),
-      chordRhythmId: asString(r.chordRhythmId, fallback.chordRhythmId),
+      chordRhythmId: asChordRhythmId(r.chordRhythmId, fallback.chordRhythmId),
       chordRhythmMode: asPatternMode(r.chordRhythmMode, fallback.chordRhythmMode),
       customChordRhythm: asCheckedArray<boolean>(r.customChordRhythm, (v) => typeof v === 'boolean', fallback.customChordRhythm),
       chordFeel: clampFinite(r.chordFeel, 0, 1, fallback.chordFeel),
       chordOctave: clampFinite(r.chordOctave, 0, 8, fallback.chordOctave),
-      bassPatternId: asString(r.bassPatternId, fallback.bassPatternId),
+      bassPatternId: asBassPatternId(r.bassPatternId, fallback.bassPatternId),
       bassPatternMode: asPatternMode(r.bassPatternMode, fallback.bassPatternMode),
       customBassPattern: asCheckedArray<BassStepChoice>(r.customBassPattern, isBassStepChoice, fallback.customBassPattern),
       bassFeel: clampFinite(r.bassFeel, 0, 1, fallback.bassFeel),
@@ -332,7 +456,7 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
       padVoicing: asPadVoicing(r.padVoicing, fallback.padVoicing),
       padDroneDegree: clampFinite(r.padDroneDegree, 0, 127, fallback.padDroneDegree),
       padDroneIntervals: asPadIntervals(r.padDroneIntervals, fallback.padDroneIntervals),
-      padVolume: clampFinite(r.padVolume, 0, 1.5, fallback.padVolume),
+      padVolume: asFaderDb(r.padVolume, fallback.padVolume),
       padMuted: asBoolean(r.padMuted),
       leadMelodySteps: asLeadNoteMatrix(r.leadMelodySteps) ?? fallback.leadMelodySteps,
       leadLoopLength: asPositiveInteger(r.leadLoopLength, fallback.leadLoopLength),
@@ -345,18 +469,24 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
         r.leadMelodyOctave, LEAD_OCTAVE_MIN, LEAD_OCTAVE_MAX, fallback.leadMelodyOctave,
       ),
       leadGate: clampFinite(r.leadGate, 0.05, 1, fallback.leadGate),
-      sequencerTracks: asCheckedArray<SequencerTrack>(r.sequencerTracks, isSequencerTrack, fallback.sequencerTracks),
-      soundKit: asString(r.soundKit, fallback.soundKit),
+      // `sanitizeLoops` is ONE function reached from BOTH untrusted-input
+      // paths — projectFile.ts's `.solna` import and store.ts's
+      // `sanitizePersistedState` on rehydrate — so `sanitizeSequencerTracks`
+      // (per-row filter, then a volume clamp per surviving row so an
+      // unclamped number never reaches faderDbToGain, which fails safe to
+      // SILENCE) is a single shared site, not a second copy.
+      sequencerTracks: sanitizeSequencerTracks(r.sequencerTracks, fallback.sequencerTracks),
+      soundKit: asSoundKit(r.soundKit, fallback.soundKit),
       drumFilterCutoff: clampFinite(r.drumFilterCutoff, 50, 12000, fallback.drumFilterCutoff),
       drumFilterResonance: clampFinite(r.drumFilterResonance, 0.1, 20, fallback.drumFilterResonance),
       drumFilterType: asFilterType(r.drumFilterType, fallback.drumFilterType),
-      synthVolume: clampFinite(r.synthVolume, 0, 1.5, fallback.synthVolume),
+      synthVolume: asFaderDb(r.synthVolume, fallback.synthVolume),
       synthMuted: asBoolean(r.synthMuted),
-      chordVolume: clampFinite(r.chordVolume, 0, 1.5, fallback.chordVolume),
+      chordVolume: asFaderDb(r.chordVolume, fallback.chordVolume),
       chordMuted: asBoolean(r.chordMuted),
-      bassVolume: clampFinite(r.bassVolume, 0, 1.5, fallback.bassVolume),
+      bassVolume: asFaderDb(r.bassVolume, fallback.bassVolume),
       bassMuted: asBoolean(r.bassMuted),
-      masterSequencerVolume: clampFinite(r.masterSequencerVolume, 0, 1, fallback.masterSequencerVolume),
+      masterSequencerVolume: asFaderDb(r.masterSequencerVolume, fallback.masterSequencerVolume),
       drumMuted: asBoolean(r.drumMuted),
     });
   }

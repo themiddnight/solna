@@ -2,14 +2,15 @@ import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 
 import type { StoreApi } from 'zustand';
 import { audioEngine } from '../audio/engine';
 import { createChordsSlice } from './chordsSlice';
+import { createDefaultLoop } from './loopSlice';
 import { presetById } from '../audio/presetRegistry';
 import { DEFAULT_BASS_PRESET_ID } from './initialState';
 import { BASS_PATTERNS } from '@/data/bassPatterns';
 import { deriveChordNotes } from '../utils/musicTheory';
 import type { SynthPresetItem } from '../data/synthPresets';
 import type { CustomChordProgressionItem } from '../types';
+import { faderDbToGain } from './levelUnits';
 import {
-  defaultPadState,
   INITIAL_CHORDS,
   INITIAL_EFFECTS,
   INITIAL_SEQUENCER_TRACKS,
@@ -155,7 +156,7 @@ describe('store defaults', () => {
   test('match the original app initial values', async () => {
     const s = await getState();
     expect(s.bpm).toBe(120);
-    expect(s.masterVolume).toBe(0.85);
+    expect(s.masterVolume).toBe(0); // DEFAULT_FADER_DB (unity 0 dB)
     expect(s.metronomeActive).toBe(false);
     expect(s.sequencerPlayer).toBe('stopped');
     expect(s.chordsPlayer).toBe('stopped');
@@ -163,7 +164,7 @@ describe('store defaults', () => {
     expect(s.scaleType).toBe('Natural Minor');
     expect(s.selectedVibeId).toBe(null);
     expect(s.soundKit).toBe('Retro Drive');
-    expect(s.masterSequencerVolume).toBe(0.8);
+    expect(s.masterSequencerVolume).toBe(-6); // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
     expect(s.drumFilterCutoff).toBe(12000);
     expect(s.drumFilterResonance).toBe(0.7);
     expect(s.drumFilterType).toBe('lowpass');
@@ -171,12 +172,12 @@ describe('store defaults', () => {
     expect(s.chordFeel).toBe(0.5);
     expect(s.chordOctave).toBe(4);
     expect(s.chordMuted).toBe(false);
-    expect(s.chordVolume).toBe(1.0);
+    expect(s.chordVolume).toBe(-6); // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
     expect(s.bassPatternId).toBe(BASS_PATTERNS[0].id);
     expect(s.bassFeel).toBe(0.5);
     expect(s.bassOctave).toBe(2);
     expect(s.bassMuted).toBe(false);
-    expect(s.bassVolume).toBe(1.0);
+    expect(s.bassVolume).toBe(-6); // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
     expect(s.controlTarget).toBe('synth');
     expect(s.activeTab).toBe('synth');
     expect(s.keyboardMode).toBe('scale-locked');
@@ -609,7 +610,10 @@ describe('applyEngineSnapshot', () => {
     const { applyEngineSnapshot } = await import('./engineSync');
     applyEngineSnapshot();
 
-    expect(setMasterVolume).toHaveBeenCalledWith(0.2);
+    // 0.2 is now DECIBELS. The snapshot pushes a linear gain, so the
+    // expectation has to convert — comparing 0.2 against 0.2 here would be
+    // asserting that the unit change did not happen.
+    expect(setMasterVolume).toHaveBeenCalledWith(faderDbToGain(0.2));
     expect(updateEffects).toHaveBeenCalledWith(snapshotEffects);
   });
 });
@@ -622,10 +626,10 @@ describe('persisted payload sanitization', () => {
     // values below are observable.
     useAppStore.setState({
       bpm: 120,
-      masterVolume: 0.85,
-      chordVolume: 1.0,
-      bassVolume: 1.0,
-      masterSequencerVolume: 0.8,
+      masterVolume: 0, // DEFAULT_FADER_DB (unity 0 dB)
+      chordVolume: -6, // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
+      bassVolume: -6, // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
+      masterSequencerVolume: -6, // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
       metronomeActive: false,
       chordMuted: false,
       bassMuted: false,
@@ -663,6 +667,7 @@ describe('persisted payload sanitization', () => {
           masterVolume: 'loud',
           chordVolume: -5,
           bassVolume: 2,
+          padVolume: 99,
           masterSequencerVolume: null,
           drumFilterCutoff: 'dark',
           drumFilterResonance: null,
@@ -688,10 +693,18 @@ describe('persisted payload sanitization', () => {
     await useAppStore.persist.rehydrate();
     const s = useAppStore.getState();
     expect(s.bpm).toBe(120);
-    expect(s.masterVolume).toBe(0.85);
-    expect(s.chordVolume).toBe(0); // clamped into [0, 1.5]
-    expect(s.bassVolume).toBe(1.5); // clamped into [0, 1.5]
-    expect(s.masterSequencerVolume).toBe(0.8);
+    expect(s.masterVolume).toBe(0); // DEFAULT_FADER_DB (unity 0 dB)
+    // DEV-388: both values are already in the -60..+12 dB range, so
+    // asFaderDb passes them through untouched — no version-based
+    // reconstruction, whatever unit they were originally written in.
+    expect(s.chordVolume).toBe(-5);
+    expect(s.bassVolume).toBe(2);
+    // padVolume is OUT of range, so it defaults like any other source bus. It is
+    // asserted by name because it was the one flat fader the hand-written list in
+    // sanitizePersistedState omitted: unvalidated, 99 reached faderDbToGain, which
+    // fails safe to silence, and the pad bus came back muted instead of trimmed.
+    expect(s.padVolume).toBe(-6); // DEFAULT_BUS_TRIM_DB
+    expect(s.masterSequencerVolume).toBe(-6); // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
     expect(s.drumFilterCutoff).toBe(12000);
     expect(s.drumFilterResonance).toBe(0.7);
     expect(s.drumFilterType).toBe('lowpass');
@@ -735,16 +748,78 @@ describe('persisted payload sanitization', () => {
     expect(useAppStore.getState().leadStepResolution).toBe('1/16');
   });
 
+  test('a stale enumerated id/name falls back to the default rather than passing through', async () => {
+    // The deleted migrateDrumVoices step used to rename '909 Modern' to
+    // 'Club Standard'; with the chain gone, a session still holding the old
+    // name must not resolve to nothing and silently play the default kit
+    // with no sign anything happened — sanitize must catch it itself.
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    useAppStore.setState({
+      soundKit: 'Retro Drive',
+      scaleRoot: 'A',
+      scaleType: 'Natural Minor',
+      chordRhythmId: 'sustained',
+      bassPatternId: BASS_PATTERNS[0].id,
+    });
+
+    flushPersistedWrites();
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 19,
+        state: {
+          loops: 'not an array', // forces the flat legacy fields to be read
+          soundKit: '909 Modern',
+          scaleRoot: 'H#',
+          scaleType: 'bogus-scale',
+          chordRhythmId: 'rhythm-ghost',
+          bassPatternId: 'bp-ghost',
+        },
+      }),
+    );
+
+    await useAppStore.persist.rehydrate();
+    const s = useAppStore.getState();
+    expect(s.soundKit).toBe('Retro Drive');
+    expect(s.scaleRoot).toBe('A');
+    expect(s.scaleType).toBe('Natural Minor');
+    expect(s.chordRhythmId).toBe('sustained');
+    expect(s.bassPatternId).toBe(BASS_PATTERNS[0].id);
+  });
+
+  test('an all-stale sequencerTracks roster backfills to the default roster, not []', async () => {
+    // sanitizeSequencerTracks drops any row whose instrument is not a real
+    // drum voice; if EVERY row is stale, dropping per-row would leave []
+    // with no add-track affordance anywhere to recover it.
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    useAppStore.setState({ sequencerTracks: INITIAL_SEQUENCER_TRACKS });
+
+    flushPersistedWrites();
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({
+        version: 19,
+        state: {
+          loops: 'not an array',
+          sequencerTracks: [{ instrument: 'tom', steps: [true, false] }],
+        },
+      }),
+    );
+
+    await useAppStore.persist.rehydrate();
+    expect(useAppStore.getState().sequencerTracks).toEqual(INITIAL_SEQUENCER_TRACKS);
+  });
+
   test('valid persisted values pass through; out-of-range numbers are clamped', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
     const partialEffects = { reverbWet: 0.9 };
 
     useAppStore.setState({
       bpm: 120,
-      masterVolume: 0.85,
-      chordVolume: 1.0,
-      bassVolume: 1.0,
-      masterSequencerVolume: 0.8,
+      masterVolume: 0, // DEFAULT_FADER_DB (unity 0 dB)
+      chordVolume: -6, // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
+      bassVolume: -6, // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
+      masterSequencerVolume: -6, // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
       metronomeActive: false,
       chordMuted: false,
       bassMuted: false,
@@ -778,7 +853,7 @@ describe('persisted payload sanitization', () => {
           metronomeActive: true,
           chordMuted: true,
           bassMuted: true,
-          soundKit: 'Deep Dub',
+          soundKit: 'Trap Beat',
           effects: partialEffects,
           chords: [{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] }],
           sequencerTracks: [],
@@ -787,8 +862,8 @@ describe('persisted payload sanitization', () => {
           scaleRoot: 'D',
           scaleType: 'Major',
           selectedVibeId: 'lofi-chill',
-          chordRhythmId: 'stabs',
-          bassPatternId: 'bass-1',
+          chordRhythmId: 'offbeatStabs',
+          bassPatternId: 'swing-double-approach',
         },
       })
     );
@@ -796,8 +871,12 @@ describe('persisted payload sanitization', () => {
     await useAppStore.persist.rehydrate();
     const s = useAppStore.getState();
     expect(s.bpm).toBe(300); // clamped into [20, 300]
-    expect(s.masterVolume).toBe(1); // clamped into [0, 1]
-    expect(s.chordVolume).toBe(0); // clamped into [0, 1.5]
+    // DEV-388: no more version-based unit reconstruction. Every level value
+    // here is already IN RANGE (-60..+12), so asFaderDb passes it through
+    // untouched, whatever unit it was originally written in — the exact
+    // trade-off store.ts's PERSIST_VERSION docblock documents.
+    expect(s.masterVolume).toBe(2);
+    expect(s.chordVolume).toBe(-1);
     expect(s.bassVolume).toBe(0.5);
     expect(s.masterSequencerVolume).toBe(0.1);
     expect(s.drumFilterCutoff).toBe(12000); // clamped into [50, 12000]
@@ -806,38 +885,38 @@ describe('persisted payload sanitization', () => {
     expect(s.metronomeActive).toBe(true);
     expect(s.chordMuted).toBe(true);
     expect(s.bassMuted).toBe(true);
-    expect(s.soundKit).toBe('Deep Dub');
+    expect(s.soundKit).toBe('Trap Beat');
     // Every numeric MasterEffects field is clamped through the shared
-    // EFFECT_LIMITS table (audio/effectLimits.ts), not just the two former
-    // "live knob" fields — a partial persisted effects object has every
-    // missing field backfilled with its EFFECT_LIMITS fallback (which equals
-    // INITIAL_EFFECTS), so it must never reach the engine as undefined.
-    expect(s.effects).toEqual({ ...INITIAL_EFFECTS, ...partialEffects });
+    // EFFECT_LIMITS table (audio/effectLimits.ts) regardless of version — a
+    // partial persisted effects object has every missing field backfilled
+    // with its EFFECT_LIMITS fallback (which equals INITIAL_EFFECTS), so it
+    // must never reach the engine as undefined. DEV-388 deleted the
+    // version-gated migrateMasterDynamics step that used to force these same
+    // ten values for a different reason (an old pre-fader, always-on
+    // compressor no longer describing anything the user chose); sanitize
+    // alone produces the identical result for a payload with no dynamics
+    // keys at all, so nothing here actually changed.
+    // That includes the two ENABLED flags: sanitizeEffectsValue reads their
+    // default from INITIAL_EFFECTS too, so a payload predating the limiter
+    // toggle loads limiter-ON, the same as a brand-new project would.
+    expect(s.effects).toEqual({
+      ...INITIAL_EFFECTS,
+      ...partialEffects,
+    });
     expect(s.chords).toEqual([{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] }]);
-    // Was `[]`: this is a version-1 payload, so the v12 -> v13 backfill runs
-    // over it and withDrumTracks appends every canonical track missing from
-    // the empty list. Sanitize still passes the array through untouched — the
-    // change is the migration ahead of it, not the sanitizer.
-    expect(s.sequencerTracks.map((t) => t.instrument)).toEqual([
-      'kick',
-      'snare',
-      'rimshot',
-      'clap',
-      'hihat',
-      'openhat',
-      'hitom',
-      'lowtom',
-      'ride',
-      'crash',
-      'bell',
-    ]);
+    // An empty array is vacuously valid shape-wise (every element of []
+    // passes isSequencerTrack), but an empty roster is not a state any user
+    // action can produce and nothing in the UI can add a track back — so
+    // sanitizeSequencerTracks backfills an empty result to the full
+    // eleven-voice canonical roster rather than letting it survive empty.
+    expect(s.sequencerTracks).toEqual(INITIAL_SEQUENCER_TRACKS);
     expect(s.customSynthPresets).toEqual([]);
     expect(s.customChordProgressions).toEqual([]);
     expect(s.scaleRoot).toBe('D');
     expect(s.scaleType).toBe('Major');
     expect(s.selectedVibeId).toBe('lofi-chill');
-    expect(s.chordRhythmId).toBe('stabs');
-    expect(s.bassPatternId).toBe('bass-1');
+    expect(s.chordRhythmId).toBe('offbeatStabs');
+    expect(s.bassPatternId).toBe('swing-double-approach');
   });
 
   test('corrupt JSON in the legacy preset keys is ignored without crashing', async () => {
@@ -858,13 +937,20 @@ describe('persisted payload sanitization', () => {
   });
 
   test('sanitize clamps reverbDecay and compressorThreshold on rehydrate', async () => {
-    const { useAppStore, flushPersistedWrites } = await getStore();
+    const { useAppStore, flushPersistedWrites, PERSIST_VERSION } = await getStore();
 
     flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
-        version: 2,
+        // Current version: the dynamics-reset migration step's guard is the
+        // literal `version < 16` (never `version < PERSIST_VERSION` — see
+        // that constant's own docblock), and it unconditionally overwrites
+        // compressorThreshold. Stamping this payload at the current version
+        // keeps that reset out of the way, so what's asserted below is
+        // sanitize's own clamp on rehydrate, not a migration's reset — and
+        // this stays true as later tasks bump PERSIST_VERSION further.
+        version: PERSIST_VERSION,
         state: {
           bpm: 120,
           masterVolume: 0.85,
@@ -882,199 +968,165 @@ describe('persisted payload sanitization', () => {
     expect(fx.reverbDecay).toBe(10);
     expect(fx.compressorThreshold).toBe(-60);
   });
+
+  // DEV-386 final review: sanitizeLoops' per-track volume clamp is ONE
+  // function reached from both projectFile.ts (asserted in
+  // projectFile.test.ts) and here, via sanitizePersistedState on rehydrate.
+  // Without this pair, deleting the clamp only reddens the .solna tests.
+  test('an out-of-range sequencer track volume rehydrates at its default, not clamped or silenced', async () => {
+    const { useAppStore, flushPersistedWrites, PERSIST_VERSION } = await getStore();
+
+    const loop = { ...createDefaultLoop(), sequencerTracks: [{ ...INITIAL_SEQUENCER_TRACKS[0], volume: 999 }] };
+    flushPersistedWrites();
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({ version: PERSIST_VERSION, state: { loops: [loop] } })
+    );
+
+    await useAppStore.persist.rehydrate();
+    // DEFAULT_FADER_DB (unity): 999's UNIT is unknown, not just its
+    // magnitude, so it is not clamped to FADER_MAX_DB.
+    expect(useAppStore.getState().loops[0].sequencerTracks[0].volume).toBe(0);
+  });
+
+  test('a non-numeric sequencer track volume rehydrates at unity, not silence', async () => {
+    const { useAppStore, flushPersistedWrites, PERSIST_VERSION } = await getStore();
+
+    const loop = { ...createDefaultLoop(), sequencerTracks: [{ ...INITIAL_SEQUENCER_TRACKS[0], volume: 'loud' }] };
+    flushPersistedWrites();
+    fakeLocalStorage.setItem(
+      'musibox_project_state_v1',
+      JSON.stringify({ version: PERSIST_VERSION, state: { loops: [loop] } })
+    );
+
+    await useAppStore.persist.rehydrate();
+    // asFaderDb's fallback for a non-finite/wrong-typed value is
+    // DEFAULT_FADER_DB (0 dB, unity), never faderDbToGain's silent 0.
+    expect(useAppStore.getState().loops[0].sequencerTracks[0].volume).toBe(0);
+  });
 });
 
-describe('arp migration off stale persisted state', () => {
-  // A v1 payload could pin arpActive:true while the arpeggiator produced no
-  // notes at all, which silenced the keyboard on every later session. The
-  // version bump has to clear that flag so those users get their keys back.
-  test('a version-1 payload with arpActive:true hydrates with the arp disabled', async () => {
+// DEV-388 deleted the chain step this used to pin (migrateDrumTracks
+// appending missing canonical tracks, migrateTrackVolumesToDb resetting
+// their volume to unity): there is no more auto-completion of a short
+// roster, and no more version-based volume reset — see the "drum voices"
+// and "old linear levels" describes below for the new, validation-only
+// behaviour that replaces both halves of what this block tested.
+
+describe('DEV-388: drum kit + drum filter survive a real refresh', () => {
+  // A real refresh is a live edit, a buffered write flushed by pagehide, and a
+  // FRESH module instance re-running create() against the same storage — not
+  // a helper call. This is the persist layer's half of the DEV-388 report
+  // ("kit and filter reset to Retro Drive on every refresh"): it passes,
+  // which rules the persist/rehydrate path OUT as the cause. The actual bug
+  // was in SequencerView's mount-time grid-to-kit effect, deleted along with
+  // `selectedGridId`'s misleading "synthwave" default — see the "DEV-388: the
+  // drum-kit-resets-on-refresh fix" describe in SequencerView.test.tsx for
+  // what is (and, honestly, is not) exercisable there under this repo's
+  // no-DOM constraint. This test is kept because nothing else in the suite
+  // exercises all four reported fields through the real round trip.
+  test('a live-edited kit and filter, flushed, are read back by a fresh module instance', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
+    fakeLocalStorage.clear();
+    await useAppStore.persist.rehydrate();
 
+    useAppStore.getState().setSoundKit('Trap Beat');
+    useAppStore.getState().setDrumFilterCutoff(3000);
+    useAppStore.getState().setDrumFilterResonance(5);
+    useAppStore.getState().setDrumFilterType('highpass');
+    flushPersistedWrites();
+
+    // Simulate an actual page refresh: a fresh module instance re-runs
+    // create() and rehydrates synchronously from the SAME fakeLocalStorage.
+    const fresh = await import(`./store?bust=refresh-${Date.now()}`);
+    const s = fresh.useAppStore.getState();
+    expect(s.soundKit).toBe('Trap Beat');
+    expect(s.drumFilterCutoff).toBe(3000);
+    expect(s.drumFilterResonance).toBe(5);
+    expect(s.drumFilterType).toBe('highpass');
+  });
+});
+
+// DEV-388 deleted the v1 arp fix and migrateTrackColors (v2 -> v3): there is
+// no version-based reset left, so a stale value in range simply survives — a
+// developer who hits an odd arpActive or a stale Tailwind colour class
+// adjusts it by hand, per the DEV-388 decision (no real users to protect).
+describe('validation-only persist boundary (DEV-388)', () => {
+  test('an old arpActive:true value is not force-disabled — it is in range and survives', async () => {
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    useAppStore.persist.clearStorage();
     flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
         version: 1,
-        state: {
-          synthParams: { ...INITIAL_SYNTH_PARAMS, arpActive: true },
-          chordSynthParams: { ...INITIAL_SYNTH_PARAMS, arpActive: true },
-          bassSynthParams: { ...INITIAL_SYNTH_PARAMS, arpActive: true },
-        },
+        state: { synthParams: { ...INITIAL_SYNTH_PARAMS, arpActive: true, filterCutoff: 900 } },
       })
     );
-
     await useAppStore.persist.rehydrate();
-    const s = useAppStore.getState();
-    expect(s.synthParams.arpActive).toBe(false);
-    expect(s.chordSynthParams.arpActive).toBe(false);
-    expect(s.bassSynthParams.arpActive).toBe(false);
+    const s = useAppStore.getState().synthParams;
+    expect(s.arpActive).toBe(true);
+    expect(s.filterCutoff).toBe(900);
   });
 
-  test('a version-1 payload keeps every other synth param it stored', async () => {
+  test('a legacy Tailwind track colour class is not remapped — it is a valid string and survives', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
-
-    flushPersistedWrites();
-    fakeLocalStorage.setItem(
-      'musibox_project_state_v1',
-      JSON.stringify({
-        version: 1,
-        state: {
-          synthParams: {
-            ...INITIAL_SYNTH_PARAMS,
-            arpActive: true,
-            filterCutoff: 900,
-            attack: 0.3,
-            preset: 'Acid Synth',
-          },
-        },
-      })
-    );
-
-    await useAppStore.persist.rehydrate();
-    const s = useAppStore.getState();
-    expect(s.synthParams.filterCutoff).toBe(900);
-    expect(s.synthParams.attack).toBe(0.3);
-    expect(s.synthParams.preset).toBe('Acid Synth');
-  });
-
-  test('a current-version payload keeps arpActive:true so the arp stays usable', async () => {
-    const { useAppStore, flushPersistedWrites } = await getStore();
-    useAppStore.persist.clearStorage();
-
     flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
         version: 2,
         state: {
-          synthParams: { ...INITIAL_SYNTH_PARAMS, arpActive: true },
+          sequencerTracks: [{ ...INITIAL_SEQUENCER_TRACKS[0], color: 'bg-rose-500' }],
         },
       })
     );
-
     await useAppStore.persist.rehydrate();
-    expect(useAppStore.getState().synthParams.arpActive).toBe(true);
+    expect(useAppStore.getState().sequencerTracks[0].color).toBe('bg-rose-500');
   });
-});
 
-describe('sequencer track colour migration wiring (v2 -> v3)', () => {
-  // The map (migrateTrackColors) is unit-tested in migrate.test.ts. These
-  // tests drive the store's actual `migrate` callback end-to-end, so a
-  // future refactor that inverts the `version >= 3` / `version >= 2`
-  // ordering (store.ts) breaks a test here, not just in production.
-  test('a version-2 payload with legacy palette track colours rehydrates with daisyUI tokens', async () => {
+  test('an old LINEAR level value in range is read as that same number of dB, not reset to unity', async () => {
+    // The exact trap CLAUDE.md and PERSIST_VERSION's docblock name: a pre-DEV-386
+    // masterVolume of 0.85 was linear gain; 0.85 is also a legal dB value, so
+    // once there is no version signal left, nothing distinguishes them. This is
+    // the accepted DEV-388 trade-off, not a bug — pin it so a future change
+    // cannot "fix" it back into a silent reinterpretation the other way.
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
-
     flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
-      JSON.stringify({
-        version: 2,
-        state: {
-          sequencerTracks: [
-            { ...INITIAL_SEQUENCER_TRACKS[0], color: 'bg-rose-500' },
-            { ...INITIAL_SEQUENCER_TRACKS[1], color: 'bg-amber-500' },
-            { ...INITIAL_SEQUENCER_TRACKS[2], color: 'bg-emerald-500' },
-            { ...INITIAL_SEQUENCER_TRACKS[3], color: 'bg-cyan-500' },
-            { ...INITIAL_SEQUENCER_TRACKS[4], color: 'bg-purple-500' },
-          ],
-        },
-      })
+      JSON.stringify({ version: 16, state: { masterVolume: 0.85 } })
     );
-
     await useAppStore.persist.rehydrate();
-    const colors = useAppStore.getState().sequencerTracks.map((t) => t.color);
-    expect(colors).toEqual([
-      // The v2 -> v3 remap (migrateTrackColors) keys on the track's OWN
-      // previous colour string through LEGACY_TRACK_COLOR_MAP, not on
-      // position or instrument: bg-rose-500/amber/emerald/cyan/purple become
-      // bg-error/warning/success/accent/secondary respectively, whichever
-      // track carries them. Here that lands kick on bg-error and snare on
-      // bg-warning — each its OWN legacy factory colour by coincidence of
-      // the fixture — so recolourDrumTracks (v13 -> v14) then moves both
-      // onto the drum namespace.
-      'bg-drum-kick',
-      'bg-drum-snare',
-      // rimshot has no entry in LEGACY_DRUM_TRACK_COLORS at all (it didn't
-      // exist pre-Task-8), so recolourDrumTracks takes the `!factory` branch
-      // and leaves its remapped bg-success untouched. clap and hihat DO have
-      // legacy entries (bg-secondary, bg-success) but the v2 -> v3 remap left
-      // them holding a DIFFERENT track's legacy colour (bg-accent,
-      // bg-secondary) — the `t.color !== factory` branch — so
-      // recolourDrumTracks leaves those two alone as well, for a different
-      // reason than rimshot's.
-      'bg-success',
-      'bg-accent',
-      'bg-secondary',
-      // Appended by the v12 -> v13 backfill, already on the drum namespace
-      // because INITIAL_SEQUENCER_TRACKS carries it directly (Task 9).
-      'bg-drum-openhat',
-      'bg-drum-hitom',
-      'bg-drum-lowtom',
-      'bg-drum-ride',
-      'bg-drum-crash',
-      'bg-drum-bell',
-    ]);
-    // steps are the user's actual musical content — must survive untouched.
-    expect(useAppStore.getState().sequencerTracks[0].steps).toEqual(
-      INITIAL_SEQUENCER_TRACKS[0].steps
-    );
+    expect(useAppStore.getState().masterVolume).toBe(0.85);
   });
 
-  test('a version-3 payload passes through untouched (no double-remap, no clobber)', async () => {
+  test('an out-of-range level value still falls back to its default', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
-
     flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
-      JSON.stringify({
-        version: 3,
-        state: {
-          sequencerTracks: [
-            { ...INITIAL_SEQUENCER_TRACKS[0], color: 'bg-error' },
-            // An already-current-version payload should never be rewritten,
-            // even if it holds a colour outside the legacy map's keys.
-            { ...INITIAL_SEQUENCER_TRACKS[1], color: 'bg-custom-brand' },
-          ],
-        },
-      })
+      JSON.stringify({ version: 16, state: { masterVolume: 999 } })
     );
-
     await useAppStore.persist.rehydrate();
-    const colors = useAppStore.getState().sequencerTracks.map((t) => t.color);
-    // Two tracks in, eleven out: withDrumTracks appends every missing
-    // canonical track, each already on the drum namespace. The kick's
-    // bg-error is its legacy factory colour, so recolourDrumTracks (v13 ->
-    // v14, which still runs from v3) moves it too; the user's bg-custom-brand
-    // snare is untouched, which is the thing this test was always about.
-    expect(colors).toEqual([
-      'bg-drum-kick',
-      'bg-custom-brand',
-      'bg-drum-rimshot',
-      'bg-drum-clap',
-      'bg-drum-hihat',
-      'bg-drum-openhat',
-      'bg-drum-hitom',
-      'bg-drum-lowtom',
-      'bg-drum-ride',
-      'bg-drum-crash',
-      'bg-drum-bell',
-    ]);
+    // Out of range: default-on-invalid, not clamped to the +12 ceiling — the
+    // unit of 999 is unknown, not just its magnitude.
+    expect(useAppStore.getState().masterVolume).toBe(0); // DEFAULT_FADER_DB
   });
 });
 
-describe('meter migration wiring (v4 -> v5)', () => {
-  // migrateMeterAndStepWidth is unit-tested directly in migrate.test.ts. These
-  // tests drive the store's actual `migrate` callback end-to-end, through the
-  // real version-chained pipeline in store.ts, the way the v2->v3 tests above
-  // do for track colours — the standalone unit alone never exercised this
-  // wiring end-to-end.
-  test('a pre-v5 payload with no meterId and 16-wide steps hydrates with a defaulted meterId and 24-wide steps', async () => {
+describe('sequencerTracks steps width (DEV-388: no more version-based padding)', () => {
+  // DEV-388 deleted migrateMeterAndStepWidth. isSequencerTrack never checked
+  // `steps.length`, so a pre-v5, 16-wide steps array was already a "valid
+  // shape" and simply passes through at its old width now — nothing pads it
+  // to MAX_STEPS_PER_BAR (24) any more. meterId still defaults, but only
+  // because sanitizePersistedState's `isMeterId` check is a plain validation
+  // rule, unrelated to the deleted chain.
+  test('a pre-v5 payload with no meterId and 16-wide steps keeps its 16-wide steps and gets a defaulted meterId', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
 
@@ -1082,45 +1134,21 @@ describe('meter migration wiring (v4 -> v5)', () => {
       true, false, false, false, true, false, false, false,
       true, false, false, false, true, false, false, false,
     ];
-    const snareSteps = [
-      false, false, false, false, true, false, false, false,
-      false, false, false, false, true, false, false, false,
-    ];
 
     flushPersistedWrites();
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
         version: 4,
-        state: {
-          sequencerTracks: [
-            { ...INITIAL_SEQUENCER_TRACKS[0], steps: kickSteps },
-            { ...INITIAL_SEQUENCER_TRACKS[1], steps: snareSteps },
-          ],
-        },
+        state: { sequencerTracks: [{ ...INITIAL_SEQUENCER_TRACKS[0], steps: kickSteps }] },
       })
     );
 
     await useAppStore.persist.rehydrate();
     const s = useAppStore.getState();
-
-    // meterId did not exist on a pre-v5 payload: defaults to 4/4.
     expect(s.meterId).toBe('4/4');
-
-    // Legacy 16-wide rows widen to the 24-wide storage array, padded with
-    // silence — never truncated, never left at their old width.
-    expect(s.sequencerTracks[0].steps.length).toBe(24);
-    expect(s.sequencerTracks[1].steps.length).toBe(24);
-    expect(s.sequencerTracks[0].steps).toEqual([
-      true, false, false, false, true, false, false, false,
-      true, false, false, false, true, false, false, false,
-      false, false, false, false, false, false, false, false,
-    ]);
-    expect(s.sequencerTracks[1].steps).toEqual([
-      false, false, false, false, true, false, false, false,
-      false, false, false, false, true, false, false, false,
-      false, false, false, false, false, false, false, false,
-    ]);
+    expect(s.sequencerTracks[0].steps).toEqual(kickSteps);
+    expect(s.sequencerTracks[0].steps.length).toBe(16);
   });
 
   test('a current-version payload with an explicit non-4/4 meterId and 24-wide steps passes through untouched', async () => {
@@ -1149,8 +1177,8 @@ describe('meter migration wiring (v4 -> v5)', () => {
   });
 });
 
-describe('loop wrap migration wiring (v5 -> v6)', () => {
-  test('a version-5 payload wraps into a single loop and hydrates the flat slices from it', async () => {
+describe('flat (pre-loop) payload: DEV-388 deleted the wrap, so it hydrates flat, not wrapped', () => {
+  test('a version-5 flat payload has no loops array, but its flat keys still hydrate the top-level slices', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
 
@@ -1172,14 +1200,15 @@ describe('loop wrap migration wiring (v5 -> v6)', () => {
 
     await useAppStore.persist.rehydrate();
     const s = useAppStore.getState();
+    // No chain step wraps this into loops[0] any more: the default single
+    // loop (from createDefaultLoop) wins instead, and never sees 'D'/96.
     expect(s.loops).toHaveLength(1);
-    expect(s.loops[0].name).toBe('Loop 1');
-    expect(s.loops[0].scaleRoot).toBe('D');
-    expect(s.activeLoopId).toBe(s.loops[0].id);
-    // The wrapped loop's content reached the flat editing surface.
+    expect(s.loops[0].scaleRoot).not.toBe('D');
+    // But the flat top-level keys the payload actually carried are still
+    // sanitized and hydrated directly — nothing here depended on the wrap.
     expect(s.scaleRoot).toBe('D');
-    expect(s.loops[0].sequencerTracks[0].steps).toEqual(wide);
     expect(s.bpm).toBe(96);
+    expect(s.sequencerTracks[0].steps).toEqual(wide);
   });
 
   test('a corrupt loops array falls back to a valid single default loop', async () => {
@@ -1285,14 +1314,16 @@ describe('project identity migration wiring (v8 -> v9)', () => {
   });
 
   test('a version-1 payload still terminates in the current persist shape', async () => {
-    const { useAppStore, flushPersistedWrites } = await getStore();
+    const { useAppStore, flushPersistedWrites, PERSIST_VERSION } = await getStore();
     useAppStore.persist.clearStorage();
     flushPersistedWrites();
     fakeLocalStorage.setItem('musibox_project_state_v1', JSON.stringify({ version: 1, state: { bpm: 100 } }));
     await useAppStore.persist.rehydrate();
     expect(useAppStore.getState().currentProjectId).toBeNull();
     flushPersistedWrites();
-    expect(JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}').version).toBe(15);
+    expect(JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}').version).toBe(
+      PERSIST_VERSION
+    );
   });
 
   test('a wrong-typed currentProjectId / projectBaselineHash is coerced to null', async () => {
@@ -1334,44 +1365,12 @@ describe('project identity migration wiring (v8 -> v9)', () => {
  * `loops` wholesale, so a v1 fixture carrying a `loops` array would not be a v1
  * fixture at all.
  */
-describe('lead step resolution migration wiring (v10 -> v11)', () => {
-  test('a version-1 payload with a real melody hydrates widened, not halved', async () => {
-    const { useAppStore, flushPersistedWrites } = await getStore();
-    useAppStore.persist.clearStorage();
-    flushPersistedWrites();
-    fakeLocalStorage.setItem(
-      'musibox_project_state_v1',
-      JSON.stringify({
-        version: 1,
-        state: { bpm: 100, leadLoopLength: 1, leadMelodySteps: [['C4'], [], ['E4']] },
-      })
-    );
-    await useAppStore.persist.rehydrate();
-
-    const s = useAppStore.getState();
-    const stored = s.loops[0].leadMelodySteps as LeadNote[][];
-    // Both lead steps ran, in order: string[][] -> LeadNote[][] at the narrow
-    // stored width, then widened so old slot i sits on tick 2i with a
-    // tick-counted length.
-    expect(stored).toHaveLength(LEAD_TICKS_PER_BAR);
-    expect(stored[0]).toEqual([{ note: 'C4', len: 2 }]);
-    expect(stored[4]).toEqual([{ note: 'E4', len: 2 }]);
-    expect(s.loops[0].leadStepResolution).toBe('1/16');
-    // …and the flat mirror the melody grid actually reads agrees with it.
-    expect(s.leadMelodySteps).toHaveLength(LEAD_TICKS_PER_BAR);
-    expect(s.leadMelodySteps[0]).toEqual([{ note: 'C4', len: 2 }]);
-    expect(s.leadStepResolution).toBe('1/16');
-  });
-
-  test('a version-10 payload is widened exactly once', async () => {
-    // The gate's own boundary, from the near side. v10 is the last version
-    // stored at the narrow width, so it is the payload the widening MUST run
-    // on — and exactly once: the step is deliberately not idempotent (applied
-    // twice it re-doubles the melody, MAX_STEPS_PER_BAR -> LEAD_TICKS_PER_BAR
-    // -> 2 * LEAD_TICKS_PER_BAR), so the `version < 11` gate is the only thing
-    // that makes it single-application. A payload at v11 never reaches
-    // `migrate` at all: zustand skips it when the stored version already
-    // matches, which is why the near side is the side worth pinning.
+describe('lead melody at an old step resolution (DEV-388: no more widening)', () => {
+  test('a version-10, narrow-width melody is a valid shape and passes through UNWIDENED', async () => {
+    // DEV-388 deleted migrateLeadStepResolution. asLeadNoteMatrix accepts an
+    // array of arrays of {note,len} at ANY width, so a pre-DEV-369 narrow
+    // melody is "valid shape, different resolution" — exactly the case the
+    // DEV-388 decision says to let through rather than reconstruct.
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
     flushPersistedWrites();
@@ -1382,9 +1381,7 @@ describe('lead step resolution migration wiring (v10 -> v11)', () => {
       JSON.stringify({
         version: 10,
         state: {
-          loops: [
-            { id: 'loop-1', name: 'Loop 1', leadLoopLength: 1, leadMelodySteps: melody },
-          ],
+          loops: [{ id: 'loop-1', name: 'Loop 1', leadLoopLength: 1, leadMelodySteps: melody }],
           activeLoopId: 'loop-1',
         },
       })
@@ -1392,10 +1389,9 @@ describe('lead step resolution migration wiring (v10 -> v11)', () => {
     await useAppStore.persist.rehydrate();
 
     const s = useAppStore.getState();
-    expect(s.loops[0].leadMelodySteps).toHaveLength(LEAD_TICKS_PER_BAR);
-    expect(s.loops[0].leadMelodySteps[0]).toEqual([{ note: 'C4', len: 2 }]);
-    expect(s.loops[0].leadStepResolution).toBe('1/16');
-    expect(s.leadMelodySteps).toHaveLength(LEAD_TICKS_PER_BAR);
+    expect(s.loops[0].leadMelodySteps).toHaveLength(MAX_STEPS_PER_BAR);
+    expect(s.loops[0].leadMelodySteps[0]).toEqual([{ note: 'C4', len: 1 }]);
+    expect(s.loops[0].leadMelodySteps).not.toHaveLength(LEAD_TICKS_PER_BAR);
   });
 });
 
@@ -1409,7 +1405,11 @@ describe('lead step resolution migration wiring (v10 -> v11)', () => {
  * here would have caught an unwired step.
  */
 describe('pad layer migration wiring (v11 -> v12)', () => {
-  test('a version-11 payload with no pad keys hydrates with the pad muted', async () => {
+  test('a version-11 payload with no pad keys hydrates with the pad AUDIBLE (missing key takes the default)', async () => {
+    // DEV-388 deleted migratePadLayer, which used to force padMuted:true for
+    // a pre-pad-layer loop. asBoolean(undefined) is false, so a missing key
+    // now takes the live default — audible — per the DEV-388 decision: "the
+    // default being audible rather than silent is acceptable now."
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
     flushPersistedWrites();
@@ -1417,22 +1417,14 @@ describe('pad layer migration wiring (v11 -> v12)', () => {
       'musibox_project_state_v1',
       JSON.stringify({
         version: 11,
-        state: {
-          loops: [{ id: 'loop-1', name: 'Loop 1', bassOctave: 2 }],
-          activeLoopId: 'loop-1',
-        },
+        state: { loops: [{ id: 'loop-1', name: 'Loop 1', bassOctave: 2 }], activeLoopId: 'loop-1' },
       })
     );
     await useAppStore.persist.rehydrate();
 
     const s = useAppStore.getState();
-    expect(s.loops[0].padMuted).toBe(true);
-    expect(s.loops[0].padMode).toBe(defaultPadState().padMode);
-    expect(s.loops[0].padVoicing).toBe(defaultPadState().padVoicing);
-    expect(s.loops[0].padDroneIntervals).toEqual(defaultPadState().padDroneIntervals);
-    expect(s.loops[0].padVolume).toBe(defaultPadState().padVolume);
-    // …and the flat mirror the pad slice actually reads agrees with it.
-    expect(s.padMuted).toBe(true);
+    expect(s.loops[0].padMuted).toBe(false);
+    expect(s.padMuted).toBe(false);
   });
 
   // The cheapest end-to-end proof that LOOP_FLAT_KEYS -> loopSync -> loops ->
@@ -1451,16 +1443,16 @@ describe('pad layer migration wiring (v11 -> v12)', () => {
   });
 });
 
-describe('drum voices migration wiring (v13 -> v15)', () => {
-  // The only end-to-end case that actually exercises the v14 STEP, not just
-  // the v13 step ahead of it: seeded at version 1 (or any version < 13), the
-  // v12 -> v13 backfill already appends `lowtom` (INITIAL_SEQUENCER_TRACKS
-  // names it that now), so v14 has nothing left to do and its absence from
-  // the chain is invisible — deleting the wiring line, or weakening its guard
-  // to `version < 13` (which skips exactly the version-13 sessions the step
-  // exists for), both leave every other test green. Seeding at version 13
-  // with a real `tom` row is the only way to prove the wiring runs.
-  test('a version-13 payload renames tom to lowtom and the kit to Club Standard', async () => {
+describe('drum instrument validation (DEV-388: dropped per-row, not renamed or wiped)', () => {
+  // DEV-388 deleted migrateDrumVoices, which used to rename a `tom` row to
+  // `lowtom`. Under validation-only, 'tom' is not a member of DRUM_TYPES, so
+  // isSequencerTrack rejects it. sequencerTracks is a SET keyed by
+  // instrument, not a sequence, so the final review fix wave switched this
+  // to a per-row DROP rather than sanitizeLoops' old all-or-nothing
+  // behaviour: one bad row loses one voice, and the rest of the programmed
+  // kit survives untouched — a real improvement on the deleted chain, which
+  // used to leave a stray 'tom' row silently dead between its steps.
+  test('a loop with one invalid "tom" row drops only that row; the rest of the kit survives', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
     flushPersistedWrites();
@@ -1472,11 +1464,14 @@ describe('drum voices migration wiring (v13 -> v15)', () => {
           loops: [{
             id: 'loop-1',
             name: 'Loop 1',
-            soundKit: '909 Modern',
             sequencerTracks: [
               {
                 id: 'track-tom', name: 'My Tom', instrument: 'tom',
                 steps: [true, false, false, true], volume: 0.6, muted: false, color: 'bg-primary',
+              },
+              {
+                id: 'track-kick', name: 'Kick', instrument: 'kick',
+                steps: [true, false, false, false], volume: -3, muted: false, color: 'bg-drum-kick',
               },
             ],
           }],
@@ -1487,50 +1482,40 @@ describe('drum voices migration wiring (v13 -> v15)', () => {
     await useAppStore.persist.rehydrate();
 
     const s = useAppStore.getState();
-    const lowtom = s.sequencerTracks.find((t) => t.instrument === 'lowtom');
-    expect(lowtom?.steps).toEqual([true, false, false, true]);
     expect(s.sequencerTracks.some((t) => t.instrument === 'tom')).toBe(false);
-    expect(s.soundKit).toBe('Club Standard');
+    // The valid row survives, unrelated to the dropped one, at its own volume.
+    expect(s.sequencerTracks).toHaveLength(1);
+    expect(s.sequencerTracks[0].instrument).toBe('kick');
+    expect(s.sequencerTracks[0].steps).toEqual([true, false, false, false]);
+    expect(s.sequencerTracks[0].volume).toBe(-3);
   });
 
-  // The reason the guard reads `version < 15` and not `< 14`. v14 was stamped on
-  // sessions hydrated part-way through the drum slice, while
-  // INITIAL_SEQUENCER_TRACKS still held seven voices and the colour transform was
-  // not yet wired — so such a session carries the v14 stamp AND a seven-track
-  // roster, and a `< 14` guard would never look at it again. This was found by
-  // the owner playing the app mid-slice and seeing seven tracks that no reload
-  // would fix. Narrowing the guard back to 14 turns this red.
-  test('a version-14 payload stranded at seven tracks is completed to eleven', async () => {
+  test('a short but validly-shaped roster (no lowtom/rimshot/hitom/ride/bell/crash) is kept as-is, not auto-completed', async () => {
+    // DEV-388 deleted migrateDrumTracks/migrateDrumVoices' auto-completion.
+    // Every named instrument here IS in DRUM_TYPES, so the array is valid
+    // shape whole, and there is no more version-based backfill of missing
+    // canonical tracks — the roster simply stays short.
     const { useAppStore, flushPersistedWrites } = await getStore();
     useAppStore.persist.clearStorage();
     flushPersistedWrites();
+    const five = ['kick', 'snare', 'hihat', 'openhat', 'clap'].map((v) => ({
+      id: `track-${v}`, name: v, instrument: v,
+      steps: [false, false, false, false], volume: 0.8, muted: false, color: 'bg-error',
+    }));
     fakeLocalStorage.setItem(
       'musibox_project_state_v1',
       JSON.stringify({
-        version: 14,
-        state: {
-          loops: [{
-            id: 'loop-1',
-            name: 'Loop 1',
-            soundKit: 'Club Standard',
-            sequencerTracks: ['kick', 'snare', 'clap', 'hihat', 'openhat', 'lowtom', 'crash'].map((v) => ({
-              id: `track-${v}`, name: v, instrument: v,
-              steps: [false, false, false, false], volume: 0.8, muted: false, color: 'bg-error',
-            })),
-          }],
-          activeLoopId: 'loop-1',
-        },
+        version: 13,
+        state: { loops: [{ id: 'loop-1', name: 'Loop 1', sequencerTracks: five }], activeLoopId: 'loop-1' },
       })
     );
     await useAppStore.persist.rehydrate();
 
     const s = useAppStore.getState();
-    expect(s.sequencerTracks.length).toBe(11);
-    for (const voice of ['rimshot', 'hitom', 'ride', 'bell']) {
-      const appended = s.sequencerTracks.find((t) => t.instrument === voice);
-      expect(appended, voice).toBeDefined();
-      expect(appended?.steps.every((v) => v === false), voice).toBe(true);
-    }
+    expect(s.sequencerTracks.length).toBe(5);
+    expect(s.sequencerTracks.map((t) => t.instrument)).toEqual([
+      'kick', 'snare', 'hihat', 'openhat', 'clap',
+    ]);
   });
 });
 

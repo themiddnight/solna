@@ -1,5 +1,6 @@
 import type { StoreApi } from 'zustand';
 import { INITIAL_SEQUENCER_TRACKS } from './initialState';
+import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
 import { getMeter } from '../utils/meter';
 import { adaptStepRow, writeStepWindow } from '../utils/patternAdapt';
 import type { AppStore, SequencerSlice } from './types';
@@ -14,7 +15,7 @@ export function createSequencerSlice(set: Set): SequencerSlice {
   return {
     sequencerTracks: INITIAL_SEQUENCER_TRACKS,
     soundKit: 'Retro Drive',
-    masterSequencerVolume: 0.8,
+    masterSequencerVolume: DEFAULT_BUS_TRIM_DB,
     drumMuted: false,
     // Drum bus filter defaults: fully open so it reads as bypass until touched.
     drumFilterCutoff: 12000,
@@ -53,6 +54,12 @@ export function createSequencerSlice(set: Set): SequencerSlice {
     // Setters backing the SequencerView grid and master volume (previously
     // App.tsx setState wrappers / local useState with the same semantics).
     setSequencerTracks: (sequencerTracks) => set({ sequencerTracks }),
+    setTrackVolume: (trackId, volume) =>
+      set((state) => ({
+        sequencerTracks: state.sequencerTracks.map((track) =>
+          track.id === trackId ? { ...track, volume } : track,
+        ),
+      })),
     setSoundKit: (soundKit) => set({ soundKit }),
     setMasterSequencerVolume: (masterSequencerVolume) => set({ masterSequencerVolume }),
     toggleDrumMuted: () => set((state) => ({ drumMuted: !state.drumMuted })),

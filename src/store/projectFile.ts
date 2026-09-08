@@ -5,8 +5,8 @@ import type { MasterEffects } from '../types';
 import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
 import { createDefaultLoop } from './loopSlice';
 import { PROJECT_FORMAT_VERSION, type ProjectBody, type ProjectContent } from './projectFormat';
-import { migrateProjectBody } from './projectFormatMigrate';
 import { clampFinite, sanitizeEffectsValue, sanitizeLoops } from './sanitize';
+import { asFaderDb } from './levelUnits';
 
 export const PROJECT_FILE_MIME = 'application/json';
 export const PROJECT_FILE_EXTENSION = '.solna';
@@ -45,7 +45,7 @@ export function sanitizeContent(raw: unknown): ProjectContent {
   return {
     bpm: clampFinite(c.bpm, 20, 300, 120),
     meterId: isMeterId(c.meterId) ? c.meterId : DEFAULT_METER_ID,
-    masterVolume: clampFinite(c.masterVolume, 0, 1, 0.85),
+    masterVolume: asFaderDb(c.masterVolume),
     effects: sanitizeEffectsValue(c.effects) as MasterEffects,
     loops: sanitizeLoops(c.loops) ?? [createDefaultLoop()],
   };
@@ -71,8 +71,10 @@ export function unknownLibraryReferences(content: ProjectContent): string[] {
 
 /**
  * Whole-file validation. Envelope problems refuse the import outright; a
- * newer formatVersion is refused without a best-effort read; an older one runs
- * the format migration chain; content is sanitised, never refused.
+ * newer formatVersion is refused without a best-effort read; an older
+ * formatVersion is accepted (nothing above sanitizeContent reads it), and
+ * content is sanitised, never refused — see PROJECT_FORMAT_VERSION's own
+ * docblock in projectFormat.ts for what "sanitised" resets and why.
  */
 export function parseProjectFile(text: string): ProjectParseResult {
   let parsed: unknown;
@@ -88,9 +90,7 @@ export function parseProjectFile(text: string): ProjectParseResult {
   if (parsed.formatVersion > PROJECT_FORMAT_VERSION) {
     return { ok: false, error: 'newer-version', message: NEWER_VERSION_MESSAGE };
   }
-  const raw = parsed.formatVersion < PROJECT_FORMAT_VERSION
-    ? migrateProjectBody(parsed, parsed.formatVersion)
-    : parsed;
+  const raw = parsed;
 
   if (typeof raw.id !== 'string' || raw.id.length === 0) return malformed();
   if (typeof raw.name !== 'string') return malformed();
@@ -119,14 +119,14 @@ export function parseProjectFile(text: string): ProjectParseResult {
  * sees an old body FIRST — every project saved before a format bump sits in
  * there at its original version.
  *
- * Same two steps as parseProjectFile, in the same order and for the same
- * reason: migrate, THEN sanitize. Reversing them hands a v1 melody to
- * asLeadNoteMatrix as a matrix of strings; that guard returns `undefined`
- * rather than throwing, so sanitizeLoops substitutes the default and the melody
- * comes back blank with no error (projectFormatMigrate.ts). The envelope is NOT
- * re-validated — a body that got into the library came through parse or
- * through this build's own writer — and the version is restamped only after
- * the content it labels has actually been upgraded.
+ * Same single step as parseProjectFile: sanitizeContent, unconditionally,
+ * regardless of what formatVersion the stored body carries — DEV-388 deleted
+ * the per-version migration chain this docblock used to describe running
+ * first. The envelope is NOT re-validated — a body that got into the library
+ * came through parse or through this build's own writer — and the version is
+ * restamped to PROJECT_FORMAT_VERSION unconditionally on every read, not
+ * only once content has been "upgraded" (there is no upgrade step left to
+ * wait for).
  *
  * A body from a NEWER build is returned verbatim: `get` has no way to report
  * "newer-version", and sanitising it would strip the fields that build added
@@ -137,10 +137,9 @@ export function normalizeStoredBody(body: ProjectBody): ProjectBody {
   const raw = body as unknown as Record<string, unknown>;
   const version = isFiniteNumber(raw.formatVersion) ? raw.formatVersion : 1;
   if (version > PROJECT_FORMAT_VERSION) return body;
-  const migrated = version < PROJECT_FORMAT_VERSION ? migrateProjectBody(raw, version) : raw;
   return {
-    ...(migrated as unknown as ProjectBody),
+    ...(raw as unknown as ProjectBody),
     formatVersion: PROJECT_FORMAT_VERSION,
-    content: sanitizeContent(migrated.content),
+    content: sanitizeContent(raw.content),
   };
 }

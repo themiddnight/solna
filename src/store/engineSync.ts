@@ -2,14 +2,15 @@ import { useEffect } from 'react';
 import { startLeadRecordBridge } from './leadRecord';
 import { shallow } from 'zustand/shallow';
 import { audioEngine } from '../audio/engine';
-import { DRUM_KITS } from '@/data/drumKits';
+import { DRUM_KITS, DRUM_TYPES } from '@/data/drumKits';
 import { useAppStore } from './store';
 import { isPlayerActive } from './transportSlice';
 import { getMeter } from '../utils/meter';
 import { startMidiInputBridge } from './midiInput';
 import { createFrameCoalescer } from '../utils/frameCoalescer';
 import { createTrailingDebounce } from '../utils/trailingDebounce';
-import type { MasterEffects } from '../types';
+import type { MasterEffects, SequencerTrack } from '../types';
+import { DEFAULT_FADER_DB, faderDbToGain } from './levelUnits';
 
 /**
  * One-way bridge from the Zustand store into the audioEngine singleton,
@@ -35,10 +36,16 @@ let stopCurrent: Stop | null = null;
  */
 export const REVERB_DECAY_COMMIT_MS = 180;
 
-// Every MasterEffects field EXCEPT reverbDecay, which has its own debounced
-// subscription below. Comparing on this list keeps a decay drag from also
-// re-running updateEffects' seven setTargetAtTime calls for nothing.
-const EFFECT_KEYS_EXCEPT_DECAY = [
+/**
+ * Every MasterEffects field EXCEPT reverbDecay, which has its own debounced
+ * subscription below. Comparing on this list keeps a decay drag from also
+ * re-running updateEffects' AudioParam writes for nothing.
+ *
+ * Exported so engineSync.test.ts can pin it: a field added to MasterEffects
+ * and forgotten HERE is a knob the engine never hears — the equalityFn calls
+ * the two objects equal and the listener simply does not run, with no error.
+ */
+export const EFFECT_KEYS_EXCEPT_DECAY = [
   'reverbWet',
   'reverbBypass',
   'delayWet',
@@ -50,8 +57,49 @@ const EFFECT_KEYS_EXCEPT_DECAY = [
   'eqMid',
   'eqHigh',
   'eqBypass',
+  'compressorEnabled',
   'compressorThreshold',
+  'compressorRatio',
+  'compressorAttack',
+  'compressorRelease',
+  'limiterEnabled',
+  'limiterThreshold',
+  'limiterRatio',
+  'limiterAttack',
+  'limiterRelease',
 ] as const;
+
+type EffectKeyExceptDecay = (typeof EFFECT_KEYS_EXCEPT_DECAY)[number];
+
+/**
+ * Compile-time exhaustiveness guard: EFFECT_KEYS_EXCEPT_DECAY is a
+ * hand-maintained subset of MasterEffects, and it has already gone stale
+ * once — silently, since a missing key throws nothing and fails no test on
+ * its own. If a field is ever added to MasterEffects (other than
+ * reverbDecay) and not added to the array above, the assignment below stops
+ * typechecking: the target Record requires a property the source, built only
+ * from EffectKeyExceptDecay, does not have. Deliberately typed off
+ * MasterEffects itself rather than derived from INITIAL_EFFECTS at runtime —
+ * the optional `*Bypass` keys have no entry in INITIAL_EFFECTS and so would
+ * be invisible to a runtime-derived check.
+ *
+ * Expressed as a type, not as a value. It used to be a `Record<…, true>` const
+ * built by `Object.fromEntries(EFFECT_KEYS_EXCEPT_DECAY.map(…))` and then
+ * discarded with `void` — an object materialised at module load whose only
+ * purpose was to be the left-hand side of an assignability check the compiler
+ * could have made without it. `Exclude` states the same thing directly: any
+ * MasterEffects key (other than reverbDecay) that the array does not list
+ * survives the subtraction, and `AssertNoMissingEffectKey`'s `extends never`
+ * constraint then rejects it BY NAME in the error text, which the assignment
+ * form never did. Nothing here survives compilation.
+ */
+type AssertNoMissingEffectKey<T extends never> = T;
+// The alias is never referenced on purpose — instantiating it IS the check, and
+// there is nothing at runtime left to reference it from.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type MissingEffectKey = AssertNoMissingEffectKey<
+  Exclude<Exclude<keyof MasterEffects, 'reverbDecay'>, EffectKeyExceptDecay>
+>;
 
 function effectsEqualExceptDecay(a: MasterEffects, b: MasterEffects): boolean {
   for (const key of EFFECT_KEYS_EXCEPT_DECAY) {
@@ -80,23 +128,92 @@ const SOURCE_BUSES = [
   { source: 'sequencer', volume: 'masterSequencerVolume', muted: 'drumMuted' },
 ] as const;
 
+/**
+ * The track gains reach the engine on a selector over `sequencerTracks`, not
+ * one subscription per track: the roster is data, tracks can be added, and a
+ * per-track subscription would have to be torn down and rebuilt whenever it
+ * changed. The equality function compares only (instrument, volume) pairs and
+ * short-circuits on reference identity, so an unrelated `set()` costs one
+ * reference compare — which matters, because subscribeWithSelector runs every
+ * selector on every set().
+ */
+function drumTrackGainsEqual(
+  a: readonly SequencerTrack[],
+  b: readonly SequencerTrack[],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i].instrument !== b[i].instrument || a[i].volume !== b[i].volume) return false;
+  }
+  return true;
+}
+
+function pushDrumTrackGains(tracks: readonly SequencerTrack[]): void {
+  const named = new Set<string>();
+  for (const track of tracks) {
+    // dB in the store, linear in the engine — the same boundary rule the
+    // source buses follow, through the same faderDbToGain, so a track pulled
+    // to the bottom of its fader is silent rather than 60 dB down.
+    audioEngine.setDrumTrackGain(track.instrument, faderDbToGain(track.volume));
+    named.add(track.instrument);
+  }
+  // Every canonical voice the incoming roster does NOT name is reset to
+  // unity. The engine's drumTrackGains map outlives any one roster, so a
+  // voice whose track disappears — a loop switch, or a persisted/imported
+  // roster with a row sanitizeSequencerTracks dropped — would otherwise keep
+  // the vanished track's attenuation forever, and its drum pad would play
+  // 30 dB down with no fader anywhere on screen explaining why.
+  //
+  // Skipped outright when the roster already covers the roster: this runs on
+  // every (instrument, volume) change, so a fader drag walks it once per
+  // detent, and a full roster can leave nothing stale by definition. The
+  // guard is on `named.size`, not `tracks.length` — `named` is a Set, so it
+  // counts DISTINCT instruments, where two rows on one instrument would clear
+  // a length check while a voice went unnamed. It is exact rather than
+  // merely conservative because `sanitizeSequencerTracks` drops any row whose
+  // instrument is outside DRUM_TYPES on every read path, so a name in `named`
+  // is always one of the names this loop would look for; if that ever stops
+  // being true, this must count canonical coverage instead of set size.
+  // Stateless by construction — no remembered previous roster — so it cannot
+  // go stale the way a diff against a cached list would.
+  if (named.size < DRUM_TYPES.length) {
+    for (const voice of DRUM_TYPES) {
+      if (!named.has(voice)) audioEngine.setDrumTrackGain(voice, faderDbToGain(DEFAULT_FADER_DB));
+    }
+  }
+}
+
 function applySliceState(): void {
   const s = useAppStore.getState();
   audioEngine.setClockBpm(s.bpm);
   audioEngine.setMeter(getMeter(s.meterId));
-  audioEngine.setMasterVolume(s.masterVolume);
+  // The store speaks dB; src/audio/ speaks linear gain and its setter
+  // signatures do not change. THIS is the conversion boundary, and it goes
+  // through faderDbToGain rather than dbToGain so the bottom of the fader is
+  // an exact 0 — a bus a user pulled all the way down passes nothing.
+  audioEngine.setMasterVolume(faderDbToGain(s.masterVolume));
   audioEngine.setMetronomeEnabled(s.metronomeActive);
   for (const bus of SOURCE_BUSES) {
-    audioEngine.setSourceGain(bus.source, s[bus.volume]);
+    audioEngine.setSourceGain(bus.source, faderDbToGain(s[bus.volume]));
     audioEngine.setSourceMuted(bus.source, s[bus.muted]);
   }
-  audioEngine.setDrumKit(DRUM_KITS[s.soundKit]);
+  audioEngine.setDrumKit(DRUM_KITS[s.soundKit], s.soundKit);
+  pushDrumTrackGains(s.sequencerTracks);
   audioEngine.setDrumFilter(s.drumFilterCutoff, s.drumFilterResonance, s.drumFilterType);
   audioEngine.updateEffects(s.effects);
   // Applied DIRECTLY, not through the debounce: applyEngineSnapshot runs once
   // right after init(), when every earlier setter was a no-op, so the impulse
   // must exist before the first note.
   audioEngine.setReverbDecay(s.effects.reverbDecay);
+  // No setPresetTrim pass here any more. These four calls used to be paired
+  // with one, precisely because setPresetTrim did NOT no-op before init() and
+  // a snapshot taken before the first click would otherwise leave a source
+  // without a trim until its own subscription next fired. That ordering
+  // hazard is gone rather than handled: triggerSynthNoteOn now derives the
+  // trim from the `params.preset` it is handed, so there is no map to seed and
+  // no window in which a source can be playing a patch the engine has not been
+  // told about.
   audioEngine.updateSynthParams(s.synthParams, 'synth');
   audioEngine.updateSynthParams(s.chordSynthParams, 'chord');
   audioEngine.updateSynthParams(s.bassSynthParams, 'bass');
@@ -130,12 +247,16 @@ export function startEngineSync(): Stop {
   // component calling an engine setter. Subscribed on the id (a primitive), so
   // the subscription fires only on a real change.
   subs.push(useAppStore.subscribe((s) => s.meterId, (id) => audioEngine.setMeter(getMeter(id)), { fireImmediately: true }));
-  subs.push(useAppStore.subscribe((s) => s.masterVolume, (v) => audioEngine.setMasterVolume(v), { fireImmediately: true }));
+  subs.push(useAppStore.subscribe((s) => s.masterVolume, (db) => audioEngine.setMasterVolume(faderDbToGain(db)), { fireImmediately: true }));
   subs.push(useAppStore.subscribe((s) => s.metronomeActive, (v) => audioEngine.setMetronomeEnabled(v), { fireImmediately: true }));
 
   // synth + chords + bass + pad + sequencer buses
+  // The volume field is dB in the store and a linear gain in the engine. The
+  // conversion lives HERE, on both the snapshot and the subscription, which
+  // is why no engine setter signature had to change for DEV-386. faderDbToGain
+  // rather than dbToGain: a bus pulled to the bottom passes exactly nothing.
   for (const bus of SOURCE_BUSES) {
-    subs.push(useAppStore.subscribe((s) => s[bus.volume], (v) => audioEngine.setSourceGain(bus.source, v), { fireImmediately: true }));
+    subs.push(useAppStore.subscribe((s) => s[bus.volume], (db) => audioEngine.setSourceGain(bus.source, faderDbToGain(db)), { fireImmediately: true }));
     subs.push(useAppStore.subscribe((s) => s[bus.muted], (v) => audioEngine.setSourceMuted(bus.source, v), { fireImmediately: true }));
   }
 
@@ -143,7 +264,14 @@ export function startEngineSync(): Stop {
   // derived object compared with `shallow`, so the subscription fires once
   // when any of the three values actually changes — and the listener gets all
   // three from the same snapshot instead of re-reading the store.
-  subs.push(useAppStore.subscribe((s) => s.soundKit, (kit) => audioEngine.setDrumKit(DRUM_KITS[kit]), { fireImmediately: true }));
+  subs.push(useAppStore.subscribe((s) => s.soundKit, (kit) => audioEngine.setDrumKit(DRUM_KITS[kit], kit), { fireImmediately: true }));
+  subs.push(
+    useAppStore.subscribe(
+      (s) => s.sequencerTracks,
+      (tracks) => pushDrumTrackGains(tracks),
+      { equalityFn: drumTrackGainsEqual, fireImmediately: true },
+    ),
+  );
   subs.push(
     useAppStore.subscribe(
       (s) => ({
@@ -209,6 +337,12 @@ export function startEngineSync(): Stop {
       useAppStore.subscribe(
         (s) => s[field],
         (params, prevParams) => {
+          // The preset trim used to be pushed here, ahead of the params and
+          // deliberately outside the frame coalescer, because it is a scalar the
+          // NEXT voice reads and a debounced push would have let one note sound
+          // at the previous patch's trim. The engine derives it from
+          // `params.preset` at the moment it builds a voice now, so a trim can no
+          // longer lag the params it belongs to — there is nothing left to order.
           if (params === prevParams) audioEngine.updateSynthParams(params, source);
           else paramFrames.push(source, () => audioEngine.updateSynthParams(params, source));
         },

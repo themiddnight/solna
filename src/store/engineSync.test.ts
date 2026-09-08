@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import { useAppStore } from './store';
-import { applyEngineSnapshot, startEngineSync, stopEngineSync } from './engineSync';
+import {
+  applyEngineSnapshot,
+  EFFECT_KEYS_EXCEPT_DECAY,
+  startEngineSync,
+  stopEngineSync,
+} from './engineSync';
 import { getMeter } from '../utils/meter';
 import type { MasterEffects, SynthParams } from '../types';
+import { DEFAULT_FADER_DB, faderDbToGain } from './levelUnits';
 
 // bun's parallel workers share module singletons (the store) across test
 // files, so transport state can leak in from earlier files — normalize what
@@ -21,8 +27,27 @@ describe('engineSync', () => {
     const setMasterVolume = spyOn(audioEngine, 'setMasterVolume').mockClear();
     const setClockBpm = spyOn(audioEngine, 'setClockBpm').mockClear();
     startEngineSync();
-    expect(setMasterVolume).toHaveBeenCalledWith(useAppStore.getState().masterVolume);
+    expect(setMasterVolume).toHaveBeenCalledWith(faderDbToGain(useAppStore.getState().masterVolume));
     expect(setClockBpm).toHaveBeenCalledWith(useAppStore.getState().bpm);
+  });
+
+  test('the master fader converts dB to linear gain at the boundary', () => {
+    const setMasterVolume = spyOn(audioEngine, 'setMasterVolume').mockClear();
+    startEngineSync();
+    useAppStore.getState().setMasterVolume(0);
+    expect(setMasterVolume).toHaveBeenLastCalledWith(1);
+    useAppStore.getState().setMasterVolume(-6);
+    expect(setMasterVolume.mock.calls.at(-1)?.[0]).toBeCloseTo(0.5011872, 6);
+    // The floor is TRUE silence, not dbToGain(-60)'s 0.001 (decision 11).
+    useAppStore.getState().setMasterVolume(-60);
+    expect(setMasterVolume.mock.calls.at(-1)?.[0]).toBe(0);
+    // ...and one detent above it is quiet, not off.
+    useAppStore.getState().setMasterVolume(-59.6);
+    expect(setMasterVolume.mock.calls.at(-1)?.[0]).toBeGreaterThan(0);
+    // The top of the range arrives intact — the engine ceiling is derived
+    // from it now (Step 9), so nothing swallows the boost.
+    useAppStore.getState().setMasterVolume(12);
+    expect(setMasterVolume.mock.calls.at(-1)?.[0]).toBeCloseTo(3.9810717, 6);
   });
 
   test('store mutations flow one-way into the engine; teardown stops them', () => {
@@ -176,6 +201,53 @@ describe('engineSync', () => {
     ]);
     updateSynthParams.mockRestore();
   });
+
+  test('a per-track drum level converts dB to linear gain at the boundary', () => {
+    startEngineSync();
+    const kick = useAppStore.getState().sequencerTracks[0];
+    // Cleared AFTER startEngineSync's fireImmediately push (every factory
+    // track starts at unity, DEV-386's own change) so each assertion below
+    // is a genuine change, not a same-value no-op the equality-guarded
+    // subscription would (correctly) suppress.
+    const setDrumTrackGain = spyOn(audioEngine, 'setDrumTrackGain').mockClear();
+    // pushDrumTrackGains re-pushes every track on any change (see its own
+    // comment in engineSync.ts), so kick's own call is found by instrument,
+    // not by position.
+    const callFor = (instrument: string) =>
+      setDrumTrackGain.mock.calls.find((c) => c[0] === instrument) as [string, number];
+
+    useAppStore.getState().setTrackVolume(kick.id, -6);
+    expect(callFor(kick.instrument)[1]).toBeCloseTo(0.5011872, 6);
+
+    setDrumTrackGain.mockClear();
+    useAppStore.getState().setTrackVolume(kick.id, 0);
+    expect(callFor(kick.instrument)[1]).toBeCloseTo(1, 6);
+  });
+
+  test('a voice whose track disappears is reset to unity, not left attenuated', () => {
+    // The engine's drumTrackGains map outlives any one roster. Pull hitom
+    // down, then swap in a roster that has no hitom track at all — reachable
+    // from a loop switch or a sanitized import — and the vanished track's
+    // attenuation must not survive on the pad.
+    startEngineSync();
+    const tracks = useAppStore.getState().sequencerTracks;
+    const hitom = tracks.find((t) => t.instrument === 'hitom')!;
+    useAppStore.getState().setTrackVolume(hitom.id, -30);
+
+    const setDrumTrackGain = spyOn(audioEngine, 'setDrumTrackGain').mockClear();
+    useAppStore.setState({ sequencerTracks: tracks.filter((t) => t.instrument !== 'hitom') });
+
+    const call = setDrumTrackGain.mock.calls.find((c) => c[0] === 'hitom') as [string, number];
+    expect(call).toBeDefined();
+    expect(call[1]).toBeCloseTo(1, 6);
+  });
+
+  test('an unrelated store write does not re-push the track gains', () => {
+    startEngineSync();
+    const setDrumTrackGain = spyOn(audioEngine, 'setDrumTrackGain').mockClear();
+    useAppStore.getState().setBpm(131);
+    expect(setDrumTrackGain).not.toHaveBeenCalled();
+  });
 });
 
 describe('engineSync meter bridge', () => {
@@ -215,9 +287,37 @@ describe('engineSync meter bridge', () => {
     const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
     const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
     applyEngineSnapshot();
-    expect(setSourceGain).toHaveBeenCalledWith('pad', 0.75);
+    expect(setSourceGain).toHaveBeenCalledWith('pad', faderDbToGain(0.75));
     expect(setSourceMuted).toHaveBeenCalledWith('pad', true);
-    useAppStore.setState({ padVolume: 1, padMuted: false });
+    useAppStore.setState({ padVolume: DEFAULT_FADER_DB, padMuted: false });
+  });
+
+  // Must-fix 3 (snapshot path): applySliceState converts EVERY bus, not just
+  // pad. Deleting the faderDbToGain wrap for any one of the other four used
+  // to leave the whole suite green — an un-converted -6 dB bus would reach
+  // setSourceGain as -6, which the engine clamp floors to 0 (silence).
+  test('applyEngineSnapshot converts every bus fader from dB to linear gain', () => {
+    useAppStore.setState({
+      synthVolume: -6,
+      chordVolume: -60,
+      bassVolume: 3,
+      padVolume: -12,
+      masterSequencerVolume: 12,
+    });
+    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
+    applyEngineSnapshot();
+    expect(setSourceGain).toHaveBeenCalledWith('synth', faderDbToGain(-6));
+    expect(setSourceGain).toHaveBeenCalledWith('chord', faderDbToGain(-60));
+    expect(setSourceGain).toHaveBeenCalledWith('bass', faderDbToGain(3));
+    expect(setSourceGain).toHaveBeenCalledWith('pad', faderDbToGain(-12));
+    expect(setSourceGain).toHaveBeenCalledWith('sequencer', faderDbToGain(12));
+    useAppStore.setState({
+      synthVolume: DEFAULT_FADER_DB,
+      chordVolume: DEFAULT_FADER_DB,
+      bassVolume: DEFAULT_FADER_DB,
+      padVolume: DEFAULT_FADER_DB,
+      masterSequencerVolume: DEFAULT_FADER_DB,
+    });
   });
 
   // The knob path, not the bus path. Without this subscription a filter/detune
@@ -245,11 +345,11 @@ describe('engineSync meter bridge', () => {
     startEngineSync();
 
     // fireImmediately: the current value is pushed at subscribe time.
-    expect(setSourceGain).toHaveBeenCalledWith('pad', useAppStore.getState().padVolume);
+    expect(setSourceGain).toHaveBeenCalledWith('pad', faderDbToGain(useAppStore.getState().padVolume));
     expect(setSourceMuted).toHaveBeenCalledWith('pad', useAppStore.getState().padMuted);
 
     useAppStore.getState().setPadVolume(0.42);
-    expect(setSourceGain).toHaveBeenLastCalledWith('pad', 0.42);
+    expect(setSourceGain).toHaveBeenLastCalledWith('pad', faderDbToGain(0.42));
 
     const before = useAppStore.getState().padMuted;
     useAppStore.getState().togglePadMuted();
@@ -285,5 +385,134 @@ describe('engineSync meter bridge', () => {
 
     expect(setReverbDecay).toHaveBeenCalledWith(3.3);
     setReverbDecay.mockRestore();
+  });
+
+  // Must-fix 3 (subscription path) + reshaped per review: seeding the store
+  // BEFORE startEngineSync() exercises the fireImmediately bootstrap itself
+  // (nothing else in this file does), rather than a warm-up write whose only
+  // job was to make the next write fire.
+  test('the fireImmediately bootstrap converts every bus fader from dB to linear gain', () => {
+    useAppStore.setState({
+      synthVolume: -3,
+      chordVolume: -60,
+      bassVolume: 6,
+      padVolume: -12,
+      masterSequencerVolume: 12,
+    });
+    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
+    startEngineSync();
+    expect(setSourceGain).toHaveBeenCalledWith('synth', faderDbToGain(-3));
+    // The bottom of the fader is TRUE silence, not 0.001 (decision 11).
+    expect(setSourceGain).toHaveBeenCalledWith('chord', 0);
+    expect(setSourceGain).toHaveBeenCalledWith('bass', faderDbToGain(6));
+    expect(setSourceGain).toHaveBeenCalledWith('pad', faderDbToGain(-12));
+    // The top arrives intact: the engine ceiling is derived from it (Step 10).
+    expect(setSourceGain).toHaveBeenCalledWith('sequencer', faderDbToGain(12));
+
+    useAppStore.setState({
+      synthVolume: DEFAULT_FADER_DB,
+      chordVolume: DEFAULT_FADER_DB,
+      bassVolume: DEFAULT_FADER_DB,
+      padVolume: DEFAULT_FADER_DB,
+      masterSequencerVolume: DEFAULT_FADER_DB,
+    });
+  });
+
+  // Optional-1 (bass on the subscription path was the one bus whose live
+  // conversion could be deleted with the suite green: pad's live edit is
+  // covered by 'the pad bus is bootstrapped and then tracks the store'
+  // above, synth/chord/sequencer by the bootstrap test's neighbours below.
+  test('each bus fader tracks a live edit, converted to linear gain', () => {
+    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
+    startEngineSync();
+
+    useAppStore.getState().setSynthVolume(-6);
+    const [source, gain] = setSourceGain.mock.calls.at(-1) as [string, number];
+    expect(source).toBe('synth');
+    expect(gain).toBeCloseTo(0.5011872, 6);
+    useAppStore.getState().setSynthVolume(0);
+    expect(setSourceGain).toHaveBeenLastCalledWith('synth', 1);
+
+    useAppStore.getState().setChordVolume(-60);
+    expect((setSourceGain.mock.calls.at(-1) as [string, number])[1]).toBe(0);
+
+    useAppStore.getState().setBassVolume(-6);
+    expect(setSourceGain.mock.calls.at(-1)).toEqual(['bass', faderDbToGain(-6)]);
+
+    useAppStore.getState().setMasterSequencerVolume(12);
+    expect((setSourceGain.mock.calls.at(-1) as [string, number])[1]).toBeCloseTo(3.9810717, 6);
+
+    useAppStore.setState({
+      synthVolume: DEFAULT_FADER_DB,
+      chordVolume: DEFAULT_FADER_DB,
+      bassVolume: DEFAULT_FADER_DB,
+      masterSequencerVolume: DEFAULT_FADER_DB,
+    });
+  });
+
+  // DEV-387 shipped this as four setPresetTrim calls in the snapshot path plus
+  // one per synth-params subscription, and these tests asserted each of those
+  // calls. The trim is derived from `params.preset` inside triggerSynthNoteOn
+  // now, so there is nothing left to push and nothing that can lag the params
+  // it belongs to. What the store side still owes is the NEGATIVE: it must
+  // never write the calibration override, because that override is consulted
+  // BEFORE the derivation and a store-side write to it would pin a source at a
+  // trim its patch does not have — the exact staleness the five pushes existed
+  // to chase. The level itself is asserted where it is audible, in
+  // engine.test.ts ("a voice's peak gain carries its own preset's calibration
+  // trim") and presetPreview.test.ts.
+  test('neither the snapshot nor a preset change writes the calibration trim override', () => {
+    const setPresetTrim = spyOn(audioEngine, 'setPresetTrim').mockClear();
+
+    applyEngineSnapshot();
+    expect(setPresetTrim).not.toHaveBeenCalled();
+
+    startEngineSync();
+    const s = useAppStore.getState();
+    useAppStore.getState().setSynthParams({ ...s.synthParams, preset: 'Some Other Patch' });
+    useAppStore.getState().setChordSynthParams({ ...s.chordSynthParams, preset: 'Some Other Patch' });
+    useAppStore.getState().setBassSynthParams({ ...s.bassSynthParams, preset: 'Some Other Patch' });
+    useAppStore.getState().setPadSynthParams({ ...s.padSynthParams, preset: 'Some Other Patch' });
+    expect(setPresetTrim).not.toHaveBeenCalled();
+
+    useAppStore.setState({
+      synthParams: s.synthParams,
+      chordSynthParams: s.chordSynthParams,
+      bassSynthParams: s.bassSynthParams,
+      padSynthParams: s.padSynthParams,
+    });
+  });
+});
+
+describe('EFFECT_KEYS_EXCEPT_DECAY', () => {
+  test('covers every MasterEffects field except reverbDecay', () => {
+    // The effects subscription compares on this list. A field missing from it
+    // is a knob the engine never hears — the subscription's equalityFn calls
+    // the two objects equal and the listener never runs. Pinned as a literal
+    // because the optional *Bypass keys are absent from INITIAL_EFFECTS and so
+    // cannot be derived from it.
+    expect([...EFFECT_KEYS_EXCEPT_DECAY].sort()).toEqual([
+      'compressorAttack',
+      'compressorEnabled',
+      'compressorRatio',
+      'compressorRelease',
+      'compressorThreshold',
+      'delayBypass',
+      'delayFeedback',
+      'delayWet',
+      'distortionBypass',
+      'distortionWet',
+      'eqBypass',
+      'eqHigh',
+      'eqLow',
+      'eqMid',
+      'limiterAttack',
+      'limiterEnabled',
+      'limiterRatio',
+      'limiterRelease',
+      'limiterThreshold',
+      'reverbBypass',
+      'reverbWet',
+    ]);
   });
 });

@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
 import {
   PROJECT_CONTENT_KEYS,
+  PROJECT_DB_LEVEL_KEYS,
   PROJECT_FORMAT_VERSION,
   PROJECT_LOOP_KEYS,
   applyProjectContent,
@@ -8,11 +10,9 @@ import {
   factoryProjectContent,
   makeEnvelope,
 } from './projectFormat';
-import { migrateProjectBody } from './projectFormatMigrate';
 import { parseProjectFile } from './projectFile';
-import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
+import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
 import { LOOP_FLAT_KEYS } from './loop';
-import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 import { createDefaultLoop } from './loopSlice';
 import { INITIAL_EFFECTS } from './initialState';
 import { DEFAULT_BPM } from './transportSlice';
@@ -122,7 +122,7 @@ describe('factoryProjectContent / makeEnvelope', () => {
     const c = factoryProjectContent();
     expect(c.bpm).toBe(DEFAULT_BPM);
     expect(c.meterId).toBe('4/4');
-    expect(c.masterVolume).toBe(0.85);
+    expect(c.masterVolume).toBe(0); // DEFAULT_FADER_DB (unity 0 dB)
     expect(c.effects).toEqual(INITIAL_EFFECTS);
     expect(c.effects).not.toBe(INITIAL_EFFECTS);
     expect(c.loops).toHaveLength(1);
@@ -139,53 +139,17 @@ describe('factoryProjectContent / makeEnvelope', () => {
   });
 });
 
-describe('migrateProjectBody — v1 -> the current format', () => {
-  test('upgrades every loop melody, seeds leadGate, and widens to ticks', () => {
-    const migrated = migrateProjectBody(
-      {
-        content: {
-          bpm: 120,
-          loops: [{ id: 'loop-1', leadMelodySteps: [['C4'], [], ['E4', 'G4']] }],
-        },
-      },
-      1,
-    ) as {
-      content: {
-        bpm: number;
-        loops: { leadMelodySteps: LeadNote[][]; leadGate: number; leadStepResolution: string }[];
-      };
-    };
-
-    // Both lead steps ran, in order: string[][] -> LeadNote[][] at the narrow
-    // stored width, then widened so old slot i sits on tick 2i with a
-    // tick-counted length.
-    const melody = migrated.content.loops[0].leadMelodySteps;
-    expect(melody).toHaveLength(LEAD_TICKS_PER_BAR);
-    expect(melody[0]).toEqual([{ note: 'C4', len: 2 }]);
-    expect(melody[2]).toEqual([]);
-    expect(melody[4]).toEqual([{ note: 'E4', len: 2 }, { note: 'G4', len: 2 }]);
-    expect(migrated.content.loops[0].leadGate).toBe(DEFAULT_LEAD_GATE);
-    expect(migrated.content.loops[0].leadStepResolution).toBe('1/16');
-    expect(migrated.content.bpm).toBe(120);
-  });
-
-  test('is a no-op at the current version', () => {
-    const body = {
-      content: { loops: [{ id: 'loop-1', leadMelodySteps: [[{ note: 'C4', len: 3 }]], leadGate: 0.3 }] },
-    };
-    expect(migrateProjectBody(body, PROJECT_FORMAT_VERSION)).toEqual(body);
-  });
-
-  test('a body with no content or no loops passes through', () => {
-    expect(migrateProjectBody({ id: 'p' }, 1)).toEqual({ id: 'p' });
-    expect(migrateProjectBody({ content: { bpm: 90 } }, 1)).toEqual({ content: { bpm: 90 } });
-  });
-});
+// migrateProjectBody and projectFormatMigrate.ts were deleted in the DEV-388
+// final review fix wave: it was a pure identity function with no production
+// caller, and the validation it explained is already stated in this file's
+// PROJECT_FORMAT_VERSION docblock above and pinned by the source-text tests
+// around it.
 
 /**
  * A formatVersion-1 file exactly as an older build wrote it: string melody
- * rows, no leadGate. Built from createDefaultLoop so every other field is
- * valid and the only thing under test is the melody.
+ * rows, no leadGate, a linear-gain masterVolume. Built from createDefaultLoop
+ * so every other field is valid and the only things under test are validation
+ * outcomes — no version-based behaviour is left to test.
  */
 function legacyV1ProjectFile(): string {
   const loop = { ...createDefaultLoop(), id: 'loop-1', name: 'Loop 1' } as unknown as Record<string, unknown>;
@@ -207,29 +171,24 @@ function legacyV1ProjectFile(): string {
   });
 }
 
-describe('a formatVersion-1 .solna file keeps its melody through the real import path', () => {
-  test('parseProjectFile upgrades before sanitize, so nothing is blanked', () => {
+describe('a formatVersion-1 .solna file through the real import path', () => {
+  test('parseProjectFile validates by range/shape, not by version, and keeps the rest', () => {
     const result = parseProjectFile(legacyV1ProjectFile());
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('parseProjectFile refused a valid v1 file');
 
     const loop: Loop = result.body.content.loops[0];
     expect(result.body.formatVersion).toBe(PROJECT_FORMAT_VERSION);
-    // Widened on the way through: old slot i is tick 2i and `len` counts
-    // ticks. A blank melody here would be the silent-loss failure.
-    expect(loop.leadMelodySteps).toHaveLength(loop.leadLoopLength * LEAD_TICKS_PER_BAR);
-    expect(loop.leadMelodySteps[0]).toEqual([
-      { note: 'C4', len: 2 },
-      { note: 'E4', len: 2 },
-    ]);
-    expect(loop.leadMelodySteps[4]).toEqual([{ note: 'G4', len: 2 }]);
+    // masterVolume was a linear 0.85 — in range for dB too, so it passes
+    // through UNCHANGED. Under the new rule that is correct: nothing can tell
+    // a pre-conversion linear value from a dB one, so nothing tries.
+    expect(result.body.content.masterVolume).toBe(0.85);
+    // The v1 melody is a DIFFERENT SHAPE (string[][]), which asLeadNoteMatrix
+    // has always rejected outright — a shape rejection, not a version one —
+    // so it still comes back blank via createDefaultLoop's own default.
+    expect(loop.leadMelodySteps).toEqual(createDefaultLoop().leadMelodySteps);
     expect(loop.leadGate).toBe(DEFAULT_LEAD_GATE);
-    // No leadStepResolution assertion here on purpose: sanitizeContent
-    // hard-defaults the field to createDefaultLoop()'s value, so any
-    // assertion at THIS seam passes even with the migration's assignment
-    // deleted. The falsifiable coverage lives in projectFormatMigrate.test.ts
-    // (this chain) and migrate.test.ts (the persist chain), which call the
-    // steps directly on loop objects that never had the field.
+    expect(loop.name).toBe('Loop 1');
     expect(result.body.content.bpm).toBe(118);
   });
 });
@@ -243,4 +202,76 @@ test('a factory project ships the pad audible', () => {
   const content = factoryProjectContent();
   expect(content.loops[0].padMuted).toBe(false);
   expect(defaultPadState().padMuted).toBe(false);
+});
+
+/**
+ * The dB level contract is prose, and prose rots. It is pinned here the only
+ * way prose can be: the test reads projectFormat.ts's own source and asserts
+ * the contract block still names the boundary version, the mixed-unit versions
+ * below it, the unit, the range, the silence encoding and every key it covers.
+ * Reading a source file from a test is
+ * established in this repo — src/data/dataLayerPurity.test.ts lints fixture
+ * sources through eslint's own API for the same reason.
+ */
+describe('the dB level contract in the format docblock', () => {
+  const source = readFileSync(new URL('./projectFormat.ts', import.meta.url), 'utf8');
+  // Anchored on the section's OWN heading line (hence the `m` flag), not on a
+  // phrase appearing anywhere in the file. A lazy
+  // /\/\*\*[^]*?dB LEVEL CONTRACT[^]*?\*\// matches leftmost-first: it would
+  // start at the file's very first docblock and swallow every comment in
+  // between, so an assertion like toContain('-60') could be satisfied by
+  // unrelated prose several blocks away.
+  const block = source.match(/^ \* dB LEVEL CONTRACT[^]*?\*\//m)?.[0] ?? '';
+
+  test('the contract block exists', () => {
+    expect(block.length).toBeGreaterThan(0);
+  });
+
+  test('names PROJECT_FORMAT_VERSION as the current, directly-read version', () => {
+    expect(block).toContain('PROJECT_FORMAT_VERSION');
+    expect(PROJECT_FORMAT_VERSION).toBe(10);
+  });
+
+  test('it states the unit, the unity, the range and the silence encoding', () => {
+    expect(block).toContain('decibels');
+    expect(block).toContain('0 dB is unity');
+    expect(block).toContain('-60');
+    expect(block).toContain('+12');
+    expect(block).toContain('JSON.stringify(-Infinity)');
+  });
+
+  test('it states validation-by-range, not a version-based reset or conversion', () => {
+    // The rule the DEV-388 follow-up landed: a value in range is legal dB
+    // regardless of which version wrote it, because nothing distinguishes a
+    // pre-conversion linear reading from a post-conversion dB one — so
+    // nothing here tries to any more.
+    expect(block).toContain('NO version-based reset or conversion');
+    expect(block).toContain('asFaderDb');
+    expect(block).toContain('0.7');
+  });
+
+  test('every key it lists is named in the contract block', () => {
+    for (const key of PROJECT_DB_LEVEL_KEYS) {
+      expect(block).toContain(key);
+    }
+  });
+
+  test('it lists flat keys only — the per-track fader is contract prose, not an entry', () => {
+    // The list is iterated by sanitizePersistedState (store.ts), so an entry has
+    // to be a real top-level key. 'sequencerTracks[].volume' used to sit in here
+    // as prose, which is what stopped the constant being usable as code at all;
+    // it is still covered by the contract, and still validated, one level down.
+    for (const key of PROJECT_DB_LEVEL_KEYS) {
+      expect(key, key).not.toContain('[');
+    }
+    expect(block).toContain('sequencerTracks[].volume');
+  });
+
+  test('every per-loop level key it names is a real per-loop key', () => {
+    const perLoop = PROJECT_DB_LEVEL_KEYS.filter((key) => key !== 'masterVolume');
+    for (const key of perLoop) {
+      expect(LOOP_FLAT_KEYS as readonly string[]).toContain(key);
+    }
+    expect(PROJECT_CONTENT_KEYS as readonly string[]).toContain('masterVolume');
+  });
 });

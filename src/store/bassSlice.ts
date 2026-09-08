@@ -1,6 +1,7 @@
 import type { StoreApi } from 'zustand';
 import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
 import type { AppStore, BassSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -14,7 +15,7 @@ export function createBassSlice(set: Set): BassSlice {
     bassFeel: 0.5,
     bassOctave: 2,
     bassMuted: false,
-    bassVolume: 1.0,
+    bassVolume: DEFAULT_BUS_TRIM_DB,
 
     setBassPatternId: (bassPatternId) => set({ bassPatternId }),
     setBassPatternMode: (bassPatternMode) => set({ bassPatternMode }),
