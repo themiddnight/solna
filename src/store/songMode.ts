@@ -212,14 +212,39 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
             // rings out instead of being cut at HARD_STOP_RELEASE.
             //
             // Synchronous, deliberately — the opposite of the advance below.
-            // This callback is registered before every playback hook's (it
-            // subscribes from reconcile, a synchronous store subscriber on the
-            // set() that starts the players; the hooks subscribe in a useEffect
-            // after React commits it), and the engine dispatches its listener
-            // Set in insertion order. So the hooks see 'stopping' on THIS step
-            // and stop here. Deferring it to a microtask would put it after all
-            // three had already played the step, and the song would run one bar
-            // past its own ending.
+            // The stop has to land before the playback hooks process this same
+            // boundary step: each of them reads the player state LIVE from the
+            // store and plays the step unless it already reads 'stopping'.
+            // Deferring this to a microtask would put it after all three had
+            // played the step, and the song would run past its own ending.
+            //
+            // KNOWN ISSUE, and the reason the paragraph above says "has to"
+            // rather than "does". It lands first only while THIS listener was
+            // registered before the hooks': subscribeClock keeps listeners in a
+            // Set and dispatches in insertion order, songMode subscribes from
+            // reconcile (a synchronous store subscriber on the set() that starts
+            // the players) and each hook subscribes from a useEffect after React
+            // commits. Two reachable paths lose that order, both pinned by
+            // characterization tests in songMode.test.ts:
+            //   1. Any mid-song loadLoop DEFAULT path — picking another loop
+            //      card on Arrange, an Instant Vibe — makes three set()s in one
+            //      tick (hardStopAll, content, restartPlayersPatch). The middle
+            //      state is "song layer, not playing", which reaches the `else`
+            //      at the bottom of reconcile and drops this subscription; the
+            //      restart re-adds it at the END of the Set. The hooks do not
+            //      move: their clock effects are keyed on isPlaying and the
+            //      RENDERED state goes 'playing' -> 'playing', so React never
+            //      re-runs them (loadLoop's own doc comment relies on that).
+            //   2. The one-click takeover — audition a loop card on Arrange,
+            //      then press the master Play — establishes the `song` scope
+            //      with the players ALREADY playing, so songMode subscribes
+            //      after the hooks did. That path predates this ending.
+            // Symptom either way: one extra bar past the end of the song.
+            // The fix is to stop depending on listener order at all (decide the
+            // ending one step early, or publish the ending step for the hooks'
+            // own step actions to consult). Both change either this function's
+            // contract or the three hooks, so they are a follow-up, not
+            // something to smuggle into the branch that discovered it.
             //
             // softStopAll also dispatches 'stop-all', so the scope goes to
             // `none` in the same set(): a finished song leaves no `song` scope
@@ -277,6 +302,14 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
       // subscription". The same gap swallowed a user-initiated Stop on the
       // Song layer. The only state this newly catches is "song layer, nothing
       // playing", which wants exactly this: no cursor, no advance listener.
+      //
+      // It is also what path 1 of the KNOWN ISSUE above trips over: loadLoop's
+      // default path passes through "song layer, nothing playing" on its way
+      // back to playing, so a mid-song loop switch tears this subscription down
+      // and the restart re-registers it behind the playback hooks'. Narrowing
+      // the condition back is not the answer — the state a finished song lands
+      // in and the state that transient passes through are the same state, and
+      // the old condition simply missed both.
       if (s.songLoopIndex !== null) s.setSongLoopIndex(null);
       stopClock();
     }

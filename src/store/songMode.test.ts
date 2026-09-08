@@ -108,12 +108,25 @@ describe('song mode pure helpers', () => {
 
 function makeFakeClock() {
   const cbs: Array<(step: number, beat: number, time: number) => void> = [];
+  // Registration IDENTITY, not just the live count: a subscription dropped and
+  // re-added inside ONE tick leaves `count` exactly where it was, and that
+  // re-registration is the whole hazard — the real engine keeps its listeners
+  // in a Set and dispatches them in insertion order, so a re-added listener
+  // moves to the back.
+  let registrations = 0;
   return {
     get count() {
       return cbs.length;
     },
+    get registrations() {
+      return registrations;
+    },
+    get current() {
+      return cbs[0] ?? null;
+    },
     subscribe: (cb: (step: number, beat: number, time: number) => void) => {
       cbs.push(cb);
+      registrations += 1;
       return () => {
         const i = cbs.indexOf(cb);
         if (i >= 0) cbs.splice(i, 1);
@@ -651,7 +664,7 @@ describe('song mode coordinator', () => {
     stop();
   });
 
-  test('a single-loop arrangement ends too, after its repeats', () => {
+  test('a single-loop arrangement ends too, after its repeats', async () => {
     // Audition play is the feature for "loop one thing forever"; song mode is
     // a piece with an ending, at every arrangement size.
     useAppStore.setState({
@@ -660,22 +673,35 @@ describe('song mode coordinator', () => {
     });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
+    // The rewind is what asserting on activeLoopId CANNOT see here: the sole
+    // loop is also loops[0], so 'a' is the answer whether the ending skipped
+    // the rewind or performed one. resetClock is the seamless path's own
+    // signature (loadLoop calls it on every atBoundary load and on nothing
+    // else), so spying it is what makes "nothing is reloaded" a real claim.
+    const resetClock = spyOn(audioEngine, 'resetClock');
     const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+    try {
+      useAppStore.getState().playAll();
+      resetClock.mockClear();
+      clock.tick(32, 2.0); // end of repeat 1 — keeps going
+      expect(useAppStore.getState().sequencerPlayer).toBe('playing');
 
-    useAppStore.getState().playAll();
-    clock.tick(32, 2.0); // end of repeat 1 — keeps going
-    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+      clock.tick(64, 4.0); // end of repeat 2 — the song is over
+      // Flush the microtask a rewind would have been deferred into.
+      await new Promise((r) => setTimeout(r, 0));
 
-    clock.tick(64, 4.0); // end of repeat 2 — the song is over
-
-    const s = useAppStore.getState();
-    expect(s.sequencerPlayer).toBe('stopping');
-    expect(s.playbackScope).toEqual({ kind: 'none' });
-    expect(clock.count).toBe(0);
-    // The sole loop is already the first one, so nothing is reloaded and the
-    // cursor is where it was.
-    expect(s.activeLoopId).toBe('a');
-    stop();
+      const s = useAppStore.getState();
+      expect(s.sequencerPlayer).toBe('stopping');
+      expect(s.playbackScope).toEqual({ kind: 'none' });
+      expect(clock.count).toBe(0);
+      // The sole loop is already the first one, so nothing is reloaded and the
+      // cursor is where it was.
+      expect(s.activeLoopId).toBe('a');
+      expect(resetClock).not.toHaveBeenCalled();
+    } finally {
+      resetClock.mockRestore();
+      stop();
+    }
   });
 
   test('after the song ends, Play starts it again from the top', async () => {
@@ -703,6 +729,84 @@ describe('song mode coordinator', () => {
     expect(s.activeLoopId).toBe('a');
     expect(s.sequencerPlayer).toBe('playing');
     expect(clock.count).toBe(1);
+    stop();
+  });
+
+  // The two tests below CHARACTERIZE a known issue rather than pin a decision:
+  // they record behaviour that is wrong, so that it stops being invisible. The
+  // ending's soft stop has to reach the playback hooks on the boundary step
+  // itself, which holds only while songMode's clock listener was registered
+  // before theirs (the engine dispatches an insertion-ordered Set). Neither
+  // path below preserves that, and the symptom of each is a song that plays one
+  // extra bar past its own end. See the KNOWN ISSUE comment on the `end` branch
+  // in songMode.ts for the two fixes, both of which are out of this task's
+  // reach. WHEN ONE LANDS, THESE TWO TESTS FLIP: each expectation below carries
+  // the value it should become.
+  test('KNOWN ISSUE: a mid-song loop switch re-registers the advance subscription', () => {
+    useAppStore.setState({
+      loops: [shortLoop('a', 4), shortLoop('b', 2), shortLoop('c', 2)],
+      activeLoopId: 'a',
+    });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+
+    useAppStore.getState().playAll();
+    const first = clock.current;
+    expect(clock.registrations).toBe(1);
+
+    // A plain user action: pick a different loop to work on from Arrange while
+    // the arrangement runs. loadLoop's default path makes three set()s in one
+    // tick — hardStopAll, the content patch, restartPlayersPatch — and
+    // restartAfterStop keeps a `song` scope, so the song simply carries on.
+    loadLoop('b');
+
+    const s = useAppStore.getState();
+    expect(s.playbackScope).toEqual({ kind: 'song' });
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.songLoopIndex).toBe(1);
+    // Still exactly one listener, so nothing here is leaked...
+    expect(clock.count).toBe(1);
+    // ...but it is a NEW registration: the middle "song layer, not playing"
+    // state reached reconcile's `else` and dropped the old one. The playback
+    // hooks keep theirs through all three set()s (their clock effects are keyed
+    // on isPlaying and the rendered state goes 'playing' -> 'playing'), so in
+    // the app songMode's callback now runs after all three.
+    expect(clock.registrations).toBe(2); // must become 1
+    expect(clock.current).not.toBe(first); // must become toBe(first)
+    stop();
+  });
+
+  test('KNOWN ISSUE: the takeover subscribes the advance after the players are already running', () => {
+    useAppStore.setState({
+      loops: [shortLoop('a', 4), shortLoop('b', 2)],
+      activeLoopId: 'a',
+    });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+
+    // Audition loop A from its card on Arrange (or arrive from the Loop layer
+    // still playing it — spec §6 row 1). The players run under a `loop` scope,
+    // which takes no advance subscription...
+    useAppStore.getState().soloLoop('a');
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+    expect(clock.count).toBe(0);
+
+    // ...and then the master Play's one-click takeover. playAll only lifts
+    // 'stopped' players, so NO player transitions here: React never re-runs the
+    // hooks' clock effects, their listeners stay exactly where they were, and
+    // this — songMode's FIRST registration — lands behind them. This path
+    // predates the ending; the `else` in reconcile has nothing to do with it,
+    // which is why fixing that alone would not be a fix.
+    useAppStore.getState().playAll();
+
+    const s = useAppStore.getState();
+    expect(s.playbackScope).toEqual({ kind: 'song' });
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.songLoopIndex).toBe(0);
+    expect(clock.count).toBe(1);
+    expect(clock.registrations).toBe(1);
     stop();
   });
 });
