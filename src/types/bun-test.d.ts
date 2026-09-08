@@ -24,6 +24,10 @@ declare module 'bun:test' {
     method: keyof O & string
   ): Mock<M>;
 
+  export const mock: {
+    module(specifier: string, factory: () => unknown): void;
+  };
+
   export interface Matchers<T = unknown> {
     not: Matchers<T>;
     toEqual(expected: unknown): void;

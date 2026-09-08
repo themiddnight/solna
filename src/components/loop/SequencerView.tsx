@@ -58,18 +58,17 @@ export const SequencerView = React.memo(function SequencerView() {
   const setDrumFilterResonance = useAppStore((s) => s.setDrumFilterResonance);
   const setDrumFilterType = useAppStore((s) => s.setDrumFilterType);
 
-  const [selectedGridId, setSelectedGridId] = useState<string>("synthwave");
+  // Starts unselected, not "synthwave": the tracks/kit on screen come from
+  // whatever was rehydrated (or the last grid actually applied THIS session),
+  // and this local state has no way to know which library grid, if any,
+  // produced that arrangement. Claiming "Synthwave" here was the cosmetic
+  // half of the DEV-388 refresh bug — the destructive half (a mount effect
+  // that actually overwrote the rehydrated kit) is fixed by applyDrumGrid
+  // being the ONLY writer below; this half is fixed by not asserting a grid
+  // name nothing chose.
+  const [selectedGridId, setSelectedGridId] = useState<string>("");
   const previewRef = useRef<PreviewHandle | null>(null);
   useEffect(() => () => previewRef.current?.(), []);
-
-  // A grid names the kit it was written for, so picking one loads both. The
-  // menu offers all 30 — the sequencer's own 14 genre grids, the 7 grids the
-  // Instant Vibes are built from, and 9 sourced variants — which were split
-  // across separate tables until they merged.
-  useEffect(() => {
-    const kit = DRUM_GRIDS[selectedGridId]?.kit;
-    if (kit) onChangeSoundKit(kit);
-  }, [selectedGridId, onChangeSoundKit]);
 
   // These are props of the memoized TrackRow, so their identity must be
   // stable. They read `sequencerTracks` LIVE from the store rather than from
@@ -93,6 +92,10 @@ export const SequencerView = React.memo(function SequencerView() {
     setSequencerTracks(
       sequencerTracks.map((t) => (t.id === trackId ? { ...t, muted: !t.muted } : t)),
     );
+  }, []);
+
+  const setTrackVolume = useCallback((trackId: string, db: number) => {
+    useAppStore.getState().setTrackVolume(trackId, db);
   }, []);
 
   const previewTrack = useCallback((track: SequencerTrack) => {
@@ -141,6 +144,17 @@ export const SequencerView = React.memo(function SequencerView() {
     );
   };
 
+  // A grid names the kit it was written for, so picking one loads both — but
+  // ONLY as a direct result of THIS call, never as a side effect derived from
+  // `selectedGridId`. That local state starts at `""` (see the useState
+  // above) and does not track the hydrated `soundKit`, so a `useEffect` keyed
+  // on it used to fire
+  // on every mount (a refresh included) and silently overwrite whatever kit
+  // had just been rehydrated with synthwave's — 'Retro Drive' — which is
+  // exactly the "kit resets to Retro Drive on refresh" bug. The menu offers
+  // all 30 grids — the sequencer's own 14 genre grids, the 7 grids the
+  // Instant Vibes are built from, and 9 sourced variants — which were split
+  // across separate tables until they merged.
   const applyDrumGrid = (id: string) => {
     setSelectedGridId(id);
     const grid = DRUM_GRIDS[id];
@@ -149,6 +163,7 @@ export const SequencerView = React.memo(function SequencerView() {
     // active bar length and writes it into the window, so what the grid shows
     // is exactly what will sound.
     replaceDrumPattern(grid.rows);
+    onChangeSoundKit(grid.kit);
   };
 
   // The grid `<option>` list is ~30 entries and each one formats two label
@@ -267,11 +282,10 @@ export const SequencerView = React.memo(function SequencerView() {
             <ChannelStrip
               idPrefix="drums"
               label="Drum Level"
-              volume={masterSequencerVolume}
+              volumeDb={masterSequencerVolume}
               accentClass="text-primary"
-              max={1}
               sliderClassName="range range-xs range-primary"
-              onVolumeChange={setMasterSequencerVolume}
+              onVolumeDbChange={setMasterSequencerVolume}
             />
           </div>
         </div>
@@ -310,6 +324,9 @@ export const SequencerView = React.memo(function SequencerView() {
                 aria-label="Drum grid"
                 title="Loads that grid's drum pattern, and its kit, over the sequencer"
               >
+                <option value="" disabled>
+                  Choose a grid…
+                </option>
                 {gridOptions}
               </select>
             </div>
@@ -360,6 +377,7 @@ export const SequencerView = React.memo(function SequencerView() {
           onToggleStep={toggleStep}
           onToggleMute={toggleMute}
           onPreview={previewTrack}
+          onVolumeChange={setTrackVolume}
         />
         </div>
       </PanelCard>

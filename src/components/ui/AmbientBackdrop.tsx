@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { audioEngine } from '@/audio/engine';
 import { useAppStore } from '@/store/store';
 import { aggregatePlayerState } from '@/store/transportSlice';
+import { attachMeter, nextMeterId } from '@/utils/meterAttach';
+import { dbfsToPercent } from '@/utils/meterScale';
 import {
   createThemePalette,
   rgbToCss,
@@ -36,6 +38,19 @@ const BLOBS: ReadonlyArray<{
   { token: '--color-accent', xFreq: 0.0001, yFreq: 0.00015, xPhase: 2.1, yPhase: 0.4 },
   { token: '--color-secondary', xFreq: 0.00017, yFreq: 0.00011, xPhase: 4.2, yPhase: 2.6 },
 ];
+
+/**
+ * Maps an RMS dBFS reading onto the 0..1 the blob geometry expects.
+ *
+ * RMS, not peak: the backdrop answers "how much is going on", which is an energy question, and a
+ * peak reading would make the blobs flicker on every transient. Through `dbfsToPercent` rather
+ * than a raw normalisation, so the backdrop and the meters agree about where a given level sits.
+ * NaN reads as silence rather than propagating into a canvas gradient, which would throw.
+ */
+export function backdropLevel(rmsDbfs: number): number {
+  if (Number.isNaN(rmsDbfs)) return 0;
+  return dbfsToPercent(rmsDbfs) / 100;
+}
 
 /**
  * Full-bleed, analyser-driven ambient field mounted behind the whole
@@ -80,6 +95,11 @@ export function AmbientBackdrop() {
     return subscribeToThemeChange(refresh);
   }, []);
 
+  // Written by the meter scheduler, read by the draw loop below. A ref, not state: the backdrop
+  // redraws every frame for its own blob motion, so a state update per tick would re-render the
+  // component and restart the draw effect. Nothing here reaches a zustand slice.
+  const levelRef = useRef(0);
+
   // Sizing owns its own effect so that starting and stopping playback — which
   // flips `animate` below — does not tear down and rebuild the ResizeObserver
   // and re-measure the canvas (a layout flush) each time.
@@ -109,6 +129,31 @@ export function AmbientBackdrop() {
   }, []);
 
   useEffect(() => {
+    if (!animate) {
+      levelRef.current = 0;
+      return;
+    }
+    const analyser = audioEngine.getMasterLevelAnalyser();
+    if (!analyser) return;
+
+    // `attachMeter` owns the level tracker, the tier's tick interval and the clock, so the tier
+    // is stated ONCE here. Hand-rolling that body wrote it twice — as `'track'` and again as the
+    // `TIER_INTERVAL_MS.track` the tracker was sized from — and a re-tier of the backdrop would
+    // have left the RMS window sized for the old cadence with nothing failing.
+    //
+    // `visibilityElement` is omitted, not passed `null`: it is optional on this path precisely
+    // because the backdrop is mounted once outside the tab views and has genuinely nothing to
+    // gate on. (`attachTickMeter` makes it required, for callers that render their own element.)
+    return attachMeter(analyser, {
+      id: nextMeterId('backdrop'),
+      tier: 'track',
+      onLevel: (level) => {
+        levelRef.current = backdropLevel(level.rmsDbfs);
+      },
+    });
+  }, [animate]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
@@ -126,10 +171,11 @@ export function AmbientBackdrop() {
       const { width, height } = canvas;
       ctx.clearRect(0, 0, width, height);
 
-      // The engine already keeps a reused buffer and computes this exact
-      // average (AudioEngine.getAudioLevel), and returns 0 with no analyser —
-      // recomputing it here meant a Uint8Array allocation every frame.
-      const level = audioEngine.getAudioLevel();
+      // Fed by the scheduler registration above at the track tier, so the backdrop reads the
+      // analyser 30 times a second rather than once per drawn frame. `getAudioLevel` used to
+      // live here and averaged frequency bins — that moved with a patch's brightness, not its
+      // loudness.
+      const level = levelRef.current;
       const palette = paletteRef.current;
 
       if (palette) {

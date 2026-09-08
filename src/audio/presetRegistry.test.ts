@@ -237,8 +237,11 @@ describe('MasterEffects has no unimplemented fields', () => {
     // A declared-but-unimplemented field is an invitation to wire UI to it;
     // store.ts's migrate already strips these from old payloads.
     expect(Object.keys(INITIAL_EFFECTS).sort()).toEqual([
+      'compressorAttack', 'compressorEnabled', 'compressorRatio', 'compressorRelease',
       'compressorThreshold', 'delayFeedback', 'delayWet', 'distortionWet',
-      'eqHigh', 'eqLow', 'eqMid', 'reverbDecay', 'reverbWet',
+      'eqHigh', 'eqLow', 'eqMid',
+      'limiterAttack', 'limiterEnabled', 'limiterRatio', 'limiterRelease',
+      'limiterThreshold', 'reverbDecay', 'reverbWet',
     ]);
   });
 });

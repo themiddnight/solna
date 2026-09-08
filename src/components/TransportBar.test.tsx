@@ -26,6 +26,16 @@ describe('TransportBar', () => {
     expect(html).toContain('input input-xs input-ghost');
     expect(html).toContain('range range-xs range-primary');
   });
+
+  test('the master fader renders on the dB taper, at unity by default', () => {
+    const html = renderToString(<TransportBar />);
+
+    // Creation-time store state (the zustand + renderToString trap): the
+    // factory default is unity, so the fader renders at 0.75 of travel.
+    expect(html).toContain('title="Master: 0.0 dB"');
+    expect(html).toContain('value="0.75"');
+    expect(html).toContain('aria-label="Master"');
+  });
 });
 
 describe('transport bar aggregate behaviour', () => {

@@ -11,6 +11,11 @@ export function initPlaybackEngine(): void {
   audioEngine.init();
 }
 
+/**
+ * `velocity` is a per-hit PERFORMANCE attribute in 0..1, never a level. A
+ * layer fader reaches the engine through setSourceGain(source, …) and must
+ * not also be multiplied in here.
+ */
 export function playbackNoteOn(
   noteName: string,
   params: SynthParams,

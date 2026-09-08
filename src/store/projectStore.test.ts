@@ -3,7 +3,6 @@ import { createMemoryBackend, createProjectStore, QUOTA_MESSAGE } from './projec
 import { PROJECT_FORMAT_VERSION, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
 import { createDefaultLoop } from './loopSlice';
 import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
-import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 
 const body = (name: string, now = 1000): ProjectBody => ({ ...makeEnvelope(name, now), content: factoryProjectContent() });
 
@@ -132,17 +131,18 @@ describe('get normalises the body it hands out', () => {
     } as unknown as ProjectBody;
   };
 
-  test('a formatVersion-1 body comes back upgraded, gated and restamped', async () => {
+  test('a formatVersion-1 body comes back restamped, with its melody reset (not misread) and gated', async () => {
     const b = legacy();
     const store = createProjectStore(async () => createMemoryBackend([b]));
     const hit = await store.get(b.id);
     expect(hit.ok).toBe(true);
     if (!hit.ok) return;
     expect(hit.value.formatVersion).toBe(PROJECT_FORMAT_VERSION);
-    // Both lead steps ran: string[][] -> LeadNote[][], then widened to ticks.
+    // DEV-388: a v1 melody is right-shape-wrong-resolution, so
+    // asLeadNoteMatrix (via sanitizeLoops) refuses it whole rather than
+    // widening it, and sanitizeLoops then substitutes the default.
     const melody = hit.value.content.loops[0].leadMelodySteps as LeadNote[][];
-    expect(melody).toHaveLength(LEAD_TICKS_PER_BAR);
-    expect(melody[0]).toEqual([{ note: 'C4', len: 2 }]);
+    expect(melody).toEqual(createDefaultLoop().leadMelodySteps);
     expect(hit.value.content.loops[0].leadGate).toBe(DEFAULT_LEAD_GATE);
   });
 

@@ -6,7 +6,6 @@ import {
   copyLeadBar,
   leadCursorBar,
   pasteLeadBar,
-  isLegacyLeadMelody,
   leadActivePosAt,
   leadCoveringNoteIndex,
   leadSoundingNotes,
@@ -16,8 +15,6 @@ import {
   resizeLeadMelody,
   resolveLeadStepTriggers,
   transposeLeadMelodyByRoot,
-  upgradeLeadMelodyV1,
-  upgradeLeadMelodyToTicks,
   type LeadNote,
 } from './leadMelody';
 import { buildArpSequence } from './arpeggiator';
@@ -27,7 +24,6 @@ import {
   TICKS_PER_SIXTEENTH,
   columnsPerBar,
 } from '../utils/stepResolution';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
 
 describe('loopLengthDivisors', () => {
   test('lists every positive divisor ascending', () => {
@@ -385,37 +381,6 @@ describe('remapLeadMelodyByScale', () => {
       [{ note: 'A3', len: 1 }, { note: 'F#4', len: 1 }, { note: 'C#4', len: 1 }],
       [],
     ]);
-  });
-});
-
-describe('upgradeLeadMelodyV1', () => {
-  test('maps every string to a len-1 note, preserving row order', () => {
-    expect(upgradeLeadMelodyV1([['C4', 'E4'], [], ['G4']])).toEqual([
-      [{ note: 'C4', len: 1 }, { note: 'E4', len: 1 }],
-      [],
-      [{ note: 'G4', len: 1 }],
-    ]);
-  });
-
-  test('an empty matrix upgrades to an empty matrix', () => {
-    expect(upgradeLeadMelodyV1([])).toEqual([]);
-  });
-});
-
-describe('isLegacyLeadMelody', () => {
-  test('accepts a matrix of strings, including empty rows', () => {
-    expect(isLegacyLeadMelody([['C4'], []])).toBe(true);
-    expect(isLegacyLeadMelody([])).toBe(true);
-  });
-
-  test('rejects the already-upgraded object shape', () => {
-    expect(isLegacyLeadMelody([[{ note: 'C4', len: 1 }]])).toBe(false);
-  });
-
-  test('rejects non-matrix values', () => {
-    expect(isLegacyLeadMelody(undefined)).toBe(false);
-    expect(isLegacyLeadMelody('C4')).toBe(false);
-    expect(isLegacyLeadMelody(['C4'])).toBe(false);
   });
 });
 
@@ -806,84 +771,4 @@ describe('the stored width moves with the melody, not with the sequencer', () =>
     expect(leadCursorBar(8, 16, 4)).toBe(1);
     expect(leadCursorBar(8, 16, 2)).toBe(0);
   });
-});
-
-describe('upgradeLeadMelodyToTicks', () => {
-  const oldBar = (): LeadNote[][] =>
-    Array.from({ length: MAX_STEPS_PER_BAR }, () => [] as LeadNote[]);
-
-  test('slot i becomes tick 2i and the odd ticks are empty', () => {
-    const steps = oldBar();
-    steps[0] = [{ note: 'C4', len: 1 }];
-    steps[3] = [{ note: 'E4', len: 1 }];
-    const out = upgradeLeadMelodyToTicks(steps, 1);
-
-    expect(out).toHaveLength(LEAD_TICKS_PER_BAR);
-    expect(out[0]).toEqual([{ note: 'C4', len: 2 }]);
-    expect(out[1]).toEqual([]);
-    expect(out[6]).toEqual([{ note: 'E4', len: 2 }]);
-    expect(out[7]).toEqual([]);
-  });
-
-  test('every len doubles, because len now counts ticks', () => {
-    // A note that was 4 sixteenths long is 8 ticks long. Same music, and
-    // the same holdSec once resolveLeadStepTriggers rounds it to cells.
-    const steps = oldBar();
-    steps[0] = [{ note: 'C4', len: 4 }];
-    expect(upgradeLeadMelodyToTicks(steps, 1)[0]).toEqual([{ note: 'C4', len: 8 }]);
-  });
-
-  test('a dormant slot the meter could not reach survives the widening', () => {
-    // Slot 20 is unreachable in 4/4 and reachable in 12/8. Quiet, not gone
-    // — the widening must not be the thing that finally loses it.
-    const steps = oldBar();
-    steps[20] = [{ note: 'G5', len: 1 }];
-    expect(upgradeLeadMelodyToTicks(steps, 1)[40]).toEqual([{ note: 'G5', len: 2 }]);
-  });
-
-  test('widens every bar, not just the first', () => {
-    const steps = [...oldBar(), ...oldBar()];
-    steps[MAX_STEPS_PER_BAR] = [{ note: 'A4', len: 2 }];
-    const out = upgradeLeadMelodyToTicks(steps, 2);
-    expect(out).toHaveLength(2 * LEAD_TICKS_PER_BAR);
-    expect(out[LEAD_TICKS_PER_BAR]).toEqual([{ note: 'A4', len: 4 }]);
-  });
-
-  test('a ragged payload is padded rather than dropped', () => {
-    expect(upgradeLeadMelodyToTicks([[{ note: 'C4', len: 1 }]], 1)).toHaveLength(
-      LEAD_TICKS_PER_BAR,
-    );
-  });
-
-  test('`bars` pads a melody narrower than the loop', () => {
-    // The floor half of the rule: one old bar of data in a two-bar loop
-    // still comes back two bars wide, so the loop keeps its shape.
-    const steps = oldBar();
-    steps[0] = [{ note: 'C4', len: 1 }];
-    const out = upgradeLeadMelodyToTicks(steps, 2);
-    expect(out).toHaveLength(2 * LEAD_TICKS_PER_BAR);
-    expect(out[0]).toEqual([{ note: 'C4', len: 2 }]);
-  });
-
-  // setLeadLoopLengthPreserve lowers leadLoopLength WITHOUT resizing the
-  // melody on purpose, so a stored melody wider than `bars` is an ordinary
-  // persisted state, not a corrupt one. Trusting `bars` over the data
-  // re-read old bar 1 at half its beat (2x) or deleted it outright (3x, 4x).
-  for (const surplus of [2, 3, 4]) {
-    test(`a melody ${surplus}x wider than \`bars\` widens every bar it holds`, () => {
-      const steps: LeadNote[][] = [];
-      for (let bar = 0; bar < surplus; bar++) {
-        const rows = oldBar();
-        rows[4] = [{ note: 'C4', len: 4 }];
-        steps.push(...rows);
-      }
-      const out = upgradeLeadMelodyToTicks(steps, 1);
-
-      expect(out).toHaveLength(surplus * LEAD_TICKS_PER_BAR);
-      for (let bar = 0; bar < surplus; bar++) {
-        expect(out[bar * LEAD_TICKS_PER_BAR + 8]).toEqual([{ note: 'C4', len: 8 }]);
-        expect(out[bar * LEAD_TICKS_PER_BAR + 4]).toEqual([]);
-      }
-    });
-  }
 });

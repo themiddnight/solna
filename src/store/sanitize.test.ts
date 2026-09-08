@@ -28,11 +28,36 @@ describe('sanitize (shared by persist hydration and project import)', () => {
     expect(sanitizeLoops('loops')).toBeUndefined();
   });
 
-  test('sanitizeLoops keeps an unknown soundKit / pattern id verbatim', () => {
-    const loop = { ...createDefaultLoop(), soundKit: 'Kit From The Future', bassPatternId: 'bp-ghost' };
+  // Five enumerated fields each name a real library entry, so an id/label
+  // outside that library's set is invalid input, not "unknown but honoured"
+  // — the deleted migrateDrumVoices step used to carry a kit rename
+  // ('909 Modern' -> 'Club Standard'), so a stale session holding the old
+  // name must fall back to the default kit rather than resolve to nothing.
+  test('sanitizeLoops falls back an unrecognised soundKit / pattern id / scale to the default loop', () => {
+    const fallback = createDefaultLoop();
+    const loop = {
+      ...fallback,
+      soundKit: '909 Modern',
+      bassPatternId: 'bp-ghost',
+      chordRhythmId: 'rhythm-ghost',
+      scaleRoot: 'H#',
+      scaleType: 'bogus-scale',
+    };
     const [out] = sanitizeLoops([loop]) ?? [];
-    expect(out.soundKit).toBe('Kit From The Future');
-    expect(out.bassPatternId).toBe('bp-ghost');
+    expect(out.soundKit).toBe(fallback.soundKit);
+    expect(out.bassPatternId).toBe(fallback.bassPatternId);
+    expect(out.chordRhythmId).toBe(fallback.chordRhythmId);
+    expect(out.scaleRoot).toBe(fallback.scaleRoot);
+    expect(out.scaleType).toBe(fallback.scaleType);
+  });
+
+  test('sanitizeLoops keeps a valid soundKit / pattern id / scale untouched', () => {
+    const [out] = sanitizeLoops([
+      { ...createDefaultLoop(), soundKit: 'Club Standard', scaleRoot: 'F#', scaleType: 'Major' },
+    ]) ?? [];
+    expect(out.soundKit).toBe('Club Standard');
+    expect(out.scaleRoot).toBe('F#');
+    expect(out.scaleType).toBe('Major');
   });
 
   // A `.solna` file now arrives from other people's devices, so an array whose
@@ -54,15 +79,40 @@ describe('sanitize (shared by persist hydration and project import)', () => {
       ['customBassPattern outside the union', 'customBassPattern', ['root', 'ninth']],
       ['leadMelodySteps that is not a matrix', 'leadMelodySteps', ['C4', 'D4']],
       ['leadMelodySteps of numbers', 'leadMelodySteps', [[60], [62]]],
-      ['sequencerTracks of strings', 'sequencerTracks', ['kick', 'snare']],
-      ['a track whose steps are numbers', 'sequencerTracks', [{ instrument: 'kick', steps: [1, 0] }]],
-      ['a track with no instrument', 'sequencerTracks', [{ steps: [true, false] }]],
     ];
     for (const [label, key, value] of cases) {
       test(`${label} falls back to the default loop's value`, () => {
         expect(field(key, value)).toEqual(fallback[key]);
       });
     }
+
+    // sequencerTracks does NOT join the all-or-nothing table above: it is a
+    // SET keyed by instrument, not a sequence, so dropping one invalid row
+    // loses one voice and shifts nothing else (see sanitizeSequencerTracks's
+    // own docblock) — UNLESS every row is invalid, in which case the roster
+    // would otherwise sanitize to `[]` with no UI affordance to add a track
+    // back, so an all-stale result falls back to the full default roster too.
+    test('sequencerTracks of strings (not an array of objects) falls back to the default roster — nothing survives', () => {
+      expect(field('sequencerTracks', ['kick', 'snare'])).toEqual(fallback.sequencerTracks);
+    });
+
+    test('a wholly invalid roster (bad steps) falls back to the default roster, not []', () => {
+      expect(field('sequencerTracks', [{ instrument: 'kick', steps: [1, 0] }])).toEqual(fallback.sequencerTracks);
+    });
+
+    test('a single row with no instrument falls back to the default roster', () => {
+      expect(field('sequencerTracks', [{ steps: [true, false] }])).toEqual(fallback.sequencerTracks);
+    });
+
+    test('a partially-stale roster still drops only the bad rows, not the whole roster', () => {
+      const good = fallback.sequencerTracks[0];
+      const out = field('sequencerTracks', [good, { instrument: 'tom', steps: [true, false] }]);
+      expect(out).toEqual([good]);
+    });
+
+    test('sequencerTracks is not an array at all falls back to the default roster', () => {
+      expect(field('sequencerTracks', 'nope')).toEqual(fallback.sequencerTracks);
+    });
 
     test('valid elements are kept as they are', () => {
       const loop = createDefaultLoop();
@@ -140,5 +190,66 @@ describe('sanitizeLoops repairs a lead melody instead of blanking it', () => {
       [{ note: 'C4', len: 2 }],
       [{ note: 'E4', len: 2 }],
     ]);
+  });
+});
+
+describe('sanitizeEffectsValue and the master dynamics fields', () => {
+  test('a body with no dynamics keys gets each stage\'s INITIAL_EFFECTS default', () => {
+    // A missing key gets the default, like every other key here — it is NOT
+    // read as `false`. That distinction was invisible while both stages
+    // defaulted off and became a bug the moment DEV-383 defaulted the limiter
+    // on: an old body would have loaded limiter-off while a brand-new project
+    // of the same content loaded limiter-on.
+    const out = sanitizeEffectsValue({ reverbWet: 0.3 }) as Record<string, unknown>;
+    expect(out.compressorEnabled).toBe(INITIAL_EFFECTS.compressorEnabled);
+    expect(out.limiterEnabled).toBe(INITIAL_EFFECTS.limiterEnabled);
+    expect(out.compressorEnabled).toBe(false);
+    expect(out.limiterEnabled).toBe(true);
+  });
+
+  test('a truthy-but-not-true persisted flag never chooses a stage\'s state', () => {
+    // Persisted JSON is untrusted input: only a real boolean passes through,
+    // so a string, a 1 or an object can never silently insert a dynamics node
+    // — the wrong type gets the default, exactly as it would with the key
+    // missing, and the untrusted value influences nothing.
+    const out = sanitizeEffectsValue({
+      compressorEnabled: 'yes',
+      limiterEnabled: 1,
+    }) as Record<string, unknown>;
+    expect(out.compressorEnabled).toBe(INITIAL_EFFECTS.compressorEnabled);
+    expect(out.limiterEnabled).toBe(INITIAL_EFFECTS.limiterEnabled);
+  });
+
+  test('an explicit false survives — it is a real boolean, not a missing key', () => {
+    const out = sanitizeEffectsValue({
+      compressorEnabled: false,
+      limiterEnabled: false,
+    }) as Record<string, unknown>;
+    expect(out.compressorEnabled).toBe(false);
+    expect(out.limiterEnabled).toBe(false);
+  });
+
+  test('an explicit true survives', () => {
+    const out = sanitizeEffectsValue({
+      compressorEnabled: true,
+      limiterEnabled: true,
+    }) as Record<string, unknown>;
+    expect(out.compressorEnabled).toBe(true);
+    expect(out.limiterEnabled).toBe(true);
+  });
+
+  test('compressorRatio is a real field now and is no longer stripped', () => {
+    const out = sanitizeEffectsValue({ compressorRatio: 6 }) as Record<string, unknown>;
+    expect(out.compressorRatio).toBe(6);
+  });
+
+  test('compressorRatio is still clamped into the node range', () => {
+    const out = sanitizeEffectsValue({ compressorRatio: 99 }) as Record<string, unknown>;
+    expect(out.compressorRatio).toBe(20);
+  });
+
+  test('compressorBypass stays dead and is still stripped', () => {
+    const out = sanitizeEffectsValue({ compressorBypass: true }) as Record<string, unknown>;
+    expect('compressorBypass' in out).toBe(false);
   });
 });

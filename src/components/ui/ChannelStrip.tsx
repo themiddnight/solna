@@ -1,9 +1,9 @@
 import React from "react";
 import type { KnobColor } from "./Knob";
 import { Volume2 } from "lucide-react";
-import { Slider } from "./Slider";
+import { VolumeFader } from "./VolumeFader";
 import { FIELD_LABEL } from "./fieldClasses";
-
+import { formatDb } from "@/utils/gainUnits";
 
 /** Icon tints allowed by the theme; reuses KnobColor so drift is impossible. */
 type StripAccent = KnobColor;
@@ -11,57 +11,57 @@ type StripAccent = KnobColor;
 interface ChannelStripProps {
   idPrefix: string;
   label?: string;
-  volume: number;
+  /**
+   * The bus level in DECIBELS: unity is 0, the range is -60..+12 for every
+   * bus. There is no `max` prop any more. It used to be a required LINEAR
+   * ceiling — 1.5 for a boostable layer, 1.0 for the drum bus — because the
+   * ceiling was a property of the bus. On a shared dB range that distinction
+   * is gone, and a per-call ceiling would be worse than useless: the taper is
+   * derived from FADER_MAX_DB, so a caller-supplied ceiling would make the
+   * same physical position mean a different level on different strips.
+   */
+  volumeDb: number;
   accentClass: StripAccent;
-  onVolumeChange: (v: number) => void;
-  // The chord panel shows a live % readout; the bass panel does not.
+  onVolumeDbChange: (db: number) => void;
+  // The chord panel shows a live dB readout; the bass panel does not.
   showReadout?: boolean;
   // Full daisyUI class list for the fader, e.g. 'range range-xs range-primary'.
   sliderClassName?: string;
-  /**
-   * Fader ceiling. Required, not defaulted: the ceiling is a property of the
-   * bus, not of this widget. The chord and bass layers can be pushed to 1.5
-   * for a boost, the drum bus is a plain 0..1 master — a default would hand
-   * whichever value it picked to the next caller by silence.
-   */
-  max: number;
 }
 
 export function ChannelStrip({
   idPrefix,
   label,
-  volume,
+  volumeDb,
   accentClass,
-  onVolumeChange,
+  onVolumeDbChange,
   showReadout = true,
   sliderClassName = "range range-xs range-accent",
-  max,
 }: ChannelStripProps) {
-  // idPrefix is the layer slug ("chord"/"bass"); the original tooltip reads
-  // "Chord Layer Gain: X%" / "Bass Layer Gain: X%".
+  // idPrefix is the layer slug ("chord"/"bass"); the tooltip reads
+  // "Chord Layer Gain: -6.0 dB".
   const layerName = idPrefix.charAt(0).toUpperCase() + idPrefix.slice(1);
+  const readout = formatDb(volumeDb);
   return (
     <div className="min-w-40">
       {label && <label className={FIELD_LABEL}>
-        {label} <span className="font-mono">({Math.round(volume * 100)}%)</span>
+        {label} <span className="font-mono">({readout})</span>
       </label>}
       <div className="flex items-center gap-2 bg-base-200 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
         <Volume2 className={`w-3.5 h-3.5 ${accentClass} shrink-0`} />
-        <Slider
+        {/* No taper, no step, no formatting here. VolumeFader owns all three,
+            which is what makes "unity at 0.75 of travel" one fact rather than
+            twenty. This component contributes the icon, the field label and
+            the box — and DEV-389 will replace exactly that, plus a meter. */}
+        <VolumeFader
           id={`slider-${idPrefix}-layer-volume`}
-          min={0}
-          max={max}
-          step={0.05}
-          value={volume}
-          onChange={onVolumeChange}
+          label={`${layerName} Layer Gain`}
+          valueDb={volumeDb}
+          onChangeDb={onVolumeDbChange}
           className={sliderClassName}
-          title={`${layerName} Layer Gain: ${(volume * 100).toFixed(0)}%`}
+          showReadout={showReadout}
+          readoutClassName="text-[10px] font-mono min-w-14 text-right"
         />
-        {showReadout && (
-          <span className="text-[10px] font-mono min-w-8 text-right">
-            {(volume * 100).toFixed(0)}%
-          </span>
-        )}
       </div>
     </div>
   );

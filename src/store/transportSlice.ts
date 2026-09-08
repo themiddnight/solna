@@ -4,6 +4,7 @@ import { DEFAULT_METER_ID } from '../utils/meter';
 import type { AppStore, PlayerModule, PlayerState, TransportSlice } from './types';
 import { playbackScopeReducer, SCOPE_NONE } from './playbackScope';
 import type { PlaybackScope } from './playbackScope';
+import { DEFAULT_FADER_DB } from './levelUnits';
 
 type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
@@ -105,7 +106,8 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
   return {
     bpm: DEFAULT_BPM,
     meterId: DEFAULT_METER_ID,
-    masterVolume: 0.85,
+    // Decibels, not a linear gain: unity is 0 dB. See src/store/levelUnits.ts.
+    masterVolume: DEFAULT_FADER_DB,
     metronomeActive: false,
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',

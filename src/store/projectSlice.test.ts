@@ -6,7 +6,6 @@ import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
 import { fingerprintContent } from './projectFingerprint';
 import { createDefaultLoop, DEFAULT_LOOP_ID } from './loopSlice';
 import { LOOP_FLAT_KEYS } from './loop';
-import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 import type { AppStore } from './types';
 
 class FakeLocalStorage {
@@ -411,11 +410,15 @@ describe('openProject through the loop-mirroring set', () => {
  * The IndexedDB twin of projectFormat.test.ts's `.solna` regression. CLAUDE.md
  * calls IndexedDB the saved project library, so Open is the FIRST reader of a
  * pre-DEV-369 body, not the second: every project saved before this branch
- * sits at formatVersion 1 with a `string[][]` melody and no leadGate. Without
- * the upgrade-then-sanitize pass on the read path, install() spreads that body
- * straight into the store — the grid renders empty, holdSec goes NaN, and the
- * corrupted matrix is persisted, so the melody is gone for good on the next
- * reload. It fails by blanking data, never by throwing.
+ * sits at formatVersion 1 with a `string[][]` melody and no leadGate.
+ *
+ * DEV-388 deleted the per-version upgrade chain: a v1 melody is a
+ * `string[][]`, which is the WRONG SHAPE for `asLeadNoteMatrix`
+ * (sanitize.ts) regardless of version, so it comes back BLANK via plain
+ * shape validation, not widened. What must still hold is that it comes back
+ * blank via the
+ * default, not via a crash: install() must never spread an un-sanitized body
+ * straight into the store.
  */
 function legacyV1Body(id: string): ProjectBody {
   const loop = { ...createDefaultLoop(), id: 'loop-legacy' } as unknown as Record<string, unknown>;
@@ -429,18 +432,7 @@ function legacyV1Body(id: string): ProjectBody {
   } as unknown as ProjectBody;
 }
 
-/**
- * The same three v1 rows after BOTH lead steps: string[][] became LeadNote[][]
- * at the narrow stored width, then widened to LEAD_TICKS_PER_BAR with old slot
- * `i` on tick `2i` and every `len` counted in ticks. The default loop is one
- * bar long, so that is the whole melody.
- */
-const UPGRADED_MELODY: LeadNote[][] = (() => {
-  const bar: LeadNote[][] = Array.from({ length: LEAD_TICKS_PER_BAR }, () => []);
-  bar[0] = [{ note: 'C4', len: 2 }, { note: 'E4', len: 2 }];
-  bar[4] = [{ note: 'G4', len: 2 }];
-  return bar;
-})();
+const BLANKED_MELODY: LeadNote[][] = createDefaultLoop().leadMelodySteps;
 
 describe('a formatVersion-1 body in the project library', () => {
   test('openProject keeps its melody — upgraded, gated and restamped', async () => {
@@ -451,8 +443,8 @@ describe('a formatVersion-1 body in the project library', () => {
     expect(result.ok).toBe(true);
 
     const s = useAppStore.getState();
-    expect(s.leadMelodySteps).toEqual(UPGRADED_MELODY);
-    expect(s.loops[0].leadMelodySteps).toEqual(UPGRADED_MELODY);
+    expect(s.leadMelodySteps).toEqual(BLANKED_MELODY);
+    expect(s.loops[0].leadMelodySteps).toEqual(BLANKED_MELODY);
     expect(s.leadGate).toBe(DEFAULT_LEAD_GATE);
     expect(s.loops[0].leadGate).toBe(DEFAULT_LEAD_GATE);
     expect(s.bpm).toBe(118);
@@ -468,6 +460,6 @@ describe('a formatVersion-1 body in the project library', () => {
     // A body re-stamped as current WITHOUT upgrading its content turns a
     // recoverable old project into a permanently mislabelled one.
     expect(result.value.formatVersion).toBe(PROJECT_FORMAT_VERSION);
-    expect(result.value.content.loops[0].leadMelodySteps).toEqual(UPGRADED_MELODY);
+    expect(result.value.content.loops[0].leadMelodySteps).toEqual(BLANKED_MELODY);
   });
 });

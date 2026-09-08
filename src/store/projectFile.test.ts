@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import { parseProjectFile, serializeProject, unknownLibraryReferences } from './projectFile';
-import { migrateProjectBody } from './projectFormatMigrate';
 import { PROJECT_FORMAT_VERSION, factoryProjectContent, makeEnvelope } from './projectFormat';
 import { createDefaultLoop } from './loopSlice';
 import { LOOP_FLAT_KEYS } from './loop';
@@ -70,7 +69,7 @@ describe('parseProjectFile sanitises wrong-typed content instead of refusing', (
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.body.content.bpm).toBe(120);
-    expect(result.body.content.masterVolume).toBe(0.85);
+    expect(result.body.content.masterVolume).toBe(0); // DEFAULT_FADER_DB (unity 0 dB)
     expect(result.body.content.meterId).toBe('4/4');
     expect(typeof result.body.content.effects.reverbWet).toBe('number');
     expect(result.body.content.loops).toHaveLength(1);
@@ -91,9 +90,45 @@ describe('parseProjectFile sanitises wrong-typed content instead of refusing', (
     expect(result.ok && result.body.content.loops).toHaveLength(1);
   });
 
-  test('unknown soundKit / bassPatternId / chordRhythmId import successfully, verbatim, with a warning', () => {
+  // DEV-386 fix round 2: a .solna body is an external contract, not this
+  // app's own localStorage — a malformed sequencerTracks[].volume here is
+  // ordinary untrusted input, and the old, unguarded isSequencerTrack let it
+  // straight through to faderDbToGain, which fails SAFE TO SILENCE. Both
+  // cases are asserted through the real import path (parseProjectFile), not
+  // by calling a sanitize helper directly.
+  test('an out-of-range sequencer track volume imports at its default, not clamped or silenced', () => {
+    const track = { ...createDefaultLoop().sequencerTracks[0], volume: 999 };
+    const loop = { ...createDefaultLoop(), sequencerTracks: [track] };
+    const result = parseProjectFile(JSON.stringify({ ...body, content: { ...body.content, loops: [loop] } }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // DEFAULT_FADER_DB (unity): 999's UNIT is unknown, not just its
+    // magnitude, so it is not clamped to FADER_MAX_DB — and not silenced.
+    expect(result.body.content.loops[0].sequencerTracks[0].volume).toBe(0);
+  });
+
+  test('a non-numeric sequencer track volume imports at unity, not silence', () => {
+    const track = { ...createDefaultLoop().sequencerTracks[0], volume: 'loud' };
+    const loop = { ...createDefaultLoop(), sequencerTracks: [track] };
+    const result = parseProjectFile(JSON.stringify({ ...body, content: { ...body.content, loops: [loop] } }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // asFaderDb's fallback for a non-finite/wrong-typed value is
+    // DEFAULT_FADER_DB (0 dB, unity) — the safe direction. Before this fix,
+    // an unclamped garbage value reached faderDbToGain, which maps anything
+    // non-finite to a LINEAR gain of exactly 0: a muted drum track, silently.
+    expect(result.body.content.loops[0].sequencerTracks[0].volume).toBe(0);
+  });
+
+  // sanitizeLoops now validates these three against their own libraries
+  // (DRUM_KITS / BASS_PATTERNS / CHORD_RHYTHMS), so an unknown id/name falls
+  // back to the default loop's value INSIDE sanitizeContent, before
+  // unknownLibraryReferences ever sees it — the import still succeeds, but
+  // nothing "unknown" survives to import verbatim or to warn about.
+  test('unknown soundKit / bassPatternId / chordRhythmId fall back to the default loop, with no warning', () => {
+    const fallback = createDefaultLoop();
     const loop = {
-      ...createDefaultLoop(),
+      ...fallback,
       soundKit: 'Kit From The Future',
       bassPatternId: 'bp-ghost',
       chordRhythmId: 'cr-ghost',
@@ -101,10 +136,10 @@ describe('parseProjectFile sanitises wrong-typed content instead of refusing', (
     const result = parseProjectFile(JSON.stringify({ ...body, content: { ...body.content, loops: [loop] } }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.body.content.loops[0].soundKit).toBe('Kit From The Future');
-    expect(result.body.content.loops[0].bassPatternId).toBe('bp-ghost');
-    expect(result.body.content.loops[0].chordRhythmId).toBe('cr-ghost');
-    expect(result.warnings).toHaveLength(3);
+    expect(result.body.content.loops[0].soundKit).toBe(fallback.soundKit);
+    expect(result.body.content.loops[0].bassPatternId).toBe(fallback.bassPatternId);
+    expect(result.body.content.loops[0].chordRhythmId).toBe(fallback.chordRhythmId);
+    expect(result.warnings).toHaveLength(0);
   });
 });
 
@@ -120,11 +155,7 @@ describe('unknownLibraryReferences', () => {
   });
 });
 
-describe('migrateProjectBody', () => {
-  test('is the identity at v1 and does not mutate its input', () => {
-    const raw = { formatVersion: 1, id: 'a' };
-    const out = migrateProjectBody(raw, 1);
-    expect(out).toEqual(raw);
-    expect(out).not.toBe(raw);
-  });
-});
+// migrateProjectBody (the identity function DEV-388 first replaced the
+// version chain with) and its module were deleted in the final review fix
+// wave: nothing in production imported it, and the three validation cases
+// its docblock explained are already stated at projectFormat.ts:29-38.

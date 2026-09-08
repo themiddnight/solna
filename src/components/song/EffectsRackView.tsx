@@ -1,5 +1,5 @@
 import React from "react";
-import { Waves, Activity, Sparkles, Sliders } from "lucide-react";
+import { Waves, Activity, Sparkles, Sliders, Gauge, ShieldCheck } from "lucide-react";
 import { MasterEffects } from "@/types";
 import { useAppStore } from "@/store/store";
 import { Knob } from "../ui/Knob";
@@ -10,10 +10,227 @@ import { PanelCard } from "../ui/PanelCard";
 import { SECTION_HEADER } from "../ui/fieldClasses";
 import { AudioVisualizer, VISUALIZER_MODES, VISUALIZER_MODE_LABEL, type VisualizerMode } from "../AudioVisualizer";
 import {
+  compressorRatioDescriptor,
   delayFeedbackDescriptor,
   distortionDriveDescriptor,
+  dynamicsAttackDescriptor,
+  dynamicsReleaseDescriptor,
   reverbDecayDescriptor,
 } from "../fxDescriptors";
+import { GainReductionMeter } from "../ui/GainReductionMeter";
+
+/** The numeric fields of `MasterEffects` — the only ones a knob may drive. `-?` is what
+ *  keeps `undefined` out of the union: MasterEffects has optional members, and a mapped
+ *  type that preserves their optionality yields `undefined` as a key. */
+type DynamicsValueKey = {
+  [K in keyof MasterEffects]-?: MasterEffects[K] extends number ? K : never;
+}[keyof MasterEffects];
+
+/** The two required `*Enabled` booleans; the optional `*Bypass?` flags are a different
+ *  mechanism entirely (see the comment on MasterEffects in types.ts). */
+type DynamicsEnabledKey = "compressorEnabled" | "limiterEnabled";
+
+interface DynamicsKnobSpec {
+  id: string;
+  label: string;
+  /** Indexes `MasterEffects`, so a renamed field fails here rather than writing a
+   *  patch nothing reads. */
+  valueKey: DynamicsValueKey;
+  min: number;
+  max: number;
+  step: number;
+  format: (value: number) => string;
+  /** Omitted where the value has no plain-language reading worth printing. */
+  descriptor?: (value: number) => string;
+}
+
+interface DynamicsCardSpec {
+  badge: number;
+  icon: React.ReactNode;
+  /** Shown as the card title AND used as the toggle's accessible name — the two were
+   *  hand-written twice per card and must not be allowed to say different things. */
+  title: string;
+  toggleId: string;
+  enabledKey: DynamicsEnabledKey;
+  stage: "compressor" | "limiter";
+  knobs: readonly DynamicsKnobSpec[];
+}
+
+/**
+ * The two master dynamics cards, in the order they render.
+ *
+ * A table rather than two ~85-line JSX blocks: the compressor and the limiter are the
+ * same card — same shell, same header, same four-knob row, same gain-reduction meter —
+ * and differed only in these values. Two copies of that markup is two places to fix a
+ * layout change and two places for one of them to be missed.
+ *
+ * What is deliberately NOT in the table is anything both cards share: the `text-success`
+ * knob colour, the `accent` toggle tone, the enabled/disabled card border. A shared value
+ * lifted into the table would read as a per-card choice and invite the two to diverge,
+ * which is the state this replaced.
+ */
+const DYNAMICS_CARDS: readonly DynamicsCardSpec[] = [
+  {
+    badge: 5,
+    icon: <Gauge className="w-3.5 h-3.5 text-success" />,
+    title: "Master Compressor",
+    toggleId: "btn-enable-compressor",
+    enabledKey: "compressorEnabled",
+    stage: "compressor",
+    knobs: [
+      {
+        id: "slider-comp-threshold",
+        label: "Threshold",
+        valueKey: "compressorThreshold",
+        min: -48,
+        max: 0,
+        step: 1,
+        format: (v) => `${v}dB`,
+      },
+      {
+        id: "slider-comp-ratio",
+        label: "Ratio",
+        valueKey: "compressorRatio",
+        min: 1,
+        max: 20,
+        step: 0.5,
+        descriptor: compressorRatioDescriptor,
+        format: (v) => `${v.toFixed(1)}:1`,
+      },
+      {
+        id: "slider-comp-attack",
+        label: "Attack",
+        valueKey: "compressorAttack",
+        min: 0.001,
+        max: 0.2,
+        step: 0.001,
+        descriptor: dynamicsAttackDescriptor,
+        format: (v) => `${(v * 1000).toFixed(0)}ms`,
+      },
+      {
+        id: "slider-comp-release",
+        label: "Release",
+        valueKey: "compressorRelease",
+        min: 0.02,
+        max: 1,
+        step: 0.01,
+        descriptor: dynamicsReleaseDescriptor,
+        format: (v) => `${(v * 1000).toFixed(0)}ms`,
+      },
+    ],
+  },
+  {
+    badge: 6,
+    icon: <ShieldCheck className="w-3.5 h-3.5 text-success" />,
+    title: "Brickwall Limiter",
+    toggleId: "btn-enable-limiter",
+    enabledKey: "limiterEnabled",
+    stage: "limiter",
+    knobs: [
+      {
+        // "Ceiling", not "Threshold": on a brickwall stage the number IS the output
+        // ceiling, and the knob id stays `limiter-threshold` because it tracks the
+        // store field, not the label.
+        id: "slider-limiter-threshold",
+        label: "Ceiling",
+        valueKey: "limiterThreshold",
+        min: -24,
+        max: 0,
+        step: 0.5,
+        format: (v) => `${v.toFixed(1)}dB`,
+      },
+      {
+        id: "slider-limiter-ratio",
+        label: "Ratio",
+        valueKey: "limiterRatio",
+        min: 4,
+        max: 20,
+        step: 1,
+        format: (v) => `${v.toFixed(0)}:1`,
+      },
+      {
+        id: "slider-limiter-attack",
+        label: "Attack",
+        valueKey: "limiterAttack",
+        min: 0.001,
+        max: 0.05,
+        step: 0.001,
+        descriptor: dynamicsAttackDescriptor,
+        format: (v) => `${(v * 1000).toFixed(0)}ms`,
+      },
+      {
+        id: "slider-limiter-release",
+        label: "Release",
+        valueKey: "limiterRelease",
+        min: 0.02,
+        max: 0.5,
+        step: 0.01,
+        descriptor: dynamicsReleaseDescriptor,
+        format: (v) => `${(v * 1000).toFixed(0)}ms`,
+      },
+    ],
+  },
+];
+
+/** One master dynamics card. Both stages render through this; see DYNAMICS_CARDS. */
+function DynamicsCard({
+  spec,
+  effects,
+  updateFx,
+}: {
+  spec: DynamicsCardSpec;
+  effects: MasterEffects;
+  updateFx: (updates: Partial<MasterEffects>) => void;
+}) {
+  const enabled = effects[spec.enabledKey];
+  return (
+    <div
+      className={`card bg-panel border shadow-md transition-all ${
+        enabled ? "border-success/40 ring-1 ring-success/20" : "border-base-300 opacity-60"
+      }`}
+    >
+      <div className="card-body p-3 sm:p-4 space-y-3">
+        <ModuleHeader
+          badge={spec.badge}
+          icon={spec.icon}
+          title={spec.title}
+          right={
+            <PowerToggle
+              id={spec.toggleId}
+              on={enabled}
+              onToggle={() => updateFx({ [spec.enabledKey]: !enabled })}
+              name={spec.title}
+              tone="accent"
+              size="xs"
+              iconOnly
+            />
+          }
+        />
+
+        <div className="flex items-start justify-around gap-2 w-full min-w-max mx-auto">
+          {spec.knobs.map((knob) => (
+            <Knob
+              key={knob.id}
+              id={knob.id}
+              label={knob.label}
+              color="text-success"
+              value={effects[knob.valueKey]}
+              min={knob.min}
+              max={knob.max}
+              step={knob.step}
+              disabled={!enabled}
+              descriptor={knob.descriptor?.(effects[knob.valueKey])}
+              format={knob.format}
+              onChange={(v) => updateFx({ [knob.valueKey]: v })}
+            />
+          ))}
+        </div>
+
+        <GainReductionMeter stage={spec.stage} active={enabled} />
+      </div>
+    </div>
+  );
+}
 
 export const EffectsRackView = React.memo(function EffectsRackView() {
   const effects = useAppStore((s) => s.effects);
@@ -262,6 +479,22 @@ export const EffectsRackView = React.memo(function EffectsRackView() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="space-y-2">
+        <h3 className={`${SECTION_HEADER} px-1`}>
+          Master Dynamics
+        </h3>
+        <p className="px-1 text-[11px] text-base-content/60">
+          Both stages sit after the master fader and after the meter, so the level you see is
+          the mix you made. The limiter starts on as a safety net for the occasional over; the
+          compressor starts off. Switch either one to taste.
+        </p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+          {DYNAMICS_CARDS.map((spec) => (
+            <DynamicsCard key={spec.stage} spec={spec} effects={effects} updateFx={updateFx} />
+          ))}
         </div>
       </section>
 

@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test';
+import { afterEach, describe, test, expect, spyOn } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -75,7 +75,7 @@ const track = (over: Partial<SequencerTrack>): SequencerTrack => ({
   name: 'T',
   instrument: 'kick',
   color: 'bg-primary',
-  volume: 1,
+  volume: 0, // DEFAULT_FADER_DB (unity 0 dB) — DEV-386, was linear 1 pre-conversion
   muted: false,
   steps: [true, false, true, false],
   ...over,
@@ -152,5 +152,62 @@ describe('the clock effect resubscribes only on isPlaying/hardStop', () => {
       .map((s) => s.trim())
       .filter(Boolean);
     expect(deps).toEqual(['isPlaying', 'hardStop']);
+  });
+});
+
+import { fireSequencerStepEvents } from './useSequencerPlayback';
+import { audioEngine } from '../audio/engine';
+import { DEFAULT_VELOCITY } from '../audio/constants';
+import { useAppStore } from '../store/store';
+
+describe('the sequencer fader is a bus gain, never a velocity', () => {
+  const initialVolume = useAppStore.getState().masterSequencerVolume;
+  afterEach(() => {
+    (audioEngine.triggerDrum as unknown as { mockRestore?: () => void }).mockRestore?.();
+    (audioEngine.triggerSynthNoteOn as unknown as { mockRestore?: () => void }).mockRestore?.();
+    useAppStore.getState().setMasterSequencerVolume(initialVolume);
+  });
+
+  // The bug this pins: masterSequencerVolume was handed to triggerPad/
+  // playbackNoteOn as the velocity AND set on the sequencer source bus, so
+  // drum output was proportional to the fader SQUARED. Both values default
+  // to 0.8, so a test that only checks the default is inaudible to the bug —
+  // this moves the fader to a value that is NOT 0.8, reads it back off the
+  // LIVE store the way the clock callback does, and asserts the engine
+  // never sees that value as a velocity.
+  test('a fader moved away from 0.8 never reaches triggerDrum as velocity', () => {
+    const drumSpy = spyOn(audioEngine, 'triggerDrum').mockImplementation(() => {});
+    useAppStore.getState().setMasterSequencerVolume(0.3);
+    const live = useAppStore.getState();
+    expect(live.masterSequencerVolume).toBe(0.3);
+    fireSequencerStepEvents([{ kind: 'pad', instrument: 'kick' }], live.synthParams, 1);
+    expect(drumSpy).toHaveBeenCalledWith('kick', DEFAULT_VELOCITY, 1);
+    expect(drumSpy.mock.calls[0]?.[1]).not.toBe(live.masterSequencerVolume);
+  });
+
+  test('a fader moved away from 0.8 never reaches triggerSynthNoteOn as velocity', () => {
+    const noteSpy = spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation(() => {});
+    useAppStore.getState().setMasterSequencerVolume(0.3);
+    const live = useAppStore.getState();
+    fireSequencerStepEvents(
+      [{ kind: 'note', note: 'C4', release: 0.4, offsetSec: 0.1 }],
+      live.synthParams,
+      1,
+    );
+    expect(noteSpy.mock.calls[0]?.[2]).toBe(DEFAULT_VELOCITY);
+    expect(noteSpy.mock.calls[0]?.[2]).not.toBe(live.masterSequencerVolume);
+  });
+
+  // Static pin, cheap and precise: the exact buggy assignment/call shapes
+  // must not reappear even if a future edit re-threads a volume variable
+  // through by another name.
+  test('the source no longer threads masterSequencerVolume into a velocity argument', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/components/useSequencerPlayback.ts'),
+      'utf8',
+    );
+    expect(source).not.toContain('triggerPad(event.instrument, live.masterSequencerVolume');
+    expect(source).not.toContain('const volume = live.masterSequencerVolume');
+    expect(source).toContain('DEFAULT_VELOCITY');
   });
 });

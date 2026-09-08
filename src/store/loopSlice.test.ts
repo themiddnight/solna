@@ -216,7 +216,7 @@ describe('loopSlice', () => {
     expect(h.state.bassVolume).toBeUndefined();
     expect(h.state.drumMuted).toBeUndefined();
     // ...nor the active loop's copy.
-    expect(h.state.loops[1].bassVolume).toBe(1.0);
+    expect(h.state.loops[1].bassVolume).toBe(-6); // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
     expect(h.state.loops[1].drumMuted).toBe(false);
   });
 

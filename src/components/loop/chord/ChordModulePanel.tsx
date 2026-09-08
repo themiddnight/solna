@@ -200,11 +200,10 @@ export function ChordModulePanel({
           <ChannelStrip
             idPrefix="chord"
             label="Chord Level"
-            volume={chordVolume}
-            max={1.5}
+            volumeDb={chordVolume}
             accentClass={SYNTH_TARGET_STYLES.chord.accent}
             sliderClassName={SYNTH_TARGET_STYLES.chord.slider}
-            onVolumeChange={setChordVolume}
+            onVolumeDbChange={setChordVolume}
           />
         </div>
 

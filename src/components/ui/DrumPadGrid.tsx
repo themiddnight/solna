@@ -21,6 +21,12 @@ import { Slider } from './Slider';
  * across the three semantic ramps, so adjacency always guarantees a colour
  * change.
  */
+// NOTE (DEV-386): `volume` here is a VELOCITY, not a level — a per-pad strike
+// strength that goes to triggerDrum as a performance attribute. It keeps its
+// authored values (kick 0.9, hihat 0.75, …); flattening them would be an
+// audible regression. Renaming the field would touch the pad type, the
+// persisted pad list and its tests, so it is deliberately left for a
+// follow-up. See utils/gainUnits.ts for the velocity-vs-level rule.
 export const DEFAULT_PADS: DrumPad[] = [
   { id: 'kick', name: 'Kick Drum', note: 'kick', color: 'from-drum-kick to-drum-kick/60 text-drum-kick-content', shortcut: 'KeyZ', volume: 0.9, pitch: 0, decay: 0.3 },
   { id: 'snare', name: 'Snare Snap', note: 'snare', color: 'from-drum-snare to-drum-snare/60 text-drum-snare-content', shortcut: 'KeyX', volume: 0.85, pitch: 0, decay: 0.2 },

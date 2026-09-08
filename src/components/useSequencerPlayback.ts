@@ -9,6 +9,7 @@ import {
   subscribePlaybackClock,
 } from "../audio/playback/playbackEngine";
 import { getMeter } from "../utils/meter";
+import { DEFAULT_VELOCITY } from "../audio/constants";
 import { armOnBarLine, isSoftStopBoundary } from "./playerStop";
 import type { PlayerState } from "../store/types";
 import type { SequencerTrack, SynthParams } from "../types";
@@ -59,6 +60,13 @@ export function sequencerStepEvents(
   for (const track of tracks) {
     if (track.muted) continue;
     if (!track.steps[stepIndex]) continue;
+    // NOTE (DEV-386): a sequencer NOTE goes to playbackNoteOn with `source`
+    // defaulting to 'synth', so it sums on the Lead bus while the Beat fader
+    // is what a user reaches for. Latent today only because all eleven
+    // canonical tracks are drum voices; the first synth or bass track makes
+    // it audible. Fixing it means deciding whether a sequencer note belongs
+    // on the sequencer bus at all — an arrangement question, not a units
+    // one. Left for a follow-up.
     if (track.instrument === 'synth' || track.instrument === 'bass') {
       events.push({
         kind: 'note',
@@ -71,6 +79,34 @@ export function sequencerStepEvents(
     }
   }
   return events;
+}
+
+/**
+ * Fires the given step events at the engine. A VELOCITY, not a level, and a
+ * fixed one — variable velocity is deferred (see the plan's Deferred
+ * section). The Beat fader reaches the drums exactly once, on the sequencer
+ * source bus, via engineSync's setSourceGain('sequencer', …) — engine.ts
+ * connects drumBusFilter into that bus. This used to ALSO hand the fader
+ * value to triggerPad as the velocity argument, where clampVelocity(v)
+ * scales every voice's peak, so drum output was proportional to
+ * masterSequencerVolume SQUARED: the 0.8 default read as -3.9 dB rather than
+ * -1.9, and a fader at -6 dB delivered -12. Exported (pure, no store read) so
+ * the fix is testable directly — the hook's clock effect never runs under
+ * `renderToString`.
+ */
+export function fireSequencerStepEvents(
+  events: readonly SequencerStepEvent[],
+  synthParams: SynthParams,
+  time: number,
+): void {
+  for (const event of events) {
+    if (event.kind === 'note') {
+      playbackNoteOn(event.note, synthParams, DEFAULT_VELOCITY, time);
+      playbackNoteOff(event.note, event.release, time + event.offsetSec);
+    } else {
+      triggerPad(event.instrument, DEFAULT_VELOCITY, time);
+    }
+  }
 }
 
 // Real-time sequencer stepper hook. Moved here from
@@ -147,20 +183,11 @@ export function useSequencerPlayback(): void {
       // the meter read above, and the pattern useLeadPlayback.ts:90 and
       // useChordPlayback.ts:632 already use.
       const live = useAppStore.getState();
-      const volume = live.masterSequencerVolume;
-      for (const event of sequencerStepEvents(
-        live.sequencerTracks,
-        stepInLoop,
+      fireSequencerStepEvents(
+        sequencerStepEvents(live.sequencerTracks, stepInLoop, live.synthParams, live.bpm),
         live.synthParams,
-        live.bpm,
-      )) {
-        if (event.kind === 'note') {
-          playbackNoteOn(event.note, live.synthParams, volume, time);
-          playbackNoteOff(event.note, event.release, time + event.offsetSec);
-        } else {
-          triggerPad(event.instrument, volume, time);
-        }
-      }
+        time,
+      );
     });
   }, [isPlaying, hardStop]);
 }

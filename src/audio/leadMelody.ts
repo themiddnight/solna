@@ -1,7 +1,6 @@
 import type { ArpMode, ArpRate } from '../types';
 import { buildArpSequence } from './arpeggiator';
 import { arpFiresOnStep, computeArpTriggers } from './arpSchedule';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import {
   LEAD_TICKS_PER_BAR,
   TICKS_PER_SIXTEENTH,
@@ -40,82 +39,6 @@ export interface LeadTrigger {
 export interface LeadNote {
   note: string;
   len: number;
-}
-
-/** True for the pre-DEV-369 `string[][]` melody shape. */
-export function isLegacyLeadMelody(value: unknown): value is string[][] {
-  return (
-    Array.isArray(value) &&
-    value.every((row) => Array.isArray(row) && row.every((n) => typeof n === 'string'))
-  );
-}
-
-/**
- * The one transform both migration chains share: every old note becomes a
- * one-step note. The persist chain and the .solna chain call this from two
- * separate functions and must NOT be refactored into one — the persist
- * payload is private localStorage shape, a project body is an external
- * contract, and the two version numbers move for different reasons.
- */
-export function upgradeLeadMelodyV1(steps: string[][]): LeadNote[][] {
-  return steps.map((row) => row.map((note) => ({ note, len: 1 })));
-}
-
-/**
- * The second transform both migration chains share: the melody widens from
- * MAX_STEPS_PER_BAR slots a bar to LEAD_TICKS_PER_BAR, stored slot `i`
- * becomes tick `i * TICKS_PER_SIXTEENTH`, the ticks between stay empty, and
- * every `len` is multiplied by TICKS_PER_SIXTEENTH because it now counts
- * ticks instead of 16ths.
- *
- * `bars` is the loop's own bar count and it is a FLOOR, never a truth: the
- * array's own bar span (ceil(length / MAX_STEPS_PER_BAR)) wins whenever it
- * is wider. `bars` is still an argument rather than the whole derivation
- * because LEAD_TICKS_PER_BAR is itself a multiple of MAX_STEPS_PER_BAR, so
- * a short array's length alone cannot say how many bars the loop wants —
- * it just stops being trusted OVER the data.
- *
- * That rule is not defensive. setLeadLoopLengthPreserve lowers
- * leadLoopLength WITHOUT resizing the melody on purpose (the extra bars go
- * dormant and play again when the length is raised back), so a stored
- * melody wider than `bars` is an ordinary persisted state. Taking `bars`
- * at its word read old bar 1 at half its beat when the surplus was exactly
- * 2x — LEAD_TICKS_PER_BAR being 2 * MAX_STEPS_PER_BAR made the old array
- * the exact width of the new one — and deleted the surplus bars outright
- * above that. Both results pass asLeadNoteMatrix, so nothing threw.
- *
- * There is deliberately NO width-equality idempotence guard: each chain's
- * version gate already guarantees this runs exactly once, and the guard was
- * the very thing that mistook two old bars for one new one.
- *
- * The persist chain and the .solna chain call this from two separate
- * functions and must NOT be refactored into one: the persist payload is
- * private localStorage shape, a project body is an external contract, and
- * the two version numbers move for different reasons.
- */
-export function upgradeLeadMelodyToTicks(
-  steps: readonly LeadNote[][],
-  bars: number,
-): LeadNote[][] {
-  const barCount = Math.max(
-    Math.max(1, Math.round(bars) || 1),
-    Math.ceil(steps.length / MAX_STEPS_PER_BAR),
-  );
-  const out: LeadNote[][] = Array.from(
-    { length: barCount * LEAD_TICKS_PER_BAR },
-    () => [] as LeadNote[],
-  );
-  for (let bar = 0; bar < barCount; bar++) {
-    for (let slot = 0; slot < MAX_STEPS_PER_BAR; slot++) {
-      const row = steps[bar * MAX_STEPS_PER_BAR + slot];
-      if (!row) continue;
-      out[bar * LEAD_TICKS_PER_BAR + slot * TICKS_PER_SIXTEENTH] = row.map((n) => ({
-        note: n.note,
-        len: Math.max(1, Math.round(n.len)) * TICKS_PER_SIXTEENTH,
-      }));
-    }
-  }
-  return out;
 }
 
 /** A note audible at a column. `age` is how many TICKS ago it started; 0 = starts here. */

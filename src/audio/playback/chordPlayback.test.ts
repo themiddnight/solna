@@ -1,5 +1,6 @@
 import { describe, expect, test, spyOn } from 'bun:test';
 import { audioEngine } from '@/audio/engine';
+import { freshEngine } from '@/audio/testFakes';
 import type { ChordItem, SynthParams } from '@/types';
 import { equalPowerVelocityScale } from '@/audio/chordRhythms';
 import type { RhythmPattern } from '@/data/chordRhythms';
@@ -64,15 +65,41 @@ describe('legato chord preview', () => {
     // Dense chords get per-voice 1/√n compensation so the summed preview
     // no longer clips.
     const scaled = 0.8 * equalPowerVelocityScale(3);
-    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, scaled, 0, 'chord');
-    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, scaled, 0, 'chord');
-    expect(onSpy).toHaveBeenCalledWith('G4', SYNTH, scaled, 0, 'chord');
+    // `undefined`, not a literal 0: triggerSynthNoteOn only falls back to
+    // ctx.currentTime for a nullish time, so passing 0 would pin the whole
+    // envelope to the audio clock's origin instead of "now".
+    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, scaled, undefined, 'chord');
+    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, scaled, undefined, 'chord');
+    expect(onSpy).toHaveBeenCalledWith('G4', SYNTH, scaled, undefined, 'chord');
     // Legato = the envelope sustains until the caller releases the preview.
     expect(offSpy).not.toHaveBeenCalled();
 
     onSpy.mockRestore();
     offSpy.mockRestore();
     stopSpy.mockRestore();
+  });
+
+  test('schedules the envelope at the CURRENT audio-clock time, not at t=0 — regression for "loud once, then quiet"', () => {
+    // fakeCtx() starts currentTime at 10s, standing in for a preview pressed
+    // well after the AudioContext was created (any press after the first).
+    // A note-on scheduled at a literal 0 would put every envelope event in
+    // the past relative to that clock, so the AudioParam timeline resolves
+    // straight to its final value on arrival — skipping the attack ramp
+    // entirely and landing directly on the sustain level.
+    const { engine, ctx } = freshEngine();
+
+    playChordLegato(
+      { root: 'C', quality: 'maj', bars: 1, notes: ['C4'] } as ChordItem,
+      SYNTH,
+      engine,
+    );
+
+    // ctx._gains[0] is the C4 voice's main amp gain (createGain is called for
+    // the main gain before the sub-osc gain inside triggerSynthNoteOn).
+    const gain = ctx._gains[0].gain;
+    for (const ev of gain.events) {
+      expect(ev.t).toBeGreaterThanOrEqual(ctx.currentTime);
+    }
   });
 });
 

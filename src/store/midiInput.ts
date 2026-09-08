@@ -2,6 +2,14 @@ import { Note } from 'tonal';
 import { audioEngine } from '../audio/engine';
 import { synthPlaybackNoteOff, synthPlaybackNoteOn } from '../audio/playback/synthPlayback';
 import { useAppStore } from './store';
+// A MIDI CC is a fader position (0..127 normalised to 0..1), not a dB ramp:
+// it must land on the SAME taper VolumeFader draws, or the two controls for
+// one value disagree about what "half" means. sliderPosTodB is the fader's
+// own exported inverse for exactly that reason; the ban on calling it
+// elsewhere is about reimplementing the taper, not about this one
+// legitimate second caller.
+// eslint-disable-next-line no-restricted-imports
+import { sliderPosTodB } from '../utils/gainUnits';
 
 let started = false;
 
@@ -47,9 +55,18 @@ export function createHeldNoteTracker() {
 const heldNotes = createHeldNoteTracker();
 let knownInputIds: string[] = [];
 
-// Applies one CC message through the enabled CC mapping for that number:
-// writes the store, then pushes the same value into the engine so the change
-// is audible immediately (engineSync fires only on a store VALUE change).
+// Applies one CC message through the enabled CC mapping for that number.
+//
+// `masterVolume` writes the store and STOPS there: engineSync subscribes to
+// that exact field with `fireImmediately`, and this bridge is itself started
+// from inside `startEngineSync`, so the subscription provably exists before
+// any CC can arrive. Pushing `setMasterVolume(faderDbToGain(db))` here as
+// well duplicated the one dB->linear boundary — two call sites that must
+// agree about the taper forever, for a value the subscription was already
+// going to deliver on the same tick. The synth-param branches below still
+// push directly: `updateSynthParams` re-shapes voices that are ALREADY
+// sounding, and engineSync routes that call through a frame coalescer, so a
+// CC sweep must not wait a frame to be heard on a held note.
 function applyCcMapping(ccNumber: number, ccValue: number): void {
   const s = useAppStore.getState();
   const mapping = s.midiMappings.find(
@@ -59,8 +76,12 @@ function applyCcMapping(ccNumber: number, ccValue: number): void {
 
   const normalized = ccValue / 127;
   if (mapping.targetKey === 'masterVolume') {
-    s.setMasterVolume(normalized);
-    audioEngine.setMasterVolume(normalized);
+    // Onto the FADER TAPER, not a linear dB ramp: a CC knob at its midpoint
+    // must land where the on-screen fader's midpoint lands, or the two
+    // controls for one value disagree about what "half" means. CC 0 is the
+    // bottom of the taper, which is silence — the same silence the fader's
+    // bottom detent gives, because both go through faderDbToGain.
+    s.setMasterVolume(sliderPosTodB(normalized));
   } else if (mapping.targetKey === 'filterCutoff') {
     const hz = 20 * Math.pow(1000, normalized);
     const updated = { ...s.synthParams, filterCutoff: Math.round(hz) };

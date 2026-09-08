@@ -6,6 +6,8 @@ import {
   type NoteInputEvent,
 } from '../audio/playback/noteInputBus';
 import { computeDisconnectedInputIds, createHeldNoteTracker, startMidiInputBridge } from './midiInput';
+import { useAppStore } from './store';
+import { sliderPosTodB } from '../utils/gainUnits';
 
 describe('computeDisconnectedInputIds', () => {
   test('returns ids present before but missing now', () => {
@@ -215,5 +217,36 @@ describe('MIDI joins the note-input funnel', () => {
 
     expect(events).toEqual([{ kind: 'off', note: 'C4', velocity: 0, time: undefined }]);
     resetNoteInputListeners();
+  });
+});
+
+describe('MIDI CC drives masterVolume on the fader taper, not a linear dB ramp', () => {
+  // No test previously exercised the default 'm-vol' mapping (CC 7) at all —
+  // this is new coverage, not a replacement.
+  test('CC 127 lands on the top of the taper: +12 dB', () => {
+    // Asserted on the STORE, and only on the store. This handler used to also
+    // call audioEngine.setMasterVolume(faderDbToGain(db)) itself, which made
+    // this file a second dB->linear boundary that had to agree with
+    // engineSync's forever. It writes the store and stops now: engineSync
+    // subscribes to `masterVolume` with fireImmediately and starts this bridge
+    // itself, so the subscription provably exists before any CC arrives, and
+    // the linear conversion is asserted once where it lives (engineSync.test).
+    const setMasterVolume = spyOn(audioEngine, 'setMasterVolume').mockClear();
+    const input = connect('dev-cc-master-top');
+
+    input.onmidimessage?.({ data: [0xb0, 7, 127], target: input });
+
+    expect(useAppStore.getState().masterVolume).toBeCloseTo(12, 6);
+    expect(setMasterVolume).not.toHaveBeenCalled();
+  });
+
+  test('CC 95 (0.748..) sits a hair below unity, on the same curve VolumeFader draws', () => {
+    const input = connect('dev-cc-master-mid');
+
+    input.onmidimessage?.({ data: [0xb0, 7, 95], target: input });
+
+    const expectedDb = sliderPosTodB(95 / 127);
+    expect(expectedDb).toBeLessThan(0);
+    expect(useAppStore.getState().masterVolume).toBeCloseTo(expectedDb, 6);
   });
 });

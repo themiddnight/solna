@@ -1,642 +1,107 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import {
-  migrateProjectTitleToVibeId,
-  migrateTrackColors,
-  migrateMeterAndStepWidth,
-  wrapFlatStateIntoLoop,
-  renameRegionKeysToLoop,
-  backfillLeadWindow,
-  migrateAddProjectIdentity,
-  migrateLeadNoteLength,
-  migrateLeadStepResolution,
-  migrateDrumTracks,
-  migrateDrumVoices,
-  LEGACY_TRACK_COLOR_MAP,
+  LEGACY_CHORD_PROGRESSIONS_KEY,
+  LEGACY_PERSIST_KEY,
+  LEGACY_SYNTH_PRESETS_KEY,
+  migrateLegacyPresets,
+  removeLegacyKeys,
 } from './migrate';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
-import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
-import { LOOP_FLAT_KEYS } from './loop';
-import { INITIAL_EFFECTS, INITIAL_SEQUENCER_TRACKS, INITIAL_SYNTH_PARAMS } from './initialState';
-import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
-import type { SequencerTrack } from '../types';
-import { defaultPadState } from './initialState';
-import { migratePadLayer } from './migrate';
-import { DRUM_KITS } from '../data/drumKits';
 
-describe('migrateProjectTitleToVibeId', () => {
-  test('drops the legacy projectTitle and seeds a null selectedVibeId', () => {
-    const migrated = migrateProjectTitleToVibeId({
-      projectTitle: 'Neon Highway 1984',
-      bpm: 118,
-    } as never) as { projectTitle?: string; selectedVibeId: string | null; bpm: number };
+/**
+ * DEV-388 deleted the 15-step `if (version < N)` persist migration chain
+ * (store.ts's PERSIST_VERSION docblock has the full reasoning) and the step
+ * functions this file used to unit-test directly: migrateProjectTitleToVibeId,
+ * migrateTrackColors, migrateMeterAndStepWidth, wrapFlatStateIntoLoop,
+ * renameRegionKeysToLoop, backfillLeadWindow, migrateAddProjectIdentity,
+ * migrateLeadNoteLength, migrateLeadStepResolution, migratePadLayer,
+ * migrateDrumTracks, migrateDrumVoices, migrateMasterDynamics,
+ * migrateMasterVolumeToDb, migrateBusFadersToDb, migrateTrackVolumesToDb.
+ * migrate.ts now exports only the legacy-preset adoption this file tests
+ * below (still called directly from store.ts's `migrate` and `merge`, never
+ * from a chain).
+ *
+ * The replacement rule — validation instead of migration, an in-range value
+ * survives regardless of what version wrote it, an invalid one becomes its
+ * default — is pinned end-to-end (through the real `persist`/`merge` wiring,
+ * which is where `sanitizePersistedState` actually lives) in store.test.ts's
+ * "persisted payload sanitization" and the rewritten migration-wiring
+ * describes there, not here: migrate.ts itself no longer contains anything
+ * version-shaped to unit-test.
+ */
 
-    expect('projectTitle' in migrated).toBe(false);
-    expect(migrated.selectedVibeId).toBe(null);
-    expect(migrated.bpm).toBe(118);
+class FakeLocalStorage {
+  private data = new Map<string, string>();
+  getItem(name: string): string | null {
+    return this.data.get(name) ?? null;
+  }
+  setItem(name: string, value: string): void {
+    this.data.set(name, value);
+  }
+  removeItem(name: string): void {
+    this.data.delete(name);
+  }
+  clear(): void {
+    this.data.clear();
+  }
+}
+
+const fakeLocalStorage = new FakeLocalStorage();
+
+beforeAll(() => {
+  Object.defineProperty(globalThis, 'localStorage', { value: fakeLocalStorage, configurable: true });
+});
+
+afterEach(() => {
+  fakeLocalStorage.clear();
+});
+
+describe('migrateLegacyPresets', () => {
+  test('adopts both legacy keys when the target arrays are empty', () => {
+    fakeLocalStorage.setItem(LEGACY_SYNTH_PRESETS_KEY, JSON.stringify([{ id: 's1' }]));
+    fakeLocalStorage.setItem(LEGACY_CHORD_PROGRESSIONS_KEY, JSON.stringify([{ id: 'c1' }]));
+
+    const result = migrateLegacyPresets({ customSynthPresets: [], customChordProgressions: [] });
+    expect(result.customSynthPresets).toEqual([{ id: 's1' }] as never);
+    expect(result.customChordProgressions).toEqual([{ id: 'c1' }] as never);
   });
 
-  test('keeps an already-migrated selectedVibeId, including an explicit null', () => {
-    const withId = migrateProjectTitleToVibeId({
-      selectedVibeId: 'lofi-chill',
-    } as never) as { selectedVibeId: string | null };
-    expect(withId.selectedVibeId).toBe('lofi-chill');
+  test('already-persisted presets win over the legacy keys', () => {
+    fakeLocalStorage.setItem(LEGACY_SYNTH_PRESETS_KEY, JSON.stringify([{ id: 'legacy' }]));
 
-    const withNull = migrateProjectTitleToVibeId({
-      selectedVibeId: null,
-    } as never) as { selectedVibeId: string | null };
-    expect(withNull.selectedVibeId).toBe(null);
+    const result = migrateLegacyPresets({ customSynthPresets: [{ id: 'kept' }] as never });
+    expect(result.customSynthPresets).toEqual([{ id: 'kept' }] as never);
   });
 
-  test('does not mutate the payload it was given', () => {
-    const input = { projectTitle: 'Cosmic Floating' };
-    migrateProjectTitleToVibeId(input as never);
-    expect(input).toEqual({ projectTitle: 'Cosmic Floating' });
+  test('corrupt JSON in a legacy key is ignored, not thrown', () => {
+    fakeLocalStorage.setItem(LEGACY_SYNTH_PRESETS_KEY, '{not json');
+
+    const result = migrateLegacyPresets({} as { customSynthPresets?: never[] });
+    expect(result.customSynthPresets).toBeUndefined();
+  });
+
+  test('a non-array legacy value is ignored', () => {
+    fakeLocalStorage.setItem(LEGACY_CHORD_PROGRESSIONS_KEY, JSON.stringify({ not: 'an array' }));
+
+    const result = migrateLegacyPresets({} as { customChordProgressions?: never[] });
+    expect(result.customChordProgressions).toBeUndefined();
+  });
+
+  test('no legacy keys stored leaves the state untouched', () => {
+    const input = { customSynthPresets: [], customChordProgressions: [] };
+    expect(migrateLegacyPresets(input)).toEqual(input);
   });
 });
 
-describe('migrateTrackColors', () => {
-  test('rewrites every legacy palette track colour to a semantic token', () => {
-    const migrated = migrateTrackColors({
-      sequencerTracks: [
-        { id: 'track-kick', color: 'bg-rose-500' },
-        { id: 'track-snare', color: 'bg-amber-500' },
-        { id: 'track-hihat', color: 'bg-emerald-500' },
-        { id: 'track-openhat', color: 'bg-cyan-500' },
-        { id: 'track-clap', color: 'bg-purple-500' },
-      ],
-    } as never) as { sequencerTracks: { color: string }[] };
+describe('removeLegacyKeys', () => {
+  test('removes all three legacy keys', () => {
+    fakeLocalStorage.setItem(LEGACY_SYNTH_PRESETS_KEY, '[]');
+    fakeLocalStorage.setItem(LEGACY_CHORD_PROGRESSIONS_KEY, '[]');
+    fakeLocalStorage.setItem(LEGACY_PERSIST_KEY, '{}');
 
-    expect(migrated.sequencerTracks.map((t) => t.color)).toEqual([
-      'bg-error',
-      'bg-warning',
-      'bg-success',
-      'bg-accent',
-      'bg-secondary',
-    ]);
-  });
+    removeLegacyKeys();
 
-  test('leaves an already-migrated colour alone', () => {
-    const migrated = migrateTrackColors({
-      sequencerTracks: [{ id: 'track-kick', color: 'bg-error' }],
-    } as never) as { sequencerTracks: { color: string }[] };
-    expect(migrated.sequencerTracks[0].color).toBe('bg-error');
-  });
-
-  test('is a no-op when sequencerTracks is missing or not an array', () => {
-    expect(migrateTrackColors({} as never)).toEqual({} as never);
-    expect(
-      migrateTrackColors({ sequencerTracks: 'nope' } as never)
-    ).toEqual({ sequencerTracks: 'nope' } as never);
-  });
-
-  test('the map covers exactly the five legacy colours', () => {
-    expect(Object.keys(LEGACY_TRACK_COLOR_MAP).sort()).toEqual([
-      'bg-amber-500',
-      'bg-cyan-500',
-      'bg-emerald-500',
-      'bg-purple-500',
-      'bg-rose-500',
-    ]);
-  });
-
-  test('preserves every other field, including steps, through the remap', () => {
-    const steps = [true, false, true, false];
-    const migrated = migrateTrackColors({
-      sequencerTracks: [
-        { id: 'track-kick', name: 'Kick 808', color: 'bg-rose-500', steps, muted: false },
-      ],
-    } as never) as { sequencerTracks: { id: string; name: string; color: string; steps: boolean[]; muted: boolean }[] };
-
-    expect(migrated.sequencerTracks[0]).toEqual({
-      id: 'track-kick',
-      name: 'Kick 808',
-      color: 'bg-error',
-      steps,
-      muted: false,
-    });
-  });
-
-  test('leaves an inherited-property-name colour like "constructor" alone rather than mangling it', () => {
-    const migrated = migrateTrackColors({
-      sequencerTracks: [{ id: 'track-kick', color: 'constructor' }],
-    } as never) as { sequencerTracks: { color: unknown }[] };
-    expect(migrated.sequencerTracks[0].color).toBe('constructor');
-
-    const toStringCase = migrateTrackColors({
-      sequencerTracks: [{ id: 'track-kick', color: 'toString' }],
-    } as never) as { sequencerTracks: { color: unknown }[] };
-    expect(toStringCase.sequencerTracks[0].color).toBe('toString');
-  });
-});
-
-describe('migrateMeterAndStepWidth (v4 -> v5)', () => {
-  test('defaults meterId to 4/4 when the payload predates meter support', () => {
-    const out = migrateMeterAndStepWidth({ bpm: 96 }) as { meterId: string; bpm: number };
-    expect(out.meterId).toBe('4/4');
-    expect(out.bpm).toBe(96);
-  });
-
-  test('keeps an already-valid meterId', () => {
-    const out = migrateMeterAndStepWidth({ meterId: '6/8' }) as { meterId: string };
-    expect(out.meterId).toBe('6/8');
-  });
-
-  test('replaces an unknown meterId rather than letting it reach the clock', () => {
-    const out = migrateMeterAndStepWidth({ meterId: '9/8' }) as { meterId: string };
-    expect(out.meterId).toBe('4/4');
-    const nonString = migrateMeterAndStepWidth({ meterId: 16 }) as unknown as { meterId: string };
-    expect(nonString.meterId).toBe('4/4');
-  });
-
-  test('pads every 16-length track steps array to MAX_STEPS_PER_BAR with false', () => {
-    const sixteen = [
-      true, false, false, false, true, false, false, false,
-      true, false, false, false, true, false, false, false,
-    ];
-    const out = migrateMeterAndStepWidth({
-      sequencerTracks: [{ id: 'track-kick', instrument: 'kick', steps: sixteen }],
-    }) as { sequencerTracks: Array<{ steps: boolean[] }> };
-
-    expect(MAX_STEPS_PER_BAR).toBe(24);
-    expect(out.sequencerTracks[0].steps.length).toBe(24);
-    expect(out.sequencerTracks[0].steps.slice(0, 16)).toEqual(sixteen);
-    expect(out.sequencerTracks[0].steps.slice(16).every((v) => v === false)).toBe(true);
-  });
-
-  test('leaves an already-24-wide payload byte-identical', () => {
-    const wide = Array.from({ length: 24 }, (_, i) => i % 5 === 0);
-    const out = migrateMeterAndStepWidth({
-      sequencerTracks: [{ id: 'track-kick', steps: wide }],
-    }) as { sequencerTracks: Array<{ steps: boolean[] }> };
-    expect(out.sequencerTracks[0].steps).toEqual(wide);
-  });
-
-  test('survives a corrupt tracks payload without throwing', () => {
-    expect(() => migrateMeterAndStepWidth({ sequencerTracks: 'nope' })).not.toThrow();
-    expect(() => migrateMeterAndStepWidth({ sequencerTracks: [null, 7, { steps: 'x' }] })).not.toThrow();
-    const out = migrateMeterAndStepWidth({
-      sequencerTracks: [null, { id: 'a', steps: [true] }],
-    }) as { sequencerTracks: unknown[] };
-    expect(out.sequencerTracks[0]).toBe(null);
-    expect((out.sequencerTracks[1] as { steps: boolean[] }).steps.length).toBe(24);
-  });
-
-  test('does not mutate the payload it was given', () => {
-    const input = { sequencerTracks: [{ id: 'a', steps: [true, false] }] };
-    migrateMeterAndStepWidth(input);
-    expect(input.sequencerTracks[0].steps.length).toBe(2);
-    expect('meterId' in input).toBe(false);
-  });
-});
-
-describe('wrapFlatStateIntoLoop (v5 -> v6)', () => {
-  test('wraps the flat per-loop fields into a single loop and drops them from the top level', () => {
-    const out = wrapFlatStateIntoLoop({
-      bpm: 96,
-      scaleRoot: 'D',
-      scaleType: 'Major',
-      synthParams: INITIAL_SYNTH_PARAMS,
-      chordFeel: 0.3,
-      drumMuted: true,
-      effects: { ...INITIAL_EFFECTS },
-    } as never) as {
-      bpm: number;
-      effects: unknown;
-      scaleRoot?: unknown;
-      chordFeel?: unknown;
-      loops: Array<{
-        id: string;
-        name: string;
-        scaleRoot: string;
-        scaleType: string;
-        chordFeel: number;
-        drumMuted: boolean;
-      }>;
-      activeLoopId: string;
-    };
-
-    expect(out.bpm).toBe(96);
-    expect(out.effects).toEqual(INITIAL_EFFECTS);
-    expect('scaleRoot' in out).toBe(false);
-    expect('chordFeel' in out).toBe(false);
-    expect(out.loops).toHaveLength(1);
-    expect(out.loops[0].name).toBe('Loop 1');
-    expect(out.loops[0].scaleRoot).toBe('D');
-    expect(out.loops[0].scaleType).toBe('Major');
-    expect(out.loops[0].chordFeel).toBe(0.3);
-    expect(out.loops[0].drumMuted).toBe(true);
-    expect(out.activeLoopId).toBe(out.loops[0].id);
-  });
-
-  test('a payload with no per-loop keys still produces a valid single loop', () => {
-    const out = wrapFlatStateIntoLoop({ bpm: 120 } as never) as { loops: unknown[] };
-    expect(out.loops).toHaveLength(1);
-  });
-
-  test('does not mutate the payload it was given', () => {
-    const input = { bpm: 96, scaleRoot: 'D' };
-    wrapFlatStateIntoLoop(input);
-    expect(input).toEqual({ bpm: 96, scaleRoot: 'D' });
-  });
-
-  test('wrap covers exactly the per-loop keys', () => {
-    const source: Record<string, unknown> = { bpm: 90 };
-    for (const key of LOOP_FLAT_KEYS) source[key] = `v-${key}`;
-    const out = wrapFlatStateIntoLoop(source) as {
-      loops: Array<Record<string, unknown>>;
-      [key: string]: unknown;
-    };
-    for (const key of LOOP_FLAT_KEYS) {
-      expect(out.loops[0][key]).toBe(`v-${key}`);
-      expect(key in out).toBe(false);
-    }
-  });
-});
-
-describe('renameRegionKeysToLoop (v6 -> v7)', () => {
-  test('renameRegionKeysToLoop renames the two persisted keys and leaves the rest', () => {
-    const state = {
-      regions: [{ id: 'a', name: 'Region 1' }],
-      activeRegionId: 'a',
-      bpm: 128,
-    };
-    const out = renameRegionKeysToLoop(state as never) as {
-      loops: { id: string; name: string }[];
-      activeLoopId: string;
-      bpm: number;
-      regions?: unknown;
-      activeRegionId?: unknown;
-    };
-    expect(out.loops).toEqual([{ id: 'a', name: 'Region 1' }]);
-    expect(out.activeLoopId).toBe('a');
-    expect(out.regions).toBeUndefined();
-    expect(out.activeRegionId).toBeUndefined();
-    expect(out.bpm).toBe(128);
-  });
-
-  test('renameRegionKeysToLoop is a no-op when the keys are already absent', () => {
-    const state = { loops: [], activeLoopId: null, bpm: 100 };
-    expect(renameRegionKeysToLoop(state as never)).toEqual({ loops: [], activeLoopId: null, bpm: 100 });
-  });
-});
-
-describe('backfillLeadWindow (v7 -> v8)', () => {
-  test('a pre-v8 loop gets the slice defaults for the octave window and view', () => {
-    const out = backfillLeadWindow({
-      loops: [{ id: 'a', name: 'Loop 1', leadLoopLength: 2 }],
-    }) as { loops: Array<Record<string, unknown>> };
-    expect(out.loops[0].leadMelodyOctave).toBe(3);
-    expect(out.loops[0].leadMelodyView).toBe('scale-locked');
-    expect(out.loops[0].leadLoopLength).toBe(2);
-  });
-
-  test('a loop that already carries them is left alone', () => {
-    const out = backfillLeadWindow({
-      loops: [{ id: 'a', leadMelodyOctave: 5, leadMelodyView: 'chromatic' }],
-    }) as { loops: Array<Record<string, unknown>> };
-    expect(out.loops[0].leadMelodyOctave).toBe(5);
-    expect(out.loops[0].leadMelodyView).toBe('chromatic');
-  });
-
-  test('it is pure, and tolerates a payload with no loops array', () => {
-    const input = { loops: [{ id: 'a' }] };
-    backfillLeadWindow(input);
-    expect(input).toEqual({ loops: [{ id: 'a' }] });
-    expect(backfillLeadWindow({ bpm: 90 })).toEqual({ bpm: 90 });
-  });
-});
-
-describe('migrateAddProjectIdentity (v8 -> v9)', () => {
-  test('a v8 payload gains both fields as null', () => {
-    const out = migrateAddProjectIdentity({ bpm: 120, loops: [] }) as Record<string, unknown>;
-    expect(out.currentProjectId).toBeNull();
-    expect(out.projectBaselineHash).toBeNull();
-    expect(out.bpm).toBe(120);
-  });
-
-  test('a v9 payload is unchanged by the step', () => {
-    const input = { bpm: 90, currentProjectId: 'p-1', projectBaselineHash: 'abc' };
-    expect(migrateAddProjectIdentity(input)).toEqual(input);
-  });
-
-  test('does not mutate the payload it was given', () => {
-    const input = { bpm: 90 } as Record<string, unknown>;
-    migrateAddProjectIdentity(input);
-    expect('currentProjectId' in input).toBe(false);
-  });
-});
-
-describe('migrateLeadNoteLength (v9 -> v10)', () => {
-  test('upgrades every loop melody to len-1 notes and seeds leadGate', () => {
-    const migrated = migrateLeadNoteLength({
-      loops: [
-        { id: 'loop-1', leadMelodySteps: [['C4', 'E4'], [], ['G4']] },
-        { id: 'loop-2', leadMelodySteps: [[]] },
-      ],
-    } as never) as { loops: { id: string; leadMelodySteps: unknown; leadGate: number }[] };
-
-    expect(migrated.loops[0].leadMelodySteps).toEqual([
-      [{ note: 'C4', len: 1 }, { note: 'E4', len: 1 }],
-      [],
-      [{ note: 'G4', len: 1 }],
-    ]);
-    expect(migrated.loops[0].leadGate).toBe(DEFAULT_LEAD_GATE);
-    expect(migrated.loops[1].leadGate).toBe(DEFAULT_LEAD_GATE);
-  });
-
-  test('is a no-op on an already-upgraded payload and keeps a custom gate', () => {
-    const already = {
-      loops: [{ id: 'loop-1', leadMelodySteps: [[{ note: 'C4', len: 4 }]], leadGate: 0.4 }],
-    };
-    const migrated = migrateLeadNoteLength(already as never) as typeof already;
-    expect(migrated.loops[0].leadMelodySteps).toEqual([[{ note: 'C4', len: 4 }]]);
-    expect(migrated.loops[0].leadGate).toBe(0.4);
-  });
-
-  test('a payload with no loops array passes through untouched', () => {
-    expect(migrateLeadNoteLength({ bpm: 118 } as never)).toEqual({ bpm: 118 } as never);
-  });
-});
-
-describe('migrateLeadStepResolution', () => {
-  const oldLoop = (): Record<string, unknown> => {
-    const steps: unknown[][] = Array.from({ length: MAX_STEPS_PER_BAR }, () => []);
-    steps[4] = [{ note: 'C4', len: 2 }];
-    return { id: 'loop-1', name: 'Loop 1', leadLoopLength: 1, leadMelodySteps: steps };
-  };
-
-  test('widens the melody and doubles the lengths', () => {
-    const out = migrateLeadStepResolution({ loops: [oldLoop()] }) as {
-      loops: { leadMelodySteps: LeadNote[][] }[];
-    };
-    expect(out.loops[0].leadMelodySteps).toHaveLength(LEAD_TICKS_PER_BAR);
-    expect(out.loops[0].leadMelodySteps[8]).toEqual([{ note: 'C4', len: 4 }]);
-  });
-
-  test('every loop without the field gets 1/16', () => {
-    // Not an arbitrary default: 1/16 is the resolution the melody actually
-    // WAS authored at, so with the doubling above an existing project opens
-    // with every note on the same beat, the same length and the same sound.
-    const out = migrateLeadStepResolution({ loops: [oldLoop()] }) as {
-      loops: { leadStepResolution: string }[];
-    };
-    expect(out.loops[0].leadStepResolution).toBe('1/16');
-  });
-
-  test('a payload with no loops is returned unharmed', () => {
-    expect(migrateLeadStepResolution({ bpm: 120 })).toEqual({ bpm: 120 });
-  });
-
-  test('a melody wider than leadLoopLength keeps every bar, at the right beat', () => {
-    // setLeadLoopLengthPreserve lowers leadLoopLength without resizing the
-    // melody, so this is an ordinary persisted state. At exactly 2x the old
-    // array is the same WIDTH as one new bar, which is what made trusting
-    // leadLoopLength re-read bar 0 at half its beat and bury bar 1.
-    const steps: unknown[][] = Array.from({ length: 2 * MAX_STEPS_PER_BAR }, () => []);
-    steps[4] = [{ note: 'C4', len: 2 }];
-    steps[MAX_STEPS_PER_BAR + 4] = [{ note: 'E4', len: 2 }];
-    const out = migrateLeadStepResolution({
-      loops: [{ id: 'loop-1', name: 'Loop 1', leadLoopLength: 1, leadMelodySteps: steps }],
-    }) as { loops: { leadMelodySteps: LeadNote[][] }[] };
-
-    expect(out.loops[0].leadMelodySteps).toHaveLength(2 * LEAD_TICKS_PER_BAR);
-    expect(out.loops[0].leadMelodySteps[8]).toEqual([{ note: 'C4', len: 4 }]);
-    expect(out.loops[0].leadMelodySteps[LEAD_TICKS_PER_BAR + 8]).toEqual([
-      { note: 'E4', len: 4 },
-    ]);
-  });
-
-  test('an old string[][] melody survives the WHOLE chain, not blank', () => {
-    // The trap, end to end: isLeadNoteMatrix rejects the pre-DEV-369 shape
-    // and hands back an EMPTY melody with no throw and no warning, so a
-    // payload that reaches sanitize un-upgraded loses the user's music on
-    // reload. The two lead steps must run in order — V1 first, ticks second.
-    const legacy = Array.from({ length: MAX_STEPS_PER_BAR }, () => [] as string[]);
-    legacy[2] = ['C4'];
-    const lengthened = migrateLeadNoteLength({
-      loops: [{ id: 'loop-1', name: 'Loop 1', leadLoopLength: 1, leadMelodySteps: legacy }],
-    });
-    const out = migrateLeadStepResolution(lengthened) as unknown as {
-      loops: { leadMelodySteps: LeadNote[][]; leadStepResolution: string }[];
-    };
-    expect(out.loops[0].leadMelodySteps[4]).toEqual([{ note: 'C4', len: 2 }]);
-    expect(out.loops[0].leadStepResolution).toBe('1/16');
-  });
-});
-
-describe('migratePadLayer', () => {
-  const PAD_KEYS = Object.keys(defaultPadState());
-
-  // THE FIRST OF THE THREE TESTS THAT KEEP THE DEFAULTS APART.
-  // A project written before the pad existed must reopen sounding the way it
-  // sounded when it was closed. defaultPadState() ships padMuted:false for new
-  // projects; the migration overrides it to true. If a later refactor collapses
-  // the two, this test is what goes red.
-  test('a pre-pad loop is backfilled with the pad muted', () => {
-    const out = migratePadLayer({ loops: [{ id: 'a', bassOctave: 2 }] }) as {
-      loops: Record<string, unknown>[];
-    };
-    expect(out.loops[0].padMuted).toBe(true);
-    expect(out.loops[0].padMode).toBe('pad');
-    expect(out.loops[0].bassOctave).toBe(2);
-  });
-
-  // Backfilling only the active loop is the easy mistake here: loopStatePatch
-  // writes every LOOP_FLAT_KEYS entry with no guard, so an unbackfilled loop
-  // writes `undefined` over the slice defaults the moment the user switches to
-  // it — and only then.
-  test('every loop is backfilled, not only the first', () => {
-    const out = migratePadLayer({
-      loops: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
-    }) as { loops: Record<string, unknown>[] };
-    expect(out.loops).toHaveLength(4);
-    for (const loop of out.loops) {
-      for (const key of PAD_KEYS) expect(loop[key]).toBeDefined();
-      expect(loop.padMuted).toBe(true);
-    }
-  });
-
-  test('a loop that already carries pad state keeps nothing of its own', () => {
-    // The step runs exactly once, at one version boundary, on payloads that by
-    // definition predate the pad — so spreading over any stale value is right.
-    const out = migratePadLayer({
-      loops: [{ id: 'a', padVolume: 0.1, padMuted: false }],
-    }) as { loops: Record<string, unknown>[] };
-    expect(out.loops[0].padMuted).toBe(true);
-    expect(out.loops[0].padVolume).toBe(defaultPadState().padVolume);
-  });
-
-  test('a payload with no loops passes through untouched', () => {
-    expect(migratePadLayer({ bpm: 120 })).toEqual({ bpm: 120 });
-  });
-});
-
-describe('v12 -> v13: the tom and crash tracks reach every loop', () => {
-  // The five tracks a REAL pre-v13 build actually wrote. A literal, not a
-  // slice of INITIAL_SEQUENCER_TRACKS: that constant's roster and order have
-  // moved twice already, and a fixture that tracks the roster it is supposed
-  // to predate stops testing anything.
-  const LEGACY_FIVE = ['kick', 'snare', 'hihat', 'openhat', 'clap'];
-  const fiveTracks = () =>
-    LEGACY_FIVE.map((instrument) => {
-      const t = INITIAL_SEQUENCER_TRACKS.find((c) => c.instrument === instrument)!;
-      return { ...t, steps: [...t.steps] };
-    });
-
-  test('every loop in the payload gains the six new voices, silent', () => {
-    const out = migrateDrumTracks({
-      loops: [
-        { id: 'a', sequencerTracks: fiveTracks() },
-        { id: 'b', sequencerTracks: fiveTracks() },
-      ],
-    }) as { loops: Array<{ sequencerTracks: SequencerTrack[] }> };
-    for (const loop of out.loops) {
-      expect(loop.sequencerTracks.map((t) => t.instrument).slice(5)).toEqual([
-        'rimshot', 'hitom', 'lowtom', 'ride', 'crash', 'bell',
-      ]);
-      for (const instrument of ['rimshot', 'hitom', 'lowtom', 'ride', 'crash', 'bell']) {
-        const t = loop.sequencerTracks.find((tr) => tr.instrument === instrument)!;
-        expect(t.steps.some(Boolean), instrument).toBe(false);
-      }
-    }
-    // Two loops, two separate bars. Sharing one would make a rimshot edit in
-    // loop a show up in loop b.
-    expect(out.loops[0].sequencerTracks[5].steps).not.toBe(
-      out.loops[1].sequencerTracks[5].steps,
-    );
-  });
-
-  test("a user's programmed track survives by reference", () => {
-    const mine = { ...INITIAL_SEQUENCER_TRACKS[0], name: 'My Kick', muted: true };
-    const out = migrateDrumTracks({ loops: [{ id: 'a', sequencerTracks: [mine] }] }) as {
-      loops: Array<{ sequencerTracks: SequencerTrack[] }>;
-    };
-    expect(out.loops[0].sequencerTracks[0]).toBe(mine);
-  });
-
-  test('a stale top-level sequencerTracks is backfilled too', () => {
-    // Belt and braces: partialize does not persist a top-level copy and the
-    // v5->v6 wrap runs first, so this branch should never fire in practice. A
-    // legacy or hand-written payload can still carry the key, and the guard
-    // costs nothing.
-    const out = migrateDrumTracks({ sequencerTracks: fiveTracks() }) as {
-      sequencerTracks: SequencerTrack[];
-    };
-    expect(out.sequencerTracks).toHaveLength(11);
-  });
-
-  test('a payload with no loops and no tracks passes through', () => {
-    expect(migrateDrumTracks({ bpm: 120 })).toEqual({ bpm: 120 });
-  });
-
-  test('a non-array sequencerTracks is left alone for sanitize to refuse', () => {
-    const out = migrateDrumTracks({ loops: [{ id: 'a', sequencerTracks: 'nope' }] }) as {
-      loops: Array<{ sequencerTracks: unknown }>;
-    };
-    expect(out.loops[0].sequencerTracks).toBe('nope');
-  });
-
-  test('it does not mutate its input', () => {
-    const input = { loops: [{ id: 'a', sequencerTracks: fiveTracks() }] };
-    migrateDrumTracks(input);
-    expect(input.loops[0].sequencerTracks).toHaveLength(5);
-  });
-});
-
-describe('migrateDrumVoices (v13 -> v14)', () => {
-  // A v13 payload carries the SEMANTIC colours, so they are spelled out here
-  // rather than sliced off INITIAL_SEQUENCER_TRACKS — Task 9 moves that constant
-  // onto bg-drum-*, and a fixture that followed it would make the colour
-  // assertion below pass without the migration doing anything.
-  // A v13 payload: seven tracks, in the seven-voice order, carrying the SEMANTIC
-  // colours. Written out rather than sliced off INITIAL_SEQUENCER_TRACKS —
-  // Task 8 reorders that constant and Task 9 recolours it, and a fixture that
-  // followed it would assert nothing.
-  const v13Track = (id: string, instrument: string, color: string) =>
-    ({ id, name: instrument, instrument, steps: [false, false], volume: 0.8,
-       muted: false, color }) as unknown as SequencerTrack;
-  const v13Loop = () => ({
-    soundKit: '909 Modern',
-    sequencerTracks: [
-      v13Track('track-kick', 'kick', 'bg-error'),
-      v13Track('track-snare', 'snare', 'bg-warning'),
-      v13Track('track-hihat', 'hihat', 'bg-success'),
-      v13Track('track-openhat', 'openhat', 'bg-accent'),
-      v13Track('track-clap', 'clap', 'bg-secondary'),
-      { id: 'track-tom', name: 'My Tom', instrument: 'tom',
-        steps: [true, false, false, true], volume: 0.4, muted: true, color: 'bg-primary' },
-      v13Track('track-crash', 'crash', 'bg-info'),
-    ],
-  });
-
-  test('the tom row keeps its steps and becomes lowtom, exactly once', () => {
-    const { loops } = migrateDrumVoices({ loops: [v13Loop()] }) as {
-      loops: { sequencerTracks: SequencerTrack[] }[];
-    };
-    const lowtoms = loops[0].sequencerTracks.filter((t) => t.instrument === 'lowtom');
-    expect(lowtoms).toHaveLength(1);
-    expect(lowtoms[0].steps).toEqual([true, false, false, true]);
-    expect(lowtoms[0].muted).toBe(true);
-    expect(loops[0].sequencerTracks.some((t) => t.instrument === 'tom')).toBe(false);
-  });
-
-  // renameDrumTrack overwrites `tom` IN PLACE, so the renamed row keeps tom's
-  // original position (before crash, not after); withDrumTracks then appends
-  // the four voices this v13 fixture never had, in canonical order.
-  test('the four new voices are appended, in canonical order, after the renamed set', () => {
-    const { loops } = migrateDrumVoices({ loops: [v13Loop()] }) as {
-      loops: { sequencerTracks: SequencerTrack[] }[];
-    };
-    expect(loops[0].sequencerTracks.map((t) => t.instrument)).toEqual([
-      'kick', 'snare', 'hihat', 'openhat', 'clap', 'lowtom', 'crash',
-      'rimshot', 'hitom', 'ride', 'bell',
-    ]);
-  });
-
-  test('the renamed kit resolves, and the old name no longer does', () => {
-    const { loops } = migrateDrumVoices({ loops: [v13Loop()] }) as { loops: { soundKit: string }[] };
-    expect(loops[0].soundKit).toBe('Club Standard');
-    expect(DRUM_KITS['Club Standard']).toBeDefined();
-    expect(DRUM_KITS['909 Modern']).toBeUndefined();
-  });
-
-  // Complements the tests above: this one asserts the acceptance property —
-  // sound does not change — directly, rather than by inference: the renamed
-  // row keeps the user's steps, and the five untouched canonical rows are
-  // unchanged.
-  test('the renamed row and the untouched factory rows keep their steps', () => {
-    const { loops } = migrateDrumVoices({ loops: [v13Loop()] }) as {
-      loops: { sequencerTracks: SequencerTrack[] }[];
-    };
-    const tracks = loops[0].sequencerTracks;
-    const lowtom = tracks.find((t) => t.instrument === 'lowtom')!;
-    expect(lowtom.steps).toEqual([true, false, false, true]);
-    expect(lowtom.muted).toBe(true);
-    const before = v13Loop().sequencerTracks;
-    for (const kept of ['kick', 'snare', 'hihat', 'openhat', 'clap', 'crash']) {
-      const original = before.find((t) => t.instrument === kept)!;
-      const after = tracks.find((t) => t.instrument === kept)!;
-      expect(after.steps, kept).toEqual(original.steps);
-    }
-  });
-
-  test('is idempotent and leaves an untouched loop alone', () => {
-    const once = migrateDrumVoices({ loops: [v13Loop()] });
-    expect(migrateDrumVoices(once)).toEqual(once);
-    const clean = { loops: [{ soundKit: 'Warehouse', sequencerTracks: 'not an array' }] };
-    expect(migrateDrumVoices(clean)).toEqual(clean);
-  });
-
-  test('the seven factory colours move to the drum namespace; a chosen one does not', () => {
-    const loop = v13Loop();
-    loop.sequencerTracks[1] = { ...loop.sequencerTracks[1], color: 'bg-error' } as SequencerTrack; // user's snare
-    const { loops } = migrateDrumVoices({ loops: [loop] }) as {
-      loops: { sequencerTracks: SequencerTrack[] }[];
-    };
-    const colourOf = (i: string) =>
-      loops[0].sequencerTracks.find((t) => t.instrument === i)!.color;
-    expect(colourOf('kick')).toBe('bg-drum-kick');
-    expect(colourOf('lowtom')).toBe('bg-drum-lowtom'); // was the `tom` row's bg-primary
-    expect(colourOf('snare')).toBe('bg-error');        // the user's, untouched
+    expect(fakeLocalStorage.getItem(LEGACY_SYNTH_PRESETS_KEY)).toBeNull();
+    expect(fakeLocalStorage.getItem(LEGACY_CHORD_PROGRESSIONS_KEY)).toBeNull();
+    expect(fakeLocalStorage.getItem(LEGACY_PERSIST_KEY)).toBeNull();
   });
 });

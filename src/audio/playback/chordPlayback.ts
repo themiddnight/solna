@@ -248,6 +248,16 @@ export type PreviewEngine = Pick<
 // envelope sustain — no note-off is scheduled. The caller releases with
 // stopSource('chord') on mouse-up. Existing voices on the chord bus are silenced
 // first so successive chords never overlap or pile up into dissonant clusters.
+//
+// `time` is left undefined, not 0: triggerSynthNoteOn falls back to
+// `ctx.currentTime` only when the argument is nullish, so a literal 0 here
+// scheduled the whole envelope at the audio clock's origin. On the FIRST
+// preview of a session that origin is close enough to `currentTime` to pass
+// unnoticed; by any later press `currentTime` has moved well past the
+// attack+decay window, so every event in the envelope already lies in the
+// past and the AudioParam timeline resolves straight to its last value — the
+// sustain level — with no attack transient at all. That is exactly "loud
+// once, then quiet" on a patch with a low sustain level.
 export function playChordLegato(
   chord: ChordItem,
   params: SynthParams,
@@ -259,7 +269,7 @@ export function playChordLegato(
       note,
       params,
       DEFAULT_VELOCITY * equalPowerVelocityScale(chord.notes.length),
-      0,
+      undefined,
       "chord",
     );
   }

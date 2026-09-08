@@ -5,6 +5,7 @@ import { INITIAL_EFFECTS } from './initialState';
 import { LOOP_FLAT_KEYS, loopStatePatch, resolveActiveLoop } from './loop';
 import { createDefaultLoop } from './loopSlice';
 import { DEFAULT_BPM } from './transportSlice';
+import { DEFAULT_FADER_DB } from './levelUnits';
 import type { AppStore, Loop, LoopStatePatch } from './types';
 
 /**
@@ -13,22 +14,119 @@ import type { AppStore, Loop, LoopStatePatch } from './types';
  * reshapes, this one only when the content contract changes. The persist
  * migration chain must never be used to read a project body.
  *
- * v5 adds the `tom` and `crash` sequencer tracks to every loop. It moved in
- * the same change as persist v13 and by coincidence only — the two numbers
- * answer different questions and must never be assumed to track each other.
- *
- * v6 is the eleven-voice kit: `tom` becomes `lowtom`, `rimshot`/`hitom`/`ride`/
- * `bell` are appended silent, and the `909 Modern` kit name becomes
- * `Club Standard`.
- *
- * v7 introduces NO new transform. It re-runs v6's: bodies were saved stamped 6
- * part-way through the drum slice, while `INITIAL_SEQUENCER_TRACKS` still held
- * seven voices, so `upgradeDrumVoicesV6` guards on `fromVersion < 7` rather
- * than `< 6` to reach them. Bumping the stamp instead of redefining what 6
- * means is the rule in CLAUDE.md ("a version stamped into persisted data is a
- * contract"); the step is idempotent, so re-running it is a no-op elsewhere.
+ * DEV-388 deleted the per-version upgrade chain this constant used to head,
+ * and then a follow-up to that same task deleted the version-gated RESET that
+ * first replaced it too — solna has no real users yet, and a fader value is
+ * just a number: a number in range cannot be told apart by whether it was
+ * written as linear gain or as dB, so nothing here tries any more. This
+ * constant is now a MARKER, not a transform trigger: it is stamped on every
+ * write (still the murva-facing interop marker, and still what
+ * `parseProjectFile` refuses a NEWER body against), but no read path branches
+ * on its value any more. A body at any other version is simply validated —
+ * `sanitizeContent` (projectFile.ts) / `sanitizeLoops` (sanitize.ts) reject anything out of
+ * range, wrong-typed, missing or not a member of an allowed set and
+ * substitute the default, the same way regardless of which version wrote the
+ * body. Three cases DEV-388 found that could not be caught this way were
+ * re-homed as validation rules instead of a migration step: an unrecognised
+ * `sequencerTracks[].instrument` is now rejected by `isSequencerTrack`
+ * (sanitize.ts), a missing `padMuted` takes the plain default, and a
+ * pre-tick-resolution `leadMelodySteps` is a valid shape and passes through
+ * unchanged. Bump this constant only when the CONTENT CONTRACT itself changes
+ * again, not for every field that gets added, renamed or reshaped —
+ * sanitizeContent already defaults those.
  */
-export const PROJECT_FORMAT_VERSION = 7;
+
+/**
+ * dB LEVEL CONTRACT — the rule a reader must follow for every key this format
+ * calls a fader.
+ *
+ * Every key the `keys` line below names is stored in DECIBELS at
+ * PROJECT_FORMAT_VERSION, and read directly as such by this build. There is
+ * NO version-based reset or conversion any more (a follow-up to DEV-388
+ * removed it): a fader value is a plain number, and a number that is finite
+ * and inside the fader's range is legal dB regardless of which version wrote
+ * it — a linear 0.7 from an old build and a dB -3 both simply pass
+ * `asFaderDb`'s range check. There are no real users solna needs to
+ * protect from a value they set under the old linear unit reading oddly under
+ * the new one; a developer who notices a stale-looking level adjusts it
+ * themselves, the same way they would any other value in range. What DOES
+ * still get rejected is a value OUTSIDE the contract below — non-finite,
+ * negative infinity, or past -60/+12 — regardless of source; that is
+ * ordinary validation, not a unit judgement.
+ *
+ * The contract, at PROJECT_FORMAT_VERSION:
+ *   keys     the flat faders PROJECT_DB_LEVEL_KEYS lists below — masterVolume
+ *            (content root), synthVolume, chordVolume, bassVolume, padVolume,
+ *            masterSequencerVolume (per-loop) — PLUS sequencerTracks[].volume
+ *            (per-track, per-loop), which is a nested row key rather than a flat
+ *            one and so is covered here but not listed there.
+ *   unit     decibels, relative (a fader), NOT dBFS.
+ *   unity    0 dB is unity gain — the signal passes at the level it arrived.
+ *            Linear gain is 10 ** (db / 20); see src/utils/gainUnits.ts.
+ *   range    -60 .. +12 dB inclusive. -60 is the fader bottom, +12 the top.
+ *            The fader's TAPER puts unity at 0.75 of physical travel
+ *            (`DEFAULT_UNITY_POS`), not the midpoint — that shapes the widget,
+ *            not the stored value, which stays plain decibels either way.
+ *   silence  a FINITE -60, never -Infinity: JSON.stringify(-Infinity) is null,
+ *            and a body crosses JSON.stringify on the way to disk. -60 dB is
+ *            0.001 linear, inaudible, and coincides with the fader bottom, so
+ *            the silence value and the bottom of the range are one place.
+ *            -Infinity is legal only in transient meter readings, which are
+ *            never serialised. murva uses -Infinity for the same concept —
+ *            that divergence is DELIBERATE (contract divergence 2) and must
+ *            never be "aligned"; pin it, don't close it.
+ *
+ * What this contract does NOT cover, and never will: the internal voicing
+ * constants nested inside `synthParams` / `chordSynthParams` / `bassSynthParams`
+ * / `padSynthParams` (`SynthParams.subOscVolume`, `noiseVolume`), each
+ * `DrumKit` voice's `gain`, a vibe's authored `pad.volume` and `DEFAULT_PADS`'
+ * pad `volume` are all still LINEAR gain and are never converted — they are
+ * mix-time trims baked into presets and factory content, not a fader a user
+ * moves, and widening this paragraph to "every level key" would be exactly the
+ * failure mode this contract exists to prevent: a reader that assumed the
+ * whole body were dB would read a linear `subOscVolume` of 1.0 as +1 dB —
+ * plausible, silent and wrong.
+ *
+ * murva reads the same numbers from `src/shared/audio/gainUnits.ts`; the copies
+ * are held together by src/utils/gainContract.test.ts, which pins them as
+ * literals. This section is itself pinned, by the dB-level-contract tests in
+ * projectFormat.test.ts, so it cannot rot away from the exports below.
+ */
+export const PROJECT_FORMAT_VERSION = 10;
+
+/**
+ * The dB level contract's keys AT THE CONTENT ROOT AND ON A LOOP — the flat
+ * fader keys, and the list `sanitizePersistedState` (store.ts) iterates so the
+ * persist path validates every one of them. It is code, not documentation
+ * shaped like code: it used to be read by nothing, and the one key that was
+ * quietly missing from the sanitizer's hand-written repeat of it (`padVolume`)
+ * went unvalidated straight into `faderDbToGain`, which fails SAFE TO SILENCE —
+ * a corrupt stored value muted the pad bus instead of defaulting to the trim
+ * every other bus got. Adding a seventh fader is now an edit to this list.
+ *
+ * `masterVolume` is the content root's own fader and the other five are the
+ * source buses; per-loop, all six live on the loop. The contract also covers
+ * `sequencerTracks[].volume`, which is deliberately NOT in this array: it is a
+ * per-row key nested inside each loop, validated by `sanitizeFlatSequencerTracks`
+ * and `sanitizeLoops`, and putting a piece of prose like `'sequencerTracks[].volume'`
+ * in a list of real key names is what made this constant unusable as code before.
+ *
+ * A literal list, not derived from a per-key version map — DEV-388 deleted the
+ * migration chain that map served, and there is no version-based rule left for a
+ * per-key version to distinguish; validation (asFaderDb / sanitize.ts) treats every
+ * one of these keys the same way regardless of which formatVersion wrote them.
+ * Everything else that looks like a level — drum-kit `gain`, `clickLevel`,
+ * `reverbSend`, preset `subOscVolume`, vibe pad `volume` — is internal voicing, not
+ * a fader, and stays linear (see the dB LEVEL CONTRACT block above).
+ */
+export const PROJECT_DB_LEVEL_KEYS: readonly string[] = [
+  'masterVolume',
+  'synthVolume',
+  'chordVolume',
+  'bassVolume',
+  'padVolume',
+  'masterSequencerVolume',
+];
 
 export interface ProjectEnvelope {
   formatVersion: number;
@@ -106,7 +204,7 @@ export function factoryProjectContent(): ProjectContent {
   return {
     bpm: DEFAULT_BPM,
     meterId: DEFAULT_METER_ID,
-    masterVolume: 0.85,
+    masterVolume: DEFAULT_FADER_DB,
     effects: { ...INITIAL_EFFECTS },
     loops: [createDefaultLoop()],
   };

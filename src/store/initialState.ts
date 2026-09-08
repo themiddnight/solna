@@ -2,6 +2,7 @@ import type { SynthParams, SequencerTrack, ChordItem, MasterEffects, SongArrange
 import { applyPreset, presetById } from '../audio/presetRegistry';
 import type { PadState } from './types';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { DEFAULT_BUS_TRIM_DB, DEFAULT_FADER_DB } from './levelUnits';
 
 // Moved verbatim from src/App.tsx — the app's original useState initial values.
 
@@ -40,12 +41,15 @@ export const INITIAL_SYNTH_PARAMS: SynthParams = {
 const SILENT_BAR: boolean[] = new Array<boolean>(MAX_STEPS_PER_BAR).fill(false);
 
 export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
+  // Every track starts at unity. Until DEV-386 these were 0.7 .. 0.9 LINEAR and
+  // nothing read them; the field is a real gain node now, so unity is what keeps
+  // a factory kit sounding the way it always has.
   {
     id: 'track-kick',
     name: 'Kick 808',
     instrument: 'kick',
     steps: [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false],
-    volume: 0.9,
+    volume: DEFAULT_FADER_DB,
     muted: false,
     color: 'bg-drum-kick',
   },
@@ -54,7 +58,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     name: 'Snare Snap',
     instrument: 'snare',
     steps: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false],
-    volume: 0.85,
+    volume: DEFAULT_FADER_DB,
     muted: false,
     color: 'bg-drum-snare',
   },
@@ -63,7 +67,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     name: 'Rim Shot',
     instrument: 'rimshot',
     steps: [...SILENT_BAR],
-    volume: 0.8,
+    volume: DEFAULT_FADER_DB,
     muted: false,
     color: 'bg-drum-rimshot',
   },
@@ -72,7 +76,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     name: 'Hand Clap',
     instrument: 'clap',
     steps: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false],
-    volume: 0.85,
+    volume: DEFAULT_FADER_DB,
     muted: false,
     color: 'bg-drum-clap',
   },
@@ -81,7 +85,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     name: 'Closed Hat',
     instrument: 'hihat',
     steps: [true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, false, false, false, false, false, false, false, false],
-    volume: 0.75,
+    volume: DEFAULT_FADER_DB,
     muted: false,
     color: 'bg-drum-hihat',
   },
@@ -90,7 +94,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     name: 'Open Hat',
     instrument: 'openhat',
     steps: [false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    volume: 0.8,
+    volume: DEFAULT_FADER_DB,
     muted: false,
     color: 'bg-drum-openhat',
   },
@@ -99,7 +103,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     name: 'Hi Tom',
     instrument: 'hitom',
     steps: [...SILENT_BAR],
-    volume: 0.8,
+    volume: DEFAULT_FADER_DB,
     muted: false,
     color: 'bg-drum-hitom',
   },
@@ -108,7 +112,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     name: 'Low Tom',
     instrument: 'lowtom',
     steps: [...SILENT_BAR],
-    volume: 0.8,
+    volume: DEFAULT_FADER_DB,
     muted: false,
     color: 'bg-drum-lowtom',
   },
@@ -117,7 +121,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     name: 'Ride',
     instrument: 'ride',
     steps: [...SILENT_BAR],
-    volume: 0.7,
+    volume: DEFAULT_FADER_DB,
     muted: false,
     color: 'bg-drum-ride',
   },
@@ -126,7 +130,7 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     name: 'Crash',
     instrument: 'crash',
     steps: [...SILENT_BAR],
-    volume: 0.7,
+    volume: DEFAULT_FADER_DB,
     muted: false,
     color: 'bg-drum-crash',
   },
@@ -135,164 +139,11 @@ export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
     name: 'Bell',
     instrument: 'bell',
     steps: [...SILENT_BAR],
-    volume: 0.7,
+    volume: DEFAULT_FADER_DB,
     muted: false,
     color: 'bg-drum-bell',
   },
 ];
-
-/**
- * Backfill any canonical drum track a payload is missing, appending only.
- *
- * The shared pure transform BOTH migration chains call — the persist chain's
- * migrateDrumTracks and the .solna chain's upgradeDrumTracksV5. It is the
- * `defaultPadState()` of this change: shared DATA-shaped logic, called from two
- * separate upgrade steps that must never be merged into one function. A project
- * body is an external contract, the persist payload is private localStorage
- * shape, and their version numbers move for different reasons (CLAUDE.md).
- *
- * APPENDS ONLY. A track whose `instrument` is already present is returned as
- * THE SAME OBJECT — a user who renamed, recoloured, muted or reprogrammed it
- * keeps it exactly. An already-complete array is returned by identity.
- *
- * IDEMPOTENT, which is what lets slice 2 reuse it unchanged for `ride` and
- * `bell`: it adds whatever is missing from INITIAL_SEQUENCER_TRACKS, so
- * growing that constant grows this transform with no edit here.
- *
- * NO EXISTING SESSION OR .solna FILE CHANGES SOUND. A restored track comes
- * back as its FACTORY entry, row and all — this copies INITIAL_SEQUENCER_TRACKS
- * rather than blanking it — but every payload the app itself can produce holds
- * all five original tracks, so the only tracks a real migration appends are
- * `tom` and `crash`, whose factory rows are empty. Only a hand-edited file that
- * deleted a track gets an audible row back. The new rows are heard only when a
- * grid or a vibe is applied afterwards, which is a deliberate user action — the
- * same discipline upgradePadLayerV4 follows with `padMuted: true`.
- */
-export function withDrumTracks(tracks: SequencerTrack[]): SequencerTrack[] {
-  // The cast and the `?.` are because this runs BEFORE sanitize in both
-  // chains, so an element can be anything a JSON file held.
-  const present = new Set(
-    tracks.map((track) => (track as Partial<SequencerTrack> | null)?.instrument),
-  );
-  const missing = INITIAL_SEQUENCER_TRACKS.filter((t) => !present.has(t.instrument));
-  if (missing.length === 0) return tracks;
-  // Fresh objects AND fresh steps arrays. Each loop in a payload runs this over
-  // its own tracks, and appending the module constant itself would make two
-  // loops share one bar — toggling a tom step in one would toggle it in the
-  // other, and in INITIAL_SEQUENCER_TRACKS. loopSlice.ts copies for the same
-  // reason.
-  return [...tracks, ...missing.map((t) => ({ ...t, steps: [...t.steps] }))];
-}
-
-
-/**
- * Rename one drum track in place, keeping every field the user owns.
- *
- * The companion withDrumTracks CANNOT do this: it appends only and never
- * rewrites a track that is present, which is exactly the property that lets a
- * renamed, recoloured, muted, reprogrammed row survive an upgrade. Run alone
- * against the tom -> lowtom change it would leave `tom` in place AND append
- * `lowtom`: the user's programmed tom row goes silent while a blank one appears
- * beside it.
- *
- * CALL THIS BEFORE withDrumTracks — as defence in depth, not because the
- * reverse order is unsafe: swap them and the "existing target row is blank ->
- * drop it and rename into it" branch below repairs the blank-lowtom-beside-a-
- * real-tom shape that order creates, so the output is byte-identical either
- * way (initialState.test.ts's order test: "append BEFORE rename repairs").
- * The row that actually prevents a silenced row beside a blank one is that
- * repair branch, not this ordering; the ordering just means the repair branch
- * is never the one doing the work in the documented path.
- *
- * Pure, idempotent, and shared by both migration chains — the discipline
- * withDrumTracks and defaultPadState() already follow. The cast and the `?.`
- * are because this runs BEFORE sanitize in both chains, so an element can be
- * anything a JSON file held.
- */
-export function renameDrumTrack(
-  tracks: SequencerTrack[],
-  from: string,
-  to: string,
-): SequencerTrack[] {
-  const instrumentOf = (t: unknown) => (t as Partial<SequencerTrack> | null)?.instrument;
-  const silent = (t: unknown) => {
-    const steps = (t as Partial<SequencerTrack> | null)?.steps;
-    return !Array.isArray(steps) || !steps.some(Boolean);
-  };
-  if (!tracks.some((t) => instrumentOf(t) === from)) return tracks;
-  const existing = tracks.find((t) => instrumentOf(t) === to);
-  // BOTH present. Not only the hand-edited case: once a later task grows
-  // INITIAL_SEQUENCER_TRACKS past seven voices, an OLD payload reaching this
-  // step through the earlier ones (those call withDrumTracks against whatever
-  // the constant holds today) will arrive here with the user's `tom` row AND
-  // a blank `lowtom` appended beside it. Drop the blank one and rename; the
-  // user's steps are the row that matters. If the `to` row has programmed
-  // steps, someone owns both and we touch neither.
-  if (existing && !silent(existing)) return tracks;
-  return tracks
-    .filter((track) => track !== existing)
-    .map((track) =>
-      instrumentOf(track) === from
-        ? { ...(track as SequencerTrack), id: `track-${to}`, instrument: to }
-        : track,
-    );
-}
-
-/**
- * Rename a loop's `soundKit`. A scalar field, not a track list, so it is its
- * own transform rather than a branch inside renameDrumTrack. Pure, idempotent
- * and shared by both chains for the same reason.
- */
-export function renameSoundKit<T extends object>(loop: T, from: string, to: string): T {
-  return (loop as { soundKit?: unknown }).soundKit === from ? { ...loop, soundKit: to } : loop;
-}
-
-/**
- * The colour every drum track shipped with before the --color-drum-* namespace
- * existed, keyed by the instrument it belonged to. `lowtom` holds what the old
- * `tom` track shipped with, so recolourDrumTracks MUST run after
- * renameDrumTrack — before it, the row is still `tom` and keeps bg-primary.
- *
- * Per instrument, not a set of seven strings: bg-error was the KICK's colour, so
- * a snare wearing it is a choice the user made and is left alone.
- */
-const LEGACY_DRUM_TRACK_COLORS: Record<string, string> = {
-  kick: 'bg-error', snare: 'bg-warning', hihat: 'bg-success',
-  openhat: 'bg-accent', clap: 'bg-secondary', lowtom: 'bg-primary', crash: 'bg-info',
-};
-
-/**
- * Move the seven original tracks onto the drum colour namespace, WITHOUT
- * touching a colour the user chose.
- *
- * Scoped exactly the way withDrumTracks is: it rewrites only what still equals
- * the factory value for that instrument. The alternative — recolouring every
- * track — would throw away a user's palette; doing nothing at all would leave
- * the sequencer as the one surface in the app where colour means two different
- * things, seven semantic tokens beside four drum ones (decision 35).
- *
- * Pure, idempotent (a bg-drum-* value is not a key of the map), shared by both
- * chains, and it changes no sound. migrateTrackColors is the precedent.
- *
- * Wired into both migration chains (migrateDrumVoices and upgradeDrumVoicesV6),
- * always last, after renameDrumTrack and withDrumTracks — the bg-drum-* classes
- * it writes are defined by the --color-drum-* block that landed in the same
- * commit as this wiring, so no session can migrate onto a colour the CSS does
- * not define. No further persist/format version bump: the slice ships together
- * (decision 29).
- */
-export function recolourDrumTracks(tracks: SequencerTrack[]): SequencerTrack[] {
-  let recoloured = false;
-  const next = tracks.map((track) => {
-    const t = track as Partial<SequencerTrack> | null;
-    if (!t || typeof t !== 'object') return track;
-    const factory = LEGACY_DRUM_TRACK_COLORS[t.instrument as string];
-    if (!factory || t.color !== factory) return track;
-    recoloured = true;
-    return { ...(track as SequencerTrack), color: `bg-drum-${t.instrument}` };
-  });
-  return recoloured ? next : tracks;
-}
 
 export const INITIAL_CHORDS: ChordItem[] = [
   { id: 'chord-1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] },
@@ -306,10 +157,30 @@ export const INITIAL_CHORDS: ChordItem[] = [
 // applyEngineSnapshot() on the first user click and are clamped through
 // audio/effectLimits.ts on the way in.
 //
-// NOTE: reverbDecay (2.0) and compressorThreshold (-12) deliberately equal the
-// engine's setupMasterChain hardcodes so the default sound is unchanged now
-// that these knobs are live. Persisted values from older sessions take
-// effect and are clamped in sanitizePersistedState.
+// NOTE: reverbDecay (2.0) deliberately equals the engine's setupMasterChain
+// hardcode so the default sound is unchanged now that the knob is live.
+//
+// The eight NUMERIC dynamics values equal the engine's historical hardcodes
+// for a different reason: they are never heard until a module is switched
+// on, so these numbers are what "on" has always meant, not what a fresh
+// project sounds like. `compressorEnabled` stays `false` (DEV-385): a
+// user must opt into compression shaping the mix.
+//
+// `limiterEnabled` defaults to `true`, reversing DEV-385's off-by-default
+// for this one stage. DEV-385's reason for defaulting both off was honest
+// metering — an always-on limiter caps the signal near -3 dBFS, so a meter
+// behind it could never show what the user actually made. That reason does
+// not hold for the limiter here: the master analysers
+// (`rewireMasterDynamics` in audio/engine.ts) are observe-only sends off
+// masterGain, wired BEFORE both dynamics stages, so the meter reads the
+// pre-limiter mix and the `over` zone stays reachable whether the limiter
+// is engaged or not.
+// The second reason this is safe: the five source buses default to -6 dB,
+// calibrated so a fresh project peaks around -2.75 dBFS. The limiter's
+// -3 dB threshold therefore only catches occasional peaks at those
+// defaults rather than compressing continuously — a limiter that engaged
+// on every dense groove would be the hidden mix-bus compressor DEV-385
+// removed. Raise the bus defaults later and re-check this still holds.
 export const INITIAL_EFFECTS: MasterEffects = {
   reverbWet: 0.25,
   reverbDecay: 2.0,
@@ -319,7 +190,16 @@ export const INITIAL_EFFECTS: MasterEffects = {
   eqLow: 2,
   eqMid: 0,
   eqHigh: 3,
+  compressorEnabled: false,
   compressorThreshold: -12,
+  compressorRatio: 4,
+  compressorAttack: 0.003,
+  compressorRelease: 0.25,
+  limiterEnabled: true,
+  limiterThreshold: -3,
+  limiterRatio: 20,
+  limiterAttack: 0.003,
+  limiterRelease: 0.15,
 };
 
 export const INITIAL_ARRANGEMENT: SongArrangement = {
@@ -558,7 +438,7 @@ export function defaultPadState(): PadState {
     padVoicing: 'triad',
     padDroneDegree: 0,
     padDroneIntervals: [1, 5, 8],
-    padVolume: 1.0,
+    padVolume: DEFAULT_BUS_TRIM_DB,
     padMuted: false,
   };
 }

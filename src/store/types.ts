@@ -30,6 +30,8 @@ export interface TransportSlice {
   bpm: number;
   /** Active time signature; the sequencer bar length is derived from this, not fixed. */
   meterId: MeterId;
+  /** DECIBELS, relative: unity is 0, the range is -60..+12. Converted to a
+   *  linear gain at the store->engine boundary in engineSync.ts, never here. */
   masterVolume: number;
   metronomeActive: boolean;
   // Transient (not persisted): mirrors the live transport state.
@@ -82,6 +84,8 @@ export interface SynthSlice {
   chordSynthParams: SynthParams;
   bassSynthParams: SynthParams;
   controlTarget: SynthControlTarget;
+  /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at
+   *  the store->engine boundary in engineSync.ts, never in a component. */
   synthVolume: number;
   synthMuted: boolean;
   setSynthParams: (params: SynthParams) => void;
@@ -102,6 +106,8 @@ export interface ChordsSlice {
   chordFeel: number;
   chordOctave: number;
   chordMuted: boolean;
+  /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at
+   *  the store->engine boundary in engineSync.ts, never in a component. */
   chordVolume: number;
   setChords: (chords: ChordItem[]) => void;
   setChordRhythmId: (rhythmId: string) => void;
@@ -120,6 +126,8 @@ export interface BassSlice {
   bassFeel: number;
   bassOctave: number;
   bassMuted: boolean;
+  /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at
+   *  the store->engine boundary in engineSync.ts, never in a component. */
   bassVolume: number;
   setBassPatternId: (patternId: string) => void;
   setBassFeel: (feel: number) => void;
@@ -141,6 +149,8 @@ export interface PadState {
   padVoicing: PadVoicing;
   padDroneDegree: number;
   padDroneIntervals: PadInterval[];
+  /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at
+   *  the store->engine boundary in engineSync.ts, never in a component. */
   padVolume: number;
   padMuted: boolean;
 }
@@ -244,6 +254,8 @@ export interface LeadSlice {
 export interface SequencerSlice {
   sequencerTracks: SequencerTrack[];
   soundKit: string;
+  /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at
+   *  the store->engine boundary in engineSync.ts, never in a component. */
   masterSequencerVolume: number;
   drumMuted: boolean;
   drumFilterCutoff: number;
@@ -263,6 +275,8 @@ export interface SequencerSlice {
    */
   replaceDrumPattern: (pattern: Record<string, boolean[]>) => void;
   setSequencerTracks: (tracks: SequencerTrack[]) => void;
+  /** Sets one track's level, in DECIBELS. */
+  setTrackVolume: (trackId: string, db: number) => void;
   setSoundKit: (kit: string) => void;
   setMasterSequencerVolume: (volume: number) => void;
   toggleDrumMuted: () => void;
@@ -380,6 +394,8 @@ export interface Loop extends PadState {
   drumFilterCutoff: number;
   drumFilterResonance: number;
   drumFilterType: FilterType;
+  /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at
+   *  the store->engine boundary in engineSync.ts, never in a component. */
   synthVolume: number;
   synthMuted: boolean;
   chordVolume: number;

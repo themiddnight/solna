@@ -10,6 +10,7 @@ import {
   INITIAL_SYNTH_PARAMS,
 } from './initialState';
 import { cloneLoop, fallbackActiveLoopId, newLoopId, nextLoopName } from './loop';
+import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
 import type { AppStore, Loop, LoopSlice } from './types';
 import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
 import { DEFAULT_LEAD_STEP_RESOLUTION, LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
@@ -53,13 +54,18 @@ export function createDefaultLoop(): Loop {
     drumFilterCutoff: 12000,
     drumFilterResonance: 0.7,
     drumFilterType: 'lowpass',
-    synthVolume: 1.0,
+    // Decibels from here down: unity is 0 dB. The old 0.8 drum-bus default
+    // was a -1.9 dB trim nobody chose; DEV-383 sets a measured one
+    // (DEFAULT_BUS_TRIM_DB — see its comment in levelUnits.ts for the
+    // measurement) on every source bus except padVolume, which comes through
+    // defaultPadState() below instead.
+    synthVolume: DEFAULT_BUS_TRIM_DB,
     synthMuted: false,
-    chordVolume: 1.0,
+    chordVolume: DEFAULT_BUS_TRIM_DB,
     chordMuted: false,
-    bassVolume: 1.0,
+    bassVolume: DEFAULT_BUS_TRIM_DB,
     bassMuted: false,
-    masterSequencerVolume: 0.8,
+    masterSequencerVolume: DEFAULT_BUS_TRIM_DB,
     drumMuted: false,
   };
 }

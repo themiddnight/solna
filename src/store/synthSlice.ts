@@ -1,5 +1,6 @@
 import type { StoreApi } from 'zustand';
 import { INITIAL_BASS_SYNTH_PARAMS, INITIAL_SYNTH_PARAMS } from './initialState';
+import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
 import type { AppStore, SynthSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -14,7 +15,7 @@ export function createSynthSlice(set: Set): SynthSlice {
     chordSynthParams: INITIAL_SYNTH_PARAMS,
     bassSynthParams: INITIAL_BASS_SYNTH_PARAMS,
     controlTarget: 'synth',
-    synthVolume: 1.0,
+    synthVolume: DEFAULT_BUS_TRIM_DB,
     synthMuted: false,
 
     // Setters backing the SynthView control panel (previously App.tsx

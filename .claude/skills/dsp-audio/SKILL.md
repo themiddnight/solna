@@ -58,23 +58,44 @@ drums: osc/noise -> drumEnv -> drumBusFilter -> dryGain
                            -> eqLow(lowshelf 250Hz)
                               -> eqMid(peaking 1.5kHz Q1)
                                  -> eqHigh(highshelf 4kHz)
-                                    -> compressor (-12dB, 4:1, knee 30)
-                                       -> masterGain (user master trim, setMasterVolume)
-                                          -> limiter (-3dB, 20:1, knee 0)
-                                             -> analyser (fftSize 256)
-                                                -> ctx.destination
+                                    -> masterGain (user master trim, setMasterVolume)
+                                       |-> analyser (fftSize 256)    [TAP: no output]
+                                       |-> levelAnalyser (fftSize 2048) [TAP: no output]
+                                       -> [compressor?] -> [limiter?] -> ctx.destination
 ```
+
+Two taps, not one: `analyser` is the spectrum node `AudioVisualizer` draws, `levelAnalyser` is the
+one `getMasterLevelAnalyser()` returns and every dBFS meter reads.
 
 Key consequences:
 - Effects are **parallel sends**, not a serial insert chain. Dry always passes; wet amount is the
   send gain (`reverbGain`/`delayGain`/`distortionGain`).
-- EQ → compressor → masterGain → limiter → analyser is **serial and fixed**. The analyser is
-  post-limiter, so `getAudioLevel()` reflects final output.
+- EQ → masterGain is serial and fixed. TWO analysers are TAPS off `masterGain` — post-fader,
+  pre-dynamics, each with no onward output — so a reading reflects the mix the user made, not
+  the post-squash output. `analyser` (fftSize 256) is the spectrum node `AudioVisualizer` draws;
+  `levelAnalyser` (fftSize 2048) is what `getMasterLevelAnalyser()` returns and `useMeterLevel`
+  reads for `VuMeter` and `AmbientBackdrop`. They are NOT interchangeable, and because the tap
+  ends both dynamics stages' reach, the `over` zone (≥ −1 dBFS) is reachable.
 - Drums bypass delay and distortion entirely — the dry path hits `drumBusFilter → dryGain` only.
   The snare/clap/crash reverb send is a per-voice gain (the kit's authored `reverbSend` LEVEL,
   not a boolean) that feeds a second shared `drumSendFilter` — a mirror of `drumBusFilter` kept in
   lockstep by `setDrumFilter` — so the wet path is filtered too, then on to `reverbNode`.
-- `masterGain` is the user's master trim only (`setMasterVolume()`, clamped 0..1, seeded at unity). Headroom is the compressor (-12 dB, 4:1) and the limiter (-3 dB, 20:1); there is no separate staging gain.
+- `masterGain` is the user's master trim only (`setMasterVolume()`, clamped 0..1, seeded at
+  unity). The master compressor and limiter are explicit, toggleable master FX
+  (`compressorEnabled` / `limiterEnabled` in `MasterEffects`). `compressorEnabled` defaults
+  off; `limiterEnabled` defaults on (DEV-383) — the master analysers tap ahead of both stages,
+  so this doesn't compromise metering, and the -3 dB threshold against the -6 dB source-bus
+  default only catches occasional peaks rather than compressing continuously. When a stage is
+  off it is genuinely disconnected, not neutralised. The "limiter" is a
+  max-ratio compressor with a hard knee — the standard Web Audio stand-in, since the API has no
+  dedicated limiter.
+- A SERIES stage cannot use the `*Bypass` mechanism: bypass flags force a wet/send gain to 0,
+  which for a compressor is silence rather than passthrough. `rewireMasterDynamics` reconnects
+  the master tail instead. The three nodes are built once and never re-created, so a rewire can
+  never orphan one; it re-makes BOTH analyser taps first and unconditionally, because
+  `masterGain.disconnect()` drops both and neither has an output that would put it back.
+  Forgetting `levelAnalyser` there throws nothing and orphans nothing — it just pins every meter
+  at −∞, which is why `engine.test.ts` asserts the tap survives a full toggle cycle.
 - Bypass flags are applied in `updateEffects()` by forcing the wet/gain value to 0, not by
   rewiring. `reverbDecay` is the impulse **duration in seconds** (the curve exponent is a fixed
   2.0); changes are quantised to 0.1 s and the built `AudioBuffer`s are cached in
@@ -153,15 +174,22 @@ context is created. Multi-field engine setters are subscribed as one encoded pri
 
 ## Drum kits
 
-`src/data/drumKits.ts`: `DrumKit` has 7 types — `kick, snare, hihat, openhat, clap, tom, crash`.
+`src/data/drumKits.ts`: `DRUM_TYPES` declares 11 voices, and its order is the canonical one —
+`kick, snare, rimshot, clap, hihat, openhat, hitom, lowtom, ride, crash, bell`. `DrumKit` and
+`triggerDrum`'s dispatch follow it, so any two of those lists compare as sorted lists.
 `mergeDrumKit` is in `src/audio/drumKits.ts`.
 `DRUM_KITS` holds `Partial<DrumKit>` overrides merged onto `DEFAULT_DRUM_KIT` by `mergeDrumKit()`.
-`triggerDrum(type, velocity, time?)` accepts aliases: `closedhat`→hihat, `lowtom`→tom, `ride`→crash.
+`triggerDrum(type, velocity, time?)` resolves `DRUM_ALIASES` before its dispatch, and that table is
+exactly `{ closedhat: 'hihat' }` — an alias pointing at a voice that has since gained its own case
+would make that case dead code silently, which is why a test asserts the table exhaustively.
 
 **Invariant, enforced by `bun run check:drums`** (`scripts/check-drum-kit-separation.ts`):
-1. every kit must override **every** one of the 7 types (no type left equal to defaults);
+1. every kit must override **every** one of the 11 voices (no voice left equal to defaults);
 2. listed params must spread far enough across kits (`max >= factor * min`), e.g. `kick.decay` 3×,
-   `snare.noiseFilter` 2.8×, `hihat.filter` 2.5×.
+   `snare.noiseFilter` 2.8×, `hihat.filter` 2.5×;
+3. voices that could collapse into a sibling *inside one kit* — rimshot against that kit's snare, the
+   two toms, ride against crash — are covered by the separate `withinKit` check, not by the
+   across-kit spread, and it fails closed on an unmeasurable pair.
 
 Adding or editing a kit means running `bun run check:drums`. `bun run verify` includes it.
 

@@ -37,4 +37,32 @@ describe('Slider tokens', () => {
     expect(html).toContain('id="slider-test"');
     expect(html).toContain('title="Bass Level"');
   });
+
+  test('an accessible name reaches the input, and is absent when not asked for', () => {
+    const named = renderToString(
+      <Slider id="s1" min={0} max={1} value={0.5} onChange={() => {}} ariaLabel="Master level" />,
+    );
+    expect(named).toContain('aria-label="Master level"');
+    const plain = renderToString(
+      <Slider id="s2" min={0} max={1} value={0.5} onChange={() => {}} />,
+    );
+    expect(plain).not.toContain('aria-label');
+  });
+
+  test('forwards onDoubleClick to the rendered <input> itself, not just to props', () => {
+    // renderToString cannot see a handler — it is not markup — so this calls
+    // the component directly. Slider's whole body IS the <input>, so the
+    // returned element is the input node: no fragment to walk through.
+    const handleDoubleClick = () => undefined;
+    const element = Slider({
+      id: 's3',
+      min: 0,
+      max: 1,
+      value: 0.5,
+      onChange: () => {},
+      onDoubleClick: handleDoubleClick,
+    });
+    expect(element.type).toBe('input');
+    expect(element.props.onDoubleClick).toBe(handleDoubleClick);
+  });
 });

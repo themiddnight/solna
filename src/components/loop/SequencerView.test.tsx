@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { SequencerView } from './SequencerView';
 import { useAppStore } from '@/store/store';
@@ -50,6 +51,17 @@ describe('SequencerView theming', () => {
     // 32px shell come from ChannelStrip, which sits on the same line already.
     expect(labels).toBe(5);
     expect(lanes).toBe(4);
+  });
+
+  // Step 17: the drum bus fader's dB markup, asserted at view level so a
+  // regression back to a %/linear readout on this call site is caught here
+  // and not only inside ChannelStrip's own unit tests.
+  test('the drum bus fader renders its dB tooltip and position step', () => {
+    // DEV-383: masterSequencerVolume's factory default is DEFAULT_BUS_TRIM_DB
+    // (-6 dB), not unity — this view renders the store's creation-time
+    // snapshot with no explicit setState, so the tooltip reflects that.
+    expect(html).toContain('title="Drums Layer Gain: -6.0 dB"');
+    expect(html).toContain('step="0.005"');
   });
 
   test('the kit and grid selects use the shared stacked field label', () => {
@@ -178,6 +190,7 @@ describe('SequencerGrid', () => {
         onToggleStep={() => {}}
         onToggleMute={() => {}}
         onPreview={() => {}}
+        onVolumeChange={() => {}}
       />,
     );
 
@@ -250,6 +263,7 @@ describe('SequencerGrid', () => {
               onToggleStep={() => {}}
               onToggleMute={() => {}}
               onPreview={() => {}}
+              onVolumeChange={() => {}}
             />
           ))}
         </div>
@@ -259,5 +273,65 @@ describe('SequencerGrid', () => {
     stepPublisher.reset('sequencer');
 
     expect(after).toBe(before);
+  });
+
+  test('every track row carries a tapered dB fader at unity', () => {
+    const html = renderToString(<SequencerView />);
+    // Creation-time store state: the eleven factory tracks are all at unity.
+    expect(html).toContain('id="slider-track-');
+    expect(html).toContain('title="Kick 808 level: 0.0 dB"');
+    expect(html).toContain('step="0.005"');
+  });
+});
+
+describe('DEV-388: the drum-kit-resets-on-refresh fix', () => {
+  // What CANNOT be exercised here, said plainly rather than pointed at a test
+  // that doesn't exist: `renderToString` never runs `useEffect` at all (see
+  // .claude/rules/testing.md's zustand+renderToString trap and React's own
+  // SSR semantics) — so re-adding the deleted mount-time `useEffect` that
+  // used to overwrite the rehydrated kit would turn NOTHING in this file red,
+  // regardless of what it did. store.test.ts's "DEV-388: drum kit + drum
+  // filter survive a real refresh" already rules the persist/rehydrate path
+  // OUT as the cause (a negative result); there is no positive, effect-firing
+  // reproduction available under this repo's no-DOM constraint.
+  //
+  // What IS pinned instead, both as static properties of the source rather
+  // than of a render: (1) `applyDrumGrid` is the ONLY place the component
+  // calls `onChangeSoundKit` — so nothing else, mount included, can write a
+  // kit — and (2) the component declares exactly one `useEffect`, the preview
+  // cleanup, so a reviewer (or this test) catching a second one is the signal
+  // a mount-time kit effect has come back.
+  test('onChangeSoundKit is called from exactly the two direct-user-input sites, never a mount effect', () => {
+    const src = readFileSync(
+      new URL('./SequencerView.tsx', import.meta.url),
+      'utf8',
+    );
+    const calls = src.match(/onChangeSoundKit\(/g) ?? [];
+    // Two legitimate call sites: the kit <select>'s own onChange (the user
+    // picks a kit directly), and applyDrumGrid (a grid names the kit it was
+    // written for). Guard on the CALL COUNT so a third call site — e.g. a
+    // reintroduced useEffect — turns this red without needing to name it.
+    expect(calls.length).toBe(2);
+    const applyDrumGridBody = src.slice(
+      src.indexOf('const applyDrumGrid ='),
+      src.indexOf('const gridOptions ='),
+    );
+    expect(applyDrumGridBody).toContain('onChangeSoundKit(grid.kit)');
+    expect(src).toContain('onChange={(e) => onChangeSoundKit(e.target.value)}');
+  });
+
+  test('the component declares exactly one useEffect (the preview cleanup)', () => {
+    const src = readFileSync(
+      new URL('./SequencerView.tsx', import.meta.url),
+      'utf8',
+    );
+    const effects = src.match(/useEffect\(/g) ?? [];
+    expect(effects.length).toBe(1);
+    expect(src).toContain('useEffect(() => () => previewRef.current?.(), [])');
+  });
+
+  test('the grid select starts unselected, not claiming a grid nothing chose', () => {
+    const html = renderToString(<SequencerView />);
+    expect(html).toContain('Choose a grid');
   });
 });

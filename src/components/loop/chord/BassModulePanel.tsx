@@ -184,10 +184,9 @@ export function BassModulePanel({
           <ChannelStrip
             idPrefix="bass"
             label="Bass Level"
-            volume={bassVolume}
-            max={1.5}
+            volumeDb={bassVolume}
             accentClass={SYNTH_TARGET_STYLES.bass.accent}
-            onVolumeChange={setBassVolume}
+            onVolumeDbChange={setBassVolume}
             showReadout={false}
             sliderClassName={SYNTH_TARGET_STYLES.bass.slider}
           />

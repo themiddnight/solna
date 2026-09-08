@@ -2,7 +2,7 @@ import React from "react";
 import { Volume2, Clock, Plus, Minus } from "lucide-react";
 import { IconButton } from "./ui/IconButton";
 import { useAppStore } from "../store/store";
-import { Slider } from "./ui/Slider";
+import { VolumeFader } from "@/components/ui/VolumeFader";
 import { PlayerTransport } from "./ui/PlayerTransport";
 import { PlayheadReadout } from "./PlayheadReadout";
 import { VuMeter } from "./ui/VuMeter";
@@ -164,25 +164,21 @@ export const TransportBar = React.memo(function TransportBar() {
         {/* Master Output Fader */}
         <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-box">
           <Volume2 className="w-3.5 h-3.5 text-base-content/60 shrink-0" />
-          <Slider
+          {/* The taper, the readout, the -inf detent and double-click-to-unity
+              all live in VolumeFader — this bar states only the width and
+              which readout it can afford. The readout is hidden below `sm`:
+              both side groups are `shrink-0`, so under that breakpoint this
+              bar has one fixed width (378px overran a 375px iPhone), and
+              dropping the readout is what brings it back. The level stays
+              readable from the fader position and exact in the `title`. */}
+          <VolumeFader
             id="slider-transport-master"
-            min={0}
-            max={1}
-            step={0.01}
-            value={masterVolume}
-            onChange={setMasterVolume}
+            label="Master"
+            valueDb={masterVolume}
+            onChangeDb={setMasterVolume}
             className="range range-xs range-primary w-10 sm:w-16"
-            title={`Master: ${(masterVolume * 100).toFixed(0)}%`}
+            readoutClassName="font-mono text-[10px] text-base-content/60 w-14 text-right hidden sm:inline"
           />
-          {/* Hidden below `sm`. Both side groups are `shrink-0`, so this bar
-              has one fixed width under that breakpoint — 378px, which overran
-              a 375px iPhone and a 360px Android and cut the fader off at the
-              screen edge. Dropping this readout (24px with its gap) is what
-              brings it to 354px. The level is still readable from the fader
-              position, and the exact percentage stays in its `title`. */}
-          <span className="font-mono text-[10px] text-base-content/60 w-5 sm:w-6 text-right hidden sm:inline">
-            {(masterVolume * 100).toFixed(0)}
-          </span>
         </div>
       </div>
     </div>

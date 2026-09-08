@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { audioEngine } from '../engine';
 import { freshEngine } from '../testFakes';
+import { NEUTRAL_TRIM_GAIN, synthTrimGainFor } from '../trims';
 import type { SynthParams, ChordItem } from '@/types';
-import { previewChordProgression, previewSequencerNote } from './presetPreview';
+import { previewChordProgression, previewSequencerNote, previewSynthPreset } from './presetPreview';
 import {
   resetNoteInputListeners,
   subscribeNoteInput,
@@ -355,6 +356,87 @@ describe('a grid audition is not a performance', () => {
       expect(events).toEqual([]);
     } finally {
       resetNoteInputListeners();
+      restore();
+    }
+  });
+});
+
+/** A factory patch the committed trim table actually calibrates. */
+const CALIBRATED_PRESET = 'Cosmic Lead';
+
+describe('a preview carries its own patch\'s calibration trim', () => {
+  // PREVIEW_SOURCE is one bus shared by all three preview entry points. While
+  // the trim lived in a persistent per-source map, each of them had to
+  // overwrite it or inherit the previous audition's patch trim — three call
+  // sites whose only job was to undo each other, and the one that forgot would
+  // have auditioned a patch at another patch's level with nothing to see. The
+  // engine derives the trim from the params handed to triggerSynthNoteOn now,
+  // so these assert the LEVEL rather than the plumbing: the staleness the old
+  // tests guarded against has no state left to live in.
+  const lastPreviewPeak = (): number => {
+    const voices = Array.from(
+      (audioEngine as any).sourceVoices.get('preview') as Set<any>,
+    );
+    return voices[voices.length - 1].gains[0].gain.ramps[0].v;
+  };
+
+  test('two auditions on the one shared bus differ in peak by the table\'s ratio', () => {
+    const { restore } = withFakeAudioEngine();
+    try {
+      const trim = synthTrimGainFor(CALIBRATED_PRESET);
+      expect(trim).not.toBe(NEUTRAL_TRIM_GAIN);
+
+      previewSequencerNote('C4', { ...SYNTH, preset: CALIBRATED_PRESET });
+      const calibrated = lastPreviewPeak();
+      // A name no factory preset has: neutral, on the same bus, immediately
+      // after the calibrated one. Under the old map this note would have kept
+      // the previous audition's trim unless something overwrote it.
+      previewSequencerNote('E4', { ...SYNTH, preset: 'A Name No Factory Preset Has' });
+      const neutral = lastPreviewPeak();
+
+      expect(calibrated / neutral).toBeCloseTo(trim, 6);
+    } finally {
+      restore();
+    }
+  });
+
+  test('previewSynthPreset auditions at the patch it is auditioning, not the last one', () => {
+    const { restore } = withFakeAudioEngine();
+    try {
+      // Both through previewSynthPreset, which auditions at its own fixed
+      // velocity — the ratio must isolate the trim, not the entry point.
+      previewSynthPreset(
+        { id: 'p1', name: CALIBRATED_PRESET, category: 'Lead', params: {} },
+        SYNTH,
+      );
+      const calibrated = lastPreviewPeak();
+      previewSynthPreset(
+        { id: 'p2', name: 'A Name No Factory Preset Has', category: 'Lead', params: {} },
+        SYNTH,
+      );
+      expect(calibrated / lastPreviewPeak()).toBeCloseTo(synthTrimGainFor(CALIBRATED_PRESET), 6);
+    } finally {
+      restore();
+    }
+  });
+
+  test('no preview path writes the per-source trim override', () => {
+    // `presetTrims` survives as a calibration-harness override and is consulted
+    // BEFORE the derivation, so an app-side write to it would be exactly the
+    // stale value the old tests existed to catch. The guarantee now is that no
+    // preview writes it at all — assert the absence, not an overwrite.
+    const { restore } = withFakeAudioEngine();
+    try {
+      const trims = (audioEngine as unknown as { presetTrims: Map<string, number> }).presetTrims;
+      trims.delete('preview');
+      previewSequencerNote('C4', SYNTH);
+      previewSynthPreset({ id: 'p1', name: 'Some Patch', category: 'Lead', params: {} }, SYNTH);
+      previewChordProgression(
+        [{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] }] as ChordItem[],
+        SYNTH,
+      );
+      expect(trims.has('preview')).toBe(false);
+    } finally {
       restore();
     }
   });

@@ -12,9 +12,13 @@
     "check:keys": "bun scripts/check-key-bindings.ts",
     "check:drums": "bun scripts/check-drum-kit-separation.ts",
     "check:contrast": "bun scripts/check-drum-contrast.ts",
+    "check:levels": "bun scripts/check-levels.ts",
+    "calibration:generate": "bun scripts/calibration/generateTrimTable.ts",
+    "calibration:smoke": "bun scripts/calibration/renderOffline.smoke.ts",
+    "calibration:verify": "bun scripts/calibration/verifyApplied.smoke.ts",
     "report:library": "bun scripts/report-library-coverage.ts",
     "report:drums-diff": "bun scripts/report-drum-diff.ts",
-    "verify": "bun test && bun run lint && bun run eslint && bun run check:keys && bun run check:drums && bun run check:contrast && bun run build"
+    "verify": "bun test && bun run lint && bun run eslint && bun run check:keys && bun run check:drums && bun run check:contrast && bun run check:levels && bun run build"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -40,6 +44,7 @@
     "eslint": "^10.9.1",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "node-web-audio-api": "2.2.0",
     "typescript-eslint": "^8.68.0",
     "vite-plugin-pwa": "^1.3.0"
   }
