@@ -283,9 +283,11 @@ describe('transportDisplayState — which solo the master button owns', () => {
 describe('playing implies a scope', () => {
   // useAppStore is the real, shared singleton — same reason as 'setBpm
   // clamping' above: undo regardless of which assertion fails, or a stray
-  // playing player leaks into whichever test runs next.
+  // playing player (or, since soloLoop also nulls it, a stray songLoopIndex)
+  // leaks into whichever test runs next.
   afterEach(() => {
     useAppStore.getState().hardStopAll();
+    useAppStore.setState({ songLoopIndex: null });
   });
 
   const playing = (s: ReturnType<typeof useAppStore.getState>) =>

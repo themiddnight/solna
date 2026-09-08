@@ -15,12 +15,20 @@
  * `songLoopIndex` is NOT part of this union — it is a pure cursor into loops[].
  * Never read its null-ness as a mode.
  *
- * INVARIANT, locked by transportSlice.test.ts: while any player is 'playing'
- * the scope is never 'none'. Loop-layer playback goes through soloLoop, so
- * `none` means stopped on both layers. Phase 3's focus-loop rule reads the
- * scope alone to decide what survives a navigation, which is only sound
- * while this holds — a new caller of play(module) that starts a stopped
- * player without setting a scope breaks it.
+ * INVARIANT, locked by transportSlice.test.ts: every TRANSPORT action leaves
+ * the scope agreeing with the players — playAll and soloLoop start players and
+ * set a scope in the same set(); hardStopAll and softStopAll stop them and
+ * reset the scope to `none`. Phase 3's focus-loop rule reads the scope alone
+ * to decide what survives a navigation, which is only sound while that holds.
+ *
+ * It does NOT yet hold across `loadLoop`. Its non-boundary path (loadLoop.ts,
+ * the branch below the padHoldsAcrossLoop early return) calls hardStopAll() —
+ * resetting the scope to `none` — and then restarts whatever was active with
+ * play(module), which sets no scope. Switching the active loop from the loop
+ * selector while the loop layer plays therefore leaves players 'playing' under
+ * a `none` scope. Phase 3 must close that hole before it treats the scope as
+ * ground truth. The lock below covers the transport actions only, and
+ * deliberately does not pin loadLoop's current behaviour as correct.
  */
 export type PlaybackScope =
   | { kind: 'none' }
