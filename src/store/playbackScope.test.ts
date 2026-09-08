@@ -101,6 +101,26 @@ describe('restartAfterStop — what an internal stop-and-restart brings back', (
       restart: true,
       scope: LOOP_A,
     });
+    // toBe, not toEqual: this row must hand BACK the scope it was given, not
+    // an equal rebuild. songMode's subscribeWithSelector compares scopes with
+    // === (see the reducer's own identity test above), so a refactor that
+    // returned `{ kind: 'loop', loopId: focusedLoopId }` here would look
+    // correct and re-run reconcile on every reload of the auditioning loop.
+    expect(restartAfterStop(LOOP_A, 'A', 'song', true).scope).toBe(LOOP_A);
+    expect(restartAfterStop(LOOP_A, 'A', 'loop', true).scope).toBe(LOOP_A);
+  });
+
+  // The fall-through cell, and the only one that stops rather than heals: on
+  // the SONG layer an unscoped restart has no loop to claim, so it declines.
+  // Unreachable in production now that nothing outside transportSlice.ts can
+  // call play(module), but reachable from a fixture — and the function is
+  // total, so the cell has an answer whether or not a test names it.
+  test('a none scope with players running is NOT healed on the song layer', () => {
+    expect(restartAfterStop(SCOPE_NONE, 'B', 'song', true)).toEqual({
+      restart: false,
+      scope: SCOPE_NONE,
+    });
+    expect(restartAfterStop(SCOPE_NONE, 'B', 'song', true).scope).toBe(SCOPE_NONE);
   });
 
   // §6 row 3, in its pure form: picking a DIFFERENT loop on the song layer

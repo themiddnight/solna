@@ -1,4 +1,4 @@
-import { describe, test, expect, spyOn, afterEach } from 'bun:test';
+import { describe, test, expect, spyOn, afterEach, beforeEach } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import { VIBES } from '../data/vibes';
 import { applyVibeToStore, resolveVibe, VIBE_IDS } from './vibes';
@@ -252,6 +252,18 @@ describe('vibe preset id resolution', () => {
 });
 
 describe('applyVibeToStore transport handling', () => {
+  // The restart is no longer unconditional: restartAfterStop reads activeTab
+  // and playbackScope, so both are INPUTS to every test below. bun shares one
+  // process across test files, and siblings leave activeTab on a song-layer
+  // tab (projectSlice.test.ts sets 'master', ArrangeView.test.tsx sets
+  // 'arrange') without restoring it — under which the ambient `none` scope
+  // falls through to the "no restart" row and these tests would fail on file
+  // order alone. Pin the baseline instead of relying on some other file's
+  // afterEach happening to run in between.
+  beforeEach(() => {
+    useAppStore.setState({ activeTab: 'sound', playbackScope: SCOPE_NONE });
+  });
+
   // Wrap the store's own action functions in place (via `setState`, not a
   // fresh mock store) so applyVibeToStore's internal
   // `useAppStore.getState()` resolves to these wrapped references. Every
