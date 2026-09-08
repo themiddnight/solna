@@ -24,7 +24,7 @@ export const PatternView = React.memo(function PatternView() {
   const patternSegment = useAppStore((s) => s.patternSegment);
   return (
     <>
-      <div className="px-3 sm:px-4 pt-3 sm:pt-4">
+      <div className="px-3 sm:px-4 pt-3 sm:pt-4 max-w-7xl mx-auto">
         <PatternSegmentRow />
       </div>
       <div className={patternSegment === 'lead' ? 'block' : 'hidden'}>
