@@ -19,6 +19,7 @@ import {
 import { useAppStore } from "@/store/store";
 import { soloTrackForControlTarget } from "@/store/trackAudibility";
 import { SoloButton } from "../ui/SoloButton";
+import { useLiveStore } from "../ui/useLiveStore";
 import type { SynthPresetItem, SynthPresetCategory } from "@/data/synthPresets";
 import { SYNTH_CATEGORIES } from "@/data/synthPresets";
 import { DRUM_KITS } from "@/data/drumKits";
@@ -75,7 +76,10 @@ const DRUM_KIT_NAMES = Object.keys(DRUM_KITS);
 export const SoundView = React.memo(function SoundView() {
   // Synth slice state + setters (named after the old props so the rest of the
   // component body is unchanged).
-  const controlTarget = useAppStore((s) => s.controlTarget);
+  // useLiveStore, not useAppStore: the solo button below derives its track
+  // from this value, and only useLiveStore serves setState() on the server
+  // snapshot renderToString uses — see useLiveStore.ts and testing.md.
+  const controlTarget = useLiveStore((s) => s.controlTarget);
   // App keeps every view mounted (block/hidden) so audio survives a tab
   // switch, which means the scope's rAF loop must be gated on this or it
   // runs forever behind a hidden tab.

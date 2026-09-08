@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
+import { useAppStore } from '@/store/store';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
 import { SoundView } from './SoundView';
 import { FIELD_LABEL, FIELD_LANE } from '../ui/fieldClasses';
@@ -232,6 +232,10 @@ describe('keyboard audition channel is always the main synth', () => {
 });
 
 describe('SoundView track solo', () => {
+  afterEach(() => {
+    useAppStore.setState({ controlTarget: 'synth' });
+  });
+
   test('one solo button, following the active target (default: synth = Lead)', () => {
     const html = renderToString(<SoundView />);
     expect(html).toContain('aria-label="Solo Lead"');
@@ -241,21 +245,18 @@ describe('SoundView track solo', () => {
     expect(html).not.toContain('aria-label="Solo Drums"');
   });
 
-  // renderToString serves plain `useAppStore` reads from the store's
-  // creation-time snapshot (see .claude/rules/testing.md), and controlTarget
-  // starts as 'synth' — so a setState('chord') before this render would be
-  // silently ignored and the test above would pass just as well with a
-  // hardcoded `track="lead"` in the component. This asserts the wiring
-  // instead: the JSX must pass the live `controlTarget` variable through
-  // `soloTrackForControlTarget`, not a literal track name, which is the only
-  // way "follows the target" can be true for a target other than the default.
-  test('the button is wired from the live controlTarget, not a hardcoded track', () => {
-    const source = readFileSync(
-      new URL('./SoundView.tsx', import.meta.url),
-      'utf8',
-    );
-    expect(source).toContain(
-      '<SoloButton track={soloTrackForControlTarget(controlTarget)} size="sm" />',
-    );
+  // SoundView reads controlTarget through useLiveStore, which serves
+  // getState() for both the client and server useSyncExternalStore
+  // snapshots (see useLiveStore.ts and .claude/rules/testing.md) — so a
+  // setState() before renderToString is observable here, unlike a plain
+  // useAppStore read. This actually renders the component with a
+  // non-default target and checks which button comes out, which a
+  // hardcoded `track="lead"` in the component would fail: the Chord
+  // button would never appear and the Lead one would never disappear.
+  test('the button switches to the active target when controlTarget changes', () => {
+    useAppStore.setState({ controlTarget: 'chord' });
+    const html = renderToString(<SoundView />);
+    expect(html).toContain('aria-label="Solo Chord"');
+    expect(html).not.toContain('aria-label="Solo Lead"');
   });
 });
