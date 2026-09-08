@@ -141,6 +141,11 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
           // disagreeing.
           s.hardStopAll();
         } else {
+          // The only scope write outside transportSlice/restartPlayersPatch,
+          // and NOT a sanctioned pattern: it exists solely to clean up a scope
+          // left claiming something with every player already stopped, which
+          // "playing implies a scope" makes unreachable today. A scope that
+          // accompanies a transport change belongs in that change's own set().
           useAppStore.setState({ playbackScope: next });
         }
         // songLoopIndex and the advance subscription are NOT dropped here:
@@ -151,7 +156,18 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
 
     const playing =
       aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
-    if (layer === 'song' && playing && s.playbackScope.kind !== 'loop') {
+    // The arrangement advances only under the SONG scope. The test used to be
+    // `kind !== 'loop'`, which also ran the song under `none` — a claim that
+    // the arrangement may play while nothing owns the transport, which is the
+    // opposite of what this phase establishes. It was breadth with nothing
+    // behind it: playAll sets `song`, soloLoop sets `loop`, both internal
+    // stop-and-restarts go through restartAfterStop, and play(module) — the
+    // one starter that sets no scope — is allowlisted to transportSlice.ts by
+    // playbackScope.test.ts's source scan. Left loose it also broke the row
+    // above: focus-loop returns identity on `none`, so a song running under
+    // `none` would cross to a loop tab with every player still going and the
+    // cursor dropped.
+    if (layer === 'song' && playing && s.playbackScope.kind === 'song') {
       if (s.songLoopIndex === null) {
         useAppStore.setState({ songLoopIndex: enterSongIndex(s.loops, s.activeLoopId) });
       }

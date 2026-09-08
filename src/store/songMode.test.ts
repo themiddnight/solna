@@ -139,7 +139,9 @@ describe('song mode coordinator', () => {
     const clock = makeFakeClock();
     const stop = startSongModeSync({ subscribeClock: clock.subscribe });
 
-    useAppStore.getState().play('sequencer');
+    // playAll(), not play('sequencer'): starting the song is what this models,
+    // and only playAll establishes the `song` scope the advance requires.
+    useAppStore.getState().playAll();
 
     const s = useAppStore.getState();
     // The song cursor starts at the ACTIVE loop's index — no auto-load of
@@ -272,7 +274,9 @@ describe('song mode coordinator', () => {
     expect(useAppStore.getState().songLoopIndex).toBe(null);
 
     useAppStore.getState().setActiveTab('arrange');
-    useAppStore.getState().play('sequencer');
+    // Re-entry is a user pressing Play All again, which is what this always
+    // modelled; play('sequencer') sets no scope and no longer enters song mode.
+    useAppStore.getState().playAll();
     expect(useAppStore.getState().songLoopIndex).toBe(0);
     expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
     stop();
@@ -320,6 +324,10 @@ describe('song mode coordinator', () => {
     stop();
   });
 
+  // Decided by loadLoop.ts's restartAfterStop(layer='song'), not by songMode:
+  // the audition stops at the PICK, and the crossing then finds a `none` scope
+  // the reducer answers with identity. A composition guard over Tasks 2+5, so
+  // no mutation of songMode.ts alone turns it red.
   test('row 3 — song layer solo-looping L, open a DIFFERENT loop to edit: stops', () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
     useAppStore.setState({
@@ -366,6 +374,41 @@ describe('song mode coordinator', () => {
     stop();
   });
 
+  // The advance subscription requires a SONG scope, not merely "not a loop".
+  // Running the arrangement under `none` would assert the opposite of this
+  // phase's premise — that the song may play while nothing owns the transport
+  // — and it breaks row 4 in the worst way: focus-loop returns identity on a
+  // `none` scope, so crossing to a loop tab would leave every player running
+  // with the cursor dropped and the current loop looping forever, unstoppable
+  // by any of the four rows above.
+  //
+  // The state is CONSTRUCTED because production has no path into it: playAll
+  // sets `song`, soloLoop sets `loop`, both internal stop-and-restarts go
+  // through restartAfterStop, and play(module) — the one starter that sets no
+  // scope — is allowlisted to transportSlice.ts alone (the source-scan guard
+  // in playbackScope.test.ts).
+  test('players running under a none scope on the song layer take no advance subscription', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+    });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+
+    useAppStore.setState({ sequencerPlayer: 'playing', playbackScope: { kind: 'none' } });
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.songLoopIndex).toBe(null);
+    expect(clock.count).toBe(0);
+    // No subscription means no advance: the arrangement does not move.
+    clock.tick(64);
+    expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
+    stop();
+  });
+
   // The safety net, and the only place focus-loop's mismatch row is exercised
   // directly. Every UI path that moves activeLoopId now carries the scope with
   // it (loadLoop, addLoop, duplicateLoop, deleteLoop), so this state is
@@ -391,6 +434,10 @@ describe('song mode coordinator', () => {
     stop();
   });
 
+  // Also decided by loadLoop.ts's restartAfterStop (layer='loop', which
+  // restarts and re-points the scope). What songMode contributes is the
+  // absence of interference: its focus-loop dispatch must not cancel that
+  // restart. Same caveat as row 3 — mutating songMode.ts alone leaves it green.
   test('switching the edited loop ON THE LOOP LAYER keeps playing, under the new loop', () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
     useAppStore.setState({
