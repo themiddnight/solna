@@ -17,7 +17,11 @@ describe('PatternView', () => {
   test('all three segments stay mounted, gated block/hidden', () => {
     const html = renderToString(<PatternView />);
     expect(html).toContain('Lead Melody');
-    expect(html).toContain('Accompaniment');
+    // NOT 'Accompaniment': PatternSegmentRow renders that word as the segment
+    // button's own label, so it would be present with ChordView unmounted.
+    // This id is ChordView's and nothing else's.
+    expect(html).toContain('id="btn-open-chord-presets-library"');
+    // 'Drum Pattern' is safe the same way — the row's button reads 'Beat'.
     expect(html).toContain('Drum Pattern');
     // The three gate wrappers are the only bare block/hidden divs in this
     // tree today, so counting them is counting the gates. `lead` is the

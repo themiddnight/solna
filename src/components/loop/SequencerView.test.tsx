@@ -37,7 +37,11 @@ describe('SequencerView theming', () => {
     expect(html.indexOf('btn-randomize-grid')).toBeGreaterThan(patternCard);
     expect(html.indexOf('btn-clear-grid')).toBeGreaterThan(patternCard);
     // Both cards come after the header, so nothing above them can be the header.
-    expect(soundCard).toBeGreaterThan(html.indexOf('>Drum Pattern<'));
+    // Guarded like patternCard above: only SegmentHeader renders this string,
+    // so an unfound header would otherwise return -1 and pass the comparison.
+    const header = html.indexOf('>Drum Pattern<');
+    expect(header).toBeGreaterThan(-1);
+    expect(soundCard).toBeGreaterThan(header);
   });
 
   // A control inside a card's control row wears a stacked label above it (the
