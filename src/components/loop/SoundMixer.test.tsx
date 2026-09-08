@@ -49,4 +49,18 @@ describe('SoundMixer', () => {
     expect(html).toContain('id="btn-mix-mute-synth"');
     expect(html).toContain('id="btn-mix-mute-drum"');
   });
+
+  // All five channels default to unmuted (MixerRow's `muted` selector reads
+  // the store's initial state, which starts every *Muted field false). An
+  // inverted mute — `on={muted}` instead of `on={!muted}` — leaves every
+  // other assertion in this file green, since ids and slider markup don't
+  // encode polarity at all. PowerToggle's `actionTitle` does: `on` true means
+  // "the layer is currently audible", so the tooltip must offer to Mute it,
+  // never Unmute it, while unmuted.
+  test('every mute button, unmuted by default, offers to Mute (not Unmute)', () => {
+    for (const c of MIXER_CHANNELS) {
+      expect(html).toContain(`title="Mute ${c.label}"`);
+      expect(html).not.toContain(`title="Unmute ${c.label}"`);
+    }
+  });
 });

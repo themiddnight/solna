@@ -69,6 +69,7 @@ const ChordPresetLibrary = React.lazy(() =>
 import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { SegmentHeader } from "../ui/SegmentHeader";
 import { ModuleHeader } from "../ui/ModuleHeader";
+import { GroupFrame } from "../ui/GroupFrame";
 import { COUNT_BADGE, HEADER_BADGE } from '../ui/fieldClasses';
 import { SortableChordCard } from "./chord/SortableChordCard";
 import { ChordModulePanel } from "./chord/ChordModulePanel";
@@ -894,22 +895,29 @@ export const ChordView = React.memo(function ChordView() {
         </DndContext>
       </div>
 
-      {/* Chord Module Panel */}
-      <ChordModulePanel
-        onPatternPreviewDown={handleChordPatternPreviewMouseDown}
-        onPatternPreviewUp={handleChordPatternPreviewMouseUp}
-        isPlaying={isPlaying}
-      />
+      {/* No label: the segment header above already reads "Accompaniment", and
+          a second one here would duplicate the card title (spec §3). gap-3
+          sm:gap-4 reproduces the space-y-3 sm:space-y-4 the root div above
+          applies to its direct children — the three panels stop being direct
+          siblings once wrapped, so that spacing no longer reaches them. */}
+      <GroupFrame className="flex flex-col gap-3 sm:gap-4">
+        {/* Chord Module Panel */}
+        <ChordModulePanel
+          onPatternPreviewDown={handleChordPatternPreviewMouseDown}
+          onPatternPreviewUp={handleChordPatternPreviewMouseUp}
+          isPlaying={isPlaying}
+        />
 
-      {/* Bass Module Panel */}
-      <BassModulePanel
-        onPatternPreviewDown={handleBassPatternPreviewMouseDown}
-        onPatternPreviewUp={handleBassPatternPreviewMouseUp}
-        isPlaying={isPlaying}
-      />
+        {/* Bass Module Panel */}
+        <BassModulePanel
+          onPatternPreviewDown={handleBassPatternPreviewMouseDown}
+          onPatternPreviewUp={handleBassPatternPreviewMouseUp}
+          isPlaying={isPlaying}
+        />
 
-      {/* Pad Module Panel */}
-      <PadModulePanel />
+        {/* Pad Module Panel */}
+        <PadModulePanel />
+      </GroupFrame>
 
       {/* Full Chord Preset Library Sidebar Drawer */}
       <Suspense

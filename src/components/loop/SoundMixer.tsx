@@ -1,19 +1,34 @@
 import React from 'react';
 import { useAppStore } from '@/store/store';
 import { SYNTH_TARGET_STYLES } from '@/utils/synthControl';
+import type { LoopMixPatch } from '@/store/types';
 import { PanelCard } from '../ui/PanelCard';
 import { ChannelStrip } from '../ui/ChannelStrip';
 import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
 import { SECTION_HEADER } from '../ui/fieldClasses';
+import { GroupFrame } from '../ui/GroupFrame';
+
+// volumeKey/muteKey index LoopMixPatch — the same ten-field type
+// SortableLoopCard.tsx's twin table (LOOP_MIX_CHANNELS) indexes — so a
+// renamed or removed store field fails here rather than leaving this table
+// self-consistent but wrong. setVolumeKey/toggleKey stay hand-written unions:
+// LoopMixPatch carries no setters, only the ten live values a loop's mix
+// override touches.
+type MixVolumeKey = {
+  [K in keyof LoopMixPatch]: LoopMixPatch[K] extends number ? K : never;
+}[keyof LoopMixPatch];
+type MixMuteKey = {
+  [K in keyof LoopMixPatch]: LoopMixPatch[K] extends boolean ? K : never;
+}[keyof LoopMixPatch];
 
 export interface MixerChannel {
   idPrefix: string;
   label: string;
-  volumeKey: 'synthVolume' | 'chordVolume' | 'bassVolume' | 'padVolume' | 'masterSequencerVolume';
+  volumeKey: MixVolumeKey;
   setVolumeKey:
     | 'setSynthVolume' | 'setChordVolume' | 'setBassVolume' | 'setPadVolume'
     | 'setMasterSequencerVolume';
-  muteKey: 'synthMuted' | 'chordMuted' | 'bassMuted' | 'padMuted' | 'drumMuted';
+  muteKey: MixMuteKey;
   toggleKey:
     | 'toggleSynthMuted' | 'toggleChordMuted' | 'toggleBassMuted' | 'togglePadMuted'
     | 'toggleDrumMuted';
@@ -138,10 +153,18 @@ export const SoundMixer = React.memo(function SoundMixer() {
     <PanelCard>
       <div className="card-body p-3 sm:p-4 gap-3">
         <span className={SECTION_HEADER}>Mixer</span>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-4 gap-y-2">
-          {MIXER_CHANNELS.map((channel) => (
-            <MixerRow key={channel.idPrefix} channel={channel} />
-          ))}
+        <div className="flex flex-col gap-2">
+          <MixerRow channel={MIXER_CHANNELS[0]} />
+          {/* Indices, not a filter: SoundMixer.test.tsx pins MIXER_CHANNELS'
+              order and length, so [0] is Lead, [1..3] are the accompaniment
+              three and [4] is Beat. A filter would silently drop a row that got
+              renamed; a bad index fails the suite. */}
+          <GroupFrame label="Accompaniment" className="flex flex-col gap-2">
+            {MIXER_CHANNELS.slice(1, 4).map((channel) => (
+              <MixerRow key={channel.idPrefix} channel={channel} />
+            ))}
+          </GroupFrame>
+          <MixerRow channel={MIXER_CHANNELS[4]} />
         </div>
       </div>
     </PanelCard>

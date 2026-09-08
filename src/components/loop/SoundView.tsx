@@ -62,6 +62,7 @@ import {
   SYNTH_TARGET_STYLES,
 } from "@/utils/synthControl";
 import type { SynthControlTarget } from "@/utils/synthControl";
+import { GroupFrame } from "../ui/GroupFrame";
 
 // The kit roster never changes at runtime, so it is read once here rather than
 // re-keyed on every render — a Knob drag re-renders this view per pointermove.
@@ -229,6 +230,25 @@ export const SoundView = React.memo(function SoundView() {
 
   const totalPresetsCount = allPresets.length;
 
+  // Explicit rather than Object.keys(SYNTH_TARGET_STYLES): the row below
+  // needs synth separated from chord/bass/pad to frame the latter three, so
+  // it no longer derives the target list from the record. synthControl.ts
+  // pins the keys to synth/chord/bass/pad in this order; a fifth target
+  // added there would silently not render here.
+  const renderTargetChip = (target: SynthControlTarget) => (
+    <button
+      key={target}
+      onClick={() => onChangeControlTarget(target)}
+      className={`btn btn-xs text-[11px] font-semibold ${
+        controlTarget === target
+          ? SYNTH_TARGET_STYLES[target].activeBtn
+          : "btn-ghost text-base-content/60"
+      }`}
+    >
+      {SYNTH_TARGET_STYLES[target].label}
+    </button>
+  );
+
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Synth Lab Header: Mode Switcher + Save Current & Full Presets Library */}
@@ -327,26 +347,24 @@ export const SoundView = React.memo(function SoundView() {
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           {/* Control Destination Selector */}
           <div
-            className={`join flex items-center gap-1 bg-base-200 border rounded-box p-1 shrink-0 ${SYNTH_TARGET_STYLES[controlTarget].border}`}
+            className={`flex items-center gap-1 bg-base-200 border rounded-box p-1 shrink-0 ${SYNTH_TARGET_STYLES[controlTarget].border}`}
           >
             <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold pl-1 pr-1 hidden sm:inline">
               Target:
             </span>
-            {(
-              Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]
-            ).map((target) => (
-              <button
-                key={target}
-                onClick={() => onChangeControlTarget(target)}
-                className={`btn btn-xs join-item text-[11px] font-semibold ${
-                  controlTarget === target
-                    ? SYNTH_TARGET_STYLES[target].activeBtn
-                    : "btn-ghost text-base-content/60"
-                }`}
-              >
-                {SYNTH_TARGET_STYLES[target].label}
-              </button>
-            ))}
+            {renderTargetChip('synth')}
+            {/* Chord, bass and pad are one job done three ways. The frame is
+                inside the tinted outer group, not replacing it: the outer
+                tint tracks the ACTIVE target, this one groups three of the
+                four. See ui/GroupFrame for why it adds no colour.
+                daisyUI's join requires its direct children to be the joined
+                items, and a GroupFrame between the outer div and three of
+                the four chips breaks that contract, so join/join-item are
+                dropped from this whole row; gap-1 (already on the row and
+                the frame) carries the spacing join used to. */}
+            <GroupFrame label="Accompaniment" className="flex items-center gap-1">
+              {(['chord', 'bass', 'pad'] as SynthControlTarget[]).map(renderTargetChip)}
+            </GroupFrame>
           </div>
 
 
