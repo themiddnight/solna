@@ -101,7 +101,7 @@ export const TransportBar = React.memo(function TransportBar() {
             other ancillary text (BPM/Meter) rather than the `md` the song
             badge uses below — this is the reason a click does one of two
             different things, so it earns the wider breakpoint. */}
-        <span className="text-xs text-base-content/70 whitespace-nowrap hidden sm:inline">
+        <span className="text-xs text-base-content/70 truncate max-w-20 sm:max-w-32 hidden sm:inline">
           {playTargetLabel(layer, activeLoopName)}
         </span>
 
