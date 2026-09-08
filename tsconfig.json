@@ -5,6 +5,7 @@
     "vite.config.ts",
     "scripts/themeTokenGuard.ts",
     "scripts/themeTokenGuard.test.ts",
-    "scripts/checkTheme.ts"
+    "scripts/checkTheme.ts",
+    "scripts/calibration/**/*"
   ]
 }

@@ -3,6 +3,8 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    // Needed only because scripts/ imports with explicit .ts extensions; src/ stays extensionless.
+    "allowImportingTsExtensions": true,
     "types": ["node"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
