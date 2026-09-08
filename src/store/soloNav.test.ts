@@ -50,6 +50,18 @@ describe('SOLO_NAV_KEYS', () => {
   test('is exactly the three navigation fields §4 names', () => {
     expect([...SOLO_NAV_KEYS]).toEqual(['activeTab', 'patternSegment', 'activeLoopId']);
   });
+
+  /**
+   * The listener must never write a field the selector reads. If `soloTracks`
+   * were added here, `clearSoloTracks()` would fire on every toggle — not an
+   * infinite loop (the emptiness guard stops it after one nested hop), but
+   * every `toggleSoloTrack` call would read back as `[]` immediately, with no
+   * compile error and no other test catching it. This constant is the only
+   * place that silent failure can be caught before it ships.
+   */
+  test('never watches soloTracks itself', () => {
+    expect(SOLO_NAV_KEYS).not.toContain('soloTracks');
+  });
 });
 
 describe('soloNavSignature', () => {
