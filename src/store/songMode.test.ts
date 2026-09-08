@@ -9,9 +9,10 @@ import { useAppStore } from './store';
 import { isSongLayer } from '../types';
 import {
   enterSongIndex,
-  nextLoopIndex,
   loopLengthSteps,
-  songAdvanceTarget,
+  SONG_END,
+  SONG_HOLD,
+  songAdvanceDecision,
   startSongModeSync,
 } from './songMode';
 import type { Loop } from './types';
@@ -38,49 +39,60 @@ describe('song mode pure helpers', () => {
     expect(loopLengthSteps(INITIAL_CHORDS, 16)).toBe(64);
   });
 
-  test('nextLoopIndex wraps to 0 after the last loop', () => {
-    expect(nextLoopIndex([{ id: 'a' }, { id: 'b' }, { id: 'c' }], 0)).toBe(1);
-    expect(nextLoopIndex([{ id: 'a' }, { id: 'b' }, { id: 'c' }], 2)).toBe(0);
-  });
-
   test('enterSongIndex resolves the active loop to its list index, defaulting to 0', () => {
     expect(enterSongIndex([{ id: 'a' }, { id: 'b' }], 'b')).toBe(1);
     expect(enterSongIndex([{ id: 'a' }], 'missing')).toBe(0);
   });
 
-  test('songAdvanceTarget returns the next loop id exactly on the boundary', () => {
+  test('songAdvanceDecision advances exactly on the boundary and holds everywhere else', () => {
+    const loops = [shortLoop('a', 4), shortLoop('b', 2), shortLoop('c', 1)];
+    expect(songAdvanceDecision(loops, 0, 63, 16)).toBe(SONG_HOLD);
+    expect(songAdvanceDecision(loops, 0, 64, 16)).toEqual({ kind: 'advance', loopId: 'b' });
+    expect(songAdvanceDecision(loops, 1, 31, 16)).toBe(SONG_HOLD);
+    expect(songAdvanceDecision(loops, 1, 32, 16)).toEqual({ kind: 'advance', loopId: 'c' });
+  });
+
+  test('songAdvanceDecision ENDS the song after the last loop instead of wrapping', () => {
     const loops = [shortLoop('a', 4), shortLoop('b', 2)];
-    expect(songAdvanceTarget(loops, 0, 63, 16)).toBe(null);
-    expect(songAdvanceTarget(loops, 0, 64, 16)).toBe('b');
-    expect(songAdvanceTarget(loops, 1, 32, 16)).toBe('a'); // wraps
-    expect(songAdvanceTarget(loops, 1, 31, 16)).toBe(null);
+    // The song has an ending: the last slot does not wrap back to the top.
+    expect(songAdvanceDecision(loops, 1, 32, 16)).toBe(SONG_END);
+    // ...and only on its own boundary. A mid-loop step still holds.
+    expect(songAdvanceDecision(loops, 1, 31, 16)).toBe(SONG_HOLD);
   });
 
-  test('songAdvanceTarget multiplies loop length by repeatCount before advancing', () => {
-    const loopA = { ...shortLoop('a', 2), repeatCount: 3 }; // 2 bars x 16 steps x 3 repeats = 96 steps
-    const loopB = shortLoop('b', 1);
+  test('songAdvanceDecision ends a SINGLE-loop arrangement too', () => {
+    // The old rule made this the one arrangement that played forever, for a
+    // technical reason (reloading the loop we are already in would hard-stop
+    // the players and rewind the clock every pass) that stopping does not
+    // have. Auditioning a card is the feature for "loop one thing forever";
+    // song mode is the feature for a piece with an ending.
+    const loops = [shortLoop('a', 4)];
+    expect(songAdvanceDecision(loops, 0, 64, 16)).toBe(SONG_END);
+  });
+
+  test('songAdvanceDecision multiplies loop length by repeatCount before deciding', () => {
+    const loopA = { ...shortLoop('a', 2), repeatCount: 3 }; // 2 bars x 16 steps x 3 repeats
+    const loopB = { ...shortLoop('b', 1), repeatCount: 2 }; // 1 bar x 16 steps x 2 repeats
     const loops = [loopA, loopB];
-    expect(songAdvanceTarget(loops, 0, 32, 16)).toBe(null); // After 1st rep
-    expect(songAdvanceTarget(loops, 0, 64, 16)).toBe(null); // After 2nd rep
-    expect(songAdvanceTarget(loops, 0, 95, 16)).toBe(null);
-    expect(songAdvanceTarget(loops, 0, 96, 16)).toBe('b'); // After 3rd rep
+    expect(songAdvanceDecision(loops, 0, 32, 16)).toBe(SONG_HOLD); // after rep 1
+    expect(songAdvanceDecision(loops, 0, 64, 16)).toBe(SONG_HOLD); // after rep 2
+    expect(songAdvanceDecision(loops, 0, 95, 16)).toBe(SONG_HOLD);
+    expect(songAdvanceDecision(loops, 0, 96, 16)).toEqual({ kind: 'advance', loopId: 'b' });
+    // The last loop's repeats are counted before the ending, too.
+    expect(songAdvanceDecision(loops, 1, 16, 16)).toBe(SONG_HOLD); // after rep 1
+    expect(songAdvanceDecision(loops, 1, 32, 16)).toBe(SONG_END); // after rep 2
   });
 
-  test('songAdvanceTarget ignores step 0, loop mode and an out-of-range cursor', () => {
+  test('songAdvanceDecision holds on step 0, in loop mode and on an out-of-range cursor', () => {
+    // Every one of these was `null` before, indistinguishable from the ending.
     const loops = [shortLoop('a', 4)];
-    expect(songAdvanceTarget(loops, null, 64, 16)).toBe(null);
-    expect(songAdvanceTarget(loops, 0, 0, 16)).toBe(null);
-    expect(songAdvanceTarget(loops, 99, 64, 16)).toBe(null);
+    expect(songAdvanceDecision(loops, null, 64, 16)).toBe(SONG_HOLD);
+    expect(songAdvanceDecision(loops, 0, 0, 16)).toBe(SONG_HOLD);
+    expect(songAdvanceDecision(loops, 99, 64, 16)).toBe(SONG_HOLD);
+    expect(songAdvanceDecision([], 0, 64, 16)).toBe(SONG_HOLD);
   });
 
-  test('songAdvanceTarget does not reload the sole loop of a single-loop arrangement', () => {
-    const loops = [shortLoop('a', 4)];
-    // Wrapping onto itself would rewind the shared clock every loop; the
-    // single-loop song must just loop in place like loop mode.
-    expect(songAdvanceTarget(loops, 0, 64, 16)).toBe(null);
-  });
-
-  test('songAdvanceTarget dwells an empty loop one bar then advances', () => {
+  test('songAdvanceDecision dwells an empty loop one bar then advances', () => {
     const empty: Loop = {
       ...createDefaultLoop(),
       id: 'empty',
@@ -88,9 +100,9 @@ describe('song mode pure helpers', () => {
       chords: [],
     };
     const loops = [empty, shortLoop('b', 1)];
-    expect(songAdvanceTarget(loops, 0, 0, 16)).toBe(null); // step 0
-    expect(songAdvanceTarget(loops, 0, 15, 16)).toBe(null); // mid-bar
-    expect(songAdvanceTarget(loops, 0, 16, 16)).toBe('b'); // after one bar of silence
+    expect(songAdvanceDecision(loops, 0, 0, 16)).toBe(SONG_HOLD); // step 0
+    expect(songAdvanceDecision(loops, 0, 15, 16)).toBe(SONG_HOLD); // mid-bar
+    expect(songAdvanceDecision(loops, 0, 16, 16)).toEqual({ kind: 'advance', loopId: 'b' });
   });
 });
 
@@ -152,14 +164,18 @@ describe('song mode coordinator', () => {
     stop();
   });
 
-  test('advances to the next loop at the boundary and wraps to the top', async () => {
+  test('advances to the next loop at each boundary', async () => {
     const loopB = {
       ...createDefaultLoop(),
       id: 'loop-b',
       name: 'Loop B',
       chords: [{ id: 'c1', root: 'C', quality: 'maj', bars: 2, notes: ['C4'] }],
     };
-    useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });
+    const loopC = { ...createDefaultLoop(), id: 'loop-c', name: 'Loop C' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB, loopC],
+      activeLoopId: 'loop-default-1',
+    });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
     const stop = startSongModeSync({ subscribeClock: clock.subscribe });
@@ -180,11 +196,14 @@ describe('song mode coordinator', () => {
     // mid-song if it decayed to 'none' here.
     expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
 
-    // Second loop is 2 bars x 16 = 32 steps; 64 + 32 = 96 wraps to loop 0.
+    // Second loop is 2 bars x 16 = 32 steps, and each advance re-anchors the
+    // grid, so 64 + 32 = 96 is loop B's own boundary: on to loop C. It used to
+    // wrap to the top here — the arrangement now ENDS instead, which
+    // 'the arrangement STOPS at its end instead of wrapping' below owns.
     clock.tick(96);
     await new Promise((r) => setTimeout(r, 0));
-    expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
-    expect(useAppStore.getState().songLoopIndex).toBe(0);
+    expect(useAppStore.getState().activeLoopId).toBe('loop-c');
+    expect(useAppStore.getState().songLoopIndex).toBe(2);
     expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
     stop();
   });
@@ -259,7 +278,13 @@ describe('song mode coordinator', () => {
 
   test('re-entering song mode re-enters at the active loop', async () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
-    useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-b' });
+    // Three loops, so the advance below lands on a MIDDLE slot: two would put
+    // the cursor on the last one, where the song now ends rather than moving.
+    const loopC = { ...createDefaultLoop(), id: 'loop-c', name: 'Loop C' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB, loopC],
+      activeLoopId: 'loop-b',
+    });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
     const clock = makeFakeClock();
     const stop = startSongModeSync({ subscribeClock: clock.subscribe });
@@ -268,8 +293,8 @@ describe('song mode coordinator', () => {
     expect(useAppStore.getState().songLoopIndex).toBe(1);
     clock.tick(64);
     await new Promise((r) => setTimeout(r, 0));
-    expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
-    expect(useAppStore.getState().songLoopIndex).toBe(0);
+    expect(useAppStore.getState().activeLoopId).toBe('loop-c');
+    expect(useAppStore.getState().songLoopIndex).toBe(2);
     useAppStore.getState().setActiveTab('sound');
     expect(useAppStore.getState().songLoopIndex).toBe(null);
 
@@ -277,8 +302,9 @@ describe('song mode coordinator', () => {
     // Re-entry is a user pressing Play All again, which is what this always
     // modelled; play('sequencer') sets no scope and no longer enters song mode.
     useAppStore.getState().playAll();
-    expect(useAppStore.getState().songLoopIndex).toBe(0);
-    expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
+    // At the active loop's index (2), not back at the top.
+    expect(useAppStore.getState().songLoopIndex).toBe(2);
+    expect(useAppStore.getState().activeLoopId).toBe('loop-c');
     stop();
   });
 
@@ -583,6 +609,100 @@ describe('song mode coordinator', () => {
     const s = useAppStore.getState();
     expect(s.activeLoopId).toBe('loop-c'); // advanced past the loop that was auditioning
     expect(s.songLoopIndex).toBe(2);
+    stop();
+  });
+
+  test('the arrangement STOPS at its end instead of wrapping to the top', async () => {
+    const loopA = shortLoop('a', 4); // 64 steps
+    const loopB = shortLoop('b', 2); // 32 steps
+    useAppStore.setState({ loops: [loopA, loopB], activeLoopId: 'a' });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+
+    useAppStore.getState().playAll();
+    expect(clock.count).toBe(1);
+
+    // End of loop A: advance to B, still playing.
+    clock.tick(64, 4.5);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useAppStore.getState().activeLoopId).toBe('b');
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+
+    // End of loop B: the song is over.
+    clock.tick(32, 9.25);
+
+    const s = useAppStore.getState();
+    // A SOFT stop: 'stopping' is the terminal state here because no playback
+    // hook is mounted in a store test to carry it to 'stopped' at the bar
+    // line. In the app those hooks release with the preset's own release time
+    // and then hard-stop themselves.
+    expect(s.sequencerPlayer).toBe('stopping');
+    expect(s.chordsPlayer).toBe('stopping');
+    expect(s.leadPlayer).toBe('stopping');
+    // No `song` scope survives the ending, and no advance subscription either.
+    expect(s.playbackScope).toEqual({ kind: 'none' });
+    expect(s.songLoopIndex).toBe(null);
+    expect(clock.count).toBe(0);
+
+    // The cursor is back at the top, so the next Play starts the song there.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useAppStore.getState().activeLoopId).toBe('a');
+    stop();
+  });
+
+  test('a single-loop arrangement ends too, after its repeats', () => {
+    // Audition play is the feature for "loop one thing forever"; song mode is
+    // a piece with an ending, at every arrangement size.
+    useAppStore.setState({
+      loops: [{ ...shortLoop('a', 2), repeatCount: 2 }], // 2 bars x 2 repeats = 64 steps
+      activeLoopId: 'a',
+    });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+
+    useAppStore.getState().playAll();
+    clock.tick(32, 2.0); // end of repeat 1 — keeps going
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+
+    clock.tick(64, 4.0); // end of repeat 2 — the song is over
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('stopping');
+    expect(s.playbackScope).toEqual({ kind: 'none' });
+    expect(clock.count).toBe(0);
+    // The sole loop is already the first one, so nothing is reloaded and the
+    // cursor is where it was.
+    expect(s.activeLoopId).toBe('a');
+    stop();
+  });
+
+  test('after the song ends, Play starts it again from the top', async () => {
+    const loopA = shortLoop('a', 4); // 64 steps
+    const loopB = shortLoop('b', 2); // 32 steps
+    useAppStore.setState({ loops: [loopA, loopB], activeLoopId: 'a' });
+    useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
+    const clock = makeFakeClock();
+    const stop = startSongModeSync({ subscribeClock: clock.subscribe });
+
+    useAppStore.getState().playAll();
+    clock.tick(64, 4.5);
+    await new Promise((r) => setTimeout(r, 0));
+    clock.tick(32, 9.25);
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Stand in for the playback hooks, which are what carry 'stopping' to
+    // 'stopped' at the bar line in the app and are not mounted here.
+    useAppStore.getState().hardStopAll();
+
+    useAppStore.getState().playAll();
+
+    const s = useAppStore.getState();
+    expect(s.songLoopIndex).toBe(0);
+    expect(s.activeLoopId).toBe('a');
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(clock.count).toBe(1);
     stop();
   });
 });
