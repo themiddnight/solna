@@ -96,8 +96,21 @@ This is presentation only. `controlTarget`'s persisted values
 **Solo is a monitoring gesture, not arrangement intent.** Mute is the opposite, which is why
 mute stays per loop in `LoopMixPatch` and solo is never written there.
 
+**This is deliberately not the DAW convention, and the deviation is the feature.** In a normal
+DAW a latched solo is an ordinary working state that survives everything. Here, the
+arrangement — including "the drums drop out in the chorus" — is expressed entirely with mute,
+which is per loop and persisted; solo exists only to hear something for a moment while editing
+it. That is why it clears on navigation instead of persisting: a control that can silence a
+track must not be able to keep doing so once the user has stopped looking at it. A future
+contributor who finds the clearing inconvenient is looking at the purpose of the feature, not
+at a rough edge, and must not "fix" it into stickiness.
+
 - **Five solo targets**, one per track. No per-drum-voice solo: the drum grid keeps its
-  existing per-voice *mute* and gains one track-level solo in the DRUM SEQUENCER header.
+  existing per-voice *mute* exactly as it works today — persisted per loop with
+  `sequencerTracks` — and auditioning a single voice is already covered by the preview Play
+  button every row carries (`TrackRow.tsx`'s `onPreview`). The Beat segment's only solo is the
+  track-level Drums one in the card header, which answers a different question the preview
+  button cannot: hearing the whole kit with nothing else under it.
 - **Placed where the editing happens**, not in the mixer: Sound (one button following the
   active target), Pattern › Lead (card header), Pattern › Accompaniment (one per chord / bass /
   pad row), Pattern › Beat (card header). The mixer has no solo column at all.
