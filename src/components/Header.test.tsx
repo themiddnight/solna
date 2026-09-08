@@ -211,7 +211,8 @@ describe('TabButton rendering', () => {
 // ProjectNameLabel takes `layer` as a plain prop rather than reading
 // `activeTab` itself (see the comment on the component): Header's own
 // `activeTab` read is a plain `useAppStore` selector, which under
-// `renderToString` always serves the store's CREATION-time value ('sound',\n// a loop tab) regardless of `setState` — there is no way to reach the song
+// `renderToString` always serves the store's CREATION-time value ('sound',
+// a loop tab) regardless of `setState` — there is no way to reach the song
 // layer through a rendered `<Header />` in this suite. Testing the label via
 // its own props, the same way `TabButton` above is tested standalone, avoids
 // that trap entirely.
