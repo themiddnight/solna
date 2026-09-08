@@ -101,7 +101,7 @@ describe('openProject', () => {
 describe('newProject', () => {
   test('resets content to factory, clears the id, keeps the tab and preferences', async () => {
     const { useAppStore, slice } = await sliceWithBackend();
-    useAppStore.setState({ bpm: 140, currentProjectId: 'x', currentProjectName: 'X', activeTab: 'effects', selectedVibeId: 'asian-zen', sequencerPlayer: 'playing', songLoopIndex: 1 });
+    useAppStore.setState({ bpm: 140, currentProjectId: 'x', currentProjectName: 'X', activeTab: 'master', selectedVibeId: 'asian-zen', sequencerPlayer: 'playing', songLoopIndex: 1 });
     slice.newProject();
     const s = useAppStore.getState();
     expect(s.bpm).toBe(120);
@@ -110,7 +110,7 @@ describe('newProject', () => {
     expect(s.currentProjectId).toBeNull();
     expect(s.currentProjectName).toBeNull();
     expect(s.selectedVibeId).toBeNull();
-    expect(s.activeTab).toBe('effects');
+    expect(s.activeTab).toBe('master');
     expect(s.sequencerPlayer).toBe('stopped');
     expect(s.dirty).toBe(false);
     // Untitled: no baseline — the tracker compares against the default project.

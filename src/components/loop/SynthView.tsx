@@ -246,7 +246,7 @@ export const SynthView = React.memo(function SynthView() {
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Synth Lab Header: Mode Switcher + Save Current & Full Presets Library */}
       <ViewHeader
-        view="synth"
+        view="sound"
         actions={
           <>
             {/* Mode Switcher: Simple vs Pro */}
@@ -395,7 +395,7 @@ export const SynthView = React.memo(function SynthView() {
               mode="oscilloscope"
               variant="inline"
               source={controlTarget}
-              paused={activeTab !== 'synth'}
+              paused={activeTab !== 'sound'}
               height={22}
               className="w-28 lg:w-40 rounded"
               colorTheme={controlTarget === "chord" ? "accent" : "primary"}

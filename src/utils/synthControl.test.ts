@@ -75,7 +75,7 @@ describe('focusSynthTarget', () => {
     focusSynthTarget('chord', nav);
     expect(nav.calls).toEqual([
       ['target', 'chord'],
-      ['tab', 'synth'],
+      ['tab', 'sound'],
     ]);
   });
 

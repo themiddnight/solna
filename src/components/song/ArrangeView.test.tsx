@@ -160,7 +160,7 @@ describe('getActiveChordIndex helper', () => {
 
 describe('ArrangeView deep-link', () => {
   test('buildEditRoute returns the loop-editor URL', () => {
-    expect(buildEditRoute('loop-b')).toBe('/loop?tab=synth&loopId=loop-b');
+    expect(buildEditRoute('loop-b')).toBe('/loop?tab=sound&loopId=loop-b');
   });
 
   test('editLoop pushes the URL, opens the synth tab and loads the loop', () => {
@@ -179,8 +179,8 @@ describe('ArrangeView deep-link', () => {
     // this unit test; in the app they see the URL already matches and skip.
     expect(fakeWindow.calls).toHaveLength(1);
     expect(fakeWindow.calls[0].method).toBe('pushState');
-    expect(fakeWindow.calls[0].url).toBe('/loop?tab=synth&loopId=loop-b');
-    expect(useAppStore.getState().activeTab).toBe('synth');
+    expect(fakeWindow.calls[0].url).toBe('/loop?tab=sound&loopId=loop-b');
+    expect(useAppStore.getState().activeTab).toBe('sound');
     expect(useAppStore.getState().activeLoopId).toBe('loop-b');
   });
 });

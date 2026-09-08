@@ -179,7 +179,7 @@ describe('store defaults', () => {
     expect(s.bassMuted).toBe(false);
     expect(s.bassVolume).toBe(-6); // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
     expect(s.controlTarget).toBe('synth');
-    expect(s.activeTab).toBe('synth');
+    expect(s.activeTab).toBe('sound');
     expect(s.keyboardMode).toBe('scale-locked');
     expect(s.synthParams).toEqual(INITIAL_SYNTH_PARAMS);
     expect(s.chordSynthParams).toEqual(INITIAL_SYNTH_PARAMS);

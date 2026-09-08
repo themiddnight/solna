@@ -192,7 +192,7 @@ export const SequencerView = React.memo(function SequencerView() {
           view-level buttons and lets each module own its own controls in its
           own card (see ChordView's chord/bass cards); this one had grown to
           seven, including the pattern edits that belong beside the grid. */}
-      <ViewHeader view="sequencer" badge={sequencerMeterBadge(meter)} />
+      <ViewHeader view="pattern" badge={sequencerMeterBadge(meter)} />
 
       {/* Drum Sound — everything that shapes how the kit sounds. Named for all
           of what it holds now (kit, filter, level), not just the filter. */}

@@ -28,8 +28,8 @@ function shortLoop(id: string, bars: number): Loop {
 describe('song mode pure helpers', () => {
   test('isSongLayer is true for both song-layer tabs', () => {
     expect(isSongLayer('arrange')).toBe(true);
-    expect(isSongLayer('effects')).toBe(true);
-    expect(isSongLayer('synth')).toBe(false);
+    expect(isSongLayer('master')).toBe(true);
+    expect(isSongLayer('sound')).toBe(false);
   });
 
   test('loopLengthSteps multiplies bars by stepsPerBar', () => {
@@ -119,7 +119,7 @@ const resetState = () => {
     loops: [loop],
     activeLoopId: loop.id,
     ...loopStatePatch(loop),
-    activeTab: 'synth',
+    activeTab: 'sound',
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
@@ -245,7 +245,7 @@ describe('song mode coordinator', () => {
 
     // Crossing to the loop layer is a hard stop — the players do NOT keep
     // looping (SP3's "detach but keep looping" rule is gone).
-    useAppStore.getState().setActiveTab('synth');
+    useAppStore.getState().setActiveTab('sound');
     const s = useAppStore.getState();
     expect(s.sequencerPlayer).toBe('stopped');
     expect(s.chordsPlayer).toBe('stopped');
@@ -268,7 +268,7 @@ describe('song mode coordinator', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
     expect(useAppStore.getState().songLoopIndex).toBe(0);
-    useAppStore.getState().setActiveTab('synth');
+    useAppStore.getState().setActiveTab('sound');
     expect(useAppStore.getState().songLoopIndex).toBe(null);
 
     useAppStore.getState().setActiveTab('arrange');
@@ -280,7 +280,7 @@ describe('song mode coordinator', () => {
 
   test('boundary loop→song while playing hard-stops the players and re-enters from the active loop', () => {
     useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
-    useAppStore.setState({ activeTab: 'synth', songLoopIndex: null });
+    useAppStore.setState({ activeTab: 'sound', songLoopIndex: null });
     const clock = makeFakeClock();
     const stop = startSongModeSync({ subscribeClock: clock.subscribe });
     useAppStore.getState().playAll();
@@ -307,7 +307,7 @@ describe('song mode coordinator', () => {
 
     // Crossing out of the song layer hard-stops and drops the cursor (SP3's
     // "detach but keep looping" rule is gone).
-    useAppStore.getState().setActiveTab('synth');
+    useAppStore.getState().setActiveTab('sound');
     const s = useAppStore.getState();
     expect(s.sequencerPlayer).toBe('stopped');
     expect(s.chordsPlayer).toBe('stopped');

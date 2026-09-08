@@ -20,10 +20,10 @@ import { sessionLabel } from "./project/projectManagerFlow";
 /** The three loop-layer tabs. Playback is the transport bar's single Play —
  *  see docs/superpowers/plans/2026-09-08-one-transport.md — so a tab no longer
  *  owns a PlayerModule and no longer carries its own play/stop pair. */
-export const AUTOMATION_TABS: readonly ViewMode[] = ['synth', 'chords', 'sequencer'];
+export const AUTOMATION_TABS: readonly ViewMode[] = ['sound', 'pattern'];
 
 /** The two song-layer tabs: the arrangement and the global master rack. */
-export const SONG_NAV_TABS: readonly ViewMode[] = ['arrange', 'effects'];
+export const SONG_NAV_TABS: readonly ViewMode[] = ['arrange', 'master'];
 
 /** The two layers in toggle order. Labels are user-facing copy. */
 export const LAYER_META: ReadonlyArray<{ layer: Layer; label: string }> = [

@@ -29,7 +29,7 @@ import { arrangeCycleSteps, arrangeStep } from './arrangeStep';
 import { loopIdKeyOf, loopIdsFromKey } from './loopIdKey';
 
 /** Pure route for the loop-editor deep-link, exported for a pure test. */
-export const buildEditRoute = (id: string) => buildRouteUrl('loop', 'synth', id);
+export const buildEditRoute = (id: string) => buildRouteUrl('loop', 'sound', id);
 
 /**
  * Deep-link from an Arrange row into the loop editor for one loop. Push the
@@ -38,8 +38,8 @@ export const buildEditRoute = (id: string) => buildRouteUrl('loop', 'synth', id)
  * skip their own pushState — one history entry, not two.
  */
 export const editLoop = (id: string) => {
-  window.history.pushState(window.history.state, '', buildRouteUrl('loop', 'synth', id));
-  useAppStore.getState().setActiveTab('synth');
+  window.history.pushState(window.history.state, '', buildRouteUrl('loop', 'sound', id));
+  useAppStore.getState().setActiveTab('sound');
   loadLoop(id);
 };
 

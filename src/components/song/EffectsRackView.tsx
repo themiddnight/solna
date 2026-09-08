@@ -245,7 +245,7 @@ export const EffectsRackView = React.memo(function EffectsRackView() {
 
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
-      <ViewHeader view="effects" />
+      <ViewHeader view="master" />
 
       <section className="space-y-2">
         <h3 className={`${SECTION_HEADER} px-1`}>
@@ -532,7 +532,7 @@ export const EffectsRackView = React.memo(function EffectsRackView() {
               // Master FX is the only tab that renders this visualizer;
               // App.tsx keeps the tab mounted while hidden, so gate the
               // rAF loop on the active tab to avoid burning CPU off-screen.
-              paused={activeTab !== "effects"}
+              paused={activeTab !== "master"}
             />
           </div>
         </PanelCard>

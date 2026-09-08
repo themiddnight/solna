@@ -562,7 +562,7 @@ export const ChordView = React.memo(function ChordView() {
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Scale & Chord Studio Header */}
       <ViewHeader
-        view="chords"
+        view="pattern"
         actions={
           <>
             <PowerToggle

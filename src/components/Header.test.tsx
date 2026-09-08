@@ -90,12 +90,12 @@ describe('persistTheme', () => {
 
 describe('header tab grouping', () => {
   test('arrange and master fx stand alone, with no transport', () => {
-    expect(SONG_NAV_TABS).toEqual(['arrange', 'effects']);
+    expect(SONG_NAV_TABS).toEqual(['arrange', 'master']);
   });
 
   test('every tab view is still reachable', () => {
     const views = [...SONG_NAV_TABS, ...AUTOMATION_TABS].sort();
-    expect(views).toEqual(['arrange', 'chords', 'effects', 'sequencer', 'synth']);
+    expect(views).toEqual(['arrange', 'master', 'pattern', 'sound']);
   });
 });
 
@@ -107,7 +107,7 @@ describe('layer toggle', () => {
 
   test('clicking a different layer navigates to that layer default tab', () => {
     expect(layerToggleTarget('loop', 'song')).toBe('arrange');
-    expect(layerToggleTarget('song', 'loop')).toBe('synth');
+    expect(layerToggleTarget('song', 'loop')).toBe('sound');
   });
 
   test('clicking the current layer is a no-op', () => {
@@ -125,9 +125,9 @@ describe('layer toggle', () => {
 describe('TabButton rendering', () => {
   test('renders with default class (hidden xl:inline) for loop tabs', () => {
     const html = renderToString(
-      <TabButton view="synth" activeTab="synth" onSelect={() => {}} />
+      <TabButton view="sound" activeTab="sound" onSelect={() => {}} />
     );
-    expect(html).toContain('id="tab-synth"');
+    expect(html).toContain('id="tab-sound"');
     expect(html).toContain('Synth/Lead');
     expect(html).toContain('class="truncate hidden xl:inline"');
   });
@@ -147,13 +147,13 @@ describe('TabButton rendering', () => {
 
     const fxHtml = renderToString(
       <TabButton
-        view="effects"
+        view="master"
         activeTab="arrange"
         onSelect={() => {}}
         labelClassName="truncate sm:inline"
       />
     );
-    expect(fxHtml).toContain('id="tab-effects"');
+    expect(fxHtml).toContain('id="tab-master"');
     expect(fxHtml).toContain('Master FX');
     expect(fxHtml).toContain('class="truncate sm:inline"');
   });
@@ -213,7 +213,7 @@ describe('the header tabs cover every view', () => {
 
   test('loop tabs then song tabs are VIEW_ORDER, reordered by layer', () => {
     expect([...rendered].sort()).toEqual([...VIEW_ORDER].sort());
-    expect(rendered).toEqual(['synth', 'chords', 'sequencer', 'arrange', 'effects']);
+    expect(rendered).toEqual(['sound', 'pattern', 'arrange', 'master']);
   });
 
   test('no view is rendered twice', () => {
@@ -231,7 +231,7 @@ describe('key picker', () => {
 
 describe('nav tab groups', () => {
   test('lists loop-layer views as plain view ids, with no player module attached', () => {
-    expect(AUTOMATION_TABS).toEqual(['synth', 'chords', 'sequencer']);
+    expect(AUTOMATION_TABS).toEqual(['sound', 'pattern']);
   });
 
   test('keeps the two layer groups disjoint', () => {

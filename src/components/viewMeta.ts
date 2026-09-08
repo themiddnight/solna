@@ -1,4 +1,4 @@
-import { AudioWaveform, Grid, LayoutList, Music, Sliders, type LucideIcon } from 'lucide-react';
+import { AudioWaveform, Grid, LayoutList, Sliders, type LucideIcon } from 'lucide-react';
 import type { ViewMode } from '../types';
 
 /**
@@ -22,16 +22,14 @@ export interface ViewMeta {
  * the two in step by hand. What this list is for is coverage: the tests below
  * iterate it to prove every view has a distinct icon and a unique label.
  */
-export const VIEW_ORDER = ['synth', 'chords', 'sequencer', 'arrange', 'effects'] as const;
+export const VIEW_ORDER = ['sound', 'pattern', 'arrange', 'master'] as const;
 
+// INTERIM (Task 1 of the nav restructure): these four rows reuse the old
+// views' icons and labels verbatim so the union compiles and the nav renders
+// something truthful enough to click. Task 3 chooses the real labels.
 export const VIEW_META: Record<ViewMode, ViewMeta> = {
-  synth: { icon: Sliders, tabLabel: 'Synth/Lead', title: 'Synth / Lead' },
-  sequencer: { icon: Grid, tabLabel: 'Beat Step', title: 'Drum Sequencer' },
-  // 'Chords/Bass' stopped being true when the pad layer landed: this tab now
-  // holds chord, bass AND pad. `Accompany` names the job all three do rather
-  // than listing them, so a fourth would not force another rename.
-  chords: { icon: Music, tabLabel: 'Accompany', title: 'Accompaniment' },
-  // Was `Sliders`, identical to Synth's — see viewMeta.test.ts.
-  effects: { icon: AudioWaveform, tabLabel: 'Master FX', title: 'Master Effects Rack' },
+  sound: { icon: Sliders, tabLabel: 'Synth/Lead', title: 'Synth / Lead' },
+  pattern: { icon: Grid, tabLabel: 'Beat Step', title: 'Drum Sequencer' },
   arrange: { icon: LayoutList, tabLabel: 'Arrange', title: 'Arrangement' },
+  master: { icon: AudioWaveform, tabLabel: 'Master FX', title: 'Master Effects Rack' },
 };

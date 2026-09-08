@@ -42,7 +42,7 @@ export function persistKeyboardMode(mode: KeyboardMode, storage?: Pick<Storage, 
  */
 export function createUiSlice(set: Set): UiSlice {
   return {
-    activeTab: 'synth',
+    activeTab: 'sound',
     keyboardMode: readStoredKeyboardMode() ?? 'scale-locked',
     midiActivityTimestamp: null,
     midiMappings: DEFAULT_MIDI_MAPPINGS,

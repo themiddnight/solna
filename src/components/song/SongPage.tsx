@@ -8,7 +8,7 @@ export const SongPage = React.memo(function SongPage() {
   return (
     <>
       <div className={activeTab === 'arrange' ? 'block' : 'hidden'}><ArrangeView /></div>
-      <div className={activeTab === 'effects' ? 'block' : 'hidden'}><EffectsRackView /></div>
+      <div className={activeTab === 'master' ? 'block' : 'hidden'}><EffectsRackView /></div>
     </>
   );
 });

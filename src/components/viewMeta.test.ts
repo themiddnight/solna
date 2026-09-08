@@ -4,9 +4,9 @@ import { AUTOMATION_TABS, SONG_NAV_TABS } from './Header';
 
 describe('VIEW_META', () => {
   test('covers every view exactly once', () => {
-    expect(VIEW_ORDER).toEqual(['synth', 'chords', 'sequencer', 'arrange', 'effects']);
+    expect(VIEW_ORDER).toEqual(['sound', 'pattern', 'arrange', 'master']);
     expect(Object.keys(VIEW_META).sort()).toEqual(
-      ['arrange', 'chords', 'effects', 'sequencer', 'synth'],
+      ['arrange', 'master', 'pattern', 'sound'],
     );
   });
 
@@ -29,6 +29,6 @@ describe('VIEW_META', () => {
 
   test('Header covers every view across its two tab groups', () => {
     const covered = [...SONG_NAV_TABS, ...AUTOMATION_TABS].sort();
-    expect(covered).toEqual(['arrange', 'chords', 'effects', 'sequencer', 'synth']);
+    expect(covered).toEqual(['arrange', 'master', 'pattern', 'sound']);
   });
 });
