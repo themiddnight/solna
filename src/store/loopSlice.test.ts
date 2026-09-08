@@ -1,7 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { StoreApi } from 'zustand';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
-import { createLoopSlice } from './loopSlice';
+import { createDefaultLoop, createLoopSlice } from './loopSlice';
+import { SCOPE_NONE } from './playbackScope';
+import { useAppStore } from './store';
 import type { AppStore } from './types';
 
 function makeSlice(initial?: Partial<AppStore>) {
@@ -17,6 +19,10 @@ function makeSlice(initial?: Partial<AppStore>) {
     // Match the real store's transport default so the song-cursor guard in
     // deleteLoop/reorderLoops behaves identically (null = loop mode).
     songLoopIndex: null,
+    // addLoop/duplicateLoop now read playbackScope (rescopeToLoop); the real
+    // store's transport slice seeds it to SCOPE_NONE, so this harness must
+    // too or those actions dereference undefined.
+    playbackScope: SCOPE_NONE,
     ...initial,
   } as AppStore;
   return {
@@ -235,5 +241,163 @@ describe('loopSlice', () => {
     h.state.reorderLoopsArray([l2, l1]);
     expect(h.state.loops.map((r) => r.id)).toEqual([l2.id, l1.id]);
     expect(h.state.songLoopIndex).toBe(1); // l1 is now at index 1
+  });
+});
+
+describe('a cursor move carries the scope with it', () => {
+  // bun runs every test file in one process without isolation, and these
+  // tests are the only ones in this file that touch the shared singleton
+  // store — a scope or player state left behind by one test (or by a
+  // sibling file) would otherwise bleed into the next. soloLoop in
+  // particular is a no-op once the scope already names a DIFFERENT loop
+  // (Task 2: "a different card is unreachable"), so a stale scope here
+  // would silently make it do nothing rather than establish the baseline a
+  // test expects. Restore SCOPE_NONE before AND after each test, matching
+  // loadLoop.test.ts's resetStore.
+  const resetScope = () => {
+    useAppStore.setState({
+      sequencerPlayer: 'stopped',
+      chordsPlayer: 'stopped',
+      leadPlayer: 'stopped',
+      songLoopIndex: null,
+      playbackScope: SCOPE_NONE,
+    });
+  };
+  beforeEach(resetScope);
+  afterEach(resetScope);
+
+  test('addLoop mid-playback re-points the scope at the new loop', () => {
+    useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    const newId = useAppStore.getState().addLoop();
+
+    const s = useAppStore.getState();
+    expect(s.activeLoopId).toBe(newId);
+    // The clone is content-identical, so the audio is unchanged and must not
+    // stop; only the scope's id moves.
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.playbackScope).toEqual({ kind: 'loop', loopId: newId });
+  });
+
+  test('duplicateLoop of the ACTIVE loop re-points the scope at the clone', () => {
+    useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    useAppStore.getState().duplicateLoop('loop-default-1');
+
+    const s = useAppStore.getState();
+    // duplicateLoop returns null when it auto-activates the clone, so read
+    // the new active id from the store rather than from the return value.
+    expect(s.activeLoopId).not.toBe('loop-default-1');
+    expect(s.playbackScope).toEqual({ kind: 'loop', loopId: s.activeLoopId });
+  });
+
+  test('duplicating a NON-active loop moves neither the cursor nor the scope', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+    });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    useAppStore.getState().duplicateLoop('loop-b');
+
+    const s = useAppStore.getState();
+    expect(s.activeLoopId).toBe('loop-default-1');
+    expect(s.playbackScope).toEqual({ kind: 'loop', loopId: 'loop-default-1' });
+  });
+
+  test('adding a loop while the song plays leaves the arrangement in charge', () => {
+    useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
+    useAppStore.getState().playAll();
+
+    useAppStore.getState().addLoop();
+
+    expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+  });
+});
+
+describe('deleteLoop never leaves the scope naming a loop that is gone', () => {
+  // Same reset as 'a cursor move carries the scope with it' above, and for
+  // the same reason: this block also calls soloLoop against the shared
+  // singleton store, and soloLoop is a no-op once the scope already names a
+  // DIFFERENT loop (or already names 'song') — a scope or player state left
+  // behind by one test would silently satisfy the next test's assertions
+  // without that test's own setup doing any work.
+  const resetScope = () => {
+    useAppStore.setState({
+      sequencerPlayer: 'stopped',
+      chordsPlayer: 'stopped',
+      leadPlayer: 'stopped',
+      songLoopIndex: null,
+      playbackScope: SCOPE_NONE,
+    });
+  };
+  beforeEach(resetScope);
+  afterEach(resetScope);
+
+  test('deleting the loop that is playing stops playback and clears the scope', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+      songLoopIndex: null,
+    });
+    useAppStore.getState().soloLoop('loop-default-1');
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+
+    const fallback = useAppStore.getState().deleteLoop('loop-default-1');
+
+    const s = useAppStore.getState();
+    expect(fallback).toBe('loop-b');
+    expect(s.activeLoopId).toBe('loop-b');
+    expect(s.sequencerPlayer).toBe('stopped');
+    expect(s.chordsPlayer).toBe('stopped');
+    expect(s.leadPlayer).toBe('stopped');
+    expect(s.playbackScope).toBe(SCOPE_NONE);
+    expect(s.loops.some((l) => l.id === 'loop-default-1')).toBe(false);
+  });
+
+  test('deleting a loop that is not the scoped one leaves playback alone', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+      songLoopIndex: null,
+    });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    useAppStore.getState().deleteLoop('loop-b');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.playbackScope).toEqual({ kind: 'loop', loopId: 'loop-default-1' });
+  });
+
+  test('deleting a loop while the song plays leaves the arrangement running', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+      songLoopIndex: 0,
+    });
+    useAppStore.getState().playAll();
+
+    useAppStore.getState().deleteLoop('loop-b');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.playbackScope).toEqual({ kind: 'song' });
+    expect(s.songLoopIndex).toBe(0);
+  });
+
+  test('the last loop cannot be deleted, so no scope change happens', () => {
+    useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    expect(useAppStore.getState().deleteLoop('loop-default-1')).toBe(null);
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
   });
 });

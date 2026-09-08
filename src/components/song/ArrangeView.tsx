@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { loadLoop } from '@/store/loadLoop';
-import { loopPlayButton, soloLoopId } from '@/store/playbackScope';
+import { loopPlayButton, scopedLoopId } from '@/store/playbackScope';
 import { loopBars } from '@/store/loop';
 import { aggregatePlayerState } from '@/store/transportSlice';
 import { useAppStore } from '@/store/store';
@@ -72,11 +72,11 @@ export const ArrangeView = React.memo(function ArrangeView() {
   const isPlaying =
     aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer) === 'playing';
 
-  const soloId = soloLoopId(playbackScope);
+  const scopedId = scopedLoopId(playbackScope);
 
   const playingId =
-    soloId !== null
-      ? soloId
+    scopedId !== null
+      ? scopedId
       : songLoopIndex !== null && loops[songLoopIndex]
       ? loops[songLoopIndex].id
       : activeLoopId;
@@ -170,7 +170,7 @@ export const ArrangeView = React.memo(function ArrangeView() {
     const playing =
       aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
 
-    if (playing && soloLoopId(s.playbackScope) === id) {
+    if (playing && scopedLoopId(s.playbackScope) === id) {
       // hardStopAll's own 'stop-all' dispatch already resets the scope.
       s.hardStopAll();
       return;
@@ -237,8 +237,8 @@ export const ArrangeView = React.memo(function ArrangeView() {
               const bars = loopBars(loop.chords);
               const repeatCount = Math.max(1, loop.repeatCount ?? 1);
               const singleCycleSteps = Math.max(1, bars * stepsPerBar);
-              const isAuditioning = isPlaying && soloId === loop.id;
-              const isSongPlaying = isPlaying && soloId === null && loop.id === playingId;
+              const isAuditioning = isPlaying && scopedId === loop.id;
+              const isSongPlaying = isPlaying && scopedId === null && loop.id === playingId;
               const isCurrentPlaying = isAuditioning || isSongPlaying;
               const isSelected = loop.id === activeLoopId;
               const playButton = loopPlayButton(playbackScope, loop.id);

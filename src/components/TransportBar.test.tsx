@@ -60,13 +60,13 @@ describe('transport bar aggregate behaviour', () => {
     expect(isHardStopEnabled('stopped', 'stopped')).toBe(false);
   });
 
-  test('a soloing scope makes the master button offer Play, so a click takes over into song mode', () => {
+  test('a solo-loop scope makes the master button offer Play, so a click takes over into song mode', () => {
     // Task 1 already covers transportDisplayState's cases in isolation; this
     // proves the composition the master button actually renders from — on
-    // the song layer a solo it does not own still presents as 'stopped', so
-    // a playing aggregate resolves to the Play button, and PlayerTransport
+    // the song layer a solo loop it does not own still presents as 'stopped',
+    // so a playing aggregate resolves to the Play button, and PlayerTransport
     // routes a click on that button to onPlay (playAll).
-    const displayState = transportDisplayState({ kind: 'solo', loopId: 'a' }, 'playing', 'song', 'a');
+    const displayState = transportDisplayState({ kind: 'loop', loopId: 'a' }, 'playing', 'song', 'a');
     expect(displayState).toBe('stopped');
     expect(resolveTransportButtons(displayState).main.label).toBe('Play');
   });

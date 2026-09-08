@@ -57,7 +57,8 @@ export interface TransportSlice {
    * mode. See src/store/playbackScope.ts.
    */
   playbackScope: PlaybackScope;
-  /** A loop card's own play/stop button: solo the loop, or stop the solo. */
+  /** A loop card's play/stop button and the Loop layer's master Play: play
+   *  this loop alone (scope `loop`), or stop it. Not the track solo. */
   soloLoop: (loopId: string) => void;
   setBpm: (bpm: number) => void;
   setMeter: (id: MeterId) => void;

@@ -1,8 +1,11 @@
 import { audioEngine } from '../audio/engine';
 import { ACCOMPANIMENT_SOURCES } from '../audio/playback/playbackEngine';
 import { padHoldsAcrossLoop } from '../audio/playback/padPlayback';
+import { layerForTab } from '../types';
 import { loopStatePatch } from './loop';
+import { restartAfterStop } from './playbackScope';
 import { useAppStore } from './store';
+import { NO_PLAYERS_ACTIVE, restartPlayersPatch } from './transportSlice';
 
 /** Same instant-but-clickless release the vibe swap and hard stop use. */
 export const LOAD_LOOP_RELEASE = 0.02;
@@ -51,8 +54,13 @@ const LOOP_VOICE_SOURCES = [...ACCOMPANIMENT_SOURCES, 'synth'] as const;
  * the boundary instant rather than a fixed 50 ms ahead of wall-clock now, which
  * used to put the downbeat 25-42 ms EARLY. clock.test.ts measures both.
  *
- * The song scope needs no preserving on that path either: it only ever decayed
- * because hardStopAll dispatched 'stop-all', and nothing here calls it.
+ * Scope, on both paths. The seamless path never calls hardStopAll, so the
+ * caller's scope simply survives it. The default path does call it, and
+ * restartAfterStop then decides what comes back: on the LOOP layer the
+ * switch is seamless and the scope re-points to the loop just loaded; on the
+ * SONG layer picking a DIFFERENT loop while one is auditioning stops the
+ * audition instead of moving it (spec §6 row 3); a song scope survives
+ * either way; and a load with nothing playing leaves `none`.
  */
 export function loadLoop(id: string, opts: { atBoundary?: number } = {}): void {
   const store = useAppStore.getState();
@@ -97,11 +105,18 @@ export function loadLoop(id: string, opts: { atBoundary?: number } = {}): void {
     return;
   }
 
+  // Captured BEFORE hardStopAll, which resets the scope to `none`.
+  const scopeBefore = store.playbackScope;
   const wasActive = {
     sequencer: store.sequencerPlayer !== 'stopped',
     chords: store.chordsPlayer !== 'stopped',
     lead: store.leadPlayer !== 'stopped',
   };
+  const wasPlaying = wasActive.sequencer || wasActive.chords || wasActive.lead;
+  // The layer decides which user action this is: switching the loop being
+  // EDITED (loop layer, seamless) or picking a different loop to work on from
+  // Arrange while one is auditioning (song layer, stops). See restartAfterStop.
+  const decision = restartAfterStop(scopeBefore, id, layerForTab(store.activeTab), wasPlaying);
   store.hardStopAll();
   for (const source of ACCOMPANIMENT_SOURCES) {
     audioEngine.stopSource(source, LOAD_LOOP_RELEASE);
@@ -109,10 +124,22 @@ export function loadLoop(id: string, opts: { atBoundary?: number } = {}): void {
 
   useAppStore.setState({ ...loopStatePatch(loop), activeLoopId: id, songLoopIndex });
 
-  // Restart whatever was playing. The playback hooks arm on the next bar line
-  // for the active meter, so the restart lands on beat 1 with no alignment
-  // code (the same guarantee the Instant Vibe swap relies on).
-  if (wasActive.sequencer) store.play('sequencer');
-  if (wasActive.chords) store.play('chords');
-  if (wasActive.lead) store.play('lead');
+  // Restart what the decision allows, WITH the scope it should leave behind.
+  // The playback hooks arm on the next bar line for the active meter, so a
+  // restart lands on beat 1 with no alignment code (the same guarantee the
+  // Instant Vibe swap relies on). Declining to restart needs no extra work:
+  // hardStopAll above already silenced everything, so the patch just carries
+  // SCOPE_NONE and the transport is genuinely stopped.
+  //
+  // One set(), not three play(module) calls: play(module) sets no scope, so
+  // the old form left players 'playing' under the `none` scope hardStopAll
+  // had just written — the hole Phase 1 documented at PlaybackScope and this
+  // closes. It stays a SEPARATE set() from the content patch above, though,
+  // and deliberately: the content patch must reach engineSync's per-value
+  // subscriptions BEFORE the transport's stopped->playing transition, which
+  // is what re-anchors the clock. Folding the two together would leave that
+  // ordering to subscriber registration order.
+  useAppStore.setState(
+    restartPlayersPatch(decision.restart ? wasActive : NO_PLAYERS_ACTIVE, decision.scope),
+  );
 }

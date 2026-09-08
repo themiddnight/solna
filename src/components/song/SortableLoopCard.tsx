@@ -170,7 +170,7 @@ export interface SortableLoopCardProps {
   isPlaying: boolean;
   isAuditioning?: boolean;
   /** Scope rule: disabled while the song owns the transport, and on every
-   *  non-soloing card while another loop is soloing. */
+   *  non-auditioning card while another loop is being auditioned. */
   playDisabled?: boolean;
   isActive: boolean;
   progressPercent?: number;
@@ -192,7 +192,7 @@ export interface SortableLoopCardProps {
 }
 
 /**
- * The card's border/ring/tint, as one string. A card is soloed, or playing, or
+ * The card's border/ring/tint, as one string. A card is auditioning, or playing, or
  * merely cued, or idle — one state, four looks — so the choice is a function of
  * three booleans and reads better named than as a four-deep ternary inside the
  * className template.
@@ -212,7 +212,7 @@ function loopCardAccent({
   return 'border-base-300 hover:border-base-content/20';
 }
 
-interface LoopSoloButtonProps {
+interface LoopAuditionButtonProps {
   loopId: string;
   loopName: string;
   isAuditioning: boolean;
@@ -224,9 +224,10 @@ interface LoopSoloButtonProps {
  * Play-only / stop for one loop. Every branch in it asks the same question —
  * is this loop the one being auditioned — and answers it four times over
  * (label, tint, tooltip, icon), which is four of the card's branches spent on
- * one boolean.
+ * one boolean. Named for AUDITION, not SOLO: Phase 4 adds per-track solo
+ * buttons and this button has nothing to do with them.
  */
-function LoopSoloButton({ loopId, loopName, isAuditioning, disabled, onToggle }: LoopSoloButtonProps) {
+function LoopAuditionButton({ loopId, loopName, isAuditioning, disabled, onToggle }: LoopAuditionButtonProps) {
   return (
     <button
       id={`btn-loop-play-${loopId}`}
@@ -267,12 +268,10 @@ interface LoopStatusBadgeProps {
   repeatCount: number;
 }
 
-/**
- * The card's one status badge: soloed, playing, cued, or nothing. Split out of
- * SortableLoopCard because the three-way ternary and the repeat-count readout
- * were four of the branches that put the card over the complexity ceiling, and
- * none of them reads anything else the card holds.
- */
+/** The card's one status badge: auditioning, playing, cued, or nothing. The
+ *  word is AUDITION, not SOLO: Phase 4 puts per-TRACK solo buttons on the
+ *  editing surfaces, and one screen must not use the same word for playing
+ *  one loop alone and for hearing one track alone. */
 function LoopStatusBadge({
   isAuditioning,
   isPlaying,
@@ -287,7 +286,7 @@ function LoopStatusBadge({
     return (
       <span className="badge badge-sm badge-accent gap-1 font-mono uppercase font-bold shrink-0 animate-pulse">
         <Play className="w-2.5 h-2.5 fill-current" />
-        {`Solo ${currentStepInLoop + 1}/${singleCycleSteps}`}
+        {`Audition ${currentStepInLoop + 1}/${singleCycleSteps}`}
       </span>
     );
   }
@@ -496,7 +495,7 @@ export const SortableLoopCard = React.memo(
               </span>
 
               {/* Dedicated Play / Stop button for this specific loop */}
-              <LoopSoloButton
+              <LoopAuditionButton
                 loopId={loop.id}
                 loopName={loop.name}
                 isAuditioning={isAuditioning}

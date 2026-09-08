@@ -16,7 +16,10 @@ import { applyPreset, presetById } from '../audio/presetRegistry';
 import { progressionById, resolveProgression } from '../audio/chordProgressions';
 import { drumGridById } from '../audio/drumGrids';
 import { requireEffectChain } from '../audio/effectChains';
+import { layerForTab } from '../types';
+import { restartAfterStop } from './playbackScope';
 import { useAppStore } from './store';
+import { NO_PLAYERS_ACTIVE, restartPlayersPatch } from './transportSlice';
 import { INITIAL_SYNTH_PARAMS } from './initialState';
 
 /** A VibeSpec with its three library references turned into values. */
@@ -99,6 +102,8 @@ export function applyVibeToStore(vibe: ResolvedVibe) {
   //    chords and patterns, otherwise the old progression's queued voices
   //    ring on top of the new one. A player that was mid-soft-stop counts as
   //    active and comes back — the user changed vibe, they did not cancel.
+  // Captured BEFORE hardStopAll below, which resets it to 'none'.
+  const scopeBefore = store.playbackScope;
   const wasActive = {
     sequencer: store.sequencerPlayer !== 'stopped',
     chords: store.chordsPlayer !== 'stopped',
@@ -187,13 +192,26 @@ export function applyVibeToStore(vibe: ResolvedVibe) {
     ...vibe.effects,
   });
 
-  // Restart only what was running. Both playback hooks arm on
-  // `step % stepsPerBar === 0` for the ACTIVE meter, which was just set above,
-  // so the restart lands on the next bar by construction — no alignment code
-  // needed here.
-  if (wasActive.sequencer) store.play('sequencer');
-  if (wasActive.chords) store.play('chords');
-  if (wasActive.lead) store.play('lead');
+  // Restart what was running, in ONE set() that also puts the scope back.
+  // Both playback hooks arm on `step % stepsPerBar === 0` for the ACTIVE
+  // meter, which was just set above, so the restart lands on the next bar by
+  // construction — no alignment code needed here.
+  //
+  // A vibe rewrites the CURRENT loop and never moves activeLoopId, so it
+  // always lands on restartAfterStop's "same loop" row: it keeps playing,
+  // under the scope it already had. The three play(module) calls this
+  // replaces set no scope at all, which is why clicking a vibe mid-playback
+  // used to leave every player 'playing' under `none`.
+  const wasPlaying = wasActive.sequencer || wasActive.chords || wasActive.lead;
+  useAppStore.setState((s) => {
+    const decision = restartAfterStop(
+      scopeBefore,
+      s.activeLoopId,
+      layerForTab(s.activeTab),
+      wasPlaying,
+    );
+    return restartPlayersPatch(decision.restart ? wasActive : NO_PLAYERS_ACTIVE, decision.scope);
+  });
 }
 
 /** Every vibe's id, in table order — the identity set the invariant tests pin against. */

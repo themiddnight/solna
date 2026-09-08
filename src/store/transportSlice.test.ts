@@ -207,14 +207,14 @@ describe('playbackScope rides alongside the player transitions in one set()', ()
     expect(h.state.playbackScope).toEqual({ kind: 'song' });
   });
 
-  test('playAll takes over from a solo — the solo id cannot survive it', () => {
-    const h = makeSlice({ playbackScope: { kind: 'solo', loopId: 'loop-a' } });
+  test('playAll takes over from a solo loop — the loop id cannot survive it', () => {
+    const h = makeSlice({ playbackScope: { kind: 'loop', loopId: 'loop-a' } });
     h.state.playAll();
     expect(h.state.playbackScope).toEqual({ kind: 'song' });
   });
 
   test('soft and hard stop both clear the scope', () => {
-    const soft = makeSlice({ playbackScope: { kind: 'solo', loopId: 'loop-a' } });
+    const soft = makeSlice({ playbackScope: { kind: 'loop', loopId: 'loop-a' } });
     soft.state.softStopAll();
     expect(soft.state.playbackScope).toEqual({ kind: 'none' });
     const hard = makeSlice({ playbackScope: { kind: 'song' } });
@@ -222,18 +222,18 @@ describe('playbackScope rides alongside the player transitions in one set()', ()
     expect(hard.state.playbackScope).toEqual({ kind: 'none' });
   });
 
-  test('soloLoop starts the players, claims the solo and drops the song cursor', () => {
+  test('soloLoop starts the players, claims the solo loop and drops the song cursor', () => {
     const h = makeSlice({ songLoopIndex: 2 });
     h.state.soloLoop('loop-a');
-    expect(h.state.playbackScope).toEqual({ kind: 'solo', loopId: 'loop-a' });
+    expect(h.state.playbackScope).toEqual({ kind: 'loop', loopId: 'loop-a' });
     expect(h.state.songLoopIndex).toBe(null);
     expect(h.state.sequencerPlayer).toBe('playing');
     expect(h.state.chordsPlayer).toBe('playing');
     expect(h.state.leadPlayer).toBe('playing');
   });
 
-  test('soloLoop on the soloing loop stops every player immediately', () => {
-    const h = makeSlice({ playbackScope: { kind: 'solo', loopId: 'loop-a' } });
+  test('soloLoop on the auditioning loop stops every player immediately', () => {
+    const h = makeSlice({ playbackScope: { kind: 'loop', loopId: 'loop-a' } });
     h.state.soloLoop('loop-a');
     expect(h.state.playbackScope).toEqual({ kind: 'none' });
     expect(h.state.sequencerPlayer).toBe('stopped');
@@ -242,34 +242,34 @@ describe('playbackScope rides alongside the player transitions in one set()', ()
   });
 
   test('per-module play never touches the scope (loadLoop restarts through it)', () => {
-    const h = makeSlice({ playbackScope: { kind: 'solo', loopId: 'loop-a' } });
+    const h = makeSlice({ playbackScope: { kind: 'loop', loopId: 'loop-a' } });
     h.state.play('sequencer');
-    expect(h.state.playbackScope).toEqual({ kind: 'solo', loopId: 'loop-a' });
+    expect(h.state.playbackScope).toEqual({ kind: 'loop', loopId: 'loop-a' });
   });
 
-  test('transportDisplayState presents Play while soloing on the song layer so Play All takes over', () => {
-    expect(transportDisplayState({ kind: 'solo', loopId: 'a' }, 'playing', 'song', 'a')).toBe('stopped');
+  test('transportDisplayState presents Play while auditioning on the song layer so Play All takes over', () => {
+    expect(transportDisplayState({ kind: 'loop', loopId: 'a' }, 'playing', 'song', 'a')).toBe('stopped');
     expect(transportDisplayState({ kind: 'song' }, 'playing', 'song', 'a')).toBe('playing');
     expect(transportDisplayState({ kind: 'none' }, 'stopping', 'loop', 'a')).toBe('stopping');
   });
 });
 
-describe('transportDisplayState — which solo the master button owns', () => {
+describe('transportDisplayState — which solo loop the master button owns', () => {
   test('shows the real player state while the loop layer plays the loop it is editing', () => {
     expect(
-      transportDisplayState({ kind: 'solo', loopId: 'l1' }, 'playing', 'loop', 'l1'),
+      transportDisplayState({ kind: 'loop', loopId: 'l1' }, 'playing', 'loop', 'l1'),
     ).toBe('playing');
   });
 
-  test('still offers Play on the song layer while a card solos, so one click takes over', () => {
+  test('still offers Play on the song layer while a card auditions, so one click takes over', () => {
     expect(
-      transportDisplayState({ kind: 'solo', loopId: 'l1' }, 'playing', 'song', 'l1'),
+      transportDisplayState({ kind: 'loop', loopId: 'l1' }, 'playing', 'song', 'l1'),
     ).toBe('stopped');
   });
 
   test('offers Play on the loop layer when the loop sounding is not the one being edited', () => {
     expect(
-      transportDisplayState({ kind: 'solo', loopId: 'l1' }, 'playing', 'loop', 'l2'),
+      transportDisplayState({ kind: 'loop', loopId: 'l1' }, 'playing', 'loop', 'l2'),
     ).toBe('stopped');
   });
 
@@ -304,7 +304,7 @@ describe('playing implies a scope', () => {
     useAppStore.getState().hardStopAll();
     useAppStore.getState().soloLoop(useAppStore.getState().activeLoopId);
     expect(playing(useAppStore.getState())).toBe(true);
-    expect(useAppStore.getState().playbackScope.kind).toBe('solo');
+    expect(useAppStore.getState().playbackScope.kind).toBe('loop');
 
     useAppStore.getState().hardStopAll();
     expect(useAppStore.getState().playbackScope).toBe(SCOPE_NONE);

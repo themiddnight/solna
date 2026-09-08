@@ -72,18 +72,68 @@ function allPlayersPatch(
   return patch;
 }
 
+/** Which players an internal stop-and-restart has to bring back. */
+export interface WasActivePlayers {
+  sequencer: boolean;
+  chords: boolean;
+  lead: boolean;
+}
+
+/** None of them — the patch for a stop-and-restart that decides not to restart. */
+export const NO_PLAYERS_ACTIVE: WasActivePlayers = Object.freeze({
+  sequencer: false,
+  chords: false,
+  lead: false,
+});
+
 /**
- * What the MASTER transport button shows. It disowns a solo it is not the
- * transport for: on the song layer every solo belongs to a loop card, so the
- * button presents as Play and one click TAKES OVER into song mode (spec:
- * "Transport Play All shows Stop only when kind === 'song'"). On the loop
- * layer the button IS the transport for the loop being edited, so that one
- * solo reports its real state — without this the button would offer Play
- * while its own page is sounding. A solo of some other loop stays disowned on
- * either layer.
+ * The players a restart brings back, and the scope that goes with them, as
+ * ONE patch. Callers apply it in a single set() so that no subscriber ever
+ * observes players running under a scope that disagrees with them — the same
+ * reason allPlayersPatch exists above.
+ *
+ * Writing 'playing' unconditionally is safe and is exactly what the three
+ * play(module) calls this replaces did: every caller has just run
+ * hardStopAll(), so every player is 'stopped' and play()'s own
+ * `current === 'stopped' ? 'playing' : current` guard could only ever take
+ * the first branch.
+ */
+export function restartPlayersPatch(
+  wasActive: WasActivePlayers,
+  scope: PlaybackScope,
+): Partial<AppStore> {
+  return {
+    ...(wasActive.sequencer ? { sequencerPlayer: 'playing' as const } : {}),
+    ...(wasActive.chords ? { chordsPlayer: 'playing' as const } : {}),
+    ...(wasActive.lead ? { leadPlayer: 'playing' as const } : {}),
+    playbackScope: scope,
+  };
+}
+
+/**
+ * Every player stopped, as a pure patch. Exported so a store path that must
+ * stop playback inside a set() it is ALREADY making — loopSlice's deleteLoop
+ * — can fold it in rather than making a second set(). A second set() would
+ * publish an intermediate state where the scope still names a loop that
+ * `loops` no longer contains, which is the one scope value nothing
+ * downstream can heal.
+ */
+export function stopAllPlayersPatch(state: AppStore): Partial<AppStore> {
+  return allPlayersPatch(state, () => 'stopped');
+}
+
+/**
+ * What the MASTER transport button shows. It disowns a solo loop it is not
+ * the transport for: on the song layer every solo loop belongs to a loop
+ * card, so the button presents as Play and one click TAKES OVER into song
+ * mode (spec: "Transport Play All shows Stop only when kind === 'song'"). On
+ * the loop layer the button IS the transport for the loop being edited, so
+ * that one solo loop reports its real state — without this the button would
+ * offer Play while its own page is sounding. A solo loop of some other loop
+ * stays disowned on either layer.
  *
  * Hard stop is unaffected — it stays live off the real player states via
- * isHardStopEnabled, so soloing audio always has a visible global kill.
+ * isHardStopEnabled, so auditioning audio always has a visible global kill.
  */
 export function transportDisplayState(
   scope: PlaybackScope,
@@ -91,7 +141,7 @@ export function transportDisplayState(
   layer: Layer,
   activeLoopId: string,
 ): PlayerState {
-  if (scope.kind !== 'solo') return aggregate;
+  if (scope.kind !== 'loop') return aggregate;
   return layer === 'loop' && scope.loopId === activeLoopId ? aggregate : 'stopped';
 }
 
@@ -167,8 +217,13 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
       })),
 
     /**
-     * A loop card's own play/stop button. Starting a solo also drops the song
-     * cursor, in the same set() — the two can never be observed disagreeing.
+     * A loop card's own play/stop button, and (since Phase 1) the master Play
+     * on the Loop layer. It establishes the `loop` scope — the SOLO LOOP —
+     * and drops the song cursor in the same set(), so the two can never be
+     * observed disagreeing. Nothing to do with the per-track solo Phase 4
+     * adds: this is one LOOP played alone, not one TRACK heard alone. The
+     * name is kept only because two components call it.
+     *
      * The caller (ArrangeView) is responsible for loadLoop-ing the target
      * FIRST, because loadLoop hard-stops and restarts whatever was playing.
      */
@@ -176,7 +231,7 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
       set((state) => {
         const scope = playbackScopeReducer(state.playbackScope, { type: 'toggle-loop', loopId });
         if (scope === state.playbackScope) return {};
-        return scope.kind === 'solo'
+        return scope.kind === 'loop'
           ? {
               playbackScope: scope,
               songLoopIndex: null,

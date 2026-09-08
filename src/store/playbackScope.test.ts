@@ -4,72 +4,174 @@ import { join } from 'node:path';
 import {
   loopPlayButton,
   playbackScopeReducer,
+  rescopeToLoop,
+  restartAfterStop,
   SCOPE_NONE,
   SCOPE_SONG,
-  soloLoopId,
+  scopedLoopId,
   type PlaybackScope,
   type PlaybackScopeAction,
 } from './playbackScope';
 
-const SOLO_A: PlaybackScope = { kind: 'solo', loopId: 'A' };
+const LOOP_A: PlaybackScope = { kind: 'loop', loopId: 'A' };
 
 const PLAY_ALL: PlaybackScopeAction = { type: 'play-all' };
 const STOP_ALL: PlaybackScopeAction = { type: 'stop-all' };
-const LAYER: PlaybackScopeAction = { type: 'layer-change' };
 const TOGGLE_A: PlaybackScopeAction = { type: 'toggle-loop', loopId: 'A' };
 const TOGGLE_B: PlaybackScopeAction = { type: 'toggle-loop', loopId: 'B' };
+const FOCUS_A: PlaybackScopeAction = { type: 'focus-loop', loopId: 'A' };
+const FOCUS_B: PlaybackScopeAction = { type: 'focus-loop', loopId: 'B' };
 
 // Every cell of the transition table, as data.
 const TABLE: Array<[PlaybackScope, PlaybackScopeAction, PlaybackScope]> = [
   [SCOPE_NONE, PLAY_ALL, { kind: 'song' }],
   [SCOPE_NONE, STOP_ALL, { kind: 'none' }],
-  [SCOPE_NONE, TOGGLE_A, { kind: 'solo', loopId: 'A' }],
-  [SCOPE_NONE, TOGGLE_B, { kind: 'solo', loopId: 'B' }],
-  [SCOPE_NONE, LAYER, { kind: 'none' }],
+  [SCOPE_NONE, TOGGLE_A, { kind: 'loop', loopId: 'A' }],
+  [SCOPE_NONE, TOGGLE_B, { kind: 'loop', loopId: 'B' }],
+  [SCOPE_NONE, FOCUS_A, { kind: 'none' }],
+  [SCOPE_NONE, FOCUS_B, { kind: 'none' }],
 
   [SCOPE_SONG, PLAY_ALL, { kind: 'song' }],
   [SCOPE_SONG, STOP_ALL, { kind: 'none' }],
   [SCOPE_SONG, TOGGLE_A, { kind: 'song' }],
   [SCOPE_SONG, TOGGLE_B, { kind: 'song' }],
-  [SCOPE_SONG, LAYER, { kind: 'none' }],
+  [SCOPE_SONG, FOCUS_A, { kind: 'none' }],
+  [SCOPE_SONG, FOCUS_B, { kind: 'none' }],
 
-  [SOLO_A, PLAY_ALL, { kind: 'song' }],
-  [SOLO_A, STOP_ALL, { kind: 'none' }],
-  [SOLO_A, TOGGLE_A, { kind: 'none' }],
-  [SOLO_A, TOGGLE_B, { kind: 'solo', loopId: 'A' }],
-  [SOLO_A, LAYER, { kind: 'none' }],
+  [LOOP_A, PLAY_ALL, { kind: 'song' }],
+  [LOOP_A, STOP_ALL, { kind: 'none' }],
+  [LOOP_A, TOGGLE_A, { kind: 'none' }],
+  [LOOP_A, TOGGLE_B, { kind: 'loop', loopId: 'A' }],
+  [LOOP_A, FOCUS_A, { kind: 'loop', loopId: 'A' }],
+  [LOOP_A, FOCUS_B, { kind: 'none' }],
 ];
 
 describe('playbackScopeReducer', () => {
   for (const [from, action, expected] of TABLE) {
-    const label = from.kind === 'solo' ? `solo(${from.loopId})` : from.kind;
-    const act = action.type === 'toggle-loop' ? `toggle-loop(${action.loopId})` : action.type;
-    test(`${label} + ${act} -> ${expected.kind === 'solo' ? `solo(${expected.loopId})` : expected.kind}`, () => {
+    const label = from.kind === 'loop' ? `loop(${from.loopId})` : from.kind;
+    const act =
+      action.type === 'toggle-loop'
+        ? `toggle-loop(${action.loopId})`
+        : action.type === 'focus-loop'
+        ? `focus-loop(${action.loopId})`
+        : action.type;
+    test(`${label} + ${act} -> ${expected.kind === 'loop' ? `loop(${expected.loopId})` : expected.kind}`, () => {
       expect(playbackScopeReducer(from, action)).toEqual(expected);
     });
   }
 
-  // The bug, stated as an invariant: no action can leave a solo id behind
-  // under a song, and none can produce a solo the user did not ask for.
-  test('play-all takes over from a solo — a solo id can never survive it', () => {
-    expect(playbackScopeReducer(SOLO_A, PLAY_ALL)).toEqual({ kind: 'song' });
-    expect(soloLoopId(playbackScopeReducer(SOLO_A, PLAY_ALL))).toBe(null);
+  // The bug, stated as an invariant: no action can leave a solo-loop id
+  // behind under a song, and none can produce a solo loop the user did not
+  // ask for.
+  test('play-all takes over from a solo loop — a loop id can never survive it', () => {
+    expect(playbackScopeReducer(LOOP_A, PLAY_ALL)).toEqual({ kind: 'song' });
+    expect(scopedLoopId(playbackScopeReducer(LOOP_A, PLAY_ALL))).toBe(null);
   });
 
   test('no-op transitions return the identical object (songMode compares by ===)', () => {
     expect(playbackScopeReducer(SCOPE_NONE, STOP_ALL)).toBe(SCOPE_NONE);
-    expect(playbackScopeReducer(SCOPE_NONE, LAYER)).toBe(SCOPE_NONE);
+    expect(playbackScopeReducer(SCOPE_NONE, FOCUS_A)).toBe(SCOPE_NONE);
+    expect(playbackScopeReducer(LOOP_A, FOCUS_A)).toBe(LOOP_A);
     expect(playbackScopeReducer(SCOPE_SONG, PLAY_ALL)).toBe(SCOPE_SONG);
-    expect(playbackScopeReducer(SOLO_A, TOGGLE_B)).toBe(SOLO_A);
+    expect(playbackScopeReducer(LOOP_A, TOGGLE_B)).toBe(LOOP_A);
+  });
+
+  // §6's rule, restated as the reducer sees it. The player-state half of
+  // each row is asserted in songMode.test.ts, where a stop actually happens.
+  test('focus-loop keeps exactly what the focused loop is sounding', () => {
+    // Nothing sounding: nothing to reconcile.
+    expect(playbackScopeReducer(SCOPE_NONE, FOCUS_B)).toBe(SCOPE_NONE);
+    // The loop in focus is the one sounding: it survives, same reference.
+    expect(playbackScopeReducer(LOOP_A, FOCUS_A)).toBe(LOOP_A);
+    // A different loop is sounding: it is not what the user is now looking at.
+    expect(playbackScopeReducer(LOOP_A, FOCUS_B)).toBe(SCOPE_NONE);
+    // The arrangement is sounding: an arrangement is never "the loop in focus".
+    expect(playbackScopeReducer(SCOPE_SONG, FOCUS_A)).toBe(SCOPE_NONE);
+  });
+});
+
+describe('restartAfterStop — what an internal stop-and-restart brings back', () => {
+  test('nothing was playing: nothing restarts and the scope stays stopped', () => {
+    expect(restartAfterStop(LOOP_A, 'A', 'loop', false)).toEqual({
+      restart: false,
+      scope: SCOPE_NONE,
+    });
+    expect(restartAfterStop(SCOPE_SONG, 'A', 'song', false)).toEqual({
+      restart: false,
+      scope: SCOPE_NONE,
+    });
+  });
+
+  test('a song scope survives on either layer: the arrangement owns the transport', () => {
+    expect(restartAfterStop(SCOPE_SONG, 'B', 'song', true)).toEqual({
+      restart: true,
+      scope: SCOPE_SONG,
+    });
+    expect(restartAfterStop(SCOPE_SONG, 'B', 'loop', true)).toEqual({
+      restart: true,
+      scope: SCOPE_SONG,
+    });
+  });
+
+  test('switching the working loop ON THE LOOP LAYER is seamless and re-points', () => {
+    expect(restartAfterStop(LOOP_A, 'B', 'loop', true)).toEqual({
+      restart: true,
+      scope: { kind: 'loop', loopId: 'B' },
+    });
+  });
+
+  test('reloading the loop that is already auditioning keeps it playing', () => {
+    expect(restartAfterStop(LOOP_A, 'A', 'song', true)).toEqual({
+      restart: true,
+      scope: LOOP_A,
+    });
+    // toBe, not toEqual: this row must hand BACK the scope it was given, not
+    // an equal rebuild. songMode's subscribeWithSelector compares scopes with
+    // === (see the reducer's own identity test above), so a refactor that
+    // returned `{ kind: 'loop', loopId: focusedLoopId }` here would look
+    // correct and re-run reconcile on every reload of the auditioning loop.
+    expect(restartAfterStop(LOOP_A, 'A', 'song', true).scope).toBe(LOOP_A);
+    expect(restartAfterStop(LOOP_A, 'A', 'loop', true).scope).toBe(LOOP_A);
+  });
+
+  // The fall-through cell, and the only one that stops rather than heals: on
+  // the SONG layer an unscoped restart has no loop to claim, so it declines.
+  // Unreachable in production now that nothing outside transportSlice.ts can
+  // call play(module), but reachable from a fixture — and the function is
+  // total, so the cell has an answer whether or not a test names it.
+  test('a none scope with players running is NOT healed on the song layer', () => {
+    expect(restartAfterStop(SCOPE_NONE, 'B', 'song', true)).toEqual({
+      restart: false,
+      scope: SCOPE_NONE,
+    });
+    expect(restartAfterStop(SCOPE_NONE, 'B', 'song', true).scope).toBe(SCOPE_NONE);
+  });
+
+  // §6 row 3, in its pure form: picking a DIFFERENT loop on the song layer
+  // while one is auditioning stops the audition. It does not follow the pick.
+  test('picking a different loop ON THE SONG LAYER stops the audition', () => {
+    expect(restartAfterStop(LOOP_A, 'B', 'song', true)).toEqual({
+      restart: false,
+      scope: SCOPE_NONE,
+    });
+  });
+
+  // Unreachable while "playing implies a scope" holds, but the function is
+  // total and heals rather than propagating the broken state.
+  test('a none scope with players running is healed on the loop layer', () => {
+    expect(restartAfterStop(SCOPE_NONE, 'B', 'loop', true)).toEqual({
+      restart: true,
+      scope: { kind: 'loop', loopId: 'B' },
+    });
   });
 });
 
 /**
- * The INVARIANT comment above names exactly two call sites — loadLoop.ts and
- * vibes.ts — that restart through play(module) with no scope, and states
- * that as a fact a reviewer can check. The comment cannot enforce itself: a
- * third caller added anywhere in src/ would leave it holding a stale claim
- * with nothing failing. This is the same shape as
+ * The INVARIANT comment above states that the only file referencing
+ * play(module) is the slice that defines it, as a fact a reviewer can check.
+ * The comment cannot enforce itself: a new caller added anywhere in src/
+ * would leave it holding a stale claim with nothing failing. This is the
+ * same shape as
  * `src/data/dataLayerPurity.test.ts` — a filesystem scan plus an explicit
  * allowlist — applied to a store invariant instead of an eslint rule.
  *
@@ -80,16 +182,15 @@ describe('playbackScopeReducer', () => {
  * slice-level test cannot see at all.
  */
 describe('play(module) caller guard', () => {
-  // Everything that may legitimately call the per-module play(module) with
-  // no scope set: the two documented holes named in playbackScope.ts's
-  // INVARIANT comment, and the slice that defines `play` itself. Test files
-  // are exempt below by extension, not listed here, because they legitimately
-  // drive `play(module)` as a fixture and never run in production.
-  const ALLOWED = new Set([
-    'src/store/loadLoop.ts',
-    'src/store/vibes.ts',
-    'src/store/transportSlice.ts',
-  ]);
+  // Everything that may legitimately reference the per-module play(module):
+  // the slice that defines it. Nothing else. Phase 3 closed the two holes
+  // this list used to hold open — loadLoop.ts and vibes.ts now restart
+  // through one set() that writes the scope with the players (see
+  // restartPlayersPatch) — so a production file reaching for play(module)
+  // again is re-opening a closed hole, not joining a documented exception.
+  // Test files are exempt below by extension, not listed here, because they
+  // legitimately drive play(module) as a fixture and never run in production.
+  const ALLOWED = new Set(['src/store/transportSlice.ts']);
 
   function sourceFiles(dir: string): string[] {
     return readdirSync(dir).flatMap((name) => {
@@ -117,7 +218,7 @@ describe('play(module) caller guard', () => {
   // HTMLMediaElement .play(), no unrelated method), and the trailing `\b`
   // rules out `.playAll`, `.playbackScope`, `.playTargetLabel` and every
   // other `play`-prefixed identifier in the tree — so it needs no allowlist
-  // entries beyond the three already here. Rejected the narrower
+  // entries beyond the one already here. Rejected the narrower
   // identifier-call alternative (`/(?<![.\w])play\s*\(\s*[^)]/`): it only
   // matches a BARE call and would stop seeing `store.play(...)` entirely,
   // trading one blind spot for another instead of covering both shapes.
@@ -143,14 +244,31 @@ describe('play(module) caller guard', () => {
           `${rel} calls play(module) but is not on the allowlist ` +
             `(${[...ALLOWED].join(', ')}). play(module) can start a stopped ` +
             `player without setting a playbackScope, which breaks the ` +
-            `invariant Phase 3 reads (see the INVARIANT comment above ` +
+            `invariant songMode reads (see the INVARIANT comment above ` +
             `playbackScope.ts's PlaybackScope type). Route the new caller ` +
-            `through playAll/soloLoop instead, or — only with a documented ` +
-            `reason matching loadLoop.ts/vibes.ts — add it to ALLOWED here.`,
+            `through playAll/soloLoop, or through restartAfterStop + ` +
+            `restartPlayersPatch if it is an internal stop-and-restart like ` +
+            `loadLoop's.`,
         );
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  // A POSITIVE control for the scan above. Phase 3 left ALLOWED's own file
+  // with no `.play` occurrence at all today — it only DEFINES play, which is
+  // `play(module: PlaybackModule) {`, no leading dot — so the offenders list
+  // above is empty for two different reasons: no disallowed file calls
+  // play(module) (the thing being tested), AND no file anywhere still
+  // matches CALL (not being tested by that assertion at all). If `play` were
+  // ever renamed, CALL would match nothing, anywhere, forever, and the scan
+  // would keep passing with an empty offenders list while enforcing nothing.
+  // These snippets mirror the two caller shapes named above (`store.play(...)`
+  // and the `s.play` binding site) without depending on real source that
+  // happens to contain them today.
+  test('CALL matches the caller shapes it exists to catch, so a play() rename cannot pass this scan vacuously', () => {
+    expect(CALL.test("store.play('sequencer')")).toBe(true);
+    expect(CALL.test('const play = useAppStore((s) => s.play);')).toBe(true);
   });
 });
 
@@ -162,8 +280,26 @@ describe('loopPlayButton', () => {
     expect(loopPlayButton(SCOPE_SONG, 'A')).toEqual({ disabled: true });
     expect(loopPlayButton(SCOPE_SONG, 'B')).toEqual({ disabled: true });
   });
-  test('solo: the soloing card is enabled, the others are disabled', () => {
-    expect(loopPlayButton(SOLO_A, 'A')).toEqual({ disabled: false });
-    expect(loopPlayButton(SOLO_A, 'B')).toEqual({ disabled: true });
+  test('loop: the auditioning card is enabled, the others are disabled', () => {
+    expect(loopPlayButton(LOOP_A, 'A')).toEqual({ disabled: false });
+    expect(loopPlayButton(LOOP_A, 'B')).toEqual({ disabled: true });
+  });
+});
+
+describe('rescopeToLoop — the scope follows a cursor move that changes no sound', () => {
+  test('a loop scope re-points at the new cursor', () => {
+    expect(rescopeToLoop(LOOP_A, 'B')).toEqual({ kind: 'loop', loopId: 'B' });
+  });
+
+  test('the same id returns the identical object (songMode compares by ===)', () => {
+    expect(rescopeToLoop(LOOP_A, 'A')).toBe(LOOP_A);
+  });
+
+  test('a song scope is untouched: the arrangement is not one loop', () => {
+    expect(rescopeToLoop(SCOPE_SONG, 'B')).toBe(SCOPE_SONG);
+  });
+
+  test('a stopped transport stays stopped — this never claims a scope', () => {
+    expect(rescopeToLoop(SCOPE_NONE, 'B')).toBe(SCOPE_NONE);
   });
 });
