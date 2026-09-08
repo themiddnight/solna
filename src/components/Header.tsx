@@ -11,22 +11,16 @@ import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from "@/utils/noteSpell
 import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/storage";
 import { useAppStore } from "../store/store";
 import { useLiveStore } from "./ui/useLiveStore";
-import type { PlayerModule, PlayerState } from "../store/types";
-import { PlayerTransport } from "./ui/PlayerTransport";
 import { IconButton } from "./ui/IconButton";
 import { Wordmark } from "./ui/Wordmark";
 import { LoopSelector } from "./loop/LoopSelector";
 import { VIEW_META } from "./viewMeta";
 import { sessionLabel } from "./project/projectManagerFlow";
 
-/** The three loop-layer tabs. Each gets its own play / soft-stop button. The
- *  synth page edits the synth patch but plays the lead melody, so it joins the
- *  `lead` transport. */
-export const AUTOMATION_TABS: ReadonlyArray<{ view: ViewMode; module: PlayerModule }> = [
-  { view: 'synth', module: 'lead' },
-  { view: 'chords', module: 'chords' },
-  { view: 'sequencer', module: 'sequencer' },
-];
+/** The three loop-layer tabs. Playback is the transport bar's single Play —
+ *  see docs/superpowers/plans/2026-09-08-one-transport.md — so a tab no longer
+ *  owns a PlayerModule and no longer carries its own play/stop pair. */
+export const AUTOMATION_TABS: readonly ViewMode[] = ['synth', 'chords', 'sequencer'];
 
 /** The two song-layer tabs: the arrangement and the global master rack. */
 export const SONG_NAV_TABS: readonly ViewMode[] = ['arrange', 'effects'];
@@ -209,11 +203,6 @@ export const Header = React.memo(function Header() {
   const activeTab = useAppStore((s) => s.activeTab);
   const layer = layerForTab(activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
-  const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
-  const chordsPlayer = useAppStore((s) => s.chordsPlayer);
-  const leadPlayer = useAppStore((s) => s.leadPlayer);
-  const play = useAppStore((s) => s.play);
-  const softStop = useAppStore((s) => s.softStop);
   // Live reads (useLiveStore, not useAppStore): under renderToString a plain
   // selector serves the store's CREATION-time state, so a test that sets
   // `dirty` before rendering would silently see false — see .claude/rules/testing.md.
@@ -223,16 +212,6 @@ export const Header = React.memo(function Header() {
   const currentProjectName = useLiveStore((s) => s.currentProjectName);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
-
-  // Module -> player state lookup, keyed on PlayerModule so it stays three-way
-  // when the lead tab (and its transport button) land in a later task. A
-  // two-player ternary here would silently map a future `lead` tab to the
-  // chords state.
-  const playerStateByModule: Record<PlayerModule, PlayerState> = {
-    sequencer: sequencerPlayer,
-    chords: chordsPlayer,
-    lead: leadPlayer,
-  };
 
   const [currentTheme, setCurrentTheme] = React.useState<SolnaTheme>(() =>
     resolveInitialTheme(
@@ -305,26 +284,14 @@ export const Header = React.memo(function Header() {
       <nav className="flex items-center justify-center order-3 md:order-2 w-full md:w-auto shrink-0">
         {layer === 'loop' && (
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {AUTOMATION_TABS.map((tab) => {
-              const state = playerStateByModule[tab.module];
-              return (
-                <div
-                  key={tab.view}
-                  className={`${NAV_GROUP_CLASS} flex items-center`}
-                >
-                  <TabButton view={tab.view} activeTab={activeTab} onSelect={setActiveTab} />
-                  <PlayerTransport
-                    id={`btn-header-play-${tab.module}`}
-                    state={state}
-                    size="sm"
-                    compact
-                    unwrapped
-                    onPlay={() => play(tab.module)}
-                    onSoftStop={() => softStop(tab.module)}
-                  />
-                </div>
-              );
-            })}
+            {AUTOMATION_TABS.map((view) => (
+              <div
+                key={view}
+                className={`${NAV_GROUP_CLASS} flex items-center`}
+              >
+                <TabButton view={view} activeTab={activeTab} onSelect={setActiveTab} />
+              </div>
+            ))}
           </div>
         )}
         {layer === 'song' && (
