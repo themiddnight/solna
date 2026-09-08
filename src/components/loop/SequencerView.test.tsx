@@ -24,7 +24,9 @@ describe('SequencerView theming', () => {
    */
   test('the drum controls live in their module cards, not the view header', () => {
     const soundCard = html.indexOf('Drum Sound');
-    const patternCard = html.indexOf('>Pattern<');
+    // The view header's own <h2> now reads "Pattern" too (Task 3), so the
+    // module card's heading is the occurrence AFTER the sound card, not the first.
+    const patternCard = html.indexOf('>Pattern<', soundCard);
     expect(soundCard).toBeGreaterThan(-1);
     expect(patternCard).toBeGreaterThan(-1);
     // The kit belongs to the sound module; the grid picker and the three
@@ -34,7 +36,7 @@ describe('SequencerView theming', () => {
     expect(html.indexOf('btn-randomize-grid')).toBeGreaterThan(patternCard);
     expect(html.indexOf('btn-clear-grid')).toBeGreaterThan(patternCard);
     // Both cards come after the header, so nothing above them can be the header.
-    expect(soundCard).toBeGreaterThan(html.indexOf('Drum Sequencer'));
+    expect(soundCard).toBeGreaterThan(html.indexOf('>Pattern<'));
   });
 
   // A control inside a card's control row wears a stacked label above it (the
@@ -44,7 +46,7 @@ describe('SequencerView theming', () => {
   // The regression this row was rebuilt for: five fields whose controls were
   // 24, 30, 32 and 48px tall bottom-aligned into five different label heights.
   test('every field in a control row shares one label line and one control lane', () => {
-    const soundRow = html.slice(html.indexOf('Drum Sound'), html.indexOf('>Pattern<'));
+    const soundRow = html.slice(html.indexOf('Drum Sound'), html.indexOf('>Pattern<', html.indexOf('Drum Sound')));
     const labels = soundRow.split(FIELD_LABEL).length - 1;
     const lanes = soundRow.split(FIELD_LANE).length - 1;
     // Kit, Filter, Cutoff, Res each own a label + lane; Drum Level's label and

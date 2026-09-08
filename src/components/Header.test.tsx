@@ -128,7 +128,7 @@ describe('TabButton rendering', () => {
       <TabButton view="sound" activeTab="sound" onSelect={() => {}} />
     );
     expect(html).toContain('id="tab-sound"');
-    expect(html).toContain('Synth/Lead');
+    expect(html).toContain('Sound');
     expect(html).toContain('class="truncate hidden xl:inline"');
   });
 

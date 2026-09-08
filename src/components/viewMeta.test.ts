@@ -10,6 +10,17 @@ describe('VIEW_META', () => {
     );
   });
 
+  // The tab label is the only text on a nav button that is not `hidden
+  // xl:inline`-suppressed below 1280px, so a label that names a PART of a tab
+  // is a wrong label, not a terse one. "Synth/Lead" named a part of Sound;
+  // "Beat Step" named a part of Pattern.
+  test('a tab is named for the whole tab, not for one thing inside it', () => {
+    expect(VIEW_META.sound.tabLabel).toBe('Sound');
+    expect(VIEW_META.pattern.tabLabel).toBe('Pattern');
+    expect(VIEW_META.arrange.tabLabel).toBe('Arrange');
+    expect(VIEW_META.master.tabLabel).toBe('Master FX');
+  });
+
   // The bug this pins: Synth and Master FX both used `Sliders`, and the tab
   // label is `hidden xl:inline`, so under 1280px the two tabs rendered
   // identically. Distinctness is now an invariant, not a code review.

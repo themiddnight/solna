@@ -24,13 +24,16 @@ export interface ViewMeta {
  */
 export const VIEW_ORDER = ['sound', 'pattern', 'arrange', 'master'] as const;
 
-// INTERIM (Task 1 of the nav restructure): these four rows reuse the old
-// views' icons and labels verbatim so the union compiles and the nav renders
-// something truthful enough to click. Task 3 chooses the real labels.
 export const VIEW_META: Record<ViewMode, ViewMeta> = {
-  sound: { icon: Sliders, tabLabel: 'Synth/Lead', title: 'Synth / Lead' },
-  pattern: { icon: Grid, tabLabel: 'Beat Step', title: 'Drum Sequencer' },
+  // Keeps `Sliders` from the old `synth` view: the tab is still the synth
+  // engine, and after the mixer lands (Task 7) a fader bank is literally what
+  // the icon depicts.
+  sound: { icon: Sliders, tabLabel: 'Sound', title: 'Sound' },
+  // Takes `Grid` from the old `sequencer` view. All three Pattern segments are
+  // step grids, so the icon that named one of them now names all three.
+  pattern: { icon: Grid, tabLabel: 'Pattern', title: 'Pattern' },
   arrange: { icon: LayoutList, tabLabel: 'Arrange', title: 'Arrangement' },
+  // Was `Sliders`, identical to the synth tab's — see viewMeta.test.ts.
   master: { icon: AudioWaveform, tabLabel: 'Master FX', title: 'Master Effects Rack' },
 };
 
