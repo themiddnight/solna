@@ -131,17 +131,18 @@ export const TransportBar = React.memo(function TransportBar() {
         )}
 
         {/* Track solo is session-only and clears itself on leaving the Loop
-            layer or changing loop — it survives a Sound/Pattern tab change or
-            a Pattern-segment change, so this chip can outlive those — but it
-            is still short-lived by construction. It still renders at EVERY
-            width, unlike the song badge above: it is the only global "something
-            is being silenced, and here is how to stop" affordance, so the names
-            truncate rather than the chip disappearing. */}
+            layer, on a Pattern-segment change, or on changing loop — it
+            survives a Sound <-> Pattern tab change, so this chip can outlive
+            that, but it is still short-lived by construction. It still
+            renders at EVERY width, unlike the song badge above: it is the
+            only global "something is being silenced, and here is how to
+            stop" affordance, so the names truncate rather than the chip
+            disappearing. */}
         {soloLabel && (
           <span
             id="badge-track-solo"
             className="badge badge-sm badge-warning font-bold gap-1 max-w-32 sm:max-w-none"
-            title="Track solo — cleared when you leave this loop or its Loop-layer tabs"
+            title="Track solo — cleared when you change Pattern segment, layer or loop"
           >
             <span className="truncate">{soloLabel}</span>
             <IconButton

@@ -42,13 +42,13 @@ afterEach(() => {
 
 describe('SOLO_NAV_KEYS', () => {
   /**
-   * Exhaustive on purpose. The subscription covers every WRITER of these two
-   * axes by construction; the one thing a future contributor can still forget
-   * is a new navigation AXIS. This test is where that decision has to be made
-   * out loud instead of by omission.
+   * Exhaustive on purpose. The subscription covers every WRITER of these
+   * three axes by construction; the one thing a future contributor can still
+   * forget is a new navigation AXIS. This test is where that decision has to
+   * be made out loud instead of by omission.
    */
-  test('is exactly the layer and active-loop axes', () => {
-    expect([...SOLO_NAV_KEYS]).toEqual(['layer', 'activeLoopId']);
+  test('is exactly the layer, Pattern-segment and active-loop axes', () => {
+    expect([...SOLO_NAV_KEYS]).toEqual(['layer', 'patternSegment', 'activeLoopId']);
   });
 
   /**
@@ -67,74 +67,39 @@ describe('SOLO_NAV_KEYS', () => {
 describe('soloNavSignature', () => {
   /**
    * Binds SOLO_NAV_KEYS to what is actually watched at runtime, not just at
-   * the type level. Without this, adding a third key to the source table
+   * the type level. Without this, adding a fourth key to the source table
    * alone (without touching soloNavSignature) would still pass the
-   * exhaustive-list test above while the subscription kept watching only two
-   * fields — a constant that lies with a green suite.
+   * exhaustive-list test above while the subscription kept watching only
+   * three fields — a constant that lies with a green suite.
    */
   test('reads exactly the fields SOLO_NAV_KEYS names', () => {
     const signature = soloNavSignature(useAppStore.getState());
     expect(Object.keys(signature)).toEqual([...SOLO_NAV_KEYS]);
   });
 
-  test('derives layer from activeTab and reads activeLoopId live', () => {
-    useAppStore.setState({ activeTab: 'arrange' });
+  test('derives layer from activeTab and reads patternSegment/activeLoopId live', () => {
+    useAppStore.setState({ activeTab: 'arrange', patternSegment: 'beat' });
     const state = useAppStore.getState();
     const signature = soloNavSignature(state);
     expect(signature).toEqual({
       layer: 'song',
+      patternSegment: 'beat',
       activeLoopId: state.activeLoopId,
     });
   });
 });
 
-describe('solo survives navigation within the Loop layer', () => {
+describe('solo survives a Sound <-> Pattern tab change', () => {
   /**
-   * The point of the whole change: soloing Drums in the Beat segment, then
-   * moving to Sound or to the Lead segment to solo Lead, must leave BOTH
-   * latched — "write a lead over just the drums" (spec §4) is only
-   * expressible as two simultaneous solos, and Drums' button lives in Beat
-   * while Lead's lives on Sound / Pattern's Lead segment, so building that
-   * set requires crossing both a tab and a segment boundary.
+   * Sound and Pattern are the two halves of editing one loop, and the user
+   * crosses between them constantly while working on it — that crossing must
+   * not cost the solo, which is the whole point of this change.
    */
-  test('soloing Drums in Beat then Lead on Sound leaves both solos latched', () => {
-    useAppStore.setState({ activeTab: 'pattern', patternSegment: 'beat' });
-    useAppStore.getState().toggleSoloTrack('drums');
-    expect(useAppStore.getState().soloTracks).toEqual(['drums']);
-
-    useAppStore.getState().setActiveTab('sound');
-    expect(useAppStore.getState().soloTracks).toEqual(['drums']);
-
-    useAppStore.getState().toggleSoloTrack('lead');
-    expect(useAppStore.getState().soloTracks).toEqual(['lead', 'drums']);
-  });
-
-  /** Same workflow, reached through the Lead segment instead of Sound. */
-  test('soloing Drums in Beat then Lead in the Lead segment leaves both solos latched', () => {
-    useAppStore.setState({ activeTab: 'pattern', patternSegment: 'beat' });
-    useAppStore.getState().toggleSoloTrack('drums');
-    expect(useAppStore.getState().soloTracks).toEqual(['drums']);
-
-    useAppStore.getState().setPatternSegment('lead');
-    expect(useAppStore.getState().soloTracks).toEqual(['drums']);
-
-    useAppStore.getState().toggleSoloTrack('lead');
-    expect(useAppStore.getState().soloTracks).toEqual(['lead', 'drums']);
-  });
-
   test('a Sound -> Pattern tab change does not clear it', () => {
     useAppStore.getState().toggleSoloTrack('drums');
     expect(useAppStore.getState().soloTracks).toEqual(['drums']);
     useAppStore.getState().setActiveTab('pattern');
     expect(useAppStore.getState().soloTracks).toEqual(['drums']);
-  });
-
-  test('a Pattern segment change does not clear it', () => {
-    useAppStore.getState().setActiveTab('pattern');
-    useAppStore.getState().toggleSoloTrack('bass');
-    expect(useAppStore.getState().soloTracks).toEqual(['bass']);
-    useAppStore.getState().setPatternSegment('beat');
-    expect(useAppStore.getState().soloTracks).toEqual(['bass']);
   });
 
   test('Sound -> Pattern -> Sound does not clear it', () => {
@@ -147,7 +112,15 @@ describe('solo survives navigation within the Loop layer', () => {
   });
 });
 
-describe('solo is cleared by navigation that leaves the Loop layer or the loop', () => {
+describe('solo is cleared by navigation', () => {
+  test('changing the Pattern segment clears it — a segment is a change of subject', () => {
+    useAppStore.getState().setActiveTab('pattern');
+    useAppStore.getState().toggleSoloTrack('bass');
+    expect(useAppStore.getState().soloTracks).toEqual(['bass']);
+    useAppStore.getState().setPatternSegment('beat');
+    expect(useAppStore.getState().soloTracks).toEqual([]);
+  });
+
   test('changing layer (Loop -> Song) clears it', () => {
     useAppStore.getState().toggleSoloTrack('lead');
     expect(useAppStore.getState().soloTracks).toEqual(['lead']);
@@ -216,10 +189,11 @@ describe('solo is cleared by navigation that leaves the Loop layer or the loop',
 });
 
 describe('soloNavUnchanged', () => {
-  test('compares both fields', () => {
-    const base = { layer: 'loop', activeLoopId: 'a' } as const;
+  test('compares all three fields', () => {
+    const base = { layer: 'loop', patternSegment: 'lead', activeLoopId: 'a' } as const;
     expect(soloNavUnchanged(base, { ...base })).toBe(true);
     expect(soloNavUnchanged(base, { ...base, layer: 'song' })).toBe(false);
+    expect(soloNavUnchanged(base, { ...base, patternSegment: 'beat' })).toBe(false);
     expect(soloNavUnchanged(base, { ...base, activeLoopId: 'b' })).toBe(false);
   });
 });

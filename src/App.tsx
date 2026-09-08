@@ -95,10 +95,10 @@ export function App() {
   // sync-back is no longer a subscription — it rides along inside the store's
   // own set(), see store/loopSync.ts.
   useSongModeSync();
-  // Track solo is a session gesture, cleared by leaving the Loop layer or
-  // changing the active loop — NOT by a tab or Pattern-segment change within
-  // the Loop layer. One subscription owns that rule for every writer of the
-  // layer/activeLoopId — see store/soloNav.ts.
+  // Track solo is a session gesture, cleared by leaving the Loop layer, by a
+  // Pattern-segment change, or by changing the active loop — NOT by a Sound
+  // <-> Pattern tab change. One subscription owns that rule for every writer
+  // of layer/patternSegment/activeLoopId — see store/soloNav.ts.
   useSoloNavClear();
 
   // Global input: owns the QWERTY listeners + note playing, feeds the dock.
