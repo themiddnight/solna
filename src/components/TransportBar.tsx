@@ -11,7 +11,7 @@ import { aggregatePlayerState, isHardStopEnabled, transportDisplayState } from "
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 import type { Loop } from '../store/types';
 import { layerForTab } from '@/types';
-import { masterPlayTarget } from './transportAction';
+import { masterPlayTarget, playTargetLabel } from './transportAction';
 
 /** The song-mode badge: present only while a song position exists. */
 export function songModeLabel(
@@ -45,6 +45,9 @@ export const TransportBar = React.memo(function TransportBar() {
   const playbackScope = useAppStore((s) => s.playbackScope);
   const activeTab = useAppStore((s) => s.activeTab);
   const activeLoopId = useAppStore((s) => s.activeLoopId);
+  const activeLoopName = useAppStore(
+    (s) => s.loops.find((loop) => loop.id === s.activeLoopId)?.name ?? '',
+  );
 
   const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer);
   const layer = layerForTab(activeTab);
@@ -92,6 +95,15 @@ export const TransportBar = React.memo(function TransportBar() {
           onHardStop={hardStopAll}
           showLabel
         />
+
+        {/* What Play will start: 'Song' on the song layer, the loop being
+            edited on the loop layer. Hidden below `sm` alongside this row's
+            other ancillary text (BPM/Meter) rather than the `md` the song
+            badge uses below — this is the reason a click does one of two
+            different things, so it earns the wider breakpoint. */}
+        <span className="text-xs text-base-content/70 whitespace-nowrap hidden sm:inline">
+          {playTargetLabel(layer, activeLoopName)}
+        </span>
 
         {songLabel && (
           <span
