@@ -21,6 +21,7 @@ import type { LeadNote } from '../audio/leadMelody';
 import type { LeadStepResolutionId } from '../utils/stepResolution';
 import type { PlaybackScope } from './playbackScope';
 import type { ProjectSlice } from './projectSlice';
+import type { SoloTrack } from './trackAudibility';
 
 /** A player is `stopping` between a soft stop and the bar line that ends it. */
 export type PlayerState = 'stopped' | 'playing' | 'stopping';
@@ -319,6 +320,24 @@ export interface UiSlice {
   // store.ts). Click-rate, so it is safe in a slice even though every mounted
   // view re-renders on a slice write.
   patternSegment: PatternSegment;
+  /**
+   * Track solo — the five source buses that are being monitored alone.
+   *
+   * Session-only and NEVER persisted: it is absent from partializeAppState and
+   * from PROJECT_CONTENT_KEYS, and it must stay absent (a project that reopens
+   * with a solo latched is the failure this design exists to avoid). Mute is
+   * the opposite gesture and stays where it is — per loop, in LoopMixPatch.
+   *
+   * A SET, not a radio: soloing Drums and then Lead sounds both. Always held in
+   * SOLO_TRACKS order, whatever order the buttons were pressed in.
+   *
+   * Cleared by navigation — see store/soloNav.ts, which owns that rule for
+   * every writer of activeTab / patternSegment / activeLoopId at once. That
+   * clearing is the point of the feature, not a rough edge: a control that can
+   * silence a track must not be able to keep doing so once the user has stopped
+   * looking at it. Do not "fix" it into stickiness.
+   */
+  soloTracks: SoloTrack[];
   // The synth keyboard's input mode. Transient by design: an input
   // preference, not composition data, so it does not travel with saved
   // projects (see partializeAppState in store.ts).
@@ -335,6 +354,8 @@ export interface UiSlice {
   selectedMidiInputId: string;
   setActiveTab: (tab: ViewMode) => void;
   setPatternSegment: (segment: PatternSegment) => void;
+  toggleSoloTrack: (track: SoloTrack) => void;
+  clearSoloTracks: () => void;
   setKeyboardMode: (mode: KeyboardMode) => void;
   triggerMidiActivity: () => void;
   setMidiMappings: (mappings: MidiMapping[]) => void;

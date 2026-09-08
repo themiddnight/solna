@@ -1,5 +1,7 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { createUiSlice, persistKeyboardMode, readStoredKeyboardMode } from './uiSlice';
+import { buildProjectContent, PROJECT_CONTENT_KEYS } from './projectFormat';
+import { partializeAppState, useAppStore } from './store';
 
 // Storage access itself can throw (Safari private browsing, "block all
 // cookies", some embedded webviews) — not merely return null. These stubs
@@ -101,5 +103,83 @@ describe('input deck dock state', () => {
     const slice = createUiSlice(((partial: Record<string, unknown>) => { applied = partial; }) as never);
     slice.setInputPanelMode('drums');
     expect(applied).toEqual({ inputPanelMode: 'drums' });
+  });
+});
+
+describe('track solo state', () => {
+  beforeEach(() => {
+    useAppStore.setState({ soloTracks: [] });
+  });
+
+  afterEach(() => {
+    useAppStore.setState({ soloTracks: [] });
+  });
+
+  test('starts empty', () => {
+    expect(useAppStore.getState().soloTracks).toEqual([]);
+  });
+
+  test('toggling is additive and canonically ordered', () => {
+    useAppStore.getState().toggleSoloTrack('drums');
+    useAppStore.getState().toggleSoloTrack('lead');
+    expect(useAppStore.getState().soloTracks).toEqual(['lead', 'drums']);
+  });
+
+  test('toggling the same track again removes it', () => {
+    useAppStore.getState().toggleSoloTrack('drums');
+    useAppStore.getState().toggleSoloTrack('drums');
+    expect(useAppStore.getState().soloTracks).toEqual([]);
+  });
+
+  test('clearSoloTracks empties the set', () => {
+    useAppStore.getState().toggleSoloTrack('pad');
+    useAppStore.getState().clearSoloTracks();
+    expect(useAppStore.getState().soloTracks).toEqual([]);
+  });
+
+  test('clearing an already-empty set keeps the array reference stable', () => {
+    const before = useAppStore.getState().soloTracks;
+    useAppStore.getState().clearSoloTracks();
+    expect(useAppStore.getState().soloTracks).toBe(before);
+  });
+
+  test('solo does not start playback: pressing it with the transport stopped is silent', () => {
+    useAppStore.setState({
+      sequencerPlayer: 'stopped',
+      chordsPlayer: 'stopped',
+      leadPlayer: 'stopped',
+    });
+    useAppStore.getState().toggleSoloTrack('drums');
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('stopped');
+    expect(s.chordsPlayer).toBe('stopped');
+    expect(s.leadPlayer).toBe('stopped');
+    expect(s.playbackScope.kind).toBe('none');
+  });
+});
+
+describe('solo is never persisted (spec §4, prohibition 1)', () => {
+  afterEach(() => {
+    useAppStore.setState({ soloTracks: [] });
+  });
+
+  test('it appears in neither partializeAppState nor PROJECT_CONTENT_KEYS', () => {
+    useAppStore.setState({ soloTracks: ['drums', 'lead'] });
+
+    const persisted = partializeAppState(useAppStore.getState());
+    expect(Object.keys(persisted)).not.toContain('soloTracks');
+
+    expect([...PROJECT_CONTENT_KEYS]).not.toContain('soloTracks');
+
+    const content = buildProjectContent(useAppStore.getState());
+    expect(Object.keys(content).sort()).toEqual([...PROJECT_CONTENT_KEYS].sort());
+  });
+
+  test('it never reaches LoopMixPatch: no loop carries a solo key', () => {
+    useAppStore.setState({ soloTracks: ['drums'] });
+    for (const loop of useAppStore.getState().loops) {
+      expect(Object.keys(loop)).not.toContain('soloTracks');
+      expect(Object.keys(loop)).not.toContain('solo');
+    }
   });
 });
