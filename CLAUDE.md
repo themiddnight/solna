@@ -22,7 +22,8 @@ bun run check:theme    # theme-token guard suite only
 bun run check:keys     # drum-pad vs synth key-binding collision check
 bun run check:drums    # drum-kit audible-separation check
 bun run check:contrast # drum-palette AA contrast floor (both themes)
-bun run verify         # test + lint + eslint + check:keys + check:drums + check:contrast + build (the gate)
+bun run check:levels   # calibration trim table still matches today's kit/preset defaults
+bun run verify         # test + lint + eslint + check:keys + check:drums + check:contrast + check:levels + build (the gate)
 ```
 
 `bun run verify` is the completion gate — run it before claiming work is done. It runs
@@ -69,7 +70,14 @@ shows it, never in a slice.
    (`transport`, `musicContext`, `synth`, `chords`, `bass`, `sequencer`, `effects`, `ui`,
    `presets`, `loop`, `lead`, `project`), with `persist` (key `musibox_project_state_v1`, `partialize` +
    `migrate` in `store.ts`, legacy-key adoption in `migrate.ts`) and `subscribeWithSelector`.
-   Bump the persist `version` and add a migration step whenever the persisted shape changes.
+   There is no per-version migration step to add any more — `PERSIST_VERSION` is stamped on
+   every write but, since DEV-388, drives no read-time transform (`migrate` in `store.ts` is
+   identity except for the legacy localStorage-key adoption it still calls, kept only because
+   zustand's `persist` throws without a `migrate` function at all). A
+   persisted shape change is handled by validating the new key in `merge`'s
+   `sanitizePersistedState`/`sanitizeLoops`, not by bumping the version. See the "no migration
+   chains" note further down for why, and for the precondition under which that stops being
+   true.
 4. `src/components/` — dumb views; must not import `audio/engine`. Only `AudioVisualizer.tsx`,
    `ui/VuMeter.tsx` and `ui/AmbientBackdrop.tsx` (read-only analyser consumers) and test files
    are exempt — routing their per-frame analyser reads through the store would mean a store
@@ -210,15 +218,34 @@ anything driven by a pointer, a clock tick or an animation frame must not write 
 directly. Consequence for tests and for reading `localStorage` in a live page: storage lags the
 store by up to one idle window; call `flushPersistedWrites()` before asserting on it.
 
-**A version stamped into persisted data is a contract, not a placeholder.** A migration step's
-guard (`if (version < N) …` in `store.ts`, its `.solna` sibling in `projectFormatMigrate.ts`) must
-not ship before what it produces is final — bumping the version and then continuing to change the
-migration's *output* across later commits leaves a session hydrated in that window stamped as
-already-migrated with the old, incomplete shape, and no later guard revisits it because the
-version check only ever looks backward. If a migration's output has to keep changing after its
-guard has shipped, bump the guard again rather than reusing the same version to now mean something
-different, and keep the transform idempotent so a session stranded by the interim contract
-self-heals the next time it runs.
+**There are no migration chains — validation replaced them, and that is a decision with a
+precondition, not an accident.** DEV-388 deleted both read-time upgrade chains (the persist
+`migrate` in `store.ts` and the `.solna` chain in `projectFormatMigrate.ts`, which a follow-up
+then deleted outright — the file, not just its chain — once its sole export had settled to a
+literal identity function with no production caller). `migrate` in `store.ts` is identity except
+for the legacy localStorage-key adoption it still calls, kept only because zustand's `persist`
+throws on a version mismatch with no `migrate` function at all. `PERSIST_VERSION` and
+`PROJECT_FORMAT_VERSION` still exist and are still stamped on every write — the latter is still
+the murva-facing interop marker and still what `parseProjectFile` refuses a *newer* body
+against — but neither drives a read-time transform any more. In place of a chain,
+`sanitizePersistedState`/`sanitizeLoops` (store.ts) and `sanitizeContent` (projectFile.ts,
+which also calls `sanitizeLoops`) validate every key on every read regardless of which version
+wrote it: out of range, wrong type, missing, or not a member of an allowed set gets the default;
+a value that is in range passes through untouched, whatever unit or shape convention was current
+when it was written. The precondition is **solna has no real users yet** — a fader value is a
+plain number, and a number in range is indistinguishable between, say, linear gain and dB, so
+nothing here guesses which one wrote it. The case worth naming, not just the benign one: a
+pre-DEV-386 bus a user had faded all the way down was stored as linear `0`, and `0` is also a
+perfectly legal dB value — *unity* — so that bus now reads back at full level, not silent. A
+developer who hits a stale-looking value fixes it by hand. If solna gains users with sessions
+worth preserving across a unit or shape change validation truly cannot express, that
+precondition is gone and a chain — sequenced the way the old ones were, one `if (version < N) …`
+guard per shape change, never reused once shipped, output frozen the moment its guard ships — is
+the thing to bring back, in `migrate`/`merge` and in a re-created project-body equivalent of
+`projectFormatMigrate.ts`, kept as two separate chains for the reason below. Until then, do not
+add a version-gated branch "just in case": a guard against a version nothing produces any more is
+dead code with no test forcing it to stay honest, which is exactly the shape the old chains
+rotted into.
 
 **The shared 16th clock runs if and only if a player holds a subscription.** `subscribeClock`
 starts the timer for the first listener and `stopClockTimer` ends it with the last, and nothing
@@ -235,6 +262,25 @@ in `App.tsx`. The `AudioContext` is created on the first user click, after which
 `applyEngineSnapshot()` re-applies the whole persisted audio state. **Never call engine setters
 from a component** — add the state to a slice and wire it in `engineSync.ts`.
 
+**A meter reads samples, not a spectrum, and it reads them before the dynamics.** Level is peak
+and windowed RMS computed from `getFloatTimeDomainData` and reported in dBFS (`src/utils/`:
+`gainUnits.ts`, `meterZones.ts`, `meterScale.ts`, `meterLevel.ts`; a zone's colour comes from
+`vuMeter.ts`'s `zoneFillClass`). Averaging
+`getByteFrequencyData` bins — what `getAudioLevel()` did — measures a patch's brightness, not its
+loudness, and yields a 0..1 with no dB meaning, which is why the segments it drove corresponded
+to nothing. The master analysers are **observe-only sends off `masterGain`**, post-fader and
+ahead of *both* dynamics stages — the compressor and the limiter sit downstream of the tap, so a
+reading is never capped by either regardless of which is engaged. The compressor defaults off;
+the limiter defaults on (DEV-383) but only catches occasional peaks at its -3 dB threshold given
+the -6 dB source-bus default, so the `over` zone stays reachable in the common case. Every meter ticks through
+`utils/meterScheduler.ts` — one rAF loop, a tier per registration, and an `IntersectionObserver`
+per element. That last part is not an optimisation here: all four tab views stay mounted, so a
+meter with no visibility gate reads its analyser forever on a tab nobody is looking at. **No
+meter value may enter a zustand slice** — a write per tick re-renders every mounted view — and
+the numbers (`-24`/`-6`/`-1` zones, the `0/5/30/100` piecewise scale, 14 dB/s decay, a −60 dBFS
+display floor) are an interop contract with murva recorded in
+`docs/superpowers/plans/2026-09-07-dev-383-gain-staging-contract.md`, not values to re-derive.
+
 **Storage access is always guarded.** `localStorage` can *throw* (Safari private mode, blocked
 cookies, embedded webviews), not just return null — `store.ts` falls back to an in-memory
 `StateStorage`, and helpers like `Header.tsx`'s theme functions take an injectable storage param
@@ -249,8 +295,12 @@ Bodies and metadata live in **separate object stores** so listing the library ne
 a single project body; every write touches both in one transaction. A **project body is the
 content set only** (see `PROJECT_CONTENT_KEYS`) — view, session and library state are excluded
 by construction — and its `formatVersion` is deliberately **independent of the persist
-`version`**: that one bumps for private `localStorage` reshapes, this one only when the content
-contract changes, and the persist migration chain must never be used to read a project body.
+`version`**: that one is stamped for private `localStorage` reshapes, this one for the `.solna`
+content contract, and a body's `.solna` shape must never be read by treating it as a
+`localStorage` payload or vice versa. Neither version drives a transform any more (see the "no
+migration chains" note above), but they still mean different things and must not collapse into
+one — `parseProjectFile` refuses a body whose `formatVersion` is newer than
+`PROJECT_FORMAT_VERSION` regardless of what `PERSIST_VERSION` is doing.
 
 **`dirty` is derived, never persisted.** One idle pass fingerprints the content set and compares
 it to the project's baseline (or, untitled, to the default project) — see `projectDirty.ts`;
@@ -269,16 +319,18 @@ before a render has no effect unless the component reads the store the way
 ## Traps recorded in the spec — don't "fix" these
 
 - **Tap Tempo and stereo VU are unbuilt**, not broken — see `docs/design.md` §4 item 3.
-- **The lead melody's two migration chains each run two upgrades, in order, before their sanitize
-  step.** `asLeadNoteMatrix` — the guard both read paths go through — returns `undefined` for the
-  pre-DEV-369 `string[][]` shape instead of throwing, and sanitize then substitutes the default, so
-  a payload that reaches sanitize un-upgraded comes back blank — no throw, no warning. Within a chain the note-length
-  upgrade runs first and the tick widening second, never the other way round: widening a
-  `string[][]` payload would leave a shape sanitize still rejects. Persist upgrades live in
-  `migrate` (before `merge`); `.solna` upgrades in `migrateProjectBody` (before `sanitizeContent`).
-  The two chains share the pure transforms and nothing else — **never merge them.** A persist
-  payload is private `localStorage` shape; a project body is an external contract; their versions
-  move for different reasons.
+- **The lead melody's two read-time upgrade chains are gone (DEV-388), and the shape they used
+  to fix up is now just validated.** `asLeadNoteMatrix` (sanitize.ts) — the guard both read paths
+  go through — still returns `undefined` for the pre-DEV-369 `string[][]` shape, so a payload in
+  that shape still comes back blank with no throw and no warning; that part is unchanged and is
+  the trap. What is gone is the pair of chains that used to widen a *valid but stale* shape (the
+  pre-tick-resolution `LeadNote[][]`) before sanitize ever saw it — a stale-but-valid shape is now
+  accepted as-is and passed through unchanged, at whatever tick density it was written, because
+  it is not invalid, just old. When the two chains existed they were never merged even though
+  they shared their pure transforms, because a persist payload is private `localStorage` shape and
+  a project body is an external contract — if a genuinely un-validatable shape change ever forces
+  a chain back (see the "no migration chains" note above), that split is still the right call and
+  should not be "fixed" into one shared chain.
 
 ## Git conventions
 
