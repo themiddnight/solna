@@ -7,7 +7,7 @@ import { PanelCard } from "../ui/PanelCard";
 interface SimpleSynthPanelProps {
   params: SynthParams;
   onChangeParams: (params: SynthParams) => void;
-  /** Target tint (chord/bass) from SynthView's TARGET_STYLES; "" for the main synth. */
+  /** Target tint (chord/bass) from SoundView's TARGET_STYLES; "" for the main synth. */
   tintClass?: string;
 }
 

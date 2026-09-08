@@ -7,10 +7,10 @@ import { LfoPanel } from './LfoPanel';
 import { OscillatorPanel } from './OscillatorPanel';
 
 /**
- * These panels were MOVED out of SynthView.tsx, not rewritten. zustand v5
+ * These panels were MOVED out of SoundView.tsx, not rewritten. zustand v5
  * serves getInitialState as the server snapshot, so renderToString here
  * renders each panel against the store's initial synth params — the same
- * markup SynthView produced for the same state.
+ * markup SoundView produced for the same state.
  *
  * The assertions below are structural, not a full snapshot: they pin the
  * element counts, every button/knob id, and the module identity token each
@@ -18,7 +18,7 @@ import { OscillatorPanel } from './OscillatorPanel';
  * wrong. Byte-identity of the move itself is checked separately against the
  * original inline JSX.
  */
-describe('Pro-Mode panels render the markup SynthView used to render inline', () => {
+describe('Pro-Mode panels render the markup SoundView used to render inline', () => {
   test('OscillatorPanel: 4 waveform buttons + 3 knobs, all module-osc', () => {
     const html = renderToString(<OscillatorPanel />);
     for (const w of ['sawtooth', 'square', 'sine', 'triangle']) {

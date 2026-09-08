@@ -18,7 +18,7 @@ import { DRUM_GRIDS } from "@/data/drumGrids";
 import { DRUM_KITS } from "@/data/drumKits";
 import { patternMeterTitle, patternOptionLabel } from "../meterSelect";
 import { Knob } from "../ui/Knob";
-import { ViewHeader } from "../ui/ViewHeader";
+import { SegmentHeader } from "../ui/SegmentHeader";
 import { PanelCard } from "../ui/PanelCard";
 import { ChannelStrip } from "../ui/ChannelStrip";
 import { FIELD_LANE, FIELD_SELECT, SECTION_HEADER } from "../ui/fieldClasses";
@@ -192,7 +192,7 @@ export const SequencerView = React.memo(function SequencerView() {
           view-level buttons and lets each module own its own controls in its
           own card (see ChordView's chord/bass cards); this one had grown to
           seven, including the pattern edits that belong beside the grid. */}
-      <ViewHeader view="pattern" badge={sequencerMeterBadge(meter)} />
+      <SegmentHeader segment="beat" badge={sequencerMeterBadge(meter)} />
 
       {/* Drum Sound — everything that shapes how the kit sounds. Named for all
           of what it holds now (kit, filter, level), not just the filter. */}

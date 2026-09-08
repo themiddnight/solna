@@ -7,7 +7,7 @@ import { useSynthChannel } from "./useSynthChannel";
 
 /**
  * Pro-Mode panel — Envelopes (amp and filter ADSR). Reads the active synth
- * channel from the store rather than taking props, so SynthView renders
+ * channel from the store rather than taking props, so SoundView renders
  * `<EnvelopePanel />` with no wiring. Its two halves carry the
  * `module-env-vca` and `module-env-vcf` identity colours (docs/design.md
  * §6.5); the tokens are named in the class strings that moved with the

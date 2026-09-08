@@ -36,7 +36,7 @@ const PAD_VOICINGS: { value: PadVoicing; label: string }[] = [
 
 /**
  * A join-group button, styled active/inactive from SYNTH_TARGET_STYLES.pad —
- * the same active/inactive pair SynthView's target selector uses, so the
+ * the same active/inactive pair SoundView's target selector uses, so the
  * pad's own toggles read as the same widget family.
  */
 function PadToggleButton({

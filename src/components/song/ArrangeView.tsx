@@ -108,7 +108,7 @@ export const ArrangeView = React.memo(function ArrangeView() {
     // mounted behind `hidden` while the user is on any other tab, so without
     // this the clock drove a setState 8-16x/sec into an invisible list. Same
     // idiom (and same reason) as the AudioVisualizer `paused` gates at
-    // EffectsRackView.tsx:299 and SynthView.tsx:418 — see
+    // EffectsRackView.tsx:299 and SoundView.tsx:418 — see
     // AudioVisualizer.tsx:603-612 for why gating inside the callback is not
     // enough.
     if (!isPlaying || activeTab !== 'arrange') {

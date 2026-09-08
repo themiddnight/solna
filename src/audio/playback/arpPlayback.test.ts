@@ -3,7 +3,7 @@ import { computeArpTriggers } from './arpPlayback';
 import type { ArpRate } from './arpPlayback';
 
 // Reference implementation: the original 4-branch subscriber logic from
-// SynthView.tsx 281-405, transcribed 1:1 into pure form.
+// SoundView.tsx 281-405, transcribed 1:1 into pure form.
 function referenceTriggers(step: number, seqLen: number, rate: ArpRate, stepDur16: number) {
   const out: Array<{ noteIndex: number; timeOffsetSec: number; holdSec: number }> = [];
   if (rate === '4n') {

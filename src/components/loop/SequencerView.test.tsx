@@ -24,8 +24,9 @@ describe('SequencerView theming', () => {
    */
   test('the drum controls live in their module cards, not the view header', () => {
     const soundCard = html.indexOf('Drum Sound');
-    // The view header's own <h2> now reads "Pattern" too (Task 3), so the
-    // module card's heading is the occurrence AFTER the sound card, not the first.
+    // The header's own <h2> reads "Drum Pattern" (the Beat segment's title in
+    // PATTERN_SEGMENTS), which `>Pattern<` does not match — but keep searching
+    // from the sound card anyway, so this stays right if the title changes.
     const patternCard = html.indexOf('>Pattern<', soundCard);
     expect(soundCard).toBeGreaterThan(-1);
     expect(patternCard).toBeGreaterThan(-1);
@@ -36,7 +37,7 @@ describe('SequencerView theming', () => {
     expect(html.indexOf('btn-randomize-grid')).toBeGreaterThan(patternCard);
     expect(html.indexOf('btn-clear-grid')).toBeGreaterThan(patternCard);
     // Both cards come after the header, so nothing above them can be the header.
-    expect(soundCard).toBeGreaterThan(html.indexOf('>Pattern<'));
+    expect(soundCard).toBeGreaterThan(html.indexOf('>Drum Pattern<'));
   });
 
   // A control inside a card's control row wears a stacked label above it (the

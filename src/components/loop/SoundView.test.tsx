@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
-import { SynthView } from './SynthView';
+import { SoundView } from './SoundView';
 import { resolveSynthControlChannel } from '@/utils/synthControl';
 import type { SynthParamChannel } from '@/utils/synthControl';
 import type { SynthParams } from '@/types';
@@ -82,28 +82,22 @@ describe('chromatic keyboard black key geometry', () => {
   // "Library" they read as the same drawer. Each now names its own content,
   // which also makes the count badge answerable ("Sounds 29", not "Library 29").
   test('the preset drawer button names its content', () => {
-    const html = renderToString(<SynthView />);
+    const html = renderToString(<SoundView />);
     expect(html).toContain('>Sounds<');
     expect(html).toContain('title="Sound Library"');
     expect(html).not.toContain('>Library<');
   });
 
-  test('SynthView still renders', () => {
-    const html = renderToString(<SynthView />);
+  test('SoundView still renders', () => {
+    const html = renderToString(<SoundView />);
     expect(html).toContain('Target:');
   });
 
-  test('the interactive keyboard moved to the dock, not SynthView', () => {
-    const html = renderToString(<SynthView />);
+  test('the interactive keyboard moved to the dock, not SoundView', () => {
+    const html = renderToString(<SoundView />);
     expect(html).not.toContain('btn-keyboard-mode-chromatic');
     expect(html).not.toContain('KB OCT');
     expect(html).not.toContain('A Natural Minor');
-  });
-
-  test('the lead melody grid renders', () => {
-    const html = renderToString(<SynthView />);
-    expect(html).toContain('Lead Melody');
-    expect(html).toContain('id="select-lead-loop-length"');
   });
 });
 

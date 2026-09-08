@@ -17,7 +17,7 @@ export interface ArpStateRef {
 }
 
 /**
- * Arpeggiator clock subscriber, moved from SynthView 281-405 with the 4 rate
+ * Arpeggiator clock subscriber, moved from SoundView 281-405 with the 4 rate
  * branches collapsed into computeArpTriggers. `stateRef` mirrors the view's
  * live arp state (held notes, params, control target, bpm) exactly like the
  * original arpStateRef. Teardown releases sounding voices, as before.
@@ -73,7 +73,7 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
       // sounding were triggered under the PRE-switch target, but this reads
       // the POST-switch one and releases the wrong bus — the old target's
       // voices are never released here. Unreachable today because the only
-      // caller (SynthView) pins controlTarget to a constant
+      // caller (SoundView) pins controlTarget to a constant
       // (KEYBOARD_AUDITION_TARGET) for the lifetime of the hook; a future
       // caller that varies controlTarget mid-hold would need to close this gap.
       if (audioEngine.getAudioContext()) {

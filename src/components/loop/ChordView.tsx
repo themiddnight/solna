@@ -68,7 +68,7 @@ const ChordPresetLibrary = React.lazy(() =>
 );
 import { PowerToggle } from "../ui/PowerToggle";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
-import { ViewHeader } from "../ui/ViewHeader";
+import { SegmentHeader } from "../ui/SegmentHeader";
 import { ModuleHeader } from "../ui/ModuleHeader";
 import { COUNT_BADGE, HEADER_BADGE } from '../ui/fieldClasses';
 import { SortableChordCard } from "./chord/SortableChordCard";
@@ -561,8 +561,8 @@ export const ChordView = React.memo(function ChordView() {
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Scale & Chord Studio Header */}
-      <ViewHeader
-        view="pattern"
+      <SegmentHeader
+        segment="accompaniment"
         actions={
           <>
             <PowerToggle
@@ -610,7 +610,7 @@ export const ChordView = React.memo(function ChordView() {
               title="Progression Library"
             >
               <Library className="w-3.5 h-3.5" />
-              {/* See the matching button in SynthView: content, not container. */}
+              {/* See the matching button in SoundView: content, not container. */}
               <span>Progressions</span>
               <span className={COUNT_BADGE}>
                 {totalProgressionsCount}
@@ -625,7 +625,7 @@ export const ChordView = React.memo(function ChordView() {
             <span>{saveToast}</span>
           </div>
         )}
-      </ViewHeader>
+      </SegmentHeader>
 
       {/* Quick Save Modal Popover */}
       <QuickSavePopover

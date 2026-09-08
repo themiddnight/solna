@@ -8,7 +8,7 @@ import { useSynthChannel } from "./useSynthChannel";
 
 /**
  * Pro-Mode panel — LFO and master pitch. Reads the active synth channel from
- * the store rather than taking props, so SynthView renders `<LfoPanel />`
+ * the store rather than taking props, so SoundView renders `<LfoPanel />`
  * with no wiring. Its identity colour is `module-lfo` (docs/design.md
  * §6.5); the token is named in the class strings that moved with the markup.
  */

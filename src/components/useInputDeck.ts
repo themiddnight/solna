@@ -31,7 +31,7 @@ import { DEFAULT_PADS } from './ui/DrumPadGrid';
 // here (instead of routing through `controlTarget`) keeps every audio call
 // site (note-on, note-off, arp playback, voice release) agreeing on one
 // engine, so a mode/target switch can never strand voices on an engine nothing
-// points at anymore (copied verbatim from SynthView).
+// points at anymore (copied verbatim from SoundView).
 const KEYBOARD_AUDITION_TARGET: SynthControlTarget = 'synth';
 
 // Decide which notes must be force-released when the keyboard mode changes.
@@ -135,7 +135,7 @@ export function useInputDeck(): {
   // Deliberately two PRIMITIVE selectors, not `(s) => s.synthParams`. This hook
   // is mounted in App, and `synthParams` is a fresh object on every knob
   // pointermove (60-120 Hz), so selecting the object re-rendered App and with
-  // it SynthView + SequencerView + ArrangeView + BottomInputDock — three of
+  // it SoundView + SequencerView + ArrangeView + BottomInputDock — three of
   // them on hidden tabs. These two scalars are the ONLY reactive reads; the
   // full params object reaches the arp through arpStateRef below.
   const arpActive = useAppStore(selectArpActive);

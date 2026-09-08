@@ -37,7 +37,6 @@ import { FilterPanel } from "./synth/FilterPanel";
 import { EnvelopePanel } from "./synth/EnvelopePanel";
 import { LfoPanel } from "./synth/LfoPanel";
 import { ArpeggiatorPanel } from "./synth/ArpeggiatorPanel";
-import { LeadMelodyGrid } from "./lead/LeadMelodyGrid";
 import { ChannelStrip } from "../ui/ChannelStrip";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { ViewHeader } from "../ui/ViewHeader";
@@ -55,7 +54,7 @@ import {
 } from "@/utils/synthControl";
 import type { SynthControlTarget } from "@/utils/synthControl";
 
-export const SynthView = React.memo(function SynthView() {
+export const SoundView = React.memo(function SoundView() {
   // Synth slice state + setters (named after the old props so the rest of the
   // component body is unchanged).
   const controlTarget = useAppStore((s) => s.controlTarget);
@@ -674,9 +673,6 @@ export const SynthView = React.memo(function SynthView() {
           <ArpeggiatorPanel />
         </div>
       )}
-
-      {/* Lead Melody Grid — the per-step pitch sequencer */}
-      <LeadMelodyGrid />
 
       {/* Preset Library Sidebar Drawer / Modal */}
       <Suspense
