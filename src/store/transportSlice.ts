@@ -111,6 +111,18 @@ export function restartPlayersPatch(
 }
 
 /**
+ * Every player stopped, as a pure patch. Exported so a store path that must
+ * stop playback inside a set() it is ALREADY making — loopSlice's deleteLoop
+ * — can fold it in rather than making a second set(). A second set() would
+ * publish an intermediate state where the scope still names a loop that
+ * `loops` no longer contains, which is the one scope value nothing
+ * downstream can heal.
+ */
+export function stopAllPlayersPatch(state: AppStore): Partial<AppStore> {
+  return allPlayersPatch(state, () => 'stopped');
+}
+
+/**
  * What the MASTER transport button shows. It disowns a solo loop it is not
  * the transport for: on the song layer every solo loop belongs to a loop
  * card, so the button presents as Play and one click TAKES OVER into song

@@ -318,3 +318,68 @@ describe('a cursor move carries the scope with it', () => {
     expect(useAppStore.getState().sequencerPlayer).toBe('playing');
   });
 });
+
+describe('deleteLoop never leaves the scope naming a loop that is gone', () => {
+  test('deleting the loop that is playing stops playback and clears the scope', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+      songLoopIndex: null,
+    });
+    useAppStore.getState().soloLoop('loop-default-1');
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+
+    const fallback = useAppStore.getState().deleteLoop('loop-default-1');
+
+    const s = useAppStore.getState();
+    expect(fallback).toBe('loop-b');
+    expect(s.activeLoopId).toBe('loop-b');
+    expect(s.sequencerPlayer).toBe('stopped');
+    expect(s.chordsPlayer).toBe('stopped');
+    expect(s.leadPlayer).toBe('stopped');
+    expect(s.playbackScope).toBe(SCOPE_NONE);
+    expect(s.loops.some((l) => l.id === 'loop-default-1')).toBe(false);
+  });
+
+  test('deleting a loop that is not the scoped one leaves playback alone', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+      songLoopIndex: null,
+    });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    useAppStore.getState().deleteLoop('loop-b');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.playbackScope).toEqual({ kind: 'loop', loopId: 'loop-default-1' });
+  });
+
+  test('deleting a loop while the song plays leaves the arrangement running', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+      songLoopIndex: 0,
+    });
+    useAppStore.getState().playAll();
+
+    useAppStore.getState().deleteLoop('loop-b');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.playbackScope).toEqual({ kind: 'song' });
+    expect(s.songLoopIndex).toBe(0);
+  });
+
+  test('the last loop cannot be deleted, so no scope change happens', () => {
+    useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    expect(useAppStore.getState().deleteLoop('loop-default-1')).toBe(null);
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+  });
+});
