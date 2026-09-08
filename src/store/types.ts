@@ -332,10 +332,12 @@ export interface UiSlice {
    * SOLO_TRACKS order, whatever order the buttons were pressed in.
    *
    * Cleared by navigation — see store/soloNav.ts, which owns that rule for
-   * every writer of activeTab / patternSegment / activeLoopId at once. That
-   * clearing is the point of the feature, not a rough edge: a control that can
-   * silence a track must not be able to keep doing so once the user has stopped
-   * looking at it. Do not "fix" it into stickiness.
+   * every writer of the LAYER (Loop ↔ Song) and of activeLoopId at once. A
+   * tab change or Pattern-segment change WITHIN the Loop layer does not clear
+   * it — see soloNav.ts for why that survival is load-bearing. That clearing
+   * is the point of the feature, not a rough edge: a control that can silence
+   * a track must not be able to keep doing so once the user has left the loop
+   * it was set in. Do not "fix" it into stickiness.
    */
   soloTracks: SoloTrack[];
   // The synth keyboard's input mode. Transient by design: an input
