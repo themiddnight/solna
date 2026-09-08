@@ -100,12 +100,28 @@ describe('play(module) caller guard', () => {
     });
   }
 
-  // The real call shapes in this repo are store.play('sequencer'),
-  // store.play(module) and h.state.play('chords') — always a `.play(`
-  // member call with a non-empty argument. Deliberately not anchored to a
-  // string-literal argument, so a future caller passing a variable (the way
-  // loadLoop.ts and vibes.ts pass `module`) is still caught.
-  const CALL = /\.play\(\s*[^)]+\)/;
+  // A member CALL (`store.play('sequencer')`, `h.state.play('chords')`) is
+  // not the only risky shape: the dominant idiom in this repo binds a slice
+  // action through a selector and calls the bare local afterwards —
+  // `const play = useAppStore((s) => s.play); …; onPlay={() => play(tab.module)}`
+  // is exactly how TransportBar.tsx binds playAll/softStopAll/hardStopAll
+  // today, and it is the literal shape commit 331bf86 deleted from
+  // Header.tsx's per-tab play buttons. A call-shaped pattern anchored on
+  // `.play(` never sees that: the call itself is bare (`play(...)`, no
+  // dot), only the binding line (`s.play`) carries one.
+  //
+  // So this matches ANY `.play` member reference, not just a call —
+  // `\.play\b` — which catches the binding site instead of the call site.
+  // Checked against every occurrence of `.play` in src/ before landing on
+  // this: it matches nothing outside store/*.ts and store/*.test.ts (no
+  // HTMLMediaElement .play(), no unrelated method), and the trailing `\b`
+  // rules out `.playAll`, `.playbackScope`, `.playTargetLabel` and every
+  // other `play`-prefixed identifier in the tree — so it needs no allowlist
+  // entries beyond the three already here. Rejected the narrower
+  // identifier-call alternative (`/(?<![.\w])play\s*\(\s*[^)]/`): it only
+  // matches a BARE call and would stop seeing `store.play(...)` entirely,
+  // trading one blind spot for another instead of covering both shapes.
+  const CALL = /\.play\b/;
 
   // Strip comments before matching. Prose referencing `store.play(module)` —
   // like the INVARIANT comment this guard sits next to — must not itself
