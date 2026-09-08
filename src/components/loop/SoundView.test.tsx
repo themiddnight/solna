@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
 import { SoundView } from './SoundView';
+import { FIELD_LABEL, FIELD_LANE } from '../ui/fieldClasses';
 import { resolveSynthControlChannel } from '@/utils/synthControl';
 import type { SynthParamChannel } from '@/utils/synthControl';
 import type { SynthParams } from '@/types';
@@ -98,6 +99,51 @@ describe('chromatic keyboard black key geometry', () => {
     expect(html).not.toContain('btn-keyboard-mode-chromatic');
     expect(html).not.toContain('KB OCT');
     expect(html).not.toContain('A Natural Minor');
+  });
+});
+
+/**
+ * The Drum Sound card (kit, filter, level) moved here from the sequencer's
+ * Beat segment (nav restructure Task 6). These three regression guards moved
+ * with it, verbatim in what they assert — only the render target changed.
+ */
+describe('the Drum Sound card, moved from the sequencer (nav restructure Task 6)', () => {
+  const html = renderToString(<SoundView />);
+
+  // Step 17: the drum bus fader's dB markup, asserted at view level so a
+  // regression back to a %/linear readout on this call site is caught here
+  // and not only inside ChannelStrip's own unit tests.
+  test('the drum bus fader renders its dB tooltip and position step', () => {
+    // DEV-383: masterSequencerVolume's factory default is DEFAULT_BUS_TRIM_DB
+    // (-6 dB), not unity — this view renders the store's creation-time
+    // snapshot with no explicit setState, so the tooltip reflects that.
+    expect(html).toContain('title="Drums Layer Gain: -6.0 dB"');
+    expect(html).toContain('step="0.005"');
+  });
+
+  // The regression this row was rebuilt for: five fields whose controls were
+  // 24, 30, 32 and 48px tall bottom-aligned into five different label heights.
+  // Nothing renders after this card in SoundView (the preset drawer's
+  // Suspense/lazy content is null while closed), so slicing from the card's
+  // own heading to the end of the string covers exactly the card — confirmed
+  // by rendering SoundView and checking FIELD_LABEL/FIELD_LANE occur zero
+  // times before that heading and exactly 5/4 times from it onward.
+  test('every field in a control row shares one label line and one control lane', () => {
+    const soundRow = html.slice(html.indexOf('Drum Sound'));
+    const labels = soundRow.split(FIELD_LABEL).length - 1;
+    const lanes = soundRow.split(FIELD_LANE).length - 1;
+    // Kit, Filter, Cutoff, Res each own a label + lane; Drum Level's label and
+    // 32px shell come from ChannelStrip, which sits on the same line already.
+    expect(labels).toBe(5);
+    expect(lanes).toBe(4);
+  });
+
+  test('the drum filter type switch is a daisyUI join on the 32px control lane', () => {
+    expect(html).toContain('join');
+    // `sm`, not `xs`: it is one field in a control row, and a 24px join next to
+    // a 32px select is what pushed the row's labels onto different baselines.
+    expect(html).toContain('btn btn-sm join-item');
+    expect(html).toContain(FIELD_LANE);
   });
 });
 

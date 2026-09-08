@@ -71,6 +71,15 @@ describe('the beat segment is pattern only', () => {
   test('keeps the grid preset select, which rewrites notes rather than sound', () => {
     expect(html).toContain('select-sequencer-grid');
   });
+
+  // The grid select carries no visible label — the card it sits in is already
+  // titled Pattern and it is that card's only field — so its accessible name
+  // has to come from somewhere else. This half of the old "the kit and grid
+  // selects use the shared stacked field label" test survives the Kit half's
+  // move to SoundView because the grid select itself never moved.
+  test('the grid select carries its own accessible name', () => {
+    expect(html).toContain('aria-label="Drum grid"');
+  });
 });
 
 describe('SequencerView grid options carry their meter', () => {
