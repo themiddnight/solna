@@ -14,6 +14,13 @@
  *
  * `songLoopIndex` is NOT part of this union — it is a pure cursor into loops[].
  * Never read its null-ness as a mode.
+ *
+ * INVARIANT, locked by transportSlice.test.ts: while any player is 'playing'
+ * the scope is never 'none'. Loop-layer playback goes through soloLoop, so
+ * `none` means stopped on both layers. Phase 3's focus-loop rule reads the
+ * scope alone to decide what survives a navigation, which is only sound
+ * while this holds — a new caller of play(module) that starts a stopped
+ * player without setting a scope breaks it.
  */
 export type PlaybackScope =
   | { kind: 'none' }

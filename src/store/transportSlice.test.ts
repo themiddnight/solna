@@ -8,6 +8,7 @@ import {
   transportDisplayState,
 } from './transportSlice';
 import { useAppStore } from './store';
+import { SCOPE_NONE } from './playbackScope';
 import { MAX_BPM, MIN_BPM } from '../utils/musicTheory';
 import type { AppStore, PlayerState, TransportSlice } from './types';
 
@@ -276,5 +277,34 @@ describe('transportDisplayState — which solo the master button owns', () => {
     expect(transportDisplayState({ kind: 'song' }, 'playing', 'song', 'l1')).toBe('playing');
     expect(transportDisplayState({ kind: 'song' }, 'stopping', 'loop', 'l1')).toBe('stopping');
     expect(transportDisplayState({ kind: 'none' }, 'stopped', 'loop', 'l1')).toBe('stopped');
+  });
+});
+
+describe('playing implies a scope', () => {
+  // useAppStore is the real, shared singleton — same reason as 'setBpm
+  // clamping' above: undo regardless of which assertion fails, or a stray
+  // playing player leaks into whichever test runs next.
+  afterEach(() => {
+    useAppStore.getState().hardStopAll();
+  });
+
+  const playing = (s: ReturnType<typeof useAppStore.getState>) =>
+    s.sequencerPlayer === 'playing' || s.chordsPlayer === 'playing' || s.leadPlayer === 'playing';
+
+  test('never leaves a player playing while the scope is none', () => {
+    useAppStore.getState().hardStopAll();
+    expect(playing(useAppStore.getState())).toBe(false);
+
+    useAppStore.getState().playAll();
+    expect(playing(useAppStore.getState())).toBe(true);
+    expect(useAppStore.getState().playbackScope.kind).not.toBe('none');
+
+    useAppStore.getState().hardStopAll();
+    useAppStore.getState().soloLoop(useAppStore.getState().activeLoopId);
+    expect(playing(useAppStore.getState())).toBe(true);
+    expect(useAppStore.getState().playbackScope.kind).toBe('solo');
+
+    useAppStore.getState().hardStopAll();
+    expect(useAppStore.getState().playbackScope).toBe(SCOPE_NONE);
   });
 });
