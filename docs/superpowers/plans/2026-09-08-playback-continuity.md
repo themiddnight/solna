@@ -259,6 +259,11 @@ The last row is the correction that matters: on the Song layer, picking a differ
 
 **The cost, stated plainly so it is a choice and not a surprise:** you cannot hop an audition from card to card on Arrange. Selecting a different loop stops the sound; hearing the new one is a second click on its play button. The header's loop dropdown is visible on the Song layer too, so it behaves the same way there. The alternative — letting the audition follow the selection — is precisely what the user asked not to happen.
 
+Two more consequences follow from the same rule and are worth stating alongside it, since neither is a behaviour change to make — both are `loadLoop` hitting the "different loop, song layer" row exactly as designed:
+
+- **Duplicating a non-active loop from Arrange while auditioning stops the audition.** The duplicate calls `loadLoop` on a song-layer tab for a loop that is not the one sounding, so it lands on the same row as picking a different card.
+- **Changing the working loop from the header dropdown while on the Master tab does the same.** `master` is a song-layer tab, which makes this the least intuitive place for the rule to bite — tweaking master FX while auditioning is a natural thing to do, and it still stops the sound.
+
 **`vibes` gets the same answer through the same function, with no special case.** A vibe rewrites the *current* loop and never moves `activeLoopId`, so it always lands on the "same loop" row: it restarts and keeps its scope, whether that is `loop{active}` or `song`. Clicking a vibe mid-playback continues to play, which is today's behaviour and what the Instant Vibes bar is for. (If the scope and the cursor ever disagree when a vibe is clicked on the Song layer, the shared rule stops playback rather than restarting under a lie — a healing outcome, not a designed one.)
 
 **The `play(module)` caller guard gets tightened, not kept.** Both restarts stop calling `play(module)` and write one `set()` instead, so `playbackScope.test.ts`'s `ALLOWED` list shrinks from three entries to one (`src/store/transportSlice.ts`, which defines `play`). That is strictly stronger: after this task, *no* production file outside the transport slice can start a player without a scope.

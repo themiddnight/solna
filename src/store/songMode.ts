@@ -239,7 +239,20 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
             //      then press the master Play — establishes the `song` scope
             //      with the players ALREADY playing, so songMode subscribes
             //      after the hooks did. That path predates this ending.
-            // Symptom either way: one extra bar past the end of the song.
+            // Symptom is NOT simply "one extra bar" for a multi-loop song. The
+            // "back to the top" rewind below calls loadLoop with this same
+            // boundary `time`, whose atBoundary branch calls
+            // dropVoicesScheduledFrom for every LOOP_VOICE_SOURCES entry
+            // (chord, bass, pad, synth) — which retroactively cancels whatever
+            // the hooks already scheduled for the extra bar on those sources,
+            // late listener or not. Drums are NOT in that list (fire-and-forget
+            // one-shots; see the file-header comment on `atBoundary`), so a hit
+            // already triggered plays regardless. A multi-loop song's overrun
+            // is therefore one extra bar of drums ALONE (plus a chopped pad
+            // tail where padMode was droning across the seam). Only a
+            // single-loop song — firstId === activeLoopId below, so the rewind
+            // is skipped and nothing gets retroactively cancelled — gets the
+            // full-band extra bar, drums included.
             // The fix is to stop depending on listener order at all (decide the
             // ending one step early, or publish the ending step for the hooks'
             // own step actions to consult). Both change either this function's

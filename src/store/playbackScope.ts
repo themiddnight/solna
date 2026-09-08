@@ -3,9 +3,13 @@ import type { Layer } from '../types';
 /**
  * The single source of truth for playback MODE.
  *
- *   none — unscoped. Nothing owns the transport; song advance is still allowed
- *          (a per-module play in the song layer runs the arrangement), but no
- *          card is auditioning and no card button is disabled.
+ *   none — unscoped. Nothing owns the transport: no card is auditioning, no
+ *          card button is disabled, and the arrangement does NOT advance —
+ *          songMode's reconcile gates the advance subscription on
+ *          `scope.kind === 'song'` specifically, not merely `!== 'loop'`, so
+ *          a song never runs while nothing owns the transport. There is no
+ *          per-module play left in the song layer to run it anyway; that path
+ *          was removed earlier in this phase.
  *   song — Play All owns the transport. Every loop-card button is disabled.
  *   loop — one loop is auditioned alone (a SOLO LOOP). Song advance is
  *          suppressed; that card shows Stop and every other card button is
@@ -172,6 +176,11 @@ export interface RestartDecision {
  * The `none`-with-players-running row is unreachable while "playing implies
  * a scope" holds. It is answered honestly rather than propagated, because
  * handing songMode a scope that lies is exactly the failure this closes.
+ *
+ * Distinct from rescopeToLoop below, which answers a different question: this
+ * one runs after an internal hard stop and decides whether anything comes
+ * back at all; that one moves the scope with the edit cursor for a change
+ * that stops nothing, because nothing about the sound changed.
  */
 export function restartAfterStop(
   before: PlaybackScope,

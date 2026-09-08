@@ -737,11 +737,15 @@ describe('song mode coordinator', () => {
   // ending's soft stop has to reach the playback hooks on the boundary step
   // itself, which holds only while songMode's clock listener was registered
   // before theirs (the engine dispatches an insertion-ordered Set). Neither
-  // path below preserves that, and the symptom of each is a song that plays one
-  // extra bar past its own end. See the KNOWN ISSUE comment on the `end` branch
-  // in songMode.ts for the two fixes, both of which are out of this task's
-  // reach. WHEN ONE LANDS, THESE TWO TESTS FLIP: each expectation below carries
-  // the value it should become.
+  // path below preserves that. The audible symptom is NOT simply "one extra
+  // bar" for every song — see the KNOWN ISSUE comment on the `end` branch in
+  // songMode.ts for why a multi-loop song loses only its drums for that bar
+  // (everything else gets retroactively cancelled by the rewind) while a
+  // single-loop song, which never rewinds, loses the whole band — but the
+  // ORDERING defect both tests pin is the same regardless. See that same
+  // comment for the two fixes, both of which are out of this task's reach.
+  // WHEN ONE LANDS, THESE TWO TESTS FLIP: each expectation below carries the
+  // value it should become.
   test('KNOWN ISSUE: a mid-song loop switch re-registers the advance subscription', () => {
     useAppStore.setState({
       loops: [shortLoop('a', 4), shortLoop('b', 2), shortLoop('c', 2)],
@@ -793,6 +797,12 @@ describe('song mode coordinator', () => {
     expect(useAppStore.getState().sequencerPlayer).toBe('playing');
     expect(clock.count).toBe(0);
 
+    // Stand in for a playback hook's own clock effect: it subscribes the
+    // moment the player it watches goes to 'playing', which just happened
+    // above, so a mounted hook in the app already holds this listener by now.
+    const hookStub = () => {};
+    clock.subscribe(hookStub);
+
     // ...and then the master Play's one-click takeover. playAll only lifts
     // 'stopped' players, so NO player transitions here: React never re-runs the
     // hooks' clock effects, their listeners stay exactly where they were, and
@@ -805,8 +815,14 @@ describe('song mode coordinator', () => {
     expect(s.playbackScope).toEqual({ kind: 'song' });
     expect(s.sequencerPlayer).toBe('playing');
     expect(s.songLoopIndex).toBe(0);
-    expect(clock.count).toBe(1);
-    expect(clock.registrations).toBe(1);
+    expect(clock.count).toBe(2);
+    expect(clock.registrations).toBe(2);
+    // The defect's mechanism, not just a healthy value: `current` is the
+    // FIRST still-subscribed listener (subscribe only ever appends), so it
+    // staying the hook stand-in — rather than becoming songMode's own
+    // callback — is what "lands behind them" above means concretely. Must
+    // become something other than hookStub once a fix lands.
+    expect(clock.current).toBe(hookStub);
     stop();
   });
 });

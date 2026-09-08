@@ -254,6 +254,22 @@ describe('play(module) caller guard', () => {
     }
     expect(offenders).toEqual([]);
   });
+
+  // A POSITIVE control for the scan above. Phase 3 left ALLOWED's own file
+  // with no `.play` occurrence at all today — it only DEFINES play, which is
+  // `play(module: PlaybackModule) {`, no leading dot — so the offenders list
+  // above is empty for two different reasons: no disallowed file calls
+  // play(module) (the thing being tested), AND no file anywhere still
+  // matches CALL (not being tested by that assertion at all). If `play` were
+  // ever renamed, CALL would match nothing, anywhere, forever, and the scan
+  // would keep passing with an empty offenders list while enforcing nothing.
+  // These snippets mirror the two caller shapes named above (`store.play(...)`
+  // and the `s.play` binding site) without depending on real source that
+  // happens to contain them today.
+  test('CALL matches the caller shapes it exists to catch, so a play() rename cannot pass this scan vacuously', () => {
+    expect(CALL.test("store.play('sequencer')")).toBe(true);
+    expect(CALL.test('const play = useAppStore((s) => s.play);')).toBe(true);
+  });
 });
 
 describe('loopPlayButton', () => {
