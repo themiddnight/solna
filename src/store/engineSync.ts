@@ -11,6 +11,8 @@ import { createFrameCoalescer } from '../utils/frameCoalescer';
 import { createTrailingDebounce } from '../utils/trailingDebounce';
 import type { MasterEffects, SequencerTrack } from '../types';
 import { DEFAULT_FADER_DB, faderDbToGain } from './levelUnits';
+import { isTrackAudible } from './trackAudibility';
+import type { AppStore } from './types';
 
 /**
  * One-way bridge from the Zustand store into the audioEngine singleton,
@@ -110,23 +112,42 @@ function effectsEqualExceptDecay(a: MasterEffects, b: MasterEffects): boolean {
 
 /**
  * Every source bus the store owns, as `[volume field, mute field, engine
- * source]`. Both the snapshot pass and the subscription block below are driven
- * from this one table, on the `synthSources` precedent further down — the two
- * used to be ten hand-written lines each, and a bus added to one and forgotten
- * in the other is silent until the first apply.
+ * source, solo track]`. Both the snapshot pass and the subscription block
+ * below are driven from this one table, on the `synthSources` precedent
+ * further down — the two used to be ten hand-written lines each, and a bus
+ * added to one and forgotten in the other is silent until the first apply.
  *
  * The field names are table data rather than a `${source}Volume` convention on
  * purpose: 'sequencer' is irregular (`masterSequencerVolume` / `drumMuted`),
  * and encoding that as a special case in the loop would cost more than
  * spelling all ten names out.
+ *
+ * `solo` is the same irregularity in the other direction: the ENGINE calls the
+ * drum bus 'sequencer' and the lead bus 'synth', while the USER-facing solo
+ * vocabulary (store/trackAudibility.ts) calls them 'drums' and 'lead'. The
+ * translation is written once, here, because this table is already the place
+ * that owns the per-bus name mapping.
  */
 const SOURCE_BUSES = [
-  { source: 'synth', volume: 'synthVolume', muted: 'synthMuted' },
-  { source: 'chord', volume: 'chordVolume', muted: 'chordMuted' },
-  { source: 'bass', volume: 'bassVolume', muted: 'bassMuted' },
-  { source: 'pad', volume: 'padVolume', muted: 'padMuted' },
-  { source: 'sequencer', volume: 'masterSequencerVolume', muted: 'drumMuted' },
+  { source: 'synth', volume: 'synthVolume', muted: 'synthMuted', solo: 'lead' },
+  { source: 'chord', volume: 'chordVolume', muted: 'chordMuted', solo: 'chord' },
+  { source: 'bass', volume: 'bassVolume', muted: 'bassMuted', solo: 'bass' },
+  { source: 'pad', volume: 'padVolume', muted: 'padMuted', solo: 'pad' },
+  { source: 'sequencer', volume: 'masterSequencerVolume', muted: 'drumMuted', solo: 'drums' },
 ] as const;
+
+/**
+ * THE audibility read, and the only one: solo beats mute, and the formula lives
+ * in store/trackAudibility.ts because src/components/ may not import
+ * audio/engine and so may not compute it.
+ *
+ * `bus.solo` is checked against SoloTrack by isTrackAudible's own signature, so
+ * a typo in the table above is a compile error rather than a bus that silently
+ * never solos.
+ */
+function busAudible(s: AppStore, bus: (typeof SOURCE_BUSES)[number]): boolean {
+  return isTrackAudible(bus.solo, s.soloTracks, s[bus.muted]);
+}
 
 /**
  * The track gains reach the engine on a selector over `sequencerTracks`, not
@@ -196,7 +217,7 @@ function applySliceState(): void {
   audioEngine.setMetronomeEnabled(s.metronomeActive);
   for (const bus of SOURCE_BUSES) {
     audioEngine.setSourceGain(bus.source, faderDbToGain(s[bus.volume]));
-    audioEngine.setSourceMuted(bus.source, s[bus.muted]);
+    audioEngine.setSourceMuted(bus.source, !busAudible(s, bus));
   }
   audioEngine.setDrumKit(DRUM_KITS[s.soundKit], s.soundKit);
   pushDrumTrackGains(s.sequencerTracks);
@@ -257,7 +278,11 @@ export function startEngineSync(): Stop {
   // rather than dbToGain: a bus pulled to the bottom passes exactly nothing.
   for (const bus of SOURCE_BUSES) {
     subs.push(useAppStore.subscribe((s) => s[bus.volume], (db) => audioEngine.setSourceGain(bus.source, faderDbToGain(db)), { fireImmediately: true }));
-    subs.push(useAppStore.subscribe((s) => s[bus.muted], (v) => audioEngine.setSourceMuted(bus.source, v), { fireImmediately: true }));
+    // Audibility, not the raw mute flag — solo beats mute. The selector returns
+    // a BOOLEAN, so the default === equality fires this listener only when the
+    // bus actually flips: a solo toggle re-runs five selectors and calls the
+    // engine only for the buses whose state really changed.
+    subs.push(useAppStore.subscribe((s) => busAudible(s, bus), (audible) => audioEngine.setSourceMuted(bus.source, !audible), { fireImmediately: true }));
   }
 
   // sequencer slice: kit + drum-bus filter. The filter is watched as one

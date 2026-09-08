@@ -516,3 +516,112 @@ describe('EFFECT_KEYS_EXCEPT_DECAY', () => {
     ]);
   });
 });
+
+/**
+ * The value setSourceMuted was last called with for one engine source, scanned
+ * across the spy's whole call history rather than only calls "since the last
+ * mockClear". A bus whose audibility never flips within a scenario is, by
+ * design, never re-pushed after its fireImmediately bootstrap (the mute
+ * subscription's default `Object.is` equality only fires on a real flip), so
+ * a call-history assertion for that bus would demand a redundant engine call
+ * the implementation correctly never makes. What the feature promises is the
+ * RESULTING engine state, not that a call happened — so read the last value
+ * pushed for the source instead; for a bus that never re-fired, that is
+ * exactly the bootstrap value, which is still the true current engine state.
+ */
+function lastMutedFor(calls: readonly unknown[][], source: string): boolean | undefined {
+  for (let i = calls.length - 1; i >= 0; i -= 1) {
+    if (calls[i][0] === source) return calls[i][1] as boolean;
+  }
+  return undefined;
+}
+
+describe('track solo reaches the engine as bus audibility', () => {
+  afterEach(() => {
+    useAppStore.setState({
+      soloTracks: [],
+      synthMuted: false,
+      chordMuted: false,
+      bassMuted: false,
+      padMuted: false,
+      drumMuted: false,
+    });
+  });
+
+  test('soloing drums silences the four melodic buses and keeps the drum bus open', () => {
+    useAppStore.setState({ soloTracks: [] });
+    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    startEngineSync();
+    setSourceMuted.mockClear();
+
+    useAppStore.getState().toggleSoloTrack('drums');
+
+    expect(setSourceMuted).toHaveBeenCalledWith('synth', true);
+    expect(setSourceMuted).toHaveBeenCalledWith('chord', true);
+    expect(setSourceMuted).toHaveBeenCalledWith('bass', true);
+    expect(setSourceMuted).toHaveBeenCalledWith('pad', true);
+    expect(setSourceMuted).not.toHaveBeenCalledWith('sequencer', true);
+  });
+
+  test('solo beats mute: a muted bus opens when it is soloed', () => {
+    useAppStore.setState({ soloTracks: [], drumMuted: true });
+    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    startEngineSync();
+    setSourceMuted.mockClear();
+
+    useAppStore.getState().toggleSoloTrack('drums');
+
+    expect(setSourceMuted).toHaveBeenCalledWith('sequencer', false);
+  });
+
+  test('solo is additive: drums + lead leaves both buses open', () => {
+    useAppStore.setState({ soloTracks: [] });
+    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    startEngineSync();
+
+    useAppStore.getState().toggleSoloTrack('drums');
+    useAppStore.getState().toggleSoloTrack('lead');
+    setSourceMuted.mockClear();
+    applyEngineSnapshot();
+
+    expect(setSourceMuted).toHaveBeenCalledWith('sequencer', false);
+    expect(setSourceMuted).toHaveBeenCalledWith('synth', false);
+    expect(setSourceMuted).toHaveBeenCalledWith('chord', true);
+    expect(setSourceMuted).toHaveBeenCalledWith('bass', true);
+    expect(setSourceMuted).toHaveBeenCalledWith('pad', true);
+  });
+
+  test('clearing the solo hands the buses back to their mute flags', () => {
+    useAppStore.setState({ soloTracks: [], chordMuted: true });
+    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    startEngineSync();
+    useAppStore.getState().toggleSoloTrack('drums');
+
+    useAppStore.getState().clearSoloTracks();
+
+    // State-based, not call-history-based (see lastMutedFor): chord's
+    // audibility is false throughout this whole scenario — muted for its own
+    // mute flag before the solo, muted for being excluded from it during —
+    // so it is correctly never re-pushed by clearSoloTracks, and asserting a
+    // fresh call for it would be asserting a redundant engine call rather
+    // than the contract.
+    expect(lastMutedFor(setSourceMuted.mock.calls, 'chord')).toBe(true);
+    expect(lastMutedFor(setSourceMuted.mock.calls, 'bass')).toBe(false);
+    expect(lastMutedFor(setSourceMuted.mock.calls, 'sequencer')).toBe(false);
+  });
+
+  test('the snapshot pass and the subscriptions agree, because both read the same table', () => {
+    useAppStore.setState({ soloTracks: ['pad'], synthMuted: false });
+    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    applyEngineSnapshot();
+
+    expect(setSourceMuted).toHaveBeenCalledWith('pad', false);
+    expect(setSourceMuted).toHaveBeenCalledWith('synth', true);
+  });
+
+  test('solo leaves the per-voice drum mute layer untouched', () => {
+    const before = useAppStore.getState().sequencerTracks.map((t) => t.muted);
+    useAppStore.getState().toggleSoloTrack('drums');
+    expect(useAppStore.getState().sequencerTracks.map((t) => t.muted)).toEqual(before);
+  });
+});
