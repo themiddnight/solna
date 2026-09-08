@@ -5,6 +5,7 @@ import type { AppStore, PlayerModule, PlayerState, TransportSlice } from './type
 import { playbackScopeReducer, SCOPE_NONE } from './playbackScope';
 import type { PlaybackScope } from './playbackScope';
 import { DEFAULT_FADER_DB } from './levelUnits';
+import type { Layer } from '../types';
 
 type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
@@ -72,17 +73,26 @@ function allPlayersPatch(
 }
 
 /**
- * What the MASTER transport button shows. While a loop is soloing the master
- * button presents as Play, so clicking it TAKES OVER into song mode in one
- * click (spec: "Transport Play All shows Stop only when kind === 'song'").
+ * What the MASTER transport button shows. It disowns a solo it is not the
+ * transport for: on the song layer every solo belongs to a loop card, so the
+ * button presents as Play and one click TAKES OVER into song mode (spec:
+ * "Transport Play All shows Stop only when kind === 'song'"). On the loop
+ * layer the button IS the transport for the loop being edited, so that one
+ * solo reports its real state — without this the button would offer Play
+ * while its own page is sounding. A solo of some other loop stays disowned on
+ * either layer.
+ *
  * Hard stop is unaffected — it stays live off the real player states via
  * isHardStopEnabled, so soloing audio always has a visible global kill.
  */
 export function transportDisplayState(
   scope: PlaybackScope,
   aggregate: PlayerState,
+  layer: Layer,
+  activeLoopId: string,
 ): PlayerState {
-  return scope.kind === 'solo' ? 'stopped' : aggregate;
+  if (scope.kind !== 'solo') return aggregate;
+  return layer === 'loop' && scope.loopId === activeLoopId ? aggregate : 'stopped';
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- get is unused but kept for signature parity with the other slice creators

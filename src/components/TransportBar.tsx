@@ -10,6 +10,8 @@ import { MidiIndicator } from "./ui/MidiIndicator";
 import { aggregatePlayerState, isHardStopEnabled, transportDisplayState } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 import type { Loop } from '../store/types';
+import { layerForTab } from '@/types';
+import { masterPlayTarget, playTargetLabel } from './transportAction';
 
 /** The song-mode badge: present only while a song position exists. */
 export function songModeLabel(
@@ -27,6 +29,7 @@ export const TransportBar = React.memo(function TransportBar() {
   const chordsPlayer = useAppStore((s) => s.chordsPlayer);
   const leadPlayer = useAppStore((s) => s.leadPlayer);
   const playAll = useAppStore((s) => s.playAll);
+  const soloLoop = useAppStore((s) => s.soloLoop);
   const softStopAll = useAppStore((s) => s.softStopAll);
   const hardStopAll = useAppStore((s) => s.hardStopAll);
   const bpm = useAppStore((s) => s.bpm);
@@ -40,17 +43,32 @@ export const TransportBar = React.memo(function TransportBar() {
   const songLoopIndex = useAppStore((s) => s.songLoopIndex);
   const loops = useAppStore((s) => s.loops);
   const playbackScope = useAppStore((s) => s.playbackScope);
+  const activeTab = useAppStore((s) => s.activeTab);
+  const activeLoopId = useAppStore((s) => s.activeLoopId);
+  const activeLoopName = useAppStore(
+    (s) => s.loops.find((loop) => loop.id === s.activeLoopId)?.name ?? '',
+  );
 
   const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer);
-  // While a loop is soloing the master button offers Play (a one-click
-  // takeover). Hard stop stays live off the REAL player states, so soloing
-  // audio always has a visible global kill even if the card is scrolled away.
-  const displayState = transportDisplayState(playbackScope, aggregate);
+  const layer = layerForTab(activeTab);
+  // On the song layer a soloing loop leaves the master button offering Play
+  // (a one-click takeover). On the loop layer the button owns the solo of the
+  // loop it is editing, so that one reports its real state. Hard stop stays
+  // live off the REAL player states, so soloing audio always has a visible
+  // global kill even if the card is scrolled away.
+  const displayState = transportDisplayState(playbackScope, aggregate, layer, activeLoopId);
   const hardStopDisabled = !isHardStopEnabled(sequencerPlayer, chordsPlayer, leadPlayer);
   // The meter loop only needs to know whether anything is sounding, off the
   // true aggregate — not the takeover-driven display state.
   const isPlaying = aggregate !== 'stopped';
   const songLabel = songModeLabel(songLoopIndex, loops);
+  const onPlay = () => {
+    if (masterPlayTarget(layer) === 'song') {
+      playAll();
+      return;
+    }
+    soloLoop(activeLoopId);
+  };
 
   const handleToggleMetronome = () => {
     // Engine mirror happens via useEngineSync (one render later)
@@ -72,11 +90,28 @@ export const TransportBar = React.memo(function TransportBar() {
           size="sm"
           showHardStop
           hardStopDisabled={hardStopDisabled}
-          onPlay={playAll}
+          onPlay={onPlay}
           onSoftStop={softStopAll}
           onHardStop={hardStopAll}
           showLabel
+          describedBy="label-transport-play-target"
         />
+
+        {/* What Play will start: 'Song' on the song layer, the loop being
+            edited on the loop layer. Visible at every width — a click does
+            one of two different things and the single Play button gives no
+            other clue below `sm`, where the button's own text label hides.
+            `id` ties it to the button via `aria-describedby` below: the
+            button itself announces only "Play", so a screen reader reading
+            the button alone gets no target without this tie. `max-w-20` is
+            the live narrow-width cap now that this always renders; `sm:max-w-32`
+            widens it once the song badge and BPM/meter controls have room too. */}
+        <span
+          id="label-transport-play-target"
+          className="text-xs text-base-content/70 truncate max-w-20 sm:max-w-32 min-w-0"
+        >
+          {playTargetLabel(layer, activeLoopName)}
+        </span>
 
         {songLabel && (
           <span

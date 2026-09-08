@@ -8,6 +8,7 @@ import {
   transportDisplayState,
 } from './transportSlice';
 import { useAppStore } from './store';
+import { SCOPE_NONE } from './playbackScope';
 import { MAX_BPM, MIN_BPM } from '../utils/musicTheory';
 import type { AppStore, PlayerState, TransportSlice } from './types';
 
@@ -246,9 +247,66 @@ describe('playbackScope rides alongside the player transitions in one set()', ()
     expect(h.state.playbackScope).toEqual({ kind: 'solo', loopId: 'loop-a' });
   });
 
-  test('transportDisplayState presents Play while soloing so Play All takes over', () => {
-    expect(transportDisplayState({ kind: 'solo', loopId: 'a' }, 'playing')).toBe('stopped');
-    expect(transportDisplayState({ kind: 'song' }, 'playing')).toBe('playing');
-    expect(transportDisplayState({ kind: 'none' }, 'stopping')).toBe('stopping');
+  test('transportDisplayState presents Play while soloing on the song layer so Play All takes over', () => {
+    expect(transportDisplayState({ kind: 'solo', loopId: 'a' }, 'playing', 'song', 'a')).toBe('stopped');
+    expect(transportDisplayState({ kind: 'song' }, 'playing', 'song', 'a')).toBe('playing');
+    expect(transportDisplayState({ kind: 'none' }, 'stopping', 'loop', 'a')).toBe('stopping');
+  });
+});
+
+describe('transportDisplayState — which solo the master button owns', () => {
+  test('shows the real player state while the loop layer plays the loop it is editing', () => {
+    expect(
+      transportDisplayState({ kind: 'solo', loopId: 'l1' }, 'playing', 'loop', 'l1'),
+    ).toBe('playing');
+  });
+
+  test('still offers Play on the song layer while a card solos, so one click takes over', () => {
+    expect(
+      transportDisplayState({ kind: 'solo', loopId: 'l1' }, 'playing', 'song', 'l1'),
+    ).toBe('stopped');
+  });
+
+  test('offers Play on the loop layer when the loop sounding is not the one being edited', () => {
+    expect(
+      transportDisplayState({ kind: 'solo', loopId: 'l1' }, 'playing', 'loop', 'l2'),
+    ).toBe('stopped');
+  });
+
+  test('passes the aggregate through for the song and none scopes', () => {
+    expect(transportDisplayState({ kind: 'song' }, 'playing', 'song', 'l1')).toBe('playing');
+    expect(transportDisplayState({ kind: 'song' }, 'stopping', 'loop', 'l1')).toBe('stopping');
+    expect(transportDisplayState({ kind: 'none' }, 'stopped', 'loop', 'l1')).toBe('stopped');
+  });
+});
+
+describe('playing implies a scope', () => {
+  // useAppStore is the real, shared singleton — same reason as 'setBpm
+  // clamping' above: undo regardless of which assertion fails, or a stray
+  // playing player (or, since soloLoop also nulls it, a stray songLoopIndex)
+  // leaks into whichever test runs next.
+  afterEach(() => {
+    useAppStore.getState().hardStopAll();
+    useAppStore.setState({ songLoopIndex: null });
+  });
+
+  const playing = (s: ReturnType<typeof useAppStore.getState>) =>
+    s.sequencerPlayer === 'playing' || s.chordsPlayer === 'playing' || s.leadPlayer === 'playing';
+
+  test('never leaves a player playing while the scope is none', () => {
+    useAppStore.getState().hardStopAll();
+    expect(playing(useAppStore.getState())).toBe(false);
+
+    useAppStore.getState().playAll();
+    expect(playing(useAppStore.getState())).toBe(true);
+    expect(useAppStore.getState().playbackScope.kind).not.toBe('none');
+
+    useAppStore.getState().hardStopAll();
+    useAppStore.getState().soloLoop(useAppStore.getState().activeLoopId);
+    expect(playing(useAppStore.getState())).toBe(true);
+    expect(useAppStore.getState().playbackScope.kind).toBe('solo');
+
+    useAppStore.getState().hardStopAll();
+    expect(useAppStore.getState().playbackScope).toBe(SCOPE_NONE);
   });
 });

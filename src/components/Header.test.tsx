@@ -89,22 +89,12 @@ describe('persistTheme', () => {
 });
 
 describe('header tab grouping', () => {
-  // The array order IS the left-to-right nav order, and each entry carries its
-  // own transport button, so a reorder here moves the play/stop buttons with
-  // their tabs. Pitched layers first (lead, then the accompaniment trio),
-  // rhythm last — the same order the Arrange mixer strip reads in.
-  test('the three playable views carry a transport, synth driving the lead', () => {
-    expect(AUTOMATION_TABS.map((t) => t.view)).toEqual(['synth', 'chords', 'sequencer']);
-    expect(AUTOMATION_TABS.every((t) => t.module !== undefined)).toBe(true);
-    expect(AUTOMATION_TABS[0].module).toBe('lead');
-  });
-
   test('arrange and master fx stand alone, with no transport', () => {
     expect(SONG_NAV_TABS).toEqual(['arrange', 'effects']);
   });
 
   test('every tab view is still reachable', () => {
-    const views = [...SONG_NAV_TABS, ...AUTOMATION_TABS.map((t) => t.view)].sort();
+    const views = [...SONG_NAV_TABS, ...AUTOMATION_TABS].sort();
     expect(views).toEqual(['arrange', 'chords', 'effects', 'sequencer', 'synth']);
   });
 });
@@ -219,7 +209,7 @@ describe('ProjectNameLabel (song layer only)', () => {
  * going missing from the nav.
  */
 describe('the header tabs cover every view', () => {
-  const rendered = [...AUTOMATION_TABS.map((t) => t.view), ...SONG_NAV_TABS];
+  const rendered = [...AUTOMATION_TABS, ...SONG_NAV_TABS];
 
   test('loop tabs then song tabs are VIEW_ORDER, reordered by layer', () => {
     expect([...rendered].sort()).toEqual([...VIEW_ORDER].sort());
@@ -236,5 +226,16 @@ describe('key picker', () => {
     const html = renderToString(<ScaleSelects idPrefix="test" />);
     expect(html).toContain('<option value="C#">C#/Db</option>');
     expect(html).toContain('<option value="C">C</option>');
+  });
+});
+
+describe('nav tab groups', () => {
+  test('lists loop-layer views as plain view ids, with no player module attached', () => {
+    expect(AUTOMATION_TABS).toEqual(['synth', 'chords', 'sequencer']);
+  });
+
+  test('keeps the two layer groups disjoint', () => {
+    const overlap = AUTOMATION_TABS.filter((view) => SONG_NAV_TABS.includes(view));
+    expect(overlap).toEqual([]);
   });
 });

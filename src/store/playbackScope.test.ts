@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   loopPlayButton,
   playbackScopeReducer,
@@ -59,6 +61,96 @@ describe('playbackScopeReducer', () => {
     expect(playbackScopeReducer(SCOPE_NONE, LAYER)).toBe(SCOPE_NONE);
     expect(playbackScopeReducer(SCOPE_SONG, PLAY_ALL)).toBe(SCOPE_SONG);
     expect(playbackScopeReducer(SOLO_A, TOGGLE_B)).toBe(SOLO_A);
+  });
+});
+
+/**
+ * The INVARIANT comment above names exactly two call sites — loadLoop.ts and
+ * vibes.ts — that restart through play(module) with no scope, and states
+ * that as a fact a reviewer can check. The comment cannot enforce itself: a
+ * third caller added anywhere in src/ would leave it holding a stale claim
+ * with nothing failing. This is the same shape as
+ * `src/data/dataLayerPurity.test.ts` — a filesystem scan plus an explicit
+ * allowlist — applied to a store invariant instead of an eslint rule.
+ *
+ * It is deliberately a separate assertion from `transportSlice.test.ts`'s
+ * "per-module play never touches the scope" test just above (in this file's
+ * sibling): that test pins the SLICE's `play` action doing nothing to the
+ * scope, by design. This test pins WHO is allowed to call it, which the
+ * slice-level test cannot see at all.
+ */
+describe('play(module) caller guard', () => {
+  // Everything that may legitimately call the per-module play(module) with
+  // no scope set: the two documented holes named in playbackScope.ts's
+  // INVARIANT comment, and the slice that defines `play` itself. Test files
+  // are exempt below by extension, not listed here, because they legitimately
+  // drive `play(module)` as a fixture and never run in production.
+  const ALLOWED = new Set([
+    'src/store/loadLoop.ts',
+    'src/store/vibes.ts',
+    'src/store/transportSlice.ts',
+  ]);
+
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return sourceFiles(path);
+      if (!/\.tsx?$/.test(name) || /\.test\.tsx?$/.test(name)) return [];
+      return [path];
+    });
+  }
+
+  // A member CALL (`store.play('sequencer')`, `h.state.play('chords')`) is
+  // not the only risky shape: the dominant idiom in this repo binds a slice
+  // action through a selector and calls the bare local afterwards —
+  // `const play = useAppStore((s) => s.play); …; onPlay={() => play(tab.module)}`
+  // is exactly how TransportBar.tsx binds playAll/softStopAll/hardStopAll
+  // today, and it is the literal shape commit 331bf86 deleted from
+  // Header.tsx's per-tab play buttons. A call-shaped pattern anchored on
+  // `.play(` never sees that: the call itself is bare (`play(...)`, no
+  // dot), only the binding line (`s.play`) carries one.
+  //
+  // So this matches ANY `.play` member reference, not just a call —
+  // `\.play\b` — which catches the binding site instead of the call site.
+  // Checked against every occurrence of `.play` in src/ before landing on
+  // this: it matches nothing outside store/*.ts and store/*.test.ts (no
+  // HTMLMediaElement .play(), no unrelated method), and the trailing `\b`
+  // rules out `.playAll`, `.playbackScope`, `.playTargetLabel` and every
+  // other `play`-prefixed identifier in the tree — so it needs no allowlist
+  // entries beyond the three already here. Rejected the narrower
+  // identifier-call alternative (`/(?<![.\w])play\s*\(\s*[^)]/`): it only
+  // matches a BARE call and would stop seeing `store.play(...)` entirely,
+  // trading one blind spot for another instead of covering both shapes.
+  const CALL = /\.play\b/;
+
+  // Strip comments before matching. Prose referencing `store.play(module)` —
+  // like the INVARIANT comment this guard sits next to — must not itself
+  // read as a caller; a scan that can't tell code from documentation would
+  // force this file's own comments to dodge the pattern they describe.
+  function stripComments(text: string): string {
+    return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  }
+
+  test('every play(module) call site outside the allowlist is a new, undocumented hole', () => {
+    const offenders: string[] = [];
+    const root = process.cwd();
+    for (const path of sourceFiles(join(root, 'src'))) {
+      const rel = path.slice(root.length + 1).replace(/\\/g, '/');
+      if (ALLOWED.has(rel)) continue;
+      const text = stripComments(readFileSync(path, 'utf8'));
+      if (CALL.test(text)) {
+        offenders.push(
+          `${rel} calls play(module) but is not on the allowlist ` +
+            `(${[...ALLOWED].join(', ')}). play(module) can start a stopped ` +
+            `player without setting a playbackScope, which breaks the ` +
+            `invariant Phase 3 reads (see the INVARIANT comment above ` +
+            `playbackScope.ts's PlaybackScope type). Route the new caller ` +
+            `through playAll/soloLoop instead, or — only with a documented ` +
+            `reason matching loadLoop.ts/vibes.ts — add it to ALLOWED here.`,
+        );
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });
 

@@ -28,7 +28,7 @@ describe('VIEW_META', () => {
   });
 
   test('Header covers every view across its two tab groups', () => {
-    const covered = [...SONG_NAV_TABS, ...AUTOMATION_TABS.map((t) => t.view)].sort();
+    const covered = [...SONG_NAV_TABS, ...AUTOMATION_TABS].sort();
     expect(covered).toEqual(['arrange', 'chords', 'effects', 'sequencer', 'synth']);
   });
 });
