@@ -173,11 +173,13 @@ describe('Accompaniment rows carry one solo each', () => {
     );
     expect(html).toContain('aria-label="Solo Bass"');
     expect(html).not.toContain('aria-label="Solo Chord"');
+    expect(html).not.toContain('aria-label="Solo Pad"');
   });
 
   test('the pad row solos pad', () => {
     const html = renderToString(<PadModulePanel />);
     expect(html).toContain('aria-label="Solo Pad"');
     expect(html).not.toContain('aria-label="Solo Chord"');
+    expect(html).not.toContain('aria-label="Solo Bass"');
   });
 });
