@@ -17,9 +17,10 @@ const LOOP_A: PlaybackScope = { kind: 'loop', loopId: 'A' };
 
 const PLAY_ALL: PlaybackScopeAction = { type: 'play-all' };
 const STOP_ALL: PlaybackScopeAction = { type: 'stop-all' };
-const LAYER: PlaybackScopeAction = { type: 'layer-change' };
 const TOGGLE_A: PlaybackScopeAction = { type: 'toggle-loop', loopId: 'A' };
 const TOGGLE_B: PlaybackScopeAction = { type: 'toggle-loop', loopId: 'B' };
+const FOCUS_A: PlaybackScopeAction = { type: 'focus-loop', loopId: 'A' };
+const FOCUS_B: PlaybackScopeAction = { type: 'focus-loop', loopId: 'B' };
 
 // Every cell of the transition table, as data.
 const TABLE: Array<[PlaybackScope, PlaybackScopeAction, PlaybackScope]> = [
@@ -27,25 +28,33 @@ const TABLE: Array<[PlaybackScope, PlaybackScopeAction, PlaybackScope]> = [
   [SCOPE_NONE, STOP_ALL, { kind: 'none' }],
   [SCOPE_NONE, TOGGLE_A, { kind: 'loop', loopId: 'A' }],
   [SCOPE_NONE, TOGGLE_B, { kind: 'loop', loopId: 'B' }],
-  [SCOPE_NONE, LAYER, { kind: 'none' }],
+  [SCOPE_NONE, FOCUS_A, { kind: 'none' }],
+  [SCOPE_NONE, FOCUS_B, { kind: 'none' }],
 
   [SCOPE_SONG, PLAY_ALL, { kind: 'song' }],
   [SCOPE_SONG, STOP_ALL, { kind: 'none' }],
   [SCOPE_SONG, TOGGLE_A, { kind: 'song' }],
   [SCOPE_SONG, TOGGLE_B, { kind: 'song' }],
-  [SCOPE_SONG, LAYER, { kind: 'none' }],
+  [SCOPE_SONG, FOCUS_A, { kind: 'none' }],
+  [SCOPE_SONG, FOCUS_B, { kind: 'none' }],
 
   [LOOP_A, PLAY_ALL, { kind: 'song' }],
   [LOOP_A, STOP_ALL, { kind: 'none' }],
   [LOOP_A, TOGGLE_A, { kind: 'none' }],
   [LOOP_A, TOGGLE_B, { kind: 'loop', loopId: 'A' }],
-  [LOOP_A, LAYER, { kind: 'none' }],
+  [LOOP_A, FOCUS_A, { kind: 'loop', loopId: 'A' }],
+  [LOOP_A, FOCUS_B, { kind: 'none' }],
 ];
 
 describe('playbackScopeReducer', () => {
   for (const [from, action, expected] of TABLE) {
     const label = from.kind === 'loop' ? `loop(${from.loopId})` : from.kind;
-    const act = action.type === 'toggle-loop' ? `toggle-loop(${action.loopId})` : action.type;
+    const act =
+      action.type === 'toggle-loop'
+        ? `toggle-loop(${action.loopId})`
+        : action.type === 'focus-loop'
+        ? `focus-loop(${action.loopId})`
+        : action.type;
     test(`${label} + ${act} -> ${expected.kind === 'loop' ? `loop(${expected.loopId})` : expected.kind}`, () => {
       expect(playbackScopeReducer(from, action)).toEqual(expected);
     });
@@ -61,9 +70,23 @@ describe('playbackScopeReducer', () => {
 
   test('no-op transitions return the identical object (songMode compares by ===)', () => {
     expect(playbackScopeReducer(SCOPE_NONE, STOP_ALL)).toBe(SCOPE_NONE);
-    expect(playbackScopeReducer(SCOPE_NONE, LAYER)).toBe(SCOPE_NONE);
+    expect(playbackScopeReducer(SCOPE_NONE, FOCUS_A)).toBe(SCOPE_NONE);
+    expect(playbackScopeReducer(LOOP_A, FOCUS_A)).toBe(LOOP_A);
     expect(playbackScopeReducer(SCOPE_SONG, PLAY_ALL)).toBe(SCOPE_SONG);
     expect(playbackScopeReducer(LOOP_A, TOGGLE_B)).toBe(LOOP_A);
+  });
+
+  // §6's rule, restated as the reducer sees it. The player-state half of
+  // each row is asserted in songMode.test.ts, where a stop actually happens.
+  test('focus-loop keeps exactly what the focused loop is sounding', () => {
+    // Nothing sounding: nothing to reconcile.
+    expect(playbackScopeReducer(SCOPE_NONE, FOCUS_B)).toBe(SCOPE_NONE);
+    // The loop in focus is the one sounding: it survives, same reference.
+    expect(playbackScopeReducer(LOOP_A, FOCUS_A)).toBe(LOOP_A);
+    // A different loop is sounding: it is not what the user is now looking at.
+    expect(playbackScopeReducer(LOOP_A, FOCUS_B)).toBe(SCOPE_NONE);
+    // The arrangement is sounding: an arrangement is never "the loop in focus".
+    expect(playbackScopeReducer(SCOPE_SONG, FOCUS_A)).toBe(SCOPE_NONE);
   });
 });
 

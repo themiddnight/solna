@@ -54,8 +54,13 @@ export type PlaybackScopeAction =
   | { type: 'stop-all' }
   /** A loop card's own play/stop button. */
   | { type: 'toggle-loop'; loopId: string }
-  /** Crossing the loop/song layer boundary (either direction). */
-  | { type: 'layer-change' };
+  /**
+   * The Loop layer now shows `loopId` — dispatched when the layer becomes
+   * `loop`, and when activeLoopId changes while the layer is already `loop`.
+   * It REPLACES 'layer-change', which cleared the scope on any boundary
+   * crossing in either direction; entering the Song layer now stops nothing.
+   */
+  | { type: 'focus-loop'; loopId: string };
 
 /**
  * Frozen singletons: the reducer must be reference-stable for no-op
@@ -91,8 +96,21 @@ export function playbackScopeReducer(
       // stop once the auditioning card scrolls out of view.
       return scope.kind === 'song' ? scope : SCOPE_SONG;
     case 'stop-all':
-    case 'layer-change':
       return scope.kind === 'none' ? scope : SCOPE_NONE;
+    case 'focus-loop':
+      // "Playback survives a navigation if and only if what sounds
+      // afterwards is exactly the loop now in focus."
+      //
+      // Nothing sounding -> nothing to reconcile, and returning `scope`
+      // rather than SCOPE_NONE keeps the reference songMode compares with ===.
+      if (scope.kind === 'none') return scope;
+      // The loop in focus IS what is sounding: it plays on, across the
+      // boundary. This is the carry-over the phase exists to build.
+      if (scope.kind === 'loop' && scope.loopId === action.loopId) return scope;
+      // Anything else sounding — the arrangement, or a different loop — is
+      // not what the user is now editing. SCOPE_NONE means stopped, and
+      // songMode turns that into the actual hard stop.
+      return SCOPE_NONE;
     case 'toggle-loop':
       if (scope.kind === 'loop') {
         // Same card again = stop. A different card is unreachable (disabled).
