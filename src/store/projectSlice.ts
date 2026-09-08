@@ -82,6 +82,16 @@ export function createProjectSlice(set: Set, get: Get, projectStore: ProjectStor
       // every loops/activeLoopId change; a wholesale content swap has no
       // such recompute, so it is reset here explicitly.
       songLoopIndex: null,
+      // A latched track solo is scoped to the surface the user set it on, and a
+      // whole-content swap (New / Open / Import — every install() caller) is the
+      // most complete surface change there is. soloNav.ts's SOLO_NAV_KEYS cannot
+      // catch this on its own: loop ids are not unique across projects, so the
+      // incoming project's first loop can carry the same id the outgoing one
+      // did (every fresh project's default loop is `loop-default-1`), and this
+      // patch writes neither activeTab nor patternSegment. Clearing it here, in
+      // the same atomic set() as the content, is what makes the guarantee hold
+      // regardless of which loop id happens to land.
+      soloTracks: [],
       currentProjectId: identity.id,
       currentProjectName: identity.name,
       projectBaselineHash: saved ? fingerprintContent(content) : null,

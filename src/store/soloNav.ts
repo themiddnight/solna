@@ -1,0 +1,84 @@
+import React from 'react';
+import { useAppStore } from './store';
+import type { AppStore } from './types';
+
+/**
+ * The navigation axes that empty the track-solo set (spec §4: "changing tab,
+ * Pattern segment, layer, or active loop").
+ *
+ * Three fields, not four: the LAYER is derived from the tab (`layerForTab` in
+ * src/types.ts), so a layer change is always a tab change and needs no entry of
+ * its own.
+ *
+ * ONE subscription over these fields, rather than a clear inside each writer.
+ * activeLoopId alone has six writers today (loadLoop's two setState calls,
+ * addLoop, duplicateLoop, deleteLoop, setActiveLoop) plus applyProjectContent's
+ * open patch, and song advance reaches it through loadLoop; a per-writer clear
+ * would have to be remembered by every one of those and by every writer added
+ * later, and a missed one is silent — the solo just keeps silencing tracks.
+ * Watching the field covers every writer that exists and every writer that will
+ * exist. The only remaining way to forget is to add a NEW navigation axis, and
+ * soloNav.test.ts asserts this list exhaustively so that has to be a decision.
+ *
+ * A song advance therefore clears the set mid-song. That is correct: it is
+ * already empty (reaching the Song layer was a tab change), and a solo that
+ * survived a loop boundary would be silencing tracks in a loop nobody soloed
+ * anything in.
+ *
+ * Changing the Sound view's control target does NOT clear the solo set,
+ * deliberately. Solo is a set, not a radio (spec §4): with one solo button on
+ * Sound following the active target, clearing on a target change would make a
+ * two-track solo set unbuildable on that surface — each new solo would erase
+ * the last — which would silently delete the "write a lead over just the
+ * drums" workflow the spec calls load-bearing. The transport bar's
+ * `SOLO · … ×` chip is what keeps a solo set on another target visible.
+ */
+export const SOLO_NAV_KEYS = ['activeTab', 'patternSegment', 'activeLoopId'] as const;
+
+/**
+ * Derived from `SOLO_NAV_KEYS`, not hand-declared, so the constant and the type
+ * cannot drift apart: adding a key to `SOLO_NAV_KEYS` changes what this type
+ * (and, below, what `soloNavSignature` actually reads) covers automatically.
+ */
+export type SoloNavSignature = Pick<AppStore, (typeof SOLO_NAV_KEYS)[number]>;
+
+/**
+ * Built by iterating `SOLO_NAV_KEYS`, not by hand-listing the three fields —
+ * see the type above for why. TypeScript cannot verify a record assembled
+ * from a `keyof`-derived key list against the `Pick<...>` it produces, so the
+ * single cast at the return is the boundary where that's asserted once,
+ * rather than trusted silently at every hand-written field.
+ */
+export function soloNavSignature(state: AppStore): SoloNavSignature {
+  return Object.fromEntries(SOLO_NAV_KEYS.map((key) => [key, state[key]])) as SoloNavSignature;
+}
+
+/**
+ * Also driven by `SOLO_NAV_KEYS`, for the same reason: `shallow` would work
+ * here too, but hand-listing the three fields a second time is exactly the
+ * kind of duplicate the constant exists to prevent.
+ */
+export function soloNavUnchanged(a: SoloNavSignature, b: SoloNavSignature): boolean {
+  return SOLO_NAV_KEYS.every((key) => a[key] === b[key]);
+}
+
+/**
+ * Starts the clear. Returns the unsubscribe, mirroring startSongModeSync.
+ *
+ * The listener runs synchronously inside the navigating set()'s own
+ * notification pass, so there is no frame in which the stale solo is audible.
+ * clearSoloTracks is reference-stable on an already-empty set, so a navigation
+ * with no solo latched notifies nothing further.
+ */
+export function startSoloNavClear(): () => void {
+  return useAppStore.subscribe(
+    soloNavSignature,
+    () => useAppStore.getState().clearSoloTracks(),
+    { equalityFn: soloNavUnchanged },
+  );
+}
+
+/** React binding, mounted once at the app root (App.tsx). */
+export function useSoloNavClear(): void {
+  React.useEffect(() => startSoloNavClear(), []);
+}

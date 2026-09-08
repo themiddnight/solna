@@ -3,6 +3,7 @@ import type { InputPanelMode, KeyboardMode } from '../types';
 import type { AppStore, UiSlice } from './types';
 import { DEFAULT_MIDI_MAPPINGS } from './types';
 import { readValidatedStorageValue, persistGuardedStorageValue } from '../utils/storage';
+import { toggleSolo } from './trackAudibility';
 
 type Set = StoreApi<AppStore>['setState'];
 
@@ -46,6 +47,7 @@ export function createUiSlice(set: Set): UiSlice {
   return {
     activeTab: 'sound',
     patternSegment: 'lead',
+    soloTracks: [],
     keyboardMode: readStoredKeyboardMode() ?? 'scale-locked',
     midiActivityTimestamp: null,
     midiMappings: DEFAULT_MIDI_MAPPINGS,
@@ -58,6 +60,14 @@ export function createUiSlice(set: Set): UiSlice {
 
     setActiveTab: (activeTab) => set({ activeTab }),
     setPatternSegment: (patternSegment) => set({ patternSegment }),
+    toggleSoloTrack: (track) =>
+      set((state) => ({ soloTracks: toggleSolo(state.soloTracks, track) })),
+    // Guarded on emptiness so the array reference is stable: soloNav.ts calls
+    // this on EVERY navigation, and handing every `soloTracks` subscriber a
+    // fresh [] on each tab click would re-run engineSync's five audibility
+    // listeners for a value that did not change.
+    clearSoloTracks: () =>
+      set((state) => (state.soloTracks.length === 0 ? {} : { soloTracks: [] })),
     setKeyboardMode: (keyboardMode) => {
       persistKeyboardMode(keyboardMode);
       set({ keyboardMode });

@@ -1,9 +1,10 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { TransportBar, songModeLabel } from './TransportBar';
 import { aggregatePlayerState, isHardStopEnabled, transportDisplayState } from '../store/transportSlice';
 import { resolveTransportButtons } from './ui/PlayerTransport';
 import { createDefaultLoop } from '../store/loopSlice';
+import { useAppStore } from '../store/store';
 import type { Loop } from '../store/types';
 
 describe('TransportBar', () => {
@@ -130,5 +131,32 @@ describe('songModeLabel', () => {
     const loops: Loop[] = [createDefaultLoop()];
     expect(songModeLabel(null, loops)).toBe(null);
     expect(songModeLabel(0, loops)).toBe('Song · Loop 1');
+  });
+});
+
+describe('the transport solo chip', () => {
+  afterEach(() => {
+    useAppStore.setState({ soloTracks: [] });
+  });
+
+  test('is absent when nothing is soloed', () => {
+    useAppStore.setState({ soloTracks: [] });
+    const html = renderToString(<TransportBar />);
+    expect(html).not.toContain('badge-track-solo');
+    expect(html).not.toContain('SOLO ·');
+  });
+
+  test('names every soloed track and offers a clear', () => {
+    useAppStore.setState({ soloTracks: ['lead', 'drums'] });
+    const html = renderToString(<TransportBar />);
+    expect(html).toContain('id="badge-track-solo"');
+    expect(html).toContain('SOLO · Lead + Drums');
+    expect(html).toContain('aria-label="Clear solo"');
+  });
+
+  test('the chip is a warning badge — a state that is silencing something', () => {
+    useAppStore.setState({ soloTracks: ['drums'] });
+    const html = renderToString(<TransportBar />);
+    expect(html).toContain('badge badge-sm badge-warning');
   });
 });

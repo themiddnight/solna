@@ -154,3 +154,32 @@ describe('PadModulePanel', () => {
     expect(html).not.toContain('text-white');
   });
 });
+
+describe('Accompaniment rows carry one solo each', () => {
+  const noop = () => undefined;
+
+  test('the chord row solos chord', () => {
+    const html = renderToString(
+      <ChordModulePanel onPatternPreviewDown={noop} onPatternPreviewUp={noop} isPlaying={false} />,
+    );
+    expect(html).toContain('aria-label="Solo Chord"');
+    expect(html).not.toContain('aria-label="Solo Bass"');
+    expect(html).not.toContain('aria-label="Solo Pad"');
+  });
+
+  test('the bass row solos bass', () => {
+    const html = renderToString(
+      <BassModulePanel onPatternPreviewDown={noop} onPatternPreviewUp={noop} isPlaying={false} />,
+    );
+    expect(html).toContain('aria-label="Solo Bass"');
+    expect(html).not.toContain('aria-label="Solo Chord"');
+    expect(html).not.toContain('aria-label="Solo Pad"');
+  });
+
+  test('the pad row solos pad', () => {
+    const html = renderToString(<PadModulePanel />);
+    expect(html).toContain('aria-label="Solo Pad"');
+    expect(html).not.toContain('aria-label="Solo Chord"');
+    expect(html).not.toContain('aria-label="Solo Bass"');
+  });
+});

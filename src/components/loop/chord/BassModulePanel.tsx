@@ -16,6 +16,7 @@ import { Slider } from "@/components/ui/Slider";
 import { PlayingStepRow, STEP_ROW_CLASS } from "@/components/ui/StepRow";
 import { PlayingStepHeader } from "@/components/ui/StepHeader";
 import { IconButton } from "@/components/ui/IconButton";
+import { SoloButton } from "@/components/ui/SoloButton";
 import { AdjustSynthButton } from "./AdjustSynthButton";
 import { PresetSelect } from "./PresetSelect";
 import { bassStepLabel, nextBassStepChoice } from "./bassStepChoice";
@@ -69,7 +70,10 @@ export function BassModulePanel({
               are 16th notes.
             </p>
           </div>
-          <AdjustSynthButton target="bass" className="text-module-bass" />
+          <div className="flex items-center gap-1.5">
+            <SoloButton track="bass" />
+            <AdjustSynthButton target="bass" className="text-module-bass" />
+          </div>
         </div>
         <div className="flex flex-row flex-wrap items-end gap-3">
           <PresetSelect

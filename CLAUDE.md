@@ -210,6 +210,22 @@ lowest row. Out-of-scale rows name `--color-accent` in both views — `leadSpanC
 argument for the notes, `leadRowLabelTone` for the label — so in chromatic view the accent
 labels also read as the semitones the key leaves out.
 
+**Track solo is a monitoring gesture, and it is session-only on purpose.** `soloTracks` lives in
+the ui slice, is absent from `partializeAppState` and `PROJECT_CONTENT_KEYS`, and never touches
+`LoopMixPatch` — mute is arrangement intent and stays per loop; solo exists only to hear something
+while editing it. It is a **set, not a radio** (soloing Drums then Lead sounds both — with the
+per-module play buttons gone, "write a lead over just the drums" is only expressible that way),
+**solo beats mute**, and its scope is the whole loop. It is **cleared by navigation** — any change
+of `activeTab`, `patternSegment` or `activeLoopId`, watched by the single subscription in
+`store/soloNav.ts` rather than by a clear inside each writer of `activeLoopId`. That
+clearing is the feature, not a rough edge: a control that can silence a track must not keep doing
+so once the user has stopped looking at it, so do not "fix" it into stickiness. Effective
+audibility is computed **only** in `engineSync.ts`, off the same `SOURCE_BUSES` table that drives
+the snapshot and the subscriptions, using `isTrackAudible` from `store/trackAudibility.ts` —
+`src/components/` may not import `audio/engine`, so a view may never compute it. Solo moves the
+drums **bus** only; the per-voice drum mute in `sequencerTracks` is a second, independent layer
+applied in `useSequencerPlayback`, and both must pass for a voice to sound.
+
 **`persist` serialises on every `set()`; only the `localStorage` write is coalesced.** Every
 `set()` that touches a key returned by `partialize` re-serialises that slice on the spot. The
 write itself goes through `utils/coalescedStorage.ts`, which buffers it to an idle callback and

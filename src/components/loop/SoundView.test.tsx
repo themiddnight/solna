@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
+import { useAppStore } from '@/store/store';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
 import { SoundView } from './SoundView';
 import { FIELD_LABEL, FIELD_LANE } from '../ui/fieldClasses';
@@ -227,5 +228,35 @@ describe('keyboard audition channel is always the main synth', () => {
     expect(resolveSynthControlChannel('synth', channels).params.preset).toBe(
       'main-synth',
     );
+  });
+});
+
+describe('SoundView track solo', () => {
+  afterEach(() => {
+    useAppStore.setState({ controlTarget: 'synth' });
+  });
+
+  test('one solo button, following the active target (default: synth = Lead)', () => {
+    const html = renderToString(<SoundView />);
+    expect(html).toContain('aria-label="Solo Lead"');
+    expect(html).not.toContain('aria-label="Solo Chord"');
+    expect(html).not.toContain('aria-label="Solo Bass"');
+    expect(html).not.toContain('aria-label="Solo Pad"');
+    expect(html).not.toContain('aria-label="Solo Drums"');
+  });
+
+  // SoundView reads controlTarget through useLiveStore, which serves
+  // getState() for both the client and server useSyncExternalStore
+  // snapshots (see useLiveStore.ts and .claude/rules/testing.md) — so a
+  // setState() before renderToString is observable here, unlike a plain
+  // useAppStore read. This actually renders the component with a
+  // non-default target and checks which button comes out, which a
+  // hardcoded `track="lead"` in the component would fail: the Chord
+  // button would never appear and the Lead one would never disappear.
+  test('the button switches to the active target when controlTarget changes', () => {
+    useAppStore.setState({ controlTarget: 'chord' });
+    const html = renderToString(<SoundView />);
+    expect(html).toContain('aria-label="Solo Chord"');
+    expect(html).not.toContain('aria-label="Solo Lead"');
   });
 });

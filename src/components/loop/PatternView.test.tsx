@@ -30,3 +30,10 @@ describe('PatternView', () => {
     expect(html.match(/class="block"/g)?.length).toBe(1);
   });
 });
+
+describe('Pattern › Lead track solo', () => {
+  test('the Lead segment header carries the Lead solo', () => {
+    const html = renderToString(<PatternView />);
+    expect(html).toContain('aria-label="Solo Lead"');
+  });
+});

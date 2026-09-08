@@ -17,6 +17,9 @@ import {
   Disc3,
 } from "lucide-react";
 import { useAppStore } from "@/store/store";
+import { soloTrackForControlTarget } from "@/store/trackAudibility";
+import { SoloButton } from "../ui/SoloButton";
+import { useLiveStore } from "../ui/useLiveStore";
 import type { SynthPresetItem, SynthPresetCategory } from "@/data/synthPresets";
 import { SYNTH_CATEGORIES } from "@/data/synthPresets";
 import { DRUM_KITS } from "@/data/drumKits";
@@ -73,7 +76,10 @@ const DRUM_KIT_NAMES = Object.keys(DRUM_KITS);
 export const SoundView = React.memo(function SoundView() {
   // Synth slice state + setters (named after the old props so the rest of the
   // component body is unchanged).
-  const controlTarget = useAppStore((s) => s.controlTarget);
+  // useLiveStore, not useAppStore: the solo button below derives its track
+  // from this value, and only useLiveStore serves setState() on the server
+  // snapshot renderToString uses — see useLiveStore.ts and testing.md.
+  const controlTarget = useLiveStore((s) => s.controlTarget);
   // App keeps every view mounted (block/hidden) so audio survives a tab
   // switch, which means the scope's rAF loop must be gated on this or it
   // runs forever behind a hidden tab.
@@ -370,6 +376,13 @@ export const SoundView = React.memo(function SoundView() {
             </GroupFrame>
           </div>
 
+          {/* ONE solo button, following the Target — Sound edits exactly one
+              layer at a time, so five buttons here would be four controls for
+              layers this view is not editing. It sits beside the Target chips
+              rather than in the view header because "it follows the target" is
+              only legible next to the target. Session-only: any tab, segment or
+              loop change empties it (store/soloNav.ts). */}
+          <SoloButton track={soloTrackForControlTarget(controlTarget)} size="sm" />
 
           {/* Per-target oscilloscope, the way a hardware synth puts a scope
               beside the section you are editing. It taps the TARGET layer's

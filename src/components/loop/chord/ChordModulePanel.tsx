@@ -15,6 +15,7 @@ import { Slider } from "@/components/ui/Slider";
 import { PlayingStepRow, STEP_ROW_CLASS } from "@/components/ui/StepRow";
 import { PlayingStepHeader } from "@/components/ui/StepHeader";
 import { IconButton } from "@/components/ui/IconButton";
+import { SoloButton } from "@/components/ui/SoloButton";
 import { AdjustSynthButton } from "./AdjustSynthButton";
 import { PresetSelect } from "./PresetSelect";
 
@@ -81,7 +82,10 @@ export function ChordModulePanel({
               register and comping rhythm.
             </p>
           </div>
-          <AdjustSynthButton target="chord" className="text-module-chord" />
+          <div className="flex items-center gap-1.5">
+            <SoloButton track="chord" />
+            <AdjustSynthButton target="chord" className="text-module-chord" />
+          </div>
         </div>
         <div className="flex flex-row flex-wrap items-end gap-3">
           {/* Chord Sound Preset Select */}

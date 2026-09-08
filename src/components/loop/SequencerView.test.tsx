@@ -298,3 +298,15 @@ describe('DEV-388: the drum-kit-resets-on-refresh fix', () => {
     expect(html).toContain('Choose a grid');
   });
 });
+
+describe('Pattern › Beat track solo', () => {
+  const html = renderToString(<SequencerView />);
+
+  test('the Beat header carries the track-level Drums solo', () => {
+    expect(html).toContain('aria-label="Solo Drums"');
+  });
+
+  test('and no per-voice solo — one solo button in the whole segment', () => {
+    expect(html.split('btn-solo-').length - 1).toBe(1);
+  });
+});

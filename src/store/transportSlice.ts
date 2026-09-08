@@ -220,9 +220,10 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
      * A loop card's own play/stop button, and (since Phase 1) the master Play
      * on the Loop layer. It establishes the `loop` scope — the SOLO LOOP —
      * and drops the song cursor in the same set(), so the two can never be
-     * observed disagreeing. Nothing to do with the per-track solo Phase 4
-     * adds: this is one LOOP played alone, not one TRACK heard alone. The
-     * name is kept only because two components call it.
+     * observed disagreeing. Nothing to do with per-track solo (`soloTracks`
+     * in the ui slice, resolved by src/store/trackAudibility.ts): this is one
+     * LOOP played alone, not one TRACK heard alone. The name is kept only
+     * because two components call it.
      *
      * The caller (ArrangeView) is responsible for loadLoop-ing the target
      * FIRST, because loadLoop hard-stops and restarts whatever was playing.

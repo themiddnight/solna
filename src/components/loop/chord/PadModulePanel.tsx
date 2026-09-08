@@ -9,6 +9,7 @@ import { FIELD_LABEL, FIELD_SELECT, JOIN_LANE, SECTION_HEADER } from "@/componen
 import { SYNTH_TARGET_STYLES } from "@/utils/synthControl";
 import { PAD_INTERVALS } from "@/types";
 import type { PadInterval, PadVoicing } from "@/types";
+import { SoloButton } from "@/components/ui/SoloButton";
 import { AdjustSynthButton } from "./AdjustSynthButton";
 import { PresetSelect } from "./PresetSelect";
 import { droneDegreeButtons, padPresetGroups } from "./padPanel";
@@ -106,6 +107,7 @@ export function PadModulePanel() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <SoloButton track="pad" />
           <div
             className={JOIN_LANE}
             role="group"

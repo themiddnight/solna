@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { MIXER_CHANNELS, SoundMixer } from './SoundMixer';
 
@@ -62,5 +63,19 @@ describe('SoundMixer', () => {
       expect(html).toContain(`title="Mute ${c.label}"`);
       expect(html).not.toContain(`title="Unmute ${c.label}"`);
     }
+  });
+});
+
+describe('the mixer has no solo column', () => {
+  test('SoundMixer renders no solo control (spec §4)', () => {
+    const html = renderToString(<SoundMixer />);
+    expect(html).not.toContain('btn-solo-');
+    expect(html).not.toContain('Solo ');
+  });
+
+  test('and its source names no solo module', () => {
+    const source = readFileSync('src/components/loop/SoundMixer.tsx', 'utf8');
+    expect(source).not.toContain('SoloButton');
+    expect(source).not.toContain('soloTracks');
   });
 });
