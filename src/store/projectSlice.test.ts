@@ -404,6 +404,31 @@ describe('openProject through the loop-mirroring set', () => {
       expect(s[key]).toEqual(incoming.content.loops[0][key]);
     }
   });
+
+  test('clears a latched track solo even though the loop id does not change (soloNav cannot see this swap)', async () => {
+    const { useAppStore } = await storeModule;
+    const { createProjectSlice } = await import('./projectSlice');
+
+    const incoming: ProjectBody = {
+      ...makeEnvelope('Same loop id', 1_000),
+      content: {
+        ...factoryProjectContent(),
+        loops: [{ ...createDefaultLoop(), id: DEFAULT_LOOP_ID }],
+      },
+    };
+    const store = createProjectStore(async () => createMemoryBackend([incoming]));
+    const slice = createProjectSlice(useAppStore.setState, useAppStore.getState, store, () => 5_000);
+    // Same activeTab, same patternSegment, same activeLoopId across the swap —
+    // none of soloNav.ts's SOLO_NAV_KEYS moves, so its subscription cannot be
+    // what clears this. Only install()'s own set() can.
+    useAppStore.setState({ ...slice, activeLoopId: DEFAULT_LOOP_ID, soloTracks: ['drums'] });
+    expect(useAppStore.getState().soloTracks).toEqual(['drums']);
+
+    const result = await (useAppStore.getState() as AppStore).openProject(incoming.id);
+
+    expect(result.ok).toBe(true);
+    expect(useAppStore.getState().soloTracks).toEqual([]);
+  });
 });
 
 /**
