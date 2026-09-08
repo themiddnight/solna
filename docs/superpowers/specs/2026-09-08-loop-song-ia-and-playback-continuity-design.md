@@ -252,15 +252,23 @@ If the rename is declined, every mention in code and docs must be qualified as "
 
 Four steps, in dependency order. Each is a branch and lands green under `bun run verify`.
 
-1. **Nav restructure** — `ViewMode`, `patternSegment`, `VIEW_META`, `Header`, the Accompaniment
+1. **One transport** — remove the per-module play buttons and `AUTOMATION_TABS`'s `module`
+   field; Loop-layer play goes through the existing `soloLoop(activeLoopId)`. Establishes
+   "playing implies a scope", which step 3 depends on.
+   Plan: `docs/superpowers/plans/2026-09-08-one-transport.md`.
+2. **Nav restructure** — `ViewMode`, `patternSegment`, `VIEW_META`, `Header`, the Accompaniment
    frame, the mixer moved onto Sound. Pure UI and types; no audio behaviour changes.
-2. **One transport** — remove the per-module play buttons and `AUTOMATION_TABS`'s `module`
-   field; Loop-layer play dispatches `toggle-loop { activeLoopId }`. Establishes "playing
-   implies a scope", which step 3 depends on.
 3. **Playback continuity** — the `focus-loop` action, `songMode.reconcile()`, the replaced
    comment, the `deleteLoop` guard.
 4. **Track solo** — ui-slice field, the solo controls, `engineSync` audibility, the transport
    bar's solo chip.
+
+**Why the transport comes before the nav**, which is the reverse of the order this section
+first carried: `AUTOMATION_TABS` (`Header.tsx:25`) maps one tab to one `PlayerModule`, and the
+per-tab play button depends on that being one-to-one. The restructured Pattern tab owns three
+modules at once, so doing the nav first would mean inventing a temporary mapping already known
+to be deleted one step later. Removing the per-tab buttons first makes the nav change a pure
+rename with nothing to invent.
 
 ### Test obligations
 
