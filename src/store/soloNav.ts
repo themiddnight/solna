@@ -23,10 +23,12 @@ import type { AppStore } from './types';
  * edit, so moving between them is a change of subject and still clears —
  * consistent with why a layer change clears, one level up.
  *
- * Known consequence, on the record rather than left to be rediscovered: a
- * solo set combining Drums with any other track is not reachable through
- * navigation. Drums' only solo button lives in the Beat segment, and reaching
- * any other track's button crosses a segment boundary, which clears the set.
+ * Consequence, on the record: because the Sound ↔ Pattern hop survives, a set
+ * spanning Drums and the melodic tracks IS buildable — solo Drums in Beat,
+ * hop to Sound, then add lead/chord/bass/pad one at a time via the control
+ * target (a target change doesn't clear either). What still empties the set
+ * is moving between Pattern's segments, leaving the Loop layer, changing the
+ * active loop, or swapping the project.
  *
  * ONE subscription over these fields, rather than a clear inside each writer.
  * activeLoopId alone has six writers today (loadLoop's two setState calls,

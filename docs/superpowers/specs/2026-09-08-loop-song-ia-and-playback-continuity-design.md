@@ -125,10 +125,11 @@ at a rough edge, and must not "fix" it into stickiness.
   the active loop empties the set. A Sound ↔ Pattern tab change does **not** clear it: Sound and
   Pattern are the two halves of editing one loop and the user crosses between them constantly, so
   a solo set that survives that crossing is the working state — a Pattern-segment change is a
-  change of subject and still clears. Known consequence, on the record rather than rediscovered
-  later: a solo set combining Drums with any other track is not reachable through navigation,
-  because Drums' only solo button lives in the Beat segment and reaching any other track's button
-  crosses a segment boundary, which clears the set. Crossing from Loop to Song is still a layer
+  change of subject and still clears. Consequence, on the record: because the Sound ↔ Pattern hop
+  survives, a set spanning Drums and the melodic tracks IS buildable — solo Drums in Beat, hop to
+  Sound, then add lead/chord/bass/pad one at a time via the control target, since a target change
+  doesn't clear either. What still empties the set is a Pattern-segment change, leaving the Loop
+  layer, changing the active loop, or swapping the project. Crossing from Loop to Song is still a layer
   change, so a solo can never leak into song playback.
 
 **Two hard constraints, to be written into the implementation plan as prohibitions rather than

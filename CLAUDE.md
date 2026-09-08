@@ -222,9 +222,11 @@ subscription in `store/soloNav.ts` rather than by a clear inside each writer of 
 tab change between Sound and Pattern does **not** clear it: Sound and Pattern are the two halves of
 editing one loop and the user crosses between them constantly, so a solo set that survives that
 crossing is the working state, while a Pattern-segment change is a change of subject and still
-clears. Known consequence, on the record rather than rediscovered later: a solo set combining Drums
-with any other track is not reachable through navigation — Drums' only solo button lives in the
-Beat segment, and reaching any other track's button crosses a segment boundary, which clears. That
+clears. Consequence, on the record: because the Sound ↔ Pattern hop survives, a set spanning Drums
+and the melodic tracks IS buildable — solo Drums in Beat, hop to Sound, then add lead/chord/bass/pad
+one at a time via the control target, since a target change doesn't clear either. What still empties
+the set is a Pattern-segment change, leaving the Loop layer, changing the active loop, or swapping
+the project. That
 clearing rule is the feature, not a rough edge: a control that can silence a track must not keep
 doing so once the user has left the loop it was set in or moved to a different thing to edit, so do
 not "fix" it into stickiness — and do not "fix" the Sound/Pattern survival back into clearing on

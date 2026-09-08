@@ -9,7 +9,28 @@ let stop: (() => void) | null = null;
 // exits. This is what makes the loop/scope/bpm-touching tests below safe in
 // any order: each test's own baseline is what it is restored to, not a
 // value some earlier test happened to leave behind.
-let baseline: Pick<ReturnType<typeof useAppStore.getState>, 'activeLoopId' | 'loops' | 'playbackScope' | 'bpm'>;
+//
+// Covers everything `newProject()` -> `install()` writes, not just
+// activeLoopId/loops/playbackScope/bpm: the "project content swap" test below
+// drives the real installer, which also touches currentProjectId,
+// currentProjectName, projectBaselineHash, dirty, songLoopIndex, meterId,
+// masterVolume and effects. Bun does not isolate modules per test file, so an
+// unrestored write here leaks into whichever file the process runs next.
+let baseline: Pick<
+  ReturnType<typeof useAppStore.getState>,
+  | 'activeLoopId'
+  | 'loops'
+  | 'playbackScope'
+  | 'bpm'
+  | 'currentProjectId'
+  | 'currentProjectName'
+  | 'projectBaselineHash'
+  | 'dirty'
+  | 'songLoopIndex'
+  | 'meterId'
+  | 'masterVolume'
+  | 'effects'
+>;
 
 beforeEach(() => {
   const state = useAppStore.getState();
@@ -18,6 +39,14 @@ beforeEach(() => {
     loops: state.loops,
     playbackScope: state.playbackScope,
     bpm: state.bpm,
+    currentProjectId: state.currentProjectId,
+    currentProjectName: state.currentProjectName,
+    projectBaselineHash: state.projectBaselineHash,
+    dirty: state.dirty,
+    songLoopIndex: state.songLoopIndex,
+    meterId: state.meterId,
+    masterVolume: state.masterVolume,
+    effects: state.effects,
   };
   useAppStore.setState({ activeTab: 'sound', patternSegment: 'lead', soloTracks: [] });
   stop = startSoloNavClear();
@@ -27,16 +56,13 @@ afterEach(() => {
   stop?.();
   stop = null;
   // Runs even when an `expect` above threw, so a failing assertion can never
-  // cascade into a later test by leaving activeLoopId/loops/playbackScope/bpm
-  // pointed somewhere a subsequent test didn't put them.
+  // cascade into a later test by leaving any of the baseline fields pointed
+  // somewhere a subsequent test didn't put them.
   useAppStore.setState({
     activeTab: 'sound',
     patternSegment: 'lead',
     soloTracks: [],
-    activeLoopId: baseline.activeLoopId,
-    loops: baseline.loops,
-    playbackScope: baseline.playbackScope,
-    bpm: baseline.bpm,
+    ...baseline,
   });
 });
 
@@ -176,6 +202,7 @@ describe('solo is cleared by navigation', () => {
 
   test('a non-navigating set() leaves the solo alone', () => {
     useAppStore.getState().toggleSoloTrack('drums');
+    expect(useAppStore.getState().soloTracks).toEqual(['drums']);
     useAppStore.getState().setBpm(useAppStore.getState().bpm + 1);
     expect(useAppStore.getState().soloTracks).toEqual(['drums']);
   });
@@ -183,6 +210,7 @@ describe('solo is cleared by navigation', () => {
   test('re-selecting the same tab is not a navigation and does not clear', () => {
     useAppStore.getState().setActiveTab('pattern');
     useAppStore.getState().toggleSoloTrack('drums');
+    expect(useAppStore.getState().soloTracks).toEqual(['drums']);
     useAppStore.getState().setActiveTab('pattern');
     expect(useAppStore.getState().soloTracks).toEqual(['drums']);
   });
