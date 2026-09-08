@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
 import { SoundView } from './SoundView';
@@ -226,6 +227,35 @@ describe('keyboard audition channel is always the main synth', () => {
     expect(resolveSynthControlChannel('synth', channels)).toBe(channels.synth);
     expect(resolveSynthControlChannel('synth', channels).params.preset).toBe(
       'main-synth',
+    );
+  });
+});
+
+describe('SoundView track solo', () => {
+  test('one solo button, following the active target (default: synth = Lead)', () => {
+    const html = renderToString(<SoundView />);
+    expect(html).toContain('aria-label="Solo Lead"');
+    expect(html).not.toContain('aria-label="Solo Chord"');
+    expect(html).not.toContain('aria-label="Solo Bass"');
+    expect(html).not.toContain('aria-label="Solo Pad"');
+    expect(html).not.toContain('aria-label="Solo Drums"');
+  });
+
+  // renderToString serves plain `useAppStore` reads from the store's
+  // creation-time snapshot (see .claude/rules/testing.md), and controlTarget
+  // starts as 'synth' — so a setState('chord') before this render would be
+  // silently ignored and the test above would pass just as well with a
+  // hardcoded `track="lead"` in the component. This asserts the wiring
+  // instead: the JSX must pass the live `controlTarget` variable through
+  // `soloTrackForControlTarget`, not a literal track name, which is the only
+  // way "follows the target" can be true for a target other than the default.
+  test('the button is wired from the live controlTarget, not a hardcoded track', () => {
+    const source = readFileSync(
+      new URL('./SoundView.tsx', import.meta.url),
+      'utf8',
+    );
+    expect(source).toContain(
+      '<SoloButton track={soloTrackForControlTarget(controlTarget)} size="sm" />',
     );
   });
 });

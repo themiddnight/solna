@@ -2,6 +2,7 @@ import React from 'react';
 import { useAppStore } from '@/store/store';
 import { PatternSegmentRow } from '../Header';
 import { SegmentHeader } from '../ui/SegmentHeader';
+import { SoloButton } from '../ui/SoloButton';
 import { ChordView } from './ChordView';
 import { SequencerView } from './SequencerView';
 import { LeadMelodyGrid } from './lead/LeadMelodyGrid';
@@ -32,7 +33,7 @@ export const PatternView = React.memo(function PatternView() {
             one card — so it borrows the padding/width shell ChordView and
             SequencerView each apply to their own root. */}
         <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
-          <SegmentHeader segment="lead" />
+          <SegmentHeader segment="lead" actions={<SoloButton track="lead" />} />
           <LeadMelodyGrid />
         </div>
       </div>

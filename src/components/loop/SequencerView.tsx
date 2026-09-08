@@ -16,6 +16,7 @@ import type { PreviewHandle } from "@/audio/playback/presetPreview";
 import { DRUM_GRIDS } from "@/data/drumGrids";
 import { patternMeterTitle, patternOptionLabel } from "../meterSelect";
 import { SegmentHeader } from "../ui/SegmentHeader";
+import { SoloButton } from "../ui/SoloButton";
 import { PanelCard } from "../ui/PanelCard";
 import { FIELD_LANE, FIELD_SELECT, SECTION_HEADER } from "../ui/fieldClasses";
 import { IconButton } from "../ui/IconButton";
@@ -177,7 +178,16 @@ export const SequencerView = React.memo(function SequencerView() {
           view-level buttons and lets each module own its own controls in its
           own card (see ChordView's chord/bass cards); this one had grown to
           seven, including the pattern edits that belong beside the grid. */}
-      <SegmentHeader segment="beat" badge={sequencerMeterBadge(meter)} />
+      {/* The Beat segment's only solo is this track-level one: hearing the
+          whole kit with nothing else under it. Auditioning a single voice is
+          already the preview Play button every TrackRow carries, and a
+          per-voice solo would be a second answer to a question that already
+          has one. */}
+      <SegmentHeader
+        segment="beat"
+        badge={sequencerMeterBadge(meter)}
+        actions={<SoloButton track="drums" />}
+      />
 
       {/* Pattern — the grid plus the tools that rewrite it. They used to sit in
           the view header, two cards away from the thing Random and Clear wipe. */}
