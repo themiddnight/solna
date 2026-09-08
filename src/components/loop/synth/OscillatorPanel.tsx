@@ -8,7 +8,7 @@ import { useSynthChannel } from "./useSynthChannel";
 
 /**
  * Pro-Mode panel — Oscillators. Reads the active synth channel from the
- * store rather than taking props, so SynthView renders `<OscillatorPanel />`
+ * store rather than taking props, so SoundView renders `<OscillatorPanel />`
  * with no wiring. Its identity colour is `module-osc` (docs/design.md
  * §6.5); the token is named in the class strings that moved with the markup.
  */

@@ -132,6 +132,14 @@ export function MixChannel({
  * the strip reads pitched layers first, rhythm after — the same story the
  * header tabs tell — and its `idPrefix` stays `drum-` because these DOM ids
  * track the store fields (`drumMuted`), not the label.
+ *
+ * The live-value twin of this table is MIXER_CHANNELS in
+ * loop/SoundMixer.tsx: same five layers, same order, same labels and tones.
+ * They must not be merged — this one writes a per-loop LoopMixPatch (an
+ * arrangement override) through setLoopMix, on whichever loop the card is
+ * for; that one writes the live store root through the ordinary slice
+ * actions, for the loop you are currently editing, and loopSync's mirroring
+ * `set` carries it into loops[] from there.
  */
 type MixVolumeKey = {
   [K in keyof LoopMixPatch]: LoopMixPatch[K] extends number ? K : never;

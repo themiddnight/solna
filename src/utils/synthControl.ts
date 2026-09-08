@@ -109,5 +109,5 @@ export function focusSynthTarget(
   // Target first: the synth view is always mounted, so switching the tab last
   // means it never renders a frame pointed at the previous channel.
   nav.setControlTarget(target);
-  nav.setActiveTab('synth');
+  nav.setActiveTab('sound');
 }

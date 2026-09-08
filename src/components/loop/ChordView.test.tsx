@@ -23,7 +23,7 @@ describe('ChordView preview UI', () => {
 });
 
 describe('ChordView progression drawer button', () => {
-  // See the matching test in SynthView.test.tsx for why neither button says
+  // See the matching test in SoundView.test.tsx for why neither button says
   // "Library" any more.
   test('names its content, not the container', () => {
     const html = renderToString(<ChordView />);

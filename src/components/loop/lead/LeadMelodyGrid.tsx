@@ -82,11 +82,11 @@ interface LeadMarkerProps {
 /**
  * The marker, subscribed. The subscription lives HERE and not in
  * LeadMelodyGrid for exactly the reason the grid itself lives here and not in
- * SynthView (see the note on LeadMelodyGrid): a published step arrives 8-32
- * times a second, and read from the grid's body it re-rendered the whole
- * toolbar — two selects, a Slider, eight buttons and 14-24 pitch labels —
- * to move one translateX. This component draws one div and nothing else, so
- * that is all a step now costs.
+ * the view that renders it (see the note on LeadMelodyGrid): a published step
+ * arrives 8-32 times a second, and read from the grid's body it re-rendered
+ * the whole toolbar — two selects, a Slider, eight buttons and 14-24 pitch
+ * labels — to move one translateX. This component draws one div and nothing
+ * else, so that is all a step now costs.
  */
 export function LeadMarker({ columns }: LeadMarkerProps) {
   const column = useLeadMarkerColumn(columns);
@@ -367,11 +367,12 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
 });
 
 export function LeadMelodyGrid() {
-  // Mounted here, not in SynthView: the step used to arrive as a prop, so all
-  // 174 JSX nodes of the 1208-line SynthView reconciled 8x/sec to move one
-  // translateX. LeadMelodyGrid is rendered exactly once (SynthView.tsx, in
-  // both simple and pro mode), which is what lets either of these subscribe
-  // the shared clock at all.
+  // Mounted here, not in the view that renders it: the step used to arrive as
+  // a prop, so all 174 JSX nodes of the then-1208-line synth view reconciled
+  // 8x/sec to move one translateX. LeadMelodyGrid is rendered exactly once
+  // (PatternView.tsx, the lead segment — it was SoundView's until the nav
+  // restructure), which is what lets either of these subscribe the shared
+  // clock at all.
   //
   // Two hooks, two gates, on purpose. useLeadPlayback schedules NOTES and
   // owns the hard stop, so it runs while the lead plays. useLeadStepPublisher

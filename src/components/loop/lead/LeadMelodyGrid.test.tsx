@@ -44,7 +44,7 @@ describe('LeadMelodyGrid', () => {
     // Read from the grid's body, a published step (8-32/sec) reconciled the
     // toolbar's two selects, the Slider, eight buttons and every pitch label
     // to move one translateX — the same fix as moving the grid out of
-    // SynthView. Geometry stays on LeadMarkerView's explicit prop because
+    // SoundView. Geometry stays on LeadMarkerView's explicit prop because
     // renderToString cannot force a playing store state.
     expect(renderToString(<LeadMarker columns={16} />)).toContain('translateX(0px)');
     // Exactly one call site, and it is LeadMarker's. There is no DOM here to

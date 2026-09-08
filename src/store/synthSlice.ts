@@ -18,7 +18,7 @@ export function createSynthSlice(set: Set): SynthSlice {
     synthVolume: DEFAULT_BUS_TRIM_DB,
     synthMuted: false,
 
-    // Setters backing the SynthView control panel (previously App.tsx
+    // Setters backing the SoundView control panel (previously App.tsx
     // setState wrappers with the same semantics).
     setSynthParams: (synthParams) => set({ synthParams }),
     setChordSynthParams: (chordSynthParams) => set({ chordSynthParams }),

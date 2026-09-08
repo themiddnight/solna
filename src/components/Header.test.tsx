@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
-import { ProjectNameLabel, TabButton, AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS, ScaleSelects } from './Header';
+import { ProjectNameLabel, TabButton, PatternSegmentRow, AUTOMATION_TABS, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, SONG_NAV_TABS, ScaleSelects } from './Header';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
 import { VIEW_ORDER } from './viewMeta';
 
@@ -89,13 +89,62 @@ describe('persistTheme', () => {
 });
 
 describe('header tab grouping', () => {
-  test('arrange and master fx stand alone, with no transport', () => {
-    expect(SONG_NAV_TABS).toEqual(['arrange', 'effects']);
+  test('the loop layer has exactly two tabs', () => {
+    expect(AUTOMATION_TABS).toEqual(['sound', 'pattern']);
+  });
+
+  test('the song layer has arrange and the master rack', () => {
+    expect(SONG_NAV_TABS).toEqual(['arrange', 'master']);
   });
 
   test('every tab view is still reachable', () => {
     const views = [...SONG_NAV_TABS, ...AUTOMATION_TABS].sort();
-    expect(views).toEqual(['arrange', 'chords', 'effects', 'sequencer', 'synth']);
+    expect(views).toEqual(['arrange', 'master', 'pattern', 'sound']);
+  });
+
+  test('the two layer groups are disjoint', () => {
+    const overlap = AUTOMATION_TABS.filter((view) => SONG_NAV_TABS.includes(view));
+    expect(overlap).toEqual([]);
+  });
+});
+
+/**
+ * The segment row renders through the same join + btn + btn-active idiom as
+ * TabButton, so a substring covering several classes at once is what proves
+ * they sit on the SAME element (see .claude/rules/testing.md).
+ *
+ * The active segment cannot be varied from a test: PatternSegmentRow reads
+ * `patternSegment` with a plain useAppStore selector, and under renderToString
+ * zustand serves the store's CREATION-time value ('lead'). So this asserts the
+ * default-active case and the two inactive cases, which is the whole matrix
+ * reachable without a DOM.
+ */
+describe('PatternSegmentRow', () => {
+  const html = renderToString(<PatternSegmentRow />);
+
+  test('renders one button per segment, in registry order', () => {
+    expect(html).toContain('id="segment-lead"');
+    expect(html).toContain('id="segment-accompaniment"');
+    expect(html).toContain('id="segment-beat"');
+    expect(html.indexOf('segment-lead')).toBeLessThan(html.indexOf('segment-accompaniment'));
+    expect(html.indexOf('segment-accompaniment')).toBeLessThan(html.indexOf('segment-beat'));
+  });
+
+  test('the active segment is the primary-filled join item, the others are ghosts', () => {
+    expect(html).toContain('btn btn-sm join-item');
+    expect(html).toContain('btn-active btn-primary');
+    expect(html).toContain('btn-ghost');
+  });
+
+  test('every segment label is readable at every width — no xl-only labels here', () => {
+    expect(html).toContain('Lead');
+    expect(html).toContain('Accompaniment');
+    expect(html).toContain('Beat');
+    expect(html).not.toContain('hidden xl:inline');
+  });
+
+  test('marks exactly one button as the current page', () => {
+    expect(html.split('aria-current="page"').length - 1).toBe(1);
   });
 });
 
@@ -107,7 +156,7 @@ describe('layer toggle', () => {
 
   test('clicking a different layer navigates to that layer default tab', () => {
     expect(layerToggleTarget('loop', 'song')).toBe('arrange');
-    expect(layerToggleTarget('song', 'loop')).toBe('synth');
+    expect(layerToggleTarget('song', 'loop')).toBe('sound');
   });
 
   test('clicking the current layer is a no-op', () => {
@@ -125,10 +174,10 @@ describe('layer toggle', () => {
 describe('TabButton rendering', () => {
   test('renders with default class (hidden xl:inline) for loop tabs', () => {
     const html = renderToString(
-      <TabButton view="synth" activeTab="synth" onSelect={() => {}} />
+      <TabButton view="sound" activeTab="sound" onSelect={() => {}} />
     );
-    expect(html).toContain('id="tab-synth"');
-    expect(html).toContain('Synth/Lead');
+    expect(html).toContain('id="tab-sound"');
+    expect(html).toContain('Sound');
     expect(html).toContain('class="truncate hidden xl:inline"');
   });
 
@@ -147,13 +196,13 @@ describe('TabButton rendering', () => {
 
     const fxHtml = renderToString(
       <TabButton
-        view="effects"
+        view="master"
         activeTab="arrange"
         onSelect={() => {}}
         labelClassName="truncate sm:inline"
       />
     );
-    expect(fxHtml).toContain('id="tab-effects"');
+    expect(fxHtml).toContain('id="tab-master"');
     expect(fxHtml).toContain('Master FX');
     expect(fxHtml).toContain('class="truncate sm:inline"');
   });
@@ -162,7 +211,7 @@ describe('TabButton rendering', () => {
 // ProjectNameLabel takes `layer` as a plain prop rather than reading
 // `activeTab` itself (see the comment on the component): Header's own
 // `activeTab` read is a plain `useAppStore` selector, which under
-// `renderToString` always serves the store's CREATION-time value ('synth',
+// `renderToString` always serves the store's CREATION-time value ('sound',
 // a loop tab) regardless of `setState` — there is no way to reach the song
 // layer through a rendered `<Header />` in this suite. Testing the label via
 // its own props, the same way `TabButton` above is tested standalone, avoids
@@ -204,7 +253,7 @@ describe('ProjectNameLabel (song layer only)', () => {
  * `viewMeta.VIEW_ORDER` exists for coverage, not for rendering — the nav is
  * driven by `AUTOMATION_TABS` and `SONG_NAV_TABS`, so the two can only be kept
  * in step by hand. This is that hand: the tabs the header actually renders,
- * loop layer then song layer, must be VIEW_ORDER's five views, each exactly
+ * loop layer then song layer, must be VIEW_ORDER's four views, each exactly
  * once. A view added to one and forgotten in the other fails here rather than
  * going missing from the nav.
  */
@@ -213,7 +262,7 @@ describe('the header tabs cover every view', () => {
 
   test('loop tabs then song tabs are VIEW_ORDER, reordered by layer', () => {
     expect([...rendered].sort()).toEqual([...VIEW_ORDER].sort());
-    expect(rendered).toEqual(['synth', 'chords', 'sequencer', 'arrange', 'effects']);
+    expect(rendered).toEqual(['sound', 'pattern', 'arrange', 'master']);
   });
 
   test('no view is rendered twice', () => {
@@ -229,13 +278,3 @@ describe('key picker', () => {
   });
 });
 
-describe('nav tab groups', () => {
-  test('lists loop-layer views as plain view ids, with no player module attached', () => {
-    expect(AUTOMATION_TABS).toEqual(['synth', 'chords', 'sequencer']);
-  });
-
-  test('keeps the two layer groups disjoint', () => {
-    const overlap = AUTOMATION_TABS.filter((view) => SONG_NAV_TABS.includes(view));
-    expect(overlap).toEqual([]);
-  });
-});

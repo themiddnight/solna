@@ -66,10 +66,10 @@ import { isProgressionAvailable } from "./chord/progressionAvailability";
 const ChordPresetLibrary = React.lazy(() =>
   import("./ChordPresetLibrary").then((m) => ({ default: m.ChordPresetLibrary })),
 );
-import { PowerToggle } from "../ui/PowerToggle";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
-import { ViewHeader } from "../ui/ViewHeader";
+import { SegmentHeader } from "../ui/SegmentHeader";
 import { ModuleHeader } from "../ui/ModuleHeader";
+import { GroupFrame } from "../ui/GroupFrame";
 import { COUNT_BADGE, HEADER_BADGE } from '../ui/fieldClasses';
 import { SortableChordCard } from "./chord/SortableChordCard";
 import { ChordModulePanel } from "./chord/ChordModulePanel";
@@ -154,12 +154,6 @@ export const ChordView = React.memo(function ChordView() {
   const customChordRhythm = useAppStore((s) => s.customChordRhythm);
   const bassPatternMode = useAppStore((s) => s.bassPatternMode);
   const customBassPattern = useAppStore((s) => s.customBassPattern);
-  const chordMuted = useAppStore((s) => s.chordMuted);
-  const toggleChordMuted = useAppStore((s) => s.toggleChordMuted);
-  const bassMuted = useAppStore((s) => s.bassMuted);
-  const toggleBassMuted = useAppStore((s) => s.toggleBassMuted);
-  const padMuted = useAppStore((s) => s.padMuted);
-  const togglePadMuted = useAppStore((s) => s.togglePadMuted);
   const bpm = useAppStore((s) => s.bpm);
   const { playChordWithRhythm, playBassWithPattern, playingIndex, activeChordId, setActiveChordId, isPlaying } = useChordPlayback();
 
@@ -561,33 +555,10 @@ export const ChordView = React.memo(function ChordView() {
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Scale & Chord Studio Header */}
-      <ViewHeader
-        view="chords"
+      <SegmentHeader
+        segment="accompaniment"
         actions={
           <>
-            <PowerToggle
-              id="btn-mute-chord"
-              on={!chordMuted}
-              onToggle={toggleChordMuted}
-              name="Chord"
-              tone="module-chord"
-            />
-            <PowerToggle
-              id="btn-mute-bass"
-              on={!bassMuted}
-              onToggle={toggleBassMuted}
-              name="Bass"
-              tone="module-bass"
-            />
-            <PowerToggle
-              id="btn-mute-pad"
-              on={!padMuted}
-              onToggle={togglePadMuted}
-              name="Pad"
-              tone="module-pad"
-            />
-            <div className="divider divider-horizontal mx-0" />
-
             {/* Quick Save Current Progression */}
             <button
               id="btn-quick-save-chord-progression"
@@ -610,7 +581,7 @@ export const ChordView = React.memo(function ChordView() {
               title="Progression Library"
             >
               <Library className="w-3.5 h-3.5" />
-              {/* See the matching button in SynthView: content, not container. */}
+              {/* See the matching button in SoundView: content, not container. */}
               <span>Progressions</span>
               <span className={COUNT_BADGE}>
                 {totalProgressionsCount}
@@ -625,7 +596,7 @@ export const ChordView = React.memo(function ChordView() {
             <span>{saveToast}</span>
           </div>
         )}
-      </ViewHeader>
+      </SegmentHeader>
 
       {/* Quick Save Modal Popover */}
       <QuickSavePopover
@@ -924,22 +895,29 @@ export const ChordView = React.memo(function ChordView() {
         </DndContext>
       </div>
 
-      {/* Chord Module Panel */}
-      <ChordModulePanel
-        onPatternPreviewDown={handleChordPatternPreviewMouseDown}
-        onPatternPreviewUp={handleChordPatternPreviewMouseUp}
-        isPlaying={isPlaying}
-      />
+      {/* No label: the segment header above already reads "Accompaniment", and
+          a second one here would duplicate the card title (spec §3). gap-3
+          sm:gap-4 reproduces the space-y-3 sm:space-y-4 the root div above
+          applies to its direct children — the three panels stop being direct
+          siblings once wrapped, so that spacing no longer reaches them. */}
+      <GroupFrame className="flex flex-col gap-3 sm:gap-4">
+        {/* Chord Module Panel */}
+        <ChordModulePanel
+          onPatternPreviewDown={handleChordPatternPreviewMouseDown}
+          onPatternPreviewUp={handleChordPatternPreviewMouseUp}
+          isPlaying={isPlaying}
+        />
 
-      {/* Bass Module Panel */}
-      <BassModulePanel
-        onPatternPreviewDown={handleBassPatternPreviewMouseDown}
-        onPatternPreviewUp={handleBassPatternPreviewMouseUp}
-        isPlaying={isPlaying}
-      />
+        {/* Bass Module Panel */}
+        <BassModulePanel
+          onPatternPreviewDown={handleBassPatternPreviewMouseDown}
+          onPatternPreviewUp={handleBassPatternPreviewMouseUp}
+          isPlaying={isPlaying}
+        />
 
-      {/* Pad Module Panel */}
-      <PadModulePanel />
+        {/* Pad Module Panel */}
+        <PadModulePanel />
+      </GroupFrame>
 
       {/* Full Chord Preset Library Sidebar Drawer */}
       <Suspense

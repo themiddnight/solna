@@ -11,7 +11,7 @@ import { SYNTH_CATEGORIES, SYNTH_PRESETS } from '@/data/synthPresets';
 import type { SynthParams } from '../types';
 
 /**
- * Load a preset over a base patch. The three call sites (SynthView's preset
+ * Load a preset over a base patch. The three call sites (SoundView's preset
  * picker, the audition preview, and instantVibes' library resolver) all wrote
  * this same three-line spread, and all three overwrite `params.preset` with the
  * preset's name — which is why no preset needs to carry its own name in params.

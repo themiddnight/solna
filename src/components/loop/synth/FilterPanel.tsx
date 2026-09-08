@@ -8,7 +8,7 @@ import { useSynthChannel } from "./useSynthChannel";
 
 /**
  * Pro-Mode panel — Filter. Reads the active synth channel from the store
- * rather than taking props, so SynthView renders `<FilterPanel />` with no
+ * rather than taking props, so SoundView renders `<FilterPanel />` with no
  * wiring. Its identity colour is `module-filter` (docs/design.md §6.5); the
  * token is named in the class strings that moved with the markup.
  */

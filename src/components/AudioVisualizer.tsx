@@ -260,7 +260,7 @@ export const AudioVisualizer = React.memo(function AudioVisualizer({
       const timeData = timeBufRef.current;
 
       // The oscilloscope draws from timeData alone, so neither the frequency
-      // read nor the avgEnergy loop earns its keep there — and SynthView
+      // read nor the avgEnergy loop earns its keep there — and SoundView
       // keeps an inline scope alive alongside the panel visualizer.
       const needsFrequencyData = mode !== 'oscilloscope';
       if (needsFrequencyData) {

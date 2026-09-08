@@ -146,7 +146,7 @@ Both are plain state — the engine gets them through `src/store/engineSync.ts`,
 
 ## Keyboard map
 
-`KEYBOARD_NOTES` lives in `src/components/ui/Keyboard.tsx` and is re-exported by `SynthView.tsx` (that
+`KEYBOARD_NOTES` lives in `src/components/ui/Keyboard.tsx` and is re-exported by `SoundView.tsx` (that
 re-export is what `scripts/check-key-bindings.ts` imports). 18 chromatic keys, C3–F4:
 
 | Row | Codes | Notes |
@@ -154,7 +154,11 @@ re-export is what `scripts/check-key-bindings.ts` imports). 18 chromatic keys, C
 | white | `KeyA KeyS KeyD KeyF KeyG KeyH KeyJ KeyK KeyL Semicolon Quote` | C3 D3 E3 F3 G3 A3 B3 C4 D4 E4 F4 |
 | black | `KeyW KeyE KeyT KeyY KeyU KeyO KeyP` | C#3 D#3 F#3 G#3 A#3 C#4 D#4 |
 
-Two modes, held as **local `SynthView` state** (not persisted, not in the store), default `scale-locked`:
+Two modes. This drifted before the nav restructure, not because of it: `keyboardMode` is now
+`uiSlice` **store** state (`store/types.ts`, `store/uiSlice.ts`), not local component state, and it
+**is** persisted — through its own dedicated `readStoredKeyboardMode`/`persistKeyboardMode`
+localStorage key, separate from the main `persist` middleware. Only `keyboardOctave` (below) stays
+local, as a `useState` inside `useInputDeck.ts`. Default is still `scale-locked`:
 
 - `chromatic` — `getChromaticKeyboardNotes(octaveOffset)` shifts `KEYBOARD_NOTES` by whole octaves.
   Always starts from C; ignores key/scale.
@@ -194,6 +198,7 @@ What breaks it, and the fix:
   and the scale-locked rows (`KeyQ…BracketRight` / `KeyA…Quote`).
 - Using a modifier/whitespace code (`Space`, `ShiftLeft`, `ArrowUp`) → fails check 4. The regex is the contract;
   extend the regex only if you genuinely need a new code family, and expect to justify it.
-- Note `Minus` and `Equal` pass check 4 but are **already claimed** by keyboard-octave shift in `SynthView`,
-  and the scale-locked rows claim `KeyQ…BracketRight` at runtime — the script only covers the chromatic
-  table, so cross-check those by hand when adding shortcuts.
+- Note `Minus` and `Equal` pass check 4 but are **already claimed** by the keyboard-octave shift inside
+  `useInputDeck.ts`'s own key-down listener (not `SoundView`), and the scale-locked rows claim
+  `KeyQ…BracketRight` at runtime — the script only covers the chromatic table, so cross-check those by
+  hand when adding shortcuts.

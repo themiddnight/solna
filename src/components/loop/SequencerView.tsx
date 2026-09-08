@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Sparkles,
-  Disc3,
 } from "lucide-react";
 import { useAppStore } from "@/store/store";
 import { getMeter } from "@/utils/meter";
@@ -15,23 +14,13 @@ import { ensureDrumEngine, triggerPad } from "@/audio/playback/drumPlayback";
 import { previewSequencerNote } from "@/audio/playback/presetPreview";
 import type { PreviewHandle } from "@/audio/playback/presetPreview";
 import { DRUM_GRIDS } from "@/data/drumGrids";
-import { DRUM_KITS } from "@/data/drumKits";
 import { patternMeterTitle, patternOptionLabel } from "../meterSelect";
-import { Knob } from "../ui/Knob";
-import { ViewHeader } from "../ui/ViewHeader";
+import { SegmentHeader } from "../ui/SegmentHeader";
 import { PanelCard } from "../ui/PanelCard";
-import { ChannelStrip } from "../ui/ChannelStrip";
 import { FIELD_LANE, FIELD_SELECT, SECTION_HEADER } from "../ui/fieldClasses";
-import { Field } from "../ui/Field";
 import { IconButton } from "../ui/IconButton";
 import { SequencerGrid } from "./sequencer/SequencerGrid";
 import type { SequencerTrack } from "@/types";
-
-// The kit roster never changes at runtime, so it is read once here rather than
-// re-keyed on every render — a Knob drag re-renders this view per pointermove.
-// Module-scope resolution is fine in `components/`; it is `src/data/` that may
-// not (CLAUDE.md, layer 1).
-const DRUM_KIT_NAMES = Object.keys(DRUM_KITS);
 
 export const SequencerView = React.memo(function SequencerView() {
   // Sequencer/transport/synth state + setters (named after the old props so the
@@ -45,18 +34,7 @@ export const SequencerView = React.memo(function SequencerView() {
   const meter = getMeter(meterId);
   const stepsPerBar = meter.stepsPerBar;
   const cells = useMemo(() => stepCells(meter), [meter]);
-  const soundKit = useAppStore((s) => s.soundKit);
   const onChangeSoundKit = useAppStore((s) => s.setSoundKit);
-  const masterSequencerVolume = useAppStore((s) => s.masterSequencerVolume);
-  const setMasterSequencerVolume = useAppStore(
-    (s) => s.setMasterSequencerVolume,
-  );
-  const drumFilterCutoff = useAppStore((s) => s.drumFilterCutoff);
-  const drumFilterResonance = useAppStore((s) => s.drumFilterResonance);
-  const drumFilterType = useAppStore((s) => s.drumFilterType);
-  const setDrumFilterCutoff = useAppStore((s) => s.setDrumFilterCutoff);
-  const setDrumFilterResonance = useAppStore((s) => s.setDrumFilterResonance);
-  const setDrumFilterType = useAppStore((s) => s.setDrumFilterType);
 
   // Starts unselected, not "synthwave": the tracks/kit on screen come from
   // whatever was rehydrated (or the last grid actually applied THIS session),
@@ -155,6 +133,13 @@ export const SequencerView = React.memo(function SequencerView() {
   // all 30 grids — the sequencer's own 14 genre grids, the 7 grids the
   // Instant Vibes are built from, and 9 sourced variants — which were split
   // across separate tables until they merged.
+  //
+  // The kit SELECT now lives on the Sound tab, so this line writes a control
+  // on another tab. That is correct and needs nothing added: both sides bind
+  // the same `soundKit` slice field, both tabs stay mounted, and a slice write
+  // re-renders every mounted view, so the select shows the new kit the instant
+  // a grid is picked. Do NOT add an effect to "keep them in sync" — that is
+  // precisely the effect described above, and it is how the reset bug got in.
   const applyDrumGrid = (id: string) => {
     setSelectedGridId(id);
     const grid = DRUM_GRIDS[id];
@@ -192,105 +177,7 @@ export const SequencerView = React.memo(function SequencerView() {
           view-level buttons and lets each module own its own controls in its
           own card (see ChordView's chord/bass cards); this one had grown to
           seven, including the pattern edits that belong beside the grid. */}
-      <ViewHeader view="sequencer" badge={sequencerMeterBadge(meter)} />
-
-      {/* Drum Sound — everything that shapes how the kit sounds. Named for all
-          of what it holds now (kit, filter, level), not just the filter. */}
-      <PanelCard>
-        <div className="card-body p-3 sm:p-4">
-        <div className="flex items-center justify-between flex-wrap gap-2.5">
-          <div className="flex items-center gap-2">
-            <Disc3 className="w-3.5 h-3.5 text-secondary" />
-            <span className={SECTION_HEADER}>
-              Drum Sound
-            </span>
-          </div>
-
-          {/* items-start + a shared lane per field: bottom-aligning controls of
-              four different heights (32px select, 24px join, 48px knob, 30px
-              fader) put these five labels on five different baselines. */}
-          <div className="flex items-start gap-5 flex-wrap">
-            <Field label="Kit" htmlFor="select-sequencer-sound-kit">
-              <select
-                id="select-sequencer-sound-kit"
-                value={soundKit}
-                onChange={(e) => onChangeSoundKit(e.target.value)}
-                className={FIELD_SELECT}
-                title="Drum kit — the sounds each track plays"
-              >
-                {DRUM_KIT_NAMES.map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Filter">
-              <div className="join">
-                {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
-                  <button
-                    key={t}
-                    id={`btn-drum-filter-${t}`}
-                    onClick={() => setDrumFilterType(t)}
-                    className={`btn btn-sm join-item text-[10px] font-semibold uppercase ${
-                      drumFilterType === t ? "btn-secondary" : "btn-ghost"
-                    }`}
-                  >
-                    {t === "lowpass" ? "LPF" : t === "bandpass" ? "BPF" : "HPF"}
-                  </button>
-                ))}
-              </div>
-            </Field>
-
-            {/* `size="sm"` (36px), not the app-wide default 48px: every other
-                knob is the main content of its own card, these two are one
-                field in a row. No `label` — the stacked one above says it, so
-                the knob renders its value readout alone. */}
-            <Field label="Cutoff">
-              <Knob
-                id="knob-drum-filter-cutoff"
-                size="sm"
-                color="text-secondary"
-                layout="horizontal"
-                value={drumFilterCutoff}
-                min={50}
-                max={12000}
-                step={10}
-                scale="log"
-                format={(v) => `${Math.round(v)} Hz`}
-                onChange={setDrumFilterCutoff}
-              />
-            </Field>
-
-            <Field label="Res">
-              <Knob
-                id="knob-drum-filter-resonance"
-                size="sm"
-                color="text-secondary"
-                layout="horizontal"
-                value={drumFilterResonance}
-                min={0.1}
-                max={20}
-                step={0.1}
-                scale="linear"
-                format={(v) => v.toFixed(1)}
-                onChange={setDrumFilterResonance}
-              />
-            </Field>
-
-            <ChannelStrip
-              idPrefix="drums"
-              label="Drum Level"
-              volumeDb={masterSequencerVolume}
-              accentClass="text-primary"
-              sliderClassName="range range-xs range-primary"
-              onVolumeDbChange={setMasterSequencerVolume}
-            />
-          </div>
-        </div>
-        </div>
-      </PanelCard>
+      <SegmentHeader segment="beat" badge={sequencerMeterBadge(meter)} />
 
       {/* Pattern — the grid plus the tools that rewrite it. They used to sit in
           the view header, two cards away from the thing Random and Clear wipe. */}

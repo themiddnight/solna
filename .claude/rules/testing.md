@@ -12,7 +12,7 @@ Tests are `bun:test`. There is **no DOM and no testing-library** in this repo, a
 added. Two styles coexist:
 
 **1. Pure-logic (the majority).** Components export their testable helpers — e.g.
-`resolveInitialTheme`/`persistTheme` from `Header.tsx`, `KEYBOARD_NOTES` from `SynthView.tsx`,
+`resolveInitialTheme`/`persistTheme` from `Header.tsx`, `KEYBOARD_NOTES` from `SoundView.tsx`,
 `DEFAULT_PADS` from `DrumPads.tsx` — and the test imports those instead of rendering. Prefer
 this: if a behaviour can be extracted into a pure function, extract it and test the function.
 

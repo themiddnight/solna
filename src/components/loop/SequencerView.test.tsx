@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { SequencerView } from './SequencerView';
 import { useAppStore } from '@/store/store';
-import { FIELD_LABEL, FIELD_LANE, FIELD_SELECT } from '../ui/fieldClasses';
 import { DRUM_TYPES } from '@/data/drumKits';
 
 describe('SequencerView theming', () => {
@@ -14,75 +13,6 @@ describe('SequencerView theming', () => {
     expect(html).not.toContain('#12152A');
     expect(html).not.toContain('#252B48');
     expect(html).not.toContain('#0B0D19');
-  });
-
-  /**
-   * The view header carries identity only, like Master FX. Each module owns its
-   * own controls in its own card, which is what ChordView's chord and bass cards
-   * already did — the sequencer's header had grown to seven controls, including
-   * the pattern edits that belong beside the grid they rewrite.
-   */
-  test('the drum controls live in their module cards, not the view header', () => {
-    const soundCard = html.indexOf('Drum Sound');
-    const patternCard = html.indexOf('>Pattern<');
-    expect(soundCard).toBeGreaterThan(-1);
-    expect(patternCard).toBeGreaterThan(-1);
-    // The kit belongs to the sound module; the grid picker and the three
-    // destructive pattern tools belong to the pattern module.
-    expect(html.indexOf('select-sequencer-sound-kit')).toBeGreaterThan(soundCard);
-    expect(html.indexOf('select-sequencer-grid')).toBeGreaterThan(patternCard);
-    expect(html.indexOf('btn-randomize-grid')).toBeGreaterThan(patternCard);
-    expect(html.indexOf('btn-clear-grid')).toBeGreaterThan(patternCard);
-    // Both cards come after the header, so nothing above them can be the header.
-    expect(soundCard).toBeGreaterThan(html.indexOf('Drum Sequencer'));
-  });
-
-  // A control inside a card's control row wears a stacked label above it (the
-  // form ChordView uses); an inline `Label:` prefix is for a group sitting in a
-  // one-line toolbar (`Target:`, `Sound Style:`). These two moved into cards, so
-  // they moved to the stacked form — and to the shared token, not a fifth copy.
-  // The regression this row was rebuilt for: five fields whose controls were
-  // 24, 30, 32 and 48px tall bottom-aligned into five different label heights.
-  test('every field in a control row shares one label line and one control lane', () => {
-    const soundRow = html.slice(html.indexOf('Drum Sound'), html.indexOf('>Pattern<'));
-    const labels = soundRow.split(FIELD_LABEL).length - 1;
-    const lanes = soundRow.split(FIELD_LANE).length - 1;
-    // Kit, Filter, Cutoff, Res each own a label + lane; Drum Level's label and
-    // 32px shell come from ChannelStrip, which sits on the same line already.
-    expect(labels).toBe(5);
-    expect(lanes).toBe(4);
-  });
-
-  // Step 17: the drum bus fader's dB markup, asserted at view level so a
-  // regression back to a %/linear readout on this call site is caught here
-  // and not only inside ChannelStrip's own unit tests.
-  test('the drum bus fader renders its dB tooltip and position step', () => {
-    // DEV-383: masterSequencerVolume's factory default is DEFAULT_BUS_TRIM_DB
-    // (-6 dB), not unity — this view renders the store's creation-time
-    // snapshot with no explicit setState, so the tooltip reflects that.
-    expect(html).toContain('title="Drums Layer Gain: -6.0 dB"');
-    expect(html).toContain('step="0.005"');
-  });
-
-  test('the kit and grid selects use the shared stacked field label', () => {
-    expect(html).toContain(FIELD_LABEL);
-    expect(html).toContain(FIELD_SELECT);
-    expect(html).toContain('>Kit</label>');
-    expect(html).not.toContain('Pattern:');
-    expect(html).not.toContain('Kit:');
-    // The grid select carries no visible label — the card it sits in is
-    // already titled Pattern and it is that card's only field — so its
-    // accessible name has to come from somewhere else.
-    expect(html).toContain('aria-label="Drum grid"');
-    expect(html).not.toContain('>Genre</label>');
-  });
-
-  test('the drum filter type switch is a daisyUI join on the 32px control lane', () => {
-    expect(html).toContain('join');
-    // `sm`, not `xs`: it is one field in a control row, and a 24px join next to
-    // a 32px select is what pushed the row's labels onto different baselines.
-    expect(html).toContain('btn btn-sm join-item');
-    expect(html).toContain(FIELD_LANE);
   });
 
   test('step numbers keep tabular-nums and the downbeat uses accent', () => {
@@ -117,6 +47,38 @@ describe('SequencerView theming', () => {
     ]) {
       expect(html).not.toContain(cls);
     }
+  });
+});
+
+/**
+ * Drum Sound moved to the Sound tab (nav restructure phase 2): a kit, a filter
+ * and a level change how the drums SOUND and change no note, which is the
+ * whole of the Sound/Pattern boundary rule. What is left here is the rhythm.
+ */
+describe('the beat segment is pattern only', () => {
+  const html = renderToString(<SequencerView />);
+
+  test('renders the Pattern card', () => {
+    expect(html).toContain('>Pattern<');
+  });
+
+  test('no longer renders any sound-shaping control', () => {
+    expect(html).not.toContain('Drum Sound');
+    expect(html).not.toContain('select-sequencer-sound-kit');
+    expect(html).not.toContain('Drum Level');
+  });
+
+  test('keeps the grid preset select, which rewrites notes rather than sound', () => {
+    expect(html).toContain('select-sequencer-grid');
+  });
+
+  // The grid select carries no visible label — the card it sits in is already
+  // titled Pattern and it is that card's only field — so its accessible name
+  // has to come from somewhere else. This half of the old "the kit and grid
+  // selects use the shared stacked field label" test survives the Kit half's
+  // move to SoundView because the grid select itself never moved.
+  test('the grid select carries its own accessible name', () => {
+    expect(html).toContain('aria-label="Drum grid"');
   });
 });
 
@@ -301,23 +263,24 @@ describe('DEV-388: the drum-kit-resets-on-refresh fix', () => {
   // kit — and (2) the component declares exactly one `useEffect`, the preview
   // cleanup, so a reviewer (or this test) catching a second one is the signal
   // a mount-time kit effect has come back.
-  test('onChangeSoundKit is called from exactly the two direct-user-input sites, never a mount effect', () => {
+  //
+  // Nav restructure Task 6 moved the kit <select> (and its own
+  // `onChangeSoundKit` call) to SoundView, so `applyDrumGrid` is now the ONLY
+  // call site left in this file, not one of two.
+  test('onChangeSoundKit is called from applyDrumGrid, the only site left in SequencerView', () => {
     const src = readFileSync(
       new URL('./SequencerView.tsx', import.meta.url),
       'utf8',
     );
     const calls = src.match(/onChangeSoundKit\(/g) ?? [];
-    // Two legitimate call sites: the kit <select>'s own onChange (the user
-    // picks a kit directly), and applyDrumGrid (a grid names the kit it was
-    // written for). Guard on the CALL COUNT so a third call site — e.g. a
-    // reintroduced useEffect — turns this red without needing to name it.
-    expect(calls.length).toBe(2);
+    // Guard on the CALL COUNT so a second call site — e.g. a reintroduced
+    // mount effect — turns this red without needing to name it.
+    expect(calls.length).toBe(1);
     const applyDrumGridBody = src.slice(
       src.indexOf('const applyDrumGrid ='),
       src.indexOf('const gridOptions ='),
     );
     expect(applyDrumGridBody).toContain('onChangeSoundKit(grid.kit)');
-    expect(src).toContain('onChange={(e) => onChangeSoundKit(e.target.value)}');
   });
 
   test('the component declares exactly one useEffect (the preview cleanup)', () => {

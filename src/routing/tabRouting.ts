@@ -9,7 +9,7 @@ export function parseLayerPath(pathname: string): Layer {
 }
 
 export function defaultTabForLayer(layer: Layer): ViewMode {
-  return layer === 'song' ? 'arrange' : 'synth';
+  return layer === 'song' ? 'arrange' : 'sound';
 }
 
 export function tabsForLayer(layer: Layer): readonly ViewMode[] {

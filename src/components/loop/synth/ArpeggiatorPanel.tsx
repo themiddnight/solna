@@ -8,7 +8,7 @@ import { useSynthChannel } from "./useSynthChannel";
 
 /**
  * Pro-Mode panel — Arpeggiator. Reads the active synth channel from the
- * store rather than taking props, so SynthView renders `<ArpeggiatorPanel />`
+ * store rather than taking props, so SoundView renders `<ArpeggiatorPanel />`
  * with no wiring. Its identity colour is `module-arp` (docs/design.md
  * §6.5); the token is named in the class strings that moved with the markup.
  */

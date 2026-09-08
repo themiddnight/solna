@@ -4,8 +4,9 @@ import { renderToString } from 'react-dom/server';
 import { BottomInputDock } from './ui/BottomInputDock';
 import { getChordKeyboardRows, getScaleLockedKeyboardNotes } from './ui/Keyboard';
 import { LoopPage } from './loop/LoopPage';
+import { PatternView } from './loop/PatternView';
 import { SequencerView } from './loop/SequencerView';
-import { SynthView } from './loop/SynthView';
+import { SoundView } from './loop/SoundView';
 import { ArrangeView } from './song/ArrangeView';
 import { SongPage } from './song/SongPage';
 
@@ -51,10 +52,11 @@ const drumProps = {
 
 // LoopPage and SequencerView take no props (the drumProps chain that used to
 // thread App -> LoopPage -> SequencerView was deleted once InputDeckDrumProps
-// moved to BottomInputDock only), so their case is zero-prop like SynthView,
+// moved to BottomInputDock only), so their case is zero-prop like SoundView,
 // ArrangeView and SongPage.
 const CASES: Array<[string, unknown, AnyProps]> = [
-  ['SynthView', SynthView, {}],
+  ['SoundView', SoundView, {}],
+  ['PatternView', PatternView, {}],
   ['SequencerView', SequencerView, {}],
   ['ArrangeView', ArrangeView, {}],
   ['BottomInputDock', BottomInputDock, { keyboardProps, drumProps }],

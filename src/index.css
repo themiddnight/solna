@@ -456,7 +456,7 @@ input[type="range"] {
 }
 
 /* Hide scrollbars on horizontally-scrolling toolbars (Header tab strips,
-   SynthView preset row, InstantVibesBar). Used as `class="no-scrollbar"`;
+   SoundView preset row, InstantVibesBar). Used as `class="no-scrollbar"`;
    Tailwind v4 declares custom utilities with @utility, not @layer utilities. */
 @utility no-scrollbar {
   scrollbar-width: none;

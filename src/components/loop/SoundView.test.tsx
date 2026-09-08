@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
-import { SynthView } from './SynthView';
-import { resolveSynthControlChannel } from '@/utils/synthControl';
-import type { SynthParamChannel } from '@/utils/synthControl';
+import { SoundView } from './SoundView';
+import { FIELD_LABEL, FIELD_LANE } from '../ui/fieldClasses';
+import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from '@/utils/synthControl';
+import type { SynthControlTarget, SynthParamChannel } from '@/utils/synthControl';
 import type { SynthParams } from '@/types';
 
 // A black key is half its own width left of the white-key boundary it
@@ -82,28 +83,93 @@ describe('chromatic keyboard black key geometry', () => {
   // "Library" they read as the same drawer. Each now names its own content,
   // which also makes the count badge answerable ("Sounds 29", not "Library 29").
   test('the preset drawer button names its content', () => {
-    const html = renderToString(<SynthView />);
+    const html = renderToString(<SoundView />);
     expect(html).toContain('>Sounds<');
     expect(html).toContain('title="Sound Library"');
     expect(html).not.toContain('>Library<');
   });
 
-  test('SynthView still renders', () => {
-    const html = renderToString(<SynthView />);
+  test('SoundView still renders', () => {
+    const html = renderToString(<SoundView />);
     expect(html).toContain('Target:');
   });
 
-  test('the interactive keyboard moved to the dock, not SynthView', () => {
-    const html = renderToString(<SynthView />);
+  // Guards the Target chip row against going back to a hand-listed literal:
+  // every entry in SYNTH_TARGET_STYLES must show up as a chip, so a target
+  // added to the registry and forgotten here fails this test instead of
+  // silently not rendering.
+  test('every SYNTH_TARGET_STYLES entry renders as a Target chip', () => {
+    const html = renderToString(<SoundView />);
+    for (const target of Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]) {
+      expect(html).toContain(`>${SYNTH_TARGET_STYLES[target].label}<`);
+    }
+  });
+
+  test('the interactive keyboard moved to the dock, not SoundView', () => {
+    const html = renderToString(<SoundView />);
     expect(html).not.toContain('btn-keyboard-mode-chromatic');
     expect(html).not.toContain('KB OCT');
     expect(html).not.toContain('A Natural Minor');
   });
+});
 
-  test('the lead melody grid renders', () => {
-    const html = renderToString(<SynthView />);
-    expect(html).toContain('Lead Melody');
-    expect(html).toContain('id="select-lead-loop-length"');
+/**
+ * The Drum Sound card (kit, filter, level) moved here from the sequencer's
+ * Beat segment (nav restructure Task 6). These three regression guards moved
+ * with it, verbatim in what they assert — only the render target changed.
+ *
+ * Task 7 then moved the LEVEL out of the card and into the one Mixer, which is
+ * the only reason two of the three read differently now: the drum bus fader is
+ * still rendered by this view (so the dB guard still belongs here) but wears
+ * SoundMixer's `drum` id prefix, and the card's field row is one field
+ * shorter.
+ */
+describe('the Drum Sound card, moved from the sequencer (nav restructure Task 6)', () => {
+  const html = renderToString(<SoundView />);
+
+  // Step 17: the drum bus fader's dB markup, asserted at view level so a
+  // regression back to a %/linear readout on this call site is caught here
+  // and not only inside ChannelStrip's own unit tests.
+  test('the drum bus fader renders its dB tooltip and position step', () => {
+    // DEV-383: masterSequencerVolume's factory default is DEFAULT_BUS_TRIM_DB
+    // (-6 dB), not unity — this view renders the store's creation-time
+    // snapshot with no explicit setState, so the tooltip reflects that.
+    // `Drum`, not `Drums`: the fader is SoundMixer's row now (idPrefix 'drum',
+    // which tracks the store field `drumMuted`), no longer the card's own
+    // "Drum Level" strip. Same view, same bus, same dB contract.
+    expect(html).toContain('title="Drum Layer Gain: -6.0 dB"');
+    expect(html).toContain('step="0.005"');
+  });
+
+  // The regression this row was rebuilt for: fields whose controls were 24, 32
+  // and 48px tall bottom-aligned into different label heights.
+  //
+  // The slice is bounded at BOTH ends on purpose. It used to run to the end of
+  // the string, which was only correct while nothing rendered after this card
+  // (the preset drawer's Suspense/lazy content is null while closed). SoundMixer
+  // now renders below it and contributes five ChannelStrip FIELD_LABELs, so an
+  // open-ended slice would count the mixer's fields as the card's and the
+  // numbers below would stop meaning "this row". `>Mixer<` is the mixer's
+  // SECTION_HEADER span, i.e. the first byte after the card.
+  test('every field in a control row shares one label line and one control lane', () => {
+    const start = html.indexOf('Drum Sound');
+    const end = html.indexOf('>Mixer<');
+    expect(end).toBeGreaterThan(start);
+    const soundRow = html.slice(start, end);
+    const labels = soundRow.split(FIELD_LABEL).length - 1;
+    const lanes = soundRow.split(FIELD_LANE).length - 1;
+    // Kit, Filter, Cutoff, Res each own a label + lane. The fifth label was
+    // "Drum Level"'s, from the ChannelStrip that is now a Mixer row.
+    expect(labels).toBe(4);
+    expect(lanes).toBe(4);
+  });
+
+  test('the drum filter type switch is a daisyUI join on the 32px control lane', () => {
+    // `sm`, not `xs`: it is one field in a control row, and a 24px join next to
+    // a 32px select is what pushed the row's labels onto different baselines.
+    // Unique to this row — the mode switcher above is `btn-xs` — so this alone
+    // carries the assertion's weight.
+    expect(html).toContain('btn btn-sm join-item');
   });
 });
 

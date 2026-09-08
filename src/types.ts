@@ -1,18 +1,38 @@
 
+/**
+ * The four tabs, two per layer. The loop layer's split is a rule, not a
+ * grouping of what happened to exist: changes the SOUND but not the notes →
+ * `sound`; changes the NOTES or the rhythm → `pattern`. Oscillator, filter,
+ * envelopes, LFO, arpeggiator, the preset library and the faders are Sound;
+ * chord progression, chord rhythm, bass pattern, drum grid and drum kit are
+ * Pattern. `arrange` now means one thing only — ordering loops — and nothing
+ * else may take that name.
+ *
+ * Pattern's three segments are a SECOND axis (`patternSegment` in the ui
+ * slice), not three more view ids: the router validates exactly one query key,
+ * and a segment is a within-tab position, not a route.
+ */
 export type ViewMode =
+  | 'sound'
+  | 'pattern'
   | 'arrange'
-  | 'synth'
-  | 'sequencer'
-  | 'chords'
-  | 'effects';
+  | 'master';
 
 export type Layer = 'loop' | 'song';
 
-export const LOOP_TABS: readonly ViewMode[] = ['synth', 'sequencer', 'chords'];
-export const SONG_TABS: readonly ViewMode[] = ['arrange', 'effects'];
+/**
+ * Pattern's three segments. A second axis alongside `ViewMode`, not three more
+ * view ids: the URL carries the tab, and a segment is a position inside one
+ * tab. Kept here rather than in store/types.ts because both the store and the
+ * components read it, exactly as `ViewMode` is.
+ */
+export type PatternSegment = 'lead' | 'accompaniment' | 'beat';
+
+export const LOOP_TABS: readonly ViewMode[] = ['sound', 'pattern'];
+export const SONG_TABS: readonly ViewMode[] = ['arrange', 'master'];
 
 export function isSongLayer(tab: ViewMode): boolean {
-  return tab === 'arrange' || tab === 'effects';
+  return tab === 'arrange' || tab === 'master';
 }
 
 export function layerForTab(tab: ViewMode): Layer {
