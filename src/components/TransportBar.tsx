@@ -10,6 +10,7 @@ import { MidiIndicator } from "./ui/MidiIndicator";
 import { aggregatePlayerState, isHardStopEnabled, transportDisplayState } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 import type { Loop } from '../store/types';
+import { layerForTab } from '@/types';
 
 /** The song-mode badge: present only while a song position exists. */
 export function songModeLabel(
@@ -40,12 +41,17 @@ export const TransportBar = React.memo(function TransportBar() {
   const songLoopIndex = useAppStore((s) => s.songLoopIndex);
   const loops = useAppStore((s) => s.loops);
   const playbackScope = useAppStore((s) => s.playbackScope);
+  const activeTab = useAppStore((s) => s.activeTab);
+  const activeLoopId = useAppStore((s) => s.activeLoopId);
 
   const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer);
-  // While a loop is soloing the master button offers Play (a one-click
-  // takeover). Hard stop stays live off the REAL player states, so soloing
-  // audio always has a visible global kill even if the card is scrolled away.
-  const displayState = transportDisplayState(playbackScope, aggregate);
+  const layer = layerForTab(activeTab);
+  // On the song layer a soloing loop leaves the master button offering Play
+  // (a one-click takeover). On the loop layer the button owns the solo of the
+  // loop it is editing, so that one reports its real state. Hard stop stays
+  // live off the REAL player states, so soloing audio always has a visible
+  // global kill even if the card is scrolled away.
+  const displayState = transportDisplayState(playbackScope, aggregate, layer, activeLoopId);
   const hardStopDisabled = !isHardStopEnabled(sequencerPlayer, chordsPlayer, leadPlayer);
   // The meter loop only needs to know whether anything is sounding, off the
   // true aggregate — not the takeover-driven display state.

@@ -246,9 +246,35 @@ describe('playbackScope rides alongside the player transitions in one set()', ()
     expect(h.state.playbackScope).toEqual({ kind: 'solo', loopId: 'loop-a' });
   });
 
-  test('transportDisplayState presents Play while soloing so Play All takes over', () => {
-    expect(transportDisplayState({ kind: 'solo', loopId: 'a' }, 'playing')).toBe('stopped');
-    expect(transportDisplayState({ kind: 'song' }, 'playing')).toBe('playing');
-    expect(transportDisplayState({ kind: 'none' }, 'stopping')).toBe('stopping');
+  test('transportDisplayState presents Play while soloing on the song layer so Play All takes over', () => {
+    expect(transportDisplayState({ kind: 'solo', loopId: 'a' }, 'playing', 'song', 'a')).toBe('stopped');
+    expect(transportDisplayState({ kind: 'song' }, 'playing', 'song', 'a')).toBe('playing');
+    expect(transportDisplayState({ kind: 'none' }, 'stopping', 'loop', 'a')).toBe('stopping');
+  });
+});
+
+describe('transportDisplayState — which solo the master button owns', () => {
+  test('shows the real player state while the loop layer plays the loop it is editing', () => {
+    expect(
+      transportDisplayState({ kind: 'solo', loopId: 'l1' }, 'playing', 'loop', 'l1'),
+    ).toBe('playing');
+  });
+
+  test('still offers Play on the song layer while a card solos, so one click takes over', () => {
+    expect(
+      transportDisplayState({ kind: 'solo', loopId: 'l1' }, 'playing', 'song', 'l1'),
+    ).toBe('stopped');
+  });
+
+  test('offers Play on the loop layer when the loop sounding is not the one being edited', () => {
+    expect(
+      transportDisplayState({ kind: 'solo', loopId: 'l1' }, 'playing', 'loop', 'l2'),
+    ).toBe('stopped');
+  });
+
+  test('passes the aggregate through for the song and none scopes', () => {
+    expect(transportDisplayState({ kind: 'song' }, 'playing', 'song', 'l1')).toBe('playing');
+    expect(transportDisplayState({ kind: 'song' }, 'stopping', 'loop', 'l1')).toBe('stopping');
+    expect(transportDisplayState({ kind: 'none' }, 'stopped', 'loop', 'l1')).toBe('stopped');
   });
 });
