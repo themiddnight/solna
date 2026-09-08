@@ -1,5 +1,4 @@
 import React from 'react';
-import type { PatternSegment, ViewMode } from '@/types';
 import { useAppStore } from './store';
 import type { AppStore } from './types';
 
@@ -28,32 +27,31 @@ import type { AppStore } from './types';
  */
 export const SOLO_NAV_KEYS = ['activeTab', 'patternSegment', 'activeLoopId'] as const;
 
-export interface SoloNavSignature {
-  activeTab: ViewMode;
-  patternSegment: PatternSegment;
-  activeLoopId: string;
-}
+/**
+ * Derived from `SOLO_NAV_KEYS`, not hand-declared, so the constant and the type
+ * cannot drift apart: adding a key to `SOLO_NAV_KEYS` changes what this type
+ * (and, below, what `soloNavSignature` actually reads) covers automatically.
+ */
+export type SoloNavSignature = Pick<AppStore, (typeof SOLO_NAV_KEYS)[number]>;
 
+/**
+ * Built by iterating `SOLO_NAV_KEYS`, not by hand-listing the three fields —
+ * see the type above for why. TypeScript cannot verify a record assembled
+ * from a `keyof`-derived key list against the `Pick<...>` it produces, so the
+ * single cast at the return is the boundary where that's asserted once,
+ * rather than trusted silently at every hand-written field.
+ */
 export function soloNavSignature(state: AppStore): SoloNavSignature {
-  return {
-    activeTab: state.activeTab,
-    patternSegment: state.patternSegment,
-    activeLoopId: state.activeLoopId,
-  };
+  return Object.fromEntries(SOLO_NAV_KEYS.map((key) => [key, state[key]])) as SoloNavSignature;
 }
 
 /**
- * Field-by-field rather than `shallow`, for the same reason songMode's own
- * equalityFn is hand-written: the selector allocates a fresh object on every
- * set(), and subscribeWithSelector runs it on every set(), so this comparison
- * is on the hot path and stays three `===` checks.
+ * Also driven by `SOLO_NAV_KEYS`, for the same reason: `shallow` would work
+ * here too, but hand-listing the three fields a second time is exactly the
+ * kind of duplicate the constant exists to prevent.
  */
 export function soloNavUnchanged(a: SoloNavSignature, b: SoloNavSignature): boolean {
-  return (
-    a.activeTab === b.activeTab &&
-    a.patternSegment === b.patternSegment &&
-    a.activeLoopId === b.activeLoopId
-  );
+  return SOLO_NAV_KEYS.every((key) => a[key] === b[key]);
 }
 
 /**
