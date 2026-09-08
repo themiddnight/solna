@@ -215,11 +215,16 @@ the ui slice, is absent from `partializeAppState` and `PROJECT_CONTENT_KEYS`, an
 `LoopMixPatch` — mute is arrangement intent and stays per loop; solo exists only to hear something
 while editing it. It is a **set, not a radio** (soloing Drums then Lead sounds both — with the
 per-module play buttons gone, "write a lead over just the drums" is only expressible that way),
-**solo beats mute**, and its scope is the whole loop. It is **cleared by navigation** — any change
-of `activeTab`, `patternSegment` or `activeLoopId`, watched by the single subscription in
-`store/soloNav.ts` rather than by a clear inside each writer of `activeLoopId`. That
-clearing is the feature, not a rough edge: a control that can silence a track must not keep doing
-so once the user has stopped looking at it, so do not "fix" it into stickiness. Effective
+**solo beats mute**, and its scope is the whole loop. It is **cleared by leaving the Loop layer or
+changing the active loop** — a change of the LAYER (derived from `activeTab` via `layerForTab`) or
+of `activeLoopId`, watched by the single subscription in `store/soloNav.ts` rather than by a clear
+inside each writer of `activeLoopId`. A tab change between Sound and Pattern, or a Pattern-segment
+change, does **not** clear it: Drums' solo button lives in the Beat segment and Lead's lives on
+Sound, so clearing on either navigation made the spec's own "write a lead over just the drums"
+two-solo workflow impossible to actually build. That clearing-on-layer-exit is the feature, not a
+rough edge: a control that can silence a track must not keep doing so once the user has left the
+loop it was set in, so do not "fix" it into stickiness — and do not "fix" the Loop-layer survival
+back into clearing on every tab change either. Effective
 audibility is computed **only** in `engineSync.ts`, off the same `SOURCE_BUSES` table that drives
 the snapshot and the subscriptions, using `isTrackAudible` from `store/trackAudibility.ts` —
 `src/components/` may not import `audio/engine`, so a view may never compute it. Solo moves the
