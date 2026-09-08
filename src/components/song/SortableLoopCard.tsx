@@ -224,8 +224,9 @@ interface LoopAuditionButtonProps {
  * Play-only / stop for one loop. Every branch in it asks the same question —
  * is this loop the one being auditioned — and answers it four times over
  * (label, tint, tooltip, icon), which is four of the card's branches spent on
- * one boolean. Named for AUDITION, not SOLO: Phase 4 adds per-track solo
- * buttons and this button has nothing to do with them.
+ * one boolean. Named for AUDITION, not SOLO: track solo (`soloTracks` in the
+ * ui slice, resolved by src/store/trackAudibility.ts) is a different feature
+ * with its own buttons and this button has nothing to do with them.
  */
 function LoopAuditionButton({ loopId, loopName, isAuditioning, disabled, onToggle }: LoopAuditionButtonProps) {
   return (
@@ -269,9 +270,10 @@ interface LoopStatusBadgeProps {
 }
 
 /** The card's one status badge: auditioning, playing, cued, or nothing. The
- *  word is AUDITION, not SOLO: Phase 4 puts per-TRACK solo buttons on the
- *  editing surfaces, and one screen must not use the same word for playing
- *  one loop alone and for hearing one track alone. */
+ *  word is AUDITION, not SOLO: per-TRACK solo (`soloTracks` in the ui slice,
+ *  resolved by src/store/trackAudibility.ts) lives on the editing surfaces,
+ *  and one screen must not use the same word for playing one loop alone and
+ *  for hearing one track alone. */
 function LoopStatusBadge({
   isAuditioning,
   isPlaying,
