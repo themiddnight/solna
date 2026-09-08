@@ -16,6 +16,7 @@ import { useRouteSync } from './routing/useRouteSync';
 import { usePlayheadSync } from './components/usePlayheadSync';
 import { useInputDeck } from './components/useInputDeck';
 import { useSongModeSync } from './store/songMode';
+import { useSoloNavClear } from './store/soloNav';
 import { useServiceWorkerUpdate } from './pwa/useServiceWorkerUpdate';
 import { isSongLayer } from './types';
 
@@ -94,6 +95,10 @@ export function App() {
   // sync-back is no longer a subscription — it rides along inside the store's
   // own set(), see store/loopSync.ts.
   useSongModeSync();
+  // Track solo is a session gesture, cleared by navigation. One subscription
+  // owns that rule for every writer of activeTab/patternSegment/activeLoopId —
+  // see store/soloNav.ts.
+  useSoloNavClear();
 
   // Global input: owns the QWERTY listeners + note playing, feeds the dock.
   const { keyboardProps, drumProps } = useInputDeck();
