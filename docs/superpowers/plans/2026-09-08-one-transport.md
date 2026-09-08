@@ -286,7 +286,7 @@ git commit -m "refactor(nav): drop the per-tab play/stop pairs and the tab-to-mo
 
 ### Task 4: lock the invariant this phase exists to create
 
-Every later phase reads the scope alone to answer "what is sounding". That is only sound if playback can never run unscoped. `play(module)` still has two callers — `store/loadLoop.ts:115-117` and `store/vibes.ts:194-196` — but both only restart players that were already active, under a scope the caller preserves, so neither can produce a playing-but-unscoped state. This task pins that with a test, so a future third caller fails the suite instead of quietly breaking Phase 3.
+Every later phase reads the scope alone to answer "what is sounding". That is only sound if playback can never run unscoped. `play(module)` still has two callers — `store/loadLoop.ts:115-117` and `store/vibes.ts:194-196` — and both are actually holes, not exceptions: each calls `hardStopAll()` first, which resets the scope to `none`, then restarts whatever was active with `play(module)`, which sets no scope, so both CAN leave players `'playing'` under a `none` scope (documented as an open invariant gap in `playbackScope.ts`'s INVARIANT comment; closing it is Phase 3's decision, out of scope here). What this task actually locks is narrower: a test pins that `playAll`, `soloLoop`, `hardStopAll` and `softStopAll` — the transport actions that are supposed to keep the scope in sync — do so, and a source-scan guard (`playbackScope.test.ts`) pins the `play(module)` caller list at exactly these two documented sites, so a future third caller fails the suite instead of quietly breaking Phase 3.
 
 **Files:**
 - Test: `src/store/transportSlice.test.ts`
