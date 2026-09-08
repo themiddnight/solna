@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import {
   loopPlayButton,
   playbackScopeReducer,
+  restartAfterStop,
   SCOPE_NONE,
   SCOPE_SONG,
   scopedLoopId,
@@ -65,12 +66,68 @@ describe('playbackScopeReducer', () => {
   });
 });
 
+describe('restartAfterStop — what an internal stop-and-restart brings back', () => {
+  test('nothing was playing: nothing restarts and the scope stays stopped', () => {
+    expect(restartAfterStop(LOOP_A, 'A', 'loop', false)).toEqual({
+      restart: false,
+      scope: SCOPE_NONE,
+    });
+    expect(restartAfterStop(SCOPE_SONG, 'A', 'song', false)).toEqual({
+      restart: false,
+      scope: SCOPE_NONE,
+    });
+  });
+
+  test('a song scope survives on either layer: the arrangement owns the transport', () => {
+    expect(restartAfterStop(SCOPE_SONG, 'B', 'song', true)).toEqual({
+      restart: true,
+      scope: SCOPE_SONG,
+    });
+    expect(restartAfterStop(SCOPE_SONG, 'B', 'loop', true)).toEqual({
+      restart: true,
+      scope: SCOPE_SONG,
+    });
+  });
+
+  test('switching the working loop ON THE LOOP LAYER is seamless and re-points', () => {
+    expect(restartAfterStop(LOOP_A, 'B', 'loop', true)).toEqual({
+      restart: true,
+      scope: { kind: 'loop', loopId: 'B' },
+    });
+  });
+
+  test('reloading the loop that is already auditioning keeps it playing', () => {
+    expect(restartAfterStop(LOOP_A, 'A', 'song', true)).toEqual({
+      restart: true,
+      scope: LOOP_A,
+    });
+  });
+
+  // §6 row 3, in its pure form: picking a DIFFERENT loop on the song layer
+  // while one is auditioning stops the audition. It does not follow the pick.
+  test('picking a different loop ON THE SONG LAYER stops the audition', () => {
+    expect(restartAfterStop(LOOP_A, 'B', 'song', true)).toEqual({
+      restart: false,
+      scope: SCOPE_NONE,
+    });
+  });
+
+  // Unreachable while "playing implies a scope" holds, but the function is
+  // total and heals rather than propagating the broken state.
+  test('a none scope with players running is healed on the loop layer', () => {
+    expect(restartAfterStop(SCOPE_NONE, 'B', 'loop', true)).toEqual({
+      restart: true,
+      scope: { kind: 'loop', loopId: 'B' },
+    });
+  });
+});
+
 /**
- * The INVARIANT comment above names exactly two call sites — loadLoop.ts and
- * vibes.ts — that restart through play(module) with no scope, and states
- * that as a fact a reviewer can check. The comment cannot enforce itself: a
- * third caller added anywhere in src/ would leave it holding a stale claim
- * with nothing failing. This is the same shape as
+ * The INVARIANT comment above states that the only file referencing
+ * play(module) is the slice that defines it, as a fact a reviewer can check.
+ * The comment cannot enforce itself: a new caller added anywhere in src/
+ * would leave it holding a stale claim with nothing failing. This is the
+ * same shape as
  * `src/data/dataLayerPurity.test.ts` — a filesystem scan plus an explicit
  * allowlist — applied to a store invariant instead of an eslint rule.
  *
@@ -81,16 +138,15 @@ describe('playbackScopeReducer', () => {
  * slice-level test cannot see at all.
  */
 describe('play(module) caller guard', () => {
-  // Everything that may legitimately call the per-module play(module) with
-  // no scope set: the two documented holes named in playbackScope.ts's
-  // INVARIANT comment, and the slice that defines `play` itself. Test files
-  // are exempt below by extension, not listed here, because they legitimately
-  // drive `play(module)` as a fixture and never run in production.
-  const ALLOWED = new Set([
-    'src/store/loadLoop.ts',
-    'src/store/vibes.ts',
-    'src/store/transportSlice.ts',
-  ]);
+  // Everything that may legitimately reference the per-module play(module):
+  // the slice that defines it. Nothing else. Phase 3 closed the two holes
+  // this list used to hold open — loadLoop.ts and vibes.ts now restart
+  // through one set() that writes the scope with the players (see
+  // restartPlayersPatch) — so a production file reaching for play(module)
+  // again is re-opening a closed hole, not joining a documented exception.
+  // Test files are exempt below by extension, not listed here, because they
+  // legitimately drive play(module) as a fixture and never run in production.
+  const ALLOWED = new Set(['src/store/transportSlice.ts']);
 
   function sourceFiles(dir: string): string[] {
     return readdirSync(dir).flatMap((name) => {
@@ -118,7 +174,7 @@ describe('play(module) caller guard', () => {
   // HTMLMediaElement .play(), no unrelated method), and the trailing `\b`
   // rules out `.playAll`, `.playbackScope`, `.playTargetLabel` and every
   // other `play`-prefixed identifier in the tree — so it needs no allowlist
-  // entries beyond the three already here. Rejected the narrower
+  // entries beyond the one already here. Rejected the narrower
   // identifier-call alternative (`/(?<![.\w])play\s*\(\s*[^)]/`): it only
   // matches a BARE call and would stop seeing `store.play(...)` entirely,
   // trading one blind spot for another instead of covering both shapes.
@@ -144,10 +200,11 @@ describe('play(module) caller guard', () => {
           `${rel} calls play(module) but is not on the allowlist ` +
             `(${[...ALLOWED].join(', ')}). play(module) can start a stopped ` +
             `player without setting a playbackScope, which breaks the ` +
-            `invariant Phase 3 reads (see the INVARIANT comment above ` +
+            `invariant songMode reads (see the INVARIANT comment above ` +
             `playbackScope.ts's PlaybackScope type). Route the new caller ` +
-            `through playAll/soloLoop instead, or — only with a documented ` +
-            `reason matching loadLoop.ts/vibes.ts — add it to ALLOWED here.`,
+            `through playAll/soloLoop, or through restartAfterStop + ` +
+            `restartPlayersPatch if it is an internal stop-and-restart like ` +
+            `loadLoop's.`,
         );
       }
     }

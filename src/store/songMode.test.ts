@@ -396,6 +396,15 @@ describe('song mode coordinator', () => {
     // 2. "Play any single loop from its card once" — drive ArrangeView's own
     // handler shape exactly: loadLoop (restarts playback) then soloLoop
     // (which owns the scope AND drops the song cursor in one set()).
+    //
+    // The Stop first is not scaffolding: while `kind === 'song'` loopPlayButton
+    // disables EVERY card's play button, so pressing one mid-arrangement is
+    // unreachable by clicking, and the user's own steps go Stop -> card Play.
+    // Before Phase 3 it happened to "work" anyway, because loadLoop let the
+    // song scope decay to `none` — the laundering restartAfterStop closes:
+    // loadLoop now keeps a song scope, so soloLoop correctly refuses to take
+    // the transport away from a running arrangement.
+    useAppStore.getState().hardStopAll();
     loadLoop('loop-b');
     useAppStore.getState().soloLoop('loop-b');
     expect(useAppStore.getState().playbackScope).toEqual({ kind: 'loop', loopId: 'loop-b' });

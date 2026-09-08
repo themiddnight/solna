@@ -72,6 +72,44 @@ function allPlayersPatch(
   return patch;
 }
 
+/** Which players an internal stop-and-restart has to bring back. */
+export interface WasActivePlayers {
+  sequencer: boolean;
+  chords: boolean;
+  lead: boolean;
+}
+
+/** None of them — the patch for a stop-and-restart that decides not to restart. */
+export const NO_PLAYERS_ACTIVE: WasActivePlayers = Object.freeze({
+  sequencer: false,
+  chords: false,
+  lead: false,
+});
+
+/**
+ * The players a restart brings back, and the scope that goes with them, as
+ * ONE patch. Callers apply it in a single set() so that no subscriber ever
+ * observes players running under a scope that disagrees with them — the same
+ * reason allPlayersPatch exists above.
+ *
+ * Writing 'playing' unconditionally is safe and is exactly what the three
+ * play(module) calls this replaces did: every caller has just run
+ * hardStopAll(), so every player is 'stopped' and play()'s own
+ * `current === 'stopped' ? 'playing' : current` guard could only ever take
+ * the first branch.
+ */
+export function restartPlayersPatch(
+  wasActive: WasActivePlayers,
+  scope: PlaybackScope,
+): Partial<AppStore> {
+  return {
+    ...(wasActive.sequencer ? { sequencerPlayer: 'playing' as const } : {}),
+    ...(wasActive.chords ? { chordsPlayer: 'playing' as const } : {}),
+    ...(wasActive.lead ? { leadPlayer: 'playing' as const } : {}),
+    playbackScope: scope,
+  };
+}
+
 /**
  * What the MASTER transport button shows. It disowns a solo loop it is not
  * the transport for: on the song layer every solo loop belongs to a loop

@@ -3,6 +3,7 @@ import { audioEngine } from '../audio/engine';
 import { loopStatePatch } from './loop';
 import { createDefaultLoop } from './loopSlice';
 import { loadLoop, LOAD_LOOP_RELEASE } from './loadLoop';
+import { SCOPE_NONE } from './playbackScope';
 import { useAppStore } from './store';
 import type { Loop } from './types';
 
@@ -22,6 +23,12 @@ const resetStore = () => {
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
     songLoopIndex: null,
+    // The layer is now an INPUT to loadLoop's restart decision, and the scope
+    // is the other one — so both have to be part of the baseline, or a
+    // sibling file leaving activeTab on 'arrange' would silently flip which
+    // row of restartAfterStop the tests below exercise.
+    activeTab: 'sound',
+    playbackScope: SCOPE_NONE,
   });
 };
 
@@ -203,5 +210,97 @@ describe('loadLoop', () => {
     loadLoop('loop-missing');
     expect(useAppStore.getState().scaleRoot).toBe('A');
     expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
+  });
+});
+
+describe('loadLoop leaves a scope that matches what is sounding', () => {
+  const twoLoops = () => [
+    createDefaultLoop(),
+    { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' },
+  ];
+
+  test('switching the working loop on the LOOP layer keeps playing, under the new loop', () => {
+    useAppStore.setState({
+      loops: twoLoops(),
+      activeLoopId: 'loop-default-1',
+      activeTab: 'sound',
+      songLoopIndex: null,
+    });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    loadLoop('loop-b');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.playbackScope).toEqual({ kind: 'loop', loopId: 'loop-b' });
+  });
+
+  test('picking a different loop on the SONG layer stops the audition (spec \u00a76 row 3)', () => {
+    useAppStore.setState({
+      loops: twoLoops(),
+      activeLoopId: 'loop-default-1',
+      activeTab: 'arrange',
+      songLoopIndex: null,
+    });
+    useAppStore.getState().soloLoop('loop-default-1');
+    expect(useAppStore.getState().sequencerPlayer).toBe('playing');
+
+    loadLoop('loop-b');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('stopped');
+    expect(s.chordsPlayer).toBe('stopped');
+    expect(s.leadPlayer).toBe('stopped');
+    expect(s.playbackScope).toBe(SCOPE_NONE);
+    expect(s.activeLoopId).toBe('loop-b');
+  });
+
+  test('reloading the loop that is auditioning keeps it playing (spec \u00a76 row 2)', () => {
+    useAppStore.setState({
+      loops: twoLoops(),
+      activeLoopId: 'loop-default-1',
+      activeTab: 'arrange',
+      songLoopIndex: null,
+    });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    loadLoop('loop-default-1');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.playbackScope).toEqual({ kind: 'loop', loopId: 'loop-default-1' });
+  });
+
+  test('a song-scoped load keeps the arrangement in charge', () => {
+    useAppStore.setState({
+      loops: twoLoops(),
+      activeLoopId: 'loop-default-1',
+      activeTab: 'arrange',
+      songLoopIndex: 0,
+    });
+    useAppStore.getState().playAll();
+
+    loadLoop('loop-b');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.playbackScope).toEqual({ kind: 'song' });
+    expect(s.songLoopIndex).toBe(1);
+  });
+
+  test('a load with nothing playing leaves the stopped scope alone', () => {
+    useAppStore.setState({
+      loops: twoLoops(),
+      activeLoopId: 'loop-default-1',
+      activeTab: 'sound',
+      songLoopIndex: null,
+    });
+    useAppStore.getState().hardStopAll();
+
+    loadLoop('loop-b');
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('stopped');
+    expect(s.playbackScope).toBe(SCOPE_NONE);
   });
 });

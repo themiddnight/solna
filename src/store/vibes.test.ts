@@ -8,6 +8,8 @@ import { DRUM_KITS } from '../data/drumKits';
 import { DRUM_GRIDS } from '../data/drumGrids';
 import { presetById } from '../audio/presetRegistry';
 import { useAppStore } from './store';
+import { createDefaultLoop } from './loopSlice';
+import { SCOPE_NONE } from './playbackScope';
 import { defaultPadState } from './initialState';
 
 /**
@@ -267,6 +269,14 @@ describe('applyVibeToStore transport handling', () => {
   // through `setState` keeps every generation of the state object wrapped
   // until we explicitly restore, and the restore always lands on the
   // current (not a stale) object.
+  //
+  // Since Phase 3 the restart is no longer a play(module) call at all — it is
+  // one setState carrying the player fields and the scope together — so the
+  // `play` wrapper below no longer sees it. It stays, because `playCalls`
+  // staying EMPTY is now the assertion that the restart went through
+  // restartPlayersPatch; the restart itself is observed by subscribing to the
+  // store and recording the stopped->playing transition, which is the same
+  // ordering fact the old `play:chords` entry stood for.
   function withOrderTracking<T>(order: string[], playCalls: string[], run: () => T): T {
     const originals = {
       hardStopAll: useAppStore.getState().hardStopAll,
@@ -298,9 +308,19 @@ describe('applyVibeToStore transport handling', () => {
       },
     });
 
+    const unsubscribe = useAppStore.subscribe((state, prev) => {
+      for (const module of ['sequencer', 'chords', 'lead'] as const) {
+        const field = `${module}Player` as const;
+        if (state[field] === 'playing' && prev[field] !== 'playing') {
+          order.push(`restart:${module}`);
+        }
+      }
+    });
+
     try {
       return run();
     } finally {
+      unsubscribe();
       useAppStore.setState({
         hardStopAll: originals.hardStopAll,
         setBpm: originals.setBpm,
@@ -329,15 +349,18 @@ describe('applyVibeToStore transport handling', () => {
     const hardStopIndex = order.indexOf('hardStopAll');
     const setBpmIndex = order.indexOf('setBpm');
     const setEffectsIndex = order.indexOf('setEffects');
-    const playIndex = order.indexOf('play:chords');
+    const restartIndex = order.indexOf('restart:chords');
     expect(hardStopIndex).toBeLessThan(setBpmIndex);
-    expect(setEffectsIndex).toBeLessThan(playIndex);
+    expect(restartIndex).toBeGreaterThan(-1);
+    expect(setEffectsIndex).toBeLessThan(restartIndex);
 
     // Chords was active, so it comes back; the Beat was not, so it stays put
-    // — and play() was never even called for it.
+    // — and nothing restarted it.
     expect(useAppStore.getState().chordsPlayer).toBe('playing');
     expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
-    expect(playCalls).not.toContain('sequencer');
+    expect(order).not.toContain('restart:sequencer');
+    // The restart is one scope-carrying setState, not a play(module) call.
+    expect(playCalls).toEqual([]);
   });
 
   test('a player that was stopping restarts rather than staying half-stopped', () => {
@@ -360,8 +383,9 @@ describe('applyVibeToStore transport handling', () => {
 
     // The weak form (end state reads 'stopped') would also pass an
     // implementation that started and immediately re-stopped the players.
-    // Asserting play was never invoked rules that out.
+    // Asserting nothing ever went to 'playing' rules that out.
     expect(playCalls).toEqual([]);
+    expect(order.filter((e) => e.startsWith('restart:'))).toEqual([]);
     expect(order[0]).toBe('hardStopAll');
 
     expect(useAppStore.getState().chordsPlayer).toBe('stopped');
@@ -682,5 +706,59 @@ describe('resolveVibe', () => {
 describe('the vibe table', () => {
   test('vibe ids are unique', () => {
     expect(new Set(VIBES.map((v) => v.id)).size).toBe(VIBES.length);
+  });
+});
+
+describe('applyVibeToStore leaves a scope that matches what is sounding', () => {
+  afterEach(() => {
+    useAppStore.getState().hardStopAll();
+    useAppStore.setState({ activeTab: 'sound' });
+  });
+
+  test('a vibe clicked mid-playback keeps the loop scope it started under', () => {
+    useAppStore.setState({
+      loops: [createDefaultLoop()],
+      activeLoopId: 'loop-default-1',
+      activeTab: 'sound',
+    });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    applyVibeToStore(RESOLVED_VIBES[0]);
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.playbackScope).toEqual({ kind: 'loop', loopId: 'loop-default-1' });
+  });
+
+  test('a vibe clicked on the song layer during an audition also keeps playing', () => {
+    useAppStore.setState({
+      loops: [createDefaultLoop()],
+      activeLoopId: 'loop-default-1',
+      activeTab: 'arrange',
+    });
+    useAppStore.getState().soloLoop('loop-default-1');
+
+    applyVibeToStore(RESOLVED_VIBES[0]);
+
+    const s = useAppStore.getState();
+    // A vibe never moves activeLoopId, so it is always the "same loop" row —
+    // the song-layer stop rule cannot be triggered by clicking a vibe.
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.playbackScope).toEqual({ kind: 'loop', loopId: 'loop-default-1' });
+  });
+
+  test('a vibe clicked with the transport stopped starts nothing and claims no scope', () => {
+    useAppStore.setState({
+      loops: [createDefaultLoop()],
+      activeLoopId: 'loop-default-1',
+      activeTab: 'sound',
+    });
+    useAppStore.getState().hardStopAll();
+
+    applyVibeToStore(RESOLVED_VIBES[0]);
+
+    const s = useAppStore.getState();
+    expect(s.sequencerPlayer).toBe('stopped');
+    expect(s.playbackScope).toBe(SCOPE_NONE);
   });
 });

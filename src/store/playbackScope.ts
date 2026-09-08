@@ -1,3 +1,5 @@
+import type { Layer } from '../types';
+
 /**
  * The single source of truth for playback MODE.
  *
@@ -24,28 +26,19 @@
  * rule reads the scope alone to decide what survives a navigation, which is
  * only sound while that holds.
  *
- * It does NOT yet hold across two call sites, both of which hard-stop and
- * restart through play(module) — which sets no scope:
+ * It holds across the two internal stop-and-restart paths as well, since
+ * DEV Phase 3: loadLoop.ts's non-boundary branch and vibes.ts's
+ * applyVibeToStore both hard-stop and restart, and both now go through
+ * restartAfterStop + restartPlayersPatch, which decide whether the players
+ * come back at all and write the scope with them in one set() instead of
+ * leaving the `none` that hardStopAll wrote. songMode reads the scope alone
+ * to decide what survives a navigation, so a restart that sets no scope
+ * would make that decision act on a lie — silence where music should
+ * continue, or a hard stop the user did not ask for.
  *
- *   - loadLoop.ts's non-boundary path (the branch below the
- *     padHoldsAcrossLoop early return, currently lines 115-117) calls
- *     hardStopAll() — resetting the scope to `none` — then restarts whatever
- *     was active with play(module). Switching the active loop from the loop
- *     selector while the loop layer plays therefore leaves players 'playing'
- *     under a `none` scope.
- *   - vibes.ts's applyVibeToStore (currently lines 102-196) captures
- *     `wasActive`, calls `store.hardStopAll()` (:107), and restarts with
- *     `store.play('sequencer' | 'chords' | 'lead')` (:194-196). Reachable in
- *     two clicks from the loop layer: press the transport Play (scope
- *     loop{loopId}, players playing), then click any vibe in the
- *     always-mounted InstantVibesBar.
- *
- * Phase 3 must close both holes before it treats the scope as ground truth.
- * The lock below covers playAll/soloLoop/hardStopAll/softStopAll only, and
- * deliberately does not pin loadLoop's or vibes.ts's current behaviour as
- * correct. A source-scan guard in playbackScope.test.ts keeps this comment's
- * "exactly these two callers" claim from drifting silently as new callers of
- * play(module) are added — see its describe block.
+ * A source-scan guard in playbackScope.test.ts keeps that true: the only
+ * file allowed to reference play(module) is transportSlice.ts, which defines
+ * it. A new caller anywhere else fails the suite.
  */
 export type PlaybackScope =
   | { kind: 'none' }
@@ -121,6 +114,64 @@ export function playbackScopeReducer(
  */
 export function scopedLoopId(scope: PlaybackScope): string | null {
   return scope.kind === 'loop' ? scope.loopId : null;
+}
+
+/** Whether an internal stop-and-restart brings the players back, and under what scope. */
+export interface RestartDecision {
+  restart: boolean;
+  scope: PlaybackScope;
+}
+
+/**
+ * The decision an INTERNAL stop-and-restart has to make — the shape
+ * loadLoop's non-boundary branch and applyVibeToStore both have: capture who
+ * was active, hardStopAll (which resets the scope to `none`), rewrite the
+ * content, and then decide. Before this existed the "decide" step was three
+ * unconditional play(module) calls, which set no scope and left playback
+ * running under `none`.
+ *
+ * The layer is a parameter because it is what distinguishes two user actions
+ * that both land here:
+ *
+ *   LOOP layer — "switch the loop I am editing" while the transport runs.
+ *     Seamless by design: the new loop comes up on the next bar line and the
+ *     scope re-points to it, because what sounds afterwards IS the loop now
+ *     in focus.
+ *
+ *   SONG layer — "pick a different loop to work on" from an Arrange card or
+ *     the header dropdown, while one loop is auditioning. The audition does
+ *     NOT follow the pick: it stops. That is §6 row 3 and it is the user's
+ *     own request ("ถ้าเข้า edit คนละ loop ที่เล่น solo loop อยู่ ให้ stop").
+ *     It is also the only answer consistent with the Arrange UI, which
+ *     already disables every other card's play button for the whole run of
+ *     an audition — letting a card SELECT move the audition would be a back
+ *     door around that rule.
+ *
+ * A song scope survives either way: an arrangement is not one loop, its
+ * cursor was already carried across by the caller, and dropping it would
+ * strand a playing song under a scope that means stopped.
+ *
+ * The `none`-with-players-running row is unreachable while "playing implies
+ * a scope" holds. It is answered honestly rather than propagated, because
+ * handing songMode a scope that lies is exactly the failure this closes.
+ */
+export function restartAfterStop(
+  before: PlaybackScope,
+  focusedLoopId: string,
+  layer: Layer,
+  wasPlaying: boolean,
+): RestartDecision {
+  if (!wasPlaying) return { restart: false, scope: SCOPE_NONE };
+  if (before.kind === 'song') return { restart: true, scope: SCOPE_SONG };
+  if (layer === 'loop') {
+    return before.kind === 'loop' && before.loopId === focusedLoopId
+      ? { restart: true, scope: before }
+      : { restart: true, scope: { kind: 'loop', loopId: focusedLoopId } };
+  }
+  if (before.kind === 'loop' && before.loopId === focusedLoopId) {
+    return { restart: true, scope: before };
+  }
+  return { restart: false, scope: SCOPE_NONE };
 }
 
 /**
