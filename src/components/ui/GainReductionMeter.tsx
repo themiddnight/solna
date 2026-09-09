@@ -73,7 +73,7 @@ export const GainReductionMeter = React.memo(function GainReductionMeter({
     <div ref={rootRef} className="flex flex-col gap-1">
       <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-base-content/60">
         <span>Gain Reduction</span>
-        <span className={active ? 'font-mono text-success' : 'font-mono text-base-content/40'}>
+        <span className={active ? 'tabular-nums text-success' : 'tabular-nums text-base-content/40'}>
           {formatReduction(reduction)}
         </span>
       </div>

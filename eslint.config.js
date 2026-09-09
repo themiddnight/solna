@@ -208,7 +208,8 @@ export default tseslint.config(
   {
     // Layering rule 3: components are dumb views — no direct audio/engine.
     // Exceptions: the read-only analyser consumers (AudioVisualizer, the
-    // transport VU meter in ui/VuMeter, AmbientBackdrop) and test files.
+    // transport VU meter in ui/VuMeter, the mixer's per-layer meters in
+    // ui/SourceMeter, AmbientBackdrop) and test files.
     // Routing their per-frame reads through the store would mean a store
     // write every animation frame and a re-render of every subscriber.
     //
@@ -358,6 +359,12 @@ export default tseslint.config(
       // would be a store write per frame and a re-render of every subscriber —
       // the same reason the three above are exempt.
       'src/components/ui/GainReductionMeter.tsx',
+      // The Sound mixer's per-layer meters. Reads one post-fader analyser per
+      // mix bus on the shared meter scheduler, for the same reason as the
+      // above: a store write per tick would re-render every mounted view.
+      // The exemption stops at this file — SoundMixer renders it and imports
+      // no engine of its own.
+      'src/components/ui/SourceMeter.tsx',
       '**/*.test.ts',
       '**/*.test.tsx',
     ],

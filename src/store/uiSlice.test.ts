@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { createUiSlice, persistKeyboardMode, readStoredKeyboardMode } from './uiSlice';
+import {
+  createUiSlice,
+  persistFollowPlayhead,
+  persistKeyboardMode,
+  readStoredFollowPlayhead,
+  readStoredKeyboardMode,
+} from './uiSlice';
 import { buildProjectContent, PROJECT_CONTENT_KEYS } from './projectFormat';
 import { partializeAppState, useAppStore } from './store';
 import { SCOPE_NONE } from './playbackScope';
@@ -81,6 +87,78 @@ describe('createUiSlice defaults', () => {
     // localStorage global and swallows the failure; state must still update.
     slice.setKeyboardMode('chord');
     expect(applied).toEqual({ keyboardMode: 'chord' });
+  });
+});
+
+describe('follow-playhead preference', () => {
+  test('adopts a valid stored value in both directions', () => {
+    expect(readStoredFollowPlayhead({ getItem: () => 'on' })).toBe(true);
+    expect(readStoredFollowPlayhead({ getItem: () => 'off' })).toBe(false);
+  });
+
+  test('returns null for nothing stored, garbage, or a boolean-looking string', () => {
+    expect(readStoredFollowPlayhead({ getItem: () => null })).toBeNull();
+    expect(readStoredFollowPlayhead({ getItem: () => 'banana' })).toBeNull();
+    // 'false' is the shape a naive String(boolean) write would leave behind;
+    // it must not read as `false` and must not read as `true` either.
+    expect(readStoredFollowPlayhead({ getItem: () => 'false' })).toBeNull();
+  });
+
+  test('degrades to null when storage access throws, instead of propagating', () => {
+    expect(readStoredFollowPlayhead(throwingGetStorage)).toBeNull();
+  });
+
+  test('writes on/off under its own storage key', () => {
+    const calls: Array<[string, string]> = [];
+    const storage = { setItem: (key: string, value: string) => { calls.push([key, value]); } };
+    persistFollowPlayhead(true, storage);
+    persistFollowPlayhead(false, storage);
+    expect(calls).toEqual([
+      ['solna_follow_playhead', 'on'],
+      ['solna_follow_playhead', 'off'],
+    ]);
+  });
+
+  test('does not throw when storage access throws (best-effort persistence)', () => {
+    expect(() => persistFollowPlayhead(false, throwingSetStorage)).not.toThrow();
+  });
+
+  test('defaults to following when nothing is stored', () => {
+    const slice = createUiSlice((() => {}) as never);
+    expect(slice.followPlayhead).toBe(true);
+  });
+
+  test('toggleFollowPlayhead flips the current value', () => {
+    let applied: Record<string, unknown> | undefined;
+    const slice = createUiSlice(((updater: (state: { followPlayhead: boolean }) => Record<string, unknown>) => {
+      applied = updater({ followPlayhead: true });
+    }) as never);
+    slice.toggleFollowPlayhead();
+    expect(applied).toEqual({ followPlayhead: false });
+  });
+
+  // The sibling test above covers the throwing case, because it can: it calls
+  // `persistFollowPlayhead` with an injected `throwingSetStorage`. The action
+  // takes no storage argument, so a test that calls it and asserts "did not
+  // throw" injects nothing — it passed only because bun defines no global
+  // `localStorage` and the ReferenceError was swallowed inside
+  // `persistGuardedStorageValue`. Under jsdom it would have been vacuous AND
+  // written into real storage, making the default-value test above it
+  // order-dependent. What IS worth pinning is that the flip happens in one
+  // `set`, with the write-through beside it.
+  test('toggleFollowPlayhead writes through as it flips, in a single set', () => {
+    const applied: Record<string, unknown>[] = [];
+    const slice = createUiSlice(((updater: (state: { followPlayhead: boolean }) => Record<string, unknown>) => {
+      applied.push(updater({ followPlayhead: false }));
+    }) as never);
+    slice.toggleFollowPlayhead();
+    expect(applied).toEqual([{ followPlayhead: true }]);
+  });
+
+  test('never rides in the persisted project blob', () => {
+    const persisted = partializeAppState(useAppStore.getState()) as unknown as Record<string, unknown>;
+    expect('followPlayhead' in persisted).toBe(false);
+    expect(PROJECT_CONTENT_KEYS).not.toContain('followPlayhead' as never);
   });
 });
 

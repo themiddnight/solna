@@ -4,7 +4,8 @@ import { GripVertical, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChordItem } from "@/types";
-import { ROOTS, formatChordQuality } from "@/utils/musicTheory";
+import { ROOTS, formatChordQuality, spellChordRoot } from "@/utils/musicTheory";
+import { spellNoteInKey } from "@/utils/noteSpelling";
 import { BEATS_PER_BAR } from "@/utils/playhead";
 import { BeatDots } from "@/components/ui/BeatDots";
 import { IconButton } from "@/components/ui/IconButton";
@@ -19,6 +20,13 @@ export interface SortableChordCardProps {
   activeBeat?: number | null;
   /** Beats per bar for the active meter; defaults to the 4/4 count. */
   beatsPerBar?: number;
+  /**
+   * The key this card SPELLS against, passed as two primitives rather than one
+   * SpellingKey object on purpose: a fresh `{ scaleRoot, scaleType }` per
+   * ChordView render would defeat the React.memo below on every beat.
+   */
+  scaleRoot: string;
+  scaleType: string;
   updateChord: (id: string, updates: Partial<ChordItem>) => void;
   removeChord: (id: string) => void;
   handleMoveChord: (index: number, direction: -1 | 1) => void;
@@ -47,6 +55,8 @@ export const SortableChordCard = React.memo(function SortableChordCard({
   isActive,
   activeBeat = null,
   beatsPerBar = BEATS_PER_BAR,
+  scaleRoot,
+  scaleType,
   updateChord,
   removeChord,
   handleMoveChord,
@@ -61,6 +71,8 @@ export const SortableChordCard = React.memo(function SortableChordCard({
     transition,
     isDragging,
   } = useSortable({ id: chord.id });
+
+  const spellingKey = { scaleRoot, scaleType };
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -137,14 +149,16 @@ export const SortableChordCard = React.memo(function SortableChordCard({
         }`}
         title="Hold to Preview Chord"
       >
-        <span className="text-2xl font-mono font-black tracking-tight flex items-baseline gap-1">
-          {chord.root}
+        <span className="text-2xl font-black tracking-tight flex items-baseline gap-1">
+          {spellChordRoot(chord.root, spellingKey)}
           <span className="text-sm font-semibold opacity-70">
             {formatChordQuality(chord.quality)}
           </span>
         </span>
-        <span className="text-[10px] opacity-70 font-mono mt-1">
-          {chord.notes.join(" • ")}
+        <span className="text-[10px] opacity-70 mt-1">
+          {chord.notes
+            .map((n) => spellNoteInKey(n, scaleRoot, scaleType))
+            .join(" • ")}
         </span>
         <BeatDots
           size="sm"
@@ -168,9 +182,11 @@ export const SortableChordCard = React.memo(function SortableChordCard({
             onChange={(e) => updateChord(chord.id, { root: e.target.value })}
             className="select select-xs w-full"
           >
+            {/* value stays ROOTS-spelled — it is what gets stored; only the
+                label is spelled, the same split KEY_OPTIONS makes. */}
             {ROOTS.map((r) => (
               <option key={r} value={r}>
-                {r}
+                {spellChordRoot(r, spellingKey)}
               </option>
             ))}
           </select>

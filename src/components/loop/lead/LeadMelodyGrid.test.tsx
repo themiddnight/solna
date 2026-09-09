@@ -75,7 +75,9 @@ describe('LeadMelodyGrid', () => {
   test('renders a clear button and the note-name column', () => {
     const html = renderToString(<LeadMelodyGrid />);
     expect(html).toContain('id="btn-lead-clear"');
-    expect(html).toContain('font-mono');
+    // The note column is the row of preview buttons, one per pitch row.
+    expect(html).toContain('title="Preview ');
+    expect(html).not.toContain('font-mono');
   });
 
   test('the resolution select offers the three resolutions, in order', () => {
@@ -245,7 +247,11 @@ describe('LeadMelodyHeaders', () => {
 describe('LeadMelodyGrid gate slider', () => {
   test('renders the labelled per-loop gate at the default 85%', () => {
     const html = renderToString(<LeadMelodyGrid />);
-    expect(html).toContain('Gate 85%');
+    // Name and value are two spans now, not one string: every settings group
+    // in this lane wears a GROUP_LABEL naming what it adjusts, so "Gate" is
+    // the same kind of caption as "Octave" and "Step" rather than a one-off.
+    expect(html).toContain('>Gate</span>');
+    expect(html).toContain('85%');
     expect(html).toContain('id="range-lead-gate"');
     expect(html).toContain('range range-primary range-xs w-20');
   });

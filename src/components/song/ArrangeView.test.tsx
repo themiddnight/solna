@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { loopStatePatch } from '@/store/loop';
 import { createDefaultLoop } from '@/store/loopSlice';
@@ -250,5 +251,39 @@ describe('loopIds changes on add, remove and reorder through the real store acti
     const { activeLoopId } = useAppStore.getState();
     useAppStore.getState().reorderLoops(activeLoopId, -1);
     expect(loopIdKeyOf(useAppStore.getState().loops)).not.toBe(before);
+  });
+});
+
+
+/**
+ * The follow-the-playhead scroll runs in an effect, which `renderToString`
+ * never executes — so the header toggle's actual authority over it is pinned
+ * off the source instead, the way Header.test.tsx pins the header's own row
+ * order. Both halves matter: the guard is what makes "off" mean no scroll at
+ * all, and the dependency is what makes turning it back on mid-song catch up
+ * to the playing card instead of waiting for the next loop change.
+ */
+describe('followPlayhead gates the scroll effect', () => {
+  const src = readFileSync(new URL('./ArrangeView.tsx', import.meta.url), 'utf8');
+
+  test('the effect returns early when the toggle is off', () => {
+    expect(src).toContain("if (!followPlayhead || !isPlaying || activeTab !== 'arrange' || !playingId) return;");
+  });
+
+  test('the flag is a dependency, so switching it on scrolls immediately', () => {
+    expect(src).toContain('}, [followPlayhead, isPlaying, activeTab, playingId]);');
+  });
+
+  test('the per-tick step is still absent from those dependencies', () => {
+    // Read the dep array out of the source and check it for `currentStep`,
+    // rather than checking for one exact serialisation of the broken list.
+    // The old assertion missed any other ordering and any prettier rewrap, so
+    // adding the per-tick step — which re-fires the scroll 8-16x/sec and
+    // fights the user's own scrolling — could land with this test green.
+    const deps = /\}, \[([^\]]*)\]\);/g;
+    const arrays = [...src.matchAll(deps)].map((m) => m[1]);
+    const scrollDeps = arrays.find((a) => a.includes('followPlayhead'));
+    expect(scrollDeps).toBeDefined();
+    expect(scrollDeps).not.toContain('currentStep');
   });
 });

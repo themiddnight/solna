@@ -14,6 +14,7 @@ import { SCOPE_NONE } from './playbackScope';
 import { defaultPadState, INITIAL_EFFECTS } from './initialState';
 import { DEFAULT_BPM } from './transportSlice';
 import { DEFAULT_METER_ID } from '../utils/meter';
+import { gainToDb, toLinearGain } from '../utils/gainUnits';
 
 /**
  * Every vibe, resolved once. Most of this file asserts on spec fields, which a
@@ -678,7 +679,9 @@ describe('applying a vibe writes its pad', () => {
     const s = useAppStore.getState();
     expect(s.padMuted).toBe(false);
     expect(s.padMode).toBe(vibe.pad!.mode);
-    expect(s.padVolume).toBe(vibe.pad!.volume);
+    // `pad.volume` is authored linear (DEV-383 divergence 4); `padVolume` is a
+    // dB fader (DEV-386), so applyVibeToStore must convert at the boundary.
+    expect(s.padVolume).toBe(gainToDb(toLinearGain(vibe.pad!.volume)));
     expect(s.padOctave).toBe(vibe.pad!.octave);
     expect(s.padVoicing).toBe(vibe.pad!.voicing);
     expect(s.padDroneDegree).toBe(vibe.pad!.droneDegree);

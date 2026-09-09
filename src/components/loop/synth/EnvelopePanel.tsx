@@ -14,10 +14,10 @@ import { useSynthChannel } from "./useSynthChannel";
  * markup.
  */
 export function EnvelopePanel() {
-  const { params, onChangeParams, tintClass } = useSynthChannel();
+  const { params, onChangeParams } = useSynthChannel();
   // 3. Envelope ADSR
   return (
-          <PanelCard tint={tintClass} className="flex-1">
+          <PanelCard inset className="flex-1">
             <div className="card-body p-4 space-y-3">
             <ModuleHeader
               badge={3}

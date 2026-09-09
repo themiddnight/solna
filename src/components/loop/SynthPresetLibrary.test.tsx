@@ -27,8 +27,9 @@ describe('SynthPresetLibrary theming', () => {
     expect(html).toContain('badge badge-accent');
   });
 
-  test('sound attribute chips are ghost mono badges', () => {
-    expect(html).toContain('badge badge-sm badge-ghost font-mono');
+  test('sound attribute chips are ghost badges, and the numeric one is tabular', () => {
+    expect(html).toContain('badge badge-sm badge-ghost');
+    expect(html).toContain('badge badge-sm badge-ghost tabular-nums');
     expect(html).not.toContain('py-0.2');
   });
 
@@ -126,14 +127,14 @@ describe('SynthPresetLibrary sound badges', () => {
 
   test('Pro Mode keeps the oscillator and filter readouts', () => {
     const pro = renderWithBadges(true);
-    expect(pro).toContain('badge badge-sm badge-ghost font-mono');
+    expect(pro).toContain('badge badge-sm badge-ghost tabular-nums');
     expect(pro).toContain('sawtooth');
     expect(pro).toContain('LPF');
   });
 
   test('Simple Mode drops them from every entry', () => {
     const simple = renderWithBadges(false);
-    expect(simple).not.toContain('badge badge-sm badge-ghost font-mono');
+    expect(simple).not.toContain('badge badge-sm badge-ghost tabular-nums');
     expect(simple).not.toContain('LPF');
     expect(simple).not.toContain('HPF');
     expect(simple).not.toContain('BPF');

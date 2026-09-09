@@ -28,10 +28,11 @@ describe('Pro-Mode panels render the markup SoundView used to render inline', ()
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('text-module-osc');
-    // Phase 2: ui/PanelCard renders the shell first and the caller's extras
-    // last, so `flex-1` moved to the end. Tailwind utilities are
-    // order-independent in the attribute; nothing renders differently.
-    expect(html).toContain('card bg-panel border border-base-300 shadow-md flex-1');
+    // The five stages are compartments INSIDE the Synth section card, so they
+    // wear PanelCard's recessed shell — no `bg-panel`, no shadow — and no
+    // target tint: that is painted once, on the section (docs/design.md §6.5).
+    expect(html).toContain('card bg-base-200 border border-base-300 flex-1');
+    expect(html).not.toContain('tint-chord');
     expect(html).not.toContain('#');
     expect(html).not.toContain('indigo-');
   });
@@ -92,10 +93,14 @@ describe('Pro-Mode panels render the markup SoundView used to render inline', ()
     expect(html).toContain('Bypass');
   });
 
-  test('every panel renders exactly one card wrapper, still carrying flex-1', () => {
+  test('every panel renders exactly one card wrapper, recessed, still carrying flex-1', () => {
     for (const Panel of [OscillatorPanel, FilterPanel, EnvelopePanel, LfoPanel, ArpeggiatorPanel]) {
       const html = renderToString(<Panel />);
-      expect(html.split('card bg-panel border border-base-300 shadow-md flex-1').length - 1).toBe(1);
+      expect(html.split('card bg-base-200 border border-base-300 flex-1').length - 1).toBe(1);
+      // A stage that re-floats itself would read as a sibling of the Synth
+      // section rather than a compartment of it.
+      expect(html).not.toContain('bg-panel');
+      expect(html).not.toContain('shadow-md');
     }
   });
 });

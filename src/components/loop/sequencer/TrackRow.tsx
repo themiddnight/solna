@@ -67,7 +67,7 @@ export const TrackRow = React.memo(
         // corners, and only a clip rect trims them to the card's own shape.
         // `hidden` would do that too, but it makes the row a scroll container,
         // and the gutter would then stick to the row instead of to the grid.
-        className="flex items-center gap-2 bg-base-200 py-2 pr-2 rounded-box border border-base-300 overflow-clip hover:border-primary/40 transition-colors"
+        className="flex items-center gap-2 bg-base-200 py-1.5 sm:py-2 pr-2 rounded-box border border-base-300 overflow-clip hover:border-primary/40 transition-colors"
       >
         {/* Track Info & Mute.
             `sticky left-0` pins the gutter to the left edge of SequencerGrid's
@@ -79,11 +79,14 @@ export const TrackRow = React.memo(
             `-my-2 py-2` covers the row's whole height (its padding included —
             the active steps' glow spills into that), and `pl-2` takes over the
             row's left padding so nothing scrolls through the 8px beside it.
-            Its width must stay in step with StepHeader's `pl-38 sm:pl-44`:
-            gutter + the row's `gap-2`. */}
-        <div className="sticky left-0 z-10 self-stretch -my-2 py-2 bg-base-200 w-36 sm:w-42 shrink-0 flex flex-col justify-center gap-1 pl-2 pr-2 border-r border-base-300">
+            Its width must stay in step with StepHeader's `pl-34 sm:pl-44`:
+            gutter + the row's `gap-2`. The phone gutter is `w-32`, not the
+            `w-36` it was: every 8px taken off it is 8px the sixteen steps
+            share, and that is what buys them a square cell instead of a
+            22x36 sliver. */}
+        <div className="sticky left-0 z-10 self-stretch -my-1.5 sm:-my-2 py-1.5 sm:py-2 bg-base-200 w-32 sm:w-42 shrink-0 flex flex-col justify-center gap-0.5 sm:gap-1 pl-2 pr-2 border-r border-base-300">
           {/* Two rows, not one. The gutter's WIDTH is load-bearing — it must
-              stay in step with StepHeader's `pl-38 sm:pl-44`, a constant the
+              stay in step with StepHeader's `pl-34 sm:pl-44`, a constant the
               chord and bass step headers share — so the fader goes BELOW the
               name rather than beside it. Height is free; width is not. */}
           <div className="flex items-center justify-between">
@@ -151,6 +154,12 @@ export const TrackRow = React.memo(
           getButtonId={getButtonId}
           activeOverlay="pulse"
           rowClassName="flex-1 flex items-center gap-1.5"
+          // Square, not the shared `h-9`: a drum cell is one hit, and eleven
+          // lanes of tall slivers read as columns of bars rather than a grid.
+          // `aspect-square` takes the height from whatever width the lane can
+          // afford (~28px on a phone, ~30px on a tablet); `max-h-9` caps it at
+          // the old height so a wide desktop grid does not grow 60px cells.
+          stepClassName="aspect-square max-h-9"
           onStepClick={handleStepClick}
         />
       </div>

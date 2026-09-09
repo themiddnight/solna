@@ -11,13 +11,12 @@ import {
 import { patternMeterTitle, patternOptionLabel } from "@/components/meterSelect";
 import { getMeter } from "@/utils/meter";
 import { stepCells } from "@/components/sequencerGrid";
-import { FIELD_LABEL, FIELD_SELECT, SECTION_HEADER } from "@/components/ui/fieldClasses";
+import { FIELD_LABEL, FIELD_SELECT } from "@/components/ui/fieldClasses";
 import { Slider } from "@/components/ui/Slider";
 import { PlayingStepRow, STEP_ROW_CLASS } from "@/components/ui/StepRow";
 import { PlayingStepHeader } from "@/components/ui/StepHeader";
 import { IconButton } from "@/components/ui/IconButton";
-import { SoloButton } from "@/components/ui/SoloButton";
-import { AdjustSynthButton } from "./AdjustSynthButton";
+import { ModulePanelCard } from "./ModulePanelCard";
 import { PresetSelect } from "./PresetSelect";
 import { bassStepLabel, nextBassStepChoice } from "./bassStepChoice";
 
@@ -58,27 +57,23 @@ export function BassModulePanel({
     [allPresets],
   );
 
+  // No `mt-4`, and `role="group"` names this card for a screen reader — see the
+  // note in ChordModulePanel for both.
   return (
-      <div className="mt-4 card bg-panel tint-bass border border-module-bass/30 p-4">
-        <div className="mb-3 flex items-start justify-between gap-2">
-          <div>
-            <h3 className={SECTION_HEADER}>
-              Bass Module
-            </h3>
-            <p className="text-[10px] text-base-content/60">
-              Bass line follows the same chord progression loop; pattern steps
+    <ModulePanelCard
+      target="bass"
+      title="Bass Module"
+      description={
+        <>
+          Bass line follows the same chord progression loop; pattern steps
               are 16th notes.
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <SoloButton track="bass" />
-            <AdjustSynthButton target="bass" className="text-module-bass" />
-          </div>
-        </div>
-        <div className="flex flex-row flex-wrap items-end gap-3">
+        </>
+      }
+    >
+      <div className="flex flex-row flex-wrap items-end gap-3">
           <PresetSelect
             id="select-bass-sound-preset"
-            label="Bass Preset"
+            label="Preset"
             title="Bass sound preset — any factory, bass, or saved preset, synced with the synth page"
             placeholder="Bass Preset…"
             groups={presetGroups}
@@ -95,7 +90,7 @@ export function BassModulePanel({
           />
 
           <div>
-            <label className={FIELD_LABEL} htmlFor="select-bass-octave">Bass Octave</label>
+            <label className={FIELD_LABEL} htmlFor="select-bass-octave">Octave</label>
             <select
               id="select-bass-octave"
               value={bassOctave}
@@ -112,7 +107,7 @@ export function BassModulePanel({
           </div>
 
           <div>
-            <label className={FIELD_LABEL} htmlFor="select-bass-rhythm-pattern">Bass Pattern</label>
+            <label className={FIELD_LABEL} htmlFor="select-bass-rhythm-pattern">Pattern</label>
             <div className="flex items-center gap-1.5">
               <select
                 id="select-bass-rhythm-pattern"
@@ -160,7 +155,7 @@ export function BassModulePanel({
 
           {/* Bass Feel Slider (tight ↔ loose) */}
           <div>
-            <label className={FIELD_LABEL} htmlFor="slider-bass-feel">Bass Feel</label>
+            <label className={FIELD_LABEL} htmlFor="slider-bass-feel">Feel</label>
             <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
               <span className="text-[9px] text-base-content/60 shrink-0">
                 tight
@@ -214,6 +209,6 @@ export function BassModulePanel({
             </div>
           </div>
         )}
-      </div>
+    </ModulePanelCard>
   );
 }

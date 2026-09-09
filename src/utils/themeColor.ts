@@ -138,6 +138,21 @@ export function resolveThemeRgb(token: ThemeToken, root?: HTMLElement): Rgb {
   return parseRgbString(computed) ?? FALLBACKS[token];
 }
 
+/**
+ * The app's font stack, read from `--font-sans` rather than re-typed.
+ *
+ * Canvas cannot take a class, so canvas text has to name a family literally —
+ * and a literal is a copy of index.css that nothing keeps in step. The theme
+ * guard cannot help here either: it bans `font-mono`/`monospace`, so the
+ * sans-stack copy it forced this code onto is unguarded. Reading the custom
+ * property is the same move `resolveThemeRgb` makes for colour.
+ */
+export function resolveThemeFontFamily(root?: HTMLElement): string {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return 'sans-serif';
+  const host = root ?? document.documentElement;
+  return window.getComputedStyle(host).getPropertyValue('--font-sans').trim() || 'sans-serif';
+}
+
 /** Resolves every theme token in one pass. Cache the result; re-run on theme change. */
 export function createThemePalette(root?: HTMLElement): Record<ThemeToken, Rgb> {
   const palette = {} as Record<ThemeToken, Rgb>;

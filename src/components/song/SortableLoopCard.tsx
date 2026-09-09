@@ -269,7 +269,7 @@ function LoopStatusBadge({
 }: LoopStatusBadgeProps) {
   if (isAuditioning) {
     return (
-      <span className="badge badge-sm badge-accent gap-1 font-mono uppercase font-bold shrink-0 animate-pulse">
+      <span className="badge badge-sm badge-accent gap-1 tabular-nums uppercase font-bold shrink-0 animate-pulse">
         <Play className="w-2.5 h-2.5 fill-current" />
         {`Audition ${currentStepInLoop + 1}/${singleCycleSteps}`}
       </span>
@@ -278,7 +278,7 @@ function LoopStatusBadge({
   if (isPlaying) {
     const position = `Playing ${currentStepInLoop + 1}/${totalStepsInLoop}`;
     return (
-      <span className="badge badge-sm badge-primary gap-1 font-mono uppercase font-bold shrink-0 animate-pulse">
+      <span className="badge badge-sm badge-primary gap-1 tabular-nums uppercase font-bold shrink-0 animate-pulse">
         <Play className="w-2.5 h-2.5 fill-current" />
         {repeatCount > 1 ? `${position} (Rep ${currentRep}/${repeatCount})` : position}
       </span>
@@ -286,7 +286,7 @@ function LoopStatusBadge({
   }
   if (isActive) {
     return (
-      <span className="badge badge-sm badge-outline badge-primary font-mono text-[10px] uppercase font-bold shrink-0">
+      <span className="badge badge-sm badge-outline badge-primary text-[10px] uppercase font-bold shrink-0">
         Active Cue
       </span>
     );
@@ -316,7 +316,7 @@ function LoopChordStrip({ chords, isPlaying, activeChordIndex }: LoopChordStripP
         return (
           <span
             key={chord.id || `${chord.root}-${cIdx}`}
-            className={`badge badge-sm gap-1 font-mono transition-all duration-150 ${
+            className={`badge badge-sm gap-1 transition-all duration-150 ${
               isChordActive
                 ? 'badge-primary font-bold ring-2 ring-primary/60 shadow-sm scale-105'
                 : 'bg-base-200 border border-base-300'
@@ -437,12 +437,20 @@ export const SortableLoopCard = React.memo(
         ref={setNodeRef}
         style={style}
         onClick={handleCardClick}
-        className={`card card-border bg-base-200 border transition-all shadow-xs cursor-pointer ${loopCardAccent(
+        /* `overflow-hidden` is load-bearing, not tidiness: the progress rail
+           below is a full-width first child sitting on the card's own rounded
+           top corners, and `rounded-t-box` on the rail alone rounds it to the
+           OUTER radius — a border width wider than the inside of the card's
+           border — so its corners spilled over the border. Clipping at the
+           card lets the rail stay square and take the card's exact shape. No
+           child of this card is positioned outside it (the selects are native
+           and pop out of the flow), so nothing else is cut off. */
+        className={`card card-border bg-base-200 border overflow-hidden transition-all shadow-xs cursor-pointer ${loopCardAccent(
           { isAuditioning, isPlaying, isActive },
         )}`}
       >
         {/* Progress bar for playing loop */}
-        <div className="w-full h-1 bg-base-300 overflow-hidden rounded-t-box">
+        <div className="w-full h-1 bg-base-300 overflow-hidden">
           {isPlaying && (
             <div
               className={`h-full transition-all duration-75 ease-linear ${
@@ -476,7 +484,7 @@ export const SortableLoopCard = React.memo(
               </button>
 
               {/* Order index badge */}
-              <span className="badge badge-sm badge-neutral font-mono font-bold shrink-0">
+              <span className="badge badge-sm badge-neutral tabular-nums font-bold shrink-0">
                 {`#${index + 1}`}
               </span>
 
@@ -547,7 +555,7 @@ export const SortableLoopCard = React.memo(
               )}
 
               {/* Bar count badge */}
-              <span className="badge badge-sm badge-ghost font-mono text-base-content/60 shrink-0">
+              <span className="badge badge-sm badge-ghost tabular-nums text-base-content/60 shrink-0">
                 {`${bars} ${bars === 1 ? 'bar' : 'bars'}`}
               </span>
 
@@ -639,7 +647,7 @@ export const SortableLoopCard = React.memo(
               <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50">
                 Key:
               </span>
-              <span className="badge badge-sm badge-outline gap-1 font-mono">
+              <span className="badge badge-sm badge-outline gap-1">
                 <span className="font-bold text-primary">{getTonicSpelling(loop.scaleRoot, loop.scaleType)}</span>
                 <span className="text-base-content/70">{loop.scaleType}</span>
               </span>
@@ -656,7 +664,7 @@ export const SortableLoopCard = React.memo(
                 id={`select-repeat-${loop.id}`}
                 value={loop.repeatCount ?? 1}
                 onChange={(e) => onSetRepeat(loop.id, Number(e.target.value))}
-                className="select select-xs select-bordered font-mono font-bold bg-base-100/80"
+                className="select select-xs select-bordered tabular-nums font-bold bg-base-100/80"
                 aria-label={`Repeat count for ${label}`}
                 title="Number of times this loop plays before advancing in song mode"
               >

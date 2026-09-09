@@ -79,6 +79,15 @@ export const RULES: { name: string; pattern: RegExp }[] = [
     pattern: /\brgba?\(/g,
   },
   {
+    // solna is single-face: no mono webfont is loaded and nothing in the app
+    // is monospaced (see docs/design.md §3). Numbers that must not jitter as
+    // they tick take `tabular-nums`, never `font-mono`. The `monospace` half
+    // also catches a canvas `ctx.font` naming the system mono stack, which is
+    // how the oscilloscope's axis labels escaped the class-level ban.
+    name: 'mono-font',
+    pattern: /\bfont-mono\b|monospace/g,
+  },
+  {
     // Utilities that do not exist in Tailwind v4 and therefore silently no-op:
     //   py-0.2 / px-0.2 / p-0.2  (spacing steps are .5-based)
     //   scale-NNN with NNN outside the real v4 scale steps

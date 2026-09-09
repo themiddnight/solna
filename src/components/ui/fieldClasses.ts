@@ -52,6 +52,22 @@ export const FIELD_LANE = 'flex items-center h-8';
 export const JOIN_LANE = `join ${FIELD_LANE} bg-base-200 border border-base-300 rounded-box px-0.5`;
 
 /**
+ * The shell every group in the header chrome sits in: the layer switcher and
+ * the tab bar in `Header.tsx`, Pattern's segment row, and the Sound tab's
+ * Simple/Pro switch. A `join` of `btn-sm` buttons, so every one of them is the
+ * same height.
+ *
+ * It is deliberately NOT `JOIN_LANE`. That one is a form control — it composes
+ * `FIELD_LANE` to drop a row of `btn-xs` toggles onto a labelled field's 32px
+ * baseline — and the header has no field baseline to join. Sound's Simple/Pro
+ * wore it while it sat in `actions`, which put a 32px segmented control in the
+ * same card as Pattern's 40px one; moving it beside the title is what made the
+ * mismatch a thing you see side by side.
+ */
+export const HEADER_GROUP =
+  'join bg-base-200 border border-base-300 rounded-box p-1 shrink-0';
+
+/**
  * The count badge the Sounds and Progressions buttons carry.
  *
  * `sm:inline-flex`, never `sm:inline`: daisyUI centres a badge's content with
@@ -85,6 +101,81 @@ export const SECTION_HEADER = 'text-xs font-bold uppercase tracking-wider text-b
  * stop, in markup the same branch added.
  */
 export const STEP_BADGE = 'badge badge-sm badge-outline tabular-nums';
+
+/**
+ * The select the header chrome wears: the loop picker and both master scale
+ * selects. Ghost-filled, because the shell around it already draws the box.
+ *
+ * `appearance-none` is load-bearing, not decoration. daisyUI opts every
+ * `.select` into Chrome's customizable select (`@supports (appearance:
+ * base-select)`) and clips the label through a rule on `selectedcontent` — but
+ * `selectedcontent` only exists when the author writes the
+ * `<button><selectedcontent>` markup themselves. With a plain `<select>` Chrome
+ * renders its own button instead, that rule matches nothing, and a label longer
+ * than the control paints straight through the padding, over the chevron and
+ * out past the border. Falling back to the classic rendering hands the label
+ * back to `.select`'s own `text-overflow: ellipsis`, which clips it at the
+ * content edge; `pe-8` widens daisyUI's 1.75rem end padding by 4px so the
+ * ellipsis lands a clear 8px short of the arrow rather than 4.
+ *
+ * The trade, on the record: these selects open the platform's own list rather
+ * than daisyUI's styled picker. Everything about the CLOSED control — the ghost
+ * fill, the arrow (a background image, not the hidden `::picker-icon`) — is
+ * unchanged.
+ *
+ * Truncation also needs a FIXED width at the call site — a `w-*`, never a
+ * `min-w-*`: daisyUI sizes `.select` at `clamp(3rem, 20rem, 100%)` with
+ * `flex-shrink: 1`, so a min-width leaves the real width to whatever the navbar
+ * has left over that render — and a select free to size itself never overflows,
+ * so its `text-overflow` never fires.
+ */
+export const HEADER_SELECT = 'select select-sm select-ghost font-bold appearance-none pe-8';
+
+/**
+ * The box a labelled control group sits in in the navbar: the loop picker and
+ * the master key/scale pair. It is the header's answer to `FIELD_LANE` — the
+ * caption and its control read as one object rather than two things that happen
+ * to be adjacent — and both groups wearing it is what makes the right-hand
+ * cluster a row of equals rather than a run of loose selects.
+ */
+export const HEADER_FIELD_SHELL =
+  'flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-0.5 rounded-field';
+
+/**
+ * The right-hand control cluster of a card's header band.
+ *
+ * `HeaderCard` (a tab's header) and `SectionCard` (a section inside it) both
+ * draw one, and on the Sound tab they stack on the same screen — so a gap or
+ * min-height change to one has to reach the other or the two bands visibly
+ * split. They were two literals that already differed by two modifiers, each
+ * file's comment pointing at the other as the model, which is the tell that
+ * they were meant to be one thing. Compose the per-band modifier at the call
+ * site: `cx(ACTION_CLUSTER, 'empty:hidden')`, `cx(ACTION_CLUSTER, 'relative')`.
+ */
+export const ACTION_CLUSTER = 'flex items-center flex-wrap gap-1.5 min-h-8';
+
+/**
+ * The same pill, at the transport bar's tighter metrics.
+ *
+ * A named sibling rather than a private literal in `TransportBar.tsx`, because
+ * BPM and Meter are the same role as the navbar's loop picker and key/scale
+ * group — "the box a labelled control group sits in" — and one role spelled in
+ * two files is how the two ended up a padding step apart with nothing to say
+ * whether that was a decision. It IS a decision: the transport bar packs
+ * Play, a target label, BPM, Meter, a metronome, a meter and the master fader
+ * into one row, so its pills give up horizontal padding below `sm` where the
+ * header's have room. Keep the difference here, in one file with the token it
+ * differs from, so the next reader compares two lines instead of two files.
+ */
+export const TRANSPORT_FIELD_SHELL =
+  'flex items-center gap-0.5 sm:gap-1 bg-base-200 border border-base-300 px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-box';
+
+/**
+ * The transport pill's caption. Lowercase where `GROUP_LABEL` is uppercase:
+ * "BPM" and "Meter" are already caps as words, so the transform buys nothing
+ * and the tracking it carries costs width the row does not have.
+ */
+export const TRANSPORT_FIELD_LABEL = 'text-[10px] text-base-content/50 hidden sm:inline px-1';
 
 /**
  * The badge a view header carries beside its title. `ViewHeader` renders it,

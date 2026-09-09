@@ -23,7 +23,7 @@ describe('StepHeader', () => {
       <StepHeader cells={cells} currentStep={0} isPlaying={false} />,
     );
     expect(html).toContain(
-      'flex items-center gap-2 mb-2 pl-38 sm:pl-44 min-w-[600px] sm:min-w-[700px]',
+      'flex items-center gap-1.5 mb-2 pl-34 sm:pl-44 pr-2 min-w-[660px] sm:min-w-[700px]',
     );
   });
 
@@ -35,9 +35,9 @@ describe('StepHeader', () => {
     );
     expect(html).toContain(`class="${STEP_ROW_CLASS}"`);
     expect(html).not.toContain('pl-44');
-    expect(html).not.toContain('pl-38');
+    expect(html).not.toContain('pl-34');
     expect(html).not.toContain('min-w-[700px]');
-    expect(html).not.toContain('min-w-[600px]');
+    expect(html).not.toContain('min-w-[660px]');
   });
 
   test('STEP_ROW_CLASS is the row default, so a header sharing it aligns', () => {

@@ -82,9 +82,11 @@ shows it, never in a slice.
    chains" note further down for why, and for the precondition under which that stops being
    true.
 4. `src/components/` — dumb views; must not import `audio/engine`. Only `AudioVisualizer.tsx`,
-   `ui/VuMeter.tsx` and `ui/AmbientBackdrop.tsx` (read-only analyser consumers) and test files
-   are exempt — routing their per-frame analyser reads through the store would mean a store
-   write on every animation frame and a re-render of every subscriber.
+   `ui/VuMeter.tsx`, `ui/AmbientBackdrop.tsx`, `ui/GainReductionMeter.tsx` and `ui/SourceMeter.tsx`
+   (read-only analyser consumers) and test files are exempt — routing their per-frame analyser
+   reads through the store would mean a store write on every animation frame and a re-render of
+   every subscriber. **`eslint.config.js` is the list that binds**; this one has drifted behind it
+   before, so add to both or the allowlist quietly grows without anyone reading it.
 
 `src/utils/` stays outside the chain, above `data/`: it may read `data/` at runtime
 (`musicTheory.ts` imports `SCALES`), but nothing in `data/` may read it back except through an
@@ -295,7 +297,8 @@ from a component** — add the state to a slice and wire it in `engineSync.ts`.
 **A meter reads samples, not a spectrum, and it reads them before the dynamics.** Level is peak
 and windowed RMS computed from `getFloatTimeDomainData` and reported in dBFS (`src/utils/`:
 `gainUnits.ts`, `meterZones.ts`, `meterScale.ts`, `meterLevel.ts`; a zone's colour comes from
-`vuMeter.ts`'s `zoneFillClass`). Averaging
+`meterColor.ts`'s `zoneFillClass`, which is `vuMeter.ts` renamed when the ten-segment bar became
+a continuous fill — there is no `vuMeter.ts` any more). Averaging
 `getByteFrequencyData` bins — what `getAudioLevel()` did — measures a patch's brightness, not its
 loudness, and yields a 0..1 with no dB meaning, which is why the segments it drove corresponded
 to nothing. The master analysers are **observe-only sends off `masterGain`**, post-fader and

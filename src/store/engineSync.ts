@@ -12,6 +12,7 @@ import { createTrailingDebounce } from '../utils/trailingDebounce';
 import type { MasterEffects, SequencerTrack } from '../types';
 import { DEFAULT_FADER_DB, faderDbToGain } from './levelUnits';
 import { isTrackAudible } from './trackAudibility';
+import { SOURCE_BUSES, type SourceBus } from './sourceBuses';
 import type { AppStore } from './types';
 
 /**
@@ -111,30 +112,24 @@ function effectsEqualExceptDecay(a: MasterEffects, b: MasterEffects): boolean {
 }
 
 /**
- * Every source bus the store owns, as `[volume field, mute field, engine
- * source, solo track]`. Both the snapshot pass and the subscription block
- * below are driven from this one table, on the `synthSources` precedent
- * further down — the two used to be ten hand-written lines each, and a bus
- * added to one and forgotten in the other is silent until the first apply.
+ * The bus table lives in `store/sourceBuses.ts`, not here, and is re-exported
+ * for the callers that already reach for it through this module.
  *
- * The field names are table data rather than a `${source}Volume` convention on
- * purpose: 'sequencer' is irregular (`masterSequencerVolume` / `drumMuted`),
- * and encoding that as a special case in the loop would cost more than
- * spelling all ten names out.
- *
- * `solo` is the same irregularity in the other direction: the ENGINE calls the
- * drum bus 'sequencer' and the lead bus 'synth', while the USER-facing solo
- * vocabulary (store/trackAudibility.ts) calls them 'drums' and 'lead'. The
- * translation is written once, here, because this table is already the place
- * that owns the per-bus name mapping.
+ * It moved because `components/mixLayers.ts` carries the same bus↔store-field
+ * mapping in its own rows and nothing checked that the two agree — a row
+ * pairing the wrong volume key with a bus name compiles, and shows up only as
+ * a mixer fader and the meter beside it describing different buses. A module
+ * with no `audio/engine` import can be read at runtime from `components/`
+ * (this one cannot, per layering rule 4), which is what lets
+ * `mixLayers.test.ts` assert the two tables row for row.
  */
-const SOURCE_BUSES = [
-  { source: 'synth', volume: 'synthVolume', muted: 'synthMuted', solo: 'lead' },
-  { source: 'chord', volume: 'chordVolume', muted: 'chordMuted', solo: 'chord' },
-  { source: 'bass', volume: 'bassVolume', muted: 'bassMuted', solo: 'bass' },
-  { source: 'pad', volume: 'padVolume', muted: 'padMuted', solo: 'pad' },
-  { source: 'sequencer', volume: 'masterSequencerVolume', muted: 'drumMuted', solo: 'drums' },
-] as const;
+export { SOURCE_BUSES, sourceBus } from './sourceBuses';
+export type {
+  SourceBus,
+  SourceBusId,
+  SourceBusMuteKey,
+  SourceBusVolumeKey,
+} from './sourceBuses';
 
 /**
  * THE audibility read, and the only one: solo beats mute, and the formula lives
@@ -145,7 +140,7 @@ const SOURCE_BUSES = [
  * a typo in the table above is a compile error rather than a bus that silently
  * never solos.
  */
-function busAudible(s: AppStore, bus: (typeof SOURCE_BUSES)[number]): boolean {
+function busAudible(s: AppStore, bus: SourceBus): boolean {
   return isTrackAudible(bus.solo, s.soloTracks, s[bus.muted]);
 }
 

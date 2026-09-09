@@ -38,6 +38,7 @@ export const VuMeter = React.memo(function VuMeter({ isPlaying }: VuMeterProps) 
     <div className="hidden sm:flex items-center gap-1 bg-base-200 border border-base-300 p-1.5 rounded-box">
       <MeterBar
         peakDbfs={level.peakDbfs}
+        rmsDbfs={level.rmsDbfs}
         heldPeakDbfs={level.heldPeakDbfs}
         className="w-14"
         title={`Master peak: ${formatDb(level.peakDbfs)}`}

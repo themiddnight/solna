@@ -1,12 +1,22 @@
 import React from 'react';
+import { SlidersVertical } from 'lucide-react';
 import { useAppStore } from '@/store/store';
+import { aggregatePlayerState } from '@/store/transportSlice';
 import { SYNTH_TARGET_STYLES } from '@/utils/synthControl';
-import { PanelCard } from '../ui/PanelCard';
-import { ChannelStrip } from '../ui/ChannelStrip';
+import { SectionCard } from '../ui/SectionCard';
+import { ChannelStrip, layerVolumeSliderId } from '../ui/ChannelStrip';
 import { PowerToggle } from '../ui/PowerToggle';
-import { MIX_LAYERS, type MixLayer, type MixLayerId } from '../mixLayers';
-import { SECTION_HEADER } from '../ui/fieldClasses';
-import { GroupFrame } from '../ui/GroupFrame';
+import { SourceMeter } from '../ui/SourceMeter';
+import {
+  MIX_GROUP_IDS,
+  MIX_GROUP_LABELS,
+  MIX_LAYERS,
+  type MixGroupId,
+  type MixLayer,
+  type MixLayerId,
+} from '../mixLayers';
+import { FIELD_LABEL, GROUP_LABEL } from '../ui/fieldClasses';
+import { formatDb } from '@/utils/gainUnits';
 
 /**
  * A mix layer plus the two things only THIS surface has: the slice actions it
@@ -56,9 +66,20 @@ export const MIXER_CHANNELS: ReadonlyArray<MixerChannel> = MIX_LAYERS.map((layer
   ...MIXER_WRITERS[layer.idPrefix],
 }));
 
-const MIXER_LEAD = MIXER_CHANNELS.filter((c) => c.group === 'lead');
-const MIXER_ACCOMPANIMENT = MIXER_CHANNELS.filter((c) => c.group === 'accompaniment');
-const MIXER_BEAT = MIXER_CHANNELS.filter((c) => c.group === 'beat');
+/**
+ * The rows under each heading, bucketed ONCE at module scope: the table never
+ * changes at runtime, and this component re-renders on every transport change.
+ *
+ * A group with no rows is dropped rather than drawn — a heading over nothing is
+ * a bug that looks like a design, and MIX_GROUP_IDS can legitimately gain an id
+ * before any layer names it.
+ */
+const MIXER_GROUPS: ReadonlyArray<{ id: MixGroupId; label: string; channels: MixerChannel[] }> =
+  MIX_GROUP_IDS.map((id) => ({
+    id,
+    label: MIX_GROUP_LABELS[id],
+    channels: MIXER_CHANNELS.filter((c) => c.group === id),
+  })).filter((group) => group.channels.length > 0);
 
 /**
  * One row = one layer. The store subscriptions live HERE, not in SoundMixer:
@@ -67,32 +88,79 @@ const MIXER_BEAT = MIXER_CHANNELS.filter((c) => c.group === 'beat');
  * re-renders that row alone — which is the same direct-write behaviour the
  * ChannelStrip call sites this replaces already had.
  */
-function MixerRow({ channel }: { channel: MixerChannel }) {
+function MixerRow({ channel, isPlaying }: { channel: MixerChannel; isPlaying: boolean }) {
   const volume = useAppStore((s) => s[channel.volumeKey]);
   const setVolume = useAppStore((s) => s[channel.setVolumeKey]);
   const muted = useAppStore((s) => s[channel.muteKey]);
   const toggleMuted = useAppStore((s) => s[channel.toggleKey]);
 
   return (
-    <div className="flex items-center gap-2">
-      <PowerToggle
-        id={`btn-mix-mute-${channel.idPrefix}`}
-        on={!muted}
-        onToggle={toggleMuted}
-        name={channel.label}
-        tone={channel.tone}
-        size="xs"
-        verb={{ on: 'Unmute', off: 'Mute' }}
-      />
-      <div className="flex-1 min-w-40">
-        <ChannelStrip
-          idPrefix={channel.idPrefix}
-          label={channel.label}
-          volumeDb={volume}
-          accentClass={channel.accentClass}
-          sliderClassName={channel.sliderClassName}
-          onVolumeDbChange={setVolume}
-        />
+    /* The row is a COLUMN: the field label on its own line, then one control
+       line carrying the toggle, the fader and the meter.
+
+       The label used to be ChannelStrip's, which put it inside the fader's own
+       box-plus-label stack — so the toggle beside that stack centred against 48
+       px while the fader box centred against its own 32, and every toggle sat 8
+       px above the control it operates. Lifting the label out makes the three
+       controls siblings on one line, and they align by construction rather than
+       by a margin someone has to keep in step with the label's height. */
+    <div className="flex flex-col gap-1">
+      <label className={FIELD_LABEL} htmlFor={layerVolumeSliderId(channel.idPrefix)}>
+        {channel.label} <span className="tabular-nums">({formatDb(volume)})</span>
+      </label>
+      {/* `items-start` + an `h-8` box around the toggle, rather than
+          `items-center`: below `sm` the fader and the meter stack, and centring
+          would drop the toggle to the middle of that stack — beside the gap
+          between them. Anchoring to the top of a 32px box puts it level with the
+          fader in both layouts, because the fader box is `h-8` too. */}
+      <div className="flex items-start gap-2">
+        {/* `iconOnly`, because the row's label above already says "Lead" and
+            what its level is — and because a square button is one width for
+            every layer, where "Lead On" / "Chord On" / "Pad Off" are three, and
+            three widths start each row's fader at a different x. The state
+            still reaches assistive tech: PowerToggle sets `aria-pressed` and an
+            `aria-label` of "Lead On", and the tooltip says what a click does. */}
+        <div className="flex items-center h-8 shrink-0">
+          <PowerToggle
+            id={`btn-mix-mute-${channel.idPrefix}`}
+            on={!muted}
+            onToggle={toggleMuted}
+            name={channel.label}
+            tone={channel.tone}
+            size="xs"
+            iconOnly
+            verb={{ on: 'Unmute', off: 'Mute' }}
+          />
+        </div>
+        {/* Below `sm` the meter drops under the fader — the two cannot sit side
+            by side in a phone's width without squeezing the fader to
+            uselessness, and the fader is the control while the meter is only
+            the readout. */}
+        <div className="flex-1 min-w-0 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex-2 min-w-0">
+            {/* `showReadout={false}` because the row label above already
+                prints `formatDb(volume)`. It defaults to true, so leaving it
+                off rendered every layer's dB twice — once in the label, once
+                inside the fader box. */}
+            <ChannelStrip
+              idPrefix={channel.idPrefix}
+              volumeDb={volume}
+              accentClass={channel.accentClass}
+              sliderClassName={channel.sliderClassName}
+              showReadout={false}
+              onVolumeDbChange={setVolume}
+            />
+          </div>
+          {/* h-8 matches the fader box it sits beside. The reading is post-fader
+              (see ui/SourceMeter), so this bar shows what the fader to its left
+              just did. */}
+          <SourceMeter
+            source={channel.engineSource}
+            label={channel.label}
+            isPlaying={isPlaying}
+            className="h-8 flex-1 min-w-0"
+          />
+        </div>
       </div>
     </div>
   );
@@ -104,28 +172,45 @@ function MixerRow({ channel }: { channel: MixerChannel }) {
  * balance you cannot see all of at once is not a balance.
  */
 export const SoundMixer = React.memo(function SoundMixer() {
+  // The one subscription that belongs at this level rather than per row: it is
+  // the SAME boolean for all five meters, it changes twice per transport
+  // toggle, and a per-row copy would be five selectors computing one answer.
+  // Derived from the three player states the way TransportBar derives it — the
+  // meters only need to know whether anything is sounding, so the tiers park on
+  // `offscreen` and no analyser is read at all while stopped.
+  const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
+  const chordsPlayer = useAppStore((s) => s.chordsPlayer);
+  const leadPlayer = useAppStore((s) => s.leadPlayer);
+  const isPlaying = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer) !== 'stopped';
+
   return (
-    <PanelCard>
-      <div className="card-body p-3 sm:p-4 gap-3">
-        <span className={SECTION_HEADER}>Mixer</span>
-        {/* Grouped by the layer's own `group` column, not by index range: a
-            sixth layer inserted anywhere but the end would fall outside
-            `slice(1, 4)` and simply not render, with the order test still
-            green. Every layer names its frame, so every layer reaches one. */}
+    <SectionCard icon={SlidersVertical} title="Mixer">
+        {/* One labelled rule per group, not a box around one of them.
+
+            Every group gets a heading, including the two that hold a single row
+            — `Lead` over the Lead row reads as a repeat until you notice that
+            the alternative is worse: a rule that appears only around the middle
+            group makes the reader work out whether the rows above and below it
+            are a group at all, and gives a sixth layer nowhere to land. The
+            headings are the same three ids MIX_LAYERS' `group` column names, so
+            a new layer arrives under a heading by construction.
+
+            Grouped by that column and never by index range: `slice(1, 4)` reads
+            the accompaniment three off positions, and a layer inserted anywhere
+            but the end would silently drop off the screen with the order test
+            still green. */}
         <div className="flex flex-col gap-2">
-          {MIXER_LEAD.map((channel) => (
-            <MixerRow key={channel.idPrefix} channel={channel} />
-          ))}
-          <GroupFrame label="Accompaniment" className="flex flex-col gap-2">
-            {MIXER_ACCOMPANIMENT.map((channel) => (
-              <MixerRow key={channel.idPrefix} channel={channel} />
-            ))}
-          </GroupFrame>
-          {MIXER_BEAT.map((channel) => (
-            <MixerRow key={channel.idPrefix} channel={channel} />
+          {MIXER_GROUPS.map((group) => (
+            <React.Fragment key={group.id}>
+              {/* `my-0`: daisyUI's divider carries its own vertical margin, and
+                  this column already spaces its children with `gap-2`. */}
+              <div className={`divider divider-start my-0 ${GROUP_LABEL}`}>{group.label}</div>
+              {group.channels.map((channel) => (
+                <MixerRow key={channel.idPrefix} channel={channel} isPlaying={isPlaying} />
+              ))}
+            </React.Fragment>
           ))}
         </div>
-      </div>
-    </PanelCard>
+    </SectionCard>
   );
 });

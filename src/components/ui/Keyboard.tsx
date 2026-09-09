@@ -213,7 +213,7 @@ export function KeyCap({
           : "bg-key-white text-key-white-content hover:brightness-105"
       }`}
     >
-      <span className="text-[10px] font-mono font-bold">{label}</span>
+      <span className="text-[10px] font-bold">{label}</span>
       <kbd className="kbd-key">{shortcutLabel(shortcutKey)}</kbd>
     </button>
   );
@@ -530,7 +530,7 @@ export function ChromaticKeyboard({
               }`}
               style={{ left: getBlackKeyLeft(noteIndex) }}
             >
-              <span className="text-[9px] font-mono font-bold text-key-black-content">
+              <span className="text-[9px] font-bold text-key-black-content">
                 {k.label}
               </span>
               <kbd className="kbd-key">
@@ -577,7 +577,7 @@ export function ChromaticKeyboard({
                 : "bg-key-white text-key-white-content hover:brightness-105"
             }`}
           >
-            <span className="text-[10px] font-mono font-bold">
+            <span className="text-[10px] font-bold">
               {k.label}
             </span>
             <kbd className="kbd-key">

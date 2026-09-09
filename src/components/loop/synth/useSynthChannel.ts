@@ -1,12 +1,18 @@
 import { useAppStore } from "@/store/store";
-import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from "@/utils/synthControl";
+import { resolveSynthControlChannel } from "@/utils/synthControl";
 import type { SynthParams } from "@/types";
 
 export interface SynthChannel {
   params: SynthParams;
   onChangeParams: (next: SynthParams) => void;
-  tintClass: string;
 }
+
+/**
+ * No `tintClass` here any more. The five panels each wore the active target's
+ * tint, which painted one fact six times inside a single card once they became
+ * compartments of the Synth section; the section itself carries it now, and
+ * SoundView computes it there. See docs/design.md §6.5.
+ */
 
 /**
  * The three values every Pro-Mode module panel needs, derived from the store
@@ -36,12 +42,5 @@ export function useSynthChannel(): SynthChannel {
     pad: { params: padSynthParams, setParams: setPadSynthParams },
   });
 
-  const tintClass = [
-    SYNTH_TARGET_STYLES[controlTarget].ring,
-    SYNTH_TARGET_STYLES[controlTarget].tint,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  return { params: channel.params, onChangeParams: channel.setParams, tintClass };
+  return { params: channel.params, onChangeParams: channel.setParams };
 }

@@ -46,11 +46,13 @@ export function SequencerGrid({
       {/* Step Indicator Header — one cell per step of the active bar */}
       <StepHeader cells={cells} currentStep={currentStep} isPlaying={isPlaying} />
 
-      {/* Track Lanes. The min-width keeps a step button ~24px wide rather than
-          letting 16 of them squeeze to nothing on a phone; the row scrolls
-          instead, and TrackRow's gutter stays pinned while it does. Any change
-          here must be mirrored in StepHeader's DRUM_HEADER_CLASS. */}
-      <div className="space-y-2 min-w-[600px] sm:min-w-[700px]">
+      {/* Track Lanes. The min-width is what makes a step button SQUARE: the
+          buttons are `aspect-square`, so their height follows the width this
+          floor leaves them once the gutter and the fifteen gaps are paid for
+          (~27px on a phone at 660, ~26px on a tablet at 700). Below it the row
+          scrolls and TrackRow's gutter stays pinned. Any change here must be
+          mirrored in StepHeader's DRUM_HEADER_CLASS. */}
+      <div className="space-y-1.5 sm:space-y-2 min-w-[660px] sm:min-w-[700px]">
         {tracks.map((track) => (
           <TrackRow
             key={track.id}

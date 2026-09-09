@@ -3,7 +3,9 @@ import { renderToString } from 'react-dom/server';
 import { useAppStore } from '@/store/store';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
 import { SoundView } from './SoundView';
-import { FIELD_LABEL, FIELD_LANE } from '../ui/fieldClasses';
+import { MIX_GROUP_IDS, MIX_GROUP_LABELS, MIX_LAYERS } from '../mixLayers';
+import { FIELD_LABEL, FIELD_LANE, HEADER_GROUP, SECTION_HEADER } from '../ui/fieldClasses';
+import { PANEL_CARD } from '../ui/PanelCard';
 import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from '@/utils/synthControl';
 import type { SynthControlTarget, SynthParamChannel } from '@/utils/synthControl';
 import type { SynthParams } from '@/types';
@@ -90,6 +92,25 @@ describe('chromatic keyboard black key geometry', () => {
     expect(html).not.toContain('>Library<');
   });
 
+  /**
+   * Both act on the synth patch and nothing else on this tab, so they belong
+   * to the Synth section rather than to the tab. Asserted by position: the
+   * Synth band opens before them and the tab header's title does not sit
+   * between, which a move back into `ViewHeader`'s actions would break.
+   */
+  test('Save and Sounds ride the Synth band, not the tab header', () => {
+    const html = renderToString(<SoundView />);
+    const synthBand = html.indexOf('>Synth<');
+    const save = html.indexOf('id="btn-quick-save-preset"');
+    const library = html.indexOf('id="btn-open-presets-library"');
+    const drumBand = html.indexOf('>Drum Sound<');
+    expect(synthBand).toBeGreaterThan(-1);
+    expect(save).toBeGreaterThan(synthBand);
+    expect(library).toBeGreaterThan(synthBand);
+    expect(save).toBeLessThan(drumBand);
+    expect(library).toBeLessThan(drumBand);
+  });
+
   test('SoundView still renders', () => {
     const html = renderToString(<SoundView />);
     expect(html).toContain('Target:');
@@ -104,6 +125,32 @@ describe('chromatic keyboard black key geometry', () => {
     for (const target of Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]) {
       expect(html).toContain(`>${SYNTH_TARGET_STYLES[target].label}<`);
     }
+  });
+
+  /**
+   * The tab holds three things and has to say so at one glance. It did not:
+   * the synth spread over a tinted target card plus a bare row of module
+   * cards with no heading at all, the drum card opened with an icon and a
+   * SECTION_HEADER, and the mixer opened with a bare SECTION_HEADER and no
+   * icon — three weights for three peers, which is what made the drum and
+   * mixer read as leftovers below the synth.
+   */
+  test('the three sections open with the same band, in reading order', () => {
+    const html = renderToString(<SoundView />);
+    const band = new RegExp(
+      `w-3\\.5 h-3\\.5 text-primary"[^>]*>.*?<span class="${SECTION_HEADER}">([^<]+)</span>`,
+      'g',
+    );
+    const bands = [...html.matchAll(band)].map((m) => m[1]);
+    expect(bands).toEqual(['Synth', 'Drum Sound', 'Mixer']);
+  });
+
+  /** One card per section, so the synth's stages cannot float off as siblings. */
+  test('the synth stages are recessed compartments, not cards beside the section', () => {
+    const html = renderToString(<SoundView />);
+    // Three sections + the view header = four floating panels, and no more.
+    expect(html.split(PANEL_CARD).length - 1).toBe(4);
+    expect(html).toContain('card bg-base-200 border border-base-300');
   });
 
   test('the interactive keyboard moved to the dock, not SoundView', () => {
@@ -271,5 +318,147 @@ describe('SoundView track solo', () => {
     const html = renderToString(<SoundView />);
     expect(html).toContain('id="btn-solo-target"');
     expect(html).not.toContain('id="btn-solo-lead"');
+  });
+});
+
+describe('SoundView mode switch', () => {
+  /**
+   * Simple/Pro chooses how deep the SAME patch is shown, so it belongs beside
+   * the title with Pattern's segment row rather than in `actions` — and it
+   * wears the same `HEADER_GROUP` shell, which is what makes the two the same
+   * height. It used to sit at the far right in a `JOIN_LANE` of `btn-xs`.
+   */
+  test('rides the title cluster in the shared header shell', () => {
+    const html = renderToString(<SoundView />);
+    const title = html.indexOf('>Sound</h2>');
+    const simple = html.indexOf('id="btn-mode-simple"');
+    const synthBand = html.indexOf('>Synth<');
+    expect(title).toBeGreaterThan(-1);
+    expect(simple).toBeGreaterThan(title);
+    expect(simple).toBeLessThan(synthBand);
+    expect(html.slice(title, simple)).toContain(HEADER_GROUP);
+  });
+});
+
+/**
+ * Every mixer row carries its own level meter, under its fader.
+ *
+ * The count is what this asserts, not the markup: a sixth mix layer added to
+ * MIX_LAYERS must arrive with a meter, and a meter that quietly stopped
+ * rendering for one layer would leave that row the only one you cannot see.
+ * The bar's own appearance belongs to ui/MeterBar and is tested there.
+ */
+describe('the Mixer rows each carry a level meter', () => {
+  const html = renderToString(<SoundView />);
+  // Silent at render: there is no DOM here, so no effect runs and no analyser
+  // is ever read — the title is the SILENT_LEVEL reading, which is the same
+  // property VuMeter.test.tsx asserts for the master meter.
+  const titles = [...html.matchAll(/title="([^"]+) peak: [^"]*"/g)].map((m) => m[1]);
+
+  test('one per layer, in the table order MIX_LAYERS declares', () => {
+    expect(titles).toEqual(['Lead', 'Chord', 'Bass', 'Pad', 'Beat']);
+  });
+
+  test('names the layer the way the screen does, not the way the engine does', () => {
+    // The drum bus is 'sequencer' to the engine and 'drum' in the store; a
+    // meter titled either of those would be naming an internal id at the user.
+    expect(html).not.toContain('sequencer peak:');
+  });
+});
+
+/**
+ * The Mixer groups its rows under labelled rules, not inside a box.
+ *
+ * What this pins is the pairing, not the styling: every group in MIX_GROUP_IDS
+ * reaches the screen as a heading, and every row lands after the heading its
+ * own `group` column names. A layer added with a group nobody renders would
+ * otherwise appear at the bottom of whichever block happened to come last.
+ */
+describe('the Mixer groups its rows under labelled dividers', () => {
+  // Sliced at the mixer's own SECTION_HEADER, not searched across the whole
+  // view: the Sound view's Target selector carries its own "Accompaniment"
+  // label further up the page, so an unscoped indexOf finds that one and every
+  // ordering assertion below reads a position from the wrong component.
+  const view = renderToString(<SoundView />);
+  const html = view.slice(view.indexOf('>Mixer<'));
+
+  test('one divider per group, in MIX_GROUP_IDS order', () => {
+    const headings = [...html.matchAll(/class="divider divider-start[^"]*">([^<]+)</g)].map(
+      (m) => m[1],
+    );
+    expect(headings).toEqual(MIX_GROUP_IDS.map((id) => MIX_GROUP_LABELS[id]));
+  });
+
+  test('every row sits after the heading its own group column names', () => {
+    for (const layer of MIX_LAYERS) {
+      const heading = html.indexOf(`>${MIX_GROUP_LABELS[layer.group]}<`);
+      const row = html.indexOf(`id="btn-mix-mute-${layer.idPrefix}"`);
+      const nextHeadingId = MIX_GROUP_IDS[MIX_GROUP_IDS.indexOf(layer.group) + 1];
+      const nextHeading = nextHeadingId
+        ? html.indexOf(`>${MIX_GROUP_LABELS[nextHeadingId]}<`)
+        : html.length;
+
+      expect(heading).toBeGreaterThan(-1);
+      expect(row).toBeGreaterThan(heading);
+      expect(row).toBeLessThan(nextHeading);
+    }
+  });
+
+  // The box is gone, deliberately — ui/GroupFrame still serves ChordView and the
+  // Sound view's Target selector, but a frame around one of three groups was
+  // asking the reader to work out whether the rows outside it were a group too.
+  // There is deliberately no "draws no group frame" test any more. It asserted
+  // `not.toContain('border border-base-300 rounded-2xl')`, which passed only
+  // because that raw radius was momentarily unique — GroupFrame's real shell
+  // (`border border-base-300 rounded-box`) is a substring of VolumeFader's box,
+  // and its caption class is a substring of the mixer's OWN dividers, so no
+  // class-substring form of the claim can be both true and non-vacuous. What
+  // the section actually promises is pinned positively by the test above:
+  // one divider per group, in MIX_GROUP_IDS order.
+});
+
+/**
+ * The Mixer's five toggles form a column, and the fader beside each starts at
+ * the same x.
+ *
+ * That alignment is why the toggles are icon-only: "Lead On", "Chord On" and
+ * "Pad Off" are three different lengths, so a labelled button leaves the column
+ * ragged and every fader at a different indent. `btn-square` is one width for
+ * every layer, including a sixth nobody has added yet.
+ */
+describe('the Mixer toggle column', () => {
+  const view = renderToString(<SoundView />);
+  const html = view.slice(view.indexOf('>Mixer<'));
+
+  test('every toggle is square, so the column is one width by construction', () => {
+    for (const layer of MIX_LAYERS) {
+      const button = html.slice(html.indexOf(`id="btn-mix-mute-${layer.idPrefix}"`));
+      expect(button.slice(0, button.indexOf('>'))).toContain('btn-square');
+    }
+  });
+
+  // Dropping the visible text must not drop the state: the row's own label says
+  // which layer this is, but only the button knows whether it is on.
+  test('and still names itself and its state without the visible text', () => {
+    for (const layer of MIX_LAYERS) {
+      const button = html.slice(html.indexOf(`id="btn-mix-mute-${layer.idPrefix}"`));
+      const tag = button.slice(0, button.indexOf('>'));
+      expect(tag).toMatch(new RegExp(`aria-label="${layer.label} (On|Off)"`));
+      expect(tag).toMatch(/aria-pressed="(true|false)"/);
+    }
+  });
+
+  // The label belongs to the ROW, not to the fader: while ChannelStrip owned it,
+  // the toggle centred against a 48px label-plus-box stack and the fader against
+  // its own 32px box, which left every toggle 8px above the control it operates.
+  test('the fader carries no label of its own, so the controls share one line', () => {
+    // One label per ROW and none from the fader. Counting is what makes this
+    // fail if ChannelStrip's own label comes back: it would double the count
+    // without changing anything a per-row slice could see.
+    const labels = [...html.matchAll(/<label /g)];
+    expect(labels).toHaveLength(MIX_LAYERS.length);
+    for (const layer of MIX_LAYERS) {
+      expect(html).toContain(`for="slider-${layer.idPrefix}-layer-volume"`);
+    }
   });
 });

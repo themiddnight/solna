@@ -69,7 +69,7 @@ describe('ChordView accompaniment layout', () => {
     };
     // One source, three voices: the progression every layer reads, then chord,
     // bass and pad voicing it — the same order the Arrange mixer strip uses.
-    const progression = at('Active Chord Progression Loop');
+    const progression = at('>Chord Progression<');
     const chord = at('card bg-panel tint-chord');
     const bass = at('card bg-panel tint-bass');
     const pad = at('card bg-panel tint-pad');
@@ -82,7 +82,8 @@ describe('ChordView accompaniment layout', () => {
     // Painting the progression `tint-chord` would claim it for one layer when
     // bass and pad read it too. It carries no module colour of its own; the
     // module tints start below it.
-    const progression = html.indexOf('Active Chord Progression Loop');
+    const progression = html.indexOf('>Chord Progression<');
+    expect(progression).toBeGreaterThan(-1);
     const shell = html.lastIndexOf('card bg-panel border border-base-300', progression);
     expect(shell).toBeGreaterThan(-1);
     // No module tint opens between that shell and the header text inside it.
@@ -93,7 +94,10 @@ describe('ChordView accompaniment layout', () => {
     // Both call setChords. Their `Auto-Reharmonized to …` badge already lived
     // in this header, so the button and its own read-out were in two
     // different cards until they were brought together.
-    const progression = html.indexOf('Active Chord Progression Loop');
+    // Anchored explicitly: a missing anchor makes indexOf return -1, and
+    // every `toBeGreaterThan(progression)` below would then pass on nothing.
+    const progression = html.indexOf('>Chord Progression<');
+    expect(progression).toBeGreaterThan(-1);
     const chordCard = html.indexOf('card bg-panel tint-chord');
     for (const id of ['btn-reharmonize-chord-progression', 'btn-toggle-auto-reharmonize']) {
       const at = html.indexOf(id);
@@ -144,12 +148,12 @@ describe('ChordView theming', () => {
     expect(html).not.toContain('tabular-nums py-0.5');
   });
 
-  test('chord chips are keyboard-reachable buttons with font-mono labels', () => {
+  test('chord chips are keyboard-reachable buttons with plain-sans labels', () => {
     // Real <button> elements, not divs with click handlers — that is what makes
     // the chips tab-reachable. btn-soft is the daisyUI variant they wear since
     // a1b4ac2; the earlier btn-outline was a styling choice, not a contract.
     expect(html).toContain('<button type="button" class="btn btn-xs btn-soft');
-    expect(html).toContain('font-mono');
+    expect(html).not.toContain('font-mono');
   });
 
   test('no legacy hex or palette utilities survive', () => {

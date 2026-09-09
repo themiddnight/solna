@@ -122,6 +122,15 @@ describe('scanSource — invalid-utility', () => {
     );
   });
 
+  test('flags the font-mono utility and a canvas font naming a mono stack', () => {
+    expect(rulesOf('const c = "text-xs font-mono";')).toContain('mono-font');
+    expect(rulesOf("c.font = '8px ui-monospace, Menlo, monospace';")).toContain('mono-font');
+  });
+
+  test('does not flag tabular-nums, the sanctioned way to hold numbers steady', () => {
+    expect(rulesOf('const c = "text-xs tabular-nums";')).not.toContain('mono-font');
+  });
+
   test('does not flag valid utilities py-0.5, scale-105, z-50, text-xs', () => {
     expect(rulesOf('const c = "py-0.5 scale-105 z-50 text-xs";')).not.toContain('invalid-utility');
   });
@@ -153,6 +162,7 @@ describe('scanSource — mechanics', () => {
       'absolute-bw',
       'dark-variant',
       'invalid-utility',
+      'mono-font',
       'palette-color',
       'raw-hex',
       'rgba-literal',

@@ -214,7 +214,7 @@ describe('SequencerGrid', () => {
     const before = renderToString(
       <div className="overflow-x-auto">
         <StepHeader cells={cells} currentStep={5} isPlaying={isPlaying} />
-        <div className="space-y-2 min-w-[600px] sm:min-w-[700px]">
+        <div className="space-y-1.5 sm:space-y-2 min-w-[660px] sm:min-w-[700px]">
           {tracks.map((track) => (
             <TrackRow
               key={track.id}
@@ -258,29 +258,32 @@ describe('DEV-388: the drum-kit-resets-on-refresh fix', () => {
   // reproduction available under this repo's no-DOM constraint.
   //
   // What IS pinned instead, both as static properties of the source rather
-  // than of a render: (1) `applyDrumGrid` is the ONLY place the component
-  // calls `onChangeSoundKit` — so nothing else, mount included, can write a
-  // kit — and (2) the component declares exactly one `useEffect`, the preview
-  // cleanup, so a reviewer (or this test) catching a second one is the signal
-  // a mount-time kit effect has come back.
+  // than of a render: (1) the component writes no kit AT ALL — not from the
+  // grid picker, not from a mount effect — and (2) it declares exactly one
+  // `useEffect`, the preview cleanup, so a reviewer (or this test) catching a
+  // second one is the signal a mount-time kit effect has come back.
   //
   // Nav restructure Task 6 moved the kit <select> (and its own
-  // `onChangeSoundKit` call) to SoundView, so `applyDrumGrid` is now the ONLY
-  // call site left in this file, not one of two.
-  test('onChangeSoundKit is called from applyDrumGrid, the only site left in SequencerView', () => {
+  // `onChangeSoundKit` call) to SoundView; the pattern/sound split then took
+  // the last one away from `applyDrumGrid` too. This file must now write NO
+  // kit at all: the grid picker on Pattern loads rows, and the kit is the
+  // user's to pick on Sound.
+  test('SequencerView writes no drum kit at all — the picker loads rows only', () => {
     const src = readFileSync(
       new URL('./SequencerView.tsx', import.meta.url),
       'utf8',
     );
-    const calls = src.match(/onChangeSoundKit\(/g) ?? [];
-    // Guard on the CALL COUNT so a second call site — e.g. a reintroduced
-    // mount effect — turns this red without needing to name it.
-    expect(calls.length).toBe(1);
+    // Guard on the CALL COUNT, and on the setter this component would have to
+    // subscribe to in order to make one, so a reintroduced write — a mount
+    // effect included — turns this red without needing to name it.
+    expect(src.match(/onChangeSoundKit\(/g) ?? []).toHaveLength(0);
+    expect(src).not.toContain('s.setSoundKit');
     const applyDrumGridBody = src.slice(
       src.indexOf('const applyDrumGrid ='),
       src.indexOf('const gridOptions ='),
     );
-    expect(applyDrumGridBody).toContain('onChangeSoundKit(grid.kit)');
+    expect(applyDrumGridBody).toContain('replaceDrumPattern(grid.rows)');
+    expect(applyDrumGridBody).not.toContain('grid.kit');
   });
 
   test('the component declares exactly one useEffect (the preview cleanup)', () => {

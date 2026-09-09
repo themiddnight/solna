@@ -429,27 +429,22 @@ describe('what the two former tables actually share', () => {
   }
 
   test('no other pair of grids is a silent duplicate', () => {
-    // A silent duplicate has to mean these two SOUND the same, not just that
-    // their rows look the same on paper: picking a grid in the sequencer also
-    // loads its `kit` (`SequencerView.tsx:63-66`, "A grid names the kit it was
-    // written for, so picking one loads both"), so two grids with identical
-    // rows but different kits are audibly different and are not duplicates.
-    // This predicate is only honest while that coupling holds — if the picker
-    // ever stops applying a grid's kit, it has to narrow again. That coupling
-    // holds on the sequencer MENU path only: `SequencerView.tsx`'s effect runs
-    // `onChangeSoundKit(DRUM_GRIDS[selectedGridId].kit)` whenever the
-    // selection changes. It does NOT hold on the vibe/dice path —
-    // `applyVibeToStore` writes `vibe.soundKit`, never `grid.kit`, so a dice
-    // reroll changes only the grid id and leaves the vibe's kit untouched.
+    // A silent duplicate means these two SOUND the same. That test used to
+    // count `kit` as a distinguisher, because picking a grid in the sequencer
+    // loaded its kit as well as its rows — the comment then said the predicate
+    // "has to narrow again" if the picker ever stopped doing that, and it has:
+    // `SequencerView.applyDrumGrid` now calls `replaceDrumPattern(grid.rows)`
+    // and writes no kit, so two grids with identical playable rows are
+    // identical on screen and in the speakers whatever kit each was authored
+    // against. `DRUM_GRIDS[id].kit` survives as provenance — the kit the grid
+    // was transcribed with — and nothing in production reads it: the vibe/dice
+    // path writes `vibe.soundKit`, never `grid.kit`.
     //
-    // The sweep also widens from vibe x genre to every unordered pair of the
-    // 30 ids, because a genre x genre collision (rock/lofi-hip-hop, both kick
-    // 0,8 / snare 4,12 / hihat 0,2,4,6,8,10,12,14 / openhat 14 / clap 4,12,
-    // but 'Acoustic Studio' vs 'Lo-Fi Vinyl' kits) cannot be expressed by a
-    // vibe-only sweep, and would sound identical to a vibe/genre-only check.
+    // The sweep covers every unordered pair of the 30 ids, because a genre x
+    // genre collision cannot be expressed by a vibe-only sweep and would sound
+    // identical to a vibe/genre-only check.
     const isSilentDuplicate = (a: string, b: string) =>
       DRUM_GRIDS[a].meter === DRUM_GRIDS[b].meter &&
-      DRUM_GRIDS[a].kit === DRUM_GRIDS[b].kit &&
       playableRowsDiffer(a, b).length === 0;
 
     const found: string[] = [];

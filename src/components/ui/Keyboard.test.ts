@@ -325,7 +325,7 @@ describe('ChromaticKeyboard renders byte-identically once getChromaticKeyboardNo
         onNoteOff: () => {},
       }),
     );
-    expect(html.length).toBe(8270);
+    expect(html.length).toBe(8090);
   });
 });
 

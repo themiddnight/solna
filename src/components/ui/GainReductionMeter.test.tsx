@@ -19,8 +19,8 @@ describe('GainReductionMeter', () => {
   test('an engaged stage tints the reading, a bypassed one dims it', () => {
     const on = renderToString(<GainReductionMeter stage="limiter" active />);
     const off = renderToString(<GainReductionMeter stage="limiter" active={false} />);
-    expect(on).toContain('font-mono text-success');
-    expect(off).toContain('font-mono text-base-content/40');
+    expect(on).toContain('tabular-nums text-success');
+    expect(off).toContain('tabular-nums text-base-content/40');
   });
 
   test('names roles, never colours', () => {

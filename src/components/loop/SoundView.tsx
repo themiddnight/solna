@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Disc3,
+  AudioWaveform,
 } from "lucide-react";
 import { useAppStore } from "@/store/store";
 import { soloTrackForControlTarget } from "@/store/trackAudibility";
@@ -46,16 +47,24 @@ import { SoundMixer } from "./SoundMixer";
 import { Knob } from "../ui/Knob";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { ViewHeader } from "../ui/ViewHeader";
-import { PanelCard } from "../ui/PanelCard";
+import { SectionCard } from "../ui/SectionCard";
 import { IconButton } from "../ui/IconButton";
 import { Field } from "../ui/Field";
 import {
   GROUP_LABEL,
   COUNT_BADGE,
-  JOIN_LANE,
   FIELD_SELECT,
-  SECTION_HEADER,
 } from "../ui/fieldClasses";
+
+/**
+ * The two depths the Sound tab can show the same patch at, in toggle order.
+ * A table rather than two hand-written buttons for the reason the segment row
+ * is one: the pair must stay identical in everything but their label and icon.
+ */
+const SYNTH_VIEW_MODES = [
+  { mode: "simple", label: "Simple", icon: Sliders },
+  { mode: "pro", label: "Pro", icon: Zap },
+] as const;
 
 // Re-exported for scripts/check-key-bindings.ts, which asserts that the synth
 // key bindings never collide with the drum-pad shortcuts. The table itself
@@ -67,6 +76,8 @@ import {
 } from "@/utils/synthControl";
 import type { SynthControlTarget } from "@/utils/synthControl";
 import { GroupFrame } from "../ui/GroupFrame";
+import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
+import { SegmentedButton, SegmentedGroup } from '@/components/ui/SegmentedControl';
 
 // The kit roster never changes at runtime, so it is read once here rather than
 // re-keyed on every render — a Knob drag re-renders this view per pointermove.
@@ -109,16 +120,7 @@ const DrumSoundCard = React.memo(function DrumSoundCard() {
       Pattern › Beat. The bus level left this card for the Mixer below, so
       that the drum bus is balanced against the other four and not alone. **/
   return (
-    <PanelCard>
-      <div className="card-body p-3 sm:p-4">
-      <div className="flex items-center justify-between flex-wrap gap-2.5">
-        <div className="flex items-center gap-2">
-          <Disc3 className="w-3.5 h-3.5 text-secondary" />
-          <span className={SECTION_HEADER}>
-            Drum Sound
-          </span>
-        </div>
-
+    <SectionCard icon={Disc3} title="Drum Sound">
         {/* items-start + a shared lane per field: bottom-aligning controls of
             three different heights (32px select, 24px join, 48px knob) put
             these labels on different baselines. */}
@@ -192,9 +194,7 @@ const DrumSoundCard = React.memo(function DrumSoundCard() {
             />
           </Field>
         </div>
-      </div>
-      </div>
-    </PanelCard>
+    </SectionCard>
   );
 });
 
@@ -357,10 +357,10 @@ export const SoundView = React.memo(function SoundView() {
     <button
       key={target}
       onClick={() => onChangeControlTarget(target)}
-      className={`btn btn-xs text-[11px] font-semibold ${
+      className={`btn btn-xs text-[11px] font-semibold rounded-sm ${
         controlTarget === target
           ? SYNTH_TARGET_STYLES[target].activeBtn
-          : "btn-ghost text-base-content/60"
+          : SYNTH_TARGET_STYLES[target].softBtn
       }`}
     >
       {SYNTH_TARGET_STYLES[target].label}
@@ -369,48 +369,54 @@ export const SoundView = React.memo(function SoundView() {
 
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
-      {/* Synth Lab Header: Mode Switcher + Save Current & Full Presets Library */}
+      {/* Names the tab and holds what belongs to the TAB. The preset Save and
+          the Sounds library used to sit here too; both act on the synth patch
+          and nothing else on this screen, so they moved onto the Synth
+          section's own band below. */}
       <ViewHeader
         view="sound"
+        viewControls={
+          /* Mode Switcher: Simple vs Pro. It chooses how deep the SAME patch
+             is shown, so it belongs beside the title with Pattern's segment
+             row — same slot, same `HEADER_GROUP` shell, same height — and not
+             in `actions`, which is for what you do TO what is on screen. */
+          <SegmentedGroup>
+            {SYNTH_VIEW_MODES.map(({ mode, label, icon }) => (
+              <SegmentedButton
+                key={mode}
+                id={`btn-mode-${mode}`}
+                icon={icon}
+                label={label}
+                active={synthViewMode === mode}
+                onSelect={() => handleToggleSynthViewMode(mode)}
+                title={`${label} Mode`}
+              />
+            ))}
+          </SegmentedGroup>
+        }
+      />
+
+      {/* The Synth section: the target it points at, the preset on it, and the
+          controls that shape it, in ONE card. They were three stacked
+          siblings — a tinted target/preset card, then a bare row of five
+          module cards, then the drum card — which read as "the tab" rather
+          than as one of the tab's three sections, and left the Drum and Mixer
+          cards below looking like leftovers rather than peers. */}
+      <SectionCard
+        icon={AudioWaveform}
+        title="Synth"
+        tint={tintClass}
+        /* Save and Sounds ride the SYNTH band, not the tab header: both act on
+           the synth patch and nothing else on this tab, and a synth-only
+           control sitting in the tab's own header is part of what made the tab
+           read as "the synth, plus two leftovers". */
         actions={
           <>
-            {/* Mode Switcher: Simple vs Pro */}
-            <div className={JOIN_LANE}>
-              <button
-                id="btn-mode-simple"
-                onClick={() => handleToggleSynthViewMode("simple")}
-                className={`btn btn-xs join-item gap-1 text-xs font-semibold ${
-                  synthViewMode === "simple"
-                    ? "btn-primary"
-                    : "btn-ghost text-base-content/60"
-                }`}
-                title="Simple Mode"
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>Simple</span>
-              </button>
-              <button
-                id="btn-mode-pro"
-                onClick={() => handleToggleSynthViewMode("pro")}
-                className={`btn btn-xs join-item gap-1 text-xs font-semibold ${
-                  synthViewMode === "pro"
-                    ? "btn-primary"
-                    : "btn-ghost text-base-content/60"
-                }`}
-                title="Pro Mode"
-              >
-                <Zap className="w-3.5 h-3.5" />
-                <span>Pro</span>
-              </button>
-            </div>
-
             <button
               id="btn-quick-save-preset"
               onClick={() => {
                 setQuickSaveName(
-                  params.preset
-                    ? `${params.preset} (Custom)`
-                    : "My Synth Patch",
+                  params.preset ? `${params.preset} (Custom)` : "My Synth Patch",
                 );
                 setQuickSaveCategory(activePresetItem?.category ?? "User");
                 setIsQuickSaving(true);
@@ -434,26 +440,27 @@ export const SoundView = React.memo(function SoundView() {
                   the two read as the same drawer. It also makes the count badge
                   answerable — "Library 29" never said 29 of what. */}
               <span>Sounds</span>
-              <span className={COUNT_BADGE}>
-                {totalPresetsCount}
-              </span>
+              <span className={COUNT_BADGE}>{totalPresetsCount}</span>
             </button>
+
+            {/* Inside `actions`, so it hangs off the button cluster that
+                raised it. As a child of the card it anchored to the card's own
+                `relative` root, which wraps the target row, the preset bar AND
+                the whole Simple/Pro body — so `top-full` resolved at the
+                bottom edge of a five-panel card, over the Drum Sound card
+                below and nowhere near the Save button. */}
+            {saveToast && (
+              <div className="toast toast-top toast-end absolute top-full right-0 mt-2 z-20">
+                <div className="alert alert-success text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-lg">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{saveToast}</span>
+                </div>
+              </div>
+            )}
           </>
         }
       >
-        {saveToast && (
-          <div className="toast toast-top toast-end absolute top-full right-4 mt-2 z-20">
-            <div className="alert alert-success text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-lg">
-              <Check className="w-3.5 h-3.5" />
-              <span>{saveToast}</span>
-            </div>
-          </div>
-        )}
-      </ViewHeader>
 
-      {/* Synth Target & Preset Selection Card */}
-      <PanelCard tint={tintClass}>
-        <div className="card-body p-3 sm:p-4 flex flex-col gap-3">
         {/* Row 1: Control Destination / Target Selector. Kept as its own row,
             visible in both Simple and Pro mode, because it's the only control
             that switches which channel (synth/chord/bass) params/onChangeParams
@@ -480,7 +487,7 @@ export const SoundView = React.memo(function SoundView() {
                 the four chips breaks that contract, so join/join-item are
                 dropped from this whole row; gap-1 (already on the row and
                 the frame) carries the spacing join used to. */}
-            <GroupFrame label="Accompaniment" className="flex items-center gap-1">
+            <GroupFrame label="Accompaniment" className="flex items-center gap-1 p-1">
               {ACCOMPANIMENT_TARGETS.map(renderTargetChip)}
             </GroupFrame>
           </div>
@@ -503,9 +510,15 @@ export const SoundView = React.memo(function SoundView() {
 
           {/* Per-target oscilloscope, the way a hardware synth puts a scope
               beside the section you are editing. It taps the TARGET layer's
-              own bus — after the VCA, before the sends — so it shows the patch
-              being edited rather than the finished mix the transport bar's
-              master meter reads.
+              own pre-fader tap — after the VCA, before that layer's bus gain
+              and the sends — so it shows the patch being edited rather than
+              the finished mix the transport bar's master meter reads, and a
+              fader move does not resize a wave that has not changed.
+
+              The trace is raw -1..+1 mapped straight onto the box height: no
+              normalisation, no AGC, no dB curve. A quiet patch draws a small
+              wave and a patch at full scale fills the box, which is only true
+              because the tap is ahead of the -6 dB bus default.
 
               The label is not decoration: the global input deck's keyboard
               always plays the 'synth' layer regardless of Target, so with
@@ -513,7 +526,7 @@ export const SoundView = React.memo(function SoundView() {
               pressed. Naming the tapped layer is what keeps that legible
               instead of reading as a broken scope. */}
           <div
-            className="ml-auto hidden sm:flex items-center gap-2 bg-base-200 border border-base-300 rounded-box px-2 h-8 shrink-0 self-end mb-0.5"
+            className="ml-auto hidden sm:flex items-center gap-2 bg-base-200 border border-base-300 rounded-box px-2 py-1 shrink-0 self-stretch"
             title={`Oscilloscope — ${SYNTH_TARGET_STYLES[controlTarget].label} layer`}
           >
             <span className="text-[10px] uppercase tracking-wider font-semibold text-base-content/50">
@@ -524,8 +537,12 @@ export const SoundView = React.memo(function SoundView() {
               variant="inline"
               source={controlTarget}
               paused={activeTab !== 'sound'}
-              height={22}
-              className="w-28 lg:w-40 rounded"
+              /* auto + self-stretch, not a pixel height: the box is
+                 self-stretch to the Target group's height, so the scope
+                 fills whatever is left inside its padding rather than
+                 tracking that height with a second number to keep in sync. */
+              height="auto"
+              className="w-28 lg:w-40 rounded self-stretch"
               colorTheme={controlTarget === "chord" ? "accent" : "primary"}
             />
           </div>
@@ -609,13 +626,19 @@ export const SoundView = React.memo(function SoundView() {
               />
 
               {/* Categorized Dropdown with Optgroups */}
-              <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-field px-2 min-w-50 max-w-60">
+              {/* Flexible below `sm`, fixed above it. `min-w-50` (200px) plus
+                  the badge and the two stepper buttons came to ~316px inside a
+                  327px phone card, so the NEXT button wrapped to a line of its
+                  own and the two steppers stopped reading as a pair. Letting
+                  the dropdown take the leftover width instead keeps all four on
+                  one row at every width. */}
+              <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-field px-2 min-w-0 flex-1 sm:flex-none sm:min-w-50 max-w-60">
                 <Sparkles className="w-3.5 h-3.5 text-accent shrink-0" />
                 <select
                   id="select-synth-preset"
                   value={params.preset}
                   onChange={(e) => handleDropdownChange(e.target.value)}
-                  className="select select-sm select-ghost bg-transparent border-0 text-base-content text-xs focus:outline-none pr-2 font-medium max-w-60 truncate"
+                  className="select select-sm select-ghost bg-transparent border-0 text-base-content text-xs focus:outline-none pr-2 font-medium min-w-0 max-w-60 truncate"
                 >
                   {categoryGroups
                     .filter((g) =>
@@ -735,7 +758,7 @@ export const SoundView = React.memo(function SoundView() {
                     className={`btn btn-xs gap-1.5 text-xs font-medium whitespace-nowrap ${
                       isSelected
                         ? "btn-primary font-semibold"
-                        : "btn-ghost border border-base-300 text-base-content/60"
+                        : TOOLBAR_BUTTON_IDLE
                     }`}
                   >
                     <span>{cat.emoji}</span>
@@ -746,33 +769,13 @@ export const SoundView = React.memo(function SoundView() {
             </div>
           </div>
         )}
-        </div>
-      </PanelCard>
 
-      {/* Quick Save Modal Popover with Category selection */}
-      <QuickSavePopover
-        open={isQuickSaving}
-        onClose={() => setIsQuickSaving(false)}
-        heading="Save Custom Preset to LocalStorage:"
-        placeholder="Preset Name..."
-        saveLabel="Save Patch"
-        name={quickSaveName}
-        onNameChange={setQuickSaveName}
-        categories={SYNTH_CATEGORIES.map((c) => ({ id: c.id, label: c.label }))}
-        category={quickSaveCategory}
-        onCategoryChange={(v) => setQuickSaveCategory(v as SynthPresetCategory)}
-        onSubmit={handleQuickSaveSubmit}
-        formClassName="flex items-center gap-2 flex-1 max-w-xl flex-wrap sm:flex-nowrap"
-      />
-
-      {/* Simple Mode vs Pro Mode Body Panels */}
+      {/* Simple Mode vs Pro Mode Body Panels. Inside the section now: they
+          edit the target the row above selects, so a card boundary between
+          the two said they were separate things. */}
       {synthViewMode === "simple" ? (
         <>
-          <SimpleSynthPanel
-            params={params}
-            onChangeParams={onChangeParams}
-            tintClass={tintClass}
-          />
+          <SimpleSynthPanel params={params} onChangeParams={onChangeParams} />
 
           {/* Friendly Pro Mode Hint */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 bg-base-100/70 border border-base-300 px-4 py-2.5 rounded-box text-xs text-base-content">
@@ -802,6 +805,25 @@ export const SoundView = React.memo(function SoundView() {
           <ArpeggiatorPanel />
         </div>
       )}
+      </SectionCard>
+
+      {/* Quick Save Modal Popover with Category selection. Outside the Synth
+          section, not in it: it is an overlay the section raises, and nesting
+          it would put a popover inside the tinted card it floats over. */}
+      <QuickSavePopover
+        open={isQuickSaving}
+        onClose={() => setIsQuickSaving(false)}
+        heading="Save Custom Preset to LocalStorage:"
+        placeholder="Preset Name..."
+        saveLabel="Save Patch"
+        name={quickSaveName}
+        onNameChange={setQuickSaveName}
+        categories={SYNTH_CATEGORIES.map((c) => ({ id: c.id, label: c.label }))}
+        category={quickSaveCategory}
+        onCategoryChange={(v) => setQuickSaveCategory(v as SynthPresetCategory)}
+        onSubmit={handleQuickSaveSubmit}
+        formClassName="flex items-center gap-2 flex-1 max-w-xl flex-wrap sm:flex-nowrap"
+      />
 
       <DrumSoundCard />
 

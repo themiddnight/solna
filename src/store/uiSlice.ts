@@ -9,6 +9,28 @@ type Set = StoreApi<AppStore>['setState'];
 
 const KEYBOARD_MODE_STORAGE_KEY = 'solna_keyboard_mode';
 
+const FOLLOW_PLAYHEAD_STORAGE_KEY = 'solna_follow_playhead';
+
+function isFollowFlag(value: string | null): value is 'on' | 'off' {
+  return value === 'on' || value === 'off';
+}
+
+/**
+ * Reads the persisted follow-playhead choice, degrading to `null` (no stored
+ * preference, or garbage) exactly as `readStoredKeyboardMode` does. Stored as
+ * `'on'`/`'off'` rather than `'true'`/`'false'` so a legacy or hand-edited
+ * value can never be read as a boolean by accident.
+ */
+export function readStoredFollowPlayhead(storage?: Pick<Storage, 'getItem'>): boolean | null {
+  const stored = readValidatedStorageValue(FOLLOW_PLAYHEAD_STORAGE_KEY, isFollowFlag, storage);
+  return stored === null ? null : stored === 'on';
+}
+
+/** Best-effort persistence, same contract as {@link persistKeyboardMode}. */
+export function persistFollowPlayhead(follow: boolean, storage?: Pick<Storage, 'setItem'>): void {
+  persistGuardedStorageValue(FOLLOW_PLAYHEAD_STORAGE_KEY, follow ? 'on' : 'off', storage);
+}
+
 const KNOWN_KEYBOARD_MODES: readonly KeyboardMode[] = ['chromatic', 'scale-locked', 'chord'];
 
 function isKeyboardMode(value: string | null): value is KeyboardMode {
@@ -49,6 +71,7 @@ export function createUiSlice(set: Set): UiSlice {
     patternSegment: 'lead',
     soloTracks: [],
     keyboardMode: readStoredKeyboardMode() ?? 'scale-locked',
+    followPlayhead: readStoredFollowPlayhead() ?? true,
     midiActivityTimestamp: null,
     midiMappings: DEFAULT_MIDI_MAPPINGS,
     isMidiSettingsOpen: false,
@@ -70,6 +93,16 @@ export function createUiSlice(set: Set): UiSlice {
     // its side too, before calling at all.
     clearSoloTracks: () =>
       set((state) => (state.soloTracks.length === 0 ? {} : { soloTracks: [] })),
+    // One writer, not two. A `setFollowPlayhead(boolean)` sat beside this with
+    // no caller but its own test, which is indistinguishable from a live action
+    // at review time — and it meant one preference had two write-through paths
+    // to keep in step. The toggle is the only entry point the UI offers.
+    toggleFollowPlayhead: () =>
+      set((state) => {
+        const followPlayhead = !state.followPlayhead;
+        persistFollowPlayhead(followPlayhead);
+        return { followPlayhead };
+      }),
     setKeyboardMode: (keyboardMode) => {
       persistKeyboardMode(keyboardMode);
       set({ keyboardMode });

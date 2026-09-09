@@ -27,7 +27,10 @@ export interface GroupFrameProps {
  */
 export function GroupFrame({ label, className, children }: GroupFrameProps) {
   return (
-    <div className={cx('border border-base-300 rounded-box p-1', className)}>
+    // `rounded-box`, the theme token, not a raw `rounded-2xl`: index.css owns
+    // --radius-box and every other card in the app reads it, so a hard-coded
+    // 1rem here would be the one surface a future radius change cannot reach.
+    <div className={cx('border border-base-300 rounded-box', className)}>
       {label !== undefined && (
         <span className={cx('block px-1 pb-0.5', GROUP_LABEL)}>
           {label}

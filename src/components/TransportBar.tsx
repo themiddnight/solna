@@ -1,9 +1,8 @@
 import React from "react";
-import { Volume2, Clock, Plus, Minus, X } from "lucide-react";
+import { Volume2, Clock, Plus, Minus } from "lucide-react";
+import { TRANSPORT_FIELD_LABEL, TRANSPORT_FIELD_SHELL } from "./ui/fieldClasses";
 import { IconButton } from "./ui/IconButton";
 import { useAppStore } from "../store/store";
-import { soloChipLabel } from "@/store/trackAudibility";
-import { useLiveStore } from "./ui/useLiveStore";
 import { VolumeFader } from "@/components/ui/VolumeFader";
 import { PlayerTransport } from "./ui/PlayerTransport";
 import { PlayheadReadout } from "./PlayheadReadout";
@@ -49,11 +48,25 @@ export const TransportBar = React.memo(function TransportBar() {
   const activeTab = useAppStore((s) => s.activeTab);
   const activeLoopId = useAppStore((s) => s.activeLoopId);
 
-  // Live reads (useLiveStore, not useAppStore): under renderToString a plain
-  // useAppStore selector serves creation-time state, so the chip's test could
-  // never latch a solo. Same reason Header.tsx reads its dirty flag this way.
-  const soloTracks = useLiveStore((s) => s.soloTracks);
-  const clearSoloTracks = useLiveStore((s) => s.clearSoloTracks);
+  // A nullable DRAFT, not a mirror of the store. Non-null only while the user
+  // is mid-edit, so the field can be freely cleared and retyped — writing
+  // straight to the store on every keystroke clamps a cleared/partial value
+  // back to the floor mid-typing (setBpm's clamp is right for the store, wrong
+  // for what is being typed). Committed on blur/Enter, then dropped back to
+  // null, which makes the store the only thing the field can display when it
+  // is not being edited.
+  //
+  // This replaced a `bpmText` mirror + a `bpmFocused` ref + a `[bpm]` sync
+  // effect. That arrangement could get stuck: the effect was the only resync,
+  // so a rejected entry that clamped to the value already stored changed
+  // nothing, never re-ran the effect, and left the box showing a tempo the
+  // transport was not playing. A null draft cannot desync because there is
+  // nothing to keep in step.
+  const [bpmDraft, setBpmDraft] = React.useState<string | null>(null);
+  const commitBpm = () => {
+    if (bpmDraft !== null) setBpm(Number(bpmDraft));
+    setBpmDraft(null);
+  };
 
   const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer);
   const layer = layerForTab(activeTab);
@@ -74,7 +87,6 @@ export const TransportBar = React.memo(function TransportBar() {
   // true aggregate — not the takeover-driven display state.
   const isPlaying = aggregate !== 'stopped';
   const songLabel = songModeLabel(songLoopIndex, loops);
-  const soloLabel = soloChipLabel(soloTracks);
   // The layer IS the choice: playAll() on song, soloLoop(activeLoopId) on loop.
   // It went through a `masterPlayTarget(layer)` helper that returned its own
   // argument — a function, a test and an import proving a ternary copied the
@@ -97,9 +109,21 @@ export const TransportBar = React.memo(function TransportBar() {
     // sits dead-centre in the viewport) whenever there is room, and floored at
     // their own content width when there isn't — which degrades to an off-centre
     // readout instead of side groups overlapping or overflowing the bar.
-    <div className="shrink-0 bg-base-100 border-t border-base-300 px-2 sm:px-3 py-1.5 sm:py-2 pb-safe sm:pb-safe-lg flex items-center justify-between gap-1.5 sm:gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
-      {/* Left Transport Actions: Play All + Tempo + Meter */}
-      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0">
+    <div className="shrink-0 bg-base-100 border-t border-base-300 px-2 sm:px-3 py-1.5 sm:py-2 pb-safe sm:pb-safe-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
+      {/* Left Transport Actions: Play All + Tempo + Meter.
+          Below `sm` this is the bar's FIRST ROW rather than its left third:
+          both side groups are content-sized, and at 375px they summed to 412px
+          — the bar clipped its own master fader with no way to scroll to it.
+          `w-full` + `justify-between` spreads transport and tempo across that
+          row; from `sm` up the group goes back to hugging its content on the
+          left of a single row. */}
+      <div className="flex items-center gap-1 sm:gap-1.5 w-full sm:w-auto justify-between sm:justify-start sm:shrink-0 min-w-0">
+        {/* What is playing, as one cluster: on the mobile first row it is the
+            left half of a `justify-between`, so transport + target must not
+            spread apart from each other. `sm:contents` dissolves the wrapper
+            once the bar is a single row again, leaving the original flat
+            child order and gaps untouched. */}
+        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 sm:contents">
         {/* Master transport: drives both automation players together. */}
         <PlayerTransport
           id="btn-bottom-transport"
@@ -139,36 +163,15 @@ export const TransportBar = React.memo(function TransportBar() {
             {songLabel}
           </span>
         )}
+        </div>
 
-        {/* Track solo is session-only and clears itself on leaving the Loop
-            layer, on a Pattern-segment change, or on changing loop — it
-            survives a Sound <-> Pattern tab change, so this chip can outlive
-            that, but it is still short-lived by construction. It still
-            renders at EVERY width, unlike the song badge above: it is the
-            only global "something is being silenced, and here is how to
-            stop" affordance, so the names truncate rather than the chip
-            disappearing. */}
-        {soloLabel && (
-          <span
-            id="badge-track-solo"
-            className="badge badge-sm badge-warning font-bold gap-1 max-w-32 sm:max-w-none"
-            title="Track solo — cleared when you change Pattern segment, layer or loop"
-          >
-            <span className="truncate">{soloLabel}</span>
-            <IconButton
-              label="Clear solo"
-              icon={<X className="w-3 h-3" />}
-              size="xs"
-              variant="ghost"
-              className="btn-circle"
-              onClick={clearSoloTracks}
-            />
-          </span>
-        )}
-
+        {/* Tempo and meter, the mobile first row's right half. Same
+            `sm:contents` trick: one cluster below `sm`, two flat siblings
+            above it. */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 sm:contents">
         {/* Tempo BPM Control */}
-        <div className="flex items-center gap-0.5 bg-base-200 border border-base-300 px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-box">
-          <span className="text-[10px] text-base-content/50 hidden sm:inline">BPM</span>
+        <div className={TRANSPORT_FIELD_SHELL}>
+          <span className={TRANSPORT_FIELD_LABEL}>BPM</span>
           <IconButton
             label="Decrease BPM"
             icon={<Minus className="w-3 h-3" />}
@@ -180,9 +183,13 @@ export const TransportBar = React.memo(function TransportBar() {
             type="number"
             min={40}
             max={240}
-            value={bpm}
-            onChange={(e) => setBpm(Number(e.target.value))}
-            className="input input-xs input-ghost w-8 sm:w-12 px-0 text-center font-mono font-bold text-primary text-xs"
+            value={bpmDraft ?? String(bpm)}
+            onChange={(e) => setBpmDraft(e.target.value)}
+            onBlur={commitBpm}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+            className="input input-xs input-ghost w-8 sm:w-12 px-0 text-center tabular-nums font-bold text-primary text-xs"
           />
           <IconButton
             label="Increase BPM"
@@ -193,13 +200,13 @@ export const TransportBar = React.memo(function TransportBar() {
         </div>
 
         {/* Time Signature */}
-        <div className="flex items-center gap-0.5 sm:gap-1 bg-base-200 border border-base-300 px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-box">
-          <span className="text-[10px] text-base-content/50 hidden sm:inline">Meter</span>
+        <div className={TRANSPORT_FIELD_SHELL}>
+          <span className={TRANSPORT_FIELD_LABEL}>Meter</span>
           <select
             id="select-transport-meter"
             value={meterId}
             onChange={(e) => setMeter(coerceMeterChoice(e.target.value, meterId))}
-            className="select select-xs select-ghost focus:outline-none font-mono font-bold text-primary px-1"
+            className="select select-xs select-ghost focus:outline-none font-bold text-primary w-16 ps-1 pe-6"
             title="Time signature"
           >
             {METER_OPTIONS.map((option) => (
@@ -209,6 +216,7 @@ export const TransportBar = React.memo(function TransportBar() {
             ))}
           </select>
         </div>
+        </div>
       </div>
 
       {/* Middle: playhead readout — now/next chord + beat dots, visible on larger screens */}
@@ -216,8 +224,12 @@ export const TransportBar = React.memo(function TransportBar() {
         <PlayheadReadout />
       </div>
 
-      {/* Right Meter & Master Gain */}
-      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+      {/* Right Meter & Master Gain — the bar's SECOND ROW below `sm` (see the
+          left group's note). Metronome/MIDI and meter/fader are wrapped as two
+          clusters so `justify-between` spreads them to the row's two ends
+          instead of scattering five controls evenly. */}
+      <div className="flex items-center gap-1 sm:gap-2 w-full sm:w-auto justify-between sm:justify-start shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 sm:contents">
         {/* Metronome Toggle */}
         <button
           id="btn-transport-metronome"
@@ -231,11 +243,13 @@ export const TransportBar = React.memo(function TransportBar() {
           <span className="hidden lg:inline text-[11px]">Click</span>
         </button>
 
-        {/* MIDI Activity Indicator (hidden on small mobile to conserve space) */}
-        <div className="hidden sm:block">
-          <MidiIndicator />
+        {/* MIDI Activity Indicator. Visible at every width now that the bar
+            wraps to two rows below `sm` — the row it shares with the meter and
+            the fader has the space the single row did not. */}
+        <MidiIndicator />
         </div>
 
+        <div className="flex items-center gap-1 sm:gap-2 sm:contents">
         {/* Real-time output level meter */}
         <VuMeter isPlaying={isPlaying} />
 
@@ -244,19 +258,22 @@ export const TransportBar = React.memo(function TransportBar() {
           <Volume2 className="w-3.5 h-3.5 text-base-content/60 shrink-0" />
           {/* The taper, the readout, the -inf detent and double-click-to-unity
               all live in VolumeFader — this bar states only the width and
-              which readout it can afford. The readout is hidden below `sm`:
-              both side groups are `shrink-0`, so under that breakpoint this
-              bar has one fixed width (378px overran a 375px iPhone), and
-              dropping the readout is what brings it back. The level stays
-              readable from the fader position and exact in the `title`. */}
+              which readout it can afford. The readout's visibility tracks the
+              bar's own layout, not screen size in the usual direction: below
+              `sm` the bar is two rows and the readout fits, from `sm` to `lg`
+              it is ONE row whose two content-sized groups summed to 803px at a
+              768px tablet, so the 56px readout is what has to go there, and it
+              returns at `lg`. The level stays readable from the fader position
+              and exact in the `title` wherever it is hidden. */}
           <VolumeFader
             id="slider-transport-master"
             label="Master"
             valueDb={masterVolume}
             onChangeDb={setMasterVolume}
-            className="range range-xs range-primary w-10 sm:w-16"
-            readoutClassName="font-mono text-[10px] text-base-content/60 w-14 text-right hidden sm:inline"
+            className="range range-xs range-primary w-16"
+            readoutClassName="tabular-nums text-[10px] text-base-content/60 w-14 text-right inline sm:hidden lg:inline"
           />
+        </div>
         </div>
       </div>
     </div>

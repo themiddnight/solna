@@ -67,7 +67,13 @@ export interface PowerToggleProps {
   /** Subject of the control, e.g. "Chord", "Reverb". Rendered as `${name} On`. */
   name: string;
   tone: PowerToggleTone;
-  /** Icon-only square button — used for the sequencer's per-track mutes. */
+  /**
+   * Icon-only square button. Used where the control's subject is already named
+   * next to it — the sequencer's per-track mutes, and every row of the Sound
+   * mixer, where the row's own label carries the layer name and the level. It
+   * also makes a COLUMN of toggles line up for free: `btn-square` is one width
+   * whatever the name is, where "Lead On" and "Chord On" are not.
+   */
   iconOnly?: boolean;
   size?: 'xs' | 'sm';
   id?: string;

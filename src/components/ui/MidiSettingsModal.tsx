@@ -97,7 +97,7 @@ export function MidiSettingsModal() {
             <select
               value={selectedMidiInputId}
               onChange={(e) => setSelectedMidiInputId(e.target.value)}
-              className="select select-sm select-bordered text-xs max-w-xs flex-1 font-mono"
+              className="select select-sm select-bordered text-xs max-w-xs flex-1"
             >
               <option value="all">All Connected Devices (Omni)</option>
               {inputs.map((input) => (
@@ -113,7 +113,7 @@ export function MidiSettingsModal() {
               {inputs.map((input) => {
                 const isActive = selectedMidiInputId === 'all' || selectedMidiInputId === input.id;
                 return (
-                  <li key={input.id} className="flex items-center justify-between text-xs font-mono text-base-content">
+                  <li key={input.id} className="flex items-center justify-between text-xs text-base-content">
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-success animate-pulse' : 'bg-base-content/30'}`} />
                       <span>{input.name}</span>
@@ -183,11 +183,11 @@ export function MidiSettingsModal() {
                   <div>
                     <div className="font-semibold text-xs text-base-content flex items-center gap-2">
                       {mapping.targetLabel}
-                      <span className="badge badge-xs badge-ghost font-mono">
+                      <span className="badge badge-xs badge-ghost">
                         {mapping.type.toUpperCase()}
                       </span>
                     </div>
-                    <div className="text-[10px] text-base-content/60 font-mono">
+                    <div className="text-[10px] text-base-content/60">
                       {mapping.type === 'cc' ? `CC #${mapping.ccNumber}` : 'Note On/Off (0-127)'}
                     </div>
                   </div>
@@ -212,7 +212,7 @@ export function MidiSettingsModal() {
                       onChange={(e) =>
                         updateMidiMapping(mapping.id, { ccNumber: parseInt(e.target.value) || 0 })
                       }
-                      className="input input-xs input-bordered w-14 font-mono text-center"
+                      className="input input-xs input-bordered w-14 tabular-nums text-center"
                       title="Edit CC number"
                     />
                   )}
@@ -257,7 +257,7 @@ export function MidiSettingsModal() {
               max="127"
               value={newCcNumber}
               onChange={(e) => setNewCcNumber(parseInt(e.target.value) || 0)}
-              className="input input-sm input-bordered w-full font-mono text-center text-xs"
+              className="input input-sm input-bordered w-full tabular-nums text-center text-xs"
             />
           </div>
         )}

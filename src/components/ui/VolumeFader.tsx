@@ -71,7 +71,7 @@ export function VolumeFader({
   onChangeDb,
   className = 'range range-xs range-primary w-full',
   showReadout = true,
-  readoutClassName = 'text-[10px] font-mono w-14 text-right shrink-0 text-base-content/80',
+  readoutClassName = 'text-[10px] tabular-nums w-14 text-right shrink-0 text-base-content/80',
 }: VolumeFaderProps) {
   // formatDb is the ONE formatter for a dB value; the readout and the tooltip
   // are the same string, so they cannot round differently.

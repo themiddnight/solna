@@ -31,6 +31,8 @@ import { arrangeCycleSteps, arrangeStep } from './arrangeStep';
 import { loopIdKeyOf, loopIdsFromKey } from './loopIdKey';
 
 /** Stable identity for the closed-dialog case — see the `labels` memo below. */
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
 const EMPTY_LOOP_LABELS: Readonly<Record<string, string>> = {};
 
 /** Pure route for the loop-editor deep-link, exported for a pure test. */
@@ -88,6 +90,7 @@ export const ArrangeView = React.memo(function ArrangeView() {
       : activeLoopId;
 
   const activeTab = useAppStore((s) => s.activeTab);
+  const followPlayhead = useAppStore((s) => s.followPlayhead);
   const stepsPerBar = useMemo(() => getMeter(meterId).stepsPerBar, [meterId]);
 
   // The per-card totals this view divides the playhead by (see the map below).
@@ -133,6 +136,42 @@ export const ArrangeView = React.memo(function ArrangeView() {
       setCurrentStep((prev) => (prev === next ? prev : next));
     });
   }, [isPlaying, activeTab, cycleSteps]);
+
+  // Follow the playhead across loops. Song playback walks from one card to the
+  // next on its own, and past a handful of loops the playing card leaves the
+  // viewport with nothing to bring it back.
+  //
+  // The dependency list is the feature, not an optimisation: it holds the loop
+  // IDENTITY and nothing that changes inside a loop, so this fires once per
+  // change of loop and the user owns the scroll position for the whole time one
+  // loop is playing. `currentStep` (8-16 writes a second) must never be added
+  // here — that would re-scroll on every clock tick and fight the user's own
+  // scrolling continuously.
+  //
+  // `block: 'center'` rather than `'nearest'`: `'nearest'` scrolls the minimum,
+  // which parks the incoming card flush against whichever edge it entered from,
+  // with no sight of the loops on either side of it. Centring costs a scroll
+  // even when the card was already visible, but that only happens on a loop
+  // change, which is exactly when moving is the point.
+  //
+  // Gated on the tab for the same reason the clock subscription above is: this
+  // view stays mounted behind `hidden`, and scrolling from a surface nobody is
+  // looking at would move the scroll container out from under the visible one.
+  //
+  // `followPlayhead` (the header's toggle, song layer) is the user's opt-out:
+  // off, this effect does nothing at all and the scroll position is theirs for
+  // the whole song. It is read here rather than gating the toggle's own writer
+  // because turning follow back ON mid-playback should catch up to the playing
+  // card immediately — the effect re-runs on the flag and scrolls once.
+  useEffect(() => {
+    if (!followPlayhead || !isPlaying || activeTab !== 'arrange' || !playingId) return;
+    const card = document.getElementById(`card-loop-${playingId}`);
+    if (!card) return;
+    card.scrollIntoView({
+      behavior: window.matchMedia(REDUCED_MOTION_QUERY).matches ? 'auto' : 'smooth',
+      block: 'center',
+    });
+  }, [followPlayhead, isPlaying, activeTab, playingId]);
 
   // The mirrored per-loop field write rebuilds `loops` (and every loop
   // object in it) on every knob/fader change to the active loop, so keying

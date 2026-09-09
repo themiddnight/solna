@@ -28,7 +28,7 @@ export const MidiIndicator = React.memo(function MidiIndicator() {
       title={active ? "MIDI Event Received! Click to configure mappings" : "MIDI Connected. Click to open MIDI settings & mappings"}
     >
       <Radio className={`w-3.5 h-3.5 ${active ? "animate-pulse text-primary" : "opacity-70"}`} />
-      <span className="hidden sm:inline font-mono text-[10px]">MIDI</span>
+      <span className="hidden sm:inline text-[10px]">MIDI</span>
       <span
         className={`w-2 h-2 rounded-full transition-all ${
           active ? "bg-primary scale-125" : "bg-base-content/30"

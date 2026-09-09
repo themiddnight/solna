@@ -7,12 +7,10 @@ import { PanelCard } from "../ui/PanelCard";
 interface SimpleSynthPanelProps {
   params: SynthParams;
   onChangeParams: (params: SynthParams) => void;
-  /** Target tint (chord/bass) from SoundView's TARGET_STYLES; "" for the main synth. */
-  tintClass?: string;
 }
 
 export const SimpleSynthPanel = React.memo(
-  function SimpleSynthPanel({ params, onChangeParams, tintClass = "" }: SimpleSynthPanelProps) {
+  function SimpleSynthPanel({ params, onChangeParams }: SimpleSynthPanelProps) {
     // Macro 1: Tone (Brightness) -> Cutoff
     const cutoffValue = params.filterCutoff ?? 4000;
     const toneLabel =
@@ -54,7 +52,7 @@ export const SimpleSynthPanel = React.memo(
         {/* 2. Four Friendly Macro Dials + 1-Click Arp */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {/* Macro 1: Tone (Brightness) */}
-          <PanelCard tint={tintClass}>
+          <PanelCard inset>
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
                 <Sun className="w-3.5 h-3.5 text-module-filter" />
@@ -79,7 +77,7 @@ export const SimpleSynthPanel = React.memo(
           </PanelCard>
 
           {/* Macro 2: Space (Release & Tail) */}
-          <PanelCard tint={tintClass}>
+          <PanelCard inset>
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
                 <Compass className="w-3.5 h-3.5 text-module-env-vca" />
@@ -110,7 +108,7 @@ export const SimpleSynthPanel = React.memo(
           </PanelCard>
 
           {/* Macro 3: Vibe (Movement & Detune) */}
-          <PanelCard tint={tintClass}>
+          <PanelCard inset>
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
                 <Waves className="w-3.5 h-3.5 text-module-lfo" />
@@ -141,7 +139,7 @@ export const SimpleSynthPanel = React.memo(
           </PanelCard>
 
           {/* Macro 4: Punch (Sub & Power) */}
-          <PanelCard tint={tintClass}>
+          <PanelCard inset>
             <div className="card-body p-3 flex flex-col items-center justify-between text-center">
               <div className="flex items-center gap-1 text-xs font-bold text-base-content">
                 <Flame className="w-3.5 h-3.5 text-module-osc" />
@@ -171,9 +169,15 @@ export const SimpleSynthPanel = React.memo(
             </div>
           </PanelCard>
 
-          {/* 1-Click Easy Arpeggiator Card */}
+          {/* 1-Click Easy Arpeggiator Card. The only macro card that does not
+              go through `PanelCard`: it keeps its own `module-arp` border, and
+              a border colour passed alongside the shell's `border-base-300`
+              would be two utilities setting one property — decided by
+              stylesheet order, not by the order they are written here. It wears
+              the recessed surface by hand instead, so it still sits level with
+              the four beside it inside the Synth section. */}
           <div
-            className={`col-span-2 sm:col-span-1 lg:col-span-1 card bg-panel border border-module-arp/30 shadow-md ${tintClass}`}
+            className="col-span-2 sm:col-span-1 lg:col-span-1 card bg-base-200 border border-module-arp/30"
           >
             <div className="card-body p-3 flex flex-col justify-between">
               <div className="flex items-center justify-between border-b border-base-300 pb-1.5">
@@ -201,7 +205,7 @@ export const SimpleSynthPanel = React.memo(
               <div className="space-y-1 my-1.5">
                 <div className="flex items-center justify-between text-[10px] text-base-content/60">
                   <span>Speed:</span>
-                  <span className="font-mono text-module-arp font-bold">
+                  <span className="tabular-nums text-module-arp font-bold">
                     {params.arpRate === "8n"
                       ? "1/8"
                       : params.arpRate === "32n"

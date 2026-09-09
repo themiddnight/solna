@@ -117,6 +117,19 @@ export function App() {
   // UI slice
   const activeTab = useAppStore((s) => s.activeTab);
 
+  // A reloaded session restores `currentProjectId` from persisted state
+  // synchronously, but `currentProjectName` is transient — resolved only by
+  // refreshProjects() against IndexedDB, which ProjectManagerModal otherwise
+  // runs lazily on first open. Without this, the header shows "Unnamed
+  // project" for a saved project until the user opens that modal once. Only
+  // fired when there is an id to resolve, so a fresh untitled session pays
+  // nothing.
+  useEffect(() => {
+    if (useAppStore.getState().currentProjectId) {
+      void useAppStore.getState().refreshProjects();
+    }
+  }, []);
+
   // Initialize audio engine on first user interaction (click, keydown, or
   // pointerdown — the global input deck's keyboard can start audio before any
   // click ever happens).

@@ -10,13 +10,12 @@ import {
 import { patternMeterTitle, patternOptionLabel } from "@/components/meterSelect";
 import { getMeter } from "@/utils/meter";
 import { stepCells } from "@/components/sequencerGrid";
-import { FIELD_LABEL, FIELD_SELECT, SECTION_HEADER } from "@/components/ui/fieldClasses";
+import { FIELD_LABEL, FIELD_SELECT } from "@/components/ui/fieldClasses";
 import { Slider } from "@/components/ui/Slider";
 import { PlayingStepRow, STEP_ROW_CLASS } from "@/components/ui/StepRow";
 import { PlayingStepHeader } from "@/components/ui/StepHeader";
 import { IconButton } from "@/components/ui/IconButton";
-import { SoloButton } from "@/components/ui/SoloButton";
-import { AdjustSynthButton } from "./AdjustSynthButton";
+import { ModulePanelCard } from "./ModulePanelCard";
 import { PresetSelect } from "./PresetSelect";
 
 export interface ChordModulePanelProps {
@@ -70,28 +69,30 @@ export function ChordModulePanel({
     [allPresets],
   );
 
+  // No `mt-4`: the GroupFrame in ChordView owns the spacing between these three
+  // cards now (`p-1` + `gap-3 sm:gap-4`). The margin was left over from when
+  // they were direct children of a `space-y` root, and inside the frame it
+  // double-counted — a 20px top inset against 4px on the other three sides, and
+  // 28px between cards where the gap says 12.
+  // `role="group"` + the heading as its label is what lets every field below
+  // drop its `Chord ` prefix: the context a screen reader needs comes from the
+  // group, not from repeating the word five times.
   return (
-      <div className="mt-4 card bg-panel tint-chord border border-module-chord/30 p-4">
-        <div className="mb-3 flex items-start justify-between gap-2">
-          <div>
-            <h3 className={SECTION_HEADER}>
-              Chord Module
-            </h3>
-            <p className="text-[10px] text-base-content/60">
-              How the chord layer voices the progression above: its sound,
+    <ModulePanelCard
+      target="chord"
+      title="Chord Module"
+      description={
+        <>
+          How the chord layer voices the progression above: its sound,
               register and comping rhythm.
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <SoloButton track="chord" />
-            <AdjustSynthButton target="chord" className="text-module-chord" />
-          </div>
-        </div>
-        <div className="flex flex-row flex-wrap items-end gap-3">
+        </>
+      }
+    >
+      <div className="flex flex-row flex-wrap items-end gap-3">
           {/* Chord Sound Preset Select */}
           <PresetSelect
             id="select-chord-sound-preset"
-            label="Chord Preset"
+            label="Preset"
             title="Chord sound preset — factory and saved presets, synced with the synth page"
             placeholder="Chord Preset…"
             groups={presetGroups}
@@ -109,7 +110,7 @@ export function ChordModulePanel({
 
           {/* Chord Octave Select */}
           <div>
-            <label className={FIELD_LABEL} htmlFor="select-chord-octave">Chord Octave</label>
+            <label className={FIELD_LABEL} htmlFor="select-chord-octave">Octave</label>
             <select
               id="select-chord-octave"
               value={chordOctave}
@@ -127,7 +128,7 @@ export function ChordModulePanel({
 
           {/* Chord Rhythm Pattern Select */}
           <div>
-            <label className={FIELD_LABEL} htmlFor="select-chord-rhythm-pattern">Chord Pattern</label>
+            <label className={FIELD_LABEL} htmlFor="select-chord-rhythm-pattern">Pattern</label>
             <div className="flex items-center gap-1.5">
               <select
                 id="select-chord-rhythm-pattern"
@@ -175,7 +176,7 @@ export function ChordModulePanel({
 
           {/* Chord Feel Slider (tight ↔ loose) */}
           <div>
-            <label className={FIELD_LABEL} htmlFor="slider-chord-feel">Chord Feel</label>
+            <label className={FIELD_LABEL} htmlFor="slider-chord-feel">Feel</label>
             <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
               <span className="text-[9px] text-base-content/60 shrink-0">
                 tight
@@ -233,6 +234,6 @@ export function ChordModulePanel({
             </div>
           </div>
         )}
-      </div>
+    </ModulePanelCard>
   );
 }
