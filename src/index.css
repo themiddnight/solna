@@ -298,14 +298,23 @@
 }
 
 [data-theme="solna-light"] {
-  /* L ~0.57 — the dark set's lightness washes out on warm paper. */
+  /* L ~0.57 — the dark set's lightness washes out on warm paper.
+
+     Content is white on the six darker fills. The three lightest — osc, chord
+     and env-vca — need ink, and it is the DEEP ember ink (#17100F, the dark
+     theme's base-200) rather than this theme's --color-base-content (#2A1A20):
+     base-content lands at 4.409, 4.471 and 4.201 against those three, all under
+     the 4.5 AA floor, and the deeper ink clears it at 4.999, 5.070 and 4.764.
+     The ink moved rather than the fills because a fill is the module's identity
+     colour and every surface that module owns reads it, where -content is only
+     ever the text sitting on that fill. `bun run check:contrast` is the gate. */
   --module-osc: #B0790C;          /* butter gold 87° */
-  --module-osc-content: #2A1A20;
+  --module-osc-content: #17100F;
   --module-chord: #6D8F45;        /* olive 125° */
-  --module-chord-content: #2A1A20;
+  --module-chord-content: #17100F;
   --module-chord-tint: #6D8F451A; /* the same olive at 10% — see tint-chord */
   --module-env-vca: #099268;      /* emerald 162° */
-  --module-env-vca-content: #2A1A20;
+  --module-env-vca-content: #17100F;
   --module-lfo: #0C7F97;          /* cyan 213° */
   --module-lfo-content: #FFFFFF;
   --module-bass: #3D6FBF;         /* steel blue 256° */

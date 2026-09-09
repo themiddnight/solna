@@ -21,7 +21,7 @@ bun test -t "reverb decay"                 # one test by name
 bun run check:theme    # theme-token guard suite only
 bun run check:keys     # drum-pad vs synth key-binding collision check
 bun run check:drums    # drum-kit audible-separation check
-bun run check:contrast # drum-palette AA contrast floor (both themes)
+bun run check:contrast # drum- and module-palette AA contrast floor (both themes)
 bun run check:levels   # calibration trim table still matches today's kit/preset defaults
 bun run verify         # test + lint + eslint + check:keys + check:drums + check:contrast + check:levels + build (the gate)
 ```
@@ -35,8 +35,15 @@ that is the state to keep it in. Per decision D5 a new rule lands as `warn` and 
 `react-hooks/exhaustive-deps` and `complexity` stay at `warn` deliberately: both have
 legitimate exceptions, so each remaining one carries a line disable naming its reason rather
 than a rule relaxed for everybody. `check:contrast`
-holds the drum palette above the AA floor in both themes; the closest pair sits a few thousandths
-above 4.5, so that step is a gate the palette can fail, not a report of what the palette is.
+holds **both** namespaced palettes — `--drum-*` and `--module-*` — above the AA floor in both
+themes; the closest pair sits a few thousandths above 4.5, so that step is a gate a palette can
+fail, not a report of what the palettes are. The two rosters are named differently on purpose:
+drum voices come from `DRUM_TYPES` (a voice exists in code whether or not it has a colour), while
+module names are read out of `index.css` itself, since the only module list is `Knob`'s
+`KnobColor` union and a CLI gate should not import a React component to learn a list of colours.
+What stops the CSS-derived half passing vacuously is that the script asserts both themes declare
+the *same* module set and that the set is non-empty — a module colour added to one theme only
+fails rather than being skipped.
 
 ## Architecture
 
