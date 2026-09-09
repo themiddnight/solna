@@ -29,6 +29,7 @@ const resetStore = () => {
     // row of restartAfterStop the tests below exercise.
     activeTab: 'sound',
     playbackScope: SCOPE_NONE,
+    selectedVibeId: null,
   });
 };
 
@@ -304,3 +305,10 @@ describe('loadLoop leaves a scope that matches what is sounding', () => {
     expect(s.playbackScope).toBe(SCOPE_NONE);
   });
 });
+
+// selectedVibeId clearing used to be inline here on both paths (hard-stop and
+// seamless boundary), gated on a local `leavingLoop` check. It is now
+// store/vibeNav.ts's activeLoopId subscription instead — one mechanism for
+// every writer of activeLoopId, loadLoop's two setState calls included — so
+// the "clears on a real switch, survives a re-select" guarantee is asserted
+// once in vibeNav.test.ts rather than per call site here.

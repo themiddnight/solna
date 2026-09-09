@@ -18,6 +18,7 @@ import type { MeterId } from '../utils/meter';
 import type { SynthPresetItem, SynthPresetCategory } from '../data/synthPresets';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { LeadNote } from '../audio/leadMelody';
+import type { LoopCopyGroupId } from './loopCopy';
 import type { LeadStepResolutionId } from '../utils/stepResolution';
 import type { PlaybackScope } from './playbackScope';
 import type { ProjectSlice } from './projectSlice';
@@ -397,7 +398,16 @@ export interface PresetsSlice {
 /** A full per-loop musical snapshot: identity + every per-loop field. */
 export interface Loop extends PadState {
   id: string;
-  name: string; // auto-named "Loop N"; ids are the stable handle
+  /** The USER's name. '' until they set one, '' again if they clear it; nothing but a rename writes it. */
+  name: string;
+  /**
+   * The APP's label, never empty. Starts at `untitled-{n}` and is overwritten
+   * with a vibe's display NAME (a snapshot, not a reference) whenever a vibe
+   * is applied to this loop. Deliberately NOT in LOOP_FLAT_KEYS: it is
+   * loop-slot identity, not loop content, so it never rides in a
+   * LoopStatePatch and no copy group can name it.
+   */
+  tempName: string;
   repeatCount?: number; // default 1, number of times this loop plays before advancing in song mode
   scaleRoot: string;
   scaleType: string;
@@ -439,7 +449,7 @@ export interface Loop extends PadState {
 }
 
 /** The per-loop fields, without identity — what loadLoop writes to the flat slices. */
-export type LoopStatePatch = Omit<Loop, 'id' | 'name' | 'repeatCount'>;
+export type LoopStatePatch = Omit<Loop, 'id' | 'name' | 'repeatCount' | 'tempName'>;
 
 /** The per-loop mixer: the 10 volume/mute fields edited on each Arrange card. */
 export type LoopMixPatch = Pick<
@@ -467,10 +477,23 @@ export interface LoopSlice {
   reorderLoops: (id: string, direction: -1 | 1) => void;
   reorderLoopsArray: (loops: Loop[]) => void;
   setLoopName: (id: string, name: string) => void;
+  /**
+   * The app's label for a loop — written by the vibe path, never by a rename.
+   * Its own action rather than a flat setter because `tempName` is not in
+   * LOOP_FLAT_KEYS, so loopSync's flat->loops[] mirror has no field to carry
+   * it from; adding one would put a label into the copyable content set.
+   */
+  setLoopTempName: (id: string, tempName: string) => void;
   setLoopRepeatCount: (id: string, repeatCount: number) => void;
   setActiveLoop: (id: string) => void;
   /** Edit a loop's 10 mixer fields in place; mirrors to the flat slices when active. */
   setLoopMix: (id: string, patch: Partial<LoopMixPatch>) => void;
+  /**
+   * Overwrite the selected copy groups of `targetId` with `sourceId`'s
+   * values. Implemented in loopCopySlice.ts rather than loopSlice.ts — see
+   * that file's docblock for the import cycle that forces the split.
+   */
+  applyLoopCopy: (targetId: string, sourceId: string, selected: readonly LoopCopyGroupId[]) => void;
 }
 
 /** Persisted project identity — extended by ProjectSlice in projectSlice.ts. */

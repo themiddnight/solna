@@ -130,6 +130,13 @@ export function applyVibeToStore(vibe: ResolvedVibe) {
   store.setScaleRoot(vibe.scaleRoot);
   store.setScaleType(vibe.scaleType);
   store.setSelectedVibeId(vibe.id);
+  // A SNAPSHOT of the vibe's display name, on the loop being rewritten — not
+  // the id, and not a pointer to the entry. Applying a vibe is a bulk setter,
+  // not a declaration that the loop IS that genre: the user is free to keep
+  // the chords, swap the kit and end up somewhere else, and a stored id would
+  // go on claiming an identity the sound has left. Unconditional, so a loop
+  // with a user `name` still tracks the last vibe applied behind it.
+  store.setLoopTempName(store.activeLoopId, vibe.name);
 
   // 2. Drums & Sequencer (Pattern + Sound Kit + Drum Filter)
   store.setSoundKit(vibe.soundKit);

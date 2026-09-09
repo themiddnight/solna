@@ -22,7 +22,10 @@ function manualScheduler() {
 
 /** A minimal store carrying only what the tracker reads and writes. */
 function makeStore(identity: { currentProjectId: string | null; projectBaselineHash: string | null }) {
-  const content = factoryProjectContent();
+  // loops swapped for a real Loop[]: factoryProjectContent().loops has no
+  // tempName (loop-slot identity, never project content — see ProjectLoop in
+  // projectFormat.ts), but this fixture stands in for the full AppStore.
+  const content = { ...factoryProjectContent(), loops: [createDefaultLoop()] };
   return create<Partial<AppStore>>()(
     subscribeWithSelector((): Partial<AppStore> => ({
       ...content,
@@ -158,7 +161,7 @@ describe('createDirtyTracker', () => {
     sched.run();
     expect(store.getState().dirty).toBe(true);
     // What projectSlice.install writes for a saved project:
-    const opened = { ...factoryProjectContent(), bpm: 77 };
+    const opened = { ...factoryProjectContent(), bpm: 77, loops: [createDefaultLoop()] };
     store.setState({ ...opened, currentProjectId: 'p-2', projectBaselineHash: fingerprintContent(opened), dirty: false });
     sched.run();
     expect(store.getState().dirty).toBe(false);
@@ -175,7 +178,13 @@ describe('createDirtyTracker', () => {
     sched.run();
     expect(store.getState().dirty).toBe(true);
     // What projectSlice.newProject writes:
-    store.setState({ ...factoryProjectContent(), currentProjectId: null, projectBaselineHash: null, dirty: false });
+    store.setState({
+      ...factoryProjectContent(),
+      loops: [createDefaultLoop()],
+      currentProjectId: null,
+      projectBaselineHash: null,
+      dirty: false,
+    });
     sched.run();
     expect(store.getState().dirty).toBe(false);
     store.setState({ bpm: 122 });

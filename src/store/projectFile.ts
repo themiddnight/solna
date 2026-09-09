@@ -4,7 +4,7 @@ import { CHORD_RHYTHMS } from '@/data/chordRhythms';
 import type { MasterEffects } from '../types';
 import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
 import { createDefaultLoop } from './loopSlice';
-import { PROJECT_FORMAT_VERSION, type ProjectBody, type ProjectContent } from './projectFormat';
+import { PROJECT_FORMAT_VERSION, pickLoopContent, type ProjectBody, type ProjectContent } from './projectFormat';
 import { clampFinite, sanitizeEffectsValue, sanitizeLoops } from './sanitize';
 import { asFaderDb } from './levelUnits';
 
@@ -39,15 +39,22 @@ const malformed = (): ProjectParseResult => ({ ok: false, error: 'malformed', me
  * Content goes through the SAME guards persist hydration uses (sanitize.ts):
  * a wrong-typed field falls back, an empty or invalid loops array becomes one
  * default loop, and unknown library ids are kept verbatim.
+ *
+ * `sanitizeLoops` returns full `Loop[]` — the same shape persist hydration
+ * reads, tempName included — so it is piped through `pickLoopContent` here
+ * too, not just at `buildProjectContent`'s write site: this function is the
+ * OTHER producer of a `ProjectContent`, and a `ProjectLoop` must never carry
+ * `tempName` regardless of which producer built it.
  */
 export function sanitizeContent(raw: unknown): ProjectContent {
   const c = isPlainObject(raw) ? raw : {};
+  const loops = sanitizeLoops(c.loops) ?? [createDefaultLoop()];
   return {
     bpm: clampFinite(c.bpm, 20, 300, 120),
     meterId: isMeterId(c.meterId) ? c.meterId : DEFAULT_METER_ID,
     masterVolume: asFaderDb(c.masterVolume),
     effects: sanitizeEffectsValue(c.effects) as MasterEffects,
-    loops: sanitizeLoops(c.loops) ?? [createDefaultLoop()],
+    loops: loops.map(pickLoopContent),
   };
 }
 

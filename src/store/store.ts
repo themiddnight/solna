@@ -14,6 +14,7 @@ import { createEffectsSlice } from './effectsSlice';
 import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
 import { createLoopSlice } from './loopSlice';
+import { createLoopCopySlice } from './loopCopySlice';
 import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
 import { DEFAULT_LEAD_STEP_RESOLUTION } from '../utils/stepResolution';
 import { migrateLegacyPresets, removeLegacyKeys, LEGACY_PERSIST_KEY } from './migrate';
@@ -385,6 +386,7 @@ export const useAppStore = create<AppStore>()(
         ...createUiSlice(setWithLoopMirror),
         ...createPresetsSlice(setWithLoopMirror),
         ...createLoopSlice(setWithLoopMirror, get),
+        ...createLoopCopySlice(setWithLoopMirror, get),
         ...createProjectSlice(setWithLoopMirror, get, projectStore),
       };
     }),

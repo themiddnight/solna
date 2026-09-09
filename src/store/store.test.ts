@@ -1226,7 +1226,8 @@ describe('flat (pre-loop) payload: DEV-388 deleted the wrap, so it hydrates flat
     await useAppStore.persist.rehydrate();
     const s = useAppStore.getState();
     expect(s.loops).toHaveLength(1);
-    expect(s.loops[0].name).toBe('Loop 1');
+    expect(s.loops[0].name).toBe('');
+    expect(s.loops[0].tempName).toBe('untitled-1');
     expect(s.activeLoopId).toBe(s.loops[0].id);
     expect(s.scaleRoot).toBe('A');
   });

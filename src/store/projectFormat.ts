@@ -2,7 +2,7 @@ import type { MasterEffects } from '../types';
 import type { MeterId } from '../utils/meter';
 import { DEFAULT_METER_ID } from '../utils/meter';
 import { INITIAL_EFFECTS } from './initialState';
-import { LOOP_FLAT_KEYS, loopStatePatch, resolveActiveLoop } from './loop';
+import { LOOP_FLAT_KEYS, loopStatePatch, resolveActiveLoop, withFreshTempNames } from './loop';
 import { createDefaultLoop } from './loopSlice';
 import { DEFAULT_BPM } from './transportSlice';
 import { DEFAULT_FADER_DB } from './levelUnits';
@@ -144,7 +144,7 @@ export interface ProjectContent {
   meterId: MeterId;
   masterVolume: number;
   effects: MasterEffects;
-  loops: Loop[];
+  loops: ProjectLoop[];
 }
 
 export interface ProjectBody extends ProjectEnvelope {
@@ -155,13 +155,46 @@ export interface ProjectBody extends ProjectEnvelope {
 export const PROJECT_CONTENT_KEYS = ['bpm', 'meterId', 'masterVolume', 'effects', 'loops'] as const;
 
 /**
- * Every field of a Loop, in fingerprint order. Derived from LOOP_FLAT_KEYS so
- * a new per-loop field is picked up automatically — and pinned by a test so
- * adding one is a conscious decision about whether it belongs in a project.
+ * Every field of a Loop that is project content, in fingerprint order.
+ * Derived from LOOP_FLAT_KEYS so a new LoopStatePatch field is picked up
+ * automatically — and pinned by a test so adding one is a conscious decision
+ * about whether it belongs in a project. This is not every field of `Loop`:
+ * `tempName` is loop-slot identity rather than content, so it is opted out
+ * one layer up, in `LoopStatePatch`'s own `Omit` (types.ts), and never
+ * reaches LOOP_FLAT_KEYS or this list to begin with — see `ProjectLoop`'s
+ * docblock below for why it is excluded, not what excludes it.
  */
 export const PROJECT_LOOP_KEYS = ['id', 'name', 'repeatCount', ...LOOP_FLAT_KEYS] as const;
 
+/**
+ * A Loop as it appears in project content: every PROJECT_LOOP_KEYS field,
+ * `tempName` excluded. `tempName` is loop-slot identity, not project content
+ * (see its docblock on `Loop` in types.ts) — the same category as
+ * `selectedVibeId` being excluded from PROJECT_CONTENT_KEYS.
+ */
+export type ProjectLoop = Omit<Loop, 'tempName'>;
+
 export type ProjectContentSource = Pick<AppStore, 'bpm' | 'meterId' | 'masterVolume' | 'effects' | 'loops'>;
+
+/**
+ * Exactly PROJECT_LOOP_KEYS off a live Loop — never a spread — so `tempName`
+ * (loop-slot identity, deliberately not in PROJECT_LOOP_KEYS) can never ride
+ * into a saved or exported project body. Before this picked, buildProjectContent
+ * wrote `state.loops` verbatim and `tempName` shipped in every `.solna` file
+ * despite being excluded from the pinned key lists — this is the fix.
+ *
+ * Exported because it is not only buildProjectContent's helper: sanitizeContent
+ * (projectFile.ts) is the OTHER producer of a `ProjectContent`, and it starts
+ * from `sanitizeLoops`'s full `Loop[]` (tempName included, since that is also
+ * what persist hydration reads) — the same strip belongs there too, or a
+ * rename/import round-trip re-widens a clean stored body back into carrying
+ * `tempName`.
+ */
+export function pickLoopContent(loop: Loop): ProjectLoop {
+  const picked = {} as Record<string, unknown>;
+  for (const key of PROJECT_LOOP_KEYS) picked[key] = (loop as unknown as Record<string, unknown>)[key];
+  return picked as ProjectLoop;
+}
 
 /**
  * Picks the content set off the live store. Explicit property list, never a
@@ -173,12 +206,16 @@ export function buildProjectContent(state: ProjectContentSource): ProjectContent
     meterId: state.meterId,
     masterVolume: state.masterVolume,
     effects: state.effects,
-    loops: state.loops,
+    loops: state.loops.map(pickLoopContent),
   };
 }
 
-export type ProjectOpenPatch = ProjectContent &
-  LoopStatePatch & { activeLoopId: string; selectedVibeId: null };
+// loops overridden to Loop[]: applyProjectContent stamps a fresh tempName
+// onto every content loop before this patch is written (withFreshTempNames),
+// so what actually reaches the store is a full Loop, never the tempName-less
+// ProjectContent shape a project body carries on disk.
+export type ProjectOpenPatch = Omit<ProjectContent, 'loops'> &
+  LoopStatePatch & { loops: Loop[]; activeLoopId: string; selectedVibeId: null };
 
 /**
  * The single store patch that installs a project. Encodes the reset rules:
@@ -190,9 +227,14 @@ export type ProjectOpenPatch = ProjectContent &
  * are deliberately absent: they are user preferences, not project state.
  */
 export function applyProjectContent(content: ProjectContent): ProjectOpenPatch {
-  const active = resolveActiveLoop(content.loops, null);
+  // content.loops carries no tempName (see ProjectLoop above) — every install
+  // synthesizes fresh loop-slot labels, the same reset applyProjectContent
+  // already does to selectedVibeId and for the same reason.
+  const loops = withFreshTempNames(content.loops);
+  const active = resolveActiveLoop(loops, null);
   return {
     ...content,
+    loops,
     ...loopStatePatch(active),
     activeLoopId: active.id,
     selectedVibeId: null,
@@ -206,7 +248,13 @@ export function factoryProjectContent(): ProjectContent {
     meterId: DEFAULT_METER_ID,
     masterVolume: DEFAULT_FADER_DB,
     effects: { ...INITIAL_EFFECTS },
-    loops: [createDefaultLoop()],
+    // Routed through pickLoopContent so the returned loop actually matches
+    // ProjectLoop (no tempName): the factory's declared contract, and what
+    // applyProjectContent expects to receive before withFreshTempNames stamps
+    // a fresh label. Returning createDefaultLoop() directly carried a tempName
+    // the type said could not be there — silently legal only because it was
+    // overwritten on install.
+    loops: [pickLoopContent(createDefaultLoop())],
   };
 }
 

@@ -33,10 +33,13 @@ function makeSlice(initial?: Partial<AppStore>) {
 }
 
 describe('loopSlice', () => {
-  test('starts with one default loop that is active', () => {
+  test('starts with one default loop whose name is empty and whose tempName is untitled-1', () => {
     const s = makeSlice().state;
     expect(s.loops).toHaveLength(1);
-    expect(s.loops[0].name).toBe('Loop 1');
+    // The user's field starts EMPTY, so nothing in state can be mistaken for
+    // a name the user chose; the app's field is what renders.
+    expect(s.loops[0].name).toBe('');
+    expect(s.loops[0].tempName).toBe('untitled-1');
     expect(s.activeLoopId).toBe(s.loops[0].id);
   });
 
@@ -60,11 +63,26 @@ describe('loopSlice', () => {
     expect(h.state.activeLoopId).toBe(id);
     const added = h.state.loops[1];
     expect(added.id).toBe(id);
-    expect(added.name).toBe('Loop 2');
+    // Add is a FRESH slot, Duplicate is a derived one, and the labels say
+    // which — even though Add clones the active loop's content. Sharing one
+    // namer between the two would erase the distinction.
+    expect(added.name).toBe('');
+    expect(added.tempName).toBe('untitled-2');
     expect(added.scaleRoot).toBe(first.scaleRoot);
     expect(added.synthParams).toEqual(first.synthParams);
     expect(added.synthParams).not.toBe(first.synthParams);
     expect(added.chords).not.toBe(first.chords);
+  });
+
+  test('addLoop never inherits the source loop label', () => {
+    const h = makeSlice();
+    h.state.setLoopName(h.state.loops[0].id, 'Drop');
+    h.state.addLoop();
+    const added = h.state.loops[1];
+    // The regression the shared-namer shortcut would cause: the new slot must
+    // not come out called `Drop` or `Drop 2`.
+    expect(added.name).toBe('');
+    expect(added.tempName).toBe('untitled-2');
   });
 
   test('duplicateLoop of the active loop inserts a deep clone after it and auto-activates it', () => {
@@ -74,7 +92,8 @@ describe('loopSlice', () => {
     expect(result).toBe(null);
     expect(h.state.loops).toHaveLength(2);
     expect(h.state.loops[1].id).toBe(h.state.activeLoopId);
-    expect(h.state.loops[1].name).toBe('Loop 2');
+    expect(h.state.loops[1].name).toBe('');
+    expect(h.state.loops[1].tempName).toBe('untitled-2');
     expect(h.state.loops[1].scaleRoot).toBe(original.scaleRoot);
     expect(h.state.loops[1].chords).not.toBe(original.chords);
   });
@@ -88,6 +107,22 @@ describe('loopSlice', () => {
     expect(h.state.loops).toHaveLength(3);
     expect(h.state.loops[1].id).toBe(cloneId); // right after the original, not at the end
     expect(h.state.activeLoopId).not.toBe(cloneId);
+    expect(h.state.loops[1].name).toBe('');
+    expect(h.state.loops[1].tempName).toBe('untitled-3');
+  });
+
+  // tempName is renumbered too, off its own stem, never copied verbatim from
+  // the source — see nextDuplicateLabel's docblock in loop.ts for why a
+  // shared tempName would resurface as a collision once both names are
+  // cleared.
+  test('duplicateLoop increments a user name and its tempName, independently', () => {
+    const h = makeSlice();
+    const id = h.state.loops[0].id;
+    h.state.setLoopName(id, 'Drop');
+    h.state.duplicateLoop(id);
+    const clone = h.state.loops[1];
+    expect(clone.name).toBe('Drop 2');
+    expect(clone.tempName).toBe('untitled-2');
   });
 
   test('deleteLoop of the active loop returns a fallback id and activates it', () => {
@@ -400,4 +435,18 @@ describe('deleteLoop never leaves the scope naming a loop that is gone', () => {
     expect(useAppStore.getState().deleteLoop('loop-default-1')).toBe(null);
     expect(useAppStore.getState().sequencerPlayer).toBe('playing');
   });
+
+  // selectedVibeId clearing on an activeLoopId change (addLoop, duplicateLoop
+  // and deleteLoop all move it) is no longer inline in these actions — see
+  // store/vibeNav.ts's activeLoopId subscription and vibeNav.test.ts, which
+  // covers every writer generically instead of one test per action here.
 });
+
+  test('setLoopTempName writes loops[] directly for the named loop only', () => {
+    const h = makeSlice();
+    const firstId = h.state.loops[0].id;
+    h.state.addLoop();
+    h.state.setLoopTempName(firstId, 'Synthwave 80s');
+    expect(h.state.loops[0].tempName).toBe('Synthwave 80s');
+    expect(h.state.loops[1].tempName).toBe('untitled-2');
+  });

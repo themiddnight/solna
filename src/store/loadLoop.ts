@@ -95,7 +95,17 @@ export function loadLoop(id: string, opts: { atBoundary?: number } = {}): void {
     if (padHoldsAcrossLoop(store.padMode)) {
       audioEngine.stopSource('pad', LOAD_LOOP_RELEASE, opts.atBoundary);
     }
-    useAppStore.setState({ ...loopStatePatch(loop), activeLoopId: id, songLoopIndex });
+    useAppStore.setState({
+      ...loopStatePatch(loop),
+      activeLoopId: id,
+      songLoopIndex,
+    });
+    // The vibe chip highlight clears itself here: vibeNav.ts watches
+    // activeLoopId and clears selectedVibeId on any change, including this
+    // one, and leaves it alone when the id written above is the one already
+    // active (a re-select, an audition toggle on the same card) — a bare
+    // `Object.is` selector already IS that "did we actually leave" check, so
+    // there is nothing left for this call site to gate.
     // Rewinding the grid is what re-arms every scheduler onto the new loop:
     // useChordPlayback's rewindChordOnClockReset sees the step go backwards and
     // restarts the progression at chord 0, while the lead and drum steppers arm
@@ -113,7 +123,14 @@ export function loadLoop(id: string, opts: { atBoundary?: number } = {}): void {
     audioEngine.stopSource(source, LOAD_LOOP_RELEASE);
   }
 
-  useAppStore.setState({ ...loopStatePatch(loop), activeLoopId: id, songLoopIndex });
+  useAppStore.setState({
+    ...loopStatePatch(loop),
+    activeLoopId: id,
+    songLoopIndex,
+  });
+  // Same rule as the boundary path above: vibeNav.ts's activeLoopId
+  // subscription clears the chip here, and leaves it alone when this write
+  // re-lands on the loop already active (an audition toggle, a re-select).
 
   // Restart what the decision allows, WITH the scope it should leave behind —
   // see commitRestartAfterStop for the rule and the no-op guard. The layer it

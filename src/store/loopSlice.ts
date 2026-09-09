@@ -9,7 +9,7 @@ import {
   INITIAL_SEQUENCER_TRACKS,
   INITIAL_SYNTH_PARAMS,
 } from './initialState';
-import { cloneLoop, fallbackActiveLoopId, newLoopId, nextLoopName } from './loop';
+import { cloneLoop, fallbackActiveLoopId, newLoopId, nextDuplicateLabel, nextUntitledName } from './loop';
 import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
 import { rescopeToLoop, scopedLoopId, SCOPE_NONE } from './playbackScope';
 import { stopAllPlayersPatch } from './transportSlice';
@@ -26,7 +26,8 @@ export const DEFAULT_LOOP_ID = 'loop-default-1';
 export function createDefaultLoop(): Loop {
   return {
     id: DEFAULT_LOOP_ID,
-    name: 'Loop 1',
+    name: '',
+    tempName: 'untitled-1',
     repeatCount: 1,
     scaleRoot: 'A',
     scaleType: 'Natural Minor',
@@ -72,7 +73,7 @@ export function createDefaultLoop(): Loop {
   };
 }
 
-export function createLoopSlice(set: Set, get: Get): LoopSlice {
+export function createLoopSlice(set: Set, get: Get): Omit<LoopSlice, 'applyLoopCopy'> {
   return {
     loops: [createDefaultLoop()],
     activeLoopId: DEFAULT_LOOP_ID,
@@ -87,7 +88,9 @@ export function createLoopSlice(set: Set, get: Get): LoopSlice {
       const loop: Loop = {
         ...cloneLoop(source),
         id: newLoopId(),
-        name: nextLoopName(state.loops),
+        // Add is a fresh slot: no name, and a number of its own.
+        name: '',
+        tempName: nextUntitledName(state.loops),
       };
       // The scope moves with the cursor: the new loop is a copy of the active
       // one, so the audio is unchanged and must keep playing — but under an id
@@ -110,10 +113,12 @@ export function createLoopSlice(set: Set, get: Get): LoopSlice {
       const state = get();
       const index = state.loops.findIndex((r) => r.id === id);
       if (index === -1) return null;
+      const source = state.loops[index];
       const clone: Loop = {
-        ...cloneLoop(state.loops[index]),
+        ...cloneLoop(source),
         id: newLoopId(),
-        name: nextLoopName(state.loops),
+        // Derived, not fresh: the label increments the one on screen.
+        ...nextDuplicateLabel(state.loops, source),
       };
       const cloneActive = id === state.activeLoopId;
       const loops = [
@@ -169,7 +174,12 @@ export function createLoopSlice(set: Set, get: Get): LoopSlice {
         return null;
       }
       const fallback = fallbackActiveLoopId(state.loops, id) ?? loops[0].id;
-      set({ loops, activeLoopId: fallback, songLoopIndex: cursor(fallback), ...stopPatch });
+      set({
+        loops,
+        activeLoopId: fallback,
+        songLoopIndex: cursor(fallback),
+        ...stopPatch,
+      });
       return fallback;
     },
 
@@ -206,6 +216,20 @@ export function createLoopSlice(set: Set, get: Get): LoopSlice {
       set((state) => ({
         loops: state.loops.map((r) => (r.id === id ? { ...r, name } : r)),
       })),
+
+    setLoopTempName: (id, tempName) => {
+      // tempName's own contract (types.ts) is "the app's label, never empty",
+      // and loopLabel's `name || tempName` has no third tier to fall back to —
+      // sanitizeLoops enforces this on load, but this is a live setter, so it
+      // must enforce it here too. A blank/whitespace call is a no-op rather
+      // than writing '' and letting the label go blank at every render site
+      // that consolidated onto loopLabel specifically to avoid that.
+      const trimmed = tempName.trim();
+      if (!trimmed) return;
+      set((state) => ({
+        loops: state.loops.map((r) => (r.id === id ? { ...r, tempName: trimmed } : r)),
+      }));
+    },
 
     setLoopRepeatCount: (id, repeatCount) =>
       set((state) => ({

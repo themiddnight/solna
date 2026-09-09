@@ -68,7 +68,12 @@ describe('pinned key sets', () => {
       [...LOOP_FLAT_KEYS, 'id', 'name', 'repeatCount'].sort(),
     );
     // Every key of a real Loop is listed, and every listed key is on a real Loop.
-    const keysOnLoop = Object.keys(createDefaultLoop()).sort();
+    // tempName is loop-slot identity, not .solna project content (same category as
+    // selectedVibeId being excluded from PROJECT_CONTENT_KEYS) — deliberately absent
+    // from PROJECT_LOOP_KEYS.
+    const keysOnLoop = Object.keys(createDefaultLoop())
+      .filter((k) => k !== 'tempName')
+      .sort();
     expect(keysOnLoop).toEqual([...PROJECT_LOOP_KEYS].sort());
   });
 });
@@ -155,6 +160,9 @@ function legacyV1ProjectFile(): string {
   const loop = { ...createDefaultLoop(), id: 'loop-1', name: 'Loop 1' } as unknown as Record<string, unknown>;
   loop.leadMelodySteps = [['C4', 'E4'], [], ['G4']];
   delete loop.leadGate;
+  // No build before this change wrote a tempName; the import path must fill
+  // one, with no formatVersion move.
+  delete loop.tempName;
   return JSON.stringify({
     formatVersion: 1,
     id: 'project-legacy',
@@ -177,7 +185,7 @@ describe('a formatVersion-1 .solna file through the real import path', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('parseProjectFile refused a valid v1 file');
 
-    const loop: Loop = result.body.content.loops[0];
+    const loop = result.body.content.loops[0];
     expect(result.body.formatVersion).toBe(PROJECT_FORMAT_VERSION);
     // masterVolume was a linear 0.85 — in range for dB too, so it passes
     // through UNCHANGED. Under the new rule that is correct: nothing can tell
@@ -189,6 +197,12 @@ describe('a formatVersion-1 .solna file through the real import path', () => {
     expect(loop.leadMelodySteps).toEqual(createDefaultLoop().leadMelodySteps);
     expect(loop.leadGate).toBe(DEFAULT_LEAD_GATE);
     expect(loop.name).toBe('Loop 1');
+    // sanitizeContent runs sanitizeLoops' full Loop[] (tempName filled in for
+    // a body that predates the field) through pickLoopContent, the same strip
+    // buildProjectContent uses — so the ProjectContent this returns carries no
+    // tempName at all, matching the type. tempName only exists again once
+    // applyProjectContent's withFreshTempNames stamps a fresh one on open.
+    expect((loop as unknown as Record<string, unknown>).tempName).toBeUndefined();
     expect(result.body.content.bpm).toBe(118);
   });
 });

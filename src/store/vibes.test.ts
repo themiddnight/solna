@@ -9,14 +9,42 @@ import { DRUM_GRIDS } from '../data/drumGrids';
 import { presetById } from '../audio/presetRegistry';
 import { useAppStore } from './store';
 import { createDefaultLoop } from './loopSlice';
+import { loopLabel, loopStatePatch } from './loop';
 import { SCOPE_NONE } from './playbackScope';
-import { defaultPadState } from './initialState';
+import { defaultPadState, INITIAL_EFFECTS } from './initialState';
+import { DEFAULT_BPM } from './transportSlice';
+import { DEFAULT_METER_ID } from '../utils/meter';
 
 /**
  * Every vibe, resolved once. Most of this file asserts on spec fields, which a
  * ResolvedVibe carries unchanged; the rest applies a vibe, which needs one.
  */
 const RESOLVED_VIBES = VIBES.map(resolveVibe);
+
+// applyVibeToStore rewrites bpm, meter, effects and the loop content wholesale,
+// and the 'audible cut' block leaves them behind (its tests restore their own
+// spy and hardStopAll the players, but not the content). Restore the default
+// baseline before AND after each test there so the suite stays
+// order-independent — a sibling file, or a future test after that block, that
+// reads the store must not see a leftover vibe's chords, key or bpm.
+const resetStore = () => {
+  const loop = createDefaultLoop();
+  useAppStore.setState({
+    loops: [loop],
+    activeLoopId: loop.id,
+    ...loopStatePatch(loop),
+    sequencerPlayer: 'stopped',
+    chordsPlayer: 'stopped',
+    leadPlayer: 'stopped',
+    songLoopIndex: null,
+    activeTab: 'sound',
+    playbackScope: SCOPE_NONE,
+    selectedVibeId: null,
+    bpm: DEFAULT_BPM,
+    meterId: DEFAULT_METER_ID,
+    effects: { ...INITIAL_EFFECTS },
+  });
+};
 
 describe('Instant Vibes Mode', () => {
   test('contains all 8 curated genre vibes with complete presets and feel settings', () => {
@@ -415,6 +443,9 @@ test('ResolvedVibe presets carry no presentational fields', () => {
 });
 
 describe('applyVibeToStore audible cut', () => {
+  beforeEach(resetStore);
+  afterEach(resetStore);
+
   // The regression this pins: the swap used to delegate the actual silencing
   // to a React effect keyed on the rendered player state. The whole swap runs
   // inside one onClick, React 18 batches it, and that state goes
@@ -772,5 +803,44 @@ describe('applyVibeToStore leaves a scope that matches what is sounding', () => 
     const s = useAppStore.getState();
     expect(s.sequencerPlayer).toBe('stopped');
     expect(s.playbackScope).toBe(SCOPE_NONE);
+  });
+});
+
+describe('a vibe stamps the active loop with its display name', () => {
+  beforeEach(() => {
+    useAppStore.setState({ activeTab: 'sound', playbackScope: SCOPE_NONE });
+  });
+
+  test('writes the vibe NAME, not its id, into the active loop and no other', () => {
+    const synthwave = RESOLVED_VIBES.find((v) => v.id === 'synthwave-80s')!;
+    const a = { ...createDefaultLoop(), id: 'loop-a', name: '', tempName: 'untitled-1' };
+    const b = { ...createDefaultLoop(), id: 'loop-b', name: '', tempName: 'untitled-2' };
+    useAppStore.setState({ loops: [a, b], activeLoopId: 'loop-a' });
+
+    applyVibeToStore(synthwave);
+
+    const loops = useAppStore.getState().loops;
+    // A copied NAME, not a stored vibeId: an id is a reference that claims
+    // identity and goes on claiming it after the sound has moved on, while a
+    // name claims only history, which cannot go stale.
+    expect(loops.find((l) => l.id === 'loop-a')!.tempName).toBe('Synthwave 80s');
+    expect(loops.find((l) => l.id === 'loop-b')!.tempName).toBe('untitled-2');
+  });
+
+  test('writes it even behind a user name, leaving the displayed label unchanged', () => {
+    const lofi = RESOLVED_VIBES.find((v) => v.id === 'lofi-chill')!;
+    const named = { ...createDefaultLoop(), id: 'loop-a', name: 'Drop', tempName: 'untitled-1' };
+    useAppStore.setState({ loops: [named], activeLoopId: 'loop-a' });
+
+    applyVibeToStore(lofi);
+
+    const loop = useAppStore.getState().loops[0];
+    // tempName always means "the last vibe applied here"; it simply stays
+    // invisible behind the user's name. A conditional write would make
+    // clearing that name reveal a stale untitled number instead of the vibe
+    // the loop was actually built from — the one moment the field exists for.
+    expect(loop.tempName).toBe('Lo-Fi Chill');
+    expect(loop.name).toBe('Drop');
+    expect(loopLabel(loop)).toBe('Drop');
   });
 });

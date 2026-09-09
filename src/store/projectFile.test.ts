@@ -141,6 +141,23 @@ describe('parseProjectFile sanitises wrong-typed content instead of refusing', (
     expect(result.body.content.loops[0].chordRhythmId).toBe(fallback.chordRhythmId);
     expect(result.warnings).toHaveLength(0);
   });
+
+  // Regression: sanitizeContent is the SECOND producer of a ProjectContent
+  // (buildProjectContent in projectFormat.ts is the first) and used to assign
+  // sanitizeLoops' full Loop[] straight into the ProjectLoop[]-typed field
+  // with no strip — so a loop that carried an explicit tempName (or fell
+  // back to sanitizeLoops' synthesized one) rode straight through into a
+  // parsed body. That body reaches normalizeStoredBody's callers unstripped
+  // too (renameProject, importProject), permanently writing tempName into a
+  // stored/exported project. Both loop.ts and normalizeStoredBody route
+  // through this same sanitizeContent, so pinning it here covers both paths.
+  test('strips tempName from every loop, explicit or synthesized', () => {
+    const withExplicit = { ...createDefaultLoop(), tempName: 'my-slot-name' };
+    const result = parseProjectFile(JSON.stringify({ ...body, content: { ...body.content, loops: [withExplicit] } }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect((result.body.content.loops[0] as unknown as Record<string, unknown>).tempName).toBeUndefined();
+  });
 });
 
 describe('unknownLibraryReferences', () => {

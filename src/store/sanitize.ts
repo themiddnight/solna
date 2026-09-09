@@ -411,6 +411,44 @@ export function isBassStepChoice(value: unknown): boolean {
 }
 
 /**
+ * A string field, trimmed, or '' for anything else — including a
+ * whitespace-only string. Pulled out of sanitizeLoops (rather than inlined as
+ * a typeof+ternary at each of its three call sites) so the trim doesn't add
+ * three more branches to a function eslint's `complexity` rule already
+ * measures near its ceiling.
+ */
+function trimmedString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * One row's tempName resolution, pulled out of sanitizeLoops so its
+ * if/else-plus-while lives in a function of its own rather than adding
+ * three branches to one eslint's `complexity` rule already measures near its
+ * ceiling. Behaviour is exactly what sanitizeLoops inlined before this split:
+ * an explicit, trimmed, not-yet-used tempName wins; otherwise the next free
+ * `untitled-N` ordinal is claimed, skipping any number an explicit tempName
+ * elsewhere in this same array — already processed or still ahead — or an
+ * earlier positional fallback already claimed.
+ */
+function resolveTempName(
+  rawTempName: unknown,
+  explicitTempNames: ReadonlySet<string>,
+  usedTempNames: ReadonlySet<string>,
+  nextOrdinal: number,
+): { tempName: string; nextOrdinal: number } {
+  const explicitTempName = trimmedString(rawTempName);
+  if (explicitTempName.length > 0 && !usedTempNames.has(explicitTempName)) {
+    return { tempName: explicitTempName, nextOrdinal };
+  }
+  let ordinal = nextOrdinal;
+  while (explicitTempNames.has(`untitled-${ordinal}`) || usedTempNames.has(`untitled-${ordinal}`)) {
+    ordinal++;
+  }
+  return { tempName: `untitled-${ordinal}`, nextOrdinal: ordinal + 1 };
+}
+
+/**
  * Validates a persisted `loops` array. Each loop is rebuilt through the
  * same per-field guards/clamps the flat payload used (synth params, finite
  * clamps, string/enum checks), with createDefaultLoop() as the fallback for
@@ -425,14 +463,58 @@ export function isBassStepChoice(value: unknown): boolean {
  */
 export function sanitizeLoops(value: unknown): Loop[] | undefined {
   if (!Array.isArray(value)) return undefined;
+  // Every EXPLICIT tempName the raw array already carries, gathered up front.
+  // The positional fallback below picks an `untitled-N` ordinal one row at a
+  // time and must never land on a number some OTHER row in this same array
+  // claims explicitly — whether that row was already processed or still lies
+  // ahead — or two loops read back indistinguishable everywhere loopLabel is
+  // used (the Arrange card, the LoopSelector dropdown, LoopCopyDialog's aria-labels).
+  // Trimmed before the length check and before it goes in the set: a
+  // whitespace-only tempName (`"   "`) is not a name at all — `tempName`'s
+  // whole contract is 'the APP's label, never empty', and a non-empty-but-
+  // blank string is truthy in JS, so an untrimmed check would accept it
+  // verbatim and hand every render site (the Arrange card, the LoopSelector
+  // dropdown, TransportBar, every card aria-label) invisible text with no
+  // in-app way to fix it.
+  const explicitTempNames = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue;
+    const t = trimmedString((raw as Record<string, unknown>).tempName);
+    if (t.length > 0) explicitTempNames.add(t);
+  }
+  // Names already handed to an EARLIER row in this same pass — explicit or
+  // positional. tempName's whole contract is to distinguish loops, so a
+  // second row explicitly carrying a name the first row already claimed
+  // (e.g. two hand-edited rows both saying `tempName: "untitled-2"`) must
+  // fall through to the positional fallback rather than being taken at
+  // face value twice.
+  const usedTempNames = new Set<string>();
+  let nextOrdinal = 1;
   const loops: Loop[] = [];
   for (const raw of value) {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue;
     const fallback = createDefaultLoop();
-    const r = { ...fallback, ...(raw as Record<string, unknown>) } as Record<string, unknown>;
+    // `tempName` is read off the RAW row, not off `r`: its fallback is
+    // POSITIONAL, and createDefaultLoop()'s constant `untitled-1` would
+    // otherwise satisfy the guard for every row in the array and hand them all
+    // the same label. Every other field's fallback is a constant, so every
+    // other field reads `r`.
+    const rawLoop = raw as Record<string, unknown>;
+    const r = { ...fallback, ...rawLoop } as Record<string, unknown>;
+    const resolved = resolveTempName(rawLoop.tempName, explicitTempNames, usedTempNames, nextOrdinal);
+    const tempName = resolved.tempName;
+    nextOrdinal = resolved.nextOrdinal;
+    usedTempNames.add(tempName); // claim it: no later row, explicit or positional, may reuse it
     loops.push({
       id: typeof r.id === 'string' && r.id.length > 0 ? r.id : `loop-${loops.length}`,
-      name: typeof r.name === 'string' && r.name.length > 0 ? r.name : `Loop ${loops.length + 1}`,
+      // Trimmed for the same reason tempName is above: renameFromDraft
+      // (SortableLoopCard.tsx) never lets a user save a whitespace-only name
+      // in the first place, so an untrimmed sanitize would accept from an
+      // imported file the one blank-but-truthy `name` a rename can't produce
+      // — and `loopLabel`'s `name || tempName` falls back to tempName only
+      // when name is empty, never when it is merely blank.
+      name: trimmedString(r.name),
+      tempName,
       repeatCount: clampFinite(asPositiveInteger(r.repeatCount, fallback.repeatCount ?? 1), 1, 32, 1),
       scaleRoot: asRootNote(r.scaleRoot, fallback.scaleRoot),
       scaleType: asScaleType(r.scaleType, fallback.scaleType),

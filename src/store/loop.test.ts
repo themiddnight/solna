@@ -9,8 +9,10 @@ import {
   cloneLoop,
   fallbackActiveLoopId,
   newLoopId,
-  nextLoopName,
+  nextDuplicateLabel,
   loopBars,
+  loopLabel,
+  nextUntitledName,
   loopStatePatch,
   resolveActiveLoop,
   LOOP_FLAT_KEYS,
@@ -23,6 +25,7 @@ function makeLoop(overrides: Partial<Loop> = {}): Loop {
   return {
     id: 'loop-x',
     name: 'Loop X',
+    tempName: 'untitled-1',
     scaleRoot: 'A',
     scaleType: 'Natural Minor',
     synthParams: INITIAL_SYNTH_PARAMS,
@@ -80,19 +83,151 @@ describe('newLoopId', () => {
   });
 });
 
-describe('nextLoopName', () => {
-  test('picks the next number above the highest Loop N', () => {
-    expect(nextLoopName([])).toBe('Loop 1');
-    expect(nextLoopName([makeLoop({ id: 'r1', name: 'Loop 1' })])).toBe('Loop 2');
-    expect(
-      nextLoopName([
-        makeLoop({ id: 'r1', name: 'Loop 1' }),
-        makeLoop({ id: 'r3', name: 'Loop 3' }),
-      ])
-    ).toBe('Loop 4');
+describe('loopLabel', () => {
+  test('a user name wins over the app label', () => {
+    expect(loopLabel({ name: 'Drop', tempName: 'Synthwave 80s' })).toBe('Drop');
   });
-  test('ignores custom names that do not match Loop N', () => {
-    expect(nextLoopName([makeLoop({ id: 'intro', name: 'Intro' })])).toBe('Loop 1');
+
+  // The case the old single-field model could not represent at all: an empty
+  // name is a VALUE (the user cleared it), not a hole, and it falls through.
+  test('a blank name falls through to tempName', () => {
+    expect(loopLabel({ name: '', tempName: 'Synthwave 80s' })).toBe('Synthwave 80s');
+    expect(loopLabel({ name: '', tempName: 'untitled-3' })).toBe('untitled-3');
+  });
+});
+
+describe('nextUntitledName', () => {
+  test('is one above the highest untitled number, not a positional index', () => {
+    expect(nextUntitledName([])).toBe('untitled-1');
+    expect(nextUntitledName([makeLoop({ id: 'a', tempName: 'untitled-1' })])).toBe('untitled-2');
+  });
+
+  // The stored-not-positional trade, asserted rather than described: the label
+  // never shifts when loops are dragged or deleted, at the cost of gaps. With
+  // untitled-2 and untitled-7 present the next is untitled-8, NOT untitled-3.
+  test('leaves gaps alone and counts from the highest', () => {
+    expect(
+      nextUntitledName([
+        makeLoop({ id: 'a', tempName: 'untitled-2' }),
+        makeLoop({ id: 'b', tempName: 'untitled-7' }),
+      ])
+    ).toBe('untitled-8');
+  });
+
+  test('a vibe-stamped or user-named loop consumes no number', () => {
+    expect(
+      nextUntitledName([
+        makeLoop({ id: 'a', name: 'Drop', tempName: 'Synthwave 80s' }),
+        makeLoop({ id: 'b', tempName: 'Lo-Fi Chill' }),
+      ])
+    ).toBe('untitled-1');
+  });
+});
+
+describe('nextDuplicateLabel', () => {
+  // The whole rule: increment the label the card is DISPLAYING, in the field
+  // it came from. tempName is ALSO renumbered here, off its own stem — never
+  // copied verbatim — because `name` masking `tempName` today does not stop
+  // either name being cleared to '' later, and a clone sharing its source's
+  // exact tempName would then surface as the same loopLabel on both cards.
+  test('a named loop increments its name and its tempName, independently', () => {
+    const source = makeLoop({ id: 'a', name: 'Drop', tempName: 'Synthwave 80s' });
+    expect(nextDuplicateLabel([source], source)).toEqual({
+      name: 'Drop 2',
+      tempName: 'Synthwave 80s 2',
+    });
+  });
+
+  test('a named loop already carrying a number counts on from its stem', () => {
+    const two = makeLoop({ id: 'a', name: 'Drop 2', tempName: 'untitled-1' });
+    expect(nextDuplicateLabel([two], two).name).toBe('Drop 3');
+  });
+
+  // The second case is the point of the rule and must not be left to the
+  // first case's coverage: copying tempName verbatim would put two cards
+  // reading `Synthwave 80s` side by side, and promoting it into `name` would
+  // stop the copy tracking vibe applications while its original kept doing so.
+  test('an unnamed loop increments tempName and leaves name empty', () => {
+    const source = makeLoop({ id: 'a', name: '', tempName: 'Synthwave 80s' });
+    expect(nextDuplicateLabel([source], source)).toEqual({
+      name: '',
+      tempName: 'Synthwave 80s 2',
+    });
+  });
+
+  test('an untitled loop counts on the hyphenated stem', () => {
+    const loops = [
+      makeLoop({ id: 'a', name: '', tempName: 'untitled-1' }),
+      makeLoop({ id: 'b', name: '', tempName: 'untitled-2' }),
+      makeLoop({ id: 'c', name: '', tempName: 'untitled-3' }),
+    ];
+    expect(nextDuplicateLabel(loops, loops[2])).toEqual({ name: '', tempName: 'untitled-4' });
+  });
+
+  // Lowest free rather than one-above-the-highest: the numbers belong to a
+  // stem, not to the project, so a gap in `Drop 2, Drop 4` is a slot a copy
+  // should fill.
+  test('takes the lowest free integer for the stem', () => {
+    const drop = makeLoop({ id: 'a', name: 'Drop', tempName: 'untitled-1' });
+    const loops = [
+      drop,
+      makeLoop({ id: 'b', name: 'Drop 2', tempName: 'untitled-2' }),
+      makeLoop({ id: 'c', name: 'Drop 4', tempName: 'untitled-3' }),
+    ];
+    expect(nextDuplicateLabel(loops, drop).name).toBe('Drop 3');
+  });
+
+  // The property, stated as a property: no two cards may read the same thing,
+  // whatever arithmetic got there. Collision is checked against the DISPLAYED
+  // label of every loop, since that is what the user is looking at.
+  test('no two loops can resolve to the same loopLabel', () => {
+    const source = makeLoop({ id: 'a', name: '', tempName: 'Synthwave 80s' });
+    const loops = [
+      source,
+      makeLoop({ id: 'b', name: 'Synthwave 80s 2', tempName: 'untitled-2' }),
+    ];
+    const next = nextDuplicateLabel(loops, source);
+    const clone = makeLoop({ id: 'c', ...next });
+    const labels = [...loops, clone].map(loopLabel);
+    expect(next.tempName).toBe('Synthwave 80s 3');
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  // A masked tempName is still a live value: it must not be handed out to a
+  // new clone just because the loop currently hiding it happens to be named.
+  // L1 -> dup -> L2 (untitled-2) -> name L2 'Foo' (masks, does not clear,
+  // untitled-2) -> dup L1 again must NOT reuse 'untitled-2', because clearing
+  // L2's name later would unmask it and collide with the new clone.
+  test('does not hand out a tempName another loop is currently masking', () => {
+    const l1 = makeLoop({ id: 'l1', name: '', tempName: 'untitled-1' });
+    const l2 = makeLoop({ id: 'l2', name: 'Foo', tempName: 'untitled-2' });
+    const next = nextDuplicateLabel([l1, l2], l1);
+    expect(next.tempName).toBe('untitled-3');
+
+    const l3 = makeLoop({ id: 'l3', ...next });
+    const l2Cleared = { ...l2, name: '' };
+    const labels = [l1, l2Cleared, l3].map(loopLabel);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  // Same masking trap, but on the named-source branch's OWN tempName
+  // renumbering: a user can rename a loop to look exactly like a placeholder
+  // ('untitled-2'), and that string is still a live, currently-masked
+  // tempName elsewhere only if some loop's real tempName equals it — here l3's
+  // masked tempName is 'untitled-5', displayed as 'untitled-2'. Duplicating a
+  // NAMED loop must avoid handing the clone's hidden tempName a value that
+  // matches another loop's DISPLAYED label, or clearing the clone's name later
+  // collides with l3.
+  test('named-source branch does not hand out a tempName matching another loop\'s displayed label', () => {
+    const l1 = makeLoop({ id: 'l1', name: 'Melody', tempName: 'untitled-1' });
+    const l3 = makeLoop({ id: 'l3', name: 'untitled-2', tempName: 'untitled-5' });
+    const next = nextDuplicateLabel([l1, l3], l1);
+    expect(next.tempName).not.toBe('untitled-2');
+
+    const l2 = makeLoop({ id: 'l2', ...next });
+    const l2Cleared = { ...l2, name: '' };
+    const labels = [l1, l3, l2Cleared].map(loopLabel);
+    expect(new Set(labels).size).toBe(labels.length);
   });
 });
 
