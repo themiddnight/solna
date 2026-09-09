@@ -25,6 +25,11 @@ Canvas code (which cannot use classes) resolves live theme colours at runtime th
 
 Run `bun run check:theme` to check this suite alone.
 
+`--drum-*` and `--module-*` carry their own namespaces and their own gate: `bun run check:contrast`
+measures every fill against its own `-content` in both themes and fails below 4.5:1. A new module
+or drum colour must be declared in **both** themes — the script fails on a set the two themes
+disagree about, rather than silently skipping the half that is missing.
+
 ## Where the answers live
 
 `docs/design.md` is the authoritative spec:

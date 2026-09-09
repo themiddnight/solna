@@ -11,7 +11,7 @@
     "check:theme": "bun test scripts/themeTokenGuard.test.ts",
     "check:keys": "bun scripts/check-key-bindings.ts",
     "check:drums": "bun scripts/check-drum-kit-separation.ts",
-    "check:contrast": "bun scripts/check-drum-contrast.ts",
+    "check:contrast": "bun scripts/check-contrast.ts",
     "check:levels": "bun scripts/check-levels.ts",
     "calibration:generate": "bun scripts/calibration/generateTrimTable.ts",
     "calibration:smoke": "bun scripts/calibration/renderOffline.smoke.ts",
