@@ -128,9 +128,16 @@ describe('transport meter select', () => {
 
 describe('songModeLabel', () => {
   test('returns a song-mode badge only while a song position exists', () => {
-    const loops: Loop[] = [createDefaultLoop()];
+    const loops: Loop[] = [{ ...createDefaultLoop(), name: 'Verse' }];
     expect(songModeLabel(null, loops)).toBe(null);
-    expect(songModeLabel(0, loops)).toBe('Song · Loop 1');
+    expect(songModeLabel(0, loops)).toBe('Song · Verse');
+  });
+
+  // Reading `name` directly rendered a bare "Song · " for every loop nobody
+  // had renamed, which after the label change is every new loop.
+  test('falls back to the app label rather than rendering a bare Song ·', () => {
+    const loops: Loop[] = [createDefaultLoop()];
+    expect(songModeLabel(0, loops)).toBe('Song · untitled-1');
   });
 });
 

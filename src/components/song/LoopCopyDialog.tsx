@@ -1,0 +1,320 @@
+import React, { useRef, useState } from 'react';
+import { Info } from 'lucide-react';
+import { loopBars } from '@/store/loop';
+import { impliesKeyCopy, LOOP_COPY_GROUPS } from '@/store/loopCopy';
+import type { LoopCopyAspect, LoopCopyGroupId, LoopCopyTrack } from '@/store/loopCopy';
+import type { Loop } from '@/store/types';
+import { formatKeyLabel } from '@/utils/noteSpelling';
+import { Modal } from '../ui/Modal';
+
+export type LoopCopyQuickChip = 'sounds' | 'patterns' | 'everything';
+
+/**
+ * A quick chip TICKS the matrix; it is not a separate mode. Quick and
+ * detailed are one selection state with two ways in, so a chip can be
+ * followed by a manual untick with no mode to leave. Derived from
+ * LOOP_COPY_GROUPS by aspect, so a thirteenth group joins the right chip
+ * without a second list being edited.
+ */
+export function quickChipSelection(chip: LoopCopyQuickChip): LoopCopyGroupId[] {
+  if (chip === 'everything') return LOOP_COPY_GROUPS.map((group) => group.id);
+  const aspect: LoopCopyAspect = chip === 'sounds' ? 'sound' : 'pattern';
+  return LOOP_COPY_GROUPS.filter((group) => group.aspect === aspect).map((group) => group.id);
+}
+
+/**
+ * The Chords-implies-Key rule applied to a candidate selection. A DEFAULT the
+ * user may then untick, never a lock — copying a progression into a different
+ * key on purpose is a real musical move.
+ */
+export function withImpliedKey(
+  source: Loop,
+  target: Loop,
+  next: readonly LoopCopyGroupId[],
+): LoopCopyGroupId[] {
+  if (next.includes('key') || !impliesKeyCopy(source, target, next)) return [...next];
+  return [...next, 'key'];
+}
+
+/** The shared key-label convention (Header, InstantVibesBar, ...) — see
+ *  formatKeyLabel's own docblock for why this must not be reopened locally. */
+const keyName = (loop: Loop) => formatKeyLabel(loop.scaleRoot, loop.scaleType);
+
+const barCount = (bars: number) => `${bars} bar${bars === 1 ? '' : 's'}`;
+
+/**
+ * A From option states the key and the bar count — the two facts that decide
+ * whether the copy will surprise you, visible before the pick rather than
+ * after. `label` is loopLabel(loop), resolved by the caller, so an unnamed
+ * loop reads as `Synthwave 80s — C Major · 8 bars` rather than as a blank
+ * followed by two facts about nothing.
+ */
+export function loopCopySourceOption(loop: Loop, label: string): string {
+  return `${label} — ${keyName(loop)} · ${barCount(loopBars(loop.chords))}`;
+}
+
+/**
+ * The collapsed Details summary. It always states what is currently ticked,
+ * so a quick chip is never a black box — the collapsed state still tells you
+ * what Apply will do.
+ */
+export function loopCopySummary(selected: readonly LoopCopyGroupId[]): string {
+  const labels = LOOP_COPY_GROUPS.filter((group) => selected.includes(group.id)).map(
+    (group) => group.label,
+  );
+  return labels.length === 0 ? 'nothing selected' : labels.join(', ');
+}
+
+/** Null unless the copy actually crosses a key boundary — see impliesKeyCopy. */
+export function loopKeyNotice(
+  source: Loop,
+  target: Loop,
+  selected: readonly LoopCopyGroupId[],
+): string | null {
+  if (!selected.includes('key') || !impliesKeyCopy(source, target, selected)) return null;
+  return `Key / Scale added: the source is in ${keyName(source)}, this loop is in ${keyName(target)}.`;
+}
+
+/**
+ * loopBars(chords) IS the loop's length in the arrangement, so copying a
+ * progression stretches or shrinks this loop inside the song. Null when the
+ * lengths match: a notice that fires every time is a notice nobody reads.
+ */
+export function loopBarsNotice(
+  source: Loop,
+  target: Loop,
+  selected: readonly LoopCopyGroupId[],
+): string | null {
+  if (!selected.includes('chord-pattern')) return null;
+  const next = loopBars(source.chords);
+  const now = loopBars(target.chords);
+  if (next === now) return null;
+  return `This loop becomes ${barCount(next)}, was ${now}.`;
+}
+
+/** The matrix's row labels. The GROUPING still lives only in
+ *  LOOP_COPY_GROUPS; this is the display name of a row, not a membership. */
+const TRACK_ROWS: readonly { track: LoopCopyTrack; label: string }[] = [
+  { track: 'lead', label: 'Lead' },
+  { track: 'chord', label: 'Chords' },
+  { track: 'bass', label: 'Bass' },
+  { track: 'pad', label: 'Pad' },
+  { track: 'drums', label: 'Drums' },
+];
+
+const QUICK_CHIPS: readonly { kind: LoopCopyQuickChip; label: string }[] = [
+  { kind: 'sounds', label: 'All sounds' },
+  { kind: 'patterns', label: 'All patterns' },
+  { kind: 'everything', label: 'Everything' },
+];
+
+const groupAt = (track: LoopCopyTrack, aspect: LoopCopyAspect) =>
+  LOOP_COPY_GROUPS.find((group) => group.track === track && group.aspect === aspect);
+
+const LOOP_WIDE_GROUPS = LOOP_COPY_GROUPS.filter((group) => group.track === 'loop');
+
+export interface LoopCopyDialogProps {
+  /** The loop being copied INTO. Pull, not push: the loop in view is the destination. */
+  targetId: string;
+  loops: readonly Loop[];
+  /** loopLabel(loop) per loop id, resolved by ArrangeView — the dialog never
+   *  reads loop.name or loop.tempName itself. */
+  labels: Readonly<Record<string, string>>;
+  onApply: (targetId: string, sourceId: string, selected: readonly LoopCopyGroupId[]) => void;
+  onClose: () => void;
+}
+
+/**
+ * Pick a source loop, tick which parts to take, Apply overwrites those parts
+ * of the target. A dumb view: it imports no engine, holds all of its
+ * selection state locally (transient UI belongs nowhere near a slice, least
+ * of all a persisted one) and takes its data and both callbacks as props.
+ *
+ * No confirmation on top and no toast: the dialog and its Apply button ARE
+ * the confirmation, and the result is immediately visible on the target card
+ * — bar badge, key badge, chord strip, mixer strip.
+ */
+export function LoopCopyDialog({
+  targetId,
+  loops,
+  labels,
+  onApply,
+  onClose,
+}: LoopCopyDialogProps) {
+  const sources = loops.filter((loop) => loop.id !== targetId);
+  const [sourceId, setSourceId] = useState(() => sources[0]?.id ?? '');
+  const [selected, setSelected] = useState<LoopCopyGroupId[]>([]);
+  // Set the moment the user directly checks or unchecks 'key' itself — the
+  // one signal that a "no key" state is a decision, not just a rule that
+  // never fired. Once true, nothing else in this dialog session may run
+  // withImpliedKey again; a quick chip is the one exception, since it
+  // replaces the whole selection and so replaces that decision too.
+  const keyTouchedRef = useRef(false);
+
+  const target = loops.find((loop) => loop.id === targetId);
+  const source = sources.find((loop) => loop.id === sourceId) ?? sources[0];
+  if (!target || !source) return null;
+
+  const toggle = (id: LoopCopyGroupId) => {
+    if (id === 'key') keyTouchedRef.current = true;
+    setSelected((prev) => {
+      if (prev.includes(id)) return prev.filter((group) => group !== id);
+      const next = [...prev, id];
+      // The implied-key default is re-derived only when the box that DRIVES
+      // the rule is the one just ticked. Running it over every toggle (as
+      // this used to) re-added 'key' the moment any OTHER box was ticked,
+      // even after the user had explicitly unticked it — withImpliedKey has
+      // no way to tell "never considered" apart from "removed on purpose".
+      // Also gated on keyTouchedRef, same as the From-select handler below:
+      // re-ticking 'chord-pattern' after the user has explicitly unticked
+      // 'key' must not silently re-add it either.
+      return id === 'chord-pattern' && !keyTouchedRef.current
+        ? withImpliedKey(source, target, next)
+        : next;
+    });
+  };
+
+  const keyNotice = loopKeyNotice(source, target, selected);
+  const barsNotice = loopBarsNotice(source, target, selected);
+
+  const checkbox = (id: LoopCopyGroupId, label: string) => (
+    <input
+      id={`chk-loop-copy-${id}`}
+      type="checkbox"
+      aria-label={label}
+      checked={selected.includes(id)}
+      onChange={() => toggle(id)}
+      className="checkbox checkbox-xs checkbox-primary"
+    />
+  );
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Copy into "${labels[targetId] ?? ''}"`}
+      size="lg"
+      boxClassName="space-y-4"
+    >
+      <label className="flex items-center gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50">
+          From
+        </span>
+        <select
+          id="select-loop-copy-source"
+          aria-label="Copy from loop"
+          value={sourceId}
+          onChange={(event) => {
+            const id = event.target.value;
+            setSourceId(id);
+            const nextSource = sources.find((loop) => loop.id === id);
+            // Skip the re-derivation once the user has explicitly touched
+            // 'key' — a source swap is an unrelated change and must not
+            // clobber that decision, the same trap toggle() above already
+            // guards against for an unrelated checkbox tick.
+            if (nextSource && !keyTouchedRef.current) {
+              setSelected((prev) => withImpliedKey(nextSource, target, prev));
+            }
+          }}
+          className="select select-sm select-bordered flex-1 text-xs"
+        >
+          {sources.map((loop) => (
+            <option key={loop.id} value={loop.id}>
+              {loopCopySourceOption(loop, labels[loop.id] ?? '')}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="flex flex-wrap gap-2">
+        {QUICK_CHIPS.map(({ kind, label }) => (
+          <button
+            key={kind}
+            id={`btn-loop-copy-chip-${kind}`}
+            type="button"
+            onClick={() => {
+              // A chip replaces the whole selection, so it replaces any
+              // earlier explicit 'key' decision along with it — re-arm the
+              // derivation rather than leaving it stuck off.
+              keyTouchedRef.current = false;
+              setSelected(withImpliedKey(source, target, quickChipSelection(kind)));
+            }}
+            className="btn btn-xs btn-outline btn-primary"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <details className="rounded-box border border-base-300 bg-base-200/40">
+        <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-base-content/70">
+          {`Details — ${loopCopySummary(selected)}`}
+        </summary>
+        <div className="space-y-3 p-3">
+          <div className="grid grid-cols-[1fr_4rem_4rem] items-center gap-y-1 text-xs">
+            <span />
+            <span className="text-center text-[10px] font-bold uppercase tracking-wider text-base-content/50">
+              Sound
+            </span>
+            <span className="text-center text-[10px] font-bold uppercase tracking-wider text-base-content/50">
+              Pattern
+            </span>
+            {TRACK_ROWS.map(({ track, label }) => {
+              const sound = groupAt(track, 'sound');
+              const pattern = groupAt(track, 'pattern');
+              return (
+                <React.Fragment key={track}>
+                  <span className="font-semibold text-base-content">{label}</span>
+                  <span className="text-center">{sound && checkbox(sound.id, sound.label)}</span>
+                  <span className="text-center">
+                    {pattern && checkbox(pattern.id, pattern.label)}
+                  </span>
+                </React.Fragment>
+              );
+            })}
+          </div>
+
+          <div className="space-y-1 border-t border-base-300 pt-3 text-xs">
+            {LOOP_WIDE_GROUPS.map((group) => (
+              <div key={group.id} className="flex items-center gap-2">
+                {checkbox(group.id, group.label)}
+                <span className="font-semibold text-base-content">{group.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </details>
+
+      {keyNotice && (
+        <p className="flex items-start gap-1.5 text-xs text-info">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {keyNotice}
+        </p>
+      )}
+      {barsNotice && (
+        <p className="flex items-start gap-1.5 text-xs text-info">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {barsNotice}
+        </p>
+      )}
+
+      <div className="modal-action">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          id="btn-loop-copy-apply"
+          type="button"
+          disabled={selected.length === 0}
+          onClick={() => {
+            onApply(targetId, source.id, selected);
+            onClose();
+          }}
+          className="btn btn-primary"
+        >
+          Apply
+        </button>
+      </div>
+    </Modal>
+  );
+}

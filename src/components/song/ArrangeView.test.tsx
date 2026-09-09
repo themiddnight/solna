@@ -55,7 +55,8 @@ describe('ArrangeView', () => {
   test('renders the default single loop with its bar count and disabled delete', () => {
     const html = renderToString(<ArrangeView />);
     expect(html).toContain('id="btn-arrange-add"');
-    expect(html).toContain('Loop 1');
+    // The default loop has no user name, so the card reads the app's label.
+    expect(html).toContain('untitled-1');
     expect(html).toContain('4 bars');
     expect(html).toContain('btn-loop-delete-loop-default-1');
     // A single loop cannot be deleted.
@@ -119,6 +120,7 @@ describe('ArrangeView', () => {
         loop={loop}
         index={0}
         totalLoops={1}
+        label="untitled-1"
         isPlaying={true}
         isActive={true}
         currentStepInLoop={0}
@@ -127,6 +129,7 @@ describe('ArrangeView', () => {
         onSelect={() => {}}
         onEdit={() => {}}
         onDuplicate={() => {}}
+        onCopyInto={() => {}}
         onDelete={() => {}}
         onReorder={() => {}}
         onRename={() => {}}
@@ -136,6 +139,17 @@ describe('ArrangeView', () => {
       />
     );
     expect(html).toContain('badge-primary font-bold ring-2');
+  });
+
+  test('every card offers Copy into…, and the dialog is mounted once, closed', () => {
+    const html = renderToString(<ArrangeView />);
+    expect(html).toContain('id="btn-loop-copy-into-loop-default-1"');
+    // Every card is mounted simultaneously inside the SortableContext, so a
+    // per-card dialog would mount a full twelve-checkbox form per loop and
+    // re-render all of them on every tick of the arrange playhead. One
+    // dialog, held by copyTargetId, and it is closed until a card asks.
+    expect(html).not.toContain('btn-loop-copy-apply');
+    expect(html).not.toContain('select-loop-copy-source');
   });
 });
 

@@ -1,7 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { createDefaultLoop } from '@/store/loopSlice';
-import { getActiveChordIndex, SortableLoopCard } from './SortableLoopCard';
+import { getActiveChordIndex, renameFromDraft, SortableLoopCard } from './SortableLoopCard';
 
 describe('getActiveChordIndex', () => {
   test('returns -1 for empty or invalid inputs', () => {
@@ -82,11 +83,13 @@ describe('SortableLoopCard', () => {
     loop: defaultLoop,
     index: 0,
     totalLoops: 2,
+    label: 'untitled-1',
     isPlaying: false,
     isActive: false,
     onSelect: () => {},
     onEdit: () => {},
     onDuplicate: () => {},
+    onCopyInto: () => {},
     onDelete: () => {},
     onReorder: () => {},
     onRename: () => {},
@@ -101,11 +104,13 @@ describe('SortableLoopCard', () => {
         loop={defaultLoop}
         index={0}
         totalLoops={2}
+        label="untitled-1"
         isPlaying={false}
         isActive={true}
         onSelect={() => {}}
         onEdit={() => {}}
         onDuplicate={() => {}}
+        onCopyInto={() => {}}
         onDelete={() => {}}
         onReorder={() => {}}
         onRename={() => {}}
@@ -123,14 +128,16 @@ describe('SortableLoopCard', () => {
   test('renders loop name, key/scale, and chord progression', () => {
     const html = renderToString(
       <SortableLoopCard
-        loop={defaultLoop}
+        loop={{ ...defaultLoop, name: 'Chorus' }}
         index={0}
         totalLoops={2}
+        label="Chorus"
         isPlaying={false}
         isActive={true}
         onSelect={() => {}}
         onEdit={() => {}}
         onDuplicate={() => {}}
+        onCopyInto={() => {}}
         onDelete={() => {}}
         onReorder={() => {}}
         onRename={() => {}}
@@ -141,7 +148,7 @@ describe('SortableLoopCard', () => {
     );
 
     // Name and index
-    expect(html).toContain('Loop 1');
+    expect(html).toContain('Chorus');
     expect(html).toContain('#1');
 
     // Key / scale info
@@ -168,11 +175,13 @@ describe('SortableLoopCard', () => {
         loop={customLoop}
         index={0}
         totalLoops={2}
+        label="untitled-1"
         isPlaying={false}
         isActive={false}
         onSelect={() => {}}
         onEdit={() => {}}
         onDuplicate={() => {}}
+        onCopyInto={() => {}}
         onDelete={() => {}}
         onReorder={() => {}}
         onRename={() => {}}
@@ -207,6 +216,7 @@ describe('SortableLoopCard', () => {
         loop={loopWithChords}
         index={0}
         totalLoops={2}
+        label="untitled-1"
         isPlaying={true}
         isActive={true}
         progressPercent={50}
@@ -219,6 +229,7 @@ describe('SortableLoopCard', () => {
         onSelect={() => {}}
         onEdit={() => {}}
         onDuplicate={() => {}}
+        onCopyInto={() => {}}
         onDelete={() => {}}
         onReorder={() => {}}
         onRename={() => {}}
@@ -243,6 +254,7 @@ describe('SortableLoopCard', () => {
         loop={defaultLoop}
         index={0}
         totalLoops={2}
+        label="untitled-1"
         isPlaying={true}
         isAuditioning={true}
         isActive={true}
@@ -253,6 +265,7 @@ describe('SortableLoopCard', () => {
         onSelect={() => {}}
         onEdit={() => {}}
         onDuplicate={() => {}}
+        onCopyInto={() => {}}
         onDelete={() => {}}
         onReorder={() => {}}
         onRename={() => {}}
@@ -274,11 +287,13 @@ describe('SortableLoopCard', () => {
         loop={defaultLoop}
         index={0}
         totalLoops={1}
+        label="untitled-1"
         isPlaying={false}
         isActive={true}
         onSelect={() => {}}
         onEdit={() => {}}
         onDuplicate={() => {}}
+        onCopyInto={() => {}}
         onDelete={() => {}}
         onReorder={() => {}}
         onRename={() => {}}
@@ -335,11 +350,13 @@ describe('SortableLoopCard', () => {
         loop={defaultLoop}
         index={0}
         totalLoops={1}
+        label="untitled-1"
         isPlaying={true}
         isActive={true}
         onSelect={() => {}}
         onEdit={() => {}}
         onDuplicate={() => {}}
+        onCopyInto={() => {}}
         onDelete={() => {}}
         onReorder={() => {}}
         onRename={() => {}}
@@ -362,5 +379,106 @@ describe('SortableLoopCard', () => {
     expect(html).toContain('id="slider-pad-loop-default-1"');
     expect(html).toContain('Pad');
   });
+
+  test('renders the label prop, not the raw name, for an unnamed loop', () => {
+    // The card is handed a resolved label; it must never fall back to
+    // loop.name, which is '' on every loop nobody has renamed.
+    const html = renderToString(
+      <SortableLoopCard {...baseProps} loop={{ ...defaultLoop, name: '', tempName: 'Synthwave 80s' }} label="Synthwave 80s" />
+    );
+    expect(html).toContain('Synthwave 80s');
+    // Every aria-label goes through the same string — a missed one is a screen
+    // reader announcing "Delete " and nothing visible in review.
+    expect(html).toContain('aria-label="Drag to reorder Synthwave 80s"');
+    expect(html).toContain('aria-label="Rename Synthwave 80s"');
+    expect(html).toContain('aria-label="Edit Synthwave 80s"');
+    expect(html).toContain('aria-label="Move Synthwave 80s up"');
+    expect(html).toContain('aria-label="Move Synthwave 80s down"');
+    expect(html).toContain('aria-label="Duplicate Synthwave 80s"');
+    expect(html).toContain('aria-label="Delete Synthwave 80s"');
+    expect(html).toContain('aria-label="Repeat count for Synthwave 80s"');
+    expect(html).toContain('aria-label="Play only Synthwave 80s"');
+  });
+
+  test('the rename input uses the label as placeholder, not the current name', () => {
+    // The trap: prefilling with loop.name is safe (an untouched blur no-ops
+    // because trimmed name equals current). Prefilling with the LABEL is the
+    // trap — the app's current tempName snapshot gets silently promoted into
+    // a permanent stored name on an untouched blur, breaking vibe tracking.
+    // This test pins the placeholder against the label, not a hardcoded string.
+    const src = readFileSync(new URL('./SortableLoopCard.tsx', import.meta.url), 'utf8');
+    expect(src).toContain('placeholder={label}');
+    expect(src).toContain('value={draftName}');
+    expect(src).toContain('setDraftName(loop.name)');
+    expect(src).not.toContain('placeholder="Loop name..."');
+  });
 });
 
+describe('renameFromDraft', () => {
+  // The old guard was `if (trimmed && trimmed !== loop.name)`, so "clear the
+  // name to go back to the temporary label" was silently treated as a cancel.
+  test('an emptied field is a real value, not a cancel', () => {
+    expect(renameFromDraft('', 'Drop')).toBe('');
+    expect(renameFromDraft('   ', 'Drop')).toBe('');
+  });
+
+  test('an unchanged field writes nothing', () => {
+    expect(renameFromDraft('Drop', 'Drop')).toBe(null);
+    expect(renameFromDraft('  Drop  ', 'Drop')).toBe(null);
+    // The blank-to-blank case is the one an untouched, placeholder-only input
+    // produces on blur: nothing changed, so nothing is written.
+    expect(renameFromDraft('', '')).toBe(null);
+  });
+
+  test('a changed field writes the trimmed value', () => {
+    expect(renameFromDraft('  Chorus ', 'Drop')).toBe('Chorus');
+  });
+});
+
+
+describe('the Copy into… button', () => {
+  const noop = () => {};
+
+  const renderCard = (totalLoops: number) =>
+    renderToString(
+      <SortableLoopCard
+        loop={createDefaultLoop()}
+        label="Verse"
+        index={0}
+        totalLoops={totalLoops}
+        isPlaying={false}
+        isActive
+        onSelect={noop}
+        onEdit={noop}
+        onDuplicate={noop}
+        onDelete={noop}
+        onCopyInto={noop}
+        onReorder={noop}
+        onRename={noop}
+        onSetRepeat={noop}
+        onTogglePlayLoop={noop}
+        onSetMix={noop}
+      />,
+    );
+
+  test('renders beside Duplicate, labelled through the resolved loop label', () => {
+    const html = renderCard(3);
+    expect(html).toContain('id="btn-loop-copy-into-loop-default-1"');
+    expect(html).toContain('aria-label="Copy parts into Verse"');
+    // Duplicate stays exactly where it is: the two gestures must read as
+    // different at a glance — one makes a new loop, the other changes this one.
+    expect(html).toContain('id="btn-loop-duplicate-loop-default-1"');
+  });
+
+  test('is disabled when the project holds one loop — there is no source', () => {
+    expect(renderCard(1)).toMatch(/id="btn-loop-copy-into-loop-default-1"[^>]*disabled=""/);
+  });
+
+  test('is enabled once a second loop exists', () => {
+    expect(renderCard(2)).not.toMatch(/id="btn-loop-copy-into-loop-default-1"[^>]*disabled=""/);
+  });
+
+  test('the card itself never mounts a dialog', () => {
+    expect(renderCard(3)).not.toContain('btn-loop-copy-apply');
+  });
+});

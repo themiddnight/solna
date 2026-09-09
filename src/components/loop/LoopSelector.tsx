@@ -1,5 +1,6 @@
 import React from 'react';
 import { loadLoop } from '@/store/loadLoop';
+import { loopLabel } from '@/store/loop';
 import { useAppStore } from '@/store/store';
 
 /** Pure handler behind the dropdown, exported for a store-driven test. */
@@ -23,7 +24,7 @@ export function LoopSelector() {
     >
       {loops.map((loop) => (
         <option key={loop.id} value={loop.id}>
-          {loop.name}
+          {loopLabel(loop)}
         </option>
       ))}
     </select>

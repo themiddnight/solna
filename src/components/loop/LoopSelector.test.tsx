@@ -29,8 +29,9 @@ describe('LoopSelector', () => {
   test('renders the default active loop as an option', () => {
     const html = renderToString(<LoopSelector />);
     expect(html).toContain('id="select-loop"');
-    expect(html).toContain('Loop 1');
     expect(html).toContain('value="loop-default-1"');
+    // An unnamed loop must not render a blank option.
+    expect(html).toContain('untitled-1');
   });
 
   test('onSelectLoop loads the picked loop into the store', () => {

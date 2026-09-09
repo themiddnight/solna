@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  ClipboardPaste,
   Copy,
   GripVertical,
   Music,
@@ -23,6 +24,19 @@ import { getTonicSpelling } from '@/utils/noteSpelling';
 import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
 import { MIX_LAYERS } from '../mixLayers';
 import { VolumeFader } from '../ui/VolumeFader';
+
+/**
+ * What a rename save should write, or null for "write nothing".
+ *
+ * `''` is a REAL value here, not a cancel: it is the user clearing the name so
+ * the card falls back to `tempName`. The old inline guard was
+ * `if (trimmed && trimmed !== loop.name)`, which discarded exactly that
+ * gesture. Pure and exported so the rule is testable without a DOM.
+ */
+export function renameFromDraft(draft: string, currentName: string): string | null {
+  const trimmed = draft.trim();
+  return trimmed === currentName ? null : trimmed;
+}
 
 /**
  * Calculates which chord index in the progression is active given current step in loop.
@@ -124,6 +138,15 @@ export interface SortableLoopCardProps {
   loop: Loop;
   index: number;
   totalLoops: number;
+  /**
+   * The resolved display label — `loopLabel(loop)`, computed by ArrangeView.
+   * The card never reads `name`/`tempName` for display: this single prop feeds
+   * both the visible UI (the card's name span, the rename input's placeholder,
+   * the audition button's displayed name) and every `aria-label` below, so a
+   * missed site is either a visible display bug or a screen reader announcing
+   * "Delete " that no snapshot test notices.
+   */
+  label: string;
   isPlaying: boolean;
   isAuditioning?: boolean;
   /** Scope rule: disabled while the song owns the transport, and on every
@@ -140,6 +163,9 @@ export interface SortableLoopCardProps {
   onSelect: (id: string) => void;
   onEdit: (id: string) => void;
   onDuplicate: (id: string) => void;
+  /** Opens the shared copy dialog with this loop as the TARGET. Pull, not
+   *  push: a misclick damages exactly the loop you are looking at. */
+  onCopyInto: (id: string) => void;
   onDelete: (id: string) => void;
   onReorder: (id: string, direction: -1 | 1) => void;
   onRename: (id: string, name: string) => void;
@@ -323,6 +349,7 @@ export const SortableLoopCard = React.memo(
     loop,
     index,
     totalLoops,
+    label,
     isPlaying,
     isAuditioning = false,
     playDisabled = false,
@@ -337,6 +364,7 @@ export const SortableLoopCard = React.memo(
     onSelect,
     onEdit,
     onDuplicate,
+    onCopyInto,
     onDelete,
     onReorder,
     onRename,
@@ -345,7 +373,9 @@ export const SortableLoopCard = React.memo(
     onSetMix,
   }: SortableLoopCardProps) {
     const [isEditingName, setIsEditingName] = useState(false);
-    const [tempName, setTempName] = useState(loop.name);
+    // The in-progress rename input. NOT the stored `tempName` field: this one
+    // is a draft of `name`, local to the card and gone on blur.
+    const [draftName, setDraftName] = useState('');
 
     const {
       attributes,
@@ -369,12 +399,9 @@ export const SortableLoopCard = React.memo(
       : -1;
 
     const handleSaveName = () => {
-      const trimmed = tempName.trim();
-      if (trimmed && trimmed !== loop.name) {
-        onRename(loop.id, trimmed);
-      } else {
-        setTempName(loop.name);
-      }
+      const next = renameFromDraft(draftName, loop.name);
+      if (next !== null) onRename(loop.id, next);
+      setDraftName('');
       setIsEditingName(false);
     };
 
@@ -382,7 +409,7 @@ export const SortableLoopCard = React.memo(
       if (e.key === 'Enter') {
         handleSaveName();
       } else if (e.key === 'Escape') {
-        setTempName(loop.name);
+        setDraftName('');
         setIsEditingName(false);
       }
     };
@@ -442,7 +469,7 @@ export const SortableLoopCard = React.memo(
                 {...attributes}
                 {...listeners}
                 className="btn btn-ghost btn-xs btn-square cursor-grab active:cursor-grabbing text-base-content/40 hover:text-base-content"
-                aria-label={`Drag to reorder ${loop.name}`}
+                aria-label={`Drag to reorder ${label}`}
                 title="Drag to reorder"
               >
                 <GripVertical className="w-4 h-4" />
@@ -456,7 +483,7 @@ export const SortableLoopCard = React.memo(
               {/* Dedicated Play / Stop button for this specific loop */}
               <LoopAuditionButton
                 loopId={loop.id}
-                loopName={loop.name}
+                loopName={label}
                 isAuditioning={isAuditioning}
                 disabled={playDisabled}
                 onToggle={onTogglePlayLoop}
@@ -468,14 +495,14 @@ export const SortableLoopCard = React.memo(
                   <input
                     id={`input-loop-name-${loop.id}`}
                     type="text"
-                    value={tempName}
-                    onChange={(e) => setTempName(e.target.value)}
+                    value={draftName}
+                    onChange={(e) => setDraftName(e.target.value)}
                     onKeyDown={handleKeyDown}
                     onBlur={handleSaveName}
                     // eslint-disable-next-line jsx-a11y/no-autofocus -- the input replaces the name in place on an explicit rename click; focusing it is the action the user asked for.
                     autoFocus
                     className="input input-xs input-bordered font-bold max-w-40 sm:max-w-56"
-                    placeholder="Loop name..."
+                    placeholder={label}
                   />
                   <button
                     type="button"
@@ -496,18 +523,23 @@ export const SortableLoopCard = React.memo(
                     className="btn btn-sm btn-ghost p-1 font-bold text-base-content hover:text-primary flex items-center gap-1.5 min-w-0 text-left"
                     title="Click to cue/select loop"
                   >
-                    <span className="truncate text-sm sm:text-base">{loop.name}</span>
+                    <span className="truncate text-sm sm:text-base">{label}</span>
                   </button>
                   <button
                     id={`btn-loop-rename-${loop.id}`}
                     type="button"
                     onClick={() => {
-                      setTempName(loop.name);
+                      // Prefill with the loop's ACTUAL NAME, not the label.
+                      // Prefilling with the label would promote the app's
+                      // current tempName snapshot into a permanent name on blur.
+                      // Prefilling with the real name ensures an untouched blur
+                      // is a no-op (empty or not, trimmed name equals current).
+                      setDraftName(loop.name);
                       setIsEditingName(true);
                     }}
                     className="btn btn-xs btn-ghost btn-square text-base-content/40 hover:text-base-content"
                     title="Rename loop"
-                    aria-label={`Rename ${loop.name}`}
+                    aria-label={`Rename ${label}`}
                   >
                     <Pencil className="w-3 h-3" />
                   </button>
@@ -536,7 +568,7 @@ export const SortableLoopCard = React.memo(
               <button
                 id={`btn-loop-edit-${loop.id}`}
                 type="button"
-                aria-label={`Edit ${loop.name}`}
+                aria-label={`Edit ${label}`}
                 onClick={() => onEdit(loop.id)}
                 className="btn btn-xs btn-outline btn-primary gap-1"
               >
@@ -546,7 +578,7 @@ export const SortableLoopCard = React.memo(
               <button
                 id={`btn-loop-up-${loop.id}`}
                 type="button"
-                aria-label={`Move ${loop.name} up`}
+                aria-label={`Move ${label} up`}
                 disabled={index === 0}
                 onClick={() => onReorder(loop.id, -1)}
                 className="btn btn-xs btn-square btn-ghost text-base-content/70 hover:text-base-content"
@@ -557,7 +589,7 @@ export const SortableLoopCard = React.memo(
               <button
                 id={`btn-loop-down-${loop.id}`}
                 type="button"
-                aria-label={`Move ${loop.name} down`}
+                aria-label={`Move ${label} down`}
                 disabled={index === totalLoops - 1}
                 onClick={() => onReorder(loop.id, 1)}
                 className="btn btn-xs btn-square btn-ghost text-base-content/70 hover:text-base-content"
@@ -568,7 +600,7 @@ export const SortableLoopCard = React.memo(
               <button
                 id={`btn-loop-duplicate-${loop.id}`}
                 type="button"
-                aria-label={`Duplicate ${loop.name}`}
+                aria-label={`Duplicate ${label}`}
                 onClick={() => onDuplicate(loop.id)}
                 className="btn btn-xs btn-square btn-ghost text-base-content/70 hover:text-base-content"
                 title="Duplicate loop"
@@ -576,9 +608,20 @@ export const SortableLoopCard = React.memo(
                 <Copy className="w-3.5 h-3.5" />
               </button>
               <button
+                id={`btn-loop-copy-into-${loop.id}`}
+                type="button"
+                aria-label={`Copy parts into ${label}`}
+                disabled={totalLoops <= 1}
+                onClick={() => onCopyInto(loop.id)}
+                className="btn btn-xs btn-square btn-ghost text-base-content/70 hover:text-base-content disabled:opacity-30"
+                title="Copy parts from another loop"
+              >
+                <ClipboardPaste className="w-3.5 h-3.5" />
+              </button>
+              <button
                 id={`btn-loop-delete-${loop.id}`}
                 type="button"
-                aria-label={`Delete ${loop.name}`}
+                aria-label={`Delete ${label}`}
                 disabled={totalLoops <= 1}
                 onClick={() => onDelete(loop.id)}
                 className="btn btn-xs btn-square btn-ghost text-error/80 hover:text-error hover:bg-error/10 disabled:opacity-30"
@@ -614,7 +657,7 @@ export const SortableLoopCard = React.memo(
                 value={loop.repeatCount ?? 1}
                 onChange={(e) => onSetRepeat(loop.id, Number(e.target.value))}
                 className="select select-xs select-bordered font-mono font-bold bg-base-100/80"
-                aria-label={`Repeat count for ${loop.name}`}
+                aria-label={`Repeat count for ${label}`}
                 title="Number of times this loop plays before advancing in song mode"
               >
                 <option value={1}>1x</option>

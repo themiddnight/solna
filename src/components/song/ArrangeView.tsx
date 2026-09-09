@@ -17,16 +17,21 @@ import {
 } from '@dnd-kit/sortable';
 import { loadLoop } from '@/store/loadLoop';
 import { loopPlayButton, scopedLoopId } from '@/store/playbackScope';
-import { loopBars } from '@/store/loop';
+import { loopBars, loopLabel } from '@/store/loop';
+import type { LoopCopyGroupId } from '@/store/loopCopy';
 import { aggregatePlayerState } from '@/store/transportSlice';
 import { useAppStore } from '@/store/store';
 import { buildRouteUrl } from '@/routing/tabRouting';
 import { getMeter } from '@/utils/meter';
 import { subscribePlaybackClock } from '@/audio/playback/playbackEngine';
 import { ViewHeader } from '../ui/ViewHeader';
+import { LoopCopyDialog } from './LoopCopyDialog';
 import { SortableLoopCard } from './SortableLoopCard';
 import { arrangeCycleSteps, arrangeStep } from './arrangeStep';
 import { loopIdKeyOf, loopIdsFromKey } from './loopIdKey';
+
+/** Stable identity for the closed-dialog case — see the `labels` memo below. */
+const EMPTY_LOOP_LABELS: Readonly<Record<string, string>> = {};
 
 /** Pure route for the loop-editor deep-link, exported for a pure test. */
 export const buildEditRoute = (id: string) => buildRouteUrl('loop', 'sound', id);
@@ -68,6 +73,7 @@ export const ArrangeView = React.memo(function ArrangeView() {
   const setLoopName = useAppStore((s) => s.setLoopName);
   const setLoopRepeatCount = useAppStore((s) => s.setLoopRepeatCount);
   const setLoopMix = useAppStore((s) => s.setLoopMix);
+  const applyLoopCopy = useAppStore((s) => s.applyLoopCopy);
 
   const isPlaying =
     aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer) === 'playing';
@@ -210,6 +216,38 @@ export const ArrangeView = React.memo(function ArrangeView() {
     [deleteLoop]
   );
 
+  // The id of the loop being copied INTO, or null when the dialog is closed.
+  // One dialog for the whole list: every card is mounted simultaneously
+  // inside the SortableContext, so a per-card dialog would mount a full form
+  // per loop and re-render all of them on every tick of the arrange playhead.
+  const [copyTargetId, setCopyTargetId] = useState<string | null>(null);
+
+  const handleCopyInto = useCallback((id: string) => setCopyTargetId(id), []);
+
+  const handleApplyCopy = useCallback(
+    (targetId: string, sourceId: string, selected: readonly LoopCopyGroupId[]) => {
+      applyLoopCopy(targetId, sourceId, selected);
+    },
+    [applyLoopCopy],
+  );
+
+  // The card never reads loop.name/loop.tempName; ArrangeView resolves the
+  // displayed label once and hands the same strings to the card and to the
+  // dialog, so a card and its copy dialog can never disagree about a name.
+  // `labels` feeds ONLY LoopCopyDialog below, which mounts exclusively while
+  // `copyTargetId !== null` — closed the overwhelming majority of the time.
+  // Skipping the map while closed matters for the same reason the
+  // `loopIdKey` comment above does: `loops` gets a new array (and every loop
+  // object re-spread) on every fader-drag tick, and without this guard that
+  // tick would also rebuild a same-size label map nothing is reading.
+  const labels = useMemo(
+    () =>
+      copyTargetId === null
+        ? EMPTY_LOOP_LABELS
+        : Object.fromEntries(loops.map((loop) => [loop.id, loopLabel(loop)])),
+    [loops, copyTargetId],
+  );
+
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto flex flex-col gap-3">
       <ViewHeader
@@ -266,6 +304,7 @@ export const ArrangeView = React.memo(function ArrangeView() {
                   loop={loop}
                   index={index}
                   totalLoops={loops.length}
+                  label={loopLabel(loop)}
                   isPlaying={isCurrentPlaying}
                   isAuditioning={isAuditioning}
                   playDisabled={playButton.disabled}
@@ -280,6 +319,7 @@ export const ArrangeView = React.memo(function ArrangeView() {
                   onSelect={handleSelectLoop}
                   onEdit={editLoop}
                   onDuplicate={handleDuplicate}
+                  onCopyInto={handleCopyInto}
                   onDelete={handleDelete}
                   onReorder={reorderLoops}
                   onRename={setLoopName}
@@ -292,6 +332,16 @@ export const ArrangeView = React.memo(function ArrangeView() {
           </div>
         </SortableContext>
       </DndContext>
+
+      {copyTargetId !== null && (
+        <LoopCopyDialog
+          targetId={copyTargetId}
+          loops={loops}
+          labels={labels}
+          onApply={handleApplyCopy}
+          onClose={() => setCopyTargetId(null)}
+        />
+      )}
     </div>
   );
 });

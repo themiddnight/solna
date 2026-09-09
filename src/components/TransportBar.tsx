@@ -12,6 +12,7 @@ import { MidiIndicator } from "./ui/MidiIndicator";
 import { aggregatePlayerState, isHardStopEnabled, transportDisplayState } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 import type { Loop } from '../store/types';
+import { loopLabel } from '@/store/loop';
 import { layerForTab } from '@/types';
 import { playTargetLabel } from './transportAction';
 
@@ -22,7 +23,7 @@ export function songModeLabel(
 ): string | null {
   if (songLoopIndex === null) return null;
   const loop = loops[songLoopIndex];
-  return loop ? `Song · ${loop.name}` : null;
+  return loop ? `Song · ${loopLabel(loop)}` : null;
 }
 
 export const TransportBar = React.memo(function TransportBar() {
@@ -61,7 +62,8 @@ export const TransportBar = React.memo(function TransportBar() {
   // not re-render this bar at all — whereas `loops` and `activeLoopId` are
   // already subscribed above, so scanning here costs one pass per render of
   // THIS component instead.
-  const activeLoopName = loops.find((loop) => loop.id === activeLoopId)?.name ?? '';
+  const activeLoop = loops.find((loop) => loop.id === activeLoopId);
+  const activeLoopName = activeLoop ? loopLabel(activeLoop) : '';
   // On the song layer a solo-looping card leaves the master button offering
   // Play (a one-click takeover). On the loop layer the button owns the solo
   // loop of the loop being edited. Hard stop stays live off the REAL player
