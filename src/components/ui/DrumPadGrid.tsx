@@ -83,8 +83,14 @@ export function DrumPadGrid({
                   : 'hover:brightness-110 active:scale-95'
               }`}
             >
-              <div className="flex items-center justify-between w-full">
-                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider truncate">
+              {/* Stacked on a phone, side by side from `sm`. Five columns of a
+                  375px screen leave a pad ~50px of inner width, and sharing
+                  that row with the shortcut key truncated half the roster to
+                  "HI T…" / "LOW…" / "CLO…" — three pads a user cannot tell
+                  apart by name. Stacking gives the name the pad's full width
+                  and lets it wrap to a second line instead of being cut. */}
+              <div className="flex flex-col items-start gap-0.5 w-full sm:flex-row sm:items-center sm:justify-between sm:gap-0">
+                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider leading-tight text-left sm:truncate">
                   {pad.name.replace(' Drum', '').replace(' Snap', '').replace(' Cymbal', '')}
                 </span>
                 <kbd className="kbd-key">

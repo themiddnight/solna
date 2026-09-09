@@ -1,35 +1,30 @@
-import React, { useSyncExternalStore } from 'react';
+import React from 'react';
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useAppStore } from '@/store/store';
+// The shared hook, not a private copy: its docstring names THIS file as the
+// reference implementation, so a fix to the snapshot contract that skipped the
+// dock would skip the component the rule was written for.
+import { useLiveStore } from './useLiveStore';
 import { ChromaticKeyboard, ScaleLockedKeyboard, ChordKeyboard } from './Keyboard';
 import { DrumPadGrid } from './DrumPadGrid';
 import { SECTION_HEADER } from './fieldClasses';
 import { IconButton } from './IconButton';
 import { formatKeyLabel } from '@/utils/noteSpelling';
 import type { InputDeckDrumProps, InputDeckKeyboardProps } from '../useInputDeck';
+import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
 
-/** Reads one slice of the store with the LIVE state as the server snapshot too.
- *
- *  zustand v5 wires `useStore`'s `getServerSnapshot` to
- *  `selector(api.getInitialState())`, so a plain `useAppStore((s) => ...)`
- *  always renders the store's creation-time values under `renderToString` — a
- *  dock that reads it would render permanently closed in tests no matter what
- *  `useAppStore.setState(...)` did beforehand (see the note in
- *  TransportBar.test.tsx). Serving `getState()` for BOTH snapshots keeps the
- *  dock reactive in the browser AND makes its server output reflect the current
- *  state. The dock selects only primitives (booleans, strings, stable setters),
- *  so a fresh value from `getSnapshot` on every render is safe under
- *  `useSyncExternalStore`'s `Object.is` cache check.
- */
-function useLiveStore<T>(
-  selector: (state: ReturnType<typeof useAppStore.getState>) => T,
-): T {
-  return useSyncExternalStore(
-    useAppStore.subscribe,
-    () => selector(useAppStore.getState()),
-    () => selector(useAppStore.getState()),
-  );
-}
+const PANEL_LABELS = { keyboard: 'Keyboard', drums: 'Drums' } as const;
+
+const KEYBOARD_MODE_LABELS = {
+  chromatic: 'Chromatic',
+  'scale-locked': 'Scale',
+  chord: 'Chord',
+} as const;
+
+const KEYBOARD_MODE_TITLES = {
+  chromatic: 'Chromatic Mode: every semitone, ignores key/scale',
+  'scale-locked': 'Scale Locked Mode: cuts notes outside the active scale',
+  chord: 'Chord Mode: diatonic triads per scale degree, plus a melody zone',
+} as const;
 
 /** The bottom input deck: a purely visual/touch surface hosting the synth
  *  keyboard and the drum pads in one panel. QWERTY input is owned by
@@ -60,6 +55,11 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
     handleNoteOff,
   } = keyboardProps;
 
+  const collapsedSummary =
+    mode === 'keyboard'
+      ? `${PANEL_LABELS.keyboard} · ${KEYBOARD_MODE_LABELS[keyboardMode]}`
+      : PANEL_LABELS.drums;
+
   return (
     <div className="relative z-30 pointer-events-none">
       {/* Always-visible header: the toggle, plus (when open) the Keyboard | Drums tabs. */}
@@ -70,11 +70,37 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
           aria-expanded={isOpen}
           onClick={() => setIsOpen(!isOpen)}
           className="btn btn-xs btn-ghost gap-1 text-xs font-bold"
-          title={isOpen ? 'Hide input deck' : 'Show input deck'}
+          title={isOpen ? 'Hide input deck' : `Show input deck (${collapsedSummary})`}
         >
           {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           <span>Input</span>
         </button>
+
+        {/* Collapsed, the dock still owns live QWERTY input, and each keyboard
+            mode binds those keys differently — so the closed header states
+            which surface and which mode the typing keys are currently driving
+            rather than making the user open the deck to find out. */}
+        {!isOpen && (
+          <div id="input-deck-collapsed-summary" className="flex items-center gap-1 pr-1">
+            {/* A real text node, not an `aria-label` on this div: ARIA does not
+                expose aria-label on a generic element with no role, so the
+                framing was announced to nobody and the badges read as two bare
+                words. `sr-only` keeps it out of the visual row, where the
+                badges already say it. */}
+            <span className="sr-only">{`Current input: ${collapsedSummary}`}</span>
+            <span className="badge badge-sm badge-outline badge-primary text-[10px] font-semibold">
+              {PANEL_LABELS[mode]}
+            </span>
+            {mode === 'keyboard' && (
+              <span
+                className="badge badge-sm badge-outline text-[10px] font-semibold text-base-content/60"
+                title={KEYBOARD_MODE_TITLES[keyboardMode]}
+              >
+                {KEYBOARD_MODE_LABELS[keyboardMode]}
+              </span>
+            )}
+          </div>
+        )}
 
         {isOpen && (
           <div className="join" role="radiogroup" aria-label="Input deck panel">
@@ -90,7 +116,7 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
                   mode === m ? 'btn-primary' : 'btn-ghost text-base-content/60'
                 }`}
               >
-                {m === 'keyboard' ? 'Keyboard' : 'Drums'}
+                {PANEL_LABELS[m]}
               </button>
             ))}
           </div>
@@ -130,7 +156,7 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
                     className="w-7 h-7 min-h-0 border border-base-300 text-base-content/60 hover:text-base-content hover:border-primary hover:bg-primary/20 disabled:opacity-30"
                   />
                   <div className="badge badge-primary badge-outline min-w-13 h-7 px-2">
-                    <span className="text-xs font-mono font-bold">
+                    <span className="text-xs tabular-nums font-bold">
                       {keyboardOctave >= 0 ? `+${keyboardOctave}` : keyboardOctave} Oct
                     </span>
                   </div>
@@ -156,21 +182,11 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
                         className={`btn btn-xs join-item text-[11px] font-semibold ${
                           keyboardMode === m
                             ? 'btn-primary'
-                            : 'btn-ghost border border-base-300 text-base-content/60'
+                            : TOOLBAR_BUTTON_IDLE
                         }`}
-                        title={
-                          m === 'chromatic'
-                            ? 'Chromatic Mode: every semitone, ignores key/scale'
-                            : m === 'scale-locked'
-                              ? 'Scale Locked Mode: cuts notes outside the active scale'
-                              : 'Chord Mode: diatonic triads per scale degree, plus a melody zone'
-                        }
+                        title={KEYBOARD_MODE_TITLES[m]}
                       >
-                        {m === 'chromatic'
-                          ? 'Chromatic'
-                          : m === 'scale-locked'
-                            ? 'Scale'
-                            : 'Chord'}
+                        {KEYBOARD_MODE_LABELS[m]}
                       </button>
                     ))}
                   </div>

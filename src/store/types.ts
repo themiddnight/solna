@@ -346,6 +346,14 @@ export interface UiSlice {
   // preference, not composition data, so it does not travel with saved
   // projects (see partializeAppState in store.ts).
   keyboardMode: KeyboardMode;
+  /**
+   * Whether the Arrange view scrolls the playing loop into view as song
+   * playback walks from one card to the next. A VIEW preference, not
+   * composition data: like `keyboardMode` it is absent from
+   * partializeAppState and rides its own localStorage key instead, so it
+   * survives a reload without travelling with a saved/exported song.
+   */
+  followPlayhead: boolean;
   midiActivityTimestamp: number | null;
   midiMappings: MidiMapping[];
   isMidiSettingsOpen: boolean;
@@ -361,6 +369,7 @@ export interface UiSlice {
   toggleSoloTrack: (track: SoloTrack) => void;
   clearSoloTracks: () => void;
   setKeyboardMode: (mode: KeyboardMode) => void;
+  toggleFollowPlayhead: () => void;
   triggerMidiActivity: () => void;
   setMidiMappings: (mappings: MidiMapping[]) => void;
   updateMidiMapping: (id: string, updates: Partial<MidiMapping>) => void;

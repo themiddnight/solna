@@ -5,6 +5,7 @@ import { PanelCard } from "@/components/ui/PanelCard";
 import { FIELD_LABEL } from "@/components/ui/fieldClasses";
 import { initSynthPlayback } from "@/audio/playback/synthPlayback";
 import { useSynthChannel } from "./useSynthChannel";
+import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
 
 /**
  * Pro-Mode panel — Arpeggiator. Reads the active synth channel from the
@@ -13,10 +14,10 @@ import { useSynthChannel } from "./useSynthChannel";
  * §6.5); the token is named in the class strings that moved with the markup.
  */
 export function ArpeggiatorPanel() {
-  const { params, onChangeParams, tintClass } = useSynthChannel();
+  const { params, onChangeParams } = useSynthChannel();
   // 5. Arpeggiator
   return (
-          <PanelCard tint={tintClass} className="flex-1">
+          <PanelCard inset className="flex-1">
             <div className="card-body p-4 space-y-3.5">
             <ModuleHeader
               badge={5}
@@ -35,7 +36,7 @@ export function ArpeggiatorPanel() {
                   className={`btn btn-xs text-[10px] font-bold uppercase tracking-wider ${
                     params.arpActive
                       ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)] shadow-md shadow-module-arp/30"
-                      : "btn-ghost border border-base-300 text-base-content/60"
+                      : TOOLBAR_BUTTON_IDLE
                   }`}
                 >
                   {params.arpActive ? "Active" : "Bypass"}
@@ -56,7 +57,7 @@ export function ArpeggiatorPanel() {
                     className={`btn btn-xs text-[10px] font-semibold capitalize ${
                       params.arpMode === m
                         ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
-                        : "btn-ghost border border-base-300 text-base-content/60"
+                        : TOOLBAR_BUTTON_IDLE
                     }`}
                   >
                     {m === "updown" ? "Up/Dn" : m}
@@ -76,10 +77,10 @@ export function ArpeggiatorPanel() {
                       key={r}
                       id={`btn-arp-rate-${r}`}
                       onClick={() => onChangeParams({ ...params, arpRate: r })}
-                      className={`btn btn-xs text-[11px] font-mono font-semibold ${
+                      className={`btn btn-xs text-[11px] tabular-nums font-semibold ${
                         params.arpRate === r
                           ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
-                          : "btn-ghost border border-base-300 text-base-content/60"
+                          : TOOLBAR_BUTTON_IDLE
                       }`}
                     >
                       {r === "16n" ? "1/16" : r === "8n" ? "1/8" : "1/32"}
@@ -103,7 +104,7 @@ export function ArpeggiatorPanel() {
                       className={`btn btn-xs w-7 min-h-0 text-xs tabular-nums font-bold ${
                         params.arpOctaves === oct
                           ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
-                          : "btn-ghost border border-base-300 text-base-content/60"
+                          : TOOLBAR_BUTTON_IDLE
                       }`}
                     >
                       +{oct}

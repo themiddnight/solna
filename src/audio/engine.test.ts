@@ -408,6 +408,81 @@ describe('source stop (preview release)', () => {
       expect(v.gains[0].gain.cancels).not.toContain(t0);
     }
   });
+
+  // Rapid preview clicks: every click stops the source before re-triggering,
+  // so a stop lands on voices that are already fading from the PREVIOUS stop.
+  // Re-releasing those re-arms their teardown timer, which is what kept a
+  // silent voice in sourceVoices for as long as clicks kept arriving.
+  test('a stop leaves a voice already fading at least as fast alone', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    const voice = Array.from(
+      (engine as any).sourceVoices.get('chord') as Set<any>,
+    )[0];
+
+    engine.stopSource('chord', 0.15);
+    const teardownAt = voice.teardownAt;
+    const cancelCount = voice.gains[0].gain.cancels.length;
+
+    ctx.currentTime = t0 + 0.05;
+    engine.stopSource('chord', 0.15);
+
+    expect(voice.teardownAt).toBe(teardownAt);
+    expect(voice.gains[0].gain.cancels).toHaveLength(cancelCount);
+  });
+
+  test('a stop shorter than the pending release still cuts the voice', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    const voice = Array.from(
+      (engine as any).sourceVoices.get('chord') as Set<any>,
+    )[0];
+
+    engine.stopSource('chord', 2);
+    const teardownAt = voice.teardownAt;
+
+    engine.stopSource('chord', 0.05);
+
+    expect(voice.teardownAt).toBeLessThan(teardownAt);
+    expect(voice.gains[0].gain.ramps.at(-1).t).toBe(t0 + 0.05);
+  });
+
+  // The symptom this guards: past maxVoicesPerSource, stealOldestVoice can
+  // only steal voices with no release planned — which are the notes of the
+  // chord being played RIGHT NOW — so every click but the last note went
+  // silent and the preview collapsed to a single note.
+  // Real timers, and ctx.currentTime advanced in lockstep with them: the
+  // teardown that drains a released voice out of sourceVoices runs on the wall
+  // clock, so a synchronous loop would show the same unbounded growth whether
+  // the bug is present or not.
+  test('repeated held previews keep sounding the whole chord', async () => {
+    const { engine, ctx } = freshEngine();
+    const notes = ['C4', 'E4', 'G4', 'B4'];
+    const step = async (seconds: number) => {
+      await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+      ctx.currentTime += seconds;
+    };
+    const chordVoices = () => (engine as any).sourceVoices.get('chord') as Set<any>;
+
+    // Eight presses a second — playChordLegato stops the source on the press
+    // and ChordView stops it again on the release.
+    for (let click = 0; click < 10; click++) {
+      engine.stopSource('chord', 0.05);
+      for (const note of notes) engine.triggerSynthNoteOn(note, SYNTH, 0.8, undefined, 'chord');
+      const sounding = Array.from(chordVoices()).filter(
+        (v) => v.releaseScheduledAt === undefined,
+      );
+      expect(sounding.map((v) => v.noteName).sort()).toEqual([...notes].sort());
+      await step(0.06);
+      engine.stopSource('chord', 0.15);
+      await step(0.06);
+    }
+
+    await step(0.4);
+    expect(chordVoices().size).toBe(0);
+  });
 });
 
 describe('scheduled source stop (soft stop on a bar line)', () => {
@@ -607,6 +682,26 @@ describe('releaseSoundingVoices', () => {
 });
 
 describe('master chain', () => {
+  // Drums reach their layer the same way voices do — through the pre-fader
+  // tap. Wiring drumBusFilter straight to the bus would leave the sequencer
+  // scope reading a signal the fader had already scaled.
+  test('the drum bus filter feeds the sequencer TAP, not its bus', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+
+    const tap = (engine as any).sourceTaps.get('sequencer');
+    const bus = (engine as any).sourceBuses.get('sequencer');
+    const drumFilter = (engine as any).drumBusFilter;
+
+    // masterChainCtx's nodes record into _connectTargets, not connectedTo.
+    expect(tap).toBeDefined();
+    expect(drumFilter._connectTargets).toContain(tap);
+    expect(drumFilter._connectTargets).not.toContain(bus);
+    expect(tap._connectTargets).toContain(bus);
+  });
+
   test('both dynamics stages default OFF, so masterGain reaches the destination directly', () => {
     const engine = makeEngine();
     const ctx = masterChainCtx();
@@ -1711,14 +1806,14 @@ describe('LFO routing', () => {
     expect(voice.lfoGain.connectedTo).toContain(voice.tremoloGain.gain);
   });
 
-  test('the tremolo gain sits between the VCA and the source bus', () => {
+  test('the tremolo gain sits between the VCA and the source tap', () => {
     const { engine } = freshEngine();
     engine.triggerSynthNoteOn('C4', TREM, 0.8, undefined, 'synth');
     const voice = (engine as any).activeVoices.get('synth:C4');
-    const bus = (engine as any).sourceBuses.get('synth');
+    const tap = (engine as any).sourceTaps.get('synth');
 
     expect(voice.gains[0].connectedTo).toEqual([voice.tremoloGain]);
-    expect(voice.tremoloGain.connectedTo).toContain(bus);
+    expect(voice.tremoloGain.connectedTo).toContain(tap);
     // Unity so the envelope passes through untouched when depth is 0.
     expect(voice.tremoloGain.gain.value).toBe(1);
   });
@@ -2842,17 +2937,50 @@ describe('getSourceAnalyser', () => {
     expect(chord).not.toBe(synth);
   });
 
-  // The tap point is the source bus, which sits after the VCA and tremolo but
-  // before the parallel sends and the master chain. That is what makes the
-  // Synth view's scope show the layer being edited rather than the finished
-  // mix — a master-tapped scope cannot do that.
-  test('taps the source bus, not the master chain', () => {
+  // The tap point is the source TAP, which sits after the VCA and tremolo but
+  // before the layer's own bus gain, the parallel sends and the master chain.
+  // That is what makes the Synth view's scope show the layer being edited
+  // rather than the finished mix — a master-tapped scope cannot do that.
+  test('taps the pre-fader source tap, not the master chain', () => {
     const { engine } = freshEngine();
     const analyser = engine.getSourceAnalyser('synth');
+    const tap = (engine as any).sourceTaps.get('synth');
+
+    expect(tap).toBeDefined();
+    expect(tap.connectedTo).toContain(analyser);
+  });
+
+  // The whole point of the tap: the scope draws a raw -1..+1 waveform against
+  // the full height of its box, so the level it reads must be the patch's own
+  // and must not move when the layer's fader does. Reading after the bus gain
+  // made a full-scale patch paint a half-height trace at the -6 dB default.
+  test('sits BEFORE the source bus gain, so a fader move cannot scale it', () => {
+    const { engine } = freshEngine();
+    const analyser = engine.getSourceAnalyser('synth');
+    const tap = (engine as any).sourceTaps.get('synth');
     const bus = (engine as any).sourceBuses.get('synth');
 
-    expect(bus).toBeDefined();
-    expect(bus.connectedTo).toContain(analyser);
+    expect(tap.connectedTo).toContain(bus);
+    expect(bus.connectedTo).not.toContain(analyser);
+
+    const before = tap.gain.value;
+    engine.setSourceGain('synth', 0.25);
+    engine.setSourceMuted('synth', true);
+    expect(tap.gain.value).toBe(before);
+  });
+
+  // Every producer feeds the tap, or the layer it produces is missing from the
+  // scope while still being perfectly audible — a silent-looking bug. Voices
+  // are checked here; the drum bus is checked in the master-chain suite, which
+  // is the only place setupMasterChain (where that edge is wired) actually runs.
+  test('a voice feeds the tap, which feeds the bus', () => {
+    const { engine } = freshEngine();
+    engine.triggerSynthNoteOn('C4', SYNTH, 1, undefined, 'chord');
+
+    const chordTap = (engine as any).sourceTaps.get('chord');
+    const chordBus = (engine as any).sourceBuses.get('chord');
+    expect(chordTap).toBeDefined();
+    expect(chordTap.connectedTo).toContain(chordBus);
   });
 
   // Nodes belong to the context that made them, so a rebuilt master chain must
@@ -2862,6 +2990,78 @@ describe('getSourceAnalyser', () => {
     const before = engine.getSourceAnalyser('synth');
     (engine as any).sourceAnalysers.clear();
     expect(engine.getSourceAnalyser('synth')).not.toBe(before);
+  });
+});
+
+describe('getSourceLevelAnalyser', () => {
+  test('is null before init(), like every other engine accessor', () => {
+    const engine = makeEngine();
+    expect(engine.getSourceLevelAnalyser('synth')).toBeNull();
+  });
+
+  test('each source gets its own analyser, and the same one every time', () => {
+    const { engine } = freshEngine();
+    const synth = engine.getSourceLevelAnalyser('synth');
+    const chord = engine.getSourceLevelAnalyser('chord');
+
+    expect(synth).not.toBeNull();
+    expect(engine.getSourceLevelAnalyser('synth')).toBe(synth);
+    expect(chord).not.toBe(synth);
+  });
+
+  // The whole reason this accessor exists next to getSourceAnalyser. A mixer
+  // meter answers "how much of this layer is in the mix?", so it must sit
+  // where the fader, the mute and the solo have already been applied — all
+  // three write the SAME bus gain (setSourceGain / setSourceMuted), so one
+  // post-fader tap gets all three for free and the UI computes no audibility
+  // of its own.
+  test('taps the source BUS, not the pre-fader tap', () => {
+    const { engine } = freshEngine();
+    // Pull the scope analyser too, which is what creates the pre-fader tap:
+    // the assertion below is about which of the two points this analyser is
+    // wired to, and it would pass vacuously against a tap that never existed.
+    engine.getSourceAnalyser('synth');
+    const analyser = engine.getSourceLevelAnalyser('synth');
+    const bus = (engine as any).sourceBuses.get('synth');
+    const tap = (engine as any).sourceTaps.get('synth');
+
+    expect(bus.connectedTo).toContain(analyser);
+    expect(tap.connectedTo).not.toContain(analyser);
+  });
+
+  // Two analysers on one source, reading two different points, and neither may
+  // be handed out in place of the other: the scope's is pre-fader by design.
+  test('is a different node from the pre-fader scope analyser', () => {
+    const { engine } = freshEngine();
+    expect(engine.getSourceLevelAnalyser('synth')).not.toBe(engine.getSourceAnalyser('synth'));
+  });
+
+  // Matches the master level analyser (engine.ts's `levelAnalyser`): a long
+  // window for a stable RMS, and no smoothing — which is inert on time-domain
+  // reads anyway, and is written here so the two level taps read identically.
+  test('is configured for level reads, not for a spectrum', () => {
+    const { engine } = freshEngine();
+    const analyser = engine.getSourceLevelAnalyser('synth')!;
+
+    expect(analyser.fftSize).toBe(2048);
+    expect(analyser.smoothingTimeConstant).toBe(0);
+  });
+
+  // Observe-only, like every other analyser in this engine: a tap that fed
+  // anything back into the graph would double the layer into the mix.
+  test('has no output of its own', () => {
+    const { engine } = freshEngine();
+    const analyser = engine.getSourceLevelAnalyser('synth') as any;
+    expect(analyser.connectedTo ?? []).toHaveLength(0);
+  });
+
+  // Nodes belong to the context that made them, so a rebuilt master chain must
+  // drop these alongside sourceBuses or the next call returns a dead node.
+  test('setupMasterChain clears the analysers with the buses', () => {
+    const { engine } = freshEngine();
+    const before = engine.getSourceLevelAnalyser('synth');
+    (engine as any).sourceLevelAnalysers.clear();
+    expect(engine.getSourceLevelAnalyser('synth')).not.toBe(before);
   });
 });
 

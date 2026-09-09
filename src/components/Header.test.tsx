@@ -1,10 +1,14 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
-import { ProjectNameLabel, TabButton, PatternSegmentRow, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, ScaleSelects } from './Header';
+import { FollowPlayheadToggle, ProjectNameLabel, TabButton, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, ScaleSelects } from './Header';
+import { PatternSegmentRow } from './ui/SegmentedControl';
 import { LOOP_TABS, SONG_TABS } from '../types';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
 import { VIEW_ORDER } from './viewMeta';
+import { GROUP_LABEL, HEADER_FIELD_SHELL } from './ui/fieldClasses';
+import { useAppStore } from '../store/store';
 
 /** The full opening tag of the element whose markup contains `needle` — pins the tag name, not text position. */
 function openTagContaining(html: string, needle: string): string {
@@ -254,6 +258,89 @@ describe('ProjectNameLabel (song layer only)', () => {
     );
     expect(openTagContaining(html, 'id="header-project-name"')).toMatch(/^<span/);
   });
+
+  // It wears the caption and the shell the loop picker wears on the other
+  // layer: without one, "Untitled project" sat in the navbar as bare text that
+  // read like a control nobody had styled.
+  test('it is captioned and framed the way the loop picker is', () => {
+    const html = renderToString(
+      <ProjectNameLabel layer="song" currentProjectId="p1" currentProjectName="Lo-Fi Study Session" />
+    );
+    expect(html).toContain('>Project<');
+    expect(html).toContain(HEADER_FIELD_SHELL);
+    expect(html).toContain(GROUP_LABEL);
+  });
+});
+
+// Reads the store through useLiveStore, so unlike the rest of the header its
+// live state IS reachable from a test's setState (see ui/useLiveStore.ts).
+describe('FollowPlayheadToggle (song layer only)', () => {
+  const initial = useAppStore.getState().followPlayhead;
+  afterEach(() => {
+    useAppStore.setState({ followPlayhead: initial });
+  });
+
+  test('following: pressed, and the label offers the way out', () => {
+    useAppStore.setState({ followPlayhead: true });
+    const html = renderToString(<FollowPlayheadToggle layer="song" />);
+    const tag = openTagContaining(html, 'id="btn-follow-playhead"');
+    expect(tag).toContain('aria-pressed="true"');
+    expect(tag).toContain('btn-active');
+    expect(tag).toContain('click to stop');
+  });
+
+  test('not following: unpressed, and the label offers the way in', () => {
+    useAppStore.setState({ followPlayhead: false });
+    const html = renderToString(<FollowPlayheadToggle layer="song" />);
+    const tag = openTagContaining(html, 'id="btn-follow-playhead"');
+    expect(tag).toContain('aria-pressed="false"');
+    expect(tag).not.toContain('btn-active');
+    expect(tag).toContain('Follow the playing loop');
+  });
+
+  test('the loop layer never shows it — the scroll it governs is Arrange only', () => {
+    const html = renderToString(<FollowPlayheadToggle layer="loop" />);
+    expect(html).not.toContain('id="btn-follow-playhead"');
+  });
+});
+
+/**
+ * Order, read off the source: `Header` itself is never rendered in this suite
+ * (its `activeTab` read serves the store's creation-time value under
+ * `renderToString` — see the note above), so what the row opens with is pinned
+ * as a static property of the file instead.
+ *
+ * The rule is that the layer's SUBJECT — the loop being edited, or the project
+ * the arrangement belongs to — comes before the tabs that view it, on both
+ * layers. It used to be tabs first, which read as "this view → of some loop".
+ */
+describe('the header cluster leads with the subject, not the tabs', () => {
+  const src = readFileSync(new URL('./Header.tsx', import.meta.url), 'utf8');
+  const navAt = src.indexOf('<nav className={`${HEADER_GROUP}');
+
+  test('the loop picker precedes the tab nav', () => {
+    expect(src.indexOf('<LoopSelector />')).toBeLessThan(navAt);
+  });
+
+  test('the project name precedes the tab nav', () => {
+    expect(src.indexOf('<ProjectNameLabel')).toBeLessThan(navAt);
+  });
+
+  // Between the two, as specified: the subject, then what Arrange does with
+  // it while it plays, then the tabs.
+  test('the follow toggle sits between the project name and the tab nav', () => {
+    expect(src.indexOf('<ProjectNameLabel')).toBeLessThan(src.indexOf('<FollowPlayheadToggle'));
+    expect(src.indexOf('<FollowPlayheadToggle')).toBeLessThan(navAt);
+  });
+
+  // The key/scale group sits with the subject rather than beside the theme
+  // toggle, which is also what keeps the tabs anchored just left of that
+  // toggle on BOTH layers — this group exists on the loop layer only, so
+  // behind the tabs it moved them sideways on every layer change.
+  test('the key/scale group precedes the tab nav, on both breakpoints', () => {
+    expect(src.indexOf('idPrefix="select-master-scale"')).toBeLessThan(navAt);
+    expect(src.indexOf('idPrefix="select-master-scale-compact"')).toBeLessThan(navAt);
+  });
 });
 
 /**
@@ -282,6 +369,38 @@ describe('key picker', () => {
     const html = renderToString(<ScaleSelects idPrefix="test" />);
     expect(html).toContain('<option value="C#">C#/Db</option>');
     expect(html).toContain('<option value="C">C</option>');
+  });
+
+  // The header pair is FIXED width, and the scale name ellipsises inside it.
+  // Both halves are one mechanism, which is why they are one test: daisyUI's
+  // `.select` sizes itself (`clamp(3rem, 20rem, 100%)`, `flex-shrink: 1`), so
+  // a `min-w-*` let the navbar decide the width AND meant the label never
+  // overflowed anything to be clipped against.
+  test('the inline pair is fixed width, not min-width', () => {
+    const html = renderToString(<ScaleSelects idPrefix="test" />);
+    // The two numbers are a design call and get retuned; that each select
+    // carries ONE of them, and that neither is a min-width, is the rule.
+    const widths = html.match(/\bw-\d+\b/g) ?? [];
+    expect(widths).toHaveLength(2);
+    expect(html).not.toContain('min-w-');
+  });
+
+  // `appearance-none` is load-bearing, not decoration — see HEADER_SELECT's
+  // comment. Without it daisyUI opts the select into Chrome's customizable
+  // select, whose label is clipped by a `selectedcontent` rule that matches
+  // nothing unless the author writes that markup, and the scale name paints
+  // over the chevron and out past the border.
+  test('both selects opt out of the customizable-select rendering', () => {
+    const html = renderToString(<ScaleSelects idPrefix="test" />);
+    expect(html.match(/appearance-none/g) ?? []).toHaveLength(2);
+  });
+
+  // The dropdown copy has a panel to fill and no navbar to hold still, so it
+  // takes the full width instead of the header's two fixed ones.
+  test('the stacked copy fills its dropdown instead', () => {
+    const html = renderToString(<ScaleSelects idPrefix="test" stacked />);
+    expect(html.match(/w-full/g) ?? []).toHaveLength(2);
+    expect(html).not.toMatch(/\bw-\d+\b/);
   });
 });
 

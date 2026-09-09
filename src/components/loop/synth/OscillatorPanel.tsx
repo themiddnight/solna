@@ -5,6 +5,7 @@ import { ModuleHeader } from "@/components/ui/ModuleHeader";
 import { PanelCard } from "@/components/ui/PanelCard";
 import { FIELD_LABEL } from "@/components/ui/fieldClasses";
 import { useSynthChannel } from "./useSynthChannel";
+import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
 
 /**
  * Pro-Mode panel — Oscillators. Reads the active synth channel from the
@@ -13,10 +14,10 @@ import { useSynthChannel } from "./useSynthChannel";
  * §6.5); the token is named in the class strings that moved with the markup.
  */
 export function OscillatorPanel() {
-  const { params, onChangeParams, tintClass } = useSynthChannel();
+  const { params, onChangeParams } = useSynthChannel();
   // 1. Oscillators Section
   return (
-          <PanelCard tint={tintClass} className="flex-1">
+          <PanelCard inset className="flex-1">
             <div className="card-body p-4 space-y-3.5">
             <ModuleHeader
               badge={1}
@@ -38,7 +39,7 @@ export function OscillatorPanel() {
                       className={`btn btn-xs text-[11px] font-semibold capitalize ${
                         params.oscType === w
                           ? "[--btn-color:var(--color-module-osc)] [--btn-fg:var(--color-module-osc-content)]"
-                          : "btn-ghost border border-base-300 text-base-content/60"
+                          : TOOLBAR_BUTTON_IDLE
                       }`}
                     >
                       {w.slice(0, 4)}

@@ -5,6 +5,7 @@ import { ModuleHeader } from "@/components/ui/ModuleHeader";
 import { PanelCard } from "@/components/ui/PanelCard";
 import { FIELD_LABEL } from "@/components/ui/fieldClasses";
 import { useSynthChannel } from "./useSynthChannel";
+import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
 
 /**
  * Pro-Mode panel — LFO and master pitch. Reads the active synth channel from
@@ -13,10 +14,10 @@ import { useSynthChannel } from "./useSynthChannel";
  * §6.5); the token is named in the class strings that moved with the markup.
  */
 export function LfoPanel() {
-  const { params, onChangeParams, tintClass } = useSynthChannel();
+  const { params, onChangeParams } = useSynthChannel();
   // 4. LFO & Master Pitch
   return (
-          <PanelCard tint={tintClass} className="flex-1">
+          <PanelCard inset className="flex-1">
             <div className="card-body p-4 space-y-3.5">
             <ModuleHeader
               badge={4}
@@ -37,7 +38,7 @@ export function LfoPanel() {
                     className={`btn btn-xs text-[11px] font-semibold capitalize ${
                       params.lfoTarget === t
                         ? "[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]"
-                        : "btn-ghost border border-base-300 text-base-content/60"
+                        : TOOLBAR_BUTTON_IDLE
                     }`}
                   >
                     {t}
@@ -83,7 +84,7 @@ export function LfoPanel() {
                     className={`btn btn-xs btn-square w-6 h-6 min-h-0 text-xs tabular-nums font-bold ${
                       params.octave === oct
                         ? "[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]"
-                        : "btn-ghost border border-base-300 text-base-content/60 hover:text-base-content"
+                        : `${TOOLBAR_BUTTON_IDLE} hover:text-base-content`
                     }`}
                   >
                     {oct > 0 ? `+${oct}` : oct}

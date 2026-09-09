@@ -43,11 +43,16 @@ instance and read when nodes are later created.
 synth/chord/bass voice: osc1 + subOsc (+ noise) -> BiquadFilter (VCF) -> GainNode (VCA) -> tremoloGain (unity)
                                                                                            |
                                                                                            v
+                        per-source TAP GainNode (unity, lazy)  [TAP: getSourceAnalyser -> per-layer scope]
+                                                                                           |
+                                                                                           v
                         per-source GainNode bus   (lazy, one per source string)
+                          |-> per-source LEVEL analyser (lazy, fftSize 2048)
+                          |     [TAP: getSourceLevelAnalyser -> the mixer's per-layer SourceMeter]
                           |      |       |     \
                         dry   delay   reverb  distortion
                                  |       |         |
-drums: osc/noise -> drumEnv -> drumBusFilter -> dryGain
+drums: osc/noise -> drumEnv -> drumBusFilter -> sequencer TAP -> sequencer bus -> dryGain
                             \_ (snare/clap/crash only) send gain (kit's
                                reverbSend LEVEL) -> drumSendFilter -> reverbNode
                                  |       |         |
@@ -64,8 +69,18 @@ drums: osc/noise -> drumEnv -> drumBusFilter -> dryGain
                                        -> [compressor?] -> [limiter?] -> ctx.destination
 ```
 
-Two taps, not one: `analyser` is the spectrum node `AudioVisualizer` draws, `levelAnalyser` is the
-one `getMasterLevelAnalyser()` returns and every dBFS meter reads.
+Two taps on `masterGain`, not one: `analyser` is the spectrum node `AudioVisualizer` draws,
+`levelAnalyser` is the one `getMasterLevelAnalyser()` returns and every MASTER dBFS meter reads.
+
+Each SOURCE has two of its own, for the same reason, and they read DIFFERENT POINTS — do not
+merge them:
+- `getSourceAnalyser()` is **pre-fader**, off the TAP gain after the VCA and before the bus gain
+  and the sends. It feeds that layer's scope, so the scope shows the patch being edited whatever
+  the fader is doing.
+- `getSourceLevelAnalyser()` is an observe-only send off the **bus**, so it is **post-fader** and
+  after mute/solo. It feeds the mixer's per-layer `SourceMeter`, which is what makes a fader move
+  show on the meter beside it — and what lets `ui/SourceMeter.tsx` be a legal reader under
+  layering rule 4, since the audibility is already IN the number.
 
 Key consequences:
 - Effects are **parallel sends**, not a serial insert chain. Dry always passes; wet amount is the
@@ -113,6 +128,15 @@ Key consequences:
 - Layer control goes through the lazy per-source `GainNode` bus: `setSourceGain(source, v)` /
   `setSourceMuted(source, bool)`, both with a ~10 ms `setTargetAtTime` ramp (click-free).
   `setupMasterChain()` clears `sourceBuses` because old buses point at dead nodes.
+- **Nothing connects to a source bus directly — everything connects to its `sourceTaps` entry**,
+  a unity `GainNode` whose only output is the bus. It exists so `getSourceAnalyser` can read a
+  layer PRE-fader: the per-layer scope draws a raw −1..+1 waveform against the full height of its
+  box, so a post-fader tap made "full height" mean "full scale after the −6 dB bus default" —
+  a patch as loud as it can get painted a half-height trace, and moving a fader resized the wave
+  of a patch that had not changed. Fader and mute stay on the bus and are unchanged. Adding a new
+  producer for a layer means connecting it to `getSourceTap(source)`; wiring it to
+  `getSourceBus(source)` is audible but invisible to that layer's scope. Cleared with
+  `sourceBuses` for the same dead-context reason.
 - `stopSource()` kills everything including future-scheduled hits; `releaseSoundingVoices()`
   leaves future hits alone (used for arp key-release). Pick deliberately.
 - Library auditions (`src/audio/playback/presetPreview.ts`) run on their own `'preview'` source

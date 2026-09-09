@@ -314,11 +314,11 @@ export function SynthPresetLibrary({
               {/* Sound Badge Attributes */}
               {showSoundBadges && (
                 <div className="flex items-center gap-1.5 text-[10px] text-base-content/60">
-                  <span className="badge badge-sm badge-ghost font-mono gap-1">
+                  <span className="badge badge-sm badge-ghost gap-1">
                     <Activity className="w-2.5 h-2.5 text-primary" />
                     {oscType}
                   </span>
-                  <span className="badge badge-sm badge-ghost font-mono gap-1">
+                  <span className="badge badge-sm badge-ghost tabular-nums gap-1">
                     <Sliders className="w-2.5 h-2.5 text-accent" />
                     {filterType === 'lowpass' ? 'LPF' : filterType === 'highpass' ? 'HPF' : 'BPF'} {Math.round(cutoff)}Hz
                   </span>

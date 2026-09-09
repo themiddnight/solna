@@ -33,10 +33,9 @@ export const VIEW_META: Record<ViewMode, ViewMeta> = {
   sound: { icon: Sliders, tabLabel: 'Sound', title: 'Sound' },
   // Takes `Grid` from the old `sequencer` view. All three Pattern segments are
   // step grids, so the icon that named one of them now names all three.
-  // `title` is dead data by design: PatternView renders no tab-level
-  // ViewHeader, because one would duplicate the segment row directly beneath
-  // it. viewMeta.test.ts still enforces title uniqueness over it — that's
-  // fine, this string just never reaches the screen.
+  // `title` and `icon` here ARE what the Pattern tab's header card shows:
+  // SegmentHeader names the header for the TAB and hangs the segment row off
+  // it, so the segments no longer supply a title of their own.
   pattern: { icon: Grid, tabLabel: 'Pattern', title: 'Pattern' },
   arrange: { icon: LayoutList, tabLabel: 'Arrange', title: 'Arrangement' },
   // Was `Sliders`, identical to the synth tab's — see viewMeta.test.ts.
@@ -44,11 +43,12 @@ export const VIEW_META: Record<ViewMode, ViewMeta> = {
 };
 
 /**
- * Pattern's segment row: id, the short name on the button, the long name on
- * the segment's own header card, and the icon. Same contract as VIEW_META
- * above and for the same reason — `Header`'s segment row and each segment's
- * `SegmentHeader` both read this table, so a button and the thing it opens can
- * never disagree about what they are called.
+ * Pattern's segment row: id, the name on the button, and the icon.
+ *
+ * There is no long `title` any more. It existed for a per-segment header card
+ * that named the segment; SegmentHeader names the TAB now and carries this row
+ * inside it, so the button IS the segment's name and a second, longer one
+ * would be the duplication that change removed.
  *
  * Unlike VIEW_ORDER/VIEW_META this is ONE list, not an order plus a record:
  * there are three entries, the row renders them in this order, and nothing
@@ -57,15 +57,14 @@ export const VIEW_META: Record<ViewMode, ViewMeta> = {
 export const PATTERN_SEGMENTS: ReadonlyArray<{
   id: PatternSegment;
   label: string;
-  title: string;
   icon: LucideIcon;
 }> = [
   // `Music` is free: it was the departed `chords` view's icon, and the note
   // grid is the most literally musical surface in the app.
-  { id: 'lead', label: 'Lead', title: 'Lead Melody', icon: Music },
+  { id: 'lead', label: 'Lead', icon: Music },
   // Chord + bass + pad, stacked — `Layers` says "several at once" without
   // naming any one of them, the same reasoning that made this group
   // `Accompany` rather than `Chords/Bass` when the pad layer landed.
-  { id: 'accompaniment', label: 'Accompaniment', title: 'Accompaniment', icon: Layers },
-  { id: 'beat', label: 'Beat', title: 'Drum Pattern', icon: Drum },
+  { id: 'accompaniment', label: 'Accompaniment', icon: Layers },
+  { id: 'beat', label: 'Beat', icon: Drum },
 ];

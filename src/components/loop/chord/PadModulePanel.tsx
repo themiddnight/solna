@@ -5,12 +5,11 @@ import {
   findPresetByName,
   getPresetsGroupedByCategory,
 } from "@/audio/presetRegistry";
-import { FIELD_LABEL, FIELD_SELECT, JOIN_LANE, SECTION_HEADER } from "@/components/ui/fieldClasses";
+import { FIELD_LABEL, FIELD_SELECT, JOIN_LANE } from "@/components/ui/fieldClasses";
 import { SYNTH_TARGET_STYLES } from "@/utils/synthControl";
 import { PAD_INTERVALS } from "@/types";
 import type { PadInterval, PadVoicing } from "@/types";
-import { SoloButton } from "@/components/ui/SoloButton";
-import { AdjustSynthButton } from "./AdjustSynthButton";
+import { ModulePanelCard } from "./ModulePanelCard";
 import { PresetSelect } from "./PresetSelect";
 import { droneDegreeButtons, padPresetGroups } from "./padPanel";
 
@@ -96,48 +95,26 @@ export function PadModulePanel() {
     [allPresets, presetName],
   );
 
+  // Mode is NOT in the header. It used to sit between the solo button and
+  // Adjust Synth, which made this card's header the only one of the three with
+  // a control in it and left the pad's most consequential switch floating away
+  // from everything it governs. It is a labelled field in the row below now,
+  // which is what let all three headers collapse into `ModulePanelCard`.
   return (
-    <div className="mt-4 card bg-panel tint-pad border border-module-pad/30 p-4">
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div>
-          <h3 className={SECTION_HEADER}>Pad Module</h3>
-          <p className="text-[10px] text-base-content/60">
-            Pad follows the chord progression, legato. Drone holds a fixed
-            note, interval or chord for the whole loop pass.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <SoloButton track="pad" />
-          <div
-            className={JOIN_LANE}
-            role="group"
-            aria-label="Pad mode"
-          >
-            <PadToggleButton
-              id="btn-pad-mode-pad"
-              active={padMode === "pad"}
-              onClick={() => setPadMode("pad")}
-              title="Legato pad, follows the chord progression"
-            >
-              Pad
-            </PadToggleButton>
-            <PadToggleButton
-              id="btn-pad-mode-drone"
-              active={padMode === "drone"}
-              onClick={() => setPadMode("drone")}
-              title="Fixed drone, held for the whole loop pass"
-            >
-              Drone
-            </PadToggleButton>
-          </div>
-          <AdjustSynthButton target="pad" className="text-module-pad" />
-        </div>
-      </div>
-
+    <ModulePanelCard
+      target="pad"
+      title="Pad Module"
+      description={
+        <>
+          Pad follows the chord progression, legato. Drone holds a fixed note,
+          interval or chord for the whole loop pass.
+        </>
+      }
+    >
       <div className="flex flex-row flex-wrap items-end gap-3">
         <PresetSelect
           id="select-pad-sound-preset"
-          label="Pad Preset"
+          label="Preset"
           title="Pad sound preset — factory Pad presets, synced with the synth page"
           placeholder="Pad Preset…"
           groups={presetGroups}
@@ -157,7 +134,7 @@ export function PadModulePanel() {
             well as the chord-following path, so hiding it in pad mode left the drone
             with a register the ear could hear and the hand could not reach. */}
         <div>
-          <label className={FIELD_LABEL} htmlFor="select-pad-octave">Pad Octave</label>
+          <label className={FIELD_LABEL} htmlFor="select-pad-octave">Octave</label>
           <select
             id="select-pad-octave"
             value={padOctave}
@@ -171,6 +148,30 @@ export function PadModulePanel() {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Ahead of the blocks it governs, and after Preset/Octave so those two
+            columns line up with the chord and bass cards. */}
+        <div>
+          <span className={FIELD_LABEL} id="label-pad-mode">Mode</span>
+          <div className={JOIN_LANE} role="group" aria-labelledby="label-pad-mode">
+            <PadToggleButton
+              id="btn-pad-mode-pad"
+              active={padMode === "pad"}
+              onClick={() => setPadMode("pad")}
+              title="Legato pad, follows the chord progression"
+            >
+              Pad
+            </PadToggleButton>
+            <PadToggleButton
+              id="btn-pad-mode-drone"
+              active={padMode === "drone"}
+              onClick={() => setPadMode("drone")}
+              title="Fixed drone, held for the whole loop pass"
+            >
+              Drone
+            </PadToggleButton>
+          </div>
         </div>
 
         {/* The two control blocks SWAP rather than both rendering with one
@@ -225,7 +226,7 @@ export function PadModulePanel() {
           </>
         ) : (
           <div>
-            <span className={FIELD_LABEL} id="label-pad-voicing">Pad Voicing</span>
+            <span className={FIELD_LABEL} id="label-pad-voicing">Voicing</span>
             <div
               className={JOIN_LANE}
               role="group"
@@ -246,6 +247,6 @@ export function PadModulePanel() {
           </div>
         )}
       </div>
-    </div>
+    </ModulePanelCard>
   );
 }

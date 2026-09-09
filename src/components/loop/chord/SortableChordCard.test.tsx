@@ -12,14 +12,20 @@ const chord = {
 
 const noop = () => {};
 
-const render = (isActive: boolean) =>
+const render = (
+  isActive: boolean,
+  key: { scaleRoot: string; scaleType: string } = { scaleRoot: 'A', scaleType: 'Natural Minor' },
+  item = chord,
+) =>
   renderToString(
     <SortableChordCard
-      chord={chord}
+      chord={item}
       idx={0}
       totalChords={4}
       startBar={1}
       isActive={isActive}
+      scaleRoot={key.scaleRoot}
+      scaleType={key.scaleType}
       updateChord={noop}
       removeChord={noop}
       handleMoveChord={noop}
@@ -48,10 +54,10 @@ describe('SortableChordCard theming', () => {
     expect(html).toContain('bg-module-chord text-module-chord-content');
   });
 
-  test('bar counter and note readout are mono badges/text', () => {
+  test('the bar counter is a tabular ghost badge and nothing is monospaced', () => {
     const html = render(false);
     expect(html).toContain('badge badge-sm badge-ghost tabular-nums');
-    expect(html).toContain('font-mono');
+    expect(html).not.toContain('font-mono');
   });
 
   test('header controls are daisyUI ghost buttons', () => {
@@ -70,5 +76,35 @@ describe('SortableChordCard theming', () => {
     for (const s of ['indigo-', 'purple-', 'rose-', 'slate-', 'text-white', 'scale-102']) {
       expect(html).not.toContain(s);
     }
+  });
+});
+
+describe('SortableChordCard spelling', () => {
+  const flatChord = {
+    id: 'chord-2',
+    root: 'D#',
+    quality: 'maj',
+    bars: 1,
+    notes: ['D#4', 'G4', 'A#4'],
+  };
+  const flatKey = { scaleRoot: 'A#', scaleType: 'Major' };
+
+  test('the pad reads the chord root the way the key writes it', () => {
+    const html = render(false, flatKey, flatChord);
+    expect(html).toContain('Eb');
+    expect(html).not.toContain('D#4');
+  });
+
+  test('the root select keeps ROOTS values and spells only the labels', () => {
+    const html = render(false, flatKey, flatChord);
+    // The stored identity is what the option carries as its value.
+    expect(html).toContain('value="D#"');
+    expect(html).toContain('>Eb</option>');
+  });
+
+  test('a sharp key leaves the sharp names alone', () => {
+    const html = render(false, { scaleRoot: 'E', scaleType: 'Major' }, flatChord);
+    expect(html).toContain('D#');
+    expect(html).not.toContain('Eb');
   });
 });

@@ -70,12 +70,11 @@ describe('PATTERN_SEGMENTS', () => {
     for (const icon of segmentIcons) expect(viewIcons.has(icon)).toBe(false);
   });
 
-  test('labels and titles are unique and non-empty', () => {
+  // No `title` to check: a segment's button label is the only name it has now
+  // — SegmentHeader names the Pattern TAB and holds this row inside it.
+  test('labels are unique and non-empty', () => {
     const labels = PATTERN_SEGMENTS.map((s) => s.label);
-    const titles = PATTERN_SEGMENTS.map((s) => s.title);
     expect(new Set(labels).size).toBe(PATTERN_SEGMENTS.length);
-    expect(new Set(titles).size).toBe(PATTERN_SEGMENTS.length);
     expect(labels.every((l) => l.trim().length > 0)).toBe(true);
-    expect(titles.every((t) => t.trim().length > 0)).toBe(true);
   });
 });

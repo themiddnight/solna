@@ -561,10 +561,19 @@ export function formatChordQuality(quality: string): string {
  * through ROOTS), and would be persisted into `ChordItem.root`.
  */
 export function formatChordLabel(root: string, quality: string, key?: SpellingKey): string {
-  const spelled = key
-    ? spellPitchClassInKey(rootSemitone(root), key.scaleRoot, key.scaleType)
-    : root;
-  return spelled + formatChordQuality(quality);
+  return spellChordRoot(root, key) + formatChordQuality(quality);
+}
+
+/**
+ * A chord root as the given key writes it: ('D#', A# Major) -> 'Eb'.
+ *
+ * Same DISPLAY-only contract as formatChordLabel's `key` parameter — the two
+ * share this function so a card that renders root and quality as separate
+ * elements spells the root exactly the way the one-string label does. Without
+ * `key` the canonical sharp name comes straight back.
+ */
+export function spellChordRoot(root: string, key?: SpellingKey): string {
+  return key ? spellPitchClassInKey(rootSemitone(root), key.scaleRoot, key.scaleType) : root;
 }
 
 export function generateBlockChordNotes(chord: string, root = 'C', octave = 4): string[] {

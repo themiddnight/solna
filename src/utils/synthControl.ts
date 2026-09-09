@@ -23,6 +23,10 @@ export const SYNTH_TARGET_STYLES: Record<
     tint: string;
     ring: string;
     activeBtn: string;
+    /** Inactive-state modifier fragment: `btn-soft` tinted to the target's own
+     * colour, so an unselected chip still reads as "this one is chord" rather
+     * than falling back to a neutral `btn-ghost`. */
+    softBtn: string;
     badge: string;
     /** Border tint for a container that frames the target's controls. */
     border: string;
@@ -41,7 +45,13 @@ export const SYNTH_TARGET_STYLES: Record<
     label: 'Lead',
     tint: '',
     ring: '',
-    activeBtn: 'btn-active',
+    // Solid primary when selected, soft primary when not — the same
+    // "selected is the more filled of the two" pairing chord/bass/pad get from
+    // their `--btn-color`. A bare `btn-active` here carried no hue at all,
+    // which made the unselected Lead chip (soft primary) read as LOUDER than
+    // the selected one, inverting the only cue this row exists to give.
+    activeBtn: 'btn-primary',
+    softBtn: 'btn-soft btn-primary',
     badge: '',
     border: 'border-primary',
     slider: 'range range-xs range-primary',
@@ -52,6 +62,7 @@ export const SYNTH_TARGET_STYLES: Record<
     tint: 'tint-chord',
     ring: 'ring-1 ring-module-chord/40',
     activeBtn: '[--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]',
+    softBtn: 'btn-soft [--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]',
     badge: '[--badge-color:var(--color-module-chord)]',
     border: 'border-module-chord',
     slider: 'range range-xs text-module-chord [--range-thumb:var(--color-module-chord-content)]',
@@ -62,6 +73,7 @@ export const SYNTH_TARGET_STYLES: Record<
     tint: 'tint-bass',
     ring: 'ring-1 ring-module-bass/40',
     activeBtn: '[--btn-color:var(--color-module-bass)] [--btn-fg:var(--color-module-bass-content)]',
+    softBtn: 'btn-soft [--btn-color:var(--color-module-bass)] [--btn-fg:var(--color-module-bass-content)]',
     badge: '[--badge-color:var(--color-module-bass)]',
     border: 'border-module-bass',
     slider: 'range range-xs text-module-bass [--range-thumb:var(--color-module-bass-content)]',
@@ -72,6 +84,7 @@ export const SYNTH_TARGET_STYLES: Record<
     tint: 'tint-pad',
     ring: 'ring-1 ring-module-pad/40',
     activeBtn: '[--btn-color:var(--color-module-pad)] [--btn-fg:var(--color-module-pad-content)]',
+    softBtn: 'btn-soft [--btn-color:var(--color-module-pad)] [--btn-fg:var(--color-module-pad-content)]',
     badge: '[--badge-color:var(--color-module-pad)]',
     border: 'border-module-pad',
     slider: 'range range-xs text-module-pad [--range-thumb:var(--color-module-pad-content)]',

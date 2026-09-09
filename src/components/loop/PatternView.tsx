@@ -1,8 +1,6 @@
 import React from 'react';
 import { useAppStore } from '@/store/store';
-import { PatternSegmentRow } from '../Header';
 import { SegmentHeader } from '../ui/SegmentHeader';
-import { SoloButton } from '../ui/SoloButton';
 import { ChordView } from './ChordView';
 import { SequencerView } from './SequencerView';
 import { LeadMelodyGrid } from './lead/LeadMelodyGrid';
@@ -19,21 +17,20 @@ import { LeadMelodyGrid } from './lead/LeadMelodyGrid';
  * through utils/meterScheduler.ts, which gates each registration on an
  * IntersectionObserver, so a hidden segment's meters stop reading.
  *
- * There is no tab-level ViewHeader here on purpose — see SegmentHeader.
+ * The segment row is not rendered here: it lives inside SegmentHeader, which
+ * every segment already opens with — see the note there for why the header is
+ * named for the tab rather than the segment.
  */
 export const PatternView = React.memo(function PatternView() {
   const patternSegment = useAppStore((s) => s.patternSegment);
   return (
     <>
-      <div className="px-3 sm:px-4 pt-3 sm:pt-4 max-w-7xl mx-auto">
-        <PatternSegmentRow />
-      </div>
       <div className={patternSegment === 'lead' ? 'block' : 'hidden'}>
         {/* The lead segment has no card wrapper of its own — LeadMelodyGrid is
             one card — so it borrows the padding/width shell ChordView and
             SequencerView each apply to their own root. */}
         <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
-          <SegmentHeader segment="lead" actions={<SoloButton track="lead" />} />
+          <SegmentHeader segment="lead" />
           <LeadMelodyGrid />
         </div>
       </div>

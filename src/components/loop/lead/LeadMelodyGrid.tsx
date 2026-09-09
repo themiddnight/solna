@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
+import { Circle, ClipboardPaste, Copy, RotateCcw } from 'lucide-react';
 import { useAppStore } from '@/store/store';
+import { TOOLBAR_BUTTON_IDLE, ToolbarButton, ToolbarCluster, ToolbarGroup, ToolbarLane } from '@/components/ui/Toolbar';
+import { GROUP_LABEL, SECTION_HEADER } from '@/components/ui/fieldClasses';
+import { PanelCard } from '@/components/ui/PanelCard';
+import { ModuleHeader } from '@/components/ui/ModuleHeader';
+import { SoloButton } from '@/components/ui/SoloButton';
 import { loopBars } from '@/store/loop';
 import { getMeter, type Meter } from '@/utils/meter';
 import { type StepCell } from '@/components/sequencerGrid';
@@ -501,12 +507,35 @@ export function LeadMelodyGrid() {
   const selectedBar = leadCursorBar(cursor, stepsPerBar, stride);
 
   return (
-    <div className="card bg-panel border border-base-300 shadow-xl">
+    // `PanelCard`, not a hand-written copy of its shell: the Beat segment beside
+    // this one renders the real component, and the copy that was here differed
+    // by a shadow step (`shadow-xl` against PANEL_CARD's `shadow-md`), so two
+    // segments one tab-click apart sat at different weights.
+    <PanelCard>
       <div className="card-body p-4">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <span className="text-xs font-bold text-base-content">Lead Melody</span>
+        {/* `Melody`, not `Lead Melody`: the segment row's own `Lead` chip sits
+            directly above, so the card names what it HOLDS and the chip names
+            which segment — the same split that lets the tab header say
+            `Pattern` and nothing more.
+            Solo rides here rather than in that tab header, because the header
+            belongs to the tab now and this button silences one track. It is
+            the rule the three Accompaniment module cards already follow. */}
+        <ModuleHeader className="mb-3" right={<SoloButton track="lead" />}>
+          {/* `children`, not `title`: ModuleHeader's title cell is the
+              mixed-case MODULE_TITLE the numbered synth stages wear, and a
+              segment's content card is a SECTION — uppercase — like the drum
+              grid's and the progression card's. */}
+          <span className={SECTION_HEADER}>Melody</span>
+        </ModuleHeader>
 
-          <div className="flex items-center gap-1.5">
+        {/* Settings lane. Everything here picks what the grid SHOWS or how it
+            sounds back, and none of it is a thing you tap twice in a row — the
+            actions live in their own lane under the grid (see ui/Toolbar).
+            View mode leads, then each setting behind a GROUP_LABEL naming what
+            it adjusts: a bare `4` and a bare `1/16` are only legible to someone
+            who already knows this grid. */}
+        <ToolbarLane className="mb-3 justify-between">
+          <ToolbarGroup>
             <div className="join">
               {(['scale-locked', 'chromatic'] as const).map((m) => (
                 <button
@@ -517,124 +546,91 @@ export function LeadMelodyGrid() {
                   className={`btn btn-xs join-item text-[11px] font-semibold ${
                     leadMelodyView === m
                       ? 'btn-primary'
-                      : 'btn-ghost border border-base-300 text-base-content/60'
+                      : TOOLBAR_BUTTON_IDLE
                   }`}
                 >
                   {m === 'scale-locked' ? 'Scale' : 'Chromatic'}
                 </button>
               ))}
             </div>
+          </ToolbarGroup>
 
-            <button
-              id="btn-lead-octave-down"
-              type="button"
-              onClick={() => setLeadMelodyOctave(leadMelodyOctave - 1)}
-              className="btn btn-xs btn-square btn-ghost border border-base-300"
-              title="Octave window down"
-            >
-              -
-            </button>
-            <span className="text-xs font-mono">{leadMelodyOctave}</span>
-            <button
-              id="btn-lead-octave-up"
-              type="button"
-              onClick={() => setLeadMelodyOctave(leadMelodyOctave + 1)}
-              className="btn btn-xs btn-square btn-ghost border border-base-300"
-              title="Octave window up"
-            >
-              +
-            </button>
+          <ToolbarCluster>
+            <ToolbarGroup>
+              <span className={GROUP_LABEL}>Octave</span>
+              <button
+                id="btn-lead-octave-down"
+                type="button"
+                onClick={() => setLeadMelodyOctave(leadMelodyOctave - 1)}
+                className="btn btn-xs btn-square btn-ghost border border-base-300"
+                title="Octave window down"
+              >
+                -
+              </button>
+              <span className="text-xs tabular-nums">{leadMelodyOctave}</span>
+              <button
+                id="btn-lead-octave-up"
+                type="button"
+                onClick={() => setLeadMelodyOctave(leadMelodyOctave + 1)}
+                className="btn btn-xs btn-square btn-ghost border border-base-300"
+                title="Octave window up"
+              >
+                +
+              </button>
+            </ToolbarGroup>
 
-            <select
-              id="select-lead-loop-length"
-              value={leadLoopLength}
-              onChange={(e) => setLeadLoopLength(Number(e.target.value))}
-              className="select select-xs select-ghost"
-              title="Melody loop length (bars)"
-            >
-              {divisors.map((d) => (
-                <option key={d} value={d}>
-                  {d} bar{d === 1 ? '' : 's'}
-                </option>
-              ))}
-            </select>
+            <ToolbarGroup>
+              <span className={GROUP_LABEL}>Length</span>
+              <select
+                id="select-lead-loop-length"
+                value={leadLoopLength}
+                onChange={(e) => setLeadLoopLength(Number(e.target.value))}
+                className="select select-xs select-ghost"
+                title="Melody loop length (bars)"
+              >
+                {divisors.map((d) => (
+                  <option key={d} value={d}>
+                    {d} bar{d === 1 ? '' : 's'}
+                  </option>
+                ))}
+              </select>
+            </ToolbarGroup>
 
-            <select
-              id="select-lead-step-resolution"
-              value={leadStepResolution}
-              onChange={(e) => setLeadStepResolution(e.target.value as typeof leadStepResolution)}
-              className="select select-xs select-ghost"
-              title="Melody grid resolution — a finer grid reveals more columns and never moves a note"
-            >
-              {LEAD_STEP_RESOLUTION_IDS.map((id) => (
-                <option key={id} value={id}>
-                  {id}
-                </option>
-              ))}
-            </select>
+            <ToolbarGroup>
+              <span className={GROUP_LABEL}>Step</span>
+              <select
+                id="select-lead-step-resolution"
+                value={leadStepResolution}
+                onChange={(e) => setLeadStepResolution(e.target.value as typeof leadStepResolution)}
+                className="select select-xs select-ghost"
+                title="Melody grid resolution — a finer grid reveals more columns and never moves a note"
+              >
+                {LEAD_STEP_RESOLUTION_IDS.map((id) => (
+                  <option key={id} value={id}>
+                    {id}
+                  </option>
+                ))}
+              </select>
+            </ToolbarGroup>
 
-            <span className="text-[10px] font-mono text-base-content/60 whitespace-nowrap">
-              {`Gate ${Math.round(leadGate * 100)}%`}
-            </span>
-            <Slider
-              id="range-lead-gate"
-              value={Math.round(leadGate * 100)}
-              min={5}
-              max={100}
-              step={5}
-              onChange={(percent) => setLeadGate(percent / 100)}
-              className="range range-primary range-xs w-20"
-              title="How much of each note's final step sounds. Applies when the arp is off."
-            />
-
-            <button
-              id="btn-lead-record"
-              type="button"
-              onClick={() => setLeadRecording(!leadRecording)}
-              aria-pressed={leadRecording}
-              className={
-                leadRecording
-                  ? 'btn btn-xs btn-error'
-                  : 'btn btn-xs btn-ghost border border-base-300 text-base-content/70'
-              }
-              title={
-                leadRecording
-                  ? 'Stop recording played notes into the grid'
-                  : `Record played notes into bar ${selectedBar + 1}, from the selected step`
-              }
-            >
-              Rec
-            </button>
-            <button
-              id="btn-lead-copy-bar"
-              type="button"
-              onClick={copySelectedLeadBar}
-              className="btn btn-xs btn-ghost border border-base-300 text-base-content/70"
-              title={`Copy bar ${selectedBar + 1}`}
-            >
-              Copy
-            </button>
-            <button
-              id="btn-lead-paste-bar"
-              type="button"
-              onClick={pasteIntoSelectedLeadBar}
-              disabled={!hasClipboard}
-              className="btn btn-xs btn-ghost border border-base-300 text-base-content/70"
-              title={`Paste over bar ${selectedBar + 1}`}
-            >
-              Paste
-            </button>
-            <button
-              id="btn-lead-clear"
-              type="button"
-              onClick={clearMelody}
-              className="btn btn-xs btn-ghost border border-base-300 text-base-content/70"
-              title="Clear melody"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
+            <ToolbarGroup>
+              <span className={GROUP_LABEL}>Gate</span>
+              <Slider
+                id="range-lead-gate"
+                value={Math.round(leadGate * 100)}
+                min={5}
+                max={100}
+                step={5}
+                onChange={(percent) => setLeadGate(percent / 100)}
+                className="range range-primary range-xs w-20"
+                title="How much of each note's final step sounds. Applies when the arp is off."
+              />
+              <span className="text-[10px] tabular-nums text-base-content/60 whitespace-nowrap">
+                {`${Math.round(leadGate * 100)}%`}
+              </span>
+            </ToolbarGroup>
+          </ToolbarCluster>
+        </ToolbarLane>
 
         <div className="overflow-x-auto bg-base-200 p-3 rounded">
           <div className="w-fit mx-auto relative">
@@ -659,7 +655,7 @@ export function LeadMelodyGrid() {
                     type="button"
                     onClick={() => previewNote(note)}
                     title={`Preview ${rowLabels[rowIndex]}`}
-                    className={`h-5 flex items-center justify-end pr-2 text-[10px] font-mono leading-none cursor-pointer ${leadRowLabelTone(outOfScale[rowIndex])}`}
+                    className={`h-5 flex items-center justify-end pr-2 text-[10px] leading-none cursor-pointer ${leadRowLabelTone(outOfScale[rowIndex])}`}
                   >
                     {rowLabels[rowIndex]}
                   </button>
@@ -688,7 +684,63 @@ export function LeadMelodyGrid() {
             <LeadMarker columns={columns} />
           </div>
         </div>
+
+        {/* Action lane. Below the grid on purpose: it sits next to the bottom
+            input dock, which is where the hands are when Rec matters, and the
+            eye reads grid-then-act rather than doubling back.
+            Rec holds the left alone because it is the only MODE here — it arms
+            a state and stays armed — while copy/paste/clear are one-shot
+            commands; splitting them by kind also buys Clear the most distance
+            from the button beside it. Clear keeps its own group so the lane's
+            wider gap sets it apart from Paste, and it must not wear red as
+            well: an armed Rec already owns that. */}
+        <ToolbarLane className="mt-3 justify-between">
+          <ToolbarGroup>
+            <ToolbarButton
+              id="btn-lead-record"
+              icon={<Circle className="w-3 h-3" />}
+              label="Rec"
+              onClick={() => setLeadRecording(!leadRecording)}
+              pressed={leadRecording}
+              title={
+                leadRecording
+                  ? 'Stop recording played notes into the grid'
+                  : `Record played notes into bar ${selectedBar + 1}, from the selected step`
+              }
+            />
+          </ToolbarGroup>
+
+          <ToolbarCluster>
+            <ToolbarGroup>
+              <ToolbarButton
+                id="btn-lead-copy-bar"
+                icon={<Copy className="w-3 h-3" />}
+                label="Copy"
+                onClick={copySelectedLeadBar}
+                title={`Copy bar ${selectedBar + 1}`}
+              />
+              <ToolbarButton
+                id="btn-lead-paste-bar"
+                icon={<ClipboardPaste className="w-3 h-3" />}
+                label="Paste"
+                onClick={pasteIntoSelectedLeadBar}
+                disabled={!hasClipboard}
+                title={`Paste over bar ${selectedBar + 1}`}
+              />
+            </ToolbarGroup>
+
+            <ToolbarGroup>
+              <ToolbarButton
+                id="btn-lead-clear"
+                icon={<RotateCcw className="w-3 h-3" />}
+                label="Clear"
+                onClick={clearMelody}
+                title="Clear melody"
+              />
+            </ToolbarGroup>
+          </ToolbarCluster>
+        </ToolbarLane>
       </div>
-    </div>
+    </PanelCard>
   );
 }

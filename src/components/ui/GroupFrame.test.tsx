@@ -5,6 +5,9 @@ import { GroupFrame } from './GroupFrame';
 describe('GroupFrame', () => {
   test('draws a 1px neutral border and no background', () => {
     const html = renderToString(<GroupFrame><span>x</span></GroupFrame>);
+    // `rounded-box`, the theme token index.css defines, not a raw Tailwind
+    // radius: a hard-coded 1rem here would be the one surface a future radius
+    // change in index.css could not reach.
     expect(html).toContain('border border-base-300 rounded-box');
     expect(html).not.toContain('bg-');
   });

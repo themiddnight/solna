@@ -138,7 +138,7 @@ export const InstantVibesBar = React.memo(function InstantVibesBar() {
               >
                 <span className="text-xs leading-none">{vibe.emoji}</span>
                 <span className="font-medium">{vibe.name}</span>
-                <span className="text-[9px] font-mono opacity-70">
+                <span className="text-[9px] tabular-nums opacity-70">
                   {/* The loaded chip is the always-visible readout of what is
                       actually loaded: after a reroll the authored BPM is no
                       longer true, and there is no undo to fall back on. */}

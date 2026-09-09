@@ -1,4 +1,5 @@
 import type { LoopMixPatch } from '@/store/types';
+import type { SourceBusId } from '@/store/engineSync';
 import type { PowerToggleTone } from './ui/PowerToggle';
 
 /**
@@ -22,6 +23,25 @@ export const MIX_LAYER_IDS = ['synth', 'chord', 'bass', 'pad', 'drum'] as const;
 
 export type MixLayerId = (typeof MIX_LAYER_IDS)[number];
 
+/**
+ * The mixer's groups, in the order they are shown. Pitched layers first,
+ * rhythm after — the same story the header tabs tell.
+ */
+export const MIX_GROUP_IDS = ['lead', 'accompaniment', 'beat'] as const;
+
+export type MixGroupId = (typeof MIX_GROUP_IDS)[number];
+
+/**
+ * The screen name of each group, as a `Record` rather than a second ordered
+ * array: adding an id to MIX_GROUP_IDS without naming it is then a compile
+ * error, instead of a divider rendering the word `undefined`.
+ */
+export const MIX_GROUP_LABELS: Record<MixGroupId, string> = {
+  lead: 'Lead',
+  accompaniment: 'Accompaniment',
+  beat: 'Beat',
+};
+
 export interface MixLayer {
   idPrefix: MixLayerId;
   label: string;
@@ -31,13 +51,22 @@ export interface MixLayer {
   /** Icon tint. Typed as ChannelStrip's `accentClass` (KnobColor) accepts it. */
   accentClass: 'text-primary' | 'text-module-chord' | 'text-module-bass' | 'text-module-pad' | 'text-accent';
   /**
-   * Which frame of the Sound mixer the row sits in. A column rather than an
+   * Which group of the Sound mixer the row sits under. A column rather than an
    * index range at the render site: `MIXER_CHANNELS.slice(1, 4)` reads the
    * accompaniment three off positions, so a sixth layer inserted anywhere but
    * the end silently drops a row off the screen with the order test still
-   * green.
+   * green. With the mixer rendering one divider per MIX_GROUP_IDS entry, this
+   * column is also what puts a new layer under a heading at all — a layer
+   * cannot name a group that has no divider, because the union is the same one.
    */
-  group: 'lead' | 'accompaniment' | 'beat';
+  group: MixGroupId;
+  /**
+   * The ENGINE's name for this layer's bus, which is not `idPrefix`: the store
+   * calls the drum bus 'drum' and the engine calls it 'sequencer'. Typed as
+   * engineSync's own union so a row naming a bus that does not exist is a
+   * compile error rather than a meter that never moves.
+   */
+  engineSource: SourceBusId;
 }
 
 /**
@@ -60,17 +89,13 @@ export interface MixLayer {
  * same story the header tabs tell.
  */
 export const MIX_LAYERS: ReadonlyArray<MixLayer> = [
-  { idPrefix: 'synth', label: 'Lead', volumeKey: 'synthVolume', muteKey: 'synthMuted', tone: 'primary', accentClass: 'text-primary', group: 'lead' },
-  { idPrefix: 'chord', label: 'Chord', volumeKey: 'chordVolume', muteKey: 'chordMuted', tone: 'module-chord', accentClass: 'text-module-chord', group: 'accompaniment' },
-  { idPrefix: 'bass', label: 'Bass', volumeKey: 'bassVolume', muteKey: 'bassMuted', tone: 'module-bass', accentClass: 'text-module-bass', group: 'accompaniment' },
-  { idPrefix: 'pad', label: 'Pad', volumeKey: 'padVolume', muteKey: 'padMuted', tone: 'module-pad', accentClass: 'text-module-pad', group: 'accompaniment' },
+  { idPrefix: 'synth', label: 'Lead', volumeKey: 'synthVolume', muteKey: 'synthMuted', engineSource: 'synth', tone: 'primary', accentClass: 'text-primary', group: 'lead' },
+  { idPrefix: 'chord', label: 'Chord', volumeKey: 'chordVolume', muteKey: 'chordMuted', engineSource: 'chord', tone: 'module-chord', accentClass: 'text-module-chord', group: 'accompaniment' },
+  { idPrefix: 'bass', label: 'Bass', volumeKey: 'bassVolume', muteKey: 'bassMuted', engineSource: 'bass', tone: 'module-bass', accentClass: 'text-module-bass', group: 'accompaniment' },
+  { idPrefix: 'pad', label: 'Pad', volumeKey: 'padVolume', muteKey: 'padMuted', engineSource: 'pad', tone: 'module-pad', accentClass: 'text-module-pad', group: 'accompaniment' },
   // `accent`, deliberately NOT the `primary` the old standalone "Drum Level"
   // strip wore: primary is Lead's tone, and the two rows now sit in one grid
   // where they must not read as the same layer.
-  { idPrefix: 'drum', label: 'Beat', volumeKey: 'masterSequencerVolume', muteKey: 'drumMuted', tone: 'accent', accentClass: 'text-accent', group: 'beat' },
+  { idPrefix: 'drum', label: 'Beat', volumeKey: 'masterSequencerVolume', muteKey: 'drumMuted', engineSource: 'sequencer', tone: 'accent', accentClass: 'text-accent', group: 'beat' },
 ];
 
-/** The layers of one mixer frame, in table order. */
-export function mixLayersInGroup(group: MixLayer['group']): ReadonlyArray<MixLayer> {
-  return MIX_LAYERS.filter((layer) => layer.group === group);
-}

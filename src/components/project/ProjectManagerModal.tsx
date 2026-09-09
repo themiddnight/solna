@@ -49,8 +49,10 @@ export function ProjectManagerModal() {
   const [dialog, setDialog] = useState<FlowDialog>(NO_DIALOG);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Availability and the current name are resolved lazily, on first open.
-  // A notice from a previous visit (e.g. a failed Delete) must not resurface.
+  // App.tsx already resolves the current name once at boot, but storage
+  // availability and the list can go stale between visits, so every open
+  // re-resolves both. A notice from a previous visit (e.g. a failed Delete)
+  // must not resurface.
   useEffect(() => {
     if (isOpen) {
       setNotice(null);

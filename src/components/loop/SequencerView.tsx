@@ -4,7 +4,6 @@ import {
   Shuffle,
   ArrowLeft,
   ArrowRight,
-  Sparkles,
 } from "lucide-react";
 import { useAppStore } from "@/store/store";
 import { getMeter } from "@/utils/meter";
@@ -18,8 +17,10 @@ import { patternMeterTitle, patternOptionLabel } from "../meterSelect";
 import { SegmentHeader } from "../ui/SegmentHeader";
 import { SoloButton } from "../ui/SoloButton";
 import { PanelCard } from "../ui/PanelCard";
-import { FIELD_LANE, FIELD_SELECT, SECTION_HEADER } from "../ui/fieldClasses";
+import { FIELD_LANE, FIELD_SELECT, HEADER_BADGE, SECTION_HEADER } from "../ui/fieldClasses";
 import { IconButton } from "../ui/IconButton";
+import { ModuleHeader } from "../ui/ModuleHeader";
+import { ToolbarButton, ToolbarGroup, ToolbarLane } from "../ui/Toolbar";
 import { SequencerGrid } from "./sequencer/SequencerGrid";
 import type { SequencerTrack } from "@/types";
 
@@ -35,7 +36,6 @@ export const SequencerView = React.memo(function SequencerView() {
   const meter = getMeter(meterId);
   const stepsPerBar = meter.stepsPerBar;
   const cells = useMemo(() => stepCells(meter), [meter]);
-  const onChangeSoundKit = useAppStore((s) => s.setSoundKit);
 
   // Starts unselected, not "synthwave": the tracks/kit on screen come from
   // whatever was rehydrated (or the last grid actually applied THIS session),
@@ -123,24 +123,27 @@ export const SequencerView = React.memo(function SequencerView() {
     );
   };
 
-  // A grid names the kit it was written for, so picking one loads both — but
-  // ONLY as a direct result of THIS call, never as a side effect derived from
-  // `selectedGridId`. That local state starts at `""` (see the useState
-  // above) and does not track the hydrated `soundKit`, so a `useEffect` keyed
-  // on it used to fire
-  // on every mount (a refresh included) and silently overwrite whatever kit
-  // had just been rehydrated with synthwave's — 'Retro Drive' — which is
-  // exactly the "kit resets to Retro Drive on refresh" bug. The menu offers
-  // all 30 grids — the sequencer's own 14 genre grids, the 7 grids the
-  // Instant Vibes are built from, and 9 sourced variants — which were split
-  // across separate tables until they merged.
+  // A grid loads its PATTERN and nothing else. It still names, in
+  // `DRUM_GRIDS[id].kit`, the kit it was transcribed against — that field is
+  // provenance a reviewer and the tests read, not something this picker
+  // applies. The kit <select> lives on the Sound tab now, two tabs away from
+  // this one, and a control on one tab must not rewrite a control on another:
+  // picking a pattern silently swapped the sound the user had chosen, with no
+  // visible cause on the screen they were looking at.
   //
-  // The kit SELECT now lives on the Sound tab, so this line writes a control
-  // on another tab. That is correct and needs nothing added: both sides bind
-  // the same `soundKit` slice field, both tabs stay mounted, and a slice write
-  // re-renders every mounted view, so the select shows the new kit the instant
-  // a grid is picked. Do NOT add an effect to "keep them in sync" — that is
-  // precisely the effect described above, and it is how the reset bug got in.
+  // Consequence, deliberately: two grids with identical rows but different
+  // authored kits now sound the same, so `drumGrids.test.ts`'s silent-duplicate
+  // predicate no longer counts `kit` as a distinguisher. Do NOT re-add a kit
+  // write here to "restore" that separation — the kit is the user's to pick on
+  // Sound. (Nor as a `useEffect` keyed on
+  // `selectedGridId`: that local state starts at `""` and does not track the
+  // hydrated `soundKit`, so such an effect fired on every mount, refresh
+  // included, and overwrote the rehydrated kit with synthwave's 'Retro Drive'
+  // — the "kit resets to Retro Drive on refresh" bug.)
+  //
+  // The menu offers all 30 grids — the sequencer's own 14 genre grids, the 7
+  // grids the Instant Vibes are built from, and 9 sourced variants — which were
+  // split across separate tables until they merged.
   const applyDrumGrid = (id: string) => {
     setSelectedGridId(id);
     const grid = DRUM_GRIDS[id];
@@ -149,7 +152,6 @@ export const SequencerView = React.memo(function SequencerView() {
     // active bar length and writes it into the window, so what the grid shows
     // is exactly what will sound.
     replaceDrumPattern(grid.rows);
-    onChangeSoundKit(grid.kit);
   };
 
   // The grid `<option>` list is ~30 entries and each one formats two label
@@ -183,90 +185,100 @@ export const SequencerView = React.memo(function SequencerView() {
           already the preview Play button every TrackRow carries, and a
           per-voice solo would be a second answer to a question that already
           has one. */}
-      <SegmentHeader
-        segment="beat"
-        badge={sequencerMeterBadge(meter)}
-        actions={<SoloButton track="drums" />}
-      />
+      <SegmentHeader segment="beat" />
 
       {/* Pattern — the grid plus the tools that rewrite it. They used to sit in
           the view header, two cards away from the thing Random and Clear wipe. */}
       <PanelCard>
         <div className="card-body p-3 sm:p-4 gap-3">
-        {/* Outside the scroll container below, so the title and its tools stay
-            put while a 700px-wide grid scrolls under them. */}
-        <div className="flex items-center justify-between flex-wrap gap-2.5">
+        {/* `Drum Pattern`, not `Pattern`: the tab header above now reads
+            `Pattern`, so the bare word here made the screen say Pattern ›
+            Pattern. The meter badge and the drum solo moved down with the
+            name — both describe THIS grid, and that header belongs to the tab.
+            No icon: neither of the other two segments' content cards carries
+            one, and a sparkle on a drum grid decorated rather than named. */}
+        <ModuleHeader
+          className="flex-wrap gap-2.5"
+          right={<SoloButton track="drums" />}
+        >
+          {/* `children`, not `title`: ModuleHeader's title cell is the
+              mixed-case MODULE_TITLE the numbered synth stages wear, and a
+              segment's content card is a SECTION — uppercase — the same as
+              Accompaniment's progression card beside it. */}
           <div className="flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-accent" />
-            <span className={SECTION_HEADER}>
-              Pattern
-            </span>
+            <span className={SECTION_HEADER}>Drum Pattern</span>
+            <span className={HEADER_BADGE}>{sequencerMeterBadge(meter)}</span>
+          </div>
+        </ModuleHeader>
+
+        {/* Outside the scroll container below, so the tools stay put while a
+            700px-wide grid scrolls under them.
+            No stacked label on the select: it is the card's only field, so a
+            "Genre" label above it would say what the option text already
+            does. `aria-label` keeps the name a visible label would carry. */}
+        <ToolbarLane className="justify-between">
+          {/* The lane wrapper is load-bearing, not decoration: daisyUI's
+              `.select` is `width: 100%`, so as a direct flex child it claims
+              the whole row and pushes the buttons onto a second line. */}
+          <div className={FIELD_LANE}>
+            <select
+              id="select-sequencer-grid"
+              value={selectedGridId}
+              onChange={(e) => applyDrumGrid(e.target.value)}
+              className={FIELD_SELECT}
+              aria-label="Drum grid"
+              title="Loads that grid's drum pattern over the sequencer. The kit is unchanged — pick it on the Sound tab."
+            >
+              <option value="" disabled>
+                Choose a grid…
+              </option>
+              {gridOptions}
+            </select>
           </div>
 
-          {/* No stacked label here: the card is already titled Pattern and this
-              is its only field, so a "Genre" label above it would say the same
-              thing twice. With no label line to align to, the select and the
-              action buttons share one centred row. `aria-label` keeps the name
-              a visible label would have carried. */}
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* The lane wrapper is load-bearing, not decoration: daisyUI's
-                `.select` is `width: 100%`, so as a direct flex child it claims
-                the whole row and pushes the buttons onto a second line. */}
-            <div className={FIELD_LANE}>
-              <select
-                id="select-sequencer-grid"
-                value={selectedGridId}
-                onChange={(e) => applyDrumGrid(e.target.value)}
-                className={FIELD_SELECT}
-                aria-label="Drum grid"
-                title="Loads that grid's drum pattern, and its kit, over the sequencer"
-              >
-                <option value="" disabled>
-                  Choose a grid…
-                </option>
-                {gridOptions}
-              </select>
-            </div>
+          <ToolbarGroup>
+            <IconButton
+              id="btn-shift-left"
+              label="Shift Pattern Left"
+              icon={<ArrowLeft className="w-3.5 h-3.5" />}
+              size="sm"
+              onClick={() => shiftSteps("left")}
+            />
 
-            <div className="flex items-center gap-1">
-              <IconButton
-                id="btn-shift-left"
-                label="Shift Pattern Left"
-                icon={<ArrowLeft className="w-3.5 h-3.5" />}
-                size="sm"
-                onClick={() => shiftSteps("left")}
-              />
+            <IconButton
+              id="btn-shift-right"
+              label="Shift Pattern Right"
+              icon={<ArrowRight className="w-3.5 h-3.5" />}
+              size="sm"
+              onClick={() => shiftSteps("right")}
+            />
 
-              <IconButton
-                id="btn-shift-right"
-                label="Shift Pattern Right"
-                icon={<ArrowRight className="w-3.5 h-3.5" />}
-                size="sm"
-                onClick={() => shiftSteps("right")}
-              />
+            <ToolbarButton
+              id="btn-randomize-grid"
+              icon={<Shuffle className="w-3 h-3" />}
+              label="Random"
+              onClick={randomizeSteps}
+              title="Randomize Steps"
+              collapseLabel
+              size="sm"
+            />
+          </ToolbarGroup>
 
-              <button
-                id="btn-randomize-grid"
-                onClick={randomizeSteps}
-                className="btn btn-sm btn-ghost gap-1"
-                title="Randomize Steps"
-              >
-                <Shuffle className="w-3 h-3" />
-                <span className="hidden sm:inline">Random</span>
-              </button>
-
-              <button
-                id="btn-clear-grid"
-                onClick={clearAllSteps}
-                className="btn btn-sm btn-ghost gap-1"
-                title="Clear Steps"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span className="hidden sm:inline">Clear</span>
-              </button>
-            </div>
-          </div>
-        </div>
+          {/* Clear sits in its own group so the lane's wider gap separates a
+              destructive action from the one beside it — the same rule the
+              lead grid's action lane follows. */}
+          <ToolbarGroup>
+            <ToolbarButton
+              id="btn-clear-grid"
+              icon={<RotateCcw className="w-3 h-3" />}
+              label="Clear"
+              onClick={clearAllSteps}
+              title="Clear Steps"
+              collapseLabel
+              size="sm"
+            />
+          </ToolbarGroup>
+        </ToolbarLane>
 
         <SequencerGrid
           tracks={tracks}

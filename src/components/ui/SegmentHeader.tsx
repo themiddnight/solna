@@ -1,33 +1,56 @@
 import React from 'react';
 import type { PatternSegment } from '@/types';
-import { PATTERN_SEGMENTS } from '../viewMeta';
+import { useAppStore } from '@/store/store';
+import { PatternSegmentRow } from './SegmentedControl';
+import { VIEW_META } from '../viewMeta';
 import { HeaderCard } from './ViewHeader';
 
 export interface SegmentHeaderProps {
   segment: PatternSegment;
-  /** Machine-computed context, e.g. the beat segment's "16-Step · 4/4". */
-  badge?: React.ReactNode;
-  /** Right-hand control cluster. */
+  /**
+   * Right-hand control cluster. Only what belongs to the TAB lives here — a
+   * segment's own solo and its context badge sit on that segment's content
+   * card instead, beside the thing they describe.
+   */
   actions?: React.ReactNode;
   /** Absolutely-positioned extras that belong to the header, e.g. save toasts. */
   children?: React.ReactNode;
 }
 
 /**
- * The header card a Pattern SEGMENT opens with — ViewHeader's sibling, sharing
- * its card so the two cannot drift.
+ * The header the Pattern tab opens with — ViewHeader's sibling, sharing its
+ * card so the two cannot drift.
  *
- * Pattern deliberately has no tab-level header of its own: a strip reading
- * "Pattern" directly under a segment row that already names the segment is
- * duplication, while each segment owns an actions cluster (Accompaniment's
- * quick-save, Beat's meter badge) that needs a home. So the header is per
- * segment, and there is exactly one of them on screen at a time.
+ * It is named for the TAB, not the segment, and carries the segment row
+ * itself. Three things used to assert identity in a stack: the navbar tab
+ * ("Pattern"), the segment row ("Accompaniment"), and this card
+ * ("Accompaniment" again) — the last two saying the same word twice. Now each
+ * part says something the others do not: the title names the view, the row
+ * names which segment, the actions belong to that segment. It also matches the
+ * Sound tab, whose ViewHeader names the tab the same way, and it buys back a
+ * whole row of vertical space.
+ *
+ * An earlier note here argued the opposite — that a strip reading "Pattern"
+ * under a segment row is duplication. That was true while the row sat OUTSIDE
+ * the strip; folding the row in is what dissolved it.
+ *
+ * Still rendered per segment rather than once by PatternView, because each
+ * segment's actions close over that segment's own local state (Accompaniment's
+ * quick-save and its toast) and hoisting them would drag that state up with
+ * them. All three segments stay MOUNTED, though, so only
+ * the active one may draw the row — three copies would put three
+ * `id="segment-lead"` buttons in the DOM.
  */
-export function SegmentHeader({ segment, badge, actions, children }: SegmentHeaderProps) {
-  const meta = PATTERN_SEGMENTS.find((s) => s.id === segment);
-  if (!meta) throw new Error(`SegmentHeader: unknown segment "${segment}"`);
+export function SegmentHeader({ segment, actions, children }: SegmentHeaderProps) {
+  const activeSegment = useAppStore((s) => s.patternSegment);
+  const { icon, title } = VIEW_META.pattern;
   return (
-    <HeaderCard icon={meta.icon} title={meta.title} badge={badge} actions={actions}>
+    <HeaderCard
+      icon={icon}
+      title={title}
+      viewControls={activeSegment === segment ? <PatternSegmentRow /> : undefined}
+      actions={actions}
+    >
       {children}
     </HeaderCard>
   );

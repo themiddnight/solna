@@ -16,6 +16,7 @@ import { applyPreset, presetById } from '../audio/presetRegistry';
 import { progressionById, resolveProgression } from '../audio/chordProgressions';
 import { drumGridById } from '../audio/drumGrids';
 import { requireEffectChain } from '../audio/effectChains';
+import { gainToDb, toLinearGain } from '../utils/gainUnits';
 import { useAppStore } from './store';
 import { commitRestartAfterStop } from './stopAndRestart';
 import { captureActivePlayers } from './transportSlice';
@@ -177,7 +178,11 @@ export function applyVibeToStore(vibe: ResolvedVibe) {
     store.setPadVoicing(pad.voicing);
     store.setPadDroneDegree(pad.droneDegree);
     store.setPadDroneIntervals(pad.droneIntervals);
-    store.setPadVolume(pad.volume);
+    // `VibeSpec.pad.volume` is an internal voicing constant (DEV-383's divergence 4)
+    // and stays LINEAR like the rest of that family — `padVolume` became a dB fader
+    // in DEV-386, so the conversion happens here at the store boundary rather than
+    // in `src/data/vibes.ts`, which may not call a resolver.
+    store.setPadVolume(gainToDb(toLinearGain(pad.volume)));
   }
   // Mute is a toggle, not a setter, so it is expressed as "the state the vibe
   // wants" and only touched when it differs — read live, because the setters

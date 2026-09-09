@@ -335,10 +335,29 @@ class AudioEngine {
    *  no-ops safely like every other and applyEngineSnapshot re-applies. */
   private drumTrackLevels = new Map<string, number>();
 
-  // One analyser per source bus, for per-layer scopes (the Synth view's
+  // One analyser per source TAP, for per-layer scopes (the Synth view's
   // oscilloscope follows its Target selector). Cleared with sourceBuses in
   // setupMasterChain — an AnalyserNode belongs to the context that made it.
   private sourceAnalysers = new Map<string, AnalyserNode>();
+
+  // One analyser per source BUS, for the per-layer meters on the Sound mixer.
+  // Separate from sourceAnalysers because it reads a different POINT (after
+  // the bus gain, so fader/mute/solo are in it) for a different QUESTION —
+  // "how much of this layer is in the mix?" rather than "how hard is this
+  // patch driving?" — and is configured for level rather than for a trace.
+  // Cleared with sourceBuses, for the same reason they are.
+  private sourceLevelAnalysers = new Map<string, AnalyserNode>();
+
+  /** Unity pass-through in front of each source bus, so a per-layer scope can
+   *  read the layer PRE-fader. Everything that used to connect straight to
+   *  getSourceBus() connects here instead; the tap's only output is the bus,
+   *  so it changes no gain and no routing. It exists because the scope has to
+   *  answer "how hard is this patch driving?", and a post-fader tap answers
+   *  "how much of it is in the mix?" — with the buses starting at −6 dB, a
+   *  patch at full scale painted a half-height trace and pulling a fader
+   *  shrank the wave of a patch that had not changed. Cleared with
+   *  sourceBuses: a tap from a dead context feeds a dead bus. */
+  private sourceTaps = new Map<string, GainNode>();
   private sourceMuted = new Map<string, boolean>();
   private sourceGains = new Map<string, number>();
 
@@ -736,8 +755,10 @@ class AudioEngine {
     // impulses built against the old one must not survive into the new graph.
     // Do NOT write new code that relies on these running.
     this.sourceBuses.clear();
+    this.sourceTaps.clear();
     this.drumTrackGains.clear();
     this.sourceAnalysers.clear();
+    this.sourceLevelAnalysers.clear();
     this.levelAnalyser = null;
     this.impulseCache.clear();
     this.reverbDecay = 2.0;
@@ -819,7 +840,7 @@ class AudioEngine {
     this.drumBusFilter.type = this.drumFilterType;
     this.drumBusFilter.frequency.value = this.drumFilterCutoff;
     this.drumBusFilter.Q.value = this.drumFilterResonance;
-    this.drumBusFilter.connect(this.getSourceBus('sequencer'));
+    this.drumBusFilter.connect(this.getSourceTap('sequencer'));
 
     // Same settings, wired to the reverb send only.
     this.drumSendFilter = this.ctx.createBiquadFilter();
@@ -1220,8 +1241,10 @@ class AudioEngine {
     filter.connect(gainNode);
     gainNode.connect(tremoloGain);
 
-    // Route through the per-source bus (lazily created) to dry/effects
-    tremoloGain.connect(this.getSourceBus(source));
+    // Route through the per-source tap, and from there the bus (both lazily
+    // created), to dry/effects. The tap is unity and exists only so a scope
+    // can read this layer before its fader — see sourceTaps.
+    tremoloGain.connect(this.getSourceTap(source));
 
     osc1.start(now);
     oscSub.start(now);
@@ -1365,6 +1388,23 @@ class AudioEngine {
     }
   }
 
+  /**
+   * When a release of `releaseTime` starting at `now` would leave this voice
+   * ready to tear down: past the AMP release ramp, plus a slop. The single
+   * definition both releaseVoice (which plans it) and stopSource (which
+   * compares against a voice's existing plan) read.
+   *
+   * The amp ramp alone, deliberately — this used to wait for the longer of the
+   * amp and filter tails. Past the amp ramp the voice sits at SILENCE, so the
+   * filter tail is inaudible and only the polyphony slot is still held: the
+   * factory presets ship filterRelease around 0.5 s against a 0.05 s preview
+   * stop, which kept ten times more dead voices alive than there was sound to
+   * justify and put a fast-clicked preview over maxVoicesPerSource.
+   */
+  private plannedTeardownAt(releaseTime: number, now: number): number {
+    return now + Math.max(0.01, releaseTime) + 0.1;
+  }
+
   // Silences one voice: cancels its envelopes, ramps amp/filter down, and
   // tears the nodes down after the release tail.
   private releaseVoice(voice: SynthVoice, releaseTime: number, now: number): void {
@@ -1384,8 +1424,9 @@ class AudioEngine {
     // teardown timer — these values are pure arithmetic and cannot throw,
     // so the `finally` block can always use them to schedule teardown.
     const filterRelease = Math.max(0.01, voice.filterRelease);
+    const teardownAt = this.plannedTeardownAt(releaseTime, now);
     const teardownDelayMs =
-      (Math.max(releaseTime, filterRelease) + Math.max(0, now - this.ctx.currentTime) + 0.1) * 1000;
+      (teardownAt - now + Math.max(0, now - this.ctx.currentTime)) * 1000;
 
     try {
       // The release has to begin at the value the envelope ACTUALLY has at
@@ -1436,7 +1477,7 @@ class AudioEngine {
       // rearmVoiceTeardowns() re-derives the delay from this after any resume,
       // because currentTime freezes while the context is suspended and the
       // wall-clock timer does not.
-      voice.teardownAt = now + Math.max(releaseTime, filterRelease) + 0.1;
+      voice.teardownAt = teardownAt;
       if (voice.teardownTimer !== undefined) clearTimeout(voice.teardownTimer);
       voice.teardownTimer = setTimeout(() => this.finishVoiceTeardown(voice), teardownDelayMs);
     }
@@ -1499,6 +1540,21 @@ class AudioEngine {
         this.silenceVoiceNow(voice, now);
         continue;
       }
+      // A voice already fading toward a teardown no later than the one this
+      // stop would plan is already stopping, so re-releasing it changes
+      // nothing audible — but releaseVoice re-arms its teardown timer, and a
+      // held preview stops its source on every press AND release. Clicking
+      // faster than the tail is long therefore kept every dead voice in
+      // sourceVoices indefinitely; past maxVoicesPerSource, stealOldestVoice
+      // can only steal voices with no release planned — the notes of the
+      // chord being pressed right now — so the preview collapsed to its last
+      // note and stayed there. A SHORTER stop still falls through and cuts
+      // the tail, which is what makes this a skip and not a blanket guard.
+      if (
+        voice.releaseScheduledAt !== undefined
+        && voice.teardownAt !== undefined
+        && voice.teardownAt <= this.plannedTeardownAt(releaseTime, now)
+      ) continue;
       voice.releaseScheduledAt = now;
       voice.releaseTime = releaseTime;
       this.releaseVoice(voice, releaseTime, now);
@@ -1577,6 +1633,22 @@ class AudioEngine {
       this.sourceBuses.set(source, bus);
     }
     return bus;
+  }
+
+  // The pre-fader entry point for a source. Unity, one output (the bus), never
+  // touched by setSourceGain/setSourceMuted — those stay on the bus, so mute
+  // and fader keep working exactly as before while the tap keeps carrying the
+  // patch's own level for the scope to read.
+  private getSourceTap(source: string): GainNode {
+    if (!this.ctx) throw new Error('AudioContext not initialized');
+    let tap = this.sourceTaps.get(source);
+    if (!tap) {
+      tap = this.ctx.createGain();
+      tap.gain.value = 1;
+      tap.connect(this.getSourceBus(source));
+      this.sourceTaps.set(source, tap);
+    }
+    return tap;
   }
 
   // Mute/unmute an entire source layer on its bus: ~10 ms ramp (click-free),
@@ -2825,12 +2897,21 @@ class AudioEngine {
   }
 
   /**
-   * Analyser tapping one source layer's bus — after the VCA and tremolo,
-   * before the parallel sends and the master chain. That is deliberately a
-   * different picture from `getAnalyser()`, which is an observe-only send off
-   * `masterGain` — post-fader, pre-dynamics — and so shows every layer summed
-   * with the effect returns: a per-layer scope is what lets the Synth view
-   * show the patch being edited rather than everything at once.
+   * Analyser tapping one source layer's PRE-FADER tap — after the VCA and
+   * tremolo, before the layer's own bus gain, the parallel sends and the
+   * master chain. That is deliberately a different picture from
+   * `getAnalyser()`, which is an observe-only send off `masterGain` —
+   * post-fader, pre-dynamics — and so shows every layer summed with the effect
+   * returns: a per-layer scope is what lets the Synth view show the patch
+   * being edited rather than everything at once.
+   *
+   * Pre-fader is the half that is easy to get wrong. The scope reads a raw
+   * −1..+1 waveform with no scaling of any kind, so its full height IS full
+   * scale; tapping after the bus gain made "full scale" mean "full scale after
+   * a −6 dB default trim", which painted a half-height trace for a patch that
+   * was in fact as loud as it can be, and shrank the wave whenever a fader
+   * moved even though the patch had not changed. The fader belongs to the
+   * mix, and the mix is what the master VU meter reads.
    *
    * Created on demand and kept, so repeated calls hand back the same node.
    * A larger fftSize than the master analyser's 256 buys a smoother trace,
@@ -2845,8 +2926,46 @@ class AudioEngine {
       analyser.smoothingTimeConstant = 0.4;
       // Observe-only: the bus keeps its own path to the sends and the dry
       // gain, so the analyser needs no output of its own.
-      this.getSourceBus(source).connect(analyser);
+      this.getSourceTap(source).connect(analyser);
       this.sourceAnalysers.set(source, analyser);
+    }
+    return analyser;
+  }
+
+  /**
+   * Analyser for one source layer's LEVEL — an observe-only send off that
+   * layer's BUS, so it is POST-fader. It is the per-channel counterpart of
+   * `getMasterLevelAnalyser()` and reads the same way: `getFloatTimeDomainData`
+   * into `src/utils/meterLevel.ts`, with no dB computed here.
+   *
+   * Post-fader is the whole point, and it is the half that is easy to get
+   * wrong. A mixer meter sits beside a fader and has to answer "how much of
+   * this layer is in the mix?" — a pre-fader reading would not move when the
+   * fader did, which next to a fader reads as a broken meter. It also gets
+   * mute and solo for free: `setSourceGain` and `setSourceMuted` both write
+   * this same bus gain, and engineSync routes solo through `setSourceMuted`,
+   * so a silenced layer meters silent without src/components/ computing any
+   * audibility of its own (which it may not do — it cannot import this file).
+   *
+   * Do NOT merge this with `getSourceAnalyser()`. That one is deliberately
+   * PRE-fader because the Synth view's scope must show the patch being edited
+   * at its own level; two questions, two tap points, two nodes.
+   *
+   * Configured like `levelAnalyser`: a long window for a stable RMS, and no
+   * smoothing — inert on time-domain reads, and written so the two level taps
+   * are visibly the same reading taken in two places.
+   */
+  getSourceLevelAnalyser(source: string): AnalyserNode | null {
+    if (!this.ctx) return null;
+    let analyser = this.sourceLevelAnalysers.get(source);
+    if (!analyser) {
+      analyser = this.ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0;
+      // Observe-only: the bus keeps its own paths to the dry gain and the
+      // sends, so the analyser needs no output of its own.
+      this.getSourceBus(source).connect(analyser);
+      this.sourceLevelAnalysers.set(source, analyser);
     }
     return analyser;
   }

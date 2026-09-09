@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { cx } from './cx';
 
 export type IconButtonSize = 'xs' | 'sm' | 'md';
-export type IconButtonVariant = 'ghost' | 'outline' | 'primary' | 'error';
+export type IconButtonVariant = 'ghost' | 'outline' | 'primary' | 'warning' | 'error';
 
 /** The shape every icon button shares; the guard test regexes for it. */
 export const ICON_BUTTON_BASE = 'btn btn-square';
@@ -14,6 +14,14 @@ const SIZE_CLASS: Record<IconButtonSize, string> = {
 };
 
 /**
+ * `warning` is here so a button that sits ON a warning surface — the solo
+ * chip's clear × — can be one daisyUI class instead of a call-site override.
+ * Colour variants carry BOTH halves daisyUI needs: `--btn-fg` (so the glyph
+ * matches the surface's own content colour) and `--btn-color` (which is what
+ * the hover fill is derived from). A `btn-ghost` on that surface gets neither,
+ * and falls back to `base-content` and `base-200` — a near-white glyph at rest
+ * and, on hover, a near-black disc under a near-black glyph.
+ *
  * `outline` is *this app's* outlined icon button — a ghost button with an
  * explicit base-300 border — not daisyUI's `btn-outline`, which paints the
  * border in the button's own colour and would change four call sites' look.
@@ -27,6 +35,7 @@ const VARIANT_CLASS: Record<IconButtonVariant, string> = {
   ghost: 'btn-ghost',
   outline: 'btn-ghost border border-base-300',
   primary: 'btn-primary',
+  warning: 'btn-warning',
   error: 'btn-error',
 };
 

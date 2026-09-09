@@ -40,6 +40,33 @@ describe('BottomInputDock', () => {
     expect(html).not.toContain('btn-pad-kick');
   });
 
+  test('collapsed header states the active panel and keyboard mode', () => {
+    const html = renderToString(
+      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
+    );
+    expect(html).toContain('input-deck-collapsed-summary');
+    expect(html).toContain('Keyboard');
+    expect(html).toContain('Scale');
+    expect(html).toContain('Current input: Keyboard');
+  });
+
+  test('collapsed header on the drums panel names no keyboard mode', () => {
+    useAppStore.setState({ isInputPanelOpen: false, inputPanelMode: 'drums' });
+    const html = renderToString(
+      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
+    );
+    expect(html).toContain('Current input: Drums');
+    expect(html).not.toContain('Scale');
+  });
+
+  test('the collapsed summary is gone once the deck is open', () => {
+    useAppStore.setState({ isInputPanelOpen: true, inputPanelMode: 'keyboard' });
+    const html = renderToString(
+      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
+    );
+    expect(html).not.toContain('input-deck-collapsed-summary');
+  });
+
   test('keyboard tab renders the scale badge, octave controls and mode radio group', () => {
     useAppStore.setState({ isInputPanelOpen: true, inputPanelMode: 'keyboard' });
     const html = renderToString(

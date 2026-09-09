@@ -80,9 +80,14 @@ export interface DrumGrid {
   /** The meter this grid was authored in. */
   meter: MeterId;
   /**
-   * The drum kit this rhythm was written for, by `DRUM_KITS` name. The
-   * sequencer applies it with the grid; a vibe names its own `soundKit` and
-   * may disagree, because a vibe chooses a sound as well as a rhythm.
+   * The drum kit this rhythm was written for, by `DRUM_KITS` name.
+   *
+   * Provenance, not an instruction: nothing applies it. The sequencer's grid
+   * menu loads rows only — the kit is a Sound-tab control and a Pattern-tab
+   * pick must not rewrite it — and a vibe names its own `soundKit`, because a
+   * vibe chooses a sound as well as a rhythm. The field stays because it
+   * records what the rhythm was heard on, which is what a re-voicing decision
+   * is judged against.
    */
   kit: string;
   /**

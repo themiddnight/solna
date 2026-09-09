@@ -70,7 +70,7 @@ import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { SegmentHeader } from "../ui/SegmentHeader";
 import { ModuleHeader } from "../ui/ModuleHeader";
 import { GroupFrame } from "../ui/GroupFrame";
-import { COUNT_BADGE, HEADER_BADGE } from '../ui/fieldClasses';
+import { COUNT_BADGE, HEADER_BADGE, SECTION_HEADER } from '../ui/fieldClasses';
 import { SortableChordCard } from "./chord/SortableChordCard";
 import { ChordModulePanel } from "./chord/ChordModulePanel";
 import { BassModulePanel } from "./chord/BassModulePanel";
@@ -675,8 +675,15 @@ export const ChordView = React.memo(function ChordView() {
           }
         >
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-base-content uppercase tracking-wider">
-              Active Chord Progression Loop
+            {/* `Chord Progression`, not `Active Chord Progression Loop`:
+                the navbar's loop selector already names the active loop, so
+                `Active` and `Loop` restated it. SECTION_HEADER by constant —
+                the literal that used to sit here spelled the same five classes
+                in a different ORDER, which slipped past both guards in
+                fieldClasses.test.ts (one matches the exact string, the other a
+                fixed-order regex). That test is order-independent now. */}
+            <span className={SECTION_HEADER}>
+              Chord Progression
             </span>
             <span className={HEADER_BADGE}>
               {chords.length} Chords
@@ -731,10 +738,10 @@ export const ChordView = React.memo(function ChordView() {
                   className="btn btn-xs btn-soft group gap-1.5 h-auto py-1 normal-case"
                   title={`Click to add ${formatChordLabel(diatonic.root, diatonic.quality, spellingKey)} (${diatonic.degreeName})`}
                 >
-                  <span className="font-mono text-[10px] text-module-chord font-bold bg-base-300 px-1.5 py-0.5 rounded-selector">
+                  <span className="text-[10px] text-module-chord font-bold bg-base-300 px-1.5 py-0.5 rounded-selector">
                     {diatonic.degreeName}
                   </span>
-                  <span className="font-mono font-semibold">
+                  <span className="font-semibold">
                     {formatChordLabel(diatonic.root, diatonic.quality, spellingKey)}
                   </span>
                   <span
@@ -799,10 +806,10 @@ export const ChordView = React.memo(function ChordView() {
                   className="btn btn-xs btn-soft btn-secondary group gap-1.5 h-auto py-1 normal-case"
                   title={`Click to add ${borrowed.label}: ${formatChordLabel(borrowed.root, borrowed.quality, spellingKey)}`}
                 >
-                  <span className="font-mono text-[10px] text-secondary font-bold bg-base-300 px-1.5 py-0.5 rounded-selector">
+                  <span className="text-[10px] text-secondary font-bold bg-base-300 px-1.5 py-0.5 rounded-selector">
                     {borrowed.label}
                   </span>
-                  <span className="font-mono font-semibold">
+                  <span className="font-semibold">
                     {formatChordLabel(borrowed.root, borrowed.quality, spellingKey)}
                   </span>
                   <span
@@ -882,6 +889,8 @@ export const ChordView = React.memo(function ChordView() {
                     isActive={isActive}
                     activeBeat={activeBeat}
                     beatsPerBar={beatsPerBar}
+                    scaleRoot={scaleRoot}
+                    scaleType={scaleType}
                     updateChord={updateChord}
                     removeChord={removeChord}
                     handleMoveChord={handleMoveChord}
@@ -900,7 +909,7 @@ export const ChordView = React.memo(function ChordView() {
           sm:gap-4 reproduces the space-y-3 sm:space-y-4 the root div above
           applies to its direct children — the three panels stop being direct
           siblings once wrapped, so that spacing no longer reaches them. */}
-      <GroupFrame className="flex flex-col gap-3 sm:gap-4">
+      <GroupFrame className="flex flex-col gap-3 p-3">
         {/* Chord Module Panel */}
         <ChordModulePanel
           onPatternPreviewDown={handleChordPatternPreviewMouseDown}

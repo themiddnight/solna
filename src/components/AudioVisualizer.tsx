@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { audioEngine } from '../audio/engine';
 import {
   createThemePalette,
+  resolveThemeFontFamily,
   rgbToCss,
   subscribeToThemeChange,
   type Rgb,
@@ -560,7 +561,12 @@ export const AudioVisualizer = React.memo(function AudioVisualizer({
 
         // 2. Axis scale labels.
         c.fillStyle = tokenColor('--color-base-content', 0.6);
-        c.font = "8px ui-monospace, SFMono-Regular, Menlo, monospace";
+        // Canvas cannot take a class, so the family is named here — but READ
+        // from `--font-sans` rather than re-typed, the same way every colour on
+        // this canvas comes from a token. A literal here is a third copy of the
+        // stack that a rebrand would leave behind, and the theme guard cannot
+        // catch it (it bans monospace, not sans).
+        c.font = `8px ${resolveThemeFontFamily()}`;
         c.fillText('+1', 3, 9);
         c.fillText(' 0', 3, centerY + 3);
         c.fillText('-1', 3, h - 5);
@@ -658,8 +664,16 @@ export const AudioVisualizer = React.memo(function AudioVisualizer({
       if (!containerRef.current || !canvas) return;
       const rect = containerRef.current.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      const width = Math.round(rect.width * dpr);
+      const height = Math.round(rect.height * dpr);
+      // Guarded, because ASSIGNING either attribute reallocates the backing
+      // bitmap and clears it — even when the value is identical. The effect
+      // re-observes on every `source`/`mode`/`colorTheme` change (source is the
+      // Sound tab's control target), so every target-chip click was dropping a
+      // frame to redo work that changed nothing.
+      if (canvas.width === width && canvas.height === height) return;
+      canvas.width = width;
+      canvas.height = height;
       // setTransform, not scale: ResizeObserver fires this on every layout
       // change and scale() multiplies onto whatever transform is already
       // there, so repeated resizes compounded to dpr^n.
@@ -698,9 +712,18 @@ export const AudioVisualizer = React.memo(function AudioVisualizer({
       className={`relative overflow-hidden ${className}`}
       style={{ height }}
     >
+      {/* absolute, not in flow: a canvas's WIDTH/HEIGHT ATTRIBUTES are its
+          intrinsic size, and handleResize writes rect.height * dpr into the
+          height attribute. In flow that closes a loop — attribute grows the
+          canvas's intrinsic height, which grows the container, which makes
+          handleResize write a bigger attribute — and it only bites when the
+          container's height is not already definite (a caller passing
+          height="auto" and stretching), and only at dpr > 1, so a 1x display
+          never shows it. Taking the canvas out of flow means the container is
+          sized by its caller alone and the canvas can only ever follow. */}
       <canvas
         ref={canvasRef}
-        className={`w-full h-full block transition-opacity ${
+        className={`absolute inset-0 w-full h-full block transition-opacity ${
           variant === 'inline' ? '' : 'cursor-pointer'
         }`}
         title={variant === 'inline' ? undefined : 'Click to toggle visualizer mode'}

@@ -3,6 +3,8 @@ import {
   Sun,
   Moon,
   ChevronDown,
+  LocateFixed,
+  LocateOff,
 } from "lucide-react";
 import { Layer, layerForTab, ViewMode } from "../types";
 import { defaultTabForLayer, tabsForLayer } from "../routing/tabRouting";
@@ -11,10 +13,11 @@ import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from "@/utils/noteSpell
 import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/storage";
 import { useAppStore } from "../store/store";
 import { useLiveStore } from "./ui/useLiveStore";
+import { GROUP_LABEL, HEADER_FIELD_SHELL, HEADER_GROUP, HEADER_SELECT } from "./ui/fieldClasses";
 import { IconButton } from "./ui/IconButton";
 import { Wordmark } from "./ui/Wordmark";
 import { LoopSelector } from "./loop/LoopSelector";
-import { VIEW_META, PATTERN_SEGMENTS } from "./viewMeta";
+import { VIEW_META } from "./viewMeta";
 import { sessionLabel } from "./project/projectManagerFlow";
 
 /** The two layers in toggle order. Labels are user-facing copy. */
@@ -59,7 +62,7 @@ export function TabButton({ view, activeTab, onSelect, labelClassName }: TabButt
       aria-current={isActive ? 'page' : undefined}
       aria-label={tabLabel}
       onClick={() => onSelect(view)}
-      className={`btn btn-sm join-item flex-1 sm:flex-initial min-w-0 px-2 sm:px-2.5 xl:px-3 gap-1 xl:gap-1.5 text-xs font-bold ${
+      className={`btn btn-sm join-item min-w-0 px-2 sm:px-2.5 xl:px-3 gap-1 xl:gap-1.5 text-xs font-bold ${
         isActive ? 'btn-active btn-primary' : 'btn-ghost'
       }`}
       title={tabLabel}
@@ -70,52 +73,6 @@ export function TabButton({ view, activeTab, onSelect, labelClassName }: TabButt
   );
 }
 
-
-/**
- * Pattern's three segments. Defined here, with the other nav chrome, so it
- * shares NAV_GROUP_CLASS and the join + btn + btn-active idiom with the tab
- * buttons above it — a segment row built from its own classes would drift out
- * of visual step with the tabs on the first restyle.
- *
- * It is RENDERED by PatternView, not by Header: the spec puts the row on its
- * own line under the vibes bar, and mounting it inside the branch that already
- * gates on `activeTab === 'pattern'` makes "only on Pattern" structural rather
- * than a second comparison that could disagree with the first.
- *
- * Unlike TabButton the labels are never hidden. There are only three of them
- * and they carry the whole of the user's sense of where they are inside the
- * tab; the tab buttons can afford icon-only below `xl` because the view header
- * underneath repeats the name, and here the view header IS per segment.
- */
-export function PatternSegmentRow() {
-  const patternSegment = useAppStore((s) => s.patternSegment);
-  const setPatternSegment = useAppStore((s) => s.setPatternSegment);
-
-  return (
-    <div className={`${NAV_GROUP_CLASS} inline-flex items-center`}>
-      {PATTERN_SEGMENTS.map(({ id, label, icon: Icon }) => {
-        const isActive = patternSegment === id;
-        return (
-          <button
-            key={id}
-            id={`segment-${id}`}
-            type="button"
-            aria-current={isActive ? 'page' : undefined}
-            aria-label={label}
-            onClick={() => setPatternSegment(id)}
-            className={`btn btn-sm join-item min-w-0 px-2 sm:px-3 gap-1 sm:gap-1.5 text-xs font-bold ${
-              isActive ? 'btn-active btn-primary' : 'btn-ghost'
-            }`}
-            title={label}
-          >
-            <Icon className="w-4 h-4 shrink-0" />
-            <span className="truncate">{label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 interface ScaleSelectsProps {
   idPrefix: string;
@@ -142,9 +99,12 @@ export function ScaleSelects({
         id={`${idPrefix}-root`}
         value={scaleRoot}
         onChange={(e) => setScaleRoot(e.target.value)}
-        className={`select select-sm select-ghost font-bold text-primary ${
-          stacked ? 'w-full' : 'min-w-24'
-        }`}
+        // `w-*`, never `min-w-*`: a min-width keeps the select from ever
+        // shrinking, which is what makes HEADER_SELECT's ellipsis unreachable.
+        // The widths are tuned against how much room the navbar has; a name
+        // too long for one ellipsises and stays whole in `title`. The dropdown
+        // copy is `w-full`, where there is room for all of it.
+        className={`${HEADER_SELECT} text-primary ${stacked ? 'w-full' : 'w-18'}`}
         title="Root Note"
       >
         {KEY_OPTIONS.map((option) => (
@@ -157,9 +117,7 @@ export function ScaleSelects({
         id={`${idPrefix}-type`}
         value={scaleType}
         onChange={(e) => setScaleType(e.target.value)}
-        className={`select select-sm select-ghost font-bold text-base-content/80 ${
-          stacked ? 'w-full' : 'min-w-36'
-        }`}
+        className={`${HEADER_SELECT} text-base-content/80 ${stacked ? 'w-full' : 'w-36'}`}
         title="Scale Type"
       >
         {Object.keys(SCALES).map((s) => (
@@ -190,21 +148,68 @@ export function ProjectNameLabel({ layer, currentProjectId, currentProjectName }
   if (layer !== 'song') return null;
   const label = sessionLabel(currentProjectId, currentProjectName);
   return (
-    <span
-      id="header-project-name"
-      title={label}
-      className={`hidden sm:inline text-xs font-semibold truncate max-w-[10rem] ${
-        currentProjectId ? 'text-base-content/80' : 'text-base-content/50 italic'
-      }`}
-    >
-      {label}
-    </span>
+    // Same shell and caption as the loop picker on the other layer, in the same
+    // place in the row: each layer opens with what its tabs are editing — a
+    // loop there, the project here. The name is a plain span and stays one, so
+    // the shell here is a frame around a READING, not a control the way the
+    // loop picker is; captioning it is what stops "Untitled project" from
+    // reading as a button someone forgot to style.
+    <div className={`hidden sm:flex ${HEADER_FIELD_SHELL}`}>
+      <span className={GROUP_LABEL}>Project</span>
+      <span
+        id="header-project-name"
+        title={label}
+        className={`text-xs font-semibold truncate max-w-[10rem] ${
+          currentProjectId ? 'text-base-content/80' : 'text-base-content/50 italic'
+        }`}
+      >
+        {label}
+      </span>
+    </div>
   );
 }
 
-/** Shared shell for every header group: the daisyUI join plus this app's chrome. */
-const NAV_GROUP_CLASS =
-  'join bg-base-200 border border-base-300 rounded-box p-1 shrink-0';
+/**
+ * Arrange's follow-the-playhead toggle. Song layer only — it is the same
+ * `layer !== 'song'` gate `ProjectNameLabel` uses, and for the same reason it
+ * sits beside it: the control belongs to what the song tabs are editing, not
+ * to the tabs.
+ *
+ * Deliberately shown on BOTH song tabs rather than only on Arrange. It is a
+ * stored preference, so setting it from Master FX is meaningful, and gating it
+ * on the tab would shift the tab row sideways every time the user crossed
+ * between the two — moving the buttons out from under the pointer that is
+ * clicking them.
+ *
+ * Takes `layer` as a prop for the same testability reason ProjectNameLabel
+ * does: a rendered `<Header />` can never reach the song layer under
+ * `renderToString` (see .claude/rules/testing.md).
+ */
+export function FollowPlayheadToggle({ layer }: { layer: Layer }) {
+  // useLiveStore, not a plain useAppStore selector: this component is rendered
+  // standalone in the suite and a plain selector would serve the store's
+  // creation-time value under renderToString, making the "off" state
+  // untestable (see ui/useLiveStore.ts and .claude/rules/testing.md).
+  const followPlayhead = useLiveStore((s) => s.followPlayhead);
+  const toggleFollowPlayhead = useLiveStore((s) => s.toggleFollowPlayhead);
+  if (layer !== 'song') return null;
+  return (
+    <IconButton
+      id="btn-follow-playhead"
+      label={followPlayhead ? 'Following the playing loop — click to stop' : 'Follow the playing loop'}
+      aria-pressed={followPlayhead}
+      active={followPlayhead}
+      icon={
+        followPlayhead ? (
+          <LocateFixed className="w-4 h-4 text-primary" />
+        ) : (
+          <LocateOff className="w-4 h-4 opacity-60" />
+        )
+      }
+      onClick={toggleFollowPlayhead}
+    />
+  );
+}
 
 export type SolnaTheme = 'solna-dark' | 'solna-light';
 
@@ -295,7 +300,7 @@ export const Header = React.memo(function Header() {
             navbar a third row on a phone. The mark alone still identifies the
             app. */}
         <Wordmark textClassName="hidden sm:inline" dirty={dirty} onClick={() => setIsProjectManagerOpen(true)} />
-        <div className={NAV_GROUP_CLASS}>
+        <div className={HEADER_GROUP}>
           {LAYER_META.map(({ layer: l, label }) => {
             const isActive = layer === l;
             return (
@@ -319,42 +324,56 @@ export const Header = React.memo(function Header() {
         </div>
       </div>
 
-      {/* Primary navigation: the active layer's tabs.
-          ONE branch over `tabsForLayer`, the same function the router validates
-          a URL with, so the nav and the routes cannot name different tabs. The
-          two layers rendered identical markup for everything except the song
-          tabs' `labelClassName`, and keeping them apart meant restyling a tab
-          button in two places. */}
-      <nav className="flex items-center justify-center order-3 md:order-2 w-full md:w-auto shrink-0">
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {tabsForLayer(layer).map((view) => (
-            <div
-              key={view}
-              className={`${NAV_GROUP_CLASS} flex items-center`}
-            >
-              <TabButton
-                view={view}
-                activeTab={activeTab}
-                onSelect={setActiveTab}
-                labelClassName={layer === 'song' ? 'truncate sm:inline' : undefined}
-              />
-            </div>
-          ))}
-        </div>
-      </nav>
+      {/* Subject, Key/Scale, Tabs & Theme Actions, in that order — broad to
+          specific, left to right: WHAT is being edited (loop picker or project
+          name), the key it is in, then WHICH view of it (Sound/Pattern or
+          Arrange/Master FX) as one `join`, per the loop/song layer switcher's
+          own idiom, so the whole right-hand cluster reads as one row. */}
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        {/* What the tabs are editing leads the cluster, ahead of the tabs
+            themselves — the loop picker on the loop layer, the project name on
+            the song layer, exactly one of the two per layer. Reading the row
+            left to right now says "this loop → this view of it" rather than
+            the other way round, and the two layers open the same way. */}
+        {layer === 'loop' && <LoopSelector />}
+        <ProjectNameLabel
+          layer={layer}
+          currentProjectId={currentProjectId}
+          currentProjectName={currentProjectName}
+        />
 
-      {/* Loop Selector, Key/Scale & Theme Actions */}
-      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 order-2 md:order-3">
+        {/* Between the subject and the tabs, on the song layer only: what
+            Arrange does with the scroll position while the song plays. */}
+        <FollowPlayheadToggle layer={layer} />
+
+        {/* The key/scale group belongs with the subject, not with the theme
+            button it used to sit beside: "which loop, in which key" is one
+            question, and a master-scale field parked inside the actions zone
+            read as a third kind of thing. Putting it before the tabs also
+            anchors THEM — the most-clicked control in the header — immediately
+            left of the theme toggle on both layers, instead of jumping ~200px
+            sideways whenever the layer changed and this loop-only group
+            appeared or vanished. */}
         {layer === 'loop' && (
           <>
-            <LoopSelector />
             {/* Scale Picker Compact (Desktop >= xl) */}
-            <div className="hidden xl:flex items-center gap-1 bg-base-200 border border-base-300 px-2 py-0.5 rounded-field">
+            <div className={`hidden xl:flex ${HEADER_FIELD_SHELL}`}>
               <ScaleSelects idPrefix="select-master-scale" />
             </div>
 
             {/* Below `xl` (mobile and landscape/portrait tablet): Compact Scale Picker Dropdown */}
-            <details className="dropdown dropdown-end xl:hidden">
+            {/* Centre-aligned on a phone, NOT `dropdown-end`. The panel is
+                224px wide and this summary's right edge sits ~169px into a
+                375px phone, so right-aligning it put both selects 50px off the
+                left of the screen — and the header clips (the app root is
+                `overflow-hidden`), so there was nothing to scroll to.
+                Start-aligning fixes that width and breaks 320px, where the
+                summary sits far enough right to push the panel off the other
+                edge; centring on the summary is the one alignment that clears
+                BOTH, because the summary sits near the middle of a phone
+                header either way. From `sm` up there is room to spare and the
+                panel goes back to hanging off the trigger's right edge. */}
+            <details className="dropdown dropdown-center sm:dropdown-end xl:hidden">
               <summary
                 id="btn-scale-dropdown"
                 className="btn btn-sm btn-ghost gap-1 px-2 text-xs font-bold list-none bg-base-200/70 border border-base-300"
@@ -381,12 +400,24 @@ export const Header = React.memo(function Header() {
             </details>
           </>
         )}
+        {/* Primary navigation: the active layer's tabs.
+            ONE branch over `tabsForLayer`, the same function the router
+            validates a URL with, so the nav and the routes cannot name
+            different tabs. The two layers rendered identical markup for
+            everything except the song tabs' `labelClassName`, and keeping
+            them apart meant restyling a tab button in two places. */}
+        <nav className={`${HEADER_GROUP} flex items-center`}>
+          {tabsForLayer(layer).map((view) => (
+            <TabButton
+              key={view}
+              view={view}
+              activeTab={activeTab}
+              onSelect={setActiveTab}
+              labelClassName={layer === 'song' ? 'truncate sm:inline' : undefined}
+            />
+          ))}
+        </nav>
 
-        <ProjectNameLabel
-          layer={layer}
-          currentProjectId={currentProjectId}
-          currentProjectName={currentProjectName}
-        />
 
         {/* Theme Toggle Button */}
         <IconButton

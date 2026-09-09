@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import React from 'react';
-import { ChannelStrip } from './ChannelStrip';
+import { ChannelStrip, layerVolumeSliderId } from './ChannelStrip';
 
 // Pure props in, markup out — no store, so the zustand/renderToString trap
 // does not apply here.
@@ -10,7 +10,6 @@ describe('ChannelStrip', () => {
     const html = renderToString(
       <ChannelStrip
         idPrefix="chord"
-        label="Chord Level"
         volumeDb={0}
         accentClass="text-primary"
         onVolumeDbChange={() => undefined}
@@ -75,5 +74,21 @@ describe('ChannelStrip', () => {
     );
     expect(html).toContain('w-3.5 h-3.5 text-primary shrink-0');
     expect(html).toContain('class="range range-xs range-primary"');
+  });
+
+  // The label lives at the call site (see loop/SoundMixer), which means the
+  // caller's `htmlFor` and this component's `id` have to agree. They agree
+  // because both call this builder — that is what the export is for.
+  test('the fader carries the shared layer id, so a caller can label it', () => {
+    const html = renderToString(
+      <ChannelStrip
+        idPrefix="pad"
+        volumeDb={-6}
+        accentClass="text-primary"
+        onVolumeDbChange={() => undefined}
+      />,
+    );
+    expect(layerVolumeSliderId('pad')).toBe('slider-pad-layer-volume');
+    expect(html).toContain(`id="${layerVolumeSliderId('pad')}"`);
   });
 });

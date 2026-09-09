@@ -40,6 +40,14 @@
   --radius-field: 0.5rem;
   --radius-box: 0.75rem;
   --border: 1px;
+  /* Flat, and DECLARED flat. daisyUI derives several values through
+     `calc(var(--depth) * …)` — a solid button's border, its inset highlight,
+     its text shadow. Left undeclared the calc is invalid, the whole custom
+     property is thrown away, and each of those falls back: the border lands
+     on `currentColor`, which is why every solid button drew a ring in its own
+     FOREGROUND colour. Declaring 0 is what makes flat actually flat. */
+  --depth: 0;
+  --noise: 0;
 }
 
 @plugin "daisyui/theme" {
@@ -70,6 +78,10 @@
   --radius-field: 0.5rem;
   --radius-box: 0.75rem;
   --border: 1px;
+  /* Both effects off here too — see solna-dark above for why declaring the
+     zero matters rather than leaving it out. */
+  --depth: 0;
+  --noise: 0;
 }
 
 /* Piano keys are physical objects: white stays white and black stays black in
@@ -80,9 +92,10 @@
    murva-brand/design.md §4 (and murva-app's own @theme block): Figtree for
    Latin, Anuphan behind it for Thai. Registering it as --font-sans means the
    `font-sans` utility and Tailwind's --default-font-family both resolve here.
-   No mono face is loaded, also matching murva: `font-mono` and <kbd> fall back
-   to Tailwind's system monospace stack. The utility is reserved for machine
-   values and music notation — see docs/design.md §3. */
+   The app is single-face: nothing is monospaced. Numbers that must not jitter
+   as they tick use `tabular-nums`, never `font-mono` — see docs/design.md §3.
+   The base rule below is what enforces it for the elements the user agent
+   monospaces on its own (<kbd>, <code>, <pre>, <samp>). */
 @theme {
   --font-sans: "Figtree", "Anuphan", sans-serif;
 }
@@ -428,6 +441,15 @@
 @layer base {
   body {
     font-family: "Figtree", "Anuphan", sans-serif;
+  }
+
+  /* The user agent (and daisyUI's .kbd) monospaces these by default; solna
+     loads no mono face and uses none, so they inherit the sans stack. */
+  kbd,
+  code,
+  pre,
+  samp {
+    font-family: inherit;
   }
 }
 

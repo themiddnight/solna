@@ -50,8 +50,10 @@ import type { AppStore } from './types';
  * deliberately: the Sound view has one solo button that follows the active
  * target, and it must be able to build a set across targets — clearing on a
  * target change would make a two-track solo set unbuildable on that surface,
- * since each new solo would erase the last. The transport bar's
- * `SOLO · … ×` chip is what keeps a solo set on another target visible.
+ * since each new solo would erase the last. The view header's
+ * `SOLO · … ×` chip (components/ui/SoloChip.tsx) is what keeps a solo set on
+ * another target visible — it rides the shared HeaderCard rather than one
+ * view, so it survives the Sound <-> Pattern hop the set itself survives.
  */
 const SOLO_NAV_SOURCES = {
   layer: (state: AppStore) => layerForTab(state.activeTab),

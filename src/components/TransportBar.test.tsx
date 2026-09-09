@@ -118,10 +118,15 @@ describe('transport meter select', () => {
     }
   });
 
+  // A Tailwind palette class is a family PLUS a shade — `slate-400`, `indigo-500`. The shade is
+  // not decoration in this assertion, it is what keeps it from firing on ordinary utilities that
+  // merely end in a family's name: a bare `not.toContain('slate-')` fails on `-translate-x-1/2`,
+  // which is exactly what the VU meter's tick marks introduced. `scripts/themeTokenGuard.ts`
+  // (`bun run check:theme`) already spells the rule this way and scans every file; this test is
+  // the narrow, in-render version of it and must not enforce a stricter rule than the gate does.
   test('the meter control introduces no raw palette classes', () => {
     const html = renderToString(<TransportBar />);
-    expect(html).not.toContain('indigo-');
-    expect(html).not.toContain('slate-');
+    expect(html).not.toMatch(/\b(?:indigo|slate)-(?:50|[1-9]00|950)\b/);
     expect(html).not.toContain('text-white');
   });
 });
@@ -141,29 +146,21 @@ describe('songModeLabel', () => {
   });
 });
 
-describe('the transport solo chip', () => {
+describe('the transport bar no longer carries the solo chip', () => {
   afterEach(() => {
     useAppStore.setState({ soloTracks: [] });
   });
 
-  test('is absent when nothing is soloed', () => {
-    useAppStore.setState({ soloTracks: [] });
-    const html = renderToString(<TransportBar />);
-    expect(html).not.toContain('badge-track-solo');
-    expect(html).not.toContain('SOLO ·');
-  });
-
-  test('names every soloed track and offers a clear', () => {
+  /**
+   * The `SOLO · … ×` chip moved to the view header (ui/SoloChip.tsx), where a
+   * solo set is visible on both the Sound and Pattern headers it survives.
+   * The bar must not grow a second copy: two clear buttons for one set is a
+   * worse bug than the crowding the move fixed.
+   */
+  test('renders no solo chip even with a solo set', () => {
     useAppStore.setState({ soloTracks: ['lead', 'drums'] });
     const html = renderToString(<TransportBar />);
-    expect(html).toContain('id="badge-track-solo"');
-    expect(html).toContain('SOLO · Lead + Drums');
-    expect(html).toContain('aria-label="Clear solo"');
-  });
-
-  test('the chip is a warning badge — a state that is silencing something', () => {
-    useAppStore.setState({ soloTracks: ['drums'] });
-    const html = renderToString(<TransportBar />);
-    expect(html).toContain('badge badge-sm badge-warning');
+    expect(html).not.toContain('data-solo-chip');
+    expect(html).not.toContain('SOLO ·');
   });
 });

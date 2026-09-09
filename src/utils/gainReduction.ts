@@ -4,7 +4,7 @@
  * `DynamicsCompressorNode.reduction` is a NEGATIVE number of dB: 0 means the
  * stage is passing the signal untouched, -6 means six dB of squash. These
  * helpers are pure — no imports, no globals — so the readout can be tested
- * without a DOM, the same shape as utils/vuMeter.ts.
+ * without a DOM, the same shape as utils/meterScale.ts.
  */
 
 /** Full scale of the reduction bar, in dB. Past this the bar simply pins. */
@@ -12,8 +12,10 @@ export const REDUCTION_METER_FLOOR_DB = -12;
 
 /**
  * Quantisation step, in dB. The readout re-renders only when the reading
- * crosses one — the same discipline VuMeter's segment count follows, and the
- * reason a per-frame value can drive React state at all.
+ * crosses one — the same discipline the level meter's display floor follows,
+ * and the reason a per-frame value can drive React state at all. (It used to
+ * cite VuMeter's segment count; the bar is a continuous fill now and has no
+ * segments.)
  */
 export const REDUCTION_STEP_DB = 0.5;
 

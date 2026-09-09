@@ -308,7 +308,7 @@ export function ChordPresetLibrary({
         header: (
           <div className="flex items-center justify-between text-[11px] font-bold text-base-content/60 uppercase tracking-wider px-1">
             <span>Standard Library Templates ({filteredTemplates.length})</span>
-            <span className="text-[10px] font-normal font-mono text-module-chord">
+            <span className="text-[10px] font-normal text-module-chord">
               Key: {tonic}
             </span>
           </div>
@@ -348,13 +348,13 @@ export function ChordPresetLibrary({
                 {progression.category}
               </span>
             </div>
-            <div className="text-[11px] font-mono text-secondary font-semibold mt-0.5">
+            <div className="text-[11px] text-secondary font-semibold mt-0.5">
               {progression.roman}
             </div>
             <p className="text-[11px] text-base-content/60 mt-1 line-clamp-2">
               {progression.description}
             </p>
-            <div className="text-[10px] font-mono text-base-content/50 mt-1">
+            <div className="text-[10px] text-base-content/50 mt-1">
               In {tonic}: <span className="text-base-content font-semibold">{previewNames}</span>
             </div>
           </div>
@@ -410,7 +410,7 @@ export function ChordPresetLibrary({
                 </span>
               )}
             </div>
-            <div className="text-[11px] font-mono text-module-chord font-semibold mt-0.5">
+            <div className="text-[11px] text-module-chord font-semibold mt-0.5">
               {e.roman}
             </div>
             {e.description && (
@@ -418,7 +418,7 @@ export function ChordPresetLibrary({
                 {e.description}
               </p>
             )}
-            <div className="text-[10px] font-mono text-base-content/50 mt-1">
+            <div className="text-[10px] text-base-content/50 mt-1">
               In {formatKeyLabel(scaleRoot, scaleType)}: <span className="text-base-content font-semibold">{previewNames}</span>
             </div>
           </div>

@@ -28,3 +28,17 @@ describe('PanelCard', () => {
     expect(html).not.toContain('  ');
   });
 });
+
+describe('PanelCard inset', () => {
+  test('renders the recessed shell — no shadow, sunk surface', () => {
+    const html = renderToString(<PanelCard inset>body</PanelCard>);
+    expect(html).toContain('<div class="card bg-base-200 border border-base-300">body</div>');
+    expect(html).not.toContain('shadow-md');
+    expect(html).not.toContain('bg-panel');
+  });
+
+  test('className follows the inset shell', () => {
+    const html = renderToString(<PanelCard inset className="flex-1">body</PanelCard>);
+    expect(html).toContain('class="card bg-base-200 border border-base-300 flex-1"');
+  });
+});

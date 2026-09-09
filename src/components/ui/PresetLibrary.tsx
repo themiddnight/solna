@@ -482,7 +482,7 @@ function SaveModalForm(props: {
               <span className="tabular-nums text-primary block mb-0.5">
                 Chords ({save.chordsSummary.count}):
               </span>
-              <span className="font-mono font-semibold text-base-content">
+              <span className="font-semibold text-base-content">
                 {save.chordsSummary.text}
               </span>
             </div>

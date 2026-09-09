@@ -19,7 +19,7 @@ describe('SimpleSynthPanel theming', () => {
   const html = renderToString(<SimpleSynthPanel params={params} onChangeParams={() => {}} />);
 
   test('macro cards use card/card-body and badge components', () => {
-    expect(html).toContain('card bg-panel');
+    expect(html).toContain('card bg-base-200');
     expect(html).toContain('card-body');
     expect(html).toContain('badge badge-sm');
   });
@@ -60,24 +60,17 @@ describe('SimpleSynthPanel theming', () => {
   });
 
   /**
-   * Simple Mode edits the same three destinations as Pro Mode, so it wears the
-   * same target tint — otherwise the panel gives no hint that a knob is about to
-   * rewrite the chord or bass voice instead of the main synth.
+   * Simple Mode edits the same four destinations as Pro Mode, and the panel
+   * still has to say which — but it no longer says it five times. The macro
+   * cards are compartments of SoundView's Synth section, which carries the
+   * target tint for all of them (docs/design.md §6.5); repeating it per card
+   * painted one fact five times inside one card.
    */
-  test('every card carries the target tint, arp card included', () => {
-    const tinted = renderToString(
-      <SimpleSynthPanel
-        params={params}
-        onChangeParams={() => {}}
-        tintClass="ring-1 ring-module-chord/40 tint-chord"
-      />,
-    );
-    const cards = tinted.match(/class="[^"]*card bg-panel[^"]*"/g) ?? [];
+  test('the macro cards are recessed compartments, and none of them tints itself', () => {
+    const cards = html.match(/class="[^"]*card bg-base-200[^"]*"/g) ?? [];
     expect(cards).toHaveLength(5);
-    for (const card of cards) expect(card).toContain('tint-chord');
-  });
-
-  test('the main-synth target leaves every card untinted', () => {
+    expect(html).not.toContain('bg-panel');
+    expect(html).not.toContain('shadow-md');
     expect(html).not.toContain('tint-chord');
     expect(html).not.toContain('tint-bass');
   });

@@ -5,13 +5,20 @@ import { useCurrentStep, type StepPlayerId } from "../playbackStep";
 /**
  * The drum grid's own container. The left padding clears TrackRow's label
  * gutter and MUST stay in step with it, or the numbers drift off the columns
- * they label: `pl-2` (8px) + gutter + `gap-2` (8px), i.e. `pl-38` for the
- * phone's `w-36` gutter and `pl-44` for the `sm:w-42` one. The min-widths are
+ * they label: gutter + the row's `gap-2` (8px), i.e. `pl-34` for the phone's
+ * `w-32` gutter and `pl-44` for the `sm:w-42` one. The min-widths are
  * SequencerGrid's, repeated because the strip is that grid's sibling, not its
- * child — both must be the same width for the columns to line up.
+ * child — both must be the same width for the columns to line up, and the
+ * `pr-2` is TrackRow's own right padding, without which the strip is 8px
+ * wider than the buttons and every number leans left of its column. So must
+ * the
+ * GAP: these cells are `flex-1` in a flex row of their own, so a gap that
+ * differs from StepRow's `gap-1.5` puts the numbers on a different column
+ * pitch and the drift compounds across the sixteen of them — it was `gap-2`,
+ * which walked the last number 7px off the button it labels.
  */
 const DRUM_HEADER_CLASS =
-  'flex items-center gap-2 mb-2 pl-38 sm:pl-44 min-w-[600px] sm:min-w-[700px]';
+  'flex items-center gap-1.5 mb-2 pl-34 sm:pl-44 pr-2 min-w-[660px] sm:min-w-[700px]';
 
 export interface StepHeaderProps {
   cells: StepCell[];

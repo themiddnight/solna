@@ -51,6 +51,13 @@ export interface StepRowProps<T> {
    * wrapper; the sequencer's row sits inside a flex header and needs `flex-1`.
    */
   rowClassName?: string;
+  /**
+   * Sizing classes on each step BUTTON, replacing the default fixed `h-9`.
+   * The sequencer passes `aspect-square max-h-9` so a drum cell is square at
+   * the width its 11-lane grid can afford rather than a tall sliver; the chord
+   * and bass grids have one row each and keep the fixed height.
+   */
+  stepClassName?: string;
   /** Fired on click with the 0-based step index. The parent cycles the value. */
   onStepClick: (index: number) => void;
 }
@@ -73,6 +80,7 @@ export function StepRow<T>({
   getButtonId,
   activeOverlay = 'label',
   rowClassName = STEP_ROW_CLASS,
+  stepClassName = 'h-9',
   onStepClick,
 }: StepRowProps<T>) {
   return (
@@ -86,7 +94,7 @@ export function StepRow<T>({
             key={cell.index}
             id={getButtonId?.(cell.index)}
             onClick={() => onStepClick(cell.index)}
-            className={`flex-1 h-9 rounded-field transition-all cursor-pointer relative ${
+            className={`flex-1 ${stepClassName} rounded-field transition-all cursor-pointer relative ${
               active
                 ? `${color} shadow-md shadow-primary/20 scale-[0.96]`
                 : cell.isAltBeatGroup
