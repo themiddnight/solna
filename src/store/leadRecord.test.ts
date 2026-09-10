@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore } from './store';
-import { startLeadRecordBridge, leadClockActive, leadMarkerFollowsClock } from './leadRecord';
+import { startMelodyRecordBridges, leadClockActive, leadMarkerFollowsClock } from './leadRecord';
 import { emitNoteInput, resetNoteInputListeners } from '../audio/playback/noteInputBus';
 import { getMeter } from '../utils/meter';
 import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '../utils/stepResolution';
@@ -41,7 +41,7 @@ beforeEach(() => {
     scaleRoot: 'C',
     scaleType: 'Major',
   });
-  stop = startLeadRecordBridge(deps);
+  stop = startMelodyRecordBridges(deps);
 });
 
 afterEach(() => {
@@ -327,5 +327,91 @@ describe('leadMarkerFollowsClock', () => {
 
   test('arming alone, with no clock anywhere, does not move it', () => {
     expect(leadMarkerFollowsClock(markerState({ recordingTrack: 'lead' }))).toBe(false);
+  });
+});
+
+describe('leadRecord — one factory, two bridges', () => {
+  const fxAt = (col: number): string[] => {
+    const state = useAppStore.getState();
+    const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+    return state.fxMelodySteps[leadStoredIndexAt(col, stepsPerBar, TICKS_PER_SIXTEENTH)]
+      .map((n) => n.note)
+      .sort();
+  };
+
+  beforeEach(() => {
+    useAppStore.setState({
+      fxMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
+      fxLoopLength: 1,
+      fxMelodyView: 'chromatic',
+      fxMelodyOctave: 3,
+      fxCursor: 0,
+      fxPlayer: 'stopped',
+    });
+  });
+
+  test('the armed track is the one that gets written, and the other stays empty', () => {
+    useAppStore.setState({ recordingTrack: 'fx' });
+
+    down('C4');
+    up('C4');
+
+    expect(fxAt(0)).toEqual(['C4']);
+    expect(at(0)).toEqual([]);
+  });
+
+  test('with nothing armed, one keypress writes neither grid', () => {
+    useAppStore.setState({ recordingTrack: null });
+
+    down('C4');
+    up('C4');
+
+    expect(at(0)).toEqual([]);
+    expect(fxAt(0)).toEqual([]);
+  });
+
+  test('the fx bridge captures held length through its own setter', () => {
+    useAppStore.setState({ recordingTrack: 'fx', leadPlayer: 'playing' });
+    liveStep = 4;
+    down('C4');
+    liveStep = 8;
+    up('C4');
+
+    const state = useAppStore.getState();
+    const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+    const row = state.fxMelodySteps[leadStoredIndexAt(4, stepsPerBar, TICKS_PER_SIXTEENTH)];
+    expect(row.find((n) => n.note === 'C4')?.len).toBe(8);
+  });
+
+  /**
+   * ONE collector for both tracks, not one per bridge. startLeadLiveClock is a
+   * module singleton whose second concurrent start returns a disposer that
+   * does nothing — so two bridges each believing they own a collector means
+   * the first one to stop tears down the anchors the other is still reading,
+   * with no error anywhere. Hoisting it out of the bridge is what makes that
+   * unrepresentable, and it keeps exactly one holder of the shared clock.
+   */
+  test('starts exactly one anchor collector for both tracks', () => {
+    expect(clockRuns).toBe(0);
+    useAppStore.setState({ leadPlayer: 'playing' });
+    expect(clockRuns).toBe(1);
+    useAppStore.setState({ leadPlayer: 'stopped' });
+    expect(clockRuns).toBe(0);
+  });
+
+  test('a note held on the FX track when the transport stops must not later extend anything', () => {
+    useAppStore.setState({ recordingTrack: 'fx', leadPlayer: 'playing' });
+    liveStep = 4;
+    down('C4');
+
+    useAppStore.setState({ leadPlayer: 'stopped' });
+
+    liveStep = 40;
+    up('C4');
+
+    const state = useAppStore.getState();
+    const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+    const row = state.fxMelodySteps[leadStoredIndexAt(4, stepsPerBar, TICKS_PER_SIXTEENTH)];
+    expect(row.find((n) => n.note === 'C4')?.len).toBe(TICKS_PER_SIXTEENTH);
   });
 });

@@ -7,7 +7,7 @@ import { columnsPerBar, strideFor } from '../utils/stepResolution';
 import { isPlayerActive } from './transportSlice';
 import { useAppStore } from './store';
 import type { PlayerState } from './types';
-import type { MelodyTrackId } from './melodyTracks';
+import { MELODY_TRACKS, type MelodyTrack, type MelodyTrackId } from './melodyTracks';
 
 /**
  * Is there music to play along to?
@@ -93,27 +93,46 @@ interface HeldNote {
 }
 
 /**
- * The bridge from performed notes to the melody grid.
- *
- * ONE subscriber, not a call bolted onto each input source. The bus already
- * settled which events count as somebody playing (see noteInputBus), so this
- * module only has to answer what to do with them — and answering it once is
- * why the computer keyboard, the on-screen keyboard and MIDI all behave the
- * same without three copies of this rule.
- *
- * The cursor never moves, in either mode. Stopped, it IS the write head, so
- * notes played together land together and a key repeat writes nothing new.
- * Playing, the clock is the write head and the cursor is simply left where
- * the user put it — which is what makes "stop returns the marker to where
- * you put it" free, with no save-and-restore step to get wrong.
+ * The two ACTION names this bridge calls. MELODY_TRACKS carries state field
+ * names only (see its docblock), so — exactly like leadSlice's `ACTIONS` and
+ * LeadMelodyGrid's `GRID_ACTIONS` — the setter names are a small typo-checked
+ * literal table here rather than a `record${Id}Note` template the compiler
+ * cannot check against the store.
  */
-export function startLeadRecordBridge(deps: LeadRecordDeps = REAL_CLOCK): () => void {
-  const held = new Map<string, HeldNote>();
+const RECORD_ACTIONS: Record<
+  MelodyTrackId,
+  {
+    record: 'recordLeadNote' | 'recordFxNote';
+    setNoteLength: 'setLeadNoteLength' | 'setFxNoteLength';
+  }
+> = {
+  lead: { record: 'recordLeadNote', setNoteLength: 'setLeadNoteLength' },
+  fx: { record: 'recordFxNote', setNoteLength: 'setFxNoteLength' },
+};
+
+/**
+ * The ONE anchor collector, for both melody tracks.
+ *
+ * Hoisted out of the per-track bridge on purpose. `startLeadLiveClock` is a
+ * module singleton: a second start while one is live is a no-op that returns a
+ * disposer which does nothing (audio/playback/leadLiveClock.ts), so two
+ * bridges each holding "their" collector means the first to stop unsubscribes
+ * and resets the anchors the other is still quantising against — silently, and
+ * only when the two predicates disagree.
+ *
+ * Started and stopped with the music, never at boot: subscribing the shared
+ * clock starts its 25 ms timer, so a permanent subscriber would keep it alive
+ * for the life of the app. One holder, gated on the transport.
+ *
+ * It is NOT gated on the arm as well. Arming mid-playback would then start the
+ * collector from cold, and inputStep() answers null until two anchors have
+ * arrived — so the first notes after arming would land silently on the cursor
+ * while the music played. The collector follows the transport; only writing
+ * follows the arm.
+ */
+export function startLiveClockCollector(deps: LeadRecordDeps = REAL_CLOCK): () => void {
   let stopClock: (() => void) | null = null;
 
-  // The collector is started and stopped with the music, not at boot:
-  // subscribing the shared clock starts its timer, so a permanent
-  // subscriber would keep it alive for the life of the app.
   const syncClock = (active: boolean): void => {
     if (active === (stopClock !== null)) return;
     if (active) {
@@ -122,13 +141,49 @@ export function startLeadRecordBridge(deps: LeadRecordDeps = REAL_CLOCK): () => 
     }
     stopClock?.();
     stopClock = null;
-    // A note still down when the transport stops has no length to compute
-    // against, and its release must not extend anything later.
-    held.clear();
   };
 
-  const unsubscribeTransport = useAppStore.subscribe(leadClockActive, syncClock, {
-    fireImmediately: true,
+  const unsubscribe = useAppStore.subscribe(leadClockActive, syncClock, { fireImmediately: true });
+
+  return () => {
+    unsubscribe();
+    syncClock(false);
+  };
+}
+
+/**
+ * The bridge from performed notes to ONE melody track's grid.
+ *
+ * ONE subscriber per track, not a call bolted onto each input source. The bus
+ * already settled which events count as somebody playing (see noteInputBus),
+ * so this module only has to answer what to do with them — and answering it
+ * once is why the computer keyboard, the on-screen keyboard and MIDI all
+ * behave the same without three copies of this rule.
+ *
+ * Instantiated per MELODY_TRACKS row, the leadSlice precedent: every store
+ * field is read through `track` and every action through RECORD_ACTIONS, so
+ * Lead and FX are one implementation with two rows. Both bridges see every
+ * note; the record action's `recordingTrack === track.id` guard is what makes
+ * exactly one of them write.
+ *
+ * The cursor never moves, in either mode. Stopped, it IS the write head, so
+ * notes played together land together and a key repeat writes nothing new.
+ * Playing, the clock is the write head and the cursor is simply left where
+ * the user put it — which is what makes "stop returns the marker to where
+ * you put it" free, with no save-and-restore step to get wrong.
+ */
+export function startMelodyRecordBridge(
+  track: MelodyTrack,
+  deps: LeadRecordDeps = REAL_CLOCK,
+): () => void {
+  const held = new Map<string, HeldNote>();
+  const actions = RECORD_ACTIONS[track.id];
+
+  // A note still down when the transport stops has no length to compute
+  // against, and its release must not extend anything later. Per bridge,
+  // because the held map is per bridge — the CLOCK is not started here.
+  const unsubscribeTransport = useAppStore.subscribe(leadClockActive, (active) => {
+    if (!active) held.clear();
   });
 
   const unsubscribeInput = subscribeNoteInput((event) => {
@@ -139,20 +194,20 @@ export function startLeadRecordBridge(deps: LeadRecordDeps = REAL_CLOCK): () => 
       const offStep = deps.inputStep();
       if (offStep === null) return;
       const len = heldStepLength(entry.onStep, offStep, entry.stride);
-      // setLeadNoteLength owns all three length invariants, including the
-      // clamp against the loop end — so a note held across the seam is
+      // The track's setNoteLength owns all three length invariants, including
+      // the clamp against the loop end — so a note held across the seam is
       // truncated rather than wrapped, with no special case here.
       //
       // The ARM is re-read here, not assumed from note-on: a press that
-      // started while armed can still be held after Rec is switched off — or
-      // after the arm has moved to the other melody track — and its release
+      // started while armed can still be held after Rec is switched off, or
+      // after the arm has moved to the other melody track, and its release
       // must not reach back and lengthen a note that was never meant to grow
       // past its initial write.
       //
       // > stride, not > 1: a one-cell note is already at that length, and
       // calling the setter for it would be a write with nothing to write.
-      if (len > entry.stride && useAppStore.getState().recordingTrack === 'lead') {
-        useAppStore.getState().setLeadNoteLength(entry.storedIndex, event.note, len);
+      if (len > entry.stride && useAppStore.getState().recordingTrack === track.id) {
+        useAppStore.getState()[actions.setNoteLength](entry.storedIndex, event.note, len);
       }
       return;
     }
@@ -162,26 +217,26 @@ export function startLeadRecordBridge(deps: LeadRecordDeps = REAL_CLOCK): () => 
     if (clockStep === null) {
       // No running clock: the cursor is the write head, and there is no step
       // count to give the note a length with, so it stays one step long.
-      state.recordLeadNote(event.note);
+      state[actions.record](event.note);
       return;
     }
     // A key repeat must not re-date a press that is still down.
     if (held.has(event.note)) return;
 
     const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-    const stride = strideFor(state.leadStepResolution);
-    const columns = state.leadLoopLength * columnsPerBar(stepsPerBar, stride);
+    const stride = strideFor(state[track.stepResolution]);
+    const columns = state[track.loopLength] * columnsPerBar(stepsPerBar, stride);
     const rawColumn = clockStepToGridColumn(clockStep, columns, stride);
-    // Clamped HERE, once, and the same value reused below: recordLeadNote
+    // Clamped HERE, once, and the same value reused below: the record action
     // clamps again internally (defence in depth for its other caller, the
     // stopped-cursor path), but that must not be the only place it happens —
     // two independent clamps of the same raw column agree today only because
     // the wrap already puts rawColumn in range, which is luck, not a
     // guarantee.
-    const column = clampLeadCursor(rawColumn, state.leadLoopLength, stepsPerBar, stride);
-    // The note goes in at len 1 immediately, so it appears on the grid the
+    const column = clampLeadCursor(rawColumn, state[track.loopLength], stepsPerBar, stride);
+    // The note goes in at one cell immediately, so it appears on the grid the
     // moment it is played; note-off extends it.
-    if (!state.recordLeadNote(event.note, column)) return;
+    if (!state[actions.record](event.note, column)) return;
     held.set(event.note, {
       onStep: clockStep,
       storedIndex: leadStoredIndexAt(column, stepsPerBar, stride),
@@ -192,6 +247,20 @@ export function startLeadRecordBridge(deps: LeadRecordDeps = REAL_CLOCK): () => 
   return () => {
     unsubscribeInput();
     unsubscribeTransport();
-    syncClock(false);
+    held.clear();
+  };
+}
+
+/**
+ * Everything the recorder needs, started once from useEngineSync: the single
+ * anchor collector plus one bridge per melody track. Returns one teardown.
+ */
+export function startMelodyRecordBridges(deps: LeadRecordDeps = REAL_CLOCK): () => void {
+  const stops = [
+    startLiveClockCollector(deps),
+    ...MELODY_TRACKS.map((track) => startMelodyRecordBridge(track, deps)),
+  ];
+  return () => {
+    for (const stop of stops) stop();
   };
 }
