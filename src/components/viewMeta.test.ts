@@ -46,8 +46,8 @@ describe('VIEW_META', () => {
 });
 
 describe('PATTERN_SEGMENTS', () => {
-  test('lists the three segments in the order the row renders them', () => {
-    expect(PATTERN_SEGMENTS.map((s) => s.id)).toEqual(['lead', 'accompaniment', 'beat']);
+  test('lists the four segments in the order the row renders them', () => {
+    expect(PATTERN_SEGMENTS.map((s) => s.id)).toEqual(['lead', 'fx', 'accompaniment', 'beat']);
   });
 
   /**
@@ -76,5 +76,38 @@ describe('PATTERN_SEGMENTS', () => {
     const labels = PATTERN_SEGMENTS.map((s) => s.label);
     expect(new Set(labels).size).toBe(PATTERN_SEGMENTS.length);
     expect(labels.every((l) => l.trim().length > 0)).toBe(true);
+  });
+});
+
+describe('PATTERN_SEGMENTS — the fx segment', () => {
+  test('the ids are the four segments, FX beside Lead', () => {
+    expect(PATTERN_SEGMENTS.map((s) => s.id)).toEqual(['lead', 'fx', 'accompaniment', 'beat']);
+  });
+
+  /**
+   * PATTERN_SEGMENTS is a LIST, not a Record<PatternSegment, …>, so the compiler
+   * cannot see a missing entry: SegmentHeader would throw at render and
+   * PatternView would show a blank tab. This comparison against
+   * PATTERN_SEGMENT_IDS is the only thing that catches it.
+   */
+  test('the table covers PATTERN_SEGMENT_IDS exactly', () => {
+    expect(PATTERN_SEGMENTS.map((s) => s.id)).toEqual([...PATTERN_SEGMENT_IDS]);
+  });
+
+  /**
+   * The icon has to be genuinely UNUSED, not merely apt: this assertion spans
+   * the tab icons and the segment icons together, so reusing one another view
+   * already wears fails here.
+   */
+  test('every segment icon is distinct from every other segment and view icon', () => {
+    const icons = [
+      ...PATTERN_SEGMENTS.map((s) => s.icon),
+      ...VIEW_ORDER.map((v) => VIEW_META[v].icon),
+    ];
+    expect(new Set(icons).size).toBe(icons.length);
+  });
+
+  test('FX is labelled FX', () => {
+    expect(PATTERN_SEGMENTS.find((s) => s.id === 'fx')?.label).toBe('FX');
   });
 });

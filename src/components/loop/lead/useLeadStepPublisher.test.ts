@@ -108,15 +108,16 @@ describe('the lead step producer', () => {
     'utf8',
   );
 
-  test('is gated on leadMarkerFollowsClock, never on the lead player alone', () => {
-    expect(source).toContain('leadMarkerFollowsClock');
-    expect(source).not.toContain('useAppStore((s)');
+  test('lead is gated on leadMarkerFollowsClock; fx follows its own player state, never the lead player', () => {
+    expect(source).toContain(
+      "trackId === 'lead' ? leadMarkerFollowsClock(s) : s.fxPlayer !== 'stopped'",
+    );
   });
 
-  test('is the only thing in the app that publishes a lead step', () => {
+  test('is the only thing in the app that publishes a step, for whichever track is mounted', () => {
     const producers = ['src/components/loop/lead/useLeadStepPublisher.ts', 'src/components/loop/lead/useLeadPlayback.ts']
       .map((file) => readFileSync(join(process.cwd(), file), 'utf8'))
-      .map((text) => (text.match(/publishStepAt\(\s*'lead'/g) ?? []).length);
+      .map((text) => (text.match(/publishStepAt\(\s*track\.stepPlayer/g) ?? []).length);
     expect(producers).toEqual([1, 0]);
   });
 });

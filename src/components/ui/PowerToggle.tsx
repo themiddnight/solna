@@ -10,7 +10,7 @@ import { Power } from 'lucide-react';
  * cannot join a closed union, and the coloured dot beside the track name
  * already carries that identity. Track mutes pass 'primary'.
  */
-export const POWER_TOGGLE_TONES = ['primary', 'accent', 'module-chord', 'module-bass', 'module-pad'] as const;
+export const POWER_TOGGLE_TONES = ['primary', 'accent', 'module-chord', 'module-bass', 'module-pad', 'module-fx'] as const;
 export type PowerToggleTone = (typeof POWER_TOGGLE_TONES)[number];
 
 /**
@@ -27,6 +27,8 @@ const TONE_CLASS: Record<PowerToggleTone, string> = {
     '[--btn-color:var(--color-module-bass)] [--btn-fg:var(--color-module-bass-content)]',
   'module-pad':
     '[--btn-color:var(--color-module-pad)] [--btn-fg:var(--color-module-pad-content)]',
+  'module-fx':
+    '[--btn-color:var(--color-module-fx)] [--btn-fg:var(--color-module-fx-content)]',
 };
 
 /**

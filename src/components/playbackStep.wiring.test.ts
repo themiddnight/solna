@@ -18,7 +18,18 @@ import { join } from 'node:path';
  */
 const WIRINGS: Array<{
   player: string;
-  producer: { file: string; regex: RegExp };
+  producer: {
+    file: string;
+    regex: RegExp;
+    /**
+     * What the producer's capture group must equal. Defaults to `player`
+     * (the common case: a hardcoded literal id). Set explicitly when the
+     * producer and consumer are pinned to each other via a shared
+     * expression rather than to the player name itself — see the
+     * 'lead/fx (shared)' row.
+     */
+    expected?: string;
+  };
   consumer: { file: string; regex: RegExp; expected: string };
   /**
    * Where the generic reader's id is actually bound as a literal prop, for
@@ -55,21 +66,37 @@ const WIRINGS: Array<{
     },
   },
   {
-    player: 'lead',
+    // Was a 'lead'-only row pinning two independently-hardcoded literals.
+    // The fx-track task parameterized both hooks by a `track: MelodyTrack`
+    // argument (src/store/melodyTracks.ts), so useLeadStepPublisher's
+    // publishStepAt and useLeadMarker's useCurrentStep now both call with
+    // `track.stepPlayer` — the SAME expression, read from the SAME
+    // MELODY_TRACKS table row — rather than two separately-typed id
+    // strings that could drift. That makes producer/consumer agreement
+    // structurally guaranteed by construction for BOTH the lead and fx
+    // tracks (there is only one place, MELODY_TRACKS, that defines
+    // `stepPlayer` per track), so one row here covers both tracks; a
+    // second row for 'fx' would point at these same two files and assert
+    // nothing new. What this row still catches: either file reverting to a
+    // hardcoded literal, or one of the two starting to read a different
+    // field (e.g. `track.player`) while the other still reads
+    // `track.stepPlayer`.
+    player: 'lead/fx (shared)',
     producer: {
       // DEV-378: the lead's step producer is NOT the scheduler. The marker
       // runs on leadClockActive (any section, or the metronome alone) while
       // useLeadPlayback runs on the lead player, so they are separate hooks
       // with separate gates.
       file: 'src/components/loop/lead/useLeadStepPublisher.ts',
-      regex: /publishStepAt\(\s*'([^']+)'/,
+      regex: /publishStepAt\(\s*([^,]+),/,
+      expected: 'track.stepPlayer',
     },
     consumer: {
       // DEV-377: the marker's column is read by useLeadMarkerColumn, not by
       // LeadMelodyGrid.tsx directly — the hook owns the useCurrentStep call.
       file: 'src/components/loop/lead/useLeadMarker.ts',
-      regex: /useCurrentStep\(\s*(?:'([^']+)'|(\w+))\s*\)/,
-      expected: 'lead',
+      regex: /useCurrentStep\(\s*([^)]+)\)/,
+      expected: 'track.stepPlayer',
     },
   },
   {
@@ -101,7 +128,7 @@ describe('playbackStep producer/consumer wiring', () => {
       const producerSource = readFileSync(join(process.cwd(), wiring.producer.file), 'utf8');
       const producerMatch = producerSource.match(wiring.producer.regex);
       expect(producerMatch).not.toBeNull();
-      expect(producerMatch![1]).toBe(wiring.player);
+      expect(producerMatch![1]).toBe(wiring.producer.expected ?? wiring.player);
 
       const consumerSource = readFileSync(join(process.cwd(), wiring.consumer.file), 'utf8');
       const consumerMatch = consumerSource.match(wiring.consumer.regex);

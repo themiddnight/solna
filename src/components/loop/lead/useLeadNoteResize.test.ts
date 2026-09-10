@@ -135,8 +135,8 @@ describe('useLeadNoteResize', () => {
   });
 
   test('writes to the store EXACTLY once — a write per pointermove would re-render every mounted tab', () => {
-    expect(source.match(/setLeadNoteLength\(/g) ?? []).toHaveLength(1);
-    expect(source.match(/paintLeadNote\(/g) ?? []).toHaveLength(1);
+    expect(source.match(/actions\.setNoteLength\]\(/g) ?? []).toHaveLength(1);
+    expect(source.match(/actions\.paintNote\]\(/g) ?? []).toHaveLength(1);
     expect(source).toContain('setPreview');
   });
 

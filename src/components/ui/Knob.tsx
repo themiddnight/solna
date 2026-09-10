@@ -33,6 +33,7 @@ export const KNOB_COLORS = [
   'text-module-env-vcf',
   'text-module-lfo',
   'text-module-arp',
+  'text-module-fx',
 ] as const;
 
 export type KnobColor = (typeof KNOB_COLORS)[number];
@@ -59,6 +60,7 @@ const BADGE_COLOR: Record<KnobColor, string> = {
   'text-module-env-vcf': '[--badge-color:var(--color-module-env-vcf)]',
   'text-module-lfo': '[--badge-color:var(--color-module-lfo)]',
   'text-module-arp': '[--badge-color:var(--color-module-arp)]',
+  'text-module-fx': '[--badge-color:var(--color-module-fx)]',
 };
 
 export function badgeColorFor(color: KnobColor = 'text-primary'): string {

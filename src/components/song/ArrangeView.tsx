@@ -19,7 +19,7 @@ import { loadLoop } from '@/store/loadLoop';
 import { loopPlayButton, scopedLoopId } from '@/store/playbackScope';
 import { loopBars, loopLabel } from '@/store/loop';
 import type { LoopCopyGroupId } from '@/store/loopCopy';
-import { aggregatePlayerState } from '@/store/transportSlice';
+import { aggregateAllPlayers } from '@/store/transportSlice';
 import { useAppStore } from '@/store/store';
 import { buildRouteUrl } from '@/routing/tabRouting';
 import { getMeter } from '@/utils/meter';
@@ -63,10 +63,6 @@ export const ArrangeView = React.memo(function ArrangeView() {
   const songLoopIndex = useAppStore((s) => s.songLoopIndex);
   const playbackScope = useAppStore((s) => s.playbackScope);
   const meterId = useAppStore((s) => s.meterId);
-  const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
-  const chordsPlayer = useAppStore((s) => s.chordsPlayer);
-  const leadPlayer = useAppStore((s) => s.leadPlayer);
-
   const addLoop = useAppStore((s) => s.addLoop);
   const duplicateLoop = useAppStore((s) => s.duplicateLoop);
   const deleteLoop = useAppStore((s) => s.deleteLoop);
@@ -77,8 +73,7 @@ export const ArrangeView = React.memo(function ArrangeView() {
   const setLoopMix = useAppStore((s) => s.setLoopMix);
   const applyLoopCopy = useAppStore((s) => s.applyLoopCopy);
 
-  const isPlaying =
-    aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer) === 'playing';
+  const isPlaying = useAppStore((s) => aggregateAllPlayers(s) === 'playing');
 
   const scopedId = scopedLoopId(playbackScope);
 
@@ -215,7 +210,7 @@ export const ArrangeView = React.memo(function ArrangeView() {
   const handleTogglePlayLoop = useCallback((id: string) => {
     const s = useAppStore.getState();
     const playing =
-      aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
+      aggregateAllPlayers(s) === 'playing';
 
     if (playing && scopedLoopId(s.playbackScope) === id) {
       // hardStopAll's own 'stop-all' dispatch already resets the scope.
@@ -237,7 +232,7 @@ export const ArrangeView = React.memo(function ArrangeView() {
       if (cloneId === null) return;
       const s = useAppStore.getState();
       const playing =
-        aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
+        aggregateAllPlayers(s) === 'playing';
       // During a live song-mode pass, activating the clone would hard-stop the
       // sounding loop and jump the song onto it — the duplicate is only meant
       // to be added for editing, so skip the swap while the song is running.

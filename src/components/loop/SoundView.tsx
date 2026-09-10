@@ -85,13 +85,17 @@ import { SegmentedButton, SegmentedGroup } from '@/components/ui/SegmentedContro
 // not (CLAUDE.md, layer 1).
 const DRUM_KIT_NAMES = Object.keys(DRUM_KITS);
 
-// Derived from SYNTH_TARGET_STYLES, not hand-listed: every target that isn't
-// the lead ('synth') one goes in the framed Accompaniment group, so a fifth
-// target added to that record renders here automatically instead of silently
-// not. Module scope for the same reason DRUM_KIT_NAMES above is: the record is
-// static, and this view re-renders per pointermove during a Knob drag.
+// The two MELODY targets render as bare chips; everything else goes in the
+// framed Accompaniment group. Derived rather than hand-listed so a sixth target
+// added to SYNTH_TARGET_STYLES renders somewhere instead of silently nowhere —
+// but the exclusion is a SET, not `!== 'synth'`, because FX is a melody track
+// beside Lead and putting it under a frame labelled "Accompaniment" would make
+// the frame say something untrue. Module scope for the same reason
+// DRUM_KIT_NAMES above is: the record is static, and this view re-renders per
+// pointermove during a Knob drag.
+const MELODY_TARGETS: readonly SynthControlTarget[] = ['synth', 'fx'];
 const ACCOMPANIMENT_TARGETS = (Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]).filter(
-  (target) => target !== 'synth',
+  (target) => !MELODY_TARGETS.includes(target),
 );
 
 /**
@@ -218,6 +222,8 @@ export const SoundView = React.memo(function SoundView() {
   const onChangeBassSynthParams = useAppStore((s) => s.setBassSynthParams);
   const padSynthParams = useAppStore((s) => s.padSynthParams);
   const setPadSynthParams = useAppStore((s) => s.setPadSynthParams);
+  const fxSynthParams = useAppStore((s) => s.fxSynthParams);
+  const setFxSynthParams = useAppStore((s) => s.setFxSynthParams);
 
   // Route the control panel (knobs, preset selects) to the selected
   // destination.
@@ -226,6 +232,7 @@ export const SoundView = React.memo(function SoundView() {
     chord: { params: chordSynthParams, setParams: onChangeChordSynthParams },
     bass: { params: bassSynthParams, setParams: onChangeBassSynthParams },
     pad: { params: padSynthParams, setParams: setPadSynthParams },
+    fx: { params: fxSynthParams, setParams: setFxSynthParams },
   };
   const channel = resolveSynthControlChannel(controlTarget, channels);
   const params = channel.params;
@@ -472,12 +479,12 @@ export const SoundView = React.memo(function SoundView() {
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           {/* Control Destination Selector */}
           <div
-            className={`flex items-center gap-1 bg-base-200 border rounded-box p-1 shrink-0 ${SYNTH_TARGET_STYLES[controlTarget].border}`}
+            className={`flex items-center gap-1 flex-wrap bg-base-200 border rounded-box p-1 ${SYNTH_TARGET_STYLES[controlTarget].border}`}
           >
             <span className={`${GROUP_LABEL} pl-1 pr-1 hidden sm:inline`}>
               Target:
             </span>
-            {renderTargetChip('synth')}
+            {MELODY_TARGETS.map(renderTargetChip)}
             {/* Chord, bass and pad are one job done three ways. The frame is
                 inside the tinted outer group, not replacing it: the outer
                 tint tracks the ACTIVE target, this one groups three of the

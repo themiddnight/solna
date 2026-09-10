@@ -16,7 +16,7 @@ const source = readFileSync(
 describe('LeadMelodyGrid', () => {
   test('renders one loop-length option per divisor of the progression', () => {
     // Default progression (INITIAL_CHORDS) totals 4 bars → divisors 1, 2, 4.
-    const html = renderToString(<LeadMelodyGrid />);
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
     expect(html).toContain('id="select-lead-loop-length"');
     expect(html).toContain('value="1"');
     expect(html).toContain('value="2"');
@@ -25,7 +25,7 @@ describe('LeadMelodyGrid', () => {
 
   test('the grid lays out loopLength × stepsPerBar columns', () => {
     // Defaults: 4/4 (16 steps) × 1-bar loop → 16 columns of 20px.
-    const html = renderToString(<LeadMelodyGrid />);
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
     expect(html).toContain('repeat(16, 20px)');
   });
 
@@ -46,25 +46,25 @@ describe('LeadMelodyGrid', () => {
     // to move one translateX — the same fix as moving the grid out of
     // SoundView. Geometry stays on LeadMarkerView's explicit prop because
     // renderToString cannot force a playing store state.
-    expect(renderToString(<LeadMarker columns={16} />)).toContain('translateX(0px)');
+    expect(renderToString(<LeadMarker trackId="lead" columns={16} />)).toContain('translateX(0px)');
     // Exactly one call site, and it is LeadMarker's. There is no DOM here to
     // count renders with, so the subscription's LOCATION is what is pinned.
     expect(source.match(/useLeadMarkerColumn\(/g) ?? []).toHaveLength(1);
-    expect(source).toContain('<LeadMarker columns={columns} />');
+    expect(source).toContain('<LeadMarker trackId={trackId} columns={columns} />');
   });
 
   test('a stopped grid still draws the marker, parked on the cursor', () => {
     // One marker, always. Stopped it is the cursor (0 by default under
     // renderToString), playing it is the clock — but it never disappears, and
     // the header strip no longer draws a second band of its own.
-    const html = renderToString(<LeadMelodyGrid />);
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
     expect(html).toContain('ring-inset ring-primary');
     expect(html).toContain('translateX(0px)');
     expect(html).not.toContain('bg-secondary text-secondary-content');
   });
 
   test('no raw palette or absolute black/white classes leak in', () => {
-    const html = renderToString(<LeadMelodyGrid />);
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
     expect(html).not.toContain('indigo-');
     expect(html).not.toContain('slate-');
     expect(html).not.toContain('text-white');
@@ -73,7 +73,7 @@ describe('LeadMelodyGrid', () => {
   });
 
   test('renders a clear button and the note-name column', () => {
-    const html = renderToString(<LeadMelodyGrid />);
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
     expect(html).toContain('id="btn-lead-clear"');
     // The note column is the row of preview buttons, one per pitch row.
     expect(html).toContain('title="Preview ');
@@ -81,16 +81,41 @@ describe('LeadMelodyGrid', () => {
   });
 
   test('the resolution select offers the three resolutions, in order', () => {
-    const html = renderToString(<LeadMelodyGrid />);
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
     expect(html).toContain('id="select-lead-step-resolution"');
     const options = [...html.matchAll(/<option value="(1\/(?:8|16|32))"/g)].map((m) => m[1]);
     expect(options).toEqual(['1/8', '1/16', '1/32']);
   });
 });
 
+describe('LeadMelodyGrid — the fx track', () => {
+  // Both grids render off creation-time state (the renderToString trap), so
+  // trackId is the only thing distinguishing these two renders.
+  const leadHtml = renderToString(<LeadMelodyGrid trackId="lead" />);
+  const fxHtml = renderToString(<LeadMelodyGrid trackId="fx" />);
+
+  test('is labelled FX, not Melody', () => {
+    expect(fxHtml).toContain('>FX</span>');
+    expect(leadHtml).toContain('>Melody</span>');
+  });
+
+  test('has no recorder — no Rec button at all', () => {
+    expect(fxHtml).not.toContain('id="btn-fx-record"');
+    expect(leadHtml).toContain('id="btn-lead-record"');
+  });
+
+  test('every DOM id is prefixed by its own track, so two mounted grids never collide', () => {
+    expect(fxHtml).toContain('id="btn-fx-clear"');
+    expect(fxHtml).toContain('id="select-fx-loop-length"');
+    expect(fxHtml).not.toContain('id="btn-lead-clear"');
+    expect(leadHtml).toContain('id="btn-lead-clear"');
+    expect(leadHtml).not.toContain('id="btn-fx-clear"');
+  });
+});
+
 describe('LeadMelodyGrid cells', () => {
   test('an empty melody renders every cell unpressed with its pitch label', () => {
-    const html = renderToString(<LeadMelodyGrid />);
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
     expect(html).toContain('aria-pressed="false"');
     expect(html).toContain('aria-label="C4"');
     // Scoped to the CELL buttons: the header strips legitimately press the
@@ -100,7 +125,7 @@ describe('LeadMelodyGrid cells', () => {
   });
 
   test('the bar copy and paste buttons render, with paste dead until something is copied', () => {
-    const html = renderToString(<LeadMelodyGrid />);
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
     expect(html).toContain('id="btn-lead-copy-bar"');
     expect(html).toContain('id="btn-lead-paste-bar"');
     expect(html.slice(html.indexOf('id="btn-lead-paste-bar"'))).toContain('disabled');
@@ -246,7 +271,7 @@ describe('LeadMelodyHeaders', () => {
 
 describe('LeadMelodyGrid gate slider', () => {
   test('renders the labelled per-loop gate at the default 85%', () => {
-    const html = renderToString(<LeadMelodyGrid />);
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
     // Name and value are two spans now, not one string: every settings group
     // in this lane wears a GROUP_LABEL naming what it adjusts, so "Gate" is
     // the same kind of caption as "Octave" and "Step" rather than a one-off.
@@ -257,7 +282,7 @@ describe('LeadMelodyGrid gate slider', () => {
   });
 
   test('the slider states that gate applies when the arp is off', () => {
-    const html = renderToString(<LeadMelodyGrid />);
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
     expect(html).toContain('Applies when the arp is off');
   });
 });

@@ -8,12 +8,13 @@ import { LeadMelodyGrid } from './lead/LeadMelodyGrid';
 /**
  * The Pattern tab: everything that changes the NOTES or the rhythm.
  *
- * All three segments stay mounted and are gated with block/hidden, the same
+ * All four segments stay mounted and are gated with block/hidden, the same
  * way App.tsx gates the four tabs. Unmounting would be worse here than there:
  * ChordView holds the chord/bass preview refs and pointer-driven local state,
  * SequencerView holds its selected-grid id and a memoised 30-entry option
- * list, and LeadMelodyGrid holds a step-publisher subscription — a segment
- * click would silently reset all of it. The cost is covered: every meter ticks
+ * list, and LeadMelodyGrid holds a step-publisher subscription — and the FX
+ * grid holds a second, separate one — a segment click would silently reset
+ * all of it. The cost is covered: every meter ticks
  * through utils/meterScheduler.ts, which gates each registration on an
  * IntersectionObserver, so a hidden segment's meters stop reading.
  *
@@ -31,7 +32,16 @@ export const PatternView = React.memo(function PatternView() {
             SequencerView each apply to their own root. */}
         <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
           <SegmentHeader segment="lead" />
-          <LeadMelodyGrid />
+          <LeadMelodyGrid trackId="lead" />
+        </div>
+      </div>
+      <div className={patternSegment === 'fx' ? 'block' : 'hidden'}>
+        {/* Same shell as Lead above, deliberately: FX is the same surface with a
+            different trackId, so a second layout here would be the two grids
+            starting to diverge. */}
+        <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
+          <SegmentHeader segment="fx" />
+          <LeadMelodyGrid trackId="fx" />
         </div>
       </div>
       <div className={patternSegment === 'accompaniment' ? 'block' : 'hidden'}>

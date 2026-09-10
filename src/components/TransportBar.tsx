@@ -8,7 +8,7 @@ import { PlayerTransport } from "./ui/PlayerTransport";
 import { PlayheadReadout } from "./PlayheadReadout";
 import { VuMeter } from "./ui/VuMeter";
 import { MidiIndicator } from "./ui/MidiIndicator";
-import { aggregatePlayerState, isHardStopEnabled, transportDisplayState } from "../store/transportSlice";
+import { aggregateAllPlayers, isAnyPlayerActive, transportDisplayState } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 import type { Loop } from '../store/types';
 import { loopLabel } from '@/store/loop';
@@ -27,9 +27,6 @@ export function songModeLabel(
 
 export const TransportBar = React.memo(function TransportBar() {
   // Transport slice
-  const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
-  const chordsPlayer = useAppStore((s) => s.chordsPlayer);
-  const leadPlayer = useAppStore((s) => s.leadPlayer);
   const playAll = useAppStore((s) => s.playAll);
   const soloLoop = useAppStore((s) => s.soloLoop);
   const softStopAll = useAppStore((s) => s.softStopAll);
@@ -68,7 +65,7 @@ export const TransportBar = React.memo(function TransportBar() {
     setBpmDraft(null);
   };
 
-  const aggregate = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer);
+  const aggregate = useAppStore(aggregateAllPlayers);
   const layer = layerForTab(activeTab);
   // Derived in the render body, not in a selector: a zustand selector runs on
   // every store set() — including every pointermove of a knob drag, which does
@@ -82,7 +79,7 @@ export const TransportBar = React.memo(function TransportBar() {
   // loop of the loop being edited. Hard stop stays live off the REAL player
   // states, so sounding audio always has a visible global kill.
   const displayState = transportDisplayState(playbackScope, aggregate, layer, activeLoopId);
-  const hardStopDisabled = !isHardStopEnabled(sequencerPlayer, chordsPlayer, leadPlayer);
+  const hardStopDisabled = !useAppStore(isAnyPlayerActive);
   // The meter loop only needs to know whether anything is sounding, off the
   // true aggregate — not the takeover-driven display state.
   const isPlaying = aggregate !== 'stopped';

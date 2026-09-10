@@ -2,9 +2,15 @@ import { useCallback, useSyncExternalStore } from 'react';
 import { playbackAudibleDelaySec } from '@/audio/playback/playbackEngine';
 
 /** One id per clock-driven player that publishes a 16th-note step. */
-export type StepPlayerId = 'chords' | 'lead' | 'sequencer';
+export type StepPlayerId = 'chords' | 'lead' | 'fx' | 'sequencer';
 
-const PLAYER_IDS: readonly StepPlayerId[] = ['chords', 'lead', 'sequencer'];
+/**
+ * Exported so a test can pin the roster. A CLOSED union, not a free string: the
+ * two melody grids are one component rendered twice, and if both wrote the same
+ * slot the FX playhead would drive the lead's marker and vice versa — at
+ * whichever grid's stride published last, with no error anywhere.
+ */
+export const PLAYER_IDS: readonly StepPlayerId[] = ['chords', 'lead', 'fx', 'sequencer'];
 
 export interface StepPublisher {
   /** Records `step` for `player` and notifies its listeners — but only when

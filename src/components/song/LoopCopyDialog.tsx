@@ -96,6 +96,7 @@ export function loopBarsNotice(
  *  LOOP_COPY_GROUPS; this is the display name of a row, not a membership. */
 const TRACK_ROWS: readonly { track: LoopCopyTrack; label: string }[] = [
   { track: 'lead', label: 'Lead' },
+  { track: 'fx', label: 'FX' },
   { track: 'chord', label: 'Chords' },
   { track: 'bass', label: 'Bass' },
   { track: 'pad', label: 'Pad' },

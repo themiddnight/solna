@@ -15,6 +15,7 @@ import { arpStepFor, getMeter } from '@/utils/meter';
 import { TICKS_PER_SIXTEENTH, columnsPerBar, strideFor } from '@/utils/stepResolution';
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from '@/components/playerStop';
 import { clockStepToGridColumn, tickToColumn } from '@/audio/leadLiveRecord';
+import { melodyTrack, type MelodyTrackId } from '@/store/melodyTracks';
 import type { PlayerState } from '@/store/types';
 
 export interface LeadArming {
@@ -104,22 +105,23 @@ export function leadScheduleHits(
 }
 
 /**
- * Drives the melody grid's notes into the synth voice on the shared clock.
+ * Drives a melody track's notes into its synth voice on the shared clock.
  * The arp is a synth feature, not a note mode: `synthParams.arpActive` gates
  * arpeggiation (on = arp, off = block), never whether the melody runs. Notes
  * and params are read LIVE from the store inside the clock callback, so a
  * knob tweak reaches the next hit without re-subscribing.
  *
  * NOTES ONLY. The marker's column is published by useLeadStepPublisher, on
- * the wider leadMarkerFollowsClock gate, because that column is also where
- * live capture writes and capture can be armed against any section's clock
- * (DEV-378). Do not publish a lead step from here: two producers on one
- * player id would fight whenever the lead plays. Rewinding the marker is
- * that hook's job too, for the same reason — the lead stopping is not
- * necessarily the marker stopping.
+ * the wider leadMarkerFollowsClock gate for lead (and the track's own player
+ * for fx), because that column is also where live capture writes and capture
+ * can be armed against any section's clock (DEV-378). Do not publish a step
+ * from here: two producers on one player id would fight whenever the track
+ * plays. Rewinding the marker is that hook's job too, for the same reason —
+ * the track stopping is not necessarily the marker stopping.
  */
-export function useLeadPlayback(): { isPlaying: boolean } {
-  const playerState = useAppStore((s) => s.leadPlayer);
+export function useLeadPlayback(trackId: MelodyTrackId): { isPlaying: boolean } {
+  const track = melodyTrack(trackId);
+  const playerState = useAppStore((s) => s[track.player]);
   const hardStop = useAppStore((s) => s.hardStop);
   const isPlaying = playerState !== 'stopped';
 
@@ -131,17 +133,17 @@ export function useLeadPlayback(): { isPlaying: boolean } {
   useEffect(
     () =>
       useAppStore.subscribe(
-        (s) => s.leadPlayer,
+        (s) => s[track.player],
         (next, prev) => {
           if (next === 'stopped') armingRef.current.armed = false;
           if (!shouldHardStopNow(prev, next, softStopPendingRef.current)) {
             if (next !== 'stopping') softStopPendingRef.current = false;
             return;
           }
-          playbackStopSource('synth', HARD_STOP_RELEASE);
+          playbackStopSource(track.engineSource, HARD_STOP_RELEASE);
         },
       ),
-    [],
+    [track],
   );
 
   useEffect(() => {
@@ -154,18 +156,19 @@ export function useLeadPlayback(): { isPlaying: boolean } {
 
     return subscribePlaybackClock((step, _beat, time) => {
       const s = useAppStore.getState();
-      const playerState = s.leadPlayer;
+      const playerState = s[track.player];
       const stepsPerBar = getMeter(s.meterId).stepsPerBar;
-      const stride = strideFor(s.leadStepResolution);
-      const columns = s.leadLoopLength * columnsPerBar(stepsPerBar, stride);
-      const melodyTicks = s.leadLoopLength * stepsPerBar * TICKS_PER_SIXTEENTH;
+      const stride = strideFor(s[track.stepResolution]);
+      const columns = s[track.loopLength] * columnsPerBar(stepsPerBar, stride);
+      const melodyTicks = s[track.loopLength] * stepsPerBar * TICKS_PER_SIXTEENTH;
       const action = leadStepAction(playerState, step, armingRef.current, stepsPerBar);
       const tickDur = stepDurationSec(s.bpm) / TICKS_PER_SIXTEENTH;
+      const params = s[track.synthParams];
 
       if (action === 'soft-stop') {
-        playbackStopSource('synth', s.synthParams.release, time);
+        playbackStopSource(track.engineSource, params.release, time);
         softStopPendingRef.current = true;
-        hardStop('lead');
+        hardStop(track.module);
         return;
       }
       if (action !== 'play') return;
@@ -176,19 +179,19 @@ export function useLeadPlayback(): { isPlaying: boolean } {
       // "when to strike them", and that answer comes off the clock's 16ths
       // via arpRate. leadScheduleHits is where the two part company, and
       // arpStep stays bar-phased by arpStepFor either way.
-      const hits = leadScheduleHits(step, stride, columns, s.synthParams.arpActive, tickDur);
+      const hits = leadScheduleHits(step, stride, columns, params.arpActive, tickDur);
 
       for (const hit of hits) {
         const column = hit.column;
         const at = time + hit.offsetSec;
-        const sounding = leadSoundingNotes(s.leadMelodySteps, column, stepsPerBar, stride);
+        const sounding = leadSoundingNotes(s[track.steps], column, stepsPerBar, stride);
         const triggers = resolveLeadStepTriggers(
           sounding,
-          s.synthParams.arpActive,
+          params.arpActive,
           arpStep,
-          s.synthParams,
+          params,
           tickDur,
-          s.leadGate,
+          s[track.gate],
           stride,
           // The ACTIVE window in TICKS, so a note left overhanging by a
           // METER change is capped at read time instead of ringing over
@@ -197,17 +200,17 @@ export function useLeadPlayback(): { isPlaying: boolean } {
           { tickInLoop: column * stride, melodyTicks },
         );
         for (const trigger of triggers) {
-          playbackNoteOn(trigger.note, s.synthParams, DEFAULT_VELOCITY, at + trigger.timeOffsetSec, 'synth');
+          playbackNoteOn(trigger.note, params, DEFAULT_VELOCITY, at + trigger.timeOffsetSec, track.engineSource);
           playbackNoteOff(
             trigger.note,
-            s.synthParams.release,
+            params.release,
             at + trigger.timeOffsetSec + trigger.holdSec,
-            'synth',
+            track.engineSource,
           );
         }
       }
     });
-  }, [isPlaying, hardStop]);
+  }, [isPlaying, hardStop, track]);
 
   return { isPlaying };
 }

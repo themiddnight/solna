@@ -1,4 +1,4 @@
-import { AudioWaveform, Drum, Grid, Layers, LayoutList, Music, Sliders, type LucideIcon } from 'lucide-react';
+import { AudioWaveform, Drum, Grid, Layers, LayoutList, Music, Sliders, Waves, type LucideIcon } from 'lucide-react';
 import { LOOP_TABS, SONG_TABS } from '../types';
 import type { PatternSegment, ViewMode } from '../types';
 
@@ -62,6 +62,13 @@ export const PATTERN_SEGMENTS: ReadonlyArray<{
   // `Music` is free: it was the departed `chords` view's icon, and the note
   // grid is the most literally musical surface in the app.
   { id: 'lead', label: 'Lead', icon: Music },
+  // `Waves` also appears elsewhere in the app (EffectsRackView's reverb card,
+  // SimpleSynthPanel's LFO icon) — viewMeta.test.ts only asserts distinctness
+  // WITHIN this segment/nav table, not app-wide uniqueness, and this tab
+  // shares its icon with the LFO section fine since the two are never shown
+  // side by side. A modulated waveform is also what an FX voice is: the tab's
+  // content, not a decoration on it.
+  { id: 'fx', label: 'FX', icon: Waves },
   // Chord + bass + pad, stacked — `Layers` says "several at once" without
   // naming any one of them, the same reasoning that made this group
   // `Accompany` rather than `Chords/Bass` when the pad layer landed.
