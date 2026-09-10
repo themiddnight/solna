@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { focusSynthTarget, resolveSynthControlChannel, SYNTH_TARGET_STYLES } from './synthControl';
 import type { SynthControlTarget, SynthParamChannel } from './synthControl';
 import type { SynthParams, ViewMode } from '../types';
+import type { MixLayerId } from '../store/focusTrack';
 import { INITIAL_SYNTH_PARAMS } from '../store/initialState';
 import { soloTrackForFocus } from '../store/trackAudibility';
 
@@ -69,7 +70,7 @@ describe('focusSynthTarget', () => {
     const calls: Array<[string, string]> = [];
     return {
       calls,
-      setControlTarget: (target: SynthControlTarget) => calls.push(['target', target]),
+      setFocusTrack: (focus: MixLayerId) => calls.push(['target', focus]),
       setActiveTab: (tab: ViewMode) => calls.push(['tab', tab]),
     };
   }

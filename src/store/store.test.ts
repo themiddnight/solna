@@ -178,7 +178,7 @@ describe('store defaults', () => {
     expect(s.bassOctave).toBe(2);
     expect(s.bassMuted).toBe(false);
     expect(s.bassVolume).toBe(-6); // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
-    expect(s.controlTarget).toBe('synth');
+    expect(s.focusTrack).toBe('synth');
     expect(s.activeTab).toBe('sound');
     expect(s.keyboardMode).toBe('scale-locked');
     expect(s.synthParams).toEqual(INITIAL_SYNTH_PARAMS);
@@ -1586,17 +1586,19 @@ describe('flushBeforeHide', () => {
   });
 });
 
-describe('patternSegment', () => {
-  test('starts on lead — the segment a new loop is most likely to be opened for', async () => {
+describe('the merged navigation state', () => {
+  /**
+   * `controlTarget` and `patternSegment` are gone from the store, not renamed
+   * around. A field that still exists but nothing reads is the shape this
+   * change exists to delete, and it would go on being written by every old
+   * call site with nothing failing.
+   */
+  test('neither controlTarget nor patternSegment is a field any more', async () => {
     const { useAppStore } = await getStore();
-    expect(useAppStore.getState().patternSegment).toBe('lead');
-  });
-
-  test('the setter moves it and nothing else', async () => {
-    const { useAppStore } = await getStore();
-    useAppStore.getState().setPatternSegment('beat');
-    expect(useAppStore.getState().patternSegment).toBe('beat');
-    expect(useAppStore.getState().activeTab).toBe('sound');
-    useAppStore.getState().setPatternSegment('lead');
+    const s = useAppStore.getState() as unknown as Record<string, unknown>;
+    expect('controlTarget' in s).toBe(false);
+    expect('patternSegment' in s).toBe(false);
+    expect('setControlTarget' in s).toBe(false);
+    expect('setPatternSegment' in s).toBe(false);
   });
 });

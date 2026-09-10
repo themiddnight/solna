@@ -29,7 +29,7 @@ function makeStore(identity: { currentProjectId: string | null; projectBaselineH
   return create<Partial<AppStore>>()(
     subscribeWithSelector((): Partial<AppStore> => ({
       ...content,
-      controlTarget: 'synth',
+      focusTrack: 'synth',
       selectedVibeId: null,
       dirty: false,
       ...identity,
@@ -87,7 +87,7 @@ describe('createDirtyTracker', () => {
     const store = makeStore(SAVED);
     const sched = manualScheduler();
     createDirtyTracker(store, { scheduler: sched.scheduler });
-    store.setState({ controlTarget: 'bass', selectedVibeId: 'cyber-dance' });
+    store.setState({ focusTrack: 'bass', selectedVibeId: 'cyber-dance' });
     expect(sched.size()).toBe(0);
     expect(store.getState().dirty).toBe(false);
   });

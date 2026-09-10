@@ -74,7 +74,6 @@ export function createUiSlice(set: Set): UiSlice {
   return {
     activeTab: 'sound',
     focusTrack: 'synth',
-    patternSegment: 'lead',
     soloTracks: [],
     keyboardMode: readStoredKeyboardMode() ?? 'scale-locked',
     followPlayhead: readStoredFollowPlayhead() ?? true,
@@ -89,7 +88,6 @@ export function createUiSlice(set: Set): UiSlice {
 
     setActiveTab: (activeTab) => set({ activeTab }),
     setFocusTrack: (focusTrack) => set({ focusTrack }),
-    setPatternSegment: (patternSegment) => set({ patternSegment }),
     toggleSoloTrack: (track) =>
       set((state) => ({ soloTracks: toggleSolo(state.soloTracks, track) })),
     // Guarded on emptiness so the array reference is stable: a fresh [] would

@@ -8,19 +8,22 @@
  * Pattern. `arrange` now means one thing only — ordering loops — and nothing
  * else may take that name.
  *
- * Pattern's three segments are a SECOND axis (`patternSegment` in the ui
- * slice), not three more view ids: the router validates exactly one query key,
- * and a segment is a within-tab position, not a route.
+ * Pattern's four segments are DERIVED from `focusTrack` (`segmentForFocus`,
+ * store/focusTrack.ts), not three more view ids: the router validates exactly
+ * one query key, and a segment is a within-tab position, not a route.
  */
 export type ViewMode = (typeof LOOP_TABS)[number] | (typeof SONG_TABS)[number];
 
 export type Layer = 'loop' | 'song';
 
 /**
- * Pattern's three segments. A second axis alongside `ViewMode`, not three more
- * view ids: the URL carries the tab, and a segment is a position inside one
- * tab. Kept here rather than in store/types.ts because both the store and the
- * components read it, exactly as `ViewMode` is.
+ * Pattern's four segments. DERIVED from `focusTrack`, not stored:
+ * `segmentForFocus` (store/focusTrack.ts) maps the six focus ids onto these
+ * four. A segment is still a position inside one tab rather than a route — the
+ * URL carries the tab and nothing else — but it is no longer an axis of its
+ * own that could disagree with the Sound view's target. Kept here rather than
+ * in store/types.ts because both the store and the components read it,
+ * exactly as `ViewMode` is.
  *
  * The const array is the source of truth and the union derives from it, the
  * `PAD_MODES` pattern below. That is what gives `PATTERN_SEGMENTS` in
