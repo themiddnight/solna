@@ -175,6 +175,15 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
         // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
         const { triggeredTargets, params } = stateRef.current;
         releaseTriggeredTargets(triggeredTargets, params.release, (target, releaseTime) => {
+          // KNOWN LIMITATION, named rather than left to be rediscovered:
+          // releaseSoundingVoices releases every SOUNDING voice on the bus,
+          // not only the ones this arp created — so a melody track playing on
+          // the same bus (the lead's engine source is 'synth', the FX track's
+          // is 'fx') has its sounding note cut short by an arp key-up. This
+          // predates focus routing (the lead has always shared 'synth'); focus
+          // routing only widens which buses it can happen on. Narrowing the
+          // call here cannot fix it: the engine has no per-voice provenance to
+          // filter on, and adding one is an engine change with its own spec.
           audioEngine.releaseSoundingVoices(target, releaseTime);
         });
       }
