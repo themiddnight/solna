@@ -114,6 +114,25 @@ export function playbackStopSource(
 }
 
 /**
+ * Silences one PLAYER's voices on a source — its sounding voices and the hits
+ * it has scheduled ahead of the transport — and nothing else on that bus.
+ *
+ * The melody-track version of `playbackStopSource`. A melody grid shares its
+ * bus with live input and the arp (the lead track's engine source is 'synth',
+ * the FX track's is 'fx'), so a whole-bus stop cut the note the player was
+ * holding down and every arp voice on that bus. `'sequencer'` is pinned here,
+ * not passed in: `src/components/` may not import the engine and must not pick
+ * an owner, and this module's callers are all the transport.
+ */
+export function playbackStopOwnedVoices(
+  source: string,
+  releaseTime = 0.1,
+  time?: number,
+): void {
+  audioEngine.stopOwnedVoices(source, 'sequencer', releaseTime, time);
+}
+
+/**
  * The pitched buses the Chords player owns. Everything that silences the
  * accompaniment silences ALL of them: one transport drives chord, bass and
  * pad, so cutting a subset leaves the rest ringing — and a drone holds the

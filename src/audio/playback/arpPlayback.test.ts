@@ -3,6 +3,7 @@ import { computeArpTick, computeArpTriggers, releaseTriggeredTargets } from './a
 import type { ArpRate } from './arpPlayback';
 import type { HeldNoteTargets } from './heldNotes';
 import type { SynthControlTarget } from '@/utils/synthControl';
+import type { VoiceOwner } from '../voiceOwner';
 import { INITIAL_SYNTH_PARAMS } from '@/store/initialState';
 
 // Reference implementation: the original 4-branch subscriber logic from
@@ -95,6 +96,22 @@ describe('releaseTriggeredTargets', () => {
     });
 
     expect(releaseTimes).toEqual([0.4567, 0.4567]);
+  });
+
+  test("every release call carries the 'arp' owner", () => {
+    // Every member of `triggered` is there because the ARP triggered a voice
+    // on it, so the owner is not an option a caller varies — it is a fact this
+    // function knows and the injected callback needs. An owner-less call would
+    // not fail to compile at the engine (releaseSynthPlaybackVoices pins its
+    // own), so this seam is the only place a wrong value is observable.
+    const owners: Array<VoiceOwner | undefined> = [];
+    const triggered = new Set<SynthControlTarget>(['synth', 'fx']);
+
+    releaseTriggeredTargets(triggered, 0.2, (_target, _releaseTime, owner) => {
+      owners.push(owner);
+    });
+
+    expect(owners).toEqual(['arp', 'arp']);
   });
 });
 

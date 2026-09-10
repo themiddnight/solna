@@ -7,6 +7,7 @@ import { stepDurationSec } from '@/utils/musicTheory';
 import { arpStepFor } from '@/utils/meter';
 import type { SynthParams } from '@/types';
 import type { SynthControlTarget } from '@/utils/synthControl';
+import type { VoiceOwner } from '../voiceOwner';
 
 // The rate table and trigger math live in audio/arpSchedule.ts so the chord
 // scheduler can share them without pulling this React hook into its module.
@@ -42,14 +43,20 @@ export interface ArpStateRef {
  * opposite sides of a layering rule: the cleanup below passes
  * `audioEngine.releaseSoundingVoices`, and `components/useInputDeck.ts` — which
  * may not import `audio/engine` — passes `releaseSynthPlaybackVoices`.
+ *
+ * The owner is handed to the callback rather than taken as a parameter: every
+ * target in `triggered` is there BECAUSE the arp triggered a voice on it, so
+ * `'arp'` is a fact this function knows, not a choice a caller makes. A
+ * two-parameter callback is still assignable, which is what lets a component
+ * keep passing `releaseSynthPlaybackVoices` without ever naming an owner.
  */
 export function releaseTriggeredTargets(
   triggered: Set<SynthControlTarget>,
   releaseTime: number,
-  release: (target: SynthControlTarget, releaseTime: number) => void,
+  release: (target: SynthControlTarget, releaseTime: number, owner: VoiceOwner) => void,
 ): void {
   for (const target of triggered) {
-    release(target, releaseTime);
+    release(target, releaseTime, 'arp');
   }
   triggered.clear();
 }
@@ -174,17 +181,8 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
         // copying it into the effect body would restore the stale-target bug.
         // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
         const { triggeredTargets, params } = stateRef.current;
-        releaseTriggeredTargets(triggeredTargets, params.release, (target, releaseTime) => {
-          // KNOWN LIMITATION, named rather than left to be rediscovered:
-          // releaseSoundingVoices releases every SOUNDING voice on the bus,
-          // not only the ones this arp created — so a melody track playing on
-          // the same bus (the lead's engine source is 'synth', the FX track's
-          // is 'fx') has its sounding note cut short by an arp key-up. This
-          // predates focus routing (the lead has always shared 'synth'); focus
-          // routing only widens which buses it can happen on. Narrowing the
-          // call here cannot fix it: the engine has no per-voice provenance to
-          // filter on, and adding one is an engine change with its own spec.
-          audioEngine.releaseSoundingVoices(target, releaseTime, 'arp');
+        releaseTriggeredTargets(triggeredTargets, params.release, (target, releaseTime, owner) => {
+          audioEngine.releaseSoundingVoices(target, releaseTime, owner);
         });
       }
     };

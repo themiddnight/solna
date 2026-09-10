@@ -6,7 +6,7 @@ import {
   initPlaybackEngine,
   playbackNoteOff,
   playbackNoteOn,
-  playbackStopSource,
+  playbackStopOwnedVoices,
   subscribePlaybackClock,
 } from '@/audio/playback/playbackEngine';
 import { DEFAULT_VELOCITY } from '@/audio/constants';
@@ -140,7 +140,7 @@ export function useLeadPlayback(trackId: MelodyTrackId): { isPlaying: boolean } 
             if (next !== 'stopping') softStopPendingRef.current = false;
             return;
           }
-          playbackStopSource(track.engineSource, HARD_STOP_RELEASE);
+          playbackStopOwnedVoices(track.engineSource, HARD_STOP_RELEASE);
         },
       ),
     [track],
@@ -166,7 +166,7 @@ export function useLeadPlayback(trackId: MelodyTrackId): { isPlaying: boolean } 
       const params = s[track.synthParams];
 
       if (action === 'soft-stop') {
-        playbackStopSource(track.engineSource, params.release, time);
+        playbackStopOwnedVoices(track.engineSource, params.release, time);
         softStopPendingRef.current = true;
         hardStop(track.module);
         return;
