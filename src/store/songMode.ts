@@ -7,7 +7,7 @@ import { loadLoop } from './loadLoop';
 import { loopBars } from './loop';
 import { playbackScopeReducer } from './playbackScope';
 import { useAppStore } from './store';
-import { aggregatePlayerState } from './transportSlice';
+import { aggregateAllPlayers, allPlayerStates } from './transportSlice';
 import type { Loop } from './types';
 
 /** A loop's length in steps = Σ chord.bars × stepsPerBar. */
@@ -155,7 +155,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
         // SCOPE_NONE is the only non-identity result: what was sounding is
         // not the loop now in focus.
         const wasPlaying =
-          aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
+          aggregateAllPlayers(s) === 'playing';
         if (wasPlaying) {
           // hardStopAll stops the players AND dispatches 'stop-all' — the
           // same SCOPE_NONE — in one set(), so the two are never observed
@@ -176,7 +176,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
     }
 
     const playing =
-      aggregatePlayerState(s.sequencerPlayer, s.chordsPlayer, s.leadPlayer) === 'playing';
+      aggregateAllPlayers(s) === 'playing';
     // The arrangement advances only under the SONG scope. The test used to be
     // `kind !== 'loop'`, which also ran the song under `none` — a claim that
     // the arrangement may play while nothing owns the transport, which is the
@@ -196,7 +196,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
         unsubClock = subscribeClock((step, _beat, time) => {
           const cur = useAppStore.getState();
           if (cur.songLoopIndex === null || cur.playbackScope.kind === 'loop') return;
-          if (aggregatePlayerState(cur.sequencerPlayer, cur.chordsPlayer, cur.leadPlayer) !== 'playing')
+          if (aggregateAllPlayers(cur) !== 'playing')
             return;
           const decision = songAdvanceDecision(
             cur.loops,
@@ -335,9 +335,12 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
       // Watched because a cursor move on the Loop layer is a focus change:
       // reconcile must dispatch focus-loop for it, not only for a tab change.
       loop: state.activeLoopId,
-      seq: state.sequencerPlayer,
-      chords: state.chordsPlayer,
-      lead: state.leadPlayer,
+      // Every registered player, table-driven — joined to one string so the
+      // equalityFn below stays a plain `===` per field. A hand-listed
+      // `seq`/`chords`/`lead` trio here is exactly the bug this closes: it
+      // watched three of four players, so an fx-only transition never woke
+      // reconcile.
+      players: allPlayerStates(state).join('|'),
       scope: state.playbackScope,
     }),
     reconcile,
@@ -345,9 +348,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
       equalityFn: (a, b) =>
         a.tab === b.tab &&
         a.loop === b.loop &&
-        a.seq === b.seq &&
-        a.chords === b.chords &&
-        a.lead === b.lead &&
+        a.players === b.players &&
         a.scope === b.scope,
     }
   );

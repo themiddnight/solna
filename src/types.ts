@@ -30,7 +30,7 @@ export type Layer = 'loop' | 'song';
  * `PatternView` would show a blank tab. viewMeta.test.ts closes that by
  * comparing the table's ids to this array.
  */
-export const PATTERN_SEGMENT_IDS = ['lead', 'accompaniment', 'beat'] as const;
+export const PATTERN_SEGMENT_IDS = ['lead', 'fx', 'accompaniment', 'beat'] as const;
 export type PatternSegment = (typeof PATTERN_SEGMENT_IDS)[number];
 
 /**

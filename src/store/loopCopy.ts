@@ -1,7 +1,7 @@
 import type { Loop, LoopStatePatch } from './types';
 
 /** The five mixer tracks a group can name, plus `loop` for the two loop-wide groups. */
-export type LoopCopyTrack = 'lead' | 'chord' | 'bass' | 'pad' | 'drums' | 'loop';
+export type LoopCopyTrack = 'lead' | 'fx' | 'chord' | 'bass' | 'pad' | 'drums' | 'loop';
 
 /**
  * The Sound/Pattern boundary the navigation already draws — changes the sound
@@ -13,6 +13,8 @@ export type LoopCopyAspect = 'sound' | 'pattern' | 'whole';
 export type LoopCopyGroupId =
   | 'lead-sound'
   | 'lead-pattern'
+  | 'fx-sound'
+  | 'fx-pattern'
   | 'chord-sound'
   | 'chord-pattern'
   | 'bass-sound'
@@ -45,7 +47,7 @@ export interface LoopCopyGroup {
  * arrangement data, not loop content.
  *
  * padVolume/padMuted reach a Loop through PadState rather than through the
- * other eight mixer fields' path; they still belong to `mix`, because the
+ * other ten mixer fields' path; they still belong to `mix`, because the
  * group is the mixer strip a user sees, not the interface a field is
  * declared in.
  */
@@ -63,6 +65,21 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
       'leadMelodyView',
       'leadMelodyOctave',
       'leadGate',
+    ],
+  },
+  { id: 'fx-sound', track: 'fx', aspect: 'sound', label: 'FX sound', keys: ['fxSynthParams'] },
+  {
+    id: 'fx-pattern',
+    track: 'fx',
+    aspect: 'pattern',
+    label: 'FX pattern',
+    keys: [
+      'fxMelodySteps',
+      'fxLoopLength',
+      'fxStepResolution',
+      'fxMelodyView',
+      'fxMelodyOctave',
+      'fxGate',
     ],
   },
   { id: 'chord-sound', track: 'chord', aspect: 'sound', label: 'Chords sound', keys: ['chordSynthParams'] },
@@ -119,6 +136,8 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
       'bassMuted',
       'padVolume',
       'padMuted',
+      'fxVolume',
+      'fxMuted',
       'masterSequencerVolume',
       'drumMuted',
     ],

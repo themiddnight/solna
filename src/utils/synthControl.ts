@@ -1,6 +1,6 @@
 import type { SynthParams, ViewMode } from '../types';
 
-export type SynthControlTarget = 'synth' | 'chord' | 'bass' | 'pad';
+export type SynthControlTarget = 'synth' | 'chord' | 'bass' | 'pad' | 'fx';
 
 // Per-destination accent styling, shared by every surface that edits a target:
 // the Target selector, the Pro/Simple panel cards and the preset drawer header.
@@ -38,7 +38,12 @@ export const SYNTH_TARGET_STYLES: Record<
      * out rather than imported because `utils/` does not reach into
      * `components/`.
      */
-    accent: 'text-primary' | 'text-module-chord' | 'text-module-bass' | 'text-module-pad';
+    accent:
+      | 'text-primary'
+      | 'text-module-chord'
+      | 'text-module-bass'
+      | 'text-module-pad'
+      | 'text-module-fx';
   }
 > = {
   synth: {
@@ -90,6 +95,17 @@ export const SYNTH_TARGET_STYLES: Record<
     slider: 'range range-xs text-module-pad [--range-thumb:var(--color-module-pad-content)]',
     accent: 'text-module-pad',
   },
+  fx: {
+    label: 'FX',
+    tint: 'tint-fx',
+    ring: 'ring-1 ring-module-fx/40',
+    activeBtn: '[--btn-color:var(--color-module-fx)] [--btn-fg:var(--color-module-fx-content)]',
+    softBtn: 'btn-soft [--btn-color:var(--color-module-fx)] [--btn-fg:var(--color-module-fx-content)]',
+    badge: '[--badge-color:var(--color-module-fx)]',
+    border: 'border-module-fx',
+    slider: 'range range-xs text-module-fx [--range-thumb:var(--color-module-fx-content)]',
+    accent: 'text-module-fx',
+  },
 };
 
 export interface SynthParamChannel {
@@ -104,6 +120,7 @@ export function resolveSynthControlChannel(
     chord: SynthParamChannel;
     bass: SynthParamChannel;
     pad: SynthParamChannel;
+    fx: SynthParamChannel;
   }
 ): SynthParamChannel {
   // Unknown runtime values (e.g. a persisted target predating this union) fall back to synth

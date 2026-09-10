@@ -8,7 +8,7 @@
  * The field names are table data rather than a `${source}Volume` convention on
  * purpose: 'sequencer' is irregular (`masterSequencerVolume` / `drumMuted`),
  * and encoding that as a special case in the loop would cost more than
- * spelling all ten names out.
+ * spelling all twelve names out.
  *
  * `solo` is the same irregularity in the other direction: the ENGINE calls the
  * drum bus 'sequencer' and the lead bus 'synth', while the USER-facing solo
@@ -21,6 +21,7 @@ export const SOURCE_BUSES = [
   { source: 'chord', volume: 'chordVolume', muted: 'chordMuted', solo: 'chord' },
   { source: 'bass', volume: 'bassVolume', muted: 'bassMuted', solo: 'bass' },
   { source: 'pad', volume: 'padVolume', muted: 'padMuted', solo: 'pad' },
+  { source: 'fx', volume: 'fxVolume', muted: 'fxMuted', solo: 'fx' },
   { source: 'sequencer', volume: 'masterSequencerVolume', muted: 'drumMuted', solo: 'drums' },
 ] as const;
 

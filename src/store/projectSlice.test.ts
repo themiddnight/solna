@@ -401,6 +401,10 @@ describe('openProject through the loop-mirroring set', () => {
     expect(s.loops).toHaveLength(1);
     for (const key of LOOP_FLAT_KEYS) {
       expect(s.loops[0][key]).toEqual(incoming.content.loops[0][key]);
+      // No cast needed: every LOOP_FLAT_KEYS entry — fx or otherwise,
+      // including fxSynthParams/fxVolume/fxMuted alongside the melody-editing
+      // fx fields — has a live top-level mirror on AppStore, so `s[key]`
+      // type-checks directly.
       expect(s[key]).toEqual(incoming.content.loops[0][key]);
     }
   });

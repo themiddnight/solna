@@ -3,6 +3,7 @@ import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
 import { deriveChordNotes } from '../utils/musicTheory';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import {
+  defaultFxState,
   defaultPadState,
   INITIAL_BASS_SYNTH_PARAMS,
   INITIAL_CHORDS,
@@ -46,6 +47,7 @@ export function createDefaultLoop(): Loop {
     bassFeel: 0.5,
     bassOctave: 2,
     ...defaultPadState(),
+    ...defaultFxState(),
     leadMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
     leadLoopLength: 1,
     leadStepResolution: DEFAULT_LEAD_STEP_RESOLUTION,

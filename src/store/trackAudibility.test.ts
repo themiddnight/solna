@@ -28,13 +28,14 @@ function drumVoiceSounds(
 }
 
 describe('SOLO_TRACKS', () => {
-  test('is exactly the five targets, in canonical order', () => {
-    expect([...SOLO_TRACKS]).toEqual(['lead', 'chord', 'bass', 'pad', 'drums']);
+  test('is exactly the six targets, in canonical order', () => {
+    expect([...SOLO_TRACKS]).toEqual(['lead', 'fx', 'chord', 'bass', 'pad', 'drums']);
   });
 
   test('every track has a label', () => {
     expect(SOLO_TRACK_LABELS).toEqual({
       lead: 'Lead',
+      fx: 'FX',
       chord: 'Chord',
       bass: 'Bass',
       pad: 'Pad',

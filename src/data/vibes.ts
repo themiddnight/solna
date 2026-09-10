@@ -149,6 +149,18 @@ export interface VibeSpec {
   /** Library reference into SYNTH_PRESETS for the lead voice. */
   synthPresetId: string;
 
+  /**
+   * Library reference into SYNTH_PRESETS for the FX voice; must resolve to
+   * category 'FX'.
+   *
+   * REQUIRED, unlike `pad`. That field is optional because a vibe *chooses*
+   * whether to bring a pad; FX is a track every loop has, the way lead is, so a
+   * vibe that declined to voice it would leave the FX track on whatever the
+   * PREVIOUS vibe set — which is the one thing the "every library id, exactly
+   * once and completely" rule exists to prevent.
+   */
+  fxPresetId: string;
+
   /** Library reference into EFFECT_CHAINS. */
   effectChainId: string;
 
@@ -189,6 +201,9 @@ export const VIBES: VibeSpec[] = [
 
     // Main Synth: Warm Keys / Whistle
     synthPresetId: 'factory-dream-keys',
+
+    // FX: the tape-hiss riser under the turnaround.
+    fxPresetId: 'factory-noise-riser-fx',
 
     // Pad: glue under the e-piano, not a foreground voice.
     pad: { volume: 0.30, presetId: 'factory-warm-polypad', mode: 'pad', octave: 3, voicing: 'open5', droneDegree: 0, droneIntervals: [1, 5, 8] },
@@ -246,6 +261,9 @@ export const VIBES: VibeSpec[] = [
     // Main Synth: Hyper Saw Lead
     synthPresetId: 'factory-hyper-saw-lead',
 
+    // FX: the laser zap that punctuates a neon night drive.
+    fxPresetId: 'factory-laser-fx',
+
     // Pad: the sustained half of the genre's two-layer chord stack.
     pad: { volume: 0.65, presetId: 'factory-string-ensemble', mode: 'pad', octave: 3, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
 
@@ -301,6 +319,9 @@ export const VIBES: VibeSpec[] = [
 
     // Main Synth: Cyber Pluck Lead
     synthPresetId: 'factory-pluck',
+
+    // FX: the riser building into the festival drop.
+    fxPresetId: 'factory-noise-riser-fx',
 
     // Pad: supersaw holding under the trance-pluck stabs.
     pad: { volume: 0.50, presetId: 'factory-neon-poly-saw', mode: 'pad', octave: 3, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
@@ -358,6 +379,9 @@ export const VIBES: VibeSpec[] = [
     // Main Synth: Ethereal Bell Pad
     synthPresetId: 'factory-celestial-shimmer',
 
+    // FX: a low cyber drone thickens the floating texture underneath.
+    fxPresetId: 'factory-cyber-drone',
+
     // Pad: a pedal tone under the Lydian progression is the genre's gesture.
     pad: { volume: 0.55, presetId: 'factory-dark-sub-pad', mode: 'drone', octave: 2, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
 
@@ -409,6 +433,9 @@ export const VIBES: VibeSpec[] = [
 
     // Main Synth: Mellow E-Piano Solo
     synthPresetId: 'factory-mellow-epiano',
+
+    // FX: the vinyl-crackle riser easing into a turnaround.
+    fxPresetId: 'factory-noise-riser-fx',
 
     effectChainId: 'boombap-dry-room',
 
@@ -463,6 +490,9 @@ export const VIBES: VibeSpec[] = [
     // Main Synth: Pentatonic Bell Lead
     synthPresetId: 'factory-glocken-bell',
 
+    // FX: a soft cyber drone standing in for distant temple ambience.
+    fxPresetId: 'factory-cyber-drone',
+
     // Pad: the sustained shō of gagaku, a direct ancestor of drone music.
     pad: { volume: 0.40, presetId: 'factory-warm-polypad', mode: 'drone', octave: 2, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
 
@@ -515,6 +545,9 @@ export const VIBES: VibeSpec[] = [
 
     // Main Synth: FM tine piano
     synthPresetId: 'factory-fm-tine-piano',
+
+    // FX: the same tape-hiss riser as lofi-chill, its sibling vibe.
+    fxPresetId: 'factory-noise-riser-fx',
 
     // Pad: same treatment as lofi-chill.
     pad: { volume: 0.30, presetId: 'factory-warm-polypad', mode: 'pad', octave: 3, voicing: 'open5', droneDegree: 0, droneIntervals: [1, 5, 8] },
@@ -570,6 +603,10 @@ export const VIBES: VibeSpec[] = [
 
     // Main Synth: bell lead, the voice the groove is named for
     synthPresetId: 'factory-glocken-bell',
+
+    // FX: a low cyber drone under the bell groove, the same texture as
+    // zen-garden's bell lead.
+    fxPresetId: 'factory-cyber-drone',
 
     effectChainId: 'boombap-dry-room',
 

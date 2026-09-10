@@ -147,6 +147,16 @@ describe('solo is cleared by navigation', () => {
     expect(useAppStore.getState().soloTracks).toEqual([]);
   });
 
+  // 'fx' is a Pattern segment like any other, so a change onto it clears the
+  // solo set for the same reason 'beat' does above.
+  test('changing the Pattern segment to fx clears it too', () => {
+    useAppStore.getState().setActiveTab('pattern');
+    useAppStore.getState().toggleSoloTrack('lead');
+    expect(useAppStore.getState().soloTracks).toEqual(['lead']);
+    useAppStore.getState().setPatternSegment('fx');
+    expect(useAppStore.getState().soloTracks).toEqual([]);
+  });
+
   test('changing layer (Loop -> Song) clears it', () => {
     useAppStore.getState().toggleSoloTrack('lead');
     expect(useAppStore.getState().soloTracks).toEqual(['lead']);

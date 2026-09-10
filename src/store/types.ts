@@ -27,7 +27,7 @@ import type { SoloTrack } from './trackAudibility';
 /** A player is `stopping` between a soft stop and the bar line that ends it. */
 export type PlayerState = 'stopped' | 'playing' | 'stopping';
 
-export type PlayerModule = 'sequencer' | 'chords' | 'lead';
+export type PlayerModule = 'sequencer' | 'chords' | 'lead' | 'fx';
 
 export interface TransportSlice {
   bpm: number;
@@ -41,6 +41,7 @@ export interface TransportSlice {
   sequencerPlayer: PlayerState;
   chordsPlayer: PlayerState;
   leadPlayer: PlayerState;
+  fxPlayer: PlayerState;
   // Transient playhead (not persisted): `playheadBeat` is the absolute beat
   // index since the shared clock was reset, so every consumer measures from the
   // same origin; the chord fields say which chord the Chords player is sounding
@@ -255,6 +256,60 @@ export interface LeadSlice {
   setLeadNoteLength: (stepIndex: number, note: string, len: number) => void;
 }
 
+/**
+ * The FX track's melody-editing state, mirroring LeadSlice's eight non-recording
+ * fields and thirteen actions exactly: `createFxSlice` (fxSlice.ts) is the
+ * other call site of the same `createMelodySlice` factory `createLeadSlice`
+ * calls. There is no `fxRecording`/`recordFxNote` pair — live capture stays
+ * lead-only (see `LeadSlice`'s own note on `recordLeadNote`).
+ */
+export interface FxSlice {
+  /** Notes per bar, stored at a fixed LEAD_TICKS_PER_BAR per bar and windowed
+   *  to the active meter AND resolution. The index is the TICK a note STARTS
+   *  on — not a 16th and not a visible column. */
+  fxMelodySteps: LeadNote[][];
+  /** Loop length in bars; must divide Σ ChordItem.bars. */
+  fxLoopLength: number;
+  /** How fine this loop's melody grid is. Per loop, not global — see
+   *  LeadSlice.leadStepResolution. */
+  fxStepResolution: LeadStepResolutionId;
+  /** Scale-locked or chromatic rows; persisted per loop. */
+  fxMelodyView: LeadMelodyView;
+  /** Lowest octave of the visible window; persisted per loop. */
+  fxMelodyOctave: number;
+  /** Fraction of a note's FINAL step that sounds, 0.05-1.0; per loop. */
+  fxGate: number;
+  setFxMelodySteps: (steps: LeadNote[][]) => void;
+  setFxLoopLength: (bars: number) => void;
+  /** Like setFxLoopLength but never resizes/trims the melody grid. */
+  setFxLoopLengthPreserve: (bars: number) => void;
+  setFxStepResolution: (id: LeadStepResolutionId) => void;
+  setFxMelodyView: (view: LeadMelodyView) => void;
+  setFxMelodyOctave: (octave: number) => void;
+  setFxGate: (gate: number) => void;
+  /** The selected COLUMN. The selected bar is derived, never stored beside it. */
+  fxCursor: number;
+  /** One copied bar at its full stored width, or null before the first copy. */
+  fxBarClipboard: LeadNote[][] | null;
+  setFxCursor: (cursor: number) => void;
+  copySelectedFxBar: () => void;
+  pasteIntoSelectedFxBar: () => void;
+  toggleFxNote: (stepIndex: number, note: string) => void;
+  /** Add or remove one drawn note — see LeadSlice.paintLeadNote. */
+  paintFxNote: (stepIndex: number, note: string, mode: LeadNotePaintMode) => void;
+  /** Set a drawn note's length — see LeadSlice.setLeadNoteLength. */
+  setFxNoteLength: (stepIndex: number, note: string, len: number) => void;
+  /** The FX synth voice's live params. */
+  fxSynthParams: SynthParams;
+  /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at
+   *  the store->engine boundary in engineSync.ts, never in a component. */
+  fxVolume: number;
+  fxMuted: boolean;
+  setFxSynthParams: (params: SynthParams) => void;
+  setFxVolume: (volume: number) => void;
+  toggleFxMuted: () => void;
+}
+
 export interface SequencerSlice {
   sequencerTracks: SequencerTrack[];
   soundKit: string;
@@ -405,7 +460,29 @@ export interface PresetsSlice {
 }
 
 /** A full per-loop musical snapshot: identity + every per-loop field. */
-export interface Loop extends PadState {
+/**
+ * The FX track's per-loop state: a twin of the lead's, plus its own patch and
+ * bus pair. Its own interface, like PadState, so `Loop` states what it holds in
+ * blocks and `defaultFxState()` has something to return.
+ *
+ * The types are the LEAD's types by construction — the FX grid is the lead grid
+ * with a different trackId, so a divergence here would be a second grid model,
+ * which is exactly what the design rejected.
+ */
+export interface FxState {
+  /** Notes per bar at LEAD_TICKS_PER_BAR; the index is the TICK a note starts on. */
+  fxMelodySteps: LeadNote[][];
+  fxLoopLength: number;
+  fxStepResolution: LeadStepResolutionId;
+  fxMelodyView: LeadMelodyView;
+  fxMelodyOctave: number;
+  fxGate: number;
+  fxSynthParams: SynthParams;
+  fxVolume: number;
+  fxMuted: boolean;
+}
+
+export interface Loop extends PadState, FxState {
   id: string;
   /** The USER's name. '' until they set one, '' again if they clear it; nothing but a rename writes it. */
   name: string;
@@ -460,7 +537,7 @@ export interface Loop extends PadState {
 /** The per-loop fields, without identity — what loadLoop writes to the flat slices. */
 export type LoopStatePatch = Omit<Loop, 'id' | 'name' | 'repeatCount' | 'tempName'>;
 
-/** The per-loop mixer: the 10 volume/mute fields edited on each Arrange card. */
+/** The per-loop mixer: the 12 volume/mute fields edited on each Arrange card. */
 export type LoopMixPatch = Pick<
   Loop,
   | 'synthVolume'
@@ -471,6 +548,8 @@ export type LoopMixPatch = Pick<
   | 'bassMuted'
   | 'padVolume'
   | 'padMuted'
+  | 'fxVolume'
+  | 'fxMuted'
   | 'masterSequencerVolume'
   | 'drumMuted'
 >;
@@ -495,7 +574,7 @@ export interface LoopSlice {
   setLoopTempName: (id: string, tempName: string) => void;
   setLoopRepeatCount: (id: string, repeatCount: number) => void;
   setActiveLoop: (id: string) => void;
-  /** Edit a loop's 10 mixer fields in place; mirrors to the flat slices when active. */
+  /** Edit a loop's 12 mixer fields in place; mirrors to the flat slices when active. */
   setLoopMix: (id: string, patch: Partial<LoopMixPatch>) => void;
   /**
    * Overwrite the selected copy groups of `targetId` with `sourceId`'s
@@ -519,6 +598,7 @@ export interface AppStore
     BassSlice,
     PadSlice,
     LeadSlice,
+    FxSlice,
     SequencerSlice,
     EffectsSlice,
     UiSlice,

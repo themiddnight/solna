@@ -57,7 +57,7 @@ import type { AppStore, Loop, LoopStatePatch } from './types';
  * The contract, at PROJECT_FORMAT_VERSION:
  *   keys     the flat faders PROJECT_DB_LEVEL_KEYS lists below — masterVolume
  *            (content root), synthVolume, chordVolume, bassVolume, padVolume,
- *            masterSequencerVolume (per-loop) — PLUS sequencerTracks[].volume
+ *            fxVolume, masterSequencerVolume (per-loop) — PLUS sequencerTracks[].volume
  *            (per-track, per-loop), which is a nested row key rather than a flat
  *            one and so is covered here but not listed there.
  *   unit     decibels, relative (a fader), NOT dBFS.
@@ -102,9 +102,9 @@ export const PROJECT_FORMAT_VERSION = 10;
  * quietly missing from the sanitizer's hand-written repeat of it (`padVolume`)
  * went unvalidated straight into `faderDbToGain`, which fails SAFE TO SILENCE —
  * a corrupt stored value muted the pad bus instead of defaulting to the trim
- * every other bus got. Adding a seventh fader is now an edit to this list.
+ * every other bus got. Adding an eighth fader is now an edit to this list.
  *
- * `masterVolume` is the content root's own fader and the other five are the
+ * `masterVolume` is the content root's own fader and the other six are the
  * source buses; per-loop, all six live on the loop. The contract also covers
  * `sequencerTracks[].volume`, which is deliberately NOT in this array: it is a
  * per-row key nested inside each loop, validated by `sanitizeFlatSequencerTracks`
@@ -125,6 +125,7 @@ export const PROJECT_DB_LEVEL_KEYS: readonly string[] = [
   'chordVolume',
   'bassVolume',
   'padVolume',
+  'fxVolume',
   'masterSequencerVolume',
 ];
 
