@@ -7,12 +7,14 @@ import {
   subscribeArpState,
   selectArpActive,
   selectSynthRelease,
+  synthTargetForFocus,
 } from './useInputDeck';
 import type { InputDeckDrumProps, InputDeckKeyboardProps } from './useInputDeck';
 import type { SynthControlTarget } from '@/utils/synthControl';
 import { useAppStore } from '../store/store';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
 import { getChordKeyboardRows, getScaleLockedKeyboardNotes } from './ui/Keyboard';
+import { MIX_LAYER_IDS } from '@/store/focusTrack';
 
 let captured: { keyboardProps: InputDeckKeyboardProps; drumProps: InputDeckDrumProps } | null = null;
 
@@ -125,6 +127,15 @@ describe('subscribeArpState', () => {
 
       useAppStore.getState().setBpm(133);
       expect(ref.current.bpm).toBe(133);
+
+      // The keyboard follows focus: the ref's target is the focused melodic
+      // track, and null when there is nothing melodic to play.
+      useAppStore.getState().setFocusTrack('fx');
+      expect(ref.current.target).toBe('fx');
+      useAppStore.getState().setFocusTrack('drum');
+      expect(ref.current.target).toBeNull();
+      useAppStore.getState().setFocusTrack('synth');
+      expect(ref.current.target).toBe('synth');
     } finally {
       stop();
     }
@@ -153,5 +164,30 @@ describe('selectArpActive / selectSynthRelease narrowing', () => {
     expect(typeof selectSynthRelease(stateA)).toBe('number');
     expect(selectArpActive(stateA)).toBe(selectArpActive(stateB));
     expect(selectSynthRelease(stateA)).toBe(selectSynthRelease(stateB));
+  });
+});
+
+describe('synthTargetForFocus', () => {
+  test('every melodic focus plays its own bus', () => {
+    expect(synthTargetForFocus('synth')).toBe('synth');
+    expect(synthTargetForFocus('fx')).toBe('fx');
+    expect(synthTargetForFocus('chord')).toBe('chord');
+    expect(synthTargetForFocus('bass')).toBe('bass');
+    expect(synthTargetForFocus('pad')).toBe('pad');
+  });
+
+  test('a drum focus has no melodic bus, and says so with null', () => {
+    // Not a fallback to 'synth': that would make the drum focus play the Lead
+    // patch off the melodic keyboard — the same invisible mis-routing this
+    // change removes. The QWERTY drum PADS are a disjoint key set on their own
+    // listener and are unaffected.
+    expect(synthTargetForFocus('drum')).toBeNull();
+  });
+
+  test('is total over the focus roster', () => {
+    for (const focus of MIX_LAYER_IDS) {
+      const target = synthTargetForFocus(focus);
+      expect(target === null || typeof target === 'string').toBe(true);
+    }
   });
 });

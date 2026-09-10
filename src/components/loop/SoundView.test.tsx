@@ -5,6 +5,8 @@ import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keybo
 import { shouldCloseSynthOverlays, SoundView } from './SoundView';
 import { MIX_GROUP_IDS, MIX_GROUP_LABELS, MIX_LAYERS } from '../mixLayers';
 import { MIX_LAYER_IDS } from '@/store/focusTrack';
+import type { MixLayerId } from '@/store/focusTrack';
+import { synthTargetForFocus } from '../useInputDeck';
 import { FIELD_LABEL, FIELD_LANE, HEADER_GROUP, SECTION_HEADER } from '../ui/fieldClasses';
 import { PANEL_CARD } from '../ui/PanelCard';
 import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from '@/utils/synthControl';
@@ -253,12 +255,22 @@ describe('the Drum Sound card, moved from the sequencer (nav restructure Task 6)
   });
 });
 
-// Regression for: the interactive keyboard must always play the main synth,
-// independent of whatever the Target selector (Synth/Chord/Bass) is editing.
-// useInputDeck pins the keyboard to the 'synth' channel (KEYBOARD_AUDITION_TARGET),
-// and this pure test asserts the resolveSynthControlChannel utility keeps that
-// decision fixed for every possible Target value.
-describe('keyboard audition channel is always the main synth', () => {
+// The interactive keyboard is no longer pinned to the main synth: it plays
+// whichever track `focusTrack` names (spec 2026-09-10-focus-track-design.md,
+// symptom (a); useInputDeck.ts, synthTargetForFocus).
+//
+// `resolveSynthControlChannel` itself is UNCHANGED — it still maps a target to
+// that target's channel — so what this block pins is the pair: focus picks the
+// target, and the target picks the channel. The drum focus is the case with no
+// channel at all, and it must resolve to nothing rather than falling back to
+// Lead: the resolver's trailing `?? channels.synth` would absorb a stray
+// 'drum' silently, which is why the fallback is never reached with one.
+describe('the keyboard auditions the focused track', () => {
+  // The `const baseParams: SynthParams = { … }` literal, the `channel(name)`
+  // factory and the `channels` object below the describe header are UNCHANGED
+  // — do not retype them, do not touch them. Only the header, the comment
+  // above it and the tests inside it change.
+
   const baseParams: SynthParams = {
     oscType: 'sine',
     subOscVolume: 0,
@@ -299,15 +311,29 @@ describe('keyboard audition channel is always the main synth', () => {
     fx: channel('fx-synth'),
   };
 
-  test('the keyboard channel is always channels.synth, no matter which target is passed to the panel resolver', () => {
-    // The panel/knob-editing resolver may point anywhere...
+  test('the panel resolver still maps every target to its own channel', () => {
     expect(resolveSynthControlChannel('chord', channels)).toBe(channels.chord);
     expect(resolveSynthControlChannel('bass', channels)).toBe(channels.bass);
-    // ...but the keyboard always resolves the hard-coded 'synth' target.
     expect(resolveSynthControlChannel('synth', channels)).toBe(channels.synth);
-    expect(resolveSynthControlChannel('synth', channels).params.preset).toBe(
-      'main-synth',
-    );
+  });
+
+  test('focus picks the target, and the target picks the channel', () => {
+    const cases: ReadonlyArray<[MixLayerId, string]> = [
+      ['synth', 'main-synth'],
+      ['fx', 'fx-synth'],
+      ['chord', 'chord-synth'],
+      ['bass', 'bass-synth'],
+      ['pad', 'pad-synth'],
+    ];
+    for (const [focus, preset] of cases) {
+      const target = synthTargetForFocus(focus);
+      if (target === null) throw new Error(`expected a melodic target for ${focus}`);
+      expect(resolveSynthControlChannel(target, channels).params.preset).toBe(preset);
+    }
+  });
+
+  test('a drum focus has no channel to audition', () => {
+    expect(synthTargetForFocus('drum')).toBeNull();
   });
 });
 

@@ -26,14 +26,53 @@ import type { DrumPad, KeyboardMode, SynthParams } from '../types';
 import type { SynthControlTarget } from '../utils/synthControl';
 import { isTypingTarget } from '../utils/keyboard';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
+import {
+  controlTargetForFocus,
+  isMelodicFocus,
+  type MixLayerId,
+} from '../store/focusTrack';
 
-// The interactive keyboard always plays the main synth, regardless of which
-// destination the panel's "Target" selector is currently editing — pinning it
-// here (instead of routing through `controlTarget`) keeps every audio call
-// site (note-on, note-off, arp playback, voice release) agreeing on one
-// engine, so a mode/target switch can never strand voices on an engine nothing
-// points at anymore (copied verbatim from SoundView).
-const KEYBOARD_AUDITION_TARGET: SynthControlTarget = 'synth';
+// The keyboard, the on-screen keyboard and the arp all play the FOCUSED track
+// (`focusTrack` in the ui slice). They used to be pinned to a module constant,
+// KEYBOARD_AUDITION_TARGET, whose stated reason was that pinning kept every
+// audio call site (note-on, note-off, arp playback, voice release) agreeing on
+// one engine, so a target switch could never strand voices on an engine
+// nothing points at any more. The target varies now, so each of those
+// guarantees is made explicitly instead:
+//
+//  - note-off releases on the target CAPTURED at note-on
+//    (arpStateRef.current.heldTargets, see audio/playback/heldNotes.ts), never
+//    on a target recomputed at release time. A focus change mid-hold would
+//    otherwise send the release to a bus the voice was never on, and the held
+//    voice would drone until the same key was pressed again on the same
+//    track. Same rule as chordKeyNotesRef below, on a different axis.
+//  - the arp records every bus it has TRIGGERED on and releases all of them
+//    (arpPlayback.ts), because one hold spanning a focus change leaves voices
+//    on more than one bus.
+//  - equal-power polyphony counts the notes held on ONE bus, and the engine
+//    rescale is scoped to that source, so playing a second track never
+//    quietens the first.
+//
+// A focus change alone does NOT cut sounding voices: they ring out naturally.
+// That is a decision (spec, Open risks 1) — cutting them is a hard stop the
+// user did not ask for, and they are finite.
+
+/**
+ * The synth bus a focus plays on, or `null` when there is nothing melodic to
+ * play. Exported so this routing decision is testable as pure logic, without
+ * rendering — `useEffect` never runs under renderToString, so the deck's
+ * behaviour is only reachable through helpers like this one.
+ *
+ * `null` for `drum` rather than a fallback to `'synth'`: a fallback would make
+ * the drum focus play the Lead patch off the melodic keyboard, silently and
+ * with nothing on screen to explain it, which is the exact failure this change
+ * exists to remove. The QWERTY drum-PAD shortcuts are unaffected — they are a
+ * disjoint key set (`KeyZ`..`Slash`, DEFAULT_PADS) on their own listener, so a
+ * drum focus silences the melodic keyboard and leaves the pads playing.
+ */
+export function synthTargetForFocus(focus: MixLayerId): SynthControlTarget | null {
+  return isMelodicFocus(focus) ? controlTargetForFocus(focus) : null;
+}
 
 // Decide which notes must be force-released when the keyboard mode changes.
 // Always releases from the snapshot of what is actually sounding right now
@@ -131,13 +170,13 @@ export const selectArpActive = (s: AppStore): boolean => s.synthParams.arpActive
 export const selectSynthRelease = (s: AppStore): number => s.synthParams.release;
 
 /**
- * Keeps `arpStateRef.current.params` / `.bpm` fresh by IMPERATIVE store
- * subscription instead of by a render-driven effect. The hook used to select
- * the whole `synthParams` object at App level purely to feed this ref, which
- * re-rendered the entire application tree on every knob pointermove. Zustand
- * notifies synchronously on `set()`, so the ref is refreshed strictly EARLIER
- * than the old post-commit effect did it — the arp can never read staler
- * params than before. Same pattern as `useSequencerPlayback.ts:69-78`.
+ * Keeps `arpStateRef.current.params` / `.bpm` / `.target` fresh by IMPERATIVE
+ * store subscription instead of by a render-driven effect. The hook used to
+ * select the whole `synthParams` object at App level purely to feed this ref,
+ * which re-rendered the entire application tree on every knob pointermove.
+ * Zustand notifies synchronously on `set()`, so the ref is refreshed strictly
+ * EARLIER than the old post-commit effect did it — the arp can never read
+ * staler params than before. Same pattern as `useSequencerPlayback.ts:69-78`.
  */
 export function subscribeArpState(ref: ArpStateRef): () => void {
   const unsubParams = useAppStore.subscribe(
@@ -154,9 +193,17 @@ export function subscribeArpState(ref: ArpStateRef): () => void {
     },
     { fireImmediately: true },
   );
+  const unsubFocus = useAppStore.subscribe(
+    (s) => s.focusTrack,
+    (focus) => {
+      ref.current.target = synthTargetForFocus(focus);
+    },
+    { fireImmediately: true },
+  );
   return () => {
     unsubParams();
     unsubBpm();
+    unsubFocus();
   };
 }
 
@@ -171,9 +218,6 @@ export function useInputDeck(): {
   const setKeyboardMode = useAppStore((s) => s.setKeyboardMode);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
-  // The keyboard always auditions the main synth (KEYBOARD_AUDITION_TARGET),
-  // regardless of which destination the panel's Target selector is editing.
-  //
   // Deliberately two PRIMITIVE selectors, not `(s) => s.synthParams`. This hook
   // is mounted in App, and `synthParams` is a fresh object on every knob
   // pointermove (60-120 Hz), so selecting the object re-rendered App and with
@@ -200,15 +244,13 @@ export function useInputDeck(): {
   const arpStateRef = useRef<ArpStateRef['current']>({
     heldTargets: new Map(),
     params: useAppStore.getState().synthParams,
-    target: KEYBOARD_AUDITION_TARGET,
+    target: synthTargetForFocus(useAppStore.getState().focusTrack),
     triggeredTargets: new Set(),
     bpm: useAppStore.getState().bpm,
   });
-  // params/bpm come straight off the store — no render subscription needed.
+  // params/bpm/target come straight off the store — no render subscription needed.
   useEffect(() => subscribeArpState(arpStateRef), []);
 
-  // The keyboard always auditions the main synth (KEYBOARD_AUDITION_TARGET),
-  // regardless of which destination the Target selector is currently editing.
   const handleNoteOn = useCallback(
     (note: string) => {
       // Params come from arpStateRef, kept fresh by an imperative store
@@ -217,15 +259,37 @@ export function useInputDeck(): {
       // on every knob move — which used to tear down and re-register the
       // window keydown/keyup listeners ~60 times a second during a drag.
       const liveParams = arpStateRef.current.params;
-      const target = KEYBOARD_AUDITION_TARGET;
+      // The bus focus names RIGHT NOW. Read once, used for both the engine
+      // call and the map entry, so the note is captured on exactly the bus it
+      // was played on even if focus moves during this callback.
+      const target = arpStateRef.current.target;
+      if (target === null) {
+        // Focus is on the drum track: the melodic keyboard has nothing to
+        // play. Nothing sounds, nothing is announced on the note-input bus
+        // (announcing would let the recorder capture a note that made no
+        // sound), and the key is not added to activeNotes — a highlighted key
+        // that plays nothing is the invisible state this change removes.
+        // Its note-off then finds no map entry and is a no-op, so the two
+        // edges stay symmetric. The QWERTY drum PADS are a separate listener
+        // over a disjoint key set and keep working.
+        return;
+      }
       const held = arpStateRef.current.heldTargets;
       initSynthPlayback();
       if (!liveParams.arpActive) {
+        const previous = noteTargetFor(held, note);
+        if (previous !== undefined && previous !== target) {
+          // The same note is already held on ANOTHER bus — QWERTY holds C4 on
+          // Lead, focus moves to FX, the on-screen keyboard is pressed on C4.
+          // The map holds one target per note, so without this release the old
+          // bus's voice loses its only release path and drones forever.
+          synthPlaybackNoteOff(note, liveParams.release, undefined, previous);
+        }
         // Equal-power polyphony: a new note lowers every voice held ON THIS
         // BUS so that instrument's total level stays flat as keys are added.
         // The map mirrors the held set synchronously so rapid presses see
         // each other.
-        const isNewNote = !held.has(note);
+        const isNewNote = previous === undefined;
         held.set(note, target);
         const scale = equalPowerVelocityScale(heldCountFor(held, target));
         if (isNewNote) {
