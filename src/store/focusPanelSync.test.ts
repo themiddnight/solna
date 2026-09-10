@@ -50,6 +50,16 @@ describe('startFocusPanelSync', () => {
     }
   });
 
+  test('runs at mount, before any focus change, so a reload never disagrees', () => {
+    useAppStore.setState({ focusTrack: 'drum' });
+    const stop = startFocusPanelSync();
+    try {
+      expect(useAppStore.getState().inputPanelMode).toBe('drums');
+    } finally {
+      stop();
+    }
+  });
+
   test('writes nothing when the panel already matches', () => {
     const stop = startFocusPanelSync();
     let writes = 0;

@@ -56,8 +56,9 @@ export function isMelodicFocus(focus: MixLayerId): focus is MelodicFocus {
 const SEGMENT_FOR_FOCUS: Record<MixLayerId, PatternSegment> = {
   synth: 'lead',
   fx: 'fx',
-  // Chord, bass and pad are one screen. Accompaniment stays a single segment
-  // showing all three, with one of the three focused and marked as such.
+  // Chord, bass and pad project to the one Accompaniment segment; nothing in
+  // ChordView reads focusTrack yet, so the segment does not distinguish which
+  // of the three is focused (spec: no change made there).
   chord: 'accompaniment',
   bass: 'accompaniment',
   pad: 'accompaniment',

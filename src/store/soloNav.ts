@@ -75,14 +75,14 @@ export type SoloNavSignature = {
  * runs on EVERY store `set()`, since the subscription below is mounted at the
  * app root for the life of the session. The map form allocated one array plus
  * a two-element tuple per key on every knob tick and every clock-driven write,
- * for an object of three strings. The loop keeps the same derived-from-the-
+ * for an object naming every source-table key. The loop keeps the same derived-from-the-
  * table property with one allocation.
  */
 export function soloNavSignature(state: AppStore): SoloNavSignature {
   // The accumulator is widened and cast once at the end, exactly as the
   // `Object.fromEntries` form was: writing through a union of mapped-type keys
   // narrows the value slot to `never`, and the alternative — an object literal
-  // naming the three fields — is the drift this table exists to prevent.
+  // naming the source-table's fields by hand — is the drift this table exists to prevent.
   const signature: Record<string, unknown> = {};
   for (const key of SOLO_NAV_KEYS) {
     signature[key] = SOLO_NAV_SOURCES[key](state);

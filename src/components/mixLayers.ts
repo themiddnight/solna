@@ -94,7 +94,7 @@ export const MIX_LAYERS: ReadonlyArray<MixLayer> = [
   { idPrefix: 'synth', label: 'Lead', volumeKey: 'synthVolume', muteKey: 'synthMuted', engineSource: 'synth', tone: 'primary', accentClass: 'text-primary', group: 'lead' },
   // group: 'lead', not its own group — Lead and FX are two melody tracks
   // sharing one heading, the way the two of them already sit as bare chips
-  // (not framed groups) in the Sound view's target row.
+  // (not framed groups) in the Sound view's focus row.
   { idPrefix: 'fx', label: 'FX', volumeKey: 'fxVolume', muteKey: 'fxMuted', engineSource: 'fx', tone: 'module-fx', accentClass: 'text-module-fx', group: 'lead' },
   { idPrefix: 'chord', label: 'Chord', volumeKey: 'chordVolume', muteKey: 'chordMuted', engineSource: 'chord', tone: 'module-chord', accentClass: 'text-module-chord', group: 'accompaniment' },
   { idPrefix: 'bass', label: 'Bass', volumeKey: 'bassVolume', muteKey: 'bassMuted', engineSource: 'bass', tone: 'module-bass', accentClass: 'text-module-bass', group: 'accompaniment' },

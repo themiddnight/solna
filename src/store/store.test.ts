@@ -572,7 +572,7 @@ describe('focusTrack persistence', () => {
    * forward (CLAUDE.md: no migration chains). A user who had FX selected on
    * Sound reopens on Lead; that is one click.
    */
-  test('an old payload carrying controlTarget/patternSegment yields neither, and focusTrack synth', async () => {
+  test('an old payload carrying only controlTarget/patternSegment still resolves focusTrack to synth', async () => {
     const { sanitizePersistedStateForTest } = await getStore();
     const out = sanitizePersistedStateForTest({ controlTarget: 'bass', patternSegment: 'beat' });
     expect(out.focusTrack).toBe('synth');

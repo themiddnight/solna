@@ -138,7 +138,7 @@ export const shouldCloseSynthOverlays = (focusTrack: MixLayerId): boolean =>
  * The eight store reads live HERE rather than at the top of SoundView, for the
  * same reason SoundMixer's MixerRow owns its own: every view stays mounted, so
  * a subscription at the top of this file re-renders the WHOLE view — the
- * header, the preset chips, the target row and all five synth panels, none of
+ * header, the preset chips, the focus row and all five synth panels, none of
  * which are memoised — on every pointermove of these two knobs. Scoped here, a
  * cutoff drag reconciles this card alone.
  */
@@ -491,11 +491,11 @@ export const SoundView = React.memo(function SoundView() {
           {renderFocusChip(BEAT_FOCUS)}
         </div>
 
-        {/* ONE solo button, following the Target — Sound edits exactly one
+        {/* ONE solo button, following the focus — Sound edits exactly one
             layer at a time, so five buttons here would be four controls for
-            layers this view is not editing. It sits beside the Target chips
-            rather than in the view header because "it follows the target" is
-            only legible next to the target. Session-only, and cleared by LEAVING the loop layer, by a change
+            layers this view is not editing. It sits beside the Focus chips
+            rather than in the view header because "it follows the focus" is
+            only legible next to the focus. Session-only, and cleared by LEAVING the loop layer, by a change
             of active loop, or by a project swap — NOT by a focus change,
             which is what makes a set spanning two tracks buildable from this
             row at all. store/soloNav.ts owns that rule and says why. */}
@@ -602,7 +602,7 @@ export const SoundView = React.memo(function SoundView() {
 
             {/* Inside `actions`, so it hangs off the button cluster that
                 raised it. As a child of the card it anchored to the card's own
-                `relative` root, which wraps the target row, the preset bar AND
+                `relative` root, which wraps the focus row, the preset bar AND
                 the whole Simple/Pro body — so `top-full` resolved at the
                 bottom edge of a five-panel card, over the Drum Sound card
                 below and nowhere near the Save button. */}

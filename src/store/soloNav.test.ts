@@ -69,7 +69,7 @@ afterEach(() => {
 describe('SOLO_NAV_KEYS', () => {
   /**
    * Exhaustive on purpose. The subscription covers every WRITER of these
-   * three axes by construction; the one thing a future contributor can still
+   * axes by construction; the one thing a future contributor can still
    * forget is a new navigation AXIS. This test is where that decision has to
    * be made out loud instead of by omission.
    */
@@ -93,10 +93,10 @@ describe('SOLO_NAV_KEYS', () => {
 describe('soloNavSignature', () => {
   /**
    * Binds SOLO_NAV_KEYS to what is actually watched at runtime, not just at
-   * the type level. Without this, adding a fourth key to the source table
+   * the type level. Without this, adding a key to the source table
    * alone (without touching soloNavSignature) would still pass the
    * exhaustive-list test above while the subscription kept watching only
-   * three fields — a constant that lies with a green suite.
+   * the old fields — a constant that lies with a green suite.
    */
   test('reads exactly the fields SOLO_NAV_KEYS names', () => {
     const signature = soloNavSignature(useAppStore.getState());

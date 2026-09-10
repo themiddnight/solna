@@ -27,6 +27,14 @@ export function panelModeForFocus(focus: MixLayerId): InputPanelMode {
  * The equality guard is here and not only in the action: zustand treats every
  * `set()` as a state change and re-runs partialize over the whole persisted
  * slice, and most focus changes leave the panel where it already was.
+ *
+ * `fireImmediately: true` runs the same check once at mount, against whatever
+ * `focusTrack` a reload restored. `focusTrack` is persisted and
+ * `inputPanelMode` is not, so without this a reload that left focus on `drum`
+ * boots with the dock showing the melodic Keyboard until focus changes again —
+ * the exact disagreement this sync exists to remove, reached with no user
+ * action at all. It does not fight a manual panel choice: the immediate fire
+ * happens once at mount, before the user can have made one.
  */
 export function startFocusPanelSync(): () => void {
   return useAppStore.subscribe(
@@ -37,6 +45,7 @@ export function startFocusPanelSync(): () => void {
         useAppStore.getState().setInputPanelMode(wanted);
       }
     },
+    { fireImmediately: true },
   );
 }
 
