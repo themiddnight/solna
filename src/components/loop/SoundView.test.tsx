@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { useAppStore } from '@/store/store';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
-import { SoundView } from './SoundView';
+import { shouldCloseSynthOverlays, SoundView } from './SoundView';
 import { MIX_GROUP_IDS, MIX_GROUP_LABELS, MIX_LAYERS } from '../mixLayers';
 import { MIX_LAYER_IDS } from '@/store/focusTrack';
 import { FIELD_LABEL, FIELD_LANE, HEADER_GROUP, SECTION_HEADER } from '../ui/fieldClasses';
@@ -117,14 +117,14 @@ describe('chromatic keyboard black key geometry', () => {
 
   test('SoundView still renders', () => {
     const html = renderToString(<SoundView />);
-    expect(html).toContain('Target:');
+    expect(html).toContain('Focus:');
   });
 
-  // Guards the Target chip row against going back to a hand-listed literal:
+  // Guards the Focus chip row against going back to a hand-listed literal:
   // every entry in SYNTH_TARGET_STYLES must show up as a chip, so a target
   // added to the registry and forgotten here fails this test instead of
   // silently not rendering.
-  test('every SYNTH_TARGET_STYLES entry renders as a Target chip', () => {
+  test('every SYNTH_TARGET_STYLES entry renders as a Focus chip', () => {
     const html = renderToString(<SoundView />);
     for (const target of Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]) {
       expect(html).toContain(`>${SYNTH_TARGET_STYLES[target].label}<`);
@@ -151,9 +151,15 @@ describe('chromatic keyboard black key geometry', () => {
 
     expect(bandsOf(renderToString(<SoundView />))).toEqual(['Synth', 'Mixer']);
 
+    // try/finally, not a bare reset after the assertion: a failed expect
+    // above would throw before the reset ran and leak 'drum' into every test
+    // that follows in this file.
     useAppStore.setState({ focusTrack: 'drum' });
-    expect(bandsOf(renderToString(<SoundView />))).toEqual(['Drum Sound', 'Mixer']);
-    useAppStore.setState({ focusTrack: 'synth' });
+    try {
+      expect(bandsOf(renderToString(<SoundView />))).toEqual(['Drum Sound', 'Mixer']);
+    } finally {
+      useAppStore.setState({ focusTrack: 'synth' });
+    }
   });
 
   /** One card per section, so the synth's stages cannot float off as siblings. */
@@ -401,6 +407,39 @@ describe('the Sound page on a drum focus', () => {
     const html = renderToString(<SoundView />);
     expect(html).toContain('id="btn-focus-synth"');
     expect(html).toContain('id="btn-focus-drum"');
+  });
+});
+
+/**
+ * `isLibraryOpen` / `isQuickSaving` are SoundView's own state and SoundView
+ * never unmounts, so a naive gate on the drum focus alone leaves them true
+ * underneath and re-opens the drawer the moment focus returns to a melodic
+ * track. `renderToString` runs no effect (see .claude/rules/testing.md), so
+ * a fresh render can never carry a stale "library flag set" into view — the
+ * closing decision itself is what is tested, per the same file's
+ * pure-logic-first convention.
+ */
+describe('the preset overlays close when focus leaves a melodic track', () => {
+  test('shouldCloseSynthOverlays is true only for the drum focus', () => {
+    expect(shouldCloseSynthOverlays('drum')).toBe(true);
+    expect(shouldCloseSynthOverlays('synth')).toBe(false);
+    expect(shouldCloseSynthOverlays('fx')).toBe(false);
+    expect(shouldCloseSynthOverlays('chord')).toBe(false);
+    expect(shouldCloseSynthOverlays('bass')).toBe(false);
+    expect(shouldCloseSynthOverlays('pad')).toBe(false);
+  });
+
+  // Regression pin for the surface itself: whatever the library flag holds,
+  // a drum focus must never render the drawer or its Suspense fallback.
+  test('a drum focus renders neither the drawer nor its loading fallback', () => {
+    useAppStore.setState({ focusTrack: 'drum' });
+    try {
+      const html = renderToString(<SoundView />);
+      expect(html).not.toContain('id="btn-open-presets-library"');
+      expect(html).not.toContain('loading loading-spinner');
+    } finally {
+      useAppStore.setState({ focusTrack: 'synth' });
+    }
   });
 });
 

@@ -186,7 +186,7 @@ export const HEADER_BADGE = 'badge badge-sm badge-outline text-[10px] font-semib
 
 /**
  * The micro-label that names a GROUP rather than a field: the caps line above
- * a GroupFrame, the keyboard's octave caption, the Sound view's "Target:".
+ * a GroupFrame, the keyboard's octave caption, the Sound view's "Focus:".
  *
  * Smaller and dimmer than SECTION_HEADER, which names a whole card, and unlike
  * FIELD_LABEL it is uppercase — design.md §3 assigns the casing by role, and

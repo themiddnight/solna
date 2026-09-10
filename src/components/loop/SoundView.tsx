@@ -118,6 +118,21 @@ const BEAT_CHIP = {
 };
 
 /**
+ * `isLibraryOpen` / `isQuickSaving` are SoundView's own `useState`, and
+ * SoundView never unmounts (every tab stays mounted — see the layering note
+ * at the top of this file's neighbours). Unmounting the Synth section on a
+ * drum focus does not reset them, so without this the preset library or the
+ * quick-save popover a user opened, then left by switching focus to Beat,
+ * pops back open the moment focus returns to a melodic track — a surface the
+ * user never asked to see again. Exported so the decision is testable
+ * directly: `renderToString` runs no effect, so a render-only test can only
+ * ever see the FIRST render's default state and could never actually catch
+ * this regression.
+ */
+export const shouldCloseSynthOverlays = (focusTrack: MixLayerId): boolean =>
+  !isMelodicFocus(focusTrack);
+
+/**
  * Drum kit and drum filter, as their own memoised subtree.
  *
  * The eight store reads live HERE rather than at the top of SoundView, for the
@@ -281,6 +296,16 @@ export const SoundView = React.memo(function SoundView() {
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [quickSaveName, setQuickSaveName] = useState<string>("");
   const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  // Close the two synth-only overlays the moment focus leaves a melodic
+  // track — see shouldCloseSynthOverlays above for why leaving them open is
+  // a bug rather than a no-op.
+  useEffect(() => {
+    if (shouldCloseSynthOverlays(focusTrack)) {
+      setIsLibraryOpen(false);
+      setIsQuickSaving(false);
+    }
+  }, [focusTrack]);
 
   // Simple vs Pro UI Mode toggle with localStorage persistence
   const [synthViewMode, setSynthViewMode] = useState<"simple" | "pro">(() => {
@@ -447,7 +472,7 @@ export const SoundView = React.memo(function SoundView() {
           className={`flex items-center gap-1 flex-wrap bg-base-200 border rounded-box p-1 ${synthTarget ? SYNTH_TARGET_STYLES[synthTarget].border : 'border-accent'}`}
         >
           <span className={`${GROUP_LABEL} pl-1 pr-1 hidden sm:inline`}>
-            Target:
+            Focus:
           </span>
           {MELODY_FOCUSES.map(renderFocusChip)}
           {/* Chord, bass and pad are one job done three ways. The frame is
