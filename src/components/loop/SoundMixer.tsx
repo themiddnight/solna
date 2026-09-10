@@ -87,6 +87,31 @@ const MIXER_GROUPS: ReadonlyArray<{ id: MixGroupId; label: string; channels: Mix
   })).filter((group) => group.channels.length > 0);
 
 /**
+ * Where each group sits on the wide-screen grid — a `Record<MixGroupId, …>` for
+ * the same reason MIXER_WRITERS is one: a group added to MIX_GROUP_IDS with
+ * nowhere to sit is then a compile error, rather than a `<div>` that falls into
+ * grid auto-flow and lands in whichever cell the placed groups left over.
+ *
+ * Two columns of three rows, not one column of six: Lead and FX (two rows) plus
+ * Beat (one) on the left, Accompaniment (three) on the right. Beat joins the
+ * melody column because that is the pairing that balances — the other two leave
+ * a 5/1 or a 2/4 split and a column of dead space beside the long one.
+ *
+ * Accompaniment spans both rows so Beat starts directly under FX. Without the
+ * span, row 1 would be as tall as the taller of the two groups in it and Beat
+ * would float below a gap the size of the difference.
+ *
+ * Every class is `lg:`-prefixed and a test holds that: below the breakpoint all
+ * of these must be inert, leaving one column in MIX_GROUP_IDS order — which is
+ * what keeps Beat last on a phone.
+ */
+export const MIXER_GROUP_PLACEMENT: Record<MixGroupId, string> = {
+  lead: 'lg:col-start-1 lg:row-start-1',
+  accompaniment: 'lg:col-start-2 lg:row-start-1 lg:row-span-2',
+  beat: 'lg:col-start-1 lg:row-start-2',
+};
+
+/**
  * One row = one layer. The store subscriptions live HERE, not in SoundMixer:
  * every view stays mounted, so ten selectors at the top of the mixer would
  * re-render all five rows on any one of the ten fields. Per row, a fader drag
@@ -114,10 +139,10 @@ function MixerRow({ channel, isPlaying }: { channel: MixerChannel; isPlaying: bo
         {channel.label} <span className="tabular-nums">({formatDb(volume)})</span>
       </label>
       {/* `items-start` + an `h-8` box around the toggle, rather than
-          `items-center`: below `sm` the fader and the meter stack, and centring
-          would drop the toggle to the middle of that stack — beside the gap
-          between them. Anchoring to the top of a 32px box puts it level with the
-          fader in both layouts, because the fader box is `h-8` too. */}
+          `items-center`: the fader and the meter stack, and centring would drop
+          the toggle to the middle of that stack — beside the gap between them.
+          Anchoring to the top of a 32px box puts it level with the fader,
+          because the fader box is `h-8` too. */}
       <div className="flex items-start gap-2">
         {/* `iconOnly`, because the row's label above already says "Lead" and
             what its level is — and because a square button is one width for
@@ -137,12 +162,14 @@ function MixerRow({ channel, isPlaying }: { channel: MixerChannel; isPlaying: bo
             verb={{ on: 'Unmute', off: 'Mute' }}
           />
         </div>
-        {/* Below `sm` the meter drops under the fader — the two cannot sit side
-            by side in a phone's width without squeezing the fader to
-            uselessness, and the fader is the control while the meter is only
-            the readout. */}
-        <div className="flex-1 min-w-0 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-          <div className="flex-2 min-w-0">
+        {/* The meter sits UNDER the fader at every width, not beside it above
+            `sm`. Side by side, the two split one row's width between a control
+            and a readout, and the fader — the thing you actually drag — got the
+            worse half of it on a phone. Stacked, the fader is full width at
+            every size, and the width the meter gives back is what pays for the
+            two-column grid this surface lays out at `lg`. */}
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+          <div className="min-w-0">
             {/* `showReadout={false}` because the row label above already
                 prints `formatDb(volume)`. It defaults to true, so leaving it
                 off rendered every layer's dB twice — once in the label, once
@@ -156,14 +183,18 @@ function MixerRow({ channel, isPlaying }: { channel: MixerChannel; isPlaying: bo
               onVolumeDbChange={setVolume}
             />
           </div>
-          {/* h-8 matches the fader box it sits beside. The reading is post-fader
-              (see ui/SourceMeter), so this bar shows what the fader to its left
-              just did. */}
+          {/* `h-4`, not the `h-8` this wore while it sat beside the fader: that
+              height existed to give a ~6px bar a 32px box to centre in, so that
+              it lined up with the fader's own `h-8`. Under the fader there is
+              nothing to line up with, and 32px of mostly-empty box would spend
+              on padding the row height the stack just took. The reading is
+              post-fader (see ui/SourceMeter), so this bar shows what the fader
+              above it just did. */}
           <SourceMeter
             source={channel.engineSource}
             label={channel.label}
             isPlaying={isPlaying}
-            className="h-8 flex-1 min-w-0"
+            className="h-4 min-w-0"
           />
         </div>
       </div>
@@ -201,16 +232,26 @@ export const SoundMixer = React.memo(function SoundMixer() {
             the accompaniment three off positions, and a layer inserted anywhere
             but the end would silently drop off the screen with the order test
             still green. */}
-        <div className="flex flex-col gap-2">
+        {/* A grid rather than a flex column: the wide layout has to place groups
+            on named cells (MIXER_GROUP_PLACEMENT), and the narrow one is a plain
+            single column — which a one-column grid already is, so there is no
+            second layout to keep in step. `lg:items-start` so the shorter column
+            keeps its rows at the top instead of a group stretching to match its
+            neighbour's height. */}
+        <div className="grid gap-2 lg:grid-cols-2 lg:gap-x-6 lg:items-start">
           {MIXER_GROUPS.map((group) => (
-            <React.Fragment key={group.id}>
+            /* A real box per group, no longer a Fragment: it is the thing the
+               grid places, and its heading has to travel to that cell with its
+               rows. The inner `gap-2` reproduces what the flat column's own gap
+               used to give these same children. */
+            <div key={group.id} className={`flex flex-col gap-2 ${MIXER_GROUP_PLACEMENT[group.id]}`}>
               {/* `my-0`: daisyUI's divider carries its own vertical margin, and
                   this column already spaces its children with `gap-2`. */}
               <div className={`divider divider-start my-0 ${GROUP_LABEL}`}>{group.label}</div>
               {group.channels.map((channel) => (
                 <MixerRow key={channel.idPrefix} channel={channel} isPlaying={isPlaying} />
               ))}
-            </React.Fragment>
+            </div>
           ))}
         </div>
     </SectionCard>
