@@ -2,12 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import {
   isTrackAudible,
   soloChipLabel,
-  soloTrackForControlTarget,
+  soloTrackForFocus,
   SOLO_TRACKS,
   SOLO_TRACK_LABELS,
   toggleSolo,
   type SoloTrack,
 } from './trackAudibility';
+import { MIX_LAYER_IDS } from './focusTrack';
 
 /**
  * The two drum mute LAYERS, composed the way the running app composes them:
@@ -99,15 +100,17 @@ describe('toggleSolo', () => {
   });
 });
 
-describe('soloTrackForControlTarget', () => {
-  test("the synth control target is the lead track", () => {
-    expect(soloTrackForControlTarget('synth')).toBe('lead');
-  });
-
-  test('the other three targets map to themselves', () => {
-    expect(soloTrackForControlTarget('chord')).toBe('chord');
-    expect(soloTrackForControlTarget('bass')).toBe('bass');
-    expect(soloTrackForControlTarget('pad')).toBe('pad');
+describe('soloTrackForFocus', () => {
+  test('maps every focus onto a real solo track', () => {
+    const actual = Object.fromEntries(MIX_LAYER_IDS.map((id) => [id, soloTrackForFocus(id)]));
+    expect(actual).toEqual({
+      synth: 'lead',
+      fx: 'fx',
+      chord: 'chord',
+      bass: 'bass',
+      pad: 'pad',
+      drum: 'drums',
+    });
   });
 });
 

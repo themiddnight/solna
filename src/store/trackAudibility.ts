@@ -1,4 +1,4 @@
-import type { SynthControlTarget } from '@/utils/synthControl';
+import type { MixLayerId } from './focusTrack';
 
 /**
  * The six track-solo targets, in the order the transport chip names them.
@@ -9,7 +9,7 @@ import type { SynthControlTarget } from '@/utils/synthControl';
  * irregular mapping (see its own comment on why `sequencer` is spelled out
  * rather than derived). It gains a `solo` column so the mapping is written
  * once; nothing else translates between the two vocabularies except
- * `soloTrackForControlTarget` below.
+ * `soloTrackForFocus` below.
  */
 export const SOLO_TRACKS = ['lead', 'fx', 'chord', 'bass', 'pad', 'drums'] as const;
 
@@ -64,12 +64,16 @@ export function toggleSolo(soloTracks: readonly SoloTrack[], track: SoloTrack): 
 }
 
 /**
- * The Sound view edits one layer at a time and its solo button follows that
- * choice, so it needs the one place the two vocabularies meet: the synth
- * control target `'synth'` is the track called `lead`.
+ * The Sound view edits one track at a time and its solo button follows the
+ * focus, so it needs the one place the two vocabularies meet: the focus
+ * `'synth'` is the track called `lead`, and the focus `'drum'` is the track
+ * called `drums`. Both irregulars are spelled out; the other four are the same
+ * word in both rosters.
  */
-export function soloTrackForControlTarget(target: SynthControlTarget): SoloTrack {
-  return target === 'synth' ? 'lead' : target;
+export function soloTrackForFocus(focus: MixLayerId): SoloTrack {
+  if (focus === 'synth') return 'lead';
+  if (focus === 'drum') return 'drums';
+  return focus;
 }
 
 /**

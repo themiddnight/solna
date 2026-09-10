@@ -11,7 +11,7 @@ export interface SoloButtonProps {
    * Overrides the default `btn-solo-<track>` DOM id. Needed by exactly one
    * placement: every view stays mounted (App.tsx gates with block/hidden, and
    * PatternView does the same for its three segments), so the Sound view's
-   * ONE button — whose track follows `controlTarget` — is always in the
+   * ONE button — whose track follows `focusTrack` — is always in the
    * document at the same time as the per-surface button for that same track.
    * Left to the default the two would share an id whatever the target is, and
    * `#btn-solo-lead` would name whichever happened to render first.

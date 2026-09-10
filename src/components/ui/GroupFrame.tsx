@@ -23,7 +23,8 @@ export interface GroupFrameProps {
  * to express a grouping the enclosure already expresses. The frame groups by
  * enclosure; the dots keep saying which is which.
  *
- * Presentation only. controlTarget's persisted values are unchanged.
+ * Presentation only. The focus row's grouping changes nothing about
+ * `focusTrack`'s persisted values.
  */
 export function GroupFrame({ label, className, children }: GroupFrameProps) {
   return (
