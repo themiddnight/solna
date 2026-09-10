@@ -11,6 +11,15 @@ import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from '@/utils/synthCo
 import type { SynthControlTarget, SynthParamChannel } from '@/utils/synthControl';
 import type { SynthParams } from '@/types';
 
+/** The full opening tag of the element whose markup contains `needle` — pins the tag name, not text position. */
+function openTagContaining(html: string, needle: string): string {
+  const idx = html.indexOf(needle);
+  if (idx === -1) throw new Error(`not found in markup: ${needle}`);
+  const start = html.lastIndexOf('<', idx);
+  const end = html.indexOf('>', idx);
+  return html.slice(start, end + 1);
+}
+
 // A black key is half its own width left of the white-key boundary it
 // straddles, so its offset is (white keys before it) strides minus half a black
 // key. Both metrics are CSS custom properties — the stride shrinks below `sm`
@@ -355,13 +364,13 @@ describe('the Sound focus row', () => {
     for (const id of MIX_LAYER_IDS) expect(html).toContain(`id="btn-focus-${id}"`);
   });
 
-  // A single literal substring, so the active classes are proven to sit on the
-  // SAME element as the id rather than somewhere else in the row.
+  // A tag-scoped check, so the active classes are proven to sit on the SAME
+  // element as the id rather than somewhere else in the row.
   test('the focused chip carries the active class list', () => {
     useAppStore.setState({ focusTrack: 'bass' });
     const html = renderToString(<SoundView />);
-    expect(html).toContain(
-      'id="btn-focus-bass" class="btn btn-xs text-[11px] font-semibold rounded-sm [--btn-color:var(--color-module-bass)] [--btn-fg:var(--color-module-bass-content)]"',
+    expect(openTagContaining(html, 'id="btn-focus-bass"')).toContain(
+      'class="btn btn-xs text-[11px] font-semibold rounded-sm [--btn-color:var(--color-module-bass)] [--btn-fg:var(--color-module-bass-content)]"',
     );
   });
 
@@ -370,6 +379,24 @@ describe('the Sound focus row', () => {
     const html = renderToString(<SoundView />);
     expect(html).toContain('aria-label="Solo Drums"');
     expect(html).not.toContain('aria-label="Solo Lead"');
+  });
+
+  // The six focus chips are a "current item in a set", the same vocabulary the
+  // mixer row's focus button uses — a screen-reader user must be able to tell
+  // which one is focused from the markup, not just from a CSS class. Scoped to
+  // the `btn-focus-*` chips (not `btn-mix-focus-*`, the mixer's own row, which
+  // marks the same layer independently and would otherwise double the count).
+  test('exactly one chip carries aria-current, and it is the focused one', () => {
+    try {
+      useAppStore.setState({ focusTrack: 'pad' });
+      const html = renderToString(<SoundView />);
+      const marked = MIX_LAYER_IDS.filter((id) =>
+        openTagContaining(html, `id="btn-focus-${id}"`).includes('aria-current="true"'),
+      );
+      expect(marked).toEqual(['pad']);
+    } finally {
+      useAppStore.setState({ focusTrack: 'synth' });
+    }
   });
 });
 

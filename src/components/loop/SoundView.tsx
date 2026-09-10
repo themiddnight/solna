@@ -417,6 +417,7 @@ export const SoundView = React.memo(function SoundView() {
       <button
         key={focus}
         id={`btn-focus-${focus}`}
+        aria-current={focusTrack === focus ? 'true' : undefined}
         onClick={() => setFocusTrack(focus)}
         className={`btn btn-xs text-[11px] font-semibold rounded-sm ${
           focusTrack === focus ? style.activeBtn : style.softBtn

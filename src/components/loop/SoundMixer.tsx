@@ -147,8 +147,8 @@ function MixerRow({ channel, isPlaying }: { channel: MixerChannel; isPlaying: bo
       <div className="flex items-center gap-1.5">
         <button
           id={`btn-mix-focus-${channel.idPrefix}`}
-          aria-current={focusTrack === channel.idPrefix ? 'true' : undefined}
           type="button"
+          aria-current={focusTrack === channel.idPrefix ? 'true' : undefined}
           onClick={() => setFocusTrack(channel.idPrefix)}
           className={`${FIELD_LABEL} text-left hover:text-base-content ${
             focusTrack === channel.idPrefix ? 'text-base-content font-bold' : ''
