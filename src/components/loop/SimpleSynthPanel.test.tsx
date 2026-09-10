@@ -1,23 +1,27 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { SimpleSynthPanel } from './SimpleSynthPanel';
-import { useAppStore } from '@/store/store';
-import { controlTargetForFocus, isMelodicFocus } from '@/store/focusTrack';
-import { resolveSynthControlChannel } from '@/utils/synthControl';
+import { synthChannelForFocus } from './synth/useSynthChannel';
+import type { SynthChannels } from './synth/useSynthChannel';
 import type { SynthParams } from '@/types';
-import type { AppStore } from '@/store/types';
 
-// Mirrors useSynthChannel's lookup without the hook, so the resolution can be
-// asserted without a render. If the two ever disagree the hook is wrong.
-function resolveChannelForFocus(s: AppStore) {
-  const target = isMelodicFocus(s.focusTrack) ? controlTargetForFocus(s.focusTrack) : 'synth';
-  return resolveSynthControlChannel(target, {
-    synth: { params: s.synthParams, setParams: s.setSynthParams },
-    chord: { params: s.chordSynthParams, setParams: s.setChordSynthParams },
-    bass: { params: s.bassSynthParams, setParams: s.setBassSynthParams },
-    pad: { params: s.padSynthParams, setParams: s.setPadSynthParams },
-    fx: { params: s.fxSynthParams, setParams: s.setFxSynthParams },
-  }).params;
+// Five distinct, otherwise-meaningless param stand-ins, one per channel. The
+// store's real slices all default to the very same `INITIAL_SYNTH_PARAMS`
+// object until a user edits one of them, so asserting identity against
+// `useAppStore.getState()`'s defaults would pass even for a wrong channel —
+// these have to be distinguishable by reference on their own.
+function fakeChannels(): SynthChannels {
+  const make = (): { params: SynthParams; setParams: (p: SynthParams) => void } => ({
+    params: {} as SynthParams,
+    setParams: () => {},
+  });
+  return {
+    synth: make(),
+    chord: make(),
+    bass: make(),
+    pad: make(),
+    fx: make(),
+  };
 }
 
 const params = {
@@ -104,17 +108,22 @@ describe('SimpleSynthPanel theming', () => {
 });
 
 describe('the synth panels follow focusTrack', () => {
-  // A pure assertion on the hook's own resolution, driven through the store
-  // rather than a render: useSynthChannel is a hook, but its whole body is a
-  // lookup, and the store's getState() is the input.
+  // A pure assertion on the hook's own extracted resolution: `useSynthChannel`
+  // is a hook, but its whole body is `synthChannelForFocus`, called here
+  // directly with a channel map built from distinct references.
   test('the FX focus resolves the FX patch, not the Lead one', () => {
-    useAppStore.setState({ focusTrack: 'fx' });
-    const s = useAppStore.getState();
-    expect(resolveChannelForFocus(s)).toBe(s.fxSynthParams);
-    useAppStore.setState({ focusTrack: 'bass' });
-    expect(resolveChannelForFocus(useAppStore.getState())).toBe(
-      useAppStore.getState().bassSynthParams,
-    );
-    useAppStore.setState({ focusTrack: 'synth' });
+    const channels = fakeChannels();
+    expect(synthChannelForFocus('fx', channels).params).toBe(channels.fx.params);
+    expect(synthChannelForFocus('bass', channels).params).toBe(channels.bass.params);
+  });
+
+  // Pins the drum branch specifically: `controlTargetForFocus` refuses a
+  // drum focus by type, so `synthChannelForFocus` falls back to the Lead
+  // patch (safe only because SoundView unmounts the Synth section on a drum
+  // focus — see the comment on the function itself). Flipping that fallback
+  // to any other channel must turn this red.
+  test('the drum focus falls back to the Lead patch', () => {
+    const channels = fakeChannels();
+    expect(synthChannelForFocus('drum', channels).params).toBe(channels.synth.params);
   });
 });
