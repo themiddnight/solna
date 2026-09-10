@@ -95,24 +95,13 @@ describe('leadMarkerPublishes', () => {
 });
 
 /**
- * Structural pins. The gate and the single-producer rule both live inside a
- * clock callback and a React effect, which this suite cannot render — and
- * both are exactly the kind of thing a later edit narrows back by accident.
- * DEV-374's first attempt at this feature widened the CONSUMER without the
- * producer and froze the marker at a stale zero; these two assertions are
- * what would have caught the mirror-image mistake.
+ * Structural pin. The single-producer rule lives inside a clock callback and
+ * a React effect, which this suite cannot render — and is exactly the kind of
+ * thing a later edit narrows back by accident. The gate itself
+ * (`leadMarkerFollowsClock`) is covered behaviourally in leadRecord.test.ts,
+ * not by pinning this file's exact call spelling here.
  */
 describe('the lead step producer', () => {
-  const source = readFileSync(
-    join(process.cwd(), 'src/components/loop/lead/useLeadStepPublisher.ts'),
-    'utf8',
-  );
-
-  test('both tracks are gated on leadMarkerFollowsClock for their OWN id, never the lead player', () => {
-    expect(source).toContain('leadMarkerFollowsClock(s, trackId)');
-    expect(source).not.toContain("s.fxPlayer !== 'stopped'");
-  });
-
   test('is the only thing in the app that publishes a step, for whichever track is mounted', () => {
     const producers = ['src/components/loop/lead/useLeadStepPublisher.ts', 'src/components/loop/lead/useLeadPlayback.ts']
       .map((file) => readFileSync(join(process.cwd(), file), 'utf8'))
