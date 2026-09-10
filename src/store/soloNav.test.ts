@@ -48,7 +48,7 @@ beforeEach(() => {
     masterVolume: state.masterVolume,
     effects: state.effects,
   };
-  useAppStore.setState({ activeTab: 'sound', patternSegment: 'lead', soloTracks: [] });
+  useAppStore.setState({ activeTab: 'sound', focusTrack: 'synth', soloTracks: [] });
   stop = startSoloNavClear();
 });
 
@@ -60,7 +60,7 @@ afterEach(() => {
   // somewhere a subsequent test didn't put them.
   useAppStore.setState({
     activeTab: 'sound',
-    patternSegment: 'lead',
+    focusTrack: 'synth',
     soloTracks: [],
     ...baseline,
   });
@@ -73,8 +73,8 @@ describe('SOLO_NAV_KEYS', () => {
    * forget is a new navigation AXIS. This test is where that decision has to
    * be made out loud instead of by omission.
    */
-  test('is exactly the layer, Pattern-segment and active-loop axes', () => {
-    expect([...SOLO_NAV_KEYS]).toEqual(['layer', 'patternSegment', 'activeLoopId']);
+  test('is exactly the layer and active-loop axes', () => {
+    expect([...SOLO_NAV_KEYS]).toEqual(['layer', 'activeLoopId']);
   });
 
   /**
@@ -103,13 +103,12 @@ describe('soloNavSignature', () => {
     expect(Object.keys(signature)).toEqual([...SOLO_NAV_KEYS]);
   });
 
-  test('derives layer from activeTab and reads patternSegment/activeLoopId live', () => {
-    useAppStore.setState({ activeTab: 'arrange', patternSegment: 'beat' });
+  test('derives layer from activeTab and reads activeLoopId live', () => {
+    useAppStore.setState({ activeTab: 'arrange' });
     const state = useAppStore.getState();
     const signature = soloNavSignature(state);
     expect(signature).toEqual({
       layer: 'song',
-      patternSegment: 'beat',
       activeLoopId: state.activeLoopId,
     });
   });
@@ -138,25 +137,36 @@ describe('solo survives a Sound <-> Pattern tab change', () => {
   });
 });
 
-describe('solo is cleared by navigation', () => {
-  test('changing the Pattern segment clears it — a segment is a change of subject', () => {
+describe('solo survives a focus change', () => {
+  /**
+   * The clear on a segment change is GONE, and this is the test that keeps it
+   * gone. With one `focusTrack`, "segment change" and "target change" are the
+   * same event — soloNav's own docblock used to argue that the first must
+   * clear and the second must not, which a merged value makes contradictory.
+   * The target rule wins: solo is a monitoring gesture whose whole purpose is
+   * comparing tracks, and clearing here would make a multi-track solo set
+   * unbuildable anywhere.
+   */
+  test('a focus change with a non-empty set leaves it intact', () => {
     useAppStore.getState().setActiveTab('pattern');
     useAppStore.getState().toggleSoloTrack('bass');
     expect(useAppStore.getState().soloTracks).toEqual(['bass']);
-    useAppStore.getState().setPatternSegment('beat');
-    expect(useAppStore.getState().soloTracks).toEqual([]);
+    useAppStore.getState().setFocusTrack('drum');
+    expect(useAppStore.getState().soloTracks).toEqual(['bass']);
+    useAppStore.getState().setFocusTrack('synth');
+    expect(useAppStore.getState().soloTracks).toEqual(['bass']);
   });
 
-  // 'fx' is a Pattern segment like any other, so a change onto it clears the
-  // solo set for the same reason 'beat' does above.
-  test('changing the Pattern segment to fx clears it too', () => {
-    useAppStore.getState().setActiveTab('pattern');
+  test('a multi-track set is buildable across focuses', () => {
+    useAppStore.getState().setFocusTrack('drum');
+    useAppStore.getState().toggleSoloTrack('drums');
+    useAppStore.getState().setFocusTrack('synth');
     useAppStore.getState().toggleSoloTrack('lead');
-    expect(useAppStore.getState().soloTracks).toEqual(['lead']);
-    useAppStore.getState().setPatternSegment('fx');
-    expect(useAppStore.getState().soloTracks).toEqual([]);
+    expect(useAppStore.getState().soloTracks).toEqual(['lead', 'drums']);
   });
+});
 
+describe('solo is cleared by navigation', () => {
   test('changing layer (Loop -> Song) clears it', () => {
     useAppStore.getState().toggleSoloTrack('lead');
     expect(useAppStore.getState().soloTracks).toEqual(['lead']);

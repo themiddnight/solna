@@ -495,12 +495,10 @@ export const SoundView = React.memo(function SoundView() {
             layer at a time, so five buttons here would be four controls for
             layers this view is not editing. It sits beside the Target chips
             rather than in the view header because "it follows the target" is
-            only legible next to the target. Session-only, and cleared by
-            LEAVING the loop layer, by a Pattern-segment change, or by a
-            change of active loop — NOT by the Sound <-> Pattern tab change
-            this button lives on, nor by a change of target (both of which a
-            set has to survive to be buildable here at all). store/soloNav.ts
-            owns that rule and says why. */}
+            only legible next to the target. Session-only, and cleared by LEAVING the loop layer, by a change
+            of active loop, or by a project swap — NOT by a focus change,
+            which is what makes a set spanning two tracks buildable from this
+            row at all. store/soloNav.ts owns that rule and says why. */}
         <SoloButton
           id="btn-solo-target"
           track={soloTrackForFocus(focusTrack)}
