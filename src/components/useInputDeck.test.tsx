@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import {
   useInputDeck,
@@ -15,6 +15,8 @@ import { useAppStore } from '../store/store';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
 import { getChordKeyboardRows, getScaleLockedKeyboardNotes } from './ui/Keyboard';
 import { MIX_LAYER_IDS } from '@/store/focusTrack';
+import { audioEngine } from '../audio/engine';
+import { subscribeNoteInput, resetNoteInputListeners, type NoteInputEvent } from '../audio/playback/noteInputBus';
 
 let captured: { keyboardProps: InputDeckKeyboardProps; drumProps: InputDeckDrumProps } | null = null;
 
@@ -115,6 +117,7 @@ describe('subscribeArpState', () => {
       },
     };
     const startingBpm = useAppStore.getState().bpm;
+    const startingFocus = useAppStore.getState().focusTrack;
     const stop = subscribeArpState(ref);
     try {
       // fireImmediately bootstrap
@@ -138,12 +141,21 @@ describe('subscribeArpState', () => {
       expect(ref.current.target).toBe('synth');
     } finally {
       stop();
+      useAppStore.getState().setFocusTrack(startingFocus);
     }
 
-    // After disposal the ref must go stale rather than keep tracking.
+    // After disposal the ref must go stale rather than keep tracking, on
+    // every subscription this function set up — not just bpm. `stop()`
+    // bundles three unsubscribes (params, bpm, focus); this proves the
+    // returned teardown actually disposes all of them, not just the ones
+    // the assertions above happened to touch.
     useAppStore.getState().setBpm(97);
     expect(ref.current.bpm).toBe(133);
     useAppStore.getState().setBpm(startingBpm);
+
+    useAppStore.getState().setFocusTrack('fx');
+    expect(ref.current.target).toBe('synth');
+    useAppStore.getState().setFocusTrack(startingFocus);
   });
 });
 
@@ -184,10 +196,63 @@ describe('synthTargetForFocus', () => {
     expect(synthTargetForFocus('drum')).toBeNull();
   });
 
-  test('is total over the focus roster', () => {
-    for (const focus of MIX_LAYER_IDS) {
-      const target = synthTargetForFocus(focus);
-      expect(target === null || typeof target === 'string').toBe(true);
-    }
+  // Deleted rather than kept as-is: it asserted only that the return type is
+  // `string | null`, which any implementation satisfies — a version that
+  // always returned 'synth', or always null, would pass it too. The two
+  // tests above already cover every focus explicitly; what is worth pinning
+  // instead is that exactly ONE focus resolves to null, and which one.
+  test('exactly one focus has no melodic bus, and it is drum', () => {
+    const nullFocuses = MIX_LAYER_IDS.filter((focus) => synthTargetForFocus(focus) === null);
+    expect(nullFocuses).toEqual(['drum']);
+  });
+});
+
+describe('handleNoteOn (via the rendered hook)', () => {
+  afterEach(() => {
+    resetNoteInputListeners();
+    (audioEngine.init as unknown as { mockRestore?: () => void }).mockRestore?.();
+    (audioEngine.triggerSynthNoteOn as unknown as { mockRestore?: () => void }).mockRestore?.();
+  });
+
+  function heard(): NoteInputEvent[] {
+    const events: NoteInputEvent[] = [];
+    subscribeNoteInput((e) => events.push(e));
+    return events;
+  }
+
+  test('a drum focus is a complete no-op: no engine call, no heldTargets entry, nothing announced', () => {
+    useAppStore.getState().setFocusTrack('drum');
+    const initSpy = spyOn(audioEngine, 'init').mockImplementation(() => Promise.resolve());
+    const noteOnSpy = spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation(() => {});
+    const events = heard();
+
+    renderToString(<Probe />);
+    captured!.keyboardProps.handleNoteOn('C4');
+
+    expect(initSpy).not.toHaveBeenCalled();
+    expect(noteOnSpy).not.toHaveBeenCalled();
+    expect(events).toEqual([]);
+    // No heldTargets entry: the matching note-off then finds nothing to
+    // release, so this second call is itself a no-op rather than proof of
+    // a leftover entry.
+    captured!.keyboardProps.handleNoteOff('C4');
+    expect(noteOnSpy).not.toHaveBeenCalled();
+
+    useAppStore.getState().setFocusTrack('synth');
+  });
+
+  test('a melodic focus plays the engine and announces on the bus', () => {
+    useAppStore.getState().setFocusTrack('synth');
+    const initSpy = spyOn(audioEngine, 'init').mockImplementation(() => Promise.resolve());
+    const noteOnSpy = spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation(() => {});
+    const events = heard();
+
+    renderToString(<Probe />);
+    captured!.keyboardProps.handleNoteOn('C4');
+
+    expect(initSpy).toHaveBeenCalled();
+    expect(noteOnSpy).toHaveBeenCalled();
+    expect(noteOnSpy.mock.calls[0]?.[0]).toBe('C4');
+    expect(events).toEqual([{ kind: 'on', note: 'C4', velocity: 1.0, time: undefined }]);
   });
 });

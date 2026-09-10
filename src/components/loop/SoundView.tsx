@@ -28,6 +28,7 @@ import {
   type MixLayerId,
 } from "@/store/focusTrack";
 import { MIX_LAYERS } from "../mixLayers";
+import { synthTargetForFocus } from "../useInputDeck";
 import type { SynthPresetItem, SynthPresetCategory } from "@/data/synthPresets";
 import { SYNTH_CATEGORIES } from "@/data/synthPresets";
 import { DRUM_KITS } from "@/data/drumKits";
@@ -273,7 +274,7 @@ export const SoundView = React.memo(function SoundView() {
   // library are all gated on this being non-null below. The Lead channel is
   // what the preset handlers close over so they stay total, and every control
   // that could invoke one of them lives inside the un-rendered section.
-  const synthTarget = isMelodicFocus(focusTrack) ? controlTargetForFocus(focusTrack) : null;
+  const synthTarget = synthTargetForFocus(focusTrack);
   const channel = resolveSynthControlChannel(synthTarget ?? 'synth', channels);
   const params = channel.params;
   const onChangeParams = channel.setParams;

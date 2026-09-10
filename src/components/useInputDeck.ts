@@ -33,8 +33,8 @@ import {
 } from '../store/focusTrack';
 
 // The keyboard, the on-screen keyboard and the arp all play the FOCUSED track
-// (`focusTrack` in the ui slice). They used to be pinned to a module constant,
-// KEYBOARD_AUDITION_TARGET, whose stated reason was that pinning kept every
+// (`focusTrack` in the ui slice). They used to be pinned to a module constant
+// (deleted with this change), whose stated reason was that pinning kept every
 // audio call site (note-on, note-off, arp playback, voice release) agreeing on
 // one engine, so a target switch could never strand voices on an engine
 // nothing points at any more. The target varies now, so each of those
@@ -136,6 +136,70 @@ export function performNoteOff(
     actions.rescale(equalPowerVelocityScale(heldCountFor(held, target)), target);
   } else {
     // Arp branch — see handleNoteOn's comment on the arp swallowing the key.
+    actions.announce(note);
+  }
+}
+
+/**
+ * The note-on decision, extracted so it is testable without rendering — same
+ * reason and same shape as `performNoteOff` above. `target` is the bus
+ * ALREADY resolved by the caller (`synthTargetForFocus`/`arpStateRef.current.target`);
+ * this function never sees `null`, since the caller's drum no-op returns
+ * before reaching it.
+ *
+ * The re-press guard — releasing the note's PREVIOUS bus when the same note
+ * is re-pressed on a new one — runs UNCONDITIONALLY, above the arp split, so
+ * both branches see it. It used to sit only inside the non-arp branch: the
+ * arp branch overwrote `held`'s entry with no release at all, so a note held
+ * with the arp off, then re-pressed on a different bus after focus moved and
+ * the arp was switched on, stranded the first bus's sounding voice with no
+ * map entry left to reach it — a drone that survived until reload.
+ *
+ * The old bus is also rescaled after its release: the voices still held
+ * there were counted assuming one more voice than is now sounding, so
+ * leaving them at the old scale would keep them quieter than equal power
+ * calls for. The note is dropped from `held` before that rescale, or
+ * `heldCountFor` would still count it as sounding on the bus it just left.
+ */
+export function performNoteOn(
+  note: string,
+  target: SynthControlTarget,
+  held: HeldNoteTargets,
+  liveParams: SynthParams,
+  actions: {
+    initEngine: () => void;
+    playNote: (note: string, target: SynthControlTarget, scale: number) => void;
+    releaseNote: (note: string, releaseTime: number, target: SynthControlTarget) => void;
+    rescale: (scale: number, target: SynthControlTarget) => void;
+    announce: (note: string) => void;
+  },
+): void {
+  actions.initEngine();
+  const previous = noteTargetFor(held, note);
+  const isNewNote = previous === undefined;
+  if (previous !== undefined && previous !== target) {
+    actions.releaseNote(note, liveParams.release, previous);
+    held.delete(note);
+    actions.rescale(equalPowerVelocityScale(heldCountFor(held, previous)), previous);
+  }
+  if (!liveParams.arpActive) {
+    // Equal-power polyphony: a new note lowers every voice held ON THIS BUS
+    // so that instrument's total level stays flat as keys are added. The map
+    // mirrors the held set synchronously so rapid presses see each other.
+    held.set(note, target);
+    const scale = equalPowerVelocityScale(heldCountFor(held, target));
+    if (isNewNote) {
+      actions.rescale(scale, target);
+    }
+    actions.playNote(note, target, scale);
+  } else {
+    // The arp swallows the key: it schedules the note itself, so nothing
+    // plays it directly and the bus would never hear about a key the user
+    // genuinely pressed. Announce it here instead, or arming the recorder
+    // with the arp on would silently capture nothing. The map is still
+    // written — the arp builds its sequence from the notes held on the bus
+    // it is playing.
+    held.set(note, target);
     actions.announce(note);
   }
 }
@@ -275,37 +339,13 @@ export function useInputDeck(): {
         return;
       }
       const held = arpStateRef.current.heldTargets;
-      initSynthPlayback();
-      if (!liveParams.arpActive) {
-        const previous = noteTargetFor(held, note);
-        if (previous !== undefined && previous !== target) {
-          // The same note is already held on ANOTHER bus — QWERTY holds C4 on
-          // Lead, focus moves to FX, the on-screen keyboard is pressed on C4.
-          // The map holds one target per note, so without this release the old
-          // bus's voice loses its only release path and drones forever.
-          synthPlaybackNoteOff(note, liveParams.release, undefined, previous);
-        }
-        // Equal-power polyphony: a new note lowers every voice held ON THIS
-        // BUS so that instrument's total level stays flat as keys are added.
-        // The map mirrors the held set synchronously so rapid presses see
-        // each other.
-        const isNewNote = previous === undefined;
-        held.set(note, target);
-        const scale = equalPowerVelocityScale(heldCountFor(held, target));
-        if (isNewNote) {
-          applySynthPlaybackVelocityScale(scale, target);
-        }
-        synthPlaybackNoteOn(note, liveParams, 1.0, undefined, target, scale);
-      } else {
-        // The arp swallows the key: it schedules the note itself, so nothing
-        // reaches synthPlaybackNoteOn and the bus would never hear about a key
-        // the user genuinely pressed. Announce it here instead, or arming the
-        // recorder with the arp on would silently capture nothing.
-        // The map is still written — the arp builds its sequence from the
-        // notes held on the bus it is playing.
-        held.set(note, target);
-        emitNoteInput({ kind: 'on', note, velocity: 1.0 });
-      }
+      performNoteOn(note, target, held, liveParams, {
+        initEngine: initSynthPlayback,
+        playNote: (n, t, scale) => synthPlaybackNoteOn(n, liveParams, 1.0, undefined, t, scale),
+        releaseNote: (n, releaseTime, t) => synthPlaybackNoteOff(n, releaseTime, undefined, t),
+        rescale: (scale, t) => applySynthPlaybackVelocityScale(scale, t),
+        announce: (n) => emitNoteInput({ kind: 'on', note: n, velocity: 1.0 }),
+      });
       setActiveNotes((prev) => new Set(prev).add(note));
     },
     [],
