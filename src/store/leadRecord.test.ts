@@ -510,4 +510,55 @@ describe('the arm follows focus', () => {
 
     expect(useAppStore.getState().recordingTrack).toBe('lead');
   });
+
+  /**
+   * Pins that `startRecordArmSync`'s unsubscribe is actually in
+   * `startMelodyRecordBridges`'s composed `stops` list. Verified by deletion
+   * per the review's nit: dropping the entry leaves this suite green
+   * everywhere else, because nothing else exercises the disposer's effect on
+   * this particular subscription.
+   */
+  test('the composed disposer releases the arm sync — a focus change no longer disarms', () => {
+    useAppStore.setState({ focusTrack: 'synth', recordingTrack: 'lead' });
+    stop?.();
+    stop = null;
+
+    useAppStore.getState().setFocusTrack('chord');
+
+    expect(useAppStore.getState().recordingTrack).toBe('lead');
+  });
+});
+
+describe('the arm follows navigation, mirroring soloNav.ts', () => {
+  let navBaseline: { activeTab: ReturnType<typeof useAppStore.getState>['activeTab']; activeLoopId: string };
+
+  beforeEach(() => {
+    const state = useAppStore.getState();
+    navBaseline = { activeTab: state.activeTab, activeLoopId: state.activeLoopId };
+    useAppStore.setState({ activeTab: 'sound', recordingTrack: 'lead' });
+  });
+
+  afterEach(() => {
+    useAppStore.setState({ ...navBaseline, recordingTrack: null });
+  });
+
+  test('leaving the Loop layer disarms', () => {
+    useAppStore.setState({ activeTab: 'arrange' });
+
+    expect(useAppStore.getState().recordingTrack).toBeNull();
+  });
+
+  test('changing the active loop disarms', () => {
+    useAppStore.setState({ activeLoopId: 'some-other-loop' });
+
+    expect(useAppStore.getState().recordingTrack).toBeNull();
+  });
+
+  test('a Sound <-> Pattern hop does NOT disarm', () => {
+    useAppStore.setState({ activeTab: 'pattern' });
+    expect(useAppStore.getState().recordingTrack).toBe('lead');
+
+    useAppStore.setState({ activeTab: 'sound' });
+    expect(useAppStore.getState().recordingTrack).toBe('lead');
+  });
 });

@@ -1,13 +1,15 @@
+import { shallow } from 'zustand/shallow';
 import { subscribeNoteInput } from '../audio/playback/noteInputBus';
 import { clampLeadCursor, leadStoredIndexAt } from '../audio/leadMelody';
 import { clockStepToGridColumn, heldStepLength } from '../audio/leadLiveRecord';
 import { leadLiveInputStep, startLeadLiveClock } from '../audio/playback/leadLiveClock';
 import { getMeter } from '../utils/meter';
 import { columnsPerBar, strideFor } from '../utils/stepResolution';
+import { layerForTab } from '../types';
 import { isPlayerActive } from './transportSlice';
 import { melodyTrackForFocus } from './focusTrack';
 import { useAppStore } from './store';
-import type { PlayerState } from './types';
+import type { AppStore, PlayerState } from './types';
 import { MELODY_TRACKS, melodyTrack, type MelodyTrack, type MelodyTrackId } from './melodyTracks';
 
 /**
@@ -270,17 +272,59 @@ export function startMelodyRecordBridge(
 }
 
 /**
- * The arm follows focus, DISARMING only.
+ * The navigation axes that disarm Rec: a focus change away from the armed
+ * track (the original DEV-374 rule), plus the two soloNav.ts axes — a change
+ * of LAYER (Loop ↔ Song, derived from the tab via `layerForTab`) and a change
+ * of `activeLoopId`. Both grids go `hidden` on a Song-layer or loop hop
+ * (App.tsx/LoopPage.tsx), so an arm that survived either would keep capturing
+ * notes into a grid the user cannot see — the same failure soloNav.ts exists
+ * to prevent for the solo set.
  *
- * One subscription rather than a clear inside every writer of `focusTrack` —
- * the soloNav.ts precedent, and for the same reason: `setFocusTrack` is not
- * the only way focus moves (a project load and hydration both write it through
- * setState), a missed writer is silent, and what it costs is a recorder still
- * capturing into a grid the user has navigated away from.
+ * The raw `activeTab` is not watched — `layer` replaces it, so a Sound ↔
+ * Pattern hop does not disarm. Those are the two halves of editing one loop
+ * and the user crosses between them constantly.
+ */
+const RECORD_ARM_NAV_SOURCES = {
+  focus: (state: AppStore) => state.focusTrack,
+  layer: (state: AppStore) => layerForTab(state.activeTab),
+  activeLoopId: (state: AppStore) => state.activeLoopId,
+};
+
+type RecordArmNavSignature = {
+  [K in keyof typeof RECORD_ARM_NAV_SOURCES]: ReturnType<(typeof RECORD_ARM_NAV_SOURCES)[K]>;
+};
+
+function recordArmNavSignature(state: AppStore): RecordArmNavSignature {
+  const signature: Record<string, unknown> = {};
+  for (const key of Object.keys(RECORD_ARM_NAV_SOURCES) as (keyof typeof RECORD_ARM_NAV_SOURCES)[]) {
+    signature[key] = RECORD_ARM_NAV_SOURCES[key](state);
+  }
+  return signature as RecordArmNavSignature;
+}
+
+/**
+ * The arm follows focus and navigation, DISARMING only.
  *
- * It never ARMS the newly focused track. Rec is a deliberate gesture and a
- * focus change is navigation; arming on navigation would put the app into
- * record because somebody clicked a mixer row.
+ * ONE subscription over `RECORD_ARM_NAV_SOURCES`, mirroring soloNav.ts,
+ * rather than a clear inside every writer of `focusTrack`/`activeTab`/
+ * `activeLoopId`: none of those fields has a single writer (a project load
+ * and hydration both write `focusTrack` through `setState`, and
+ * `activeLoopId` alone has six — see soloNav.ts's own docblock), a missed
+ * writer is silent, and what it costs here is a recorder still capturing into
+ * a grid the user has navigated away from.
+ *
+ * `layer` and `activeLoopId` disarm unconditionally — they are pure
+ * navigation, not a Rec decision. `focus` keeps the original, narrower rule:
+ * disarm only when the newly focused track differs from the one armed, so
+ * moving focus back onto the armed track (or between two mixer rows that
+ * both name it) leaves it armed. A project swap is not one of these axes —
+ * `install()` in projectSlice.ts clears `recordingTrack` itself, in the same
+ * atomic `set()` as the content, because loop ids are not unique across
+ * projects and `activeLoopId` cannot catch that one.
+ *
+ * It never ARMS the newly focused (or navigated-to) track. Rec is a
+ * deliberate gesture and navigation is not; arming on navigation would put
+ * the app into record because somebody clicked a mixer row or changed tabs.
  *
  * This is also the whole reason Rec needs no coupling back to the audition
  * target. An earlier draft forced the keyboard to Lead while armed so that
@@ -290,13 +334,18 @@ export function startMelodyRecordBridge(
  */
 export function startRecordArmSync(): () => void {
   return useAppStore.subscribe(
-    (state) => state.focusTrack,
-    (focus) => {
+    recordArmNavSignature,
+    (curr, prev) => {
       const state = useAppStore.getState();
       if (state.recordingTrack === null) return;
-      if (melodyTrackForFocus(focus) === state.recordingTrack) return;
+      if (curr.layer !== prev.layer || curr.activeLoopId !== prev.activeLoopId) {
+        state.setRecordingTrack(null);
+        return;
+      }
+      if (melodyTrackForFocus(curr.focus) === state.recordingTrack) return;
       state.setRecordingTrack(null);
     },
+    { equalityFn: shallow },
   );
 }
 
