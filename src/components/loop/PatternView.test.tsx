@@ -1,6 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, afterEach } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { PatternView } from './PatternView';
+import { PatternView, segmentVisibilityClass } from './PatternView';
+import { MIX_LAYER_IDS, segmentForFocus } from '@/store/focusTrack';
+import { PATTERN_SEGMENT_IDS } from '@/types';
+import { useAppStore } from '@/store/store';
 
 describe('PatternView', () => {
   // Moved here from SoundView.test.tsx when the lead grid left the Sound tab.
@@ -32,6 +35,48 @@ describe('PatternView', () => {
     // creation-time segment, hence one `block` and three `hidden`.
     expect(html.match(/class="hidden"/g)?.length).toBe(3);
     expect(html.match(/class="block"/g)?.length).toBe(1);
+  });
+});
+
+describe('segmentVisibilityClass', () => {
+  /**
+   * Tested as a pure function rather than by counting `class="hidden"` in a
+   * render: PatternView's tree pulls in ChordView, SequencerView and two
+   * melody grids, and the property being asserted — exactly one segment
+   * un-hidden, for EVERY focus — is a property of the projection, not of that
+   * markup. The render test below still counts the gates for the default
+   * focus, which is what proves the projection is actually wired in.
+   */
+  test('leaves exactly one segment showing, for every focus', () => {
+    for (const focus of MIX_LAYER_IDS) {
+      const shown = PATTERN_SEGMENT_IDS.filter(
+        (segment) => segmentVisibilityClass(focus, segment) === 'block',
+      );
+      expect(shown).toEqual([segmentForFocus(focus)]);
+    }
+  });
+
+  test('the three accompaniment focuses all show the accompaniment segment', () => {
+    for (const focus of ['chord', 'bass', 'pad'] as const) {
+      expect(segmentVisibilityClass(focus, 'accompaniment')).toBe('block');
+      expect(segmentVisibilityClass(focus, 'beat')).toBe('hidden');
+    }
+  });
+});
+
+describe('the Pattern gate is wired to focusTrack', () => {
+  afterEach(() => {
+    useAppStore.setState({ focusTrack: 'synth' });
+  });
+
+  test('a drum focus shows the beat segment and hides the other three', () => {
+    useAppStore.setState({ focusTrack: 'drum' });
+    const html = renderToString(<PatternView />);
+    expect(html.match(/class="hidden"/g)?.length).toBe(3);
+    expect(html.match(/class="block"/g)?.length).toBe(1);
+    // The Beat segment's own header row is the one that draws the segment
+    // buttons, and it only draws when its segment is active.
+    expect(html).toContain('id="segment-beat"');
   });
 });
 

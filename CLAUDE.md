@@ -51,7 +51,8 @@ Single-page audio workstation ("Solna"): two layers (Loop, Song) holding four ta
 them — Sound and Pattern on the loop layer, Arrange and Master on the song layer — plus Pattern's
 own four segments (Lead, FX, Accompaniment, Beat). **Every one of them stays mounted
 simultaneously**, gated `block`/`hidden` at three levels: `App.tsx` on the layer
-(`isSongLayer(activeTab)`), `LoopPage.tsx` on `activeTab`, `PatternView.tsx` on `patternSegment`.
+(`isSongLayer(activeTab)`), `LoopPage.tsx` on `activeTab`, `PatternView.tsx` on
+`segmentForFocus(focusTrack)`.
 Audio therefore never stops when switching tabs. **Consequence:** state that lives in a store slice or high in the tree
 re-renders *every* mounted view, not just the visible one. High-frequency state — the current
 playback step, a value being dragged on a knob — must therefore stay local to the subtree that
