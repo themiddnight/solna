@@ -1,5 +1,6 @@
 import type { LoopMixPatch } from '@/store/types';
 import type { SourceBusId } from '@/store/engineSync';
+import type { MixLayerId } from '@/store/focusTrack';
 import type { PowerToggleTone } from './ui/PowerToggle';
 
 /**
@@ -15,13 +16,14 @@ type MixMuteKey = {
 }[keyof LoopMixPatch];
 
 /**
- * DOM id prefix and lookup key for a layer. These track the STORE fields
- * (`drumMuted`), not the labels — which is why the drum bus is `drum` here and
- * "Beat" on screen.
+ * The layer roster is declared in `@/store/focusTrack` and re-exported here.
+ * It moved down because `focusTrack` is store state and `src/store/` may not
+ * import `src/components/` — see the docblock there. Every existing importer
+ * of `MIX_LAYER_IDS` / `MixLayerId` from this module keeps working unchanged;
+ * the mixer is now one of two readers of the roster rather than its owner.
  */
-export const MIX_LAYER_IDS = ['synth', 'fx', 'chord', 'bass', 'pad', 'drum'] as const;
-
-export type MixLayerId = (typeof MIX_LAYER_IDS)[number];
+export { MIX_LAYER_IDS } from '@/store/focusTrack';
+export type { MixLayerId } from '@/store/focusTrack';
 
 /**
  * The mixer's groups, in the order they are shown. Pitched layers first,
