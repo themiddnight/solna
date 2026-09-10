@@ -130,9 +130,9 @@ describe('scheduled chord hits', () => {
 
     // A multi-hit chord pattern schedules all hits in one burst, e.g. two
     // hits of the same note 0.5 s apart, each released shortly after.
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.25, 'chord');
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.75, 'chord');
 
     // The first voice's envelope may only be cancelled by its OWN scheduled
@@ -149,7 +149,7 @@ describe('live param updates', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 2, 'chord');
 
     const voice = (engine as any).activeVoices.get('chord:C4');
@@ -163,7 +163,7 @@ describe('live param updates', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 1, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 1, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0, 'chord');
 
     const voice = (engine as any).activeVoices.get('chord:C4');
@@ -179,7 +179,7 @@ describe('live param updates', () => {
 
     // A voice starting 1 s ahead with its full envelope (attack ramps and the
     // note-off release) already planned.
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 1, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 1, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 3, 'chord');
 
     const voice = (engine as any).activeVoices.get('chord:C4');
@@ -202,7 +202,7 @@ describe('pending release re-arming', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 4, 'chord');
 
     const vca = ctx._gains[0].gain;
@@ -217,7 +217,7 @@ describe('pending release re-arming', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 4, 'chord');
 
     const voice = (engine as any).activeVoices.get('chord:C4');
@@ -237,7 +237,7 @@ describe('pending release re-arming', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 2, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 2, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 - 1, 'chord');
 
     const vca = ctx._gains[0].gain;
@@ -255,9 +255,9 @@ describe('pending release re-arming', () => {
 
     // Chord pattern with a repeated note: the second hit is pre-scheduled, so
     // the dedup map points at it while the first hit is the one sounding now.
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.3, 'chord');
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.8, 'chord');
 
     // The first hit is sounding right now (t0 + 0.15 < its release at t0 + 0.3).
@@ -276,8 +276,8 @@ describe('pending release re-arming', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'synth');
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'synth', 1, 'live');
 
     const oldVoiceGain = ctx._gains[0].gain;
     expect(oldVoiceGain.cancels).toContain(t0);
@@ -289,9 +289,9 @@ describe('bass retrigger', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C2', SYNTH, 0.8, t0, 'bass');
+    engine.triggerSynthNoteOn('C2', SYNTH, 0.8, t0, 'bass', 1, 'live');
     engine.triggerSynthNoteOff('C2', SYNTH.release, t0 + 1, 'bass');
-    engine.triggerSynthNoteOn('C2', SYNTH, 0.8, t0 + 0.5, 'bass');
+    engine.triggerSynthNoteOn('C2', SYNTH, 0.8, t0 + 0.5, 'bass', 1, 'live');
 
     // The old voice stays tracked until its teardown (mono needs that), and
     // its release must be aimed at the new note's start (t0 + 0.5) — never at
@@ -315,7 +315,7 @@ describe('bass retrigger', () => {
 
     // attack 0.02 + decay 0.4, so the amp envelope is past sustain by t0 + 0.42
     // and every release below takes releaseVoice's "past the envelope" branch.
-    engine.triggerSynthNoteOn('C2', SYNTH, 0.8, t0, 'bass');
+    engine.triggerSynthNoteOn('C2', SYNTH, 0.8, t0, 'bass', 1, 'live');
     const gain = ctx._gains[0].gain;
 
     engine.triggerSynthNoteOff('C2', 0.05, t0 + 1, 'bass');
@@ -341,15 +341,15 @@ describe('bass retrigger', () => {
 
     // C2 is released and left to fade; E2 is held with its note-off still
     // ahead on the clock.
-    engine.triggerSynthNoteOn('C2', SYNTH, 0.8, t0, 'bass');
+    engine.triggerSynthNoteOn('C2', SYNTH, 0.8, t0, 'bass', 1, 'live');
     engine.triggerSynthNoteOff('C2', 0.05, t0 + 0.5, 'bass');
-    engine.triggerSynthNoteOn('E2', SYNTH, 0.8, t0 + 1, 'bass');
+    engine.triggerSynthNoteOn('E2', SYNTH, 0.8, t0 + 1, 'bass', 1, 'live');
     engine.triggerSynthNoteOff('E2', SYNTH.release, t0 + 5, 'bass');
 
     const c2 = bassVoices().find((v) => v.noteName === 'C2');
     const e2 = bassVoices().find((v) => v.noteName === 'E2');
 
-    engine.triggerSynthNoteOn('G2', SYNTH, 0.8, t0 + 2, 'bass');
+    engine.triggerSynthNoteOn('G2', SYNTH, 0.8, t0 + 2, 'bass', 1, 'live');
 
     // C2's release has already STARTED: killing it again would only reset its
     // teardown timer and re-run its ramps.
@@ -367,12 +367,12 @@ describe('source stop (preview release)', () => {
 
     // A multi-hit pattern pre-schedules all hits at once (as
     // scheduleBarInvariantEvents does): two same-note hits plus another note.
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.25, 'chord');
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.75, 'chord');
-    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, t0 + 0.5, 'chord');
-    engine.triggerSynthNoteOn('F2', SYNTH, 0.8, t0, 'bass');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, t0 + 0.5, 'chord', 1, 'live');
+    engine.triggerSynthNoteOn('F2', SYNTH, 0.8, t0, 'bass', 1, 'live');
 
     const chordVoicesBefore = Array.from(
       (engine as any).sourceVoices.get('chord') as Set<{ startTime: number; gains: { gain: { cancels: number[]; events: { v: number }[] } }[] }>,
@@ -416,7 +416,7 @@ describe('source stop (preview release)', () => {
   test('a stop leaves a voice already fading at least as fast alone', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     const voice = Array.from(
       (engine as any).sourceVoices.get('chord') as Set<any>,
     )[0];
@@ -435,7 +435,7 @@ describe('source stop (preview release)', () => {
   test('a stop shorter than the pending release still cuts the voice', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     const voice = Array.from(
       (engine as any).sourceVoices.get('chord') as Set<any>,
     )[0];
@@ -470,7 +470,7 @@ describe('source stop (preview release)', () => {
     // and ChordView stops it again on the release.
     for (let click = 0; click < 10; click++) {
       engine.stopSource('chord', 0.05);
-      for (const note of notes) engine.triggerSynthNoteOn(note, SYNTH, 0.8, undefined, 'chord');
+      for (const note of notes) engine.triggerSynthNoteOn(note, SYNTH, 0.8, undefined, 'chord', 1, 'live');
       const sounding = Array.from(chordVoices()).filter(
         (v) => v.releaseScheduledAt === undefined,
       );
@@ -490,7 +490,7 @@ describe('scheduled source stop (soft stop on a bar line)', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime; // 10
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'chord', 1, 'live');
 
     // Schedule the stop a bar ahead, the way a soft stop does.
     const stopAt = t0 + 2;
@@ -513,7 +513,7 @@ describe('scheduled source stop (soft stop on a bar line)', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     engine.stopSource('chord', 0.02);
 
     const voices = Array.from(
@@ -623,7 +623,7 @@ describe('releaseSoundingVoices', () => {
 
     // The arpeggiator schedules the next note on a future 16th and pairs it
     // with its own note-off, so the voice already ends by itself.
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0 + 0.5, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0 + 0.5, 'synth', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.6, 'synth');
 
     // The key comes up before that note sounds.
@@ -640,7 +640,7 @@ describe('releaseSoundingVoices', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0, 'synth', 1, 'live');
     engine.releaseSoundingVoices('synth', 0.1);
 
     const soundingVoiceGain = ctx._gains[0].gain;
@@ -653,7 +653,7 @@ describe('releaseSoundingVoices', () => {
 
     // No paired note-off: nothing would ever end this voice, so it must not
     // be skipped or it would drone forever.
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0 + 0.5, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0 + 0.5, 'synth', 1, 'live');
     engine.releaseSoundingVoices('synth', 0.1);
 
     expect(ctx._gains[0].gain.cancels).toContain(t0);
@@ -663,7 +663,7 @@ describe('releaseSoundingVoices', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0, 'synth', 1, 'live');
     engine.releaseSoundingVoices('chord', 0.1);
 
     expect(ctx._gains[0].gain.cancels).not.toContain(t0);
@@ -673,7 +673,7 @@ describe('releaseSoundingVoices', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0 + 0.5, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0 + 0.5, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.6, 'chord');
     engine.stopSource('chord', 0.1);
 
@@ -1021,9 +1021,9 @@ describe('live polyphony equal-power scaling', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth');
-    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, undefined, 'synth');
-    engine.triggerSynthNoteOn('G4', SYNTH, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, undefined, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('G4', SYNTH, 0.8, undefined, 'synth', 1, 'live');
     engine.triggerSynthNoteOff('G4', SYNTH.release, undefined, 'synth');
 
     engine.applySynthVelocityScale(0.5, 'synth');
@@ -1046,7 +1046,7 @@ describe('live polyphony equal-power scaling', () => {
   test('a voice triggered with a scaleFactor re-scales relative to it', () => {
     const { engine } = freshEngine();
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 1.0, undefined, 'synth', 0.5);
+    engine.triggerSynthNoteOn('C4', SYNTH, 1.0, undefined, 'synth', 0.5, 'live');
     const c4 = (engine as any).activeVoices.get('synth:C4');
     expect(c4.envelopeScale).toBe(0.5);
 
@@ -1061,7 +1061,7 @@ describe('live polyphony equal-power scaling', () => {
   test('a re-scale that matches the current scale leaves voices untouched', () => {
     const { engine } = freshEngine();
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth', 1, 'live');
     engine.applySynthVelocityScale(1, 'synth');
 
     const c4 = (engine as any).activeVoices.get('synth:C4');
@@ -1071,8 +1071,8 @@ describe('live polyphony equal-power scaling', () => {
   test('rescales only the named source — a keyboard press leaves chord voices alone', () => {
     const { engine } = freshEngine();
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth');
-    engine.triggerSynthNoteOn('A3', SYNTH, 0.8, undefined, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('A3', SYNTH, 0.8, undefined, 'chord', 1, 'live');
 
     engine.applySynthVelocityScale(0.5, 'synth');
 
@@ -1259,7 +1259,7 @@ describe('noise source', () => {
 
   test('a preset with noiseVolume 0 creates no noise source at all', () => {
     const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
 
     expect(ctx._bufferSources).toHaveLength(0);
     const voice = (engine as any).activeVoices.get('synth:C4');
@@ -1269,7 +1269,7 @@ describe('noise source', () => {
 
   test('a preset with noiseVolume > 0 gets a looped noise source at that level', () => {
     const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn('C4', NOISY, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', NOISY, 0.8, ctx.currentTime, 'synth', 1, 'live');
 
     expect(ctx._bufferSources).toHaveLength(1);
     // Without loop the noise would run out mid-note: the buffer is 2 s while
@@ -1282,8 +1282,8 @@ describe('noise source', () => {
 
   test('the noise level scales with noiseVolume rather than being a fixed amount', () => {
     const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn('C4', { ...SYNTH, noiseVolume: 0.4 }, 0.8, ctx.currentTime, 'synth');
-    engine.triggerSynthNoteOn('E4', { ...SYNTH, noiseVolume: 0.02 }, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, noiseVolume: 0.4 }, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('E4', { ...SYNTH, noiseVolume: 0.02 }, 0.8, ctx.currentTime, 'synth', 1, 'live');
 
     const loud = (engine as any).activeVoices.get('synth:C4');
     const quiet = (engine as any).activeVoices.get('synth:E4');
@@ -1293,7 +1293,7 @@ describe('noise source', () => {
 
   test('noise runs into the filter, not past it, so the VCF envelope shapes it', () => {
     const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn('C4', NOISY, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', NOISY, 0.8, ctx.currentTime, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
 
     // Noise is a third source alongside osc1/oscSub, so it belongs upstream of
@@ -1307,7 +1307,7 @@ describe('noise source', () => {
 
   test('a noise source added live is wired into the filter too', () => {
     const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
 
     engine.updateSynthParams({ ...SYNTH, noiseVolume: 0.3 }, 'synth');
@@ -1317,7 +1317,7 @@ describe('noise source', () => {
 
   test('gains[0] and gains[1] stay the main and sub gains when noise is present', () => {
     const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn('C4', NOISY, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', NOISY, 0.8, ctx.currentTime, 'synth', 1, 'live');
 
     // Positional: releaseVoice ramps gains[0] and updateSynthParams writes
     // subOscVolume into gains[1]. Creating the noise gain must not shift them.
@@ -1331,7 +1331,7 @@ describe('noise source', () => {
 
   test('turning the noise knob up reaches a sounding voice that started silent', () => {
     const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
     expect(voice.noise).toBeUndefined();
 
@@ -1344,7 +1344,7 @@ describe('noise source', () => {
 
   test('turning the noise knob down to zero silences it on a sounding voice', () => {
     const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn('C4', NOISY, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', NOISY, 0.8, ctx.currentTime, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
 
     engine.updateSynthParams({ ...NOISY, noiseVolume: 0 }, 'synth');
@@ -1357,7 +1357,7 @@ describe('noise source', () => {
     // Tiny filterRelease as well as a tiny release: the teardown timeout waits
     // max(releaseTime, filterRelease) + 0.1 s, and SYNTH's 0.5 s filter release
     // would outlast the test.
-    engine.triggerSynthNoteOn('C4', { ...NOISY, filterRelease: 0.01 }, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...NOISY, filterRelease: 0.01 }, 0.8, ctx.currentTime, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
     const stopped = spyOn(voice.noise, 'stop');
     const disconnected = spyOn(voice.noise, 'disconnect');
@@ -1394,7 +1394,7 @@ describe('release discontinuity', () => {
     const t0 = ctx.currentTime;
     const releaseAt = t0 + HELD;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, releaseAt, 'chord');
 
     // A step here is a click: the amp jumps in a single sample.
@@ -1408,7 +1408,7 @@ describe('release discontinuity', () => {
 
     // filterEnvAmount 1200 over a 0.4 s filter decay: the cutoff is still
     // falling from its 3600 Hz peak when the release begins.
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, releaseAt, 'chord');
 
     const voice = (engine as any).activeVoices.get('chord:C4');
@@ -1425,7 +1425,7 @@ describe('release discontinuity', () => {
     const HELD_CHORD: SynthParams = { ...SYNTH, attack: 0.005, decay: 0.01, sustain: 1, release: 0.01 };
     const peak = 0.8 * 0.4;
 
-    engine.triggerSynthNoteOn('C4', HELD_CHORD, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', HELD_CHORD, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', HELD_CHORD.release, t0 + 2.7, 'chord');
 
     const vca = ctx._gains[0].gain;
@@ -1439,7 +1439,7 @@ describe('release discontinuity', () => {
     const t0 = ctx.currentTime;
 
     // Note-off with no time: the release starts at currentTime, mid-attack.
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, undefined, 'chord');
 
     expect(stepRatio(ctx._gains[0].gain, t0)).toBeLessThan(1.02);
@@ -1455,7 +1455,7 @@ describe('release without cancelAndHoldAtTime (Firefox)', () => {
     const t0 = ctx.currentTime;
     const releaseAt = t0 + 0.125;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, releaseAt, 'chord');
 
     // gain.value reports the value at currentTime — still the 0.0001 envelope
@@ -1471,7 +1471,7 @@ describe('release without cancelAndHoldAtTime (Firefox)', () => {
     // Released 0.1 s in, while the 0.42 s attack+decay is still running: the
     // exact value is unknowable without cancelAndHoldAtTime, so `.value` is
     // the best estimate available.
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 0.1, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 0.1, 'chord', 1, 'live');
     const vca = ctx._gains[0].gain;
     vca.value = 0.05;
 
@@ -1486,7 +1486,7 @@ describe('release without cancelAndHoldAtTime (Firefox)', () => {
 
     // Past attack+decay the value IS the sustain level, so no estimate is
     // needed and Firefox gets the same exact anchor as everyone else.
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 1, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 1, 'chord', 1, 'live');
     const vca = ctx._gains[0].gain;
     vca.value = 0.05;
 
@@ -1499,7 +1499,7 @@ describe('release without cancelAndHoldAtTime (Firefox)', () => {
     const { engine, ctx } = freshEngine({ cancelAndHold: false });
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     const voice = (engine as any).activeVoices.get('chord:C4');
     voice.filter.frequency.value = 3000;
 
@@ -1518,7 +1518,7 @@ describe('live Sustain', () => {
   test('turning Sustain up lifts a note that is already ringing', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
-    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', PAD.release, t0 + 4, 'chord');
 
     const vca = ctx._gains[0].gain;
@@ -1530,7 +1530,7 @@ describe('live Sustain', () => {
   test('turning Sustain down lowers it, and the stored level follows', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
-    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', PAD.release, t0 + 4, 'chord');
 
     const vca = ctx._gains[0].gain;
@@ -1546,7 +1546,7 @@ describe('live Sustain', () => {
   test('a param change that leaves Sustain alone never touches the amp', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
-    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', PAD.release, t0 + 4, 'chord');
 
     const vca = ctx._gains[0].gain;
@@ -1562,7 +1562,7 @@ describe('live Sustain', () => {
     const t0 = ctx.currentTime;
     // A held key, so applySynthVelocityScale's equal-power rebalance applies
     // (it skips voices with a planned release).
-    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'synth');
+    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'synth', 1, 'live');
     engine.applySynthVelocityScale(0.5, 'synth');
 
     const voice = (engine as any).activeVoices.get('synth:C4');
@@ -1577,7 +1577,7 @@ describe('live Sustain', () => {
   test('a voice already fading keeps its release', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
-    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0 - 2, 'chord');
+    engine.triggerSynthNoteOn('C4', PAD, 0.8, t0 - 2, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', PAD.release, t0 - 1, 'chord');
 
     const vca = ctx._gains[0].gain;
@@ -1593,7 +1593,7 @@ describe('envelope-safe rebalancing', () => {
     const t0 = ctx.currentTime;
 
     // Attack is 0.02 s; rebalance 0.01 s in, halfway up the ramp.
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'synth', 1, 'live');
     ctx.currentTime = t0 + 0.01;
     engine.applySynthVelocityScale(0.5, 'synth');
 
@@ -1614,7 +1614,7 @@ describe('envelope-safe rebalancing', () => {
     // since it also skips any voice with a scheduled release) is exactly how
     // the two silently diverge again the next time either one changes.
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth', 1, 'live');
 
     expect(typeof (engine as any).reshapeableVoices).toBe('function');
     const spy = spyOn(engine as any, 'reshapeableVoices');
@@ -1657,7 +1657,7 @@ describe('envelope end markers', () => {
     // synthPresets ships attack: 0.002, below the 0.005 floor the ramp uses.
     const fast = { ...SYNTH, attack: 0.002, decay: 0.4, filterAttack: 0.002, filterDecay: 0.4 };
 
-    engine.triggerSynthNoteOn('C4', fast, 0.8, t0, 'synth');
+    engine.triggerSynthNoteOn('C4', fast, 0.8, t0, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
 
     // The ramp ends at t0 + max(0.005, 0.002) + 0.4; a marker computed from the
@@ -1672,9 +1672,9 @@ describe('scheduled same-note dedup', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'synth', 1, 'live');
     const first = (engine as any).activeVoices.get('synth:C4');
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.5, 'synth', 1, 'live');
 
     // The bass path at engine.ts:394 forwards `time`; this one did not, so the
     // old voice was cut up to a full 100 ms lookahead before the new one began.
@@ -1685,7 +1685,7 @@ describe('scheduled same-note dedup', () => {
 describe('noise source initial level', () => {
   test('adding noise to a live voice starts from an explicit floor, not a denormal', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', { ...SYNTH, noiseVolume: 0 }, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, noiseVolume: 0 }, 0.8, undefined, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
     expect(voice.noiseGain).toBeUndefined();
 
@@ -1704,7 +1704,7 @@ describe('releasing a voice that has not started', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'chord', 1, 'live');
     const voice = (engine as any).activeVoices.get('chord:C4');
     const vca = voice.gains[0].gain;
     // The note-on's own attack/decay ramps already sit in `ramps`; clear them
@@ -1725,7 +1725,7 @@ describe('releasing a voice that has not started', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'chord', 1, 'live');
     engine.stopSource('chord', 0.1);
 
     expect((engine as any).sourceVoices.get('chord').size).toBe(0);
@@ -1736,7 +1736,7 @@ describe('releasing a voice that has not started', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 1, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 - 1, 'chord', 1, 'live');
     const vca = (engine as any).activeVoices.get('chord:C4').gains[0].gain;
     vca.ramps.length = 0;
 
@@ -1749,7 +1749,7 @@ describe('releasing a voice that has not started', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'synth', 1, 'live');
     const vca = (engine as any).activeVoices.get('synth:C4').gains[0].gain;
     // The note-on's own attack/decay ramps already sit in `ramps`; clear them
     // so the assertion below is about ramps releaseSoundingVoices schedules.
@@ -1765,7 +1765,7 @@ describe('releasing a voice that has not started', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0 + 0.1, 'synth', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.3, 'synth');
     const vca = (engine as any).activeVoices.get('synth:C4').gains[0].gain;
     const before = vca.events.length;
@@ -1782,10 +1782,10 @@ describe('re-planning a pending release', () => {
     const t0 = ctx.currentTime;
     const pad = { ...SYNTH, release: 2 };
 
-    engine.triggerSynthNoteOn('C2', pad, 0.8, t0 - 1, 'bass');
+    engine.triggerSynthNoteOn('C2', pad, 0.8, t0 - 1, 'bass', 1, 'live');
     const first = (engine as any).activeVoices.get('bass:C2');
     // The new bass note releases the old one with the mono-kill's 0.05 s.
-    engine.triggerSynthNoteOn('E2', pad, 0.8, t0 + 1, 'bass');
+    engine.triggerSynthNoteOn('E2', pad, 0.8, t0 + 1, 'bass', 1, 'live');
     expect(first.releaseTime).toBe(0.05);
 
     first.gains[0].gain.ramps.length = 0;
@@ -1802,7 +1802,7 @@ describe('re-planning a pending release', () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
 
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 4, 'chord');
     const vca = (engine as any).activeVoices.get('chord:C4').gains[0].gain;
     vca.ramps.length = 0;
@@ -1820,7 +1820,7 @@ describe('LFO routing', () => {
 
   test('a volume LFO modulates a SERIES gain, never the VCA param itself', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', TREM, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', TREM, 0.8, undefined, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
 
     // Connecting the LFO to gainNode.gain SUMS with the envelope: the release
@@ -1831,7 +1831,7 @@ describe('LFO routing', () => {
 
   test('the tremolo gain sits between the VCA and the source tap', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', TREM, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', TREM, 0.8, undefined, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
     const tap = (engine as any).sourceTaps.get('synth');
 
@@ -1843,7 +1843,7 @@ describe('LFO routing', () => {
 
   test('a voice with no LFO still routes through the tremolo gain', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
 
     // Always present, so switching a live voice onto tremolo is a reconnect of
@@ -1854,12 +1854,12 @@ describe('LFO routing', () => {
 
   test('cutoff and pitch targets are unchanged', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth', 1, 'live');
     const cut = (engine as any).activeVoices.get('synth:C4');
     expect(cut.lfoGain.connectedTo).toContain(cut.filter.frequency);
     expect(cut.lfoGain.gain.value).toBeCloseTo(0.5 * 1500, 9);
 
-    engine.triggerSynthNoteOn('E4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'pitch' }, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('E4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'pitch' }, 0.8, undefined, 'synth', 1, 'live');
     const pit = (engine as any).activeVoices.get('synth:E4');
     expect(pit.lfoGain.connectedTo).toContain(pit.oscs[0].detune);
     expect(pit.lfoGain.gain.value).toBeCloseTo(0.5 * 50, 9);
@@ -1867,7 +1867,7 @@ describe('LFO routing', () => {
 
   test('switching a live voice from cutoff to volume moves the LFO to the tremolo gain', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
     expect(voice.lfoGain.gain.value).toBeCloseTo(0.5 * 1500, 9);
 
@@ -1884,7 +1884,7 @@ describe('LFO routing', () => {
 
   test('switching a live voice from pitch to volume also lands at the tremolo scale instantly', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'pitch' }, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'pitch' }, 0.8, undefined, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
     expect(voice.lfoGain.gain.value).toBeCloseTo(0.5 * 50, 9);
 
@@ -1897,7 +1897,7 @@ describe('LFO routing', () => {
 
   test('a depth change with the target UNCHANGED still glides, not jumps', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
 
     engine.updateSynthParams({ ...SYNTH, lfoDepth: 0.2, lfoTarget: 'cutoff' }, 'synth');
@@ -1909,7 +1909,7 @@ describe('LFO routing', () => {
 
   test('depth above 1 still clamps the tremolo scale so the trough stays positive', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 3, lfoTarget: 'volume' }, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 3, lfoTarget: 'volume' }, 0.8, undefined, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
 
     // Math.min(1, params.lfoDepth) clamps the MULTIPLIER to 1 before scaling
@@ -1921,7 +1921,7 @@ describe('LFO routing', () => {
 
   test('an LFO added to a live voice that started without one is wired, not dropped', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth'); // lfoDepth 0
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth', 1, 'live'); // lfoDepth 0
     const voice = (engine as any).activeVoices.get('synth:C4');
     expect(voice.lfo).toBeUndefined();
 
@@ -1935,7 +1935,7 @@ describe('LFO routing', () => {
 describe('LFO teardown at depth zero', () => {
   test('dropping depth to zero stops and disconnects the oscillator', async () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
     const lfo = voice.lfo;
     const lfoGain = voice.lfoGain;
@@ -1954,7 +1954,7 @@ describe('LFO teardown at depth zero', () => {
 
   test('depth back up before the teardown lands keeps the same oscillator', async () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, lfoDepth: 0.5, lfoTarget: 'cutoff' }, 0.8, undefined, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
     const lfo = voice.lfo;
 
@@ -2859,7 +2859,7 @@ describe('the hi-hat choke group', () => {
 describe('source bus level control', () => {
   test('setSourceGain ramps instead of stepping, and clamps to 0..MAX_FADER_GAIN', () => {
     const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'chord', 1, 'live');
     const bus = (engine as any).sourceBuses.get('chord');
 
     engine.setSourceGain('chord', 0.4);
@@ -2877,7 +2877,7 @@ describe('source bus level control', () => {
 
   test('setSourceMuted ramps to 0 and back to the stored gain', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'bass');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'bass', 1, 'live');
     const bus = (engine as any).sourceBuses.get('bass');
     engine.setSourceGain('bass', 0.6);
 
@@ -2891,7 +2891,7 @@ describe('source bus level control', () => {
 
   test('a gain set while muted does not un-mute the bus', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'bass');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'bass', 1, 'live');
     const bus = (engine as any).sourceBuses.get('bass');
 
     engine.setSourceMuted('bass', true);
@@ -2998,7 +2998,7 @@ describe('getSourceAnalyser', () => {
   // is the only place setupMasterChain (where that edge is wired) actually runs.
   test('a voice feeds the tap, which feeds the bus', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 1, undefined, 'chord');
+    engine.triggerSynthNoteOn('C4', SYNTH, 1, undefined, 'chord', 1, 'live');
 
     const chordTap = (engine as any).sourceTaps.get('chord');
     const chordBus = (engine as any).sourceBuses.get('chord');
@@ -3095,7 +3095,7 @@ describe('voice lifetime backstop', () => {
   test('a note-on with no matching note-off is torn down after maxVoiceLifetimeMs', async () => {
     const { engine, ctx } = freshEngine();
     (engine as any).maxVoiceLifetimeMs = 20;
-    engine.triggerSynthNoteOn('C4', { ...SYNTH, filterRelease: 0.01 }, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, filterRelease: 0.01 }, 0.8, ctx.currentTime, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
     const stopped = spyOn(voice.oscs[0], 'stop');
 
@@ -3117,6 +3117,8 @@ describe('voice lifetime backstop', () => {
       0.8,
       ctx.currentTime,
       'synth',
+      1,
+      'live',
     );
     const voice = (engine as any).activeVoices.get('synth:C4');
     const stopped = spyOn(voice.oscs[0], 'stop');
@@ -3132,7 +3134,7 @@ describe('voice lifetime backstop', () => {
   test('a still-scheduled future voice is not touched by an already-expired guard', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).maxVoiceLifetimeMs = 30_000;
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime + 5, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime + 5, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
 
     expect(voice.lifetimeGuardTimer).toBeDefined();
@@ -3142,7 +3144,7 @@ describe('voice lifetime backstop', () => {
   test('a guard timer whose voice is no longer the current one for its key does not release it', async () => {
     const { engine, ctx } = freshEngine();
     (engine as any).maxVoiceLifetimeMs = 20;
-    engine.triggerSynthNoteOn('C4', { ...SYNTH, filterRelease: 0.01 }, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, filterRelease: 0.01 }, 0.8, ctx.currentTime, 'synth', 1, 'live');
     const staleVoice = (engine as any).activeVoices.get('synth:C4');
     const staleStopped = spyOn(staleVoice.oscs[0], 'stop');
 
@@ -3170,7 +3172,7 @@ describe('voice lifetime backstop', () => {
   test('a voice released by the guard is no longer reshapeable during its release tail', async () => {
     const { engine, ctx } = freshEngine();
     (engine as any).maxVoiceLifetimeMs = 20;
-    engine.triggerSynthNoteOn('C4', { ...SYNTH, filterRelease: 0.01 }, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', { ...SYNTH, filterRelease: 0.01 }, 0.8, ctx.currentTime, 'synth', 1, 'live');
     const voice = (engine as any).activeVoices.get('synth:C4');
 
     // Wait past the 20 ms guard but well inside the ~150 ms teardown window
@@ -3190,13 +3192,13 @@ describe('voice cap', () => {
   test('exceeding maxVoicesPerSource steals the oldest already-started voice', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).maxVoicesPerSource = 3;
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
-    engine.triggerSynthNoteOn('D4', SYNTH, 0.8, ctx.currentTime, 'synth');
-    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('D4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     const oldest = (engine as any).activeVoices.get('synth:C4');
     expect(oldest.releaseScheduledAt).toBeUndefined();
 
-    engine.triggerSynthNoteOn('F4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('F4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
 
     expect(oldest.releaseScheduledAt).toBeDefined();
     const newest = (engine as any).activeVoices.get('synth:F4');
@@ -3207,9 +3209,9 @@ describe('voice cap', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).maxVoicesPerSource = 2;
     const future = ctx.currentTime + 5;
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, future, 'synth');
-    engine.triggerSynthNoteOn('D4', SYNTH, 0.8, ctx.currentTime, 'synth');
-    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, future, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('D4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
 
     const futureVoice = (engine as any).activeVoices.get('synth:C4');
     const middleVoice = (engine as any).activeVoices.get('synth:D4');
@@ -3220,14 +3222,14 @@ describe('voice cap', () => {
   test('a second steal after the first one picks a different, newer voice', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).maxVoicesPerSource = 2;
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
-    engine.triggerSynthNoteOn('D4', SYNTH, 0.8, ctx.currentTime, 'synth');
-    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('D4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     const first = (engine as any).activeVoices.get('synth:C4');
     const firstReleasedAt = first.releaseScheduledAt;
     expect(firstReleasedAt).toBeDefined();
 
-    engine.triggerSynthNoteOn('G4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('G4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
 
     const second = (engine as any).activeVoices.get('synth:D4');
     expect(second.releaseScheduledAt).toBeDefined();
@@ -3239,13 +3241,13 @@ describe('voice cap', () => {
   test('a voice already releasing is never stolen a second time', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).maxVoicesPerSource = 2;
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     engine.triggerSynthNoteOff('C4', 0.3, ctx.currentTime, 'synth');
     const releasing = (engine as any).activeVoices.get('synth:C4');
     const releasedAt = releasing.releaseScheduledAt;
 
-    engine.triggerSynthNoteOn('D4', SYNTH, 0.8, ctx.currentTime, 'synth');
-    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    engine.triggerSynthNoteOn('D4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
 
     expect(releasing.releaseScheduledAt).toBe(releasedAt);
   });
@@ -3256,15 +3258,15 @@ describe('bass mono kill iterates the bass voice set, not every active voice', (
     const { engine, ctx } = freshEngine();
     const e = engine as any;
 
-    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'chord');
-    e.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth');
-    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'chord', 1, 'live');
+    e.triggerSynthNoteOn('E4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass', 1, 'live');
 
     const oldBass = e.activeVoices.get('bass:C2');
     expect(oldBass).toBeTruthy();
     expect(oldBass.releaseScheduledAt).toBeUndefined();
 
-    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass', 1, 'live');
 
     // The previous bass voice was released...
     expect(oldBass.releaseScheduledAt).toBe(ctx.currentTime);
@@ -3277,12 +3279,12 @@ describe('bass mono kill iterates the bass voice set, not every active voice', (
     const { engine, ctx } = freshEngine();
     const e = engine as any;
 
-    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass', 1, 'live');
     e.triggerSynthNoteOff('C2', 0.2, ctx.currentTime, 'bass');
     const dying = e.activeVoices.get('bass:C2');
     const cancelsBefore = dying.gains[0].gain.cancels.length;
 
-    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass', 1, 'live');
 
     expect(dying.gains[0].gain.cancels.length).toBe(cancelsBefore);
   });
@@ -3291,14 +3293,14 @@ describe('bass mono kill iterates the bass voice set, not every active voice', (
     const { engine, ctx } = freshEngine();
     const e = engine as any;
 
-    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass', 1, 'live');
     // Release planned one second ahead — a long scheduled note that would
     // otherwise ring through the new one and break monophony.
     e.triggerSynthNoteOff('C2', 0.2, ctx.currentTime + 1, 'bass');
     const pending = e.activeVoices.get('bass:C2');
     expect(pending.releaseScheduledAt).toBe(ctx.currentTime + 1);
 
-    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass', 1, 'live');
 
     expect(pending.releaseScheduledAt).toBe(ctx.currentTime);
   });
@@ -3310,14 +3312,14 @@ describe('bass mono kill iterates the bass voice set, not every active voice', (
     const { engine, ctx } = freshEngine();
     const e = engine as any;
 
-    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass', 1, 'live');
     const superseded = e.activeVoices.get('bass:C2');
-    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass', 1, 'live');
     const current = e.activeVoices.get('bass:C2');
     expect(current).not.toBe(superseded);
 
     const currentCancels = current.gains[0].gain.cancels.length;
-    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass', 1, 'live');
 
     // Exactly one release reached the current C2 voice.
     expect(current.gains[0].gain.cancels.length).toBe(currentCancels + 1);
@@ -3335,13 +3337,13 @@ describe('bass mono kill iterates the bass voice set, not every active voice', (
     const { engine, ctx } = freshEngine();
     const e = engine as any;
 
-    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'bass', 1, 'live');
     const stale = e.activeVoices.get('bass:C2');
     expect(stale.releaseScheduledAt).toBeUndefined();
 
     // A real voice, built the normal way but under a different source so
     // creating it does not run the bass mono-kill against `stale`.
-    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     const occupant = e.activeVoices.get('synth:C2');
     const occupantCancelsBefore = occupant.gains[0].gain.cancels.length;
 
@@ -3349,7 +3351,7 @@ describe('bass mono kill iterates the bass voice set, not every active voice', (
     // triggerSynthNoteOff entirely.
     e.activeVoices.set('bass:C2', occupant);
 
-    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass');
+    e.triggerSynthNoteOn('G2', SYNTH, 0.8, ctx.currentTime, 'bass', 1, 'live');
 
     // The identity guard must refuse to act on `stale` because it no longer
     // matches its own activeVoices slot — and, critically, must not release
@@ -3430,7 +3432,7 @@ describe('idle suspend and audio-clock teardown', () => {
 
   test('a live voice blocks the suspend', () => {
     const { engine, ctx } = suspendableEngine();
-    (engine as any).triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    (engine as any).triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     (engine as any).maybeSuspendNow();
     expect(ctx.suspendCalls).toBe(0);
   });
@@ -3477,7 +3479,7 @@ describe('idle suspend and audio-clock teardown', () => {
   test('a released voice records its teardown time on the AUDIO clock', () => {
     const { engine, ctx } = suspendableEngine();
     const e = engine as any;
-    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     e.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
 
     const voice = e.activeVoices.get('synth:C4');
@@ -3488,7 +3490,7 @@ describe('idle suspend and audio-clock teardown', () => {
   test('a releasing voice also blocks the suspend — a release tail must never be cut', () => {
     const { engine, ctx } = suspendableEngine();
     const e = engine as any;
-    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     e.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
     e.maybeSuspendNow();
     expect(ctx.suspendCalls).toBe(0);
@@ -3498,7 +3500,7 @@ describe('idle suspend and audio-clock teardown', () => {
   test('wakeIfIdle re-arms a pending teardown against the frozen audio clock, when THIS engine idle-suspended', () => {
     const { engine, ctx } = suspendableEngine();
     const e = engine as any;
-    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     e.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
     const voice = e.activeVoices.get('synth:C4');
     const firstTimer = voice.teardownTimer;
@@ -3524,7 +3526,7 @@ describe('idle suspend and audio-clock teardown', () => {
     const { engine, ctx } = suspendableEngine();
     const e = engine as any;
     ctx.state = 'suspended';
-    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     e.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
     const voice = e.activeVoices.get('synth:C4');
     const firstTimer = voice.teardownTimer;
@@ -3548,7 +3550,7 @@ describe('idle suspend and audio-clock teardown', () => {
     e.maybeSuspendNow();
     expect(ctx.state).toBe('suspended');
 
-    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     expect(ctx.resumeCalls).toBe(1);
   });
 
@@ -3578,7 +3580,7 @@ describe('idle suspend and audio-clock teardown', () => {
     const { engine, ctx } = freshEngine();
     const e = engine as any;
     expect(e.idleTimer).toBeNull();
-    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     expect(e.idleTimer).not.toBeNull();
   });
 
@@ -3671,7 +3673,7 @@ describe('idle suspend and audio-clock teardown', () => {
     // Prove recoverability end-to-end: the very next sound-producing trigger
     // retries resume(), it is not stuck silent forever.
     ctx.resume = async () => { resumeAttempts++; ctx.state = 'running'; };
-    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth');
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     expect(resumeAttempts).toBe(2);
   });
 });
@@ -3684,9 +3686,9 @@ describe('reshapeableVoices reuses one scratch array', () => {
     const e = engine as any;
     const t0 = ctx.currentTime;
 
-    e.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord');
-    e.triggerSynthNoteOn('E4', SYNTH, 0.8, t0, 'chord');
-    e.triggerSynthNoteOn('C2', SYNTH, 0.8, t0, 'bass');
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
+    e.triggerSynthNoteOn('E4', SYNTH, 0.8, t0, 'chord', 1, 'live');
+    e.triggerSynthNoteOn('C2', SYNTH, 0.8, t0, 'bass', 1, 'live');
 
     const a = e.activeVoices.get('chord:C4');
     const b = e.activeVoices.get('chord:E4');
@@ -3716,7 +3718,7 @@ describe('reshapeableVoices reuses one scratch array', () => {
   test('two successive calls over the same voice set schedule identical automation', () => {
     const { engine, ctx } = freshEngine();
     const e = engine as any;
-    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'chord');
+    e.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'chord', 1, 'live');
     const voice = e.activeVoices.get('chord:C4');
 
     engine.updateSynthParams(SYNTH, 'chord');
@@ -3736,12 +3738,12 @@ describe('dropVoicesScheduledFrom', () => {
     const t0 = ctx.currentTime;
     const T = t0 + 0.075;
 
-    engine.triggerSynthNoteOn('C4', LONG, 0.8, t0 - 0.05, 'chord'); // sounding
-    engine.triggerSynthNoteOn('E4', LONG, 0.8, t0 + 0.03, 'chord'); // before T
-    engine.triggerSynthNoteOn('G4', LONG, 0.8, t0 + 0.09, 'chord'); // past T
+    engine.triggerSynthNoteOn('C4', LONG, 0.8, t0 - 0.05, 'chord', 1, 'live'); // sounding
+    engine.triggerSynthNoteOn('E4', LONG, 0.8, t0 + 0.03, 'chord', 1, 'live'); // before T
+    engine.triggerSynthNoteOn('G4', LONG, 0.8, t0 + 0.09, 'chord', 1, 'live'); // past T
     // Exactly ON the boundary belongs to the OUTGOING loop's schedule; the
     // incoming loop's own note at T is emitted by the new scheduler.
-    engine.triggerSynthNoteOn('A4', LONG, 0.8, T, 'chord');
+    engine.triggerSynthNoteOn('A4', LONG, 0.8, T, 'chord', 1, 'live');
 
     engine.dropVoicesScheduledFrom('chord', T);
 
@@ -3757,7 +3759,7 @@ describe('dropVoicesScheduledFrom', () => {
     // HARD_STOP_RELEASE a user Stop uses.
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
-    engine.triggerSynthNoteOn('C4', LONG, 0.8, t0, 'chord');
+    engine.triggerSynthNoteOn('C4', LONG, 0.8, t0, 'chord', 1, 'live');
     const voice = [...((engine as any).sourceVoices.get('chord') as Set<any>)][0];
     const rampsBefore = voice.gains[0].gain.ramps.length;
 
@@ -4379,13 +4381,13 @@ describe('calibration trim reaches the rendered peak (DEV-387)', () => {
     expect(trimmed).not.toBe(NEUTRAL_TRIM_GAIN);
 
     const aBefore = ctx._gains.length;
-    engine.triggerSynthNoteOn('C4', base, 0.5, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', base, 0.5, undefined, 'synth', 1, 'live');
     const aPeak = ctx._gains[aBefore].gain.ramps[0].v;
 
     // A name no factory preset has: neutral, on the same source, immediately
     // after a trimmed note on it.
     const bBefore = ctx._gains.length;
-    engine.triggerSynthNoteOn('E4', trimTestParams('A Name No Factory Preset Has'), 0.5, undefined, 'synth');
+    engine.triggerSynthNoteOn('E4', trimTestParams('A Name No Factory Preset Has'), 0.5, undefined, 'synth', 1, 'live');
     const bPeak = ctx._gains[bBefore].gain.ramps[0].v;
 
     expect(aPeak / bPeak).toBeCloseTo(trimmed, 6);
@@ -4399,15 +4401,33 @@ describe('calibration trim reaches the rendered peak (DEV-387)', () => {
 
     engine.setPresetTrim('synth', 2);
     const synthBefore = ctx._gains.length;
-    engine.triggerSynthNoteOn('C4', params, 0.5, undefined, 'synth');
+    engine.triggerSynthNoteOn('C4', params, 0.5, undefined, 'synth', 1, 'live');
     const synthPeak = ctx._gains[synthBefore].gain.ramps[0].v;
 
     // 'bass' was never told about a trim, so it stays neutral even though the
     // engine now carries a non-neutral entry for 'synth' in the same map.
     const bassBefore = ctx._gains.length;
-    engine.triggerSynthNoteOn('C4', params, 0.5, undefined, 'bass');
+    engine.triggerSynthNoteOn('C4', params, 0.5, undefined, 'bass', 1, 'live');
     const bassPeak = ctx._gains[bassBefore].gain.ramps[0].v;
 
     expect(synthPeak / bassPeak).toBeCloseTo(2, 6);
+  });
+});
+
+describe('voice provenance', () => {
+  test('the owner passed at note-on is stored on the voice', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'synth', 1, 'arp');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, t0, 'synth', 1, 'sequencer');
+
+    const voices = [...((engine as any).sourceVoices.get('synth') as Set<any>)];
+    // Two voices, two owners: the field is per-voice, not per-source. A
+    // per-source record would make both read the same and every scoped
+    // release in Tasks 3 and 4 either a no-op or a whole-bus stop.
+    expect(voices.map((v) => v.owner).sort()).toEqual(['arp', 'sequencer']);
+    expect(voices.find((v) => v.noteName === 'C4').owner).toBe('arp');
+    expect(voices.find((v) => v.noteName === 'E4').owner).toBe('sequencer');
   });
 });

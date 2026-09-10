@@ -105,7 +105,7 @@ export function emitStepEvents(
 ): void {
   for (const ev of events) {
     const start = time + ev.timeOffset;
-    audioEngine.triggerSynthNoteOn(ev.noteName, params, ev.velocity, start, source);
+    audioEngine.triggerSynthNoteOn(ev.noteName, params, ev.velocity, start, source, 1, "sequencer");
     // The clamp to chordEnd stops a long feel hold from overlapping the next
     // chord — but a strum's later notes start up to (n-1)*30 ms after `time`,
     // and on a chord's LAST step at high bpm (200 bpm = 0.075 s/step) that
@@ -226,6 +226,8 @@ export function playFullHoldChord(
       DEFAULT_VELOCITY * equalPowerVelocityScale(notes.length),
       startTime,
       source,
+      1,
+      "sequencer",
     );
     audioEngine.triggerSynthNoteOff(
       n,
@@ -271,6 +273,8 @@ export function playChordLegato(
       DEFAULT_VELOCITY * equalPowerVelocityScale(chord.notes.length),
       undefined,
       "chord",
+      1,
+      "preview",
     );
   }
 }

@@ -12,6 +12,7 @@ import { DEFAULT_VELOCITY, ENV_FLOOR, SILENCE, clampCutoff, clampVelocity } from
 import { random } from './rng';
 import { mergeDrumKit } from './drumKits';
 import type { DrumKit, DrumType, HatParams, SnareParams } from '@/data/drumKits';
+import type { VoiceOwner } from './voiceOwner';
 import { DRUM_TYPES } from '@/data/drumKits';
 import { clampEffects, clampEffectValue } from './effectLimits';
 import { IMPULSE_CACHE_SAMPLE_BUDGET, impulseSampleCount, keysToEvict } from './impulseBudget';
@@ -54,6 +55,11 @@ interface SynthVoice {
   filterSustainCutoff: number;
   envelopeScale: number;
   source: string;
+  // Which PLAYER created this voice. Written once, at the single construction
+  // site below, which is the only moment that means "this player now owns a
+  // voice here" — never recomputed, so a release cannot be misrouted by a
+  // focus change or a transport start that happened after note-on.
+  owner: VoiceOwner;
   noteName: string;
   startTime: number;
   releaseScheduledAt?: number;
@@ -1135,7 +1141,23 @@ class AudioEngine {
     }
   }
 
-  triggerSynthNoteOn(noteName: string, params: SynthParams, velocity = DEFAULT_VELOCITY, time?: number, source = 'synth', scaleFactor = 1): void {
+  /**
+   * `owner` is REQUIRED and deliberately un-defaulted. Same rule, and the
+   * same recorded reason, as `applySynthVelocityScale`'s required `source`:
+   * that bug existed precisely because a call site could leave the argument off
+   * and silently re-acquire reach over every voice. A default here would let
+   * the next call site do it again, with no type error to see — and an
+   * unlabelled voice is a voice no scoped release can ever exclude.
+   */
+  triggerSynthNoteOn(
+    noteName: string,
+    params: SynthParams,
+    velocity = DEFAULT_VELOCITY,
+    time: number | undefined,
+    source = 'synth',
+    scaleFactor = 1,
+    owner: VoiceOwner,
+  ): void {
     if (!this.ctx || !this.dryGain) return;
     // wakeIfIdle() re-arms the idle countdown itself on every reachable path
     // (see its body) — a second explicit markActivity() call here was a
@@ -1267,6 +1289,7 @@ class AudioEngine {
       filterSustainCutoff: filterSustainLevel,
       envelopeScale: scaleFactor,
       source,
+      owner,
       noteName,
       startTime: now,
       releaseScheduledAt: undefined,

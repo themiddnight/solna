@@ -161,7 +161,7 @@ export function previewChordProgression(
     for (; nextIndex < end; nextIndex++) {
       const start = startTime + nextIndex * PREVIEW_CHORD_DURATION;
       for (const n of chords[nextIndex].notes) {
-        audioEngine.triggerSynthNoteOn(n, params, 0.75, start, PREVIEW_SOURCE);
+        audioEngine.triggerSynthNoteOn(n, params, 0.75, start, PREVIEW_SOURCE, 1, "preview");
         audioEngine.triggerSynthNoteOff(
           n,
           0.3,
@@ -210,7 +210,7 @@ export function previewSynthPreset(
   // preview bus is a source like any other — so it gets the trim too. It gets it
   // from `testParams.preset`, which applyPreset just stamped: the engine reads
   // that on the trigger below rather than from anything this file has to push.
-  audioEngine.triggerSynthNoteOn('C4', testParams, 0.85, start, PREVIEW_SOURCE);
+  audioEngine.triggerSynthNoteOn('C4', testParams, 0.85, start, PREVIEW_SOURCE, 1, "preview");
   audioEngine.triggerSynthNoteOff('C4', testParams.release || 0.4, start + 0.45, PREVIEW_SOURCE);
   return handle;
 }
@@ -240,7 +240,7 @@ export function previewSequencerNote(
 
   const handle = beginPreview();
   const start = ctx.currentTime;
-  audioEngine.triggerSynthNoteOn(note, params, velocity, start, PREVIEW_SOURCE);
+  audioEngine.triggerSynthNoteOn(note, params, velocity, start, PREVIEW_SOURCE, 1, "preview");
   audioEngine.triggerSynthNoteOff(note, releaseSec, start + holdSec, PREVIEW_SOURCE);
   return handle;
 }

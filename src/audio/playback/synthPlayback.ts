@@ -53,6 +53,7 @@ export function synthPlaybackNoteOn(
     time,
     target,
     scaleFactor,
+    "live",
   );
   // After the engine call, never before: a subscriber that throws must not be
   // able to swallow the note the user played.

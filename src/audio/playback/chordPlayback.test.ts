@@ -68,9 +68,9 @@ describe('legato chord preview', () => {
     // `undefined`, not a literal 0: triggerSynthNoteOn only falls back to
     // ctx.currentTime for a nullish time, so passing 0 would pin the whole
     // envelope to the audio clock's origin instead of "now".
-    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, scaled, undefined, 'chord');
-    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, scaled, undefined, 'chord');
-    expect(onSpy).toHaveBeenCalledWith('G4', SYNTH, scaled, undefined, 'chord');
+    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, scaled, undefined, 'chord', 1, 'preview');
+    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, scaled, undefined, 'chord', 1, 'preview');
+    expect(onSpy).toHaveBeenCalledWith('G4', SYNTH, scaled, undefined, 'chord', 1, 'preview');
     // Legato = the envelope sustains until the caller releases the preview.
     expect(offSpy).not.toHaveBeenCalled();
 
@@ -314,7 +314,7 @@ describe('emitStepEvents note-off clamping', () => {
       12,
     );
 
-    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, 0.8, 11.5, 'chord');
+    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, 0.8, 11.5, 'chord', 1, 'sequencer');
     expect(offSpy).toHaveBeenCalledWith('C4', SYNTH.release, 12, 'chord');
 
     onSpy.mockRestore();
@@ -351,7 +351,7 @@ describe('emitStepEvents note-off clamping', () => {
       14,
     );
 
-    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, 0.7, 11.53, 'chord');
+    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, 0.7, 11.53, 'chord', 1, 'sequencer');
     expect(offSpy).toHaveBeenCalledWith('E4', SYNTH.release, 11.78, 'chord');
 
     onSpy.mockRestore();
@@ -536,7 +536,7 @@ describe('full-hold chord scheduling', () => {
 
     const scaled = 0.8 * equalPowerVelocityScale(7);
     for (const n of notes) {
-      expect(onSpy).toHaveBeenCalledWith(n, SYNTH, scaled, 10, 'chord');
+      expect(onSpy).toHaveBeenCalledWith(n, SYNTH, scaled, 10, 'chord', 1, 'sequencer');
       expect(offSpy).toHaveBeenCalledWith(n, SYNTH.release, 14, 'chord');
     }
     expect(onSpy).toHaveBeenCalledTimes(7);

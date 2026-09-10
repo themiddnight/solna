@@ -151,7 +151,7 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
 
       for (const t of triggers) {
         const note = sequence[t.noteIndex];
-        audioEngine.triggerSynthNoteOn(note, params, 0.9, time + t.timeOffsetSec, target);
+        audioEngine.triggerSynthNoteOn(note, params, 0.9, time + t.timeOffsetSec, target, 1, "arp");
         audioEngine.triggerSynthNoteOff(note, params.release, time + t.timeOffsetSec + t.holdSec, target);
       }
     });

@@ -23,7 +23,9 @@ export function playbackNoteOn(
   time?: number,
   source = "synth",
 ): void {
-  audioEngine.triggerSynthNoteOn(noteName, params, velocity, time, source);
+  // 'sequencer' — the transport playing back written material. The bridge
+  // decides the owner; no component names one.
+  audioEngine.triggerSynthNoteOn(noteName, params, velocity, time, source, 1, "sequencer");
 }
 
 export function playbackNoteOff(
