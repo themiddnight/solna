@@ -278,6 +278,7 @@ describe('leadClockActive', () => {
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
+    fxPlayer: 'stopped',
     ...patch,
   });
 
@@ -300,47 +301,54 @@ describe('leadClockActive', () => {
   test('a player still stopping still owns the clock', () => {
     expect(leadClockActive(clockState({ leadPlayer: 'stopping' }))).toBe(true);
   });
+
+  // FX is music too. The question is whether there is something to play along
+  // to, not whose track it is: recording lead over an FX riser has a clock.
+  test('the fx player counts, exactly as the drums and the chords do', () => {
+    expect(leadClockActive(clockState({ fxPlayer: 'playing' }))).toBe(true);
+  });
 });
 
 describe('leadMarkerFollowsClock', () => {
   type MarkerState = Parameters<typeof leadMarkerFollowsClock>[0];
-  const markerState = (patch: Partial<MarkerState>): MarkerState => ({
+  const markerState = (over: Partial<MarkerState>): MarkerState => ({
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
+    fxPlayer: 'stopped',
     recordingTrack: null,
-    ...patch,
+    ...over,
   });
 
-  test('the lead playing is enough on its own, armed or not', () => {
-    expect(leadMarkerFollowsClock(markerState({ leadPlayer: 'playing' }))).toBe(true);
-    expect(
-      leadMarkerFollowsClock(markerState({ leadPlayer: 'playing', recordingTrack: 'lead' })),
-    ).toBe(true);
+  test('a track that is playing always follows the clock', () => {
+    expect(leadMarkerFollowsClock(markerState({ leadPlayer: 'playing' }), 'lead')).toBe(true);
+    expect(leadMarkerFollowsClock(markerState({ fxPlayer: 'playing' }), 'fx')).toBe(true);
   });
 
-  // The gap DEV-378 closes: something else is playing, capture is armed and
-  // in time, so the marker has a write column to show and must show it.
-  test('another section counts once Rec is armed', () => {
-    expect(
-      leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing', recordingTrack: 'lead' })),
-    ).toBe(true);
-    expect(
-      leadMarkerFollowsClock(markerState({ chordsPlayer: 'playing', recordingTrack: 'lead' })),
-    ).toBe(true);
+  // The gates are per track, and the arm is one value: the FX marker must not
+  // follow the clock because LEAD is armed, and vice versa.
+  test('the recording term only fires for the track the arm names', () => {
+    const armedFx = markerState({ sequencerPlayer: 'playing', recordingTrack: 'fx' });
+    expect(leadMarkerFollowsClock(armedFx, 'fx')).toBe(true);
+    expect(leadMarkerFollowsClock(armedFx, 'lead')).toBe(false);
+
+    const armedLead = markerState({ sequencerPlayer: 'playing', recordingTrack: 'lead' });
+    expect(leadMarkerFollowsClock(armedLead, 'lead')).toBe(true);
+    expect(leadMarkerFollowsClock(armedLead, 'fx')).toBe(false);
   });
 
   // ...and the line this predicate draws that leadClockActive does not: a
-  // running clock the lead is neither sounding on nor capturing from writes
-  // nothing (recordLeadNote returns false unless recordingTrack is 'lead'), so a
-  // marker sweeping the grid would animate a write head that does not exist.
-  test('a clock with nothing armed and the lead silent does not move it', () => {
-    expect(leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing' }))).toBe(false);
+  // clock running with nothing armed and the track silent. Nothing is written
+  // there, so a mark sweeping the grid would animate a write head that does
+  // not exist.
+  test('a clock with nothing armed does not move a stopped marker', () => {
+    expect(leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing' }), 'lead')).toBe(false);
+    expect(leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing' }), 'fx')).toBe(false);
     expect(leadClockActive(markerState({ sequencerPlayer: 'playing' }))).toBe(true);
   });
 
-  test('arming alone, with no clock anywhere, does not move it', () => {
-    expect(leadMarkerFollowsClock(markerState({ recordingTrack: 'lead' }))).toBe(false);
+  test('armed against a silent transport follows nothing', () => {
+    expect(leadMarkerFollowsClock(markerState({ recordingTrack: 'lead' }), 'lead')).toBe(false);
   });
 });
 

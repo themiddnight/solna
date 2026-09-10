@@ -7,7 +7,7 @@ import { columnsPerBar, strideFor } from '../utils/stepResolution';
 import { isPlayerActive } from './transportSlice';
 import { useAppStore } from './store';
 import type { PlayerState } from './types';
-import { MELODY_TRACKS, type MelodyTrack, type MelodyTrackId } from './melodyTracks';
+import { MELODY_TRACKS, melodyTrack, type MelodyTrack, type MelodyTrackId } from './melodyTracks';
 
 /**
  * Is there music to play along to?
@@ -22,52 +22,69 @@ import { MELODY_TRACKS, type MelodyTrack, type MelodyTrackId } from './melodyTra
  * longer runs a clock at all — it is a click on music that is already playing
  * (see setMetronomeEnabled in audio/engine.ts) — so counting it would put this
  * predicate in disagreement with whether a clock exists to quantise against.
- * To record in time to a click alone, press play on the lead: an empty melody
- * makes no sound, and the click, the marker and capture all follow from the
- * one transport that is running.
+ * To record in time to a click alone, press play on a melody track: an empty
+ * melody makes no sound, and the click, the marker and capture all follow from
+ * the one transport that is running.
+ *
+ * FX counts for the same reason the drums do, and this predicate takes NO
+ * track id: the question is whether music is playing, not whose track it is,
+ * so a per-track answer would tell a lead recorder there is nothing to play
+ * along to while an FX riser is plainly sounding. An id it did not read would
+ * also be an unused parameter, which `bun run eslint` reports.
  */
 export function leadClockActive(state: {
   sequencerPlayer: PlayerState;
   chordsPlayer: PlayerState;
   leadPlayer: PlayerState;
+  fxPlayer: PlayerState;
 }): boolean {
   return (
     isPlayerActive(state.sequencerPlayer) ||
     isPlayerActive(state.chordsPlayer) ||
-    isPlayerActive(state.leadPlayer)
+    isPlayerActive(state.leadPlayer) ||
+    isPlayerActive(state.fxPlayer)
   );
 }
 
 /**
- * Does the MARKER follow the clock right now?
+ * Does THIS track's marker follow the clock right now?
  *
- * Wider than the lead player, narrower than leadClockActive, and neither by
- * accident. DEV-377 merged the playhead and the write cursor into one mark,
- * so it should track the clock when either of those meanings is live: the
- * lead is sounding, or capture is armed against a clock that is running.
+ * Wider than the track's own player, narrower than leadClockActive, and
+ * neither by accident. DEV-377 merged the playhead and the write cursor into
+ * one mark, so it should track the clock when either of those meanings is
+ * live: this track is sounding, or capture is armed ON THIS TRACK against a
+ * clock that is running.
  *
- * The third case — a clock running with nothing armed and the lead silent —
- * is what separates this from leadClockActive. recordLeadNote returns false
+ * The third case — a clock running with nothing armed and this track silent —
+ * is what separates this from leadClockActive. The record action returns false
  * unless `recordingTrack` names this track, so nothing is written there at
  * all, and a mark sweeping the grid would be animating a write head that does
- * not exist.
- * Turning the metronome on is not a transport start, and it should not look
- * like one.
+ * not exist. Turning the metronome on is not a transport start, and it should
+ * not look like one.
+ *
+ * The `trackId` is what keeps two mounted grids honest: with one arm value and
+ * a per-track question, the FX marker cannot start sweeping because LEAD is
+ * armed. The track's own player field is read through MELODY_TRACKS rather
+ * than by literal name, so a row rename moves this with it.
  *
  * The recorder keeps leadClockActive: its question is "is there music to
  * play along to", which is about time, not about whether the user armed
  * anything. Two questions, two predicates, sharing the one that answers the
  * first.
  */
-export function leadMarkerFollowsClock(state: {
-  sequencerPlayer: PlayerState;
-  chordsPlayer: PlayerState;
-  leadPlayer: PlayerState;
-  recordingTrack: MelodyTrackId | null;
-}): boolean {
+export function leadMarkerFollowsClock(
+  state: {
+    sequencerPlayer: PlayerState;
+    chordsPlayer: PlayerState;
+    leadPlayer: PlayerState;
+    fxPlayer: PlayerState;
+    recordingTrack: MelodyTrackId | null;
+  },
+  trackId: MelodyTrackId,
+): boolean {
   return (
-    isPlayerActive(state.leadPlayer) ||
-    (state.recordingTrack === 'lead' && leadClockActive(state))
+    isPlayerActive(state[melodyTrack(trackId).player]) ||
+    (state.recordingTrack === trackId && leadClockActive(state))
   );
 }
 

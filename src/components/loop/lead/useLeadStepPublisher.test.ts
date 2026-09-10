@@ -108,10 +108,9 @@ describe('the lead step producer', () => {
     'utf8',
   );
 
-  test('lead is gated on leadMarkerFollowsClock; fx follows its own player state, never the lead player', () => {
-    expect(source).toContain(
-      "trackId === 'lead' ? leadMarkerFollowsClock(s) : s.fxPlayer !== 'stopped'",
-    );
+  test('both tracks are gated on leadMarkerFollowsClock for their OWN id, never the lead player', () => {
+    expect(source).toContain('leadMarkerFollowsClock(s, trackId)');
+    expect(source).not.toContain("s.fxPlayer !== 'stopped'");
   });
 
   test('is the only thing in the app that publishes a step, for whichever track is mounted', () => {
