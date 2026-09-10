@@ -139,7 +139,17 @@ describe('LeadMelodyGrid — Rec follows focus', () => {
   });
 
   test('the action lane keeps both of its children, so the actions stay pinned right', () => {
-    expect(render('drum', 'lead')).toContain('justify-between');
+    // With Rec hidden (focus 'drum'), the left ToolbarGroup renders empty but
+    // present — its opening AND closing tag immediately precede the action
+    // cluster's opening tag, all inside the SAME `justify-between` lane. A
+    // deleted empty group would collapse this into one child and break the
+    // literal match, unlike a bare `toContain('justify-between')`, which the
+    // lane satisfies on its own regardless of how many children it has.
+    expect(render('drum', 'lead')).toContain(
+      'flex items-center flex-wrap gap-x-3 gap-y-2 mt-3 justify-between">' +
+        '<div class="flex items-center gap-1 shrink-0"></div>' +
+        '<div class="flex items-center flex-wrap gap-x-3 gap-y-2">',
+    );
   });
 });
 
