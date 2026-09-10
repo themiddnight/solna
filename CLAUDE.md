@@ -228,16 +228,16 @@ once and one keypress can never write two grids; `store/leadRecord.ts` is a fact
 shared anchor collector rather than one per bridge. The Rec button renders on whichever melody
 grid `melodyTrackForFocus(focusTrack)` names and on neither when focus is chord, bass, pad or
 drum. **The arm is cleared by any navigation away from the armed grid**, not by a focus change
-alone: `startRecordArmSync` watches the same axes `soloNav.ts` does — the focus, the LAYER
-(derived from `activeTab`, so a Sound <-> Pattern hop does NOT disarm) and `activeLoopId` — and a
-project install clears it in the same atomic patch that clears the solo set. A recorder left armed
-on a grid the user has navigated away from writes notes the user cannot see, and a focus change is
-not the only way to navigate away. Nothing couples the arm back to the audition target, because
-the armed track already IS the focused track. Separately, the FX
-track's synth voice cannot do a PITCH riser as shipped (the filter envelope ramps
-`filter.frequency` only), and its LFO still restarts on every note (the LFO oscillator is created
-per voice at note-on); a FILTER-SWEEP riser works today. Both limits are deferred to their own
-spec.
+alone: `startRecordArmSync` watches the two axes `soloNav.ts` watches — the LAYER (derived from
+`activeTab`, so a Sound <-> Pattern hop does NOT disarm) and `activeLoopId` — PLUS the focus,
+which solo deliberately ignores, and a project install clears the arm in the same atomic patch
+that clears the solo set. A recorder left armed on a grid the user has navigated away from writes
+notes the user cannot see, and a focus change is not the only way to navigate away. Nothing
+couples the arm back to the audition target, because the armed track already IS the focused
+track. Separately, **the FX track's synth voice** cannot do a PITCH riser as shipped (the filter
+envelope ramps `filter.frequency` only), and its LFO still restarts on every note (the LFO
+oscillator is created per voice at note-on); a FILTER-SWEEP riser works today. Both limits are
+deferred to their own spec.
 
 **A scale-locked lead grid borrows a row; it never hides a note.** A note outside the key is
 never deleted by a view change — before, it simply had no row to be drawn on, so switching to

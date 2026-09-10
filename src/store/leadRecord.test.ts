@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore } from './store';
-import { startMelodyRecordBridges, leadClockActive, leadMarkerFollowsClock } from './leadRecord';
+import { startMelodyRecordBridges, leadClockActive, leadMarkerFollowsClock, RECORD_ARM_NAV_SOURCES } from './leadRecord';
 import { emitNoteInput, resetNoteInputListeners } from '../audio/playback/noteInputBus';
 import { getMeter } from '../utils/meter';
 import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '../utils/stepResolution';
@@ -535,7 +535,12 @@ describe('the arm follows navigation, mirroring soloNav.ts', () => {
   beforeEach(() => {
     const state = useAppStore.getState();
     navBaseline = { activeTab: state.activeTab, activeLoopId: state.activeLoopId };
-    useAppStore.setState({ activeTab: 'sound', recordingTrack: 'lead' });
+    // TWO writes, not one: the arm sync is live here, so a combined patch that
+    // also moved the layer (an earlier file leaving activeTab on a Song tab)
+    // would be observed as a navigation and disarm the fixture itself. Settle
+    // the tab first, then arm.
+    useAppStore.setState({ activeTab: 'sound' });
+    useAppStore.setState({ recordingTrack: 'lead' });
   });
 
   afterEach(() => {
@@ -560,5 +565,14 @@ describe('the arm follows navigation, mirroring soloNav.ts', () => {
 
     useAppStore.setState({ activeTab: 'sound' });
     expect(useAppStore.getState().recordingTrack).toBe('lead');
+  });
+});
+
+// Removing an axis is already caught by the three per-axis tests above. ADDING
+// one is not, and an axis that silently starts disarming the recorder is a
+// decision nobody made — soloNav.ts pins its own roster the same way.
+describe('RECORD_ARM_NAV_SOURCES', () => {
+  test('watches exactly the focus, the layer and the active loop', () => {
+    expect(Object.keys(RECORD_ARM_NAV_SOURCES).sort()).toEqual(['activeLoopId', 'focus', 'layer']);
   });
 });

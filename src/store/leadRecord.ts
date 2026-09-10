@@ -284,7 +284,13 @@ export function startMelodyRecordBridge(
  * Pattern hop does not disarm. Those are the two halves of editing one loop
  * and the user crosses between them constantly.
  */
-const RECORD_ARM_NAV_SOURCES = {
+/**
+ * Exported only so a test can assert the roster EXHAUSTIVELY. Dropping an axis
+ * is already pinned by a per-axis behaviour test; ADDING one is not, and a new
+ * axis that disarms without anyone deciding it should is the failure that
+ * assertion catches.
+ */
+export const RECORD_ARM_NAV_SOURCES = {
   focus: (state: AppStore) => state.focusTrack,
   layer: (state: AppStore) => layerForTab(state.activeTab),
   activeLoopId: (state: AppStore) => state.activeLoopId,
