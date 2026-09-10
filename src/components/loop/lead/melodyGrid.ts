@@ -1,4 +1,4 @@
-import { getScaleNotesInOctave, isNoteInScale, ROOTS } from '@/utils/musicTheory';
+import { getScaleNotesInOctave, isNoteInScale, ROOTS, stepDurationSec } from '@/utils/musicTheory';
 import { spellNoteInKey } from '@/utils/noteSpelling';
 import type { LeadMelodyView } from '@/store/types';
 import { leadStoredIndexAt, type LeadNote } from '@/audio/leadMelody';
@@ -411,4 +411,45 @@ export function leadMarkerColumn(
   // it clamps to the visible edge rather than wrapping — landing on column 0
   // via modulo would look like the user chose column 0, which they didn't.
   return clampColumn(cursor, columns);
+}
+
+/**
+ * How long a melody-grid preview holds, in seconds.
+ *
+ * Two lengths, both musical, replacing the fixed 0.22 s gate this grid used to
+ * pass: that constant was silent for any patch whose attack exceeded it, so the
+ * only way to pick a safe value was to measure it against the slowest patch in
+ * the library — a hidden dependency on the preset table, re-broken by every
+ * preset added. Measured, before this: the 1.2 s attack of the riser four of
+ * the eight vibes put on the FX track was still around -67 dBFS when note-off
+ * cancelled it, so that grid's first note made no sound at all and nothing on
+ * screen explained why. Every vibe hands FX a patch slower than 0.22 s, so
+ * that was the common case, not an edge one.
+ *
+ * - No `lenTicks` — a ROW-LABEL preview, which asks "what pitch is this row"
+ *   and nothing more. One beat, `60 / bpm`, i.e. four 16ths: the shortest
+ *   length that is a musical unit rather than an arbitrary one, and one that
+ *   gets longer at slower tempos, which is the direction that helps.
+ * - With `lenTicks` — a CELL's own length, rounded to whole cells through the
+ *   active stride by leadNoteCells. That is the same expression the scheduler's
+ *   holdSec and the renderer's span already share, so a preview lasts exactly
+ *   what the grid draws and what playback will sound.
+ *
+ * This does not make every patch audible at every tempo, and is not meant to: a
+ * 1.2 s attack still only reaches part-way through a 0.43 s beat at 140 BPM.
+ * The point is that the length is a stated musical rule a reader can predict
+ * rather than a constant that happened to work for the patches someone tried.
+ *
+ * A bpm that is not a positive finite number would make `60 / bpm` Infinity or
+ * NaN, and a note-off scheduled at Infinity never fires — a drone on the
+ * preview bus that the returned handle cannot cut either, since it stops the
+ * source rather than the schedule. Store bpm is sanitized, so this answers 0
+ * instead of throwing: a preview that does not sound is a bug a user can
+ * report, a preview that never stops is one they cannot escape.
+ */
+export function leadPreviewHoldSec(bpm: number, stride: number, lenTicks?: number): number {
+  if (!Number.isFinite(bpm) || bpm <= 0) return 0;
+  const sixteenthSec = stepDurationSec(bpm);
+  if (lenTicks === undefined) return 4 * sixteenthSec;
+  return leadNoteCells(lenTicks, stride) * stride * (sixteenthSec / TICKS_PER_SIXTEENTH);
 }
