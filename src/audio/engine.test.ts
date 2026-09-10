@@ -1067,6 +1067,29 @@ describe('live polyphony equal-power scaling', () => {
     const c4 = (engine as any).activeVoices.get('synth:C4');
     expect(c4.gains[0].gain.targets).toHaveLength(0);
   });
+
+  test('rescales only the named source — a keyboard press leaves chord voices alone', () => {
+    const { engine } = freshEngine();
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth');
+    engine.triggerSynthNoteOn('A3', SYNTH, 0.8, undefined, 'chord');
+
+    (engine as any).applySynthVelocityScale(0.5, 'synth');
+
+    const voices = (engine as any).activeVoices;
+    const lead = voices.get('synth:C4');
+    const chord = voices.get('chord:A3');
+
+    expect(lead.envelopeScale).toBe(0.5);
+    expect(lead.gains[0].gain.targets).toHaveLength(1);
+
+    // The chord voice is on a bus nobody pressed a key on: no re-scale at all.
+    // Asserted on the RECORDED events, not on a computed value — fakeParam's
+    // valueAt() refuses a timeline containing setTargetAtTime and this path
+    // uses it.
+    expect(chord.envelopeScale).toBe(1);
+    expect(chord.gains[0].gain.targets).toHaveLength(0);
+  });
 });
 
 describe('live effect knobs', () => {
@@ -1540,7 +1563,7 @@ describe('live Sustain', () => {
     // A held key, so applySynthVelocityScale's equal-power rebalance applies
     // (it skips voices with a planned release).
     engine.triggerSynthNoteOn('C4', PAD, 0.8, t0, 'synth');
-    engine.applySynthVelocityScale(0.5);
+    engine.applySynthVelocityScale(0.5, 'synth');
 
     const voice = (engine as any).activeVoices.get('synth:C4');
     const rebalanced = voice.sustainLevel;
@@ -3156,7 +3179,7 @@ describe('voice lifetime backstop', () => {
     await new Promise((r) => setTimeout(r, 60));
 
     const sustainBefore = voice.sustainLevel;
-    engine.applySynthVelocityScale(0.3);
+    engine.applySynthVelocityScale(0.3, 'synth');
 
     expect((engine as any).reshapeableVoices()).not.toContain(voice);
     expect(voice.sustainLevel).toBe(sustainBefore);

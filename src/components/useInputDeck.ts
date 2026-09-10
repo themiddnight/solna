@@ -186,7 +186,7 @@ export function useInputDeck(): {
         held.add(note);
         const scale = equalPowerVelocityScale(held.size);
         if (isNewNote) {
-          applySynthPlaybackVelocityScale(scale);
+          applySynthPlaybackVelocityScale(scale, KEYBOARD_AUDITION_TARGET);
         }
         synthPlaybackNoteOn(
           note,
@@ -223,7 +223,10 @@ export function useInputDeck(): {
           undefined,
           KEYBOARD_AUDITION_TARGET,
         );
-        applySynthPlaybackVelocityScale(equalPowerVelocityScale(held.size));
+        applySynthPlaybackVelocityScale(
+          equalPowerVelocityScale(held.size),
+          KEYBOARD_AUDITION_TARGET,
+        );
       } else if (wasHeld) {
         // Arp branch — see handleNoteOn.
         emitNoteInput({ kind: 'off', note, velocity: 0 });

@@ -1562,14 +1562,23 @@ class AudioEngine {
   }
 
   /**
-   * Re-balances every still-sounding voice for equal-power polyphony (held
-   * notes get quieter as more join). Voices with a planned release — pattern
-   * hits — keep their envelopes; envelopeScale makes repeated calls relative.
+   * Re-balances every still-sounding voice OF ONE SOURCE for equal-power
+   * polyphony (held notes get quieter as more join). Voices with a planned
+   * release — pattern hits — keep their envelopes; envelopeScale makes
+   * repeated calls relative.
+   *
+   * `source` is REQUIRED. This used to call `reshapeableVoices()` with no
+   * argument although the parameter existed, and `reshapeableVoices(undefined)`
+   * walks EVERY entry of sourceVoices — so a keyboard press re-shaped the
+   * sounding chord, bass and pad voices as well as the synth's, quietly
+   * ducking the accompaniment under a held keyboard chord. A required
+   * parameter is what stops a later call site re-acquiring that reach by
+   * simply leaving the argument off, which is how the original slipped in.
    */
-  applySynthVelocityScale(scale: number): void {
+  applySynthVelocityScale(scale: number, source: string): void {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
-    for (const voice of this.reshapeableVoices()) {
+    for (const voice of this.reshapeableVoices(source)) {
       if (voice.releaseScheduledAt !== undefined) continue;
       const factor = scale / voice.envelopeScale;
       if (Math.abs(factor - 1) < 0.001) continue;

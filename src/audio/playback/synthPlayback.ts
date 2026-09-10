@@ -14,8 +14,11 @@ export function hasSynthPlaybackContext(): boolean {
   return !!audioEngine.getAudioContext();
 }
 
-export function applySynthPlaybackVelocityScale(scale: number): void {
-  audioEngine.applySynthVelocityScale(scale);
+export function applySynthPlaybackVelocityScale(
+  scale: number,
+  target: string,
+): void {
+  audioEngine.applySynthVelocityScale(scale, target);
 }
 
 /**
