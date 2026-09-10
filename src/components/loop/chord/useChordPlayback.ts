@@ -41,7 +41,7 @@ import {
   initPlaybackEngine,
   playbackNoteOff,
   playbackNoteOn,
-  playbackStopSource,
+  playbackStopOwnedVoices,
   subscribePlaybackClock,
 } from "@/audio/playback/playbackEngine";
 import type { AccompanimentSource } from "@/audio/playback/playbackEngine";
@@ -614,6 +614,13 @@ export function useChordPlayback() {
   // Cut ALL THREE sources: the Chords player drives the bass line and the pad
   // layer, so silencing 'chord' alone would leave the bass and the pad
   // droning — and a drone holds the longest note in the app.
+  //
+  // playbackStopOwnedVoices, not playbackStopSource: keyboard/arp input can
+  // land on 'chord'/'bass'/'pad' too via focus routing, and a whole-bus stop
+  // would cut a held key or arp note off that bus the moment this player
+  // stops — the same bug per-voice provenance fixed for lead/FX. This
+  // player's own hits all carry owner 'sequencer' (chordPlayback.ts), which
+  // is what the wrapper pins.
   useEffect(
     () =>
       useAppStore.subscribe(
@@ -649,7 +656,7 @@ export function useChordPlayback() {
             return;
           }
           for (const source of ACCOMPANIMENT_SOURCES) {
-            playbackStopSource(source, HARD_STOP_RELEASE);
+            playbackStopOwnedVoices(source, HARD_STOP_RELEASE);
           }
         },
       ),
@@ -692,7 +699,7 @@ export function useChordPlayback() {
           pad: useAppStore.getState().padSynthParams.release,
         };
         for (const source of ACCOMPANIMENT_SOURCES) {
-          playbackStopSource(source, releases[source], time);
+          playbackStopOwnedVoices(source, releases[source], time);
         }
         softStopPendingRef.current = true;
         // Read the action live, the way the transition handler above does: the

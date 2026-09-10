@@ -367,3 +367,19 @@ describe('useChordPlayback shares the one HARD_STOP_RELEASE', () => {
     expect(source).toContain('HARD_STOP_RELEASE');
   });
 });
+
+describe('useChordPlayback stops only its own voices, not the whole bus', () => {
+  test('uses playbackStopOwnedVoices, not the whole-bus playbackStopSource', () => {
+    // A whole-bus stop on 'chord'/'bass'/'pad' would cut a keyboard or arp
+    // note sharing that bus — the same bug per-voice provenance fixed for
+    // lead/FX. This player's own hits carry owner 'sequencer' (chordPlayback.ts),
+    // so both its hard-stop and soft-stop paths must go through the
+    // owner-scoped wrapper instead of the whole-bus one.
+    const source = readFileSync(
+      join(process.cwd(), 'src/components/loop/chord/useChordPlayback.ts'),
+      'utf8',
+    );
+    expect(source).not.toMatch(/\bplaybackStopSource\(/);
+    expect(source.match(/\bplaybackStopOwnedVoices\(/g)?.length).toBe(2);
+  });
+});
