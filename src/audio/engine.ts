@@ -1553,12 +1553,27 @@ class AudioEngine {
     }
   }
 
-  stopSource(source: string, releaseTime = 0.1, time?: number): void {
+  /**
+   * The shared body of stopSource and stopOwnedVoices: silence a source's
+   * voices, including hits still scheduled ahead of the transport.
+   *
+   * `owner === undefined` means every voice on the bus. One body rather than
+   * two, because the skip guard below is subtle, was arrived at from a real
+   * bug, and a drift between two copies of it would be inaudible until it
+   * wasn't.
+   */
+  private stopVoicesOf(
+    source: string,
+    releaseTime: number,
+    time: number | undefined,
+    owner: VoiceOwner | undefined,
+  ): void {
     if (!this.ctx) return;
     const now = time ?? this.ctx.currentTime;
     const voices = this.sourceVoices.get(source);
     if (!voices) return;
     for (const voice of Array.from(voices)) {
+      if (owner !== undefined && voice.owner !== owner) continue;
       if (voice.startTime > now) {
         this.silenceVoiceNow(voice, now);
         continue;
@@ -1582,6 +1597,41 @@ class AudioEngine {
       voice.releaseTime = releaseTime;
       this.releaseVoice(voice, releaseTime, now);
     }
+  }
+
+  /**
+   * Immediately silences EVERY voice of a source — sounding ones and hits still
+   * scheduled in the future, whoever created them. Releasing a held preview
+   * stops the whole pattern, not just the last scheduled hit.
+   *
+   * `time` anchors the release in the AudioContext's timeline so a soft stop
+   * can be scheduled exactly on a bar line instead of relying on a timer.
+   * releaseVoice already handles a `now` in the future.
+   *
+   * Whole-bus reach is DELIBERATELY the method with the whole-bus name.
+   * loadLoop, vibes and projectSlice genuinely mean "silence this bus, whatever
+   * is on it" — a project install that left a held note ringing would be worse
+   * than the bug per-voice provenance closes. Anything narrower calls
+   * stopOwnedVoices; it can never be reached by omitting an argument, which is
+   * how the original defect came to exist.
+   */
+  stopSource(source: string, releaseTime = 0.1, time?: number): void {
+    this.stopVoicesOf(source, releaseTime, time, undefined);
+  }
+
+  /**
+   * stopSource narrowed to one owner: sounding voices AND future-scheduled hits
+   * that THIS player created, and nothing else. What the melody-track sequencer
+   * needs, so stopping a grid does not cut a held key or an arp note off the
+   * shared bus.
+   */
+  stopOwnedVoices(
+    source: string,
+    owner: VoiceOwner,
+    releaseTime = 0.1,
+    time?: number,
+  ): void {
+    this.stopVoicesOf(source, releaseTime, time, owner);
   }
 
   /**

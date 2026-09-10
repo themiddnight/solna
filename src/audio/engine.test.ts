@@ -736,6 +736,68 @@ describe('releaseSoundingVoices', () => {
   });
 });
 
+describe('stopOwnedVoices', () => {
+  test("leaves another owner's sounding voice untouched", () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0, 'synth', 1, 'sequencer');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.9, t0, 'synth', 1, 'live');
+
+    const voices = [...((engine as any).sourceVoices.get('synth') as Set<any>)];
+    const seqVoice = voices.find((v) => v.owner === 'sequencer');
+    const liveVoice = voices.find((v) => v.owner === 'live');
+
+    const liveGain = liveVoice.gains[0].gain;
+    const before = {
+      events: liveGain.events.length,
+      targets: liveGain.targets.length,
+      cancels: liveGain.cancels.length,
+    };
+
+    engine.stopOwnedVoices('synth', 'sequencer', 0.02);
+
+    expect(seqVoice.gains[0].gain.cancels).toContain(t0);
+    expect(seqVoice.releaseScheduledAt).toBe(t0);
+
+    // The load-bearing half: stopping a melody grid must not cut the key the
+    // player is holding down. No new automation of ANY kind on that voice.
+    expect(liveGain.events.length).toBe(before.events);
+    expect(liveGain.targets.length).toBe(before.targets);
+    expect(liveGain.cancels.length).toBe(before.cancels);
+    expect(liveVoice.releaseScheduledAt).toBeUndefined();
+  });
+
+  test("leaves another owner's future-scheduled voice in place", () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    // This is the case a whole-bus stop DESTROYS: stopSource hard-silences a
+    // future voice through silenceVoiceNow, which also drops it from
+    // sourceVoices — so an arp note the clock has already queued would never
+    // sound, and it is unrecoverable rather than merely early.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0 + 0.5, 'synth', 1, 'arp');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.9, t0, 'synth', 1, 'sequencer');
+
+    const arpVoice = [...((engine as any).sourceVoices.get('synth') as Set<any>)]
+      .find((v) => v.owner === 'arp');
+    const arpGain = arpVoice.gains[0].gain;
+    const beforeEvents = arpGain.events.length;
+
+    engine.stopOwnedVoices('synth', 'sequencer', 0.02);
+
+    expect(arpGain.events.length).toBe(beforeEvents);
+    expect(arpGain.cancels).not.toContain(t0);
+  });
+
+  test('an unknown source and a context-less engine are both no-ops', () => {
+    const { engine } = freshEngine();
+    expect(() => engine.stopOwnedVoices('nope', 'arp', 0.02)).not.toThrow();
+    const bare = makeEngine();
+    expect(() => bare.stopOwnedVoices('synth', 'arp', 0.02)).not.toThrow();
+  });
+});
+
 describe('master chain', () => {
   // Drums reach their layer the same way voices do — through the pre-fader
   // tap. Wiring drumBusFilter straight to the bus would leave the sequencer
