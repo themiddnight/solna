@@ -15,6 +15,7 @@ import { emitNoteInput } from '../audio/playback/noteInputBus';
 import { ensureDrumEngine, triggerPad as triggerDrumPad } from '../audio/playback/drumPlayback';
 import { useAppStore } from '../store/store';
 import type { AppStore } from '../store/types';
+import { synthChannelForFocus } from './loop/synth/useSynthChannel';
 import {
   clampKeyboardOctave,
   getChromaticKeyboardNotes,
@@ -176,12 +177,18 @@ export function performNoteOn(
 ): void {
   actions.initEngine();
   const previous = noteTargetFor(held, note);
-  const isNewNote = previous === undefined;
   if (previous !== undefined && previous !== target) {
     actions.releaseNote(note, liveParams.release, previous);
     held.delete(note);
     actions.rescale(equalPowerVelocityScale(heldCountFor(held, previous)), previous);
   }
+  // Computed AFTER the re-press guard above (which may just have deleted this
+  // note from `held` on a cross-bus re-press), not before it: "new" here means
+  // new to the bus it is about to sound on, not new to `held` overall — a
+  // cross-bus re-press left this false when computed from `previous`, so the
+  // arriving bus was never rescaled to include the voice that just landed on
+  // it, leaving it a hair quieter than every note already on that bus.
+  const isNewNote = !held.has(note);
   if (!liveParams.arpActive) {
     // Equal-power polyphony: a new note lowers every voice held ON THIS BUS
     // so that instrument's total level stays flat as keys are added. The map
@@ -225,13 +232,31 @@ export interface InputDeckDrumProps {
   onPadVolumeChange: (padId: string, volume: number) => void;
 }
 
+// The synth params the keyboard/arp actually play: the FOCUSED track's, not
+// always Lead's. Reuses `synthChannelForFocus` — the same resolver
+// `useSynthChannel` feeds the Pro/Simple panels with — so a drum focus falls
+// back to Lead's channel exactly once, in one place, rather than being
+// re-decided here. That fallback is inert for playback: every path that would
+// read this value for a drum focus (`synthTargetForFocus` returning `null`)
+// already returns before touching it, so which channel it falls back to
+// cannot be heard.
+function resolveFocusedSynthParams(s: AppStore): SynthParams {
+  return synthChannelForFocus(s.focusTrack, {
+    synth: { params: s.synthParams, setParams: s.setSynthParams },
+    chord: { params: s.chordSynthParams, setParams: s.setChordSynthParams },
+    bass: { params: s.bassSynthParams, setParams: s.setBassSynthParams },
+    pad: { params: s.padSynthParams, setParams: s.setPadSynthParams },
+    fx: { params: s.fxSynthParams, setParams: s.setFxSynthParams },
+  }).params;
+}
+
 // Named (not inline) so a test can pin their behaviour directly: given two
 // `synthParams` objects differing only in a field the hook does not read
 // reactively, each selector must still return the SAME primitive — that
 // equality is what lets `useAppStore(selectArpActive)` skip a re-render on
 // every unrelated knob move.
-export const selectArpActive = (s: AppStore): boolean => s.synthParams.arpActive;
-export const selectSynthRelease = (s: AppStore): number => s.synthParams.release;
+export const selectArpActive = (s: AppStore): boolean => resolveFocusedSynthParams(s).arpActive;
+export const selectSynthRelease = (s: AppStore): number => resolveFocusedSynthParams(s).release;
 
 /**
  * Keeps `arpStateRef.current.params` / `.bpm` / `.target` fresh by IMPERATIVE
@@ -243,8 +268,14 @@ export const selectSynthRelease = (s: AppStore): number => s.synthParams.release
  * staler params than before. Same pattern as `useSequencerPlayback.ts:69-78`.
  */
 export function subscribeArpState(ref: ArpStateRef): () => void {
+  // A single selector over the FOCUSED channel's params, not always
+  // `s.synthParams`: this re-fires both when that channel's own params object
+  // changes AND when focus moves to a different channel (the selector then
+  // returns a different object, e.g. `fxSynthParams` instead of
+  // `synthParams`), so one subscription covers both triggers the fix calls
+  // for — no separate focus-driven refresh of `.params` is needed.
   const unsubParams = useAppStore.subscribe(
-    (s) => s.synthParams,
+    resolveFocusedSynthParams,
     (params) => {
       ref.current.params = params;
     },
@@ -307,7 +338,7 @@ export function useInputDeck(): {
   // must never lag a keypress by a render.
   const arpStateRef = useRef<ArpStateRef['current']>({
     heldTargets: new Map(),
-    params: useAppStore.getState().synthParams,
+    params: resolveFocusedSynthParams(useAppStore.getState()),
     target: synthTargetForFocus(useAppStore.getState().focusTrack),
     triggeredTargets: new Set(),
     bpm: useAppStore.getState().bpm,

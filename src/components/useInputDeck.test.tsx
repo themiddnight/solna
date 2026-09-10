@@ -166,6 +166,51 @@ describe('subscribeArpState', () => {
       useAppStore.getState().setFocusTrack(startingFocus);
     }
   });
+
+  test('routes params through the FOCUSED channel: fx focus reads fxSynthParams, not synthParams', () => {
+    const ref = {
+      current: {
+        heldTargets: new Map<string, SynthControlTarget>(),
+        params: useAppStore.getState().synthParams,
+        target: 'synth' as SynthControlTarget | null,
+        triggeredTargets: new Set<SynthControlTarget>(),
+        bpm: useAppStore.getState().bpm,
+      },
+    };
+    const startingFocus = useAppStore.getState().focusTrack;
+    const startingFxParams = useAppStore.getState().fxSynthParams;
+    const startingSynthParams = useAppStore.getState().synthParams;
+    const stop = subscribeArpState(ref);
+    try {
+      useAppStore.getState().setFocusTrack('fx');
+      expect(ref.current.params).toBe(useAppStore.getState().fxSynthParams);
+      expect(ref.current.params).not.toBe(useAppStore.getState().synthParams);
+
+      // Flipping fxSynthParams.arpActive arms the arp while synthParams.arpActive
+      // does not — the reader is the focused channel's own params, not Lead's.
+      useAppStore.getState().setFxSynthParams({
+        ...useAppStore.getState().fxSynthParams,
+        arpActive: true,
+      });
+      expect(ref.current.params.arpActive).toBe(true);
+      expect(selectArpActive(useAppStore.getState())).toBe(true);
+
+      useAppStore.getState().setFxSynthParams({
+        ...useAppStore.getState().fxSynthParams,
+        arpActive: false,
+      });
+      useAppStore.getState().setSynthParams({
+        ...useAppStore.getState().synthParams,
+        arpActive: true,
+      });
+      expect(selectArpActive(useAppStore.getState())).toBe(false);
+    } finally {
+      stop();
+      useAppStore.getState().setFxSynthParams(startingFxParams);
+      useAppStore.getState().setSynthParams(startingSynthParams);
+      useAppStore.getState().setFocusTrack(startingFocus);
+    }
+  });
 });
 
 describe('selectArpActive / selectSynthRelease narrowing', () => {
@@ -437,6 +482,35 @@ describe('performNoteOn', () => {
     });
     expect(held.size).toBe(1);
     expect(held.get('C4')).toBe('fx');
+  });
+
+  test('a non-arp cross-bus re-press rescales the bus the note ARRIVES at (fix 1)', () => {
+    // Reproduced by the review: hold C4 on 'synth', hold E4 on 'fx', re-press
+    // C4 on 'fx' — before the fix, `isNewNote` was computed from `previous`
+    // (defined, since C4 was already held on 'synth'), so it read `false` and
+    // 'fx' was never rescaled for its now-two held notes: E4 stayed at 1.0
+    // while C4 arrived at 0.707, two notes on one bus at different levels.
+    const held: HeldNoteTargets = new Map();
+    const rescaled: Array<[number, SynthControlTarget]> = [];
+    const played: Array<[string, SynthControlTarget, number]> = [];
+    const actions = {
+      initEngine: () => {},
+      playNote: (n: string, t: SynthControlTarget, s: number) => played.push([n, t, s]),
+      releaseNote: () => {},
+      rescale: (s: number, t: SynthControlTarget) => rescaled.push([s, t]),
+      announce: () => {},
+    };
+    const params = { ...INITIAL_SYNTH_PARAMS, arpActive: false };
+
+    performNoteOn('C4', 'synth', held, params, actions);
+    performNoteOn('E4', 'fx', held, params, actions);
+    rescaled.length = 0;
+    played.length = 0;
+
+    performNoteOn('C4', 'fx', held, params, actions);
+
+    expect(rescaled).toContainEqual([equalPowerVelocityScale(2), 'fx']);
+    expect(played).toEqual([['C4', 'fx', equalPowerVelocityScale(2)]]);
   });
 
   test('a brand-new note on the non-arp branch plays and rescales once', () => {
