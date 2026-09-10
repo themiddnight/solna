@@ -16,6 +16,7 @@ import { useRouteSync } from './routing/useRouteSync';
 import { usePlayheadSync } from './components/usePlayheadSync';
 import { useInputDeck } from './components/useInputDeck';
 import { useSongModeSync } from './store/songMode';
+import { useFocusPanelSync } from './store/focusPanelSync';
 import { useSoloNavClear } from './store/soloNav';
 import { useVibeNavClear } from './store/vibeNav';
 import { useServiceWorkerUpdate } from './pwa/useServiceWorkerUpdate';
@@ -101,6 +102,10 @@ export function App() {
   // <-> Pattern tab change. One subscription owns that rule for every writer
   // of layer/patternSegment/activeLoopId — see store/soloNav.ts.
   useSoloNavClear();
+  // The input deck's panel follows focus (melodic keyboard vs. drum pads), so
+  // a focus change never leaves the dock showing a panel that focus has
+  // nothing to play on — see store/focusPanelSync.ts.
+  useFocusPanelSync();
   // The vibe chip highlight means "the loop this vibe was applied to is in
   // focus", so it clears on any activeLoopId change, whoever the writer —
   // see store/vibeNav.ts.
