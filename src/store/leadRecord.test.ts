@@ -48,6 +48,20 @@ afterEach(() => {
   stop?.();
   stop = null;
   resetNoteInputListeners();
+  // bun runs the whole suite in ONE process, so anything this file arms or
+  // writes must be put back here rather than left to the next file's own
+  // beforeEach — `recordingTrack` in particular is read by uiSlice.test.ts's
+  // very first test, with nothing else resetting it in between.
+  useAppStore.setState({
+    recordingTrack: null,
+    leadPlayer: 'stopped',
+    chordsPlayer: 'stopped',
+    sequencerPlayer: 'stopped',
+    metronomeActive: false,
+    leadMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
+    fxMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
+    fxPlayer: 'stopped',
+  });
 });
 
 const down = (note: string): void => emitNoteInput({ kind: 'on', note, velocity: 1 });
@@ -413,5 +427,33 @@ describe('leadRecord — one factory, two bridges', () => {
     const stepsPerBar = getMeter(state.meterId).stepsPerBar;
     const row = state.fxMelodySteps[leadStoredIndexAt(4, stepsPerBar, TICKS_PER_SIXTEENTH)];
     expect(row.find((n) => n.note === 'C4')?.len).toBe(TICKS_PER_SIXTEENTH);
+  });
+
+  /**
+   * The composed disposer must release BOTH per-track bridges, not just
+   * lead's. Asserted per track, on purpose: a `stops` list that dropped the
+   * fx entry would still pass a lead-only or an aggregate check, because
+   * lead's own bridge would still be torn down correctly.
+   */
+  test('the composed disposer releases the fx bridge', () => {
+    useAppStore.setState({ recordingTrack: 'fx' });
+    stop?.();
+    stop = null;
+
+    down('C4');
+    up('C4');
+
+    expect(fxAt(0)).toEqual([]);
+  });
+
+  test('the composed disposer still releases the lead bridge', () => {
+    useAppStore.setState({ recordingTrack: 'lead' });
+    stop?.();
+    stop = null;
+
+    down('C4');
+    up('C4');
+
+    expect(at(0)).toEqual([]);
   });
 });
