@@ -144,10 +144,16 @@
    the yellows), at a fixed lightness per theme — ~0.75 for dark, ~0.57 for
    light — so no stage reads as merely a darker version of its neighbour:
 
-     osc 87° · chord 125° · env-vca 162° · lfo 213° ·
+     osc 87° · chord 125° · env-vca 162° · fx 187° · lfo 213° ·
      bass 256° · env-vcf 294° · arp 322° · filter 356°
 
-   Every adjacent pair is at least 28° apart. Two rules constrain the set:
+   Every adjacent pair is at least 25° apart. It was 28° until --module-fx
+   landed: 162→213 was the widest gap left in the ring, so a ninth hue could be
+   at most 25.5° from both neighbours, and 28° stopped being satisfiable rather
+   than stopping being wanted. Written down as the new floor because a rule that
+   the palette already breaks teaches a reader to ignore the next one too. The
+   two constraints below did NOT relax — fx is outside the 20-60° amber band and
+   reuses no semantic hex. Two rules constrain the set:
    the 20-60° amber band belongs to --color-primary, with --module-pad as the
    ONE recorded exception (it sits at 40° in both themes, darkened off
    --color-warning in light) — no further colour, module or drum, may enter the
@@ -172,6 +178,8 @@
   --color-module-lfo-content: var(--module-lfo-content);
   --color-module-arp: var(--module-arp);
   --color-module-arp-content: var(--module-arp-content);
+  --color-module-fx: var(--module-fx);
+  --color-module-fx-content: var(--module-fx-content);
 }
 
 /* Drum voice colours. Eleven sequencer tracks against eight semantic tokens is
@@ -232,6 +240,9 @@
   --module-chord-tint: #A9C96D1A; /* the same olive at 10% — see tint-chord */
   --module-env-vca: #4FD69E;      /* emerald 162° */
   --module-env-vca-content: #17100F;
+  --module-fx: #33C6BB;           /* teal 187° — L0.75 C0.12, the dark set's lightness */
+  --module-fx-content: #17100F;
+  --module-fx-tint: #33C6BB1A;    /* the same teal at 10% — see tint-fx */
   --module-lfo: #47C6DE;          /* cyan 213° */
   --module-lfo-content: #17100F;
   --module-bass: #74A6E8;         /* steel blue 256° */
@@ -315,6 +326,11 @@
   --module-chord-tint: #6D8F451A; /* the same olive at 10% — see tint-chord */
   --module-env-vca: #099268;      /* emerald 162° */
   --module-env-vca-content: #17100F;
+  --module-fx: #19827A;           /* teal 187° — L0.55, two steps below the light set's
+                                     0.57 because 0.57 at this hue reads 4.28:1 against
+                                     white; 0.55 clears AA at 4.65:1, level with lfo */
+  --module-fx-content: #FFFFFF;
+  --module-fx-tint: #19827A1A;    /* the same teal at 10% — see tint-fx */
   --module-lfo: #0C7F97;          /* cyan 213° */
   --module-lfo-content: #FFFFFF;
   --module-bass: #3D6FBF;         /* steel blue 256° */
@@ -445,6 +461,10 @@
 
 @utility tint-pad {
   background-image: linear-gradient(var(--module-pad-tint), var(--module-pad-tint));
+}
+
+@utility tint-fx {
+  background-image: linear-gradient(var(--module-fx-tint), var(--module-fx-tint));
 }
 
 @layer base {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ALLOWLIST, RULES, scanRepo, scanSource } from './themeTokenGuard';
 
 const rulesOf = (source: string) =>
@@ -232,6 +233,59 @@ describe('scanRepo — every non-allowlisted src file is token-clean', () => {
       .join('\n');
 
     expect(report).toBe('');
+  });
+});
+
+describe('module palette — the fx pair clears AA in both themes', () => {
+  // Scoped to `fx` on purpose, NOT the whole module palette: three of the
+  // existing LIGHT module colours (osc 4.409, chord 4.471, env-vca 4.201) sit
+  // below 4.5:1 today, and retuning them is not this change's job. What this
+  // pins is that the colour ADDED here is not a fourth one.
+  //
+  // The maths is a local copy of scripts/check-drum-contrast.ts's, deliberately:
+  // that file is a standalone bun script with no exports, and giving it exports
+  // so a test could import them would make a CLI gate carry a library API.
+  const css = readFileSync(fileURLToPath(new URL('../src/index.css', import.meta.url)), 'utf8');
+
+  function lin(channel: number): number {
+    const c = channel / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  }
+  function relativeLuminance(hex: string): number {
+    return (
+      0.2126 * lin(parseInt(hex.slice(1, 3), 16)) +
+      0.7152 * lin(parseInt(hex.slice(3, 5), 16)) +
+      0.0722 * lin(parseInt(hex.slice(5, 7), 16))
+    );
+  }
+  function contrastRatio(a: string, b: string): number {
+    const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
+  // Both --module-fx declarations, in file order: the dark block (`:root,
+  // [data-theme="solna-dark"]`) precedes the light one in index.css. Asserting
+  // the COUNT is what keeps that assumption honest — a third declaration, or a
+  // block reordering, fails here rather than measuring one theme twice.
+  const fills = [...css.matchAll(/--module-fx:\s*(#[0-9A-Fa-f]{6})/g)].map((m) => m[1]);
+  const contents = [...css.matchAll(/--module-fx-content:\s*(#[0-9A-Fa-f]{6})/g)].map((m) => m[1]);
+
+  test('declares exactly one fx pair per theme', () => {
+    expect(fills).toHaveLength(2);
+    expect(contents).toHaveLength(2);
+  });
+
+  test('dark fx clears the 4.5:1 AA floor', () => {
+    expect(contrastRatio(fills[0], contents[0])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test('light fx clears the 4.5:1 AA floor', () => {
+    expect(contrastRatio(fills[1], contents[1])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test('fx carries a 10% tint derived from its own fill, per theme', () => {
+    const tints = [...css.matchAll(/--module-fx-tint:\s*(#[0-9A-Fa-f]{8})/g)].map((m) => m[1]);
+    expect(tints).toEqual([`${fills[0]}1A`, `${fills[1]}1A`]);
   });
 });
 
