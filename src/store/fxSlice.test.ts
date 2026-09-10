@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from 'bun:test';
+import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { useAppStore } from './store';
 import {
   DEFAULT_LEAD_STEP_RESOLUTION,
@@ -8,7 +8,7 @@ import {
 } from '@/utils/stepResolution';
 
 import { getMeter } from '@/utils/meter';
-import type { LeadNote } from '@/audio/leadMelody';
+import { leadStoredIndexAt, type LeadNote } from '@/audio/leadMelody';
 
 const empty = (): LeadNote[][] => Array.from({ length: LEAD_TICKS_PER_BAR }, () => []);
 
@@ -96,5 +96,55 @@ describe('the fx melody slice', () => {
     // 1 bar, from tick 0: stepsPerBar × TICKS_PER_SIXTEENTH ticks.
     const maxLen = getMeter('4/4').stepsPerBar * TICKS_PER_SIXTEENTH;
     expect(useAppStore.getState().fxMelodySteps[0]).toEqual([{ note: 'C4', len: maxLen }]);
+  });
+});
+
+describe('recordFxNote — the same factory, pointed at the fx row', () => {
+  afterEach(() => {
+    useAppStore.setState({ recordingTrack: null });
+  });
+
+  beforeEach(() => {
+    useAppStore.setState({
+      fxMelodySteps: empty(),
+      leadMelodySteps: empty(),
+      fxLoopLength: 1,
+      fxStepResolution: DEFAULT_LEAD_STEP_RESOLUTION,
+      fxMelodyView: 'chromatic',
+      fxMelodyOctave: 3,
+      fxCursor: 2,
+      meterId: '4/4',
+      recordingTrack: null,
+      scaleRoot: 'C',
+      scaleType: 'Major',
+    });
+  });
+
+  const fxAt = (col: number): string[] => {
+    const state = useAppStore.getState();
+    const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+    return state.fxMelodySteps[leadStoredIndexAt(col, stepsPerBar, stride)].map((n) => n.note);
+  };
+
+  test('declines while the arm points at the other track, and writes when it points here', () => {
+    useAppStore.setState({ recordingTrack: 'lead' });
+    expect(useAppStore.getState().recordFxNote('C4')).toBe(false);
+    expect(fxAt(2)).toEqual([]);
+
+    useAppStore.setState({ recordingTrack: 'fx' });
+    expect(useAppStore.getState().recordFxNote('C4')).toBe(true);
+    expect(fxAt(2)).toEqual(['C4']);
+  });
+
+  test('writes the FX grid and never the lead grid', () => {
+    useAppStore.setState({ recordingTrack: 'fx' });
+    useAppStore.getState().recordFxNote('C4');
+    expect(useAppStore.getState().leadMelodySteps.every((row) => row.length === 0)).toBe(true);
+  });
+
+  test('honours the FX view field, not the lead one', () => {
+    useAppStore.setState({ recordingTrack: 'fx', fxMelodyView: 'scale-locked', leadMelodyView: 'chromatic' });
+    expect(useAppStore.getState().recordFxNote('C#4')).toBe(false);
+    expect(fxAt(2)).toEqual([]);
   });
 });

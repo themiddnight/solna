@@ -219,8 +219,9 @@ export interface LeadSlice {
   /**
    * Write a PERFORMED note at the given column, or at the cursor if omitted.
    * The column is clamped to the live loop window either way; the cursor is
-   * never moved. Declines if not armed, or if the note is anything the grid
-   * cannot show — out-of-scale in scale-locked view, or an octave no legal
+   * never moved. Declines unless `recordingTrack` names this track, or if the
+   * note is anything the grid cannot show — out-of-scale in scale-locked
+   * view, or an octave no legal
    * window reaches. Follows the octave window when possible, so a recorded
    * note is never invisible.
    *
@@ -251,8 +252,10 @@ export interface LeadSlice {
  * The FX track's melody-editing state, mirroring LeadSlice's eight non-recording
  * fields and thirteen actions exactly: `createFxSlice` (fxSlice.ts) is the
  * other call site of the same `createMelodySlice` factory `createLeadSlice`
- * calls. There is no `fxRecording`/`recordFxNote` pair — live capture stays
- * lead-only (see `LeadSlice`'s own note on `recordLeadNote`).
+ * calls. `recordFxNote` is the fourteenth action the factory builds, and there is no
+ * `fxRecording` beside it: the armed track is one scalar in the ui slice
+ * (`recordingTrack`), so both tracks' record actions ask the same value which
+ * track it names.
  */
 export interface FxSlice {
   /** Notes per bar, stored at a fixed LEAD_TICKS_PER_BAR per bar and windowed
@@ -290,6 +293,9 @@ export interface FxSlice {
   paintFxNote: (stepIndex: number, note: string, mode: LeadNotePaintMode) => void;
   /** Set a drawn note's length — see LeadSlice.setLeadNoteLength. */
   setFxNoteLength: (stepIndex: number, note: string, len: number) => void;
+  /** Write a PERFORMED note — see LeadSlice.recordLeadNote. Declines unless
+   *  `recordingTrack === 'fx'`. */
+  recordFxNote: (note: string, column?: number) => boolean;
   /** The FX synth voice's live params. */
   fxSynthParams: SynthParams;
   /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at

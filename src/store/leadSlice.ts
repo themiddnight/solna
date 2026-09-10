@@ -76,6 +76,7 @@ const ACTIONS: Record<MelodyTrackId, {
   setStepResolution: Extract<keyof AppStore, string>; setView: Extract<keyof AppStore, string>; setOctave: Extract<keyof AppStore, string>; setGate: Extract<keyof AppStore, string>;
   toggleNote: Extract<keyof AppStore, string>; paintNote: Extract<keyof AppStore, string>; setNoteLength: Extract<keyof AppStore, string>;
   setCursor: Extract<keyof AppStore, string>; copyBar: Extract<keyof AppStore, string>; pasteBar: Extract<keyof AppStore, string>;
+  record: Extract<keyof AppStore, string>;
 }> = {
   lead: {
     setSteps: 'setLeadMelodySteps', setLoopLength: 'setLeadLoopLength',
@@ -83,6 +84,7 @@ const ACTIONS: Record<MelodyTrackId, {
     setView: 'setLeadMelodyView', setOctave: 'setLeadMelodyOctave', setGate: 'setLeadGate',
     toggleNote: 'toggleLeadNote', paintNote: 'paintLeadNote', setNoteLength: 'setLeadNoteLength',
     setCursor: 'setLeadCursor', copyBar: 'copySelectedLeadBar', pasteBar: 'pasteIntoSelectedLeadBar',
+    record: 'recordLeadNote',
   },
   fx: {
     setSteps: 'setFxMelodySteps', setLoopLength: 'setFxLoopLength',
@@ -90,6 +92,7 @@ const ACTIONS: Record<MelodyTrackId, {
     setView: 'setFxMelodyView', setOctave: 'setFxMelodyOctave', setGate: 'setFxGate',
     toggleNote: 'toggleFxNote', paintNote: 'paintFxNote', setNoteLength: 'setFxNoteLength',
     setCursor: 'setFxCursor', copyBar: 'copySelectedFxBar', pasteBar: 'pasteIntoSelectedFxBar',
+    record: 'recordFxNote',
   },
 };
 
@@ -104,11 +107,9 @@ const ACTIONS: Record<MelodyTrackId, {
  * they are already track-agnostic and take no track parameter. Giving them one
  * would be an unused parameter, which `bun run eslint` reports.
  *
- * `recordLeadNote` is NOT here: live capture is lead-only (one note-input
- * dispatcher, store/leadRecord.ts's leadMarkerFollowsClock), so it stays in
- * createLeadSlice below. The arm itself, `recordingTrack`, is not even a lead
- * field — it lives on the ui slice because its whole purpose is being unique
- * ACROSS tracks (see its docblock in types.ts).
+ * `recordLeadNote` IS here, as `[actions.record]`, and its fx twin comes free:
+ * live capture is per melody track now, and the arm it checks is one ui-slice
+ * scalar (`recordingTrack`) rather than a field on either track.
  *
  * The return type is `Partial<AppStore>` because the KEYS are per-track — this
  * one factory produces `setLeadGate` for one row and `setFxGate` for the other,
@@ -129,12 +130,9 @@ const ACTIONS: Record<MelodyTrackId, {
 export function createMelodySlice(
   track: MelodyTrack,
   set: Set,
-  // Unused here: every action this factory builds writes through `set`'s
-  // updater form alone. Kept in the signature (matching `Get`, the same pair
-  // every other slice factory takes) rather than dropped, so a future melody
-  // action that DOES need a synchronous read is a one-line addition, not a
-  // signature change at both call sites.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // Read synchronously by the record action, which has to answer "did that
+  // write land?" before returning — every other action here writes through
+  // `set`'s updater form and never reads.
   get: Get,
 ): Partial<AppStore> {
   // Every note add/remove funnels through here, whatever started it: a click,
@@ -320,38 +318,30 @@ export function createMelodySlice(
         }
         return { [track.steps]: next };
       }),
-  };
 
-  return slice as Partial<AppStore>;
-}
-
-export function createLeadSlice(set: Set, get: Get): LeadSlice {
-  const melody = createMelodySlice(melodyTrack('lead'), set, get);
-  const paintLeadNote = melody.paintLeadNote as LeadSlice['paintLeadNote'];
-
-  return {
-    ...melody,
-
-    // Returns whether it actually wrote, so a caller can tell a captured note
-    // from one the grid refused.
-    recordLeadNote: (note, column) => {
+    // Live capture's write path, per track. Returns whether it actually
+    // WROTE, so a caller can tell a captured note from one the grid refused —
+    // store/leadRecord.ts uses that answer to decide whether to hold the note
+    // for its note-off to lengthen.
+    [actions.record]: (note: string, column?: number): boolean => {
       const state = get();
-      // The ARMED TRACK, not a boolean: one scalar in the ui slice holds it,
-      // so each track asks whether the arm is pointed at it.
-      if (state.recordingTrack !== 'lead') return false;
+      // The ARMED track, not "is recording". Both bridges observe the one
+      // note-input bus and both call their own record action; this line is
+      // what makes exactly one of them write.
+      if (state.recordingTrack !== track.id) return false;
 
       // Both guards exist to keep one promise: a recorded note is visible on
       // the grid the moment it is recorded. Storing what the grid cannot draw
       // would leave notes that play back but cannot be seen or erased.
       if (
-        state.leadMelodyView === 'scale-locked' &&
+        state[track.view] === 'scale-locked' &&
         !isNoteInScale(note, state.scaleRoot, state.scaleType)
       ) {
         return false;
       }
       const octave = leadRecordOctave(
         note,
-        state.leadMelodyOctave,
+        state[track.octave],
         LEAD_WINDOW_OCTAVES,
         LEAD_OCTAVE_MIN,
         LEAD_OCTAVE_MAX,
@@ -359,27 +349,33 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
       if (octave === null) return false;
 
       const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-      const stride = strideFor(state.leadStepResolution);
+      const stride = strideFor(state[track.stepResolution]);
       // Clamped whichever head it came from: a meter or loop-length change can
       // narrow the window under a column that was legal when it was chosen.
       const target = clampLeadCursor(
-        column ?? state.leadCursor,
-        state.leadLoopLength,
+        column ?? state[track.cursor],
+        state[track.loopLength],
         stepsPerBar,
         stride,
       );
-      if (octave !== state.leadMelodyOctave) set({ leadMelodyOctave: octave });
+      if (octave !== state[track.octave]) set({ [track.octave]: octave });
       // 'draw', never 'toggle': playing a note that is already at this column
       // must be a no-op, not a delete. A performer repeating a note expects
       // nothing to happen, not the note to vanish.
-      const before = state.leadMelodySteps;
-      paintLeadNote(leadStoredIndexAt(target, stepsPerBar, stride), note, 'draw');
+      const before = state[track.steps];
+      paintNote(leadStoredIndexAt(target, stepsPerBar, stride), note, 'draw');
       // And a no-op must REPORT as one. 'draw' declines a column already
       // covered by a note that started earlier, and the live recorder uses
       // this answer to register a held note against that row — told true, it
       // would hold a row that does not contain the pitch, and the note-off's
-      // setLeadNoteLength would silently find nothing to lengthen.
-      return get().leadMelodySteps !== before;
+      // setNoteLength would silently find nothing to lengthen.
+      return get()[track.steps] !== before;
     },
-  } as LeadSlice;
+  };
+
+  return slice as Partial<AppStore>;
+}
+
+export function createLeadSlice(set: Set, get: Get): LeadSlice {
+  return createMelodySlice(melodyTrack('lead'), set, get) as LeadSlice;
 }
