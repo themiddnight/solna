@@ -4,7 +4,6 @@ import type {
   SequencerTrack,
   MasterEffects,
   ViewMode,
-  PatternSegment,
   CustomChordProgressionItem,
   FilterType,
   KeyboardMode,
@@ -13,7 +12,6 @@ import type {
   PadMode,
   PadVoicing,
 } from '../types';
-import type { SynthControlTarget } from '../utils/synthControl';
 import type { MeterId } from '../utils/meter';
 import type { SynthPresetItem, SynthPresetCategory } from '../data/synthPresets';
 import type { BassStepChoice } from '@/data/bassPatterns';
@@ -23,6 +21,7 @@ import type { LeadStepResolutionId } from '../utils/stepResolution';
 import type { PlaybackScope } from './playbackScope';
 import type { ProjectSlice } from './projectSlice';
 import type { SoloTrack } from './trackAudibility';
+import type { MixLayerId } from './focusTrack';
 
 /** A player is `stopping` between a soft stop and the bar line that ends it. */
 export type PlayerState = 'stopped' | 'playing' | 'stopping';
@@ -88,7 +87,6 @@ export interface SynthSlice {
   synthParams: SynthParams;
   chordSynthParams: SynthParams;
   bassSynthParams: SynthParams;
-  controlTarget: SynthControlTarget;
   /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at
    *  the store->engine boundary in engineSync.ts, never in a component. */
   synthVolume: number;
@@ -96,7 +94,6 @@ export interface SynthSlice {
   setSynthParams: (params: SynthParams) => void;
   setChordSynthParams: (params: SynthParams) => void;
   setBassSynthParams: (params: SynthParams) => void;
-  setControlTarget: (target: SynthControlTarget) => void;
   setSynthVolume: (volume: number) => void;
   toggleSynthMuted: () => void;
 }
@@ -371,11 +368,18 @@ export interface EffectsSlice {
 export interface UiSlice {
   // All ui state is transient (not persisted); the active tab comes from the URL query.
   activeTab: ViewMode;
-  // Which of Pattern's three segments is showing. Transient like activeTab —
-  // a session position, not composition data (see partializeAppState in
-  // store.ts). Click-rate, so it is safe in a slice even though every mounted
-  // view re-renders on a slice write.
-  patternSegment: PatternSegment;
+  /**
+   * The ONE "what am I working on" value: which track Sound's panels edit and
+   * which grid Pattern shows. Its id type is the mixer's roster, deliberately
+   * — the app already had four vocabularies for "a track" and a fifth would
+   * guarantee a fifth translation table. `'synth'` means Lead.
+   *
+   * Unlike the rest of this slice it IS persisted, top-level, exactly where
+   * `controlTarget` was: it is a user preference that should survive a reload.
+   * It is NOT project content — `PROJECT_CONTENT_KEYS` excludes it for the
+   * same reason it excluded `controlTarget`.
+   */
+  focusTrack: MixLayerId;
   /**
    * Track solo — the five source buses that are being monitored alone.
    *
@@ -388,13 +392,10 @@ export interface UiSlice {
    * SOLO_TRACKS order, whatever order the buttons were pressed in.
    *
    * Cleared by navigation — see store/soloNav.ts, which owns that rule for
-   * every writer of the LAYER (Loop ↔ Song), of patternSegment and of
-   * activeLoopId at once. A Sound ↔ Pattern tab change does NOT clear it —
-   * see soloNav.ts for why that survival matters — but a Pattern-segment
-   * change still does. That clearing is the point of the feature, not a
-   * rough edge: a control that can silence a track must not be able to keep
-   * doing so once the user has left the loop it was set in. Do not "fix" it
-   * into stickiness.
+   * every writer of the LAYER (Loop ↔ Song) and of activeLoopId at once.
+   * Neither a tab change within the Loop layer nor a `focusTrack` change
+   * clears it — see soloNav.ts for why the focus survival is what makes a
+   * multi-track set buildable at all.
    */
   soloTracks: SoloTrack[];
   // The synth keyboard's input mode. Transient by design: an input
@@ -420,7 +421,7 @@ export interface UiSlice {
   midiLearnTargetId: string | null;
   selectedMidiInputId: string;
   setActiveTab: (tab: ViewMode) => void;
-  setPatternSegment: (segment: PatternSegment) => void;
+  setFocusTrack: (focus: MixLayerId) => void;
   toggleSoloTrack: (track: SoloTrack) => void;
   clearSoloTracks: () => void;
   setKeyboardMode: (mode: KeyboardMode) => void;
@@ -617,7 +618,7 @@ export interface PersistedState {
   masterVolume: number;
   metronomeActive: boolean;
   selectedVibeId: string | null;
-  controlTarget: SynthControlTarget;
+  focusTrack: MixLayerId;
   effects: MasterEffects;
   customSynthPresets: SynthPresetItem[];
   customChordProgressions: CustomChordProgressionItem[];

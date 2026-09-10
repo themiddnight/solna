@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MIX_GROUP_IDS, MIX_GROUP_LABELS, MIX_LAYERS } from './mixLayers';
+import { MIX_GROUP_IDS, MIX_GROUP_LABELS, MIX_LAYER_IDS, MIX_LAYERS } from './mixLayers';
 import { SOURCE_BUSES, sourceBus } from '@/store/sourceBuses';
 
 /**
@@ -28,6 +28,23 @@ describe('MIX_LAYERS agrees with the engine bus table', () => {
     });
     for (const [id, volumeKey, muteKey, busVolume, busMuted] of pairs) {
       expect([id, volumeKey, muteKey]).toEqual([id, busVolume, busMuted]);
+    }
+  });
+});
+
+/**
+ * `SoundView.tsx` reads a row with `MIX_LAYERS.find((l) => l.idPrefix ===
+ * 'drum')!` — a module-scope non-null assertion the brief mandated on the
+ * strength of nothing that actually pins a row existing for every roster id.
+ * Without this test, a `MIX_LAYER_IDS` member added with no matching
+ * `MIX_LAYERS` row is a load-time crash on whichever surface calls `.find`,
+ * not a compile error and not a red test anywhere else in the suite.
+ */
+describe('MIX_LAYER_IDS and MIX_LAYERS agree', () => {
+  test('every roster id has exactly one row, in the same order', () => {
+    expect(MIX_LAYERS.map((layer) => layer.idPrefix)).toEqual([...MIX_LAYER_IDS]);
+    for (const id of MIX_LAYER_IDS) {
+      expect(MIX_LAYERS.filter((layer) => layer.idPrefix === id).length).toBe(1);
     }
   });
 });

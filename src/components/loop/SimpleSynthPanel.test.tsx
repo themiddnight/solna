@@ -1,7 +1,28 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { SimpleSynthPanel } from './SimpleSynthPanel';
+import { synthChannelForFocus } from './synth/useSynthChannel';
+import type { SynthChannels } from './synth/useSynthChannel';
 import type { SynthParams } from '@/types';
+
+// Five distinct, otherwise-meaningless param stand-ins, one per channel. The
+// store's real slices all default to the very same `INITIAL_SYNTH_PARAMS`
+// object until a user edits one of them, so asserting identity against
+// `useAppStore.getState()`'s defaults would pass even for a wrong channel —
+// these have to be distinguishable by reference on their own.
+function fakeChannels(): SynthChannels {
+  const make = (): { params: SynthParams; setParams: (p: SynthParams) => void } => ({
+    params: {} as SynthParams,
+    setParams: () => {},
+  });
+  return {
+    synth: make(),
+    chord: make(),
+    bass: make(),
+    pad: make(),
+    fx: make(),
+  };
+}
 
 const params = {
   filterCutoff: 4000,
@@ -83,5 +104,26 @@ describe('SimpleSynthPanel theming', () => {
     for (const legacy of ['amber-', 'cyan-', 'pink-', 'emerald-', 'purple-', 'text-white']) {
       expect(html).not.toContain(legacy);
     }
+  });
+});
+
+describe('the synth panels follow focusTrack', () => {
+  // A pure assertion on the hook's own extracted resolution: `useSynthChannel`
+  // is a hook, but its whole body is `synthChannelForFocus`, called here
+  // directly with a channel map built from distinct references.
+  test('the FX focus resolves the FX patch, not the Lead one', () => {
+    const channels = fakeChannels();
+    expect(synthChannelForFocus('fx', channels).params).toBe(channels.fx.params);
+    expect(synthChannelForFocus('bass', channels).params).toBe(channels.bass.params);
+  });
+
+  // Pins the drum branch specifically: `controlTargetForFocus` refuses a
+  // drum focus by type, so `synthChannelForFocus` falls back to the Lead
+  // patch (safe only because SoundView unmounts the Synth section on a drum
+  // focus — see the comment on the function itself). Flipping that fallback
+  // to any other channel must turn this red.
+  test('the drum focus falls back to the Lead patch', () => {
+    const channels = fakeChannels();
+    expect(synthChannelForFocus('drum', channels).params).toBe(channels.synth.params);
   });
 });

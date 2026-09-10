@@ -1,10 +1,42 @@
 import { useAppStore } from "@/store/store";
+import { controlTargetForFocus, isMelodicFocus } from "@/store/focusTrack";
+import type { MixLayerId } from "@/store/focusTrack";
 import { resolveSynthControlChannel } from "@/utils/synthControl";
+import type { SynthParamChannel } from "@/utils/synthControl";
 import type { SynthParams } from "@/types";
 
 export interface SynthChannel {
   params: SynthParams;
   onChangeParams: (next: SynthParams) => void;
+}
+
+export interface SynthChannels {
+  synth: SynthParamChannel;
+  chord: SynthParamChannel;
+  bass: SynthParamChannel;
+  pad: SynthParamChannel;
+  fx: SynthParamChannel;
+}
+
+/**
+ * `focus` -> the channel the synth panels write to. Exported and pure so the
+ * test exercises THIS, not a second copy of it: the drum branch's Lead
+ * fallback is the whole point of the function and a mirrored helper could
+ * never catch it drifting.
+ *
+ * `controlTargetForFocus` refuses a drum focus by TYPE, so the narrowing is
+ * forced here rather than optional. Lead is the value in that branch, and it
+ * is safe only because SoundView renders no synth surface at all when the
+ * focus is `drum` — the whole Synth section is unmounted, so no panel that
+ * calls this hook is on screen and nothing can write through it. That gate
+ * is asserted in SoundView.test.tsx ("no Synth section on a drum focus"); if
+ * it is ever removed, this branch becomes the invisible Lead-patch edit the
+ * spec's trap describes.
+ */
+export function synthChannelForFocus(focus: MixLayerId, channels: SynthChannels): SynthChannel {
+  const target = isMelodicFocus(focus) ? controlTargetForFocus(focus) : 'synth';
+  const channel = resolveSynthControlChannel(target, channels);
+  return { params: channel.params, onChangeParams: channel.setParams };
 }
 
 /**
@@ -25,7 +57,7 @@ export interface SynthChannel {
  * the channel it is pointed at actually changes.
  */
 export function useSynthChannel(): SynthChannel {
-  const controlTarget = useAppStore((s) => s.controlTarget);
+  const focusTrack = useAppStore((s) => s.focusTrack);
   const synthParams = useAppStore((s) => s.synthParams);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
   const bassSynthParams = useAppStore((s) => s.bassSynthParams);
@@ -37,13 +69,11 @@ export function useSynthChannel(): SynthChannel {
   const setPadSynthParams = useAppStore((s) => s.setPadSynthParams);
   const setFxSynthParams = useAppStore((s) => s.setFxSynthParams);
 
-  const channel = resolveSynthControlChannel(controlTarget, {
+  return synthChannelForFocus(focusTrack, {
     synth: { params: synthParams, setParams: setSynthParams },
     chord: { params: chordSynthParams, setParams: setChordSynthParams },
     bass: { params: bassSynthParams, setParams: setBassSynthParams },
     pad: { params: padSynthParams, setParams: setPadSynthParams },
     fx: { params: fxSynthParams, setParams: setFxSynthParams },
   });
-
-  return { params: channel.params, onChangeParams: channel.setParams };
 }

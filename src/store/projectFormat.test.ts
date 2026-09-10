@@ -31,7 +31,7 @@ const liveState = {
   effects: { ...INITIAL_EFFECTS, reverbWet: 0.4 },
   loops: [loopA, loopB],
   // excluded keys, present on purpose
-  controlTarget: 'bass',
+  focusTrack: 'bass',
   activeLoopId: 'loop-b',
   metronomeActive: true,
   selectedVibeId: 'cyber-dance',
@@ -50,7 +50,7 @@ describe('buildProjectContent', () => {
   test('excluded keys are ABSENT from the output (catches a stray ...state spread)', () => {
     const content = buildProjectContent(liveState as never) as unknown as Record<string, unknown>;
     for (const key of [
-      'controlTarget',
+      'focusTrack',
       'activeLoopId',
       'metronomeActive',
       'selectedVibeId',
@@ -92,9 +92,9 @@ describe('applyProjectContent (the reset rules)', () => {
     }
   });
 
-  test('never touches controlTarget or metronomeActive', () => {
+  test('never touches focusTrack or metronomeActive', () => {
     const patch = applyProjectContent(buildProjectContent(liveState as never)) as unknown as Record<string, unknown>;
-    expect('controlTarget' in patch).toBe(false);
+    expect('focusTrack' in patch).toBe(false);
     expect('metronomeActive' in patch).toBe(false);
   });
 });

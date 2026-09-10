@@ -1,5 +1,6 @@
 import React from 'react';
-import { useAppStore } from '@/store/store';
+import { focusForSegment, segmentForFocus } from '@/store/focusTrack';
+import { useLiveStore } from './useLiveStore';
 import { PATTERN_SEGMENTS } from '../viewMeta';
 import { HEADER_GROUP } from './fieldClasses';
 
@@ -89,8 +90,9 @@ export function SegmentedButton({
  * underneath repeats the name, and here the view header IS per segment.
  */
 export function PatternSegmentRow() {
-  const patternSegment = useAppStore((s) => s.patternSegment);
-  const setPatternSegment = useAppStore((s) => s.setPatternSegment);
+  const focusTrack = useLiveStore((s) => s.focusTrack);
+  const setFocusTrack = useLiveStore((s) => s.setFocusTrack);
+  const activeSegment = segmentForFocus(focusTrack);
 
   return (
     <SegmentedGroup>
@@ -100,8 +102,13 @@ export function PatternSegmentRow() {
           id={`segment-${id}`}
           icon={icon}
           label={label}
-          active={patternSegment === id}
-          onSelect={() => setPatternSegment(id)}
+          active={activeSegment === id}
+          // `accompaniment` always sends `chord` — see focusForSegment for why
+          // there is deliberately no memory of which of the three was last
+          // used. Consequence, on the record: focus `pad`, go to Beat, press
+          // Accompaniment and you land on `chord`, not `pad`. That is one
+          // click, and all three grids are on screen either way.
+          onSelect={() => setFocusTrack(focusForSegment(id))}
         />
       ))}
     </SegmentedGroup>

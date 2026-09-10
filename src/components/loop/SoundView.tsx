@@ -18,9 +18,16 @@ import {
   AudioWaveform,
 } from "lucide-react";
 import { useAppStore } from "@/store/store";
-import { soloTrackForControlTarget } from "@/store/trackAudibility";
+import { soloTrackForFocus } from "@/store/trackAudibility";
 import { SoloButton } from "../ui/SoloButton";
 import { useLiveStore } from "../ui/useLiveStore";
+import {
+  MIX_LAYER_IDS,
+  isMelodicFocus,
+  controlTargetForFocus,
+  type MixLayerId,
+} from "@/store/focusTrack";
+import { MIX_LAYERS } from "../mixLayers";
 import type { SynthPresetItem, SynthPresetCategory } from "@/data/synthPresets";
 import { SYNTH_CATEGORIES } from "@/data/synthPresets";
 import { DRUM_KITS } from "@/data/drumKits";
@@ -74,7 +81,6 @@ import {
   resolveSynthControlChannel,
   SYNTH_TARGET_STYLES,
 } from "@/utils/synthControl";
-import type { SynthControlTarget } from "@/utils/synthControl";
 import { GroupFrame } from "../ui/GroupFrame";
 import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
 import { SegmentedButton, SegmentedGroup } from '@/components/ui/SegmentedControl';
@@ -85,18 +91,46 @@ import { SegmentedButton, SegmentedGroup } from '@/components/ui/SegmentedContro
 // not (CLAUDE.md, layer 1).
 const DRUM_KIT_NAMES = Object.keys(DRUM_KITS);
 
-// The two MELODY targets render as bare chips; everything else goes in the
-// framed Accompaniment group. Derived rather than hand-listed so a sixth target
-// added to SYNTH_TARGET_STYLES renders somewhere instead of silently nowhere —
-// but the exclusion is a SET, not `!== 'synth'`, because FX is a melody track
-// beside Lead and putting it under a frame labelled "Accompaniment" would make
-// the frame say something untrue. Module scope for the same reason
+// The two MELODY focuses render as bare chips, the three accompaniment ones go
+// in the framed group, and Beat sits last on its own — the same pitched-first,
+// rhythm-after order MIX_LAYERS uses. Derived from the roster rather than
+// hand-listed so a seventh layer renders somewhere instead of silently
+// nowhere, but the split is a SET, not `!== 'synth'`: FX is a melody track
+// beside Lead, and putting it under a frame labelled "Accompaniment" would
+// make the frame say something untrue. Module scope for the same reason
 // DRUM_KIT_NAMES above is: the record is static, and this view re-renders per
 // pointermove during a Knob drag.
-const MELODY_TARGETS: readonly SynthControlTarget[] = ['synth', 'fx'];
-const ACCOMPANIMENT_TARGETS = (Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]).filter(
-  (target) => !MELODY_TARGETS.includes(target),
+const MELODY_FOCUSES: readonly MixLayerId[] = ['synth', 'fx'];
+const BEAT_FOCUS: MixLayerId = 'drum';
+const ACCOMPANIMENT_FOCUSES = MIX_LAYER_IDS.filter(
+  (id) => !MELODY_FOCUSES.includes(id) && id !== BEAT_FOCUS,
 );
+
+// The Beat chip's styling comes from MIX_LAYERS' drum row, not from
+// SYNTH_TARGET_STYLES, which has five entries and no sixth to add: a drum
+// focus has no synth channel, so a row in that table would be a claim that it
+// does. Both class strings are literals — Tailwind v4 scans source statically,
+// so a class assembled at runtime would never be emitted.
+const BEAT_CHIP = {
+  label: MIX_LAYERS.find((l) => l.idPrefix === 'drum')!.label,
+  activeBtn: 'btn-accent',
+  softBtn: 'btn-soft btn-accent',
+};
+
+/**
+ * `isLibraryOpen` / `isQuickSaving` are SoundView's own `useState`, and
+ * SoundView never unmounts (every tab stays mounted — see the layering note
+ * at the top of this file's neighbours). Unmounting the Synth section on a
+ * drum focus does not reset them, so without this the preset library or the
+ * quick-save popover a user opened, then left by switching focus to Beat,
+ * pops back open the moment focus returns to a melodic track — a surface the
+ * user never asked to see again. Exported so the decision is testable
+ * directly: `renderToString` runs no effect, so a render-only test can only
+ * ever see the FIRST render's default state and could never actually catch
+ * this regression.
+ */
+export const shouldCloseSynthOverlays = (focusTrack: MixLayerId): boolean =>
+  !isMelodicFocus(focusTrack);
 
 /**
  * Drum kit and drum filter, as their own memoised subtree.
@@ -104,7 +138,7 @@ const ACCOMPANIMENT_TARGETS = (Object.keys(SYNTH_TARGET_STYLES) as SynthControlT
  * The eight store reads live HERE rather than at the top of SoundView, for the
  * same reason SoundMixer's MixerRow owns its own: every view stays mounted, so
  * a subscription at the top of this file re-renders the WHOLE view — the
- * header, the preset chips, the target row and all five synth panels, none of
+ * header, the preset chips, the focus row and all five synth panels, none of
  * which are memoised — on every pointermove of these two knobs. Scoped here, a
  * cutoff drag reconciles this card alone.
  */
@@ -205,10 +239,11 @@ const DrumSoundCard = React.memo(function DrumSoundCard() {
 export const SoundView = React.memo(function SoundView() {
   // Synth slice state + setters (named after the old props so the rest of the
   // component body is unchanged).
-  // useLiveStore, not useAppStore: the solo button below derives its track
-  // from this value, and only useLiveStore serves setState() on the server
+  // useLiveStore, not useAppStore: the chips and the solo button below derive
+  // from this value, and only useLiveStore serves getState() on the server
   // snapshot renderToString uses — see useLiveStore.ts and testing.md.
-  const controlTarget = useLiveStore((s) => s.controlTarget);
+  const focusTrack = useLiveStore((s) => s.focusTrack);
+  const setFocusTrack = useAppStore((s) => s.setFocusTrack);
   // App keeps every view mounted (block/hidden) so audio survives a tab
   // switch, which means the scope's rAF loop must be gated on this or it
   // runs forever behind a hidden tab.
@@ -216,7 +251,6 @@ export const SoundView = React.memo(function SoundView() {
   const synthParams = useAppStore((s) => s.synthParams);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
   const bassSynthParams = useAppStore((s) => s.bassSynthParams);
-  const onChangeControlTarget = useAppStore((s) => s.setControlTarget);
   const onChangeSynthParams = useAppStore((s) => s.setSynthParams);
   const onChangeChordSynthParams = useAppStore((s) => s.setChordSynthParams);
   const onChangeBassSynthParams = useAppStore((s) => s.setBassSynthParams);
@@ -234,16 +268,21 @@ export const SoundView = React.memo(function SoundView() {
     pad: { params: padSynthParams, setParams: setPadSynthParams },
     fx: { params: fxSynthParams, setParams: setFxSynthParams },
   };
-  const channel = resolveSynthControlChannel(controlTarget, channels);
+  // Null when the focus is `drum`: `controlTargetForFocus` refuses that focus
+  // by type, and the Synth section, its quick-save popover and the preset
+  // library are all gated on this being non-null below. The Lead channel is
+  // what the preset handlers close over so they stay total, and every control
+  // that could invoke one of them lives inside the un-rendered section.
+  const synthTarget = isMelodicFocus(focusTrack) ? controlTargetForFocus(focusTrack) : null;
+  const channel = resolveSynthControlChannel(synthTarget ?? 'synth', channels);
   const params = channel.params;
   const onChangeParams = channel.setParams;
 
-  const tintClass = [
-    SYNTH_TARGET_STYLES[controlTarget].ring,
-    SYNTH_TARGET_STYLES[controlTarget].tint,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const tintClass = synthTarget
+    ? [SYNTH_TARGET_STYLES[synthTarget].ring, SYNTH_TARGET_STYLES[synthTarget].tint]
+        .filter(Boolean)
+        .join(" ")
+    : "";
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [customPresets, setCustomPresets] = useState<SynthPresetItem[]>([]);
   const allPresets = useMemo(
@@ -257,6 +296,16 @@ export const SoundView = React.memo(function SoundView() {
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [quickSaveName, setQuickSaveName] = useState<string>("");
   const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  // Close the two synth-only overlays the moment focus leaves a melodic
+  // track — see shouldCloseSynthOverlays above for why leaving them open is
+  // a bug rather than a no-op.
+  useEffect(() => {
+    if (shouldCloseSynthOverlays(focusTrack)) {
+      setIsLibraryOpen(false);
+      setIsQuickSaving(false);
+    }
+  }, [focusTrack]);
 
   // Simple vs Pro UI Mode toggle with localStorage persistence
   const [synthViewMode, setSynthViewMode] = useState<"simple" | "pro">(() => {
@@ -360,19 +409,24 @@ export const SoundView = React.memo(function SoundView() {
 
   const totalPresetsCount = allPresets.length;
 
-  const renderTargetChip = (target: SynthControlTarget) => (
-    <button
-      key={target}
-      onClick={() => onChangeControlTarget(target)}
-      className={`btn btn-xs text-[11px] font-semibold rounded-sm ${
-        controlTarget === target
-          ? SYNTH_TARGET_STYLES[target].activeBtn
-          : SYNTH_TARGET_STYLES[target].softBtn
-      }`}
-    >
-      {SYNTH_TARGET_STYLES[target].label}
-    </button>
-  );
+  const renderFocusChip = (focus: MixLayerId) => {
+    const style = isMelodicFocus(focus)
+      ? SYNTH_TARGET_STYLES[controlTargetForFocus(focus)]
+      : BEAT_CHIP;
+    return (
+      <button
+        key={focus}
+        id={`btn-focus-${focus}`}
+        aria-current={focusTrack === focus ? 'true' : undefined}
+        onClick={() => setFocusTrack(focus)}
+        className={`btn btn-xs text-[11px] font-semibold rounded-sm ${
+          focusTrack === focus ? style.activeBtn : style.softBtn
+        }`}
+      >
+        {style.label}
+      </button>
+    );
+  };
 
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
@@ -403,12 +457,108 @@ export const SoundView = React.memo(function SoundView() {
         }
       />
 
+      {/* The focus row: the one "what am I working on" control, and the only
+          place on this tab that can change it. It sits OUTSIDE the Synth
+          section, not inside it as the old Target row did, because the Synth
+          section is unmounted on a drum focus — inside, the row would take the
+          only way back to a melodic focus down with it.
+
+          Six chips, not five: `drum` is a focus like any other and Beat is
+          where the drum kit is edited. Kept as its own row, visible in both
+          Simple and Pro mode, because it is the control that switches which
+          channel every knob below points at. */}
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+        {/* Control Destination Selector */}
+        <div
+          className={`flex items-center gap-1 flex-wrap bg-base-200 border rounded-box p-1 ${synthTarget ? SYNTH_TARGET_STYLES[synthTarget].border : 'border-accent'}`}
+        >
+          <span className={`${GROUP_LABEL} pl-1 pr-1 hidden sm:inline`}>
+            Focus:
+          </span>
+          {MELODY_FOCUSES.map(renderFocusChip)}
+          {/* Chord, bass and pad are one job done three ways. The frame is
+              inside the tinted outer group, not replacing it: the outer
+              tint tracks the ACTIVE target, this one groups three of the
+              four. See ui/GroupFrame for why it adds no colour.
+              daisyUI's join requires its direct children to be the joined
+              items, and a GroupFrame between the outer div and three of
+              the four chips breaks that contract, so join/join-item are
+              dropped from this whole row; gap-1 (already on the row and
+              the frame) carries the spacing join used to. */}
+          <GroupFrame label="Accompaniment" className="flex items-center gap-1 p-1">
+            {ACCOMPANIMENT_FOCUSES.map(renderFocusChip)}
+          </GroupFrame>
+          {renderFocusChip(BEAT_FOCUS)}
+        </div>
+
+        {/* ONE solo button, following the focus — Sound edits exactly one
+            layer at a time, so five buttons here would be four controls for
+            layers this view is not editing. It sits beside the Focus chips
+            rather than in the view header because "it follows the focus" is
+            only legible next to the focus. Session-only, and cleared by LEAVING the loop layer, by a change
+            of active loop, or by a project swap — NOT by a focus change,
+            which is what makes a set spanning two tracks buildable from this
+            row at all. store/soloNav.ts owns that rule and says why. */}
+        <SoloButton
+          id="btn-solo-target"
+          track={soloTrackForFocus(focusTrack)}
+          size="sm"
+        />
+
+        {/* Per-target oscilloscope, the way a hardware synth puts a scope
+            beside the section you are editing. It taps the TARGET layer's
+            own pre-fader tap — after the VCA, before that layer's bus gain
+            and the sends — so it shows the patch being edited rather than
+            the finished mix the transport bar's master meter reads, and a
+            fader move does not resize a wave that has not changed.
+
+            The trace is raw -1..+1 mapped straight onto the box height: no
+            normalisation, no AGC, no dB curve. A quiet patch draws a small
+            wave and a patch at full scale fills the box, which is only true
+            because the tap is ahead of the -6 dB bus default.
+
+            The label is not decoration: the global input deck's keyboard
+            still plays the 'synth' (Lead) layer regardless of focus —
+            KEYBOARD_AUDITION_TARGET in useInputDeck.ts is a module constant
+            and routing it through focus is plan 2 of the focus-track spec —
+            so with the focus on Chord or Bass the trace stays flat while
+            keys are pressed. Naming the tapped layer is what keeps that
+            legible instead of reading as a broken scope. A drum focus taps no
+            melodic bus, so the scope is absent rather than flat. */}
+        {synthTarget !== null && (
+          <div
+            className="ml-auto hidden sm:flex items-center gap-2 bg-base-200 border border-base-300 rounded-box px-2 py-1 shrink-0 self-stretch"
+            title={`Oscilloscope — ${SYNTH_TARGET_STYLES[synthTarget].label} layer`}
+          >
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-base-content/50">
+              {SYNTH_TARGET_STYLES[synthTarget].label}
+            </span>
+            <AudioVisualizer
+              mode="oscilloscope"
+              variant="inline"
+              source={synthTarget}
+              paused={activeTab !== 'sound'}
+              /* auto + self-stretch, not a pixel height: the box is
+                 self-stretch to the Target group's height, so the scope
+                 fills whatever is left inside its padding rather than
+                 tracking that height with a second number to keep in sync. */
+              height="auto"
+              className="w-28 lg:w-40 rounded self-stretch"
+              colorTheme={synthTarget === "chord" ? "accent" : "primary"}
+            />
+          </div>
+        )}
+      </div>
+
       {/* The Synth section: the target it points at, the preset on it, and the
           controls that shape it, in ONE card. They were three stacked
           siblings — a tinted target/preset card, then a bare row of five
           module cards, then the drum card — which read as "the tab" rather
           than as one of the tab's three sections, and left the Drum and Mixer
           cards below looking like leftovers rather than peers. */}
+      {synthTarget !== null && (() => {
+        const target = synthTarget;
+        return (
       <SectionCard
         icon={AudioWaveform}
         title="Synth"
@@ -452,7 +602,7 @@ export const SoundView = React.memo(function SoundView() {
 
             {/* Inside `actions`, so it hangs off the button cluster that
                 raised it. As a child of the card it anchored to the card's own
-                `relative` root, which wraps the target row, the preset bar AND
+                `relative` root, which wraps the focus row, the preset bar AND
                 the whole Simple/Pro body — so `top-full` resolved at the
                 bottom edge of a five-panel card, over the Drum Sound card
                 below and nowhere near the Save button. */}
@@ -468,96 +618,9 @@ export const SoundView = React.memo(function SoundView() {
         }
       >
 
-        {/* Row 1: Control Destination / Target Selector. Kept as its own row,
-            visible in both Simple and Pro mode, because it's the only control
-            that switches which channel (synth/chord/bass) params/onChangeParams
-            below points at — Pro mode's oscillator/filter/envelope sections
-            read that same params object, so folding this into the Simple-only
-            preset bar would silently strand Pro mode on whatever target was
-            last picked. */}
-        {/* Row 1: Control Destination / Target Selector */}
-        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-          {/* Control Destination Selector */}
-          <div
-            className={`flex items-center gap-1 flex-wrap bg-base-200 border rounded-box p-1 ${SYNTH_TARGET_STYLES[controlTarget].border}`}
-          >
-            <span className={`${GROUP_LABEL} pl-1 pr-1 hidden sm:inline`}>
-              Target:
-            </span>
-            {MELODY_TARGETS.map(renderTargetChip)}
-            {/* Chord, bass and pad are one job done three ways. The frame is
-                inside the tinted outer group, not replacing it: the outer
-                tint tracks the ACTIVE target, this one groups three of the
-                four. See ui/GroupFrame for why it adds no colour.
-                daisyUI's join requires its direct children to be the joined
-                items, and a GroupFrame between the outer div and three of
-                the four chips breaks that contract, so join/join-item are
-                dropped from this whole row; gap-1 (already on the row and
-                the frame) carries the spacing join used to. */}
-            <GroupFrame label="Accompaniment" className="flex items-center gap-1 p-1">
-              {ACCOMPANIMENT_TARGETS.map(renderTargetChip)}
-            </GroupFrame>
-          </div>
-
-          {/* ONE solo button, following the Target — Sound edits exactly one
-              layer at a time, so five buttons here would be four controls for
-              layers this view is not editing. It sits beside the Target chips
-              rather than in the view header because "it follows the target" is
-              only legible next to the target. Session-only, and cleared by
-              LEAVING the loop layer, by a Pattern-segment change, or by a
-              change of active loop — NOT by the Sound <-> Pattern tab change
-              this button lives on, nor by a change of target (both of which a
-              set has to survive to be buildable here at all). store/soloNav.ts
-              owns that rule and says why. */}
-          <SoloButton
-            id="btn-solo-target"
-            track={soloTrackForControlTarget(controlTarget)}
-            size="sm"
-          />
-
-          {/* Per-target oscilloscope, the way a hardware synth puts a scope
-              beside the section you are editing. It taps the TARGET layer's
-              own pre-fader tap — after the VCA, before that layer's bus gain
-              and the sends — so it shows the patch being edited rather than
-              the finished mix the transport bar's master meter reads, and a
-              fader move does not resize a wave that has not changed.
-
-              The trace is raw -1..+1 mapped straight onto the box height: no
-              normalisation, no AGC, no dB curve. A quiet patch draws a small
-              wave and a patch at full scale fills the box, which is only true
-              because the tap is ahead of the -6 dB bus default.
-
-              The label is not decoration: the global input deck's keyboard
-              always plays the 'synth' layer regardless of Target, so with
-              Target on Chord or Bass the trace stays flat while keys are
-              pressed. Naming the tapped layer is what keeps that legible
-              instead of reading as a broken scope. */}
-          <div
-            className="ml-auto hidden sm:flex items-center gap-2 bg-base-200 border border-base-300 rounded-box px-2 py-1 shrink-0 self-stretch"
-            title={`Oscilloscope — ${SYNTH_TARGET_STYLES[controlTarget].label} layer`}
-          >
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-base-content/50">
-              {SYNTH_TARGET_STYLES[controlTarget].label}
-            </span>
-            <AudioVisualizer
-              mode="oscilloscope"
-              variant="inline"
-              source={controlTarget}
-              paused={activeTab !== 'sound'}
-              /* auto + self-stretch, not a pixel height: the box is
-                 self-stretch to the Target group's height, so the scope
-                 fills whatever is left inside its padding rather than
-                 tracking that height with a second number to keep in sync. */
-              height="auto"
-              className="w-28 lg:w-40 rounded self-stretch"
-              colorTheme={controlTarget === "chord" ? "accent" : "primary"}
-            />
-          </div>
-        </div>
-
         {/* Pro Mode: Row 2 Categorized Preset Selection Bar */}
         {synthViewMode === "pro" && (
-          <div className={`flex flex-wrap items-center justify-between gap-2.5 bg-base-300 border border-base-300 p-2 rounded-box ${SYNTH_TARGET_STYLES[controlTarget].tint}`}>
+          <div className={`flex flex-wrap items-center justify-between gap-2.5 bg-base-300 border border-base-300 p-2 rounded-box ${SYNTH_TARGET_STYLES[target].tint}`}>
             {/* Category Filter Tabs */}
             <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[11px]">
               <span className="text-[10px] uppercase font-bold text-base-content/50 px-1">
@@ -813,53 +876,65 @@ export const SoundView = React.memo(function SoundView() {
         </div>
       )}
       </SectionCard>
+        );
+      })()}
 
       {/* Quick Save Modal Popover with Category selection. Outside the Synth
           section, not in it: it is an overlay the section raises, and nesting
-          it would put a popover inside the tinted card it floats over. */}
-      <QuickSavePopover
-        open={isQuickSaving}
-        onClose={() => setIsQuickSaving(false)}
-        heading="Save Custom Preset to LocalStorage:"
-        placeholder="Preset Name..."
-        saveLabel="Save Patch"
-        name={quickSaveName}
-        onNameChange={setQuickSaveName}
-        categories={SYNTH_CATEGORIES.map((c) => ({ id: c.id, label: c.label }))}
-        category={quickSaveCategory}
-        onCategoryChange={(v) => setQuickSaveCategory(v as SynthPresetCategory)}
-        onSubmit={handleQuickSaveSubmit}
-        formClassName="flex items-center gap-2 flex-1 max-w-xl flex-wrap sm:flex-nowrap"
-      />
+          it would put a popover inside the tinted card it floats over. Gated
+          on a melodic focus along with the section that raises it — a drum
+          focus has no synth patch for it to save. */}
+      {synthTarget !== null && (
+        <QuickSavePopover
+          open={isQuickSaving}
+          onClose={() => setIsQuickSaving(false)}
+          heading="Save Custom Preset to LocalStorage:"
+          placeholder="Preset Name..."
+          saveLabel="Save Patch"
+          name={quickSaveName}
+          onNameChange={setQuickSaveName}
+          categories={SYNTH_CATEGORIES.map((c) => ({ id: c.id, label: c.label }))}
+          category={quickSaveCategory}
+          onCategoryChange={(v) => setQuickSaveCategory(v as SynthPresetCategory)}
+          onSubmit={handleQuickSaveSubmit}
+          formClassName="flex items-center gap-2 flex-1 max-w-xl flex-wrap sm:flex-nowrap"
+        />
+      )}
 
-      <DrumSoundCard />
+      {/* A drum focus has no synth channel to show a kit for — Drum Sound
+          takes its place instead, below. */}
+      {synthTarget === null && <DrumSoundCard />}
 
       {/* The one mixer: every layer's level and mute, including the drum bus
           whose level used to be a lone strip in the card above. */}
       <SoundMixer />
 
-      {/* Preset Library Sidebar Drawer / Modal */}
-      <Suspense
-        fallback={
-          isLibraryOpen ? (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-base-300/60">
-              <span className="loading loading-spinner loading-lg text-primary" />
-            </div>
-          ) : null
-        }
-      >
-        <SynthPresetLibrary
-          isOpen={isLibraryOpen}
-          onClose={() => setIsLibraryOpen(false)}
-          currentParams={params}
-          target={controlTarget}
-          showSoundBadges={synthViewMode === "pro"}
-          onSelectPreset={(preset) => {
-            handleSelectPreset(preset);
-            setIsLibraryOpen(false);
-          }}
-        />
-      </Suspense>
+      {/* Preset Library Sidebar Drawer / Modal. Gated with the Synth section:
+          the library edits whichever synth patch `target` names, and a drum
+          focus names none. */}
+      {synthTarget !== null && (
+        <Suspense
+          fallback={
+            isLibraryOpen ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-base-300/60">
+                <span className="loading loading-spinner loading-lg text-primary" />
+              </div>
+            ) : null
+          }
+        >
+          <SynthPresetLibrary
+            isOpen={isLibraryOpen}
+            onClose={() => setIsLibraryOpen(false)}
+            currentParams={params}
+            target={synthTarget}
+            showSoundBadges={synthViewMode === "pro"}
+            onSelectPreset={(preset) => {
+              handleSelectPreset(preset);
+              setIsLibraryOpen(false);
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 });

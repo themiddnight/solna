@@ -2,13 +2,23 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { useAppStore } from '@/store/store';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
-import { SoundView } from './SoundView';
+import { shouldCloseSynthOverlays, SoundView } from './SoundView';
 import { MIX_GROUP_IDS, MIX_GROUP_LABELS, MIX_LAYERS } from '../mixLayers';
+import { MIX_LAYER_IDS } from '@/store/focusTrack';
 import { FIELD_LABEL, FIELD_LANE, HEADER_GROUP, SECTION_HEADER } from '../ui/fieldClasses';
 import { PANEL_CARD } from '../ui/PanelCard';
 import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from '@/utils/synthControl';
 import type { SynthControlTarget, SynthParamChannel } from '@/utils/synthControl';
 import type { SynthParams } from '@/types';
+
+/** The full opening tag of the element whose markup contains `needle` — pins the tag name, not text position. */
+function openTagContaining(html: string, needle: string): string {
+  const idx = html.indexOf(needle);
+  if (idx === -1) throw new Error(`not found in markup: ${needle}`);
+  const start = html.lastIndexOf('<', idx);
+  const end = html.indexOf('>', idx);
+  return html.slice(start, end + 1);
+}
 
 // A black key is half its own width left of the white-key boundary it
 // straddles, so its offset is (white keys before it) strides minus half a black
@@ -103,24 +113,27 @@ describe('chromatic keyboard black key geometry', () => {
     const synthBand = html.indexOf('>Synth<');
     const save = html.indexOf('id="btn-quick-save-preset"');
     const library = html.indexOf('id="btn-open-presets-library"');
-    const drumBand = html.indexOf('>Drum Sound<');
+    // Drum Sound does not render on a melodic focus (default here), so the
+    // Mixer band — always present — is the next fixed point after the Synth
+    // section's own controls.
+    const mixerBand = html.indexOf('>Mixer<');
     expect(synthBand).toBeGreaterThan(-1);
     expect(save).toBeGreaterThan(synthBand);
     expect(library).toBeGreaterThan(synthBand);
-    expect(save).toBeLessThan(drumBand);
-    expect(library).toBeLessThan(drumBand);
+    expect(save).toBeLessThan(mixerBand);
+    expect(library).toBeLessThan(mixerBand);
   });
 
   test('SoundView still renders', () => {
     const html = renderToString(<SoundView />);
-    expect(html).toContain('Target:');
+    expect(html).toContain('Focus:');
   });
 
-  // Guards the Target chip row against going back to a hand-listed literal:
+  // Guards the Focus chip row against going back to a hand-listed literal:
   // every entry in SYNTH_TARGET_STYLES must show up as a chip, so a target
   // added to the registry and forgotten here fails this test instead of
   // silently not rendering.
-  test('every SYNTH_TARGET_STYLES entry renders as a Target chip', () => {
+  test('every SYNTH_TARGET_STYLES entry renders as a Focus chip', () => {
     const html = renderToString(<SoundView />);
     for (const target of Object.keys(SYNTH_TARGET_STYLES) as SynthControlTarget[]) {
       expect(html).toContain(`>${SYNTH_TARGET_STYLES[target].label}<`);
@@ -135,21 +148,35 @@ describe('chromatic keyboard black key geometry', () => {
    * icon — three weights for three peers, which is what made the drum and
    * mixer read as leftovers below the synth.
    */
-  test('the three sections open with the same band, in reading order', () => {
-    const html = renderToString(<SoundView />);
+  // Synth and Drum Sound are mutually exclusive now — one focus shows exactly
+  // one of the two — so the "three peers" this test used to pin are only ever
+  // two bands plus Mixer at a time. Checked on both sides of the gate.
+  test('the sections open with the same band, in reading order', () => {
     const band = new RegExp(
       `w-3\\.5 h-3\\.5 text-primary"[^>]*>.*?<span class="${SECTION_HEADER}">([^<]+)</span>`,
       'g',
     );
-    const bands = [...html.matchAll(band)].map((m) => m[1]);
-    expect(bands).toEqual(['Synth', 'Drum Sound', 'Mixer']);
+    const bandsOf = (html: string) => [...html.matchAll(band)].map((m) => m[1]);
+
+    expect(bandsOf(renderToString(<SoundView />))).toEqual(['Synth', 'Mixer']);
+
+    // try/finally, not a bare reset after the assertion: a failed expect
+    // above would throw before the reset ran and leak 'drum' into every test
+    // that follows in this file.
+    useAppStore.setState({ focusTrack: 'drum' });
+    try {
+      expect(bandsOf(renderToString(<SoundView />))).toEqual(['Drum Sound', 'Mixer']);
+    } finally {
+      useAppStore.setState({ focusTrack: 'synth' });
+    }
   });
 
   /** One card per section, so the synth's stages cannot float off as siblings. */
   test('the synth stages are recessed compartments, not cards beside the section', () => {
     const html = renderToString(<SoundView />);
-    // Three sections + the view header = four floating panels, and no more.
-    expect(html.split(PANEL_CARD).length - 1).toBe(4);
+    // Synth + Mixer + the view header = three floating panels on the default
+    // (melodic) focus, and no more — Drum Sound is absent here, not hidden.
+    expect(html.split(PANEL_CARD).length - 1).toBe(3);
     expect(html).toContain('card bg-base-200 border border-base-300');
   });
 
@@ -173,7 +200,12 @@ describe('chromatic keyboard black key geometry', () => {
  * shorter.
  */
 describe('the Drum Sound card, moved from the sequencer (nav restructure Task 6)', () => {
+  // Drum Sound only renders on a drum focus now (Task 4) — set before the one
+  // render this whole describe block shares, and restore afterward so later
+  // describes in this file see the default melodic focus again.
+  useAppStore.setState({ focusTrack: 'drum' });
   const html = renderToString(<SoundView />);
+  useAppStore.setState({ focusTrack: 'synth' });
 
   // Step 17: the drum bus fader's dB markup, asserted at view level so a
   // regression back to a %/linear readout on this call site is caught here
@@ -281,7 +313,7 @@ describe('keyboard audition channel is always the main synth', () => {
 
 describe('SoundView track solo', () => {
   afterEach(() => {
-    useAppStore.setState({ controlTarget: 'synth' });
+    useAppStore.setState({ focusTrack: 'synth' });
   });
 
   test('one solo button, following the active target (default: synth = Lead)', () => {
@@ -293,16 +325,16 @@ describe('SoundView track solo', () => {
     expect(html).not.toContain('aria-label="Solo Drums"');
   });
 
-  // SoundView reads controlTarget through useLiveStore, which serves
+  // SoundView reads focusTrack through useLiveStore, which serves
   // getState() for both the client and server useSyncExternalStore
   // snapshots (see useLiveStore.ts and .claude/rules/testing.md) — so a
   // setState() before renderToString is observable here, unlike a plain
   // useAppStore read. This actually renders the component with a
-  // non-default target and checks which button comes out, which a
+  // non-default focus and checks which button comes out, which a
   // hardcoded `track="lead"` in the component would fail: the Chord
   // button would never appear and the Lead one would never disappear.
-  test('the button switches to the active target when controlTarget changes', () => {
-    useAppStore.setState({ controlTarget: 'chord' });
+  test('the button switches to the active target when focusTrack changes', () => {
+    useAppStore.setState({ focusTrack: 'chord' });
     const html = renderToString(<SoundView />);
     expect(html).toContain('aria-label="Solo Chord"');
     expect(html).not.toContain('aria-label="Solo Lead"');
@@ -319,6 +351,122 @@ describe('SoundView track solo', () => {
     const html = renderToString(<SoundView />);
     expect(html).toContain('id="btn-solo-target"');
     expect(html).not.toContain('id="btn-solo-lead"');
+  });
+});
+
+describe('the Sound focus row', () => {
+  afterEach(() => {
+    useAppStore.setState({ focusTrack: 'synth' });
+  });
+
+  test('renders one chip per mix layer, drum included', () => {
+    const html = renderToString(<SoundView />);
+    for (const id of MIX_LAYER_IDS) expect(html).toContain(`id="btn-focus-${id}"`);
+  });
+
+  // A tag-scoped check, so the active classes are proven to sit on the SAME
+  // element as the id rather than somewhere else in the row.
+  test('the focused chip carries the active class list', () => {
+    useAppStore.setState({ focusTrack: 'bass' });
+    const html = renderToString(<SoundView />);
+    expect(openTagContaining(html, 'id="btn-focus-bass"')).toContain(
+      'class="btn btn-xs text-[11px] font-semibold rounded-sm [--btn-color:var(--color-module-bass)] [--btn-fg:var(--color-module-bass-content)]"',
+    );
+  });
+
+  test('the solo button follows focus, and drum focus gives it the Drums track', () => {
+    useAppStore.setState({ focusTrack: 'drum' });
+    const html = renderToString(<SoundView />);
+    expect(html).toContain('aria-label="Solo Drums"');
+    expect(html).not.toContain('aria-label="Solo Lead"');
+  });
+
+  // The six focus chips are a "current item in a set", the same vocabulary the
+  // mixer row's focus button uses — a screen-reader user must be able to tell
+  // which one is focused from the markup, not just from a CSS class. Scoped to
+  // the `btn-focus-*` chips (not `btn-mix-focus-*`, the mixer's own row, which
+  // marks the same layer independently and would otherwise double the count).
+  test('exactly one chip carries aria-current, and it is the focused one', () => {
+    try {
+      useAppStore.setState({ focusTrack: 'pad' });
+      const html = renderToString(<SoundView />);
+      const marked = MIX_LAYER_IDS.filter((id) =>
+        openTagContaining(html, `id="btn-focus-${id}"`).includes('aria-current="true"'),
+      );
+      expect(marked).toEqual(['pad']);
+    } finally {
+      useAppStore.setState({ focusTrack: 'synth' });
+    }
+  });
+});
+
+describe('the Sound page on a drum focus', () => {
+  afterEach(() => {
+    useAppStore.setState({ focusTrack: 'synth' });
+  });
+
+  /**
+   * The Synth section must be ABSENT from the markup, not merely hidden. This
+   * is the gate useSynthChannel's drum branch relies on: with the section
+   * unmounted no panel calls that hook, so its Lead fallback can never edit
+   * anything. Hiding it with `block`/`hidden` instead would leave the panels
+   * mounted and pointed at the Lead patch.
+   */
+  test('shows Drum Sound and no Synth section', () => {
+    useAppStore.setState({ focusTrack: 'drum' });
+    const html = renderToString(<SoundView />);
+    expect(html).toContain('Drum Sound');
+    expect(html).not.toContain('>Synth<');
+    expect(html).not.toContain('id="btn-quick-save-preset"');
+  });
+
+  test('a melodic focus shows the Synth section and no Drum Sound', () => {
+    useAppStore.setState({ focusTrack: 'pad' });
+    const html = renderToString(<SoundView />);
+    expect(html).toContain('id="btn-quick-save-preset"');
+    expect(html).not.toContain('Drum Sound');
+  });
+
+  // The focus row is outside the Synth section on purpose: inside it, a drum
+  // focus would hide the only control that can get back to a melodic one.
+  test('the focus row is still on screen with the Synth section gone', () => {
+    useAppStore.setState({ focusTrack: 'drum' });
+    const html = renderToString(<SoundView />);
+    expect(html).toContain('id="btn-focus-synth"');
+    expect(html).toContain('id="btn-focus-drum"');
+  });
+});
+
+/**
+ * `isLibraryOpen` / `isQuickSaving` are SoundView's own state and SoundView
+ * never unmounts, so a naive gate on the drum focus alone leaves them true
+ * underneath and re-opens the drawer the moment focus returns to a melodic
+ * track. `renderToString` runs no effect (see .claude/rules/testing.md), so
+ * a fresh render can never carry a stale "library flag set" into view — the
+ * closing decision itself is what is tested, per the same file's
+ * pure-logic-first convention.
+ */
+describe('the preset overlays close when focus leaves a melodic track', () => {
+  test('shouldCloseSynthOverlays is true only for the drum focus', () => {
+    expect(shouldCloseSynthOverlays('drum')).toBe(true);
+    expect(shouldCloseSynthOverlays('synth')).toBe(false);
+    expect(shouldCloseSynthOverlays('fx')).toBe(false);
+    expect(shouldCloseSynthOverlays('chord')).toBe(false);
+    expect(shouldCloseSynthOverlays('bass')).toBe(false);
+    expect(shouldCloseSynthOverlays('pad')).toBe(false);
+  });
+
+  // Regression pin for the surface itself: whatever the library flag holds,
+  // a drum focus must never render the drawer or its Suspense fallback.
+  test('a drum focus renders neither the drawer nor its loading fallback', () => {
+    useAppStore.setState({ focusTrack: 'drum' });
+    try {
+      const html = renderToString(<SoundView />);
+      expect(html).not.toContain('id="btn-open-presets-library"');
+      expect(html).not.toContain('loading loading-spinner');
+    } finally {
+      useAppStore.setState({ focusTrack: 'synth' });
+    }
   });
 });
 

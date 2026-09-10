@@ -11,8 +11,19 @@ import { IconButton } from './IconButton';
 import { formatKeyLabel } from '@/utils/noteSpelling';
 import type { InputDeckDrumProps, InputDeckKeyboardProps } from '../useInputDeck';
 import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
+import { MIX_LAYERS } from '../mixLayers';
+import { MIX_LAYER_IDS, type MixLayerId } from '@/store/focusTrack';
 
 const PANEL_LABELS = { keyboard: 'Keyboard', drums: 'Drums' } as const;
+
+/**
+ * The focused track's name, keyed by focus id. Read off MIX_LAYERS rather than
+ * spelled again, so the chip and the mixer row for the same track can never
+ * disagree — `'synth'` is "Lead" and `'drum'` is "Beat" in both.
+ */
+export const FOCUS_CHIP_LABELS: Record<MixLayerId, string> = Object.fromEntries(
+  MIX_LAYERS.map((layer) => [layer.idPrefix, layer.label]),
+) as Record<MixLayerId, string>;
 
 const KEYBOARD_MODE_LABELS = {
   chromatic: 'Chromatic',
@@ -40,6 +51,8 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
   const setIsOpen = useLiveStore((s) => s.setIsInputPanelOpen);
   const mode = useLiveStore((s) => s.inputPanelMode);
   const setMode = useLiveStore((s) => s.setInputPanelMode);
+  const focusTrack = useLiveStore((s) => s.focusTrack);
+  const setFocusTrack = useLiveStore((s) => s.setFocusTrack);
 
   const {
     keyboardMode,
@@ -75,6 +88,48 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
           {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           <span>Input</span>
         </button>
+
+        {/* The focus chip. ALWAYS visible — open, collapsed, on every tab and
+            every Pattern segment — because the dock is the one surface all of
+            them share, and "which track will the keyboard play" has to be
+            answerable without navigating. A daisyUI dropdown rather than a
+            cycling button: six values is too many to step through, and a menu
+            shows the whole roster at once. */}
+        <div className="dropdown dropdown-top">
+          <button
+            id="btn-focus-chip"
+            type="button"
+            aria-label={`Working on ${FOCUS_CHIP_LABELS[focusTrack]}`}
+            className={`btn btn-xs gap-1 text-[11px] font-semibold ${TOOLBAR_BUTTON_IDLE}`}
+            title="Which track you are working on"
+          >
+            <span className="text-base-content/50 uppercase tracking-wider text-[9px]">On</span>
+            <span>{FOCUS_CHIP_LABELS[focusTrack]}</span>
+          </button>
+          <ul
+            className="dropdown-content menu menu-sm z-40 mb-1 w-36 rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
+          >
+            {MIX_LAYER_IDS.map((id) => (
+              <li key={id}>
+                <button
+                  id={`btn-focus-chip-${id}`}
+                  type="button"
+                  aria-current={focusTrack === id ? 'true' : undefined}
+                  onClick={(e) => {
+                    setFocusTrack(id);
+                    // daisyUI opens this dropdown on :focus-within, and picking
+                    // an item leaves DOM focus on the item itself, so without
+                    // this the menu stays open over the dock after selection.
+                    (e.currentTarget as HTMLElement).blur();
+                  }}
+                  className={focusTrack === id ? 'active font-bold' : ''}
+                >
+                  {FOCUS_CHIP_LABELS[id]}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
 
         {/* Collapsed, the dock still owns live QWERTY input, and each keyboard
             mode binds those keys differently — so the closed header states

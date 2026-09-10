@@ -1,4 +1,5 @@
 import type { SynthParams, ViewMode } from '../types';
+import type { MixLayerId } from '../store/focusTrack';
 
 export type SynthControlTarget = 'synth' | 'chord' | 'bass' | 'pad' | 'fx';
 
@@ -128,16 +129,13 @@ export function resolveSynthControlChannel(
 }
 
 export interface SynthTargetNavigation {
-  setControlTarget: (target: SynthControlTarget) => void;
+  setFocusTrack: (focus: MixLayerId) => void;
   setActiveTab: (tab: ViewMode) => void;
 }
 
-export function focusSynthTarget(
-  target: SynthControlTarget,
-  nav: SynthTargetNavigation
-): void {
-  // Target first: the synth view is always mounted, so switching the tab last
-  // means it never renders a frame pointed at the previous channel.
-  nav.setControlTarget(target);
+export function focusSynthTarget(focus: MixLayerId, nav: SynthTargetNavigation): void {
+  // Focus first: the Sound view is always mounted, so switching the tab last
+  // means it never renders a frame pointed at the previous track.
+  nav.setFocusTrack(focus);
   nav.setActiveTab('sound');
 }

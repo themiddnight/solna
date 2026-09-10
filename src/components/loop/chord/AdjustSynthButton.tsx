@@ -11,13 +11,13 @@ export function AdjustSynthButton({
   target: SynthControlTarget;
   className?: string;
 }) {
-  const setControlTarget = useAppStore((s) => s.setControlTarget);
+  const setFocusTrack = useAppStore((s) => s.setFocusTrack);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const label = SYNTH_TARGET_STYLES[target].label;
   return (
     <button
       type="button"
-      onClick={() => focusSynthTarget(target, { setControlTarget, setActiveTab })}
+      onClick={() => focusSynthTarget(target, { setFocusTrack, setActiveTab })}
       className={`btn btn-xs btn-ghost gap-1 ${className}`}
       title={`Open the synth view with the ${label} target selected`}
     >

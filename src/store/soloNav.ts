@@ -6,30 +6,25 @@ import type { AppStore } from './types';
 
 /**
  * The navigation axes that empty the track-solo set: a change of LAYER (Loop
- * ↔ Song, derived from the tab via `layerForTab`), a change of Pattern
- * segment, and a change of active loop.
+ * ↔ Song, derived from the tab via `layerForTab`) and a change of active loop.
+ * A project swap clears it too, in projectSlice's own atomic patch — loop ids
+ * are not unique across projects, so `activeLoopId` cannot catch that one.
  *
- * The raw `activeTab` is no longer watched — `layer` replaces it, so moving
- * between Sound and Pattern no longer clears the set. `patternSegment` is
- * still watched exactly as before: a segment change still clears.
+ * The raw `activeTab` is not watched — `layer` replaces it, so moving between
+ * Sound and Pattern does not clear the set.
  *
- * WHY Sound ↔ Pattern must not clear, but a segment change still must: Sound
- * and Pattern are the two halves of editing ONE loop — its sound and its
- * notes — and a user crosses between them constantly while working on that
- * loop, adjusting the synth and then the pattern and back. A solo set that
- * survives that crossing is the working state; having to re-toggle it on
- * every tab switch was the friction this change removes. A Pattern-segment
- * change is a different kind of navigation: Lead, Accompaniment and Beat are
- * different THINGS being edited within Pattern, not two views onto the same
- * edit, so moving between them is a change of subject and still clears —
- * consistent with why a layer change clears, one level up.
- *
- * Consequence, on the record: because the Sound ↔ Pattern hop survives, a set
- * spanning Drums and the melodic tracks IS buildable — solo Drums in Beat,
- * hop to Sound, then add lead/chord/bass/pad one at a time via the control
- * target (a target change doesn't clear either). What still empties the set
- * is moving between Pattern's segments, leaving the Loop layer, changing the
- * active loop, or swapping the project.
+ * WHY THE PATTERN-SEGMENT AXIS WENT AWAY. This table used to watch
+ * `patternSegment` as well, and this docblock used to argue two things at
+ * once: that a segment change is a change of SUBJECT and must clear, and that
+ * a Sound-view target change must NOT clear, because the Sound view has one
+ * solo button following the target and clearing on a target change would make
+ * a two-track set unbuildable on that surface. With `focusTrack` those are the
+ * same event. Keeping the clear would make a multi-track set unbuildable
+ * everywhere, which is the failure the second argument existed to prevent —
+ * and the second argument is the stronger one, because solo is a monitoring
+ * gesture whose entire purpose is comparing tracks. A focus change therefore
+ * never clears the set. soloNav.test.ts asserts that directly, so restoring
+ * the clear has to be a decision.
  *
  * ONE subscription over these fields, rather than a clear inside each writer.
  * activeLoopId alone has six writers today (loadLoop's two setState calls,
@@ -46,18 +41,12 @@ import type { AppStore } from './types';
  * survived a loop boundary would be silencing tracks in a loop nobody soloed
  * anything in.
  *
- * Changing the Sound view's control target does NOT clear the solo set,
- * deliberately: the Sound view has one solo button that follows the active
- * target, and it must be able to build a set across targets — clearing on a
- * target change would make a two-track solo set unbuildable on that surface,
- * since each new solo would erase the last. The view header's
- * `SOLO · … ×` chip (components/ui/SoloChip.tsx) is what keeps a solo set on
- * another target visible — it rides the shared HeaderCard rather than one
- * view, so it survives the Sound <-> Pattern hop the set itself survives.
+ * The view header's `SOLO · … ×` chip (components/ui/SoloChip.tsx) is what
+ * keeps a solo set on another track visible — it rides the shared HeaderCard
+ * rather than one view, so it survives every hop the set itself survives.
  */
 const SOLO_NAV_SOURCES = {
   layer: (state: AppStore) => layerForTab(state.activeTab),
-  patternSegment: (state: AppStore) => state.patternSegment,
   activeLoopId: (state: AppStore) => state.activeLoopId,
 };
 
@@ -86,14 +75,14 @@ export type SoloNavSignature = {
  * runs on EVERY store `set()`, since the subscription below is mounted at the
  * app root for the life of the session. The map form allocated one array plus
  * a two-element tuple per key on every knob tick and every clock-driven write,
- * for an object of three strings. The loop keeps the same derived-from-the-
+ * for an object naming every source-table key. The loop keeps the same derived-from-the-
  * table property with one allocation.
  */
 export function soloNavSignature(state: AppStore): SoloNavSignature {
   // The accumulator is widened and cast once at the end, exactly as the
   // `Object.fromEntries` form was: writing through a union of mapped-type keys
   // narrows the value slot to `never`, and the alternative — an object literal
-  // naming the three fields — is the drift this table exists to prevent.
+  // naming the source-table's fields by hand — is the drift this table exists to prevent.
   const signature: Record<string, unknown> = {};
   for (const key of SOLO_NAV_KEYS) {
     signature[key] = SOLO_NAV_SOURCES[key](state);

@@ -40,7 +40,7 @@ describe('fingerprintContent', () => {
 
   test('ignores keys outside the content set even when they are present', () => {
     const base = factoryProjectContent();
-    const withExtras = { ...base, selectedVibeId: 'cyber-dance', controlTarget: 'bass', activeLoopId: 'zzz' };
+    const withExtras = { ...base, selectedVibeId: 'cyber-dance', focusTrack: 'bass', activeLoopId: 'zzz' };
     expect(fingerprintContent(withExtras as never)).toBe(fingerprintContent(base));
   });
 

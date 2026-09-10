@@ -54,7 +54,7 @@ describe('openProject', () => {
   test('stops the transport, installs content in one set(), applies the reset rules and takes a baseline', async () => {
     const p = stored('Alpha', 77);
     const { useAppStore, slice } = await sliceWithBackend([p]);
-    useAppStore.setState({ sequencerPlayer: 'playing', selectedVibeId: 'cyber-dance', controlTarget: 'bass', metronomeActive: true, activeLoopId: 'foreign', songLoopIndex: 2 });
+    useAppStore.setState({ sequencerPlayer: 'playing', selectedVibeId: 'cyber-dance', focusTrack: 'bass', metronomeActive: true, activeLoopId: 'foreign', songLoopIndex: 2 });
     let writes = 0;
     const unsub = useAppStore.subscribe((s, prev) => { if (s.bpm !== prev.bpm || s.loops !== prev.loops) writes++; });
     const result = await slice.openProject(p.id);
@@ -68,7 +68,7 @@ describe('openProject', () => {
     expect(s.activeLoopId).toBe('loop-Alpha');
     expect(s.scaleRoot).toBe(p.content.loops[0].scaleRoot);
     expect(s.selectedVibeId).toBeNull();
-    expect(s.controlTarget).toBe('bass');
+    expect(s.focusTrack).toBe('bass');
     expect(s.metronomeActive).toBe(true);
     expect(s.currentProjectId).toBe(p.id);
     expect(s.currentProjectName).toBe('Alpha');
@@ -422,7 +422,7 @@ describe('openProject through the loop-mirroring set', () => {
     };
     const store = createProjectStore(async () => createMemoryBackend([incoming]));
     const slice = createProjectSlice(useAppStore.setState, useAppStore.getState, store, () => 5_000);
-    // Same activeTab, same patternSegment, same activeLoopId across the swap —
+    // Same activeTab, same focusTrack, same activeLoopId across the swap —
     // none of soloNav.ts's SOLO_NAV_KEYS moves, so its subscription cannot be
     // what clears this. Only install()'s own set() can.
     useAppStore.setState({ ...slice, activeLoopId: DEFAULT_LOOP_ID, soloTracks: ['drums'] });

@@ -94,10 +94,10 @@ export type MelodyTrackId = MelodyTrack['id'];
  * exist on this table any more. It always named the SAME literal the row's
  * own `id`/`module`/`stepPlayer` already carry, and grepping
  * `\.controlTarget\b` across the codebase turns up no reader of
- * `melodyTrack(id).controlTarget` — every actual control-target read goes
- * through `s.controlTarget` on the zustand store directly, a different value
- * entirely. Dead data got a real assertion once and then got deleted instead
- * of kept.
+ * `melodyTrack(id).controlTarget` — every actual control-target read now goes
+ * through `controlTargetForFocus(focusTrack)` (store/focusTrack.ts), a
+ * different value entirely. Dead data got a real assertion once and then got
+ * deleted instead of kept.
  */
 type Assert<T extends true> = T;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

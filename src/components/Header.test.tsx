@@ -124,11 +124,9 @@ describe('header tab grouping', () => {
  * TabButton, so a substring covering several classes at once is what proves
  * they sit on the SAME element (see .claude/rules/testing.md).
  *
- * The active segment cannot be varied from a test: PatternSegmentRow reads
- * `patternSegment` with a plain useAppStore selector, and under renderToString
- * zustand serves the store's CREATION-time value ('lead'). So this asserts the
- * default-active case and the two inactive cases, which is the whole matrix
- * reachable without a DOM.
+ * PatternSegmentRow reads `focusTrack` through `useLiveStore`, so a test can
+ * set focus before rendering and see the active button move (see the
+ * `focusTrack` test just below).
  */
 describe('PatternSegmentRow', () => {
   const html = renderToString(<PatternSegmentRow />);
@@ -152,6 +150,24 @@ describe('PatternSegmentRow', () => {
     expect(html).toContain('Accompaniment');
     expect(html).toContain('Beat');
     expect(html).not.toContain('hidden xl:inline');
+  });
+
+  // The restore is in a `finally`, not a trailing statement: a thrown assertion
+  // above it would otherwise leak a non-default `focusTrack` into every test
+  // that runs after this one, and the failure would show up somewhere else.
+  test('the active button follows focusTrack, and accompaniment covers three focuses', () => {
+    try {
+      useAppStore.setState({ focusTrack: 'pad' });
+      const padHtml = renderToString(<PatternSegmentRow />);
+      expect(openTagContaining(padHtml, 'id="segment-accompaniment"')).toContain(
+        'aria-current="page"',
+      );
+      useAppStore.setState({ focusTrack: 'drum' });
+      const drumHtml = renderToString(<PatternSegmentRow />);
+      expect(openTagContaining(drumHtml, 'id="segment-beat"')).toContain('aria-current="page"');
+    } finally {
+      useAppStore.setState({ focusTrack: 'synth' });
+    }
   });
 
   test('marks exactly one button as the current page', () => {

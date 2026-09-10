@@ -224,7 +224,7 @@ export type ProjectOpenPatch = Omit<ProjectContent, 'loops'> &
  * `activeLoopId` -> loops[0] through the same resolution persist `merge`
  * uses, and the flat per-loop keys written through loopStatePatch in the SAME
  * patch — writing `loops` without them would leave the previous project's
- * sound on screen and in the engine. `controlTarget` and `metronomeActive`
+ * sound on screen and in the engine. `focusTrack` and `metronomeActive`
  * are deliberately absent: they are user preferences, not project state.
  */
 export function applyProjectContent(content: ProjectContent): ProjectOpenPatch {

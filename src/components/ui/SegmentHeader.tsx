@@ -1,6 +1,7 @@
 import React from 'react';
 import type { PatternSegment } from '@/types';
-import { useAppStore } from '@/store/store';
+import { segmentForFocus } from '@/store/focusTrack';
+import { useLiveStore } from './useLiveStore';
 import { PatternSegmentRow } from './SegmentedControl';
 import { VIEW_META } from '../viewMeta';
 import { HeaderCard } from './ViewHeader';
@@ -42,7 +43,10 @@ export interface SegmentHeaderProps {
  * `id="segment-lead"` buttons in the DOM.
  */
 export function SegmentHeader({ segment, actions, children }: SegmentHeaderProps) {
-  const activeSegment = useAppStore((s) => s.patternSegment);
+  // useLiveStore for the same reason PatternView's gate uses it: this decides
+  // which of the four mounted headers draws the segment row, and a test that
+  // sets focusTrack must be able to see the result.
+  const activeSegment = segmentForFocus(useLiveStore((s) => s.focusTrack));
   const { icon, title } = VIEW_META.pattern;
   return (
     <HeaderCard

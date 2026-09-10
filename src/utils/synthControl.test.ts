@@ -2,8 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { focusSynthTarget, resolveSynthControlChannel, SYNTH_TARGET_STYLES } from './synthControl';
 import type { SynthControlTarget, SynthParamChannel } from './synthControl';
 import type { SynthParams, ViewMode } from '../types';
+import type { MixLayerId } from '../store/focusTrack';
 import { INITIAL_SYNTH_PARAMS } from '../store/initialState';
-import { soloTrackForControlTarget } from '../store/trackAudibility';
+import { soloTrackForFocus } from '../store/trackAudibility';
 
 const baseParams: SynthParams = {
   oscType: 'sine',
@@ -69,7 +70,7 @@ describe('focusSynthTarget', () => {
     const calls: Array<[string, string]> = [];
     return {
       calls,
-      setControlTarget: (target: SynthControlTarget) => calls.push(['target', target]),
+      setFocusTrack: (focus: MixLayerId) => calls.push(['target', focus]),
       setActiveTab: (tab: ViewMode) => calls.push(['tab', tab]),
     };
   }
@@ -150,14 +151,15 @@ describe('the fx control target', () => {
   });
 
   /**
-   * soloTrackForControlTarget keeps its SINGLE irregularity ('synth' -> 'lead').
-   * The fx target is called `fx` and the fx solo track is called `fx`, so it
-   * passes through the identity branch. Do NOT regularise the lead case: that
-   * one mapping is the entire reason the function exists, and a second special
-   * case is where it stops being readable.
+   * soloTrackForFocus keeps its two irregularities ('synth' -> 'lead',
+   * 'drum' -> 'drums'). The fx focus is called `fx` and the fx solo track is
+   * called `fx`, so it passes through the identity branch. Do NOT regularise
+   * the lead or drum cases: those two mappings are the entire reason the
+   * function exists, and a third special case is where it stops being
+   * readable.
    */
-  test('fx passes through soloTrackForControlTarget unchanged', () => {
-    expect(soloTrackForControlTarget('fx')).toBe('fx');
-    expect(soloTrackForControlTarget('synth')).toBe('lead');
+  test('fx passes through soloTrackForFocus unchanged', () => {
+    expect(soloTrackForFocus('fx')).toBe('fx');
+    expect(soloTrackForFocus('synth')).toBe('lead');
   });
 });
