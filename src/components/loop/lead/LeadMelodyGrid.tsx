@@ -49,6 +49,8 @@ import { leadClickShouldPreview } from './leadPaint';
 import { useLeadNotePaint } from './useLeadNotePaint';
 import { Slider } from '@/components/ui/Slider';
 import { melodyTrack, type MelodyTrackId } from '@/store/melodyTracks';
+import { melodyTrackForFocus } from '@/store/focusTrack';
+import { useLiveStore } from '@/components/ui/useLiveStore';
 
 /**
  * Action names MELODY_TRACKS' row does not carry: the table (melodyTracks.ts)
@@ -469,13 +471,20 @@ export interface LeadMelodyGridProps {
 //
 // Two hooks, two gates, on purpose. useLeadPlayback schedules NOTES and
 // owns the hard stop, so it runs while the track's player plays.
-// useLeadStepPublisher moves the MARKER, which for the lead track also has to
+// useLeadStepPublisher moves the MARKER, which for the armed track also has to
 // track somebody else's clock while Rec is armed, because that column is the
-// recorder's write head — the fx track has no recorder, so its marker
-// follows its own player and nothing else. Its `isPlaying` return is not what
-// the marker uses; useLeadMarkerColumn reads the same wider gate the
-// publisher does — from inside LeadMarker, so the published step re-renders
-// one div rather than this whole body.
+// recorder's write head — an unarmed track's marker follows its own player
+// and nothing else. Its `isPlaying` return is not what the marker uses;
+// useLeadMarkerColumn reads the same wider gate the publisher does — from
+// inside LeadMarker, so the published step re-renders one div rather than
+// this whole body.
+//
+// `trackId` is REQUIRED and has no default, and must stay that way. A default
+// of `'lead'` would let a call site that forgot the prop render a second copy
+// of the lead grid — visually plausible, internally consistent in both
+// instances, and caught by no test. Rec makes that worse rather than better:
+// both copies would agree about which track is armed and both would be wrong
+// about which grid the user is looking at.
 export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
   const track = melodyTrack(trackId);
   const actions = GRID_ACTIONS[trackId];
@@ -564,9 +573,12 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
   const copySelectedLeadBar = useAppStore((s) => s[actions.copyBar]);
   const pasteIntoSelectedLeadBar = useAppStore((s) => s[actions.pasteBar]);
   const hasClipboard = useAppStore((s) => s[track.clipboard] !== null);
-  const recordingTrack = useAppStore((s) => s.recordingTrack);
-  const setRecordingTrack = useAppStore((s) => s.setRecordingTrack);
-  const armed = recordingTrack === trackId;
+  // useLiveStore, not useAppStore: this markup has to reflect a test-set focus
+  // under renderToString, where zustand serves the creation-time state as the
+  // server snapshot (see .claude/rules/testing.md and BottomInputDock.tsx).
+  const armed = useLiveStore((s) => s.recordingTrack) === trackId;
+  const setRecordingTrack = useLiveStore((s) => s.setRecordingTrack);
+  const showRec = useLiveStore((s) => melodyTrackForFocus(s.focusTrack)) === trackId;
 
   const setMelodyNoteLength = useAppStore((s) => s[actions.setNoteLength]);
   const onResize = useCallback(
@@ -809,13 +821,15 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
             from the button beside it. Clear keeps its own group so the lane's
             wider gap sets it apart from Paste, and it must not wear red as
             well: an armed Rec already owns that.
-            FX has no recorder (scope decision at the top of this plan) — its
-            left group renders empty rather than not at all, so `justify-between`
-            still has two children and the actions cluster stays pinned right,
-            exactly where it sits on the lead grid. */}
+            Rec renders on whichever melody grid focus names, and on NEITHER
+            when focus is chord, bass, pad or drum — a Rec button that arms an
+            invisible track is the invisible-state failure focusTrack exists to
+            remove. The left group renders empty rather than not at all, so
+            `justify-between` still has two children and the actions cluster
+            stays pinned right. */}
         <ToolbarLane className="mt-3 justify-between">
           <ToolbarGroup>
-            {trackId === 'lead' && (
+            {showRec && (
               <ToolbarButton
                 id={`btn-${trackId}-record`}
                 icon={<Circle className="w-3 h-3" />}

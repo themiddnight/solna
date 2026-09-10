@@ -33,6 +33,7 @@ beforeEach(() => {
     leadMelodyView: 'chromatic',
     leadMelodyOctave: 3,
     leadCursor: 0,
+    focusTrack: 'synth',
     recordingTrack: 'lead',
     leadPlayer: 'stopped',
     chordsPlayer: 'stopped',
@@ -48,6 +49,7 @@ afterEach(() => {
   stop?.();
   stop = null;
   resetNoteInputListeners();
+  useAppStore.getState().setFocusTrack('synth');
   // bun runs the whole suite in ONE process, so anything this file arms or
   // writes must be put back here rather than left to the next file's own
   // beforeEach — `recordingTrack` in particular is read by uiSlice.test.ts's
@@ -463,5 +465,49 @@ describe('leadRecord — one factory, two bridges', () => {
     up('C4');
 
     expect(at(0)).toEqual([]);
+  });
+});
+
+describe('the arm follows focus', () => {
+  /**
+   * One subscription, not a clear inside setFocusTrack — the soloNav.ts
+   * precedent, and for the same reason: setFocusTrack is not the only writer
+   * (a project load or a hydration writes the field through setState), and a
+   * missed writer is silent, because the recorder just keeps capturing into a
+   * grid the user is no longer looking at.
+   */
+  test('a focus change away from the armed track disarms it', () => {
+    useAppStore.setState({ focusTrack: 'synth', recordingTrack: 'lead' });
+
+    useAppStore.getState().setFocusTrack('chord');
+
+    expect(useAppStore.getState().recordingTrack).toBeNull();
+  });
+
+  test('crossing between the two melody tracks disarms rather than following', () => {
+    useAppStore.setState({ focusTrack: 'synth', recordingTrack: 'lead' });
+
+    useAppStore.getState().setFocusTrack('fx');
+
+    // Never re-armed on the new track: Rec is a deliberate gesture and a focus
+    // change is navigation. Arming on navigation would put the app into
+    // record because the user clicked a mixer row.
+    expect(useAppStore.getState().recordingTrack).toBeNull();
+  });
+
+  test('a focus change that lands back on the armed track leaves it armed', () => {
+    // The fixture itself must not be observed as a navigation: restart the
+    // bridge around it so the sync's cached focus is 'drum' from the start,
+    // the same way a project load would establish it, rather than the live
+    // subscription seeing a synth -> drum hop it would otherwise (correctly)
+    // disarm.
+    stop?.();
+    stop = null;
+    useAppStore.setState({ focusTrack: 'drum', recordingTrack: 'lead' });
+    stop = startMelodyRecordBridges(deps);
+
+    useAppStore.getState().setFocusTrack('synth');
+
+    expect(useAppStore.getState().recordingTrack).toBe('lead');
   });
 });

@@ -221,9 +221,14 @@ internally consistent. Two mounted grids hold two clock subscriptions, which is 
 runs iff a player holds a subscription" rule permits: both are players and neither starts a timer.
 The step publisher is keyed per track (`StepPlayerId` gained `'fx'`); one shared slot would have the
 FX playhead driving the lead's marker at whichever grid's stride published last, with no error
-anywhere. **FX has no live recorder yet** — the armed track is one scalar (`recordingTrack` in the ui
-slice) and only Lead's grid can point it anywhere — and it is not a constraint on the material:
-a user who wants a counter-melody writes one and the track behaves identically. What it cannot do as shipped is a PITCH riser (the filter envelope ramps
+anywhere. **Rec is armed per melody track, and the armed track is ONE value.**
+`recordingTrack: MelodyTrackId | null` lives in the ui slice, so two tracks can never be armed at
+once and one keypress can never write two grids; `store/leadRecord.ts` is a factory over
+`MELODY_TRACKS` and each bridge writes only while `recordingTrack` names its own row, with one
+shared anchor collector rather than one per bridge. The Rec button renders on whichever melody
+grid `melodyTrackForFocus(focusTrack)` names and on neither when focus is chord, bass, pad or
+drum, and a focus change away from the armed track disarms it — which is why nothing couples the
+arm back to the audition target: the armed track already IS the focused track. What it cannot do as shipped is a PITCH riser (the filter envelope ramps
 `filter.frequency` only) and its LFO still restarts on every note (the LFO oscillator is created per
 voice at note-on); a FILTER-SWEEP riser works today. Both limits are deferred to their own spec.
 

@@ -5,6 +5,7 @@ import { leadLiveInputStep, startLeadLiveClock } from '../audio/playback/leadLiv
 import { getMeter } from '../utils/meter';
 import { columnsPerBar, strideFor } from '../utils/stepResolution';
 import { isPlayerActive } from './transportSlice';
+import { melodyTrackForFocus } from './focusTrack';
 import { useAppStore } from './store';
 import type { PlayerState } from './types';
 import { MELODY_TRACKS, melodyTrack, type MelodyTrack, type MelodyTrackId } from './melodyTracks';
@@ -269,12 +270,45 @@ export function startMelodyRecordBridge(
 }
 
 /**
+ * The arm follows focus, DISARMING only.
+ *
+ * One subscription rather than a clear inside every writer of `focusTrack` —
+ * the soloNav.ts precedent, and for the same reason: `setFocusTrack` is not
+ * the only way focus moves (a project load and hydration both write it through
+ * setState), a missed writer is silent, and what it costs is a recorder still
+ * capturing into a grid the user has navigated away from.
+ *
+ * It never ARMS the newly focused track. Rec is a deliberate gesture and a
+ * focus change is navigation; arming on navigation would put the app into
+ * record because somebody clicked a mixer row.
+ *
+ * This is also the whole reason Rec needs no coupling back to the audition
+ * target. An earlier draft forced the keyboard to Lead while armed so that
+ * what you heard was what got written; with the arm scoped to focus, the armed
+ * track IS the focused track and that rule has nothing left to fix. Do not
+ * reintroduce one.
+ */
+export function startRecordArmSync(): () => void {
+  return useAppStore.subscribe(
+    (state) => state.focusTrack,
+    (focus) => {
+      const state = useAppStore.getState();
+      if (state.recordingTrack === null) return;
+      if (melodyTrackForFocus(focus) === state.recordingTrack) return;
+      state.setRecordingTrack(null);
+    },
+  );
+}
+
+/**
  * Everything the recorder needs, started once from useEngineSync: the single
- * anchor collector plus one bridge per melody track. Returns one teardown.
+ * anchor collector, the arm-follows-focus sync, plus one bridge per melody
+ * track. Returns one teardown.
  */
 export function startMelodyRecordBridges(deps: LeadRecordDeps = REAL_CLOCK): () => void {
   const stops = [
     startLiveClockCollector(deps),
+    startRecordArmSync(),
     ...MELODY_TRACKS.map((track) => startMelodyRecordBridge(track, deps)),
   ];
   return () => {
