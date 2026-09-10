@@ -28,6 +28,7 @@ import { createDirtyTracker } from './projectDirty';
 import { createProjectStore } from './projectStore';
 import { openIndexedDbBackend } from './projectStoreIdb';
 import { isMeterId } from '../utils/meter';
+import { isMixLayerId } from './focusTrack';
 import { createCoalescedStorage } from '../utils/coalescedStorage';
 import type { AppStore, PersistedState, Loop } from './types';
 import {
@@ -188,7 +189,7 @@ export function partializeAppState(state: AppStore): PersistedState {
     masterVolume: state.masterVolume,
     metronomeActive: state.metronomeActive,
     selectedVibeId: state.selectedVibeId,
-    controlTarget: state.controlTarget,
+    focusTrack: state.focusTrack,
     effects: state.effects,
     customSynthPresets: state.customSynthPresets,
     customChordProgressions: state.customChordProgressions,
@@ -303,6 +304,17 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   );
   sanitized.drumFilterType = asFilterType(sanitized.drumFilterType, 'lowpass');
   sanitized.metronomeActive = asBoolean(sanitized.metronomeActive);
+  // A NEW clause, written from nothing: `controlTarget` — the key focusTrack
+  // replaces — was persisted with no validation at all, so there is nothing
+  // here to rename. What stood in for it was `resolveSynthControlChannel`'s
+  // trailing `?? channels.synth`, a runtime fallback that quietly absorbed any
+  // out-of-roster value. That fallback becomes a TRAP now the roster includes
+  // 'drum': a drum focus leaking into the synth path is not an error, not a
+  // warning and not a visible mis-render — it silently points every Sound-page
+  // knob at the Lead patch. Sanitizing here removes the bad-value case
+  // altogether; typing controlTargetForFocus over MelodicFocus removes the
+  // legal-but-wrong 'drum' one. Both, or the `??` goes on swallowing it.
+  sanitized.focusTrack = isMixLayerId(sanitized.focusTrack) ? sanitized.focusTrack : 'synth';
   sanitized.fxGate = clampFinite(sanitized.fxGate, 0.05, 1, DEFAULT_LEAD_GATE);
   sanitized.fxStepResolution = asLeadStepResolution(
     sanitized.fxStepResolution,
@@ -380,6 +392,15 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   sanitized.projectBaselineHash = asNullableString(sanitized.projectBaselineHash);
 
   return sanitized as unknown as Partial<AppStore>;
+}
+
+/**
+ * Test seam. `sanitizePersistedState` is internal to the persist wiring; this
+ * export is what lets store.test.ts assert a clause directly instead of
+ * round-tripping a payload through localStorage and the merge.
+ */
+export function sanitizePersistedStateForTest(persisted: unknown): Partial<AppStore> {
+  return sanitizePersistedState(persisted);
 }
 
 export const useAppStore = create<AppStore>()(

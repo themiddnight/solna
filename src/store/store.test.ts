@@ -464,7 +464,7 @@ describe('persist partialize', () => {
       'masterVolume',
       'metronomeActive',
       'selectedVibeId',
-      'controlTarget',
+      'focusTrack',
       'effects',
       'customSynthPresets',
       'customChordProgressions',
@@ -480,6 +480,7 @@ describe('persist partialize', () => {
     const excludedKeys = [
       'activeTab',
       'patternSegment',
+      'controlTarget',
       'keyboardMode',
       'isInputPanelOpen',
       'inputPanelMode',
@@ -526,6 +527,55 @@ describe('persist partialize', () => {
 
     // No function values of any kind survive the allow-list
     expect(Object.values(snapshot).every((v) => typeof v !== 'function')).toBe(true);
+  });
+});
+
+describe('focusTrack', () => {
+  test('starts on synth — Lead, the track a new loop is most likely opened for', async () => {
+    const { useAppStore } = await getStore();
+    expect(useAppStore.getState().focusTrack).toBe('synth');
+  });
+
+  test('the setter moves it and nothing else', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.getState().setFocusTrack('drum');
+    expect(useAppStore.getState().focusTrack).toBe('drum');
+    expect(useAppStore.getState().activeTab).toBe('sound');
+    useAppStore.getState().setFocusTrack('synth');
+  });
+});
+
+describe('focusTrack persistence', () => {
+  /**
+   * `controlTarget` was persisted with NO sanitize clause at all — nothing
+   * validated it on read, and `resolveSynthControlChannel`'s trailing
+   * `?? channels.synth` was standing in for the validation. That fallback
+   * becomes a trap once the roster includes 'drum', so the clause below is
+   * written from nothing; there is no old clause to rename.
+   */
+  test('sanitize maps a missing, non-string or out-of-roster focusTrack to synth', async () => {
+    const { sanitizePersistedStateForTest } = await getStore();
+    expect(sanitizePersistedStateForTest({}).focusTrack).toBe('synth');
+    expect(sanitizePersistedStateForTest({ focusTrack: 7 }).focusTrack).toBe('synth');
+    expect(sanitizePersistedStateForTest({ focusTrack: 'lead' }).focusTrack).toBe('synth');
+    expect(sanitizePersistedStateForTest({ focusTrack: null }).focusTrack).toBe('synth');
+  });
+
+  test('sanitize leaves a valid focusTrack untouched, including drum', async () => {
+    const { sanitizePersistedStateForTest } = await getStore();
+    expect(sanitizePersistedStateForTest({ focusTrack: 'fx' }).focusTrack).toBe('fx');
+    expect(sanitizePersistedStateForTest({ focusTrack: 'drum' }).focusTrack).toBe('drum');
+  });
+
+  /**
+   * The old keys are simply ignored — not read, not translated, not carried
+   * forward (CLAUDE.md: no migration chains). A user who had FX selected on
+   * Sound reopens on Lead; that is one click.
+   */
+  test('an old payload carrying controlTarget/patternSegment yields neither, and focusTrack synth', async () => {
+    const { sanitizePersistedStateForTest } = await getStore();
+    const out = sanitizePersistedStateForTest({ controlTarget: 'bass', patternSegment: 'beat' });
+    expect(out.focusTrack).toBe('synth');
   });
 });
 

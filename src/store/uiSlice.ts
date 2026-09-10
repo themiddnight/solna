@@ -61,13 +61,19 @@ export function persistKeyboardMode(mode: KeyboardMode, storage?: Pick<Storage, 
  * persist blob (partializeAppState) — the active tab lives in the URL query
  * (?tab=...) instead, and the keyboard mode is persisted separately to its
  * own localStorage key (like the theme), since an input mode has no business
- * travelling with a saved/exported song. The Pattern segment is a sibling of
- * it: also transient, but not in the URL, because a segment is a position
- * inside a tab rather than a route.
+ * travelling with a saved/exported song.
+ *
+ * `focusTrack` is the exception in this slice: it IS persisted, top-level,
+ * in the place `controlTarget` used to occupy — which track you were working
+ * on is a preference worth surviving a reload, and it is validated on read
+ * (sanitizePersistedState) rather than carried through a migration chain. The
+ * Pattern segment is no longer a field at all: it is `segmentForFocus(focus)`,
+ * derived at each of the three surfaces that show it.
  */
 export function createUiSlice(set: Set): UiSlice {
   return {
     activeTab: 'sound',
+    focusTrack: 'synth',
     patternSegment: 'lead',
     soloTracks: [],
     keyboardMode: readStoredKeyboardMode() ?? 'scale-locked',
@@ -82,6 +88,7 @@ export function createUiSlice(set: Set): UiSlice {
     selectedMidiInputId: 'all',
 
     setActiveTab: (activeTab) => set({ activeTab }),
+    setFocusTrack: (focusTrack) => set({ focusTrack }),
     setPatternSegment: (patternSegment) => set({ patternSegment }),
     toggleSoloTrack: (track) =>
       set((state) => ({ soloTracks: toggleSolo(state.soloTracks, track) })),

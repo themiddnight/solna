@@ -23,6 +23,7 @@ import type { LeadStepResolutionId } from '../utils/stepResolution';
 import type { PlaybackScope } from './playbackScope';
 import type { ProjectSlice } from './projectSlice';
 import type { SoloTrack } from './trackAudibility';
+import type { MixLayerId } from './focusTrack';
 
 /** A player is `stopping` between a soft stop and the bar line that ends it. */
 export type PlayerState = 'stopped' | 'playing' | 'stopping';
@@ -371,6 +372,18 @@ export interface EffectsSlice {
 export interface UiSlice {
   // All ui state is transient (not persisted); the active tab comes from the URL query.
   activeTab: ViewMode;
+  /**
+   * The ONE "what am I working on" value: which track Sound's panels edit and
+   * which grid Pattern shows. Its id type is the mixer's roster, deliberately
+   * — the app already had four vocabularies for "a track" and a fifth would
+   * guarantee a fifth translation table. `'synth'` means Lead.
+   *
+   * Unlike the rest of this slice it IS persisted, top-level, exactly where
+   * `controlTarget` was: it is a user preference that should survive a reload.
+   * It is NOT project content — `PROJECT_CONTENT_KEYS` excludes it for the
+   * same reason it excluded `controlTarget`.
+   */
+  focusTrack: MixLayerId;
   // Which of Pattern's three segments is showing. Transient like activeTab —
   // a session position, not composition data (see partializeAppState in
   // store.ts). Click-rate, so it is safe in a slice even though every mounted
@@ -420,6 +433,7 @@ export interface UiSlice {
   midiLearnTargetId: string | null;
   selectedMidiInputId: string;
   setActiveTab: (tab: ViewMode) => void;
+  setFocusTrack: (focus: MixLayerId) => void;
   setPatternSegment: (segment: PatternSegment) => void;
   toggleSoloTrack: (track: SoloTrack) => void;
   clearSoloTracks: () => void;
@@ -617,7 +631,7 @@ export interface PersistedState {
   masterVolume: number;
   metronomeActive: boolean;
   selectedVibeId: string | null;
-  controlTarget: SynthControlTarget;
+  focusTrack: MixLayerId;
   effects: MasterEffects;
   customSynthPresets: SynthPresetItem[];
   customChordProgressions: CustomChordProgressionItem[];
