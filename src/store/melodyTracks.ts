@@ -38,7 +38,7 @@ import type { SoloTrack } from './trackAudibility';
 export const MELODY_TRACKS = [
   {
     id: 'lead',
-    label: 'Lead',
+    cardTitle: 'Melody',
     steps: 'leadMelodySteps',
     loopLength: 'leadLoopLength',
     stepResolution: 'leadStepResolution',
@@ -58,7 +58,7 @@ export const MELODY_TRACKS = [
   },
   {
     id: 'fx',
-    label: 'FX',
+    cardTitle: 'FX',
     steps: 'fxMelodySteps',
     loopLength: 'fxLoopLength',
     stepResolution: 'fxStepResolution',
@@ -102,11 +102,28 @@ export type MelodyTrackId = MelodyTrack['id'];
  * different value entirely. Dead data got a real assertion once and then got
  * deleted instead of kept.
  */
-type Assert<T extends true> = T;
+/**
+ * `Assert<T extends true>` — instantiating it with a condition that resolves
+ * to `false` fails the `extends true` constraint and is a real compile error,
+ * unlike a bare conditional alias which resolves to `never` with nothing
+ * consuming it and no error at all. Exported because `focusTrack.ts` runs the
+ * same cross-vocabulary checks and had declared its own copy.
+ */
+export type Assert<T extends true> = T;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _AssertSoloTracks = Assert<MelodyTrack['solo'] extends SoloTrack ? true : false>;
 
+/**
+ * Row lookup, resolved once at module scope. `melodyTrack` is called from four
+ * render bodies AND from `leadMarkerFollowsClock`, which is the selector of
+ * four live subscriptions (the marker and the step publisher, each mounted
+ * twice) — so a `.find` scan there ran per subscription per store `set()`.
+ */
+const TRACK_BY_ID = Object.fromEntries(
+  MELODY_TRACKS.map((track) => [track.id, track]),
+) as Record<MelodyTrackId, MelodyTrack>;
+
 /** Narrow a track id to its row. Undefined is impossible for a `MelodyTrackId`. */
 export function melodyTrack(id: MelodyTrackId): MelodyTrack {
-  return MELODY_TRACKS.find((track) => track.id === id) as MelodyTrack;
+  return TRACK_BY_ID[id];
 }

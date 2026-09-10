@@ -3,6 +3,7 @@ import { shallow } from 'zustand/shallow';
 import { useAppStore } from './store';
 import { layerForTab } from '../types';
 import type { AppStore } from './types';
+import { createNavSignature, type NavSignature } from './navSignature';
 
 /**
  * The navigation axes that empty the track-solo set: a change of LAYER (Loop
@@ -51,44 +52,16 @@ const SOLO_NAV_SOURCES = {
 };
 
 /**
- * Derived from `SOLO_NAV_SOURCES`, not hand-declared, so the constant and the
- * table cannot drift apart: adding a key to the table changes what this list
- * (and, below, what `soloNavSignature` actually reads) covers automatically.
+ * Both derived from `SOLO_NAV_SOURCES` by `createNavSignature`, so the key
+ * list and what the selector actually reads cannot drift from the table or
+ * from each other: adding an axis to the table covers both automatically.
+ * See navSignature.ts for why the selector is a loop and why `keys` is
+ * resolved once.
  */
-export const SOLO_NAV_KEYS = Object.keys(SOLO_NAV_SOURCES) as (keyof typeof SOLO_NAV_SOURCES)[];
+export const { keys: SOLO_NAV_KEYS, signature: soloNavSignature } =
+  createNavSignature(SOLO_NAV_SOURCES);
 
-/**
- * Also derived from `SOLO_NAV_SOURCES`: a mapped type over its keys, rather
- * than a `Pick<AppStore, ...>`, because one watched value is no longer a
- * plain projection of a store field — `layer` is computed from `activeTab`,
- * not a field on `AppStore` at all.
- */
-export type SoloNavSignature = {
-  [K in keyof typeof SOLO_NAV_SOURCES]: ReturnType<(typeof SOLO_NAV_SOURCES)[K]>;
-};
-
-/**
- * Built by iterating `SOLO_NAV_KEYS` and calling each key's source function —
- * see the type above for why a hand-listed `Pick` no longer fits.
- *
- * A plain loop rather than `Object.fromEntries(SOLO_NAV_KEYS.map(...))`: this
- * runs on EVERY store `set()`, since the subscription below is mounted at the
- * app root for the life of the session. The map form allocated one array plus
- * a two-element tuple per key on every knob tick and every clock-driven write,
- * for an object naming every source-table key. The loop keeps the same derived-from-the-
- * table property with one allocation.
- */
-export function soloNavSignature(state: AppStore): SoloNavSignature {
-  // The accumulator is widened and cast once at the end, exactly as the
-  // `Object.fromEntries` form was: writing through a union of mapped-type keys
-  // narrows the value slot to `never`, and the alternative — an object literal
-  // naming the source-table's fields by hand — is the drift this table exists to prevent.
-  const signature: Record<string, unknown> = {};
-  for (const key of SOLO_NAV_KEYS) {
-    signature[key] = SOLO_NAV_SOURCES[key](state);
-  }
-  return signature as SoloNavSignature;
-}
+export type SoloNavSignature = NavSignature<typeof SOLO_NAV_SOURCES>;
 
 /**
  * Starts the clear. Returns the unsubscribe, mirroring startSongModeSync.

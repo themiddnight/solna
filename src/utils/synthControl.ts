@@ -1,5 +1,4 @@
-import type { SynthParams, ViewMode } from '../types';
-import type { MixLayerId } from '../store/focusTrack';
+import type { SynthParams } from '../types';
 
 export type SynthControlTarget = 'synth' | 'chord' | 'bass' | 'pad' | 'fx';
 
@@ -114,28 +113,16 @@ export interface SynthParamChannel {
   setParams: (params: SynthParams) => void;
 }
 
+/**
+ * One channel per `SynthControlTarget`, keyed by the union itself — so a sixth
+ * bus is a compile error here rather than a shape two files agree on by hand.
+ */
+export type SynthParamChannels = Record<SynthControlTarget, SynthParamChannel>;
+
 export function resolveSynthControlChannel(
   target: SynthControlTarget,
-  channels: {
-    synth: SynthParamChannel;
-    chord: SynthParamChannel;
-    bass: SynthParamChannel;
-    pad: SynthParamChannel;
-    fx: SynthParamChannel;
-  }
+  channels: SynthParamChannels,
 ): SynthParamChannel {
   // Unknown runtime values (e.g. a persisted target predating this union) fall back to synth
   return channels[target] ?? channels.synth;
-}
-
-export interface SynthTargetNavigation {
-  setFocusTrack: (focus: MixLayerId) => void;
-  setActiveTab: (tab: ViewMode) => void;
-}
-
-export function focusSynthTarget(focus: MixLayerId, nav: SynthTargetNavigation): void {
-  // Focus first: the Sound view is always mounted, so switching the tab last
-  // means it never renders a frame pointed at the previous track.
-  nav.setFocusTrack(focus);
-  nav.setActiveTab('sound');
 }

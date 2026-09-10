@@ -63,20 +63,33 @@ function selectedBar(state: AppStore, track: MelodyTrack): number {
  * string the compiler cannot check against the slice interface, so a typo would
  * surface as a missing action at click time rather than at build time.
  *
- * Each field is typed `Extract<keyof AppStore, string>`, not plain `string`:
- * `createMelodySlice` builds its return object using these names as computed
- * keys and casts the whole thing `as LeadSlice`/`as FxSlice` at the two call
- * sites below, so a value here that is not an actual `AppStore` key used to
- * compile fine and return `undefined` at runtime for whatever typo'd action a
- * caller invoked. Tying the value type to `keyof AppStore` turns that same
- * typo into a build error instead.
+ * Each field is typed as the literal union of its two possible values (e.g.
+ * `'setLeadNoteLength' | 'setFxNoteLength'`), not `Extract<keyof AppStore,
+ * string>`: `createMelodySlice` below only needs the broader type, because it
+ * builds its return object using these names as computed keys and casts the
+ * whole thing `as LeadSlice`/`as FxSlice` at the two call sites. But
+ * leadRecord.ts, LeadMelodyGrid.tsx, useLeadNotePaint.ts and
+ * useLeadNoteResize.ts index the LIVE STORE with a field of this table
+ * (`useAppStore((s) => s[actions.setNoteLength])`), and indexing `AppStore`
+ * with the broad type resolves to the giant union of every field's type —
+ * not the one function each caller actually wants. The literal union narrows
+ * `state[actions.setNoteLength]` back down to exactly the two callable types
+ * it can be, in exchange for the same typo-checking `Extract<keyof AppStore,
+ * string>` gave: a value that is not a real `AppStore` key is still a build
+ * error, since a union member that names no such key does not exist.
+ *
+ * Exported as the ONE table of melody action names: leadRecord.ts,
+ * LeadMelodyGrid.tsx, useLeadNotePaint.ts and useLeadNoteResize.ts each index
+ * into it for the subset of actions they call, rather than re-declaring their
+ * own copy — a rename here used to require updating five typo-checked
+ * literals in sync, with nothing to catch a copy left stale.
  */
-const ACTIONS: Record<MelodyTrackId, {
-  setSteps: Extract<keyof AppStore, string>; setLoopLength: Extract<keyof AppStore, string>; setLoopLengthPreserve: Extract<keyof AppStore, string>;
-  setStepResolution: Extract<keyof AppStore, string>; setView: Extract<keyof AppStore, string>; setOctave: Extract<keyof AppStore, string>; setGate: Extract<keyof AppStore, string>;
-  toggleNote: Extract<keyof AppStore, string>; paintNote: Extract<keyof AppStore, string>; setNoteLength: Extract<keyof AppStore, string>;
-  setCursor: Extract<keyof AppStore, string>; copyBar: Extract<keyof AppStore, string>; pasteBar: Extract<keyof AppStore, string>;
-  record: Extract<keyof AppStore, string>;
+export const MELODY_ACTIONS: Record<MelodyTrackId, {
+  setSteps: 'setLeadMelodySteps' | 'setFxMelodySteps'; setLoopLength: 'setLeadLoopLength' | 'setFxLoopLength'; setLoopLengthPreserve: 'setLeadLoopLengthPreserve' | 'setFxLoopLengthPreserve';
+  setStepResolution: 'setLeadStepResolution' | 'setFxStepResolution'; setView: 'setLeadMelodyView' | 'setFxMelodyView'; setOctave: 'setLeadMelodyOctave' | 'setFxMelodyOctave'; setGate: 'setLeadGate' | 'setFxGate';
+  toggleNote: 'toggleLeadNote' | 'toggleFxNote'; paintNote: 'paintLeadNote' | 'paintFxNote'; setNoteLength: 'setLeadNoteLength' | 'setFxNoteLength';
+  setCursor: 'setLeadCursor' | 'setFxCursor'; copyBar: 'copySelectedLeadBar' | 'copySelectedFxBar'; pasteBar: 'pasteIntoSelectedLeadBar' | 'pasteIntoSelectedFxBar';
+  record: 'recordLeadNote' | 'recordFxNote';
 }> = {
   lead: {
     setSteps: 'setLeadMelodySteps', setLoopLength: 'setLeadLoopLength',
@@ -183,7 +196,7 @@ export function createMelodySlice(
       return { [track.steps]: next };
     });
 
-  const actions = ACTIONS[track.id];
+  const actions = MELODY_ACTIONS[track.id];
 
   const slice: Record<string, unknown> = {
     [track.steps]: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),

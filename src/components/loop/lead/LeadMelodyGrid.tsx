@@ -49,60 +49,9 @@ import { leadClickShouldPreview } from './leadPaint';
 import { useLeadNotePaint } from './useLeadNotePaint';
 import { Slider } from '@/components/ui/Slider';
 import { melodyTrack, type MelodyTrackId } from '@/store/melodyTracks';
+import { MELODY_ACTIONS } from '@/store/leadSlice';
 import { melodyTrackForFocus } from '@/store/focusTrack';
 import { useLiveStore } from '@/components/ui/useLiveStore';
-
-/**
- * Action names MELODY_TRACKS' row does not carry: the table (melodyTracks.ts)
- * declares STATE field names only, and this file also needs the SETTER names
- * for the toolbar controls and the bar clipboard. Kept local rather than added
- * to the table for the same reason leadSlice.ts's own `ACTIONS` map is
- * private to it: both sides are typo-checked literals, and a templated
- * `set${id}Gate` would trade that compile-time check for a runtime one.
- */
-const GRID_ACTIONS: Record<
-  MelodyTrackId,
-  {
-    setSteps: 'setLeadMelodySteps' | 'setFxMelodySteps';
-    setLoopLength: 'setLeadLoopLength' | 'setFxLoopLength';
-    setLoopLengthPreserve: 'setLeadLoopLengthPreserve' | 'setFxLoopLengthPreserve';
-    setStepResolution: 'setLeadStepResolution' | 'setFxStepResolution';
-    setView: 'setLeadMelodyView' | 'setFxMelodyView';
-    setOctave: 'setLeadMelodyOctave' | 'setFxMelodyOctave';
-    setGate: 'setLeadGate' | 'setFxGate';
-    setCursor: 'setLeadCursor' | 'setFxCursor';
-    copyBar: 'copySelectedLeadBar' | 'copySelectedFxBar';
-    pasteBar: 'pasteIntoSelectedLeadBar' | 'pasteIntoSelectedFxBar';
-    setNoteLength: 'setLeadNoteLength' | 'setFxNoteLength';
-  }
-> = {
-  lead: {
-    setSteps: 'setLeadMelodySteps',
-    setLoopLength: 'setLeadLoopLength',
-    setLoopLengthPreserve: 'setLeadLoopLengthPreserve',
-    setStepResolution: 'setLeadStepResolution',
-    setView: 'setLeadMelodyView',
-    setOctave: 'setLeadMelodyOctave',
-    setGate: 'setLeadGate',
-    setCursor: 'setLeadCursor',
-    copyBar: 'copySelectedLeadBar',
-    pasteBar: 'pasteIntoSelectedLeadBar',
-    setNoteLength: 'setLeadNoteLength',
-  },
-  fx: {
-    setSteps: 'setFxMelodySteps',
-    setLoopLength: 'setFxLoopLength',
-    setLoopLengthPreserve: 'setFxLoopLengthPreserve',
-    setStepResolution: 'setFxStepResolution',
-    setView: 'setFxMelodyView',
-    setOctave: 'setFxMelodyOctave',
-    setGate: 'setFxGate',
-    setCursor: 'setFxCursor',
-    copyBar: 'copySelectedFxBar',
-    pasteBar: 'pasteIntoSelectedFxBar',
-    setNoteLength: 'setFxNoteLength',
-  },
-};
 
 /** Fixed width (px) of the note-name column, shared by the header spacer. */
 const LABEL_WIDTH = 44;
@@ -487,7 +436,7 @@ export interface LeadMelodyGridProps {
 // about which grid the user is looking at.
 export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
   const track = melodyTrack(trackId);
-  const actions = GRID_ACTIONS[trackId];
+  const actions = MELODY_ACTIONS[trackId];
   useLeadPlayback(trackId);
   useLeadStepPublisher(trackId);
   const meterId = useAppStore((s) => s.meterId);
@@ -650,7 +599,7 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
               mixed-case MODULE_TITLE the numbered synth stages wear, and a
               segment's content card is a SECTION — uppercase — like the drum
               grid's and the progression card's. */}
-          <span className={SECTION_HEADER}>{track.id === 'fx' ? 'FX' : 'Melody'}</span>
+          <span className={SECTION_HEADER}>{track.cardTitle}</span>
         </ModuleHeader>
 
         {/* Settings lane. Everything here picks what the grid SHOWS or how it

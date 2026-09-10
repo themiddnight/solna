@@ -6,7 +6,7 @@ import { shouldCloseSynthOverlays, SoundView } from './SoundView';
 import { MIX_GROUP_IDS, MIX_GROUP_LABELS, MIX_LAYERS } from '../mixLayers';
 import { MIX_LAYER_IDS } from '@/store/focusTrack';
 import type { MixLayerId } from '@/store/focusTrack';
-import { synthTargetForFocus } from '../useInputDeck';
+import { synthTargetForFocus } from '@/store/focusTrack';
 import { FIELD_LABEL, FIELD_LANE, HEADER_GROUP, SECTION_HEADER } from '../ui/fieldClasses';
 import { PANEL_CARD } from '../ui/PanelCard';
 import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from '@/utils/synthControl';

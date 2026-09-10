@@ -6,7 +6,6 @@ import {
   allPlayerStates,
   createTransportSlice,
   isAnyPlayerActive,
-  isHardStopEnabled,
   isPlayerActive,
   transportDisplayState,
 } from './transportSlice';
@@ -119,13 +118,15 @@ describe('derived transport helpers', () => {
     }
   });
 
-  test('hard stop is enabled whenever any player still has sound scheduled', () => {
-    expect(isHardStopEnabled('stopped', 'stopped')).toBe(false);
-    // Deliberately NOT derived from aggregate: one stopping + one stopped
-    // still needs a working hard stop.
-    expect(isHardStopEnabled('stopping', 'stopped')).toBe(true);
-    expect(isHardStopEnabled('stopped', 'playing')).toBe(true);
-    expect(isHardStopEnabled('stopping', 'stopping')).toBe(true);
+  // The hard stop is enabled whenever any player still has sound scheduled,
+  // which is what TransportBar computes as `aggregate !== 'stopped'`. It is
+  // deliberately NOT `aggregate === 'playing'`: one stopping + one stopped
+  // still needs a working hard stop.
+  test('hard stop stays enabled while a player is still stopping', () => {
+    expect(aggregatePlayerState('stopped', 'stopped') !== 'stopped').toBe(false);
+    expect(aggregatePlayerState('stopping', 'stopped') !== 'stopped').toBe(true);
+    expect(aggregatePlayerState('stopped', 'playing') !== 'stopped').toBe(true);
+    expect(aggregatePlayerState('stopping', 'stopping') !== 'stopped').toBe(true);
   });
 });
 
@@ -227,10 +228,10 @@ describe('three-way derived transport helpers', () => {
   });
 
   test('hard stop is enabled whenever any of three players is active', () => {
-    expect(isHardStopEnabled('stopped', 'stopped', 'stopped')).toBe(false);
-    expect(isHardStopEnabled('stopped', 'stopped', 'playing')).toBe(true);
-    expect(isHardStopEnabled('stopped', 'stopping', 'stopped')).toBe(true);
-    expect(isHardStopEnabled('stopped', 'stopped', 'stopping')).toBe(true);
+    expect(aggregatePlayerState('stopped', 'stopped', 'stopped') !== 'stopped').toBe(false);
+    expect(aggregatePlayerState('stopped', 'stopped', 'playing') !== 'stopped').toBe(true);
+    expect(aggregatePlayerState('stopped', 'stopping', 'stopped') !== 'stopped').toBe(true);
+    expect(aggregatePlayerState('stopped', 'stopped', 'stopping') !== 'stopped').toBe(true);
   });
 
   test('master actions drive the lead too', () => {

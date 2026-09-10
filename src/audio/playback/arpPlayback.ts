@@ -46,9 +46,10 @@ export interface ArpStateRef {
  *
  * The owner is handed to the callback rather than taken as a parameter: every
  * target in `triggered` is there BECAUSE the arp triggered a voice on it, so
- * `'arp'` is a fact this function knows, not a choice a caller makes. A
- * two-parameter callback is still assignable, which is what lets a component
- * keep passing `releaseSynthPlaybackVoices` without ever naming an owner.
+ * `'arp'` is a fact this function knows, not a choice a caller makes. This is
+ * the ONE place that literal is written — `releaseSynthPlaybackVoices` takes
+ * the owner it is handed rather than pinning a second copy — and a component
+ * still names no owner, because it passes that function by reference.
  */
 export function releaseTriggeredTargets(
   triggered: Set<SynthControlTarget>,
@@ -60,6 +61,21 @@ export function releaseTriggeredTargets(
   }
   triggered.clear();
 }
+
+interface ArpTick {
+  sequence: string[];
+  triggers: ReturnType<typeof computeArpTriggers>;
+}
+
+/**
+ * The "this tick does nothing" answer, allocated once. `computeArpTick` runs
+ * inside the clock lookahead callback and takes one of its three early exits
+ * on the overwhelming majority of ticks (arp off, nothing held, this step
+ * does not fire), so building a fresh object and two arrays for each of them
+ * was exactly the steady-state garbage the gate ordering below exists to
+ * avoid. Callers only read it.
+ */
+const EMPTY_ARP_TICK: ArpTick = { sequence: [], triggers: [] };
 
 /**
  * The "does this tick fire, and if so what" step, extracted out of the clock
@@ -84,27 +100,26 @@ export function computeArpTick(
   bpm: number,
   step: number,
   stepsPerBar: number,
-): { sequence: string[]; triggers: ReturnType<typeof computeArpTriggers> } {
-  const empty = { sequence: [] as string[], triggers: [] as ReturnType<typeof computeArpTriggers> };
-  if (!params.arpActive) return empty;
+): ArpTick {
+  if (!params.arpActive) return EMPTY_ARP_TICK;
   // The cheap question first — heldCountFor allocates nothing, while
   // heldNotesFor builds an array, and this runs inside the lookahead
   // callback where steady-state garbage becomes a scheduling stall.
-  if (heldCountFor(heldTargets, target) === 0) return empty;
+  if (heldCountFor(heldTargets, target) === 0) return EMPTY_ARP_TICK;
 
   // Gate BEFORE the build: at rate 4n this skips four of every five
   // buildArpSequence calls, each of which is a tonal sort plus one transpose
   // per note per octave, inside the lookahead callback.
   const stepDur16 = stepDurationSec(bpm);
   const arpStep = arpStepFor(step, stepsPerBar);
-  if (!arpFiresOnStep(arpStep, params.arpRate)) return empty;
+  if (!arpFiresOnStep(arpStep, params.arpRate)) return EMPTY_ARP_TICK;
 
   const sequence = buildArpSequence(
     heldNotesFor(heldTargets, target),
     params.arpMode,
     params.arpOctaves,
   );
-  if (sequence.length === 0) return empty;
+  if (sequence.length === 0) return EMPTY_ARP_TICK;
 
   const triggers = computeArpTriggers(arpStep, sequence.length, params.arpRate, stepDur16);
   if (triggers.length > 0) {

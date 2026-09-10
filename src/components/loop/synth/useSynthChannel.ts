@@ -1,8 +1,8 @@
 import { useAppStore } from "@/store/store";
-import { controlTargetForFocus, isMelodicFocus } from "@/store/focusTrack";
+import { synthTargetForFocus } from "@/store/focusTrack";
 import type { MixLayerId } from "@/store/focusTrack";
 import { resolveSynthControlChannel } from "@/utils/synthControl";
-import type { SynthParamChannel } from "@/utils/synthControl";
+import type { SynthParamChannels } from "@/utils/synthControl";
 import type { SynthParams } from "@/types";
 
 export interface SynthChannel {
@@ -10,13 +10,8 @@ export interface SynthChannel {
   onChangeParams: (next: SynthParams) => void;
 }
 
-export interface SynthChannels {
-  synth: SynthParamChannel;
-  chord: SynthParamChannel;
-  bass: SynthParamChannel;
-  pad: SynthParamChannel;
-  fx: SynthParamChannel;
-}
+/** Alias, so the panels and `resolveSynthControlChannel` cannot disagree. */
+export type SynthChannels = SynthParamChannels;
 
 /**
  * `focus` -> the channel the synth panels write to. Exported and pure so the
@@ -24,18 +19,18 @@ export interface SynthChannels {
  * fallback is the whole point of the function and a mirrored helper could
  * never catch it drifting.
  *
- * `controlTargetForFocus` refuses a drum focus by TYPE, so the narrowing is
- * forced here rather than optional. Lead is the value in that branch, and it
- * is safe only because SoundView renders no synth surface at all when the
- * focus is `drum` — the whole Synth section is unmounted, so no panel that
- * calls this hook is on screen and nothing can write through it. That gate
- * is asserted in SoundView.test.tsx ("no Synth section on a drum focus"); if
- * it is ever removed, this branch becomes the invisible Lead-patch edit the
- * spec's trap describes.
+ * `synthTargetForFocus` (store/focusTrack.ts) refuses to answer for a drum
+ * focus — it returns `null` — so the `?? 'synth'` here is the fallback, spelled
+ * at the one call site that needs it rather than baked into the projection.
+ * Lead is safe in that branch only because SoundView renders no synth surface
+ * at all when the focus is `drum`: the whole Synth section is unmounted, so no
+ * panel that reads this is on screen and nothing can write through it. That
+ * gate is asserted in SoundView.test.tsx ("no Synth section on a drum focus");
+ * if it is ever removed, this fallback becomes the invisible Lead-patch edit
+ * the spec's trap describes.
  */
 export function synthChannelForFocus(focus: MixLayerId, channels: SynthChannels): SynthChannel {
-  const target = isMelodicFocus(focus) ? controlTargetForFocus(focus) : 'synth';
-  const channel = resolveSynthControlChannel(target, channels);
+  const channel = resolveSynthControlChannel(synthTargetForFocus(focus) ?? 'synth', channels);
   return { params: channel.params, onChangeParams: channel.setParams };
 }
 

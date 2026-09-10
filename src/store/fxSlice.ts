@@ -1,8 +1,7 @@
 import type { StoreApi } from 'zustand';
 import { createMelodySlice } from './leadSlice';
 import { melodyTrack } from './melodyTracks';
-import { INITIAL_SYNTH_PARAMS } from './initialState';
-import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
+import { defaultFxBusState } from './initialState';
 import type { AppStore, FxSlice } from './types';
 
 /**
@@ -21,10 +20,10 @@ export function createFxSlice(
     // FX has no legacy synth slice to inherit a bus/patch from (unlike lead,
     // whose synthVolume/synthMuted/synthParams predate this factory and live
     // in SynthSlice), so these three live here rather than in
-    // createMelodySlice — lead must not gain siblings for them.
-    fxSynthParams: INITIAL_SYNTH_PARAMS,
-    fxVolume: DEFAULT_BUS_TRIM_DB,
-    fxMuted: false,
+    // createMelodySlice — lead must not gain siblings for them. Their VALUES
+    // come from initialState, which states them for a new loop too: a default
+    // spelled in both places drifts into a session and a loop disagreeing.
+    ...defaultFxBusState(),
     setFxSynthParams: (fxSynthParams) => set({ fxSynthParams }),
     setFxVolume: (fxVolume) => set({ fxVolume }),
     toggleFxMuted: () => set((state) => ({ fxMuted: !state.fxMuted })),

@@ -105,3 +105,14 @@ export const MIX_LAYERS: ReadonlyArray<MixLayer> = [
   { idPrefix: 'drum', label: 'Beat', volumeKey: 'masterSequencerVolume', muteKey: 'drumMuted', engineSource: 'sequencer', tone: 'accent', accentClass: 'text-accent', group: 'beat' },
 ];
 
+
+/**
+ * Each layer's screen name, keyed by focus id. Derived from MIX_LAYERS rather
+ * than spelled again, so two surfaces naming the same track can never
+ * disagree — `'synth'` is "Lead" and `'drum'` is "Beat" in both. It lives
+ * beside the table it reads so a view wanting ONE label indexes a record
+ * instead of scanning the array behind a non-null assertion.
+ */
+export const MIX_LAYER_LABELS: Record<MixLayerId, string> = Object.fromEntries(
+  MIX_LAYERS.map((layer) => [layer.idPrefix, layer.label]),
+) as Record<MixLayerId, string>;

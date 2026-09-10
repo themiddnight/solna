@@ -25,10 +25,11 @@ import {
   MIX_LAYER_IDS,
   isMelodicFocus,
   controlTargetForFocus,
+  melodyTrackForFocus,
+  synthTargetForFocus,
   type MixLayerId,
 } from "@/store/focusTrack";
-import { MIX_LAYERS } from "../mixLayers";
-import { synthTargetForFocus } from "../useInputDeck";
+import { MIX_LAYER_LABELS } from "../mixLayers";
 import type { SynthPresetItem, SynthPresetCategory } from "@/data/synthPresets";
 import { SYNTH_CATEGORIES } from "@/data/synthPresets";
 import { DRUM_KITS } from "@/data/drumKits";
@@ -51,6 +52,7 @@ import { FilterPanel } from "./synth/FilterPanel";
 import { EnvelopePanel } from "./synth/EnvelopePanel";
 import { LfoPanel } from "./synth/LfoPanel";
 import { ArpeggiatorPanel } from "./synth/ArpeggiatorPanel";
+import { synthChannelForFocus } from "./synth/useSynthChannel";
 import { SoundMixer } from "./SoundMixer";
 import { Knob } from "../ui/Knob";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
@@ -78,10 +80,7 @@ const SYNTH_VIEW_MODES = [
 // key bindings never collide with the drum-pad shortcuts. The table itself
 // lives in ui/Keyboard.tsx; this is the historical import path.
 export { KEYBOARD_NOTES } from "../ui/Keyboard";
-import {
-  resolveSynthControlChannel,
-  SYNTH_TARGET_STYLES,
-} from "@/utils/synthControl";
+import { SYNTH_TARGET_STYLES } from "@/utils/synthControl";
 import { GroupFrame } from "../ui/GroupFrame";
 import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
 import { SegmentedButton, SegmentedGroup } from '@/components/ui/SegmentedControl';
@@ -96,24 +95,29 @@ const DRUM_KIT_NAMES = Object.keys(DRUM_KITS);
 // in the framed group, and Beat sits last on its own — the same pitched-first,
 // rhythm-after order MIX_LAYERS uses. Derived from the roster rather than
 // hand-listed so a seventh layer renders somewhere instead of silently
-// nowhere, but the split is a SET, not `!== 'synth'`: FX is a melody track
-// beside Lead, and putting it under a frame labelled "Accompaniment" would
-// make the frame say something untrue. Module scope for the same reason
+// nowhere, and the melody split asks the store which focuses ARE melody
+// tracks rather than listing them or testing `!== 'synth'`: FX is a melody
+// track beside Lead, and putting it under a frame labelled "Accompaniment"
+// would make the frame say something untrue — as would a third melody track
+// that a hand-written pair had never heard of. Module scope for the same reason
 // DRUM_KIT_NAMES above is: the record is static, and this view re-renders per
 // pointermove during a Knob drag.
-const MELODY_FOCUSES: readonly MixLayerId[] = ['synth', 'fx'];
+const MELODY_FOCUSES: readonly MixLayerId[] = MIX_LAYER_IDS.filter(
+  (id) => melodyTrackForFocus(id) !== null,
+);
 const BEAT_FOCUS: MixLayerId = 'drum';
 const ACCOMPANIMENT_FOCUSES = MIX_LAYER_IDS.filter(
   (id) => !MELODY_FOCUSES.includes(id) && id !== BEAT_FOCUS,
 );
 
-// The Beat chip's styling comes from MIX_LAYERS' drum row, not from
-// SYNTH_TARGET_STYLES, which has five entries and no sixth to add: a drum
-// focus has no synth channel, so a row in that table would be a claim that it
-// does. Both class strings are literals — Tailwind v4 scans source statically,
-// so a class assembled at runtime would never be emitted.
+// The Beat chip's label comes from MIX_LAYERS' drum row; its styling is
+// literal rather than from SYNTH_TARGET_STYLES, which has five entries and no
+// sixth to add: a drum focus has no synth channel, so a row in that table
+// would be a claim that it does. Both class strings are literals — Tailwind v4
+// scans source statically, so a class assembled at runtime would never be
+// emitted.
 const BEAT_CHIP = {
-  label: MIX_LAYERS.find((l) => l.idPrefix === 'drum')!.label,
+  label: MIX_LAYER_LABELS[BEAT_FOCUS],
   activeBtn: 'btn-accent',
   softBtn: 'btn-soft btn-accent',
 };
@@ -275,9 +279,9 @@ export const SoundView = React.memo(function SoundView() {
   // what the preset handlers close over so they stay total, and every control
   // that could invoke one of them lives inside the un-rendered section.
   const synthTarget = synthTargetForFocus(focusTrack);
-  const channel = resolveSynthControlChannel(synthTarget ?? 'synth', channels);
+  const channel = synthChannelForFocus(focusTrack, channels);
   const params = channel.params;
-  const onChangeParams = channel.setParams;
+  const onChangeParams = channel.onChangeParams;
 
   const tintClass = synthTarget
     ? [SYNTH_TARGET_STYLES[synthTarget].ring, SYNTH_TARGET_STYLES[synthTarget].tint]
@@ -471,7 +475,7 @@ export const SoundView = React.memo(function SoundView() {
       <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
         {/* Control Destination Selector */}
         <div
-          className={`flex items-center gap-1 flex-wrap bg-base-200 border rounded-box p-1 ${synthTarget ? SYNTH_TARGET_STYLES[synthTarget].border : 'border-accent'}`}
+          className={`flex items-center gap-1 flex-wrap bg-base-200 border rounded-box px-2 py-1 ${synthTarget ? SYNTH_TARGET_STYLES[synthTarget].border : 'border-accent'}`}
         >
           <span className={`${GROUP_LABEL} pl-1 pr-1 hidden sm:inline`}>
             Focus:
@@ -556,9 +560,7 @@ export const SoundView = React.memo(function SoundView() {
           module cards, then the drum card — which read as "the tab" rather
           than as one of the tab's three sections, and left the Drum and Mixer
           cards below looking like leftovers rather than peers. */}
-      {synthTarget !== null && (() => {
-        const target = synthTarget;
-        return (
+      {synthTarget !== null && (
       <SectionCard
         icon={AudioWaveform}
         title="Synth"
@@ -620,7 +622,7 @@ export const SoundView = React.memo(function SoundView() {
 
         {/* Pro Mode: Row 2 Categorized Preset Selection Bar */}
         {synthViewMode === "pro" && (
-          <div className={`flex flex-wrap items-center justify-between gap-2.5 bg-base-300 border border-base-300 p-2 rounded-box ${SYNTH_TARGET_STYLES[target].tint}`}>
+          <div className={`flex flex-wrap items-center justify-between gap-2.5 bg-base-300 border border-base-300 p-2 rounded-box ${SYNTH_TARGET_STYLES[synthTarget].tint}`}>
             {/* Category Filter Tabs */}
             <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[11px]">
               <span className="text-[10px] uppercase font-bold text-base-content/50 px-1">
@@ -876,8 +878,7 @@ export const SoundView = React.memo(function SoundView() {
         </div>
       )}
       </SectionCard>
-        );
-      })()}
+      )}
 
       {/* Quick Save Modal Popover with Category selection. Outside the Synth
           section, not in it: it is an overlay the section raises, and nesting

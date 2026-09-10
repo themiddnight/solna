@@ -15,7 +15,6 @@ import { emitNoteInput } from '../audio/playback/noteInputBus';
 import { ensureDrumEngine, triggerPad as triggerDrumPad } from '../audio/playback/drumPlayback';
 import { useAppStore } from '../store/store';
 import type { AppStore } from '../store/types';
-import { synthChannelForFocus } from './loop/synth/useSynthChannel';
 import {
   clampKeyboardOctave,
   getChromaticKeyboardNotes,
@@ -27,11 +26,8 @@ import type { DrumPad, KeyboardMode, SynthParams } from '../types';
 import type { SynthControlTarget } from '../utils/synthControl';
 import { isTypingTarget } from '../utils/keyboard';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
-import {
-  controlTargetForFocus,
-  isMelodicFocus,
-  type MixLayerId,
-} from '../store/focusTrack';
+import { synthTargetForFocus } from '../store/focusTrack';
+import { SYNTH_PARAM_FIELD } from '../store/sourceBuses';
 
 // The keyboard, the on-screen keyboard and the arp all play the FOCUSED track
 // (`focusTrack` in the ui slice). They used to be pinned to a module constant
@@ -57,23 +53,6 @@ import {
 // A focus change alone does NOT cut sounding voices: they ring out naturally.
 // That is a decision (spec, Open risks 1) — cutting them is a hard stop the
 // user did not ask for, and they are finite.
-
-/**
- * The synth bus a focus plays on, or `null` when there is nothing melodic to
- * play. Exported so this routing decision is testable as pure logic, without
- * rendering — `useEffect` never runs under renderToString, so the deck's
- * behaviour is only reachable through helpers like this one.
- *
- * `null` for `drum` rather than a fallback to `'synth'`: a fallback would make
- * the drum focus play the Lead patch off the melodic keyboard, silently and
- * with nothing on screen to explain it, which is the exact failure this change
- * exists to remove. The QWERTY drum-PAD shortcuts are unaffected — they are a
- * disjoint key set (`KeyZ`..`Slash`, DEFAULT_PADS) on their own listener, so a
- * drum focus silences the melodic keyboard and leaves the pads playing.
- */
-export function synthTargetForFocus(focus: MixLayerId): SynthControlTarget | null {
-  return isMelodicFocus(focus) ? controlTargetForFocus(focus) : null;
-}
 
 // Decide which notes must be force-released when the keyboard mode changes.
 // Always releases from the snapshot of what is actually sounding right now
@@ -233,21 +212,22 @@ export interface InputDeckDrumProps {
 }
 
 // The synth params the keyboard/arp actually play: the FOCUSED track's, not
-// always Lead's. Reuses `synthChannelForFocus` — the same resolver
-// `useSynthChannel` feeds the Pro/Simple panels with — so a drum focus falls
-// back to Lead's channel exactly once, in one place, rather than being
-// re-decided here. That fallback is inert for playback: every path that would
-// read this value for a drum focus (`synthTargetForFocus` returning `null`)
-// already returns before touching it, so which channel it falls back to
+// always Lead's. Routes through `synthTargetForFocus` — the same store-layer
+// projection the Pro/Simple panels resolve their channel from — so a drum
+// focus is not re-decided here. Its `?? 'synth'` fallback is inert for
+// playback: every path that would read this value for a drum focus already
+// returns on the `null` before touching it, so which channel it falls back to
 // cannot be heard.
+//
+// Indexes ONE field through the shared SYNTH_PARAM_FIELD map instead of
+// building `synthChannelForFocus`'s full 5-channel record: this runs as a raw
+// Zustand selector (selectArpActive/selectSynthRelease/subscribeArpState
+// below), so it re-executes on every store `set()` for the app's lifetime, not
+// just on a relevant change — and the map is the same one engineSync drives
+// the engine from, so the arp cannot end up reading a different bus's patch
+// than the one being played.
 function resolveFocusedSynthParams(s: AppStore): SynthParams {
-  return synthChannelForFocus(s.focusTrack, {
-    synth: { params: s.synthParams, setParams: s.setSynthParams },
-    chord: { params: s.chordSynthParams, setParams: s.setChordSynthParams },
-    bass: { params: s.bassSynthParams, setParams: s.setBassSynthParams },
-    pad: { params: s.padSynthParams, setParams: s.setPadSynthParams },
-    fx: { params: s.fxSynthParams, setParams: s.setFxSynthParams },
-  }).params;
+  return s[SYNTH_PARAM_FIELD[synthTargetForFocus(s.focusTrack) ?? 'synth']];
 }
 
 // Named (not inline) so a test can pin their behaviour directly: given two

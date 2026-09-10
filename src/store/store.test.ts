@@ -554,17 +554,17 @@ describe('focusTrack persistence', () => {
    * written from nothing; there is no old clause to rename.
    */
   test('sanitize maps a missing, non-string or out-of-roster focusTrack to synth', async () => {
-    const { sanitizePersistedStateForTest } = await getStore();
-    expect(sanitizePersistedStateForTest({}).focusTrack).toBe('synth');
-    expect(sanitizePersistedStateForTest({ focusTrack: 7 }).focusTrack).toBe('synth');
-    expect(sanitizePersistedStateForTest({ focusTrack: 'lead' }).focusTrack).toBe('synth');
-    expect(sanitizePersistedStateForTest({ focusTrack: null }).focusTrack).toBe('synth');
+    const { sanitizePersistedState } = await getStore();
+    expect(sanitizePersistedState({}).focusTrack).toBe('synth');
+    expect(sanitizePersistedState({ focusTrack: 7 }).focusTrack).toBe('synth');
+    expect(sanitizePersistedState({ focusTrack: 'lead' }).focusTrack).toBe('synth');
+    expect(sanitizePersistedState({ focusTrack: null }).focusTrack).toBe('synth');
   });
 
   test('sanitize leaves a valid focusTrack untouched, including drum', async () => {
-    const { sanitizePersistedStateForTest } = await getStore();
-    expect(sanitizePersistedStateForTest({ focusTrack: 'fx' }).focusTrack).toBe('fx');
-    expect(sanitizePersistedStateForTest({ focusTrack: 'drum' }).focusTrack).toBe('drum');
+    const { sanitizePersistedState } = await getStore();
+    expect(sanitizePersistedState({ focusTrack: 'fx' }).focusTrack).toBe('fx');
+    expect(sanitizePersistedState({ focusTrack: 'drum' }).focusTrack).toBe('drum');
   });
 
   /**
@@ -573,8 +573,8 @@ describe('focusTrack persistence', () => {
    * Sound reopens on Lead; that is one click.
    */
   test('an old payload carrying only controlTarget/patternSegment still resolves focusTrack to synth', async () => {
-    const { sanitizePersistedStateForTest } = await getStore();
-    const out = sanitizePersistedStateForTest({ controlTarget: 'bass', patternSegment: 'beat' });
+    const { sanitizePersistedState } = await getStore();
+    const out = sanitizePersistedState({ controlTarget: 'bass', patternSegment: 'beat' });
     expect(out.focusTrack).toBe('synth');
   });
 });

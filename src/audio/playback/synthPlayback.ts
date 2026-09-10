@@ -2,6 +2,7 @@ import { audioEngine } from "../engine";
 import { emitNoteInput } from "./noteInputBus";
 import type { SynthParams } from "@/types";
 import type { SynthControlTarget } from "@/utils/synthControl";
+import type { VoiceOwner } from "../voiceOwner";
 
 // Thin engine bridge for SoundView's keyboard/arp handlers (layering rule 3):
 // the view never touches audio/engine directly. The handlers keep all their
@@ -73,18 +74,21 @@ export function synthPlaybackNoteOff(
 
 export function releaseSynthPlaybackVoices(
   target: SynthControlTarget,
-  releaseTime = 0.1,
+  releaseTime: number,
+  owner: VoiceOwner,
 ): void {
   // audioEngine.releaseSoundingVoices deliberately stays typed `source:
   // string` — the engine knows nothing about the store's target vocabulary —
   // so the narrowing to SynthControlTarget happens here, at the one call site
   // a wrong bus name could otherwise slip through untyped.
   //
-  // The 'arp' literal below is pinned rather than threaded through as a
-  // parameter, because this two-parameter signature is what keeps
-  // `src/components/` from having to import `VoiceOwner`. arpPlayback.ts's
-  // `releaseTriggeredTargets` passes its own 'arp' literal to this function's
-  // callers, and nothing checks the two stay in sync — if either literal ever
-  // changed, the drift would be silent.
-  audioEngine.releaseSoundingVoices(target, releaseTime, 'arp');
+  // `owner` is threaded, not pinned. It used to be a second `'arp'` literal
+  // here, matching the one `releaseTriggeredTargets` already passes its
+  // callback — two copies with nothing checking they agreed, which the comment
+  // that stood here admitted would drift silently. Required with no default,
+  // the same rule `triggerSynthNoteOn` follows: an owner-blind release must
+  // not be reachable by omitting an argument. `src/components/` still never
+  // names an owner — it passes this function BY REFERENCE as the callback, so
+  // the value comes from arpPlayback.ts and the layering rule is untouched.
+  audioEngine.releaseSoundingVoices(target, releaseTime, owner);
 }

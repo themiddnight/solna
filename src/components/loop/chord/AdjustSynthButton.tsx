@@ -1,7 +1,8 @@
 import React from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { useAppStore } from '@/store/store';
-import { focusSynthTarget, SYNTH_TARGET_STYLES } from '@/utils/synthControl';
+import { SYNTH_TARGET_STYLES } from '@/utils/synthControl';
+import { focusSynthTarget } from '@/store/focusTrack';
 import type { SynthControlTarget } from '@/utils/synthControl';
 
 export function AdjustSynthButton({

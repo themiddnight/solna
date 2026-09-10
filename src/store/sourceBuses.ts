@@ -1,3 +1,6 @@
+import type { SynthControlTarget } from '@/utils/synthControl';
+import type { AppStore } from './types';
+
 /**
  * Every source bus the store owns, as `[volume field, mute field, engine
  * source, solo track]`. Both the snapshot pass and the subscription block
@@ -50,3 +53,29 @@ export function sourceBus(id: SourceBusId): SourceBus {
 
 
 
+
+/**
+ * The store field holding each synth bus's patch, keyed by control target.
+ *
+ * The `SOURCE_BUSES` idea one column over, and its own table rather than a
+ * sixth column there, because the drum bus has no patch — a `null` cell would
+ * make every reader test for it. This map was previously spelled FOUR times
+ * (engineSync's snapshot pass, engineSync's subscription block, the input
+ * deck's focused-params selector, SoundView's channel record), and three of
+ * those failed silently when they disagreed: the engine simply never received
+ * the new bus's patch, and the arp went on reading Lead's.
+ *
+ * `satisfies` rather than a type annotation, so the values stay literal — a
+ * caller indexing the store with one gets `SynthParams`, not the union of
+ * every `AppStore` field's type.
+ */
+export const SYNTH_PARAM_FIELD = {
+  synth: 'synthParams',
+  chord: 'chordSynthParams',
+  bass: 'bassSynthParams',
+  pad: 'padSynthParams',
+  fx: 'fxSynthParams',
+} as const satisfies Record<SynthControlTarget, keyof AppStore>;
+
+/** The control targets, in canonical order, derived from the map above. */
+export const SYNTH_PARAM_TARGETS = Object.keys(SYNTH_PARAM_FIELD) as SynthControlTarget[];

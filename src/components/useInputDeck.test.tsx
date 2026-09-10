@@ -7,11 +7,11 @@ import {
   subscribeArpState,
   selectArpActive,
   selectSynthRelease,
-  synthTargetForFocus,
   performNoteOff,
   performNoteOn,
 } from './useInputDeck';
 import type { InputDeckDrumProps, InputDeckKeyboardProps } from './useInputDeck';
+import { synthTargetForFocus } from '@/store/focusTrack';
 import type { SynthControlTarget } from '@/utils/synthControl';
 import type { HeldNoteTargets } from '../audio/playback/heldNotes';
 import { useAppStore } from '../store/store';

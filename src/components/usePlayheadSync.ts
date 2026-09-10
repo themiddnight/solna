@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAppStore } from '../store/store';
-import { aggregatePlayerState, allPlayerStates } from '../store/transportSlice';
+import { aggregatePlayerState, isAnyPlayerActive } from '../store/transportSlice';
 import type { PlayerState } from '../store/types';
 import { subscribePlaybackClock } from '../audio/playback/playbackEngine';
 
@@ -8,9 +8,9 @@ import { subscribePlaybackClock } from '../audio/playback/playbackEngine';
  * Pure decision, exported so it is testable without a DOM: the playhead runs
  * whenever ANY registered transport player is active. Kept variadic (rather
  * than taking `AppStore` itself) so the existing per-player unit tests keep
- * working unchanged; the hook below is what feeds it every player, table-
- * driven off `allPlayerStates` so a new player module reaches the playhead
- * for free instead of needing a hand-added argument here.
+ * working unchanged; the hook below asks the same question of the live store
+ * through `isAnyPlayerActive`, which folds the same rule over every registered
+ * player without allocating a states array on each of the app's `set()`s.
  */
 export function shouldRunPlayheadSync(...players: PlayerState[]): boolean {
   return aggregatePlayerState(...players) !== 'stopped';
@@ -27,7 +27,7 @@ export function shouldRunPlayheadSync(...players: PlayerState[]): boolean {
  * often for the same rendered output.
  */
 export function usePlayheadSync(): void {
-  const isRunning = useAppStore((s) => shouldRunPlayheadSync(...allPlayerStates(s)));
+  const isRunning = useAppStore(isAnyPlayerActive);
 
   useEffect(() => {
     const { setPlayheadBeat, setPlayheadChord } = useAppStore.getState();

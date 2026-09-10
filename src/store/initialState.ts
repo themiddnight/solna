@@ -463,6 +463,20 @@ export function defaultFxState(): FxState {
     fxMelodyView: 'scale-locked',
     fxMelodyOctave: 3,
     fxGate: DEFAULT_LEAD_GATE,
+    ...defaultFxBusState(),
+  };
+}
+
+/**
+ * The FX track's patch and fader, split out because they are declared in TWO
+ * places: here, for a new loop's content, and in `createFxSlice`, which owns
+ * them for the session (they have no legacy synth slice to inherit from the
+ * way lead's `synthVolume`/`synthParams` do). Stated once, so a changed
+ * default cannot give a new SESSION and a new LOOP different FX state — the
+ * `padVolume` failure `PROJECT_DB_LEVEL_KEYS` records, in advance.
+ */
+export function defaultFxBusState(): Pick<FxState, 'fxSynthParams' | 'fxVolume' | 'fxMuted'> {
+  return {
     fxSynthParams: INITIAL_SYNTH_PARAMS,
     fxVolume: DEFAULT_BUS_TRIM_DB,
     fxMuted: false,

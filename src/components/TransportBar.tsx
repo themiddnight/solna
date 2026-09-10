@@ -8,7 +8,7 @@ import { PlayerTransport } from "./ui/PlayerTransport";
 import { PlayheadReadout } from "./PlayheadReadout";
 import { VuMeter } from "./ui/VuMeter";
 import { MidiIndicator } from "./ui/MidiIndicator";
-import { aggregateAllPlayers, isAnyPlayerActive, transportDisplayState } from "../store/transportSlice";
+import { aggregateAllPlayers, transportDisplayState } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 import type { Loop } from '../store/types';
 import { loopLabel } from '@/store/loop';
@@ -79,10 +79,13 @@ export const TransportBar = React.memo(function TransportBar() {
   // loop of the loop being edited. Hard stop stays live off the REAL player
   // states, so sounding audio always has a visible global kill.
   const displayState = transportDisplayState(playbackScope, aggregate, layer, activeLoopId);
-  const hardStopDisabled = !useAppStore(isAnyPlayerActive);
   // The meter loop only needs to know whether anything is sounding, off the
   // true aggregate — not the takeover-driven display state.
   const isPlaying = aggregate !== 'stopped';
+  // Equivalent to `useAppStore(isAnyPlayerActive)`: `aggregate` already folds
+  // every player's state the same way, so a second selector re-running
+  // `allPlayerStates` on every store set() would only duplicate this one.
+  const hardStopDisabled = !isPlaying;
   const songLabel = songModeLabel(songLoopIndex, loops);
   // The layer IS the choice: playAll() on song, soloLoop(activeLoopId) on loop.
   // It went through a `masterPlayTarget(layer)` helper that returned its own

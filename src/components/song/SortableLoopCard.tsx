@@ -19,6 +19,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Loop, LoopMixPatch } from '@/store/types';
 import { ChordItem } from '@/types';
 import { loopBars } from '@/store/loop';
+import { formatDb } from '@/utils/gainUnits';
 import { formatChordQuality } from '@/utils/musicTheory';
 import { getTonicSpelling } from '@/utils/noteSpelling';
 import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
@@ -91,7 +92,7 @@ export function MixChannel({
   return (
     <div
       className={`flex flex-col gap-1 p-2 rounded-box bg-base-100 border border-base-300/60 transition-opacity ${
-        muted ? 'opacity-50' : 'opacity-100'
+        muted ? 'opacity-50 grayscale' : 'opacity-100'
       }`}
     >
       <div className="flex items-center justify-between gap-1">
@@ -105,16 +106,25 @@ export function MixChannel({
             {label}
           </span>
         </div>
-        <PowerToggle
-          id={`btn-mute-${idPrefix}`}
-          on={!muted}
-          onToggle={onToggleMute}
-          name={`${label} mute`}
-          tone={tone}
-          size="xs"
-          iconOnly
-          verb={{ on: 'Unmute', off: 'Mute' }}
-        />
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span
+            className={`text-[10px] tabular-nums shrink-0 ${
+              muted ? 'text-base-content/40' : 'text-base-content/70'
+            }`}
+          >
+            {formatDb(volumeDb)}
+          </span>
+          <PowerToggle
+            id={`btn-mute-${idPrefix}`}
+            on={!muted}
+            onToggle={onToggleMute}
+            name={`${label} mute`}
+            tone={tone}
+            size="xs"
+            iconOnly
+            verb={{ on: 'Unmute', off: 'Mute' }}
+          />
+        </div>
       </div>
       <div className="flex items-center gap-1.5 mt-0.5">
         {/* The same fader the channel strips and the transport bar use, so
@@ -127,6 +137,7 @@ export function MixChannel({
           label={`${label} gain`}
           valueDb={volumeDb}
           onChangeDb={onVolumeDbChange}
+          showReadout={false}
           className={`range range-xs ${sliderAccent} w-full`}
         />
       </div>
@@ -698,7 +709,7 @@ export const SortableLoopCard = React.memo(
           </div>
 
           {/* 5-Channel Mixer Strip */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 pt-0.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-0.5">
             {/* The card's mixer strip: one row per layer, in table order.
                 MIX_LAYERS is shared with loop/SoundMixer.tsx so the five
                 labels, tones, colours and store fields are written once. The

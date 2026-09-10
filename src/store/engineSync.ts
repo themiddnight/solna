@@ -12,7 +12,7 @@ import { createTrailingDebounce } from '../utils/trailingDebounce';
 import type { MasterEffects, SequencerTrack } from '../types';
 import { DEFAULT_FADER_DB, faderDbToGain } from './levelUnits';
 import { isTrackAudible } from './trackAudibility';
-import { SOURCE_BUSES, type SourceBus } from './sourceBuses';
+import { SOURCE_BUSES, SYNTH_PARAM_FIELD, SYNTH_PARAM_TARGETS, type SourceBus } from './sourceBuses';
 import type { AppStore } from './types';
 
 /**
@@ -230,11 +230,11 @@ function applySliceState(): void {
   // trim from the `params.preset` it is handed, so there is no map to seed and
   // no window in which a source can be playing a patch the engine has not been
   // told about.
-  audioEngine.updateSynthParams(s.synthParams, 'synth');
-  audioEngine.updateSynthParams(s.chordSynthParams, 'chord');
-  audioEngine.updateSynthParams(s.bassSynthParams, 'bass');
-  audioEngine.updateSynthParams(s.padSynthParams, 'pad');
-  audioEngine.updateSynthParams(s.fxSynthParams, 'fx');
+  // Off SYNTH_PARAM_FIELD, like the subscription block below: a hand-listed
+  // copy here and a table there is how a new bus reaches one and not the other.
+  for (const target of SYNTH_PARAM_TARGETS) {
+    audioEngine.updateSynthParams(s[SYNTH_PARAM_FIELD[target]], target);
+  }
 }
 
 export function startEngineSync(): Stop {
@@ -347,14 +347,8 @@ export function startEngineSync(): Stop {
     ),
   );
 
-  const synthSources = [
-    ['synthParams', 'synth'],
-    ['chordSynthParams', 'chord'],
-    ['bassSynthParams', 'bass'],
-    ['padSynthParams', 'pad'],
-    ['fxSynthParams', 'fx'],
-  ] as const;
-  for (const [field, source] of synthSources) {
+  for (const source of SYNTH_PARAM_TARGETS) {
+    const field = SYNTH_PARAM_FIELD[source];
     subs.push(
       useAppStore.subscribe(
         (s) => s[field],

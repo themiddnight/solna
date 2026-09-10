@@ -11,19 +11,11 @@ import { IconButton } from './IconButton';
 import { formatKeyLabel } from '@/utils/noteSpelling';
 import type { InputDeckDrumProps, InputDeckKeyboardProps } from '../useInputDeck';
 import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
-import { MIX_LAYERS } from '../mixLayers';
-import { MIX_LAYER_IDS, type MixLayerId } from '@/store/focusTrack';
+import { MIX_LAYER_LABELS } from '../mixLayers';
+import { MIX_LAYER_IDS } from '@/store/focusTrack';
 
 const PANEL_LABELS = { keyboard: 'Keyboard', drums: 'Drums' } as const;
 
-/**
- * The focused track's name, keyed by focus id. Read off MIX_LAYERS rather than
- * spelled again, so the chip and the mixer row for the same track can never
- * disagree — `'synth'` is "Lead" and `'drum'` is "Beat" in both.
- */
-export const FOCUS_CHIP_LABELS: Record<MixLayerId, string> = Object.fromEntries(
-  MIX_LAYERS.map((layer) => [layer.idPrefix, layer.label]),
-) as Record<MixLayerId, string>;
 
 const KEYBOARD_MODE_LABELS = {
   chromatic: 'Chromatic',
@@ -99,12 +91,12 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
           <button
             id="btn-focus-chip"
             type="button"
-            aria-label={`Working on ${FOCUS_CHIP_LABELS[focusTrack]}`}
+            aria-label={`Working on ${MIX_LAYER_LABELS[focusTrack]}`}
             className={`btn btn-xs gap-1 text-[11px] font-semibold ${TOOLBAR_BUTTON_IDLE}`}
             title="Which track you are working on"
           >
             <span className="text-base-content/50 uppercase tracking-wider text-[9px]">On</span>
-            <span>{FOCUS_CHIP_LABELS[focusTrack]}</span>
+            <span>{MIX_LAYER_LABELS[focusTrack]}</span>
           </button>
           <ul
             className="dropdown-content menu menu-sm z-40 mb-1 w-36 rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
@@ -124,7 +116,7 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
                   }}
                   className={focusTrack === id ? 'active font-bold' : ''}
                 >
-                  {FOCUS_CHIP_LABELS[id]}
+                  {MIX_LAYER_LABELS[id]}
                 </button>
               </li>
             ))}

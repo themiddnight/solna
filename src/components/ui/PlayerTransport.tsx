@@ -18,7 +18,7 @@ export interface TransportButtons {
  * tested without rendering React (the repo has no DOM test setup).
  *
  * `hard.disabled` is decided by the CALLER for aggregate transports — see
- * isHardStopEnabled in transportSlice.ts, which deliberately does not follow
+ * isAnyPlayerActive in transportSlice.ts, which deliberately does not follow
  * the aggregate state. This default covers the single-player case.
  */
 export function resolveTransportButtons(state: PlayerState): TransportButtons {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { TransportBar, songModeLabel } from './TransportBar';
-import { aggregatePlayerState, isHardStopEnabled, transportDisplayState } from '../store/transportSlice';
+import { aggregatePlayerState, transportDisplayState } from '../store/transportSlice';
 import { resolveTransportButtons } from './ui/PlayerTransport';
 import { createDefaultLoop } from '../store/loopSlice';
 import { useAppStore } from '../store/store';
@@ -48,17 +48,17 @@ describe('transport bar aggregate behaviour', () => {
     expect(aggregate).toBe('stopping');
     // The main button is parked, but the cut must stay available.
     expect(resolveTransportButtons(aggregate).main.disabled).toBe(true);
-    expect(isHardStopEnabled(seq, chords)).toBe(true);
+    expect(aggregate !== 'stopped').toBe(true);
   });
 
   test('a single playing player drives the whole bar into playing', () => {
     expect(aggregatePlayerState('stopped', 'playing')).toBe('playing');
-    expect(isHardStopEnabled('stopped', 'playing')).toBe(true);
+    expect(aggregatePlayerState('stopped', 'playing') !== 'stopped').toBe(true);
   });
 
   test('fully stopped disables the hard stop', () => {
     expect(aggregatePlayerState('stopped', 'stopped')).toBe('stopped');
-    expect(isHardStopEnabled('stopped', 'stopped')).toBe(false);
+    expect(aggregatePlayerState('stopped', 'stopped') !== 'stopped').toBe(false);
   });
 
   test('a solo-loop scope makes the master button offer Play, so a click takes over into song mode', () => {

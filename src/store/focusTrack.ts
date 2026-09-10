@@ -1,6 +1,6 @@
-import type { PatternSegment } from '@/types';
+import type { PatternSegment, ViewMode } from '@/types';
 import type { SynthControlTarget } from '@/utils/synthControl';
-import type { MelodyTrackId } from './melodyTracks';
+import type { Assert, MelodyTrackId } from './melodyTracks';
 
 /**
  * DOM id prefix, mixer lookup key, and — since the focus-track change — the id
@@ -120,13 +120,6 @@ export function controlTargetForFocus(focus: MelodicFocus): SynthControlTarget {
   return focus;
 }
 
-/**
- * `Assert<T extends true>` — the melodyTracks.ts pattern. Instantiating it with
- * a condition that resolves to `false` fails the `extends true` constraint and
- * is a real compile error, unlike a bare conditional alias which resolves to
- * `never` with nothing consuming it and no error at all.
- */
-type Assert<T extends true> = T;
 /* eslint-disable @typescript-eslint/no-unused-vars -- these two aliases ARE the
    assertion; consuming them at runtime would defeat the point. */
 type _AssertMelodicIsControlTarget = Assert<
@@ -136,6 +129,28 @@ type _AssertControlTargetIsMelodic = Assert<
   SynthControlTarget extends MelodicFocus ? true : false
 >;
 /* eslint-enable @typescript-eslint/no-unused-vars */
+
+/**
+ * The synth bus a focus plays on, or `null` when there is nothing melodic to
+ * play. The total form of `controlTargetForFocus`, and the one place the drum
+ * case is answered: it lives beside its siblings (`melodyTrackForFocus`,
+ * `controlTargetForFocus`) rather than in a view, because "what does this
+ * focus route to" is store knowledge that `src/components/` reads, never
+ * decides. It used to be answered twice in two component files — a nullable
+ * copy in `useInputDeck.ts` and a Lead-defaulting copy in `useSynthChannel.ts`
+ * — which had a root hook and a leaf panel importing routing logic from each
+ * other. A caller that needs a total answer writes `?? 'synth'` at its own
+ * call site, where the fallback is visible.
+ *
+ * `null` for `drum` rather than a built-in fallback: a fallback would make the
+ * drum focus play the Lead patch off the melodic keyboard, silently and with
+ * nothing on screen to explain it. The QWERTY drum-PAD shortcuts are
+ * unaffected — they are a disjoint key set on their own listener, so a drum
+ * focus silences the melodic keyboard and leaves the pads playing.
+ */
+export function synthTargetForFocus(focus: MixLayerId): SynthControlTarget | null {
+  return isMelodicFocus(focus) ? controlTargetForFocus(focus) : null;
+}
 
 /**
  * The bridge into MELODY_TRACKS. `null` for the four focuses that are not a
@@ -154,4 +169,31 @@ const MELODY_TRACK_FOR_FOCUS: Record<MixLayerId, MelodyTrackId | null> = {
 /** Which melody track a focus names, or `null` if it names none. */
 export function melodyTrackForFocus(focus: MixLayerId): MelodyTrackId | null {
   return MELODY_TRACK_FOR_FOCUS[focus];
+}
+
+/**
+ * The two setters "take me to this track's synth" needs. An injected pair, not
+ * a `useAppStore` read, so the ordering rule below is testable as pure logic.
+ */
+export interface SynthTargetNavigation {
+  setFocusTrack: (focus: MixLayerId) => void;
+  setActiveTab: (tab: ViewMode) => void;
+}
+
+/**
+ * Focus a track AND show its synth — the Adjust-Synth button's whole job.
+ *
+ * It lives here rather than in `utils/synthControl.ts`, where it used to sit:
+ * `utils/` is outside the layering chain and above `data/`, so reaching into
+ * `store/` for `MixLayerId` put a type cycle between the two files (utils read
+ * the focus roster; the store read `SynthControlTarget` back). The styles
+ * table and the target union stay in utils, which now imports no store type;
+ * this is store navigation and belongs with the other `focusTrack`
+ * projections.
+ */
+export function focusSynthTarget(focus: MixLayerId, nav: SynthTargetNavigation): void {
+  // Focus first: the Sound view is always mounted, so switching the tab last
+  // means it never renders a frame pointed at the previous track.
+  nav.setFocusTrack(focus);
+  nav.setActiveTab('sound');
 }

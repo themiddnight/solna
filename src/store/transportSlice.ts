@@ -13,7 +13,13 @@ type Get = StoreApi<AppStore>['getState'];
 /** The transport's default tempo; factoryProjectContent() reads it so a new project matches a fresh session. */
 export const DEFAULT_BPM = 120;
 
-type PlayerField = 'sequencerPlayer' | 'chordsPlayer' | 'leadPlayer' | 'fxPlayer';
+export type PlayerField = 'sequencerPlayer' | 'chordsPlayer' | 'leadPlayer' | 'fxPlayer';
+
+/** Just the player fields of the store — all `allPlayerStates` and the two
+ *  folds below read, so a caller holding only those (leadRecord's clock
+ *  predicate, a test fixture) can pass its own object instead of a whole
+ *  `AppStore`. */
+export type PlayerStates = Pick<AppStore, PlayerField>;
 
 const FIELD: Record<PlayerModule, PlayerField> = {
   sequencer: 'sequencerPlayer',
@@ -21,6 +27,17 @@ const FIELD: Record<PlayerModule, PlayerField> = {
   lead: 'leadPlayer',
   fx: 'fxPlayer',
 };
+
+/**
+ * `FIELD`'s keys and values, resolved ONCE at module scope. Every fold below
+ * runs as a zustand selector on every `set()` — a knob drag writes at pointer
+ * rate — so re-running `Object.keys(FIELD)` per call allocated an array per
+ * selector per write. Hoisting keeps the table-driven property (a new
+ * `PlayerModule` is still picked up for free) and costs nothing at runtime;
+ * `soloNav.ts`'s `SOLO_NAV_KEYS` is the same move for the same reason.
+ */
+const PLAYER_MODULES = Object.keys(FIELD) as PlayerModule[];
+const PLAYER_FIELDS = PLAYER_MODULES.map((module) => FIELD[module]);
 
 /** A player still owns scheduled sound unless it is fully stopped. */
 export function isPlayerActive(state: PlayerState): boolean {
@@ -32,15 +49,6 @@ export function aggregatePlayerState(...states: PlayerState[]): PlayerState {
   if (states.includes('playing')) return 'playing';
   if (states.includes('stopping')) return 'stopping';
   return 'stopped';
-}
-
-/**
- * Deliberately NOT derived from aggregatePlayerState: when one player is
- * `stopping` and the others are already `stopped`, the aggregate reads
- * `stopping` but there is still sound to cut, so hard stop must stay live.
- */
-export function isHardStopEnabled(...states: PlayerState[]): boolean {
-  return states.some(isPlayerActive);
 }
 
 /**
@@ -64,7 +72,7 @@ function allPlayersPatch(
   next: (current: PlayerState) => PlayerState,
 ): Partial<AppStore> {
   const patch: Partial<AppStore> = {};
-  (Object.keys(FIELD) as PlayerModule[]).forEach((module) => {
+  PLAYER_MODULES.forEach((module) => {
     const field = FIELD[module];
     const current = state[field];
     const target = next(current);
@@ -100,7 +108,7 @@ export const NO_PLAYERS_ACTIVE: WasActivePlayers = Object.freeze({
  */
 export function captureActivePlayers(state: AppStore): WasActivePlayers {
   const captured = {} as WasActivePlayers;
-  (Object.keys(FIELD) as PlayerModule[]).forEach((module) => {
+  PLAYER_MODULES.forEach((module) => {
     captured[module] = isPlayerActive(state[FIELD[module]]);
   });
   return captured;
@@ -108,7 +116,7 @@ export function captureActivePlayers(state: AppStore): WasActivePlayers {
 
 /** Whether a capture holds anything at all — restartAfterStop's `wasPlaying`. */
 export function anyPlayerActive(wasActive: WasActivePlayers): boolean {
-  return (Object.keys(FIELD) as PlayerModule[]).some((module) => wasActive[module]);
+  return PLAYER_MODULES.some((module) => wasActive[module]);
 }
 
 /**
@@ -120,8 +128,27 @@ export function anyPlayerActive(wasActive: WasActivePlayers): boolean {
  * fields (the bug this trio exists to close: nine call sites had done exactly
  * that by hand and silently stopped at three players when `fx` shipped).
  */
-export function allPlayerStates(state: AppStore): PlayerState[] {
-  return (Object.keys(FIELD) as PlayerModule[]).map((module) => state[FIELD[module]]);
+export function allPlayerStates(state: PlayerStates): PlayerState[] {
+  return PLAYER_FIELDS.map((field) => state[field]);
+}
+
+/** One digit per `PlayerState`, so `playerStatesKey` can pack them base-3. */
+const PLAYER_STATE_CODE: Record<PlayerState, number> = { stopped: 0, playing: 1, stopping: 2 };
+
+/**
+ * Every player's state folded into ONE comparable scalar, table-driven off
+ * `FIELD` like the folds below.
+ *
+ * For subscriptions that must wake on any player transition (songMode's
+ * reconcile): watching this is a plain `===` on a number, where watching
+ * `allPlayerStates(state).join('|')` allocated two arrays and a string on
+ * every store `set()` — i.e. at knob-drag rate, forever. Only equality is
+ * meaningful; the numeric value itself carries no ordering.
+ */
+export function playerStatesKey(state: PlayerStates): number {
+  let key = 0;
+  for (const field of PLAYER_FIELDS) key = key * 3 + PLAYER_STATE_CODE[state[field]];
+  return key;
 }
 
 /**
@@ -130,19 +157,29 @@ export function allPlayerStates(state: AppStore): PlayerState[] {
  * `aggregatePlayerState(state.sequencerPlayer, state.chordsPlayer,
  * state.leadPlayer)` shape that used to be copied at each call site.
  */
-export function aggregateAllPlayers(state: AppStore): PlayerState {
-  return aggregatePlayerState(...allPlayerStates(state));
+export function aggregateAllPlayers(state: PlayerStates): PlayerState {
+  let stopping = false;
+  for (const field of PLAYER_FIELDS) {
+    const value = state[field];
+    if (value === 'playing') return 'playing';
+    if (value === 'stopping') stopping = true;
+  }
+  return stopping ? 'stopping' : 'stopped';
 }
 
 /**
- * Whether ANY player still owns scheduled sound, table-driven replacement for
- * the hand-listed `isHardStopEnabled(state.sequencerPlayer, ...)` shape.
- * Semantically identical to `isHardStopEnabled(...allPlayerStates(state))` —
- * kept as its own name because most call sites want "is anything live" from
- * the live store, not the hard-stop-button's own reasoning about `stopping`.
+ * Whether ANY player still owns scheduled sound — the one answer to "is
+ * anything live", table-driven off `FIELD` rather than a hand-listed subset.
+ *
+ * Deliberately NOT `aggregateAllPlayers(state) === 'playing'`: when one player
+ * is `stopping` and the others are already `stopped`, the aggregate reads
+ * `stopping` but there is still sound to cut, so the hard stop this gates must
+ * stay live. `isPlayerActive` is where that rule is spelled; this is the fold
+ * of it over every registered player.
  */
-export function isAnyPlayerActive(state: AppStore): boolean {
-  return allPlayerStates(state).some(isPlayerActive);
+export function isAnyPlayerActive(state: PlayerStates): boolean {
+  for (const field of PLAYER_FIELDS) if (isPlayerActive(state[field])) return true;
+  return false;
 }
 
 /**
@@ -162,7 +199,7 @@ export function restartPlayersPatch(
   scope: PlaybackScope,
 ): Partial<AppStore> {
   const patch: Partial<AppStore> = { playbackScope: scope };
-  (Object.keys(FIELD) as PlayerModule[]).forEach((module) => {
+  PLAYER_MODULES.forEach((module) => {
     if (wasActive[module]) patch[FIELD[module]] = 'playing';
   });
   return patch;
@@ -191,7 +228,7 @@ export function stopAllPlayersPatch(state: AppStore): Partial<AppStore> {
  * stays disowned on either layer.
  *
  * Hard stop is unaffected — it stays live off the real player states via
- * isHardStopEnabled, so auditioning audio always has a visible global kill.
+ * isAnyPlayerActive, so auditioning audio always has a visible global kill.
  */
 export function transportDisplayState(
   scope: PlaybackScope,

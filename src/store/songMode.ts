@@ -7,7 +7,7 @@ import { loadLoop } from './loadLoop';
 import { loopBars } from './loop';
 import { playbackScopeReducer } from './playbackScope';
 import { useAppStore } from './store';
-import { aggregateAllPlayers, allPlayerStates } from './transportSlice';
+import { aggregateAllPlayers, playerStatesKey } from './transportSlice';
 import type { Loop } from './types';
 
 /** A loop's length in steps = Σ chord.bars × stepsPerBar. */
@@ -335,12 +335,13 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
       // Watched because a cursor move on the Loop layer is a focus change:
       // reconcile must dispatch focus-loop for it, not only for a tab change.
       loop: state.activeLoopId,
-      // Every registered player, table-driven — joined to one string so the
-      // equalityFn below stays a plain `===` per field. A hand-listed
-      // `seq`/`chords`/`lead` trio here is exactly the bug this closes: it
-      // watched three of four players, so an fx-only transition never woke
-      // reconcile.
-      players: allPlayerStates(state).join('|'),
+      // Every registered player, table-driven — folded to one scalar so the
+      // equalityFn below stays a plain `===` per field, and so this selector
+      // allocates nothing on a store `set()` it does not care about. A
+      // hand-listed `seq`/`chords`/`lead` trio here is exactly the bug this
+      // closes: it watched three of four players, so an fx-only transition
+      // never woke reconcile.
+      players: playerStatesKey(state),
       scope: state.playbackScope,
     }),
     reconcile,

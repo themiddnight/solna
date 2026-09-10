@@ -6,11 +6,13 @@ import { leadLiveInputStep, startLeadLiveClock } from '../audio/playback/leadLiv
 import { getMeter } from '../utils/meter';
 import { columnsPerBar, strideFor } from '../utils/stepResolution';
 import { layerForTab } from '../types';
-import { isPlayerActive } from './transportSlice';
+import { isAnyPlayerActive, isPlayerActive, type PlayerStates } from './transportSlice';
 import { melodyTrackForFocus } from './focusTrack';
 import { useAppStore } from './store';
-import type { AppStore, PlayerState } from './types';
+import type { AppStore } from './types';
+import { createNavSignature } from './navSignature';
 import { MELODY_TRACKS, melodyTrack, type MelodyTrack, type MelodyTrackId } from './melodyTracks';
+import { MELODY_ACTIONS } from './leadSlice';
 
 /**
  * Is there music to play along to?
@@ -35,18 +37,8 @@ import { MELODY_TRACKS, melodyTrack, type MelodyTrack, type MelodyTrackId } from
  * along to while an FX riser is plainly sounding. An id it did not read would
  * also be an unused parameter, which `bun run eslint` reports.
  */
-export function leadClockActive(state: {
-  sequencerPlayer: PlayerState;
-  chordsPlayer: PlayerState;
-  leadPlayer: PlayerState;
-  fxPlayer: PlayerState;
-}): boolean {
-  return (
-    isPlayerActive(state.sequencerPlayer) ||
-    isPlayerActive(state.chordsPlayer) ||
-    isPlayerActive(state.leadPlayer) ||
-    isPlayerActive(state.fxPlayer)
-  );
+export function leadClockActive(state: PlayerStates): boolean {
+  return isAnyPlayerActive(state);
 }
 
 /**
@@ -76,13 +68,7 @@ export function leadClockActive(state: {
  * first.
  */
 export function leadMarkerFollowsClock(
-  state: {
-    sequencerPlayer: PlayerState;
-    chordsPlayer: PlayerState;
-    leadPlayer: PlayerState;
-    fxPlayer: PlayerState;
-    recordingTrack: MelodyTrackId | null;
-  },
+  state: PlayerStates & { recordingTrack: MelodyTrackId | null },
   trackId: MelodyTrackId,
 ): boolean {
   return (
@@ -111,24 +97,6 @@ interface HeldNote {
   /** The stride the note was captured at, so a resolution change mid-hold cannot re-scale its length. */
   stride: number;
 }
-
-/**
- * The two ACTION names this bridge calls. MELODY_TRACKS carries state field
- * names only (see its docblock), so — exactly like leadSlice's `ACTIONS` and
- * LeadMelodyGrid's `GRID_ACTIONS` — the setter names are a small typo-checked
- * literal table here rather than a `record${Id}Note` template the compiler
- * cannot check against the store.
- */
-const RECORD_ACTIONS: Record<
-  MelodyTrackId,
-  {
-    record: 'recordLeadNote' | 'recordFxNote';
-    setNoteLength: 'setLeadNoteLength' | 'setFxNoteLength';
-  }
-> = {
-  lead: { record: 'recordLeadNote', setNoteLength: 'setLeadNoteLength' },
-  fx: { record: 'recordFxNote', setNoteLength: 'setFxNoteLength' },
-};
 
 /**
  * The ONE anchor collector, for both melody tracks.
@@ -181,7 +149,7 @@ export function startLiveClockCollector(deps: LeadRecordDeps = REAL_CLOCK): () =
  * behave the same without three copies of this rule.
  *
  * Instantiated per MELODY_TRACKS row, the leadSlice precedent: every store
- * field is read through `track` and every action through RECORD_ACTIONS, so
+ * field is read through `track` and every action through MELODY_ACTIONS, so
  * Lead and FX are one implementation with two rows. Both bridges see every
  * note; the record action's `recordingTrack === track.id` guard is what makes
  * exactly one of them write.
@@ -197,7 +165,7 @@ export function startMelodyRecordBridge(
   deps: LeadRecordDeps = REAL_CLOCK,
 ): () => void {
   const held = new Map<string, HeldNote>();
-  const actions = RECORD_ACTIONS[track.id];
+  const actions = MELODY_ACTIONS[track.id];
 
   // A note still down when the transport stops has no length to compute
   // against, and its release must not extend anything later. Per bridge,
@@ -296,17 +264,8 @@ export const RECORD_ARM_NAV_SOURCES = {
   activeLoopId: (state: AppStore) => state.activeLoopId,
 };
 
-type RecordArmNavSignature = {
-  [K in keyof typeof RECORD_ARM_NAV_SOURCES]: ReturnType<(typeof RECORD_ARM_NAV_SOURCES)[K]>;
-};
-
-function recordArmNavSignature(state: AppStore): RecordArmNavSignature {
-  const signature: Record<string, unknown> = {};
-  for (const key of Object.keys(RECORD_ARM_NAV_SOURCES) as (keyof typeof RECORD_ARM_NAV_SOURCES)[]) {
-    signature[key] = RECORD_ARM_NAV_SOURCES[key](state);
-  }
-  return signature as RecordArmNavSignature;
-}
+/** Same machinery soloNav.ts uses, one table over — see navSignature.ts. */
+const { signature: recordArmNavSignature } = createNavSignature(RECORD_ARM_NAV_SOURCES);
 
 /**
  * The arm follows focus and navigation, DISARMING only.

@@ -2,21 +2,8 @@ import { useCallback, useState } from 'react';
 import type React from 'react';
 import { useAppStore } from '@/store/store';
 import { type MelodyTrackId } from '@/store/melodyTracks';
+import { MELODY_ACTIONS } from '@/store/leadSlice';
 import { LEAD_CELL_WIDTH, leadResizeLen } from './melodyGrid';
-
-/**
- * The resize/erase action names MELODY_TRACKS' row does not carry (it
- * declares STATE field names only — see melodyTracks.ts), for the same
- * reason useLeadNotePaint.ts's own `PAINT_ACTIONS` is kept local rather than
- * templated.
- */
-const RESIZE_ACTIONS: Record<
-  MelodyTrackId,
-  { setNoteLength: 'setLeadNoteLength' | 'setFxNoteLength'; paintNote: 'paintLeadNote' | 'paintFxNote' }
-> = {
-  lead: { setNoteLength: 'setLeadNoteLength', paintNote: 'paintLeadNote' },
-  fx: { setNoteLength: 'setFxNoteLength', paintNote: 'paintFxNote' },
-};
 
 export interface LeadResizePreview {
   stepIndex: number;
@@ -143,7 +130,7 @@ export function useLeadNoteResize(trackId: MelodyTrackId): {
     stride: number,
   ) => void;
 } {
-  const actions = RESIZE_ACTIONS[trackId];
+  const actions = MELODY_ACTIONS[trackId];
   const [preview, setPreview] = useState<LeadResizePreview | null>(null);
 
   const startResize = useCallback(

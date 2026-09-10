@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { playbackAudibleDelaySec } from '@/audio/playback/playbackEngine';
+import type { PlayerModule } from '@/store/types';
 
 /** One id per clock-driven player that publishes a 16th-note step. */
 export type StepPlayerId = 'chords' | 'lead' | 'fx' | 'sequencer';
@@ -11,6 +12,21 @@ export type StepPlayerId = 'chords' | 'lead' | 'fx' | 'sequencer';
  * whichever grid's stride published last, with no error anywhere.
  */
 export const PLAYER_IDS: readonly StepPlayerId[] = ['chords', 'lead', 'fx', 'sequencer'];
+
+/**
+ * The roster above is member-for-member the store's `PlayerModule`, and it is
+ * NOT an alias of it: this file's union means "publishes a step", which is a
+ * claim only this file can make, while `PlayerModule` means "has a transport
+ * player". They are the same four today, and the two lists gained `'fx'` in
+ * two separate edits with nothing tying them together — so the equality is
+ * asserted rather than assumed. A player that genuinely does not publish steps
+ * deletes these two lines and writes down why instead.
+ */
+type Assert<T extends true> = T;
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- the alias IS the assertion. */
+type _AssertStepPlayersAreModules = Assert<
+  StepPlayerId extends PlayerModule ? (PlayerModule extends StepPlayerId ? true : false) : false
+>;
 
 export interface StepPublisher {
   /** Records `step` for `player` and notifies its listeners — but only when

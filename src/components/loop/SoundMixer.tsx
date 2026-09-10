@@ -37,10 +37,7 @@ const MIXER_WRITERS: Record<MixLayerId, {
   sliderClassName: string;
 }> = {
   synth: { setVolumeKey: 'setSynthVolume', toggleKey: 'toggleSynthMuted', sliderClassName: SYNTH_TARGET_STYLES.synth.slider },
-  // FX has no SynthControlTarget entry — there is no Target-selector row for
-  // it — so its slider class is spelled out here, following the same
-  // module-token pattern chord/bass/pad's SYNTH_TARGET_STYLES entries use.
-  fx: { setVolumeKey: 'setFxVolume', toggleKey: 'toggleFxMuted', sliderClassName: 'range range-xs text-module-fx [--range-thumb:var(--color-module-fx-content)]' },
+  fx: { setVolumeKey: 'setFxVolume', toggleKey: 'toggleFxMuted', sliderClassName: SYNTH_TARGET_STYLES.fx.slider },
   chord: { setVolumeKey: 'setChordVolume', toggleKey: 'toggleChordMuted', sliderClassName: SYNTH_TARGET_STYLES.chord.slider },
   bass: { setVolumeKey: 'setBassVolume', toggleKey: 'toggleBassMuted', sliderClassName: SYNTH_TARGET_STYLES.bass.slider },
   pad: { setVolumeKey: 'setPadVolume', toggleKey: 'togglePadMuted', sliderClassName: SYNTH_TARGET_STYLES.pad.slider },

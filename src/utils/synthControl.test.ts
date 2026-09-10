@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { focusSynthTarget, resolveSynthControlChannel, SYNTH_TARGET_STYLES } from './synthControl';
+import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from './synthControl';
 import type { SynthControlTarget, SynthParamChannel } from './synthControl';
-import type { SynthParams, ViewMode } from '../types';
-import type { MixLayerId } from '../store/focusTrack';
+import type { SynthParams } from '../types';
 import { INITIAL_SYNTH_PARAMS } from '../store/initialState';
 import { soloTrackForFocus } from '../store/trackAudibility';
 
@@ -41,6 +40,15 @@ function channel(name: string): SynthParamChannel {
   };
 }
 
+test('the pad target carries its own module styling', () => {
+  const style = SYNTH_TARGET_STYLES.pad;
+  expect(style.label).toBe('Pad');
+  expect(style.tint).toBe('tint-pad');
+  expect(style.ring).toContain('module-pad');
+  expect(style.activeBtn).toContain('--color-module-pad');
+  expect(style.badge).toContain('--color-module-pad');
+});
+
 describe('resolveSynthControlChannel', () => {
   const channels = {
     synth: channel('synth-patch'),
@@ -63,49 +71,6 @@ describe('resolveSynthControlChannel', () => {
       resolveSynthControlChannel('unknown-target' as unknown as SynthControlTarget, channels)
     ).toBe(channels.synth);
   });
-});
-
-describe('focusSynthTarget', () => {
-  function recorder() {
-    const calls: Array<[string, string]> = [];
-    return {
-      calls,
-      setFocusTrack: (focus: MixLayerId) => calls.push(['target', focus]),
-      setActiveTab: (tab: ViewMode) => calls.push(['tab', tab]),
-    };
-  }
-
-  test('selects the requested target and opens the synth view', () => {
-    const nav = recorder();
-    focusSynthTarget('chord', nav);
-    expect(nav.calls).toEqual([
-      ['target', 'chord'],
-      ['tab', 'sound'],
-    ]);
-  });
-
-  test('carries each target through unchanged', () => {
-    for (const target of ['synth', 'chord', 'bass'] as SynthControlTarget[]) {
-      const nav = recorder();
-      focusSynthTarget(target, nav);
-      expect(nav.calls[0]).toEqual(['target', target]);
-    }
-  });
-
-  test('sets the target before switching tabs so the synth view renders on the right channel', () => {
-    const nav = recorder();
-    focusSynthTarget('bass', nav);
-    expect(nav.calls.map(([kind]) => kind)).toEqual(['target', 'tab']);
-  });
-});
-
-test('the pad target carries its own module styling', () => {
-  const style = SYNTH_TARGET_STYLES.pad;
-  expect(style.label).toBe('Pad');
-  expect(style.tint).toBe('tint-pad');
-  expect(style.ring).toContain('module-pad');
-  expect(style.activeBtn).toContain('--color-module-pad');
-  expect(style.badge).toContain('--color-module-pad');
 });
 
 describe('the fx control target', () => {

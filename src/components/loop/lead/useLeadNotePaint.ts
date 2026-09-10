@@ -1,26 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/store';
 import { type MelodyTrackId } from '@/store/melodyTracks';
+import { MELODY_ACTIONS } from '@/store/leadSlice';
 import {
   createLeadPaintController,
   createLeadPaintHandlers,
   type LeadPaintHandlers,
 } from './leadPaint';
-
-/**
- * The paint/toggle action names MELODY_TRACKS' row does not carry (it
- * declares STATE field names only — see melodyTracks.ts). Kept local for the
- * same reason LeadMelodyGrid's own `GRID_ACTIONS` is: a typo-checked literal
- * on both sides beats a templated `paint${id}Note` that the compiler cannot
- * verify against the store's action names.
- */
-const PAINT_ACTIONS: Record<
-  MelodyTrackId,
-  { paintNote: 'paintLeadNote' | 'paintFxNote'; toggleNote: 'toggleLeadNote' | 'toggleFxNote' }
-> = {
-  lead: { paintNote: 'paintLeadNote', toggleNote: 'toggleLeadNote' },
-  fx: { paintNote: 'paintFxNote', toggleNote: 'toggleFxNote' },
-};
 
 /**
  * Wires the paint state machine to the DOM. Everything decidable lives in
@@ -38,7 +24,7 @@ export function useLeadNotePaint(
   trackId: MelodyTrackId,
   resolveStepIndex: (col: number) => number,
 ): LeadPaintHandlers {
-  const actions = PAINT_ACTIONS[trackId];
+  const actions = MELODY_ACTIONS[trackId];
   const ref = useRef<LeadPaintHandlers | null>(null);
   const controllerRef = useRef<ReturnType<typeof createLeadPaintController> | null>(null);
   // The controller is built once, but the column-to-stored-index mapping moves

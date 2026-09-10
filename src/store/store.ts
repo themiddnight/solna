@@ -278,7 +278,7 @@ function sanitizeEnumeratedFields(sanitized: Record<string, unknown>): void {
 
 /* eslint-disable-next-line complexity -- one persisted key validated per line;
    the count tracks how many fields this function validates, not tangled branching. */
-function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
+export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (typeof persisted !== 'object' || persisted === null) return {};
   const sanitized = { ...(persisted as Record<string, unknown>) };
 
@@ -392,15 +392,6 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   sanitized.projectBaselineHash = asNullableString(sanitized.projectBaselineHash);
 
   return sanitized as unknown as Partial<AppStore>;
-}
-
-/**
- * Test seam. `sanitizePersistedState` is internal to the persist wiring; this
- * export is what lets store.test.ts assert a clause directly instead of
- * round-tripping a payload through localStorage and the merge.
- */
-export function sanitizePersistedStateForTest(persisted: unknown): Partial<AppStore> {
-  return sanitizePersistedState(persisted);
 }
 
 export const useAppStore = create<AppStore>()(
