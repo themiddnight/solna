@@ -498,7 +498,6 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
   const chords = useAppStore((s) => s.chords);
-  const synthParams = useAppStore((s) => s[track.synthParams]);
 
   const meter = getMeter(meterId);
   const stepsPerBar = meter.stepsPerBar;
@@ -590,19 +589,26 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
   // dependency on the preset table. `lenTicks` omitted means a row label, which
   // sounds one beat; passed, it means a cell, which sounds what it draws.
   //
-  // bpm is read off getState() rather than subscribed to. This grid already
-  // re-renders once per 16th to move the playhead, and a preview is a click:
-  // the value at click time is the only one that can matter, and a subscription
-  // here would add a re-render of every mounted melody grid per tempo change
-  // for a value nothing renders.
+  // bpm AND synthParams are read off getState() rather than subscribed to or
+  // closed over. This grid already re-renders once per 16th to move the
+  // playhead, and a preview is a click: the value at click time is the only
+  // one that can matter. synthParams in particular must not sit in the
+  // useCallback deps — it is store state ui/Knob.tsx writes on every
+  // pointermove, so a synth-cutoff drag would change previewNote's identity
+  // once per frame, and previewNote is a prop of the React.memo'd
+  // LeadMelodyCells, so that identity change re-rendered the whole cell
+  // matrix of BOTH mounted melody grids per pointer move for a callback
+  // nothing renders.
   const previewNote = useCallback(
     (note: string, lenTicks?: number) => {
-      previewSequencerNote(note, synthParams, undefined, {
-        holdSec: leadPreviewHoldSec(useAppStore.getState().bpm, stride, lenTicks),
-        releaseSec: synthParams.release,
+      const state = useAppStore.getState();
+      const params = state[track.synthParams];
+      previewSequencerNote(note, params, undefined, {
+        holdSec: leadPreviewHoldSec(state.bpm, stride, lenTicks),
+        releaseSec: params.release,
       });
     },
-    [synthParams, stride],
+    [stride, track.synthParams],
   );
 
   // Clamped again HERE, not only on write: a meter or loop-length change can

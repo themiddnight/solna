@@ -550,6 +550,21 @@ section** — see *FX default patch — dropped* for why the patch end of it is 
 `previewSequencerNote`'s own `holdSec = 0.5` default is unchanged — it serves other callers, and
 this change is about the melody grid's call site passing something meaningful.
 
+**What shipped is narrower than "clicking a cell that holds a note sounds that note's own
+`len`."** Only the keyboard toggle's ADD half previews, and only at the one drawn cell — a click
+on a cell that already holds a note does not re-audition it, and a pointer click never previews
+at all. The gap is deliberate, not a shortfall: a pointer-down on a covered cell begins a
+paint/erase stroke (`createLeadPaintController`), and a stroke visits one new cell per
+`pointermove`, each cell calling `beginPreview()` again — `presetPreview.ts`'s own generation
+counter cuts the previous preview the moment a newer one starts, by design, so a drag across even
+a few cells would machine-gun the preview bus into a stutter rather than the single note a click
+is supposed to sound. Gating on the keyboard path sidesteps the whole class of gesture; wiring a
+pointer audition would need its own drag-vs-click distinction first, which is exactly the scope
+this plan declined (see the linked plan's "Deliberately not in this plan"). Nothing about the
+length arithmetic narrows with it: `leadPreviewHoldSec`'s `lenTicks` branch already converts any
+tick length through the active stride, so a later pointer audition — a click, not a drag, on a
+filled cell — is a new call site passing that cell's `len`, not new arithmetic.
+
 ## FX default patch — dropped
 
 **This change is dropped. It was written against a false premise: that the FX track defaults to
