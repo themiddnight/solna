@@ -1,7 +1,24 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { SimpleSynthPanel } from './SimpleSynthPanel';
+import { useAppStore } from '@/store/store';
+import { controlTargetForFocus, isMelodicFocus } from '@/store/focusTrack';
+import { resolveSynthControlChannel } from '@/utils/synthControl';
 import type { SynthParams } from '@/types';
+import type { AppStore } from '@/store/types';
+
+// Mirrors useSynthChannel's lookup without the hook, so the resolution can be
+// asserted without a render. If the two ever disagree the hook is wrong.
+function resolveChannelForFocus(s: AppStore) {
+  const target = isMelodicFocus(s.focusTrack) ? controlTargetForFocus(s.focusTrack) : 'synth';
+  return resolveSynthControlChannel(target, {
+    synth: { params: s.synthParams, setParams: s.setSynthParams },
+    chord: { params: s.chordSynthParams, setParams: s.setChordSynthParams },
+    bass: { params: s.bassSynthParams, setParams: s.setBassSynthParams },
+    pad: { params: s.padSynthParams, setParams: s.setPadSynthParams },
+    fx: { params: s.fxSynthParams, setParams: s.setFxSynthParams },
+  }).params;
+}
 
 const params = {
   filterCutoff: 4000,
@@ -83,5 +100,21 @@ describe('SimpleSynthPanel theming', () => {
     for (const legacy of ['amber-', 'cyan-', 'pink-', 'emerald-', 'purple-', 'text-white']) {
       expect(html).not.toContain(legacy);
     }
+  });
+});
+
+describe('the synth panels follow focusTrack', () => {
+  // A pure assertion on the hook's own resolution, driven through the store
+  // rather than a render: useSynthChannel is a hook, but its whole body is a
+  // lookup, and the store's getState() is the input.
+  test('the FX focus resolves the FX patch, not the Lead one', () => {
+    useAppStore.setState({ focusTrack: 'fx' });
+    const s = useAppStore.getState();
+    expect(resolveChannelForFocus(s)).toBe(s.fxSynthParams);
+    useAppStore.setState({ focusTrack: 'bass' });
+    expect(resolveChannelForFocus(useAppStore.getState())).toBe(
+      useAppStore.getState().bassSynthParams,
+    );
+    useAppStore.setState({ focusTrack: 'synth' });
   });
 });

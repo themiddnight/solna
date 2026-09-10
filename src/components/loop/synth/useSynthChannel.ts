@@ -1,4 +1,5 @@
 import { useAppStore } from "@/store/store";
+import { controlTargetForFocus, isMelodicFocus } from "@/store/focusTrack";
 import { resolveSynthControlChannel } from "@/utils/synthControl";
 import type { SynthParams } from "@/types";
 
@@ -25,7 +26,7 @@ export interface SynthChannel {
  * the channel it is pointed at actually changes.
  */
 export function useSynthChannel(): SynthChannel {
-  const controlTarget = useAppStore((s) => s.controlTarget);
+  const focusTrack = useAppStore((s) => s.focusTrack);
   const synthParams = useAppStore((s) => s.synthParams);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
   const bassSynthParams = useAppStore((s) => s.bassSynthParams);
@@ -37,7 +38,17 @@ export function useSynthChannel(): SynthChannel {
   const setPadSynthParams = useAppStore((s) => s.setPadSynthParams);
   const setFxSynthParams = useAppStore((s) => s.setFxSynthParams);
 
-  const channel = resolveSynthControlChannel(controlTarget, {
+  // `controlTargetForFocus` refuses a drum focus by TYPE, so the narrowing is
+  // forced here rather than optional. Lead is the value in that branch, and it
+  // is safe only because SoundView renders no synth surface at all when the
+  // focus is `drum` — the whole Synth section is unmounted, so no panel that
+  // calls this hook is on screen and nothing can write through it. That gate
+  // is asserted in SoundView.test.tsx ("no Synth section on a drum focus"); if
+  // it is ever removed, this branch becomes the invisible Lead-patch edit the
+  // spec's trap describes.
+  const target = isMelodicFocus(focusTrack) ? controlTargetForFocus(focusTrack) : 'synth';
+
+  const channel = resolveSynthControlChannel(target, {
     synth: { params: synthParams, setParams: setSynthParams },
     chord: { params: chordSynthParams, setParams: setChordSynthParams },
     bass: { params: bassSynthParams, setParams: setBassSynthParams },
