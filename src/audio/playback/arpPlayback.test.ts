@@ -119,17 +119,22 @@ describe('computeArpTick', () => {
     expect(triggered.has('synth')).toBe(true);
   });
 
-  test('deleting the record step (triggeredTargets.add) leaves the release with nothing to release', () => {
-    // This is the assertion that specifically goes red if the `.add(target)`
-    // line is deleted from computeArpTick: `triggered` stays empty even
-    // though a trigger genuinely fired, so releaseTriggeredTargets — proven
-    // above to call release once per recorded member — would call it zero
-    // times and the voice this tick started would drone.
+  test('with notes held on TWO buses, only the target bus is sequenced and recorded', () => {
+    // A hold spanning a focus change can leave notes on more than one bus —
+    // computeArpTick must sequence and record only the one it was called
+    // for, never the other bus's notes leaking into this tick's trigger set.
     const triggered = new Set<SynthControlTarget>();
     const params = { ...INITIAL_SYNTH_PARAMS, arpActive: true };
-    const result = computeArpTick(triggered, 'synth', heldWith('synth', 'C4'), params, 120, 0, 16);
+    const held: HeldNoteTargets = new Map([
+      ['C4', 'synth' as SynthControlTarget],
+      ['E4', 'fx' as SynthControlTarget],
+    ]);
+    const result = computeArpTick(triggered, 'fx', held, params, 120, 0, 16);
 
     expect(result.triggers.length).toBeGreaterThan(0);
+    expect(result.sequence).toEqual(['E4']);
+    expect(triggered.has('fx')).toBe(true);
+    expect(triggered.has('synth')).toBe(false);
     expect(triggered.size).toBe(1);
   });
 
