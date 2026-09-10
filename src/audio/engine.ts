@@ -1166,8 +1166,8 @@ class AudioEngine {
     params: SynthParams,
     velocity = DEFAULT_VELOCITY,
     time: number | undefined,
-    source = 'synth',
-    scaleFactor = 1,
+    source: string,
+    scaleFactor: number,
     owner: VoiceOwner,
   ): void {
     if (!this.ctx || !this.dryGain) return;

@@ -5,7 +5,12 @@
  * - `'live'`      — a person pressing something: computer keyboard, on-screen
  *                   keyboard, MIDI device.
  * - `'arp'`       — the arpeggiator's clock.
- * - `'sequencer'` — the transport playing back written material.
+ * - `'sequencer'` — the transport playing back written material. Same string
+ *                   as the engine's drum-sequencer bus name, but a different
+ *                   vocabulary — `stopOwnedVoices('sequencer', 'sequencer', …)`
+ *                   would compile and read confusingly. Harmless today because
+ *                   drums hold no synth voices, but worth a future reader's
+ *                   double take.
  * - `'preview'`   — an audition: a library item or a grid cell clicked to hear.
  *
  * A tuple AND a type, not one of them: a union declared alone cannot be

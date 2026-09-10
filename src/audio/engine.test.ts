@@ -409,6 +409,32 @@ describe('source stop (preview release)', () => {
     }
   });
 
+  // stopSource delegates to the shared stopVoicesOf body with `owner`
+  // deliberately `undefined`. If that ever changed to pass a literal owner
+  // instead, every other stopSource test here uses only 'live' voices and
+  // would still pass — this is the one that would catch it.
+  test('stopSource releases every owner on the bus, not just one', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'chord', 1, 'live');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.8, t0, 'chord', 1, 'sequencer');
+
+    const chordVoices = Array.from(
+      (engine as any).sourceVoices.get('chord') as Set<{ owner: string; releaseScheduledAt?: number }>,
+    );
+    expect(chordVoices).toHaveLength(2);
+    const liveVoice = chordVoices.find((v) => v.owner === 'live')!;
+    const sequencerVoice = chordVoices.find((v) => v.owner === 'sequencer')!;
+    expect(liveVoice.releaseScheduledAt).toBeUndefined();
+    expect(sequencerVoice.releaseScheduledAt).toBeUndefined();
+
+    engine.stopSource('chord', 0.15);
+
+    expect(liveVoice.releaseScheduledAt).toBe(t0);
+    expect(sequencerVoice.releaseScheduledAt).toBe(t0);
+  });
+
   // Rapid preview clicks: every click stops the source before re-triggering,
   // so a stop lands on voices that are already fading from the PREVIOUS stop.
   // Re-releasing those re-arms their teardown timer, which is what kept a

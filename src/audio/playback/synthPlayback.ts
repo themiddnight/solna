@@ -79,5 +79,12 @@ export function releaseSynthPlaybackVoices(
   // string` — the engine knows nothing about the store's target vocabulary —
   // so the narrowing to SynthControlTarget happens here, at the one call site
   // a wrong bus name could otherwise slip through untyped.
+  //
+  // The 'arp' literal below is pinned rather than threaded through as a
+  // parameter, because this two-parameter signature is what keeps
+  // `src/components/` from having to import `VoiceOwner`. arpPlayback.ts's
+  // `releaseTriggeredTargets` passes its own 'arp' literal to this function's
+  // callers, and nothing checks the two stay in sync — if either literal ever
+  // changed, the drift would be silent.
   audioEngine.releaseSoundingVoices(target, releaseTime, 'arp');
 }

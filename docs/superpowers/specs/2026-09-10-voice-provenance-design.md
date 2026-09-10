@@ -31,9 +31,14 @@ which player created a voice, so a release cannot scope itself to one player.
 | the arpeggiator | `audio/playback/arpPlayback.ts` |
 | the melody-track sequencer | `audio/playback/playbackEngine.ts` (from `useLeadPlayback`) |
 
-`'chord'`, `'bass'`, `'pad'` and `'preview'` each have one player today. The
-design still labels their voices, because an unlabelled voice would be a hole
-the required parameter below exists to close.
+`'preview'` has one player today. `'chord'`, `'bass'` and `'pad'` do not:
+`SynthControlTarget` (`src/utils/synthControl.ts`) includes them alongside
+`'synth'` and `'fx'`, and `focusTrack` can route live input and the arp onto
+any of them, so `useChordPlayback.ts`'s `playbackStopSource` calls carry the
+same whole-bus-stop defect this plan fixes for the lead and FX tracks — not yet
+addressed, and out of this plan's scope. The design still labels every voice's
+owner regardless, because an unlabelled voice would be a hole the required
+parameter below exists to close.
 
 ## Design
 
