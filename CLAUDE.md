@@ -279,7 +279,10 @@ focused at cleanup time), because one hold can span a focus change and leave voi
 one bus. A `drum` focus makes the melodic keyboard a complete no-op: nothing sounds and nothing is
 announced on the note-input bus, because announcing a silent key would let the recorder capture a
 note that made no sound; the disjoint QWERTY drum-pad keys are a separate listener and keep
-working regardless of focus.
+working regardless of focus. **One surface is deliberately exempt: an external MIDI device still
+plays Lead whatever the focus is** — `store/midiInput.ts` names `'synth'` outright — because
+routing it needs a drum-pad ↔ GM-note mapping this app does not have and does not need, being
+designed to require no external device.
 
 **`persist` serialises on every `set()`; only the `localStorage` write is coalesced.** Every
 `set()` that touches a key returned by `partialize` re-serialises that slice on the spot. The
