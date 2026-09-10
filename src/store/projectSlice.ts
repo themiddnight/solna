@@ -1,7 +1,7 @@
 import type { StoreApi } from 'zustand';
 import { audioEngine } from '../audio/engine';
 import { ACCOMPANIMENT_SOURCES } from '../audio/playback/playbackEngine';
-import type { AppStore, ProjectIdentityState } from './types';
+import type { AppStore } from './types';
 import {
   PROJECT_FORMAT_VERSION,
   applyProjectContent,
@@ -11,37 +11,31 @@ import {
   newProjectId,
   type ProjectBody,
   type ProjectContent,
-  type ProjectMeta,
+  type ProjectEnvelope,
 } from './projectFormat';
-import { fingerprintContent, isContentDirty } from './projectFingerprint';
-import { toMeta, type ProjectStore, type ProjectStoreResult, type ProjectStoreStatus } from './projectStore';
+import { unknownLibraryReferences } from './projectFile';
+import { loopStatePatch, resolveActiveLoop } from './loop';
+import type { ProjectStore, ProjectStoreResult, ProjectStoreStatus } from './projectStore';
 
 type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
 
-export interface ProjectSlice extends ProjectIdentityState {
-  /** Transient. Owned by the dirty tracker (projectDirty.ts); actions here only reset it. */
-  dirty: boolean;
-  /** Transient; resolved from projectMeta on refresh. Null = unsaved session or lookup miss. */
-  currentProjectName: string | null;
+export interface ProjectSlice {
+  /** The envelope's name. null = untitled (never named, or a fresh slot). */
+  projectName: string | null;
   projectStoreStatus: ProjectStoreStatus;
-  projectList: ProjectMeta[];
-  /** A non-blocking notice for the modal (unknown references, quota, unavailable). */
+  /** A non-blocking toast surface: unknown references, quota, unavailable. */
   projectNotice: string | null;
   setProjectNotice: (notice: string | null) => void;
-  refreshProjects: () => Promise<void>;
+  setProjectName: (name: string) => void;
+  /** Boot: read the one slot and install it (or keep the factory session). */
+  loadProject: () => Promise<void>;
+  /** The autosave write. Never throws; a failure surfaces as a notice. */
+  save: () => Promise<ProjectStoreResult<ProjectBody>>;
   newProject: () => void;
-  openProject: (id: string) => Promise<ProjectStoreResult<ProjectMeta>>;
-  saveProject: () => Promise<ProjectStoreResult<ProjectMeta>>;
-  saveProjectAs: (name: string) => Promise<ProjectStoreResult<ProjectMeta>>;
-  renameProject: (id: string, name: string) => Promise<ProjectStoreResult<ProjectMeta>>;
-  deleteProject: (id: string) => Promise<ProjectStoreResult<null>>;
-  importProject: (body: ProjectBody, mode: 'new' | 'overwrite' | 'copy') => Promise<ProjectStoreResult<ProjectMeta | null>>;
-  exportStoredProject: (id: string) => Promise<ProjectStoreResult<ProjectBody>>;
-  buildSessionExport: (name: string, now: number) => ProjectBody;
+  openProjectFile: (body: ProjectBody) => Promise<ProjectStoreResult<ProjectBody>>;
+  exportProjectFile: () => ProjectBody;
 }
-
-export const IMPORTED_SUFFIX = ' (imported)';
 
 /**
  * Same instant-but-clickless release loadLoop uses (LOAD_LOOP_RELEASE in
@@ -49,6 +43,23 @@ export const IMPORTED_SUFFIX = ' (imported)';
  * and this slice is part of building it.
  */
 export const INSTALL_RELEASE = 0.02;
+
+/** Untitled reads as an empty name on disk; `null` is its in-store spelling. */
+function normalizeName(name: string): string | null {
+  const trimmed = name.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * The project's envelope, minus the name (which lives in the store so the
+ * header can render it). The `id` is kept but INERT: it rides the `.solna`
+ * contract and is adopted from an opened file, but the storage slot is a fixed
+ * key, so nothing looks a project up by it.
+ */
+interface SlotIdentity {
+  id: string;
+  createdAt: number;
+}
 
 /**
  * Lifecycle actions. Every path that replaces the live session goes through
@@ -59,22 +70,23 @@ export const INSTALL_RELEASE = 0.02;
  * engineSync's subscriptions fire synchronously on that write, and a cut after
  * it would race them and let the old project's queued voices ring over the
  * new one. Drums are one-shots; one already-scheduled hit may still land.
- *
- * Baseline: a saved project gets the fingerprint of what was installed; an
- * untitled session (New, or an import with storage unavailable) keeps a null
- * baseline and its dirty flag comes from the default-project comparison
- * (isContentDirty). The dirty guard is the UI's job — by the time an action
- * here runs, the user has already chosen Discard or saved.
  */
-export function createProjectSlice(set: Set, get: Get, projectStore: ProjectStore, now: () => number = Date.now): ProjectSlice {
-  const install = (content: ProjectContent, identity: { id: string | null; name: string | null }): void => {
+export function createProjectSlice(
+  set: Set,
+  get: Get,
+  projectStore: ProjectStore,
+  now: () => number = Date.now,
+): ProjectSlice {
+  let slot: SlotIdentity = { id: newProjectId(), createdAt: now() };
+
+  const install = (content: ProjectContent, identity: ProjectEnvelope, activeLoopId: string | null = null): void => {
     get().hardStopAll();
     for (const source of ACCOMPANIMENT_SOURCES) {
       audioEngine.stopSource(source, INSTALL_RELEASE);
     }
-    const saved = identity.id !== null;
+    slot = { id: identity.id, createdAt: identity.createdAt };
     set({
-      ...applyProjectContent(content),
+      ...applyProjectContent(content, activeLoopId),
       // A song-mode cursor into the OLD project's loops[] must not survive
       // the swap: it would index the new project's loops[] instead (out of
       // range, or in range but pointing at the wrong loop) and enterSongIndex
@@ -83,190 +95,121 @@ export function createProjectSlice(set: Set, get: Get, projectStore: ProjectStor
       // such recompute, so it is reset here explicitly.
       songLoopIndex: null,
       // A latched track solo is scoped to the surface the user set it on, and a
-      // whole-content swap (New / Open / Import — every install() caller) is the
-      // most complete surface change there is. soloNav.ts's SOLO_NAV_KEYS cannot
-      // catch this on its own: loop ids are not unique across projects, so the
-      // incoming project's first loop can carry the same id the outgoing one
-      // did (every fresh project's default loop is `loop-default-1`), and this
-      // patch writes neither activeTab nor focusTrack. Clearing it here, in
-      // the same atomic set() as the content, is what makes the guarantee hold
-      // regardless of which loop id happens to land.
+      // whole-content swap is the most complete surface change there is.
+      // soloNav.ts's SOLO_NAV_KEYS cannot catch this on its own: loop ids are
+      // not unique across projects, so the incoming project's first loop can
+      // carry the same id the outgoing one did (every fresh project's default
+      // loop is `loop-default-1`), and this patch writes neither activeTab nor
+      // focusTrack. Clearing it here, in the same atomic set() as the content,
+      // is what makes the guarantee hold regardless of which loop id lands.
       soloTracks: [],
       // Same reasoning, same atomic patch: the arm is scoped to the loop the
       // user was recording into, and a whole-content swap leaves nothing for
-      // it to still name. leadRecord.ts's startRecordArmSync watches
-      // activeLoopId, but loop ids are not unique across projects (every
-      // fresh project's default loop is `loop-default-1`), so that sync
-      // cannot catch this on its own — install() must clear it directly, the
-      // way it already does for soloTracks.
+      // it to still name.
       recordingTrack: null,
-      currentProjectId: identity.id,
-      currentProjectName: identity.name,
-      projectBaselineHash: saved ? fingerprintContent(content) : null,
-      dirty: saved ? false : isContentDirty(content, null, null),
+      projectName: normalizeName(identity.name),
     });
   };
 
-  const currentBody = (name: string, at: number): ProjectBody => {
-    const s = get();
-    const content = buildProjectContent(s);
-    const existing = s.currentProjectId ? s.projectList.find((m) => m.id === s.currentProjectId) : undefined;
-    if (existing) {
-      return { ...existing, name: existing.name, updatedAt: at, content };
-    }
-    return { ...makeEnvelope(name, at), content };
+  /** Re-publish availability only when it CHANGED — a store write per autosave would re-render every mounted view. */
+  const publishStatus = (): void => {
+    const next = projectStore.status();
+    if (get().projectStoreStatus !== next) set({ projectStoreStatus: next });
   };
 
-  const upsertList = (meta: ProjectMeta): void =>
-    set((s) => ({
-      projectList: [meta, ...s.projectList.filter((m) => m.id !== meta.id)].sort((a, b) => b.updatedAt - a.updatedAt),
-    }));
-
-  const write = async (body: ProjectBody, makeCurrent: boolean): Promise<ProjectStoreResult<ProjectMeta>> => {
-    const result = await projectStore.put(body);
-    set({ projectStoreStatus: projectStore.status() });
-    if (!result.ok) return result; // a failed save never clears dirty
-    upsertList(result.value);
-    if (makeCurrent) {
-      set({
-        currentProjectId: body.id,
-        currentProjectName: body.name,
-        projectBaselineHash: fingerprintContent(body.content),
-        dirty: false,
-      });
-    }
-    return result;
+  /**
+   * `activeLoopId` is persisted while `loops` now comes from IndexedDB, so a
+   * stored value can name a loop the loaded project does not have — the same
+   * reconciliation persist `merge` does for a localStorage payload.
+   */
+  const reconcileActiveLoop = (): void => {
+    const { loops, activeLoopId } = get();
+    if (loops.some((row) => row.id === activeLoopId)) return;
+    const active = resolveActiveLoop(loops, null);
+    set({ activeLoopId: active.id, ...loopStatePatch(active) });
   };
 
   return {
-    currentProjectId: null,
-    projectBaselineHash: null,
-    dirty: false,
-    currentProjectName: null,
+    projectName: null,
     projectStoreStatus: 'unknown',
-    projectList: [],
     projectNotice: null,
 
     setProjectNotice: (projectNotice) => set({ projectNotice }),
 
-    refreshProjects: async () => {
-      const result = await projectStore.list();
-      const status = projectStore.status();
-      if (!result.ok) {
-        // Unavailable: keep the id (Export current session still uses it) but
-        // there is no name to show — the UI renders "Unnamed project".
-        set({ projectStoreStatus: status, projectList: [] });
+    setProjectName: (name) => set({ projectName: normalizeName(name) }),
+
+    loadProject: async () => {
+      const result = await projectStore.load();
+      publishStatus();
+      if (result.ok === false) {
+        if (result.error === 'not-found') {
+          // Empty slot: a normal first run. Keep the factory content the
+          // slices already booted with — no install, so nothing is announced
+          // and the engine is not touched. The first autosave writes the slot.
+          slot = { id: newProjectId(), createdAt: now() };
+        } else {
+          set({ projectNotice: result.message });
+        }
+        reconcileActiveLoop();
         return;
       }
-      const { currentProjectId } = get();
-      const current = currentProjectId ? result.value.find((m) => m.id === currentProjectId) : undefined;
+      const body = result.value;
+      install(body.content, body, get().activeLoopId);
+      const warnings = unknownLibraryReferences(body.content);
       set({
-        projectStoreStatus: status,
-        projectList: result.value,
-        // A stored id that names no project is a lookup miss, not an error:
-        // the session is simply unsaved now. The baseline goes with the id
-        // (as in deleteProject): a hash belonging to a project that is no
-        // longer there can never be matched again, and the untitled rule —
-        // compare against the default project — is the right one from here.
-        currentProjectId: current ? currentProjectId : null,
-        currentProjectName: current ? current.name : null,
-        ...(current ? {} : { projectBaselineHash: null }),
+        projectNotice:
+          warnings.length > 0 ? `Opened with unrecognised references: ${warnings.join(', ')}` : null,
       });
     },
 
-    newProject: () => install(factoryProjectContent(), { id: null, name: null }),
-
-    openProject: async (id) => {
-      const result = await projectStore.get(id);
-      set({ projectStoreStatus: projectStore.status() });
-      if (!result.ok) return result;
-      // Keep the list in sync immediately, so a Save right after Open (with
-      // no intervening refreshProjects) still finds the project's envelope.
-      upsertList(toMeta(result.value));
-      install(result.value.content, { id: result.value.id, name: result.value.name });
-      return { ok: true, value: toMeta(result.value) };
-    },
-
-    saveProject: async () => {
-      const s = get();
-      if (!s.currentProjectId) {
-        return { ok: false, error: 'not-found', message: 'This session is not a saved project yet.' };
-      }
-      if (!s.projectList.some((m) => m.id === s.currentProjectId)) {
-        // projectList is transient and starts empty after a reload — a
-        // persisted currentProjectId can be a real saved project that just
-        // hasn't been through refreshProjects() yet. Confirm against the
-        // store itself before refusing the save.
-        const existing = await projectStore.get(s.currentProjectId);
-        if (existing.ok === false) {
-          if (existing.error === 'not-found') {
-            set({ currentProjectId: null, currentProjectName: null, projectBaselineHash: null });
-          }
-          return existing;
-        }
-        upsertList(toMeta(existing.value));
-      }
-      return write(currentBody('', now()), true);
-    },
-
-    saveProjectAs: async (name) => {
-      const body: ProjectBody = { ...makeEnvelope(name, now()), content: buildProjectContent(get()) };
-      return write(body, true);
-    },
-
-    renameProject: async (id, name) => {
-      const existing = await projectStore.get(id);
-      if (!existing.ok) return existing;
-      const renamed: ProjectBody = { ...existing.value, name, updatedAt: now() };
-      const result = await projectStore.put(renamed);
-      set({ projectStoreStatus: projectStore.status() });
-      if (!result.ok) return result;
-      upsertList(result.value);
-      if (get().currentProjectId === id) set({ currentProjectName: name });
+    save: async () => {
+      const body = get().exportProjectFile();
+      const result = await projectStore.save(body);
+      publishStatus();
+      // A failed autosave never blocks the app and never rolls the live
+      // session back — the notice is the only signal. The failure is not
+      // re-scheduled: `projectAutosave.write()` fires this `save()` once and
+      // clears its handle, so the slot stays stale until the next content
+      // change schedules a write. That re-attempt covers everything, because
+      // autosave writes the whole content set rather than a delta.
+      if (result.ok === false) set({ projectNotice: result.message });
       return result;
     },
 
-    deleteProject: async (id) => {
-      const result = await projectStore.remove(id);
-      set({ projectStoreStatus: projectStore.status() });
-      if (!result.ok) return result;
-      set((s) => ({
-        projectList: s.projectList.filter((m) => m.id !== id),
-        // The session's work is now stored nowhere — but stays on screen.
-        ...(s.currentProjectId === id
-          ? { currentProjectId: null, currentProjectName: null, projectBaselineHash: null, dirty: true }
-          : {}),
-      }));
+    newProject: () => {
+      install(factoryProjectContent(), makeEnvelope('', now()));
+      set({ projectNotice: null });
+      // Explicit, not left to the content subscription: New on an
+      // already-factory session changes nothing content-wise, so nothing
+      // would schedule a write and the slot would stay empty.
+      void get().save();
+    },
+
+    openProjectFile: async (body) => {
+      install(body.content, body);
+      const result = await get().save();
+      const warnings = unknownLibraryReferences(body.content);
+      // `save()` has already published its own failure notice, and this set()
+      // runs after it. Writing the warnings unconditionally would ERASE it: an
+      // ordinary file has no warnings, so a file opened on a device with
+      // unavailable storage would install correctly and say nothing at all —
+      // the exact case the notice exists for. Both are combined instead, and
+      // the failure leads because it is the one that costs the user work.
+      const notices = [
+        ...(result.ok === false ? [result.message] : []),
+        ...(warnings.length > 0 ? [`Opened with unrecognised references: ${warnings.join(', ')}`] : []),
+      ];
+      set({ projectNotice: notices.length > 0 ? notices.join(' ') : null });
       return result;
     },
 
-    importProject: async (body, mode) => {
-      const at = now();
-      const toStore: ProjectBody =
-        mode === 'copy'
-          ? { ...body, formatVersion: PROJECT_FORMAT_VERSION, id: newProjectId(), name: `${body.name}${IMPORTED_SUFFIX}`, createdAt: at, updatedAt: at }
-          : { ...body, formatVersion: PROJECT_FORMAT_VERSION };
-      const result = await projectStore.put(toStore);
-      set({ projectStoreStatus: projectStore.status() });
-      if (result.ok === false && result.error !== 'unavailable') return result;
-      if (result.ok) upsertList(result.value);
-      // Storage unavailable: the file still opens, but it is nobody's project.
-      install(toStore.content, result.ok ? { id: toStore.id, name: toStore.name } : { id: null, name: null });
-      return { ok: true, value: result.ok ? result.value : null };
-    },
-
-    exportStoredProject: async (id) => {
-      const result = await projectStore.get(id);
-      set({ projectStoreStatus: projectStore.status() });
-      return result;
-    },
-
-    // Precondition: requires refreshProjects() to have run since load, so
-    // currentBody's `existing` lookup can find the current project's
-    // envelope in `projectList` — the Project Manager does this on open.
-    // Unlike saveProject, this is sync and cannot fall back to an async
-    // projectStore.get(); refreshProjects() is the only place that
-    // populates the list.
-    buildSessionExport: (name, at) => currentBody(name, at),
+    exportProjectFile: (): ProjectBody => ({
+      formatVersion: PROJECT_FORMAT_VERSION,
+      id: slot.id,
+      name: get().projectName ?? '',
+      createdAt: slot.createdAt,
+      updatedAt: now(),
+      content: buildProjectContent(get()),
+    }),
   };
 }

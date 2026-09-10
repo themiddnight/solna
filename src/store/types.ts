@@ -432,7 +432,6 @@ export interface UiSlice {
   midiActivityTimestamp: number | null;
   midiMappings: MidiMapping[];
   isMidiSettingsOpen: boolean;
-  isProjectManagerOpen: boolean;
   // The bottom input dock's open state and active tab. Session-only by design:
   // an input-surface preference, not composition data (see partializeAppState).
   isInputPanelOpen: boolean;
@@ -453,7 +452,6 @@ export interface UiSlice {
   removeMidiMapping: (id: string) => void;
   resetMidiMappings: () => void;
   setIsMidiSettingsOpen: (open: boolean) => void;
-  setIsProjectManagerOpen: (open: boolean) => void;
   setMidiLearnTargetId: (id: string | null) => void;
   setIsInputPanelOpen: (open: boolean) => void;
   setInputPanelMode: (mode: InputPanelMode) => void;
@@ -605,12 +603,6 @@ export interface LoopSlice {
   applyLoopCopy: (targetId: string, sourceId: string, selected: readonly LoopCopyGroupId[]) => void;
 }
 
-/** Persisted project identity — extended by ProjectSlice in projectSlice.ts. */
-export interface ProjectIdentityState {
-  currentProjectId: string | null;
-  projectBaselineHash: string | null;
-}
-
 export interface AppStore
   extends TransportSlice,
     MusicContextSlice,
@@ -627,23 +619,14 @@ export interface AppStore
     LoopSlice,
     ProjectSlice {}
 
-// The exact allow-list shape produced by the persist `partialize` config —
-// this interface and partializeAppState in store.ts must list the same keys.
-// Per-loop fields live inside `loops`; every other persisted field is global
-// and stays top-level, and the two together reconstruct the whole persisted
-// snapshot.
+// The exact allow-list shape produced by the persist `partialize` config — this
+// interface and partializeAppState in store.ts must list the same keys. Project
+// content is not here: it is autosaved to IndexedDB, see store/projectAutosave.ts.
 export interface PersistedState {
-  bpm: number;
-  meterId: MeterId;
-  masterVolume: number;
   metronomeActive: boolean;
   selectedVibeId: string | null;
   focusTrack: MixLayerId;
-  effects: MasterEffects;
   customSynthPresets: SynthPresetItem[];
   customChordProgressions: CustomChordProgressionItem[];
-  loops: Loop[];
   activeLoopId: string;
-  currentProjectId: string | null;
-  projectBaselineHash: string | null;
 }

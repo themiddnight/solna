@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createMemoryBackend, createProjectStore, QUOTA_MESSAGE } from './projectStore';
+import { createMemoryBackend, createProjectStore, PROJECT_SLOT_KEY, QUOTA_MESSAGE } from './projectStore';
 import { PROJECT_FORMAT_VERSION, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
 import { createDefaultLoop } from './loopSlice';
 import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
@@ -7,50 +7,63 @@ import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
 const body = (name: string, now = 1000): ProjectBody => ({ ...makeEnvelope(name, now), content: factoryProjectContent() });
 
 describe('createProjectStore against the in-memory backend', () => {
-  test('put then list returns metadata only, most recently updated first', async () => {
+  test('an empty slot is not-found — the normal first-run state, not an error', async () => {
     const store = createProjectStore(async () => createMemoryBackend());
-    await store.put(body('Old', 1000));
-    await store.put(body('New', 2000));
-    const list = await store.list();
-    expect(list.ok).toBe(true);
-    if (!list.ok) return;
-    expect(list.value.map((m) => m.name)).toEqual(['New', 'Old']);
-    expect('content' in list.value[0]).toBe(false);
+    const result = await store.load();
+    expect(result.ok).toBe(false);
+    if (result.ok === false) {
+      expect(result.error).toBe('not-found');
+      expect(result.message).toBe('No project is stored on this device yet.');
+    }
     expect(store.status()).toBe('ready');
   });
 
-  test('get returns the full body and not-found for a missing id', async () => {
-    const store = createProjectStore(async () => createMemoryBackend());
-    const b = body('One');
-    await store.put(b);
-    const hit = await store.get(b.id);
-    expect(hit.ok && hit.value.content.bpm).toBe(120);
-    const miss = await store.get('nope');
-    expect(miss.ok).toBe(false);
-    if (miss.ok === false) expect(miss.error).toBe('not-found');
-  });
-
-  test('remove deletes both records', async () => {
+  test('save then load round-trips the whole body through the one slot', async () => {
     const backend = createMemoryBackend();
     const store = createProjectStore(async () => backend);
-    const b = body('Gone');
-    await store.put(b);
-    await store.remove(b.id);
-    expect(backend.bodies.has(b.id)).toBe(false);
-    expect(backend.metas.has(b.id)).toBe(false);
+    const b = { ...body('Alpha'), content: { ...factoryProjectContent(), bpm: 143 } };
+    const saved = await store.save(b);
+    expect(saved.ok).toBe(true);
+    const loaded = await store.load();
+    expect(loaded.ok && loaded.value.content.bpm).toBe(143);
+    expect(loaded.ok && loaded.value.id).toBe(b.id);
+    expect(backend.slot.size).toBe(1);
+    expect(backend.slot.has(PROJECT_SLOT_KEY)).toBe(true);
+  });
+
+  test('a second save overwrites the slot — there is no second row', async () => {
+    const backend = createMemoryBackend();
+    const store = createProjectStore(async () => backend);
+    await store.save(body('First'));
+    await store.save(body('Second'));
+    expect(backend.slot.size).toBe(1);
+    const loaded = await store.load();
+    expect(loaded.ok && loaded.value.name).toBe('Second');
+  });
+
+  test('clear empties the slot; a later load is not-found again', async () => {
+    const store = createProjectStore(async () => createMemoryBackend());
+    await store.save(body('Doomed'));
+    const cleared = await store.clear();
+    expect(cleared.ok).toBe(true);
+    const loaded = await store.load();
+    expect(loaded.ok).toBe(false);
+    if (loaded.ok === false) expect(loaded.error).toBe('not-found');
   });
 
   test('a failing open resolves to the degraded state and never throws', async () => {
     const store = createProjectStore(async () => {
       throw new Error('SecurityError: IndexedDB is blocked');
     });
-    const list = await store.list();
-    expect(list.ok).toBe(false);
-    if (list.ok === false) expect(list.error).toBe('unavailable');
+    const load = await store.load();
+    expect(load.ok).toBe(false);
+    if (load.ok === false) expect(load.error).toBe('unavailable');
     expect(store.status()).toBe('unavailable');
-    const put = await store.put(body('X'));
-    expect(put.ok).toBe(false);
-    if (put.ok === false) expect(put.error).toBe('unavailable');
+    const save = await store.save(body('X'));
+    expect(save.ok).toBe(false);
+    if (save.ok === false) expect(save.error).toBe('unavailable');
+    const clear = await store.clear();
+    expect(clear.ok).toBe(false);
   });
 
   test('open is attempted once — a second call reuses the outcome', async () => {
@@ -59,19 +72,19 @@ describe('createProjectStore against the in-memory backend', () => {
       opens++;
       return createMemoryBackend();
     });
-    await store.list();
-    await store.list();
-    await store.put(body('Y'));
+    await store.load();
+    await store.load();
+    await store.save(body('Y'));
     expect(opens).toBe(1);
   });
 
-  test('QuotaExceededError on put becomes the quota result with the spec message', async () => {
+  test('QuotaExceededError on save becomes the quota result with the spec message', async () => {
     const backend = createMemoryBackend();
     backend.put = async () => {
       throw new DOMException('quota', 'QuotaExceededError');
     };
     const store = createProjectStore(async () => backend);
-    const result = await store.put(body('Big'));
+    const result = await store.save(body('Big'));
     expect(result.ok).toBe(false);
     if (result.ok === false) {
       expect(result.error).toBe('quota');
@@ -85,41 +98,17 @@ describe('createProjectStore against the in-memory backend', () => {
       throw new Error('boom');
     };
     const store = createProjectStore(async () => backend);
-    const result = await store.get('x');
+    const result = await store.load();
     expect(result.ok).toBe(false);
     if (result.ok === false) expect(result.error).toBe('failed');
-  });
-
-  test('read-repair drops an orphaned meta row on first open, without reading bodies', async () => {
-    const backend = createMemoryBackend();
-    const orphan = body('Orphan');
-    backend.metas.set(orphan.id, { ...orphan, content: undefined } as never);
-    const store = createProjectStore(async () => backend);
-    const list = await store.list();
-    expect(list.ok && list.value).toEqual([]);
-    expect(backend.metas.has(orphan.id)).toBe(false);
-  });
-
-  test('a repair that throws is cosmetic: the store is still ready and reads and writes work', async () => {
-    const backend = createMemoryBackend();
-    backend.repairOrphans = async () => {
-      throw new DOMException('inactive', 'TransactionInactiveError');
-    };
-    const store = createProjectStore(async () => backend);
-    const put = await store.put(body('Survivor'));
-    expect(put.ok).toBe(true);
-    expect(store.status()).toBe('ready');
-    const list = await store.list();
-    expect(list.ok && list.value.map((m) => m.name)).toEqual(['Survivor']);
   });
 });
 
 /**
- * The seam: `get` is where a stored body is READ, so it is where the format
- * chain runs — open, export, rename and saveProject's existence check all go
- * through it and none of them has to remember.
+ * The seam: `load` is where a stored body is READ, so it is where the format
+ * chain runs. Nothing else reads the slot, so no caller has to remember.
  */
-describe('get normalises the body it hands out', () => {
+describe('load normalises the body it hands out', () => {
   const legacy = (): ProjectBody => {
     const loop = { ...createDefaultLoop(), id: 'loop-legacy' } as unknown as Record<string, unknown>;
     loop.leadMelodySteps = [['C4'], []];
@@ -133,25 +122,20 @@ describe('get normalises the body it hands out', () => {
 
   test('a formatVersion-1 body comes back restamped, with its melody reset (not misread) and gated', async () => {
     const b = legacy();
-    const store = createProjectStore(async () => createMemoryBackend([b]));
-    const hit = await store.get(b.id);
+    const store = createProjectStore(async () => createMemoryBackend(b));
+    const hit = await store.load();
     expect(hit.ok).toBe(true);
     if (!hit.ok) return;
     expect(hit.value.formatVersion).toBe(PROJECT_FORMAT_VERSION);
-    // DEV-388: a v1 melody is right-shape-wrong-resolution, so
-    // asLeadNoteMatrix (via sanitizeLoops) refuses it whole rather than
-    // widening it, and sanitizeLoops then substitutes the default.
     const melody = hit.value.content.loops[0].leadMelodySteps as LeadNote[][];
     expect(melody).toEqual(createDefaultLoop().leadMelodySteps);
     expect(hit.value.content.loops[0].leadGate).toBe(DEFAULT_LEAD_GATE);
   });
 
   test('a body from a NEWER build is handed back verbatim, not downgrade-stamped', async () => {
-    // `get` cannot report "newer-version", and sanitising would strip the
-    // fields that build added and persist the loss on the next save.
     const b = { ...body('Future'), formatVersion: PROJECT_FORMAT_VERSION + 1 };
-    const store = createProjectStore(async () => createMemoryBackend([b]));
-    const hit = await store.get(b.id);
+    const store = createProjectStore(async () => createMemoryBackend(b));
+    const hit = await store.load();
     expect(hit.ok && hit.value.formatVersion).toBe(PROJECT_FORMAT_VERSION + 1);
   });
 });

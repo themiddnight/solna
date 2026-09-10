@@ -153,24 +153,24 @@ describe('lead slice — setLeadLoopLength resizes by whole bars', () => {
 
 describe('lead slice — persistence', () => {
   beforeEach(resetLead);
-  test('leadMelodySteps and leadLoopLength are persisted inside the active loop', () => {
-    // v6: per-loop fields persist inside loops[activeLoopId], kept fresh by
-    // the live-write sync-back folded into the store's own set() (loopSync).
+  test('leadMelodySteps and leadLoopLength ride inside the active loop', () => {
+    // Per-loop fields live inside loops[activeLoopId], kept fresh by the
+    // live-write sync-back folded into the store's own set() (loopSync). Read
+    // off the store rather than off `partializeAppState`: content is no longer
+    // a localStorage key, and `loops` is what the autosave path serialises.
     const s = useAppStore.getState();
     s.toggleLeadNote(0, 'C4');
     s.setLeadLoopLength(2);
-    const persisted = partializeAppState(useAppStore.getState());
-    const loop = persisted.loops.find((r) => r.id === persisted.activeLoopId)!;
+    const loop = useAppStore.getState().loops.find((r) => r.id === s.activeLoopId)!;
     expect(loop.leadMelodySteps).toEqual(useAppStore.getState().leadMelodySteps);
     expect(loop.leadLoopLength).toBe(2);
   });
 
-  test('the octave window and view mode persist inside the active loop', () => {
+  test('the octave window and view mode ride inside the active loop', () => {
     const s = useAppStore.getState();
     s.setLeadMelodyOctave(5);
     s.setLeadMelodyView('chromatic');
-    const persisted = partializeAppState(useAppStore.getState());
-    const loop = persisted.loops.find((r) => r.id === persisted.activeLoopId)!;
+    const loop = useAppStore.getState().loops.find((r) => r.id === s.activeLoopId)!;
     expect(loop.leadMelodyOctave).toBe(5);
     expect(loop.leadMelodyView).toBe('chromatic');
   });

@@ -16,43 +16,16 @@ import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
 import { createLoopSlice } from './loopSlice';
 import { createLoopCopySlice } from './loopCopySlice';
-import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
-import { DEFAULT_LEAD_STEP_RESOLUTION } from '../utils/stepResolution';
 import { migrateLegacyPresets, removeLegacyKeys, LEGACY_PERSIST_KEY } from './migrate';
-import { asFaderDb, DEFAULT_BUS_TRIM_DB, DEFAULT_FADER_DB } from './levelUnits';
-import { loopStatePatch, resolveActiveLoop } from './loop';
 import { createLoopMirroringSet } from './loopSync';
-import { PROJECT_DB_LEVEL_KEYS } from './projectFormat';
 import { createProjectSlice } from './projectSlice';
-import { createDirtyTracker } from './projectDirty';
+import { createProjectAutosave } from './projectAutosave';
 import { createProjectStore } from './projectStore';
 import { openIndexedDbBackend } from './projectStoreIdb';
-import { isMeterId } from '../utils/meter';
 import { isMixLayerId } from './focusTrack';
 import { createCoalescedStorage } from '../utils/coalescedStorage';
-import type { AppStore, PersistedState, Loop } from './types';
-import {
-  sanitizeSynthParams,
-  sanitizeEffectsValue,
-  sanitizeLoops,
-  asLeadStepResolution,
-  clampFinite,
-  asBoolean,
-  asNullableString,
-  isPatternMode,
-  asFilterType,
-  isPositiveInteger,
-  asLeadNoteMatrix,
-  sanitizeSequencerTracks,
-  isChordItem,
-  isBassStepChoice,
-  isRootNote,
-  isScaleType,
-  isChordRhythmId,
-  isBassPatternId,
-  asSoundKit,
-} from './sanitize';
-import { INITIAL_SEQUENCER_TRACKS } from './initialState';
+import type { AppStore, PersistedState } from './types';
+import { asBoolean } from './sanitize';
 
 export const PERSIST_KEY = 'musibox_project_state_v1';
 
@@ -63,8 +36,8 @@ export const PERSIST_KEY = 'musibox_project_state_v1';
  * live in `migrate:` below (see CLAUDE.md: solna has no real users yet, so a
  * per-version upgrade chain was machinery maintained for nobody). What
  * replaced it is VALIDATION, not migration: `merge` below runs every
- * hydrated payload through `sanitizePersistedState` / `sanitizeLoops`
- * regardless of what version wrote it. Those functions decide per KEY
+ * hydrated payload through `sanitizePersistedState` regardless of what
+ * version wrote it. That function decides per KEY
  * whether a value is trustworthy — in range, correctly typed, a member of
  * its allowed set — never per payload version. A value that reads oddly
  * because it predates a unit change (a fader stored as linear gain before
@@ -178,218 +151,64 @@ export function flushPersistedWrites(): void {
 // is still in its temporal dead zone) can still reach the store api.
 let storeApi: StoreApi<AppStore> | undefined;
 
-// Explicit allow-list: the nine global fields plus the loops arrangement.
-// Every per-loop musical field lives inside `loops`; the flat copies in the
-// live state are intentionally NOT persisted (they are the working copy of the
-// active loop and are kept in sync by loopSync's live-write subscription).
+/**
+ * Explicit allow-list: session/view prefs plus the user's own library, and
+ * NOTHING ELSE. Project content (bpm, meterId, masterVolume, effects, loops) is
+ * no longer here — IndexedDB is its home now, written by the autosave path
+ * below. What is left is exactly what must survive a reload but is not a
+ * project: which track/loop the user was on, the metronome, the last vibe chip,
+ * and the cross-project preset/progression library (never project content —
+ * the 2026-09-03 "excluded — user library" rule).
+ */
 export function partializeAppState(state: AppStore): PersistedState {
   return {
-    bpm: state.bpm,
-    meterId: state.meterId,
-    masterVolume: state.masterVolume,
     metronomeActive: state.metronomeActive,
     selectedVibeId: state.selectedVibeId,
     focusTrack: state.focusTrack,
-    effects: state.effects,
     customSynthPresets: state.customSynthPresets,
     customChordProgressions: state.customChordProgressions,
-    loops: state.loops,
     activeLoopId: state.activeLoopId,
-    currentProjectId: state.currentProjectId,
-    projectBaselineHash: state.projectBaselineHash,
   };
 }
 
 /**
- * Validates the flat top-level `sequencerTracks` key (a pre-loop-wrap shape
- * sanitizeLoops never sees). Extracted out of sanitizePersistedState purely to
- * keep that function's cyclomatic complexity under the repo ceiling. The
- * per-row-drop reasoning (why an unrecognised instrument is dropped, not
- * defaulted, and why that does not shorten anything else) lives on
- * `sanitizeSequencerTracks` in sanitize.ts, which this reuses so the flat and
- * `loops[]` paths cannot drift.
+ * Picks and validates only session preferences and user libraries. Old content
+ * and unknown keys must never override the factory state or store actions.
+ *
+ * Musical content is deliberately absent: it no longer travels through
+ * localStorage, so `sanitizeContent` (projectFile.ts) is the one reader that
+ * validates it, on the `.solna` import and IndexedDB load paths where the
+ * content actually enters the store. Repeating the rules here would be a second
+ * copy of a rule that now has exactly one entry point.
  */
-function sanitizeFlatSequencerTracks(sanitized: Record<string, unknown>): void {
-  if (!Array.isArray(sanitized.sequencerTracks)) return;
-  sanitized.sequencerTracks = sanitizeSequencerTracks(
-    sanitized.sequencerTracks,
-    INITIAL_SEQUENCER_TRACKS,
-  );
-}
-
-/**
- * ELEMENT-checks the flat top-level `chords` / `customChordRhythm` /
- * `customBassPattern` keys (a pre-loop-wrap shape sanitizeLoops never sees).
- * Extracted out of sanitizePersistedState purely to keep that function's
- * cyclomatic complexity under the repo ceiling, same as
- * sanitizeFlatSequencerTracks above. Before DEV-388 these keys only reached
- * the top-level slices AFTER wrapFlatStateIntoLoop wrapped them into
- * `loops[0]` and sanitizeLoops validated each element (`isChordItem` /
- * `isBassStepChoice`); with that wrap deleted, a bare `Array.isArray` check
- * would let `{"chords": [1, 2, 3]}` reach the chord scheduler, which
- * isChordItem's own docblock (sanitize.ts) says is a crash, not a wrong
- * sound. All-or-nothing per key (not per-element) on purpose: these are
- * ordered sequences, the same reasoning asCheckedArray's docblock gives for
- * sanitizeLoops' own `chords`/`customChordRhythm`/`customBassPattern` checks
- * — unlike `sequencerTracks`, a set keyed by instrument, which drops per row
- * instead (see sanitizeSequencerTracks).
- */
-function sanitizeFlatOrderedArrays(sanitized: Record<string, unknown>): void {
-  if (Array.isArray(sanitized.chords) && !sanitized.chords.every(isChordItem)) {
-    delete sanitized.chords;
-  }
-  if (
-    Array.isArray(sanitized.customChordRhythm) &&
-    !sanitized.customChordRhythm.every((v) => typeof v === 'boolean')
-  ) {
-    delete sanitized.customChordRhythm;
-  }
-  if (
-    Array.isArray(sanitized.customBassPattern) &&
-    !sanitized.customBassPattern.every(isBassStepChoice)
-  ) {
-    delete sanitized.customBassPattern;
-  }
-}
-
-/**
- * Type-guards the parsed persist payload before it reaches the merge. ONLY the
- * keys listed here are checked — everything else in the payload passes through
- * unchanged, so a key added to partialize gets no validation until it is added
- * here too. The per-value rules live in sanitize.ts, shared with the `.solna`
- * import path (projectFile.ts) so the two readers cannot drift.
- */
-/**
- * The five persisted keys that must name a real library entry, not just
- * satisfy a bare `typeof` — grouped here so `sanitizePersistedState` states
- * this as one cohesive job instead of five branches of unrelated shape (this
- * grouping is what took the function's complexity back under the eslint
- * ceiling after these five checks were added one at a time). See the
- * matching `is*`/`as*` guards' docblocks in sanitize.ts for why a bare
- * `typeof` check is not enough (the deleted kit-rename migration step).
- */
-function sanitizeEnumeratedFields(sanitized: Record<string, unknown>): void {
-  sanitized.soundKit = asSoundKit(sanitized.soundKit, 'Retro Drive');
-  if (!isRootNote(sanitized.scaleRoot)) delete sanitized.scaleRoot;
-  if (!isScaleType(sanitized.scaleType)) delete sanitized.scaleType;
-  if (!isChordRhythmId(sanitized.chordRhythmId)) delete sanitized.chordRhythmId;
-  if (!isBassPatternId(sanitized.bassPatternId)) delete sanitized.bassPatternId;
-}
-
-/* eslint-disable-next-line complexity -- one persisted key validated per line;
-   the count tracks how many fields this function validates, not tangled branching. */
 export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (typeof persisted !== 'object' || persisted === null) return {};
-  const sanitized = { ...(persisted as Record<string, unknown>) };
+  const input = persisted as Record<string, unknown>;
+  const sanitized: Record<string, unknown> = {
+    metronomeActive: input.metronomeActive,
+    focusTrack: input.focusTrack,
+    selectedVibeId: input.selectedVibeId,
+    customSynthPresets: input.customSynthPresets,
+    customChordProgressions: input.customChordProgressions,
+    activeLoopId: input.activeLoopId,
+  };
 
-  sanitized.bpm = clampFinite(sanitized.bpm, 20, 300, 120);
-  // Driven off the format's own list, not repeated by hand: the hand-written repeat
-  // this replaces silently omitted `padVolume`, so a corrupt stored value reached
-  // faderDbToGain unvalidated and that function fails SAFE TO SILENCE — a muted pad
-  // bus instead of the default every other fader got. `masterVolume` is the one key
-  // here that is not a source bus, so it keeps asFaderDb's own UNITY default; the
-  // five source buses default to the measured headroom trim (DEV-383).
-  for (const key of PROJECT_DB_LEVEL_KEYS) {
-    sanitized[key] = asFaderDb(
-      sanitized[key],
-      key === 'masterVolume' ? DEFAULT_FADER_DB : DEFAULT_BUS_TRIM_DB,
-    );
-  }
-  sanitized.drumFilterCutoff = clampFinite(sanitized.drumFilterCutoff, 50, 12000, 12000);
-  sanitized.drumFilterResonance = clampFinite(sanitized.drumFilterResonance, 0.1, 20, 0.7);
-  sanitized.leadGate = clampFinite(sanitized.leadGate, 0.05, 1, DEFAULT_LEAD_GATE);
-  sanitized.leadStepResolution = asLeadStepResolution(
-    sanitized.leadStepResolution,
-    DEFAULT_LEAD_STEP_RESOLUTION,
-  );
-  sanitized.drumFilterType = asFilterType(sanitized.drumFilterType, 'lowpass');
   sanitized.metronomeActive = asBoolean(sanitized.metronomeActive);
-  // A NEW clause, written from nothing: `controlTarget` — the key focusTrack
-  // replaces — was persisted with no validation at all, so there is nothing
-  // here to rename. What stood in for it was `resolveSynthControlChannel`'s
-  // trailing `?? channels.synth`, a runtime fallback that quietly absorbed any
-  // out-of-roster value. That fallback becomes a TRAP now the roster includes
-  // 'drum': a drum focus leaking into the synth path is not an error, not a
-  // warning and not a visible mis-render — it silently points every Sound-page
-  // knob at the Lead patch. Sanitizing here removes the bad-value case
-  // altogether; typing controlTargetForFocus over MelodicFocus removes the
-  // legal-but-wrong 'drum' one. Both, or the `??` goes on swallowing it.
+  // Sanitizing here is what removes the bad-value case altogether — see the
+  // focusTrack docblock this replaces: a 'drum' value leaking into the synth
+  // path is not an error and not a visible mis-render, it silently points
+  // every Sound-page knob at the Lead patch.
   sanitized.focusTrack = isMixLayerId(sanitized.focusTrack) ? sanitized.focusTrack : 'synth';
-  sanitized.fxGate = clampFinite(sanitized.fxGate, 0.05, 1, DEFAULT_LEAD_GATE);
-  sanitized.fxStepResolution = asLeadStepResolution(
-    sanitized.fxStepResolution,
-    DEFAULT_LEAD_STEP_RESOLUTION,
-  );
-  sanitized.fxMuted = asBoolean(sanitized.fxMuted);
-  sanitized.synthMuted = asBoolean(sanitized.synthMuted);
-  sanitized.chordMuted = asBoolean(sanitized.chordMuted);
-  sanitized.bassMuted = asBoolean(sanitized.bassMuted);
-  sanitized.drumMuted = asBoolean(sanitized.drumMuted);
-  sanitized.effects = sanitizeEffectsValue(sanitized.effects);
-
-  // Arrays and free-form strings: drop invalid values so the currentState
-  // defaults win in the merge spread below.
-  for (const key of ['chords', 'sequencerTracks', 'customSynthPresets', 'customChordProgressions', 'customChordRhythm', 'customBassPattern']) {
-    if (!Array.isArray(sanitized[key])) delete sanitized[key];
-  }
-  sanitizeFlatOrderedArrays(sanitized);
-  // Like the five bus faders above: a garbage per-track `volume` must clamp
-  // to a fader value, not reach faderDbToGain unclamped — that function fails
-  // SAFE TO SILENCE (any non-finite or out-of-range-low input maps to 0 gain),
-  // so a corrupted number here would otherwise mute a drum track with no
-  // error rather than defaulting to unity like every other level key does.
-  sanitizeFlatSequencerTracks(sanitized);
-  sanitizeEnumeratedFields(sanitized);
-  for (const key of ['chordRhythmMode', 'bassPatternMode']) {
-    if (!isPatternMode(sanitized[key])) delete sanitized[key];
-  }
-  // Coerced, not merely checked: one fractional `len` must not cost the
-  // session its whole melody (see asLeadNoteMatrix).
-  const melody = asLeadNoteMatrix(sanitized.leadMelodySteps);
-  if (melody) sanitized.leadMelodySteps = melody;
-  else delete sanitized.leadMelodySteps;
-  if (!isPositiveInteger(sanitized.leadLoopLength)) {
-    delete sanitized.leadLoopLength;
-  }
-  // Coerced, not merely checked — one fractional `len` must not cost the
-  // session its whole FX melody. Deleting on failure (rather than substituting)
-  // is what lets the freshly-built currentState default win in the merge below.
-  const fxMelody = asLeadNoteMatrix(sanitized.fxMelodySteps);
-  if (fxMelody) sanitized.fxMelodySteps = fxMelody;
-  else delete sanitized.fxMelodySteps;
-  if (!isPositiveInteger(sanitized.fxLoopLength)) {
-    delete sanitized.fxLoopLength;
-  }
   if (typeof sanitized.selectedVibeId !== 'string' && sanitized.selectedVibeId !== null) {
     delete sanitized.selectedVibeId;
   }
-  if (!isMeterId(sanitized.meterId)) delete sanitized.meterId;
-
-  // Only rewrite the synth param objects that were actually stored; an absent
-  // key must keep falling through to the freshly-built currentState default.
-  for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams', 'padSynthParams', 'fxSynthParams']) {
-    if (key in sanitized) sanitized[key] = sanitizeSynthParams(sanitized[key]);
+  for (const key of ['customSynthPresets', 'customChordProgressions']) {
+    if (!Array.isArray(sanitized[key])) delete sanitized[key];
   }
-
-  // v7: loops + activeLoopId. A valid loops array also pins
-  // activeLoopId to an existing loop (else the first); a missing/invalid
-  // array drops both keys so the currentState defaults win in the merge.
-  const loops = sanitizeLoops(sanitized.loops);
-  if (loops) {
-    sanitized.loops = loops;
-    if (
-      typeof sanitized.activeLoopId !== 'string' ||
-      !loops.some((r) => r.id === sanitized.activeLoopId)
-    ) {
-      sanitized.activeLoopId = loops[0].id;
-    }
-  } else {
-    delete sanitized.loops;
-    delete sanitized.activeLoopId;
-  }
-
-  sanitized.currentProjectId = asNullableString(sanitized.currentProjectId);
-  sanitized.projectBaselineHash = asNullableString(sanitized.projectBaselineHash);
+  // Only the TYPE is checked here. Whether the id names a loop can only be
+  // decided once the loops themselves have loaded from IndexedDB, which happens
+  // after hydration — `reconcileActiveLoop` in projectSlice.ts owns that.
+  if (typeof sanitized.activeLoopId !== 'string') delete sanitized.activeLoopId;
 
   return sanitized as unknown as Partial<AppStore>;
 }
@@ -442,22 +261,7 @@ export const useAppStore = create<AppStore>()(
       merge: (persistedState, currentState) => {
         const sanitized = sanitizePersistedState(persistedState);
         const base = { ...currentState, ...sanitized };
-        const withPresets = { ...base, ...migrateLegacyPresets(base as Partial<PersistedState>) };
-        // Load loops[activeLoopId] into the flat slices LAST, so the loop's
-        // fields win over any stale top-level per-loop keys a legacy payload
-        // still carries. Guarded on the SANITIZED payload having `loops`: a
-        // pre-loop-wrap flat payload has none (DEV-388 deleted the chain step
-        // that used to wrap one into `loops[0]`), so its flat keys simply
-        // hydrate the top-level slices directly and never gain a loop mirror.
-        const loops = sanitized.loops as Loop[] | undefined;
-        if (Array.isArray(loops) && loops.length > 0) {
-          const active = resolveActiveLoop(
-            loops,
-            typeof sanitized.activeLoopId === 'string' ? sanitized.activeLoopId : null,
-          );
-          return { ...withPresets, loops, activeLoopId: active.id, ...loopStatePatch(active) };
-        }
-        return withPresets;
+        return { ...base, ...migrateLegacyPresets(base as Partial<PersistedState>) };
       },
       // Post-hydration: the merged state (legacy presets adopted by `merge`
       // above) must be written under the new persist key before the legacy
@@ -473,26 +277,34 @@ export const useAppStore = create<AppStore>()(
   )
 );
 
-/** Idle-debounced dirty detection — see projectDirty.ts. Started once per tab. */
-export const dirtyTracker = createDirtyTracker(useAppStore);
-
-// The boot pass. persist hydration is SYNCHRONOUS inside create() above (a
-// sync StateStorage resolves through zustand's toThenable without yielding),
-// so it has already restored the content keys before this tracker existed and
-// its subscription never sees them. Without this one scheduled pass a reloaded
-// session carrying unsaved work reports `dirty: false` — no badge, and no
-// dirty guard on Open / Import / New, which is exactly the tab-killed case the
-// dirty flag exists for. Scheduled, not run now, so launch pays nothing.
-dirtyTracker.schedule();
+/** The idle-coalesced autosave writer — see projectAutosave.ts. One per tab. */
+export const projectAutosave = createProjectAutosave(useAppStore);
 
 /**
- * The buffered persist write goes out on the way to hidden. The dirty pass is
- * forced first only so the badge and the guard are honest for whatever runs
- * next in this tab — `dirty` is transient (not in partialize), so this is not
- * about what gets persisted.
+ * Boot: read the one project slot, then arm autosave. Armed in a `finally` so a
+ * rejected load still leaves the app writable rather than silently readonly.
+ * Memoized — React StrictMode mounts App's effect twice, and a second load
+ * would re-install a project over whatever the user had already touched.
+ */
+let booting: Promise<void> | null = null;
+export function bootProject(): Promise<void> {
+  booting ??= (async () => {
+    try {
+      await useAppStore.getState().loadProject();
+    } finally {
+      projectAutosave.arm();
+    }
+  })();
+  return booting;
+}
+
+/**
+ * The buffered writes go out on the way to hidden — both of them. The autosave
+ * flush is what makes a killed tab's last edit durable, and the persist flush
+ * is the pre-existing session-prefs one.
  */
 export function flushBeforeHide(): void {
-  dirtyTracker.runNow();
+  projectAutosave.flush();
   flushPersistedWrites();
 }
 

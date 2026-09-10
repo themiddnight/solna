@@ -240,9 +240,9 @@ export const asPadVoicing = memberOr<PadVoicing>(memberTest(PAD_VOICING_SET));
  * (persist payload and `.solna` body) go through it, so a selection stored by
  * an edit and one restored from disk are byte-identical.
  *
- * The sort is load-bearing: projectDirty fingerprints the content set, and an
- * unsorted array gives one selection two `projectDirty` fingerprints — an
- * unsaved-changes badge no edit caused.
+ * The sort is load-bearing, not cosmetic: [5, 1] and [1, 5] are the same
+ * selection, and without it that one selection has two on-disk spellings — so
+ * an unchanged drone round-trips through a load as a change.
  */
 export function normalizePadIntervals(values: Iterable<unknown>): PadInterval[] {
   const seen = new Set<PadInterval>();

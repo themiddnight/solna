@@ -1,17 +1,21 @@
 import type { ProjectStoreBackend } from './projectStore';
-import type { ProjectBody, ProjectMeta } from './projectFormat';
-import { toMeta } from './projectStore';
+import { PROJECT_SLOT_KEY } from './projectStore';
+import type { ProjectBody } from './projectFormat';
 
 export const PROJECT_DB_NAME = 'solna-projects';
-export const PROJECT_DB_VERSION = 1;
-const BODIES = 'projects';
-const METAS = 'projectMeta';
+/**
+ * Bumped from 1: the single slot replaces the old two-store library layout
+ * outright. Solna has no real users, so the upgrade is a drop — the old
+ * `projects` / `projectMeta` stores are not read and not migrated.
+ */
+export const PROJECT_DB_VERSION = 2;
+const SLOT = 'project';
 
 /**
  * How long to wait for an open that never fires an event. Generous on purpose:
  * a cold first-run open on a slow device under storage pressure can take
- * seconds, and timing that out costs the user their whole project library for
- * the session. Only a genuinely stuck webview should reach this.
+ * seconds, and timing that out costs the user the session's autosave. Only a
+ * genuinely stuck webview should reach this.
  */
 const OPEN_TIMEOUT_MS = 10_000;
 
@@ -31,11 +35,10 @@ function transactionDone(tx: IDBTransaction): Promise<void> {
 }
 
 /**
- * Opens (and on first use creates) the two-store database. Rejects — instead
- * of throwing synchronously — when `indexedDB` is missing, blocked or errors
- * on open; createProjectStore turns that rejection into the degraded state.
- * A stuck open (some webviews never fire any event) is bounded by a timeout so
- * the Project Manager cannot hang forever.
+ * Opens (and on first use creates) the single-slot database. Rejects — instead
+ * of throwing synchronously — when `indexedDB` is missing, blocked or errors on
+ * open; createProjectStore turns that rejection into the degraded state, and a
+ * stuck open is bounded by a timeout so boot cannot hang forever.
  */
 export function openIndexedDbBackend(dbName = PROJECT_DB_NAME): Promise<ProjectStoreBackend> {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -57,8 +60,13 @@ export function openIndexedDbBackend(dbName = PROJECT_DB_NAME): Promise<ProjectS
     }, OPEN_TIMEOUT_MS);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(BODIES)) db.createObjectStore(BODIES, { keyPath: 'id' });
-      if (!db.objectStoreNames.contains(METAS)) db.createObjectStore(METAS, { keyPath: 'id' });
+      // `deleteObjectStore` before the transactional create/delete rule bites:
+      // dropping the old library stores belongs in the same versionchange
+      // transaction that declares the new one.
+      for (const name of [...db.objectStoreNames]) {
+        if (name !== SLOT) db.deleteObjectStore(name);
+      }
+      if (!db.objectStoreNames.contains(SLOT)) db.createObjectStore(SLOT);
     };
     request.onsuccess = () => {
       clearTimeout(timer);
@@ -73,45 +81,20 @@ export function openIndexedDbBackend(dbName = PROJECT_DB_NAME): Promise<ProjectS
       reject(new Error('indexedDB open blocked'));
     };
   }).then((db): ProjectStoreBackend => ({
-    listMeta: async () => {
-      const tx = db.transaction(METAS, 'readonly');
-      const rows = await requestToPromise(tx.objectStore(METAS).getAll() as IDBRequest<ProjectMeta[]>);
-      return rows;
-    },
-    getBody: async (id) => {
-      const tx = db.transaction(BODIES, 'readonly');
-      return requestToPromise(tx.objectStore(BODIES).get(id) as IDBRequest<ProjectBody | undefined>);
+    // A keyPath-less store takes an explicit key on every put; one fixed key
+    // means put() overwrites the slot and the store never grows past one row.
+    getBody: async () => {
+      const tx = db.transaction(SLOT, 'readonly');
+      return requestToPromise(tx.objectStore(SLOT).get(PROJECT_SLOT_KEY) as IDBRequest<ProjectBody | undefined>);
     },
     put: async (body) => {
-      const tx = db.transaction([BODIES, METAS], 'readwrite');
-      tx.objectStore(BODIES).put(body);
-      tx.objectStore(METAS).put(toMeta(body));
+      const tx = db.transaction(SLOT, 'readwrite');
+      tx.objectStore(SLOT).put(body, PROJECT_SLOT_KEY);
       await transactionDone(tx);
     },
-    remove: async (id) => {
-      const tx = db.transaction([BODIES, METAS], 'readwrite');
-      tx.objectStore(BODIES).delete(id);
-      tx.objectStore(METAS).delete(id);
-      await transactionDone(tx);
-    },
-    repairOrphans: async () => {
-      // Key-only: getAllKeys never deserialises a body. BOTH reads are issued
-      // synchronously on one readonly transaction — awaiting between two
-      // requests on the SAME transaction can find it already committed
-      // (TransactionInactiveError on older WebKit) — and the deletes then run
-      // on a fresh readwrite transaction, opened only when there is work.
-      const readTx = db.transaction([BODIES, METAS], 'readonly');
-      const bodyRequest = requestToPromise(readTx.objectStore(BODIES).getAllKeys());
-      const metaRequest = requestToPromise(readTx.objectStore(METAS).getAllKeys());
-      const [bodyKeys, metaKeys] = await Promise.all([bodyRequest, metaRequest]);
-      const bodySet = new Set(bodyKeys);
-      const metaSet = new Set(metaKeys);
-      const staleMetas = metaKeys.filter((key) => !bodySet.has(key));
-      const staleBodies = bodyKeys.filter((key) => !metaSet.has(key));
-      if (staleMetas.length === 0 && staleBodies.length === 0) return;
-      const tx = db.transaction([BODIES, METAS], 'readwrite');
-      for (const key of staleMetas) tx.objectStore(METAS).delete(key);
-      for (const key of staleBodies) tx.objectStore(BODIES).delete(key);
+    remove: async () => {
+      const tx = db.transaction(SLOT, 'readwrite');
+      tx.objectStore(SLOT).delete(PROJECT_SLOT_KEY);
       await transactionDone(tx);
     },
   }));

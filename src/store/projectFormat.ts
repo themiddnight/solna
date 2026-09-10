@@ -137,9 +137,6 @@ export interface ProjectEnvelope {
   updatedAt: number;
 }
 
-/** What a list row renders — the envelope and nothing else. */
-export type ProjectMeta = ProjectEnvelope;
-
 export interface ProjectContent {
   bpm: number;
   meterId: MeterId;
@@ -221,18 +218,19 @@ export type ProjectOpenPatch = Omit<ProjectContent, 'loops'> &
 /**
  * The single store patch that installs a project. Encodes the reset rules:
  * `selectedVibeId` -> null (a project has no vibe until a chip is pressed),
- * `activeLoopId` -> loops[0] through the same resolution persist `merge`
- * uses, and the flat per-loop keys written through loopStatePatch in the SAME
+ * `activeLoopId` -> the saved selection at boot, or loops[0] on Open/New,
+ * and the flat per-loop keys written through loopStatePatch in the SAME
  * patch — writing `loops` without them would leave the previous project's
  * sound on screen and in the engine. `focusTrack` and `metronomeActive`
  * are deliberately absent: they are user preferences, not project state.
  */
-export function applyProjectContent(content: ProjectContent): ProjectOpenPatch {
+export function applyProjectContent(content: ProjectContent, activeLoopId: string | null = null): ProjectOpenPatch {
   // content.loops carries no tempName (see ProjectLoop above) — every install
   // synthesizes fresh loop-slot labels, the same reset applyProjectContent
   // already does to selectedVibeId and for the same reason.
   const loops = withFreshTempNames(content.loops);
-  const active = resolveActiveLoop(loops, null);
+  // Boot resumes a valid session selection; Open/New use the first loop.
+  const active = resolveActiveLoop(loops, activeLoopId);
   return {
     ...content,
     loops,

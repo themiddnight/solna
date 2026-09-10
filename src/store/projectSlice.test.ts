@@ -1,10 +1,9 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import { createMemoryBackend, createProjectStore } from './projectStore';
-import { PROJECT_FORMAT_VERSION, buildProjectContent, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
-import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
-import { fingerprintContent } from './projectFingerprint';
-import { createDefaultLoop, DEFAULT_LOOP_ID } from './loopSlice';
+import { unknownLibraryReferences } from './projectFile';
+import { buildProjectContent, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
+import { DEFAULT_LOOP_ID, createDefaultLoop } from './loopSlice';
 import { LOOP_FLAT_KEYS } from './loop';
 import type { AppStore } from './types';
 
@@ -24,14 +23,14 @@ beforeAll(() => {
 });
 
 /** A fresh slice bound to the live store but to ITS OWN memory backend. */
-async function sliceWithBackend(seed: ProjectBody[] = []) {
+async function sliceWithBackend(seed?: ProjectBody) {
   const { useAppStore } = await storeModule;
   const { createProjectSlice } = await import('./projectSlice');
   const backend = createMemoryBackend(seed);
   const store = createProjectStore(async () => backend);
   const slice = createProjectSlice(useAppStore.setState, useAppStore.getState, store, () => 5_000);
-  useAppStore.setState({ ...slice, currentProjectId: null, projectBaselineHash: null, dirty: false });
-  return { useAppStore, backend, slice: useAppStore.getState() as AppStore };
+  useAppStore.setState({ ...slice, projectName: null });
+  return { useAppStore, backend, store, slice: useAppStore.getState() as AppStore };
 }
 
 const stored = (name: string, bpm: number): ProjectBody => ({
@@ -50,338 +49,252 @@ afterEach(() => {
   stopSource.mockRestore();
 });
 
-describe('openProject', () => {
-  test('stops the transport, installs content in one set(), applies the reset rules and takes a baseline', async () => {
-    const p = stored('Alpha', 77);
-    const { useAppStore, slice } = await sliceWithBackend([p]);
-    useAppStore.setState({ sequencerPlayer: 'playing', selectedVibeId: 'cyber-dance', focusTrack: 'bass', metronomeActive: true, activeLoopId: 'foreign', songLoopIndex: 2 });
-    let writes = 0;
-    const unsub = useAppStore.subscribe((s, prev) => { if (s.bpm !== prev.bpm || s.loops !== prev.loops) writes++; });
-    const result = await slice.openProject(p.id);
-    unsub();
-    expect(result.ok).toBe(true);
-    const s = useAppStore.getState();
-    expect(writes).toBe(1);
-    expect(s.sequencerPlayer).toBe('stopped');
-    expect(s.playbackScope.kind).toBe('none');
-    expect(s.bpm).toBe(77);
-    expect(s.activeLoopId).toBe('loop-Alpha');
-    expect(s.scaleRoot).toBe(p.content.loops[0].scaleRoot);
-    expect(s.selectedVibeId).toBeNull();
-    expect(s.focusTrack).toBe('bass');
-    expect(s.metronomeActive).toBe(true);
-    expect(s.currentProjectId).toBe(p.id);
-    expect(s.currentProjectName).toBe('Alpha');
-    expect(s.projectBaselineHash).toBe(fingerprintContent(p.content));
-    expect(s.dirty).toBe(false);
-    expect(s.songLoopIndex).toBeNull();
+describe('loadProject (boot)', () => {
+  test('boot restores the selected loop and its flat fields in the content install', async () => {
+    const p = stored('Resume', 110);
+    p.content.loops.push({ ...p.content.loops[0], id: 'second', scaleRoot: 'D' });
+    const { useAppStore, slice } = await sliceWithBackend(p);
+    useAppStore.setState({ activeLoopId: 'second' });
+    const selections: string[] = [];
+    const unsubscribe = useAppStore.subscribe((s, prev) => {
+      if (s.loops !== prev.loops) selections.push(s.activeLoopId);
+    });
+    await slice.loadProject();
+    unsubscribe();
+    expect(useAppStore.getState().activeLoopId).toBe('second');
+    expect(useAppStore.getState().scaleRoot).toBe('D');
+    expect(selections).toEqual(['second']);
   });
 
-  test('cuts the chord, bass and pad voices BEFORE the state swap, like loadLoop', async () => {
-    const p = stored('Cut', 78);
-    const { useAppStore, slice } = await sliceWithBackend([p]);
+  test('an empty slot keeps the factory session, leaves the name untitled and writes nothing', async () => {
+    const { useAppStore, backend, slice } = await sliceWithBackend();
+    const before = useAppStore.getState().bpm;
+    await slice.loadProject();
+    const s = useAppStore.getState();
+    expect(s.bpm).toBe(before);
+    expect(s.projectName).toBeNull();
+    expect(s.projectStoreStatus).toBe('ready');
+    expect(s.projectNotice).toBeNull();
+    expect(backend.slot.size).toBe(0);
+  });
+
+  test('a stored project installs with the reset rules, in one set(), with the voice tails cut first', async () => {
+    const p = stored('Alpha', 77);
+    const { useAppStore, slice } = await sliceWithBackend(p);
+    // The incoming loop id is already the active one, so soloNav.ts's own nav
+    // subscription sees no change at all: only install()'s atomic clear can
+    // empty the solo set and the armed Rec track below.
+    useAppStore.setState({
+      sequencerPlayer: 'playing',
+      selectedVibeId: 'cyber-dance',
+      focusTrack: 'bass',
+      metronomeActive: true,
+      songLoopIndex: 2,
+      activeLoopId: 'loop-Alpha',
+      soloTracks: ['drums'],
+      recordingTrack: 'lead',
+    });
     const order: string[] = [];
     stopSource.mockImplementation((source: string, release: number) => { order.push(`${source}@${release}`); });
-    const unsub = useAppStore.subscribe((s, prev) => { if (s.bpm !== prev.bpm) order.push('set'); });
-    await slice.openProject(p.id);
+    let writes = 0;
+    const unsub = useAppStore.subscribe((s, prev) => {
+      if (s.bpm !== prev.bpm || s.loops !== prev.loops) writes++;
+      if (s.bpm !== prev.bpm) order.push('set');
+    });
+    await slice.loadProject();
     unsub();
+    const s = useAppStore.getState();
+    // The content swap is ONE set(): a split install — loops, then the flat
+    // per-loop patch, then bpm — re-renders every mounted view per write.
+    expect(writes).toBe(1);
+    // Exactly the three accompaniment buses, at INSTALL_RELEASE, before the
+    // set: a wrong source list, a changed release, or a cut moved after the
+    // content write would let the old project's queued voices ring over it.
     expect(order).toEqual(['chord@0.02', 'bass@0.02', 'pad@0.02', 'set']);
+    expect(s.bpm).toBe(77);
+    expect(s.selectedVibeId).toBeNull();
+    expect(s.activeLoopId).toBe('loop-Alpha');
+    expect(s.songLoopIndex).toBeNull();
+    expect(s.projectName).toBe('Alpha');
+    expect(s.soloTracks).toEqual([]);
+    expect(s.recordingTrack).toBeNull();
+    // User preferences, deliberately NOT project content: carried over.
+    expect(s.focusTrack).toBe('bass');
+    expect(s.metronomeActive).toBe(true);
   });
 
-  test('a missing id is a not-found result, leaves the session untouched and cuts nothing', async () => {
+  // The spec says a body with unknown library references "still loads, and says
+  // so". The load half holds; the notice half cannot fire from here any more:
+  // projectStore.load() runs normalizeStoredBody() at the read site, and
+  // sanitizeContent substitutes an unknown soundKit with the fallback kit
+  // before this slice ever sees the body. The notice stays live on the
+  // openProjectFile path below, which receives the body directly. Whether
+  // sanitizeContent should keep library ids verbatim (as the spec's "Library
+  // provenance" bullet states) is a sanitize.ts question, not this slice's.
+  test('a stored body naming an unknown kit still loads, with the reference already substituted', async () => {
+    const p = stored('Alpha', 77);
+    p.content.loops[0].soundKit = 'Nonexistent Kit';
+    const { useAppStore, slice } = await sliceWithBackend(p);
+    await slice.loadProject();
+    const s = useAppStore.getState();
+    expect(s.bpm).toBe(77);
+    expect(s.loops[0].soundKit).not.toBe('Nonexistent Kit');
+    expect(s.projectNotice).toBeNull();
+  });
+
+  test('unavailable storage keeps the factory session and sets the degraded notice', async () => {
+    const { useAppStore } = await storeModule;
+    const { createProjectSlice } = await import('./projectSlice');
+    const failed = createProjectStore(async () => { throw new Error('blocked'); });
+    const slice = createProjectSlice(useAppStore.setState, useAppStore.getState, failed, () => 5_000);
+    const before = useAppStore.getState().bpm;
+    await slice.loadProject();
+    const s = useAppStore.getState();
+    expect(s.bpm).toBe(before);
+    expect(s.projectStoreStatus).toBe('unavailable');
+    expect(s.projectNotice).toContain('storage is unavailable');
+  });
+
+  test('a persisted activeLoopId naming no loaded loop is pinned to loops[0]', async () => {
     const { useAppStore, slice } = await sliceWithBackend();
-    useAppStore.setState({ bpm: 133 });
-    const result = await slice.openProject('ghost');
+    useAppStore.setState({ activeLoopId: 'loop-from-a-previous-project' });
+    await slice.loadProject();
+    expect(useAppStore.getState().activeLoopId).toBe(useAppStore.getState().loops[0].id);
+  });
+});
+
+describe('save (autosave write)', () => {
+  test('writes the live content under the current envelope and publishes status', async () => {
+    const { useAppStore, backend, slice } = await sliceWithBackend();
+    useAppStore.setState({ bpm: 155 });
+    const result = await slice.save();
+    expect(result.ok).toBe(true);
+    const row = backend.slot.get('current');
+    expect(row?.content.bpm).toBe(155);
+    expect(row?.name).toBe('');
+    expect(useAppStore.getState().projectStoreStatus).toBe('ready');
+  });
+
+  test('an unavailable save leaves the live session untouched and surfaces the notice', async () => {
+    const { useAppStore } = await storeModule;
+    const { createProjectSlice } = await import('./projectSlice');
+    const failed = createProjectStore(async () => { throw new Error('blocked'); });
+    const slice = createProjectSlice(useAppStore.setState, useAppStore.getState, failed, () => 5_000);
+    useAppStore.setState({ bpm: 91 });
+    const result = await slice.save();
     expect(result.ok).toBe(false);
-    expect(useAppStore.getState().bpm).toBe(133);
-    expect(stopSource).not.toHaveBeenCalled();
+    // The live session never rolls back: there is no "Save" to fail.
+    expect(useAppStore.getState().bpm).toBe(91);
+    expect(useAppStore.getState().projectNotice).toContain('storage is unavailable');
   });
 });
 
 describe('newProject', () => {
-  test('resets content to factory, clears the id, keeps the tab and preferences', async () => {
-    const { useAppStore, slice } = await sliceWithBackend();
-    useAppStore.setState({ bpm: 140, currentProjectId: 'x', currentProjectName: 'X', activeTab: 'master', selectedVibeId: 'asian-zen', sequencerPlayer: 'playing', songLoopIndex: 1 });
-    slice.newProject();
-    const s = useAppStore.getState();
-    expect(s.bpm).toBe(120);
-    expect(s.loops).toHaveLength(1);
-    expect(s.activeLoopId).toBe(s.loops[0].id);
-    expect(s.currentProjectId).toBeNull();
-    expect(s.currentProjectName).toBeNull();
-    expect(s.selectedVibeId).toBeNull();
-    expect(s.activeTab).toBe('master');
-    expect(s.sequencerPlayer).toBe('stopped');
-    expect(s.dirty).toBe(false);
-    // Untitled: no baseline — the tracker compares against the default project.
-    expect(s.projectBaselineHash).toBeNull();
-    expect(s.songLoopIndex).toBeNull();
-  });
-
-  test('cuts the chord, bass and pad voices before the reset, like Open', async () => {
-    const { useAppStore, slice } = await sliceWithBackend();
-    const order: string[] = [];
-    stopSource.mockImplementation((source: string) => { order.push(source); });
-    const unsub = useAppStore.subscribe((s, prev) => { if (s.loops !== prev.loops) order.push('set'); });
-    useAppStore.setState({ bpm: 140 });
-    slice.newProject();
-    unsub();
-    expect(order).toEqual(['chord', 'bass', 'pad', 'set']);
-  });
-
-  /**
-   * install()'s own clear, not leadRecord.ts's startRecordArmSync: loop ids
-   * are not unique across projects (every fresh project's default loop is
-   * `loop-default-1`), so an incoming project can leave activeLoopId
-   * unchanged and the nav sync would see nothing to disarm on. The atomic
-   * `set()` is what has to catch it, exactly like soloTracks above it.
-   */
-  test('a project install clears an armed Rec track', async () => {
-    const { useAppStore, slice } = await sliceWithBackend();
-    useAppStore.setState({ recordingTrack: 'lead' });
-    slice.newProject();
-    expect(useAppStore.getState().recordingTrack).toBeNull();
+  test('installs factory content, clears the name and writes the empty project', async () => {
+    const p = stored('Alpha', 77);
+    const { useAppStore, backend, slice } = await sliceWithBackend(p);
+    await slice.loadProject();
+    useAppStore.setState({ bpm: 200 });
+    useAppStore.getState().newProject();
+    expect(useAppStore.getState().bpm).toBe(120);
+    expect(useAppStore.getState().projectName).toBeNull();
+    // newProject saves explicitly, so a New on an already-factory session
+    // still writes the slot instead of leaving it empty. The write is fired
+    // and forgotten (`void get().save()`) over the async ProjectStore, so one
+    // macrotask lets it land before the slot is read.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(backend.slot.get('current')?.content.bpm).toBe(120);
   });
 });
 
-describe('saveProject / saveProjectAs', () => {
-  test('saveProjectAs mints a record, makes it current and clears dirty', async () => {
+describe('openProjectFile', () => {
+  test('adopts the file’s envelope, installs its content and becomes the autosaved project', async () => {
     const { useAppStore, backend, slice } = await sliceWithBackend();
-    useAppStore.setState({ bpm: 99, dirty: true });
-    const result = await slice.saveProjectAs('Fresh');
+    const file = stored('From Disk', 99);
+    const result = await slice.openProjectFile(file);
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(backend.bodies.get(result.value.id)?.content.bpm).toBe(99);
-    expect(result.value.name).toBe('Fresh');
-    expect(result.value.createdAt).toBe(5_000);
-    expect(result.value.updatedAt).toBe(5_000);
-    const s = useAppStore.getState();
-    expect(s.currentProjectId).toBe(result.value.id);
-    expect(s.currentProjectName).toBe('Fresh');
-    expect(s.dirty).toBe(false);
-    expect(s.projectList[0].id).toBe(result.value.id);
-    expect(s.projectBaselineHash).toBe(fingerprintContent(buildProjectContent(s)));
+    expect(useAppStore.getState().projectName).toBe('From Disk');
+    expect(useAppStore.getState().bpm).toBe(99);
+    expect(backend.slot.get('current')?.id).toBe(file.id);
   });
 
-  test('saveProject writes back silently: same id, same createdAt, new updatedAt', async () => {
-    const p = stored('Keep', 80);
-    const { useAppStore, backend, slice } = await sliceWithBackend([p]);
-    await slice.openProject(p.id);
-    useAppStore.setState({ bpm: 81, dirty: true });
-    const result = await slice.saveProject();
-    expect(result.ok).toBe(true);
-    const saved = backend.bodies.get(p.id);
-    expect(saved?.content.bpm).toBe(81);
-    expect(saved?.createdAt).toBe(1_000);
-    expect(saved?.updatedAt).toBe(5_000);
-    expect(saved?.name).toBe('Keep');
-    expect(useAppStore.getState().dirty).toBe(false);
+  // DEFENSIVE CONTRACT — no production caller reaches this. Both readers run
+  // `sanitizeContent` before the slice ever sees a body, and `sanitizeLoops`
+  // substitutes an unknown `soundKit`/`chordRhythmId`/`bassPatternId` with its
+  // library fallback, so `unknownLibraryReferences` is empty on every real path
+  // and the notice never fires (the spec's "Library provenance" bullet says so).
+  // This test hands the slice a RAW, unsanitized body to pin the guard the slice
+  // still keeps against such a caller; it asserts a contract, not a behaviour a
+  // user can observe. The substitute-and-continue path is what production does.
+  test('guards a raw unsanitized body — a notice production cannot produce', async () => {
+    const { useAppStore, slice } = await sliceWithBackend();
+    const file = stored('From Disk', 99);
+    file.content.loops[0].soundKit = 'Nonexistent Kit';
+    await slice.openProjectFile(file);
+    const notice = useAppStore.getState().projectNotice ?? '';
+    expect(notice).toContain('unrecognised references');
+    expect(notice).toContain('drum kit "Nonexistent Kit"');
   });
 
-  test('saveProject falls back to the store when a valid currentProjectId is missing from the transient list', async () => {
-    const p = stored('Reloaded', 82);
-    const { useAppStore, backend, slice } = await sliceWithBackend([p]);
-    // Simulate a fresh reload: currentProjectId came back from persistence,
-    // but refreshProjects() has not run yet, so projectList is still empty.
-    useAppStore.setState({ currentProjectId: p.id, currentProjectName: null, bpm: 83, dirty: true });
-    expect(useAppStore.getState().projectList).toEqual([]);
-    const result = await slice.saveProject();
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.id).toBe(p.id);
-    const saved = backend.bodies.get(p.id);
-    expect(saved?.content.bpm).toBe(83);
-    expect(saved?.createdAt).toBe(1_000);
-    expect(useAppStore.getState().dirty).toBe(false);
+  test('an empty name in the file reads back as untitled', async () => {
+    const { useAppStore, slice } = await sliceWithBackend();
+    await slice.openProjectFile(stored('', 99));
+    expect(useAppStore.getState().projectName).toBeNull();
   });
 
-  test('saveProject without a current project refuses with not-found (the UI prompts for a name)', async () => {
-    const { slice } = await sliceWithBackend();
-    const result = await slice.saveProject();
-    expect(result.ok).toBe(false);
-    if (result.ok === false) expect(result.error).toBe('not-found');
-  });
-
-  test('a failed save never clears dirty', async () => {
-    const { useAppStore, backend, slice } = await sliceWithBackend();
-    backend.put = async () => { throw new DOMException('q', 'QuotaExceededError'); };
-    useAppStore.setState({ dirty: true });
-    const result = await slice.saveProjectAs('Too Big');
-    expect(result.ok).toBe(false);
-    expect(useAppStore.getState().dirty).toBe(true);
-    expect(useAppStore.getState().currentProjectId).toBeNull();
-  });
-
-  test('saveProjectAs from an open project never overwrites the source', async () => {
-    const p = stored('Source', 70);
-    const { useAppStore, backend, slice } = await sliceWithBackend([p]);
-    await slice.openProject(p.id);
-    useAppStore.setState({ bpm: 71 });
-    const result = await slice.saveProjectAs('Source copy');
-    expect(result.ok && result.value.id).not.toBe(p.id);
-    expect(backend.bodies.get(p.id)?.content.bpm).toBe(70);
-  });
-});
-
-describe('renameProject', () => {
-  test('bumps updatedAt, updates the list and the current name, and does not touch dirty', async () => {
-    const p = stored('Before', 60);
-    const { useAppStore, backend, slice } = await sliceWithBackend([p]);
-    await slice.openProject(p.id);
-    useAppStore.setState({ dirty: true });
-    const result = await slice.renameProject(p.id, 'After');
-    expect(result.ok).toBe(true);
-    expect(backend.bodies.get(p.id)?.name).toBe('After');
-    expect(backend.metas.get(p.id)?.updatedAt).toBe(5_000);
-    const s = useAppStore.getState();
-    expect(s.currentProjectName).toBe('After');
-    expect(s.projectList.find((m) => m.id === p.id)?.name).toBe('After');
-    expect(s.dirty).toBe(true);
-  });
-});
-
-describe('deleteProject', () => {
-  test('deleting the current project clears the id, marks dirty and leaves content on screen', async () => {
-    const p = stored('Doomed', 66);
-    const { useAppStore, backend, slice } = await sliceWithBackend([p]);
-    await slice.openProject(p.id);
-    const result = await slice.deleteProject(p.id);
-    expect(result.ok).toBe(true);
-    expect(backend.bodies.has(p.id)).toBe(false);
-    const s = useAppStore.getState();
-    expect(s.bpm).toBe(66);
-    expect(s.currentProjectId).toBeNull();
-    expect(s.currentProjectName).toBeNull();
-    expect(s.projectBaselineHash).toBeNull();
-    expect(s.dirty).toBe(true);
-  });
-
-  test('deleting another project leaves the current one alone', async () => {
-    const a = stored('A', 61);
-    const b = stored('B', 62);
-    const { useAppStore, slice } = await sliceWithBackend([a, b]);
-    await slice.openProject(a.id);
-    await slice.deleteProject(b.id);
-    expect(useAppStore.getState().currentProjectId).toBe(a.id);
-    expect(useAppStore.getState().dirty).toBe(false);
-  });
-});
-
-describe('importProject', () => {
-  test('new id: stored, then opened through the Open path', async () => {
-    const { useAppStore, backend, slice } = await sliceWithBackend();
-    useAppStore.setState({ selectedVibeId: 'lofi-chill' });
-    const file = stored('Imported', 55);
-    const result = await slice.importProject(file, 'new');
-    expect(result.ok).toBe(true);
-    expect(backend.bodies.has(file.id)).toBe(true);
-    const s = useAppStore.getState();
-    expect(s.bpm).toBe(55);
-    expect(s.selectedVibeId).toBeNull();
-    expect(s.currentProjectId).toBe(file.id);
-  });
-
-  test('overwrite replaces the stored record with the file', async () => {
-    const existing = stored('Old', 50);
-    const { backend, slice } = await sliceWithBackend([existing]);
-    const file = { ...existing, name: 'From File', updatedAt: 9_000, content: { ...existing.content, bpm: 51 } };
-    await slice.importProject(file, 'overwrite');
-    expect(backend.bodies.get(existing.id)?.content.bpm).toBe(51);
-    expect(backend.bodies.get(existing.id)?.name).toBe('From File');
-  });
-
-  test('copy mints a new id, appends " (imported)" and leaves the existing record alone', async () => {
-    const existing = stored('Twin', 50);
-    const { useAppStore, backend, slice } = await sliceWithBackend([existing]);
-    const result = await slice.importProject({ ...existing, content: { ...existing.content, bpm: 52 } }, 'copy');
-    expect(result.ok).toBe(true);
-    if (!result.ok || !result.value) return;
-    expect(result.value.id).not.toBe(existing.id);
-    expect(result.value.name).toBe('Twin (imported)');
-    expect(backend.bodies.get(existing.id)?.content.bpm).toBe(50);
-    expect(useAppStore.getState().currentProjectId).toBe(result.value.id);
-  });
-
-  test('with storage unavailable the file still opens, with no current project', async () => {
+  test('the file still installs when storage is unavailable — it is just nobody’s project', async () => {
     const { useAppStore } = await storeModule;
     const { createProjectSlice } = await import('./projectSlice');
-    const store = createProjectStore(async () => { throw new Error('blocked'); });
-    const slice = createProjectSlice(useAppStore.setState, useAppStore.getState, store, () => 5_000);
-    useAppStore.setState({ ...slice, currentProjectId: 'stale' });
-    const result = await useAppStore.getState().importProject(stored('Loose', 44), 'new');
-    expect(result.ok).toBe(true);
-    const s = useAppStore.getState();
-    expect(s.bpm).toBe(44);
-    expect(s.currentProjectId).toBeNull();
-    expect(s.projectBaselineHash).toBeNull();
-    // Stored nowhere and different from the default project: unsaved work.
-    expect(s.dirty).toBe(true);
-    expect(s.projectStoreStatus).toBe('unavailable');
+    const failed = createProjectStore(async () => { throw new Error('blocked'); });
+    const slice = createProjectSlice(useAppStore.setState, useAppStore.getState, failed, () => 5_000);
+    // Installed, so `openProjectFile`'s own `get().save()` is this slice's save
+    // and not a sibling test's leaked instance.
+    useAppStore.setState({ ...slice, projectName: null });
+    const result = await slice.openProjectFile(stored('From Disk', 99));
+    expect(result.ok).toBe(false);
+    expect(useAppStore.getState().bpm).toBe(99);
+    expect(useAppStore.getState().projectName).toBe('From Disk');
+    // The install must not swallow the failed save: the file opens, and the
+    // user is told it is nobody's project.
+    expect(useAppStore.getState().projectNotice).toContain('storage is unavailable');
+  });
+
+  // The references half rides the same defensive path as the test above — a raw
+  // body, which no reader hands the slice. What this pins is the join: a failed
+  // save's message must not be erased by the (production-empty) warnings set().
+  test('an unavailable save and unresolved references both reach the notice', async () => {
+    const { useAppStore } = await storeModule;
+    const { createProjectSlice } = await import('./projectSlice');
+    const failed = createProjectStore(async () => { throw new Error('blocked'); });
+    const slice = createProjectSlice(useAppStore.setState, useAppStore.getState, failed, () => 5_000);
+    useAppStore.setState({ ...slice, projectName: null });
+    const file = stored('From Disk', 99);
+    file.content.loops[0].soundKit = 'Nonexistent Kit';
+    await slice.openProjectFile(file);
+    const notice = useAppStore.getState().projectNotice ?? '';
+    expect(notice).toContain('storage is unavailable');
+    expect(notice).toContain('unrecognised references');
+    expect(notice).toContain('drum kit "Nonexistent Kit"');
   });
 });
 
-describe('export', () => {
-  test('exportStoredProject returns the saved snapshot, not live state', async () => {
-    const p = stored('Snap', 40);
-    const { useAppStore, slice } = await sliceWithBackend([p]);
-    await slice.openProject(p.id);
-    useAppStore.setState({ bpm: 41 });
-    const result = await slice.exportStoredProject(p.id);
-    expect(result.ok && result.value.content.bpm).toBe(40);
-  });
-
-  test('buildSessionExport returns live state with the current identity and does not touch dirty', async () => {
-    const p = stored('Live', 40);
-    const { useAppStore, slice } = await sliceWithBackend([p]);
-    await slice.openProject(p.id);
-    useAppStore.setState({ bpm: 41, dirty: true });
-    const body = useAppStore.getState().buildSessionExport('ignored when current', 7_000);
-    expect(body.id).toBe(p.id);
-    expect(body.name).toBe('Live');
-    expect(body.createdAt).toBe(1_000);
-    expect(body.updatedAt).toBe(7_000);
-    expect(body.content.bpm).toBe(41);
-    expect(useAppStore.getState().dirty).toBe(true);
-  });
-
-  test('buildSessionExport with no current project mints a fresh id and uses the given name', async () => {
+describe('exportProjectFile', () => {
+  test('serialises the live session through the content key allow-list', async () => {
     const { useAppStore } = await sliceWithBackend();
-    const body = useAppStore.getState().buildSessionExport('Loose Session', 7_000);
-    expect(body.id.startsWith('project-')).toBe(true);
-    expect(body.name).toBe('Loose Session');
-    expect(body.createdAt).toBe(7_000);
-    expect(body.updatedAt).toBe(7_000);
+    useAppStore.setState({ bpm: 133, selectedVibeId: 'cyber-dance', metronomeActive: true });
+    const body = useAppStore.getState().exportProjectFile();
+    expect(body.content).toEqual(buildProjectContent(useAppStore.getState()));
+    expect(Object.keys(body.content).sort()).toEqual(['bpm', 'effects', 'loops', 'masterVolume', 'meterId']);
+    expect('selectedVibeId' in body.content).toBe(false);
+  });
+
+  test('an untitled session exports an empty name rather than a placeholder', async () => {
+    const { useAppStore } = await sliceWithBackend();
+    expect(useAppStore.getState().exportProjectFile().name).toBe('');
   });
 });
 
-describe('refreshProjects', () => {
-  test('resolves the current name from the list, and a stale id becomes an unsaved session', async () => {
-    const p = stored('Named', 30);
-    const { useAppStore, slice } = await sliceWithBackend([p]);
-    useAppStore.setState({ currentProjectId: p.id, currentProjectName: null });
-    await slice.refreshProjects();
-    expect(useAppStore.getState().currentProjectName).toBe('Named');
-    expect(useAppStore.getState().projectStoreStatus).toBe('ready');
-    useAppStore.setState({ currentProjectId: 'stale-id', projectBaselineHash: 'stale-hash' });
-    await slice.refreshProjects();
-    expect(useAppStore.getState().currentProjectId).toBeNull();
-    // The baseline goes with the id: a hash for a project that is gone can
-    // never be matched again, so the session must fall back to the untitled
-    // rule rather than staying permanently dirty against a dead baseline.
-    expect(useAppStore.getState().projectBaselineHash).toBeNull();
-  });
-});
-
-/**
- * The seam the slice actually runs on in the app: store.ts hands every slice a
- * `set` wrapped by createLoopMirroringSet, not the raw setState the tests
- * above use. install() writes `loops` AND the flat per-loop keys in one set(),
- * and the incoming loops[0].id can equal the CURRENT activeLoopId (both the
- * default id, the common case for a project saved from a fresh session) — so
- * the mirror sees no activeLoopId move and does have flat keys to mirror. It
- * must not rewrite the incoming array with the OLD project's sound.
- */
-describe('openProject through the loop-mirroring set', () => {
+describe('the loop-mirroring set', () => {
   test('installs the incoming loops array verbatim when loops[0].id equals the current activeLoopId', async () => {
     const { useAppStore } = await storeModule;
     const { createProjectSlice } = await import('./projectSlice');
@@ -395,10 +308,9 @@ describe('openProject through the loop-mirroring set', () => {
         loops: [{ ...createDefaultLoop(), id: DEFAULT_LOOP_ID, scaleRoot: 'D', scaleType: 'Dorian', bassOctave: 3 }],
       },
     };
-    const store = createProjectStore(async () => createMemoryBackend([incoming]));
+    const store = createProjectStore(async () => createMemoryBackend(incoming));
     const mirroringSet = createLoopMirroringSet(useAppStore.setState, useAppStore.getState);
     const slice = createProjectSlice(mirroringSet, useAppStore.getState, store, () => 5_000);
-    // The pre-open session is on the SAME loop id, with a different sound.
     useAppStore.setState({
       ...slice,
       activeLoopId: DEFAULT_LOOP_ID,
@@ -408,101 +320,14 @@ describe('openProject through the loop-mirroring set', () => {
       bassOctave: 2,
     });
 
-    const result = await (useAppStore.getState() as AppStore).openProject(incoming.id);
-    expect(result.ok).toBe(true);
+    await slice.loadProject();
     const s = useAppStore.getState();
     expect(s.bpm).toBe(143);
     expect(s.loops).toHaveLength(1);
     for (const key of LOOP_FLAT_KEYS) {
       expect(s.loops[0][key]).toEqual(incoming.content.loops[0][key]);
-      // No cast needed: every LOOP_FLAT_KEYS entry — fx or otherwise,
-      // including fxSynthParams/fxVolume/fxMuted alongside the melody-editing
-      // fx fields — has a live top-level mirror on AppStore, so `s[key]`
-      // type-checks directly.
-      expect(s[key]).toEqual(incoming.content.loops[0][key]);
+      expect(s[key]).toEqual(s.loops[0][key]);
     }
-  });
-
-  test('clears a latched track solo even though the loop id does not change (soloNav cannot see this swap)', async () => {
-    const { useAppStore } = await storeModule;
-    const { createProjectSlice } = await import('./projectSlice');
-
-    const incoming: ProjectBody = {
-      ...makeEnvelope('Same loop id', 1_000),
-      content: {
-        ...factoryProjectContent(),
-        loops: [{ ...createDefaultLoop(), id: DEFAULT_LOOP_ID }],
-      },
-    };
-    const store = createProjectStore(async () => createMemoryBackend([incoming]));
-    const slice = createProjectSlice(useAppStore.setState, useAppStore.getState, store, () => 5_000);
-    // Same activeTab, same focusTrack, same activeLoopId across the swap —
-    // none of soloNav.ts's SOLO_NAV_KEYS moves, so its subscription cannot be
-    // what clears this. Only install()'s own set() can.
-    useAppStore.setState({ ...slice, activeLoopId: DEFAULT_LOOP_ID, soloTracks: ['drums'] });
-    expect(useAppStore.getState().soloTracks).toEqual(['drums']);
-
-    const result = await (useAppStore.getState() as AppStore).openProject(incoming.id);
-
-    expect(result.ok).toBe(true);
-    expect(useAppStore.getState().soloTracks).toEqual([]);
-  });
-});
-
-/**
- * The IndexedDB twin of projectFormat.test.ts's `.solna` regression. CLAUDE.md
- * calls IndexedDB the saved project library, so Open is the FIRST reader of a
- * pre-DEV-369 body, not the second: every project saved before this branch
- * sits at formatVersion 1 with a `string[][]` melody and no leadGate.
- *
- * DEV-388 deleted the per-version upgrade chain: a v1 melody is a
- * `string[][]`, which is the WRONG SHAPE for `asLeadNoteMatrix`
- * (sanitize.ts) regardless of version, so it comes back BLANK via plain
- * shape validation, not widened. What must still hold is that it comes back
- * blank via the
- * default, not via a crash: install() must never spread an un-sanitized body
- * straight into the store.
- */
-function legacyV1Body(id: string): ProjectBody {
-  const loop = { ...createDefaultLoop(), id: 'loop-legacy' } as unknown as Record<string, unknown>;
-  loop.leadMelodySteps = [['C4', 'E4'], [], ['G4']];
-  delete loop.leadGate;
-  return {
-    ...makeEnvelope('Legacy', 1_000),
-    id,
-    formatVersion: 1,
-    content: { ...factoryProjectContent(), bpm: 118, loops: [loop] },
-  } as unknown as ProjectBody;
-}
-
-const BLANKED_MELODY: LeadNote[][] = createDefaultLoop().leadMelodySteps;
-
-describe('a formatVersion-1 body in the project library', () => {
-  test('openProject keeps its melody — upgraded, gated and restamped', async () => {
-    const body = legacyV1Body('project-legacy-open');
-    const { useAppStore, slice } = await sliceWithBackend([body]);
-
-    const result = await slice.openProject(body.id);
-    expect(result.ok).toBe(true);
-
-    const s = useAppStore.getState();
-    expect(s.leadMelodySteps).toEqual(BLANKED_MELODY);
-    expect(s.loops[0].leadMelodySteps).toEqual(BLANKED_MELODY);
-    expect(s.leadGate).toBe(DEFAULT_LEAD_GATE);
-    expect(s.loops[0].leadGate).toBe(DEFAULT_LEAD_GATE);
-    expect(s.bpm).toBe(118);
-  });
-
-  test('exportStoredProject upgrades the content it stamps as current', async () => {
-    const body = legacyV1Body('project-legacy-export');
-    const { slice } = await sliceWithBackend([body]);
-
-    const result = await slice.exportStoredProject(body.id);
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error('exportStoredProject refused a stored body');
-    // A body re-stamped as current WITHOUT upgrading its content turns a
-    // recoverable old project into a permanently mislabelled one.
-    expect(result.value.formatVersion).toBe(PROJECT_FORMAT_VERSION);
-    expect(result.value.content.loops[0].leadMelodySteps).toEqual(BLANKED_MELODY);
+    expect(unknownLibraryReferences(s.exportProjectFile().content)).toEqual([]);
   });
 });

@@ -12,20 +12,20 @@ let stop: (() => void) | null = null;
 //
 // Covers everything `newProject()` -> `install()` writes, not just
 // activeLoopId/loops/playbackScope/bpm: the "project content swap" test below
-// drives the real installer, which also touches currentProjectId,
-// currentProjectName, projectBaselineHash, dirty, songLoopIndex, meterId,
+// drives the real installer, which also touches songLoopIndex, meterId,
 // masterVolume and effects. Bun does not isolate modules per test file, so an
 // unrestored write here leaks into whichever file the process runs next.
+//
+// It named the project-identity and unsaved-changes fields until the
+// single-project rework deleted those fields outright — a baseline over a
+// field the store no longer has is a type error, which is exactly how this
+// list is kept honest.
 let baseline: Pick<
   ReturnType<typeof useAppStore.getState>,
   | 'activeLoopId'
   | 'loops'
   | 'playbackScope'
   | 'bpm'
-  | 'currentProjectId'
-  | 'currentProjectName'
-  | 'projectBaselineHash'
-  | 'dirty'
   | 'songLoopIndex'
   | 'meterId'
   | 'masterVolume'
@@ -39,10 +39,6 @@ beforeEach(() => {
     loops: state.loops,
     playbackScope: state.playbackScope,
     bpm: state.bpm,
-    currentProjectId: state.currentProjectId,
-    currentProjectName: state.currentProjectName,
-    projectBaselineHash: state.projectBaselineHash,
-    dirty: state.dirty,
     songLoopIndex: state.songLoopIndex,
     meterId: state.meterId,
     masterVolume: state.masterVolume,

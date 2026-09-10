@@ -148,8 +148,8 @@ describe('parseProjectFile sanitises wrong-typed content instead of refusing', (
   // with no strip — so a loop that carried an explicit tempName (or fell
   // back to sanitizeLoops' synthesized one) rode straight through into a
   // parsed body. That body reaches normalizeStoredBody's callers unstripped
-  // too (renameProject, importProject), permanently writing tempName into a
-  // stored/exported project. Both loop.ts and normalizeStoredBody route
+  // too (the library load, and an opened file), permanently writing tempName
+  // into a stored/exported project. Both loop.ts and normalizeStoredBody route
   // through this same sanitizeContent, so pinning it here covers both paths.
   test('strips tempName from every loop, explicit or synthesized', () => {
     const withExplicit = { ...createDefaultLoop(), tempName: 'my-slot-name' };

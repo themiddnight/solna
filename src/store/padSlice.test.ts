@@ -65,9 +65,9 @@ describe('pad actions', () => {
 });
 
 describe('pad sanitizers', () => {
-  // The sort is not cosmetic. projectDirty fingerprints the content set, so
-  // [5,1] and [1,5] — the same selection — would fingerprint differently and
-  // raise an unsaved-changes badge that no edit caused.
+  // The sort is not cosmetic. [5,1] and [1,5] are the same selection, and
+  // without it that one selection has two on-disk spellings, so an unchanged
+  // drone round-trips through a load as a change.
   test('asPadIntervals filters, de-duplicates and sorts ascending', () => {
     expect(asPadIntervals([5, 1, 5, 99, 'x', 4], [1])).toEqual([1, 4, 5]);
   });

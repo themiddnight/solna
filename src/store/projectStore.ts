@@ -1,16 +1,19 @@
 import { normalizeStoredBody } from './projectFile';
-import type { ProjectBody, ProjectMeta } from './projectFormat';
+import type { ProjectBody } from './projectFormat';
+
+/**
+ * The one slot. The single project is stored under a FIXED key rather than
+ * under the envelope's `id`: the id is kept because `.solna`
+ * (serializeProject / parseProjectFile) and the murva interop contract expect
+ * it, but nothing looks the slot up by it, so opening a file that carries a
+ * different id overwrites the same row instead of leaving a second one.
+ */
+export const PROJECT_SLOT_KEY = 'current';
 
 export interface ProjectStoreBackend {
-  /** Metadata only — must not deserialise bodies. */
-  listMeta(): Promise<ProjectMeta[]>;
-  getBody(id: string): Promise<ProjectBody | undefined>;
-  /** Writes `projects` and `projectMeta` in ONE transaction. */
+  getBody(): Promise<ProjectBody | undefined>;
   put(body: ProjectBody): Promise<void>;
-  /** Removes from both stores in ONE transaction. */
-  remove(id: string): Promise<void>;
-  /** Drops any row present in one store but not the other. Key-only. */
-  repairOrphans(): Promise<void>;
+  remove(): Promise<void>;
 }
 
 export type ProjectStoreStatus = 'unknown' | 'ready' | 'unavailable';
@@ -21,26 +24,15 @@ export type ProjectStoreResult<T> =
 
 export const QUOTA_MESSAGE = 'There is not enough storage space to save this project';
 export const UNAVAILABLE_MESSAGE =
-  'Project storage is unavailable on this device (private browsing or blocked site storage).';
-export const NOT_FOUND_MESSAGE = 'That project is no longer stored on this device.';
+  'Project storage is unavailable on this device (private browsing or blocked site storage). Autosave is off, so export a .solna file to keep your work.';
+export const NOT_FOUND_MESSAGE = 'No project is stored on this device yet.';
 export const FAILED_MESSAGE = 'Project storage failed. Export the session to keep your work.';
 
 export interface ProjectStore {
   status(): ProjectStoreStatus;
-  list(): Promise<ProjectStoreResult<ProjectMeta[]>>;
-  get(id: string): Promise<ProjectStoreResult<ProjectBody>>;
-  put(body: ProjectBody): Promise<ProjectStoreResult<ProjectMeta>>;
-  remove(id: string): Promise<ProjectStoreResult<null>>;
-}
-
-export function toMeta(body: ProjectBody): ProjectMeta {
-  return {
-    formatVersion: body.formatVersion,
-    id: body.id,
-    name: body.name,
-    createdAt: body.createdAt,
-    updatedAt: body.updatedAt,
-  };
+  load(): Promise<ProjectStoreResult<ProjectBody>>;
+  save(body: ProjectBody): Promise<ProjectStoreResult<ProjectBody>>;
+  clear(): Promise<ProjectStoreResult<null>>;
 }
 
 function isQuotaError(err: unknown): boolean {
@@ -51,8 +43,8 @@ function isQuotaError(err: unknown): boolean {
  * Wraps a backend so every call resolves to a typed result — an `open()` that
  * throws or rejects is a normal state ('unavailable'), not an exception path,
  * mirroring resolveStorage() in store.ts. Availability is resolved ONCE,
- * lazily, on the first call: probing at module load would cost every launch a
- * database open that most launches never need.
+ * lazily, on the first call; boot is now what makes that first call, so the
+ * open still costs nothing until something reads the slot.
  */
 export function createProjectStore(openBackend: () => Promise<ProjectStoreBackend>): ProjectStore {
   let status: ProjectStoreStatus = 'unknown';
@@ -60,23 +52,14 @@ export function createProjectStore(openBackend: () => Promise<ProjectStoreBacken
 
   const open = (): Promise<ProjectStoreBackend | null> => {
     opening ??= (async () => {
-      let backend: ProjectStoreBackend;
       try {
-        backend = await openBackend();
+        const backend = await openBackend();
+        status = 'ready';
+        return backend;
       } catch {
         status = 'unavailable';
         return null;
       }
-      // Availability is decided by the open ALONE. Orphan rows are cosmetic —
-      // a meta with no body is one list row that fails to open — so a repair
-      // that throws must never cost the whole session its storage.
-      status = 'ready';
-      try {
-        await backend.repairOrphans();
-      } catch {
-        // ignore
-      }
-      return backend;
     })();
     return opening;
   };
@@ -94,58 +77,40 @@ export function createProjectStore(openBackend: () => Promise<ProjectStoreBacken
 
   return {
     status: () => status,
-    list: () =>
+    load: () =>
       run(async (b) => {
-        const metas = await b.listMeta();
-        metas.sort((x, y) => y.updatedAt - x.updatedAt);
-        return { ok: true, value: metas };
-      }),
-    // Every body LEAVES the library through here — open, export, rename and
-    // saveProject's existence check all read through get — so the upgrade
-    // runs where the body is READ, not at one caller. A body stored before a
-    // format bump is otherwise spread straight into the store by
-    // openProject/install, or re-stamped as current by a writer that never
-    // upgraded its content; both fail silently, by blanking data.
-    get: (id) =>
-      run(async (b) => {
-        const body = await b.getBody(id);
+        const body = await b.getBody();
+        // Every body LEAVES storage through here, so the format chain runs at
+        // the one read site rather than at each caller.
         return body
-          ? { ok: true, value: normalizeStoredBody(body) }
-          : { ok: false, error: 'not-found', message: NOT_FOUND_MESSAGE };
+          ? { ok: true as const, value: normalizeStoredBody(body) }
+          : { ok: false as const, error: 'not-found' as const, message: NOT_FOUND_MESSAGE };
       }),
-    put: (body) =>
+    save: (body) =>
       run(async (b) => {
         await b.put(body);
-        return { ok: true, value: toMeta(body) };
+        return { ok: true as const, value: body };
       }),
-    remove: (id) =>
+    clear: () =>
       run(async (b) => {
-        await b.remove(id);
-        return { ok: true, value: null };
+        await b.remove();
+        return { ok: true as const, value: null };
       }),
   };
 }
 
 /** Test double and the shape the IndexedDB backend must match. */
-export function createMemoryBackend(seed: ProjectBody[] = []) {
-  const bodies = new Map<string, ProjectBody>(seed.map((b) => [b.id, b]));
-  const metas = new Map<string, ProjectMeta>(seed.map((b) => [b.id, toMeta(b)]));
-  const backend: ProjectStoreBackend & { bodies: typeof bodies; metas: typeof metas } = {
-    bodies,
-    metas,
-    listMeta: async () => [...metas.values()],
-    getBody: async (id) => bodies.get(id),
+export function createMemoryBackend(seed?: ProjectBody) {
+  const slot = new Map<string, ProjectBody>();
+  if (seed) slot.set(PROJECT_SLOT_KEY, structuredClone(seed));
+  const backend: ProjectStoreBackend & { slot: typeof slot } = {
+    slot,
+    getBody: async () => slot.get(PROJECT_SLOT_KEY),
     put: async (body) => {
-      bodies.set(body.id, structuredClone(body));
-      metas.set(body.id, toMeta(body));
+      slot.set(PROJECT_SLOT_KEY, structuredClone(body));
     },
-    remove: async (id) => {
-      bodies.delete(id);
-      metas.delete(id);
-    },
-    repairOrphans: async () => {
-      for (const id of [...metas.keys()]) if (!bodies.has(id)) metas.delete(id);
-      for (const id of [...bodies.keys()]) if (!metas.has(id)) bodies.delete(id);
+    remove: async () => {
+      slot.delete(PROJECT_SLOT_KEY);
     },
   };
   return backend;
