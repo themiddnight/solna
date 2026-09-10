@@ -130,6 +130,7 @@ describe('the dock focus chip', () => {
     const chipTag = openTagContaining(closed, 'id="btn-focus-chip"');
     expect(chipTag).toContain('id="btn-focus-chip"');
     expect(chipTag).not.toContain('aria-haspopup');
+    expect(closed).toContain('>Beat</span>');
     useAppStore.setState({ isInputPanelOpen: true });
     const open = renderToString(
       <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,

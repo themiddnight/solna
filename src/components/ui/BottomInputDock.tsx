@@ -115,7 +115,13 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
                   id={`btn-focus-chip-${id}`}
                   type="button"
                   aria-current={focusTrack === id ? 'true' : undefined}
-                  onClick={() => setFocusTrack(id)}
+                  onClick={(e) => {
+                    setFocusTrack(id);
+                    // daisyUI opens this dropdown on :focus-within, and picking
+                    // an item leaves DOM focus on the item itself, so without
+                    // this the menu stays open over the dock after selection.
+                    (e.currentTarget as HTMLElement).blur();
+                  }}
                   className={focusTrack === id ? 'active font-bold' : ''}
                 >
                   {FOCUS_CHIP_LABELS[id]}
