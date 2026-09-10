@@ -99,7 +99,6 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
           <button
             id="btn-focus-chip"
             type="button"
-            aria-haspopup="menu"
             aria-label={`Working on ${FOCUS_CHIP_LABELS[focusTrack]}`}
             className={`btn btn-xs gap-1 text-[11px] font-semibold ${TOOLBAR_BUTTON_IDLE}`}
             title="Which track you are working on"
@@ -115,8 +114,7 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
                 <button
                   id={`btn-focus-chip-${id}`}
                   type="button"
-                  role="menuitemradio"
-                  aria-checked={focusTrack === id}
+                  aria-current={focusTrack === id ? 'true' : undefined}
                   onClick={() => setFocusTrack(id)}
                   className={focusTrack === id ? 'active font-bold' : ''}
                 >

@@ -129,7 +129,7 @@ describe('the dock focus chip', () => {
     );
     const chipTag = openTagContaining(closed, 'id="btn-focus-chip"');
     expect(chipTag).toContain('id="btn-focus-chip"');
-    expect(chipTag).toContain('aria-haspopup="menu"');
+    expect(chipTag).not.toContain('aria-haspopup');
     useAppStore.setState({ isInputPanelOpen: true });
     const open = renderToString(
       <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
@@ -143,5 +143,26 @@ describe('the dock focus chip', () => {
       <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
     );
     for (const id of MIX_LAYER_IDS) expect(html).toContain(`id="btn-focus-chip-${id}"`);
+  });
+
+  test('exactly one item carries aria-current, matching the focused track', () => {
+    try {
+      useAppStore.setState({ focusTrack: 'drum' });
+      const html = renderToString(
+        <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
+      );
+      const current = MIX_LAYER_IDS.filter((id) => {
+        const tag = openTagContaining(html, `id="btn-focus-chip-${id}"`);
+        return tag.includes('aria-current="true"');
+      });
+      expect(current).toEqual(['drum']);
+      for (const id of MIX_LAYER_IDS) {
+        if (id === 'drum') continue;
+        const tag = openTagContaining(html, `id="btn-focus-chip-${id}"`);
+        expect(tag).not.toContain('aria-current');
+      }
+    } finally {
+      useAppStore.setState({ focusTrack: 'synth' });
+    }
   });
 });
