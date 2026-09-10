@@ -102,7 +102,7 @@ Typography is shared with murva, and solna is **single-face**: one sans stack fo
     wears its label *above* it (`FIELD_LABEL`) — the form `ChordView`'s
     preset/octave/pattern/feel/level row uses. An inline `Label:` prefix is only
     for a group that sits in a one-line toolbar with no room to stack, which is
-    why `Target:` and `Sound Style:` keep it.
+    why `Focus:` and `Sound Style:` keep it.
   * **One label line, one control lane.** A stacked label only lines up if every
     control in the row does, so a labelled field puts its control in
     `FIELD_LANE` — the 32px line `btn-sm` and `select-sm` already resolve to.
