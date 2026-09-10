@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
-import { MIXER_CHANNELS, SoundMixer } from './SoundMixer';
+import { MIX_GROUP_IDS } from '../mixLayers';
+import { MIXER_CHANNELS, MIXER_GROUP_PLACEMENT, SoundMixer } from './SoundMixer';
 
 describe('MIXER_CHANNELS', () => {
   // The same six layers, in the same order, as LOOP_MIX_CHANNELS in
@@ -77,5 +78,38 @@ describe('the mixer has no solo column', () => {
     const source = readFileSync('src/components/loop/SoundMixer.tsx', 'utf8');
     expect(source).not.toContain('SoloButton');
     expect(source).not.toContain('soloTracks');
+  });
+});
+
+describe('the wide-screen two-column placement', () => {
+  // Every group is placed by hand, so the guard that matters is not "does the
+  // record have six keys" — the `Record<MixGroupId, …>` type already refuses a
+  // missing one — but "does any two of them name the same cell". Two groups
+  // sharing a `col-start`/`row-start` pair stack on top of each other in the
+  // grid: no error, no failing type, just one group drawn over another at `lg`
+  // and nowhere below it.
+  test('no two groups are placed on the same grid cell', () => {
+    const cells = MIX_GROUP_IDS.map((id) => {
+      const classes = MIXER_GROUP_PLACEMENT[id].split(/\s+/);
+      const col = classes.find((c) => c.includes('col-start-'));
+      const row = classes.find((c) => c.includes('row-start-'));
+      // A group placed on no cell at all is the same bug arriving by omission:
+      // it falls into grid auto-flow and lands wherever the others left a hole.
+      expect(col, `${id} names no column`).toBeDefined();
+      expect(row, `${id} names no row`).toBeDefined();
+      return `${col} ${row}`;
+    });
+    expect(new Set(cells).size).toBe(MIX_GROUP_IDS.length);
+  });
+
+  // The point of the whole layout: below `lg` the groups are one column in
+  // MIX_GROUP_IDS order, so Beat stays last. A placement class that forgot its
+  // `lg:` prefix would move Beat up into the middle on a phone.
+  test('every placement class is gated behind the lg breakpoint', () => {
+    for (const id of MIX_GROUP_IDS) {
+      for (const cls of MIXER_GROUP_PLACEMENT[id].split(/\s+/)) {
+        expect(cls, `${id}: ${cls}`).toMatch(/^lg:/);
+      }
+    }
   });
 });

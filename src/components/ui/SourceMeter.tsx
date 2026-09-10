@@ -30,8 +30,9 @@ export interface SourceMeterProps {
  *    and every tab view stays mounted (`block`/`hidden`), so without the gate
  *    five meters would read forever on a surface nobody is looking at.
  * 3. **It fills whatever box the caller gives it, and centres in it.** The
- *    mixer sits it beside the fader on a wide screen and under the fader on a
- *    narrow one; a width or a height decided in here could not do both, so the
+ *    mixer stacks it under the fader in a `h-4` box; the transport's own meter
+ *    does not use this component at all. A width or a height decided in here
+ *    would be one surface's layout baked into every surface's meter, so the
  *    layout stays with the layout (loop/SoundMixer.tsx) and this owns only the
  *    reading.
  *
