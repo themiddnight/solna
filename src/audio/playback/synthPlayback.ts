@@ -1,6 +1,7 @@
 import { audioEngine } from "../engine";
 import { emitNoteInput } from "./noteInputBus";
 import type { SynthParams } from "@/types";
+import type { SynthControlTarget } from "@/utils/synthControl";
 
 // Thin engine bridge for SoundView's keyboard/arp handlers (layering rule 3):
 // the view never touches audio/engine directly. The handlers keep all their
@@ -67,8 +68,12 @@ export function synthPlaybackNoteOff(
 }
 
 export function releaseSynthPlaybackVoices(
-  target: string,
+  target: SynthControlTarget,
   releaseTime = 0.1,
 ): void {
+  // audioEngine.releaseSoundingVoices deliberately stays typed `source:
+  // string` — the engine knows nothing about the store's target vocabulary —
+  // so the narrowing to SynthControlTarget happens here, at the one call site
+  // a wrong bus name could otherwise slip through untyped.
   audioEngine.releaseSoundingVoices(target, releaseTime);
 }

@@ -55,6 +55,58 @@ export function releaseTriggeredTargets(
 }
 
 /**
+ * The "does this tick fire, and if so what" step, extracted out of the clock
+ * callback below so it is reachable from a test. `useEffect` does not run
+ * under `renderToString` and this repo bans DOM/testing-library, so nothing
+ * inside `subscribeClock`'s callback was exercisable before this existed —
+ * deleting `triggeredTargets.add(target)` (or any of the early-exit gates)
+ * left the whole suite green.
+ *
+ * Recorded at TRIGGER time, into `triggeredTargets` — not at render time, not
+ * when focus changes. This is the only moment that means "a voice now exists
+ * on this bus", and `releaseTriggeredTargets` above releases exactly this
+ * set. Returns the sequence and the triggers so the caller can play them; an
+ * empty `triggers` array means nothing fires this tick and nothing is
+ * recorded.
+ */
+export function computeArpTick(
+  triggeredTargets: Set<SynthControlTarget>,
+  target: SynthControlTarget,
+  heldTargets: HeldNoteTargets,
+  params: SynthParams,
+  bpm: number,
+  step: number,
+  stepsPerBar: number,
+): { sequence: string[]; triggers: ReturnType<typeof computeArpTriggers> } {
+  const empty = { sequence: [] as string[], triggers: [] as ReturnType<typeof computeArpTriggers> };
+  if (!params.arpActive) return empty;
+  // The cheap question first — heldCountFor allocates nothing, while
+  // heldNotesFor builds an array, and this runs inside the lookahead
+  // callback where steady-state garbage becomes a scheduling stall.
+  if (heldCountFor(heldTargets, target) === 0) return empty;
+
+  // Gate BEFORE the build: at rate 4n this skips four of every five
+  // buildArpSequence calls, each of which is a tonal sort plus one transpose
+  // per note per octave, inside the lookahead callback.
+  const stepDur16 = stepDurationSec(bpm);
+  const arpStep = arpStepFor(step, stepsPerBar);
+  if (!arpFiresOnStep(arpStep, params.arpRate)) return empty;
+
+  const sequence = buildArpSequence(
+    heldNotesFor(heldTargets, target),
+    params.arpMode,
+    params.arpOctaves,
+  );
+  if (sequence.length === 0) return empty;
+
+  const triggers = computeArpTriggers(arpStep, sequence.length, params.arpRate, stepDur16);
+  if (triggers.length > 0) {
+    triggeredTargets.add(target);
+  }
+  return { sequence, triggers };
+}
+
+/**
  * Arpeggiator clock subscriber, moved from SoundView 281-405 with the 4 rate
  * branches collapsed into computeArpTriggers. `stateRef` mirrors the deck's
  * live arp state: which notes are held and on which bus, the params, the bus
@@ -86,31 +138,19 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
       // Focus is on the drum track: the melodic keyboard has nothing to play,
       // so the arp has nothing to arpeggiate.
       if (target === null) return;
-      // The cheap question first — heldCountFor allocates nothing, while
-      // heldNotesFor builds an array, and this runs inside the lookahead
-      // callback where steady-state garbage becomes a scheduling stall.
-      if (heldCountFor(heldTargets, target) === 0) return;
 
-      // Gate BEFORE the build: at rate 4n this skips four of every five
-      // buildArpSequence calls, each of which is a tonal sort plus one
-      // transpose per note per octave, inside the lookahead callback.
-      const stepDur16 = stepDurationSec(bpm);
-      const arpStep = arpStepFor(step, audioEngine.getMeter().stepsPerBar);
-      if (!arpFiresOnStep(arpStep, params.arpRate)) return;
-
-      const sequence = buildArpSequence(
-        heldNotesFor(heldTargets, target),
-        params.arpMode,
-        params.arpOctaves,
+      const { sequence, triggers } = computeArpTick(
+        stateRef.current.triggeredTargets,
+        target,
+        heldTargets,
+        params,
+        bpm,
+        step,
+        audioEngine.getMeter().stepsPerBar,
       );
-      if (sequence.length === 0) return;
 
-      for (const t of computeArpTriggers(arpStep, sequence.length, params.arpRate, stepDur16)) {
+      for (const t of triggers) {
         const note = sequence[t.noteIndex];
-        // Recorded at TRIGGER time — not at render time, not when focus
-        // changes. This is the only moment that means "a voice now exists on
-        // this bus", and the cleanup below releases exactly this set.
-        stateRef.current.triggeredTargets.add(target);
         audioEngine.triggerSynthNoteOn(note, params, 0.9, time + t.timeOffsetSec, target);
         audioEngine.triggerSynthNoteOff(note, params.release, time + t.timeOffsetSec + t.holdSec, target);
       }

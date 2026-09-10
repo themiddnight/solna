@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { equalPowerVelocityScale } from '@/audio/chordRhythms';
 import { useArpPlayback, releaseTriggeredTargets, type ArpStateRef } from '../audio/playback/arpPlayback';
-import { heldCountFor, noteTargetFor } from '../audio/playback/heldNotes';
+import { heldCountFor, noteTargetFor, type HeldNoteTargets } from '../audio/playback/heldNotes';
 import {
   applySynthPlaybackVelocityScale,
   hasSynthPlaybackContext,
@@ -22,7 +22,7 @@ import {
   getScaleLockedKeyboardNotesFlat,
   getChordKeyboardRows,
 } from './ui/Keyboard';
-import type { DrumPad, KeyboardMode } from '../types';
+import type { DrumPad, KeyboardMode, SynthParams } from '../types';
 import type { SynthControlTarget } from '../utils/synthControl';
 import { isTypingTarget } from '../utils/keyboard';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
@@ -58,6 +58,47 @@ export function releaseAllHeldNotes(
   releaseNote: (note: string) => void,
 ): void {
   notesToReleaseOnKeyboardModeChange(heldNotes).forEach(releaseNote);
+}
+
+/**
+ * The note-off decision, extracted so it is testable without rendering: given
+ * the note and the map it was captured into at note-on, releases the bus the
+ * note actually PLAYED on — unconditionally, on every branch — then performs
+ * the arp-mode-specific extra step.
+ *
+ * "Capture at note-on" means a note-off releases the bus a property of the
+ * NOTE, not of the arp's current state. Before this, the release only ran in
+ * the non-arp branch, so a key held with the arp off, then toggled on and
+ * released before the arp's first trigger, drained neither `heldTargets` (via
+ * this function it does) nor its own sounding voice — a drone that survived
+ * until reload. In arp mode the held key usually sounded no voice of its own
+ * on this bus, so the extra release here is a no-op; in the toggle-mid-hold
+ * case it is exactly the backstop that was missing. The arp branch's OWN
+ * triggered voices are released separately, by the `triggeredTargets` cleanup
+ * in useInputDeck's arp-silence effect.
+ */
+export function performNoteOff(
+  note: string,
+  held: HeldNoteTargets,
+  liveParams: SynthParams,
+  actions: {
+    releaseNote: (note: string, releaseTime: number, target: SynthControlTarget) => void;
+    rescale: (scale: number, target: SynthControlTarget) => void;
+    announce: (note: string) => void;
+  },
+): void {
+  const target = noteTargetFor(held, note);
+  held.delete(note);
+  if (target === undefined) return;
+  actions.releaseNote(note, liveParams.release, target);
+  if (!liveParams.arpActive) {
+    // Release first (marks the voice so re-scaling skips it), then let the
+    // voices still held ON THAT BUS rise back toward full level.
+    actions.rescale(equalPowerVelocityScale(heldCountFor(held, target)), target);
+  } else {
+    // Arp branch — see handleNoteOn's comment on the arp swallowing the key.
+    actions.announce(note);
+  }
 }
 
 export interface InputDeckKeyboardProps {
@@ -214,21 +255,14 @@ export function useInputDeck(): {
       // The bus this note was PLAYED on, never the bus focus names right now:
       // recomputing would send the release to an engine the voice was never
       // on and the held voice would drone until the same key was pressed
-      // again on the same track. See audio/playback/heldNotes.ts.
-      const target = noteTargetFor(held, note);
-      held.delete(note);
-      if (target !== undefined && !liveParams.arpActive) {
-        // Release first (marks the voice so re-scaling skips it), then let
-        // the voices still held ON THAT BUS rise back toward full level.
-        synthPlaybackNoteOff(note, liveParams.release, undefined, target);
-        applySynthPlaybackVelocityScale(
-          equalPowerVelocityScale(heldCountFor(held, target)),
-          target,
-        );
-      } else if (target !== undefined) {
-        // Arp branch — see handleNoteOn.
-        emitNoteInput({ kind: 'off', note, velocity: 0 });
-      }
+      // again on the same track. See audio/playback/heldNotes.ts and
+      // performNoteOff above.
+      performNoteOff(note, held, liveParams, {
+        releaseNote: (n, releaseTime, target) =>
+          synthPlaybackNoteOff(n, releaseTime, undefined, target),
+        rescale: (scale, target) => applySynthPlaybackVelocityScale(scale, target),
+        announce: (n) => emitNoteInput({ kind: 'off', note: n, velocity: 0 }),
+      });
       setActiveNotes((prev) => {
         const next = new Set(prev);
         next.delete(note);
