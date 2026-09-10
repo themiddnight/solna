@@ -45,7 +45,7 @@ import { useLeadMarkerColumn } from './useLeadMarker';
 import { useLeadPlayback } from './useLeadPlayback';
 import { useLeadStepPublisher } from './useLeadStepPublisher';
 import { useLeadNoteResize } from './useLeadNoteResize';
-import { leadPaintClickIsKeyboard } from './leadPaint';
+import { leadClickShouldPreview } from './leadPaint';
 import { useLeadNotePaint } from './useLeadNotePaint';
 import { Slider } from '@/components/ui/Slider';
 import { melodyTrack, type MelodyTrackId } from '@/store/melodyTracks';
@@ -281,15 +281,10 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
                   aria-pressed={kind !== 'none'}
                   onClick={(e) => {
                     paint.onCellClick(e, idx, note);
-                    // Only the ADD half auditions, and only from the keyboard.
-                    // onCellClick toggles, so `kind === 'none'` before the
-                    // click is exactly the case where the cell holds a note
-                    // after it — "hear what you drew". The erase half stays
-                    // silent: auditioning a note as it is removed says the
-                    // opposite of what just happened. Pointer clicks never
-                    // reach here at all (leadPaintClickIsKeyboard), so a paint
-                    // drag cannot machine-gun the shared preview bus.
-                    if (leadPaintClickIsKeyboard(e.detail) && kind === 'none') {
+                    // leadClickShouldPreview holds the ADD-half-only,
+                    // keyboard-only gate as one tested predicate rather than
+                    // a copy of that logic inline here.
+                    if (leadClickShouldPreview(e.detail, kind)) {
                       // A toggled-in note is written with `len: stride`
                       // (leadSlice) — one drawn cell — so that is the length
                       // the audition sounds.

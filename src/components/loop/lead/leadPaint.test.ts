@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   createLeadPaintController,
   createLeadPaintHandlers,
+  leadClickShouldPreview,
   leadPaintClickIsKeyboard,
   leadPaintKey,
   type LeadPaintCommit,
@@ -215,5 +216,26 @@ describe('which cell activation may audition', () => {
     for (const stride of [1, 2, 4]) {
       expect(leadNoteCells(stride, stride)).toBe(1);
     }
+  });
+
+  // leadClickShouldPreview is the actual gate LeadMelodyGrid's onClick calls —
+  // these three cases are exactly the ones the review found untested: a wrong
+  // implementation that previews unconditionally, on erase, or on a
+  // pointer-originated click fails one of them.
+  describe('leadClickShouldPreview', () => {
+    test('a keyboard click on an empty cell previews', () => {
+      expect(leadClickShouldPreview(0, 'none')).toBe(true);
+    });
+
+    test('a keyboard click on a cell that already holds a note stays silent (erase)', () => {
+      expect(leadClickShouldPreview(0, 'start')).toBe(false);
+      expect(leadClickShouldPreview(0, 'body')).toBe(false);
+      expect(leadClickShouldPreview(0, 'end')).toBe(false);
+    });
+
+    test('a pointer click never previews, whatever the cell holds', () => {
+      expect(leadClickShouldPreview(1, 'none')).toBe(false);
+      expect(leadClickShouldPreview(1, 'start')).toBe(false);
+    });
   });
 });
