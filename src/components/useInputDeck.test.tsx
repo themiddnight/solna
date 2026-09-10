@@ -9,6 +9,7 @@ import {
   selectSynthRelease,
 } from './useInputDeck';
 import type { InputDeckDrumProps, InputDeckKeyboardProps } from './useInputDeck';
+import type { SynthControlTarget } from '@/utils/synthControl';
 import { useAppStore } from '../store/store';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
 import { getChordKeyboardRows, getScaleLockedKeyboardNotes } from './ui/Keyboard';
@@ -104,9 +105,10 @@ describe('subscribeArpState', () => {
   test('mirrors synthParams and bpm into the ref, then stops on dispose', () => {
     const ref = {
       current: {
-        activeNotes: new Set<string>(),
+        heldTargets: new Map<string, SynthControlTarget>(),
         params: useAppStore.getState().synthParams,
-        controlTarget: 'synth' as const,
+        target: 'synth' as SynthControlTarget | null,
+        triggeredTargets: new Set<SynthControlTarget>(),
         bpm: useAppStore.getState().bpm,
       },
     };

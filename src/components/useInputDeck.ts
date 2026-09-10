@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { equalPowerVelocityScale } from '@/audio/chordRhythms';
-import { useArpPlayback, type ArpStateRef } from '../audio/playback/arpPlayback';
+import { useArpPlayback, releaseTriggeredTargets, type ArpStateRef } from '../audio/playback/arpPlayback';
+import { heldCountFor, noteTargetFor } from '../audio/playback/heldNotes';
 import {
   applySynthPlaybackVelocityScale,
   hasSynthPlaybackContext,
@@ -149,20 +150,19 @@ export function useInputDeck(): {
   // key was held — never recompute the chord at release time.
   const chordKeyNotesRef = useRef<Map<string, string[]>>(new Map());
 
-  // Keep latest params and activeNotes in a ref so the clock listener reads live state
-  // without re-subscribing or stopping voices on every keystroke/parameter tweak.
-  // params/controlTarget here are always the keyboard's own (main synth) channel,
-  // never the panel's currently-edited target — see KEYBOARD_AUDITION_TARGET.
-  const arpStateRef = useRef({
-    activeNotes,
+  // Keep the live arp state in a ref so the clock listener reads it without
+  // re-subscribing or stopping voices on every keystroke or parameter tweak.
+  // `heldTargets` is written synchronously by handleNoteOn/handleNoteOff — in
+  // the arp branch too, which is why the old commit-time mirror of
+  // `activeNotes` is gone: the arp builds its sequence from this map, so it
+  // must never lag a keypress by a render.
+  const arpStateRef = useRef<ArpStateRef['current']>({
+    heldTargets: new Map(),
     params: useAppStore.getState().synthParams,
-    controlTarget: KEYBOARD_AUDITION_TARGET,
+    target: KEYBOARD_AUDITION_TARGET,
+    triggeredTargets: new Set(),
     bpm: useAppStore.getState().bpm,
   });
-  // activeNotes is React state, so it still needs a commit-time mirror.
-  useEffect(() => {
-    arpStateRef.current.activeNotes = activeNotes;
-  }, [activeNotes]);
   // params/bpm come straight off the store — no render subscription needed.
   useEffect(() => subscribeArpState(arpStateRef), []);
 
@@ -176,31 +176,29 @@ export function useInputDeck(): {
       // on every knob move — which used to tear down and re-register the
       // window keydown/keyup listeners ~60 times a second during a drag.
       const liveParams = arpStateRef.current.params;
+      const target = KEYBOARD_AUDITION_TARGET;
+      const held = arpStateRef.current.heldTargets;
       initSynthPlayback();
       if (!liveParams.arpActive) {
-        // Equal-power polyphony: a new note lowers every held voice so the
-        // total level stays flat as keys are added. The ref mirrors
-        // activeNotes synchronously so rapid presses see each other.
-        const held = arpStateRef.current.activeNotes;
+        // Equal-power polyphony: a new note lowers every voice held ON THIS
+        // BUS so that instrument's total level stays flat as keys are added.
+        // The map mirrors the held set synchronously so rapid presses see
+        // each other.
         const isNewNote = !held.has(note);
-        held.add(note);
-        const scale = equalPowerVelocityScale(held.size);
+        held.set(note, target);
+        const scale = equalPowerVelocityScale(heldCountFor(held, target));
         if (isNewNote) {
-          applySynthPlaybackVelocityScale(scale, KEYBOARD_AUDITION_TARGET);
+          applySynthPlaybackVelocityScale(scale, target);
         }
-        synthPlaybackNoteOn(
-          note,
-          liveParams,
-          1.0,
-          undefined,
-          KEYBOARD_AUDITION_TARGET,
-          scale,
-        );
+        synthPlaybackNoteOn(note, liveParams, 1.0, undefined, target, scale);
       } else {
         // The arp swallows the key: it schedules the note itself, so nothing
         // reaches synthPlaybackNoteOn and the bus would never hear about a key
         // the user genuinely pressed. Announce it here instead, or arming the
         // recorder with the arp on would silently capture nothing.
+        // The map is still written — the arp builds its sequence from the
+        // notes held on the bus it is playing.
+        held.set(note, target);
         emitNoteInput({ kind: 'on', note, velocity: 1.0 });
       }
       setActiveNotes((prev) => new Set(prev).add(note));
@@ -212,22 +210,22 @@ export function useInputDeck(): {
     (note: string) => {
       // Same ref read as handleNoteOn — see the note there.
       const liveParams = arpStateRef.current.params;
-      const held = arpStateRef.current.activeNotes;
-      const wasHeld = held.delete(note);
-      if (wasHeld && !liveParams.arpActive) {
+      const held = arpStateRef.current.heldTargets;
+      // The bus this note was PLAYED on, never the bus focus names right now:
+      // recomputing would send the release to an engine the voice was never
+      // on and the held voice would drone until the same key was pressed
+      // again on the same track. See audio/playback/heldNotes.ts.
+      const target = noteTargetFor(held, note);
+      held.delete(note);
+      if (target !== undefined && !liveParams.arpActive) {
         // Release first (marks the voice so re-scaling skips it), then let
-        // the remaining held voices rise back toward full level.
-        synthPlaybackNoteOff(
-          note,
-          liveParams.release,
-          undefined,
-          KEYBOARD_AUDITION_TARGET,
-        );
+        // the voices still held ON THAT BUS rise back toward full level.
+        synthPlaybackNoteOff(note, liveParams.release, undefined, target);
         applySynthPlaybackVelocityScale(
-          equalPowerVelocityScale(held.size),
-          KEYBOARD_AUDITION_TARGET,
+          equalPowerVelocityScale(heldCountFor(held, target)),
+          target,
         );
-      } else if (wasHeld) {
+      } else if (target !== undefined) {
         // Arp branch — see handleNoteOn.
         emitNoteInput({ kind: 'off', note, velocity: 0 });
       }
@@ -265,20 +263,29 @@ export function useInputDeck(): {
       // both refs must be read at cleanup time; a copy taken at effect setup
       // would release the wrong set and clear the wrong map.
       const held = notesToReleaseOnKeyboardModeChange(
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
-        arpStateRef.current.activeNotes,
+        arpStateRef.current.heldTargets.keys(),
       );
       held.forEach((note) => handleNoteOffRef.current(note));
       // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
       chordKeyNotesRef.current.clear();
+      // Cleared with it: handleNoteOff deletes each note it releases, but a
+      // note released by any other path would otherwise leave a stale entry
+      // naming a bus that has nothing sounding on it.
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+      arpStateRef.current.heldTargets.clear();
     };
   }, [keyboardMode]);
 
   // Silence lingering arp voices when all keys are released in arp mode.
-  // Always the keyboard's own (main synth) channel — see KEYBOARD_AUDITION_TARGET.
+  // Releases every bus the arp actually triggered on — a hold that spanned a
+  // focus change left voices on more than one.
   useEffect(() => {
     if (arpActive && activeNotes.size === 0 && hasSynthPlaybackContext()) {
-      releaseSynthPlaybackVoices(KEYBOARD_AUDITION_TARGET, release);
+      releaseTriggeredTargets(
+        arpStateRef.current.triggeredTargets,
+        release,
+        releaseSynthPlaybackVoices,
+      );
     }
   }, [arpActive, activeNotes.size, release]);
 
@@ -385,7 +392,7 @@ export function useInputDeck(): {
   // handleNoteOn/handleNoteOff already do — see the comment above arpStateRef.
   useEffect(() => {
     const releaseHeld = () => {
-      releaseAllHeldNotes(arpStateRef.current.activeNotes, handleNoteOffRef.current);
+      releaseAllHeldNotes(arpStateRef.current.heldTargets.keys(), handleNoteOffRef.current);
     };
     const handleVisibilityChange = () => {
       if (document.hidden) releaseHeld();

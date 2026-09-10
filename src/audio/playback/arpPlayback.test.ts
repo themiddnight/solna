@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { computeArpTriggers } from './arpPlayback';
+import { computeArpTriggers, releaseTriggeredTargets } from './arpPlayback';
 import type { ArpRate } from './arpPlayback';
+import type { SynthControlTarget } from '@/utils/synthControl';
 
 // Reference implementation: the original 4-branch subscriber logic from
 // SoundView.tsx 281-405, transcribed 1:1 into pure form.
@@ -49,5 +50,49 @@ describe('computeArpTriggers', () => {
     // The reference transcription produces the same floored values.
     expect(computeArpTriggers(4, 5, '4n', 0.01)[0].holdSec).toBe(0.04);
     expect(computeArpTriggers(0, 5, '32n', 0.01)[0].holdSec).toBe(0.03);
+  });
+});
+
+describe('releaseTriggeredTargets', () => {
+  test('releases every bus the arp has triggered on, then forgets them', () => {
+    // A hold that spans a focus change leaves sounding voices on MORE THAN
+    // ONE bus — Lead's from the ticks before the change, FX's from the ticks
+    // after — and a single captured target releases exactly one of them while
+    // the other drones.
+    const released: [string, number][] = [];
+    const triggered = new Set<SynthControlTarget>(['synth', 'fx']);
+
+    releaseTriggeredTargets(triggered, 0.25, (target, releaseTime) => {
+      released.push([target, releaseTime]);
+    });
+
+    expect(released).toEqual([
+      ['synth', 0.25],
+      ['fx', 0.25],
+    ]);
+    expect(triggered.size).toBe(0);
+  });
+
+  test('a bus that was focused but never triggered on gets no release', () => {
+    // The negative half. A cleanup that released every KNOWN target would pass
+    // the test above while releasing buses it never touched — harmless to the
+    // ear, but it makes the record a lie and hides a real stranded voice.
+    const released: SynthControlTarget[] = [];
+    const triggered = new Set<SynthControlTarget>(['synth']);
+
+    releaseTriggeredTargets(triggered, 0.3, (target) => {
+      released.push(target);
+    });
+
+    expect(released).toEqual(['synth']);
+    expect(released).not.toContain('fx');
+  });
+
+  test('an empty record releases nothing', () => {
+    const released: SynthControlTarget[] = [];
+    releaseTriggeredTargets(new Set<SynthControlTarget>(), 0.3, (target) => {
+      released.push(target);
+    });
+    expect(released).toEqual([]);
   });
 });
