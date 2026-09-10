@@ -1,4 +1,5 @@
 import type { LeadNotePaintMode } from '@/store/types';
+import type { LeadCellKind } from './melodyGrid';
 
 /** A stroke can only draw or erase — 'toggle' is the click's business. */
 export type LeadPaintMode = Exclude<LeadNotePaintMode, 'toggle'>;
@@ -38,6 +39,23 @@ export function leadPaintKey(stepIndex: number, note: string): string {
  */
 export function leadPaintClickIsKeyboard(detail: number): boolean {
   return detail === 0;
+}
+
+/**
+ * Whether a cell activation should audition the note it just wrote.
+ *
+ * Only the ADD half of the keyboard toggle qualifies: `kindBeforeClick ===
+ * 'none'` is exactly the case where onCellClick's toggle turns the cell from
+ * empty to filled — "hear what you drew". A click on a cell that already
+ * holds a note erases it instead, and auditioning while erasing would say the
+ * opposite of what just happened. A pointer-originated click is excluded via
+ * `leadPaintClickIsKeyboard` rather than a second copy of `detail === 0`: a
+ * paint drag visits one new cell per pointermove and each beginPreview()
+ * would cut the one before it, machine-gunning the shared preview bus for the
+ * length of the drag.
+ */
+export function leadClickShouldPreview(detail: number, kindBeforeClick: LeadCellKind): boolean {
+  return leadPaintClickIsKeyboard(detail) && kindBeforeClick === 'none';
 }
 
 /**

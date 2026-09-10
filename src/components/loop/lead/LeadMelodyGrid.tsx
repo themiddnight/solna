@@ -30,6 +30,7 @@ import {
   leadNotesInWindow,
   leadOutOfScaleRows,
   leadPitchRows,
+  leadPreviewHoldSec,
   leadRowLabel,
   leadRowLabelTone,
   leadSpanClasses,
@@ -44,6 +45,7 @@ import { useLeadMarkerColumn } from './useLeadMarker';
 import { useLeadPlayback } from './useLeadPlayback';
 import { useLeadStepPublisher } from './useLeadStepPublisher';
 import { useLeadNoteResize } from './useLeadNoteResize';
+import { leadClickShouldPreview } from './leadPaint';
 import { useLeadNotePaint } from './useLeadNotePaint';
 import { Slider } from '@/components/ui/Slider';
 import { melodyTrack, type MelodyTrackId } from '@/store/melodyTracks';
@@ -168,6 +170,7 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   stride,
   colsPerBar,
   cellsPerBar,
+  onPreview,
 }: {
   trackId: MelodyTrackId;
   meter: Meter;
@@ -181,6 +184,13 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   stride: number;
   colsPerBar: number;
   cellsPerBar: StepCell[];
+  /**
+   * Audition a note the user just drew with the keyboard. Required, with no
+   * default: a default would make a call site that forgot the prop render a
+   * grid that draws correctly and never makes a sound — internally consistent,
+   * visually plausible, and caught by no test.
+   */
+  onPreview: (note: string, lenTicks: number) => void;
 }) {
   const stepsPerBar = meter.stepsPerBar;
   const columns = loopLength * colsPerBar;
@@ -269,7 +279,18 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
                   type="button"
                   aria-label={rowLabel}
                   aria-pressed={kind !== 'none'}
-                  onClick={(e) => paint.onCellClick(e, idx, note)}
+                  onClick={(e) => {
+                    paint.onCellClick(e, idx, note);
+                    // leadClickShouldPreview holds the ADD-half-only,
+                    // keyboard-only gate as one tested predicate rather than
+                    // a copy of that logic inline here.
+                    if (leadClickShouldPreview(e.detail, kind)) {
+                      // A toggled-in note is written with `len: stride`
+                      // (leadSlice) — one drawn cell — so that is the length
+                      // the audition sounds.
+                      onPreview(note, stride);
+                    }
+                  }}
                   onPointerDown={(e) =>
                     paint.onCellPointerDown(e, idx, col, note, kind !== 'none')
                   }
@@ -477,7 +498,6 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
   const chords = useAppStore((s) => s.chords);
-  const synthParams = useAppStore((s) => s[track.synthParams]);
 
   const meter = getMeter(meterId);
   const stepsPerBar = meter.stepsPerBar;
@@ -562,14 +582,33 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
   // is not performing a note, so the note-input bus must not see it — and it
   // runs on the 'preview' bus, so its release cannot cut a key the player is
   // holding at the same pitch. It calls audioEngine.init() itself.
+  //
+  // The length comes from leadPreviewHoldSec, not from a constant: a fixed gate
+  // is silent for any patch whose attack outruns it, so its only safe value is
+  // a measurement against the slowest patch in the library — a hidden
+  // dependency on the preset table. `lenTicks` omitted means a row label, which
+  // sounds one beat; passed, it means a cell, which sounds what it draws.
+  //
+  // bpm AND synthParams are read off getState() rather than subscribed to or
+  // closed over. This grid already re-renders once per 16th to move the
+  // playhead, and a preview is a click: the value at click time is the only
+  // one that can matter. synthParams in particular must not sit in the
+  // useCallback deps — it is store state ui/Knob.tsx writes on every
+  // pointermove, so a synth-cutoff drag would change previewNote's identity
+  // once per frame, and previewNote is a prop of the React.memo'd
+  // LeadMelodyCells, so that identity change re-rendered the whole cell
+  // matrix of BOTH mounted melody grids per pointer move for a callback
+  // nothing renders.
   const previewNote = useCallback(
-    (note: string) => {
-      previewSequencerNote(note, synthParams, undefined, {
-        holdSec: 0.22,
-        releaseSec: synthParams.release,
+    (note: string, lenTicks?: number) => {
+      const state = useAppStore.getState();
+      const params = state[track.synthParams];
+      previewSequencerNote(note, params, undefined, {
+        holdSec: leadPreviewHoldSec(state.bpm, stride, lenTicks),
+        releaseSec: params.release,
       });
     },
-    [synthParams],
+    [stride, track.synthParams],
   );
 
   // Clamped again HERE, not only on write: a meter or loop-length change can
@@ -749,6 +788,7 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
                   stride={stride}
                   colsPerBar={colsPerBar}
                   cellsPerBar={cellsPerBar}
+                  onPreview={previewNote}
                 />
               </div>
             </div>

@@ -18,10 +18,12 @@ import {
   leadCursorKeyTarget,
   leadCellEndsSpan,
   leadMarkerColumn,
+  leadPreviewHoldSec,
 } from './melodyGrid';
 import type { LeadNote } from '@/audio/leadMelody';
 import { columnsPerBar, LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
 import { getMeter } from '@/utils/meter';
+import { stepDurationSec } from '@/utils/musicTheory';
 
 describe('leadPitchRows — scale-locked', () => {
   test('lists the scale notes across the window, highest first', () => {
@@ -651,5 +653,47 @@ describe('leadRowLabelTone', () => {
 
   test('an in-scale row label keeps the muted base tone', () => {
     expect(leadRowLabelTone(false)).toBe('text-base-content/60 hover:text-base-content');
+  });
+});
+
+describe('leadPreviewHoldSec', () => {
+  test('a row-label preview is one beat at the current bpm', () => {
+    expect(leadPreviewHoldSec(120, 2)).toBeCloseTo(0.5, 10);
+    expect(leadPreviewHoldSec(60, 2)).toBeCloseTo(1, 10);
+    expect(leadPreviewHoldSec(140, 4)).toBeCloseTo(60 / 140, 10);
+  });
+
+  test('one beat is four 16ths, and the stride does not enter it', () => {
+    for (const stride of [1, 2, 4]) {
+      expect(leadPreviewHoldSec(96, stride)).toBeCloseTo(4 * stepDurationSec(96), 10);
+    }
+  });
+
+  test('a cell preview lasts the CELLS the note draws, not its raw ticks', () => {
+    // 120 bpm: a 16th is 0.125 s, so a tick is 0.0625 s.
+    // 2 ticks at stride 2 draws one cell -> 2 ticks -> 0.125 s.
+    expect(leadPreviewHoldSec(120, 2, 2)).toBeCloseTo(0.125, 10);
+    // 3 ticks at stride 2 still draws TWO cells (ceil) -> 4 ticks -> 0.25 s.
+    expect(leadPreviewHoldSec(120, 2, 3)).toBeCloseTo(0.25, 10);
+    // 8 ticks at stride 4 draws two cells -> 8 ticks -> 0.5 s.
+    expect(leadPreviewHoldSec(120, 4, 8)).toBeCloseTo(0.5, 10);
+  });
+
+  test('a cell preview is leadNoteCells driven, so it agrees with what is drawn', () => {
+    const tickDur = stepDurationSec(100) / TICKS_PER_SIXTEENTH;
+    expect(leadPreviewHoldSec(100, 2, 5)).toBeCloseTo(leadNoteCells(5, 2) * 2 * tickDur, 10);
+  });
+
+  test('a zero-length note still sounds the one cell it draws', () => {
+    expect(leadPreviewHoldSec(120, 2, 0)).toBeCloseTo(0.125, 10);
+  });
+
+  test('a non-positive or non-finite bpm answers 0 rather than Infinity', () => {
+    // A note-off scheduled at start + Infinity never fires: a drone on the
+    // preview bus with no handle able to stop it.
+    expect(leadPreviewHoldSec(0, 2)).toBe(0);
+    expect(leadPreviewHoldSec(-120, 2, 4)).toBe(0);
+    expect(leadPreviewHoldSec(Number.NaN, 2)).toBe(0);
+    expect(leadPreviewHoldSec(Number.POSITIVE_INFINITY, 2)).toBe(0);
   });
 });

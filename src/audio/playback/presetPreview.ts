@@ -217,10 +217,12 @@ export function previewSynthPreset(
 
 /**
  * One-note audition: a sequencer row, or a melody-grid cell you clicked to
- * hear what you drew. A 0.5 s gate by default; `holdSec` and `releaseSec`
- * exist because the melody grid wants a shorter, drier blip, and giving it
- * its own function was how it ended up auditioning on the 'synth' bus and
- * cutting the player's held keys.
+ * hear what you drew. A 0.5 s gate by default, which is what `SequencerView`
+ * takes as-is; `holdSec` and `releaseSec` exist because the melody grid's
+ * caller does not want a fixed gate at all — it wants one beat for a
+ * row-label preview or a drawn cell's own length in ticks for a keyboard
+ * audition, either of which can run longer than this default at any normal
+ * tempo, and only the caller knows which.
  *
  * Silent on the note-input bus by construction — it reaches the engine
  * directly — which is what a grid click needs: clicking a cell is not

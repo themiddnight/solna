@@ -2,10 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import {
   createLeadPaintController,
   createLeadPaintHandlers,
+  leadClickShouldPreview,
   leadPaintClickIsKeyboard,
   leadPaintKey,
   type LeadPaintCommit,
 } from './leadPaint';
+import { leadNoteCells } from '@/utils/stepResolution';
 
 function collector(): { commits: LeadPaintCommit[]; ctl: ReturnType<typeof createLeadPaintController> } {
   const commits: LeadPaintCommit[] = [];
@@ -192,5 +194,48 @@ describe('createLeadPaintHandlers', () => {
     const { toggled, h } = harness();
     h.onCellClick({ detail: 1 }, 7, 'G4');
     expect(toggled).toHaveLength(0);
+  });
+});
+
+describe('which cell activation may audition', () => {
+  // The audition rides leadPaintClickIsKeyboard rather than a second copy of
+  // `detail === 0`. A pointer click never reaches onCellClick — it is a paint
+  // stroke, which visits one new cell per pointermove and whose every
+  // beginPreview() cuts the one before it, so auditioning there would
+  // machine-gun the preview bus for the length of a drag.
+  test('only a keyboard activation is eligible', () => {
+    expect(leadPaintClickIsKeyboard(0)).toBe(true);
+    expect(leadPaintClickIsKeyboard(1)).toBe(false);
+    expect(leadPaintClickIsKeyboard(2)).toBe(false);
+  });
+
+  // A toggle that ADDS writes `len: stride` (leadSlice), i.e. exactly one
+  // drawn cell — so the length an audition should sound after an add is one
+  // cell's worth of ticks, and leadPreviewHoldSec turns that into seconds.
+  test('an added note is one cell long, which is the length an audition sounds', () => {
+    for (const stride of [1, 2, 4]) {
+      expect(leadNoteCells(stride, stride)).toBe(1);
+    }
+  });
+
+  // leadClickShouldPreview is the actual gate LeadMelodyGrid's onClick calls —
+  // these three cases are exactly the ones the review found untested: a wrong
+  // implementation that previews unconditionally, on erase, or on a
+  // pointer-originated click fails one of them.
+  describe('leadClickShouldPreview', () => {
+    test('a keyboard click on an empty cell previews', () => {
+      expect(leadClickShouldPreview(0, 'none')).toBe(true);
+    });
+
+    test('a keyboard click on a cell that already holds a note stays silent (erase)', () => {
+      expect(leadClickShouldPreview(0, 'start')).toBe(false);
+      expect(leadClickShouldPreview(0, 'body')).toBe(false);
+      expect(leadClickShouldPreview(0, 'end')).toBe(false);
+    });
+
+    test('a pointer click never previews, whatever the cell holds', () => {
+      expect(leadClickShouldPreview(1, 'none')).toBe(false);
+      expect(leadClickShouldPreview(1, 'start')).toBe(false);
+    });
   });
 });
