@@ -1026,7 +1026,7 @@ describe('live polyphony equal-power scaling', () => {
     engine.triggerSynthNoteOn('G4', SYNTH, 0.8, undefined, 'synth');
     engine.triggerSynthNoteOff('G4', SYNTH.release, undefined, 'synth');
 
-    (engine as any).applySynthVelocityScale(0.5);
+    engine.applySynthVelocityScale(0.5, 'synth');
 
     const voices = (engine as any).activeVoices;
     const c4 = voices.get('synth:C4');
@@ -1050,7 +1050,7 @@ describe('live polyphony equal-power scaling', () => {
     const c4 = (engine as any).activeVoices.get('synth:C4');
     expect(c4.envelopeScale).toBe(0.5);
 
-    (engine as any).applySynthVelocityScale(0.25);
+    engine.applySynthVelocityScale(0.25, 'synth');
     expect(c4.gains[0].gain.targets).toHaveLength(1);
     expect(c4.gains[0].gain.targets[0].v).toBeCloseTo(
       1.0 * 0.4 * SYNTH.sustain * 0.25,
@@ -1062,7 +1062,7 @@ describe('live polyphony equal-power scaling', () => {
     const { engine } = freshEngine();
 
     engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth');
-    (engine as any).applySynthVelocityScale(1);
+    engine.applySynthVelocityScale(1, 'synth');
 
     const c4 = (engine as any).activeVoices.get('synth:C4');
     expect(c4.gains[0].gain.targets).toHaveLength(0);
@@ -1595,7 +1595,7 @@ describe('envelope-safe rebalancing', () => {
     // Attack is 0.02 s; rebalance 0.01 s in, halfway up the ramp.
     engine.triggerSynthNoteOn('C4', SYNTH, 0.8, t0, 'synth');
     ctx.currentTime = t0 + 0.01;
-    (engine as any).applySynthVelocityScale(0.5);
+    engine.applySynthVelocityScale(0.5, 'synth');
 
     const gain = (engine as any).activeVoices.get('synth:C4').gains[0].gain;
     const anchor = gain.events.find((e: any) => e.t === t0 + 0.01);
@@ -1618,7 +1618,7 @@ describe('envelope-safe rebalancing', () => {
 
     expect(typeof (engine as any).reshapeableVoices).toBe('function');
     const spy = spyOn(engine as any, 'reshapeableVoices');
-    (engine as any).applySynthVelocityScale(0.5);
+    engine.applySynthVelocityScale(0.5, 'synth');
     expect(spy).toHaveBeenCalled();
   });
 });
