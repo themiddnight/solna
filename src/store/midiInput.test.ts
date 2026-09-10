@@ -250,3 +250,54 @@ describe('MIDI CC drives masterVolume on the fader taper, not a linear dB ramp',
     expect(useAppStore.getState().masterVolume).toBeCloseTo(expectedDb, 6);
   });
 });
+
+// Unlike masterVolume, the five synth-param branches (filterCutoff,
+// filterResonance, attack, release, oscType) push to audioEngine directly, in
+// addition to writing the store. That is not leftover duplication: engineSync
+// (not started in this file — see its own subscription tests) routes
+// updateSynthParams through a per-key frame coalescer
+// (src/utils/frameCoalescer.ts) that applies only the FIRST value for a key
+// inside an animation-frame window and defers any repeat to the next frame.
+// updateSynthParams re-shapes voices that are ALREADY sounding, so a CC sweep
+// on a held note must hear every intermediate value, not one per frame — the
+// direct call here is what delivers that, and removing it would make a sweep
+// step instead of glide. This test pins that every one of the five branches
+// still makes that direct call with the right computed value; it does not
+// (and cannot, since engineSync isn't running here) re-prove the coalescer's
+// own timing, which frameCoalescer.test.ts and engineSync.test.ts already own.
+describe('MIDI CC pushes the five synth-param branches straight to the engine', () => {
+  test('filterCutoff (CC 74) computes Hz from the CC value and pushes it directly', () => {
+    const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockClear();
+    const input = connect('dev-cc-filter-cutoff');
+
+    input.onmidimessage?.({ data: [0xb0, 74, 64], target: input });
+
+    const expectedHz = Math.round(20 * Math.pow(1000, 64 / 127));
+    expect(useAppStore.getState().synthParams.filterCutoff).toBe(expectedHz);
+    const lastCall = updateSynthParams.mock.calls.at(-1);
+    expect(lastCall?.[1]).toBe('synth');
+    expect((lastCall?.[0] as { filterCutoff: number }).filterCutoff).toBe(expectedHz);
+
+    updateSynthParams.mockRestore();
+  });
+
+  test('filterResonance (CC 71), attack (CC 73), release (CC 72) and oscType (CC 16) all push directly too', () => {
+    const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockClear();
+    const input = connect('dev-cc-other-synth-targets');
+
+    input.onmidimessage?.({ data: [0xb0, 71, 64], target: input });
+    input.onmidimessage?.({ data: [0xb0, 73, 64], target: input });
+    input.onmidimessage?.({ data: [0xb0, 72, 64], target: input });
+    input.onmidimessage?.({ data: [0xb0, 16, 64], target: input });
+
+    const s = useAppStore.getState().synthParams;
+    const calls = updateSynthParams.mock.calls.filter(([, source]) => source === 'synth');
+    expect(calls.length).toBe(4);
+    expect((calls.at(-4)?.[0] as { filterResonance: number }).filterResonance).toBe(s.filterResonance);
+    expect((calls.at(-3)?.[0] as { attack: number }).attack).toBe(s.attack);
+    expect((calls.at(-2)?.[0] as { release: number }).release).toBe(s.release);
+    expect((calls.at(-1)?.[0] as { oscType: string }).oscType).toBe(s.oscType);
+
+    updateSynthParams.mockRestore();
+  });
+});
