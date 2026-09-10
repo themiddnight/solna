@@ -119,12 +119,26 @@ Key consequences:
 
 ## Voices and per-source buses
 
-- `triggerSynthNoteOn(noteName, params, velocity, time?, source='synth', scaleFactor=1)`.
-  Sources in use: `'synth'`, `'chord'`, `'bass'`.
+- `triggerSynthNoteOn(noteName, params, velocity, time, source='synth', scaleFactor=1, owner)`.
+  Sources in use: `'synth'`, `'fx'`, `'chord'`, `'bass'`, `'pad'`, `'preview'`. `owner` is a
+  `VoiceOwner` (`src/audio/voiceOwner.ts`: `live` / `arp` / `sequencer` / `preview`), is
+  **required with no default**, and is stored on the voice. The bridges in `audio/playback/`
+  choose it; nothing in `src/components/` names an owner.
+- Three release methods, and picking the wrong one is audible. `stopSource(source, …)` kills
+  EVERYTHING on the bus including future-scheduled hits and whoever created them — what a
+  project install, a loop load or a vibe swap means. `stopOwnedVoices(source, owner, …)` is that
+  narrowed to one player, which is what a melody-grid stop means, because live input and the arp
+  share the melodic buses. `releaseSoundingVoices(source, releaseTime, owner)` releases only that
+  owner's STARTED voices and leaves its future-scheduled hits alone — the arp key-release path.
+  All three take the owner (or pointedly do not) as a required argument: whole-bus reach must
+  never be reachable by leaving one off, which is how the pre-provenance defect existed.
 - Two maps: `activeVoices` keyed `${source}:${noteName}` (latest voice per note, for dedup) and
   `sourceVoices: Map<string, Set<Voice>>` (every live *or future-scheduled* voice, so a whole
   layer can be silenced).
 - `'bass'` is forced monophonic — a new bass note releases all other bass voices first.
+- One voice slot per `${source}:${noteName}` is still shared BETWEEN owners — see the deferred
+  note at `activeVoices` in `engine.ts`. Two players sounding the same note on one bus cut each
+  other short; that is known, and not what provenance fixed.
 - Layer control goes through the lazy per-source `GainNode` bus: `setSourceGain(source, v)` /
   `setSourceMuted(source, bool)`, both with a ~10 ms `setTargetAtTime` ramp (click-free).
   `setupMasterChain()` clears `sourceBuses` because old buses point at dead nodes.
@@ -137,8 +151,6 @@ Key consequences:
   producer for a layer means connecting it to `getSourceTap(source)`; wiring it to
   `getSourceBus(source)` is audible but invisible to that layer's scope. Cleared with
   `sourceBuses` for the same dead-context reason.
-- `stopSource()` kills everything including future-scheduled hits; `releaseSoundingVoices()`
-  leaves future hits alone (used for arp key-release). Pick deliberately.
 - Library auditions (`src/audio/playback/presetPreview.ts`) run on their own `'preview'` source
   bus, not `'synth'`/`'chord'`/`'bass'` — deliberately, so a preview's disposer can call
   `stopSource('preview', …)` without also cutting the user's own held notes. One consequence:

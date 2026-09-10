@@ -308,6 +308,18 @@ class AudioEngine {
   // Active voices tracking. activeVoices keys `${source}:${noteName}` and only
   // keeps the LATEST voice per key; sourceVoices keeps every live or still-
   // scheduled voice per source so a whole layer can be silenced at once.
+  //
+  // DEFERRED, deliberately: keying by source and note means two OWNERS on one
+  // bus share one voice slot. If the melody grid plays C4 on 'synth' while a
+  // key holding C4 is down, the dedup at the top of triggerSynthNoteOn releases
+  // the held note's voice. The note is CUT SHORT, not left droning — the dedup
+  // releases the older voice correctly — which is why this is a musical wart
+  // and not a stuck-voice bug. Giving each owner its own slot means revisiting
+  // the same-note dedup, the bass mono-kill, voice stealing and
+  // updateSynthParams, all of which the existing tests pin to today's one-slot
+  // behaviour; that is a larger change than per-voice provenance justified.
+  // Recorded HERE, at the cause, not at the arp, which is merely one place it
+  // can be noticed.
   private activeVoices = new Map<string, SynthVoice>();
   private sourceVoices = new Map<string, Set<SynthVoice>>();
 
@@ -1647,6 +1659,13 @@ class AudioEngine {
    * ducking the accompaniment under a held keyboard chord. A required
    * parameter is what stops a later call site re-acquiring that reach by
    * simply leaving the argument off, which is how the original slipped in.
+   *
+   * No OWNER filter, and that is not an oversight. It already skips every voice
+   * with a planned release, and sequenced voices always have one —
+   * playbackNoteOff schedules the release at scheduling time — so equal-power
+   * polyphony from a keyboard hold already cannot re-shape the sequencer's
+   * notes. The `source` narrowing above is what this method needed; provenance
+   * adds nothing on top of it.
    */
   applySynthVelocityScale(scale: number, source: string): void {
     if (!this.ctx) return;

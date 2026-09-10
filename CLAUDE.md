@@ -296,6 +296,25 @@ plays Lead whatever the focus is** — `store/midiInput.ts` names `'synth'` outr
 routing it needs a drum-pad ↔ GM-note mapping this app does not have and does not need, being
 designed to require no external device.
 
+**Every voice records the PLAYER that created it, and a release names one.** `SynthVoice` carries
+an `owner: VoiceOwner` from `src/audio/voiceOwner.ts` — `live`, `arp`, `sequencer`, `preview` —
+written at the engine's single voice-construction site and **required with no default** at
+`triggerSynthNoteOn`. Three players share each melodic bus (live input, the arp, the melody-track
+sequencer), so an owner-blind release is a bug rather than a shortcut: an arp key-up used to cut
+short a melody track's sounding note, and a melody-grid stop used to cut the key the player was
+holding. `releaseSoundingVoices(source, releaseTime, owner)` and
+`stopOwnedVoices(source, owner, …)` are the scoped calls; `stopSource` keeps its whole-bus meaning
+for a project install, a loop load and a vibe swap, which genuinely mean "silence this bus,
+whatever is on it". **Whole-bus reach therefore requires calling a method whose name says so, and
+can never be reached by omitting an argument** — which is exactly how the defect came to exist,
+and the same scar `applySynthVelocityScale`'s required `source` carries. The owner is chosen by
+the bridges in `src/audio/playback/` and **no file in `src/components/` names one**, so the
+layering rules do not move and a view cannot pick the wrong owner. What is NOT fixed: `activeVoices`
+is still keyed `` `${source}:${noteName}` `` and keeps one voice per key, so two players sounding
+the same note on one bus still cut each other short — recorded as a comment at `activeVoices`, at
+the cause, and deliberately deferred because unpicking it means revisiting the same-note dedup,
+the bass mono-kill, voice stealing and `updateSynthParams` together.
+
 **`persist` serialises on every `set()`; only the `localStorage` write is coalesced.** Every
 `set()` that touches a key returned by `partialize` re-serialises that slice on the spot. The
 write itself goes through `utils/coalescedStorage.ts`, which buffers it to an idle callback and
