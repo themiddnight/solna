@@ -7,6 +7,7 @@ import { SectionCard } from '../ui/SectionCard';
 import { ChannelStrip, layerVolumeSliderId } from '../ui/ChannelStrip';
 import { PowerToggle } from '../ui/PowerToggle';
 import { SourceMeter } from '../ui/SourceMeter';
+import { useLiveStore } from '../ui/useLiveStore';
 import {
   MIX_GROUP_IDS,
   MIX_GROUP_LABELS,
@@ -123,6 +124,8 @@ function MixerRow({ channel, isPlaying }: { channel: MixerChannel; isPlaying: bo
   const setVolume = useAppStore((s) => s[channel.setVolumeKey]);
   const muted = useAppStore((s) => s[channel.muteKey]);
   const toggleMuted = useAppStore((s) => s[channel.toggleKey]);
+  const focusTrack = useLiveStore((s) => s.focusTrack);
+  const setFocusTrack = useLiveStore((s) => s.setFocusTrack);
 
   return (
     /* The row is a COLUMN: the field label on its own line, then one control
@@ -135,9 +138,29 @@ function MixerRow({ channel, isPlaying }: { channel: MixerChannel; isPlaying: bo
        controls siblings on one line, and they align by construction rather than
        by a margin someone has to keep in step with the label's height. */
     <div className="flex flex-col gap-1">
-      <label className={FIELD_LABEL} htmlFor={layerVolumeSliderId(channel.idPrefix)}>
-        {channel.label} <span className="tabular-nums">({formatDb(volume)})</span>
-      </label>
+      {/* The row's own name is the focus control: clicking it points every
+          Sound-page knob at this layer. A button rather than a click handler
+          on the row body, because the row body already contains a fader and a
+          mute toggle and a click that lands on either must not also navigate.
+          The `htmlFor` moves onto a sibling `<label className="sr-only">` so
+          the fader keeps an accessible name. */}
+      <div className="flex items-center gap-1.5">
+        <button
+          id={`btn-mix-focus-${channel.idPrefix}`}
+          aria-current={focusTrack === channel.idPrefix ? 'true' : undefined}
+          type="button"
+          onClick={() => setFocusTrack(channel.idPrefix)}
+          className={`${FIELD_LABEL} text-left hover:text-base-content ${
+            focusTrack === channel.idPrefix ? 'text-base-content font-bold' : ''
+          }`}
+          title={`Work on ${channel.label}`}
+        >
+          {channel.label} <span className="tabular-nums">({formatDb(volume)})</span>
+        </button>
+        <label className="sr-only" htmlFor={layerVolumeSliderId(channel.idPrefix)}>
+          {channel.label} level
+        </label>
+      </div>
       {/* `items-start` + an `h-8` box around the toggle, rather than
           `items-center`: the fader and the meter stack, and centring would drop
           the toggle to the middle of that stack — beside the gap between them.

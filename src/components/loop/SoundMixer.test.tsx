@@ -1,6 +1,8 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
+import { useAppStore } from '@/store/store';
+import { MIX_LAYER_IDS } from '@/store/focusTrack';
 import { MIX_GROUP_IDS } from '../mixLayers';
 import { MIXER_CHANNELS, MIXER_GROUP_PLACEMENT, SoundMixer } from './SoundMixer';
 
@@ -111,5 +113,25 @@ describe('the wide-screen two-column placement', () => {
         expect(cls, `${id}: ${cls}`).toMatch(/^lg:/);
       }
     }
+  });
+});
+
+describe('a mixer row sets focus', () => {
+  afterEach(() => {
+    useAppStore.setState({ focusTrack: 'synth' });
+  });
+
+  test('every row carries a focus button', () => {
+    const html = renderToString(<SoundMixer />);
+    for (const id of MIX_LAYER_IDS) expect(html).toContain(`id="btn-mix-focus-${id}"`);
+  });
+
+  // aria-current is what tells a screen reader which row is the one being
+  // edited, and it is the only visible difference between the six rows.
+  test('the focused row is marked, and only that one', () => {
+    useAppStore.setState({ focusTrack: 'chord' });
+    const html = renderToString(<SoundMixer />);
+    expect(html).toContain('id="btn-mix-focus-chord" aria-current="true"');
+    expect(html.match(/aria-current="true"/g)?.length).toBe(1);
   });
 });
