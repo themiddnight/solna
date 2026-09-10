@@ -270,6 +270,20 @@ the snapshot and the subscriptions, using `isTrackAudible` from `store/trackAudi
 drums **bus** only; the per-voice drum mute in `sequencerTracks` is a second, independent layer
 applied in `useSequencerPlayback`, and both must pass for a voice to sound.
 
+**The keyboard, the on-screen keyboard and the arp all play whichever track `focusTrack`
+names — bus AND patch.** A note's bus is CAPTURED at note-on and never recomputed at release, so
+a focus change mid-hold cannot send a note-off to a bus the voice was never on. Equal-power
+polyphony counts held notes per BUS, never globally — playing a second track never quietens the
+first. The arp releases every bus it has actually TRIGGERED a voice on (not just whichever bus is
+focused at cleanup time), because one hold can span a focus change and leave voices on more than
+one bus. A `drum` focus makes the melodic keyboard a complete no-op: nothing sounds and nothing is
+announced on the note-input bus, because announcing a silent key would let the recorder capture a
+note that made no sound; the disjoint QWERTY drum-pad keys are a separate listener and keep
+working regardless of focus. **One surface is deliberately exempt: an external MIDI device still
+plays Lead whatever the focus is** — `store/midiInput.ts` names `'synth'` outright — because
+routing it needs a drum-pad ↔ GM-note mapping this app does not have and does not need, being
+designed to require no external device.
+
 **`persist` serialises on every `set()`; only the `localStorage` write is coalesced.** Every
 `set()` that touches a key returned by `partialize` re-serialises that slice on the spot. The
 write itself goes through `utils/coalescedStorage.ts`, which buffers it to an idle callback and

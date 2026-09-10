@@ -329,6 +329,12 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
 
   return {
     ...melody,
+
+    // KNOWN GAP, named rather than left to be rediscovered: nothing clears
+    // this on a focus change, so arming Rec and then focusing Bass records
+    // bass-sounding notes into the LEAD grid. That became reachable when the
+    // keyboard started following focusTrack; Rec-per-track owns the decision
+    // and closes it, so no clearing rule is invented here for it to undo.
     leadRecording: false,
     setLeadRecording: (leadRecording) => set({ leadRecording }),
 

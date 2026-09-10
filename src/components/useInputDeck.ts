@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { equalPowerVelocityScale } from '@/audio/chordRhythms';
-import { useArpPlayback, type ArpStateRef } from '../audio/playback/arpPlayback';
+import { useArpPlayback, releaseTriggeredTargets, type ArpStateRef } from '../audio/playback/arpPlayback';
+import { heldCountFor, noteTargetFor, type HeldNoteTargets } from '../audio/playback/heldNotes';
 import {
   applySynthPlaybackVelocityScale,
   hasSynthPlaybackContext,
@@ -14,6 +15,7 @@ import { emitNoteInput } from '../audio/playback/noteInputBus';
 import { ensureDrumEngine, triggerPad as triggerDrumPad } from '../audio/playback/drumPlayback';
 import { useAppStore } from '../store/store';
 import type { AppStore } from '../store/types';
+import { synthChannelForFocus } from './loop/synth/useSynthChannel';
 import {
   clampKeyboardOctave,
   getChromaticKeyboardNotes,
@@ -21,18 +23,57 @@ import {
   getScaleLockedKeyboardNotesFlat,
   getChordKeyboardRows,
 } from './ui/Keyboard';
-import type { DrumPad, KeyboardMode } from '../types';
+import type { DrumPad, KeyboardMode, SynthParams } from '../types';
 import type { SynthControlTarget } from '../utils/synthControl';
 import { isTypingTarget } from '../utils/keyboard';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
+import {
+  controlTargetForFocus,
+  isMelodicFocus,
+  type MixLayerId,
+} from '../store/focusTrack';
 
-// The interactive keyboard always plays the main synth, regardless of which
-// destination the panel's "Target" selector is currently editing — pinning it
-// here (instead of routing through `controlTarget`) keeps every audio call
-// site (note-on, note-off, arp playback, voice release) agreeing on one
-// engine, so a mode/target switch can never strand voices on an engine nothing
-// points at anymore (copied verbatim from SoundView).
-const KEYBOARD_AUDITION_TARGET: SynthControlTarget = 'synth';
+// The keyboard, the on-screen keyboard and the arp all play the FOCUSED track
+// (`focusTrack` in the ui slice). They used to be pinned to a module constant
+// (deleted with this change), whose stated reason was that pinning kept every
+// audio call site (note-on, note-off, arp playback, voice release) agreeing on
+// one engine, so a target switch could never strand voices on an engine
+// nothing points at any more. The target varies now, so each of those
+// guarantees is made explicitly instead:
+//
+//  - note-off releases on the target CAPTURED at note-on
+//    (arpStateRef.current.heldTargets, see audio/playback/heldNotes.ts), never
+//    on a target recomputed at release time. A focus change mid-hold would
+//    otherwise send the release to a bus the voice was never on, and the held
+//    voice would drone until the same key was pressed again on the same
+//    track. Same rule as chordKeyNotesRef below, on a different axis.
+//  - the arp records every bus it has TRIGGERED on and releases all of them
+//    (arpPlayback.ts), because one hold spanning a focus change leaves voices
+//    on more than one bus.
+//  - equal-power polyphony counts the notes held on ONE bus, and the engine
+//    rescale is scoped to that source, so playing a second track never
+//    quietens the first.
+//
+// A focus change alone does NOT cut sounding voices: they ring out naturally.
+// That is a decision (spec, Open risks 1) — cutting them is a hard stop the
+// user did not ask for, and they are finite.
+
+/**
+ * The synth bus a focus plays on, or `null` when there is nothing melodic to
+ * play. Exported so this routing decision is testable as pure logic, without
+ * rendering — `useEffect` never runs under renderToString, so the deck's
+ * behaviour is only reachable through helpers like this one.
+ *
+ * `null` for `drum` rather than a fallback to `'synth'`: a fallback would make
+ * the drum focus play the Lead patch off the melodic keyboard, silently and
+ * with nothing on screen to explain it, which is the exact failure this change
+ * exists to remove. The QWERTY drum-PAD shortcuts are unaffected — they are a
+ * disjoint key set (`KeyZ`..`Slash`, DEFAULT_PADS) on their own listener, so a
+ * drum focus silences the melodic keyboard and leaves the pads playing.
+ */
+export function synthTargetForFocus(focus: MixLayerId): SynthControlTarget | null {
+  return isMelodicFocus(focus) ? controlTargetForFocus(focus) : null;
+}
 
 // Decide which notes must be force-released when the keyboard mode changes.
 // Always releases from the snapshot of what is actually sounding right now
@@ -59,6 +100,117 @@ export function releaseAllHeldNotes(
   notesToReleaseOnKeyboardModeChange(heldNotes).forEach(releaseNote);
 }
 
+/**
+ * The note-off decision, extracted so it is testable without rendering: given
+ * the note and the map it was captured into at note-on, releases the bus the
+ * note actually PLAYED on — unconditionally, on every branch — then performs
+ * the arp-mode-specific extra step.
+ *
+ * "Capture at note-on" means a note-off releases the bus a property of the
+ * NOTE, not of the arp's current state. Before this, the release only ran in
+ * the non-arp branch, so a key held with the arp off, then toggled on and
+ * released before the arp's first trigger, drained neither `heldTargets` (via
+ * this function it does) nor its own sounding voice — a drone that survived
+ * until reload. In arp mode the held key usually sounded no voice of its own
+ * on this bus, so the extra release here is a no-op; in the toggle-mid-hold
+ * case it is exactly the backstop that was missing. The arp branch's OWN
+ * triggered voices are released separately, by the `triggeredTargets` cleanup
+ * in useInputDeck's arp-silence effect.
+ */
+export function performNoteOff(
+  note: string,
+  held: HeldNoteTargets,
+  liveParams: SynthParams,
+  actions: {
+    releaseNote: (note: string, releaseTime: number, target: SynthControlTarget) => void;
+    rescale: (scale: number, target: SynthControlTarget) => void;
+    announce: (note: string) => void;
+  },
+): void {
+  const target = noteTargetFor(held, note);
+  held.delete(note);
+  if (target === undefined) return;
+  actions.releaseNote(note, liveParams.release, target);
+  if (!liveParams.arpActive) {
+    // Release first (marks the voice so re-scaling skips it), then let the
+    // voices still held ON THAT BUS rise back toward full level.
+    actions.rescale(equalPowerVelocityScale(heldCountFor(held, target)), target);
+  } else {
+    // Arp branch — see handleNoteOn's comment on the arp swallowing the key.
+    actions.announce(note);
+  }
+}
+
+/**
+ * The note-on decision, extracted so it is testable without rendering — same
+ * reason and same shape as `performNoteOff` above. `target` is the bus
+ * ALREADY resolved by the caller (`synthTargetForFocus`/`arpStateRef.current.target`);
+ * this function never sees `null`, since the caller's drum no-op returns
+ * before reaching it.
+ *
+ * The re-press guard — releasing the note's PREVIOUS bus when the same note
+ * is re-pressed on a new one — runs UNCONDITIONALLY, above the arp split, so
+ * both branches see it. It used to sit only inside the non-arp branch: the
+ * arp branch overwrote `held`'s entry with no release at all, so a note held
+ * with the arp off, then re-pressed on a different bus after focus moved and
+ * the arp was switched on, stranded the first bus's sounding voice with no
+ * map entry left to reach it — a drone that survived until reload.
+ *
+ * The old bus is also rescaled after its release: the voices still held
+ * there were counted assuming one more voice than is now sounding, so
+ * leaving them at the old scale would keep them quieter than equal power
+ * calls for. The note is dropped from `held` before that rescale, or
+ * `heldCountFor` would still count it as sounding on the bus it just left.
+ */
+export function performNoteOn(
+  note: string,
+  target: SynthControlTarget,
+  held: HeldNoteTargets,
+  liveParams: SynthParams,
+  actions: {
+    initEngine: () => void;
+    playNote: (note: string, target: SynthControlTarget, scale: number) => void;
+    releaseNote: (note: string, releaseTime: number, target: SynthControlTarget) => void;
+    rescale: (scale: number, target: SynthControlTarget) => void;
+    announce: (note: string) => void;
+  },
+): void {
+  actions.initEngine();
+  const previous = noteTargetFor(held, note);
+  if (previous !== undefined && previous !== target) {
+    actions.releaseNote(note, liveParams.release, previous);
+    held.delete(note);
+    actions.rescale(equalPowerVelocityScale(heldCountFor(held, previous)), previous);
+  }
+  // Computed AFTER the re-press guard above (which may just have deleted this
+  // note from `held` on a cross-bus re-press), not before it: "new" here means
+  // new to the bus it is about to sound on, not new to `held` overall — a
+  // cross-bus re-press left this false when computed from `previous`, so the
+  // arriving bus was never rescaled to include the voice that just landed on
+  // it, leaving it a hair quieter than every note already on that bus.
+  const isNewNote = !held.has(note);
+  if (!liveParams.arpActive) {
+    // Equal-power polyphony: a new note lowers every voice held ON THIS BUS
+    // so that instrument's total level stays flat as keys are added. The map
+    // mirrors the held set synchronously so rapid presses see each other.
+    held.set(note, target);
+    const scale = equalPowerVelocityScale(heldCountFor(held, target));
+    if (isNewNote) {
+      actions.rescale(scale, target);
+    }
+    actions.playNote(note, target, scale);
+  } else {
+    // The arp swallows the key: it schedules the note itself, so nothing
+    // plays it directly and the bus would never hear about a key the user
+    // genuinely pressed. Announce it here instead, or arming the recorder
+    // with the arp on would silently capture nothing. The map is still
+    // written — the arp builds its sequence from the notes held on the bus
+    // it is playing.
+    held.set(note, target);
+    actions.announce(note);
+  }
+}
+
 export interface InputDeckKeyboardProps {
   keyboardMode: KeyboardMode;
   setKeyboardMode: (mode: KeyboardMode) => void;
@@ -80,26 +232,50 @@ export interface InputDeckDrumProps {
   onPadVolumeChange: (padId: string, volume: number) => void;
 }
 
+// The synth params the keyboard/arp actually play: the FOCUSED track's, not
+// always Lead's. Reuses `synthChannelForFocus` — the same resolver
+// `useSynthChannel` feeds the Pro/Simple panels with — so a drum focus falls
+// back to Lead's channel exactly once, in one place, rather than being
+// re-decided here. That fallback is inert for playback: every path that would
+// read this value for a drum focus (`synthTargetForFocus` returning `null`)
+// already returns before touching it, so which channel it falls back to
+// cannot be heard.
+function resolveFocusedSynthParams(s: AppStore): SynthParams {
+  return synthChannelForFocus(s.focusTrack, {
+    synth: { params: s.synthParams, setParams: s.setSynthParams },
+    chord: { params: s.chordSynthParams, setParams: s.setChordSynthParams },
+    bass: { params: s.bassSynthParams, setParams: s.setBassSynthParams },
+    pad: { params: s.padSynthParams, setParams: s.setPadSynthParams },
+    fx: { params: s.fxSynthParams, setParams: s.setFxSynthParams },
+  }).params;
+}
+
 // Named (not inline) so a test can pin their behaviour directly: given two
 // `synthParams` objects differing only in a field the hook does not read
 // reactively, each selector must still return the SAME primitive — that
 // equality is what lets `useAppStore(selectArpActive)` skip a re-render on
 // every unrelated knob move.
-export const selectArpActive = (s: AppStore): boolean => s.synthParams.arpActive;
-export const selectSynthRelease = (s: AppStore): number => s.synthParams.release;
+export const selectArpActive = (s: AppStore): boolean => resolveFocusedSynthParams(s).arpActive;
+export const selectSynthRelease = (s: AppStore): number => resolveFocusedSynthParams(s).release;
 
 /**
- * Keeps `arpStateRef.current.params` / `.bpm` fresh by IMPERATIVE store
- * subscription instead of by a render-driven effect. The hook used to select
- * the whole `synthParams` object at App level purely to feed this ref, which
- * re-rendered the entire application tree on every knob pointermove. Zustand
- * notifies synchronously on `set()`, so the ref is refreshed strictly EARLIER
- * than the old post-commit effect did it — the arp can never read staler
- * params than before. Same pattern as `useSequencerPlayback.ts:69-78`.
+ * Keeps `arpStateRef.current.params` / `.bpm` / `.target` fresh by IMPERATIVE
+ * store subscription instead of by a render-driven effect. The hook used to
+ * select the whole `synthParams` object at App level purely to feed this ref,
+ * which re-rendered the entire application tree on every knob pointermove.
+ * Zustand notifies synchronously on `set()`, so the ref is refreshed strictly
+ * EARLIER than the old post-commit effect did it — the arp can never read
+ * staler params than before. Same pattern as `useSequencerPlayback.ts:69-78`.
  */
 export function subscribeArpState(ref: ArpStateRef): () => void {
+  // A single selector over the FOCUSED channel's params, not always
+  // `s.synthParams`: this re-fires both when that channel's own params object
+  // changes AND when focus moves to a different channel (the selector then
+  // returns a different object, e.g. `fxSynthParams` instead of
+  // `synthParams`), so one subscription covers both triggers the fix calls
+  // for — no separate focus-driven refresh of `.params` is needed.
   const unsubParams = useAppStore.subscribe(
-    (s) => s.synthParams,
+    resolveFocusedSynthParams,
     (params) => {
       ref.current.params = params;
     },
@@ -112,9 +288,17 @@ export function subscribeArpState(ref: ArpStateRef): () => void {
     },
     { fireImmediately: true },
   );
+  const unsubFocus = useAppStore.subscribe(
+    (s) => s.focusTrack,
+    (focus) => {
+      ref.current.target = synthTargetForFocus(focus);
+    },
+    { fireImmediately: true },
+  );
   return () => {
     unsubParams();
     unsubBpm();
+    unsubFocus();
   };
 }
 
@@ -129,9 +313,6 @@ export function useInputDeck(): {
   const setKeyboardMode = useAppStore((s) => s.setKeyboardMode);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
-  // The keyboard always auditions the main synth (KEYBOARD_AUDITION_TARGET),
-  // regardless of which destination the panel's Target selector is editing.
-  //
   // Deliberately two PRIMITIVE selectors, not `(s) => s.synthParams`. This hook
   // is mounted in App, and `synthParams` is a fresh object on every knob
   // pointermove (60-120 Hz), so selecting the object re-rendered App and with
@@ -149,25 +330,22 @@ export function useInputDeck(): {
   // key was held — never recompute the chord at release time.
   const chordKeyNotesRef = useRef<Map<string, string[]>>(new Map());
 
-  // Keep latest params and activeNotes in a ref so the clock listener reads live state
-  // without re-subscribing or stopping voices on every keystroke/parameter tweak.
-  // params/controlTarget here are always the keyboard's own (main synth) channel,
-  // never the panel's currently-edited target — see KEYBOARD_AUDITION_TARGET.
-  const arpStateRef = useRef({
-    activeNotes,
-    params: useAppStore.getState().synthParams,
-    controlTarget: KEYBOARD_AUDITION_TARGET,
+  // Keep the live arp state in a ref so the clock listener reads it without
+  // re-subscribing or stopping voices on every keystroke or parameter tweak.
+  // `heldTargets` is written synchronously by handleNoteOn/handleNoteOff — in
+  // the arp branch too, which is why the old commit-time mirror of
+  // `activeNotes` is gone: the arp builds its sequence from this map, so it
+  // must never lag a keypress by a render.
+  const arpStateRef = useRef<ArpStateRef['current']>({
+    heldTargets: new Map(),
+    params: resolveFocusedSynthParams(useAppStore.getState()),
+    target: synthTargetForFocus(useAppStore.getState().focusTrack),
+    triggeredTargets: new Set(),
     bpm: useAppStore.getState().bpm,
   });
-  // activeNotes is React state, so it still needs a commit-time mirror.
-  useEffect(() => {
-    arpStateRef.current.activeNotes = activeNotes;
-  }, [activeNotes]);
-  // params/bpm come straight off the store — no render subscription needed.
+  // params/bpm/target come straight off the store — no render subscription needed.
   useEffect(() => subscribeArpState(arpStateRef), []);
 
-  // The keyboard always auditions the main synth (KEYBOARD_AUDITION_TARGET),
-  // regardless of which destination the Target selector is currently editing.
   const handleNoteOn = useCallback(
     (note: string) => {
       // Params come from arpStateRef, kept fresh by an imperative store
@@ -176,33 +354,29 @@ export function useInputDeck(): {
       // on every knob move — which used to tear down and re-register the
       // window keydown/keyup listeners ~60 times a second during a drag.
       const liveParams = arpStateRef.current.params;
-      initSynthPlayback();
-      if (!liveParams.arpActive) {
-        // Equal-power polyphony: a new note lowers every held voice so the
-        // total level stays flat as keys are added. The ref mirrors
-        // activeNotes synchronously so rapid presses see each other.
-        const held = arpStateRef.current.activeNotes;
-        const isNewNote = !held.has(note);
-        held.add(note);
-        const scale = equalPowerVelocityScale(held.size);
-        if (isNewNote) {
-          applySynthPlaybackVelocityScale(scale);
-        }
-        synthPlaybackNoteOn(
-          note,
-          liveParams,
-          1.0,
-          undefined,
-          KEYBOARD_AUDITION_TARGET,
-          scale,
-        );
-      } else {
-        // The arp swallows the key: it schedules the note itself, so nothing
-        // reaches synthPlaybackNoteOn and the bus would never hear about a key
-        // the user genuinely pressed. Announce it here instead, or arming the
-        // recorder with the arp on would silently capture nothing.
-        emitNoteInput({ kind: 'on', note, velocity: 1.0 });
+      // The bus focus names RIGHT NOW. Read once, used for both the engine
+      // call and the map entry, so the note is captured on exactly the bus it
+      // was played on even if focus moves during this callback.
+      const target = arpStateRef.current.target;
+      if (target === null) {
+        // Focus is on the drum track: the melodic keyboard has nothing to
+        // play. Nothing sounds, nothing is announced on the note-input bus
+        // (announcing would let the recorder capture a note that made no
+        // sound), and the key is not added to activeNotes — a highlighted key
+        // that plays nothing is the invisible state this change removes.
+        // Its note-off then finds no map entry and is a no-op, so the two
+        // edges stay symmetric. The QWERTY drum PADS are a separate listener
+        // over a disjoint key set and keep working.
+        return;
       }
+      const held = arpStateRef.current.heldTargets;
+      performNoteOn(note, target, held, liveParams, {
+        initEngine: initSynthPlayback,
+        playNote: (n, t, scale) => synthPlaybackNoteOn(n, liveParams, 1.0, undefined, t, scale),
+        releaseNote: (n, releaseTime, t) => synthPlaybackNoteOff(n, releaseTime, undefined, t),
+        rescale: (scale, t) => applySynthPlaybackVelocityScale(scale, t),
+        announce: (n) => emitNoteInput({ kind: 'on', note: n, velocity: 1.0 }),
+      });
       setActiveNotes((prev) => new Set(prev).add(note));
     },
     [],
@@ -212,22 +386,18 @@ export function useInputDeck(): {
     (note: string) => {
       // Same ref read as handleNoteOn — see the note there.
       const liveParams = arpStateRef.current.params;
-      const held = arpStateRef.current.activeNotes;
-      const wasHeld = held.delete(note);
-      if (wasHeld && !liveParams.arpActive) {
-        // Release first (marks the voice so re-scaling skips it), then let
-        // the remaining held voices rise back toward full level.
-        synthPlaybackNoteOff(
-          note,
-          liveParams.release,
-          undefined,
-          KEYBOARD_AUDITION_TARGET,
-        );
-        applySynthPlaybackVelocityScale(equalPowerVelocityScale(held.size));
-      } else if (wasHeld) {
-        // Arp branch — see handleNoteOn.
-        emitNoteInput({ kind: 'off', note, velocity: 0 });
-      }
+      const held = arpStateRef.current.heldTargets;
+      // The bus this note was PLAYED on, never the bus focus names right now:
+      // recomputing would send the release to an engine the voice was never
+      // on and the held voice would drone until the same key was pressed
+      // again on the same track. See audio/playback/heldNotes.ts and
+      // performNoteOff above.
+      performNoteOff(note, held, liveParams, {
+        releaseNote: (n, releaseTime, target) =>
+          synthPlaybackNoteOff(n, releaseTime, undefined, target),
+        rescale: (scale, target) => applySynthPlaybackVelocityScale(scale, target),
+        announce: (n) => emitNoteInput({ kind: 'off', note: n, velocity: 0 }),
+      });
       setActiveNotes((prev) => {
         const next = new Set(prev);
         next.delete(note);
@@ -262,20 +432,29 @@ export function useInputDeck(): {
       // both refs must be read at cleanup time; a copy taken at effect setup
       // would release the wrong set and clear the wrong map.
       const held = notesToReleaseOnKeyboardModeChange(
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
-        arpStateRef.current.activeNotes,
+        arpStateRef.current.heldTargets.keys(),
       );
       held.forEach((note) => handleNoteOffRef.current(note));
       // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
       chordKeyNotesRef.current.clear();
+      // Cleared with it: handleNoteOff deletes each note it releases, but a
+      // note released by any other path would otherwise leave a stale entry
+      // naming a bus that has nothing sounding on it.
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+      arpStateRef.current.heldTargets.clear();
     };
   }, [keyboardMode]);
 
   // Silence lingering arp voices when all keys are released in arp mode.
-  // Always the keyboard's own (main synth) channel — see KEYBOARD_AUDITION_TARGET.
+  // Releases every bus the arp actually triggered on — a hold that spanned a
+  // focus change left voices on more than one.
   useEffect(() => {
     if (arpActive && activeNotes.size === 0 && hasSynthPlaybackContext()) {
-      releaseSynthPlaybackVoices(KEYBOARD_AUDITION_TARGET, release);
+      releaseTriggeredTargets(
+        arpStateRef.current.triggeredTargets,
+        release,
+        releaseSynthPlaybackVoices,
+      );
     }
   }, [arpActive, activeNotes.size, release]);
 
@@ -382,7 +561,7 @@ export function useInputDeck(): {
   // handleNoteOn/handleNoteOff already do — see the comment above arpStateRef.
   useEffect(() => {
     const releaseHeld = () => {
-      releaseAllHeldNotes(arpStateRef.current.activeNotes, handleNoteOffRef.current);
+      releaseAllHeldNotes(arpStateRef.current.heldTargets.keys(), handleNoteOffRef.current);
     };
     const handleVisibilityChange = () => {
       if (document.hidden) releaseHeld();

@@ -28,6 +28,7 @@ import {
   type MixLayerId,
 } from "@/store/focusTrack";
 import { MIX_LAYERS } from "../mixLayers";
+import { synthTargetForFocus } from "../useInputDeck";
 import type { SynthPresetItem, SynthPresetCategory } from "@/data/synthPresets";
 import { SYNTH_CATEGORIES } from "@/data/synthPresets";
 import { DRUM_KITS } from "@/data/drumKits";
@@ -273,7 +274,7 @@ export const SoundView = React.memo(function SoundView() {
   // library are all gated on this being non-null below. The Lead channel is
   // what the preset handlers close over so they stay total, and every control
   // that could invoke one of them lives inside the un-rendered section.
-  const synthTarget = isMelodicFocus(focusTrack) ? controlTargetForFocus(focusTrack) : null;
+  const synthTarget = synthTargetForFocus(focusTrack);
   const channel = resolveSynthControlChannel(synthTarget ?? 'synth', channels);
   const params = channel.params;
   const onChangeParams = channel.setParams;
@@ -517,14 +518,13 @@ export const SoundView = React.memo(function SoundView() {
             wave and a patch at full scale fills the box, which is only true
             because the tap is ahead of the -6 dB bus default.
 
-            The label is not decoration: the global input deck's keyboard
-            still plays the 'synth' (Lead) layer regardless of focus —
-            KEYBOARD_AUDITION_TARGET in useInputDeck.ts is a module constant
-            and routing it through focus is plan 2 of the focus-track spec —
-            so with the focus on Chord or Bass the trace stays flat while
-            keys are pressed. Naming the tapped layer is what keeps that
-            legible instead of reading as a broken scope. A drum focus taps no
-            melodic bus, so the scope is absent rather than flat. */}
+            The label is not decoration: the global input deck's keyboard now
+            plays whichever layer is focused (useInputDeck.ts,
+            synthTargetForFocus), the same layer this scope taps, so the trace
+            moves while keys are pressed regardless of which target is
+            focused. Naming the tapped layer keeps that legible instead of
+            reading as a scope tied to nothing in particular. A drum focus
+            taps no melodic bus, so the scope is absent rather than flat. */}
         {synthTarget !== null && (
           <div
             className="ml-auto hidden sm:flex items-center gap-2 bg-base-200 border border-base-300 rounded-box px-2 py-1 shrink-0 self-stretch"
