@@ -264,6 +264,7 @@ describe('keyboard audition channel is always the main synth', () => {
     chord: channel('chord-synth'),
     bass: channel('bass-synth'),
     pad: channel('pad-synth'),
+    fx: channel('fx-synth'),
   };
 
   test('the keyboard channel is always channels.synth, no matter which target is passed to the panel resolver', () => {
@@ -356,7 +357,7 @@ describe('the Mixer rows each carry a level meter', () => {
   const titles = [...html.matchAll(/title="([^"]+) peak: [^"]*"/g)].map((m) => m[1]);
 
   test('one per layer, in the table order MIX_LAYERS declares', () => {
-    expect(titles).toEqual(['Lead', 'Chord', 'Bass', 'Pad', 'Beat']);
+    expect(titles).toEqual(['Lead', 'FX', 'Chord', 'Bass', 'Pad', 'Beat']);
   });
 
   test('names the layer the way the screen does, not the way the engine does', () => {

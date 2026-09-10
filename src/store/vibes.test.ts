@@ -1,7 +1,9 @@
 import { describe, test, expect, spyOn, afterEach, beforeEach } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import { VIBES } from '../data/vibes';
-import { applyVibeToStore, resolveVibe, VIBE_IDS } from './vibes';
+import { applyVibeToStore, resolveVibe, resolveVibeSynthParams, VIBE_IDS } from './vibes';
+import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
+import type { LeadNote } from '../audio/leadMelody';
 import { CHORD_RHYTHMS } from '../data/chordRhythms';
 import { BASS_PATTERNS } from '../data/bassPatterns';
 import { DRUM_KITS } from '../data/drumKits';
@@ -845,5 +847,35 @@ describe('a vibe stamps the active loop with its display name', () => {
     expect(loop.tempName).toBe('Lo-Fi Chill');
     expect(loop.name).toBe('Drop');
     expect(loopLabel(loop)).toBe('Drop');
+  });
+});
+
+describe('applyVibeToStore — the FX track', () => {
+  test('writes fxSynthParams from the vibe fx preset', () => {
+    const vibe = resolveVibe(VIBES.find((v) => v.id === 'synthwave-80s')!);
+    applyVibeToStore(vibe);
+    expect(useAppStore.getState().fxSynthParams).toEqual(
+      resolveVibeSynthParams(vibe.fxPresetId),
+    );
+  });
+
+  /**
+   * A vibe supplies a VOICE, never NOTES — exactly what it already does for the
+   * lead. Applying a vibe must never destroy something the user wrote.
+   */
+  test('never writes fxMelodySteps', () => {
+    const steps = Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]);
+    steps[0] = [{ note: 'C4', len: 6 }];
+    useAppStore.setState({ fxMelodySteps: steps });
+    applyVibeToStore(resolveVibe(VIBES.find((v) => v.id === 'lofi-chill')!));
+    expect(useAppStore.getState().fxMelodySteps[0]).toEqual([{ note: 'C4', len: 6 }]);
+  });
+
+  test('never writes leadMelodySteps either — the rule is the same for both', () => {
+    const steps = Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]);
+    steps[0] = [{ note: 'E4', len: 6 }];
+    useAppStore.setState({ leadMelodySteps: steps });
+    applyVibeToStore(resolveVibe(VIBES.find((v) => v.id === 'lofi-chill')!));
+    expect(useAppStore.getState().leadMelodySteps[0]).toEqual([{ note: 'E4', len: 6 }]);
   });
 });

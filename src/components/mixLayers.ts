@@ -3,7 +3,7 @@ import type { SourceBusId } from '@/store/engineSync';
 import type { PowerToggleTone } from './ui/PowerToggle';
 
 /**
- * `volumeKey`/`muteKey` index `LoopMixPatch` — the ten fields a loop's mix
+ * `volumeKey`/`muteKey` index `LoopMixPatch` — the twelve fields a loop's mix
  * override touches — so a renamed or removed store field fails here rather
  * than leaving a table self-consistent but wrong.
  */
@@ -19,7 +19,7 @@ type MixMuteKey = {
  * (`drumMuted`), not the labels — which is why the drum bus is `drum` here and
  * "Beat" on screen.
  */
-export const MIX_LAYER_IDS = ['synth', 'chord', 'bass', 'pad', 'drum'] as const;
+export const MIX_LAYER_IDS = ['synth', 'fx', 'chord', 'bass', 'pad', 'drum'] as const;
 
 export type MixLayerId = (typeof MIX_LAYER_IDS)[number];
 
@@ -37,7 +37,7 @@ export type MixGroupId = (typeof MIX_GROUP_IDS)[number];
  * error, instead of a divider rendering the word `undefined`.
  */
 export const MIX_GROUP_LABELS: Record<MixGroupId, string> = {
-  lead: 'Lead',
+  lead: 'Lead and FX',
   accompaniment: 'Accompaniment',
   beat: 'Beat',
 };
@@ -49,7 +49,7 @@ export interface MixLayer {
   muteKey: MixMuteKey;
   tone: PowerToggleTone;
   /** Icon tint. Typed as ChannelStrip's `accentClass` (KnobColor) accepts it. */
-  accentClass: 'text-primary' | 'text-module-chord' | 'text-module-bass' | 'text-module-pad' | 'text-accent';
+  accentClass: 'text-primary' | 'text-module-chord' | 'text-module-bass' | 'text-module-pad' | 'text-module-fx' | 'text-accent';
   /**
    * Which group of the Sound mixer the row sits under. A column rather than an
    * index range at the render site: `MIXER_CHANNELS.slice(1, 4)` reads the
@@ -70,7 +70,7 @@ export interface MixLayer {
 }
 
 /**
- * The five mix layers, in canonical order — the ONE description of what they
+ * The six mix layers, in canonical order — the ONE description of what they
  * are called, what store fields they name and what colour they wear.
  *
  * Two surfaces render them and they write different things: the Sound mixer
@@ -90,6 +90,10 @@ export interface MixLayer {
  */
 export const MIX_LAYERS: ReadonlyArray<MixLayer> = [
   { idPrefix: 'synth', label: 'Lead', volumeKey: 'synthVolume', muteKey: 'synthMuted', engineSource: 'synth', tone: 'primary', accentClass: 'text-primary', group: 'lead' },
+  // group: 'lead', not its own group — Lead and FX are two melody tracks
+  // sharing one heading, the way the two of them already sit as bare chips
+  // (not framed groups) in the Sound view's target row.
+  { idPrefix: 'fx', label: 'FX', volumeKey: 'fxVolume', muteKey: 'fxMuted', engineSource: 'fx', tone: 'module-fx', accentClass: 'text-module-fx', group: 'lead' },
   { idPrefix: 'chord', label: 'Chord', volumeKey: 'chordVolume', muteKey: 'chordMuted', engineSource: 'chord', tone: 'module-chord', accentClass: 'text-module-chord', group: 'accompaniment' },
   { idPrefix: 'bass', label: 'Bass', volumeKey: 'bassVolume', muteKey: 'bassMuted', engineSource: 'bass', tone: 'module-bass', accentClass: 'text-module-bass', group: 'accompaniment' },
   { idPrefix: 'pad', label: 'Pad', volumeKey: 'padVolume', muteKey: 'padMuted', engineSource: 'pad', tone: 'module-pad', accentClass: 'text-module-pad', group: 'accompaniment' },

@@ -93,6 +93,7 @@ export function applyVibeToStore(vibe: ResolvedVibe) {
   const finalChordSynthParams = resolveVibeSynthParams(vibe.chordPresetId);
   const finalBassSynthParams = resolveVibeSynthParams(vibe.bassPresetId);
   const finalSynthParams = resolveVibeSynthParams(vibe.synthPresetId);
+  const finalFxSynthParams = resolveVibeSynthParams(vibe.fxPresetId);
   // The pad's own settings and its resolved voice, carried together so the
   // write block below reads one object instead of a vibe field and a parallel
   // nullable params variable that must be null-checked in lockstep with it.
@@ -190,8 +191,12 @@ export function applyVibeToStore(vibe: ResolvedVibe) {
   const wantMuted = !pad;
   if (useAppStore.getState().padMuted !== wantMuted) store.togglePadMuted();
 
-  // 5. Main Synth Sound Preset
+  // 5. Main Synth + FX Sound Presets
   store.setSynthParams(finalSynthParams);
+  // A vibe supplies a VOICE, never NOTES: `fxMelodySteps` is deliberately not
+  // written here, exactly as `leadMelodySteps` is not. Applying a vibe must
+  // never destroy something the user wrote.
+  store.setFxSynthParams(finalFxSynthParams);
 
   // 6. Master Effects
   store.setEffects({

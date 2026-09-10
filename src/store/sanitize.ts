@@ -533,6 +533,7 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
       bassFeel: clampFinite(r.bassFeel, 0, 1, fallback.bassFeel),
       bassOctave: clampFinite(r.bassOctave, 0, 8, fallback.bassOctave),
       padSynthParams: sanitizeSynthParams(r.padSynthParams),
+      fxSynthParams: sanitizeSynthParams(r.fxSynthParams),
       padMode: asPadMode(r.padMode, fallback.padMode),
       padOctave: clampFinite(r.padOctave, 0, 8, fallback.padOctave),
       padVoicing: asPadVoicing(r.padVoicing, fallback.padVoicing),
@@ -551,6 +552,14 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
         r.leadMelodyOctave, LEAD_OCTAVE_MIN, LEAD_OCTAVE_MAX, fallback.leadMelodyOctave,
       ),
       leadGate: clampFinite(r.leadGate, 0.05, 1, fallback.leadGate),
+      fxMelodySteps: asLeadNoteMatrix(r.fxMelodySteps) ?? fallback.fxMelodySteps,
+      fxLoopLength: asPositiveInteger(r.fxLoopLength, fallback.fxLoopLength),
+      fxStepResolution: asLeadStepResolution(r.fxStepResolution, fallback.fxStepResolution),
+      fxMelodyView: r.fxMelodyView === 'chromatic' ? 'chromatic' : 'scale-locked',
+      fxMelodyOctave: clampFinite(
+        r.fxMelodyOctave, LEAD_OCTAVE_MIN, LEAD_OCTAVE_MAX, fallback.fxMelodyOctave,
+      ),
+      fxGate: clampFinite(r.fxGate, 0.05, 1, fallback.fxGate),
       // `sanitizeLoops` is ONE function reached from BOTH untrusted-input
       // paths — projectFile.ts's `.solna` import and store.ts's
       // `sanitizePersistedState` on rehydrate — so `sanitizeSequencerTracks`
@@ -568,6 +577,8 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
       chordMuted: asBoolean(r.chordMuted),
       bassVolume: asFaderDb(r.bassVolume, fallback.bassVolume),
       bassMuted: asBoolean(r.bassMuted),
+      fxVolume: asFaderDb(r.fxVolume, fallback.fxVolume),
+      fxMuted: asBoolean(r.fxMuted),
       masterSequencerVolume: asFaderDb(r.masterSequencerVolume, fallback.masterSequencerVolume),
       drumMuted: asBoolean(r.drumMuted),
     });

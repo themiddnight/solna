@@ -1,7 +1,7 @@
 import React from 'react';
 import { SlidersVertical } from 'lucide-react';
 import { useAppStore } from '@/store/store';
-import { aggregatePlayerState } from '@/store/transportSlice';
+import { isAnyPlayerActive } from '@/store/transportSlice';
 import { SYNTH_TARGET_STYLES } from '@/utils/synthControl';
 import { SectionCard } from '../ui/SectionCard';
 import { ChannelStrip, layerVolumeSliderId } from '../ui/ChannelStrip';
@@ -22,20 +22,24 @@ import { formatDb } from '@/utils/gainUnits';
  * A mix layer plus the two things only THIS surface has: the slice actions it
  * writes through, and the slider class its ChannelStrip wears.
  *
- * `Record<MixLayerId, …>` rather than a second five-row array: the compiler
- * then refuses a sixth layer that has a label and a store field but no way to
- * write it, which two parallel arrays joined by position could not.
+ * `Record<MixLayerId, …>` rather than a second six-row array: the compiler
+ * then refuses a layer that has a label and a store field but no way to write
+ * it, which two parallel arrays joined by position could not.
  */
 const MIXER_WRITERS: Record<MixLayerId, {
   setVolumeKey:
-    | 'setSynthVolume' | 'setChordVolume' | 'setBassVolume' | 'setPadVolume'
+    | 'setSynthVolume' | 'setFxVolume' | 'setChordVolume' | 'setBassVolume' | 'setPadVolume'
     | 'setMasterSequencerVolume';
   toggleKey:
-    | 'toggleSynthMuted' | 'toggleChordMuted' | 'toggleBassMuted' | 'togglePadMuted'
+    | 'toggleSynthMuted' | 'toggleFxMuted' | 'toggleChordMuted' | 'toggleBassMuted' | 'togglePadMuted'
     | 'toggleDrumMuted';
   sliderClassName: string;
 }> = {
   synth: { setVolumeKey: 'setSynthVolume', toggleKey: 'toggleSynthMuted', sliderClassName: SYNTH_TARGET_STYLES.synth.slider },
+  // FX has no SynthControlTarget entry — there is no Target-selector row for
+  // it — so its slider class is spelled out here, following the same
+  // module-token pattern chord/bass/pad's SYNTH_TARGET_STYLES entries use.
+  fx: { setVolumeKey: 'setFxVolume', toggleKey: 'toggleFxMuted', sliderClassName: 'range range-xs text-module-fx [--range-thumb:var(--color-module-fx-content)]' },
   chord: { setVolumeKey: 'setChordVolume', toggleKey: 'toggleChordMuted', sliderClassName: SYNTH_TARGET_STYLES.chord.slider },
   bass: { setVolumeKey: 'setBassVolume', toggleKey: 'toggleBassMuted', sliderClassName: SYNTH_TARGET_STYLES.bass.slider },
   pad: { setVolumeKey: 'setPadVolume', toggleKey: 'togglePadMuted', sliderClassName: SYNTH_TARGET_STYLES.pad.slider },
@@ -61,10 +65,11 @@ export type MixerChannel = MixLayer & (typeof MIXER_WRITERS)[MixLayerId];
  * (engineSync.ts's SOURCE_BUSES) since before this file, with no UI anywhere
  * except the Arrange loop cards.
  */
-export const MIXER_CHANNELS: ReadonlyArray<MixerChannel> = MIX_LAYERS.map((layer) => ({
-  ...layer,
-  ...MIXER_WRITERS[layer.idPrefix],
-}));
+export const MIXER_CHANNELS: ReadonlyArray<MixerChannel> = MIX_LAYERS
+  .map((layer) => ({
+    ...layer,
+    ...MIXER_WRITERS[layer.idPrefix],
+  }));
 
 /**
  * The rows under each heading, bucketed ONCE at module scope: the table never
@@ -175,13 +180,10 @@ export const SoundMixer = React.memo(function SoundMixer() {
   // The one subscription that belongs at this level rather than per row: it is
   // the SAME boolean for all five meters, it changes twice per transport
   // toggle, and a per-row copy would be five selectors computing one answer.
-  // Derived from the three player states the way TransportBar derives it — the
-  // meters only need to know whether anything is sounding, so the tiers park on
+  // Derived from every registered player's state, table-driven the way
+  // TransportBar derives it — the meters only need to know whether anything is sounding, so the tiers park on
   // `offscreen` and no analyser is read at all while stopped.
-  const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
-  const chordsPlayer = useAppStore((s) => s.chordsPlayer);
-  const leadPlayer = useAppStore((s) => s.leadPlayer);
-  const isPlaying = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer) !== 'stopped';
+  const isPlaying = useAppStore(isAnyPlayerActive);
 
   return (
     <SectionCard icon={SlidersVertical} title="Mixer">

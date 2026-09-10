@@ -24,19 +24,26 @@ const inCMajor = (): Loop => ({
 });
 
 describe('quickChipSelection', () => {
-  test('All sounds ticks the five Sound cells and nothing else', () => {
+  test('All sounds ticks the six Sound cells and nothing else', () => {
     expect(new Set(quickChipSelection('sounds'))).toEqual(
-      new Set(['lead-sound', 'chord-sound', 'bass-sound', 'pad-sound', 'drums-sound']),
+      new Set(['lead-sound', 'fx-sound', 'chord-sound', 'bass-sound', 'pad-sound', 'drums-sound']),
     );
   });
 
-  test('All patterns ticks the five Pattern cells and nothing else', () => {
+  test('All patterns ticks the six Pattern cells and nothing else', () => {
     expect(new Set(quickChipSelection('patterns'))).toEqual(
-      new Set(['lead-pattern', 'chord-pattern', 'bass-pattern', 'pad-pattern', 'drums-pattern']),
+      new Set([
+        'lead-pattern',
+        'fx-pattern',
+        'chord-pattern',
+        'bass-pattern',
+        'pad-pattern',
+        'drums-pattern',
+      ]),
     );
   });
 
-  test('Everything ticks all twelve groups', () => {
+  test('Everything ticks all fourteen groups', () => {
     expect(new Set(quickChipSelection('everything'))).toEqual(
       new Set(LOOP_COPY_GROUPS.map((group) => group.id)),
     );
@@ -234,7 +241,7 @@ describe('LoopCopyDialog markup', () => {
     expect(html).not.toContain('value="loop-target"');
   });
 
-  test('all twelve group checkboxes are rendered, unchecked', () => {
+  test('all fourteen group checkboxes are rendered, unchecked', () => {
     const html = renderDialog();
     for (const group of LOOP_COPY_GROUPS) {
       expect(html).toContain(`id="chk-loop-copy-${group.id}"`);

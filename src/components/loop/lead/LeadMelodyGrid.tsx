@@ -46,6 +46,59 @@ import { useLeadStepPublisher } from './useLeadStepPublisher';
 import { useLeadNoteResize } from './useLeadNoteResize';
 import { useLeadNotePaint } from './useLeadNotePaint';
 import { Slider } from '@/components/ui/Slider';
+import { melodyTrack, type MelodyTrackId } from '@/store/melodyTracks';
+
+/**
+ * Action names MELODY_TRACKS' row does not carry: the table (melodyTracks.ts)
+ * declares STATE field names only, and this file also needs the SETTER names
+ * for the toolbar controls and the bar clipboard. Kept local rather than added
+ * to the table for the same reason leadSlice.ts's own `ACTIONS` map is
+ * private to it: both sides are typo-checked literals, and a templated
+ * `set${id}Gate` would trade that compile-time check for a runtime one.
+ */
+const GRID_ACTIONS: Record<
+  MelodyTrackId,
+  {
+    setSteps: 'setLeadMelodySteps' | 'setFxMelodySteps';
+    setLoopLength: 'setLeadLoopLength' | 'setFxLoopLength';
+    setLoopLengthPreserve: 'setLeadLoopLengthPreserve' | 'setFxLoopLengthPreserve';
+    setStepResolution: 'setLeadStepResolution' | 'setFxStepResolution';
+    setView: 'setLeadMelodyView' | 'setFxMelodyView';
+    setOctave: 'setLeadMelodyOctave' | 'setFxMelodyOctave';
+    setGate: 'setLeadGate' | 'setFxGate';
+    setCursor: 'setLeadCursor' | 'setFxCursor';
+    copyBar: 'copySelectedLeadBar' | 'copySelectedFxBar';
+    pasteBar: 'pasteIntoSelectedLeadBar' | 'pasteIntoSelectedFxBar';
+    setNoteLength: 'setLeadNoteLength' | 'setFxNoteLength';
+  }
+> = {
+  lead: {
+    setSteps: 'setLeadMelodySteps',
+    setLoopLength: 'setLeadLoopLength',
+    setLoopLengthPreserve: 'setLeadLoopLengthPreserve',
+    setStepResolution: 'setLeadStepResolution',
+    setView: 'setLeadMelodyView',
+    setOctave: 'setLeadMelodyOctave',
+    setGate: 'setLeadGate',
+    setCursor: 'setLeadCursor',
+    copyBar: 'copySelectedLeadBar',
+    pasteBar: 'pasteIntoSelectedLeadBar',
+    setNoteLength: 'setLeadNoteLength',
+  },
+  fx: {
+    setSteps: 'setFxMelodySteps',
+    setLoopLength: 'setFxLoopLength',
+    setLoopLengthPreserve: 'setFxLoopLengthPreserve',
+    setStepResolution: 'setFxStepResolution',
+    setView: 'setFxMelodyView',
+    setOctave: 'setFxMelodyOctave',
+    setGate: 'setFxGate',
+    setCursor: 'setFxCursor',
+    copyBar: 'copySelectedFxBar',
+    pasteBar: 'pasteIntoSelectedFxBar',
+    setNoteLength: 'setFxNoteLength',
+  },
+};
 
 /** Fixed width (px) of the note-name column, shared by the header spacer. */
 const LABEL_WIDTH = 44;
@@ -82,6 +135,7 @@ export function LeadMarkerView({ column }: LeadMarkerViewProps) {
 }
 
 interface LeadMarkerProps {
+  trackId: MelodyTrackId;
   columns: number;
 }
 
@@ -94,14 +148,15 @@ interface LeadMarkerProps {
  * labels — to move one translateX. This component draws one div and nothing
  * else, so that is all a step now costs.
  */
-export function LeadMarker({ columns }: LeadMarkerProps) {
-  const column = useLeadMarkerColumn(columns);
+export function LeadMarker({ trackId, columns }: LeadMarkerProps) {
+  const column = useLeadMarkerColumn(trackId, columns);
   return <LeadMarkerView column={column} />;
 }
 
 // Memoized: props are stable across clock ticks, so the cells never re-render
 // when only the playhead moves.
 const LeadMelodyCells = React.memo(function LeadMelodyCells({
+  trackId,
   meter,
   loopLength,
   melody,
@@ -114,6 +169,7 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
   colsPerBar,
   cellsPerBar,
 }: {
+  trackId: MelodyTrackId;
   meter: Meter;
   loopLength: number;
   melody: readonly LeadNote[][];
@@ -128,14 +184,14 @@ const LeadMelodyCells = React.memo(function LeadMelodyCells({
 }) {
   const stepsPerBar = meter.stepsPerBar;
   const columns = loopLength * colsPerBar;
-  const { preview, startResize } = useLeadNoteResize();
+  const { preview, startResize } = useLeadNoteResize(trackId);
   // Column → stored index. Stored indices are bar-major at MAX_STEPS_PER_BAR,
   // so this is not the identity and a skipped-cell fill must go through it.
   const resolveStepIndex = useCallback(
     (col: number) => leadStoredIndexAt(col, stepsPerBar, stride),
     [stepsPerBar, stride],
   );
-  const paint = useLeadNotePaint(resolveStepIndex);
+  const paint = useLeadNotePaint(trackId, resolveStepIndex);
   // The drag preview is applied here, in local render state — the store is
   // written once, on pointerup (see useLeadNoteResize).
   const previewed = useMemo(() => {
@@ -372,51 +428,66 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
   );
 });
 
-export function LeadMelodyGrid() {
-  // Mounted here, not in the view that renders it: the step used to arrive as
-  // a prop, so all 174 JSX nodes of the then-1208-line synth view reconciled
-  // 8x/sec to move one translateX. LeadMelodyGrid is rendered exactly once
-  // (PatternView.tsx, the lead segment — it was SoundView's until the nav
-  // restructure), which is what lets either of these subscribe the shared
-  // clock at all.
-  //
-  // Two hooks, two gates, on purpose. useLeadPlayback schedules NOTES and
-  // owns the hard stop, so it runs while the lead plays. useLeadStepPublisher
-  // moves the MARKER, which also has to track somebody else's clock while Rec
-  // is armed, because that column is the recorder's write head. Its
-  // `isPlaying` return is not what the marker uses; useLeadMarkerColumn reads
-  // the same wider gate the publisher does — from inside LeadMarker, so the
-  // published step re-renders one div rather than this whole body.
-  useLeadPlayback();
-  useLeadStepPublisher();
+export interface LeadMelodyGridProps {
+  /**
+   * REQUIRED, with no default. A default of 'lead' would make a call site
+   * that forgot the prop render a second copy of the lead grid — visually
+   * plausible, silently wrong, and caught by no test, because both instances
+   * would be internally consistent.
+   */
+  trackId: MelodyTrackId;
+}
+
+// Mounted here, not in the view that renders it: the step used to arrive as
+// a prop, so all 174 JSX nodes of the then-1208-line synth view reconciled
+// 8x/sec to move one translateX. LeadMelodyGrid is mounted once PER TRACK
+// (PatternView.tsx, the Lead and FX segments), which
+// is what lets each instance's hooks subscribe the shared clock at all: two
+// mounted grids are two players, each holding its own subscription, which is
+// exactly what "the clock runs iff a player holds a subscription" permits.
+//
+// Two hooks, two gates, on purpose. useLeadPlayback schedules NOTES and
+// owns the hard stop, so it runs while the track's player plays.
+// useLeadStepPublisher moves the MARKER, which for the lead track also has to
+// track somebody else's clock while Rec is armed, because that column is the
+// recorder's write head — the fx track has no recorder, so its marker
+// follows its own player and nothing else. Its `isPlaying` return is not what
+// the marker uses; useLeadMarkerColumn reads the same wider gate the
+// publisher does — from inside LeadMarker, so the published step re-renders
+// one div rather than this whole body.
+export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
+  const track = melodyTrack(trackId);
+  const actions = GRID_ACTIONS[trackId];
+  useLeadPlayback(trackId);
+  useLeadStepPublisher(trackId);
   const meterId = useAppStore((s) => s.meterId);
-  const leadMelodySteps = useAppStore((s) => s.leadMelodySteps);
-  const leadLoopLength = useAppStore((s) => s.leadLoopLength);
-  const leadStepResolution = useAppStore((s) => s.leadStepResolution);
-  const setLeadStepResolution = useAppStore((s) => s.setLeadStepResolution);
-  const leadMelodyView = useAppStore((s) => s.leadMelodyView);
-  const leadMelodyOctave = useAppStore((s) => s.leadMelodyOctave);
-  const setLeadMelodyView = useAppStore((s) => s.setLeadMelodyView);
-  const setLeadMelodyOctave = useAppStore((s) => s.setLeadMelodyOctave);
-  const setLeadLoopLength = useAppStore((s) => s.setLeadLoopLength);
-  const setLeadLoopLengthPreserve = useAppStore((s) => s.setLeadLoopLengthPreserve);
-  const setLeadMelodySteps = useAppStore((s) => s.setLeadMelodySteps);
-  const leadGate = useAppStore((s) => s.leadGate);
-  const setLeadGate = useAppStore((s) => s.setLeadGate);
+  const melodySteps = useAppStore((s) => s[track.steps]);
+  const melodyLoopLength = useAppStore((s) => s[track.loopLength]);
+  const melodyStepResolution = useAppStore((s) => s[track.stepResolution]);
+  const setMelodyStepResolution = useAppStore((s) => s[actions.setStepResolution]);
+  const melodyView = useAppStore((s) => s[track.view]);
+  const melodyOctave = useAppStore((s) => s[track.octave]);
+  const setMelodyView = useAppStore((s) => s[actions.setView]);
+  const setMelodyOctave = useAppStore((s) => s[actions.setOctave]);
+  const setMelodyLoopLength = useAppStore((s) => s[actions.setLoopLength]);
+  const setMelodyLoopLengthPreserve = useAppStore((s) => s[actions.setLoopLengthPreserve]);
+  const setMelodySteps = useAppStore((s) => s[actions.setSteps]);
+  const melodyGate = useAppStore((s) => s[track.gate]);
+  const setMelodyGate = useAppStore((s) => s[actions.setGate]);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
   const chords = useAppStore((s) => s.chords);
-  const synthParams = useAppStore((s) => s.synthParams);
+  const synthParams = useAppStore((s) => s[track.synthParams]);
 
   const meter = getMeter(meterId);
   const stepsPerBar = meter.stepsPerBar;
   const totalBars = loopBars(chords);
   const divisors = loopLengthDivisors(totalBars);
-  const stride = strideFor(leadStepResolution);
+  const stride = strideFor(melodyStepResolution);
   const colsPerBar = columnsPerBar(stepsPerBar, stride);
   const cellsPerBar = useMemo(() => leadColumnCells(meter, stride), [meter, stride]);
 
-  const columns = leadLoopLength * colsPerBar;
+  const columns = melodyLoopLength * colsPerBar;
 
   // The rows a scale-locked view would otherwise drop. A note outside the key
   // is never deleted — it just had no row to be drawn on, so switching to
@@ -424,21 +495,21 @@ export function LeadMelodyGrid() {
   // the last note on a borrowed row and the row goes with it, exactly as an
   // in-scale row keeps its place because the scale still names it.
   const borrowedNotes = useMemo(
-    () => leadNotesInWindow(leadMelodySteps, columns, stepsPerBar, stride),
-    [leadMelodySteps, columns, stepsPerBar, stride],
+    () => leadNotesInWindow(melodySteps, columns, stepsPerBar, stride),
+    [melodySteps, columns, stepsPerBar, stride],
   );
 
   const rows = useMemo(
     () =>
       leadPitchRows(
-        leadMelodyView,
+        melodyView,
         scaleRoot,
         scaleType,
-        leadMelodyOctave,
+        melodyOctave,
         LEAD_WINDOW_OCTAVES,
         borrowedNotes,
       ),
-    [leadMelodyView, scaleRoot, scaleType, leadMelodyOctave, borrowedNotes],
+    [melodyView, scaleRoot, scaleType, melodyOctave, borrowedNotes],
   );
 
   // Memoized beside rowLabels and for the same reason: both readers — the note
@@ -454,8 +525,8 @@ export function LeadMelodyGrid() {
   // so a per-cell — or even a twice-per-row — derivation is work the row count
   // already bounds.
   const rowLabels = useMemo(
-    () => rows.map((note) => leadRowLabel(note, leadMelodyView, scaleRoot, scaleType)),
-    [rows, leadMelodyView, scaleRoot, scaleType],
+    () => rows.map((note) => leadRowLabel(note, melodyView, scaleRoot, scaleType)),
+    [rows, melodyView, scaleRoot, scaleType],
   );
 
   // Clamp loopLength down when the progression no longer divides it. Uses the
@@ -464,27 +535,27 @@ export function LeadMelodyGrid() {
   // in the bars that fell out of the loop (they stay dormant and return if the
   // loop length is raised again).
   useEffect(() => {
-    const clamped = clampLeadLoopLength(leadLoopLength, totalBars);
-    if (clamped !== leadLoopLength) setLeadLoopLengthPreserve(clamped);
-  }, [totalBars, leadLoopLength, setLeadLoopLengthPreserve]);
+    const clamped = clampLeadLoopLength(melodyLoopLength, totalBars);
+    if (clamped !== melodyLoopLength) setMelodyLoopLengthPreserve(clamped);
+  }, [totalBars, melodyLoopLength, setMelodyLoopLengthPreserve]);
 
-  const leadCursor = useAppStore((s) => s.leadCursor);
-  const setLeadCursor = useAppStore((s) => s.setLeadCursor);
-  const copySelectedLeadBar = useAppStore((s) => s.copySelectedLeadBar);
-  const pasteIntoSelectedLeadBar = useAppStore((s) => s.pasteIntoSelectedLeadBar);
-  const hasClipboard = useAppStore((s) => s.leadBarClipboard !== null);
+  const melodyCursor = useAppStore((s) => s[track.cursor]);
+  const setMelodyCursor = useAppStore((s) => s[actions.setCursor]);
+  const copySelectedLeadBar = useAppStore((s) => s[actions.copyBar]);
+  const pasteIntoSelectedLeadBar = useAppStore((s) => s[actions.pasteBar]);
+  const hasClipboard = useAppStore((s) => s[track.clipboard] !== null);
   const leadRecording = useAppStore((s) => s.leadRecording);
   const setLeadRecording = useAppStore((s) => s.setLeadRecording);
 
-  const setLeadNoteLength = useAppStore((s) => s.setLeadNoteLength);
+  const setMelodyNoteLength = useAppStore((s) => s[actions.setNoteLength]);
   const onResize = useCallback(
-    (stepIndex: number, note: string, len: number) => setLeadNoteLength(stepIndex, note, len),
-    [setLeadNoteLength],
+    (stepIndex: number, note: string, len: number) => setMelodyNoteLength(stepIndex, note, len),
+    [setMelodyNoteLength],
   );
 
   const clearMelody = useCallback(
-    () => setLeadMelodySteps(leadMelodySteps.map(() => [] as LeadNote[])),
-    [leadMelodySteps, setLeadMelodySteps],
+    () => setMelodySteps(melodySteps.map(() => [] as LeadNote[])),
+    [melodySteps, setMelodySteps],
   );
 
   // previewSequencerNote, not synthPlaybackNoteOn: hearing a cell you clicked
@@ -503,7 +574,7 @@ export function LeadMelodyGrid() {
 
   // Clamped again HERE, not only on write: a meter or loop-length change can
   // narrow the window under a cursor that was legal when it was set.
-  const cursor = clampLeadCursor(leadCursor, leadLoopLength, stepsPerBar, stride);
+  const cursor = clampLeadCursor(melodyCursor, melodyLoopLength, stepsPerBar, stride);
   const selectedBar = leadCursorBar(cursor, stepsPerBar, stride);
 
   return (
@@ -516,16 +587,18 @@ export function LeadMelodyGrid() {
         {/* `Melody`, not `Lead Melody`: the segment row's own `Lead` chip sits
             directly above, so the card names what it HOLDS and the chip names
             which segment — the same split that lets the tab header say
-            `Pattern` and nothing more.
+            `Pattern` and nothing more. FX names itself instead, since its own
+            segment chip says `FX` and "FX Melody" would be as redundant as
+            "Lead Lead Melody".
             Solo rides here rather than in that tab header, because the header
             belongs to the tab now and this button silences one track. It is
             the rule the three Accompaniment module cards already follow. */}
-        <ModuleHeader className="mb-3" right={<SoloButton track="lead" />}>
+        <ModuleHeader className="mb-3" right={<SoloButton track={track.solo} />}>
           {/* `children`, not `title`: ModuleHeader's title cell is the
               mixed-case MODULE_TITLE the numbered synth stages wear, and a
               segment's content card is a SECTION — uppercase — like the drum
               grid's and the progression card's. */}
-          <span className={SECTION_HEADER}>Melody</span>
+          <span className={SECTION_HEADER}>{track.id === 'fx' ? 'FX' : 'Melody'}</span>
         </ModuleHeader>
 
         {/* Settings lane. Everything here picks what the grid SHOWS or how it
@@ -540,11 +613,11 @@ export function LeadMelodyGrid() {
               {(['scale-locked', 'chromatic'] as const).map((m) => (
                 <button
                   key={m}
-                  id={`btn-lead-view-${m}`}
+                  id={`btn-${trackId}-view-${m}`}
                   type="button"
-                  onClick={() => setLeadMelodyView(m)}
+                  onClick={() => setMelodyView(m)}
                   className={`btn btn-xs join-item text-[11px] font-semibold ${
-                    leadMelodyView === m
+                    melodyView === m
                       ? 'btn-primary'
                       : TOOLBAR_BUTTON_IDLE
                   }`}
@@ -559,19 +632,19 @@ export function LeadMelodyGrid() {
             <ToolbarGroup>
               <span className={GROUP_LABEL}>Octave</span>
               <button
-                id="btn-lead-octave-down"
+                id={`btn-${trackId}-octave-down`}
                 type="button"
-                onClick={() => setLeadMelodyOctave(leadMelodyOctave - 1)}
+                onClick={() => setMelodyOctave(melodyOctave - 1)}
                 className="btn btn-xs btn-square btn-ghost border border-base-300"
                 title="Octave window down"
               >
                 -
               </button>
-              <span className="text-xs tabular-nums">{leadMelodyOctave}</span>
+              <span className="text-xs tabular-nums">{melodyOctave}</span>
               <button
-                id="btn-lead-octave-up"
+                id={`btn-${trackId}-octave-up`}
                 type="button"
-                onClick={() => setLeadMelodyOctave(leadMelodyOctave + 1)}
+                onClick={() => setMelodyOctave(melodyOctave + 1)}
                 className="btn btn-xs btn-square btn-ghost border border-base-300"
                 title="Octave window up"
               >
@@ -582,9 +655,9 @@ export function LeadMelodyGrid() {
             <ToolbarGroup>
               <span className={GROUP_LABEL}>Length</span>
               <select
-                id="select-lead-loop-length"
-                value={leadLoopLength}
-                onChange={(e) => setLeadLoopLength(Number(e.target.value))}
+                id={`select-${trackId}-loop-length`}
+                value={melodyLoopLength}
+                onChange={(e) => setMelodyLoopLength(Number(e.target.value))}
                 className="select select-xs select-ghost"
                 title="Melody loop length (bars)"
               >
@@ -599,9 +672,9 @@ export function LeadMelodyGrid() {
             <ToolbarGroup>
               <span className={GROUP_LABEL}>Step</span>
               <select
-                id="select-lead-step-resolution"
-                value={leadStepResolution}
-                onChange={(e) => setLeadStepResolution(e.target.value as typeof leadStepResolution)}
+                id={`select-${trackId}-step-resolution`}
+                value={melodyStepResolution}
+                onChange={(e) => setMelodyStepResolution(e.target.value as typeof melodyStepResolution)}
                 className="select select-xs select-ghost"
                 title="Melody grid resolution — a finer grid reveals more columns and never moves a note"
               >
@@ -616,17 +689,17 @@ export function LeadMelodyGrid() {
             <ToolbarGroup>
               <span className={GROUP_LABEL}>Gate</span>
               <Slider
-                id="range-lead-gate"
-                value={Math.round(leadGate * 100)}
+                id={`range-${trackId}-gate`}
+                value={Math.round(melodyGate * 100)}
                 min={5}
                 max={100}
                 step={5}
-                onChange={(percent) => setLeadGate(percent / 100)}
+                onChange={(percent) => setMelodyGate(percent / 100)}
                 className="range range-primary range-xs w-20"
                 title="How much of each note's final step sounds. Applies when the arp is off."
               />
               <span className="text-[10px] tabular-nums text-base-content/60 whitespace-nowrap">
-                {`${Math.round(leadGate * 100)}%`}
+                {`${Math.round(melodyGate * 100)}%`}
               </span>
             </ToolbarGroup>
           </ToolbarCluster>
@@ -637,7 +710,7 @@ export function LeadMelodyGrid() {
             <LeadMelodyHeaders
               cursor={cursor}
               selectedBar={selectedBar}
-              onSelectColumn={setLeadCursor}
+              onSelectColumn={setMelodyCursor}
               columns={columns}
               cellsPerBar={cellsPerBar}
               columnsPerBar={colsPerBar}
@@ -664,9 +737,10 @@ export function LeadMelodyGrid() {
 
               <div className="shrink-0">
                 <LeadMelodyCells
+                  trackId={trackId}
                   meter={meter}
-                  loopLength={leadLoopLength}
-                  melody={leadMelodySteps}
+                  loopLength={melodyLoopLength}
+                  melody={melodySteps}
                   rows={rows}
                   rowLabels={rowLabels}
                   outOfScale={outOfScale}
@@ -681,7 +755,7 @@ export function LeadMelodyGrid() {
 
             {/* Last child of the w-fit container, so it spans the ruler and
                 the grid body as one column. */}
-            <LeadMarker columns={columns} />
+            <LeadMarker trackId={trackId} columns={columns} />
           </div>
         </div>
 
@@ -693,34 +767,40 @@ export function LeadMelodyGrid() {
             commands; splitting them by kind also buys Clear the most distance
             from the button beside it. Clear keeps its own group so the lane's
             wider gap sets it apart from Paste, and it must not wear red as
-            well: an armed Rec already owns that. */}
+            well: an armed Rec already owns that.
+            FX has no recorder (scope decision at the top of this plan) — its
+            left group renders empty rather than not at all, so `justify-between`
+            still has two children and the actions cluster stays pinned right,
+            exactly where it sits on the lead grid. */}
         <ToolbarLane className="mt-3 justify-between">
           <ToolbarGroup>
-            <ToolbarButton
-              id="btn-lead-record"
-              icon={<Circle className="w-3 h-3" />}
-              label="Rec"
-              onClick={() => setLeadRecording(!leadRecording)}
-              pressed={leadRecording}
-              title={
-                leadRecording
-                  ? 'Stop recording played notes into the grid'
-                  : `Record played notes into bar ${selectedBar + 1}, from the selected step`
-              }
-            />
+            {trackId === 'lead' && (
+              <ToolbarButton
+                id={`btn-${trackId}-record`}
+                icon={<Circle className="w-3 h-3" />}
+                label="Rec"
+                onClick={() => setLeadRecording(!leadRecording)}
+                pressed={leadRecording}
+                title={
+                  leadRecording
+                    ? 'Stop recording played notes into the grid'
+                    : `Record played notes into bar ${selectedBar + 1}, from the selected step`
+                }
+              />
+            )}
           </ToolbarGroup>
 
           <ToolbarCluster>
             <ToolbarGroup>
               <ToolbarButton
-                id="btn-lead-copy-bar"
+                id={`btn-${trackId}-copy-bar`}
                 icon={<Copy className="w-3 h-3" />}
                 label="Copy"
                 onClick={copySelectedLeadBar}
                 title={`Copy bar ${selectedBar + 1}`}
               />
               <ToolbarButton
-                id="btn-lead-paste-bar"
+                id={`btn-${trackId}-paste-bar`}
                 icon={<ClipboardPaste className="w-3 h-3" />}
                 label="Paste"
                 onClick={pasteIntoSelectedLeadBar}
@@ -731,7 +811,7 @@ export function LeadMelodyGrid() {
 
             <ToolbarGroup>
               <ToolbarButton
-                id="btn-lead-clear"
+                id={`btn-${trackId}-clear`}
                 icon={<RotateCcw className="w-3 h-3" />}
                 label="Clear"
                 onClick={clearMelody}

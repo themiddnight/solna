@@ -13,12 +13,13 @@ type Get = StoreApi<AppStore>['getState'];
 /** The transport's default tempo; factoryProjectContent() reads it so a new project matches a fresh session. */
 export const DEFAULT_BPM = 120;
 
-type PlayerField = 'sequencerPlayer' | 'chordsPlayer' | 'leadPlayer';
+type PlayerField = 'sequencerPlayer' | 'chordsPlayer' | 'leadPlayer' | 'fxPlayer';
 
 const FIELD: Record<PlayerModule, PlayerField> = {
   sequencer: 'sequencerPlayer',
   chords: 'chordsPlayer',
   lead: 'leadPlayer',
+  fx: 'fxPlayer',
 };
 
 /** A player still owns scheduled sound unless it is fully stopped. */
@@ -43,9 +44,9 @@ export function isHardStopEnabled(...states: PlayerState[]): boolean {
 }
 
 /**
- * Transport slice. `sequencerPlayer` / `chordsPlayer` / `leadPlayer` and the
- * `playhead*` fields are transient (excluded from `partializeAppState`);
- * everything else persists.
+ * Transport slice. `sequencerPlayer` / `chordsPlayer` / `leadPlayer` /
+ * `fxPlayer` and the `playhead*` fields are transient (excluded from
+ * `partializeAppState`); everything else persists.
  *
  * Engine side-effects (init/resetClock on the fully-stopped -> playing
  * transition) are handled by engineSync's transport subscription; the actual
@@ -89,6 +90,7 @@ export const NO_PLAYERS_ACTIVE: WasActivePlayers = Object.freeze({
   sequencer: false,
   chords: false,
   lead: false,
+  fx: false,
 });
 
 /**
@@ -107,6 +109,40 @@ export function captureActivePlayers(state: AppStore): WasActivePlayers {
 /** Whether a capture holds anything at all — restartAfterStop's `wasPlaying`. */
 export function anyPlayerActive(wasActive: WasActivePlayers): boolean {
   return (Object.keys(FIELD) as PlayerModule[]).some((module) => wasActive[module]);
+}
+
+/**
+ * Every player's LIVE state, read straight off the store rather than a
+ * capture — table-driven off `FIELD` so a new `PlayerModule` is picked up
+ * here for free. This is the one place `aggregateAllPlayers` and
+ * `isAnyPlayerActive` below read from, so both stay in lockstep with
+ * `PlayerModule`'s current member set instead of each naming its own list of
+ * fields (the bug this trio exists to close: nine call sites had done exactly
+ * that by hand and silently stopped at three players when `fx` shipped).
+ */
+export function allPlayerStates(state: AppStore): PlayerState[] {
+  return (Object.keys(FIELD) as PlayerModule[]).map((module) => state[FIELD[module]]);
+}
+
+/**
+ * The single state the master transport shows, folded over EVERY registered
+ * player rather than a hand-picked subset. Table-driven replacement for the
+ * `aggregatePlayerState(state.sequencerPlayer, state.chordsPlayer,
+ * state.leadPlayer)` shape that used to be copied at each call site.
+ */
+export function aggregateAllPlayers(state: AppStore): PlayerState {
+  return aggregatePlayerState(...allPlayerStates(state));
+}
+
+/**
+ * Whether ANY player still owns scheduled sound, table-driven replacement for
+ * the hand-listed `isHardStopEnabled(state.sequencerPlayer, ...)` shape.
+ * Semantically identical to `isHardStopEnabled(...allPlayerStates(state))` —
+ * kept as its own name because most call sites want "is anything live" from
+ * the live store, not the hard-stop-button's own reasoning about `stopping`.
+ */
+export function isAnyPlayerActive(state: AppStore): boolean {
+  return allPlayerStates(state).some(isPlayerActive);
 }
 
 /**
@@ -194,6 +230,7 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
+    fxPlayer: 'stopped',
     playheadBeat: null,
     playheadChordIndex: null,
     playheadChordStartBeat: 0,

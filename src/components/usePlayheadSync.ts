@@ -1,13 +1,16 @@
 import { useEffect } from 'react';
 import { useAppStore } from '../store/store';
-import { aggregatePlayerState } from '../store/transportSlice';
+import { aggregatePlayerState, allPlayerStates } from '../store/transportSlice';
 import type { PlayerState } from '../store/types';
 import { subscribePlaybackClock } from '../audio/playback/playbackEngine';
 
 /**
  * Pure decision, exported so it is testable without a DOM: the playhead runs
- * whenever ANY of the three transport players is active. A two-player
- * derivation here would silently drop the lead player from the playhead.
+ * whenever ANY registered transport player is active. Kept variadic (rather
+ * than taking `AppStore` itself) so the existing per-player unit tests keep
+ * working unchanged; the hook below is what feeds it every player, table-
+ * driven off `allPlayerStates` so a new player module reaches the playhead
+ * for free instead of needing a hand-added argument here.
  */
 export function shouldRunPlayheadSync(...players: PlayerState[]): boolean {
   return aggregatePlayerState(...players) !== 'stopped';
@@ -24,10 +27,7 @@ export function shouldRunPlayheadSync(...players: PlayerState[]): boolean {
  * often for the same rendered output.
  */
 export function usePlayheadSync(): void {
-  const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
-  const chordsPlayer = useAppStore((s) => s.chordsPlayer);
-  const leadPlayer = useAppStore((s) => s.leadPlayer);
-  const isRunning = shouldRunPlayheadSync(sequencerPlayer, chordsPlayer, leadPlayer);
+  const isRunning = useAppStore((s) => shouldRunPlayheadSync(...allPlayerStates(s)));
 
   useEffect(() => {
     const { setPlayheadBeat, setPlayheadChord } = useAppStore.getState();

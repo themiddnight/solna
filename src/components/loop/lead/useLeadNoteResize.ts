@@ -1,7 +1,22 @@
 import { useCallback, useState } from 'react';
 import type React from 'react';
 import { useAppStore } from '@/store/store';
+import { type MelodyTrackId } from '@/store/melodyTracks';
 import { LEAD_CELL_WIDTH, leadResizeLen } from './melodyGrid';
+
+/**
+ * The resize/erase action names MELODY_TRACKS' row does not carry (it
+ * declares STATE field names only — see melodyTracks.ts), for the same
+ * reason useLeadNotePaint.ts's own `PAINT_ACTIONS` is kept local rather than
+ * templated.
+ */
+const RESIZE_ACTIONS: Record<
+  MelodyTrackId,
+  { setNoteLength: 'setLeadNoteLength' | 'setFxNoteLength'; paintNote: 'paintLeadNote' | 'paintFxNote' }
+> = {
+  lead: { setNoteLength: 'setLeadNoteLength', paintNote: 'paintLeadNote' },
+  fx: { setNoteLength: 'setFxNoteLength', paintNote: 'paintFxNote' },
+};
 
 export interface LeadResizePreview {
   stepIndex: number;
@@ -117,7 +132,7 @@ export function leadPreviewUnchanged(
  * write per pointermove would re-render every view and re-serialise the
  * persisted slice on every frame of the gesture.
  */
-export function useLeadNoteResize(): {
+export function useLeadNoteResize(trackId: MelodyTrackId): {
   preview: LeadResizePreview | null;
   startResize: (
     e: React.PointerEvent<HTMLElement>,
@@ -128,6 +143,7 @@ export function useLeadNoteResize(): {
     stride: number,
   ) => void;
 } {
+  const actions = RESIZE_ACTIONS[trackId];
   const [preview, setPreview] = useState<LeadResizePreview | null>(null);
 
   const startResize = useCallback(
@@ -194,9 +210,9 @@ export function useLeadNoteResize(): {
         // leadResizeCommit's decision, so it can be tested for real.
         const outcome = leadResizeCommit(drag, ev.type, ev.clientX);
         if (outcome.kind === 'resize') {
-          useAppStore.getState().setLeadNoteLength(outcome.stepIndex, outcome.note, outcome.len);
+          useAppStore.getState()[actions.setNoteLength](outcome.stepIndex, outcome.note, outcome.len);
         } else if (outcome.kind === 'erase') {
-          useAppStore.getState().paintLeadNote(outcome.stepIndex, outcome.note, 'erase');
+          useAppStore.getState()[actions.paintNote](outcome.stepIndex, outcome.note, 'erase');
         }
       };
       // WINDOW, not the grab strip, and no setPointerCapture. The strip is
@@ -213,7 +229,7 @@ export function useLeadNoteResize(): {
       window.addEventListener('pointerup', onEnd);
       window.addEventListener('pointercancel', onEnd);
     },
-    [],
+    [actions],
   );
 
   return { preview, startResize };

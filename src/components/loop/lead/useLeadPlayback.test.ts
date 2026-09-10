@@ -46,12 +46,12 @@ describe('useLeadPlayback feeds the loop gate and the sounding notes into the sc
     'utf8',
   );
 
-  test('reads leadGate live from the store inside the clock callback', () => {
-    expect(source).toContain('s.leadGate');
+  test('reads the gate live from the store inside the clock callback, through the track row', () => {
+    expect(source).toContain('s[track.gate]');
   });
 
   test('resolves triggers from leadSoundingNotes, not a step note set', () => {
-    expect(source).toContain('leadSoundingNotes(s.leadMelodySteps, column, stepsPerBar, stride)');
+    expect(source).toContain('leadSoundingNotes(s[track.steps], column, stepsPerBar, stride)');
     expect(source).not.toContain('leadStepNotes');
   });
 });

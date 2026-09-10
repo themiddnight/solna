@@ -1,8 +1,10 @@
 import type { SynthParams, SequencerTrack, ChordItem, MasterEffects, SongArrangement } from '../types';
 import { applyPreset, presetById } from '../audio/presetRegistry';
-import type { PadState } from './types';
+import type { PadState, FxState } from './types';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import { DEFAULT_BUS_TRIM_DB, DEFAULT_FADER_DB } from './levelUnits';
+import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
+import { DEFAULT_LEAD_STEP_RESOLUTION, LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 
 // Moved verbatim from src/App.tsx — the app's original useState initial values.
 
@@ -440,5 +442,29 @@ export function defaultPadState(): PadState {
     padDroneIntervals: [1, 5, 8],
     padVolume: DEFAULT_BUS_TRIM_DB,
     padMuted: false,
+  };
+}
+
+
+/**
+ * The FX track's factory state. A function, not a frozen constant, because
+ * `fxMelodySteps` is a fresh array per loop — a shared one would make two loops
+ * the same melody the first time a note was drawn.
+ *
+ * `fxVolume` is DEFAULT_BUS_TRIM_DB, the measured headroom trim every source bus
+ * takes (DEV-383), and `fxMuted` is false: a track that has to be unmuted before
+ * it can make a sound reads as broken rather than as quiet.
+ */
+export function defaultFxState(): FxState {
+  return {
+    fxMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
+    fxLoopLength: 1,
+    fxStepResolution: DEFAULT_LEAD_STEP_RESOLUTION,
+    fxMelodyView: 'scale-locked',
+    fxMelodyOctave: 3,
+    fxGate: DEFAULT_LEAD_GATE,
+    fxSynthParams: INITIAL_SYNTH_PARAMS,
+    fxVolume: DEFAULT_BUS_TRIM_DB,
+    fxMuted: false,
   };
 }

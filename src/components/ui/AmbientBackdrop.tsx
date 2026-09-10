@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { audioEngine } from '@/audio/engine';
 import { useAppStore } from '@/store/store';
-import { aggregatePlayerState } from '@/store/transportSlice';
+import { isAnyPlayerActive } from '@/store/transportSlice';
 import { attachMeter, nextMeterId } from '@/utils/meterAttach';
 import { dbfsToPercent } from '@/utils/meterScale';
 import {
@@ -65,10 +65,7 @@ export function backdropLevel(rmsDbfs: number): number {
  */
 export function AmbientBackdrop() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const sequencerPlayer = useAppStore((s) => s.sequencerPlayer);
-  const chordsPlayer = useAppStore((s) => s.chordsPlayer);
-  const leadPlayer = useAppStore((s) => s.leadPlayer);
-  const isPlaying = aggregatePlayerState(sequencerPlayer, chordsPlayer, leadPlayer) !== 'stopped';
+  const isPlaying = useAppStore(isAnyPlayerActive);
 
   const [reducedMotion, setReducedMotion] = useState(
     () => window.matchMedia(REDUCED_MOTION_QUERY).matches,

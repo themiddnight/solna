@@ -6,6 +6,7 @@ import { stepDurationSec } from '@/utils/musicTheory';
 import { getMeter } from '@/utils/meter';
 import { TICKS_PER_SIXTEENTH, columnsPerBar, strideFor } from '@/utils/stepResolution';
 import { publishStepAt, resetStep } from '@/components/playbackStep';
+import { melodyTrack, type MelodyTrackId } from '@/store/melodyTracks';
 import { leadScheduleHits, type LeadScheduleHit } from './useLeadPlayback';
 
 /**
@@ -32,16 +33,18 @@ export function leadMarkerPublishes(
 }
 
 /**
- * The lead's step producer, and the only one.
+ * Each track's step producer, and the only one for that track's slot.
  *
  * Split out of useLeadPlayback because the two answer different questions
- * and are gated differently. The scheduler runs while the LEAD plays; the
- * marker also has to run while capture is armed against somebody else's
- * clock, because the column it shows is where that capture writes — with
- * the lead stopped and the metronome or the drums running, capture was in
- * time while the marker sat frozen on leadCursor, pointing at a column
- * nothing was being written to. leadMarkerFollowsClock draws that line, and
- * store/leadRecord.ts says why it is not simply the recorder's own gate.
+ * and are gated differently. The scheduler runs while the TRACK's player
+ * plays; the lead marker also has to run while capture is armed against
+ * somebody else's clock, because the column it shows is where that capture
+ * writes — with the lead stopped and the metronome or the drums running,
+ * capture was in time while the marker sat frozen on leadCursor, pointing at
+ * a column nothing was being written to. leadMarkerFollowsClock draws that
+ * line, and store/leadRecord.ts says why it is not simply the recorder's own
+ * gate. FX has no recorder, so its marker follows its own player state and
+ * nothing else.
  *
  * Widening the CONSUMER alone does not work and was tried: useLeadMarker's
  * predicate without a producer behind it froze the marker at a stale zero,
@@ -53,21 +56,25 @@ export function leadMarkerPublishes(
  * life of the app. The predicate is false whenever nothing is running, so
  * this hook only ever joins a clock that is already ticking and never
  * starts one — which is also acceptance criterion 3, that no step is
- * published for the lead while nothing at all plays.
+ * published while nothing at all plays.
  *
- * Mounted beside useLeadPlayback in LeadMelodyGrid, which renders exactly
- * once. The cost is one more clock listener, not one more timer.
+ * Mounted beside useLeadPlayback in LeadMelodyGrid, which renders once per
+ * melody track. The cost of a second grid is one more clock listener, not one
+ * more timer.
  */
-export function useLeadStepPublisher(): void {
-  const followsClock = useAppStore(leadMarkerFollowsClock);
+export function useLeadStepPublisher(trackId: MelodyTrackId): void {
+  const track = melodyTrack(trackId);
+  // Lead follows the WIDER gate — its marker must also track somebody else's
+  // clock while Rec is armed, because that column is where live capture writes
+  // (store/leadRecord.ts says why that is not simply the recorder's own gate).
+  // FX has no recorder, so its marker follows its own player and nothing else.
+  const followsClock = useAppStore((s) =>
+    trackId === 'lead' ? leadMarkerFollowsClock(s) : s.fxPlayer !== 'stopped',
+  );
 
   useEffect(() => {
     if (!followsClock) {
-      // The marker owns this reset now, and it fires when the marker stops
-      // following the clock — not when the lead player stops. With the drums
-      // still running and Rec still armed, a rewind to 0 would park the
-      // marker somewhere the music is not.
-      resetStep('lead');
+      resetStep(track.stepPlayer);
       return;
     }
 
@@ -76,17 +83,12 @@ export function useLeadStepPublisher(): void {
     return subscribePlaybackClock((step, _beat, time) => {
       const s = useAppStore.getState();
       const stepsPerBar = getMeter(s.meterId).stepsPerBar;
-      const stride = strideFor(s.leadStepResolution);
-      const columns = s.leadLoopLength * columnsPerBar(stepsPerBar, stride);
+      const stride = strideFor(s[track.stepResolution]);
+      const columns = s[track.loopLength] * columnsPerBar(stepsPerBar, stride);
       const tickDur = stepDurationSec(s.bpm) / TICKS_PER_SIXTEENTH;
-      // One publish per on-grid tick, each with its OWN audible time, so at
-      // 1/32 the two columns of a dispatch land half a 16th apart instead of
-      // both jumping at once. Nothing here may sit behind a guard: this
-      // callback exists only to publish, which is what makes the marker
-      // honest during pre-arm and 'stopping' as well as while notes sound.
       for (const hit of leadMarkerPublishes(step, stride, columns, tickDur)) {
-        publishStepAt('lead', hit.column, time + hit.offsetSec);
+        publishStepAt(track.stepPlayer, hit.column, time + hit.offsetSec);
       }
     });
-  }, [followsClock]);
+  }, [followsClock, track]);
 }

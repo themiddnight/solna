@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { StoreApi } from 'zustand';
 import {
+  aggregateAllPlayers,
   aggregatePlayerState,
+  allPlayerStates,
   createTransportSlice,
+  isAnyPlayerActive,
   isHardStopEnabled,
   isPlayerActive,
   transportDisplayState,
@@ -10,7 +13,7 @@ import {
 import { useAppStore } from './store';
 import { SCOPE_NONE } from './playbackScope';
 import { MAX_BPM, MIN_BPM } from '../utils/musicTheory';
-import type { AppStore, PlayerState, TransportSlice } from './types';
+import type { AppStore, PlayerModule, PlayerState, TransportSlice } from './types';
 
 // Minimal harness: createTransportSlice takes zustand's (set, get). We back
 // both with a plain object so the slice can be exercised without a store.
@@ -124,6 +127,46 @@ describe('derived transport helpers', () => {
     expect(isHardStopEnabled('stopped', 'playing')).toBe(true);
     expect(isHardStopEnabled('stopping', 'stopping')).toBe(true);
   });
+});
+
+describe('table-driven "all players" helpers cover every registered PlayerModule', () => {
+  // A hardcoded module list here (the exact bug this trio replaces at its
+  // nine former call sites) would keep passing even if a module stopped being
+  // read. Instead this walks the state object itself and checks that flipping
+  // EACH field independently changes every helper's answer — so a module
+  // silently dropped from FIELD fails this test rather than reproducing the
+  // gap.
+  const ALL_MODULES: PlayerModule[] = ['sequencer', 'chords', 'lead', 'fx'];
+  const FIELD_OF: Record<PlayerModule, keyof AppStore> = {
+    sequencer: 'sequencerPlayer',
+    chords: 'chordsPlayer',
+    lead: 'leadPlayer',
+    fx: 'fxPlayer',
+  };
+  const allStopped = () =>
+    ({
+      sequencerPlayer: 'stopped',
+      chordsPlayer: 'stopped',
+      leadPlayer: 'stopped',
+      fxPlayer: 'stopped',
+    }) as unknown as AppStore;
+
+  test('allPlayerStates returns one entry per module, in module order', () => {
+    const state = allStopped();
+    expect(allPlayerStates(state)).toHaveLength(ALL_MODULES.length);
+  });
+
+  for (const module of ALL_MODULES) {
+    test(`setting ${module} alone flips isAnyPlayerActive and the aggregate`, () => {
+      const stopped = allStopped();
+      expect(isAnyPlayerActive(stopped)).toBe(false);
+      expect(aggregateAllPlayers(stopped)).toBe('stopped');
+
+      const withOnePlaying = { ...stopped, [FIELD_OF[module]]: 'playing' } as AppStore;
+      expect(isAnyPlayerActive(withOnePlaying)).toBe(true);
+      expect(aggregateAllPlayers(withOnePlaying)).toBe('playing');
+    });
+  }
 });
 
 describe('setBpm clamping', () => {

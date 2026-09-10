@@ -15,7 +15,12 @@ import { DEFAULT_FADER_DB, faderDbToGain } from './levelUnits';
 // files, so transport state can leak in from earlier files — normalize what
 // these tests depend on.
 beforeEach(() => {
-  useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped' });
+  useAppStore.setState({
+    sequencerPlayer: 'stopped',
+    chordsPlayer: 'stopped',
+    leadPlayer: 'stopped',
+    fxPlayer: 'stopped',
+  });
 });
 
 afterEach(() => {

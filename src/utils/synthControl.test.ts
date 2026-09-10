@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { focusSynthTarget, resolveSynthControlChannel, SYNTH_TARGET_STYLES } from './synthControl';
 import type { SynthControlTarget, SynthParamChannel } from './synthControl';
 import type { SynthParams, ViewMode } from '../types';
+import { INITIAL_SYNTH_PARAMS } from '../store/initialState';
+import { soloTrackForControlTarget } from '../store/trackAudibility';
 
 const baseParams: SynthParams = {
   oscType: 'sine',
@@ -44,6 +46,7 @@ describe('resolveSynthControlChannel', () => {
     chord: channel('chord-patch'),
     bass: channel('bass-patch'),
     pad: channel('pad-patch'),
+    fx: channel('fx-patch'),
   };
 
   test('routes each control target to its own param channel', () => {
@@ -51,6 +54,7 @@ describe('resolveSynthControlChannel', () => {
     expect(resolveSynthControlChannel('chord', channels)).toBe(channels.chord);
     expect(resolveSynthControlChannel('bass', channels)).toBe(channels.bass);
     expect(resolveSynthControlChannel('pad', channels)).toBe(channels.pad);
+    expect(resolveSynthControlChannel('fx', channels)).toBe(channels.fx);
   });
 
   test('falls back to the synth channel for unknown targets', () => {
@@ -101,4 +105,59 @@ test('the pad target carries its own module styling', () => {
   expect(style.ring).toContain('module-pad');
   expect(style.activeBtn).toContain('--color-module-pad');
   expect(style.badge).toContain('--color-module-pad');
+});
+
+describe('the fx control target', () => {
+  test('SYNTH_TARGET_STYLES has a complete row for fx', () => {
+    expect(SYNTH_TARGET_STYLES.fx).toEqual({
+      label: 'FX',
+      tint: 'tint-fx',
+      ring: 'ring-1 ring-module-fx/40',
+      activeBtn: '[--btn-color:var(--color-module-fx)] [--btn-fg:var(--color-module-fx-content)]',
+      softBtn: 'btn-soft [--btn-color:var(--color-module-fx)] [--btn-fg:var(--color-module-fx-content)]',
+      badge: '[--badge-color:var(--color-module-fx)]',
+      border: 'border-module-fx',
+      slider: 'range range-xs text-module-fx [--range-thumb:var(--color-module-fx-content)]',
+      accent: 'text-module-fx',
+    });
+  });
+
+  /**
+   * Every string in that record must stay a LITERAL. Tailwind v4 scans source
+   * statically, so a class assembled from `--color-module-${target}` at runtime
+   * is never emitted — the chip would render with no colour and nothing would
+   * fail. Asserted by shape: no value may contain a template placeholder.
+   */
+  test('no style string is assembled at runtime', () => {
+    for (const style of Object.values(SYNTH_TARGET_STYLES)) {
+      for (const value of Object.values(style)) {
+        expect(value).not.toContain('${');
+      }
+    }
+  });
+
+  test('resolveSynthControlChannel routes fx to the fx channel', () => {
+    const A: SynthParams = { ...INITIAL_SYNTH_PARAMS, preset: 'a' };
+    const B: SynthParams = { ...INITIAL_SYNTH_PARAMS, preset: 'b' };
+    const channels = {
+      synth: { params: A, setParams: () => {} },
+      chord: { params: A, setParams: () => {} },
+      bass: { params: A, setParams: () => {} },
+      pad: { params: A, setParams: () => {} },
+      fx: { params: B, setParams: () => {} },
+    };
+    expect(resolveSynthControlChannel('fx', channels).params).toBe(B);
+  });
+
+  /**
+   * soloTrackForControlTarget keeps its SINGLE irregularity ('synth' -> 'lead').
+   * The fx target is called `fx` and the fx solo track is called `fx`, so it
+   * passes through the identity branch. Do NOT regularise the lead case: that
+   * one mapping is the entire reason the function exists, and a second special
+   * case is where it stops being readable.
+   */
+  test('fx passes through soloTrackForControlTarget unchanged', () => {
+    expect(soloTrackForControlTarget('fx')).toBe('fx');
+    expect(soloTrackForControlTarget('synth')).toBe('lead');
+  });
 });

@@ -1,23 +1,24 @@
 import type { SynthControlTarget } from '@/utils/synthControl';
 
 /**
- * The five track-solo targets, in the order the transport chip names them.
+ * The six track-solo targets, in the order the transport chip names them.
  *
  * These are USER vocabulary, not engine vocabulary. `engineSync.ts`'s
- * SOURCE_BUSES calls the same five buses `synth`/`chord`/`bass`/`pad`/
+ * SOURCE_BUSES calls the same six buses `synth`/`chord`/`bass`/`pad`/`fx`/
  * `sequencer`, and that table already exists to hold exactly this kind of
  * irregular mapping (see its own comment on why `sequencer` is spelled out
  * rather than derived). It gains a `solo` column so the mapping is written
  * once; nothing else translates between the two vocabularies except
  * `soloTrackForControlTarget` below.
  */
-export const SOLO_TRACKS = ['lead', 'chord', 'bass', 'pad', 'drums'] as const;
+export const SOLO_TRACKS = ['lead', 'fx', 'chord', 'bass', 'pad', 'drums'] as const;
 
 export type SoloTrack = (typeof SOLO_TRACKS)[number];
 
 /** Display names — the transport chip and every solo button's accessible name. */
 export const SOLO_TRACK_LABELS: Record<SoloTrack, string> = {
   lead: 'Lead',
+  fx: 'FX',
   chord: 'Chord',
   bass: 'Bass',
   pad: 'Pad',

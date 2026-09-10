@@ -9,6 +9,7 @@ import { createChordsSlice } from './chordsSlice';
 import { createBassSlice } from './bassSlice';
 import { createPadSlice } from './padSlice';
 import { createLeadSlice } from './leadSlice';
+import { createFxSlice } from './fxSlice';
 import { createSequencerSlice } from './sequencerSlice';
 import { createEffectsSlice } from './effectsSlice';
 import { createUiSlice } from './uiSlice';
@@ -274,6 +275,8 @@ function sanitizeEnumeratedFields(sanitized: Record<string, unknown>): void {
   if (!isBassPatternId(sanitized.bassPatternId)) delete sanitized.bassPatternId;
 }
 
+/* eslint-disable-next-line complexity -- one persisted key validated per line;
+   the count tracks how many fields this function validates, not tangled branching. */
 function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (typeof persisted !== 'object' || persisted === null) return {};
   const sanitized = { ...(persisted as Record<string, unknown>) };
@@ -300,6 +303,12 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   );
   sanitized.drumFilterType = asFilterType(sanitized.drumFilterType, 'lowpass');
   sanitized.metronomeActive = asBoolean(sanitized.metronomeActive);
+  sanitized.fxGate = clampFinite(sanitized.fxGate, 0.05, 1, DEFAULT_LEAD_GATE);
+  sanitized.fxStepResolution = asLeadStepResolution(
+    sanitized.fxStepResolution,
+    DEFAULT_LEAD_STEP_RESOLUTION,
+  );
+  sanitized.fxMuted = asBoolean(sanitized.fxMuted);
   sanitized.synthMuted = asBoolean(sanitized.synthMuted);
   sanitized.chordMuted = asBoolean(sanitized.chordMuted);
   sanitized.bassMuted = asBoolean(sanitized.bassMuted);
@@ -330,6 +339,15 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (!isPositiveInteger(sanitized.leadLoopLength)) {
     delete sanitized.leadLoopLength;
   }
+  // Coerced, not merely checked — one fractional `len` must not cost the
+  // session its whole FX melody. Deleting on failure (rather than substituting)
+  // is what lets the freshly-built currentState default win in the merge below.
+  const fxMelody = asLeadNoteMatrix(sanitized.fxMelodySteps);
+  if (fxMelody) sanitized.fxMelodySteps = fxMelody;
+  else delete sanitized.fxMelodySteps;
+  if (!isPositiveInteger(sanitized.fxLoopLength)) {
+    delete sanitized.fxLoopLength;
+  }
   if (typeof sanitized.selectedVibeId !== 'string' && sanitized.selectedVibeId !== null) {
     delete sanitized.selectedVibeId;
   }
@@ -337,7 +355,7 @@ function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
 
   // Only rewrite the synth param objects that were actually stored; an absent
   // key must keep falling through to the freshly-built currentState default.
-  for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams', 'padSynthParams']) {
+  for (const key of ['synthParams', 'chordSynthParams', 'bassSynthParams', 'padSynthParams', 'fxSynthParams']) {
     if (key in sanitized) sanitized[key] = sanitizeSynthParams(sanitized[key]);
   }
 
@@ -381,6 +399,7 @@ export const useAppStore = create<AppStore>()(
         ...createBassSlice(setWithLoopMirror),
         ...createPadSlice(setWithLoopMirror),
         ...createLeadSlice(setWithLoopMirror, get),
+        ...createFxSlice(setWithLoopMirror, get),
         ...createSequencerSlice(setWithLoopMirror),
         ...createEffectsSlice(setWithLoopMirror),
         ...createUiSlice(setWithLoopMirror),

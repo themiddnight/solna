@@ -1,10 +1,26 @@
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/store';
+import { type MelodyTrackId } from '@/store/melodyTracks';
 import {
   createLeadPaintController,
   createLeadPaintHandlers,
   type LeadPaintHandlers,
 } from './leadPaint';
+
+/**
+ * The paint/toggle action names MELODY_TRACKS' row does not carry (it
+ * declares STATE field names only — see melodyTracks.ts). Kept local for the
+ * same reason LeadMelodyGrid's own `GRID_ACTIONS` is: a typo-checked literal
+ * on both sides beats a templated `paint${id}Note` that the compiler cannot
+ * verify against the store's action names.
+ */
+const PAINT_ACTIONS: Record<
+  MelodyTrackId,
+  { paintNote: 'paintLeadNote' | 'paintFxNote'; toggleNote: 'toggleLeadNote' | 'toggleFxNote' }
+> = {
+  lead: { paintNote: 'paintLeadNote', toggleNote: 'toggleLeadNote' },
+  fx: { paintNote: 'paintFxNote', toggleNote: 'toggleFxNote' },
+};
 
 /**
  * Wires the paint state machine to the DOM. Everything decidable lives in
@@ -18,7 +34,11 @@ import {
  * would mean reimplementing the covering-note rules outside the slice that
  * owns them.
  */
-export function useLeadNotePaint(resolveStepIndex: (col: number) => number): LeadPaintHandlers {
+export function useLeadNotePaint(
+  trackId: MelodyTrackId,
+  resolveStepIndex: (col: number) => number,
+): LeadPaintHandlers {
+  const actions = PAINT_ACTIONS[trackId];
   const ref = useRef<LeadPaintHandlers | null>(null);
   const controllerRef = useRef<ReturnType<typeof createLeadPaintController> | null>(null);
   // The controller is built once, but the column-to-stored-index mapping moves
@@ -30,13 +50,13 @@ export function useLeadNotePaint(resolveStepIndex: (col: number) => number): Lea
   if (!ref.current) {
     const controller = createLeadPaintController(
       ({ stepIndex, note, mode }) => {
-        useAppStore.getState().paintLeadNote(stepIndex, note, mode);
+        useAppStore.getState()[actions.paintNote](stepIndex, note, mode);
       },
       (col) => resolveRef.current(col),
     );
     controllerRef.current = controller;
     ref.current = createLeadPaintHandlers(controller, (stepIndex, note) => {
-      useAppStore.getState().toggleLeadNote(stepIndex, note);
+      useAppStore.getState()[actions.toggleNote](stepIndex, note);
     });
   }
 

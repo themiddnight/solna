@@ -49,7 +49,7 @@ fails rather than being skipped.
 
 Single-page audio workstation ("Solna"): two layers (Loop, Song) holding four tab views between
 them — Sound and Pattern on the loop layer, Arrange and Master on the song layer — plus Pattern's
-own three segments (Lead, Accompaniment, Beat). **Every one of them stays mounted
+own four segments (Lead, FX, Accompaniment, Beat). **Every one of them stays mounted
 simultaneously**, gated `block`/`hidden` at three levels: `App.tsx` on the layer
 (`isSongLayer(activeTab)`), `LoopPage.tsx` on `activeTab`, `PatternView.tsx` on `patternSegment`.
 Audio therefore never stops when switching tabs. **Consequence:** state that lives in a store slice or high in the tree
@@ -198,15 +198,33 @@ they constrained GENERATED rows, and authored grids are curated — a crash on b
 over a kick on beat 1 is standard, not a clash, and porting the filter would reject
 grids for being correct.
 
-**The lead melody stores at its own width, and only the lead melody does.** The sequencer,
-chord-rhythm and bass grids store every bar at the widest meter's `MAX_STEPS_PER_BAR` and window
-it to the active `stepsPerBar`. The lead runs the same non-destructive scheme on a second axis —
-it stores at the finest *step resolution* (`LEAD_TICKS_PER_BAR` in `utils/stepResolution.ts`) and
-*strides* to the active one — so a `leadMelodySteps` index is a tick, not a 16th, and a
-`LeadNote.len` counts ticks. Two consequences: a slot is dormant either because the meter cannot
-reach it or because the resolution cannot, and **both tests live in `leadActivePosAt` and nowhere
-else**; and a change of view never writes — an explicit edit writes, changing meter or resolution
-does not.
+**The melody tracks store at their own width, and only they do.** The sequencer, chord-rhythm and
+bass grids store every bar at the widest meter's `MAX_STEPS_PER_BAR` and window it to the active
+`stepsPerBar`. The two melody tracks — Lead and FX — run the same non-destructive scheme on a
+second axis: they store at the finest *step resolution* (`LEAD_TICKS_PER_BAR` in
+`utils/stepResolution.ts`) and *stride* to the active one, so a `leadMelodySteps` or
+`fxMelodySteps` index is a tick, not a 16th, and a `LeadNote.len` counts ticks. Two consequences: a
+slot is dormant either because the meter cannot reach it or because the resolution cannot, and
+**both tests live in `leadActivePosAt` and nowhere else**; and a change of view never writes — an
+explicit edit writes, changing meter or resolution does not.
+
+**FX is the lead track's twin, and the symmetry comes from a table rather than a rename.**
+`MELODY_TRACKS` (`store/melodyTracks.ts`) has one row per melody track and spells its store field
+names out as table data — the `SOURCE_BUSES` precedent — because the LEAD row is irregular in four
+columns (`synthParams`, `synthVolume`, `synthMuted`, engine source `'synth'`) and a
+`` `${id}MelodySteps` `` convention would need a per-column exception for one of the two rows.
+`leadSlice` is one factory instantiated twice, and `LeadMelodyGrid` takes a **required** `trackId`
+with no default — a default of `'lead'` would make a call site that forgot the prop render a second
+copy of the lead grid, visually plausible and caught by no test, because both instances would be
+internally consistent. Two mounted grids hold two clock subscriptions, which is what the "the clock
+runs iff a player holds a subscription" rule permits: both are players and neither starts a timer.
+The step publisher is keyed per track (`StepPlayerId` gained `'fx'`); one shared slot would have the
+FX playhead driving the lead's marker at whichever grid's stride published last, with no error
+anywhere. **FX has no live recorder** — `leadRecording` and `store/leadRecord.ts` stay lead-only —
+and it is not a constraint on the material: a user who wants a counter-melody writes one and the
+track behaves identically. What it cannot do as shipped is a PITCH riser (the filter envelope ramps
+`filter.frequency` only) and its LFO still restarts on every note (the LFO oscillator is created per
+voice at note-on); a FILTER-SWEEP riser works today. Both limits are deferred to their own spec.
 
 **A scale-locked lead grid borrows a row; it never hides a note.** A note outside the key is
 never deleted by a view change — before, it simply had no row to be drawn on, so switching to
@@ -235,7 +253,7 @@ tab change between Sound and Pattern does **not** clear it: Sound and Pattern ar
 editing one loop and the user crosses between them constantly, so a solo set that survives that
 crossing is the working state, while a Pattern-segment change is a change of subject and still
 clears. Consequence, on the record: because the Sound ↔ Pattern hop survives, a set spanning Drums
-and the melodic tracks IS buildable — solo Drums in Beat, hop to Sound, then add lead/chord/bass/pad
+and the melodic tracks IS buildable — solo Drums in Beat, hop to Sound, then add lead/fx/chord/bass/pad
 one at a time via the control target, since a target change doesn't clear either. What still empties
 the set is a Pattern-segment change, leaving the Loop layer, changing the active loop, or swapping
 the project. That

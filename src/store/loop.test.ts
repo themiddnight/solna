@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  defaultFxState,
   defaultPadState,
   INITIAL_CHORDS,
   INITIAL_SEQUENCER_TRACKS,
@@ -48,6 +49,7 @@ function makeLoop(overrides: Partial<Loop> = {}): Loop {
     leadMelodyView: 'scale-locked',
     leadMelodyOctave: 3,
     leadGate: DEFAULT_LEAD_GATE,
+    ...defaultFxState(),
     sequencerTracks: INITIAL_SEQUENCER_TRACKS.map((t) => ({ ...t, steps: [...t.steps] })),
     soundKit: 'Retro Drive',
     drumFilterCutoff: 12000,
