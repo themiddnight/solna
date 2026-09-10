@@ -184,7 +184,7 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
           // routing only widens which buses it can happen on. Narrowing the
           // call here cannot fix it: the engine has no per-voice provenance to
           // filter on, and adding one is an engine change with its own spec.
-          audioEngine.releaseSoundingVoices(target, releaseTime);
+          audioEngine.releaseSoundingVoices(target, releaseTime, 'arp');
         });
       }
     };

@@ -79,5 +79,5 @@ export function releaseSynthPlaybackVoices(
   // string` — the engine knows nothing about the store's target vocabulary —
   // so the narrowing to SynthControlTarget happens here, at the one call site
   // a wrong bus name could otherwise slip through untyped.
-  audioEngine.releaseSoundingVoices(target, releaseTime);
+  audioEngine.releaseSoundingVoices(target, releaseTime, 'arp');
 }

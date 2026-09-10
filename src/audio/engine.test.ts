@@ -627,7 +627,7 @@ describe('releaseSoundingVoices', () => {
     engine.triggerSynthNoteOff('C4', SYNTH.release, t0 + 0.6, 'synth');
 
     // The key comes up before that note sounds.
-    engine.releaseSoundingVoices('synth', 0.1);
+    engine.releaseSoundingVoices('synth', 0.1, 'live');
 
     // Cancelling at t0 would wipe the scheduled attack and the note would
     // never be heard — only its own release at t0 + 0.6 may touch it.
@@ -641,7 +641,7 @@ describe('releaseSoundingVoices', () => {
     const t0 = ctx.currentTime;
 
     engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0, 'synth', 1, 'live');
-    engine.releaseSoundingVoices('synth', 0.1);
+    engine.releaseSoundingVoices('synth', 0.1, 'live');
 
     const soundingVoiceGain = ctx._gains[0].gain;
     expect(soundingVoiceGain.cancels).toContain(t0);
@@ -654,7 +654,7 @@ describe('releaseSoundingVoices', () => {
     // No paired note-off: nothing would ever end this voice, so it must not
     // be skipped or it would drone forever.
     engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0 + 0.5, 'synth', 1, 'live');
-    engine.releaseSoundingVoices('synth', 0.1);
+    engine.releaseSoundingVoices('synth', 0.1, 'live');
 
     expect(ctx._gains[0].gain.cancels).toContain(t0);
   });
@@ -664,9 +664,64 @@ describe('releaseSoundingVoices', () => {
     const t0 = ctx.currentTime;
 
     engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0, 'synth', 1, 'live');
-    engine.releaseSoundingVoices('chord', 0.1);
+    engine.releaseSoundingVoices('chord', 0.1, 'live');
 
     expect(ctx._gains[0].gain.cancels).not.toContain(t0);
+  });
+
+  test('leaves a voice of another owner untouched', () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    // Two players on ONE bus — the exact situation this whole change exists
+    // for. The lead track's engine source is 'synth' and the arp plays
+    // whichever bus focusTrack names, so an arp key-up used to cut the
+    // melody track's sounding note short.
+    // Different note names: the same-note dedup would release the first
+    // voice before the second existed, and there would be nothing to assert.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0, 'synth', 1, 'arp');
+    engine.triggerSynthNoteOn('E4', SYNTH, 0.9, t0, 'synth', 1, 'sequencer');
+
+    const voices = [...((engine as any).sourceVoices.get('synth') as Set<any>)];
+    const arpVoice = voices.find((v) => v.owner === 'arp');
+    const seqVoice = voices.find((v) => v.owner === 'sequencer');
+
+    // The NEGATIVE half is the load-bearing one: a test that only checks the
+    // arp voice got its ramp stays green with the owner filter deleted.
+    const seqGain = seqVoice.gains[0].gain;
+    const before = {
+      events: seqGain.events.length,
+      targets: seqGain.targets.length,
+      cancels: seqGain.cancels.length,
+    };
+
+    engine.releaseSoundingVoices('synth', 0.1, 'arp');
+
+    // Asserting on the recorded arrays, never valueAt(): release ramps use
+    // setTargetAtTime and fakeParam.valueAt THROWS on such a timeline.
+    expect(arpVoice.gains[0].gain.cancels).toContain(t0);
+    expect(arpVoice.releaseScheduledAt).toBe(t0);
+
+    expect(seqGain.events.length).toBe(before.events);
+    expect(seqGain.targets.length).toBe(before.targets);
+    expect(seqGain.cancels.length).toBe(before.cancels);
+    expect(seqVoice.releaseScheduledAt).toBeUndefined();
+  });
+
+  test("another owner's future-scheduled voice is not hard-silenced", () => {
+    const { engine, ctx } = freshEngine();
+    const t0 = ctx.currentTime;
+
+    // A future voice with no release of its own is the case the owner-blind
+    // path hard-silences via silenceVoiceNow — which also removes it from
+    // sourceVoices, so the sequencer's next note would never sound.
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.9, t0 + 0.5, 'synth', 1, 'sequencer');
+
+    engine.releaseSoundingVoices('synth', 0.1, 'arp');
+
+    const voices = [...((engine as any).sourceVoices.get('synth') as Set<any>)];
+    expect(voices.length).toBe(1);
+    expect(voices[0].gains[0].gain.cancels).not.toContain(t0);
   });
 
   test('stopSource still kills a scheduled voice, so pattern previews stop dead', () => {
@@ -1755,7 +1810,7 @@ describe('releasing a voice that has not started', () => {
     // so the assertion below is about ramps releaseSoundingVoices schedules.
     vca.ramps.length = 0;
 
-    engine.releaseSoundingVoices('synth', 0.1);
+    engine.releaseSoundingVoices('synth', 0.1, 'live');
 
     expect(vca.ramps).toHaveLength(0);
     expect(vca.events.at(-1)!.v).toBe(0);
@@ -1770,7 +1825,7 @@ describe('releasing a voice that has not started', () => {
     const vca = (engine as any).activeVoices.get('synth:C4').gains[0].gain;
     const before = vca.events.length;
 
-    engine.releaseSoundingVoices('synth', 0.1);
+    engine.releaseSoundingVoices('synth', 0.1, 'live');
 
     expect(vca.events.length).toBe(before);
   });

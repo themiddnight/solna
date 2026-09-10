@@ -1621,19 +1621,26 @@ class AudioEngine {
   }
 
   /**
-   * Releases only the voices of a source that have actually started. Unlike
-   * stopSource this leaves future-scheduled hits alone, so releasing a held
-   * key in arp mode no longer cancels the envelopes of notes the clock has
-   * already scheduled (which cancelled their attack and made them inaudible).
-   * A future voice without a release of its own is still released, otherwise
-   * it would drone forever.
+   * Releases only the voices of a source THAT THIS OWNER CREATED and that have
+   * actually started. Unlike stopSource this leaves future-scheduled hits
+   * alone, so releasing a held key in arp mode no longer cancels the envelopes
+   * of notes the clock has already scheduled (which cancelled their attack and
+   * made them inaudible). A future voice without a release of its own is still
+   * released, otherwise it would drone forever.
+   *
+   * `owner` is REQUIRED and un-defaulted. Three players share the melodic
+   * buses — live input, the arp, the melody-track sequencer — so an owner-blind
+   * release on 'synth' or 'fx' cuts a melody track's sounding note short on an
+   * arp key-up. Whole-bus reach lives in stopSource, whose name says so, and
+   * must never be reachable by leaving an argument off.
    */
-  releaseSoundingVoices(source: string, releaseTime = 0.1): void {
+  releaseSoundingVoices(source: string, releaseTime: number, owner: VoiceOwner): void {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     const voices = this.sourceVoices.get(source);
     if (!voices) return;
     for (const voice of Array.from(voices)) {
+      if (voice.owner !== owner) continue;
       if (voice.startTime > now) {
         // A future hit that already owns a release keeps it: this is the arp
         // key-release path, which must not cancel notes the clock has planned.
