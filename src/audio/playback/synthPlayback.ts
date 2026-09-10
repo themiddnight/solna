@@ -17,8 +17,11 @@ export function hasSynthPlaybackContext(): boolean {
 
 export function applySynthPlaybackVelocityScale(
   scale: number,
-  target: string,
+  target: SynthControlTarget,
 ): void {
+  // audioEngine.applySynthVelocityScale deliberately stays typed `source:
+  // string` (see releaseSynthPlaybackVoices below) — the narrowing happens
+  // here, at the store-facing wrapper.
   audioEngine.applySynthVelocityScale(scale, target);
 }
 

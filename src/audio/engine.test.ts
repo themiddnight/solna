@@ -1074,7 +1074,7 @@ describe('live polyphony equal-power scaling', () => {
     engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'synth');
     engine.triggerSynthNoteOn('A3', SYNTH, 0.8, undefined, 'chord');
 
-    (engine as any).applySynthVelocityScale(0.5, 'synth');
+    engine.applySynthVelocityScale(0.5, 'synth');
 
     const voices = (engine as any).activeVoices;
     const lead = voices.get('synth:C4');
