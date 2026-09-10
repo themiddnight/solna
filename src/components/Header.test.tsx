@@ -152,16 +152,22 @@ describe('PatternSegmentRow', () => {
     expect(html).not.toContain('hidden xl:inline');
   });
 
+  // The restore is in a `finally`, not a trailing statement: a thrown assertion
+  // above it would otherwise leak a non-default `focusTrack` into every test
+  // that runs after this one, and the failure would show up somewhere else.
   test('the active button follows focusTrack, and accompaniment covers three focuses', () => {
-    useAppStore.setState({ focusTrack: 'pad' });
-    const padHtml = renderToString(<PatternSegmentRow />);
-    expect(openTagContaining(padHtml, 'id="segment-accompaniment"')).toContain(
-      'aria-current="page"',
-    );
-    useAppStore.setState({ focusTrack: 'drum' });
-    const drumHtml = renderToString(<PatternSegmentRow />);
-    expect(openTagContaining(drumHtml, 'id="segment-beat"')).toContain('aria-current="page"');
-    useAppStore.setState({ focusTrack: 'synth' });
+    try {
+      useAppStore.setState({ focusTrack: 'pad' });
+      const padHtml = renderToString(<PatternSegmentRow />);
+      expect(openTagContaining(padHtml, 'id="segment-accompaniment"')).toContain(
+        'aria-current="page"',
+      );
+      useAppStore.setState({ focusTrack: 'drum' });
+      const drumHtml = renderToString(<PatternSegmentRow />);
+      expect(openTagContaining(drumHtml, 'id="segment-beat"')).toContain('aria-current="page"');
+    } finally {
+      useAppStore.setState({ focusTrack: 'synth' });
+    }
   });
 
   test('marks exactly one button as the current page', () => {
