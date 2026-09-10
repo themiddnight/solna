@@ -277,3 +277,33 @@ describe('solo is never persisted (spec §4, prohibition 1)', () => {
     }
   });
 });
+
+describe('recordingTrack — the armed melody track', () => {
+  afterEach(() => {
+    useAppStore.getState().setRecordingTrack(null);
+  });
+
+  test('starts disarmed', () => {
+    expect(useAppStore.getState().recordingTrack).toBeNull();
+  });
+
+  /**
+   * ONE value, not a boolean per track. A pair of booleans has nothing
+   * stopping both being true, and one live-capture clock would then write two
+   * grids from a single keypress — a state no UI can reach, so no test would
+   * find it. The type makes it unrepresentable instead, and this test is what
+   * pins the type's intent to a behaviour a reviewer can read.
+   */
+  test('arming a second track replaces the first — two can never be armed at once', () => {
+    useAppStore.getState().setRecordingTrack('lead');
+    useAppStore.getState().setRecordingTrack('fx');
+    expect(useAppStore.getState().recordingTrack).toBe('fx');
+  });
+
+  test('is NOT persisted — a reload must never come back recording', () => {
+    useAppStore.getState().setRecordingTrack('lead');
+    const persisted = partializeAppState(useAppStore.getState()) as unknown as Record<string, unknown>;
+    expect('recordingTrack' in persisted).toBe(false);
+    expect('leadRecording' in persisted).toBe(false);
+  });
+});

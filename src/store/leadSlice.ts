@@ -104,9 +104,11 @@ const ACTIONS: Record<MelodyTrackId, {
  * they are already track-agnostic and take no track parameter. Giving them one
  * would be an unused parameter, which `bun run eslint` reports.
  *
- * `recordLeadNote` and `leadRecording` are NOT here: live capture is lead-only
- * (one note-input dispatcher, store/leadRecord.ts's leadMarkerFollowsClock), so
- * they stay in createLeadSlice below.
+ * `recordLeadNote` is NOT here: live capture is lead-only (one note-input
+ * dispatcher, store/leadRecord.ts's leadMarkerFollowsClock), so it stays in
+ * createLeadSlice below. The arm itself, `recordingTrack`, is not even a lead
+ * field — it lives on the ui slice because its whole purpose is being unique
+ * ACROSS tracks (see its docblock in types.ts).
  *
  * The return type is `Partial<AppStore>` because the KEYS are per-track — this
  * one factory produces `setLeadGate` for one row and `setFxGate` for the other,
@@ -330,19 +332,13 @@ export function createLeadSlice(set: Set, get: Get): LeadSlice {
   return {
     ...melody,
 
-    // KNOWN GAP, named rather than left to be rediscovered: nothing clears
-    // this on a focus change, so arming Rec and then focusing Bass records
-    // bass-sounding notes into the LEAD grid. That became reachable when the
-    // keyboard started following focusTrack; Rec-per-track owns the decision
-    // and closes it, so no clearing rule is invented here for it to undo.
-    leadRecording: false,
-    setLeadRecording: (leadRecording) => set({ leadRecording }),
-
     // Returns whether it actually wrote, so a caller can tell a captured note
     // from one the grid refused.
     recordLeadNote: (note, column) => {
       const state = get();
-      if (!state.leadRecording) return false;
+      // The ARMED TRACK, not a boolean: one scalar in the ui slice holds it,
+      // so each track asks whether the arm is pointed at it.
+      if (state.recordingTrack !== 'lead') return false;
 
       // Both guards exist to keep one promise: a recorded note is visible on
       // the grid the moment it is recorded. Storing what the grid cannot draw

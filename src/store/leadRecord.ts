@@ -7,6 +7,7 @@ import { columnsPerBar, strideFor } from '../utils/stepResolution';
 import { isPlayerActive } from './transportSlice';
 import { useAppStore } from './store';
 import type { PlayerState } from './types';
+import type { MelodyTrackId } from './melodyTracks';
 
 /**
  * Is there music to play along to?
@@ -47,8 +48,9 @@ export function leadClockActive(state: {
  *
  * The third case — a clock running with nothing armed and the lead silent —
  * is what separates this from leadClockActive. recordLeadNote returns false
- * while leadRecording is off, so nothing is written there at all, and a mark
- * sweeping the grid would be animating a write head that does not exist.
+ * unless `recordingTrack` names this track, so nothing is written there at
+ * all, and a mark sweeping the grid would be animating a write head that does
+ * not exist.
  * Turning the metronome on is not a transport start, and it should not look
  * like one.
  *
@@ -61,9 +63,12 @@ export function leadMarkerFollowsClock(state: {
   sequencerPlayer: PlayerState;
   chordsPlayer: PlayerState;
   leadPlayer: PlayerState;
-  leadRecording: boolean;
+  recordingTrack: MelodyTrackId | null;
 }): boolean {
-  return isPlayerActive(state.leadPlayer) || (state.leadRecording && leadClockActive(state));
+  return (
+    isPlayerActive(state.leadPlayer) ||
+    (state.recordingTrack === 'lead' && leadClockActive(state))
+  );
 }
 
 /** The real live clock. Injectable so the bridge is testable without one. */
@@ -138,14 +143,15 @@ export function startLeadRecordBridge(deps: LeadRecordDeps = REAL_CLOCK): () => 
       // clamp against the loop end — so a note held across the seam is
       // truncated rather than wrapped, with no special case here.
       //
-      // leadRecording is re-checked here, not assumed from note-on: a press
-      // that started while armed can still be held after Rec is turned off,
-      // and its release must not reach back and lengthen a note that was
-      // never meant to grow past its initial write.
+      // The ARM is re-read here, not assumed from note-on: a press that
+      // started while armed can still be held after Rec is switched off — or
+      // after the arm has moved to the other melody track — and its release
+      // must not reach back and lengthen a note that was never meant to grow
+      // past its initial write.
       //
       // > stride, not > 1: a one-cell note is already at that length, and
       // calling the setter for it would be a write with nothing to write.
-      if (len > entry.stride && useAppStore.getState().leadRecording) {
+      if (len > entry.stride && useAppStore.getState().recordingTrack === 'lead') {
         useAppStore.getState().setLeadNoteLength(entry.storedIndex, event.note, len);
       }
       return;

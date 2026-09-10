@@ -33,7 +33,7 @@ beforeEach(() => {
     leadMelodyView: 'chromatic',
     leadMelodyOctave: 3,
     leadCursor: 0,
-    leadRecording: true,
+    recordingTrack: 'lead',
     leadPlayer: 'stopped',
     chordsPlayer: 'stopped',
     sequencerPlayer: 'stopped',
@@ -104,7 +104,7 @@ describe('leadRecord bridge', () => {
   });
 
   test('nothing is captured while disarmed', () => {
-    useAppStore.setState({ leadRecording: false });
+    useAppStore.setState({ recordingTrack: null });
 
     down('C4');
 
@@ -199,7 +199,7 @@ describe('leadRecord bridge — live capture', () => {
     liveStep = 4;
     down('C4');
 
-    useAppStore.setState({ leadRecording: false });
+    useAppStore.setState({ recordingTrack: null });
     liveStep = 8;
     up('C4');
 
@@ -294,14 +294,14 @@ describe('leadMarkerFollowsClock', () => {
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
-    leadRecording: false,
+    recordingTrack: null,
     ...patch,
   });
 
   test('the lead playing is enough on its own, armed or not', () => {
     expect(leadMarkerFollowsClock(markerState({ leadPlayer: 'playing' }))).toBe(true);
     expect(
-      leadMarkerFollowsClock(markerState({ leadPlayer: 'playing', leadRecording: true })),
+      leadMarkerFollowsClock(markerState({ leadPlayer: 'playing', recordingTrack: 'lead' })),
     ).toBe(true);
   });
 
@@ -309,16 +309,16 @@ describe('leadMarkerFollowsClock', () => {
   // in time, so the marker has a write column to show and must show it.
   test('another section counts once Rec is armed', () => {
     expect(
-      leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing', leadRecording: true })),
+      leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing', recordingTrack: 'lead' })),
     ).toBe(true);
     expect(
-      leadMarkerFollowsClock(markerState({ chordsPlayer: 'playing', leadRecording: true })),
+      leadMarkerFollowsClock(markerState({ chordsPlayer: 'playing', recordingTrack: 'lead' })),
     ).toBe(true);
   });
 
   // ...and the line this predicate draws that leadClockActive does not: a
   // running clock the lead is neither sounding on nor capturing from writes
-  // nothing (recordLeadNote returns false while leadRecording is off), so a
+  // nothing (recordLeadNote returns false unless recordingTrack is 'lead'), so a
   // marker sweeping the grid would animate a write head that does not exist.
   test('a clock with nothing armed and the lead silent does not move it', () => {
     expect(leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing' }))).toBe(false);
@@ -326,6 +326,6 @@ describe('leadMarkerFollowsClock', () => {
   });
 
   test('arming alone, with no clock anywhere, does not move it', () => {
-    expect(leadMarkerFollowsClock(markerState({ leadRecording: true }))).toBe(false);
+    expect(leadMarkerFollowsClock(markerState({ recordingTrack: 'lead' }))).toBe(false);
   });
 });

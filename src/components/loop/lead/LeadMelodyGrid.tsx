@@ -564,8 +564,9 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
   const copySelectedLeadBar = useAppStore((s) => s[actions.copyBar]);
   const pasteIntoSelectedLeadBar = useAppStore((s) => s[actions.pasteBar]);
   const hasClipboard = useAppStore((s) => s[track.clipboard] !== null);
-  const leadRecording = useAppStore((s) => s.leadRecording);
-  const setLeadRecording = useAppStore((s) => s.setLeadRecording);
+  const recordingTrack = useAppStore((s) => s.recordingTrack);
+  const setRecordingTrack = useAppStore((s) => s.setRecordingTrack);
+  const armed = recordingTrack === trackId;
 
   const setMelodyNoteLength = useAppStore((s) => s[actions.setNoteLength]);
   const onResize = useCallback(
@@ -819,10 +820,10 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
                 id={`btn-${trackId}-record`}
                 icon={<Circle className="w-3 h-3" />}
                 label="Rec"
-                onClick={() => setLeadRecording(!leadRecording)}
-                pressed={leadRecording}
+                onClick={() => setRecordingTrack(armed ? null : trackId)}
+                pressed={armed}
                 title={
-                  leadRecording
+                  armed
                     ? 'Stop recording played notes into the grid'
                     : `Record played notes into bar ${selectedBar + 1}, from the selected step`
                 }

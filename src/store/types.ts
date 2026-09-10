@@ -18,6 +18,7 @@ import type { BassStepChoice } from '@/data/bassPatterns';
 import type { LeadNote } from '../audio/leadMelody';
 import type { LoopCopyGroupId } from './loopCopy';
 import type { LeadStepResolutionId } from '../utils/stepResolution';
+import type { MelodyTrackId } from './melodyTracks';
 import type { PlaybackScope } from './playbackScope';
 import type { ProjectSlice } from './projectSlice';
 import type { SoloTrack } from './trackAudibility';
@@ -216,13 +217,6 @@ export interface LeadSlice {
   copySelectedLeadBar: () => void;
   pasteIntoSelectedLeadBar: () => void;
   /**
-   * Rec arming. NOT persisted: an armed recorder surviving a reload would
-   * capture the first note of the next session into a project the user
-   * thought they had only opened.
-   */
-  leadRecording: boolean;
-  setLeadRecording: (recording: boolean) => void;
-  /**
    * Write a PERFORMED note at the given column, or at the cursor if omitted.
    * The column is clamped to the live loop window either way; the cursor is
    * never moved. Declines if not armed, or if the note is anything the grid
@@ -398,6 +392,25 @@ export interface UiSlice {
    * multi-track set buildable at all.
    */
   soloTracks: SoloTrack[];
+  /**
+   * The melody track Rec is armed on, or null when nothing is armed.
+   *
+   * ONE value, not a boolean per track. Two booleans would have nothing
+   * stopping both being true, and one live-capture clock would then write two
+   * grids from a single keypress — a state unreachable through the UI, so no
+   * test would find it. `MelodyTrackId | null` makes it unrepresentable.
+   *
+   * It lives HERE rather than on LeadSlice/FxSlice because it spans both: a
+   * per-track slice cannot own a value whose whole purpose is being unique
+   * ACROSS tracks. That is also why MELODY_TRACKS gains no `recording`
+   * column — see its docblock.
+   *
+   * Session-only and NEVER persisted, like everything else in this slice: it
+   * is absent from partializeAppState and must stay absent, because an armed
+   * recorder surviving a reload would capture the first note of the next
+   * session into a project the user thought they had only opened.
+   */
+  recordingTrack: MelodyTrackId | null;
   // The synth keyboard's input mode. Transient by design: an input
   // preference, not composition data, so it does not travel with saved
   // projects (see partializeAppState in store.ts).
@@ -424,6 +437,7 @@ export interface UiSlice {
   setFocusTrack: (focus: MixLayerId) => void;
   toggleSoloTrack: (track: SoloTrack) => void;
   clearSoloTracks: () => void;
+  setRecordingTrack: (track: MelodyTrackId | null) => void;
   setKeyboardMode: (mode: KeyboardMode) => void;
   toggleFollowPlayhead: () => void;
   triggerMidiActivity: () => void;

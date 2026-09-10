@@ -221,9 +221,9 @@ internally consistent. Two mounted grids hold two clock subscriptions, which is 
 runs iff a player holds a subscription" rule permits: both are players and neither starts a timer.
 The step publisher is keyed per track (`StepPlayerId` gained `'fx'`); one shared slot would have the
 FX playhead driving the lead's marker at whichever grid's stride published last, with no error
-anywhere. **FX has no live recorder** — `leadRecording` and `store/leadRecord.ts` stay lead-only —
-and it is not a constraint on the material: a user who wants a counter-melody writes one and the
-track behaves identically. What it cannot do as shipped is a PITCH riser (the filter envelope ramps
+anywhere. **FX has no live recorder yet** — the armed track is one scalar (`recordingTrack` in the ui
+slice) and only Lead's grid can point it anywhere — and it is not a constraint on the material:
+a user who wants a counter-melody writes one and the track behaves identically. What it cannot do as shipped is a PITCH riser (the filter envelope ramps
 `filter.frequency` only) and its LFO still restarts on every note (the LFO oscillator is created per
 voice at note-on); a FILTER-SWEEP riser works today. Both limits are deferred to their own spec.
 
