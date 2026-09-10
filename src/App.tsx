@@ -1,16 +1,18 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AmbientBackdrop } from './components/ui/AmbientBackdrop';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { BottomInputDock } from './components/ui/BottomInputDock';
 import { Header } from './components/Header';
 import { InstantVibesBar } from './components/InstantVibesBar';
+import { ProjectLoading } from './components/ProjectLoading';
 import { LoopPage } from './components/loop/LoopPage';
 import { SongPage } from './components/song/SongPage';
 import { TransportBar } from './components/TransportBar';
 import { MidiSettingsModal } from './components/ui/MidiSettingsModal';
-import { ProjectManagerModal } from './components/project/ProjectManagerModal';
+import { ProjectNotice } from './components/project/ProjectNotice';
 import { UpdateBanner } from './components/ui/UpdateBanner';
 import { audioEngine } from './audio/engine';
-import { useAppStore } from './store/store';
+import { bootProject, useAppStore } from './store/store';
 import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
 import { useRouteSync } from './routing/useRouteSync';
 import { usePlayheadSync } from './components/usePlayheadSync';
@@ -82,7 +84,7 @@ export function registerIdleWake(
   };
 }
 
-export function App() {
+function Workspace() {
   // One-way bridge: store state -> audioEngine singleton (replaces the
   // engine-sync useEffect blocks that used to live here).
   useEngineSync();
@@ -121,19 +123,6 @@ export function App() {
 
   // UI slice
   const activeTab = useAppStore((s) => s.activeTab);
-
-  // A reloaded session restores `currentProjectId` from persisted state
-  // synchronously, but `currentProjectName` is transient — resolved only by
-  // refreshProjects() against IndexedDB, which ProjectManagerModal otherwise
-  // runs lazily on first open. Without this, the header shows "Unnamed
-  // project" for a saved project until the user opens that modal once. Only
-  // fired when there is an id to resolve, so a fresh untitled session pays
-  // nothing.
-  useEffect(() => {
-    if (useAppStore.getState().currentProjectId) {
-      void useAppStore.getState().refreshProjects();
-    }
-  }, []);
 
   // Initialize audio engine on first user interaction (click, keydown, or
   // pointerdown — the global input deck's keyboard can start audio before any
@@ -211,8 +200,51 @@ export function App() {
 
       {/* MIDI Settings Modal */}
       <MidiSettingsModal />
-      <ProjectManagerModal />
+
+      {/* The one surface for a parse/export/autosave failure — mounted at the
+          app root because the notice outlives whichever view raised it. */}
+      <ProjectNotice />
     </div>
+  );
+}
+
+/** Mount route, input and engine coordinators only against the loaded project. */
+function ProjectBootGate() {
+  // The project slot is read asynchronously, so the workspace is gated until
+  // it settles — rendering it early would flash factory content over the real
+  // project, and an edit made in that window would autosave over it.
+  const [booted, setBooted] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void bootProject()
+      .catch((err: unknown) => {
+        // A rejected load must not be an unhandled rejection: `loadProject`
+        // turns every storage failure into a typed result, so reaching here
+        // means something threw outright — the store keeps its factory
+        // content and the workspace is still revealed below.
+        console.error('[boot] project load failed; continuing with factory content', err);
+      })
+      .finally(() => {
+        if (!cancelled) setBooted(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return booted ? <Workspace /> : <ProjectLoading />;
+}
+
+/**
+ * The crash boundary wraps the workspace rather than sitting inside it: an
+ * error thrown by Workspace's own render — a slice selector, a theme lookup —
+ * could not be caught by a boundary that Workspace rendered itself.
+ */
+export function App() {
+  return (
+    <ErrorBoundary showDetails={import.meta.env.DEV === true}>
+      <ProjectBootGate />
+    </ErrorBoundary>
   );
 }
 

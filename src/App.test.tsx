@@ -1,5 +1,8 @@
-import { describe, expect, test } from 'bun:test';
-import { registerFirstGesture, registerIdleWake } from './App';
+import { describe, expect, spyOn, test } from 'bun:test';
+import React from 'react';
+import { renderToString } from 'react-dom/server';
+import * as routing from './routing/useRouteSync';
+import { App, registerFirstGesture, registerIdleWake } from './App';
 
 /**
  * A minimal EventTarget stand-in: no DOM, just enough of the
@@ -137,4 +140,17 @@ describe('registerIdleWake', () => {
     target.fire('keydown');
     expect(woken).toBe(0);
   });
+});
+
+// Server rendering does not run effects, so boot is still pending. Routing must
+// not even mount against the placeholder loops: its mount effect would consume
+// a deep link before the IndexedDB project makes that loop available.
+test('pending project boot does not mount the route coordinator', () => {
+  const routeSync = spyOn(routing, 'useRouteSync').mockImplementation(() => {});
+  try {
+    renderToString(<App />);
+    expect(routeSync).not.toHaveBeenCalled();
+  } finally {
+    routeSync.mockRestore();
+  }
 });
