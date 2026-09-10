@@ -228,9 +228,11 @@ once and one keypress can never write two grids; `store/leadRecord.ts` is a fact
 shared anchor collector rather than one per bridge. The Rec button renders on whichever melody
 grid `melodyTrackForFocus(focusTrack)` names and on neither when focus is chord, bass, pad or
 drum, and a focus change away from the armed track disarms it — which is why nothing couples the
-arm back to the audition target: the armed track already IS the focused track. What it cannot do as shipped is a PITCH riser (the filter envelope ramps
-`filter.frequency` only) and its LFO still restarts on every note (the LFO oscillator is created per
-voice at note-on); a FILTER-SWEEP riser works today. Both limits are deferred to their own spec.
+arm back to the audition target: the armed track already IS the focused track. Separately, the FX
+track's synth voice cannot do a PITCH riser as shipped (the filter envelope ramps
+`filter.frequency` only), and its LFO still restarts on every note (the LFO oscillator is created
+per voice at note-on); a FILTER-SWEEP riser works today. Both limits are deferred to their own
+spec.
 
 **A scale-locked lead grid borrows a row; it never hides a note.** A note outside the key is
 never deleted by a view change — before, it simply had no row to be drawn on, so switching to
