@@ -30,6 +30,7 @@ import {
   leadNotesInWindow,
   leadOutOfScaleRows,
   leadPitchRows,
+  leadPreviewHoldSec,
   leadRowLabel,
   leadRowLabelTone,
   leadSpanClasses,
@@ -562,14 +563,26 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
   // is not performing a note, so the note-input bus must not see it — and it
   // runs on the 'preview' bus, so its release cannot cut a key the player is
   // holding at the same pitch. It calls audioEngine.init() itself.
+  //
+  // The length comes from leadPreviewHoldSec, not from a constant: a fixed gate
+  // is silent for any patch whose attack outruns it, so its only safe value is
+  // a measurement against the slowest patch in the library — a hidden
+  // dependency on the preset table. `lenTicks` omitted means a row label, which
+  // sounds one beat; passed, it means a cell, which sounds what it draws.
+  //
+  // bpm is read off getState() rather than subscribed to. This grid already
+  // re-renders once per 16th to move the playhead, and a preview is a click:
+  // the value at click time is the only one that can matter, and a subscription
+  // here would add a re-render of every mounted melody grid per tempo change
+  // for a value nothing renders.
   const previewNote = useCallback(
-    (note: string) => {
+    (note: string, lenTicks?: number) => {
       previewSequencerNote(note, synthParams, undefined, {
-        holdSec: 0.22,
+        holdSec: leadPreviewHoldSec(useAppStore.getState().bpm, stride, lenTicks),
         releaseSec: synthParams.release,
       });
     },
-    [synthParams],
+    [synthParams, stride],
   );
 
   // Clamped again HERE, not only on write: a meter or loop-length change can

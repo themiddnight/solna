@@ -148,6 +148,30 @@ describe('preview handle lifetimes', () => {
   });
 });
 
+describe('previewSequencerNote default gate', () => {
+  // SequencerView's row preview passes no options at all, so this default IS
+  // that surface's behaviour. The melody grid used to reach in and shorten it
+  // to 0.22 s at its own call site; it now passes a musical length instead,
+  // and this pins the default so a future edit there cannot drift the drum
+  // rows with it.
+  test('holds 0.5 s when the caller states no length', () => {
+    const { restore } = withFakeAudioEngine();
+    try {
+      const handle = previewSequencerNote('C4', SYNTH, 0.8);
+      const voice = Array.from(
+        (audioEngine as any).sourceVoices.get('preview') as Set<{
+          startTime: number;
+          releaseScheduledAt: number;
+        }>,
+      )[0];
+      expect(voice.releaseScheduledAt - voice.startTime).toBeCloseTo(0.5, 10);
+      handle();
+    } finally {
+      restore();
+    }
+  });
+});
+
 import {
   PREVIEW_CHORD_DURATION,
   PREVIEW_LOOKAHEAD_SEC,
