@@ -92,6 +92,14 @@ export function createProjectSlice(set: Set, get: Get, projectStore: ProjectStor
       // the same atomic set() as the content, is what makes the guarantee hold
       // regardless of which loop id happens to land.
       soloTracks: [],
+      // Same reasoning, same atomic patch: the arm is scoped to the loop the
+      // user was recording into, and a whole-content swap leaves nothing for
+      // it to still name. leadRecord.ts's startRecordArmSync watches
+      // activeLoopId, but loop ids are not unique across projects (every
+      // fresh project's default loop is `loop-default-1`), so that sync
+      // cannot catch this on its own — install() must clear it directly, the
+      // way it already does for soloTracks.
+      recordingTrack: null,
       currentProjectId: identity.id,
       currentProjectName: identity.name,
       projectBaselineHash: saved ? fingerprintContent(content) : null,

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type React from 'react';
@@ -7,6 +7,9 @@ import { LeadMelodyHeaders, LeadMelodyGrid, LeadMarker, LeadMarkerView } from '.
 import { stepCells } from '@/components/sequencerGrid';
 import { getMeter } from '@/utils/meter';
 import { leadColumnCells } from './melodyGrid';
+import { useAppStore } from '@/store/store';
+import type { MixLayerId } from '@/store/focusTrack';
+import type { MelodyTrackId } from '@/store/melodyTracks';
 
 const source = readFileSync(
   join(process.cwd(), 'src/components/loop/lead/LeadMelodyGrid.tsx'),
@@ -99,17 +102,54 @@ describe('LeadMelodyGrid — the fx track', () => {
     expect(leadHtml).toContain('>Melody</span>');
   });
 
-  test('has no recorder — no Rec button at all', () => {
-    expect(fxHtml).not.toContain('id="btn-fx-record"');
-    expect(leadHtml).toContain('id="btn-lead-record"');
-  });
-
   test('every DOM id is prefixed by its own track, so two mounted grids never collide', () => {
     expect(fxHtml).toContain('id="btn-fx-clear"');
     expect(fxHtml).toContain('id="select-fx-loop-length"');
     expect(fxHtml).not.toContain('id="btn-lead-clear"');
     expect(leadHtml).toContain('id="btn-lead-clear"');
     expect(leadHtml).not.toContain('id="btn-fx-clear"');
+  });
+});
+
+describe('LeadMelodyGrid — Rec follows focus', () => {
+  afterEach(() => {
+    useAppStore.setState({ focusTrack: 'synth' });
+  });
+
+  // These read through useLiveStore, which serves getState() for BOTH
+  // snapshots, so a setState before renderToString is actually visible — a
+  // plain useAppStore selector would render creation-time state and this whole
+  // block would silently assert against 'synth'.
+  const render = (focus: MixLayerId, trackId: MelodyTrackId): string => {
+    useAppStore.setState({ focusTrack: focus });
+    return renderToString(<LeadMelodyGrid trackId={trackId} />);
+  };
+
+  test('the focused melody grid carries Rec and the other does not', () => {
+    expect(render('synth', 'lead')).toContain('id="btn-lead-record"');
+    expect(render('synth', 'fx')).not.toContain('id="btn-fx-record"');
+    expect(render('fx', 'fx')).toContain('id="btn-fx-record"');
+    expect(render('fx', 'lead')).not.toContain('id="btn-lead-record"');
+  });
+
+  test('no melody track is focused, so neither grid offers Rec', () => {
+    expect(render('drum', 'lead')).not.toContain('id="btn-lead-record"');
+    expect(render('drum', 'fx')).not.toContain('id="btn-fx-record"');
+    expect(render('chord', 'lead')).not.toContain('id="btn-lead-record"');
+  });
+
+  test('the action lane keeps both of its children, so the actions stay pinned right', () => {
+    // With Rec hidden (focus 'drum'), the left ToolbarGroup renders empty but
+    // present — its opening AND closing tag immediately precede the action
+    // cluster's opening tag, all inside the SAME `justify-between` lane. A
+    // deleted empty group would collapse this into one child and break the
+    // literal match, unlike a bare `toContain('justify-between')`, which the
+    // lane satisfies on its own regardless of how many children it has.
+    expect(render('drum', 'lead')).toContain(
+      'flex items-center flex-wrap gap-x-3 gap-y-2 mt-3 justify-between">' +
+        '<div class="flex items-center gap-1 shrink-0"></div>' +
+        '<div class="flex items-center flex-wrap gap-x-3 gap-y-2">',
+    );
   });
 });
 

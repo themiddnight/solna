@@ -11,13 +11,14 @@ import { leadMarkerColumn } from './melodyGrid';
  * track's cursor stays in the store so a header click during playback still
  * takes effect the moment the transport stops.
  *
- * The live source for LEAD is leadMarkerFollowsClock, not
- * `leadPlayer !== 'stopped'`: this column is also where live capture writes,
- * so it has to track the clock while Rec is armed and anything at all is
- * playing. With the narrower predicate, playing along to the drums with the
- * lead stopped put every captured note in time while the marker sat on the
- * cursor, pointing at a column nothing was being written to. FX has no
- * recorder, so its marker follows its own player state and nothing else.
+ * The live source is leadMarkerFollowsClock for BOTH tracks, not
+ * `player !== 'stopped'`: this column is also where live capture writes, so it
+ * has to track the clock while Rec is armed on this track and anything at all
+ * is playing. With the narrower predicate, playing along to the drums with the
+ * track stopped put every captured note in time while the marker sat on the
+ * cursor, pointing at a column nothing was being written to. The predicate
+ * takes the track id, so one arm value cannot make the other grid's marker
+ * sweep.
  *
  * This predicate is only safe because useLeadStepPublisher produces on the
  * same gate, per track. Widening it alone was tried during DEV-374 and
@@ -34,8 +35,6 @@ export function useLeadMarkerColumn(trackId: MelodyTrackId, columns: number): nu
   const track = melodyTrack(trackId);
   const currentStep = useCurrentStep(track.stepPlayer);
   const cursor = useAppStore((s) => s[track.cursor]);
-  const followsClock = useAppStore((s) =>
-    trackId === 'lead' ? leadMarkerFollowsClock(s) : s[track.player] !== 'stopped',
-  );
+  const followsClock = useAppStore((s) => leadMarkerFollowsClock(s, trackId));
   return leadMarkerColumn(followsClock, currentStep, cursor, columns);
 }

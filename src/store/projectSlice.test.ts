@@ -128,6 +128,20 @@ describe('newProject', () => {
     unsub();
     expect(order).toEqual(['chord', 'bass', 'pad', 'set']);
   });
+
+  /**
+   * install()'s own clear, not leadRecord.ts's startRecordArmSync: loop ids
+   * are not unique across projects (every fresh project's default loop is
+   * `loop-default-1`), so an incoming project can leave activeLoopId
+   * unchanged and the nav sync would see nothing to disarm on. The atomic
+   * `set()` is what has to catch it, exactly like soloTracks above it.
+   */
+  test('a project install clears an armed Rec track', async () => {
+    const { useAppStore, slice } = await sliceWithBackend();
+    useAppStore.setState({ recordingTrack: 'lead' });
+    slice.newProject();
+    expect(useAppStore.getState().recordingTrack).toBeNull();
+  });
 });
 
 describe('saveProject / saveProjectAs', () => {

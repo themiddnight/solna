@@ -37,14 +37,16 @@ export function leadMarkerPublishes(
  *
  * Split out of useLeadPlayback because the two answer different questions
  * and are gated differently. The scheduler runs while the TRACK's player
- * plays; the lead marker also has to run while capture is armed against
- * somebody else's clock, because the column it shows is where that capture
- * writes — with the lead stopped and the metronome or the drums running,
- * capture was in time while the marker sat frozen on leadCursor, pointing at
- * a column nothing was being written to. leadMarkerFollowsClock draws that
- * line, and store/leadRecord.ts says why it is not simply the recorder's own
- * gate. FX has no recorder, so its marker follows its own player state and
- * nothing else.
+ * plays; the marker also has to run while capture is armed on this track
+ * against somebody else's clock, because the column it shows is where that
+ * capture writes — with the track stopped and the metronome or the drums
+ * running, capture was in time while the marker sat frozen on the cursor,
+ * pointing at a column nothing was being written to. leadMarkerFollowsClock
+ * draws that line, and store/leadRecord.ts says why it is not simply the
+ * recorder's own gate.
+ *
+ * Both tracks are gated the same way, on their own id: the arm is one value
+ * (`recordingTrack`), so the term is per track rather than per file.
  *
  * Widening the CONSUMER alone does not work and was tried: useLeadMarker's
  * predicate without a producer behind it froze the marker at a stale zero,
@@ -64,13 +66,11 @@ export function leadMarkerPublishes(
  */
 export function useLeadStepPublisher(trackId: MelodyTrackId): void {
   const track = melodyTrack(trackId);
-  // Lead follows the WIDER gate — its marker must also track somebody else's
-  // clock while Rec is armed, because that column is where live capture writes
-  // (store/leadRecord.ts says why that is not simply the recorder's own gate).
-  // FX has no recorder, so its marker follows its own player and nothing else.
-  const followsClock = useAppStore((s) =>
-    trackId === 'lead' ? leadMarkerFollowsClock(s) : s.fxPlayer !== 'stopped',
-  );
+  // BOTH tracks follow the wider gate for their own id — a track's marker must
+  // also track somebody else's clock while Rec is armed on it, because that
+  // column is where live capture writes (store/leadRecord.ts says why that is
+  // not simply the recorder's own gate).
+  const followsClock = useAppStore((s) => leadMarkerFollowsClock(s, trackId));
 
   useEffect(() => {
     if (!followsClock) {

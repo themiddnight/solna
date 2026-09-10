@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore } from './store';
-import { startLeadRecordBridge, leadClockActive, leadMarkerFollowsClock } from './leadRecord';
+import { startMelodyRecordBridges, leadClockActive, leadMarkerFollowsClock, RECORD_ARM_NAV_SOURCES } from './leadRecord';
 import { emitNoteInput, resetNoteInputListeners } from '../audio/playback/noteInputBus';
 import { getMeter } from '../utils/meter';
 import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '../utils/stepResolution';
@@ -33,7 +33,8 @@ beforeEach(() => {
     leadMelodyView: 'chromatic',
     leadMelodyOctave: 3,
     leadCursor: 0,
-    leadRecording: true,
+    focusTrack: 'synth',
+    recordingTrack: 'lead',
     leadPlayer: 'stopped',
     chordsPlayer: 'stopped',
     sequencerPlayer: 'stopped',
@@ -41,13 +42,28 @@ beforeEach(() => {
     scaleRoot: 'C',
     scaleType: 'Major',
   });
-  stop = startLeadRecordBridge(deps);
+  stop = startMelodyRecordBridges(deps);
 });
 
 afterEach(() => {
   stop?.();
   stop = null;
   resetNoteInputListeners();
+  useAppStore.getState().setFocusTrack('synth');
+  // bun runs the whole suite in ONE process, so anything this file arms or
+  // writes must be put back here rather than left to the next file's own
+  // beforeEach — `recordingTrack` in particular is read by uiSlice.test.ts's
+  // very first test, with nothing else resetting it in between.
+  useAppStore.setState({
+    recordingTrack: null,
+    leadPlayer: 'stopped',
+    chordsPlayer: 'stopped',
+    sequencerPlayer: 'stopped',
+    metronomeActive: false,
+    leadMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
+    fxMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
+    fxPlayer: 'stopped',
+  });
 });
 
 const down = (note: string): void => emitNoteInput({ kind: 'on', note, velocity: 1 });
@@ -104,7 +120,7 @@ describe('leadRecord bridge', () => {
   });
 
   test('nothing is captured while disarmed', () => {
-    useAppStore.setState({ leadRecording: false });
+    useAppStore.setState({ recordingTrack: null });
 
     down('C4');
 
@@ -199,7 +215,7 @@ describe('leadRecord bridge — live capture', () => {
     liveStep = 4;
     down('C4');
 
-    useAppStore.setState({ leadRecording: false });
+    useAppStore.setState({ recordingTrack: null });
     liveStep = 8;
     up('C4');
 
@@ -264,6 +280,7 @@ describe('leadClockActive', () => {
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
+    fxPlayer: 'stopped',
     ...patch,
   });
 
@@ -286,46 +303,276 @@ describe('leadClockActive', () => {
   test('a player still stopping still owns the clock', () => {
     expect(leadClockActive(clockState({ leadPlayer: 'stopping' }))).toBe(true);
   });
+
+  // FX is music too. The question is whether there is something to play along
+  // to, not whose track it is: recording lead over an FX riser has a clock.
+  test('the fx player counts, exactly as the drums and the chords do', () => {
+    expect(leadClockActive(clockState({ fxPlayer: 'playing' }))).toBe(true);
+  });
 });
 
 describe('leadMarkerFollowsClock', () => {
   type MarkerState = Parameters<typeof leadMarkerFollowsClock>[0];
-  const markerState = (patch: Partial<MarkerState>): MarkerState => ({
+  const markerState = (over: Partial<MarkerState>): MarkerState => ({
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
-    leadRecording: false,
-    ...patch,
+    fxPlayer: 'stopped',
+    recordingTrack: null,
+    ...over,
   });
 
-  test('the lead playing is enough on its own, armed or not', () => {
-    expect(leadMarkerFollowsClock(markerState({ leadPlayer: 'playing' }))).toBe(true);
-    expect(
-      leadMarkerFollowsClock(markerState({ leadPlayer: 'playing', leadRecording: true })),
-    ).toBe(true);
+  test('a track that is playing always follows the clock', () => {
+    expect(leadMarkerFollowsClock(markerState({ leadPlayer: 'playing' }), 'lead')).toBe(true);
+    expect(leadMarkerFollowsClock(markerState({ fxPlayer: 'playing' }), 'fx')).toBe(true);
   });
 
-  // The gap DEV-378 closes: something else is playing, capture is armed and
-  // in time, so the marker has a write column to show and must show it.
-  test('another section counts once Rec is armed', () => {
-    expect(
-      leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing', leadRecording: true })),
-    ).toBe(true);
-    expect(
-      leadMarkerFollowsClock(markerState({ chordsPlayer: 'playing', leadRecording: true })),
-    ).toBe(true);
+  // The gates are per track, and the arm is one value: the FX marker must not
+  // follow the clock because LEAD is armed, and vice versa.
+  test('the recording term only fires for the track the arm names', () => {
+    const armedFx = markerState({ sequencerPlayer: 'playing', recordingTrack: 'fx' });
+    expect(leadMarkerFollowsClock(armedFx, 'fx')).toBe(true);
+    expect(leadMarkerFollowsClock(armedFx, 'lead')).toBe(false);
+
+    const armedLead = markerState({ sequencerPlayer: 'playing', recordingTrack: 'lead' });
+    expect(leadMarkerFollowsClock(armedLead, 'lead')).toBe(true);
+    expect(leadMarkerFollowsClock(armedLead, 'fx')).toBe(false);
   });
 
   // ...and the line this predicate draws that leadClockActive does not: a
-  // running clock the lead is neither sounding on nor capturing from writes
-  // nothing (recordLeadNote returns false while leadRecording is off), so a
-  // marker sweeping the grid would animate a write head that does not exist.
-  test('a clock with nothing armed and the lead silent does not move it', () => {
-    expect(leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing' }))).toBe(false);
+  // clock running with nothing armed and the track silent. Nothing is written
+  // there, so a mark sweeping the grid would animate a write head that does
+  // not exist.
+  test('a clock with nothing armed does not move a stopped marker', () => {
+    expect(leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing' }), 'lead')).toBe(false);
+    expect(leadMarkerFollowsClock(markerState({ sequencerPlayer: 'playing' }), 'fx')).toBe(false);
     expect(leadClockActive(markerState({ sequencerPlayer: 'playing' }))).toBe(true);
   });
 
-  test('arming alone, with no clock anywhere, does not move it', () => {
-    expect(leadMarkerFollowsClock(markerState({ leadRecording: true }))).toBe(false);
+  test('armed against a silent transport follows nothing', () => {
+    expect(leadMarkerFollowsClock(markerState({ recordingTrack: 'lead' }), 'lead')).toBe(false);
+  });
+});
+
+describe('leadRecord — one factory, two bridges', () => {
+  const fxAt = (col: number): string[] => {
+    const state = useAppStore.getState();
+    const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+    return state.fxMelodySteps[leadStoredIndexAt(col, stepsPerBar, TICKS_PER_SIXTEENTH)]
+      .map((n) => n.note)
+      .sort();
+  };
+
+  beforeEach(() => {
+    useAppStore.setState({
+      fxMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
+      fxLoopLength: 1,
+      fxMelodyView: 'chromatic',
+      fxMelodyOctave: 3,
+      fxCursor: 0,
+      fxPlayer: 'stopped',
+    });
+  });
+
+  test('the armed track is the one that gets written, and the other stays empty', () => {
+    useAppStore.setState({ recordingTrack: 'fx' });
+
+    down('C4');
+    up('C4');
+
+    expect(fxAt(0)).toEqual(['C4']);
+    expect(at(0)).toEqual([]);
+  });
+
+  test('with nothing armed, one keypress writes neither grid', () => {
+    useAppStore.setState({ recordingTrack: null });
+
+    down('C4');
+    up('C4');
+
+    expect(at(0)).toEqual([]);
+    expect(fxAt(0)).toEqual([]);
+  });
+
+  test('the fx bridge captures held length through its own setter', () => {
+    useAppStore.setState({ recordingTrack: 'fx', leadPlayer: 'playing' });
+    liveStep = 4;
+    down('C4');
+    liveStep = 8;
+    up('C4');
+
+    const state = useAppStore.getState();
+    const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+    const row = state.fxMelodySteps[leadStoredIndexAt(4, stepsPerBar, TICKS_PER_SIXTEENTH)];
+    expect(row.find((n) => n.note === 'C4')?.len).toBe(8);
+  });
+
+  /**
+   * ONE collector for both tracks, not one per bridge. startLeadLiveClock is a
+   * module singleton whose second concurrent start returns a disposer that
+   * does nothing — so two bridges each believing they own a collector means
+   * the first one to stop tears down the anchors the other is still reading,
+   * with no error anywhere. Hoisting it out of the bridge is what makes that
+   * unrepresentable, and it keeps exactly one holder of the shared clock.
+   */
+  test('starts exactly one anchor collector for both tracks', () => {
+    expect(clockRuns).toBe(0);
+    useAppStore.setState({ leadPlayer: 'playing' });
+    expect(clockRuns).toBe(1);
+    useAppStore.setState({ leadPlayer: 'stopped' });
+    expect(clockRuns).toBe(0);
+  });
+
+  test('a note held on the FX track when the transport stops must not later extend anything', () => {
+    useAppStore.setState({ recordingTrack: 'fx', leadPlayer: 'playing' });
+    liveStep = 4;
+    down('C4');
+
+    useAppStore.setState({ leadPlayer: 'stopped' });
+
+    liveStep = 40;
+    up('C4');
+
+    const state = useAppStore.getState();
+    const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+    const row = state.fxMelodySteps[leadStoredIndexAt(4, stepsPerBar, TICKS_PER_SIXTEENTH)];
+    expect(row.find((n) => n.note === 'C4')?.len).toBe(TICKS_PER_SIXTEENTH);
+  });
+
+  /**
+   * The composed disposer must release BOTH per-track bridges, not just
+   * lead's. Asserted per track, on purpose: a `stops` list that dropped the
+   * fx entry would still pass a lead-only or an aggregate check, because
+   * lead's own bridge would still be torn down correctly.
+   */
+  test('the composed disposer releases the fx bridge', () => {
+    useAppStore.setState({ recordingTrack: 'fx' });
+    stop?.();
+    stop = null;
+
+    down('C4');
+    up('C4');
+
+    expect(fxAt(0)).toEqual([]);
+  });
+
+  test('the composed disposer still releases the lead bridge', () => {
+    useAppStore.setState({ recordingTrack: 'lead' });
+    stop?.();
+    stop = null;
+
+    down('C4');
+    up('C4');
+
+    expect(at(0)).toEqual([]);
+  });
+});
+
+describe('the arm follows focus', () => {
+  /**
+   * One subscription, not a clear inside setFocusTrack — the soloNav.ts
+   * precedent, and for the same reason: setFocusTrack is not the only writer
+   * (a project load or a hydration writes the field through setState), and a
+   * missed writer is silent, because the recorder just keeps capturing into a
+   * grid the user is no longer looking at.
+   */
+  test('a focus change away from the armed track disarms it', () => {
+    useAppStore.setState({ focusTrack: 'synth', recordingTrack: 'lead' });
+
+    useAppStore.getState().setFocusTrack('chord');
+
+    expect(useAppStore.getState().recordingTrack).toBeNull();
+  });
+
+  test('crossing between the two melody tracks disarms rather than following', () => {
+    useAppStore.setState({ focusTrack: 'synth', recordingTrack: 'lead' });
+
+    useAppStore.getState().setFocusTrack('fx');
+
+    // Never re-armed on the new track: Rec is a deliberate gesture and a focus
+    // change is navigation. Arming on navigation would put the app into
+    // record because the user clicked a mixer row.
+    expect(useAppStore.getState().recordingTrack).toBeNull();
+  });
+
+  test('a focus change that lands back on the armed track leaves it armed', () => {
+    // The fixture itself must not be observed as a navigation: restart the
+    // bridge around it so the sync's cached focus is 'drum' from the start,
+    // the same way a project load would establish it, rather than the live
+    // subscription seeing a synth -> drum hop it would otherwise (correctly)
+    // disarm.
+    stop?.();
+    stop = null;
+    useAppStore.setState({ focusTrack: 'drum', recordingTrack: 'lead' });
+    stop = startMelodyRecordBridges(deps);
+
+    useAppStore.getState().setFocusTrack('synth');
+
+    expect(useAppStore.getState().recordingTrack).toBe('lead');
+  });
+
+  /**
+   * Pins that `startRecordArmSync`'s unsubscribe is actually in
+   * `startMelodyRecordBridges`'s composed `stops` list. Verified by deletion
+   * per the review's nit: dropping the entry leaves this suite green
+   * everywhere else, because nothing else exercises the disposer's effect on
+   * this particular subscription.
+   */
+  test('the composed disposer releases the arm sync — a focus change no longer disarms', () => {
+    useAppStore.setState({ focusTrack: 'synth', recordingTrack: 'lead' });
+    stop?.();
+    stop = null;
+
+    useAppStore.getState().setFocusTrack('chord');
+
+    expect(useAppStore.getState().recordingTrack).toBe('lead');
+  });
+});
+
+describe('the arm follows navigation, mirroring soloNav.ts', () => {
+  let navBaseline: { activeTab: ReturnType<typeof useAppStore.getState>['activeTab']; activeLoopId: string };
+
+  beforeEach(() => {
+    const state = useAppStore.getState();
+    navBaseline = { activeTab: state.activeTab, activeLoopId: state.activeLoopId };
+    // TWO writes, not one: the arm sync is live here, so a combined patch that
+    // also moved the layer (an earlier file leaving activeTab on a Song tab)
+    // would be observed as a navigation and disarm the fixture itself. Settle
+    // the tab first, then arm.
+    useAppStore.setState({ activeTab: 'sound' });
+    useAppStore.setState({ recordingTrack: 'lead' });
+  });
+
+  afterEach(() => {
+    useAppStore.setState({ ...navBaseline, recordingTrack: null });
+  });
+
+  test('leaving the Loop layer disarms', () => {
+    useAppStore.setState({ activeTab: 'arrange' });
+
+    expect(useAppStore.getState().recordingTrack).toBeNull();
+  });
+
+  test('changing the active loop disarms', () => {
+    useAppStore.setState({ activeLoopId: 'some-other-loop' });
+
+    expect(useAppStore.getState().recordingTrack).toBeNull();
+  });
+
+  test('a Sound <-> Pattern hop does NOT disarm', () => {
+    useAppStore.setState({ activeTab: 'pattern' });
+    expect(useAppStore.getState().recordingTrack).toBe('lead');
+
+    useAppStore.setState({ activeTab: 'sound' });
+    expect(useAppStore.getState().recordingTrack).toBe('lead');
+  });
+});
+
+// Removing an axis is already caught by the three per-axis tests above. ADDING
+// one is not, and an axis that silently starts disarming the recorder is a
+// decision nobody made — soloNav.ts pins its own roster the same way.
+describe('RECORD_ARM_NAV_SOURCES', () => {
+  test('watches exactly the focus, the layer and the active loop', () => {
+    expect(Object.keys(RECORD_ARM_NAV_SOURCES).sort()).toEqual(['activeLoopId', 'focus', 'layer']);
   });
 });

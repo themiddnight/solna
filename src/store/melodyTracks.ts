@@ -28,9 +28,12 @@ import type { SoloTrack } from './trackAudibility';
  * else. `melodyTracks.test.ts` asserts the nine per-loop columns against
  * LOOP_FLAT_KEYS and leaves these two out of that check.
  *
- * There is no `recording` column: live capture is lead-only (store/leadRecord.ts,
- * and the one note-input dispatcher behind it), so the FX grid renders no Rec
- * button and its step publisher's gate is just its own player state.
+ * There is still no `recording` column, and now for a stronger reason than
+ * "lead-only": the ARMED TRACK is one scalar in the ui slice
+ * (`recordingTrack`), precisely so two tracks cannot be armed at once. A
+ * per-track `recording` field would make that state representable, and one
+ * live-capture clock would then write two grids from a single keypress. Both
+ * tracks' gates ask `recordingTrack === id` instead — see store/leadRecord.ts.
  */
 export const MELODY_TRACKS = [
   {

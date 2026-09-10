@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { startLeadRecordBridge } from './leadRecord';
+import { startMelodyRecordBridges } from './leadRecord';
 import { shallow } from 'zustand/shallow';
 import { audioEngine } from '../audio/engine';
 import { DRUM_KITS, DRUM_TYPES } from '@/data/drumKits';
@@ -422,8 +422,9 @@ export function stopEngineSync(): void {
 export function useEngineSync(): void {
   useEffect(() => startEngineSync(), []);
   // Started beside the engine bridge because it has the same shape: one
-  // subscription, for the whole life of the app, owned by nothing on screen.
-  useEffect(() => startLeadRecordBridge(), []);
+  // subscription set, for the whole life of the app, owned by nothing on
+  // screen. One anchor collector and one bridge per melody track.
+  useEffect(() => startMelodyRecordBridges(), []);
 }
 
 /**

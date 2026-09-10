@@ -221,11 +221,23 @@ internally consistent. Two mounted grids hold two clock subscriptions, which is 
 runs iff a player holds a subscription" rule permits: both are players and neither starts a timer.
 The step publisher is keyed per track (`StepPlayerId` gained `'fx'`); one shared slot would have the
 FX playhead driving the lead's marker at whichever grid's stride published last, with no error
-anywhere. **FX has no live recorder** — `leadRecording` and `store/leadRecord.ts` stay lead-only —
-and it is not a constraint on the material: a user who wants a counter-melody writes one and the
-track behaves identically. What it cannot do as shipped is a PITCH riser (the filter envelope ramps
-`filter.frequency` only) and its LFO still restarts on every note (the LFO oscillator is created per
-voice at note-on); a FILTER-SWEEP riser works today. Both limits are deferred to their own spec.
+anywhere. **Rec is armed per melody track, and the armed track is ONE value.**
+`recordingTrack: MelodyTrackId | null` lives in the ui slice, so two tracks can never be armed at
+once and one keypress can never write two grids; `store/leadRecord.ts` is a factory over
+`MELODY_TRACKS` and each bridge writes only while `recordingTrack` names its own row, with one
+shared anchor collector rather than one per bridge. The Rec button renders on whichever melody
+grid `melodyTrackForFocus(focusTrack)` names and on neither when focus is chord, bass, pad or
+drum. **The arm is cleared by any navigation away from the armed grid**, not by a focus change
+alone: `startRecordArmSync` watches the two axes `soloNav.ts` watches — the LAYER (derived from
+`activeTab`, so a Sound <-> Pattern hop does NOT disarm) and `activeLoopId` — PLUS the focus,
+which solo deliberately ignores, and a project install clears the arm in the same atomic patch
+that clears the solo set. A recorder left armed on a grid the user has navigated away from writes
+notes the user cannot see, and a focus change is not the only way to navigate away. Nothing
+couples the arm back to the audition target, because the armed track already IS the focused
+track. Separately, **the FX track's synth voice** cannot do a PITCH riser as shipped (the filter
+envelope ramps `filter.frequency` only), and its LFO still restarts on every note (the LFO
+oscillator is created per voice at note-on); a FILTER-SWEEP riser works today. Both limits are
+deferred to their own spec.
 
 **A scale-locked lead grid borrows a row; it never hides a note.** A note outside the key is
 never deleted by a view change — before, it simply had no row to be drawn on, so switching to

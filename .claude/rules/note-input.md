@@ -53,9 +53,10 @@ must not be able to swallow a note the user played.
 
 **A note-off is data now, not just a release.** Live capture (DEV-374) reads
 the gap between a note's on and its off, quantised in steps, and extends the
-written note through `setLeadNoteLength`. A source that plays a note but
-never announces the release therefore records a one-step note — audible,
-visible, and silently wrong. Announce both edges.
+written note through the armed track's length setter (`setLeadNoteLength` or
+`setFxNoteLength`). A source that plays a note but never announces the
+release therefore records a one-step note — audible, visible, and silently
+wrong. Announce both edges.
 
 **Sequenced notes are not input.** Playback goes through `playbackEngine`
 (`playbackNoteOn`), which is deliberately not on this bus. A step the

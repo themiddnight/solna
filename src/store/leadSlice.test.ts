@@ -23,7 +23,7 @@ function resetLead(): void {
     leadMelodyOctave: 3,
     leadCursor: 0,
     leadBarClipboard: null,
-    leadRecording: false,
+    recordingTrack: null,
     leadPlayer: 'stopped',
     // Every other lead field is reset here; leaving this one out let a
     // resolution set in one describe leak into the next, which is an
@@ -552,18 +552,18 @@ describe('lead slice — step entry', () => {
     const stepsPerBar = getMeter(state.meterId).stepsPerBar;
     return state.leadMelodySteps[leadStoredIndexAt(col, stepsPerBar, TICKS_PER_SIXTEENTH)];
   };
-  const arm = (): void => useAppStore.getState().setLeadRecording(true);
+  const arm = (): void => useAppStore.getState().setRecordingTrack('lead');
 
-  test('arming is off by default and toggles', () => {
-    expect(useAppStore.getState().leadRecording).toBe(false);
+  test('arming is off by default and points at the track it was set to', () => {
+    expect(useAppStore.getState().recordingTrack).toBeNull();
     arm();
-    expect(useAppStore.getState().leadRecording).toBe(true);
+    expect(useAppStore.getState().recordingTrack).toBe('lead');
   });
 
   test('arming is NOT persisted — a reload must never come back recording', () => {
     arm();
     const persisted = partializeAppState(useAppStore.getState()) as unknown as Record<string, unknown>;
-    expect('leadRecording' in persisted).toBe(false);
+    expect('recordingTrack' in persisted).toBe(false);
   });
 
   test('a recorded note lands at the cursor and reports that it wrote', () => {
