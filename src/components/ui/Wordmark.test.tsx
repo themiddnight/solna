@@ -4,12 +4,15 @@ import { renderToString } from 'react-dom/server';
 import { Wordmark } from './Wordmark';
 
 describe('Wordmark', () => {
-  test('is a real button with the accessible label and a 44px target', () => {
+  // A focusable span, not a <button>: it is rendered inside daisyUI's
+  // `dropdown`, whose open state is driven by `:focus-within`, and a nested
+  // button would swallow the focus the dropdown needs.
+  test('is a focusable span with a 44px target', () => {
     const html = renderToString(<Wordmark />);
-    expect(html).toContain('<button type="button"');
-    expect(html).toContain('aria-label="Open Project Manager"');
+    expect(html).toContain('tabindex="0"');
+    expect(html).toContain('role="button"');
     expect(html).toContain('min-h-11 min-w-11');
-    expect(html).toContain('h-8 w-8'); // the mark image is unchanged; padding lives on the button
+    expect(html).toContain('h-8 w-8'); // the mark image is unchanged; padding lives on the trigger
   });
 
   test('shows a hover and focus-visible affordance from theme tokens', () => {
@@ -18,11 +21,11 @@ describe('Wordmark', () => {
     expect(html).toContain('focus-visible:outline-primary');
   });
 
-  test('renders the dirty badge only when dirty', () => {
-    expect(renderToString(<Wordmark />)).not.toContain('Unsaved changes');
-    const html = renderToString(<Wordmark dirty />);
-    expect(html).toContain('indicator-item status status-warning status-sm');
-    expect(html).toContain('aria-label="Unsaved changes"');
+  // The wordmark carries no accessible name of its own any more: it is the
+  // ProjectMenu trigger, and that caller is what names the control.
+  test('takes its accessible name from the caller', () => {
+    expect(renderToString(<Wordmark />)).not.toContain('aria-label=');
+    expect(renderToString(<Wordmark ariaLabel="Project menu" />)).toContain('aria-label="Project menu"');
   });
 
   test('keeps the text props working', () => {

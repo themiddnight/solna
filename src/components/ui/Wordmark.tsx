@@ -11,48 +11,35 @@ interface WordmarkProps {
    * `hidden sm:inline`, which is what keeps its phone layout down to two rows).
    */
   textClassName?: string;
-  /** Opens the Project Manager. The wordmark is the feature's only entry point. */
-  onClick?: () => void;
-  /** Unsaved changes: shows the corner dot on the mark. */
-  dirty?: boolean;
+  /** Overridden by ProjectMenu, which names the control it wraps. */
+  ariaLabel?: string;
 }
 
 /**
- * Brand wordmark AND the Project Manager button. A real <button> so keyboard
- * focus, Enter/Space and screen-reader semantics come for free. The mark image
- * stays 32px; the 44px tap target comes from the button's min size — below
- * `sm` the text is hidden and this is the whole target, so it is a
- * requirement, not polish. Typography mirrors murva's Wordmark.
+ * The brand wordmark, and — through ProjectMenu — the project menu's trigger.
+ * Deliberately NOT a <button>: it is rendered inside daisyUI's `dropdown`,
+ * whose open state is driven by `:focus-within`, and a nested button would
+ * swallow the focus the dropdown needs.
  */
 export function Wordmark({
   markOnly = false,
   className = "",
   textClassName = "",
-  onClick,
-  dirty = false,
+  ariaLabel,
 }: WordmarkProps) {
   return (
-    <button
-      type="button"
-      aria-label="Open Project Manager"
-      onClick={onClick}
+    <span
+      tabIndex={0}
+      role="button"
+      aria-label={ariaLabel}
       className={`inline-flex items-center gap-2 min-h-11 min-w-11 px-1.5 rounded-box cursor-pointer transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${className}`}
     >
-      <span className="indicator">
-        {dirty && (
-          <span
-            role="status"
-            aria-label="Unsaved changes"
-            className="indicator-item status status-warning status-sm"
-          />
-        )}
-        <img
-          src="/assets/favicon.svg"
-          alt=""
-          className="h-8 w-8"
-          draggable={false}
-        />
-      </span>
+      <img
+        src="/assets/favicon.svg"
+        alt=""
+        className="h-8 w-8"
+        draggable={false}
+      />
       {!markOnly && (
         <span
           className={`text-2xl font-normal text-primary leading-none ${textClassName}`}
@@ -61,6 +48,6 @@ export function Wordmark({
           solna
         </span>
       )}
-    </button>
+    </span>
   );
 }

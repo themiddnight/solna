@@ -15,10 +15,9 @@ import { useAppStore } from "../store/store";
 import { useLiveStore } from "./ui/useLiveStore";
 import { GROUP_LABEL, HEADER_FIELD_SHELL, HEADER_GROUP, HEADER_SELECT } from "./ui/fieldClasses";
 import { IconButton } from "./ui/IconButton";
-import { Wordmark } from "./ui/Wordmark";
 import { LoopSelector } from "./loop/LoopSelector";
+import { ProjectMenu } from "./project/ProjectMenu";
 import { VIEW_META } from "./viewMeta";
-import { sessionLabel } from "./project/projectManagerFlow";
 
 /** The two layers in toggle order. Labels are user-facing copy. */
 export const LAYER_META: ReadonlyArray<{ layer: Layer; label: string }> = [
@@ -130,41 +129,75 @@ export function ScaleSelects({
   );
 }
 
+/** What an unnamed project reads as, in the header and in the menu. */
+export const UNTITLED_PROJECT_LABEL = 'Untitled project';
+
+/**
+ * The one place a project's name becomes display text. `null` is the store's
+ * spelling of "never named" (see projectSlice's `normalizeName`), so the
+ * label is derived rather than stored — a stored label would go stale the
+ * moment the name changed.
+ */
+export function projectDisplayName(name: string | null): string {
+  return name ?? UNTITLED_PROJECT_LABEL;
+}
+
 interface ProjectNameLabelProps {
   layer: Layer;
-  currentProjectId: string | null;
-  currentProjectName: string | null;
 }
 
 /**
- * The current project's name, song layer only. Takes `layer` as a prop
- * (rather than reading `activeTab` itself) so it can be unit-tested directly:
- * under `renderToString`, `Header`'s own `activeTab` read is a plain
+ * The project's name, song layer only, editable in place. Takes `layer` as a
+ * prop (rather than reading `activeTab` itself) so it can be unit-tested
+ * directly: under `renderToString`, `Header`'s own `activeTab` read is a plain
  * `useAppStore` selector, which serves the store's CREATION-time value and
  * never reflects a test's `setState` (see .claude/rules/testing.md) — there is
  * no way to reach the song layer through a rendered `<Header />` in a test.
+ *
+ * `draft` is local state, never a store value: a keystroke must not write the
+ * store (each write would re-render every mounted view, and the name is
+ * envelope rather than content). Commit is Enter or blur; Escape reverts.
  */
-export function ProjectNameLabel({ layer, currentProjectId, currentProjectName }: ProjectNameLabelProps) {
+export function ProjectNameLabel({ layer }: ProjectNameLabelProps) {
+  const name = useLiveStore((s) => s.projectName);
+  const setProjectName = useLiveStore((s) => s.setProjectName);
+  const [draft, setDraft] = React.useState<string | null>(null);
   if (layer !== 'song') return null;
-  const label = sessionLabel(currentProjectId, currentProjectName);
+  const label = projectDisplayName(name);
+  const value = draft ?? name ?? '';
+  const commit = () => {
+    setProjectName(value);
+    setDraft(null);
+  };
   return (
     // Same shell and caption as the loop picker on the other layer, in the same
     // place in the row: each layer opens with what its tabs are editing — a
-    // loop there, the project here. The name is a plain span and stays one, so
-    // the shell here is a frame around a READING, not a control the way the
-    // loop picker is; captioning it is what stops "Untitled project" from
-    // reading as a button someone forgot to style.
-    <div className={`hidden sm:flex ${HEADER_FIELD_SHELL}`}>
-      <span className={GROUP_LABEL}>Project</span>
-      <span
+    // loop there, the project here.
+    <div className={HEADER_FIELD_SHELL}>
+      <label className={GROUP_LABEL} htmlFor="header-project-name">
+        Project
+      </label>
+      <input
         id="header-project-name"
+        type="text"
+        value={value}
+        placeholder={UNTITLED_PROJECT_LABEL}
+        aria-label="Project name"
         title={label}
-        className={`text-xs font-semibold truncate max-w-[10rem] ${
-          currentProjectId ? 'text-base-content/80' : 'text-base-content/50 italic'
-        }`}
-      >
-        {label}
-      </span>
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            setDraft(null);
+          }
+        }}
+        className="input input-xs w-20 sm:w-32 max-w-[10rem] text-xs font-semibold bg-transparent border-0 focus:outline-none"
+      />
     </div>
   );
 }
@@ -247,13 +280,6 @@ export const Header = React.memo(function Header() {
   const activeTab = useAppStore((s) => s.activeTab);
   const layer = layerForTab(activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
-  // Live reads (useLiveStore, not useAppStore): under renderToString a plain
-  // selector serves the store's CREATION-time state, so a test that sets
-  // `dirty` before rendering would silently see false — see .claude/rules/testing.md.
-  const dirty = useLiveStore((s) => s.dirty);
-  const setIsProjectManagerOpen = useLiveStore((s) => s.setIsProjectManagerOpen);
-  const currentProjectId = useLiveStore((s) => s.currentProjectId);
-  const currentProjectName = useLiveStore((s) => s.currentProjectName);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
 
@@ -299,7 +325,7 @@ export const Header = React.memo(function Header() {
             pushes the loop/scale/theme group off the brand's row and gives the
             navbar a third row on a phone. The mark alone still identifies the
             app. */}
-        <Wordmark textClassName="hidden sm:inline" dirty={dirty} onClick={() => setIsProjectManagerOpen(true)} />
+        <ProjectMenu textClassName="hidden sm:inline" />
         <div className={HEADER_GROUP}>
           {LAYER_META.map(({ layer: l, label }) => {
             const isActive = layer === l;
@@ -336,11 +362,7 @@ export const Header = React.memo(function Header() {
             left to right now says "this loop → this view of it" rather than
             the other way round, and the two layers open the same way. */}
         {layer === 'loop' && <LoopSelector />}
-        <ProjectNameLabel
-          layer={layer}
-          currentProjectId={currentProjectId}
-          currentProjectName={currentProjectName}
-        />
+        <ProjectNameLabel layer={layer} />
 
         {/* Between the subject and the tabs, on the song layer only: what
             Arrange does with the scroll position while the song plays. */}

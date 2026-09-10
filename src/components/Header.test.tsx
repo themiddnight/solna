@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import React from 'react';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
-import { FollowPlayheadToggle, ProjectNameLabel, TabButton, LAYER_META, layerToggleTarget, persistTheme, readStoredTheme, resolveInitialTheme, ScaleSelects } from './Header';
+import { FollowPlayheadToggle, ProjectNameLabel, TabButton, LAYER_META, layerToggleTarget, persistTheme, projectDisplayName, readStoredTheme, resolveInitialTheme, ScaleSelects, UNTITLED_PROJECT_LABEL } from './Header';
 import { PatternSegmentRow } from './ui/SegmentedControl';
 import { LOOP_TABS, SONG_TABS } from '../types';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
@@ -243,48 +243,55 @@ describe('TabButton rendering', () => {
 // layer through a rendered `<Header />` in this suite. Testing the label via
 // its own props, the same way `TabButton` above is tested standalone, avoids
 // that trap entirely.
+//
+// The name it shows is read through `useLiveStore` (the component owns the
+// read now, so a committed edit is visible without a remount), which is also
+// what makes `setState({ projectName })` before a render reach it — the
+// `getServerSnapshot` trap does not apply to this block.
 describe('ProjectNameLabel (song layer only)', () => {
-  test('a saved project shows its name, dimmed but not italic', () => {
-    const html = renderToString(
-      <ProjectNameLabel layer="song" currentProjectId="p1" currentProjectName="Lo-Fi Study Session" />
-    );
+  const initial = useAppStore.getState().projectName;
+  afterEach(() => {
+    useAppStore.setState({ projectName: initial });
+  });
+
+  test('a named project renders an editable input holding the name', () => {
+    useAppStore.setState({ projectName: 'Lo-Fi Study Session' });
+    const html = renderToString(<ProjectNameLabel layer="song" />);
     expect(html).toContain('id="header-project-name"');
-    expect(html).toContain('Lo-Fi Study Session');
-    expect(openTagContaining(html, 'id="header-project-name"')).toContain('text-base-content/80');
+    expect(openTagContaining(html, 'id="header-project-name"')).toMatch(/^<input/);
+    expect(html).toContain('value="Lo-Fi Study Session"');
   });
 
-  test('an untitled session shows the sessionLabel text, italicized', () => {
-    const html = renderToString(
-      <ProjectNameLabel layer="song" currentProjectId={null} currentProjectName={null} />
-    );
-    expect(html).toContain('Unsaved session');
-    expect(openTagContaining(html, 'id="header-project-name"')).toContain('italic');
+  test('the only project-name editor remains visible on phone widths', () => {
+    const html = renderToString(<ProjectNameLabel layer="song" />);
+    expect(html).toContain('id="header-project-name"');
+    expect(html).not.toMatch(/class="[^"]*\bhidden\b/);
   });
 
-  test('the loop layer never shows the label, even with a current project', () => {
-    const html = renderToString(
-      <ProjectNameLabel layer="loop" currentProjectId="p1" currentProjectName="Lo-Fi Study Session" />
-    );
+  test('an untitled session shows the untitled placeholder', () => {
+    useAppStore.setState({ projectName: null });
+    const html = renderToString(<ProjectNameLabel layer="song" />);
+    expect(html).toContain(`placeholder="${UNTITLED_PROJECT_LABEL}"`);
+    expect(html).toContain('value=""');
+  });
+
+  test('the loop layer renders no project-name control at all', () => {
+    useAppStore.setState({ projectName: 'Lo-Fi Study Session' });
+    const html = renderToString(<ProjectNameLabel layer="loop" />);
     expect(html).not.toContain('id="header-project-name"');
   });
 
-  test('the label is a plain span, not a button', () => {
-    const html = renderToString(
-      <ProjectNameLabel layer="song" currentProjectId="p1" currentProjectName="Lo-Fi Study Session" />
-    );
-    expect(openTagContaining(html, 'id="header-project-name"')).toMatch(/^<span/);
-  });
-
-  // It wears the caption and the shell the loop picker wears on the other
-  // layer: without one, "Untitled project" sat in the navbar as bare text that
-  // read like a control nobody had styled.
   test('it is captioned and framed the way the loop picker is', () => {
-    const html = renderToString(
-      <ProjectNameLabel layer="song" currentProjectId="p1" currentProjectName="Lo-Fi Study Session" />
-    );
+    useAppStore.setState({ projectName: 'Alpha' });
+    const html = renderToString(<ProjectNameLabel layer="song" />);
     expect(html).toContain('>Project<');
     expect(html).toContain(HEADER_FIELD_SHELL);
     expect(html).toContain(GROUP_LABEL);
+  });
+
+  test('projectDisplayName names the untitled case and passes a name through', () => {
+    expect(projectDisplayName(null)).toBe(UNTITLED_PROJECT_LABEL);
+    expect(projectDisplayName('Alpha')).toBe('Alpha');
   });
 });
 
