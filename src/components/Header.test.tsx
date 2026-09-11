@@ -367,6 +367,22 @@ describe('the header cluster leads with the subject, not the tabs', () => {
 });
 
 /**
+ * The copy button belongs beside the loop picker, on the loop layer only,
+ * because that is what it copies: the loop the header's subject names. It is
+ * pinned as source text rather than rendered markup because `Header` reads
+ * the layer off the store, and a `setState` before a `renderToString` would
+ * silently render creation-time state (see `.claude/rules/testing.md`).
+ */
+describe('the loop layer renders the copy button beside the loop selector', () => {
+  test('the copy button is imported and rendered with the loop selector', () => {
+    const src = readFileSync(new URL('./Header.tsx', import.meta.url), 'utf8');
+    expect(src).toContain('import { LoopCopyButton }');
+    expect(src).toContain('<LoopCopyButton />');
+    expect(src).toContain('<LoopSelector />');
+  });
+});
+
+/**
  * `viewMeta.VIEW_ORDER` exists for coverage, not for rendering — the nav is
  * driven by `LOOP_TABS` and `SONG_TABS`, so the two can only be kept
  * in step by hand. This is that hand: the tabs the header actually renders,

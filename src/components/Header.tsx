@@ -15,6 +15,7 @@ import { useAppStore } from "../store/store";
 import { useLiveStore } from "./ui/useLiveStore";
 import { GROUP_LABEL, HEADER_FIELD_SHELL, HEADER_GROUP, HEADER_SELECT } from "./ui/fieldClasses";
 import { IconButton } from "./ui/IconButton";
+import { LoopCopyButton } from "./loop/LoopCopyButton";
 import { LoopSelector } from "./loop/LoopSelector";
 import { ProjectMenu } from "./project/ProjectMenu";
 import { VIEW_META } from "./viewMeta";
@@ -361,7 +362,12 @@ export const Header = React.memo(function Header() {
             the song layer, exactly one of the two per layer. Reading the row
             left to right now says "this loop → this view of it" rather than
             the other way round, and the two layers open the same way. */}
-        {layer === 'loop' && <LoopSelector />}
+        {layer === 'loop' && (
+          <>
+            <LoopCopyButton />
+            <LoopSelector />
+          </>
+        )}
         <ProjectNameLabel layer={layer} />
 
         {/* Between the subject and the tabs, on the song layer only: what

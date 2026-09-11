@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Info } from 'lucide-react';
 import { loopBars } from '@/store/loop';
 import { impliesKeyCopy, LOOP_COPY_GROUPS } from '@/store/loopCopy';
+import { useAppStore } from '@/store/store';
 import type { LoopCopyAspect, LoopCopyGroupId, LoopCopyTrack } from '@/store/loopCopy';
 import type { Loop } from '@/store/types';
 import { formatKeyLabel } from '@/utils/noteSpelling';
@@ -85,11 +86,47 @@ export function loopBarsNotice(
   target: Loop,
   selected: readonly LoopCopyGroupId[],
 ): string | null {
-  if (!selected.includes('chord-pattern')) return null;
+  if (!selected.includes('chord-progression')) return null;
   const next = loopBars(source.chords);
   const now = loopBars(target.chords);
   if (next === now) return null;
   return `This loop becomes ${barCount(next)}, was ${now}.`;
+}
+
+/**
+ * The remembered source, or the first source when the remembered one no longer
+ * names a loop in this project (it was deleted, or the list shrank). Empty
+ * string when there is no source at all — the same sentinel the dialog has
+ * always used for a project that holds only the target loop.
+ */
+export function resolveCopySourceId(
+  sources: readonly Loop[],
+  rememberedSourceId: string | null,
+): string {
+  return sources.some((loop) => loop.id === rememberedSourceId)
+    ? (rememberedSourceId as string)
+    : (sources[0]?.id ?? '');
+}
+
+/**
+ * Whether a restored selection counts as an explicit "no key" decision rather
+ * than a rule that never fired. True only when the progression is ticked, key
+ * is NOT, and the keys actually differ — the one combination a restored
+ * snapshot can only reach by the user having unticked 'key' on purpose, which
+ * the next toggle/source-change must then respect instead of re-adding it.
+ */
+export function restoreKeyTouched(
+  selected: readonly LoopCopyGroupId[],
+  source: Loop | undefined,
+  target: Loop | undefined,
+): boolean {
+  return (
+    source !== undefined &&
+    target !== undefined &&
+    selected.includes('chord-progression') &&
+    !selected.includes('key') &&
+    impliesKeyCopy(source, target, selected)
+  );
 }
 
 /** The matrix's row labels. The GROUPING still lives only in
@@ -143,17 +180,27 @@ export function LoopCopyDialog({
   onClose,
 }: LoopCopyDialogProps) {
   const sources = loops.filter((loop) => loop.id !== targetId);
-  const [sourceId, setSourceId] = useState(() => sources[0]?.id ?? '');
-  const [selected, setSelected] = useState<LoopCopyGroupId[]>([]);
+  const target = loops.find((loop) => loop.id === targetId);
+
+  const rememberedSelection = useAppStore((s) => s.loopCopySelection);
+  const rememberedSourceId = useAppStore((s) => s.loopCopySourceId);
+  const setLoopCopySelection = useAppStore((s) => s.setLoopCopySelection);
+
+  const [sourceId, setSourceId] = useState(() => resolveCopySourceId(sources, rememberedSourceId));
+  const [selected, setSelected] = useState<LoopCopyGroupId[]>(() => [...rememberedSelection]);
+
+  const source = sources.find((loop) => loop.id === sourceId) ?? sources[0];
+
   // Set the moment the user directly checks or unchecks 'key' itself — the
   // one signal that a "no key" state is a decision, not just a rule that
   // never fired. Once true, nothing else in this dialog session may run
   // withImpliedKey again; a quick chip is the one exception, since it
   // replaces the whole selection and so replaces that decision too.
-  const keyTouchedRef = useRef(false);
+  // A restored selection that omits 'key' while its progression is ticked and
+  // the keys differ was a deliberate untick, so it starts already-touched to
+  // keep the next toggle from silently re-adding 'key'.
+  const keyTouchedRef = useRef(restoreKeyTouched(rememberedSelection, source, target));
 
-  const target = loops.find((loop) => loop.id === targetId);
-  const source = sources.find((loop) => loop.id === sourceId) ?? sources[0];
   if (!target || !source) return null;
 
   const toggle = (id: LoopCopyGroupId) => {
@@ -167,9 +214,9 @@ export function LoopCopyDialog({
       // even after the user had explicitly unticked it — withImpliedKey has
       // no way to tell "never considered" apart from "removed on purpose".
       // Also gated on keyTouchedRef, same as the From-select handler below:
-      // re-ticking 'chord-pattern' after the user has explicitly unticked
+      // re-ticking 'chord-progression' after the user has explicitly unticked
       // 'key' must not silently re-add it either.
-      return id === 'chord-pattern' && !keyTouchedRef.current
+      return id === 'chord-progression' && !keyTouchedRef.current
         ? withImpliedKey(source, target, next)
         : next;
     });
@@ -194,7 +241,7 @@ export function LoopCopyDialog({
       open
       onClose={onClose}
       title={`Copy into "${labels[targetId] ?? ''}"`}
-      size="lg"
+      size="md"
       boxClassName="space-y-4"
     >
       <label className="flex items-center gap-2">
@@ -252,7 +299,7 @@ export function LoopCopyDialog({
           {`Details — ${loopCopySummary(selected)}`}
         </summary>
         <div className="space-y-3 p-3">
-          <div className="grid grid-cols-[1fr_4rem_4rem] items-center gap-y-1 text-xs">
+          <div className="grid grid-cols-[1fr_5rem_5rem_5rem] items-center gap-y-1 text-xs">
             <span />
             <span className="text-center text-[10px] font-bold uppercase tracking-wider text-base-content/50">
               Sound
@@ -260,15 +307,22 @@ export function LoopCopyDialog({
             <span className="text-center text-[10px] font-bold uppercase tracking-wider text-base-content/50">
               Pattern
             </span>
+            <span className="text-center text-[10px] font-bold uppercase tracking-wider text-base-content/50">
+              Progression
+            </span>
             {TRACK_ROWS.map(({ track, label }) => {
               const sound = groupAt(track, 'sound');
               const pattern = groupAt(track, 'pattern');
+              const progression = groupAt(track, 'progression');
               return (
                 <React.Fragment key={track}>
                   <span className="font-semibold text-base-content">{label}</span>
                   <span className="text-center">{sound && checkbox(sound.id, sound.label)}</span>
                   <span className="text-center">
                     {pattern && checkbox(pattern.id, pattern.label)}
+                  </span>
+                  <span className="text-center">
+                    {progression && checkbox(progression.id, progression.label)}
                   </span>
                 </React.Fragment>
               );
@@ -308,6 +362,7 @@ export function LoopCopyDialog({
           type="button"
           disabled={selected.length === 0}
           onClick={() => {
+            setLoopCopySelection(selected, source.id);
             onApply(targetId, source.id, selected);
             onClose();
           }}

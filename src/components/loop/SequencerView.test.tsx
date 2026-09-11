@@ -313,3 +313,10 @@ describe('Pattern › Beat track solo', () => {
     expect(html.split('btn-solo-').length - 1).toBe(1);
   });
 });
+
+describe('Pattern › Beat segment paste button', () => {
+  test('the drum pattern card body carries the drums-pattern paste button', () => {
+    const src = readFileSync(new URL('./SequencerView.tsx', import.meta.url), 'utf8');
+    expect(src).toContain("groups={['drums-pattern']}");
+  });
+});

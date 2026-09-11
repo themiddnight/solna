@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { useAppStore } from '@/store/store';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
-import { shouldCloseSynthOverlays, SoundView } from './SoundView';
+import { shouldCloseSynthOverlays, SoundView, SYNTH_SOUND_GROUP } from './SoundView';
 import { MIX_GROUP_IDS, MIX_GROUP_LABELS, MIX_LAYERS } from '../mixLayers';
-import { MIX_LAYER_IDS } from '@/store/focusTrack';
+import { MIX_LAYER_IDS, melodyTrackForFocus } from '@/store/focusTrack';
 import type { MixLayerId } from '@/store/focusTrack';
 import { synthTargetForFocus } from '@/store/focusTrack';
+import { LOOP_COPY_GROUPS } from '@/store/loopCopy';
 import { FIELD_LABEL, FIELD_LANE, HEADER_GROUP, SECTION_HEADER } from '../ui/fieldClasses';
 import { PANEL_CARD } from '../ui/PanelCard';
 import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from '@/utils/synthControl';
@@ -492,6 +494,53 @@ describe('the preset overlays close when focus leaves a melodic track', () => {
       expect(html).not.toContain('loading loading-spinner');
     } finally {
       useAppStore.setState({ focusTrack: 'synth' });
+    }
+  });
+});
+
+/**
+ * The Synth and Drum Sound bands each carry a paste button for the groups
+ * their own controls edit. Photo-pinned against the source, not rendered: the
+ * Synth band's paste button names a DIFFERENT group depending on `synthTarget`
+ * (Lead vs FX) and both branches cannot be seen in one render, so the source
+ * is the only place the pairing is checkable in full.
+ */
+describe('the Sound sections carry paste buttons', () => {
+  test('the Drum Sound and Synth sections carry paste buttons', () => {
+    const src = readFileSync(new URL('./SoundView.tsx', import.meta.url), 'utf8');
+    expect(src).toContain('<ModulePasteButton');
+    expect(src).toContain('groups={[\'drums-sound\']}');
+    expect(src).toContain("'fx-sound'");
+    expect(src).toContain("'lead-sound'");
+  });
+
+  /**
+   * The Synth band edits whichever patch `synthTarget` names, and that is
+   * EVERY melodic focus — chord, bass and pad included, not just Lead and FX
+   * (`isMelodicFocus` is `focus !== 'drum'`). The mapping was a two-way test
+   * (`fx` vs everything-else = Lead), which put a Lead paste button on the
+   * chord/bass/pad patches' own band; the source pin above could not see it,
+   * because the bad wiring satisfied every substring it looked for. Asserted
+   * here against the store's own roster rather than a second hand-written
+   * list, so a target added later fails here instead of falling through.
+   */
+  test('the Synth band names the focused track’s own sound group', () => {
+    expect(SYNTH_SOUND_GROUP).toEqual({
+      synth: 'lead-sound',
+      fx: 'fx-sound',
+      chord: 'chord-sound',
+      bass: 'bass-sound',
+      pad: 'pad-sound',
+    });
+
+    const targets = Object.keys(SYNTH_SOUND_GROUP) as SynthControlTarget[];
+    for (const focus of targets) {
+      const group = LOOP_COPY_GROUPS.find((g) => g.id === SYNTH_SOUND_GROUP[focus]);
+      expect(group).toBeDefined();
+      // The SOUND aspect, not the pattern: this band's Save/Sounds act on the
+      // patch alone, and the melody grids carry the pattern groups.
+      expect(group?.aspect).toBe('sound');
+      expect(group?.track).toBe(melodyTrackForFocus(focus) ?? focus);
     }
   });
 });

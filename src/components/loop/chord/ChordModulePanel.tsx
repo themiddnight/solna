@@ -16,6 +16,7 @@ import { PlayingStepRow, STEP_ROW_CLASS } from "@/components/ui/StepRow";
 import { PlayingStepHeader } from "@/components/ui/StepHeader";
 import { IconButton } from "@/components/ui/IconButton";
 import { ModulePanelCard } from "./ModulePanelCard";
+import { ModulePasteButton } from "../ModulePasteButton";
 import { PresetSelect } from "./PresetSelect";
 
 export interface ChordModulePanelProps {
@@ -87,6 +88,7 @@ export function ChordModulePanel({
               register and comping rhythm.
         </>
       }
+      actions={<ModulePasteButton groups={['chord-sound', 'chord-pattern']} />}
     >
       <div className="flex flex-row flex-wrap items-end gap-3">
           {/* Chord Sound Preset Select */}

@@ -1,4 +1,5 @@
 import { describe, expect, test, afterEach } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { PatternView, segmentVisibilityClass } from './PatternView';
 import { MIX_LAYER_IDS, segmentForFocus } from '@/store/focusTrack';
@@ -89,5 +90,20 @@ describe('Pattern › Lead track solo', () => {
   test('the FX segment header carries the FX solo', () => {
     const html = renderToString(<PatternView />);
     expect(html).toContain('aria-label="Solo FX"');
+  });
+});
+
+describe('Pattern › segment paste buttons', () => {
+  // The button moved out of the segment header and into each card's own
+  // ModuleHeader `right` slot, so it lives in the melody grid now — one grid
+  // mounted per track, picking its group from `trackId`. Asserted as the two
+  // group literals because the grid builds the prop with a ternary.
+  test('the melody grid carries its pattern paste button, per track', () => {
+    const src = readFileSync(
+      new URL('./lead/LeadMelodyGrid.tsx', import.meta.url),
+      'utf8',
+    );
+    expect(src).toContain("'lead-pattern'");
+    expect(src).toContain("'fx-pattern'");
   });
 });

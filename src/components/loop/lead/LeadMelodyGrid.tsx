@@ -42,6 +42,7 @@ import {
   strideFor,
 } from '@/utils/stepResolution';
 import { useLeadMarkerColumn } from './useLeadMarker';
+import { ModulePasteButton } from '../ModulePasteButton';
 import { useLeadPlayback } from './useLeadPlayback';
 import { useLeadStepPublisher } from './useLeadStepPublisher';
 import { useLeadNoteResize } from './useLeadNoteResize';
@@ -594,7 +595,15 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
             Solo rides here rather than in that tab header, because the header
             belongs to the tab now and this button silences one track. It is
             the rule the three Accompaniment module cards already follow. */}
-        <ModuleHeader className="mb-3" right={<SoloButton track={track.solo} />}>
+        <ModuleHeader
+          className="mb-3"
+          right={
+            <div className="flex items-center gap-1.5">
+              <ModulePasteButton groups={[trackId === 'fx' ? 'fx-pattern' : 'lead-pattern']} />
+              <SoloButton track={track.solo} />
+            </div>
+          }
+        >
           {/* `children`, not `title`: ModuleHeader's title cell is the
               mixed-case MODULE_TITLE the numbered synth stages wear, and a
               segment's content card is a SECTION — uppercase — like the drum

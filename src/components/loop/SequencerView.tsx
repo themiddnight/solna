@@ -22,6 +22,7 @@ import { IconButton } from "../ui/IconButton";
 import { ModuleHeader } from "../ui/ModuleHeader";
 import { ToolbarButton, ToolbarGroup, ToolbarLane } from "../ui/Toolbar";
 import { SequencerGrid } from "./sequencer/SequencerGrid";
+import { ModulePasteButton } from "./ModulePasteButton";
 import type { SequencerTrack } from "@/types";
 
 export const SequencerView = React.memo(function SequencerView() {
@@ -199,7 +200,12 @@ export const SequencerView = React.memo(function SequencerView() {
             one, and a sparkle on a drum grid decorated rather than named. */}
         <ModuleHeader
           className="flex-wrap gap-2.5"
-          right={<SoloButton track="drums" />}
+          right={
+            <div className="flex items-center gap-1.5">
+              <ModulePasteButton groups={['drums-pattern']} />
+              <SoloButton track="drums" />
+            </div>
+          }
         >
           {/* `children`, not `title`: ModuleHeader's title cell is the
               mixed-case MODULE_TITLE the numbered synth stages wear, and a

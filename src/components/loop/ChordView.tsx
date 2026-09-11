@@ -75,6 +75,7 @@ import { SortableChordCard } from "./chord/SortableChordCard";
 import { ChordModulePanel } from "./chord/ChordModulePanel";
 import { BassModulePanel } from "./chord/BassModulePanel";
 import { PadModulePanel } from "./chord/PadModulePanel";
+import { ModulePasteButton } from "./ModulePasteButton";
 import { beatsPerBarFor, resolveBeatCounter } from "@/utils/playhead";
 
 import { CHORD_PROGRESSIONS } from "@/data/chordProgressions";
@@ -671,6 +672,11 @@ export const ChordView = React.memo(function ChordView() {
                 />
                 <span>Auto-Reharmonize: {autoReharmonize ? "ON" : "OFF"}</span>
               </button>
+
+              {/* Paste a copied chord progression into this card. Far right so
+                  it sits with the other whole-progression actions, not among
+                  the quick-add palette below. */}
+              <ModulePasteButton groups={['chord-progression']} />
             </div>
           }
         >

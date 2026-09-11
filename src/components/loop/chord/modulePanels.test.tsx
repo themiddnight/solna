@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { BassModulePanel } from './BassModulePanel';
 import { ChordModulePanel } from './ChordModulePanel';
@@ -152,6 +153,34 @@ describe('PadModulePanel', () => {
     expect(html).not.toContain('#');
     expect(html).not.toContain('indigo-');
     expect(html).not.toContain('text-white');
+  });
+});
+
+/**
+ * Each module card's header carries the paste button for its own sound +
+ * pattern groups. Photo-pinned against the source rather than rendered: the
+ * button's disabled state depends on a clipboard a `renderToString` render
+ * cannot set, and what this task wires is a call site — which group ids each
+ * card names — not the button's behaviour (ModulePasteButton's own tests).
+ */
+describe('each module panel header carries its paste button', () => {
+  test('every panel renders a ModulePasteButton in its card actions', () => {
+    for (const file of ['ChordModulePanel.tsx', 'BassModulePanel.tsx', 'PadModulePanel.tsx']) {
+      const src = readFileSync(new URL(`./${file}`, import.meta.url), 'utf8');
+      expect(src).toContain('<ModulePasteButton');
+    }
+  });
+
+  test('each names its own sound and pattern groups', () => {
+    const expected: ReadonlyArray<[string, string]> = [
+      ['ChordModulePanel.tsx', `groups={['chord-sound', 'chord-pattern']}`],
+      ['BassModulePanel.tsx', `groups={['bass-sound', 'bass-pattern']}`],
+      ['PadModulePanel.tsx', `groups={['pad-sound', 'pad-pattern']}`],
+    ];
+    for (const [file, call] of expected) {
+      const src = readFileSync(new URL(`./${file}`, import.meta.url), 'utf8');
+      expect(src).toContain(call);
+    }
   });
 });
 

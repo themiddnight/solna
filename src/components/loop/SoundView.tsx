@@ -54,6 +54,7 @@ import { LfoPanel } from "./synth/LfoPanel";
 import { ArpeggiatorPanel } from "./synth/ArpeggiatorPanel";
 import { synthChannelForFocus } from "./synth/useSynthChannel";
 import { SoundMixer } from "./SoundMixer";
+import { ModulePasteButton } from "./ModulePasteButton";
 import { Knob } from "../ui/Knob";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { ViewHeader } from "../ui/ViewHeader";
@@ -81,6 +82,8 @@ const SYNTH_VIEW_MODES = [
 // lives in ui/Keyboard.tsx; this is the historical import path.
 export { KEYBOARD_NOTES } from "../ui/Keyboard";
 import { SYNTH_TARGET_STYLES } from "@/utils/synthControl";
+import type { SynthControlTarget } from "@/utils/synthControl";
+import type { LoopCopyGroupId } from "@/store/loopCopy";
 import { GroupFrame } from "../ui/GroupFrame";
 import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
 import { SegmentedButton, SegmentedGroup } from '@/components/ui/SegmentedControl';
@@ -90,6 +93,31 @@ import { SegmentedButton, SegmentedGroup } from '@/components/ui/SegmentedContro
 // Module-scope resolution is fine in `components/`; it is `src/data/` that may
 // not (CLAUDE.md, layer 1).
 const DRUM_KIT_NAMES = Object.keys(DRUM_KITS);
+
+/**
+ * The sound group the Synth band's paste button names, per focused target.
+ *
+ * A table, NOT `synthTarget === 'fx' ? ['fx-sound'] : ['lead-sound']`. This
+ * band edits whichever patch `synthTarget` names, and `synthTargetForFocus` is
+ * `controlTargetForFocus` for EVERY melodic focus — chord, bass and pad
+ * included, not just Lead and FX (`isMelodicFocus` is `focus !== 'drum'`). A
+ * two-way test therefore put a Lead paste button on the chord patch's own
+ * band: the button wrote the clipboard's Lead sound into `synthParams` while
+ * the user was looking at `chordSynthParams`, with no error anywhere.
+ *
+ * Keyed by the union, so a sixth target is a compile error here rather than a
+ * call site falling through to Lead — the shape `resolveSynthControlChannel`'s
+ * `channels` table already uses for the same reason. Exported so the mapping
+ * itself is testable: the source-text pin this replaced could only assert that
+ * the two strings appear, which is exactly what the defect satisfied.
+ */
+export const SYNTH_SOUND_GROUP: Record<SynthControlTarget, LoopCopyGroupId> = {
+  synth: 'lead-sound',
+  fx: 'fx-sound',
+  chord: 'chord-sound',
+  bass: 'bass-sound',
+  pad: 'pad-sound',
+};
 
 // The two MELODY focuses render as bare chips, the three accompaniment ones go
 // in the framed group, and Beat sits last on its own — the same pitched-first,
@@ -163,7 +191,11 @@ const DrumSoundCard = React.memo(function DrumSoundCard() {
       Pattern › Beat. The bus level left this card for the Mixer below, so
       that the drum bus is balanced against the other four and not alone. **/
   return (
-    <SectionCard icon={Disc3} title="Drum Sound">
+    <SectionCard
+      icon={Disc3}
+      title="Drum Sound"
+      actions={<ModulePasteButton groups={['drums-sound']} />}
+    >
         {/* items-start + a shared lane per field: bottom-aligning controls of
             three different heights (32px select, 24px join, 48px knob) put
             these labels on different baselines. */}
@@ -601,6 +633,17 @@ export const SoundView = React.memo(function SoundView() {
               <span>Sounds</span>
               <span className={COUNT_BADGE}>{totalPresetsCount}</span>
             </button>
+
+            {/* The band's third action, and the one that follows the FOCUS
+                rather than the tab: this section shows whichever melodic
+                patch `synthTarget` names, so its paste button has to name
+                THAT track's sound group. `SYNTH_SOUND_GROUP` carries the
+                mapping and its docblock says why a two-way test is wrong
+                here; `synthTarget` is non-null everywhere inside this card,
+                so the lookup is total. The pattern groups are not offered
+                from this band — the melody grids and the Pattern segments
+                already carry them. */}
+            <ModulePasteButton groups={[SYNTH_SOUND_GROUP[synthTarget]]} />
 
             {/* Inside `actions`, so it hangs off the button cluster that
                 raised it. As a child of the card it anchored to the card's own

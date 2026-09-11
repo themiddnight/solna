@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { ChordView } from './ChordView';
 import { useAppStore } from '@/store/store';
@@ -375,5 +376,12 @@ describe('ChordView custom step grids', () => {
     initial.customBassPattern = new Array<BassStepChoice>(16).fill('rest');
     useAppStore.getState().setBassPatternMode('preset');
     useAppStore.getState().setCustomBassPattern(new Array<BassStepChoice>(16).fill('rest'));
+  });
+});
+
+describe('Accompaniment › chord-progression paste button', () => {
+  test('the progression card body carries the chord-progression paste button', () => {
+    const src = readFileSync(new URL('./ChordView.tsx', import.meta.url), 'utf8');
+    expect(src).toContain("groups={['chord-progression']}");
   });
 });

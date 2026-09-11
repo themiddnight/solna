@@ -10,6 +10,7 @@ import { SYNTH_TARGET_STYLES } from "@/utils/synthControl";
 import { PAD_INTERVALS } from "@/types";
 import type { PadInterval, PadVoicing } from "@/types";
 import { ModulePanelCard } from "./ModulePanelCard";
+import { ModulePasteButton } from "../ModulePasteButton";
 import { PresetSelect } from "./PresetSelect";
 import { droneDegreeButtons, padPresetGroups } from "./padPanel";
 
@@ -110,6 +111,7 @@ export function PadModulePanel() {
           interval or chord for the whole loop pass.
         </>
       }
+      actions={<ModulePasteButton groups={['pad-sound', 'pad-pattern']} />}
     >
       <div className="flex flex-row flex-wrap items-end gap-3">
         <PresetSelect

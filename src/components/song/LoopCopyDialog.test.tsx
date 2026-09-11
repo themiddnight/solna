@@ -11,6 +11,8 @@ import {
   loopCopySummary,
   loopKeyNotice,
   quickChipSelection,
+  resolveCopySourceId,
+  restoreKeyTouched,
   withImpliedKey,
 } from './LoopCopyDialog';
 
@@ -43,7 +45,12 @@ describe('quickChipSelection', () => {
     );
   });
 
-  test('Everything ticks all fourteen groups', () => {
+  test('the chord progression is in neither column chip', () => {
+    expect(quickChipSelection('sounds')).not.toContain('chord-progression');
+    expect(quickChipSelection('patterns')).not.toContain('chord-progression');
+  });
+
+  test('Everything ticks every group', () => {
     expect(new Set(quickChipSelection('everything'))).toEqual(
       new Set(LOOP_COPY_GROUPS.map((group) => group.id)),
     );
@@ -58,9 +65,9 @@ describe('quickChipSelection', () => {
 });
 
 describe('withImpliedKey', () => {
-  test('adds key when the chord pattern crosses a key boundary', () => {
-    expect(withImpliedKey(inCMajor(), inAMinor(), ['chord-pattern'])).toEqual([
-      'chord-pattern',
+  test('adds key when the chord progression crosses a key boundary', () => {
+    expect(withImpliedKey(inCMajor(), inAMinor(), ['chord-progression'])).toEqual([
+      'chord-progression',
       'key',
     ]);
   });
@@ -68,24 +75,24 @@ describe('withImpliedKey', () => {
   test('adds nothing when the two loops are already in the same key', () => {
     const source = { ...inCMajor(), id: 'loop-source' };
     const target = { ...inCMajor(), id: 'loop-target' };
-    expect(withImpliedKey(source, target, ['chord-pattern'])).toEqual(['chord-pattern']);
+    expect(withImpliedKey(source, target, ['chord-progression'])).toEqual(['chord-progression']);
   });
 
   test('never adds key twice', () => {
-    expect(withImpliedKey(inCMajor(), inAMinor(), ['chord-pattern', 'key'])).toEqual([
-      'chord-pattern',
+    expect(withImpliedKey(inCMajor(), inAMinor(), ['chord-progression', 'key'])).toEqual([
+      'chord-progression',
       'key',
     ]);
   });
 
-  test('a quick chip runs through the same rule', () => {
-    const next = withImpliedKey(inCMajor(), inAMinor(), quickChipSelection('patterns'));
-    expect(next).toContain('key');
+  test('a chip without the progression never implies key', () => {
+    expect(withImpliedKey(inCMajor(), inAMinor(), quickChipSelection('patterns'))).not.toContain('key');
+    expect(withImpliedKey(inCMajor(), inAMinor(), quickChipSelection('sounds'))).not.toContain('key');
   });
 
   test('re-run against a NEW source that differs in key still implies key', () => {
     // I1 regression guard: changing the From select must re-derive the rule
-    // against the new source, not just the source active when chord-pattern
+    // against the new source, not just the source active when chord-progression
     // was first ticked. This proves withImpliedKey itself is correct/idempotent
     // for that re-derivation — the wiring fix is pinned below.
     const firstSource = {
@@ -95,7 +102,7 @@ describe('withImpliedKey', () => {
       scaleType: 'Natural Minor',
     };
     const target = inAMinor();
-    const afterTick = withImpliedKey(firstSource, target, ['chord-pattern']);
+    const afterTick = withImpliedKey(firstSource, target, ['chord-progression']);
     expect(afterTick).not.toContain('key');
 
     const differentSource = inCMajor();
@@ -139,20 +146,20 @@ describe('LoopCopyDialog wiring (source-text pin)', () => {
     );
   });
 
-  test('the chord-pattern toggle guard requires an UNTOUCHED key checkbox, in that polarity (I1/I2)', () => {
+  test('the chord-progression toggle guard requires an UNTOUCHED key checkbox, in that polarity (I1/I2)', () => {
     const src = readFileSync(new URL('./LoopCopyDialog.tsx', import.meta.url), 'utf8');
     const toggleMatch = src.match(/const toggle = \(id: LoopCopyGroupId\) => \{([\s\S]*?\n {2}\};)/);
     expect(toggleMatch).not.toBeNull();
     const toggleBody = toggleMatch?.[1] ?? '';
     expect(toggleBody).toMatch(
-      /id === 'chord-pattern' && !keyTouchedRef\.current\s*\?\s*withImpliedKey\(source, target, next\)\s*:\s*next/,
+      /id === 'chord-progression' && !keyTouchedRef\.current\s*\?\s*withImpliedKey\(source, target, next\)\s*:\s*next/,
     );
   });
 });
 
 describe('the two notices are conditional', () => {
   test('the key notice names both keys when they differ', () => {
-    expect(loopKeyNotice(inCMajor(), inAMinor(), ['chord-pattern', 'key'])).toBe(
+    expect(loopKeyNotice(inCMajor(), inAMinor(), ['chord-progression', 'key'])).toBe(
       'Key / Scale added: the source is in C Major, this loop is in A Natural Minor.',
     );
   });
@@ -160,29 +167,29 @@ describe('the two notices are conditional', () => {
   test('the key notice is silent when the keys match', () => {
     const source = { ...inCMajor(), id: 'loop-source' };
     const target = { ...inCMajor(), id: 'loop-target' };
-    expect(loopKeyNotice(source, target, ['chord-pattern', 'key'])).toBeNull();
+    expect(loopKeyNotice(source, target, ['chord-progression', 'key'])).toBeNull();
   });
 
   test('the key notice is silent when the user has unticked key, even though the keys differ', () => {
     // I2 regression guard: key is a default, not a lock (per the spec). If the
     // user unticks it after the auto-tick, the notice must not keep claiming
     // "added" — Apply will not add it.
-    expect(loopKeyNotice(inCMajor(), inAMinor(), ['chord-pattern'])).toBeNull();
+    expect(loopKeyNotice(inCMajor(), inAMinor(), ['chord-progression'])).toBeNull();
   });
 
   test('the bar notice states the concrete consequence', () => {
     const source = inCMajor();
     source.chords = [...source.chords, ...source.chords];
-    expect(loopBarsNotice(source, inAMinor(), ['chord-pattern'])).toBe(
+    expect(loopBarsNotice(source, inAMinor(), ['chord-progression'])).toBe(
       'This loop becomes 8 bars, was 4.',
     );
   });
 
   test('the bar notice is silent when the lengths match', () => {
-    expect(loopBarsNotice(inCMajor(), inAMinor(), ['chord-pattern'])).toBeNull();
+    expect(loopBarsNotice(inCMajor(), inAMinor(), ['chord-progression'])).toBeNull();
   });
 
-  test('the bar notice is silent when the chord pattern is not ticked', () => {
+  test('the bar notice is silent when the chord progression is not ticked', () => {
     const source = inCMajor();
     source.chords = [...source.chords, ...source.chords];
     expect(loopBarsNotice(source, inAMinor(), ['lead-sound', 'mix'])).toBeNull();
@@ -195,13 +202,59 @@ describe('the source option and the details summary', () => {
   });
 
   test('the summary always states what is currently ticked', () => {
-    expect(loopCopySummary(['lead-sound', 'chord-pattern', 'key'])).toBe(
-      'Lead sound, Chords pattern, Key / Scale',
+    expect(loopCopySummary(['lead-sound', 'chord-progression', 'chord-pattern', 'key'])).toBe(
+      'Lead sound, Chord progression, Chords rhythm, Key / Scale',
     );
   });
 
   test('the summary says so when nothing is ticked', () => {
     expect(loopCopySummary([])).toBe('nothing selected');
+  });
+});
+
+describe('resolveCopySourceId', () => {
+  test('remembers a still-valid source', () => {
+    expect(resolveCopySourceId([inCMajor(), inAMinor()], 'loop-target')).toBe('loop-target');
+  });
+
+  test('falls back to the first source when the remembered one is gone', () => {
+    expect(resolveCopySourceId([inCMajor(), inAMinor()], 'loop-deleted')).toBe('loop-source');
+  });
+
+  test('falls back to an empty string with no sources', () => {
+    expect(resolveCopySourceId([], null)).toBe('');
+  });
+});
+
+describe('restoreKeyTouched', () => {
+  test('true when the progression is ticked, key is not, and the keys differ', () => {
+    expect(restoreKeyTouched(['chord-progression'], inCMajor(), inAMinor())).toBe(true);
+  });
+
+  test('false when key is present in the restored selection', () => {
+    expect(restoreKeyTouched(['chord-progression', 'key'], inCMajor(), inAMinor())).toBe(false);
+  });
+
+  test('false when the keys match — the rule never fired, nothing was unticked', () => {
+    expect(restoreKeyTouched(['chord-progression'], inCMajor(), inCMajor())).toBe(false);
+  });
+
+  test('false when the progression is not ticked', () => {
+    expect(restoreKeyTouched(['lead-sound'], inCMajor(), inAMinor())).toBe(false);
+  });
+
+  test('false when a source or target is missing', () => {
+    expect(restoreKeyTouched(['chord-progression'], undefined, inAMinor())).toBe(false);
+    expect(restoreKeyTouched(['chord-progression'], inCMajor(), undefined)).toBe(false);
+  });
+});
+
+describe('LoopCopyDialog wiring (session-state pin)', () => {
+  test('reads the remembered session and writes it on Apply', () => {
+    const src = readFileSync(new URL('./LoopCopyDialog.tsx', import.meta.url), 'utf8');
+    expect(src).toContain('useAppStore((s) => s.loopCopySelection)');
+    expect(src).toContain('useAppStore((s) => s.loopCopySourceId)');
+    expect(src).toContain('setLoopCopySelection(selected, source.id)');
   });
 });
 
@@ -241,7 +294,7 @@ describe('LoopCopyDialog markup', () => {
     expect(html).not.toContain('value="loop-target"');
   });
 
-  test('all fourteen group checkboxes are rendered, unchecked', () => {
+  test('all group checkboxes are rendered, unchecked', () => {
     const html = renderDialog();
     for (const group of LOOP_COPY_GROUPS) {
       expect(html).toContain(`id="chk-loop-copy-${group.id}"`);
@@ -254,6 +307,10 @@ describe('LoopCopyDialog markup', () => {
     expect(html).toContain('id="btn-loop-copy-chip-sounds"');
     expect(html).toContain('id="btn-loop-copy-chip-patterns"');
     expect(html).toContain('id="btn-loop-copy-chip-everything"');
+  });
+
+  test('the Progression column header renders', () => {
+    expect(renderDialog()).toContain('>Progression<');
   });
 
   test('the summary line reports the empty selection, and neither notice renders', () => {

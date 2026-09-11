@@ -15,11 +15,13 @@ import { AdjustSynthButton } from './AdjustSynthButton';
  * change to the shape (dropping the stale `mt-4`, adding the `role`/
  * `aria-labelledby` pair) had to be made three times and agreed.
  *
- * The header is fixed at [title][description] · [solo][Adjust Synth] because
- * all three want exactly that. Pad's mode switch used to sit in this row and
- * was moved down into the body precisely so the three headers could be one
- * thing; keeping the cluster closed here is what stops the next control
- * drifting back into it.
+ * The header is fixed at [title][description] · [actions][solo][Adjust Synth]
+ * because all three want exactly that. `actions` is the one open slot — the
+ * paste button, whose group ids differ per module — and it sits left of the
+ * solo/adjust pair so those two keep the corner in every card. Pad's mode
+ * switch used to sit in this row and was moved down into the body precisely so
+ * the three headers could be one thing; keeping the cluster closed here is
+ * what stops the next control drifting back into it.
  *
  * `role="group"` plus the heading as its label is what lets every field below
  * drop its `Chord `/`Bass `/`Pad ` prefix: the context a screen reader needs
@@ -52,10 +54,12 @@ export interface ModulePanelCardProps {
   title: string;
   /** The one-line "what this layer does" under the title. */
   description: ReactNode;
+  /** Extra header controls (e.g. the paste button), rendered left of the solo/adjust cluster. */
+  actions?: ReactNode;
   children: ReactNode;
 }
 
-export function ModulePanelCard({ target, title, description, children }: ModulePanelCardProps) {
+export function ModulePanelCard({ target, title, description, actions, children }: ModulePanelCardProps) {
   const { tint, border, accent } = MODULE_CLASSES[target];
   const titleId = `${target}-module-title`;
   return (
@@ -68,6 +72,7 @@ export function ModulePanelCard({ target, title, description, children }: Module
           <p className="text-[10px] text-base-content/60">{description}</p>
         </div>
         <div className="flex items-center gap-1.5">
+          {actions}
           <SoloButton track={target} />
           <AdjustSynthButton target={target} className={accent} />
         </div>
