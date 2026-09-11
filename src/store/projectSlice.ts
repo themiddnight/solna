@@ -107,6 +107,10 @@ export function createProjectSlice(
       // user was recording into, and a whole-content swap leaves nothing for
       // it to still name.
       recordingTrack: null,
+      // A clipboard source is scoped to the outgoing project's loops. Loop ids
+      // may collide across projects, so keeping only the id could otherwise
+      // resolve to unrelated content after the swap.
+      loopClipboard: null,
       projectName: normalizeName(identity.name),
     });
   };

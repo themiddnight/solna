@@ -4,11 +4,11 @@ import type { Loop, LoopStatePatch } from './types';
 export type LoopCopyTrack = 'lead' | 'fx' | 'chord' | 'bass' | 'pad' | 'drums' | 'loop';
 
 /**
- * The Sound/Pattern boundary the navigation already draws — changes the sound
- * but not the notes, versus changes the notes or the rhythm. `whole` is the
- * two loop-wide groups, which are neither half of that split.
+ * The boundary a group draws: `sound` changes the voice, `pattern` the notes
+ * or comping rhythm, `progression` the chord progression alone. `whole` is
+ * the two loop-wide groups, which are none of the three.
  */
-export type LoopCopyAspect = 'sound' | 'pattern' | 'whole';
+export type LoopCopyAspect = 'sound' | 'pattern' | 'progression' | 'whole';
 
 export type LoopCopyGroupId =
   | 'lead-sound'
@@ -16,6 +16,7 @@ export type LoopCopyGroupId =
   | 'fx-sound'
   | 'fx-pattern'
   | 'chord-sound'
+  | 'chord-progression'
   | 'chord-pattern'
   | 'bass-sound'
   | 'bass-pattern'
@@ -35,7 +36,7 @@ export interface LoopCopyGroup {
 }
 
 /**
- * A five-track x two-aspect matrix plus two loop-wide groups, and **the only
+ * A five-track matrix — two aspects per track, three on the chord track — plus two loop-wide groups, and **the only
  * place the grouping is written** — the dialog lays its matrix out from
  * `track`/`aspect`, `buildLoopCopyPatch` reads `keys`, and loopCopy.test.ts
  * asserts the union of every `keys` equals LOOP_FLAT_KEYS exactly.
@@ -84,18 +85,18 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
   },
   { id: 'chord-sound', track: 'chord', aspect: 'sound', label: 'Chords sound', keys: ['chordSynthParams'] },
   {
+    id: 'chord-progression',
+    track: 'chord',
+    aspect: 'progression',
+    label: 'Chord progression',
+    keys: ['chords'],
+  },
+  {
     id: 'chord-pattern',
     track: 'chord',
     aspect: 'pattern',
-    label: 'Chords pattern',
-    keys: [
-      'chords',
-      'chordRhythmId',
-      'chordRhythmMode',
-      'customChordRhythm',
-      'chordFeel',
-      'chordOctave',
-    ],
+    label: 'Chords rhythm',
+    keys: ['chordRhythmId', 'chordRhythmMode', 'customChordRhythm', 'chordFeel', 'chordOctave'],
   },
   { id: 'bass-sound', track: 'bass', aspect: 'sound', label: 'Bass sound', keys: ['bassSynthParams'] },
   {
@@ -213,6 +214,6 @@ export function impliesKeyCopy(
   target: Loop,
   selected: readonly LoopCopyGroupId[],
 ): boolean {
-  if (!selected.includes('chord-pattern')) return false;
+  if (!selected.includes('chord-progression')) return false;
   return source.scaleRoot !== target.scaleRoot || source.scaleType !== target.scaleType;
 }

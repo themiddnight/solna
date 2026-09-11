@@ -93,6 +93,7 @@ describe('loadProject (boot)', () => {
       activeLoopId: 'loop-Alpha',
       soloTracks: ['drums'],
       recordingTrack: 'lead',
+      loopClipboard: { sourceLoopId: 'loop-Alpha' },
     });
     const order: string[] = [];
     stopSource.mockImplementation((source: string, release: number) => { order.push(`${source}@${release}`); });
@@ -118,6 +119,7 @@ describe('loadProject (boot)', () => {
     expect(s.projectName).toBe('Alpha');
     expect(s.soloTracks).toEqual([]);
     expect(s.recordingTrack).toBeNull();
+    expect(s.loopClipboard).toBeNull();
     // User preferences, deliberately NOT project content: carried over.
     expect(s.focusTrack).toBe('bass');
     expect(s.metronomeActive).toBe(true);

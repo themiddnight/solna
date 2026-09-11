@@ -76,6 +76,9 @@ export function createUiSlice(set: Set): UiSlice {
     focusTrack: 'synth',
     soloTracks: [],
     recordingTrack: null,
+    loopCopySelection: [],
+    loopCopySourceId: null,
+    loopClipboard: null,
     keyboardMode: readStoredKeyboardMode() ?? 'scale-locked',
     followPlayhead: readStoredFollowPlayhead() ?? true,
     midiActivityTimestamp: null,
@@ -102,6 +105,10 @@ export function createUiSlice(set: Set): UiSlice {
     // computes `armed ? null : trackId` itself, so the store never has to
     // guess which track a bare "toggle" meant.
     setRecordingTrack: (recordingTrack) => set({ recordingTrack }),
+    setLoopCopySelection: (loopCopySelection, loopCopySourceId) =>
+      set({ loopCopySelection, loopCopySourceId }),
+    setLoopClipboard: (loopClipboard) => set({ loopClipboard }),
+    clearLoopClipboard: () => set({ loopClipboard: null }),
     // One writer, not two. A `setFollowPlayhead(boolean)` sat beside this with
     // no caller but its own test, which is indistinguishable from a live action
     // at review time — and it meant one preference had two write-through paths

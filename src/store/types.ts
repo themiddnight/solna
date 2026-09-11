@@ -365,6 +365,16 @@ export interface EffectsSlice {
   setEffects: (effects: MasterEffects) => void;
 }
 
+/**
+ * The one-slot copy-source buffer behind the loop editor's copy/paste buttons.
+ * Copy is "copy all", so this is a reference to the source loop, not a
+ * pre-selected group list — which groups move is decided per paste.
+ * Session-only and never persisted.
+ */
+export interface LoopClipboard {
+  sourceLoopId: string;
+}
+
 export interface UiSlice {
   // All ui state is transient (not persisted); the active tab comes from the URL query.
   activeTab: ViewMode;
@@ -417,6 +427,25 @@ export interface UiSlice {
    * session into a project the user thought they had only opened.
    */
   recordingTrack: MelodyTrackId | null;
+  /**
+   * The LoopCopyDialog's last applied copy selection, remembered across opens
+   * within the session. Session-only and NEVER persisted — like everything
+   * else in this slice it is absent from partializeAppState and
+   * PROJECT_CONTENT_KEYS: a copy selection is an editing convenience, not
+   * composition data, and a reload defaulting fresh is the right reset.
+   * `sourceId` may name a loop since deleted; the dialog falls back to its
+   * first source when it no longer resolves.
+   */
+  loopCopySelection: readonly LoopCopyGroupId[];
+  loopCopySourceId: string | null;
+  /**
+   * The one-slot copy-source buffer for the loop editor's copy/paste buttons.
+   * Session-only and NEVER persisted, like loopCopySelection above.
+   * `sourceLoopId` may name a loop since deleted; paste clears the buffer when
+   * it no longer resolves. Not cleared on a successful paste, so one copy can
+   * be pasted into several loops in turn.
+   */
+  loopClipboard: LoopClipboard | null;
   // The synth keyboard's input mode. Transient by design: an input
   // preference, not composition data, so it does not travel with saved
   // projects (see partializeAppState in store.ts).
@@ -443,6 +472,9 @@ export interface UiSlice {
   toggleSoloTrack: (track: SoloTrack) => void;
   clearSoloTracks: () => void;
   setRecordingTrack: (track: MelodyTrackId | null) => void;
+  setLoopCopySelection: (selection: readonly LoopCopyGroupId[], sourceId: string | null) => void;
+  setLoopClipboard: (clipboard: LoopClipboard) => void;
+  clearLoopClipboard: () => void;
   setKeyboardMode: (mode: KeyboardMode) => void;
   toggleFollowPlayhead: () => void;
   triggerMidiActivity: () => void;

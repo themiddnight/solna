@@ -307,3 +307,59 @@ describe('recordingTrack — the armed melody track', () => {
     expect('leadRecording' in persisted).toBe(false);
   });
 });
+
+describe('loop-copy session state', () => {
+  afterEach(() => {
+    useAppStore.getState().setLoopCopySelection([], null);
+  });
+
+  test('starts with nothing selected and no remembered source', () => {
+    expect(useAppStore.getState().loopCopySelection).toEqual([]);
+    expect(useAppStore.getState().loopCopySourceId).toBeNull();
+  });
+
+  test('setLoopCopySelection remembers the selection and the source in one set()', () => {
+    useAppStore.getState().setLoopCopySelection(['lead-sound', 'chord-progression'], 'loop-source');
+    expect(useAppStore.getState().loopCopySelection).toEqual(['lead-sound', 'chord-progression']);
+    expect(useAppStore.getState().loopCopySourceId).toBe('loop-source');
+  });
+
+  test('is NOT persisted — a reload must come back with the dialog defaulting fresh', () => {
+    useAppStore.getState().setLoopCopySelection(['mix'], 'loop-source');
+    const persisted = partializeAppState(useAppStore.getState()) as unknown as Record<string, unknown>;
+    expect('loopCopySelection' in persisted).toBe(false);
+    expect('loopCopySourceId' in persisted).toBe(false);
+    expect([...PROJECT_CONTENT_KEYS]).not.toContain('loopCopySelection');
+    expect([...PROJECT_CONTENT_KEYS]).not.toContain('loopCopySourceId');
+  });
+});
+
+describe('loop clipboard buffer', () => {
+  afterEach(() => {
+    useAppStore.getState().clearLoopClipboard();
+  });
+
+  test('starts empty', () => {
+    expect(useAppStore.getState().loopClipboard).toBeNull();
+  });
+
+  test('setLoopClipboard stores the source reference', () => {
+    useAppStore.getState().setLoopClipboard({ sourceLoopId: 'loop-source' });
+    expect(useAppStore.getState().loopClipboard).toEqual({
+      sourceLoopId: 'loop-source',
+    });
+  });
+
+  test('clearLoopClipboard empties it', () => {
+    useAppStore.getState().setLoopClipboard({ sourceLoopId: 'a' });
+    useAppStore.getState().clearLoopClipboard();
+    expect(useAppStore.getState().loopClipboard).toBeNull();
+  });
+
+  test('is NOT persisted — absent from partializeAppState and PROJECT_CONTENT_KEYS', () => {
+    useAppStore.getState().setLoopClipboard({ sourceLoopId: 'a' });
+    const persisted = partializeAppState(useAppStore.getState()) as unknown as Record<string, unknown>;
+    expect('loopClipboard' in persisted).toBe(false);
+    expect([...PROJECT_CONTENT_KEYS]).not.toContain('loopClipboard');
+  });
+});

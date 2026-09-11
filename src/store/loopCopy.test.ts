@@ -47,8 +47,22 @@ describe('buildLoopCopyPatch', () => {
     expect(Object.keys(patch)).toEqual(['synthParams']);
   });
 
+  test('chord-progression copies only the progression; chord-pattern only the rhythm', () => {
+    const progression = buildLoopCopyPatch(sourceLoop(), targetLoop(), ['chord-progression']);
+    expect(Object.keys(progression)).toEqual(['chords']);
+
+    const rhythm = buildLoopCopyPatch(sourceLoop(), targetLoop(), ['chord-pattern']);
+    expect(Object.keys(rhythm)).toEqual([
+      'chordRhythmId',
+      'chordRhythmMode',
+      'customChordRhythm',
+      'chordFeel',
+      'chordOctave',
+    ]);
+  });
+
   test('several groups contribute exactly their union and nothing else', () => {
-    const patch = buildLoopCopyPatch(sourceLoop(), targetLoop(), ['chord-pattern', 'key']);
+    const patch = buildLoopCopyPatch(sourceLoop(), targetLoop(), ['chord-progression', 'chord-pattern', 'key']);
     expect(new Set(Object.keys(patch))).toEqual(
       new Set([
         'chords',
@@ -141,19 +155,19 @@ describe('impliesKeyCopy', () => {
     scaleType: 'Natural Minor',
   };
 
-  test('different keys with the chord pattern ticked implies the key copy', () => {
-    expect(impliesKeyCopy(inC, inAMinor, ['chord-pattern'])).toBe(true);
+  test('different keys with the chord progression ticked implies the key copy', () => {
+    expect(impliesKeyCopy(inC, inAMinor, ['chord-progression'])).toBe(true);
   });
 
   test('a differing scale type alone is enough', () => {
-    expect(impliesKeyCopy({ ...inC, scaleType: 'Dorian' }, inC, ['chord-pattern'])).toBe(true);
+    expect(impliesKeyCopy({ ...inC, scaleType: 'Dorian' }, inC, ['chord-progression'])).toBe(true);
   });
 
   test('matching keys imply nothing, so the notice never fires on a no-op', () => {
-    expect(impliesKeyCopy(inC, { ...inC, id: 'c' }, ['chord-pattern'])).toBe(false);
+    expect(impliesKeyCopy(inC, { ...inC, id: 'c' }, ['chord-progression'])).toBe(false);
   });
 
-  test('without the chord pattern nothing is implied, whatever the keys are', () => {
+  test('without the chord progression nothing is implied, whatever the keys are', () => {
     expect(impliesKeyCopy(inC, inAMinor, ['lead-sound', 'mix', 'drums-pattern'])).toBe(false);
     expect(impliesKeyCopy(inC, inAMinor, [])).toBe(false);
   });
