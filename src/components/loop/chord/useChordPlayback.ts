@@ -10,25 +10,22 @@ import {
   scheduleWholeChord,
 } from "@/audio/playback/chordPlayback";
 import type { BarInvariantEvent } from "@/audio/playback/chordPlayback";
+import type { RhythmPattern } from "@/data/chordRhythms";
 import {
-  CHORD_RHYTHMS,
-  RhythmPattern,
-} from "@/data/chordRhythms";
-import {
-  customRhythmPattern,
+  adaptBassPattern,
+  adaptRhythmPattern,
   feelToHoldScale,
   fullHoldDuration,
+  isFullHoldBass,
+  isFullHoldRhythm,
+  resolvePlaybackBassPattern,
+  resolvePlaybackRhythmPattern,
 } from "@/audio/chordRhythms";
 import {
-  customBassPattern,
   isApproachToken,
   resolveBassSteps,
 } from "@/audio/bassPatterns";
-import {
-  BASS_PATTERNS,
-  BassPattern,
-  type BassStepChoice,
-} from "@/data/bassPatterns";
+import type { BassPattern } from "@/data/bassPatterns";
 import {
   STEPS_PER_BAR,
   generateBlockChordNotes,
@@ -45,20 +42,13 @@ import {
   subscribePlaybackClock,
 } from "@/audio/playback/playbackEngine";
 import type { AccompanimentSource } from "@/audio/playback/playbackEngine";
-import { getMeter, type MeterId } from "@/utils/meter";
-import { adaptStepEvents } from "@/utils/eventAdapt";
+import { getMeter } from "@/utils/meter";
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "@/components/playerStop";
 import type { PlayerState } from "@/store/types";
 import type { ChordItem } from "@/types";
 import { publishStepAt, resetStep } from "@/components/playbackStep";
-import {
-  applyPadVoicing,
-  padHoldSec,
-  padHoldsAcrossLoop,
-  resolveDroneNotes,
-  shouldArmPad,
-} from "@/audio/playback/padPlayback";
-import { loopBars } from "@/store/loop";
+import { padHoldsAcrossLoop, resolvePadArm } from "@/audio/playback/padPlayback";
+import { loopBars } from "@/utils/songStructure";
 
 /**
  * Where the chord+bass scheduler currently is on the shared grid. Kept as a
@@ -141,91 +131,6 @@ interface ChordPlan {
 }
 
 /**
- * Patterns that hold one voice across the whole chord instead of re-striking.
- *
- * `stepsPerBar` is the ACTIVE bar length, not the constant 16: in 12/8 a bar is
- * 24 steps, and a 16-step hold there covers two thirds of a bar, not all of it.
- * Exported so the pure-logic tests can reach them without React.
- */
-export function isFullHoldRhythm(pattern: RhythmPattern, stepsPerBar: number): boolean {
-  return (
-    pattern.id === "sustained" ||
-    (pattern.hits.length === 1 &&
-      pattern.hits[0].step === 0 &&
-      (pattern.hits[0].holdSteps ?? 1) >= stepsPerBar)
-  );
-}
-
-export function isFullHoldBass(pattern: BassPattern, stepsPerBar: number): boolean {
-  return (
-    pattern.id === "whole-note-root" ||
-    (pattern.steps.length === 1 &&
-      pattern.steps[0].step === 0 &&
-      (pattern.steps[0].holdSteps ?? 1) >= stepsPerBar)
-  );
-}
-
-function resolveRhythmPattern(id: string): RhythmPattern {
-  return CHORD_RHYTHMS.find((p) => p.id === id) ?? CHORD_RHYTHMS[0];
-}
-
-function resolveBassPattern(id: string): BassPattern {
-  return BASS_PATTERNS.find((p) => p.id === id) ?? BASS_PATTERNS[0];
-}
-
-/**
- * Mode-aware pattern resolution for playback. Custom grids are synthesized at
- * the ACTIVE meter, so the returned pattern is stamped with `meterId` and
- * `adaptRhythmPattern`/`adaptBassPattern` return it unchanged there.
- */
-export function resolvePlaybackRhythmPattern(
-  mode: 'preset' | 'custom',
-  rhythmId: string,
-  customGrid: readonly boolean[],
-  stepsPerBar: number,
-  meterId: MeterId,
-): RhythmPattern {
-  return mode === 'custom'
-    ? customRhythmPattern(customGrid, stepsPerBar, meterId)
-    : resolveRhythmPattern(rhythmId);
-}
-
-export function resolvePlaybackBassPattern(
-  mode: 'preset' | 'custom',
-  patternId: string,
-  customGrid: readonly BassStepChoice[],
-  stepsPerBar: number,
-  meterId: MeterId,
-): BassPattern {
-  return mode === 'custom'
-    ? customBassPattern(customGrid, stepsPerBar, meterId)
-    : resolveBassPattern(patternId);
-}
-
-/**
- * Playback-time adaptation. Chord and bass rhythms are picked by id and never
- * edited by the user, so the library stays byte-identical on disk and a meter
- * change re-adapts on the next chord — no migration, no lossy write-back.
- * (The drum grid is the opposite case: it is user-editable, so preset
- * adaptation there is materialised at APPLY time in the sequencer slice.)
- *
- * Returns the SAME object when no adaptation is needed, so the identity checks
- * and id comparisons downstream (isFullHoldRhythm/isFullHoldBass) are unaffected
- * in 4/4.
- */
-export function adaptRhythmPattern(pattern: RhythmPattern, stepsPerBar: number): RhythmPattern {
-  const sourceSteps = getMeter(pattern.meter).stepsPerBar;
-  if (sourceSteps === stepsPerBar) return pattern;
-  return { ...pattern, hits: adaptStepEvents(pattern.hits, sourceSteps, stepsPerBar) };
-}
-
-export function adaptBassPattern(pattern: BassPattern, stepsPerBar: number): BassPattern {
-  const sourceSteps = getMeter(pattern.meter).stepsPerBar;
-  if (sourceSteps === stepsPerBar) return pattern;
-  return { ...pattern, steps: adaptStepEvents(pattern.steps, sourceSteps, stepsPerBar) };
-}
-
-/**
  * Strikes the pad's voicing and schedules its release.
  *
  * Deliberately NOT folded into startChordPlan: that function has no access to
@@ -238,37 +143,26 @@ export function adaptBassPattern(pattern: BassPattern, stepsPerBar: number): Bas
  */
 function armPad(chord: ChordItem, isLoopStart: boolean, time: number): void {
   const s = useAppStore.getState();
-  if (!shouldArmPad(s.padMode, isLoopStart)) return;
-
   const stepsPerBar = activeStepsPerBar();
-  const barDur = barDurationSec(s.bpm, stepsPerBar);
 
-  const notes =
-    s.padMode === 'drone'
-      ? resolveDroneNotes(
-          s.padDroneDegree,
-          s.padDroneIntervals,
-          s.padOctave,
-          s.scaleRoot,
-          s.scaleType,
-        )
-      : applyPadVoicing(
-          generateBlockChordNotes(chord.quality, chord.root, s.padOctave),
-          s.padVoicing,
-        );
-  if (notes.length === 0) return;
-
-  const holdSec = padHoldSec(
-    s.padMode,
-    // No `|| 1` guard: padHoldSec already floors at one bar, so a malformed
-    // `bars: 0` cannot schedule a note-off at its own note-on.
-    chord.bars,
+  const arm = resolvePadArm({
+    mode: s.padMode,
+    isLoopStart,
+    chord,
+    degree: s.padDroneDegree,
+    intervals: s.padDroneIntervals,
+    padOctave: s.padOctave,
+    voicing: s.padVoicing,
+    scaleRoot: s.scaleRoot,
+    scaleType: s.scaleType,
+    barDur: barDurationSec(s.bpm, stepsPerBar),
     // Only a drone reads the loop's length, and loopBars walks the whole
     // progression — pad mode arms on EVERY chord and must not pay for it.
-    padHoldsAcrossLoop(s.padMode) ? loopBars(s.chords) : 0,
-    barDur,
-  );
-  playFullHoldChord(notes, s.padSynthParams, time, holdSec, 'pad');
+    loopBarCount: padHoldsAcrossLoop(s.padMode) ? loopBars(s.chords) : 0,
+  });
+  if (!arm) return;
+
+  playFullHoldChord(arm.notes, s.padSynthParams, time, arm.holdSec, 'pad');
 }
 
 /**

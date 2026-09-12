@@ -7,7 +7,7 @@ import { getMeter } from '@/utils/meter';
 import { TICKS_PER_SIXTEENTH, columnsPerBar, strideFor } from '@/utils/stepResolution';
 import { publishStepAt, resetStep } from '@/components/playbackStep';
 import { melodyTrack, type MelodyTrackId } from '@/store/melodyTracks';
-import { leadScheduleHits, type LeadScheduleHit } from './useLeadPlayback';
+import { leadScheduleHits, type LeadScheduleHit } from '@/audio/leadMelody';
 
 /**
  * Every (column, offset) the MARKER publishes for one clock dispatch.

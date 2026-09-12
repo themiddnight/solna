@@ -6,7 +6,7 @@ import { GROUP_LABEL, SECTION_HEADER } from '@/components/ui/fieldClasses';
 import { PanelCard } from '@/components/ui/PanelCard';
 import { ModuleHeader } from '@/components/ui/ModuleHeader';
 import { SoloButton } from '@/components/ui/SoloButton';
-import { loopBars } from '@/store/loop';
+import { loopBars } from '@/utils/songStructure';
 import { getMeter, type Meter } from '@/utils/meter';
 import { type StepCell } from '@/components/sequencerGrid';
 import {

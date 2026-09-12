@@ -3,13 +3,16 @@ import {
   Sun,
   Moon,
   ChevronDown,
+  Download,
   LocateFixed,
   LocateOff,
 } from "lucide-react";
 import { Layer, layerForTab, ViewMode } from "../types";
+import { selectMixdownBusy, type MixdownProgress, type MixdownResult } from "@/store/mixdownSlice";
 import { defaultTabForLayer, tabsForLayer } from "../routing/tabRouting";
 import { SCALES } from "@/data/scales";
 import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from "@/utils/noteSpelling";
+import { downloadBlob } from "@/utils/projectFileIO";
 import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/storage";
 import { useAppStore } from "../store/store";
 import { useLiveStore } from "./ui/useLiveStore";
@@ -245,6 +248,179 @@ export function FollowPlayheadToggle({ layer }: { layer: Layer }) {
   );
 }
 
+/** What a click handler needs, injected so the wiring is testable with no DOM. */
+export interface MixdownExportDeps {
+  exportMixdown: () => Promise<MixdownResult>;
+  download: (fileName: string, blob: Blob) => void;
+  setNotice: (message: string) => void;
+  setProgress: (progress: MixdownProgress | null) => void;
+  isCancelled: () => boolean;
+  yieldToBrowserPaint: () => Promise<void>;
+}
+
+/**
+ * What a download that threw reads as. The same sentence — and the same
+ * reasoning — as `ProjectMenu`'s `downloadCopy`: the anchor/blob path can throw
+ * in a restricted embedding, and downloading is best-effort.
+ */
+export const MIXDOWN_DOWNLOAD_FAILED_MESSAGE =
+  'Could not write the file. Check the browser’s download settings.';
+
+/**
+ * The click handler's whole body: run the export, download on success, and say
+ * so.
+ *
+ * Extracted and dependency-injected for the reason it is a plain function
+ * rather than an inline arrow: the suite has no DOM and no testing-library, so
+ * a handler that called `downloadBlob` and `setProjectNotice` directly would be
+ * untestable — the buttons would render and nothing would prove they were
+ * wired to anything.
+ *
+ * A RENDER failure writes NO notice here. The slice already wrote one, and a
+ * second message on top of it would be the same fact told twice in two voices.
+ * A DOWNLOAD failure is the opposite case and is the reason the download is
+ * guarded: `downloadBlob` revokes in a `finally` but catches nothing, so it
+ * rethrows — and on that path the user has waited out a full render, has no
+ * file, and would otherwise be told nothing at all. The success notice is
+ * written only after the download has actually returned.
+ */
+export async function runMixdownExport(deps: MixdownExportDeps): Promise<MixdownResult> {
+  const result = await deps.exportMixdown();
+  if (result.ok) {
+    deps.setProgress({ phase: 'downloading' });
+    try {
+      await deps.yieldToBrowserPaint();
+      if (deps.isCancelled()) {
+        return { ok: false, reason: { kind: 'cancelled' } };
+      }
+      deps.download(result.fileName, result.blob);
+    } catch {
+      deps.setNotice(MIXDOWN_DOWNLOAD_FAILED_MESSAGE);
+      return result;
+    } finally {
+      deps.setProgress(null);
+    }
+    deps.setNotice(`Exported ${result.fileName}.`);
+  }
+  return result;
+}
+
+function mixdownProgressLabel(progress: MixdownProgress | null): string {
+  if (!progress || progress.phase === 'preparing') return 'Preparing arrangement…';
+  if (progress.phase === 'rendering') return `Rendering mixdown… ${progress.percent}%`;
+  if (progress.phase === 'encoding') return 'Encoding WAV…';
+  if (progress.phase === 'cancelling') return 'Cancelling…';
+  return 'Downloading…';
+}
+
+/** Let React commit the delivery phase for one visible frame before download. */
+function yieldToBrowserPaint(): Promise<void> {
+  if (typeof requestAnimationFrame !== 'function') {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+/**
+ * Export ▾ — the song layer's one arrangement-wide action.
+ *
+ * Takes `layer` as a prop rather than deriving it, for the same testability
+ * reason `FollowPlayheadToggle` and `ProjectNameLabel` do: `Header` derives
+ * `layer` from `activeTab` through a plain `useAppStore` selector, which under
+ * `renderToString` serves the store's creation-time state, so a rendered
+ * `<Header />` can never reach the song layer. The prop is what makes
+ * "song layer only" an assertable statement.
+ *
+ * The menu is SHAPED to take a stem row later — one row per export kind, each
+ * owning its own action — and no row is built for it. A control that can never
+ * work on this build must not be advertised.
+ *
+ * `busy` disables the trigger AND the row across rendering and browser
+ * delivery: the row can otherwise be clicked twice before either phase
+ * resolves, and the disabled attribute closes that gap for the pointer.
+ */
+export function ExportButton({ layer }: { layer: Layer }) {
+  const busy = useLiveStore(selectMixdownBusy);
+  const mixdownProgress = useLiveStore((s) => s.mixdownProgress);
+  const setMixdownProgress = useLiveStore((s) => s.setMixdownProgress);
+  const cancelMixdown = useLiveStore((s) => s.cancelMixdown);
+  const isMixdownCancelled = useLiveStore((s) => s.isMixdownCancelled);
+  const exportMixdown = useLiveStore((s) => s.exportMixdown);
+  const setProjectNotice = useLiveStore((s) => s.setProjectNotice);
+  if (layer !== 'song') return null;
+  const progressLabel = mixdownProgressLabel(mixdownProgress);
+
+  return (
+    <div className="flex items-center gap-1">
+      <div className="dropdown dropdown-end">
+        <button
+          id="btn-export"
+          type="button"
+          disabled={busy}
+          className="btn btn-sm btn-ghost gap-1 px-2 text-xs font-bold"
+          aria-label={busy ? progressLabel : 'Export'}
+          aria-live="polite"
+          aria-busy={busy}
+        >
+          {busy ? (
+            <span className="loading loading-spinner loading-sm" aria-hidden="true" />
+          ) : (
+            <Download className="w-4 h-4" />
+          )}
+          <span className={busy ? undefined : 'hidden sm:inline'}>
+            {busy ? progressLabel : 'Export'}
+          </span>
+          {!busy && <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />}
+        </button>
+        <ul
+          id="export-menu"
+          // daisyUI's dropdown holds itself open on :focus-within, so the panel
+          // must be focusable or the menu closes the moment a pointer-down lands
+          // inside it. It is a plain container, not a control; the <li><button>
+          // row inside is what the keyboard actually reaches.
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+          tabIndex={0}
+          className="dropdown-content menu menu-sm z-50 mt-2 min-w-44 max-w-[calc(100vw-2rem)] rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
+        >
+          <li>
+            <button
+              id="btn-export-mixdown"
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                void runMixdownExport({
+                  exportMixdown,
+                  download: downloadBlob,
+                  setNotice: setProjectNotice,
+                  setProgress: setMixdownProgress,
+                  isCancelled: isMixdownCancelled,
+                  yieldToBrowserPaint,
+                });
+              }}
+            >
+              {busy ? progressLabel : 'Export mixdown (WAV)'}
+            </button>
+          </li>
+        </ul>
+      </div>
+      {busy && mixdownProgress?.phase !== 'cancelling' && (
+        <button
+          id="btn-cancel-export"
+          type="button"
+          className="btn btn-sm btn-ghost px-2 text-xs"
+          onClick={cancelMixdown}
+        >
+          Cancel export
+        </button>
+      )}
+    </div>
+  );
+}
+
 export type SolnaTheme = 'solna-dark' | 'solna-light';
 
 const THEME_STORAGE_KEY = 'solna_theme';
@@ -374,6 +550,11 @@ export const Header = React.memo(function Header() {
             Arrange does with the scroll position while the song plays. */}
         <FollowPlayheadToggle layer={layer} />
 
+        {/* Beside it, song layer only: the arrangement-wide export. It sits
+        with the song's own controls rather than in the project menu, because
+        what it writes is the arrangement — not the project file. */}
+        <ExportButton layer={layer} />
+
         {/* The key/scale group belongs with the subject, not with the theme
             button it used to sit beside: "which loop, in which key" is one
             question, and a master-scale field parked inside the actions zone
@@ -465,4 +646,3 @@ export const Header = React.memo(function Header() {
     </header>
   );
 });
-

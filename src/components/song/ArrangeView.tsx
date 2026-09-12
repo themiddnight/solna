@@ -17,7 +17,8 @@ import {
 } from '@dnd-kit/sortable';
 import { loadLoop } from '@/store/loadLoop';
 import { loopPlayButton, scopedLoopId } from '@/store/playbackScope';
-import { loopBars, loopLabel } from '@/store/loop';
+import { loopLabel } from '@/store/loop';
+import { loopBars, loopDwellSteps } from '@/utils/songStructure';
 import type { LoopCopyGroupId } from '@/store/loopCopy';
 import { aggregateAllPlayers } from '@/store/transportSlice';
 import { useAppStore } from '@/store/store';
@@ -92,15 +93,13 @@ export const ArrangeView = React.memo(function ArrangeView() {
   // The stored step may only be reduced modulo a COMMON multiple of all of
   // them, or a card's progress bar would jump — arrangeStep.test.ts pins that
   // invariant.
+  //
+  // These totals are `loopDwellSteps`, the arrangement's OWN dwell rule, not a
+  // second copy of it: the card shows how far through the loop the song is, so
+  // a card total that disagreed with `songAdvanceDecision` would put the
+  // playhead at the wrong place on the card it is drawn on.
   const cycleSteps = useMemo(
-    () =>
-      arrangeCycleSteps(
-        loops.map(
-          (loop) =>
-            Math.max(1, loopBars(loop.chords) * stepsPerBar) *
-            Math.max(1, loop.repeatCount ?? 1),
-        ),
-      ),
+    () => arrangeCycleSteps(loops.map((loop) => loopDwellSteps(loop, stepsPerBar))),
     [loops, stepsPerBar],
   );
 

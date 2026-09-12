@@ -12,21 +12,34 @@ export function projectFileName(name: string): string {
   return `${slugifyProjectName(name)}.solna`;
 }
 
-interface ObjectUrlApi {
+export interface ObjectUrlApi {
   createObjectURL(blob: Blob): string;
   revokeObjectURL(url: string): void;
 }
 
-export function downloadTextFile(
+/**
+ * Hands a Blob to the browser as a download.
+ *
+ * The `<a download>` dance, in one place, with the URL revoked in a `finally`
+ * so a click that throws — a blocked download, a sandboxed frame — does not
+ * leak an object URL that pins the blob for the life of the page. `doc` and
+ * `url` are injectable for exactly the reason `downloadTextFile`'s are: the
+ * store never touches the DOM, so the component does, and the component's
+ * helper is then testable with no DOM at all.
+ *
+ * A Blob URL rather than a data URL, for the reason this file already
+ * records: a rendered mixdown is far past any browser's data-URL length
+ * limit.
+ */
+export function downloadBlob(
   fileName: string,
-  text: string,
-  mime: string,
+  blob: Blob,
   doc?: Document,
   url?: ObjectUrlApi,
 ): void {
   const d = doc ?? document;
   const u = url ?? URL;
-  const href = u.createObjectURL(new Blob([text], { type: mime }));
+  const href = u.createObjectURL(blob);
   const anchor = d.createElement('a');
   anchor.href = href;
   anchor.download = fileName;
@@ -37,6 +50,16 @@ export function downloadTextFile(
     anchor.remove();
     u.revokeObjectURL(href);
   }
+}
+
+export function downloadTextFile(
+  fileName: string,
+  text: string,
+  mime: string,
+  doc?: Document,
+  url?: ObjectUrlApi,
+): void {
+  downloadBlob(fileName, new Blob([text], { type: mime }), doc, url);
 }
 
 /** A directory or a zero-byte pick reads as '' and is then reported as malformed. */

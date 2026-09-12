@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Info } from 'lucide-react';
-import { loopBars } from '@/store/loop';
+import { loopBars } from '@/utils/songStructure';
 import { impliesKeyCopy, LOOP_COPY_GROUPS } from '@/store/loopCopy';
 import { useAppStore } from '@/store/store';
 import type { LoopCopyAspect, LoopCopyGroupId, LoopCopyTrack } from '@/store/loopCopy';

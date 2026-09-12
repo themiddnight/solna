@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import React from 'react';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
-import { FollowPlayheadToggle, ProjectNameLabel, TabButton, LAYER_META, layerToggleTarget, persistTheme, projectDisplayName, readStoredTheme, resolveInitialTheme, ScaleSelects, UNTITLED_PROJECT_LABEL } from './Header';
+import { ExportButton, FollowPlayheadToggle, MIXDOWN_DOWNLOAD_FAILED_MESSAGE, ProjectNameLabel, runMixdownExport, TabButton, LAYER_META, layerToggleTarget, persistTheme, projectDisplayName, readStoredTheme, resolveInitialTheme, ScaleSelects, UNTITLED_PROJECT_LABEL } from './Header';
 import { PatternSegmentRow } from './ui/SegmentedControl';
 import { LOOP_TABS, SONG_TABS } from '../types';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
@@ -327,6 +327,200 @@ describe('FollowPlayheadToggle (song layer only)', () => {
   });
 });
 
+// Reads the store through useLiveStore, so a test's setState lands (see
+// ui/useLiveStore.ts). The LAYER comes from the prop, which is what makes
+// "song layer only" an assertable statement under renderToString.
+describe('ExportButton (song layer only)', () => {
+  const initial = useAppStore.getState().exporting;
+  // In afterEach rather than at the end of the one test that sets it: an
+  // assertion that throws above the reset would otherwise leak `exporting: true`
+  // into every test that follows.
+  afterEach(() => {
+    useAppStore.setState({ exporting: initial, mixdownProgress: null });
+  });
+
+  test('the song layer shows the trigger and its one item', () => {
+    const html = renderToString(<ExportButton layer="song" />);
+    expect(html).toContain('id="btn-export"');
+    expect(html).toContain('id="btn-export-mixdown"');
+    expect(html).toContain('Export mixdown (WAV)');
+  });
+
+  test('the loop layer never shows it — an export is an arrangement action', () => {
+    const html = renderToString(<ExportButton layer="loop" />);
+    expect(html).not.toContain('id="btn-export"');
+  });
+
+  test('the menu is shaped to take a stem row, and does not advertise one', () => {
+    const html = renderToString(<ExportButton layer="song" />);
+    // The row is out of scope, and a control that can never work on this build
+    // must not be advertised — the same rule the Drive rows follow when
+    // VITE_GOOGLE_CLIENT_ID is unset.
+    expect(html).not.toContain('stem');
+    expect(html).not.toContain('Stem');
+    expect(html).not.toContain('coming soon');
+    expect(html).not.toContain('disabled');
+  });
+
+  test('while exporting, the trigger is disabled and the item says so', () => {
+    useAppStore.setState({
+      exporting: true,
+      mixdownProgress: { phase: 'rendering', percent: 35 },
+    });
+    const html = renderToString(<ExportButton layer="song" />);
+    const trigger = openTagContaining(html, 'id="btn-export"');
+    expect(trigger).toContain('disabled');
+    expect(trigger).toContain('aria-live="polite"');
+    expect(html).toContain('loading loading-spinner');
+    expect(html).toContain('Rendering mixdown… 35%');
+    expect(html).toContain('id="btn-cancel-export"');
+    expect(html).toContain('Cancel export');
+  });
+
+  test('while cancellation drains, the status is honest and cannot be cancelled twice', () => {
+    useAppStore.setState({
+      exporting: true,
+      mixdownProgress: { phase: 'cancelling' },
+    });
+    const html = renderToString(<ExportButton layer="song" />);
+    expect(html).toContain('Cancelling…');
+    expect(html).not.toContain('id="btn-cancel-export"');
+  });
+
+  test('while handing the WAV to the browser, the trigger stays busy and says Downloading', () => {
+    useAppStore.setState({
+      exporting: false,
+      mixdownProgress: { phase: 'downloading' },
+    });
+    const html = renderToString(<ExportButton layer="song" />);
+    const trigger = openTagContaining(html, 'id="btn-export"');
+    expect(trigger).toContain('disabled');
+    expect(html).toContain('loading loading-spinner');
+    expect(html).toContain('Downloading…');
+  });
+
+  test('the panel is focusable, like every other dropdown in the app', () => {
+    // daisyUI holds `dropdown-content` open on :focus-within, so a
+    // non-focusable panel closes the instant a pointer lands inside it.
+    const html = renderToString(<ExportButton layer="song" />);
+    const panel = openTagContaining(html, 'id="export-menu"');
+    expect(panel).toContain('tabindex="0"');
+  });
+});
+
+describe('runMixdownExport', () => {
+  test('a successful export downloads the blob and names the file', async () => {
+    const downloaded: [string, Blob][] = [];
+    const notices: string[] = [];
+    const result = await runMixdownExport({
+      exportMixdown: async () => ({
+        ok: true,
+        destination: 'download',
+        blob: new Blob(['wav'], { type: 'audio/wav' }),
+        fileName: 'my-song.wav',
+      }),
+      download: (fileName, blob) => downloaded.push([fileName, blob]),
+      setNotice: (message) => notices.push(message),
+      setProgress: () => {},
+      isCancelled: () => false,
+      yieldToBrowserPaint: async () => {},
+    });
+    expect(result.ok).toBe(true);
+    expect(downloaded.map(([name]) => name)).toEqual(['my-song.wav']);
+    expect(notices).toEqual(['Exported my-song.wav.']);
+  });
+
+  test('a failed export downloads nothing and writes no success notice', async () => {
+    const downloaded: string[] = [];
+    const notices: string[] = [];
+    const result = await runMixdownExport({
+      // The slice already wrote the failure notice; this path must not write a
+      // SECOND, contradicting one on top of it.
+      exportMixdown: async () => ({ ok: false, reason: { kind: 'empty-arrangement' } }),
+      download: (fileName) => downloaded.push(fileName),
+      setNotice: (message) => notices.push(message),
+      setProgress: () => {},
+      isCancelled: () => false,
+      yieldToBrowserPaint: async () => {},
+    });
+    expect(result.ok).toBe(false);
+    expect(downloaded).toEqual([]);
+    expect(notices).toEqual([]);
+  });
+
+  // The download is the one step that can throw AFTER a full render — a
+  // blocked download, a sandboxed frame — and it is the same failure
+  // ProjectMenu's `downloadCopy` already reports on this exact call. Silent
+  // here, the user waits out a render, gets no file and is told nothing.
+  test('a download that throws is reported, and claims no success', async () => {
+    const notices: string[] = [];
+    const result = await runMixdownExport({
+      exportMixdown: async () => ({
+        ok: true,
+        destination: 'download',
+        blob: new Blob(['wav'], { type: 'audio/wav' }),
+        fileName: 'my-song.wav',
+      }),
+      download: () => {
+        throw new Error('blocked');
+      },
+      setNotice: (message) => notices.push(message),
+      setProgress: () => {},
+      isCancelled: () => false,
+      yieldToBrowserPaint: async () => {},
+    });
+    expect(result.ok).toBe(true);
+    expect(notices).toEqual([MIXDOWN_DOWNLOAD_FAILED_MESSAGE]);
+    expect(notices).not.toContain('Exported my-song.wav.');
+  });
+
+  test('paints Downloading before handing the WAV to the browser, then clears it', async () => {
+    const events: string[] = [];
+    await runMixdownExport({
+      exportMixdown: async () => ({
+        ok: true,
+        destination: 'download',
+        blob: new Blob(['wav'], { type: 'audio/wav' }),
+        fileName: 'my-song.wav',
+      }),
+      download: () => events.push('download'),
+      setNotice: () => {},
+      setProgress: (progress) => events.push(progress?.phase ?? 'clear'),
+      isCancelled: () => false,
+      yieldToBrowserPaint: async () => {
+        events.push('paint');
+      },
+    });
+
+    expect(events).toEqual(['downloading', 'paint', 'download', 'clear']);
+  });
+
+  test('a cancellation during browser paint suppresses download and success', async () => {
+    const downloaded: string[] = [];
+    const notices: string[] = [];
+    let cancelled = false;
+    const result = await runMixdownExport({
+      exportMixdown: async () => ({
+        ok: true,
+        destination: 'download',
+        blob: new Blob(['wav'], { type: 'audio/wav' }),
+        fileName: 'old-project.wav',
+      }),
+      download: (fileName) => downloaded.push(fileName),
+      setNotice: (message) => notices.push(message),
+      setProgress: () => {},
+      isCancelled: () => cancelled,
+      yieldToBrowserPaint: async () => {
+        cancelled = true;
+      },
+    });
+
+    expect(result).toEqual({ ok: false, reason: { kind: 'cancelled' } });
+    expect(downloaded).toEqual([]);
+    expect(notices).toEqual([]);
+  });
+});
+
 /**
  * Order, read off the source: `Header` itself is never rendered in this suite
  * (its `activeTab` read serves the store's creation-time value under
@@ -442,4 +636,3 @@ describe('key picker', () => {
     expect(html).not.toMatch(/\bw-\d+\b/);
   });
 });
-

@@ -32,11 +32,11 @@ import {
 } from "@dnd-kit/sortable";
 import { ChordItem, CustomChordProgressionItem } from "@/types";
 import { useAppStore } from "@/store/store";
+import { useChordPlayback } from "./chord/useChordPlayback";
 import {
-  useChordPlayback,
-  resolvePlaybackRhythmPattern,
   resolvePlaybackBassPattern,
-} from "./chord/useChordPlayback";
+  resolvePlaybackRhythmPattern,
+} from "@/audio/chordRhythms";
 import {
   ensurePreviewEngine,
   hasPreviewEngine,

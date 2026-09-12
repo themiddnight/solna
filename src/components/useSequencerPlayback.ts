@@ -2,7 +2,8 @@ import { useEffect, useRef } from "react";
 import { useAppStore } from "../store/store";
 import { publishStepAt, resetStep } from "./playbackStep";
 import { ensureDrumEngine, triggerPad } from "../audio/playback/drumPlayback";
-import { STEPS_PER_BAR, stepDurationSec } from "../utils/musicTheory";
+import { sequencerStepEvents, type SequencerStepEvent } from "@/audio/sequencerSteps";
+import { STEPS_PER_BAR } from "../utils/musicTheory";
 import {
   playbackNoteOff,
   playbackNoteOn,
@@ -12,7 +13,7 @@ import { getMeter } from "../utils/meter";
 import { DEFAULT_VELOCITY } from "../audio/constants";
 import { armOnBarLine, isSoftStopBoundary } from "./playerStop";
 import type { PlayerState } from "../store/types";
-import type { SequencerTrack, SynthParams } from "../types";
+import type { SynthParams } from "../types";
 
 /** Whether the stepper has caught a bar line and started running. */
 export interface SequencerArming {
@@ -41,44 +42,6 @@ export function sequencerStepAction(
   if (isSoftStopBoundary(state, step, stepsPerBar)) return "soft-stop";
   if (!armOnBarLine(arming, step, stepsPerBar)) return "idle";
   return "play";
-}
-
-/** What one sequencer step must trigger. Pure so the per-step decision is
- *  testable without a clock, an AudioContext or a React render. */
-export type SequencerStepEvent =
-  | { kind: 'note'; note: string; release: number; offsetSec: number }
-  | { kind: 'pad'; instrument: string };
-
-export function sequencerStepEvents(
-  tracks: readonly SequencerTrack[],
-  stepIndex: number,
-  synthParams: SynthParams,
-  bpm: number,
-): SequencerStepEvent[] {
-  const events: SequencerStepEvent[] = [];
-  const offsetSec = stepDurationSec(bpm) * 0.8;
-  for (const track of tracks) {
-    if (track.muted) continue;
-    if (!track.steps[stepIndex]) continue;
-    // NOTE (DEV-386): a sequencer NOTE goes to playbackNoteOn with `source`
-    // defaulting to 'synth', so it sums on the Lead bus while the Beat fader
-    // is what a user reaches for. Latent today only because all eleven
-    // canonical tracks are drum voices; the first synth or bass track makes
-    // it audible. Fixing it means deciding whether a sequencer note belongs
-    // on the sequencer bus at all — an arrangement question, not a units
-    // one. Left for a follow-up.
-    if (track.instrument === 'synth' || track.instrument === 'bass') {
-      events.push({
-        kind: 'note',
-        note: track.instrument === 'bass' ? 'C2' : 'C4',
-        release: synthParams.release,
-        offsetSec,
-      });
-    } else {
-      events.push({ kind: 'pad', instrument: track.instrument });
-    }
-  }
-  return events;
 }
 
 /**
@@ -180,8 +143,8 @@ export function useSequencerPlayback(): void {
       publishStepAt('sequencer', stepInLoop, time);
 
       // Everything the step needs, read LIVE off the store — same rationale as
-      // the meter read above, and the pattern useLeadPlayback.ts:90 and
-      // useChordPlayback.ts:632 already use.
+      // the meter read above, and the pattern the lead and chord schedulers'
+      // own clock callbacks already use.
       const live = useAppStore.getState();
       fireSequencerStepEvents(
         sequencerStepEvents(live.sequencerTracks, stepInLoop, live.synthParams, live.bpm),

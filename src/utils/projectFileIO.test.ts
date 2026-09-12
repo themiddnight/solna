@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { downloadTextFile, projectFileName, readFileAsText, slugifyProjectName } from './projectFileIO';
+import { downloadBlob, downloadTextFile, projectFileName, readFileAsText, slugifyProjectName } from './projectFileIO';
 
 describe('slugifyProjectName / projectFileName', () => {
   test('slugifies and appends .solna', () => {
@@ -39,6 +39,64 @@ describe('downloadTextFile', () => {
     expect(() => downloadTextFile('x.solna', '{}', 'application/json', doc, url)).toThrow(error);
     expect(removed).toBe(true);
     expect(revoked).toBe('blob:fake');
+  });
+});
+
+describe('downloadBlob', () => {
+  /**
+   * A document stub that records the anchor it was handed. `throwOnClick`
+   * makes the click itself fail — the blocked-download case — rather than
+   * casting the stub's `createElement` aside in one test.
+   */
+  function recordingDoc(throwOnClick = false) {
+    const clicks: string[] = [];
+    const removed: string[] = [];
+    const doc = {
+      createElement: () => {
+        const anchor = {
+          href: '',
+          download: '',
+          click: () => {
+            if (throwOnClick) throw new Error('blocked');
+            clicks.push(anchor.href);
+          },
+          remove: () => removed.push(anchor.href),
+        };
+        return anchor;
+      },
+      body: { appendChild: () => {} },
+    } as unknown as Document;
+    return { doc, clicks, removed };
+  }
+
+  test('creates a URL, clicks the anchor, and revokes in the same order', () => {
+    const { doc, clicks, removed } = recordingDoc();
+    const revoked: string[] = [];
+    const url = {
+      createObjectURL: () => 'blob:1',
+      revokeObjectURL: (href: string) => revoked.push(href),
+    };
+    downloadBlob('song.wav', new Blob(['x'], { type: 'audio/wav' }), doc, url);
+    expect(clicks).toEqual(['blob:1']);
+    // Revoked, and revoked AFTER the click: a URL revoked first is a download
+    // that never starts.
+    expect(removed).toEqual(['blob:1']);
+    expect(revoked).toEqual(['blob:1']);
+  });
+
+  test('revokes even when the click throws', () => {
+    const { doc } = recordingDoc(true);
+    const revoked: string[] = [];
+    const url = { createObjectURL: () => 'blob:2', revokeObjectURL: (h: string) => revoked.push(h) };
+    expect(() => downloadBlob('song.wav', new Blob(['x']), doc, url)).toThrow('blocked');
+    expect(revoked).toEqual(['blob:2']);
+  });
+
+  test('downloadTextFile is the same download with a text blob', () => {
+    const { doc, clicks } = recordingDoc();
+    const url = { createObjectURL: () => 'blob:3', revokeObjectURL: () => {} };
+    downloadTextFile('a.solna', 'body', 'application/json', doc, url);
+    expect(clicks).toEqual(['blob:3']);
   });
 });
 

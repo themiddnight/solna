@@ -18,7 +18,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Loop, LoopMixPatch } from '@/store/types';
 import { ChordItem } from '@/types';
-import { loopBars } from '@/store/loop';
+import { loopBars } from '@/utils/songStructure';
 import { formatDb } from '@/utils/gainUnits';
 import { formatChordQuality } from '@/utils/musicTheory';
 import { getTonicSpelling } from '@/utils/noteSpelling';

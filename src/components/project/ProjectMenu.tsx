@@ -3,6 +3,7 @@ import { Cloud, CloudOff, CloudUpload, FileDown, FilePlus, Save, Upload } from '
 import { defaultSaveName } from '@/utils/driveBrowser';
 import { PROJECT_FILE_ACCEPT, PROJECT_FILE_MIME, parseProjectFile, serializeProject, type ProjectParseResult } from '@/store/projectFile';
 import type { ProjectSaveResult } from '@/store/projectSlice';
+import { selectMixdownBusy } from '@/store/mixdownSlice';
 import type { ProjectSource } from '@/store/projectSource';
 import type { DriveUserProfile } from '@/store/driveClient';
 import { pickLocalOpenHandle, readTextFromHandle } from '@/utils/localFileSave';
@@ -167,6 +168,12 @@ export const CONFIRM_COPY: Record<ReplacingAction, { title: string; label: strin
 export const REPLACE_CONFIRM_MESSAGE =
   'This replaces your current project. It is autosaved, so the one you are editing now will be gone.';
 
+export function replaceConfirmMessage(exporting: boolean): string {
+  return exporting
+    ? `${REPLACE_CONFIRM_MESSAGE} The export in progress will be cancelled.`
+    : REPLACE_CONFIRM_MESSAGE;
+}
+
 /**
  * The wordmark IS the project menu. There is no project list any more, so the
  * brand mark is the one place a project-level action can live, and it is
@@ -190,6 +197,7 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
   const saveProject = useLiveStore((s) => s.saveProject);
   const saveProjectAsLocal = useLiveStore((s) => s.saveProjectAsLocal);
   const projectName = useLiveStore((s) => s.projectName);
+  const exporting = useLiveStore(selectMixdownBusy);
   const projectSource = useLiveStore((s) => s.projectSource);
   const driveAvailable = useLiveStore((s) => s.driveAvailable);
   const driveSignedIn = useLiveStore((s) => s.driveSignedIn);
@@ -391,7 +399,7 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
       {confirming !== null && (
         <ConfirmDialog
           title={CONFIRM_COPY[confirming].title}
-          message={REPLACE_CONFIRM_MESSAGE}
+          message={replaceConfirmMessage(exporting)}
           confirmLabel={CONFIRM_COPY[confirming].label}
           onConfirm={confirmReplace}
           onCancel={() => setConfirming(null)}

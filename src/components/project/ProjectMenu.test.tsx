@@ -7,6 +7,7 @@ import {
   REPLACE_CONFIRM_MESSAGE,
   REPLACING_ACTIONS,
   driveAccountLabel,
+  replaceConfirmMessage,
   replacesProject,
   saveLabel,
   visibleMenuSections,
@@ -122,6 +123,13 @@ describe('ProjectMenu', () => {
     expect(REPLACE_CONFIRM_MESSAGE).toBe(
       'This replaces your current project. It is autosaved, so the one you are editing now will be gone.',
     );
+  });
+
+  test('the replace confirmation warns that an active export will be cancelled', () => {
+    expect(replaceConfirmMessage(true)).toBe(
+      `${REPLACE_CONFIRM_MESSAGE} The export in progress will be cancelled.`,
+    );
+    expect(replaceConfirmMessage(false)).toBe(REPLACE_CONFIRM_MESSAGE);
   });
 
   // The menu is behind a dropdown that opens on focus, which renderToString

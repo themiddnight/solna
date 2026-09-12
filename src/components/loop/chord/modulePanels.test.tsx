@@ -112,7 +112,7 @@ describe('PadModulePanel', () => {
   // getServerSnapshot serves the store's creation-time state (the zustand +
   // renderToString trap), which has padMode 'pad' — so this renders the
   // chord-voicing fields (voicing), never the drone fields. The other
-  // branch is exercised by padArm/padPlayback tests; this test stays
+  // branch is exercised by the padPlayback tests; this test stays
   // limited to the structural class-string checks the sibling panels use.
   const html = renderToString(<PadModulePanel />);
 
