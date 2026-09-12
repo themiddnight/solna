@@ -3098,6 +3098,45 @@ describe('source bus level control', () => {
     expect(bus.gain.targets.at(-1)!.v).toBe(0.6);
   });
 
+  test('a future source mute changes the bus at the song boundary, not at scheduler time', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'fx', 1, 'live');
+    const bus = (engine as any).sourceBuses.get('fx');
+    const boundary = ctx.currentTime + 0.075;
+
+    engine.setSourceMuted('fx', true, boundary);
+
+    expect(bus.gain.cancels.at(-1)).toBe(boundary);
+    expect(bus.gain.targets.at(-1)).toEqual({ v: 0, t: boundary, tc: 0.01 });
+  });
+
+  test('a future source fader change also waits for the song boundary', () => {
+    const { engine, ctx } = freshEngine();
+    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'fx', 1, 'live');
+    const bus = (engine as any).sourceBuses.get('fx');
+    const boundary = ctx.currentTime + 0.075;
+
+    engine.setSourceGain('fx', 0.4, boundary);
+
+    expect(bus.gain.cancels.at(-1)).toBe(boundary);
+    expect(bus.gain.targets.at(-1)).toEqual({ v: 0.4, t: boundary, tc: 0.01 });
+  });
+
+  test('a future Beat mute schedules its dry and authored reverb branches together', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+    const boundary = ctx.currentTime + 0.075;
+
+    engine.setSourceMuted('sequencer', true, boundary);
+
+    const dryBus = (engine as any).sourceBuses.get('sequencer');
+    const sendGate = (engine as any).drumSendGate;
+    expect(dryBus.gain.targets.at(-1)).toEqual({ v: 0, t: boundary, tc: 0.01 });
+    expect(sendGate.gain.targets.at(-1)).toEqual({ v: 0, t: boundary, tc: 0.01 });
+  });
+
   test('a gain set while muted does not un-mute the bus', () => {
     const { engine } = freshEngine();
     engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'bass', 1, 'live');

@@ -163,8 +163,8 @@ describe('loadLoop', () => {
 
     const order: string[] = [];
     const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockImplementation(
-      (source, muted) => {
-        if (muted) order.push(`mute:${source}`);
+      (source, muted, ...rest: unknown[]) => {
+        if (muted) order.push(`mute:${source}@${String(rest[0])}`);
       },
     );
     const resetClock = spyOn(audioEngine, 'resetClock').mockImplementation(() => {
@@ -177,12 +177,12 @@ describe('loadLoop', () => {
       loadLoop(loopB.id, { atBoundary: 42.5 });
 
       expect(order).toEqual([
-        'mute:synth',
-        'mute:chord',
-        'mute:bass',
-        'mute:pad',
-        'mute:fx',
-        'mute:sequencer',
+        'mute:synth@42.5',
+        'mute:chord@42.5',
+        'mute:bass@42.5',
+        'mute:pad@42.5',
+        'mute:fx@42.5',
+        'mute:sequencer@42.5',
         'reset',
       ]);
       // The clock reset is the action that lets every player schedule the
@@ -192,6 +192,50 @@ describe('loadLoop', () => {
       stopEngineSync();
       setSourceMuted.mockRestore();
       resetClock.mockRestore();
+    }
+  });
+
+  test('a muted outgoing FX track stays closed until the next loop boundary', () => {
+    const loopA: Loop = { ...createDefaultLoop(), fxMuted: true };
+    const loopB: Loop = {
+      ...createDefaultLoop(),
+      id: 'loop-b',
+      name: 'B',
+      fxMuted: false,
+    };
+    useAppStore.setState({
+      loops: [loopA, loopB],
+      activeLoopId: loopA.id,
+      ...loopStatePatch(loopA),
+      soloTracks: [],
+      songLoopIndex: 0,
+      playbackScope: { kind: 'song' },
+    });
+
+    const fxMuteWrites: Array<{ muted: boolean; time: unknown }> = [];
+    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockImplementation(
+      (source, muted, ...rest: unknown[]) => {
+        if (source === 'fx') fxMuteWrites.push({ muted, time: rest[0] });
+      },
+    );
+    try {
+      startEngineSync();
+      fxMuteWrites.length = 0; // discard fireImmediately bootstrap
+
+      loadLoop(loopB.id, { atBoundary: 42.5 });
+
+      // The old loop's final FX note may already be queued by the lookahead
+      // scheduler. Opening at currentTime makes that muted note audible; the
+      // bus must remain closed until the exact boundary instead.
+      expect(fxMuteWrites).toEqual([{ muted: false, time: 42.5 }]);
+
+      useAppStore.setState({ fxMuted: true });
+      // The boundary context is synchronous and scoped to loadLoop's update;
+      // a later user mute remains immediate rather than inheriting 42.5.
+      expect(fxMuteWrites.at(-1)).toEqual({ muted: true, time: undefined });
+    } finally {
+      stopEngineSync();
+      setSourceMuted.mockRestore();
     }
   });
 

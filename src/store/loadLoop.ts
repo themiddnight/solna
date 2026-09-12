@@ -4,6 +4,7 @@ import { padHoldsAcrossLoop } from '../audio/playback/padPlayback';
 import { loopStatePatch } from './loop';
 import { useAppStore } from './store';
 import { commitRestartAfterStop } from './stopAndRestart';
+import { withSourceTransitionTime } from './sourceTransition';
 import { captureActivePlayers } from './transportSlice';
 
 /** Same instant-but-clickless release the vibe swap and hard stop use. */
@@ -95,10 +96,12 @@ export function loadLoop(id: string, opts: { atBoundary?: number } = {}): void {
     if (padHoldsAcrossLoop(store.padMode)) {
       audioEngine.stopSource('pad', LOAD_LOOP_RELEASE, opts.atBoundary);
     }
-    useAppStore.setState({
-      ...loopStatePatch(loop),
-      activeLoopId: id,
-      songLoopIndex,
+    withSourceTransitionTime(opts.atBoundary, () => {
+      useAppStore.setState({
+        ...loopStatePatch(loop),
+        activeLoopId: id,
+        songLoopIndex,
+      });
     });
     // The vibe chip highlight clears itself here: vibeNav.ts watches
     // activeLoopId and clears selectedVibeId on any change, including this

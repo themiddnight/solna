@@ -1791,19 +1791,19 @@ class AudioEngine {
   // Mute/unmute an entire source layer with a ~10 ms click-free ramp. The
   // source stops feeding every downstream branch; effect tails already inside
   // the shared processors remain free to decay.
-  setSourceMuted(source: string, muted: boolean): void {
+  setSourceMuted(source: string, muted: boolean, time?: number): void {
     this.sourceMuted.set(source, muted);
     if (!this.ctx) return;
-    const now = this.ctx.currentTime;
+    const now = Math.max(time ?? this.ctx.currentTime, this.ctx.currentTime);
     const targetGain = muted ? 0 : (this.sourceGains.get(source) ?? 1);
     this.rampSourceLevel(source, targetGain, now);
   }
 
   // Set gain/volume for an entire source layer (e.g. chord, bass, synth)
-  setSourceGain(source: string, volume: number): void {
+  setSourceGain(source: string, volume: number, time?: number): void {
     this.sourceGains.set(source, volume);
     if (!this.ctx) return;
-    const now = this.ctx.currentTime;
+    const now = Math.max(time ?? this.ctx.currentTime, this.ctx.currentTime);
     const isMuted = this.sourceMuted.get(source);
     // Derived from the fader range (MAX_FADER_GAIN is dbToGain(FADER_MAX_DB)),
     // not an independent literal. It used to be 1.5 — +3.5 dB — so a fader

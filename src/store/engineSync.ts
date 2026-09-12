@@ -13,6 +13,7 @@ import type { MasterEffects, SequencerTrack } from '../types';
 import { DEFAULT_FADER_DB, faderDbToGain } from './levelUnits';
 import { isTrackAudible } from './trackAudibility';
 import { SOURCE_BUSES, SYNTH_PARAM_FIELD, SYNTH_PARAM_TARGETS, type SourceBus } from './sourceBuses';
+import { sourceTransitionTime } from './sourceTransition';
 import type { AppStore } from './types';
 
 /**
@@ -144,6 +145,20 @@ function busAudible(s: AppStore, bus: SourceBus): boolean {
   return isTrackAudible(bus.solo, s.soloTracks, s[bus.muted]);
 }
 
+/** Preserve ordinary two-argument engine calls; only a song boundary carries time. */
+function pushSourceGain(bus: SourceBus, db: number): void {
+  const gain = faderDbToGain(db);
+  const time = sourceTransitionTime();
+  if (time === undefined) audioEngine.setSourceGain(bus.source, gain);
+  else audioEngine.setSourceGain(bus.source, gain, time);
+}
+
+function pushSourceMuted(bus: SourceBus, audible: boolean): void {
+  const time = sourceTransitionTime();
+  if (time === undefined) audioEngine.setSourceMuted(bus.source, !audible);
+  else audioEngine.setSourceMuted(bus.source, !audible, time);
+}
+
 /**
  * The track gains reach the engine on a selector over `sequencerTracks`, not
  * one subscription per track: the roster is data, tracks can be added, and a
@@ -273,12 +288,12 @@ export function startEngineSync(): Stop {
   // is why no engine setter signature had to change for DEV-386. faderDbToGain
   // rather than dbToGain: a bus pulled to the bottom passes exactly nothing.
   for (const bus of SOURCE_BUSES) {
-    subs.push(useAppStore.subscribe((s) => s[bus.volume], (db) => audioEngine.setSourceGain(bus.source, faderDbToGain(db)), { fireImmediately: true }));
+    subs.push(useAppStore.subscribe((s) => s[bus.volume], (db) => pushSourceGain(bus, db), { fireImmediately: true }));
     // Audibility, not the raw mute flag — solo beats mute. The selector returns
     // a BOOLEAN, so the default === equality fires this listener only when the
     // bus actually flips: a solo toggle re-runs five selectors and calls the
     // engine only for the buses whose state really changed.
-    subs.push(useAppStore.subscribe((s) => busAudible(s, bus), (audible) => audioEngine.setSourceMuted(bus.source, !audible), { fireImmediately: true }));
+    subs.push(useAppStore.subscribe((s) => busAudible(s, bus), (audible) => pushSourceMuted(bus, audible), { fireImmediately: true }));
   }
 
   // sequencer slice: kit + drum-bus filter. The filter is watched as one
