@@ -3,6 +3,7 @@ import { subscribePlaybackClock } from '../audio/playback/playbackEngine';
 import { layerForTab } from '../types';
 import type { Layer } from '../types';
 import { getMeter } from '../utils/meter';
+import { stepDurationSec } from '../utils/musicTheory';
 import { songAdvanceDecision } from '../utils/songStructure';
 import { loadLoop } from './loadLoop';
 import { playbackScopeReducer } from './playbackScope';
@@ -135,13 +136,13 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
           if (cur.songLoopIndex === null || cur.playbackScope.kind === 'loop') return;
           if (aggregateAllPlayers(cur) !== 'playing')
             return;
+          const stepsPerBar = getMeter(cur.meterId).stepsPerBar;
           const decision = songAdvanceDecision(
             cur.loops,
             cur.songLoopIndex,
             step,
-            getMeter(cur.meterId).stepsPerBar,
+            stepsPerBar,
           );
-          if (decision.kind === 'hold') return;
           if (decision.kind === 'end') {
             // The song has an ending. SOFT stop, not hard: each playback hook
             // sees 'stopping', reaches this same boundary step's bar line and
@@ -221,18 +222,27 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
             }
             return;
           }
-          // Defer: loadLoop re-anchors the shared grid, and running that
-          // synchronously here mutates clockStepIndex mid-dispatch — this
-          // callback is one of clockTick's own listeners — so the boundary
-          // step's dispatch and the rewind's step-0 re-dispatch collide and the
-          // new loop's first chord/drum fires twice. A microtask runs before
-          // the next 25 ms tick, so the rewind lands cleanly on the following
-          // one with every playback hook re-armed.
-          //
-          // `time` is the boundary step's own audio time. It selects loadLoop's
-          // seamless path — no player ever stops, so nothing cuts the outgoing
-          // loop's tails — and anchors the incoming loop's step 0 exactly there.
-          queueMicrotask(() => loadLoop(decision.loopId, { atBoundary: time }));
+          // Pre-arm the advance one step EARLY. The boundary decision is
+          // deterministic, so at step N-1 we already know step N crosses.
+          // Scheduling loadLoop from here (rather than reacting to the boundary
+          // step) runs the resetClock re-anchor a full 16th earlier, so its
+          // `atBoundary > currentTime` guard never trips the `now + 0.05`
+          // fallback under clock-tick jitter — the gap the late boundary
+          // dispatch used to open. The microtask deferral is kept for the same
+          // reason as before: loadLoop re-anchors the grid, and doing that
+          // synchronously inside clockTick's own dispatch collides with the
+          // step being dispatched.
+          const nextDecision = songAdvanceDecision(
+            cur.loops,
+            cur.songLoopIndex,
+            step + 1,
+            stepsPerBar,
+          );
+          if (nextDecision.kind === 'advance') {
+            queueMicrotask(() =>
+              loadLoop(nextDecision.loopId, { atBoundary: time + stepDurationSec(cur.bpm) }),
+            );
+          }
         });
       }
     } else {

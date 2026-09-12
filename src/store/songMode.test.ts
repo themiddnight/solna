@@ -6,6 +6,7 @@ import { loopStatePatch } from './loop';
 import { scopedLoopId } from './playbackScope';
 import { useAppStore } from './store';
 import { isSongLayer } from '../types';
+import { stepDurationSec } from '../utils/musicTheory';
 import { enterSongIndex, startSongModeSync } from './songMode';
 import type { Loop } from './types';
 
@@ -175,8 +176,8 @@ describe('song mode coordinator: entering and advancing', () => {
 
     // The advance is queued from inside the clock dispatch and re-anchors the
     // shared grid on the boundary, so each loop's boundary is measured from 0.
-    // First loop is 4 bars x 16 = 64 steps.
-    clock.tick(64);
+    // First loop is 4 bars x 16 = 64 steps; the advance fires on the LAST step.
+    clock.tick(63);
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().activeLoopId).toBe('loop-b');
     expect(useAppStore.getState().songLoopIndex).toBe(1);
@@ -186,10 +187,11 @@ describe('song mode coordinator: entering and advancing', () => {
     expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
 
     // Second loop is 2 bars x 16 = 32 steps, and each advance re-anchors the
-    // grid, so 64 + 32 = 96 is loop B's own boundary: on to loop C. It used to
-    // wrap to the top here — the arrangement now ENDS instead, which
-    // 'the arrangement STOPS at its end instead of wrapping' below owns.
-    clock.tick(96);
+    // grid, so 64 + 32 = 96 is loop B's own boundary; the advance fires one
+    // step before it, at 95: on to loop C. It used to wrap to the top here —
+    // the arrangement now ENDS instead, which 'the arrangement STOPS at its
+    // end instead of wrapping' below owns.
+    clock.tick(95);
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().activeLoopId).toBe('loop-c');
     expect(useAppStore.getState().songLoopIndex).toBe(2);
@@ -212,7 +214,10 @@ describe('song mode coordinator: entering and advancing', () => {
       useAppStore.getState().playAll();
       resetClock.mockClear();
 
-      clock.tick(64, 12.75);
+      // The advance fires one step early and adds one step's duration back to
+      // `time` to recover the boundary instant.
+      const stepDuration = stepDurationSec(useAppStore.getState().bpm);
+      clock.tick(63, 12.75 - stepDuration);
       await new Promise((r) => setTimeout(r, 0));
 
       expect(useAppStore.getState().activeLoopId).toBe('loop-b');
@@ -241,7 +246,7 @@ describe('song mode coordinator: leaving and re-entering', () => {
     const stop = startSync({ subscribeClock: clock.subscribe });
 
     useAppStore.getState().playAll();
-    clock.tick(64);
+    clock.tick(63);
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
 
@@ -285,7 +290,7 @@ describe('song mode coordinator: leaving and re-entering', () => {
     useAppStore.getState().playAll();
     // Enters at the active loop (index 1), not the top.
     expect(useAppStore.getState().songLoopIndex).toBe(1);
-    clock.tick(64);
+    clock.tick(63);
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().activeLoopId).toBe('loop-c');
     expect(useAppStore.getState().songLoopIndex).toBe(2);
@@ -560,7 +565,7 @@ describe('song mode coordinator: solo-loop isolation', () => {
     useAppStore.getState().playAll();
     expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
     expect(useAppStore.getState().songLoopIndex).toBe(0);
-    clock.tick(64);
+    clock.tick(63);
     await new Promise((r) => setTimeout(r, 0)); // songMode defers loadLoop to a microtask
     expect(useAppStore.getState().activeLoopId).toBe('loop-b');
     stop();
@@ -618,7 +623,7 @@ describe('song mode coordinator: Play All again, and reaching the end', () => {
     expect(useAppStore.getState().playbackScope).toEqual({ kind: 'song' });
     expect(scopedLoopId(useAppStore.getState().playbackScope)).toBe(null);
 
-    clock.tick(64); // loop-b is 4 bars x 16 steps, same as the default loop
+    clock.tick(63); // the advance fires one step before loop-b's boundary
     await new Promise((r) => setTimeout(r, 0)); // songMode defers loadLoop to a microtask
     const s = useAppStore.getState();
     expect(s.activeLoopId).toBe('loop-c'); // advanced past the loop that was auditioning
@@ -637,8 +642,9 @@ describe('song mode coordinator: Play All again, and reaching the end', () => {
     useAppStore.getState().playAll();
     expect(clock.count).toBe(1);
 
-    // End of loop A: advance to B, still playing.
-    clock.tick(64, 4.5);
+    // End of loop A: advance to B, still playing. The advance fires one step
+    // before the boundary (the `time` here is not asserted).
+    clock.tick(63);
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().activeLoopId).toBe('b');
     expect(useAppStore.getState().sequencerPlayer).toBe('playing');
