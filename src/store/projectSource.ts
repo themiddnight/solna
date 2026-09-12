@@ -1,4 +1,5 @@
 import { PROJECT_FORMAT_VERSION, newProjectId, type ProjectBody, type ProjectEnvelope } from './projectFormat';
+import { isPlainObject } from './projectFile';
 
 /**
  * Where an explicit Save writes back to. It is held BESIDE the project body and
@@ -54,18 +55,23 @@ export function newDocumentIdentity(now: number): DocumentIdentity {
   return { id: newProjectId(), createdAt: now };
 }
 
+/** The envelope field set, written once; only where `updatedAt` comes from differs. */
+function projectEnvelope(identity: DocumentIdentity, name: string, updatedAt: number): ProjectEnvelope {
+  return {
+    formatVersion: PROJECT_FORMAT_VERSION,
+    id: identity.id,
+    name,
+    createdAt: identity.createdAt,
+    updatedAt,
+  };
+}
+
 /**
  * Save: the SAME document. The id and createdAt survive and only updatedAt
  * moves — a `.solna` file is a document and its envelope says so.
  */
 export function envelopeForSave(previous: DocumentIdentity, name: string, now: number): ProjectEnvelope {
-  return {
-    formatVersion: PROJECT_FORMAT_VERSION,
-    id: previous.id,
-    name,
-    createdAt: previous.createdAt,
-    updatedAt: now,
-  };
+  return projectEnvelope(previous, name, now);
 }
 
 /**
@@ -76,23 +82,13 @@ export function envelopeForSave(previous: DocumentIdentity, name: string, now: n
  * argument fails `@typescript-eslint/no-unused-vars` — which is an error here.
  */
 export function envelopeForSaveAs(identity: DocumentIdentity, name: string): ProjectEnvelope {
-  return {
-    formatVersion: PROJECT_FORMAT_VERSION,
-    id: identity.id,
-    name,
-    createdAt: identity.createdAt,
-    updatedAt: identity.createdAt,
-  };
+  return projectEnvelope(identity, name, identity.createdAt);
 }
 
 /** The one slot's value: the project plus where explicit Save writes it back. */
 export interface ProjectSlotRecord {
   body: ProjectBody;
   source: ProjectSource;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**

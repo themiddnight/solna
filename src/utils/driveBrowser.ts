@@ -61,9 +61,9 @@ export function sortBrowserRows(rows: ReadonlyArray<DriveBrowserRow>): DriveBrow
  * a React list is a warning plus a stale row. The later page wins, because it
  * was fetched later.
  */
-export function appendPage(current: DrivePage, next: DrivePage): DrivePage {
+export function appendFiles(current: ReadonlyArray<DriveFileMeta>, next: DrivePage): DrivePage {
   const byId = new Map<string, DriveFileMeta>();
-  for (const file of [...current.files, ...next.files]) byId.set(file.id, file);
+  for (const file of [...current, ...next.files]) byId.set(file.id, file);
   const files = [...byId.values()];
   return next.nextPageToken === undefined ? { files } : { files, nextPageToken: next.nextPageToken };
 }

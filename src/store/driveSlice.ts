@@ -54,6 +54,12 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
     if (get().driveSignedIn !== signedIn) set({ driveSignedIn: signedIn });
   };
 
+  /** A Drive failure is a notice plus a result — written once so the two stay together. */
+  const fail = (message: string): { ok: false; message: string } => {
+    set({ projectNotice: message });
+    return { ok: false, message };
+  };
+
   const guard = async <T>(op: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; message: string }> => {
     try {
       const value = await op();
@@ -91,7 +97,9 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
     },
 
     disconnectDrive: async () => {
-      await deps.auth.revoke();
+      // Fire-and-forget: revoke() clears the token locally first and never
+      // throws, so sign-out must not wait on Google's round-trip.
+      void deps.auth.revoke();
       setSignedIn(false);
       set({ driveUser: null });
       // The design's sign-out row: the id is meaningless once the token is
@@ -111,11 +119,11 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
     openFromDrive: async (fileId) => {
       const read = await guard(() => deps.client.readProject(fileId));
       if (read.ok === false) {
-        set({ projectNotice: read.message });
+        fail(read.message);
         return;
       }
       if (read.value.ok === false) {
-        set({ projectNotice: read.value.message });
+        fail(read.value.message);
         return;
       }
       // One install path for every open — local file, Drive file, boot. Only
@@ -133,10 +141,7 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
       }
       const body = get().exportProjectFile();
       const updated = await guard(() => deps.client.updateProject(source.fileId, body));
-      if (updated.ok === false) {
-        set({ projectNotice: updated.message });
-        return { ok: false, message: updated.message };
-      }
+      if (updated.ok === false) return fail(updated.message);
       set({ projectNotice: null });
       return { ok: true, destination: 'drive' };
     },
@@ -147,10 +152,7 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
       // not leave the live document wearing an id no file carries.
       const { body, identity } = get().saveAsBody(name);
       const created = await guard(() => deps.client.createProject(name, body));
-      if (created.ok === false) {
-        set({ projectNotice: created.message });
-        return { ok: false, message: created.message };
-      }
+      if (created.ok === false) return fail(created.message);
       await get().adoptSaveAs(identity, name, { kind: 'drive', fileId: created.value.id });
       set({ projectNotice: null });
       return { ok: true, destination: 'drive' };

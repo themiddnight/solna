@@ -1,4 +1,5 @@
 import { PROJECT_FILE_EXTENSION, PROJECT_FILE_MIME } from '../store/projectFile';
+import { readFileAsText } from './projectFileIO';
 
 /**
  * Neither picker is in lib.dom.d.ts, so both are declared here rather than
@@ -37,25 +38,35 @@ export const SOLNA_OPEN_TYPE: FilePickerType = {
   accept: { [PROJECT_FILE_MIME]: [PROJECT_FILE_EXTENSION, '.json'] },
 };
 
+/**
+ * The capability probe, one spelling for both directions: a scope with no such
+ * function is unavailable, and a found function is bound so it keeps its `this`.
+ */
+function resolvePickerMethod<T>(scope: unknown, name: 'showSaveFilePicker' | 'showOpenFilePicker'): T | null {
+  if (typeof scope !== 'object' || scope === null) return null;
+  const candidate = (scope as Record<string, unknown>)[name];
+  if (typeof candidate !== 'function') return null;
+  return candidate.bind(scope) as unknown as T;
+}
+
 /** The capability probe: null means "this browser cannot pick a save target". */
 export function resolveSaveFilePicker(scope: unknown): ShowSaveFilePicker | null {
-  if (typeof scope !== 'object' || scope === null) return null;
-  const candidate = (scope as { showSaveFilePicker?: unknown }).showSaveFilePicker;
-  if (typeof candidate !== 'function') return null;
-  return (candidate as ShowSaveFilePicker).bind(scope);
+  return resolvePickerMethod<ShowSaveFilePicker>(scope, 'showSaveFilePicker');
 }
 
 /** The same probe for the open direction: null means "fall back to the input". */
 export function resolveOpenFilePicker(scope: unknown): ShowOpenFilePicker | null {
-  if (typeof scope !== 'object' || scope === null) return null;
-  const candidate = (scope as { showOpenFilePicker?: unknown }).showOpenFilePicker;
-  if (typeof candidate !== 'function') return null;
-  return (candidate as ShowOpenFilePicker).bind(scope);
+  return resolvePickerMethod<ShowOpenFilePicker>(scope, 'showOpenFilePicker');
 }
 
 export type PickHandleResult =
   | { ok: true; handle: FileSystemFileHandle }
   | { ok: false; reason: 'unavailable' | 'cancelled' };
+
+/** A thrown picker error maps to one reason: the user dismissed it, or the API refused. */
+function pickFailure(err: unknown): 'unavailable' | 'cancelled' {
+  return (err as { name?: string } | null)?.name === 'AbortError' ? 'cancelled' : 'unavailable';
+}
 
 /**
  * Two failures, two meanings, and the caller must not treat them alike:
@@ -73,8 +84,7 @@ export async function pickLocalSaveHandle(
   try {
     return { ok: true, handle: await pick({ suggestedName: fileName, types: [SOLNA_SAVE_TYPE] }) };
   } catch (err) {
-    const name = (err as { name?: string } | null)?.name;
-    return { ok: false, reason: name === 'AbortError' ? 'cancelled' : 'unavailable' };
+    return { ok: false, reason: pickFailure(err) };
   }
 }
 
@@ -93,8 +103,7 @@ export async function pickLocalOpenHandle(scope: unknown = globalThis): Promise<
     const handle = handles[0];
     return handle ? { ok: true, handle } : { ok: false, reason: 'cancelled' };
   } catch (err) {
-    const name = (err as { name?: string } | null)?.name;
-    return { ok: false, reason: name === 'AbortError' ? 'cancelled' : 'unavailable' };
+    return { ok: false, reason: pickFailure(err) };
   }
 }
 
@@ -106,7 +115,7 @@ export async function pickLocalOpenHandle(scope: unknown = globalThis): Promise<
  */
 export async function readTextFromHandle(handle: FileSystemFileHandle): Promise<string> {
   try {
-    return await (await handle.getFile()).text();
+    return await readFileAsText(await handle.getFile());
   } catch {
     return '';
   }

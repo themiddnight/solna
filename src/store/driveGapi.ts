@@ -60,6 +60,20 @@ export function updateFileBody(text: string, mimeType: string, boundary: string 
 }
 
 /**
+ * The multipart upload envelope, written once: gapi rejects a `Content-Type`
+ * boundary that does not match the body's, so the two must stay in one place.
+ */
+function uploadRequest(method: 'POST' | 'PATCH', path: string, body: string): GapiRequest {
+  return {
+    path,
+    method,
+    params: { uploadType: 'multipart', fields: DRIVE_META_FIELDS },
+    headers: { 'Content-Type': `multipart/related; boundary=${DRIVE_BOUNDARY}` },
+    body,
+  };
+}
+
+/**
  * Only an `id` is required — Drive echoes exactly the fields `fields=` asked
  * for, and treating a missing display field as a failure would report a
  * successful write as an error. A record with no id IS unreadable: a Save As
@@ -182,25 +196,21 @@ export function createGapiTransport(getGapi: () => Promise<GapiRoot>, auth: Driv
     // could name would be one `drive.file` cannot see.
     create: (params) =>
       run(async (client) => {
-        const request: GapiRequest = {
-          path: `${DRIVE_API_BASE}${DRIVE_UPLOAD_PATH}`,
-          method: 'POST',
-          params: { uploadType: 'multipart', fields: DRIVE_META_FIELDS },
-          headers: { 'Content-Type': `multipart/related; boundary=${DRIVE_BOUNDARY}` },
-          body: createFileBody({ name: params.name, mimeType: params.mimeType }, params.text),
-        };
+        const request = uploadRequest(
+          'POST',
+          `${DRIVE_API_BASE}${DRIVE_UPLOAD_PATH}`,
+          createFileBody({ name: params.name, mimeType: params.mimeType }, params.text),
+        );
         return requireMeta((await client.request(request)).result);
       }),
 
     update: (params) =>
       run(async (client) => {
-        const request: GapiRequest = {
-          path: `${DRIVE_API_BASE}${DRIVE_UPLOAD_PATH}/${params.fileId}`,
-          method: 'PATCH',
-          params: { uploadType: 'multipart', fields: DRIVE_META_FIELDS },
-          headers: { 'Content-Type': `multipart/related; boundary=${DRIVE_BOUNDARY}` },
-          body: updateFileBody(params.text, params.mimeType),
-        };
+        const request = uploadRequest(
+          'PATCH',
+          `${DRIVE_API_BASE}${DRIVE_UPLOAD_PATH}/${params.fileId}`,
+          updateFileBody(params.text, params.mimeType),
+        );
         return requireMeta((await client.request(request)).result);
       }),
   };

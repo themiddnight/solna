@@ -229,25 +229,38 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
  * holds no token until `token()` is called and the transport calls `getGapi()`
  * only on its first request, so importing this file still loads nothing.
  */
-const driveAuth = createDriveAuth({ loadOauth2: loadGis, clientId: driveClientId() });
+/** Read once: an unset VITE_GOOGLE_CLIENT_ID is a normal degraded state, not a boot failure. */
+const DRIVE_CLIENT_ID = driveClientId();
+const DRIVE_AVAILABLE = DRIVE_CLIENT_ID !== '';
+const driveAuth = createDriveAuth({ loadOauth2: loadGis, clientId: DRIVE_CLIENT_ID });
 // Load GIS before the user presses Connect. Token acquisition itself remains
-// user-initiated, so the consent popup stays within that gesture.
-void driveAuth.preload?.();
+// user-initiated, so the consent popup stays within that gesture. Skipped when
+// there is no client id: the script could never produce a token, so fetching it
+// would be a large third-party download for a feature that only reports
+// "not configured".
+if (DRIVE_AVAILABLE) void driveAuth.preload?.();
 
 /**
  * `createGapiTransport` wants a `getGapi` that THROWS on failure, while
  * `loadGapi` reports one as a `LoadResult` — so the adapter is where the two
- * conventions meet, not a caller's job.
+ * conventions meet, not a caller's job. Memoized: loadGapi re-enters
+ * `gapi.load('client')` on every call, so each Drive request would pay an extra
+ * async hop for a module that is already loaded; a failed load clears the cache
+ * so the next request retries.
  */
-const getGapi = async (): Promise<GapiRoot> => {
-  const loaded = await loadGapi();
-  if (loaded.ok === false) throw new DriveUnavailableError(loaded.message);
-  return loaded.value;
+let gapiReady: Promise<GapiRoot> | null = null;
+const getGapi = (): Promise<GapiRoot> => {
+  gapiReady ??= loadGapi().then((loaded) => {
+    if (loaded.ok === false) throw new DriveUnavailableError(loaded.message);
+    return loaded.value;
+  }).catch((err) => {
+    gapiReady = null;
+    throw err;
+  });
+  return gapiReady;
 };
 
 const driveClient = createDriveClient(createGapiTransport(getGapi, driveAuth));
-/** Read once: an unset VITE_GOOGLE_CLIENT_ID is a normal degraded state, not a boot failure. */
-const DRIVE_AVAILABLE = driveClientId() !== '';
 
 export const useAppStore = create<AppStore>()(
   persist(

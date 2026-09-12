@@ -1,4 +1,4 @@
-import type { GisOauth2, LoadResult } from '../utils/googleScriptLoader';
+import { GIS_LOAD_FAILED_MESSAGE, type GisOauth2, type LoadResult } from '../utils/googleScriptLoader';
 
 /**
  * `drive.file` and nothing else. It reads as "only the files this app created or
@@ -10,7 +10,7 @@ import type { GisOauth2, LoadResult } from '../utils/googleScriptLoader';
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 export const DRIVE_DENIED_MESSAGE = 'Google Drive access was not granted.';
-export const DRIVE_UNAVAILABLE_MESSAGE = 'Could not load the Google Drive client. Check your connection and try again.';
+export const DRIVE_UNAVAILABLE_MESSAGE = GIS_LOAD_FAILED_MESSAGE;
 export const DRIVE_FAILED_MESSAGE = 'Google Drive did not respond. Your project is still autosaved on this device.';
 
 /** The two ways acquiring a token fails, kept apart because the copy differs. */

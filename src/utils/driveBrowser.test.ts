@@ -3,7 +3,7 @@ import {
   DRIVE_EMPTY_HINT,
   DRIVE_EMPTY_STATE,
   DRIVE_LOADING_TEXT,
-  appendPage,
+  appendFiles,
   defaultSaveName,
   formatModified,
   sortBrowserRows,
@@ -51,25 +51,25 @@ describe('sortBrowserRows', () => {
   });
 });
 
-describe('appendPage', () => {
+describe('appendFiles', () => {
   test('accumulates rows and carries the new token', () => {
-    const first = { files: [meta('f1', 'a.solna', '2026-09-01T00:00:00.000Z')], nextPageToken: 'p2' };
+    const first = [meta('f1', 'a.solna', '2026-09-01T00:00:00.000Z')];
     const second = { files: [meta('f2', 'b.solna', '2026-09-02T00:00:00.000Z')] };
-    const merged = appendPage(first, second);
+    const merged = appendFiles(first, second);
     expect(merged.files.map((file) => file.id)).toEqual(['f1', 'f2']);
     expect(merged.nextPageToken).toBeUndefined();
   });
 
   test('a file that appears on both pages is kept once — a save can shift the window', () => {
-    const first = { files: [meta('f1', 'a.solna', '2026-09-01T00:00:00.000Z')], nextPageToken: 'p2' };
+    const first = [meta('f1', 'a.solna', '2026-09-01T00:00:00.000Z')];
     const second = { files: [meta('f1', 'a.solna', '2026-09-01T00:00:00.000Z'), meta('f2', 'b.solna', '2026-09-02T00:00:00.000Z')] };
-    expect(appendPage(first, second).files.map((file) => file.id)).toEqual(['f1', 'f2']);
+    expect(appendFiles(first, second).files.map((file) => file.id)).toEqual(['f1', 'f2']);
   });
 
   test('a later page wins for a repeated id', () => {
-    const first = { files: [meta('f1', 'old name.solna', '2026-09-01T00:00:00.000Z')], nextPageToken: 'p2' };
+    const first = [meta('f1', 'old name.solna', '2026-09-01T00:00:00.000Z')];
     const second = { files: [meta('f1', 'new name.solna', '2026-09-02T00:00:00.000Z')] };
-    expect(appendPage(first, second).files[0].name).toBe('new name.solna');
+    expect(appendFiles(first, second).files[0].name).toBe('new name.solna');
   });
 });
 

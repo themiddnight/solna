@@ -23,15 +23,12 @@ interface ProjectLoadingProps {
  * so it needs no asset of its own.
  */
 export function ProjectLoading({ label = PROJECT_LOADING_LABEL, overlay = false }: ProjectLoadingProps) {
+  const containerClass = `${overlay ? 'fixed inset-0 z-50 bg-base-100/80 backdrop-blur-sm' : 'h-dvh bg-base-100'} text-base-content flex flex-col items-center justify-center gap-4`;
   return (
     <div
       role="status"
       aria-live="polite"
-      className={
-        overlay
-          ? 'fixed inset-0 z-50 bg-base-100/80 backdrop-blur-sm text-base-content flex flex-col items-center justify-center gap-4'
-          : 'h-dvh bg-base-100 text-base-content flex flex-col items-center justify-center gap-4'
-      }
+      className={containerClass}
     >
       <span className="loading loading-spinner loading-lg text-primary" aria-hidden="true" />
       <p className="text-sm font-semibold text-base-content/70">{label}</p>

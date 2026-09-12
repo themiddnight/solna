@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileText } from 'lucide-react';
 import type { DrivePage } from '@/store/driveClient';
 import {
@@ -7,7 +7,7 @@ import {
   DRIVE_LOADING_TEXT,
   DRIVE_OPEN_TITLE,
   DRIVE_SAVE_TITLE,
-  appendPage,
+  appendFiles,
   formatModified,
   sortBrowserRows,
   toBrowserRows,
@@ -42,27 +42,33 @@ export function DriveBrowserList({
   }
   return (
     <ul className="max-h-72 overflow-y-auto">
-      {rows.map((row) => (
-        <li key={row.id}>
-          {onOpen ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm w-full justify-start gap-2 font-normal"
-              onClick={() => onOpen(row.id)}
-            >
-              <FileText className="w-4 h-4 text-base-content/60" aria-hidden="true" />
-              <span className="truncate">{row.name}</span>
-              <span className="ml-auto text-xs text-base-content/50">{formatModified(row.modifiedTime)}</span>
-            </button>
-          ) : (
-            <div className="flex min-h-8 items-center gap-2 px-3 text-sm text-base-content/60">
-              <FileText className="w-4 h-4" aria-hidden="true" />
-              <span className="truncate">{row.name}</span>
-              <span className="ml-auto text-xs text-base-content/50">{formatModified(row.modifiedTime)}</span>
-            </div>
-          )}
-        </li>
-      ))}
+      {rows.map((row) => {
+        const rowMeta = (
+          <>
+            <span className="truncate">{row.name}</span>
+            <span className="ml-auto text-xs text-base-content/50">{formatModified(row.modifiedTime)}</span>
+          </>
+        );
+        return (
+          <li key={row.id}>
+            {onOpen ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm w-full justify-start gap-2 font-normal"
+                onClick={() => onOpen(row.id)}
+              >
+                <FileText className="w-4 h-4 text-base-content/60" aria-hidden="true" />
+                {rowMeta}
+              </button>
+            ) : (
+              <div className="flex min-h-8 items-center gap-2 px-3 text-sm text-base-content/60">
+                <FileText className="w-4 h-4" aria-hidden="true" />
+                {rowMeta}
+              </div>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -157,10 +163,14 @@ export function DriveFileBrowserModal({
       setError(outcome.message);
       return;
     }
-    const merged = appendPage({ files: [...files] }, outcome.page);
+    const merged = appendFiles(files, outcome.page);
     setFiles(merged.files);
     setNextPageToken(merged.nextPageToken);
   };
+
+  // Sorted once per fetch, not per render: the modal re-renders on every
+  // keystroke in the save-name field and every loading/error transition.
+  const rows = useMemo(() => sortBrowserRows(toBrowserRows(files)), [files]);
 
   return (
     <Modal open={open} onClose={onClose} title={browserTitle(mode)} size="lg" boxClassName="space-y-3">
@@ -170,7 +180,7 @@ export function DriveFileBrowserModal({
           {loading && <p className="text-xs text-base-content/60">{DRIVE_LOADING_TEXT}</p>}
 
           {shouldRenderList(loading, error, files.length) && (
-            <DriveBrowserList rows={sortBrowserRows(toBrowserRows([...files]))} onOpen={openHandlerForMode(mode, onOpenFile)} />
+            <DriveBrowserList rows={rows} onOpen={openHandlerForMode(mode, onOpenFile)} />
           )}
 
           {nextPageToken !== undefined && !loading && (

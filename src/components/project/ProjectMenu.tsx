@@ -1,7 +1,7 @@
 import React, { Fragment, useCallback, useRef, useState } from 'react';
 import { Cloud, CloudOff, CloudUpload, FileDown, FilePlus, Save, Upload } from 'lucide-react';
 import { defaultSaveName } from '@/utils/driveBrowser';
-import { PROJECT_FILE_ACCEPT, PROJECT_FILE_MIME, parseProjectFile, serializeProject } from '@/store/projectFile';
+import { PROJECT_FILE_ACCEPT, PROJECT_FILE_MIME, parseProjectFile, serializeProject, type ProjectParseResult } from '@/store/projectFile';
 import type { ProjectSaveResult } from '@/store/projectSlice';
 import type { ProjectSource } from '@/store/projectSource';
 import type { DriveUserProfile } from '@/store/driveClient';
@@ -48,6 +48,8 @@ export interface ProjectMenuRow {
 }
 
 export interface ProjectMenuSection {
+  /** A stable id for placement logic — never rendered and never a display string. */
+  id: 'document' | 'local' | 'drive';
   /** Rendered as a non-interactive menu title; null for the unlabelled first group. */
   heading: string | null;
   /** A second, muted line under the heading — the Drive account, when connected. */
@@ -61,20 +63,26 @@ export interface ProjectMenuSection {
  * rather than a few rows scattered among the local ones because it is the one
  * group that vanishes entirely when the deployment has no client id.
  */
+/** The Save row as one literal, placed into Local or Drive — never written twice. */
+const SAVE_ROW: ProjectMenuRow = { action: 'save', label: 'Save', icon: Save };
+
 export const PROJECT_MENU_SECTIONS: readonly ProjectMenuSection[] = [
   {
+    id: 'document',
     heading: null,
     rows: [{ action: 'new', label: 'New project', icon: FilePlus }],
   },
   {
+    id: 'local',
     heading: 'Local',
     rows: [
       { action: 'open', label: 'Open .solna', icon: Upload },
-      { action: 'save', label: 'Save', icon: Save },
+      SAVE_ROW,
       { action: 'save-as', label: 'Save as…', icon: FileDown },
     ],
   },
   {
+    id: 'drive',
     heading: 'Drive',
     rows: [
       { action: 'open-drive', label: 'Open from Drive', icon: Cloud },
@@ -117,6 +125,7 @@ export function visibleMenuSections(
   const isDrive = sourceKind === 'drive';
 
   const sections = PROJECT_MENU_SECTIONS.map((section) => ({
+    id: section.id,
     heading: section.heading,
     rows: section.rows.filter(({ action }) => {
       if (action === 'open-drive' || action === 'save-as-drive') return driveAvailable;
@@ -127,11 +136,11 @@ export function visibleMenuSections(
 
   if (isDrive) {
     for (const section of sections) {
-      if (section.heading === 'Local') {
+      if (section.id === 'local') {
         section.rows = section.rows.filter((row) => row.action !== 'save');
-      } else if (section.heading === 'Drive') {
+      } else if (section.id === 'drive') {
         section.rows = section.rows.flatMap((row) =>
-          row.action === 'open-drive' ? [row, { action: 'save', label: 'Save', icon: Save }] : [row],
+          row.action === 'open-drive' ? [row, SAVE_ROW] : [row],
         );
       }
     }
@@ -141,7 +150,7 @@ export function visibleMenuSections(
     .filter((section) => section.rows.length > 0)
     .map((section) => ({
       ...section,
-      subtitle: section.heading === 'Drive' ? (driveAccountLabel(driveUser) ?? undefined) : undefined,
+      subtitle: section.id === 'drive' ? (driveAccountLabel(driveUser) ?? undefined) : undefined,
       rows: section.rows.map((row) =>
         row.action === 'save' ? { ...row, label: saveLabel(sourceKind) } : row,
       ),
@@ -149,16 +158,10 @@ export function visibleMenuSections(
 }
 
 /** Only the three replacing actions ever reach the confirm — see replacesProject. */
-export const CONFIRM_TITLE: Record<ReplacingAction, string> = {
-  open: 'Open a project file',
-  'open-drive': 'Open from Google Drive',
-  new: 'Start a new project',
-};
-
-export const CONFIRM_LABEL: Record<ReplacingAction, string> = {
-  open: 'Choose a file',
-  'open-drive': 'Browse Drive',
-  new: 'New project',
+export const CONFIRM_COPY: Record<ReplacingAction, { title: string; label: string }> = {
+  open: { title: 'Open a project file', label: 'Choose a file' },
+  'open-drive': { title: 'Open from Google Drive', label: 'Browse Drive' },
+  new: { title: 'Start a new project', label: 'New project' },
 };
 
 export const REPLACE_CONFIRM_MESSAGE =
@@ -198,6 +201,20 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
   const saveAsToDrive = useLiveStore((s) => s.saveAsToDrive);
 
   const report = (message: string | null) => setProjectNotice(message);
+
+  /**
+   * The one path a parsed body takes: a parse failure reports and stops; an
+   * open failure reports unless it is the "storage unavailable" degrade, which
+   * is the same notice-free outcome as a missing slot.
+   */
+  const openParsed = async (parsed: ProjectParseResult, source?: ProjectSource) => {
+    if (parsed.ok === false) {
+      report(parsed.message);
+      return;
+    }
+    const result = await openProjectFile(parsed.body, source);
+    if (result.ok === false && result.error !== 'unavailable') report(result.message);
+  };
 
   /**
    * The no-File-System-Access fallback for Save As (Safari, Firefox): a
@@ -247,9 +264,11 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
     }
   };
 
-  const runSave = () => run('Saving…', async () => finishSave(await saveProject()));
-  const runSaveAs = () => run('Saving…', async () => finishSave(await saveProjectAsLocal()));
-  const runSaveAsToDrive = (name: string) => run('Saving to Drive…', async () => finishSave(await saveAsToDrive(name)));
+  const runSaveOp = (label: string, op: () => Promise<ProjectSaveResult>) =>
+    run(label, async () => finishSave(await op()));
+  const runSave = () => runSaveOp('Saving…', saveProject);
+  const runSaveAs = () => runSaveOp('Saving…', saveProjectAsLocal);
+  const runSaveAsToDrive = (name: string) => runSaveOp('Saving to Drive…', () => saveAsToDrive(name));
 
   const runOpenFromDrive = (fileId: string) =>
     run('Opening from Drive…', async () => {
@@ -273,12 +292,7 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
     if (!file) return;
     await run('Opening…', async () => {
       const parsed = parseProjectFile(await readFileAsText(file));
-      if (parsed.ok === false) {
-        report(parsed.message);
-        return;
-      }
-      const result = await openProjectFile(parsed.body);
-      if (result.ok === false && result.error !== 'unavailable') report(result.message);
+      await openParsed(parsed);
     });
   };
 
@@ -297,12 +311,7 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
         return;
       }
       const parsed = parseProjectFile(await readTextFromHandle(picked.handle));
-      if (parsed.ok === false) {
-        report(parsed.message);
-        return;
-      }
-      const result = await openProjectFile(parsed.body, { kind: 'local', handle: picked.handle });
-      if (result.ok === false && result.error !== 'unavailable') report(result.message);
+      await openParsed(parsed, { kind: 'local', handle: picked.handle });
     });
 
   const choose = (action: ProjectMenuAction) => {
@@ -381,9 +390,9 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
       />
       {confirming !== null && (
         <ConfirmDialog
-          title={CONFIRM_TITLE[confirming]}
+          title={CONFIRM_COPY[confirming].title}
           message={REPLACE_CONFIRM_MESSAGE}
-          confirmLabel={CONFIRM_LABEL[confirming]}
+          confirmLabel={CONFIRM_COPY[confirming].label}
           onConfirm={confirmReplace}
           onCancel={() => setConfirming(null)}
         />

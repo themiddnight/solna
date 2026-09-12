@@ -286,7 +286,7 @@ export function createProjectSlice(
       const written = await writeText(picked.handle, serializeProject(body));
       if (written.ok === false) return written;
       await get().adoptSaveAs(identity, name, { kind: 'local', handle: picked.handle });
-      return { ok: true, destination: 'local' };
+      return written;
     },
 
     saveAsBody: (name) => {
