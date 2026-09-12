@@ -26,6 +26,8 @@ export class Clock {
   // this. Set through store/engineSync.ts, never from a component.
   private meter: Meter = getMeter(DEFAULT_METER_ID);
   private clockListeners = new Set<(step: number, beat: number, time: number) => void>();
+  private afterStepTasks: Array<() => void> = [];
+  private dispatchingStep = false;
   private static readonly CLOCK_LOOKAHEAD = 0.1; // schedule events this far ahead
   private static readonly CLOCK_REANCHOR_DELAY = 0.05; // gap used to re-anchor the schedule after resets and stalls
   private static readonly CLOCK_UPDATE_MS = 25;
@@ -104,6 +106,19 @@ export class Clock {
     };
   }
 
+  /**
+   * Run a control-side transition after every listener has consumed the
+   * current step, but before clockTick can dispatch the next scheduled step.
+   * Outside a clock dispatch it retains the old microtask deferral semantics.
+   */
+  scheduleAfterCurrentStep(task: () => void): void {
+    if (this.dispatchingStep) {
+      this.afterStepTasks.push(task);
+      return;
+    }
+    queueMicrotask(task);
+  }
+
   setClockBpm(bpm: number): void {
     this.clockBpm = clampBpm(bpm);
   }
@@ -166,8 +181,10 @@ export class Clock {
     if (this.clockNextStepTime < this.ctx.currentTime - Clock.CLOCK_STALL_THRESHOLD) {
       this.clockNextStepTime = this.ctx.currentTime + Clock.CLOCK_REANCHOR_DELAY;
     }
-    const stepDuration = stepDurationSec(this.clockBpm);
     while (this.clockNextStepTime < this.ctx.currentTime + Clock.CLOCK_LOOKAHEAD) {
+      // Re-read per iteration: an after-step transition may install a loop
+      // with a different BPM and re-anchor step 0 inside this same tick.
+      const stepDuration = stepDurationSec(this.clockBpm);
       const time = this.clockNextStepTime;
       const step = this.clockStepIndex;
       // Advance BEFORE dispatching. A listener that throws must not leave the
@@ -193,16 +210,29 @@ export class Clock {
       // step/beat pair for this iteration — the two are otherwise independent
       // side effects (each schedules against the audio-clock `time`, not JS
       // call order), so this ordering has no audible effect.
-      this.clockListeners.forEach((fn) => {
-        try {
-          fn(step, beat, time);
-        } catch (err) {
-          console.error('[audioEngine] clock listener threw; continuing', err);
-        }
-      });
+      this.dispatchingStep = true;
+      try {
+        this.clockListeners.forEach((fn) => {
+          try {
+            fn(step, beat, time);
+          } catch (err) {
+            console.error('[audioEngine] clock listener threw; continuing', err);
+          }
+        });
 
-      if (this.metronomeEnabled && isBeatBoundary(stepInBar, this.meter.accentGroups)) {
-        this.playMetronomeClick(stepInBar === 0, time);
+        if (this.metronomeEnabled && isBeatBoundary(stepInBar, this.meter.accentGroups)) {
+          this.playMetronomeClick(stepInBar === 0, time);
+        }
+      } finally {
+        this.dispatchingStep = false;
+        const tasks = this.afterStepTasks.splice(0);
+        for (const task of tasks) {
+          try {
+            task();
+          } catch (err) {
+            console.error('[audioEngine] after-step task threw; continuing', err);
+          }
+        }
       }
     }
   }
@@ -210,7 +240,7 @@ export class Clock {
   createClickBuffers(): void {
     if (!this.ctx) return;
     const sr = this.ctx.sampleRate;
-    
+
     // High click (downbeat)
     const lenHigh = Math.floor(sr * 0.03);
     const bufHigh = this.ctx.createBuffer(1, lenHigh, sr);

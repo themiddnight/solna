@@ -24,7 +24,7 @@ import { makeEngine } from './testFakes';
  *       -> `clock.test.ts`
  *
  * The shared harness those files import — `masterChainCtx`, `recordNodes`,
- * `fxWith`, `trimTestParams`, `SYNTH` — lives in `engineTestHelpers.ts`.
+ * `trimTestParams`, `SYNTH` — lives in `engineTestHelpers.ts`.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any -- the engine exports no
    internals; these tests drive the private subsystem fields and the

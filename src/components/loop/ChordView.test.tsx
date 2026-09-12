@@ -23,6 +23,21 @@ describe('ChordView preview UI', () => {
   });
 });
 
+describe('ChordView playback wiring', () => {
+  test('mounts exactly one chord scheduler', () => {
+    // renderToString cannot observe effect subscriptions. Count the hook at
+    // the two composition sites instead: a second call creates an independent
+    // scheduler and clock listener, so every chord, bass and pad event fires
+    // twice while this always-mounted view is playing.
+    const sources = [
+      readFileSync(new URL('./ChordView.tsx', import.meta.url), 'utf8'),
+      readFileSync(new URL('./chord/useChordView.ts', import.meta.url), 'utf8'),
+    ];
+    const calls = sources.flatMap((source) => source.match(/\buseChordPlayback\s*\(/g) ?? []);
+    expect(calls).toHaveLength(1);
+  });
+});
+
 describe('ChordView progression drawer button', () => {
   // See the matching test in SoundView.test.tsx for why neither button says
   // "Library" any more.

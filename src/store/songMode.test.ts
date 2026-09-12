@@ -34,6 +34,7 @@ describe('song mode pure helpers', () => {
 
 function makeFakeClock() {
   const cbs: Array<(step: number, beat: number, time: number) => void> = [];
+  const afterStepTasks: Array<() => void> = [];
   // Registration IDENTITY, not just the live count: a subscription dropped and
   // re-added inside ONE tick leaves `count` exactly where it was, and that
   // re-registration is the whole hazard — the real engine keeps its listeners
@@ -58,6 +59,9 @@ function makeFakeClock() {
         if (i >= 0) cbs.splice(i, 1);
       };
     },
+    scheduleAfterStep: (task: () => void) => {
+      afterStepTasks.push(task);
+    },
     tick: (step: number, time = 0) => {
       // Iterate a copy, but re-check membership before each call. The real
       // engine keeps its listeners in a Set and dispatches with forEach, where
@@ -70,6 +74,7 @@ function makeFakeClock() {
         if (!cbs.includes(cb)) continue;
         cb(step, step, time);
       }
+      while (afterStepTasks.length > 0) afterStepTasks.shift()?.();
     },
   };
 }
@@ -89,6 +94,7 @@ const resetState = () => {
     // of those ticks lands on a boundary and seven tests here fail for a reason
     // that has nothing to do with song mode.
     meterId: '4/4',
+    bpm: 120,
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
@@ -224,6 +230,44 @@ describe('song mode coordinator: entering and advancing', () => {
       expect(resetClock.mock.calls.at(-1)).toEqual([12.75]);
     } finally {
       resetClock.mockRestore();
+      stop();
+    }
+  });
+
+  test('a batched boundary sees the incoming loop before its playback listeners run', async () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+      activeTab: 'arrange',
+      songLoopIndex: null,
+      bpm: 300,
+    });
+    const clock = makeFakeClock();
+    const stop = startSync({
+      subscribeClock: clock.subscribe,
+      scheduleAfterStep: clock.scheduleAfterStep,
+    });
+    const loopsSeenByPlayback: string[] = [];
+    const stopPlayback = clock.subscribe((step) => {
+      loopsSeenByPlayback.push(`${step}:${useAppStore.getState().activeLoopId}`);
+    });
+    try {
+      useAppStore.getState().playAll();
+
+      // A 16th is 50 ms at 300 BPM, so the 100 ms lookahead can dispatch the
+      // pre-arm and boundary synchronously. The post-step task must install B
+      // between those two listener passes; a microtask runs only after both.
+      clock.tick(63, 12.7);
+      // loadLoop re-anchors the real clock, so the boundary is dispatched as
+      // the incoming loop's step 0 rather than the outgoing loop's step 64.
+      clock.tick(0, 12.75);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(loopsSeenByPlayback).toEqual(['63:loop-default-1', '0:loop-b']);
+      expect(useAppStore.getState().activeLoopId).toBe('loop-b');
+    } finally {
+      stopPlayback();
       stop();
     }
   });
@@ -844,4 +888,3 @@ describe('song mode coordinator: KNOWN ISSUE — advance-subscription ordering',
   });
 
 });
-

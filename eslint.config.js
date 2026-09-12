@@ -396,12 +396,6 @@ export default tseslint.config(
       // The exemption stops at this file — SoundMixer renders it and imports
       // no engine of its own.
       'src/components/ui/SourceMeter.tsx',
-      // The shared audio test harness. Not a `.test.ts` only because bun would
-      // then treat it as a suite of its own; it exists for the test files that
-      // do import it and is exempt for exactly their reason (`fxWith` builds an
-      // effects payload from the store's INITIAL_EFFECTS so a test can never
-      // drift from it).
-      'src/audio/engineTestHelpers.ts',
       '**/*.test.ts',
       '**/*.test.tsx',
     ],

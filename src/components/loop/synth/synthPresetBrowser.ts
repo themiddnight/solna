@@ -251,4 +251,3 @@ export function useSynthOverlays({
 
 export type SynthPresetBrowser = ReturnType<typeof useSynthPresetBrowser>;
 export type SynthOverlays = ReturnType<typeof useSynthOverlays>;
-

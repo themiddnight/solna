@@ -27,8 +27,13 @@ The boundary decision is deterministic — `songAdvanceDecision` returns `advanc
 next step crosses the boundary. Schedule the advance from there, one full step earlier:
 
 - In `songMode.ts`'s clock callback, decide `songAdvanceDecision(…, step + 1, …)`.
-- When it is `advance`, call `loadLoop(loopId, { atBoundary: time + stepDurationSec(bpm) })`
-  where `time` is the current step's audio time, so `atBoundary` is still the true
+- When it is `advance`, queue
+  `loadLoop(loopId, { atBoundary: time + stepDurationSec(bpm) })` through the
+  clock's after-current-step seam. It runs after every listener has consumed
+  step N-1, but before the clock's synchronous lookahead loop may dispatch N.
+  This matters at fast tempos or after jitter, when both steps can fit in one
+  `clockTick()`; a JavaScript microtask would run only after the whole loop.
+  `time` is the current step's audio time, so `atBoundary` is still the true
   boundary instant. Audio timing is unchanged — only the *control* runs earlier.
 - This lifts the margin from ~75 ms to ~200 ms (one 16th + the lookahead), so the
   `resetClock` fallback is no longer reached under ordinary jitter.
@@ -49,6 +54,8 @@ song ending is a one-time event; its rewind gap (if any) is out of scope here.
 
 ## Files
 
+- `src/audio/clock.ts`, `src/audio/engine.ts`, `src/audio/playback/playbackEngine.ts` —
+  expose the after-current-step seam that flushes between batched lookahead steps.
 - `src/store/songMode.ts` — pre-arm the `advance` (remove the reactive advance, add the
   `step + 1` decision + `atBoundary = time + stepDurationSec(bpm)`).
 - `src/store/songMode.test.ts` — pin that the advance is scheduled one step early at the
@@ -58,5 +65,6 @@ song ending is a one-time event; its rewind gap (if any) is out of scope here.
 
 - `bun test src/store/songMode.test.ts`, then full `bun test`.
 - `bun run verify`.
-- The `boundaryErrorMs` tests in `src/audio/clock.test.ts` already pin the re-anchor
-  lands step 0 on-grid; the new test pins the *margin* (decision one step early).
+- The `boundaryErrorMs` tests in `src/audio/clock.test.ts` pin the re-anchor lands
+  step 0 on-grid; an after-step test pins that a transition runs between two steps
+  batched into one tick, and the song-mode test pins the matching loop handoff.

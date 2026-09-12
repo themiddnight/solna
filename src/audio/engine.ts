@@ -106,6 +106,8 @@ export class AudioEngine {
     return this.clock.subscribeClock(listener);
   }
 
+  scheduleAfterClockStep(task: () => void): void { this.clock.scheduleAfterCurrentStep(task); }
+
   setClockBpm(bpm: number): void { this.clock.setClockBpm(bpm); }
 
   setMeter(meter: Meter): void { this.clock.setMeter(meter); }

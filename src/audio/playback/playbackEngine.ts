@@ -43,6 +43,10 @@ export function subscribePlaybackClock(
   return audioEngine.subscribeClock(listener);
 }
 
+export function scheduleAfterPlaybackClockStep(task: () => void): void {
+  audioEngine.scheduleAfterClockStep(task);
+}
+
 /**
  * How long from NOW until `time` is actually heard, in seconds.
  *

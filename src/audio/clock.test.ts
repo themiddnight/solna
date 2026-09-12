@@ -124,6 +124,42 @@ describe('shared clock dispatch: a throwing listener', () => {
 });
 
 describe('shared clock dispatch: step, beat and bpm', () => {
+  test('an after-step task runs between two steps batched into one tick', () => {
+    const { engine, tick } = clockEngine(300);
+    let transitioned = false;
+    const seen: string[] = [];
+    engine.subscribeClock((step) => {
+      if (step === 0) engine.scheduleAfterClockStep(() => { transitioned = true; });
+    });
+    engine.subscribeClock((step) => seen.push(`${step}:${transitioned}`));
+
+    tick();
+
+    expect(seen.slice(0, 2)).toEqual(['0:false', '1:true']);
+  });
+
+  test('a post-step re-anchor uses the incoming BPM inside the same tick', () => {
+    const { engine, ctx, tick } = clockEngine(120);
+    const clock = (engine as any).clock;
+    // Forty milliseconds late is still below the stall threshold. The old
+    // step and its boundary therefore both fit in this tick's lookahead.
+    clock.clockNextStepTime = ctx.currentTime - 0.04;
+    let transitioned = false;
+    engine.subscribeClock((_step, _beat, time) => {
+      if (transitioned) return;
+      engine.scheduleAfterClockStep(() => {
+        transitioned = true;
+        engine.setClockBpm(300);
+        engine.resetClock(time + stepDurationSec(120));
+      });
+    });
+
+    tick();
+
+    // Incoming step 0 lands at 10.085; its next 300-BPM 16th is 50 ms later.
+    expect(clock.clockNextStepTime).toBeCloseTo(ctx.currentTime + 0.135, 9);
+  });
+
   test('step index is monotonic and beat is floor(step / 4)', () => {
     const { engine, ctx, tick } = clockEngine();
     const rows: Array<{ step: number; beat: number; time: number }> = [];

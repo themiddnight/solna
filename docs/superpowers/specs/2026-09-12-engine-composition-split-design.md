@@ -52,8 +52,9 @@ entirely into their owning subsystem and never appear on the facade.
 `engine.test.ts` (52 `describe` blocks) splits along the same lines: drum describes →
 `drumSynth.test.ts`, voice/LFO describes → `synthVoices.test.ts`, master/effect/analyser
 describes → `masterRack.test.ts`, clock/idle describes → the existing `clock.test.ts`.
-Shared harness (`masterChainCtx`, `recordNodes`, `fxWith`, `trimTestParams`, `SYNTH`)
-moves to `engineTestHelpers.ts`. Test casts into private fields change path, e.g.
+Shared harness (`masterChainCtx`, `recordNodes`, `trimTestParams`, `SYNTH`)
+moves to `engineTestHelpers.ts`; the store-backed `fxWith` fixture stays local to
+`masterRack.test.ts` so the audio layer never imports store code. Test casts into private fields change path, e.g.
 `(engine as any).ctx` → `(engine as any).masterRack.ctx`.
 
 ## TDD order

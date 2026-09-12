@@ -1,8 +1,16 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { INITIAL_EFFECTS } from '../store/initialState';
+import type { MasterEffects } from '../types';
 import { bindFakeCtx, fakeNode, fakeParam, freshEngine, makeEngine } from './testFakes';
 import { FADER_MAX_DB, MAX_FADER_GAIN, dbToGain, toDecibels } from '../utils/gainUnits';
-import { SYNTH, fxWith, masterChainCtx } from './engineTestHelpers';
+import { SYNTH, masterChainCtx } from './engineTestHelpers';
+
+/** A complete effects patch without setReverbDecay's separately-owned key. */
+function fxWith(overrides: Partial<MasterEffects>): Omit<MasterEffects, 'reverbDecay'> {
+  const next = { ...INITIAL_EFFECTS, ...overrides } as Record<string, unknown>;
+  delete next.reverbDecay;
+  return next as unknown as Omit<MasterEffects, 'reverbDecay'>;
+}
 
 /**
  * The master node graph: gain staging, dynamics, effects, meters and the source buses.

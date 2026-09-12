@@ -1,6 +1,5 @@
 import React, { Suspense } from 'react';
 import { Bookmark, Check, Library } from 'lucide-react';
-import { useChordPlayback } from './chord/useChordPlayback';
 
 // The drawer is never needed on first paint — PresetLibrary early-returns
 // null when closed — so it is code-split out of the main chunk.
@@ -146,7 +145,6 @@ export const ChordView = React.memo(function ChordView() {
   // palette chip auditions, and the looping pattern a module's button plays.
   const chordPreview = useHeldChordPreview(state);
   const patternPreviews = usePatternPreviews(state);
-  const { isPlaying } = useChordPlayback();
 
   const [isLibraryOpen, setIsLibraryOpen] = React.useState<boolean>(false);
 
@@ -181,7 +179,7 @@ export const ChordView = React.memo(function ChordView() {
         pasteButton={<ModulePasteButton groups={['chord-progression']} />}
       />
 
-      <AccompanimentModules previews={patternPreviews} isPlaying={isPlaying} />
+      <AccompanimentModules previews={patternPreviews} isPlaying={state.playback.isPlaying} />
 
       {/* Full Chord Preset Library Sidebar Drawer */}
       <Suspense

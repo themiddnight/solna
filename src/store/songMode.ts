@@ -1,5 +1,8 @@
 import React from 'react';
-import { subscribePlaybackClock } from '../audio/playback/playbackEngine';
+import {
+  scheduleAfterPlaybackClockStep,
+  subscribePlaybackClock,
+} from '../audio/playback/playbackEngine';
 import { layerForTab } from '../types';
 import type { Layer } from '../types';
 import { getMeter } from '../utils/meter';
@@ -19,6 +22,8 @@ export function enterSongIndex(loops: readonly { id: string }[], activeLoopId: s
 export interface SongModeDeps {
   /** Injectable clock subscriber for tests (defaults to the real shared clock). */
   subscribeClock?: (cb: (step: number, beat: number, time: number) => void) => () => void;
+  /** Runs after the current step's listeners, before a batched next step. */
+  scheduleAfterStep?: (task: () => void) => void;
 }
 
 /**
@@ -41,6 +46,7 @@ export interface SongModeDeps {
  */
 export function startSongModeSync(deps: SongModeDeps = {}): () => void {
   const subscribeClock = deps.subscribeClock ?? subscribePlaybackClock;
+  const scheduleAfterStep = deps.scheduleAfterStep ?? scheduleAfterPlaybackClockStep;
   let prevLayer: Layer | null = null;
   let prevLoopId: string | null = null;
   let unsubClock: (() => void) | null = null;
@@ -134,8 +140,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
         unsubClock = subscribeClock((step, _beat, time) => {
           const cur = useAppStore.getState();
           if (cur.songLoopIndex === null || cur.playbackScope.kind === 'loop') return;
-          if (aggregateAllPlayers(cur) !== 'playing')
-            return;
+          if (aggregateAllPlayers(cur) !== 'playing') return;
           const stepsPerBar = getMeter(cur.meterId).stepsPerBar;
           const decision = songAdvanceDecision(
             cur.loops,
@@ -213,9 +218,9 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
             // the default one would hard-stop mid-release and cut every
             // accompaniment source at LOAD_LOOP_RELEASE — undoing the soft stop
             // one line above (loadLoop's wasPlaying counts a 'stopping' player
-            // as active). Deferred for the reason the advance is: loadLoop
-            // re-anchors the grid, and doing that inside the clock's own
-            // dispatch collides with the step being dispatched.
+            // as active). Deferred because this branch is already ON the
+            // boundary: re-anchoring during its listener pass would collide
+            // with the step being dispatched.
             const firstId = cur.loops[0]?.id;
             if (firstId !== undefined && firstId !== cur.activeLoopId) {
               queueMicrotask(() => loadLoop(firstId, { atBoundary: time }));
@@ -228,10 +233,11 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
           // step) runs the resetClock re-anchor a full 16th earlier, so its
           // `atBoundary > currentTime` guard never trips the `now + 0.05`
           // fallback under clock-tick jitter — the gap the late boundary
-          // dispatch used to open. The microtask deferral is kept for the same
-          // reason as before: loadLoop re-anchors the grid, and doing that
-          // synchronously inside clockTick's own dispatch collides with the
-          // step being dispatched.
+          // dispatch used to open. The clock's post-step queue runs only after
+          // every listener has consumed N-1, but before its synchronous
+          // lookahead loop may dispatch N. That ordering keeps N-1 on the
+          // outgoing content and step 0 on the incoming content even when both
+          // fit in one clockTick; a microtask would run only after both.
           const nextDecision = songAdvanceDecision(
             cur.loops,
             cur.songLoopIndex,
@@ -239,7 +245,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
             stepsPerBar,
           );
           if (nextDecision.kind === 'advance') {
-            queueMicrotask(() =>
+            scheduleAfterStep(() =>
               loadLoop(nextDecision.loopId, { atBoundary: time + stepDurationSec(cur.bpm) }),
             );
           }

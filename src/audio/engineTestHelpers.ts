@@ -1,5 +1,4 @@
-import { INITIAL_EFFECTS } from '../store/initialState';
-import type { MasterEffects, SynthParams } from '../types';
+import type { SynthParams } from '../types';
 import { fakeNode, fakeParam, freshEngine } from './testFakes';
 
 /** A minimal, deliberately plain patch that differs only in its `preset` name. */
@@ -75,18 +74,6 @@ export function masterChainCtx() {
     }),
     resume: async () => {},
   };
-}
-
-/**
- * A full effects payload minus reverbDecay, which updateEffects deliberately
- * refuses (it is owned by setReverbDecay). Built by deletion rather than by
- * spelling every key so the tests never drift from INITIAL_EFFECTS, and
- * without the excess-property error a literal spread would raise.
- */
-export function fxWith(overrides: Partial<MasterEffects>): Omit<MasterEffects, 'reverbDecay'> {
-  const next = { ...INITIAL_EFFECTS, ...overrides } as Record<string, unknown>;
-  delete next.reverbDecay;
-  return next as unknown as Omit<MasterEffects, 'reverbDecay'>;
 }
 
 export const SYNTH: SynthParams = {
