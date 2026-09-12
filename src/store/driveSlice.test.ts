@@ -225,6 +225,15 @@ describe('openFromDrive', () => {
 });
 
 describe('saveToDrive', () => {
+  test('marks a restored Drive source signed in after its Save acquires a token', async () => {
+    const { useAppStore, drive } = await freshStore();
+    useAppStore.setState({ projectSource: { kind: 'drive', fileId: 'drive-9' }, driveSignedIn: false });
+
+    await drive.saveToDrive();
+
+    expect(useAppStore.getState().driveSignedIn).toBe(true);
+  });
+
   test('updates the file the source names and keeps the document identity', async () => {
     const sent: Array<{ fileId: string; body: ProjectBody }> = [];
     const { useAppStore, drive } = await freshStore({

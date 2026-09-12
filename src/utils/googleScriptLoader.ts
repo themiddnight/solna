@@ -83,7 +83,12 @@ export function loadScript(url: string, doc?: ScriptDocument): Promise<LoadResul
   }
   let pending = loaded.get(url);
   if (!pending) {
-    pending = inject(url, host as ScriptDocument);
+    const started = inject(url, host as ScriptDocument);
+    const retryable = started.then((result) => {
+      if (result.ok === false && loaded.get(url) === retryable) loaded.delete(url);
+      return result;
+    });
+    pending = retryable;
     loaded.set(url, pending);
   }
   return pending;

@@ -52,6 +52,8 @@ export function isAuthFailure(err: unknown): boolean {
 }
 
 export interface DriveAuth {
+  /** Start loading GIS without requesting a token or opening a popup. */
+  preload?(): Promise<void>;
   /** A live access token, acquiring one if there is none. Rejects with DriveAuthError. */
   token(): Promise<string>;
   /** Forget the current token without telling Google — used after a 401. */
@@ -81,13 +83,20 @@ export function createDriveAuth(deps: DriveAuthDeps): DriveAuth {
   let oauth2: GisOauth2 | null = null;
   let acquired = false;
   let pending: Promise<string> | null = null;
+  let preloadPromise: Promise<void> | null = null;
+  let loadError: DriveAuthError | null = null;
 
-  const oauth = async (): Promise<GisOauth2> => {
-    if (oauth2) return oauth2;
-    const loaded = await deps.loadOauth2();
-    if (loaded.ok === false) throw new DriveAuthError('unavailable', DRIVE_UNAVAILABLE_MESSAGE);
-    oauth2 = loaded.value;
-    return oauth2;
+  const preload = (): Promise<void> => {
+    preloadPromise ??= deps.loadOauth2().then((loaded) => {
+      if (loaded.ok === false) {
+        loadError = new DriveAuthError('unavailable', DRIVE_UNAVAILABLE_MESSAGE);
+        return;
+      }
+      oauth2 = loaded.value;
+    }).catch(() => {
+      loadError = new DriveAuthError('unavailable', DRIVE_UNAVAILABLE_MESSAGE);
+    });
+    return preloadPromise;
   };
 
   /**
@@ -97,49 +106,49 @@ export function createDriveAuth(deps: DriveAuthDeps): DriveAuth {
    * screen appear at all.
    */
   const request = (prompt: string | undefined): Promise<string> => {
-    pending ??= (async () => {
-      // A deployment with no client id has not been REFUSED anything, so it
-      // must not report the denial sentence. Checked before GIS is touched:
-      // initTokenClient('') fails inside Google's own script and comes back
-      // through error_callback, i.e. as a denial.
-      if (deps.clientId.length === 0) throw new DriveAuthError('unavailable', DRIVE_UNAVAILABLE_MESSAGE);
-      const client = await oauth();
-      return new Promise<string>((resolve, reject) => {
-        const deny = () => reject(new DriveAuthError('denied', DRIVE_DENIED_MESSAGE));
-        const tokenClient = client.initTokenClient({
-          client_id: deps.clientId,
-          scope: DRIVE_SCOPE,
-          // A fresh token must never silently inherit a broader earlier grant.
-          include_granted_scopes: false,
-          callback: (response) => {
-            if (!response.access_token) {
-              deny();
-              return;
-            }
-            const lifetime =
-              typeof response.expires_in === 'number' ? response.expires_in : DEFAULT_LIFETIME_SECONDS;
-            token = { value: response.access_token, expiresAt: now() + lifetime * 1_000 };
-            acquired = true;
-            resolve(token.value);
-          },
-          error_callback: deny,
-        });
-        if (prompt === undefined) tokenClient.requestAccessToken();
-        else tokenClient.requestAccessToken({ prompt });
+    // Do not await GIS here. `requestAccessToken()` must be called on the
+    // click's stack; waiting for a script load first makes browsers block the
+    // consent popup. App boot calls `preload`, and an early click can retry.
+    if (deps.clientId.length === 0) return Promise.reject(new DriveAuthError('unavailable', DRIVE_UNAVAILABLE_MESSAGE));
+    if (!oauth2) return Promise.reject(loadError ?? new DriveAuthError('unavailable', DRIVE_UNAVAILABLE_MESSAGE));
+    const client = oauth2;
+    pending = new Promise<string>((resolve, reject) => {
+      const deny = () => reject(new DriveAuthError('denied', DRIVE_DENIED_MESSAGE));
+      const tokenClient = client.initTokenClient({
+        client_id: deps.clientId,
+        scope: DRIVE_SCOPE,
+        // A fresh token must never silently inherit a broader earlier grant.
+        include_granted_scopes: false,
+        callback: (response) => {
+          if (!response.access_token) {
+            deny();
+            return;
+          }
+          const lifetime =
+            typeof response.expires_in === 'number' ? response.expires_in : DEFAULT_LIFETIME_SECONDS;
+          token = { value: response.access_token, expiresAt: now() + lifetime * 1_000 };
+          acquired = true;
+          resolve(token.value);
+        },
+        error_callback: deny,
       });
-    })().finally(() => {
+      if (prompt === undefined) tokenClient.requestAccessToken();
+      else tokenClient.requestAccessToken({ prompt });
+    }).finally(() => {
       pending = null;
     });
     return pending;
   };
 
   return {
+    preload,
     token: async () => {
       if (token && token.expiresAt > now()) return token.value;
       return request(acquired ? '' : undefined);
     },
     invalidate: () => {
       token = null;
+      acquired = false;
     },
     revoke: async () => {
       const current = token;
@@ -162,9 +171,10 @@ export function createDriveAuth(deps: DriveAuthDeps): DriveAuth {
 }
 
 /**
- * Run a Drive call with a live token, retrying ONCE on a 401. Exactly one retry:
- * the second 401 means the grant is gone rather than the token being stale, and
- * a loop there would hammer the consent screen.
+ * Run a Drive call with a live token. A 401 invalidates it and returns a typed
+ * denial for the UI to surface. GIS requires `requestAccessToken()` to begin
+ * from a user gesture, while a 401 arrives after the request's async round
+ * trip, so silently asking GIS for a replacement here would be popup-blocked.
  */
 export async function withDriveToken<T>(auth: DriveAuth, op: (token: string) => Promise<T>): Promise<T> {
   const first = await auth.token();
@@ -173,17 +183,7 @@ export async function withDriveToken<T>(auth: DriveAuth, op: (token: string) => 
   } catch (err) {
     if (!isAuthFailure(err)) throw err;
     auth.invalidate();
-    try {
-      return await op(await auth.token());
-    } catch (retried) {
-      // A 401 that survives a fresh token is the GRANT being gone, not the
-      // token being stale — so it leaves here as a DriveAuthError, the one
-      // shape the slice recognises as "correct the signed-in mirror". Letting
-      // gapi's raw `{ status: 401 }` escape would make it an anonymous failure
-      // and leave the menu claiming a connection the user no longer has.
-      if (isAuthFailure(retried)) throw new DriveAuthError('denied', DRIVE_DENIED_MESSAGE);
-      throw retried;
-    }
+    throw new DriveAuthError('denied', DRIVE_DENIED_MESSAGE);
   }
 }
 

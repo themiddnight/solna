@@ -230,6 +230,9 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
  * only on its first request, so importing this file still loads nothing.
  */
 const driveAuth = createDriveAuth({ loadOauth2: loadGis, clientId: driveClientId() });
+// Load GIS before the user presses Connect. Token acquisition itself remains
+// user-initiated, so the consent popup stays within that gesture.
+void driveAuth.preload?.();
 
 /**
  * `createGapiTransport` wants a `getGapi` that THROWS on failure, while

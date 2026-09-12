@@ -14,7 +14,7 @@ import {
   toUserProfile,
   updateFileBody,
 } from './driveGapi';
-import { DriveUnavailableError, driveErrorMessage, type DriveAuth } from './driveAuth';
+import { DriveAuthError, DriveUnavailableError, driveErrorMessage, type DriveAuth } from './driveAuth';
 import { DRIVE_LIST_FIELDS, DRIVE_LIST_ORDER, DRIVE_LIST_QUERY, SOLNA_DRIVE_MIME } from './driveClient';
 import type { GapiRequest, GapiResponse, GapiRoot } from '../utils/googleScriptLoader';
 
@@ -257,7 +257,7 @@ describe('createGapiTransport', () => {
     expect((caught as Error).message).toBe('Drive returned a file record with no id');
   });
 
-  test('a 401 is retried once with a fresh token', async () => {
+  test('a 401 invalidates the token and requires a later user-initiated reconnect', async () => {
     let attempts = 0;
     const gapi = fakeGapi(async () => {
       attempts++;
@@ -266,10 +266,11 @@ describe('createGapiTransport', () => {
     });
     const { auth, state } = fakeAuth();
     const transport = createGapiTransport(async () => gapi.root, auth);
-    await transport.list({ q: 'q', pageSize: 100, orderBy: 'o', fields: 'f' });
-    expect(attempts).toBe(2);
+    const err = await transport.list({ q: 'q', pageSize: 100, orderBy: 'o', fields: 'f' }).catch((thrown: unknown) => thrown);
+    expect(err instanceof DriveAuthError).toBe(true);
+    expect(attempts).toBe(1);
     expect(state.invalidated).toBe(1);
-    expect(gapi.tokens).toEqual([{ access_token: 'token-1' }, { access_token: 'token-2' }]);
+    expect(gapi.tokens).toEqual([{ access_token: 'token-1' }]);
   });
 
   test('a gapi client that will not load fails with the unavailable sentence', async () => {

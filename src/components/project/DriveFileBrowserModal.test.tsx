@@ -4,6 +4,7 @@ import {
   DriveBrowserList,
   DriveFileBrowserModal,
   browserTitle,
+  openHandlerForMode,
   shouldRenderList,
   type DriveFileBrowserModalProps,
 } from './DriveFileBrowserModal';
@@ -74,6 +75,14 @@ describe('DriveBrowserList', () => {
     // The hint is part of the empty state, not a separate feature: without it an
     // empty list looks like a bug to a user who can see their own .solna in Drive.
     expect(empty).toContain('download it and use Open .solna');
+  });
+});
+
+describe('openHandlerForMode', () => {
+  test('does not make existing Drive files destructive from Save As', () => {
+    const open = () => {};
+    expect(openHandlerForMode('save-as', open)).toBeUndefined();
+    expect(openHandlerForMode('open', open)).toBe(open);
   });
 });
 

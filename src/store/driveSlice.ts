@@ -56,7 +56,9 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
 
   const guard = async <T>(op: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; message: string }> => {
     try {
-      return { ok: true, value: await op() };
+      const value = await op();
+      setSignedIn(deps.auth.signedIn());
+      return { ok: true, value };
     } catch (err) {
       if (err instanceof DriveAuthError) setSignedIn(false);
       return { ok: false, message: driveErrorMessage(err) };

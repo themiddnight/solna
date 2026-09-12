@@ -34,7 +34,6 @@ Concretely, after this ships:
    **writable** handle so that the next Save overwrites the file that was opened; or from Google
    Drive through an in-app list of the Solna projects this app can see (no Google-hosted picker
    iframe).
-5. **Export** stays, as a distinct action: download a copy without changing the source.
 
 **Open → edit → Save overwrites** is the requirement this design exists for, and it is why local
 Open goes through `showOpenFilePicker` rather than the `<input type=file>` the previous design
@@ -70,12 +69,12 @@ The sections below of `2026-09-11-single-project-autosave-design.md` remain auth
 
 | From (2026-09-11) | To (this design) |
 | --- | --- |
-| There is **no explicit Save**; Export is the only manual save-to-file | **Save** commits to the source; **Save As** creates a new file and re-points the source; **Export** is a copy without re-pointing |
+| There is **no explicit Save**; Export is the only manual save-to-file | **Save** commits to the source; **Save As** creates a new file and re-points the source; the redundant Export action is removed |
 | The slot holds a bare `ProjectBody` | The slot holds a **slot record** `{ body, source }` |
 | A project has no memory of where it came from | A project carries a **source**: `untitled`, a Drive file id, or a local `FileSystemFileHandle` |
 | "Any backend, account, sync, sharing" is a non-goal | A **Google Drive backend** exists (OAuth + Drive API v3); sharing/sync still are not |
 | No file browser; Open is a native file `<input>` only | A **Drive project list** (flat: the `.solna` files this app can see) plus `showOpenFilePicker` for local open, with the `<input>` kept only as the no-API fallback |
-| Export is a plain `download` of the live session | Local **Save** writes back to the opened file via the File System Access API; `download` is the fallback |
+| Export is a plain `download` of the live session | Local **Save** writes back to the opened file via the File System Access API; **Save As** or the no-API fallback downloads a new copy |
 
 ## The source reference (core concept)
 
@@ -103,15 +102,15 @@ A `FileSystemFileHandle` is structured-cloneable, so the slot record can live in
 plain structured value; the handle never passes through `JSON.stringify` because the slot path is
 IndexedDB (structured clone), not the `.solna` serialiser.
 
-## Save / Save As / Export semantics
+## Save / Save As semantics
 
 The dispatch is a pure function of `source` — no UI state beyond it:
 
-| `source` | **Save** | **Save As** | **Export** |
-| --- | --- | --- | --- |
-| `untitled` | = Save As (no target to overwrite) | choose Drive/local, create new, source ← new | download a copy, source unchanged |
-| `drive(fileId)` | Drive `files.update` (media) on that id | Drive `files.create` (named in the project-list modal), source ← new id | download a copy, source unchanged |
-| `local(handle)` | write serialised body to the handle | `showSaveFilePicker` → new handle, source ← new handle | download a copy, source unchanged |
+| `source` | **Save** | **Save As** |
+| --- | --- | --- |
+| `untitled` | = Save As (no target to overwrite) | choose Drive/local, create new, source ← new |
+| `drive(fileId)` | Drive `files.update` (media) on that id | Drive `files.create` (named in the project-list modal), source ← new id |
+| `local(handle)` | write serialised body to the handle | `showSaveFilePicker` → new handle, source ← new handle |
 
 Envelope hygiene on write (a `.solna` file is a document, and its envelope says so):
 
@@ -151,9 +150,11 @@ interface ProjectSlotRecord {
 **Auth — Google Identity Services, client-side only.** No backend, matching Solna's SPA
 architecture. Load `https://accounts.google.com/gsi/client`; `google.accounts.oauth2.initTokenClient`
 with the client id and scope `https://www.googleapis.com/auth/drive.file`, then
-`requestAccessToken()`. The access token is ~1 hour, kept **in memory only** (never persisted,
-never in the store), and re-requested on demand — GIS re-issues silently while its consent cookie
-is valid. Sign-out calls `google.accounts.oauth2.revoke`.
+`requestAccessToken()`. GIS is preloaded at app boot, but token requests begin only from the
+user's Connect, Save, Open, or Save As gesture: the request must not await a script load before
+asking GIS to open its consent window. The access token is ~1 hour, kept **in memory only**
+(never persisted, never in the store), and re-requested from a later user gesture when needed.
+Sign-out calls `google.accounts.oauth2.revoke`.
 
 **Scope is `drive.file` and nothing else.** It means "see/edit/create/delete only the files this
 app created or opened". It is **non-sensitive**, so it needs no restricted-scope security
@@ -233,13 +234,12 @@ Save overwrites the file that was opened:
 
 ## UI shell
 
-**Entry point.** The Wordmark menu (the 2026-09-11 "Open / Export / New" compact menu) grows to:
+**Entry point.** The Wordmark menu replaces the 2026-09-11 "Open / Export / New" compact menu with:
 
 - **Open `.solna`** — `showOpenFilePicker`, falling back to the file input.
 - **Open from Drive** — the Drive project list; requires sign-in if not connected.
 - **Save** — commit to source; when `untitled`, opens the Save-As dialog.
 - **Save As** — choose Drive or local, create a new file, re-point the source.
-- **Export `.solna`** — download a copy, source unchanged.
 - **New** — confirm-replace → factory content, source ← `untitled`.
 - **Disconnect Drive** — revoke and sign out. **Shown only while signed in**, because a row that is
   a no-op in the common case is worse than an absent one.
@@ -319,7 +319,7 @@ empty slots, quota, unavailable storage, and two-tab last-write-wins. Additions:
 | --- | --- |
 | **Save with `untitled` source** | Routes to Save As; no overwrite of anything. |
 | **Save As with no Drive connection** | The dialog offers local only (or prompts to connect first); the local path never requires a token. |
-| **Drive token expired / revoked** | Next Drive call re-requests via GIS; if the user denies, the action aborts with a notice and `driveSignedIn → false`. A `drive` source that can no longer be reached is not cleared automatically — the user still holds the local session; Save As can re-point it. |
+| **Drive token expired / revoked** | A later user-initiated Drive action re-requests via GIS; if the user denies, the action aborts with a notice and `driveSignedIn → false`. A `drive` source that can no longer be reached is not cleared automatically — the user still holds the local session; Save As can re-point it. |
 | **Sign out with a `drive` source** | Source reverts to `untitled` (the id is meaningless without a token); the body and autosave are untouched. |
 | **Local overwrite unsupported** | `showSaveFilePicker` absent → Save degrades to `download`; source stays `untitled`. Capability probe, not an error. |
 | **Local open unsupported** | `showOpenFilePicker` absent → the `<input>` fallback; the project opens `untitled` and its first Save is a Save As. |
@@ -329,7 +329,7 @@ empty slots, quota, unavailable storage, and two-tab last-write-wins. Additions:
 | **A `.solna` in Drive that Solna did not create** | Invisible to `files.list` under `drive.file` and not openable from Drive. The empty state names the workaround: download it and use local Open. |
 | **A Drive project the user moved into a folder** | Still listed and still writable — the query filters on MIME only, never on `parents`. |
 | **Drive not configured (no client id)** | Every Drive affordance is absent; nothing asks for a token. Local Save/Save As/Open are unaffected. |
-| **A 401 that survives the one silent retry** | The grant is gone, not the token stale: `driveSignedIn → false` and a notice. It must take the same path as an explicit denial — one place decides, and a raw `{ status: 401 }` must not slip past it as a generic failure. |
+| **A 401 from Drive** | The token is forgotten, `driveSignedIn → false`, and the action reports the same notice as a denial. GIS can only open a popup from a user gesture, so the completed async request never silently retries; the user can reconnect and try again. |
 
 ## Migration
 

@@ -30,7 +30,7 @@ export function DriveBrowserList({
   onOpen,
 }: {
   rows: DriveBrowserRow[];
-  onOpen: (fileId: string) => void;
+  onOpen?: (fileId: string) => void;
 }) {
   if (rows.length === 0) {
     return (
@@ -44,15 +44,23 @@ export function DriveBrowserList({
     <ul className="max-h-72 overflow-y-auto">
       {rows.map((row) => (
         <li key={row.id}>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm w-full justify-start gap-2 font-normal"
-            onClick={() => onOpen(row.id)}
-          >
-            <FileText className="w-4 h-4 text-base-content/60" aria-hidden="true" />
-            <span className="truncate">{row.name}</span>
-            <span className="ml-auto text-xs text-base-content/50">{formatModified(row.modifiedTime)}</span>
-          </button>
+          {onOpen ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm w-full justify-start gap-2 font-normal"
+              onClick={() => onOpen(row.id)}
+            >
+              <FileText className="w-4 h-4 text-base-content/60" aria-hidden="true" />
+              <span className="truncate">{row.name}</span>
+              <span className="ml-auto text-xs text-base-content/50">{formatModified(row.modifiedTime)}</span>
+            </button>
+          ) : (
+            <div className="flex min-h-8 items-center gap-2 px-3 text-sm text-base-content/60">
+              <FileText className="w-4 h-4" aria-hidden="true" />
+              <span className="truncate">{row.name}</span>
+              <span className="ml-auto text-xs text-base-content/50">{formatModified(row.modifiedTime)}</span>
+            </div>
+          )}
         </li>
       ))}
     </ul>
@@ -85,6 +93,14 @@ export interface DriveFileBrowserModalProps {
  */
 export function shouldRenderList(loading: boolean, error: string | null, fileCount: number): boolean {
   return !loading && (error === null || fileCount > 0);
+}
+
+/** Save As may show existing files, but selecting one must never replace the current project. */
+export function openHandlerForMode(
+  mode: DriveFileBrowserModalProps['mode'],
+  onOpenFile: DriveFileBrowserModalProps['onOpenFile'],
+): DriveFileBrowserModalProps['onOpenFile'] | undefined {
+  return mode === 'open' ? onOpenFile : undefined;
 }
 
 export function DriveFileBrowserModal({
@@ -154,7 +170,7 @@ export function DriveFileBrowserModal({
           {loading && <p className="text-xs text-base-content/60">{DRIVE_LOADING_TEXT}</p>}
 
           {shouldRenderList(loading, error, files.length) && (
-            <DriveBrowserList rows={sortBrowserRows(toBrowserRows([...files]))} onOpen={onOpenFile} />
+            <DriveBrowserList rows={sortBrowserRows(toBrowserRows([...files]))} onOpen={openHandlerForMode(mode, onOpenFile)} />
           )}
 
           {nextPageToken !== undefined && !loading && (

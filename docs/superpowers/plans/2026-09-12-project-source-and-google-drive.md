@@ -1,5 +1,10 @@
 # Project Source and Google Drive Implementation Plan
 
+> **Historical implementation plan.** The shipped menu intentionally removes the standalone
+> Export action because Save As already creates a new `.solna` file. References to Export in the
+> task transcript below describe the earlier plan, not the current product requirement; the
+> companion design spec is authoritative.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give the single autosaved project a *source* — untitled, a Google Drive file id, or a local `FileSystemFileHandle` — so explicit Save commits back to **the file the project was opened from**, Save As creates a new one, and an in-app list opens and creates Solna projects in Drive.

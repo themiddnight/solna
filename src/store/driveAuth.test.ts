@@ -6,6 +6,7 @@ import {
   DRIVE_UNAVAILABLE_MESSAGE,
   DriveAuthError,
   DriveUnavailableError,
+  type DriveAuthDeps,
   createDriveAuth,
   driveClientId,
   driveErrorMessage,
@@ -41,10 +42,34 @@ function fakeGis(responses: Array<GisTokenResponse | 'error'> = []) {
 
 const neverLoads = async () => ({ ok: false as const, message: 'offline' });
 
+async function preparedAuth(deps: DriveAuthDeps) {
+  const auth = createDriveAuth(deps);
+  await auth.preload?.();
+  return auth;
+}
+
 describe('createDriveAuth', () => {
+  test('refuses a token request while GIS is still loading, rather than opening a popup after the gesture', async () => {
+    const gis = fakeGis();
+    let finishLoad: ((result: { ok: true; value: GisOauth2 }) => void) | undefined;
+    const auth = createDriveAuth({
+      loadOauth2: () => new Promise((resolve) => { finishLoad = resolve; }),
+      clientId: 'cid',
+    });
+
+    const primed = auth.preload?.();
+    const beforeReady = auth.token().catch((thrown: unknown) => thrown);
+    finishLoad?.({ ok: true, value: gis.oauth2 });
+    await primed;
+
+    const earlyError = await beforeReady;
+    expect((earlyError as DriveAuthError).kind).toBe('unavailable');
+    expect(await auth.token()).toBe('token-1');
+  });
+
   test('requests a token and reports signed in', async () => {
     const gis = fakeGis();
-    const auth = createDriveAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid' });
+    const auth = await preparedAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid' });
     expect(auth.signedIn()).toBe(false);
     expect(await auth.token()).toBe('token-1');
     expect(auth.signedIn()).toBe(true);
@@ -52,7 +77,7 @@ describe('createDriveAuth', () => {
 
   test('asks for exactly drive.file, the injected client id, and no inherited grant', async () => {
     const gis = fakeGis();
-    const auth = createDriveAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid-42' });
+    const auth = await preparedAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid-42' });
     await auth.token();
     const config = gis.configs[0];
     expect(config.client_id).toBe('cid-42');
@@ -63,7 +88,7 @@ describe('createDriveAuth', () => {
 
   test('a live token is reused — GIS is not asked twice', async () => {
     const gis = fakeGis();
-    const auth = createDriveAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid' });
+    const auth = await preparedAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid' });
     await auth.token();
     await auth.token();
     expect(gis.configs).toHaveLength(1);
@@ -72,7 +97,7 @@ describe('createDriveAuth', () => {
   test('an expired token is re-requested, silently on the second round', async () => {
     let clock = 1_000;
     const gis = fakeGis([{ access_token: 'token-1', expires_in: 60 }, { access_token: 'token-2', expires_in: 60 }]);
-    const auth = createDriveAuth({
+    const auth = await preparedAuth({
       loadOauth2: async () => ({ ok: true, value: gis.oauth2 }),
       clientId: 'cid',
       now: () => clock,
@@ -89,7 +114,7 @@ describe('createDriveAuth', () => {
 
   test('a denied consent rejects with kind denied and leaves the app signed out', async () => {
     const gis = fakeGis(['error']);
-    const auth = createDriveAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid' });
+    const auth = await preparedAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid' });
     // ONE queued response, so exactly one token() call may consume it. Calling
     // token() a second time here would fall through to the fake's default
     // success and assert the opposite of what the test name says.
@@ -101,7 +126,7 @@ describe('createDriveAuth', () => {
   });
 
   test('a GIS script that will not load is unavailable, not a hang', async () => {
-    const auth = createDriveAuth({ loadOauth2: neverLoads, clientId: 'cid' });
+    const auth = await preparedAuth({ loadOauth2: neverLoads, clientId: 'cid' });
     const err = await auth.token().catch((thrown: unknown) => thrown);
     expect(err instanceof DriveAuthError).toBe(true);
     expect((err as DriveAuthError).kind).toBe('unavailable');
@@ -110,7 +135,7 @@ describe('createDriveAuth', () => {
 
   test('revoke hands the token to GIS and forgets it', async () => {
     const gis = fakeGis();
-    const auth = createDriveAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid' });
+    const auth = await preparedAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid' });
     await auth.token();
     await auth.revoke();
     expect(gis.revoked).toEqual(['token-1']);
@@ -119,14 +144,14 @@ describe('createDriveAuth', () => {
 
   test('revoke without ever signing in is a no-op, not a crash', async () => {
     const gis = fakeGis();
-    const auth = createDriveAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid' });
+    const auth = await preparedAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid' });
     await auth.revoke();
     expect(gis.revoked).toEqual([]);
   });
 
   test('invalidate drops the token so the next call asks again', async () => {
     const gis = fakeGis();
-    const auth = createDriveAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid' });
+    const auth = await preparedAuth({ loadOauth2: async () => ({ ok: true, value: gis.oauth2 }), clientId: 'cid' });
     await auth.token();
     auth.invalidate();
     expect(auth.signedIn()).toBe(false);
@@ -151,16 +176,19 @@ describe('isAuthFailure', () => {
 describe('withDriveToken', () => {
   const authWith = (value = 'token-1') => {
     let issued = 0;
+    let invalidated = 0;
     const auth = {
       token: async () => {
         issued++;
         return value;
       },
-      invalidate: () => {},
+      invalidate: () => {
+        invalidated++;
+      },
       revoke: async () => {},
       signedIn: () => true,
     };
-    return { auth, issued: () => issued };
+    return { auth, issued: () => issued, invalidated: () => invalidated };
   };
 
   test('passes a live token to the operation', async () => {
@@ -168,32 +196,17 @@ describe('withDriveToken', () => {
     expect(await withDriveToken(auth, async (token) => `saw:${token}`)).toBe('saw:token-1');
   });
 
-  test('re-requests once on a 401 — GIS re-issues while its consent cookie holds', async () => {
-    const { auth, issued } = authWith();
-    let attempts = 0;
-    const result = await withDriveToken(auth, async () => {
-      attempts++;
-      if (attempts === 1) throw { status: 401 };
-      return 'recovered';
-    });
-    expect(result).toBe('recovered');
-    expect(attempts).toBe(2);
-    expect(issued()).toBe(2);
-  });
-
-  test('a second 401 is the grant being gone, and leaves as a DriveAuthError', async () => {
-    const { auth, issued } = authWith();
+  test('a 401 invalidates the token but does not open a new OAuth popup after the request has returned', async () => {
+    const { auth, issued, invalidated } = authWith();
     let attempts = 0;
     const err = await withDriveToken(auth, async () => {
       attempts++;
       throw { status: 401 };
     }).catch((thrown: unknown) => thrown);
-    // NOT the raw `{ status: 401 }`: the slice recognises DriveAuthError and
-    // nothing else as the signal to drop `driveSignedIn`.
     expect(err instanceof DriveAuthError).toBe(true);
-    expect((err as DriveAuthError).kind).toBe('denied');
-    expect(attempts).toBe(2);
-    expect(issued()).toBe(2);
+    expect(attempts).toBe(1);
+    expect(issued()).toBe(1);
+    expect(invalidated()).toBe(1);
   });
 
   test('a non-auth failure propagates immediately', async () => {

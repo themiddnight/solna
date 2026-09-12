@@ -33,6 +33,7 @@ beforeEach(() => {
   // Each test starts from an empty module-level load cache.
   delete (globalThis as { google?: unknown }).google;
   delete (globalThis as { gapi?: unknown }).gapi;
+  delete (globalThis as { document?: unknown }).document;
 });
 
 describe('the origin allowlist', () => {
@@ -73,6 +74,20 @@ describe('loadScript', () => {
     appended[0].onerror?.();
     const result = await pending;
     expect(result.ok).toBe(false);
+  });
+
+  test('a failed production load is retried instead of being cached forever', async () => {
+    const { appended, doc } = fakeDoc();
+    Object.defineProperty(globalThis, 'document', { value: doc, configurable: true });
+
+    const first = loadScript(GIS_SCRIPT_URL);
+    appended[0].onerror?.();
+    expect((await first).ok).toBe(false);
+
+    const second = loadScript(GIS_SCRIPT_URL);
+    expect(appended).toHaveLength(2);
+    appended[1].onload?.();
+    expect(await second).toEqual({ ok: true, value: null });
   });
 
   test('with no doc argument it reads globalThis.document, and says unavailable when there is none', async () => {

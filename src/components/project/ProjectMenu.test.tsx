@@ -88,7 +88,7 @@ describe('ProjectMenu', () => {
     ]);
   });
 
-  test('renders a Save and a Save as row with stable ids', () => {
+  test('renders Save actions without the removed Export action', () => {
     // The test deployment has no client id, so `driveAvailable` is false at
     // store creation and the Drive rows would be absent. useLiveStore serves
     // getState() for both snapshots, so setting it here does reach the render.
@@ -96,6 +96,8 @@ describe('ProjectMenu', () => {
     const html = renderToString(<ProjectMenu textClassName="hidden sm:inline" />);
     expect(html).toContain('id="project-menu-save"');
     expect(html).toContain('id="project-menu-save-as"');
+    expect(html).not.toContain('id="project-menu-export"');
+    expect(html).not.toContain('Export .solna');
     expect(html).toContain('Open from Drive');
     useAppStore.setState({ driveAvailable: false });
   });
