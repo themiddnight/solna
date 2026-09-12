@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { bindFakeCtx, fakeCtx, freshEngine, makeEngine, type EngineInstance } from './testFakes';
 import { barDurationSec, STEPS_PER_BAR, stepDurationSec } from '../utils/musicTheory';
 import { getMeter } from '../utils/meter';
-import { fakeCtx, makeEngine, type EngineInstance } from './testFakes';
+import { SYNTH, suspendableEngine } from './engineTestHelpers';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the engine exports no
    internals; these tests drive the private clockTick and read private clock
@@ -16,7 +17,7 @@ const activeEngines: EngineInstance[] = [];
 
 afterEach(() => {
   for (const engine of activeEngines) {
-    (engine as any).stopClockTimer();
+    (engine as any).clock.stopClockTimer();
   }
   activeEngines.length = 0;
 });
@@ -29,16 +30,16 @@ afterEach(() => {
 function clockEngine(bpm = 120) {
   const engine = makeEngine();
   const ctx = fakeCtx();
-  (engine as any).ctx = ctx;
+  bindFakeCtx(engine, ctx);
   engine.setClockBpm(bpm);
-  (engine as any).clockNextStepTime = ctx.currentTime;
-  (engine as any).clockStepIndex = 0;
+  (engine as any).clock.clockNextStepTime = ctx.currentTime;
+  (engine as any).clock.clockStepIndex = 0;
   activeEngines.push(engine);
-  const tick = () => (engine as any).clockTick();
+  const tick = () => (engine as any).clock.clockTick();
   return { engine, ctx, tick };
 }
 
-describe('shared clock dispatch', () => {
+describe('shared clock dispatch: a throwing listener', () => {
   test('a listener that throws does not stall the grid', () => {
     const errors = spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -102,7 +103,7 @@ describe('shared clock dispatch', () => {
       engine.subscribeClock((step) => {
         if (indexDuringCall === undefined) {
           stepArg = step;
-          indexDuringCall = (engine as any).clockStepIndex;
+          indexDuringCall = (engine as any).clock.clockStepIndex;
         }
         throw new Error('boom');
       });
@@ -115,12 +116,14 @@ describe('shared clock dispatch', () => {
       // step 0 forever — the observable symptom of the ordering bug.
       ctx.currentTime += 1;
       tick();
-      expect((engine as any).clockStepIndex).toBeGreaterThan(1);
+      expect((engine as any).clock.clockStepIndex).toBeGreaterThan(1);
     } finally {
       errors.mockRestore();
     }
   });
+});
 
+describe('shared clock dispatch: step, beat and bpm', () => {
   test('step index is monotonic and beat is floor(step / 4)', () => {
     const { engine, ctx, tick } = clockEngine();
     const rows: Array<{ step: number; beat: number; time: number }> = [];
@@ -165,11 +168,11 @@ describe('shared clock dispatch', () => {
   test('setClockBpm clamps out-of-range input instead of producing a 0-length step', () => {
     const { engine } = clockEngine();
     engine.setClockBpm(0);
-    expect((engine as any).clockBpm).toBe(20);
+    expect((engine as any).clock.clockBpm).toBe(20);
     engine.setClockBpm(9999);
-    expect((engine as any).clockBpm).toBe(300);
+    expect((engine as any).clock.clockBpm).toBe(300);
     engine.setClockBpm(Number.NaN);
-    expect((engine as any).clockBpm).toBe(120);
+    expect((engine as any).clock.clockBpm).toBe(120);
   });
 
   test('a stall re-anchors the schedule instead of bursting every missed step', () => {
@@ -191,7 +194,7 @@ describe('shared clock dispatch', () => {
   test('the metronome downbeat lands on STEPS_PER_BAR, not a hardcoded 16', () => {
     const { engine, ctx, tick } = clockEngine();
     const downbeats: number[] = [];
-    (engine as any).playMetronomeClick = (isDownbeat: boolean, time: number) => {
+    (engine as any).clock.playMetronomeClick = (isDownbeat: boolean, time: number) => {
       if (isDownbeat) downbeats.push(time);
     };
     engine.setMetronomeEnabled(true);
@@ -219,7 +222,7 @@ describe('meter-aware clock', () => {
     const clicks: Array<{ step: number; downbeat: boolean }> = [];
     const beats: number[] = [];
     let dispatched = 0;
-    (engine as any).playMetronomeClick = (isDownbeat: boolean) => {
+    (engine as any).clock.playMetronomeClick = (isDownbeat: boolean) => {
       clicks.push({ step: dispatched, downbeat: isDownbeat });
     };
     engine.setMeter(getMeter('4/4'));
@@ -254,7 +257,7 @@ describe('meter-aware clock', () => {
     const { engine, ctx, tick } = clockEngine();
     const clicks: Array<{ step: number; downbeat: boolean }> = [];
     let dispatched = 0;
-    (engine as any).playMetronomeClick = (isDownbeat: boolean) => {
+    (engine as any).clock.playMetronomeClick = (isDownbeat: boolean) => {
       clicks.push({ step: dispatched, downbeat: isDownbeat });
     };
     engine.setMeter(getMeter('7/8'));
@@ -280,7 +283,7 @@ describe('meter-aware clock', () => {
     const { engine, ctx, tick } = clockEngine();
     const downbeatSteps: number[] = [];
     let dispatched = 0;
-    (engine as any).playMetronomeClick = (isDownbeat: boolean) => {
+    (engine as any).clock.playMetronomeClick = (isDownbeat: boolean) => {
       if (isDownbeat) downbeatSteps.push(dispatched);
     };
     engine.setMeter(getMeter('7/8'));
@@ -333,16 +336,16 @@ describe('resetClock anchoring', () => {
   test('with no argument it re-anchors CLOCK_REANCHOR_DELAY ahead of now', () => {
     const { engine, ctx } = clockEngine();
     engine.resetClock();
-    expect((engine as any).clockStepIndex).toBe(0);
-    expect((engine as any).clockNextStepTime).toBeCloseTo(ctx.currentTime + 0.05, 6);
+    expect((engine as any).clock.clockStepIndex).toBe(0);
+    expect((engine as any).clock.clockNextStepTime).toBeCloseTo(ctx.currentTime + 0.05, 6);
   });
 
   test('an explicit future anchor puts step 0 exactly there', () => {
     const { engine, ctx } = clockEngine();
     const target = ctx.currentTime + 0.075;
     engine.resetClock(target);
-    expect((engine as any).clockStepIndex).toBe(0);
-    expect((engine as any).clockNextStepTime).toBe(target);
+    expect((engine as any).clock.clockStepIndex).toBe(0);
+    expect((engine as any).clock.clockNextStepTime).toBe(target);
   });
 
   test('an anchor already in the past falls back rather than scheduling behind', () => {
@@ -351,7 +354,7 @@ describe('resetClock anchoring', () => {
     // clockTick burst every step between then and now.
     const { engine, ctx } = clockEngine();
     engine.resetClock(ctx.currentTime - 0.2);
-    expect((engine as any).clockNextStepTime).toBeCloseTo(ctx.currentTime + 0.05, 6);
+    expect((engine as any).clock.clockNextStepTime).toBeCloseTo(ctx.currentTime + 0.05, 6);
   });
 });
 
@@ -413,22 +416,22 @@ describe('the metronome does not run the clock', () => {
   test('enabling it starts no timer', () => {
     const { engine } = clockEngine();
     engine.setMetronomeEnabled(true);
-    expect((engine as any).clockTimer).toBeNull();
+    expect((engine as any).clock.clockTimer).toBeNull();
   });
 
   test('the last subscriber leaving stops the clock even with it enabled', () => {
     const { engine } = clockEngine();
     engine.setMetronomeEnabled(true);
     const unsubscribe = engine.subscribeClock(() => {});
-    expect((engine as any).clockTimer).not.toBeNull();
+    expect((engine as any).clock.clockTimer).not.toBeNull();
     unsubscribe();
-    expect((engine as any).clockTimer).toBeNull();
+    expect((engine as any).clock.clockTimer).toBeNull();
   });
 
   test('it still clicks on the beat while a player holds the clock', () => {
     const { engine, ctx, tick } = clockEngine();
     const clicks: number[] = [];
-    (engine as any).playMetronomeClick = (_down: boolean, time: number) => clicks.push(time);
+    (engine as any).clock.playMetronomeClick = (_down: boolean, time: number) => clicks.push(time);
     engine.setMetronomeEnabled(true);
     engine.subscribeClock(() => {});
 
@@ -437,5 +440,271 @@ describe('the metronome does not run the clock', () => {
       ctx.currentTime += 0.025;
     }
     expect(clicks.length).toBeGreaterThan(1);
+  });
+});
+
+
+describe("idle suspend and wakeIfIdle", () => {
+
+  test('an idle engine suspends when its idle timer fires', () => {
+    const { engine, ctx } = suspendableEngine();
+    (engine as any).maybeSuspendNow();
+    expect(ctx.suspendCalls).toBe(1);
+  });
+
+  test('a live voice blocks the suspend', () => {
+    const { engine, ctx } = suspendableEngine();
+    (engine as any).synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    (engine as any).maybeSuspendNow();
+    expect(ctx.suspendCalls).toBe(0);
+  });
+
+  test('a clock listener blocks the suspend', () => {
+    const { engine, ctx } = suspendableEngine();
+    const unsubscribe = engine.subscribeClock(() => {});
+    (engine as any).maybeSuspendNow();
+    expect(ctx.suspendCalls).toBe(0);
+    unsubscribe();
+  });
+
+  // The metronome is a click, not a transport: with no clock listener it
+  // makes no sound, so leaving the toggle on must not hold the context.
+  test('an enabled metronome with nothing playing does not block the suspend', () => {
+    const { engine, ctx } = suspendableEngine();
+    engine.setMetronomeEnabled(true);
+    (engine as any).maybeSuspendNow();
+    expect(ctx.suspendCalls).toBe(1);
+    engine.setMetronomeEnabled(false);
+  });
+
+  test('wakeIfIdle resumes a context this engine suspended', () => {
+    const { engine, ctx } = suspendableEngine();
+    (engine as any).maybeSuspendNow();
+    expect(ctx.state).toBe('suspended');
+
+    engine.wakeIfIdle();
+    expect(ctx.resumeCalls).toBe(1);
+  });
+
+  test('wakeIfIdle on a running context is a no-op and never throws', () => {
+    const { engine, ctx } = suspendableEngine();
+    engine.wakeIfIdle();
+    engine.wakeIfIdle();
+    expect(ctx.resumeCalls).toBe(0);
+  });
+
+  test('wakeIfIdle before init never throws', () => {
+    const engine = makeEngine();
+    expect(() => engine.wakeIfIdle()).not.toThrow();
+  });
+});
+
+describe("a suspended context freezes the audio clock", () => {
+
+  test('a released voice records its teardown time on the AUDIO clock', () => {
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    e.synthVoices.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
+
+    const voice = e.synthVoices.activeVoices.get('synth:C4');
+    // max(release 0.5, filterRelease 0.5) + 0.1 grace
+    expect(voice.teardownAt).toBeCloseTo(ctx.currentTime + 0.6, 5);
+  });
+
+  test('a releasing voice also blocks the suspend — a release tail must never be cut', () => {
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    e.synthVoices.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
+    e.maybeSuspendNow();
+    expect(ctx.suspendCalls).toBe(0);
+    clearTimeout(e.synthVoices.activeVoices.get('synth:C4').teardownTimer);
+  });
+
+  test('wakeIfIdle re-arms a pending teardown against the frozen audio clock, when THIS engine idle-suspended', () => {
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    e.synthVoices.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
+    const voice = e.synthVoices.activeVoices.get('synth:C4');
+    const firstTimer = voice.teardownTimer;
+
+    // A releasing voice blocks maybeSuspendNow (proven above), so this drives
+    // wakeIfIdle's own resume/re-arm branch directly by forcing the internal
+    // state maybeSuspendNow would have set had the predicate allowed it. This
+    // is NOT what a real backgrounded-tab suspend looks like — that path
+    // never touches suspendedForIdle at all and is covered separately below,
+    // through init()'s own resume branch.
+    ctx.state = 'suspended';
+    e.suspendedForIdle = true;
+    engine.wakeIfIdle();
+
+    // The timer was replaced, and the voice is still tracked — the old wall
+    // clock timer would have torn it down 10 s into a 0.6 s release.
+    expect(voice.teardownTimer).not.toBe(firstTimer);
+    expect(e.synthVoices.activeVoices.get('synth:C4')).toBe(voice);
+    clearTimeout(voice.teardownTimer);
+  });
+
+  test('init resumes and re-arms a pending teardown when the BROWSER suspended the context', async () => {
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    ctx.state = 'suspended';
+    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    e.synthVoices.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
+    const voice = e.synthVoices.activeVoices.get('synth:C4');
+    const firstTimer = voice.teardownTimer;
+
+    // This is the genuine backgrounded-tab scenario: the browser suspends on
+    // its own schedule, with no idle flag of ours ever set. init()'s existing
+    // resume branch is the only thing that ever sees it.
+    await e.init();
+
+    expect(ctx.resumeCalls).toBe(1);
+    expect(voice.teardownTimer).not.toBe(firstTimer);
+    clearTimeout(voice.teardownTimer);
+  });
+});
+
+describe("every activity path re-arms the idle countdown", () => {
+
+  test('a MIDI-triggered note-on wakes a context this engine idle-suspended', () => {
+    // midiInput.ts calls triggerSynthNoteOn directly with no init()/gesture
+    // path of its own — this proves the wake happens at the engine boundary
+    // regardless of caller, not only from a pointer/keyboard gesture.
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.maybeSuspendNow();
+    expect(ctx.state).toBe('suspended');
+
+    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    expect(ctx.resumeCalls).toBe(1);
+  });
+
+  test('a MIDI-triggered drum hit wakes a context this engine idle-suspended', () => {
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.maybeSuspendNow();
+    expect(ctx.state).toBe('suspended');
+
+    engine.triggerDrum('kick');
+    expect(ctx.resumeCalls).toBe(1);
+  });
+
+  test('an ordinary click on a running (never idle-suspended) context still restarts the idle countdown', () => {
+    // Regression: wakeIfIdle used to clear the timer and return before
+    // reaching markActivity() whenever there was nothing of its own to
+    // resume, leaving idle suspend disarmed after the first click until the
+    // next note, clock tick or metronome event.
+    const { engine } = suspendableEngine();
+    const e = engine as any;
+    e.idleTimer = null;
+    engine.wakeIfIdle();
+    expect(e.idleTimer).not.toBeNull();
+  });
+
+  test('triggerSynthNoteOn marks activity', () => {
+    const { engine, ctx } = freshEngine();
+    const e = engine as any;
+    expect(e.idleTimer).toBeNull();
+    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    expect(e.idleTimer).not.toBeNull();
+  });
+
+  test('triggerDrum marks activity', () => {
+    const { engine } = freshEngine();
+    const e = engine as any;
+    expect(e.idleTimer).toBeNull();
+    engine.triggerDrum('kick');
+    expect(e.idleTimer).not.toBeNull();
+  });
+});
+
+describe("activity marks and the resume-failure path", () => {
+
+  test('subscribeClock marks activity on subscribe and again on the last unsubscribe', () => {
+    const { engine } = freshEngine();
+    const e = engine as any;
+    expect(e.idleTimer).toBeNull();
+    const unsubscribe = engine.subscribeClock(() => {});
+    expect(e.idleTimer).not.toBeNull();
+
+    // Reset so the assertion below can only pass if the DISPOSER'S OWN call
+    // fires, not the one already proven above.
+    clearTimeout(e.idleTimer);
+    e.idleTimer = null;
+    unsubscribe();
+    expect(e.idleTimer).not.toBeNull();
+  });
+
+  test('setMetronomeEnabled marks activity on both the on and the off transition', () => {
+    const { engine } = freshEngine();
+    const e = engine as any;
+    expect(e.idleTimer).toBeNull();
+    engine.setMetronomeEnabled(true);
+    expect(e.idleTimer).not.toBeNull();
+
+    clearTimeout(e.idleTimer);
+    e.idleTimer = null;
+    engine.setMetronomeEnabled(false);
+    expect(e.idleTimer).not.toBeNull();
+  });
+
+  test('init marks activity', async () => {
+    const { engine } = suspendableEngine();
+    const e = engine as any;
+    e.idleTimer = null;
+    expect(e.idleTimer).toBeNull();
+    await e.init();
+    expect(e.idleTimer).not.toBeNull();
+  });
+
+  test("init clears suspendedForIdle on its own resume, so a later wakeIfIdle doesn't redundantly resume again", async () => {
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.maybeSuspendNow();
+    expect(ctx.state).toBe('suspended');
+    expect(e.suspendedForIdle).toBe(true);
+
+    await e.init();
+    expect(ctx.resumeCalls).toBe(1);
+    expect(e.suspendedForIdle).toBe(false);
+
+    // Nothing left for wakeIfIdle to do — it must not resume() a second time.
+    engine.wakeIfIdle();
+    expect(ctx.resumeCalls).toBe(1);
+  });
+
+  test('a rejected resume() leaves the engine recoverable: the flag stays true and a later trigger retries', async () => {
+    // The exact regression this guards: clearing suspendedForIdle BEFORE
+    // resume() settles (instead of inside its .then()) would make a refused
+    // resume permanent — no later gesture or note would ever try again, and
+    // the instrument stays silent for the rest of the session.
+    const { engine, ctx } = suspendableEngine();
+    const e = engine as any;
+    e.maybeSuspendNow();
+    expect(ctx.state).toBe('suspended');
+
+    let resumeAttempts = 0;
+    ctx.resume = async () => {
+      resumeAttempts++;
+      throw new Error('autoplay policy refused this resume');
+    };
+
+    engine.wakeIfIdle();
+    // Flush the rejected promise's .then/.catch chain.
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(resumeAttempts).toBe(1);
+    // Still owed a resume — this is the behaviour under test, not the retry.
+    expect(e.suspendedForIdle).toBe(true);
+    expect(ctx.state).toBe('suspended');
+
+    // Prove recoverability end-to-end: the very next sound-producing trigger
+    // retries resume(), it is not stuck silent forever.
+    ctx.resume = async () => { resumeAttempts++; ctx.state = 'running'; };
+    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    expect(resumeAttempts).toBe(2);
   });
 });

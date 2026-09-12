@@ -75,6 +75,123 @@ export function createDefaultLoop(): Loop {
   };
 }
 
+/**
+ * Song mode's cursor is the ACTIVE loop's index in `loops`, or null outside
+ * song mode. Re-derived from the new list after any change that can shift it,
+ * so a delete or a reorder can't leave it pointing at the wrong loop or out of
+ * range (which would freeze the song advance).
+ */
+function songCursor(
+  loops: Loop[],
+  activeLoopId: string,
+  songLoopIndex: number | null
+): number | null {
+  return songLoopIndex !== null ? Math.max(0, loops.findIndex((r) => r.id === activeLoopId)) : null;
+}
+
+/** Appends a fresh copy of the active loop, moving the cursor and the scope onto it. */
+function insertNewLoop(set: Set, get: Get): string {
+  const state = get();
+  const source = state.loops.find((r) => r.id === state.activeLoopId) ?? state.loops[0];
+  const loop: Loop = {
+    ...cloneLoop(source),
+    id: newLoopId(),
+    // Add is a fresh slot: no name, and a number of its own.
+    name: '',
+    tempName: nextUntitledName(state.loops),
+  };
+  // The scope moves with the cursor: the new loop is a copy of the active
+  // one, so the audio is unchanged and must keep playing — but under an id
+  // that names the loop now in focus. Left behind, the scope would point
+  // at the old loop and the master Play would render enabled and do
+  // nothing (soloLoop early-returns on an unchanged scope reference).
+  // rescopeToLoop leaves `song` and `none` alone.
+  set({
+    loops: [...state.loops, loop],
+    activeLoopId: loop.id,
+    playbackScope: rescopeToLoop(state.playbackScope, loop.id),
+  });
+  return loop.id;
+}
+
+/**
+ * Deep clone inserted immediately after the original. When the clone is
+ * auto-activated (original was active) the content matches the flat slices,
+ * so no loadLoop is needed; otherwise the caller must load the clone and gets
+ * the clone's id back, while an auto-activated clone returns null.
+ */
+function insertLoopClone(set: Set, get: Get, id: string): string | null {
+  const state = get();
+  const index = state.loops.findIndex((r) => r.id === id);
+  if (index === -1) return null;
+  const source = state.loops[index];
+  const clone: Loop = {
+    ...cloneLoop(source),
+    id: newLoopId(),
+    // Derived, not fresh: the label increments the one on screen.
+    ...nextDuplicateLabel(state.loops, source),
+  };
+  const cloneActive = id === state.activeLoopId;
+  const loops = [
+    ...state.loops.slice(0, index + 1),
+    clone,
+    ...state.loops.slice(index + 1),
+  ];
+  // Same rule as addLoop: only the auto-activated branch moves the cursor,
+  // so only it moves the scope.
+  set(
+    cloneActive
+      ? {
+          loops,
+          activeLoopId: clone.id,
+          playbackScope: rescopeToLoop(state.playbackScope, clone.id),
+        }
+      : { loops },
+  );
+  return cloneActive ? null : clone.id;
+}
+
+/**
+ * A project always has ≥ 1 loop. Deleting the active loop returns the fallback
+ * id so the caller can loadLoop it; deleting any other loop returns null.
+ */
+function removeLoop(set: Set, get: Get, id: string): string | null {
+  const state = get();
+  if (state.loops.length <= 1) return null;
+  const index = state.loops.findIndex((r) => r.id === id);
+  if (index === -1) return null;
+  const wasActive = id === state.activeLoopId;
+  const loops = state.loops.filter((r) => r.id !== id);
+  // Deleting the loop that is sounding stops playback: after this the
+  // loop that was sounding is not the loop in focus, because it is not
+  // anywhere. Folded into the same set() as the removal so no subscriber
+  // ever sees a scope naming a loop that `loops` no longer contains — the
+  // one scope value focus-loop cannot heal, since it would compare the
+  // focused id against a ghost. A `song` scope is deliberately untouched:
+  // an arrangement one slot shorter is still an arrangement, which is why
+  // the cursor below is re-derived rather than dropped.
+  const stopPatch =
+    scopedLoopId(state.playbackScope) === id
+      ? { playbackScope: SCOPE_NONE, ...stopAllPlayersPatch(state) }
+      : {};
+  if (!wasActive) {
+    set({
+      loops,
+      songLoopIndex: songCursor(loops, state.activeLoopId, state.songLoopIndex),
+      ...stopPatch,
+    });
+    return null;
+  }
+  const fallback = fallbackActiveLoopId(state.loops, id) ?? loops[0].id;
+  set({
+    loops,
+    activeLoopId: fallback,
+    songLoopIndex: songCursor(loops, fallback, state.songLoopIndex),
+    ...stopPatch,
+  });
+  return fallback;
+}
+
 export function createLoopSlice(set: Set, get: Get): Omit<LoopSlice, 'applyLoopCopy'> {
   return {
     loops: [createDefaultLoop()],
@@ -83,107 +200,11 @@ export function createLoopSlice(set: Set, get: Get): Omit<LoopSlice, 'applyLoopC
     // A new loop is a copy of the active loop (default), appended. Content
     // is identical to what the flat slices already hold, so no loadLoop call
     // is needed — the cursor and the scope move, nothing else.
-    addLoop: () => {
-      const state = get();
-      const source =
-        state.loops.find((r) => r.id === state.activeLoopId) ?? state.loops[0];
-      const loop: Loop = {
-        ...cloneLoop(source),
-        id: newLoopId(),
-        // Add is a fresh slot: no name, and a number of its own.
-        name: '',
-        tempName: nextUntitledName(state.loops),
-      };
-      // The scope moves with the cursor: the new loop is a copy of the active
-      // one, so the audio is unchanged and must keep playing — but under an id
-      // that names the loop now in focus. Left behind, the scope would point
-      // at the old loop and the master Play would render enabled and do
-      // nothing (soloLoop early-returns on an unchanged scope reference).
-      // rescopeToLoop leaves `song` and `none` alone.
-      set({
-        loops: [...state.loops, loop],
-        activeLoopId: loop.id,
-        playbackScope: rescopeToLoop(state.playbackScope, loop.id),
-      });
-      return loop.id;
-    },
+    addLoop: () => insertNewLoop(set, get),
 
-    // Deep clone inserted immediately after the original. When the clone is
-    // auto-activated (original was active) the content matches the flat slices,
-    // so no loadLoop is needed; otherwise the caller must load the clone.
-    duplicateLoop: (id) => {
-      const state = get();
-      const index = state.loops.findIndex((r) => r.id === id);
-      if (index === -1) return null;
-      const source = state.loops[index];
-      const clone: Loop = {
-        ...cloneLoop(source),
-        id: newLoopId(),
-        // Derived, not fresh: the label increments the one on screen.
-        ...nextDuplicateLabel(state.loops, source),
-      };
-      const cloneActive = id === state.activeLoopId;
-      const loops = [
-        ...state.loops.slice(0, index + 1),
-        clone,
-        ...state.loops.slice(index + 1),
-      ];
-      // Same rule as addLoop: only the auto-activated branch moves the cursor,
-      // so only it moves the scope.
-      set(
-        cloneActive
-          ? {
-              loops,
-              activeLoopId: clone.id,
-              playbackScope: rescopeToLoop(state.playbackScope, clone.id),
-            }
-          : { loops },
-      );
-      return cloneActive ? null : clone.id;
-    },
+    duplicateLoop: (id) => insertLoopClone(set, get, id),
 
-    // A project always has ≥ 1 loop. Deleting the active loop returns the
-    // fallback id so the caller can loadLoop it.
-    deleteLoop: (id) => {
-      const state = get();
-      if (state.loops.length <= 1) return null;
-      const index = state.loops.findIndex((r) => r.id === id);
-      if (index === -1) return null;
-      const wasActive = id === state.activeLoopId;
-      const loops = state.loops.filter((r) => r.id !== id);
-      // Deleting the loop that is sounding stops playback: after this the
-      // loop that was sounding is not the loop in focus, because it is not
-      // anywhere. Folded into the same set() as the removal so no subscriber
-      // ever sees a scope naming a loop that `loops` no longer contains — the
-      // one scope value focus-loop cannot heal, since it would compare the
-      // focused id against a ghost. A `song` scope is deliberately untouched:
-      // an arrangement one slot shorter is still an arrangement, which is why
-      // the cursor below is re-derived rather than dropped.
-      const stopPatch =
-        scopedLoopId(state.playbackScope) === id
-          ? { playbackScope: SCOPE_NONE, ...stopAllPlayersPatch(state) }
-          : {};
-      // Song mode: the cursor must track the ACTIVE loop's index in the NEW
-      // list, so a delete (of the active loop or a neighbour) can't leave it
-      // pointing at the wrong loop or out of range (which would freeze the
-      // song advance). Loop mode keeps the null cursor.
-      const cursor = (activeId: string) =>
-        state.songLoopIndex !== null
-          ? Math.max(0, loops.findIndex((r) => r.id === activeId))
-          : null;
-      if (!wasActive) {
-        set({ loops, songLoopIndex: cursor(state.activeLoopId), ...stopPatch });
-        return null;
-      }
-      const fallback = fallbackActiveLoopId(state.loops, id) ?? loops[0].id;
-      set({
-        loops,
-        activeLoopId: fallback,
-        songLoopIndex: cursor(fallback),
-        ...stopPatch,
-      });
-      return fallback;
-    },
+    deleteLoop: (id) => removeLoop(set, get, id),
 
     reorderLoops: (id, direction) =>
       set((state) => {
@@ -198,20 +219,14 @@ export function createLoopSlice(set: Set, get: Get): Omit<LoopSlice, 'applyLoopC
           // activeLoopId is unchanged by a reorder; only its list index
           // shifts, so re-derive the song cursor onto its new position (kept
           // null in loop mode).
-          songLoopIndex:
-            state.songLoopIndex !== null
-              ? Math.max(0, loops.findIndex((r) => r.id === state.activeLoopId))
-              : null,
+          songLoopIndex: songCursor(loops, state.activeLoopId, state.songLoopIndex),
         };
       }),
 
     reorderLoopsArray: (loops) =>
       set((state) => ({
         loops,
-        songLoopIndex:
-          state.songLoopIndex !== null
-            ? Math.max(0, loops.findIndex((r) => r.id === state.activeLoopId))
-            : null,
+        songLoopIndex: songCursor(loops, state.activeLoopId, state.songLoopIndex),
       })),
 
     setLoopName: (id, name) =>

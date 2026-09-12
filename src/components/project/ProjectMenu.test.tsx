@@ -15,7 +15,11 @@ import {
 
 const allActions = () => PROJECT_MENU_SECTIONS.flatMap((section) => section.rows.map((row) => row.action));
 
-describe('ProjectMenu', () => {
+/** The actions a user actually sees, given availability, sign-in and source. */
+const visibleActions = (available: boolean, signedIn: boolean, sourceKind: 'drive' | 'local' | 'untitled') =>
+  visibleMenuSections(available, signedIn, sourceKind, null).flatMap((s) => s.rows.map((r) => r.action));
+
+describe('ProjectMenu menu composition', () => {
   test('orders the menu as New, then Local, then Drive', () => {
     expect(PROJECT_MENU_SECTIONS.map((s) => s.heading)).toEqual([null, 'Local', 'Drive']);
     expect(allActions()).toEqual([
@@ -58,13 +62,11 @@ describe('ProjectMenu', () => {
   });
 
   test('the Drive rows appear only when they can work, and the section vanishes otherwise', () => {
-    const actions = (available: boolean, signedIn: boolean, sourceKind: 'drive' | 'local' | 'untitled') =>
-      visibleMenuSections(available, signedIn, sourceKind, null).flatMap((s) => s.rows.map((r) => r.action));
     // No client id: no Drive section at all — not a disabled one.
-    expect(actions(false, false, 'untitled')).toEqual(['new', 'open', 'save', 'save-as']);
+    expect(visibleActions(false, false, 'untitled')).toEqual(['new', 'open', 'save', 'save-as']);
     // Configured but signed out: Open from Drive and Save as to Drive are offered
     // (the modal is where connecting happens), Disconnect is not.
-    expect(actions(true, false, 'untitled')).toEqual([
+    expect(visibleActions(true, false, 'untitled')).toEqual([
       'new',
       'open',
       'save',
@@ -72,13 +74,11 @@ describe('ProjectMenu', () => {
       'open-drive',
       'save-as-drive',
     ]);
-    expect(actions(true, true, 'untitled')).toContain('disconnect-drive');
+    expect(visibleActions(true, true, 'untitled')).toContain('disconnect-drive');
   });
 
   test('a Drive-bound file keeps its Save inside the Drive section', () => {
-    const actions = (available: boolean, signedIn: boolean, sourceKind: 'drive' | 'local' | 'untitled') =>
-      visibleMenuSections(available, signedIn, sourceKind, null).flatMap((s) => s.rows.map((r) => r.action));
-    expect(actions(true, true, 'drive')).toEqual([
+    expect(visibleActions(true, true, 'drive')).toEqual([
       'new',
       'open',
       'save-as',
@@ -131,7 +131,9 @@ describe('ProjectMenu', () => {
     );
     expect(replaceConfirmMessage(false)).toBe(REPLACE_CONFIRM_MESSAGE);
   });
+});
 
+describe('ProjectMenu rendering', () => {
   // The menu is behind a dropdown that opens on focus, which renderToString
   // never triggers — so the closed state is what is pinned here: the trigger is
   // a labelled button and the file input is present but hidden.

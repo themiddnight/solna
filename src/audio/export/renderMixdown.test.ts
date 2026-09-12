@@ -152,7 +152,7 @@ describe('buildLoopVoices', () => {
   });
 });
 
-describe('renderMixdown', () => {
+describe('renderMixdown: progress and cancellation', () => {
   test('reports real render-timeline progress before encoding the WAV', async () => {
     const updates: MixdownRenderProgress[] = [];
 
@@ -193,6 +193,9 @@ describe('renderMixdown', () => {
     expect(result).toEqual({ ok: false, reason: { kind: 'cancelled' } });
   });
 
+});
+
+describe('renderMixdown: the rendered buffer', () => {
   test('applies each loop\'s mixer instead of keeping the active loop\'s mutes for the whole song', async () => {
     const quietEffects = {
       ...FACTORY_EFFECTS,
@@ -289,6 +292,9 @@ describe('renderMixdown', () => {
     }
   });
 
+});
+
+describe('renderMixdown: determinism', () => {
   test('two renders of one snapshot are byte-identical', async () => {
     const snapshot = mixdownSnapshot();
     const a = await renderMixdown(snapshot);
@@ -329,4 +335,5 @@ describe('renderMixdown', () => {
       Math.random = original;
     }
   });
+
 });

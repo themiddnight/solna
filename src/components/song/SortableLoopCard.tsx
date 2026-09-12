@@ -355,386 +355,511 @@ function LoopChordStrip({ chords, isPlaying, activeChordIndex }: LoopChordStripP
   );
 }
 
-export const SortableLoopCard = React.memo(
-  function SortableLoopCard({
+/**
+ * The in-progress rename: whether the input is showing, plus the draft text.
+ *
+ * The draft is NOT the stored `tempName` field — it is a draft of `name`, local
+ * to the card and gone on blur, which is why it lives with the editing flag
+ * rather than in the store.
+ */
+function useLoopNameDraft(loop: Loop, onRename: (id: string, name: string) => void) {
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [draftName, setDraftName] = useState('');
+
+  const save = () => {
+    const next = renameFromDraft(draftName, loop.name);
+    if (next !== null) onRename(loop.id, next);
+    setDraftName('');
+    setIsEditingName(false);
+  };
+
+  const cancel = () => {
+    setDraftName('');
+    setIsEditingName(false);
+  };
+
+  const startEditing = () => {
+    // Prefill with the loop's ACTUAL NAME, not the label.
+    // Prefilling with the label would promote the app's
+    // current tempName snapshot into a permanent name on blur.
+    // Prefilling with the real name ensures an untouched blur
+    // is a no-op (empty or not, trimmed name equals current).
+    setDraftName(loop.name);
+    setIsEditingName(true);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      save();
+    } else if (e.key === 'Escape') {
+      cancel();
+    }
+  };
+
+  return { isEditingName, draftName, setDraftName, save, cancel, startEditing, onKeyDown };
+}
+
+type LoopNameDraft = ReturnType<typeof useLoopNameDraft>;
+
+/** The drag handle's dnd-kit wiring, handed down rather than spread on the
+ *  card's root so the root stays a plain click target. */
+type SortHandle = Pick<ReturnType<typeof useSortable>, 'attributes' | 'listeners'>;
+
+/** The loop's name in the header: the rename input while editing, the name
+ *  button plus its rename affordance otherwise. */
+function LoopNameField({
+  loopId,
+  label,
+  draft,
+  onSelect,
+}: {
+  loopId: string;
+  label: string;
+  draft: LoopNameDraft;
+  onSelect: (id: string) => void;
+}) {
+  const { isEditingName, draftName, setDraftName, save, startEditing, onKeyDown } = draft;
+
+  if (isEditingName) {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          id={`input-loop-name-${loopId}`}
+          type="text"
+          value={draftName}
+          onChange={(e) => setDraftName(e.target.value)}
+          onKeyDown={onKeyDown}
+          onBlur={save}
+          // eslint-disable-next-line jsx-a11y/no-autofocus -- the input replaces the name in place on an explicit rename click; focusing it is the action the user asked for.
+          autoFocus
+          className="input input-xs input-bordered font-bold max-w-40 sm:max-w-56"
+          placeholder={label}
+        />
+        <button
+          type="button"
+          onClick={save}
+          className="btn btn-xs btn-square btn-ghost text-success"
+          title="Save name"
+          aria-label="Save loop name"
+        >
+          <Check className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 min-w-0">
+      <button
+        id={`btn-loop-select-${loopId}`}
+        type="button"
+        onClick={() => onSelect(loopId)}
+        className="btn btn-sm btn-ghost p-1 font-bold text-base-content hover:text-primary flex items-center gap-1.5 min-w-0 text-left"
+        title="Click to cue/select loop"
+      >
+        <span className="truncate text-sm sm:text-base">{label}</span>
+      </button>
+      <button
+        id={`btn-loop-rename-${loopId}`}
+        type="button"
+        onClick={startEditing}
+        className="btn btn-xs btn-ghost btn-square text-base-content/40 hover:text-base-content"
+        title="Rename loop"
+        aria-label={`Rename ${label}`}
+      >
+        <Pencil className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
+/** The card's action cluster: Edit plus the five icon-only card commands. */
+function LoopCardActions({ card }: { card: SortableLoopCardProps }) {
+  const {
     loop,
     index,
     totalLoops,
     label,
-    isPlaying,
+    onEdit,
+    onReorder,
+    onDuplicate,
+    onCopyInto,
+    onDelete,
+  } = card;
+
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      <button
+        id={`btn-loop-edit-${loop.id}`}
+        type="button"
+        aria-label={`Edit ${label}`}
+        onClick={() => onEdit(loop.id)}
+        className="btn btn-xs btn-outline btn-primary gap-1"
+      >
+        <Music className="w-3 h-3" />
+        Edit
+      </button>
+      <button
+        id={`btn-loop-up-${loop.id}`}
+        type="button"
+        aria-label={`Move ${label} up`}
+        disabled={index === 0}
+        onClick={() => onReorder(loop.id, -1)}
+        className="btn btn-xs btn-square btn-ghost text-base-content/70 hover:text-base-content"
+        title="Move up"
+      >
+        <ArrowUp className="w-3.5 h-3.5" />
+      </button>
+      <button
+        id={`btn-loop-down-${loop.id}`}
+        type="button"
+        aria-label={`Move ${label} down`}
+        disabled={index === totalLoops - 1}
+        onClick={() => onReorder(loop.id, 1)}
+        className="btn btn-xs btn-square btn-ghost text-base-content/70 hover:text-base-content"
+        title="Move down"
+      >
+        <ArrowDown className="w-3.5 h-3.5" />
+      </button>
+      <button
+        id={`btn-loop-duplicate-${loop.id}`}
+        type="button"
+        aria-label={`Duplicate ${label}`}
+        onClick={() => onDuplicate(loop.id)}
+        className="btn btn-xs btn-square btn-ghost text-base-content/70 hover:text-base-content"
+        title="Duplicate loop"
+      >
+        <Copy className="w-3.5 h-3.5" />
+      </button>
+      <button
+        id={`btn-loop-copy-into-${loop.id}`}
+        type="button"
+        aria-label={`Copy parts into ${label}`}
+        disabled={totalLoops <= 1}
+        onClick={() => onCopyInto(loop.id)}
+        className="btn btn-xs btn-square btn-ghost text-base-content/70 hover:text-base-content disabled:opacity-30"
+        title="Copy parts from another loop"
+      >
+        <ClipboardPaste className="w-3.5 h-3.5" />
+      </button>
+      <button
+        id={`btn-loop-delete-${loop.id}`}
+        type="button"
+        aria-label={`Delete ${label}`}
+        disabled={totalLoops <= 1}
+        onClick={() => onDelete(loop.id)}
+        className="btn btn-xs btn-square btn-ghost text-error/80 hover:text-error hover:bg-error/10 disabled:opacity-30"
+        title="Delete loop"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The header cluster: drag handle, order badge, audition, name, bar count and
+ * the status badge — the seven content-driven items described above the group
+ * that holds them, plus the action cluster beside it.
+ */
+function LoopCardHeader({
+  card,
+  bars,
+  draft,
+  sortHandle,
+}: {
+  card: SortableLoopCardProps;
+  bars: number;
+  draft: LoopNameDraft;
+  sortHandle: SortHandle;
+}) {
+  const {
+    loop,
+    index,
+    label,
     isAuditioning = false,
     playDisabled = false,
+    isPlaying,
     isActive,
-    progressPercent = 0,
     currentStepInLoop = 0,
     totalStepsInLoop = 16,
     singleCycleSteps = 16,
     currentRep = 1,
     repeatCount = 1,
-    stepsPerBar = 4,
     onSelect,
-    onEdit,
-    onDuplicate,
-    onCopyInto,
-    onDelete,
-    onReorder,
-    onRename,
-    onSetRepeat,
     onTogglePlayLoop,
-    onSetMix,
-  }: SortableLoopCardProps) {
-    const [isEditingName, setIsEditingName] = useState(false);
-    // The in-progress rename input. NOT the stored `tempName` field: this one
-    // is a draft of `name`, local to the card and gone on blur.
-    const [draftName, setDraftName] = useState('');
+  } = card;
 
-    const {
-      attributes,
-      listeners,
-      setNodeRef,
-      transform,
-      transition,
-      isDragging,
-    } = useSortable({ id: loop.id });
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      {/* `flex-wrap` is load-bearing: this group holds seven items whose
+          widths are content-driven (the loop name, a bar count, a live
+          "Playing 7/64 (Rep 1/2)" badge), and as a single non-wrapping
+          row they overlapped each other on a phone rather than
+          overflowing visibly. `basis-full` keeps the action cluster
+          beside it from being squeezed onto the same short line. */}
+      <div className="flex flex-wrap items-center gap-2 min-w-0 basis-full sm:basis-0 sm:flex-1">
+        {/* Drag Handle */}
+        <button
+          type="button"
+          {...sortHandle.attributes}
+          {...sortHandle.listeners}
+          className="btn btn-ghost btn-xs btn-square cursor-grab active:cursor-grabbing text-base-content/40 hover:text-base-content"
+          aria-label={`Drag to reorder ${label}`}
+          title="Drag to reorder"
+        >
+          <GripVertical className="w-4 h-4" />
+        </button>
 
-    const style = {
-      transform: CSS.Transform.toString(transform),
-      transition,
-      zIndex: isDragging ? 30 : undefined,
-      opacity: isDragging ? 0.6 : 1,
-    };
+        {/* Order index badge */}
+        <span className="badge badge-sm badge-neutral tabular-nums font-bold shrink-0">
+          {`#${index + 1}`}
+        </span>
 
-    const bars = loopBars(loop.chords);
-    const activeChordIndex = isPlaying
-      ? getActiveChordIndex(loop.chords, currentStepInLoop, stepsPerBar)
-      : -1;
+        {/* Dedicated Play / Stop button for this specific loop */}
+        <LoopAuditionButton
+          loopId={loop.id}
+          loopName={label}
+          isAuditioning={isAuditioning}
+          disabled={playDisabled}
+          onToggle={onTogglePlayLoop}
+        />
 
-    const handleSaveName = () => {
-      const next = renameFromDraft(draftName, loop.name);
-      if (next !== null) onRename(loop.id, next);
-      setDraftName('');
-      setIsEditingName(false);
-    };
+        {/* Editable Name or Display */}
+        <LoopNameField loopId={loop.id} label={label} draft={draft} onSelect={onSelect} />
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter') {
-        handleSaveName();
-      } else if (e.key === 'Escape') {
-        setDraftName('');
-        setIsEditingName(false);
-      }
-    };
+        {/* Bar count badge */}
+        <span className="badge badge-sm badge-ghost tabular-nums text-base-content/60 shrink-0">
+          {`${bars} ${bars === 1 ? 'bar' : 'bars'}`}
+        </span>
 
-    const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-
-      // Don't trigger card selection if clicking interactive controls (buttons, inputs, selects, range sliders, drag handles)
-      if (
-        target.closest(
-          'button, input, select, textarea, [role="button"], [role="slider"], .range, .select, [data-no-card-select]'
-        )
-      ) {
-        return;
-      }
-
-      onSelect(loop.id);
-    };
-
-    return (
-      /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the card click is a shortcut for the loop-name button inside it (line 343), which is a real focusable control; the handler already ignores clicks that landed on a control. */
-      <div
-        id={`card-loop-${loop.id}`}
-        ref={setNodeRef}
-        style={style}
-        onClick={handleCardClick}
-        /* `overflow-hidden` is load-bearing, not tidiness: the progress rail
-           below is a full-width first child sitting on the card's own rounded
-           top corners, and `rounded-t-box` on the rail alone rounds it to the
-           OUTER radius — a border width wider than the inside of the card's
-           border — so its corners spilled over the border. Clipping at the
-           card lets the rail stay square and take the card's exact shape. No
-           child of this card is positioned outside it (the selects are native
-           and pop out of the flow), so nothing else is cut off. */
-        className={`card card-border bg-base-200 border overflow-hidden transition-all shadow-xs cursor-pointer ${loopCardAccent(
-          { isAuditioning, isPlaying, isActive },
-        )}`}
-      >
-        {/* Progress bar for playing loop */}
-        <div className="w-full h-1 bg-base-300 overflow-hidden">
-          {isPlaying && (
-            <div
-              className={`h-full transition-all duration-75 ease-linear ${
-                isAuditioning ? 'bg-accent' : 'bg-primary'
-              }`}
-              style={{ width: `${progressPercent}%` }}
-            />
-          )}
-        </div>
-
-        <div className="p-3 sm:p-4 flex flex-col gap-3">
-          {/* Card Header */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* `flex-wrap` is load-bearing: this group holds seven items whose
-                widths are content-driven (the loop name, a bar count, a live
-                "Playing 7/64 (Rep 1/2)" badge), and as a single non-wrapping
-                row they overlapped each other on a phone rather than
-                overflowing visibly. `basis-full` keeps the action cluster
-                beside it from being squeezed onto the same short line. */}
-            <div className="flex flex-wrap items-center gap-2 min-w-0 basis-full sm:basis-0 sm:flex-1">
-              {/* Drag Handle */}
-              <button
-                type="button"
-                {...attributes}
-                {...listeners}
-                className="btn btn-ghost btn-xs btn-square cursor-grab active:cursor-grabbing text-base-content/40 hover:text-base-content"
-                aria-label={`Drag to reorder ${label}`}
-                title="Drag to reorder"
-              >
-                <GripVertical className="w-4 h-4" />
-              </button>
-
-              {/* Order index badge */}
-              <span className="badge badge-sm badge-neutral tabular-nums font-bold shrink-0">
-                {`#${index + 1}`}
-              </span>
-
-              {/* Dedicated Play / Stop button for this specific loop */}
-              <LoopAuditionButton
-                loopId={loop.id}
-                loopName={label}
-                isAuditioning={isAuditioning}
-                disabled={playDisabled}
-                onToggle={onTogglePlayLoop}
-              />
-
-              {/* Editable Name or Display */}
-              {isEditingName ? (
-                <div className="flex items-center gap-1">
-                  <input
-                    id={`input-loop-name-${loop.id}`}
-                    type="text"
-                    value={draftName}
-                    onChange={(e) => setDraftName(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onBlur={handleSaveName}
-                    // eslint-disable-next-line jsx-a11y/no-autofocus -- the input replaces the name in place on an explicit rename click; focusing it is the action the user asked for.
-                    autoFocus
-                    className="input input-xs input-bordered font-bold max-w-40 sm:max-w-56"
-                    placeholder={label}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSaveName}
-                    className="btn btn-xs btn-square btn-ghost text-success"
-                    title="Save name"
-                    aria-label="Save loop name"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1 min-w-0">
-                  <button
-                    id={`btn-loop-select-${loop.id}`}
-                    type="button"
-                    onClick={() => onSelect(loop.id)}
-                    className="btn btn-sm btn-ghost p-1 font-bold text-base-content hover:text-primary flex items-center gap-1.5 min-w-0 text-left"
-                    title="Click to cue/select loop"
-                  >
-                    <span className="truncate text-sm sm:text-base">{label}</span>
-                  </button>
-                  <button
-                    id={`btn-loop-rename-${loop.id}`}
-                    type="button"
-                    onClick={() => {
-                      // Prefill with the loop's ACTUAL NAME, not the label.
-                      // Prefilling with the label would promote the app's
-                      // current tempName snapshot into a permanent name on blur.
-                      // Prefilling with the real name ensures an untouched blur
-                      // is a no-op (empty or not, trimmed name equals current).
-                      setDraftName(loop.name);
-                      setIsEditingName(true);
-                    }}
-                    className="btn btn-xs btn-ghost btn-square text-base-content/40 hover:text-base-content"
-                    title="Rename loop"
-                    aria-label={`Rename ${label}`}
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-
-              {/* Bar count badge */}
-              <span className="badge badge-sm badge-ghost tabular-nums text-base-content/60 shrink-0">
-                {`${bars} ${bars === 1 ? 'bar' : 'bars'}`}
-              </span>
-
-              <LoopStatusBadge
-                isAuditioning={isAuditioning}
-                isPlaying={isPlaying}
-                isActive={isActive}
-                currentStepInLoop={currentStepInLoop}
-                singleCycleSteps={singleCycleSteps}
-                totalStepsInLoop={totalStepsInLoop}
-                currentRep={currentRep}
-                repeatCount={repeatCount}
-              />
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                id={`btn-loop-edit-${loop.id}`}
-                type="button"
-                aria-label={`Edit ${label}`}
-                onClick={() => onEdit(loop.id)}
-                className="btn btn-xs btn-outline btn-primary gap-1"
-              >
-                <Music className="w-3 h-3" />
-                Edit
-              </button>
-              <button
-                id={`btn-loop-up-${loop.id}`}
-                type="button"
-                aria-label={`Move ${label} up`}
-                disabled={index === 0}
-                onClick={() => onReorder(loop.id, -1)}
-                className="btn btn-xs btn-square btn-ghost text-base-content/70 hover:text-base-content"
-                title="Move up"
-              >
-                <ArrowUp className="w-3.5 h-3.5" />
-              </button>
-              <button
-                id={`btn-loop-down-${loop.id}`}
-                type="button"
-                aria-label={`Move ${label} down`}
-                disabled={index === totalLoops - 1}
-                onClick={() => onReorder(loop.id, 1)}
-                className="btn btn-xs btn-square btn-ghost text-base-content/70 hover:text-base-content"
-                title="Move down"
-              >
-                <ArrowDown className="w-3.5 h-3.5" />
-              </button>
-              <button
-                id={`btn-loop-duplicate-${loop.id}`}
-                type="button"
-                aria-label={`Duplicate ${label}`}
-                onClick={() => onDuplicate(loop.id)}
-                className="btn btn-xs btn-square btn-ghost text-base-content/70 hover:text-base-content"
-                title="Duplicate loop"
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </button>
-              <button
-                id={`btn-loop-copy-into-${loop.id}`}
-                type="button"
-                aria-label={`Copy parts into ${label}`}
-                disabled={totalLoops <= 1}
-                onClick={() => onCopyInto(loop.id)}
-                className="btn btn-xs btn-square btn-ghost text-base-content/70 hover:text-base-content disabled:opacity-30"
-                title="Copy parts from another loop"
-              >
-                <ClipboardPaste className="w-3.5 h-3.5" />
-              </button>
-              <button
-                id={`btn-loop-delete-${loop.id}`}
-                type="button"
-                aria-label={`Delete ${label}`}
-                disabled={totalLoops <= 1}
-                onClick={() => onDelete(loop.id)}
-                className="btn btn-xs btn-square btn-ghost text-error/80 hover:text-error hover:bg-error/10 disabled:opacity-30"
-                title="Delete loop"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Key / Scale & Chord Progression Information & Repeat Setting */}
-          <div className="flex flex-wrap items-center gap-2 p-2 rounded-box bg-base-100/60 border border-base-300/40 text-xs">
-            {/* Key / Scale Display */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50">
-                Key:
-              </span>
-              <span className="badge badge-sm badge-outline gap-1">
-                <span className="font-bold text-primary">{getTonicSpelling(loop.scaleRoot, loop.scaleType)}</span>
-                <span className="text-base-content/70">{loop.scaleType}</span>
-              </span>
-            </div>
-
-            <div className="divider divider-horizontal my-0 mx-0.5 hidden sm:flex" />
-
-            {/* Loop Repeat Setting */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50">
-                Repeat:
-              </span>
-              <select
-                id={`select-repeat-${loop.id}`}
-                value={loop.repeatCount ?? 1}
-                onChange={(e) => onSetRepeat(loop.id, Number(e.target.value))}
-                className="select select-xs select-bordered tabular-nums font-bold bg-base-100/80"
-                aria-label={`Repeat count for ${label}`}
-                title="Number of times this loop plays before advancing in song mode"
-              >
-                <option value={1}>1x</option>
-                <option value={2}>2x</option>
-                <option value={3}>3x</option>
-                <option value={4}>4x</option>
-                <option value={6}>6x</option>
-                <option value={8}>8x</option>
-                <option value={12}>12x</option>
-                <option value={16}>16x</option>
-              </select>
-            </div>
-
-            <div className="divider divider-horizontal my-0 mx-0.5 hidden sm:flex" />
-
-            {/* Chord Progression Display with Real-Time Highlighting.
-                `basis-full` below `sm`: sharing a row with Key and Repeat leaves
-                a phone about 40px for the label plus every chord, which pushed
-                "Progression:" past the card's right edge. Its own line fits both. */}
-            <div className="flex flex-wrap items-center gap-1.5 basis-full sm:basis-0 sm:flex-1 min-w-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50 shrink-0">
-                Progression:
-              </span>
-              <LoopChordStrip
-                chords={loop.chords}
-                isPlaying={isPlaying}
-                activeChordIndex={activeChordIndex}
-              />
-            </div>
-          </div>
-
-          {/* 5-Channel Mixer Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-0.5">
-            {/* The card's mixer strip: one row per layer, in table order.
-                MIX_LAYERS is shared with loop/SoundMixer.tsx so the five
-                labels, tones, colours and store fields are written once. The
-                two surfaces' WRITERS stay separate and must — this one writes
-                a per-loop LoopMixPatch override through setLoopMix, on
-                whichever loop the card is for, while the mixer writes the live
-                store root through the ordinary slice actions. */}
-            {MIX_LAYERS.map((ch) => (
-              <MixChannel
-                key={ch.idPrefix}
-                idPrefix={`${ch.idPrefix}-${loop.id}`}
-                label={ch.label}
-                volumeDb={loop[ch.volumeKey]}
-                muted={loop[ch.muteKey]}
-                tone={ch.tone}
-                sliderAccent={ch.accentClass}
-                onVolumeDbChange={(v) => onSetMix(loop.id, { [ch.volumeKey]: v })}
-                onToggleMute={() =>
-                  onSetMix(loop.id, { [ch.muteKey]: !loop[ch.muteKey] })
-                }
-              />
-            ))}
-          </div>
-        </div>
+        <LoopStatusBadge
+          isAuditioning={isAuditioning}
+          isPlaying={isPlaying}
+          isActive={isActive}
+          currentStepInLoop={currentStepInLoop}
+          singleCycleSteps={singleCycleSteps}
+          totalStepsInLoop={totalStepsInLoop}
+          currentRep={currentRep}
+          repeatCount={repeatCount}
+        />
       </div>
-    );
-  }
-);
+
+      {/* Action Buttons */}
+      <LoopCardActions card={card} />
+    </div>
+  );
+}
+
+/** The thin top rail: the audition/play progress of this loop. */
+function LoopCardProgressRail({
+  isPlaying,
+  isAuditioning,
+  progressPercent,
+}: {
+  isPlaying: boolean;
+  isAuditioning: boolean;
+  progressPercent: number;
+}) {
+  return (
+    <div className="w-full h-1 bg-base-300 overflow-hidden">
+      {isPlaying && (
+        <div
+          className={`h-full transition-all duration-75 ease-linear ${
+            isAuditioning ? 'bg-accent' : 'bg-primary'
+          }`}
+          style={{ width: `${progressPercent}%` }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Key / scale, repeat count and the chord progression, on one strip. */
+function LoopCardMetaRow({
+  card,
+  activeChordIndex,
+}: {
+  card: SortableLoopCardProps;
+  activeChordIndex: number;
+}) {
+  const { loop, label, isPlaying, onSetRepeat } = card;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 p-2 rounded-box bg-base-100/60 border border-base-300/40 text-xs">
+      {/* Key / Scale Display */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50">
+          Key:
+        </span>
+        <span className="badge badge-sm badge-outline gap-1">
+          <span className="font-bold text-primary">{getTonicSpelling(loop.scaleRoot, loop.scaleType)}</span>
+          <span className="text-base-content/70">{loop.scaleType}</span>
+        </span>
+      </div>
+
+      <div className="divider divider-horizontal my-0 mx-0.5 hidden sm:flex" />
+
+      {/* Loop Repeat Setting */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50">
+          Repeat:
+        </span>
+        <select
+          id={`select-repeat-${loop.id}`}
+          value={loop.repeatCount ?? 1}
+          onChange={(e) => onSetRepeat(loop.id, Number(e.target.value))}
+          className="select select-xs select-bordered tabular-nums font-bold bg-base-100/80"
+          aria-label={`Repeat count for ${label}`}
+          title="Number of times this loop plays before advancing in song mode"
+        >
+          <option value={1}>1x</option>
+          <option value={2}>2x</option>
+          <option value={3}>3x</option>
+          <option value={4}>4x</option>
+          <option value={6}>6x</option>
+          <option value={8}>8x</option>
+          <option value={12}>12x</option>
+          <option value={16}>16x</option>
+        </select>
+      </div>
+
+      <div className="divider divider-horizontal my-0 mx-0.5 hidden sm:flex" />
+
+      {/* Chord Progression Display with Real-Time Highlighting.
+          `basis-full` below `sm`: sharing a row with Key and Repeat leaves
+          a phone about 40px for the label plus every chord, which pushed
+          "Progression:" past the card's right edge. Its own line fits both. */}
+      <div className="flex flex-wrap items-center gap-1.5 basis-full sm:basis-0 sm:flex-1 min-w-0">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50 shrink-0">
+          Progression:
+        </span>
+        <LoopChordStrip
+          chords={loop.chords}
+          isPlaying={isPlaying}
+          activeChordIndex={activeChordIndex}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The card's five-channel mixer strip, one row per MIX_LAYERS entry. */
+function LoopCardMixer({ card }: { card: SortableLoopCardProps }) {
+  const { loop, onSetMix } = card;
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-0.5">
+      {/* The card's mixer strip: one row per layer, in table order.
+          MIX_LAYERS is shared with loop/SoundMixer.tsx so the five
+          labels, tones, colours and store fields are written once. The
+          two surfaces' WRITERS stay separate and must — this one writes
+          a per-loop LoopMixPatch override through setLoopMix, on
+          whichever loop the card is for, while the mixer writes the live
+          store root through the ordinary slice actions. */}
+      {MIX_LAYERS.map((ch) => (
+        <MixChannel
+          key={ch.idPrefix}
+          idPrefix={`${ch.idPrefix}-${loop.id}`}
+          label={ch.label}
+          volumeDb={loop[ch.volumeKey]}
+          muted={loop[ch.muteKey]}
+          tone={ch.tone}
+          sliderAccent={ch.accentClass}
+          onVolumeDbChange={(v) => onSetMix(loop.id, { [ch.volumeKey]: v })}
+          onToggleMute={() => onSetMix(loop.id, { [ch.muteKey]: !loop[ch.muteKey] })}
+        />
+      ))}
+    </div>
+  );
+}
+
+export const SortableLoopCard = React.memo(function SortableLoopCard(props: SortableLoopCardProps) {
+  const {
+    loop,
+    isPlaying,
+    isAuditioning = false,
+    isActive,
+    progressPercent = 0,
+    currentStepInLoop = 0,
+    stepsPerBar = 4,
+    onRename,
+  } = props;
+
+  const draft = useLoopNameDraft(loop, onRename);
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: loop.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 30 : undefined,
+    opacity: isDragging ? 0.6 : 1,
+  };
+
+  const bars = loopBars(loop.chords);
+  const activeChordIndex = isPlaying
+    ? getActiveChordIndex(loop.chords, currentStepInLoop, stepsPerBar)
+    : -1;
+
+  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+
+    // Don't trigger card selection if clicking interactive controls (buttons, inputs, selects, range sliders, drag handles)
+    if (
+      target.closest(
+        'button, input, select, textarea, [role="button"], [role="slider"], .range, .select, [data-no-card-select]'
+      )
+    ) {
+      return;
+    }
+
+    props.onSelect(loop.id);
+  };
+
+
+  return (
+    /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the card click is a shortcut for the loop-name button inside it (line 343), which is a real focusable control; the handler already ignores clicks that landed on a control. */
+    <div
+      id={`card-loop-${loop.id}`}
+      ref={setNodeRef}
+      style={style}
+      onClick={handleCardClick}
+      /* `overflow-hidden` is load-bearing, not tidiness: the progress rail
+         below is a full-width first child sitting on the card's own rounded
+         top corners, and `rounded-t-box` on the rail alone rounds it to the
+         OUTER radius — a border width wider than the inside of the card's
+         border — so its corners spilled over the border. Clipping at the
+         card lets the rail stay square and take the card's exact shape. No
+         child of this card is positioned outside it (the selects are native
+         and pop out of the flow), so nothing else is cut off. */
+      className={`card card-border bg-base-200 border overflow-hidden transition-all shadow-xs cursor-pointer ${loopCardAccent(
+        { isAuditioning, isPlaying, isActive },
+      )}`}
+    >
+      <LoopCardProgressRail
+        isPlaying={isPlaying}
+        isAuditioning={isAuditioning}
+        progressPercent={progressPercent}
+      />
+
+      <div className="p-3 sm:p-4 flex flex-col gap-3">
+        <LoopCardHeader
+          card={props}
+          bars={bars}
+          draft={draft}
+          sortHandle={{ attributes, listeners }}
+        />
+
+        {/* Key / Scale & Chord Progression Information & Repeat Setting */}
+        <LoopCardMetaRow card={props} activeChordIndex={activeChordIndex} />
+
+        {/* 5-Channel Mixer Strip */}
+        <LoopCardMixer card={props} />
+      </div>
+    </div>
+  );
+});

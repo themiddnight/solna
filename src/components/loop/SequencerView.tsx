@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/store";
 import { getMeter } from "@/utils/meter";
+import type { MeterId } from "@/utils/meter";
 import { sequencerMeterBadge, stepCells } from "../sequencerGrid";
 import { rotateStepWindow, writeStepWindow } from "@/utils/patternAdapt";
 import { ensureDrumEngine, triggerPad } from "@/audio/playback/drumPlayback";
@@ -25,36 +26,20 @@ import { SequencerGrid } from "./sequencer/SequencerGrid";
 import { ModulePasteButton } from "./ModulePasteButton";
 import type { SequencerTrack } from "@/types";
 
-export const SequencerView = React.memo(function SequencerView() {
-  // Sequencer/transport/synth state + setters (named after the old props so the
-  // rest of the component body is unchanged).
-  const tracks = useAppStore((s) => s.sequencerTracks);
-  const onChangeTracks = useAppStore((s) => s.setSequencerTracks);
-  const replaceDrumPattern = useAppStore((s) => s.replaceDrumPattern);
-  const meterId = useAppStore((s) => s.meterId);
-  // getMeter returns the shared METERS[id] object, so `meter` is a stable
-  // identity per meterId and this memo only rebuilds on a real meter change.
-  const meter = getMeter(meterId);
-  const stepsPerBar = meter.stepsPerBar;
-  const cells = useMemo(() => stepCells(meter), [meter]);
-
-  // Starts unselected, not "synthwave": the tracks/kit on screen come from
-  // whatever was rehydrated (or the last grid actually applied THIS session),
-  // and this local state has no way to know which library grid, if any,
-  // produced that arrangement. Claiming "Synthwave" here was the cosmetic
-  // half of the DEV-388 refresh bug — the destructive half (a mount effect
-  // that actually overwrote the rehydrated kit) is fixed by applyDrumGrid
-  // being the ONLY writer below; this half is fixed by not asserting a grid
-  // name nothing chose.
-  const [selectedGridId, setSelectedGridId] = useState<string>("");
+/**
+ * The callbacks each memoized TrackRow receives, plus the bass/synth note
+ * preview that backs its Play button.
+ *
+ * Their identity must be stable, so they read `sequencerTracks` LIVE from the
+ * store rather than from the render scope: a useCallback([]) over a
+ * closed-over `tracks` would capture the tracks as of the first render and
+ * silently drop every edit made after it. The slice's setter takes a plain
+ * value, not an updater.
+ */
+function useSequencerTrackActions() {
   const previewRef = useRef<PreviewHandle | null>(null);
   useEffect(() => () => previewRef.current?.(), []);
 
-  // These are props of the memoized TrackRow, so their identity must be
-  // stable. They read `sequencerTracks` LIVE from the store rather than from
-  // the render scope: a useCallback([]) over the closed-over `tracks` would
-  // capture the tracks as of the first render and silently drop every edit
-  // made after it. The slice's setter takes a plain value, not an updater.
   const toggleStep = useCallback((trackId: string, stepIndex: number) => {
     const { sequencerTracks, setSequencerTracks } = useAppStore.getState();
     setSequencerTracks(
@@ -93,9 +78,20 @@ export const SequencerView = React.memo(function SequencerView() {
     }
   }, []);
 
-  // Clear/randomize/shift all act on the VISIBLE window only. The cells past it
-  // are this row's programming for a wider meter; destroying them would make a
-  // meter switch lossy, which is exactly what windowing exists to prevent.
+  return { toggleStep, toggleMute, setTrackVolume, previewTrack };
+}
+
+/**
+ * The three pattern edits the toolbar fires. They act on the VISIBLE window
+ * only: the cells past it are the row's programming for a wider meter, and
+ * destroying them would make a meter switch lossy — which is exactly what
+ * windowing exists to prevent.
+ */
+function useDrumPatternTools(
+  tracks: SequencerTrack[],
+  stepsPerBar: number,
+  onChangeTracks: (tracks: SequencerTrack[]) => void,
+) {
   const clearAllSteps = () => {
     onChangeTracks(
       tracks.map((t) => ({
@@ -123,6 +119,40 @@ export const SequencerView = React.memo(function SequencerView() {
       tracks.map((t) => ({ ...t, steps: rotateStepWindow(t.steps, stepsPerBar, direction) })),
     );
   };
+
+  return { clearAllSteps, randomizeSteps, shiftSteps };
+}
+
+export const SequencerView = React.memo(function SequencerView() {
+  // Sequencer/transport/synth state + setters (named after the old props so the
+  // rest of the component body is unchanged).
+  const tracks = useAppStore((s) => s.sequencerTracks);
+  const onChangeTracks = useAppStore((s) => s.setSequencerTracks);
+  const replaceDrumPattern = useAppStore((s) => s.replaceDrumPattern);
+  const meterId = useAppStore((s) => s.meterId);
+  // getMeter returns the shared METERS[id] object, so `meter` is a stable
+  // identity per meterId and this memo only rebuilds on a real meter change.
+  const meter = getMeter(meterId);
+  const stepsPerBar = meter.stepsPerBar;
+  const cells = useMemo(() => stepCells(meter), [meter]);
+
+  // Starts unselected, not "synthwave": the tracks/kit on screen come from
+  // whatever was rehydrated (or the last grid actually applied THIS session),
+  // and this local state has no way to know which library grid, if any,
+  // produced that arrangement. Claiming "Synthwave" here was the cosmetic
+  // half of the DEV-388 refresh bug — the destructive half (a mount effect
+  // that actually overwrote the rehydrated kit) is fixed by applyDrumGrid
+  // being the ONLY writer below; this half is fixed by not asserting a grid
+  // name nothing chose.
+  const [selectedGridId, setSelectedGridId] = useState<string>("");
+
+  const { toggleStep, toggleMute, setTrackVolume, previewTrack } =
+    useSequencerTrackActions();
+  const { clearAllSteps, randomizeSteps, shiftSteps } = useDrumPatternTools(
+    tracks,
+    stepsPerBar,
+    onChangeTracks,
+  );
 
   // A grid loads its PATTERN and nothing else. It still names, in
   // `DRUM_GRIDS[id].kit`, the kit it was transcribed against — that field is
@@ -154,26 +184,6 @@ export const SequencerView = React.memo(function SequencerView() {
     // is exactly what will sound.
     replaceDrumPattern(grid.rows);
   };
-
-  // The grid `<option>` list is ~30 entries and each one formats two label
-  // strings, but the only render-varying input is the ACTIVE meter (the labels
-  // mark which grids match it). This component subscribes to the drum filter
-  // and volume values, and a Knob drag fires onChange per pointermove — so
-  // without this memo one drag rebuilds all thirty labels ~60x/s. Everything
-  // else the JSX reads (DRUM_GRIDS, the two label helpers) is module scope.
-  const gridOptions = useMemo(
-    () =>
-      Object.entries(DRUM_GRIDS).map(([id, grid]) => (
-        <option
-          key={id}
-          value={id}
-          title={patternMeterTitle(grid.name, grid.meter, meter.id)}
-        >
-          {patternOptionLabel(grid.name, grid.meter, meter.id)}
-        </option>
-      )),
-    [meter.id],
-  );
 
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
@@ -217,74 +227,14 @@ export const SequencerView = React.memo(function SequencerView() {
           </div>
         </ModuleHeader>
 
-        {/* Outside the scroll container below, so the tools stay put while a
-            700px-wide grid scrolls under them.
-            No stacked label on the select: it is the card's only field, so a
-            "Genre" label above it would say what the option text already
-            does. `aria-label` keeps the name a visible label would carry. */}
-        <ToolbarLane className="justify-between">
-          {/* The lane wrapper is load-bearing, not decoration: daisyUI's
-              `.select` is `width: 100%`, so as a direct flex child it claims
-              the whole row and pushes the buttons onto a second line. */}
-          <div className={FIELD_LANE}>
-            <select
-              id="select-sequencer-grid"
-              value={selectedGridId}
-              onChange={(e) => applyDrumGrid(e.target.value)}
-              className={FIELD_SELECT}
-              aria-label="Drum grid"
-              title="Loads that grid's drum pattern over the sequencer. The kit is unchanged — pick it on the Sound tab."
-            >
-              <option value="" disabled>
-                Choose a grid…
-              </option>
-              {gridOptions}
-            </select>
-          </div>
-
-          <ToolbarGroup>
-            <IconButton
-              id="btn-shift-left"
-              label="Shift Pattern Left"
-              icon={<ArrowLeft className="w-3.5 h-3.5" />}
-              size="sm"
-              onClick={() => shiftSteps("left")}
-            />
-
-            <IconButton
-              id="btn-shift-right"
-              label="Shift Pattern Right"
-              icon={<ArrowRight className="w-3.5 h-3.5" />}
-              size="sm"
-              onClick={() => shiftSteps("right")}
-            />
-
-            <ToolbarButton
-              id="btn-randomize-grid"
-              icon={<Shuffle className="w-3 h-3" />}
-              label="Random"
-              onClick={randomizeSteps}
-              title="Randomize Steps"
-              collapseLabel
-              size="sm"
-            />
-          </ToolbarGroup>
-
-          {/* Clear sits in its own group so the lane's wider gap separates a
-              destructive action from the one beside it — the same rule the
-              lead grid's action lane follows. */}
-          <ToolbarGroup>
-            <ToolbarButton
-              id="btn-clear-grid"
-              icon={<RotateCcw className="w-3 h-3" />}
-              label="Clear"
-              onClick={clearAllSteps}
-              title="Clear Steps"
-              collapseLabel
-              size="sm"
-            />
-          </ToolbarGroup>
-        </ToolbarLane>
+        <DrumPatternToolbar
+          meterId={meterId}
+          selectedGridId={selectedGridId}
+          onSelectGrid={applyDrumGrid}
+          onShift={shiftSteps}
+          onRandomize={randomizeSteps}
+          onClear={clearAllSteps}
+        />
 
         <SequencerGrid
           tracks={tracks}
@@ -299,3 +249,115 @@ export const SequencerView = React.memo(function SequencerView() {
     </div>
   );
 });
+
+/** The grid picker and the edits that rewrite the pattern. */
+interface DrumPatternToolbarProps {
+  meterId: MeterId;
+  selectedGridId: string;
+  onSelectGrid: (id: string) => void;
+  onShift: (direction: "left" | "right") => void;
+  onRandomize: () => void;
+  onClear: () => void;
+}
+
+/**
+ * Sits OUTSIDE the grid's scroll container, so the tools stay put while a
+ * 700px-wide grid scrolls under them.
+ */
+function DrumPatternToolbar({
+  meterId,
+  selectedGridId,
+  onSelectGrid,
+  onShift,
+  onRandomize,
+  onClear,
+}: DrumPatternToolbarProps) {
+  // The grid `<option>` list is ~30 entries and each one formats two label
+  // strings, but the only render-varying input is the ACTIVE meter (the labels
+  // mark which grids match it). This component subscribes to the drum filter
+  // and volume values, and a Knob drag fires onChange per pointermove — so
+  // without this memo one drag rebuilds all thirty labels ~60x/s. Everything
+  // else the JSX reads (DRUM_GRIDS, the two label helpers) is module scope.
+  const gridOptions = useMemo(
+    () =>
+      Object.entries(DRUM_GRIDS).map(([id, grid]) => (
+        <option
+          key={id}
+          value={id}
+          title={patternMeterTitle(grid.name, grid.meter, meterId)}
+        >
+          {patternOptionLabel(grid.name, grid.meter, meterId)}
+        </option>
+      )),
+    [meterId],
+  );
+
+  // No stacked label on the select: it is the card's only field, so a
+  // "Genre" label above it would say what the option text already
+  // does. `aria-label` keeps the name a visible label would carry.
+  return (
+    <ToolbarLane className="justify-between">
+      {/* The lane wrapper is load-bearing, not decoration: daisyUI's
+          `.select` is `width: 100%`, so as a direct flex child it claims
+          the whole row and pushes the buttons onto a second line. */}
+      <div className={FIELD_LANE}>
+        <select
+          id="select-sequencer-grid"
+          value={selectedGridId}
+          onChange={(e) => onSelectGrid(e.target.value)}
+          className={FIELD_SELECT}
+          aria-label="Drum grid"
+          title="Loads that grid's drum pattern over the sequencer. The kit is unchanged — pick it on the Sound tab."
+        >
+          <option value="" disabled>
+            Choose a grid…
+          </option>
+          {gridOptions}
+        </select>
+      </div>
+
+      <ToolbarGroup>
+        <IconButton
+          id="btn-shift-left"
+          label="Shift Pattern Left"
+          icon={<ArrowLeft className="w-3.5 h-3.5" />}
+          size="sm"
+          onClick={() => onShift("left")}
+        />
+
+        <IconButton
+          id="btn-shift-right"
+          label="Shift Pattern Right"
+          icon={<ArrowRight className="w-3.5 h-3.5" />}
+          size="sm"
+          onClick={() => onShift("right")}
+        />
+
+        <ToolbarButton
+          id="btn-randomize-grid"
+          icon={<Shuffle className="w-3 h-3" />}
+          label="Random"
+          onClick={onRandomize}
+          title="Randomize Steps"
+          collapseLabel
+          size="sm"
+        />
+      </ToolbarGroup>
+
+      {/* Clear sits in its own group so the lane's wider gap separates a
+          destructive action from the one beside it — the same rule the
+          lead grid's action lane follows. */}
+      <ToolbarGroup>
+        <ToolbarButton
+          id="btn-clear-grid"
+          icon={<RotateCcw className="w-3 h-3" />}
+          label="Clear"
+          onClick={onClear}
+          title="Clear Steps"
+          collapseLabel
+          size="sm"
+        />
+      </ToolbarGroup>
+    </ToolbarLane>
+  );
+}

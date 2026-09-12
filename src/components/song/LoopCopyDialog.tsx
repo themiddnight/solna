@@ -172,6 +172,158 @@ export interface LoopCopyDialogProps {
  * the confirmation, and the result is immediately visible on the target card
  * — bar badge, key badge, chord strip, mixer strip.
  */
+/** One aspect's checkbox: the matrix and the loop-wide list render the same input. */
+function CopyGroupCheckbox({
+  id,
+  label,
+  checked,
+  onToggle,
+}: {
+  id: LoopCopyGroupId;
+  label: string;
+  checked: boolean;
+  onToggle: (id: LoopCopyGroupId) => void;
+}) {
+  return (
+    <input
+      id={`chk-loop-copy-${id}`}
+      type="checkbox"
+      aria-label={label}
+      checked={checked}
+      onChange={() => onToggle(id)}
+      className="checkbox checkbox-xs checkbox-primary"
+    />
+  );
+}
+
+/** The three one-click presets. */
+function CopyQuickChips({ onPick }: { onPick: (kind: LoopCopyQuickChip) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {QUICK_CHIPS.map(({ kind, label }) => (
+        <button
+          key={kind}
+          id={`btn-loop-copy-chip-${kind}`}
+          type="button"
+          onClick={() => onPick(kind)}
+          className="btn btn-xs btn-outline btn-primary"
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The modal footer: Cancel, and Apply, which writes the selection through. */
+function CopyDialogActions({
+  disabled,
+  onApply,
+  onCancel,
+}: {
+  disabled: boolean;
+  onApply: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="modal-action">
+      <button type="button" className="btn btn-ghost" onClick={onCancel}>
+        Cancel
+      </button>
+      <button
+        id="btn-loop-copy-apply"
+        type="button"
+        disabled={disabled}
+        onClick={onApply}
+        className="btn btn-primary"
+      >
+        Apply
+      </button>
+    </div>
+  );
+}
+
+/** A muted advisory line: the implied key, or a bar-count mismatch. */
+function CopyNotice({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="flex items-start gap-1.5 text-xs text-info">
+      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      {children}
+    </p>
+  );
+}
+
+/** The Details disclosure: the per-track sound/pattern/progression matrix. */
+function CopyDetails({
+  selected,
+  onToggle,
+}: {
+  selected: readonly LoopCopyGroupId[];
+  onToggle: (id: LoopCopyGroupId) => void;
+}) {
+  const checkbox = (id: LoopCopyGroupId, label: string) => (
+    <CopyGroupCheckbox id={id} label={label} checked={selected.includes(id)} onToggle={onToggle} />
+  );
+
+  return (
+    <details className="rounded-box border border-base-300 bg-base-200/40">
+      <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-base-content/70">
+        {`Details — ${loopCopySummary(selected)}`}
+      </summary>
+      <div className="space-y-3 p-3">
+        <div className="grid grid-cols-[1fr_5rem_5rem_5rem] items-center gap-y-1 text-xs">
+          <span />
+          <span className="text-center text-[10px] font-bold uppercase tracking-wider text-base-content/50">
+            Sound
+          </span>
+          <span className="text-center text-[10px] font-bold uppercase tracking-wider text-base-content/50">
+            Pattern
+          </span>
+          <span className="text-center text-[10px] font-bold uppercase tracking-wider text-base-content/50">
+            Progression
+          </span>
+          {TRACK_ROWS.map(({ track, label }) => {
+            const sound = groupAt(track, 'sound');
+            const pattern = groupAt(track, 'pattern');
+            const progression = groupAt(track, 'progression');
+            return (
+              <React.Fragment key={track}>
+                <span className="font-semibold text-base-content">{label}</span>
+                <span className="text-center">{sound && checkbox(sound.id, sound.label)}</span>
+                <span className="text-center">
+                  {pattern && checkbox(pattern.id, pattern.label)}
+                </span>
+                <span className="text-center">
+                  {progression && checkbox(progression.id, progression.label)}
+                </span>
+              </React.Fragment>
+            );
+          })}
+        </div>
+
+        <div className="space-y-1 border-t border-base-300 pt-3 text-xs">
+          {LOOP_WIDE_GROUPS.map((group) => (
+            <div key={group.id} className="flex items-center gap-2">
+              {checkbox(group.id, group.label)}
+              <span className="font-semibold text-base-content">{group.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+/**
+ * Pick a source loop, tick which parts to take, Apply overwrites those parts
+ * of the target. A dumb view: it imports no engine, holds all of its
+ * selection state locally (transient UI belongs nowhere near a slice, least
+ * of all a persisted one) and takes its data and both callbacks as props.
+ *
+ * No confirmation on top and no toast: the dialog and its Apply button ARE
+ * the confirmation, and the result is immediately visible on the target card
+ * — bar badge, key badge, chord strip, mixer strip.
+ */
 export function LoopCopyDialog({
   targetId,
   loops,
@@ -213,28 +365,31 @@ export function LoopCopyDialog({
       // this used to) re-added 'key' the moment any OTHER box was ticked,
       // even after the user had explicitly unticked it — withImpliedKey has
       // no way to tell "never considered" apart from "removed on purpose".
-      // Also gated on keyTouchedRef, same as the From-select handler below:
-      // re-ticking 'chord-progression' after the user has explicitly unticked
-      // 'key' must not silently re-add it either.
+      // Also gated on keyTouchedRef, same as pickSource below: re-ticking
+      // 'chord-progression' after the user has explicitly unticked 'key'
+      // must not silently re-add it either.
       return id === 'chord-progression' && !keyTouchedRef.current
         ? withImpliedKey(source, target, next)
         : next;
     });
   };
 
+  // A chip replaces the whole selection, so it replaces any earlier explicit
+  // 'key' decision along with it — re-arm the derivation rather than leaving
+  // it stuck off.
+  const pickChip = (kind: LoopCopyQuickChip) => {
+    keyTouchedRef.current = false;
+    setSelected(withImpliedKey(source, target, quickChipSelection(kind)));
+  };
+
   const keyNotice = loopKeyNotice(source, target, selected);
   const barsNotice = loopBarsNotice(source, target, selected);
 
-  const checkbox = (id: LoopCopyGroupId, label: string) => (
-    <input
-      id={`chk-loop-copy-${id}`}
-      type="checkbox"
-      aria-label={label}
-      checked={selected.includes(id)}
-      onChange={() => toggle(id)}
-      className="checkbox checkbox-xs checkbox-primary"
-    />
-  );
+  const apply = () => {
+    setLoopCopySelection(selected, source.id);
+    onApply(targetId, source.id, selected);
+    onClose();
+  };
 
   return (
     <Modal
@@ -274,103 +429,18 @@ export function LoopCopyDialog({
         </select>
       </label>
 
-      <div className="flex flex-wrap gap-2">
-        {QUICK_CHIPS.map(({ kind, label }) => (
-          <button
-            key={kind}
-            id={`btn-loop-copy-chip-${kind}`}
-            type="button"
-            onClick={() => {
-              // A chip replaces the whole selection, so it replaces any
-              // earlier explicit 'key' decision along with it — re-arm the
-              // derivation rather than leaving it stuck off.
-              keyTouchedRef.current = false;
-              setSelected(withImpliedKey(source, target, quickChipSelection(kind)));
-            }}
-            className="btn btn-xs btn-outline btn-primary"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <CopyQuickChips onPick={pickChip} />
 
-      <details className="rounded-box border border-base-300 bg-base-200/40">
-        <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-base-content/70">
-          {`Details — ${loopCopySummary(selected)}`}
-        </summary>
-        <div className="space-y-3 p-3">
-          <div className="grid grid-cols-[1fr_5rem_5rem_5rem] items-center gap-y-1 text-xs">
-            <span />
-            <span className="text-center text-[10px] font-bold uppercase tracking-wider text-base-content/50">
-              Sound
-            </span>
-            <span className="text-center text-[10px] font-bold uppercase tracking-wider text-base-content/50">
-              Pattern
-            </span>
-            <span className="text-center text-[10px] font-bold uppercase tracking-wider text-base-content/50">
-              Progression
-            </span>
-            {TRACK_ROWS.map(({ track, label }) => {
-              const sound = groupAt(track, 'sound');
-              const pattern = groupAt(track, 'pattern');
-              const progression = groupAt(track, 'progression');
-              return (
-                <React.Fragment key={track}>
-                  <span className="font-semibold text-base-content">{label}</span>
-                  <span className="text-center">{sound && checkbox(sound.id, sound.label)}</span>
-                  <span className="text-center">
-                    {pattern && checkbox(pattern.id, pattern.label)}
-                  </span>
-                  <span className="text-center">
-                    {progression && checkbox(progression.id, progression.label)}
-                  </span>
-                </React.Fragment>
-              );
-            })}
-          </div>
+      <CopyDetails selected={selected} onToggle={toggle} />
 
-          <div className="space-y-1 border-t border-base-300 pt-3 text-xs">
-            {LOOP_WIDE_GROUPS.map((group) => (
-              <div key={group.id} className="flex items-center gap-2">
-                {checkbox(group.id, group.label)}
-                <span className="font-semibold text-base-content">{group.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </details>
+      {keyNotice && <CopyNotice>{keyNotice}</CopyNotice>}
+      {barsNotice && <CopyNotice>{barsNotice}</CopyNotice>}
 
-      {keyNotice && (
-        <p className="flex items-start gap-1.5 text-xs text-info">
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          {keyNotice}
-        </p>
-      )}
-      {barsNotice && (
-        <p className="flex items-start gap-1.5 text-xs text-info">
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          {barsNotice}
-        </p>
-      )}
-
-      <div className="modal-action">
-        <button type="button" className="btn btn-ghost" onClick={onClose}>
-          Cancel
-        </button>
-        <button
-          id="btn-loop-copy-apply"
-          type="button"
-          disabled={selected.length === 0}
-          onClick={() => {
-            setLoopCopySelection(selected, source.id);
-            onApply(targetId, source.id, selected);
-            onClose();
-          }}
-          className="btn btn-primary"
-        >
-          Apply
-        </button>
-      </div>
+      <CopyDialogActions
+        disabled={selected.length === 0}
+        onApply={apply}
+        onCancel={onClose}
+      />
     </Modal>
   );
 }

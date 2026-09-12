@@ -109,8 +109,31 @@ function normalizeName(name: string): string | null {
 }
 
 /**
+ * The per-instance state every action below closes over: `slot` is the
+ * document's identity record (its id and creation time), re-pointed by an
+ * install and by a Save As that actually landed, and read back by
+ * `exportProjectFile`. `now` is injectable so a test can pin the clock.
+ */
+interface ProjectSession {
+  slot: DocumentIdentity;
+  now: () => number;
+}
+
+/**
+ * What every action below closes over. A context object rather than four
+ * positional parameters because each action needs a different subset of them,
+ * and two same-typed arguments swapped at a call site would still compile.
+ */
+interface ProjectContext {
+  set: Set;
+  get: Get;
+  store: ProjectStore;
+  session: ProjectSession;
+}
+
+/**
  * Lifecycle actions. Every path that replaces the live session goes through
- * `install`, in loadLoop's order: hardStopAll (dispatches the reducer's
+ * `installProject`, in loadLoop's order: hardStopAll (dispatches the reducer's
  * 'stop-all', whose frozen singleton songMode compares by reference) → cut the
  * chord and bass voices → ONE set() carrying the content, the reset rules, the
  * flat per-loop patch and the identity. The cut happens BEFORE the set():
@@ -118,93 +141,265 @@ function normalizeName(name: string): string | null {
  * it would race them and let the old project's queued voices ring over the
  * new one. Drums are one-shots; one already-scheduled hit may still land.
  */
+function installProject(
+  ctx: ProjectContext,
+  content: ProjectContent,
+  identity: ProjectEnvelope,
+  activeLoopId: string | null = null,
+  source: ProjectSource = UNTITLED_SOURCE,
+): void {
+  // An export owns a snapshot of the outgoing project. Invalidate that job
+  // before the live session changes so it can never publish progress or
+  // download its old audio into the incoming project's UI.
+  ctx.get().cancelMixdown();
+  ctx.get().hardStopAll();
+  for (const source of ACCOMPANIMENT_SOURCES) {
+    audioEngine.stopSource(source, INSTALL_RELEASE);
+  }
+  ctx.session.slot = { id: identity.id, createdAt: identity.createdAt };
+  ctx.set({
+    ...applyProjectContent(content, activeLoopId),
+    // A song-mode cursor into the OLD project's loops[] must not survive
+    // the swap: it would index the new project's loops[] instead (out of
+    // range, or in range but pointing at the wrong loop) and enterSongIndex
+    // is skipped once the cursor is non-null. loadLoop recomputes it on
+    // every loops/activeLoopId change; a wholesale content swap has no
+    // such recompute, so it is reset here explicitly.
+    songLoopIndex: null,
+    // A latched track solo is scoped to the surface the user set it on, and a
+    // whole-content swap is the most complete surface change there is.
+    // soloNav.ts's SOLO_NAV_KEYS cannot catch this on its own: loop ids are
+    // not unique across projects, so the incoming project's first loop can
+    // carry the same id the outgoing one did (every fresh project's default
+    // loop is `loop-default-1`), and this patch writes neither activeTab nor
+    // focusTrack. Clearing it here, in the same atomic set() as the content,
+    // is what makes the guarantee hold regardless of which loop id lands.
+    soloTracks: [],
+    // Same reasoning, same atomic patch: the arm is scoped to the loop the
+    // user was recording into, and a whole-content swap leaves nothing for
+    // it to still name.
+    recordingTrack: null,
+    // A clipboard source is scoped to the outgoing project's loops. Loop ids
+    // may collide across projects, so keeping only the id could otherwise
+    // resolve to unrelated content after the swap.
+    loopClipboard: null,
+    projectName: normalizeName(identity.name),
+    // The source is part of what an install replaces: opening a file that
+    // came from Drive must not leave the previous project's handle behind, or
+    // the first Save would overwrite a file the user never opened.
+    projectSource: source,
+  });
+}
+
+/** Re-publish availability only when it CHANGED — a store write per autosave would re-render every mounted view. */
+function publishStoreStatus(ctx: ProjectContext): void {
+  const next = ctx.store.status();
+  if (ctx.get().projectStoreStatus !== next) ctx.set({ projectStoreStatus: next });
+}
+
+/**
+ * `activeLoopId` is persisted while `loops` now comes from IndexedDB, so a
+ * stored value can name a loop the loaded project does not have — the same
+ * reconciliation persist `merge` does for a localStorage payload.
+ */
+function reconcileActiveLoop(ctx: ProjectContext): void {
+  const { loops, activeLoopId } = ctx.get();
+  if (loops.some((row) => row.id === activeLoopId)) return;
+  const active = resolveActiveLoop(loops, null);
+  ctx.set({ activeLoopId: active.id, ...loopStatePatch(active) });
+}
+
+function buildProjectBody(get: Get, envelope: ProjectEnvelope): ProjectBody {
+  return { ...envelope, content: buildProjectContent(get()) };
+}
+
+async function writeProjectText(
+  handle: FileSystemFileHandle,
+  text: string,
+): Promise<ProjectSaveResult> {
+  try {
+    await writeTextToHandle(handle, text);
+    return { ok: true, destination: 'local' };
+  } catch {
+    return { ok: false, message: SAVE_FAILED_MESSAGE };
+  }
+}
+
+/** Boot: read the one slot and install it, or keep the factory session. */
+async function loadProjectFromStore(ctx: ProjectContext): Promise<void> {
+  const result = await ctx.store.load();
+  publishStoreStatus(ctx);
+  if (result.ok === false) {
+    if (result.error === 'not-found') {
+      // Empty slot: a normal first run. Keep the factory content the
+      // slices already booted with — no install, so nothing is announced
+      // and the engine is not touched. The first autosave writes the slot.
+      ctx.session.slot = newDocumentIdentity(ctx.session.now());
+      ctx.set({ projectSource: UNTITLED_SOURCE });
+    } else {
+      ctx.set({ projectNotice: result.message });
+    }
+    reconcileActiveLoop(ctx);
+    return;
+  }
+  const { body, source } = result.value;
+  installProject(ctx, body.content, body, ctx.get().activeLoopId, source);
+  const warnings = unknownLibraryReferences(body.content);
+  ctx.set({
+    projectNotice:
+      warnings.length > 0 ? `Opened with unrecognised references: ${warnings.join(', ')}` : null,
+  });
+}
+
+/**
+ * The autosave write. The record, not the body: the slot carries the source so
+ * a reload resumes a project that still knows which file it belongs to.
+ * Autosave READS the source and never changes it — only Open, Save As, New and
+ * a Drive sign-out re-point it.
+ */
+async function saveToSlot(ctx: ProjectContext): Promise<ProjectStoreResult<ProjectSlotRecord>> {
+  const { get } = ctx;
+  const record: ProjectSlotRecord = { body: get().exportProjectFile(), source: get().projectSource };
+  const result = await ctx.store.save(record);
+  publishStoreStatus(ctx);
+  // A failed autosave never blocks the app and never rolls the live
+  // session back — the notice is the only signal. The failure is not
+  // re-scheduled: `projectAutosave.write()` fires this `save()` once and
+  // clears its handle, so the slot stays stale until the next content
+  // change schedules a write. That re-attempt covers everything, because
+  // autosave writes the whole content set rather than a delta.
+  if (result.ok === false) ctx.set({ projectNotice: result.message });
+  return result;
+}
+
+/** Explicit Save. A pure function of the source — see saveTarget(). */
+async function saveToTarget(ctx: ProjectContext): Promise<ProjectSaveResult> {
+  const target = saveTarget(ctx.get().projectSource);
+  switch (target.kind) {
+    case 'save-as':
+      // No target to overwrite, so Save IS Save As. Nothing is clobbered.
+      return ctx.get().saveProjectAsLocal();
+    case 'drive-update':
+      return ctx.get().saveToDrive();
+    case 'local-write': {
+      if (!(await ensureWritePermission(target.handle))) {
+        return { ok: false, message: SAVE_HANDLE_DENIED_MESSAGE };
+      }
+      return writeProjectText(target.handle, serializeProject(ctx.get().exportProjectFile()));
+    }
+  }
+}
+
+/** Save As to this device: pick a target, write it, then re-point at it. */
+async function saveAsToLocalFile(ctx: ProjectContext): Promise<ProjectSaveResult> {
+  const picked = await pickLocalSaveHandle(projectFileName(ctx.get().projectName ?? ''));
+  if (picked.ok === false) {
+    return { ok: true, destination: picked.reason === 'cancelled' ? 'cancelled' : 'download' };
+  }
+  if (!(await ensureWritePermission(picked.handle))) {
+    return { ok: false, message: SAVE_HANDLE_DENIED_MESSAGE };
+  }
+  const name = fileNameWithoutExtension(picked.handle.name);
+  const { body, identity } = ctx.get().saveAsBody(name);
+  const written = await writeProjectText(picked.handle, serializeProject(body));
+  if (written.ok === false) return written;
+  await ctx.get().adoptSaveAs(identity, name, { kind: 'local', handle: picked.handle });
+  return written;
+}
+
+/**
+ * The body a Save As writes, built before the write. One clock read, carried
+ * by the identity: a document created at 12:00:00.000 and "updated" at
+ * 12:00:00.004 is a lie the envelope should not have to tell, and
+ * envelopeForSaveAs takes no second `now` for exactly that reason.
+ */
+function buildSaveAsBody(
+  ctx: ProjectContext,
+  name: string,
+): { body: ProjectBody; identity: DocumentIdentity } {
+  const identity = newDocumentIdentity(ctx.session.now());
+  return { body: buildProjectBody(ctx.get, envelopeForSaveAs(identity, name)), identity };
+}
+
+/** Adopt a Save As that actually landed: identity, name and source, then persist. */
+async function adoptSaveAsDocument(
+  ctx: ProjectContext,
+  identity: DocumentIdentity,
+  name: string,
+  source: ProjectSource,
+): Promise<void> {
+  ctx.session.slot = identity;
+  ctx.set({ projectName: normalizeName(name), projectSource: source });
+  // Explicit, not left to the autosave subscription: `projectSource` is not
+  // a content key, so a re-point that changed no content would otherwise
+  // never reach the slot, and a reload would resume a project that forgot
+  // which file it belongs to.
+  //
+  // AWAITED, and that is why this is async: the slot write has to have
+  // landed before the action that triggered it resolves, or a caller (or a
+  // test) that reads the slot next sees the old source and the ordering
+  // depends on how many microtask hops the backend happens to take.
+  await ctx.get().save();
+}
+
+/** Re-point the source without touching content, then persist. See ProjectSlice.applyProjectSource. */
+async function applySource(ctx: ProjectContext, source: ProjectSource): Promise<void> {
+  const current = ctx.get().projectSource;
+  const unchanged =
+    (current.kind === 'untitled' && source.kind === 'untitled') ||
+    (current.kind === 'drive' && source.kind === 'drive' && current.fileId === source.fileId) ||
+    (current.kind === 'local' && source.kind === 'local' && current.handle === source.handle);
+  if (unchanged) return;
+  ctx.set({ projectSource: source });
+  // Explicit, like adoptSaveAs: the source is not a content key, so nothing
+  // else would schedule a write and the slot would keep the stale pointer.
+  // Awaited, so that a caller which reads the slot next sees this write.
+  await ctx.get().save();
+}
+
+function startNewProject(ctx: ProjectContext): void {
+  installProject(ctx, factoryProjectContent(), makeEnvelope('', ctx.session.now()));
+  ctx.set({ projectNotice: null });
+  // Explicit, not left to the content subscription: New on an
+  // already-factory session changes nothing content-wise, so nothing
+  // would schedule a write and the slot would stay empty.
+  void ctx.get().save();
+}
+
+/** Install a body handed in from outside (a `.solna` file, or a Drive copy), then save it into the slot. */
+async function openProjectBody(
+  ctx: ProjectContext,
+  body: ProjectBody,
+  source: ProjectSource = UNTITLED_SOURCE,
+): Promise<ProjectStoreResult<ProjectSlotRecord>> {
+  installProject(ctx, body.content, body, null, source);
+  const result = await ctx.get().save();
+  const warnings = unknownLibraryReferences(body.content);
+  // `save()` has already published its own failure notice, and this set()
+  // runs after it. Writing the warnings unconditionally would ERASE it: an
+  // ordinary file has no warnings, so a file opened on a device with
+  // unavailable storage would install correctly and say nothing at all —
+  // the exact case the notice exists for. Both are combined instead, and
+  // the failure leads because it is the one that costs the user work.
+  const notices = [
+    ...(result.ok === false ? [result.message] : []),
+    ...(warnings.length > 0 ? [`Opened with unrecognised references: ${warnings.join(', ')}`] : []),
+  ];
+  ctx.set({ projectNotice: notices.length > 0 ? notices.join(' ') : null });
+  return result;
+}
+
 export function createProjectSlice(
   set: Set,
   get: Get,
   projectStore: ProjectStore,
   now: () => number = Date.now,
 ): ProjectSlice {
-  let slot: DocumentIdentity = newDocumentIdentity(now());
-
-  const install = (
-    content: ProjectContent,
-    identity: ProjectEnvelope,
-    activeLoopId: string | null = null,
-    source: ProjectSource = UNTITLED_SOURCE,
-  ): void => {
-    // An export owns a snapshot of the outgoing project. Invalidate that job
-    // before the live session changes so it can never publish progress or
-    // download its old audio into the incoming project's UI.
-    get().cancelMixdown();
-    get().hardStopAll();
-    for (const source of ACCOMPANIMENT_SOURCES) {
-      audioEngine.stopSource(source, INSTALL_RELEASE);
-    }
-    slot = { id: identity.id, createdAt: identity.createdAt };
-    set({
-      ...applyProjectContent(content, activeLoopId),
-      // A song-mode cursor into the OLD project's loops[] must not survive
-      // the swap: it would index the new project's loops[] instead (out of
-      // range, or in range but pointing at the wrong loop) and enterSongIndex
-      // is skipped once the cursor is non-null. loadLoop recomputes it on
-      // every loops/activeLoopId change; a wholesale content swap has no
-      // such recompute, so it is reset here explicitly.
-      songLoopIndex: null,
-      // A latched track solo is scoped to the surface the user set it on, and a
-      // whole-content swap is the most complete surface change there is.
-      // soloNav.ts's SOLO_NAV_KEYS cannot catch this on its own: loop ids are
-      // not unique across projects, so the incoming project's first loop can
-      // carry the same id the outgoing one did (every fresh project's default
-      // loop is `loop-default-1`), and this patch writes neither activeTab nor
-      // focusTrack. Clearing it here, in the same atomic set() as the content,
-      // is what makes the guarantee hold regardless of which loop id lands.
-      soloTracks: [],
-      // Same reasoning, same atomic patch: the arm is scoped to the loop the
-      // user was recording into, and a whole-content swap leaves nothing for
-      // it to still name.
-      recordingTrack: null,
-      // A clipboard source is scoped to the outgoing project's loops. Loop ids
-      // may collide across projects, so keeping only the id could otherwise
-      // resolve to unrelated content after the swap.
-      loopClipboard: null,
-      projectName: normalizeName(identity.name),
-      // The source is part of what an install replaces: opening a file that
-      // came from Drive must not leave the previous project's handle behind, or
-      // the first Save would overwrite a file the user never opened.
-      projectSource: source,
-    });
-  };
-
-  /** Re-publish availability only when it CHANGED — a store write per autosave would re-render every mounted view. */
-  const publishStatus = (): void => {
-    const next = projectStore.status();
-    if (get().projectStoreStatus !== next) set({ projectStoreStatus: next });
-  };
-
-  /**
-   * `activeLoopId` is persisted while `loops` now comes from IndexedDB, so a
-   * stored value can name a loop the loaded project does not have — the same
-   * reconciliation persist `merge` does for a localStorage payload.
-   */
-  const reconcileActiveLoop = (): void => {
-    const { loops, activeLoopId } = get();
-    if (loops.some((row) => row.id === activeLoopId)) return;
-    const active = resolveActiveLoop(loops, null);
-    set({ activeLoopId: active.id, ...loopStatePatch(active) });
-  };
-
-  const buildBody = (envelope: ProjectEnvelope): ProjectBody => ({
-    ...envelope,
-    content: buildProjectContent(get()),
-  });
-
-  const writeText = async (handle: FileSystemFileHandle, text: string): Promise<ProjectSaveResult> => {
-    try {
-      await writeTextToHandle(handle, text);
-      return { ok: true, destination: 'local' };
-    } catch {
-      return { ok: false, message: SAVE_FAILED_MESSAGE };
-    }
+  const ctx: ProjectContext = {
+    set,
+    get,
+    store: projectStore,
+    session: { slot: newDocumentIdentity(now()), now },
   };
 
   return {
@@ -217,147 +412,28 @@ export function createProjectSlice(
 
     setProjectName: (name) => set({ projectName: normalizeName(name) }),
 
-    loadProject: async () => {
-      const result = await projectStore.load();
-      publishStatus();
-      if (result.ok === false) {
-        if (result.error === 'not-found') {
-          // Empty slot: a normal first run. Keep the factory content the
-          // slices already booted with — no install, so nothing is announced
-          // and the engine is not touched. The first autosave writes the slot.
-          slot = newDocumentIdentity(now());
-          set({ projectSource: UNTITLED_SOURCE });
-        } else {
-          set({ projectNotice: result.message });
-        }
-        reconcileActiveLoop();
-        return;
-      }
-      const { body, source } = result.value;
-      install(body.content, body, get().activeLoopId, source);
-      const warnings = unknownLibraryReferences(body.content);
-      set({
-        projectNotice:
-          warnings.length > 0 ? `Opened with unrecognised references: ${warnings.join(', ')}` : null,
-      });
-    },
+    loadProject: () => loadProjectFromStore(ctx),
 
-    save: async () => {
-      // The record, not the body: the slot carries the source so a reload
-      // resumes a project that still knows which file it belongs to. Autosave
-      // READS the source and never changes it — only Open, Save As, New and a
-      // Drive sign-out re-point it.
-      const record: ProjectSlotRecord = { body: get().exportProjectFile(), source: get().projectSource };
-      const result = await projectStore.save(record);
-      publishStatus();
-      // A failed autosave never blocks the app and never rolls the live
-      // session back — the notice is the only signal. The failure is not
-      // re-scheduled: `projectAutosave.write()` fires this `save()` once and
-      // clears its handle, so the slot stays stale until the next content
-      // change schedules a write. That re-attempt covers everything, because
-      // autosave writes the whole content set rather than a delta.
-      if (result.ok === false) set({ projectNotice: result.message });
-      return result;
-    },
+    save: () => saveToSlot(ctx),
 
-    saveProject: async () => {
-      const target = saveTarget(get().projectSource);
-      switch (target.kind) {
-        case 'save-as':
-          // No target to overwrite, so Save IS Save As. Nothing is clobbered.
-          return get().saveProjectAsLocal();
-        case 'drive-update':
-          return get().saveToDrive();
-        case 'local-write': {
-          if (!(await ensureWritePermission(target.handle))) {
-            return { ok: false, message: SAVE_HANDLE_DENIED_MESSAGE };
-          }
-          return writeText(target.handle, serializeProject(get().exportProjectFile()));
-        }
-      }
-    },
+    saveProject: () => saveToTarget(ctx),
 
-    saveProjectAsLocal: async () => {
-      const picked = await pickLocalSaveHandle(projectFileName(get().projectName ?? ''));
-      if (picked.ok === false) {
-        return { ok: true, destination: picked.reason === 'cancelled' ? 'cancelled' : 'download' };
-      }
-      if (!(await ensureWritePermission(picked.handle))) {
-        return { ok: false, message: SAVE_HANDLE_DENIED_MESSAGE };
-      }
-      const name = fileNameWithoutExtension(picked.handle.name);
-      const { body, identity } = get().saveAsBody(name);
-      const written = await writeText(picked.handle, serializeProject(body));
-      if (written.ok === false) return written;
-      await get().adoptSaveAs(identity, name, { kind: 'local', handle: picked.handle });
-      return written;
-    },
+    saveProjectAsLocal: () => saveAsToLocalFile(ctx),
 
-    saveAsBody: (name) => {
-      // One clock read, carried by the identity: a document created at
-      // 12:00:00.000 and "updated" at 12:00:00.004 is a lie the envelope should
-      // not have to tell, and envelopeForSaveAs takes no second `now` for
-      // exactly that reason.
-      const identity = newDocumentIdentity(now());
-      return { body: buildBody(envelopeForSaveAs(identity, name)), identity };
-    },
+    saveAsBody: (name) => buildSaveAsBody(ctx, name),
 
-    adoptSaveAs: async (identity, name, source) => {
-      slot = identity;
-      set({ projectName: normalizeName(name), projectSource: source });
-      // Explicit, not left to the autosave subscription: `projectSource` is not
-      // a content key, so a re-point that changed no content would otherwise
-      // never reach the slot, and a reload would resume a project that forgot
-      // which file it belongs to.
-      //
-      // AWAITED, and that is why this is async: the slot write has to have
-      // landed before the action that triggered it resolves, or a caller (or a
-      // test) that reads the slot next sees the old source and the ordering
-      // depends on how many microtask hops the backend happens to take.
-      await get().save();
-    },
+    adoptSaveAs: (identity, name, source) => adoptSaveAsDocument(ctx, identity, name, source),
 
-    applyProjectSource: async (source) => {
-      const current = get().projectSource;
-      const unchanged =
-        (current.kind === 'untitled' && source.kind === 'untitled') ||
-        (current.kind === 'drive' && source.kind === 'drive' && current.fileId === source.fileId) ||
-        (current.kind === 'local' && source.kind === 'local' && current.handle === source.handle);
-      if (unchanged) return;
-      set({ projectSource: source });
-      // Explicit, like adoptSaveAs: the source is not a content key, so nothing
-      // else would schedule a write and the slot would keep the stale pointer.
-      // Awaited, so that a caller which reads the slot next sees this write.
-      await get().save();
-    },
+    applyProjectSource: (source) => applySource(ctx, source),
 
-    newProject: () => {
-      install(factoryProjectContent(), makeEnvelope('', now()));
-      set({ projectNotice: null });
-      // Explicit, not left to the content subscription: New on an
-      // already-factory session changes nothing content-wise, so nothing
-      // would schedule a write and the slot would stay empty.
-      void get().save();
-    },
+    newProject: () => startNewProject(ctx),
 
-    openProjectFile: async (body, source = UNTITLED_SOURCE) => {
-      install(body.content, body, null, source);
-      const result = await get().save();
-      const warnings = unknownLibraryReferences(body.content);
-      // `save()` has already published its own failure notice, and this set()
-      // runs after it. Writing the warnings unconditionally would ERASE it: an
-      // ordinary file has no warnings, so a file opened on a device with
-      // unavailable storage would install correctly and say nothing at all —
-      // the exact case the notice exists for. Both are combined instead, and
-      // the failure leads because it is the one that costs the user work.
-      const notices = [
-        ...(result.ok === false ? [result.message] : []),
-        ...(warnings.length > 0 ? [`Opened with unrecognised references: ${warnings.join(', ')}`] : []),
-      ];
-      set({ projectNotice: notices.length > 0 ? notices.join(' ') : null });
-      return result;
-    },
+    openProjectFile: (body, source = UNTITLED_SOURCE) => openProjectBody(ctx, body, source),
 
-    exportProjectFile: (): ProjectBody => buildBody(envelopeForSave(slot, get().projectName ?? '', now())),
+    exportProjectFile: (): ProjectBody =>
+      buildProjectBody(
+        get,
+        envelopeForSave(ctx.session.slot, get().projectName ?? '', ctx.session.now()),
+      ),
   };
 }

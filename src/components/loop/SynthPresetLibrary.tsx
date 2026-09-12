@@ -44,29 +44,51 @@ interface SynthLibraryEntry extends PresetLibraryEntry {
   preset: SynthPresetItem;
 }
 
-export function SynthPresetLibrary({
-  currentParams,
-  onSelectPreset,
-  target,
-  showSoundBadges = true,
-  isOpen,
-  onClose,
-}: SynthPresetLibraryProps) {
-  const customPresets = useAppStore((s) => s.customSynthPresets);
-  const savePreset = useAppStore((s) => s.saveCustomPreset);
-  const deletePreset = useAppStore((s) => s.deleteCustomPreset);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [toastTone, setToastTone] = useState<'success' | 'error'>('success');
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
-  const previewRef = useRef<PreviewHandle | null>(null);
-  useEffect(() => () => previewRef.current?.(), []);
-
-  const showToast = (msg: string, tone: 'success' | 'error' = 'success') => {
-    setToastTone(tone);
-    setToastMsg(msg);
-    window.setTimeout(() => setToastMsg(null), 3000);
+/** The drawer entry for one preset: the generic's shape, plus the preset itself. */
+function toLibraryEntry(p: SynthPresetItem): SynthLibraryEntry {
+  return {
+    id: p.id,
+    name: p.name,
+    category: p.category,
+    description: p.description ?? '',
+    isFactory: p.isFactory,
+    preset: p,
   };
+}
 
+// PORT of the original category chips (original lines ~57-67, ~257-289):
+// 'All' first with the total count, then the eight categories in
+// SYNTH_CATEGORIES order; chip labels are the original's ('Custom' for User)
+// and counts live in `count`; the save-form select uses selectLabel to keep
+// the original 'Custom / User' wording.
+function buildCategories(allPresets: readonly SynthPresetItem[]): PresetCategory[] {
+  return [
+    { id: 'All', label: 'All', badgeClass: 'badge badge-primary', description: '', count: String(allPresets.length) },
+    ...SYNTH_CATEGORIES.map((meta) => {
+      const count =
+        meta.id === 'User'
+          ? allPresets.filter((p) => !p.isFactory || p.category === 'User').length
+          : allPresets.filter((p) => p.category === meta.id).length;
+      return {
+        id: meta.id,
+        label: meta.shortLabel,
+        selectLabel: meta.label,
+        badgeClass: 'badge badge-primary',
+        description: meta.description,
+        count: String(count),
+      };
+    }),
+  ];
+}
+
+/**
+ * The index the drawer renders from: every preset, the categories keyed off
+ * them, and the filter predicate they are searched with. One hook because the
+ * four are derived from the same `customSynthPresets` plus the current patch,
+ * and reading them together is the whole of "what the drawer shows".
+ */
+function useSynthLibraryIndex(currentParams: SynthParams) {
+  const customPresets = useAppStore((s) => s.customSynthPresets);
   const allPresets = useMemo(() => getAllSynthPresets(customPresets), [customPresets]);
 
   // Which entry the drawer should reveal on open — the one the card list marks
@@ -76,44 +98,9 @@ export function SynthPresetLibrary({
     [allPresets, currentParams.preset]
   );
 
-  const entries = useMemo<SynthLibraryEntry[]>(
-    () =>
-      allPresets.map((p) => ({
-        id: p.id,
-        name: p.name,
-        category: p.category,
-        description: p.description ?? '',
-        isFactory: p.isFactory,
-        preset: p,
-      })),
-    [allPresets]
-  );
+  const entries = useMemo<SynthLibraryEntry[]>(() => allPresets.map(toLibraryEntry), [allPresets]);
 
-  // PORT of the original category chips (original lines ~57-67, ~257-289):
-  // 'All' first with the total count, then the eight categories in
-  // SYNTH_CATEGORIES order; chip labels are the original's ('Custom' for User)
-  // and counts live in `count`; the save-form select uses selectLabel to keep
-  // the original 'Custom / User' wording.
-  const categories = useMemo<PresetCategory[]>(
-    () => [
-      { id: 'All', label: 'All', badgeClass: 'badge badge-primary', description: '', count: String(allPresets.length) },
-      ...SYNTH_CATEGORIES.map((meta) => {
-        const count =
-          meta.id === 'User'
-            ? allPresets.filter((p) => !p.isFactory || p.category === 'User').length
-            : allPresets.filter((p) => p.category === meta.id).length;
-        return {
-          id: meta.id,
-          label: meta.shortLabel,
-          selectLabel: meta.label,
-          badgeClass: 'badge badge-primary',
-          description: meta.description,
-          count: String(count),
-        };
-      }),
-    ],
-    [allPresets]
-  );
+  const categories = useMemo<PresetCategory[]>(() => buildCategories(allPresets), [allPresets]);
 
   // PORT of the original filteredPresets predicate: the 'User' chip matches
   // every custom entry regardless of its saved category (plus any factory entry
@@ -137,6 +124,46 @@ export function SynthPresetLibrary({
     return matchesCategory && matchesSearch;
   }, []);
 
+  return { allPresets, activeEntryId, entries, categories, filterEntries };
+}
+
+/** The drawer's one toast line: a message, a tone, and its three-second self-clear. */
+function useSynthPresetToast() {
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [toastTone, setToastTone] = useState<'success' | 'error'>('success');
+
+  const showToast = useCallback((msg: string, tone: 'success' | 'error' = 'success') => {
+    setToastTone(tone);
+    setToastMsg(msg);
+    window.setTimeout(() => setToastMsg(null), 3000);
+  }, []);
+
+  return { toastMsg, toastTone, showToast };
+}
+
+/**
+ * Everything the drawer does to a preset: save, delete, audition and the two
+ * JSON file commands — plus the audition handle and the pending delete, which
+ * are the only state any of them needs.
+ */
+function useSynthPresetActions({
+  currentParams,
+  onSelectPreset,
+  showToast,
+}: {
+  currentParams: SynthParams;
+  onSelectPreset: (preset: SynthPresetItem) => void;
+  showToast: (msg: string, tone?: 'success' | 'error') => void;
+}) {
+  const customPresets = useAppStore((s) => s.customSynthPresets);
+  const savePreset = useAppStore((s) => s.saveCustomPreset);
+  const deletePreset = useAppStore((s) => s.deleteCustomPreset);
+
+  const previewRef = useRef<PreviewHandle | null>(null);
+  useEffect(() => () => previewRef.current?.(), []);
+
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+
   // PORT of the original save handler: save the current params (the store
   // action strips the `preset` label and trims name/description internally),
   // toast the original message, then select the created preset. Always returns
@@ -153,9 +180,14 @@ export function SynthPresetLibrary({
     return true;
   };
 
-  const handleDelete = (id: string, name: string) => {
-    setPendingDelete({ id, name });
+  const requestDelete = (id: string, name: string) => setPendingDelete({ id, name });
+
+  const confirmDelete = () => {
+    if (pendingDelete) deletePreset(pendingDelete.id);
+    setPendingDelete(null);
   };
+
+  const cancelDelete = () => setPendingDelete(null);
 
   const handleAudition = (preset: SynthPresetItem) => {
     previewRef.current?.();
@@ -204,52 +236,67 @@ export function SynthPresetLibrary({
     reader.readAsText(file);
   };
 
-  // PORT of the original list organization (original lines ~375-416): grouped
-  // category sections when viewing All without a search, flat list otherwise.
-  const groupEntries = (
-    filtered: SynthLibraryEntry[],
-    query: string,
-    category: string
-  ): PresetLibraryGroup<SynthLibraryEntry>[] => {
-    if (category !== 'All' || query.trim()) {
-      return [
-        { key: 'flat', className: 'space-y-3', innerClassName: 'space-y-3', entries: filtered },
-      ];
-    }
-
-    return getPresetsGroupedByCategory(filtered.map((e) => e.preset)).map((group) => ({
-      key: group.category,
-      className: 'space-y-2',
-      header: (
-        <div className="flex items-center justify-between px-1 pt-2 pb-1 border-b border-base-300">
-          <div className="flex items-center gap-2">
-            <span className={`${group.badgeClass} badge-sm font-semibold`}>
-              {group.category}
-            </span>
-            <span className="text-xs font-bold text-base-content">{group.label}</span>
-          </div>
-          {group.description && (
-            <span className="text-[10px] text-base-content/50 truncate max-w-40">
-              {group.description}
-            </span>
-          )}
-        </div>
-      ),
-      entries: group.presets.map((p) => ({
-        id: p.id,
-        name: p.name,
-        category: p.category,
-        description: p.description ?? '',
-        isFactory: p.isFactory,
-        preset: p,
-      })),
-    }));
+  return {
+    pendingDelete,
+    hasCustomPresets: customPresets.length > 0,
+    handleSave,
+    requestDelete,
+    confirmDelete,
+    cancelDelete,
+    handleAudition,
+    handleExport,
+    handleImport,
   };
+}
 
-  // PORT of the original empty state (original lines ~376-388): icon, "No
-  // presets found for ..." text, and the "Save your first custom preset now"
-  // link (opens the save form) when the User category is empty.
-  const emptyState = (query: string, category: string, openSave: () => void) => (
+// PORT of the original list organization (original lines ~375-416): grouped
+// category sections when viewing All without a search, flat list otherwise.
+function groupSynthEntries(
+  filtered: SynthLibraryEntry[],
+  query: string,
+  category: string
+): PresetLibraryGroup<SynthLibraryEntry>[] {
+  if (category !== 'All' || query.trim()) {
+    return [
+      { key: 'flat', className: 'space-y-3', innerClassName: 'space-y-3', entries: filtered },
+    ];
+  }
+
+  return getPresetsGroupedByCategory(filtered.map((e) => e.preset)).map((group) => ({
+    key: group.category,
+    className: 'space-y-2',
+    header: (
+      <div className="flex items-center justify-between px-1 pt-2 pb-1 border-b border-base-300">
+        <div className="flex items-center gap-2">
+          <span className={`${group.badgeClass} badge-sm font-semibold`}>
+            {group.category}
+          </span>
+          <span className="text-xs font-bold text-base-content">{group.label}</span>
+        </div>
+        {group.description && (
+          <span className="text-[10px] text-base-content/50 truncate max-w-40">
+            {group.description}
+          </span>
+        )}
+      </div>
+    ),
+    entries: group.presets.map(toLibraryEntry),
+  }));
+}
+
+// PORT of the original empty state (original lines ~376-388): icon, "No
+// presets found for ..." text, and the "Save your first custom preset now"
+// link (opens the save form) when the User category is empty.
+function SynthEmptyState({
+  query,
+  category,
+  openSave,
+}: {
+  query: string;
+  category: string;
+  openSave: () => void;
+}) {
+  return (
     <div className="text-center py-12 text-base-content/50 text-xs space-y-2">
       <FolderOpen className="w-8 h-8 mx-auto opacity-40 text-primary" />
       <p>No presets found for "{query || category}"</p>
@@ -260,110 +307,130 @@ export function SynthPresetLibrary({
       )}
     </div>
   );
+}
 
-  // PORT of the original preset card (original lines ~432-509): whole-card
-  // select, Active badge + category badge, description, sound badges
-  // (osc type + filter label/cutoff), audition + delete buttons.
-  const renderEntry = (e: SynthLibraryEntry) => {
-    const preset = e.preset;
-    const isCurrent = currentParams.preset === preset.name;
-    const oscType = preset.params.oscType || 'sawtooth';
-    const filterType = preset.params.filterType || 'lowpass';
-    const cutoff = preset.params.filterCutoff || 2000;
-    const meta = getCategoryMeta(preset.category);
+// PORT of the original preset card (original lines ~432-509): whole-card
+// select, Active badge + category badge, description, sound badges
+// (osc type + filter label/cutoff), audition + delete buttons.
+function SynthPresetCard({
+  entry,
+  currentPresetName,
+  showSoundBadges,
+  onSelect,
+  onAudition,
+  onRequestDelete,
+}: {
+  entry: SynthLibraryEntry;
+  currentPresetName: string | undefined;
+  showSoundBadges: boolean;
+  onSelect: (preset: SynthPresetItem) => void;
+  onAudition: (preset: SynthPresetItem) => void;
+  onRequestDelete: (id: string, name: string) => void;
+}) {
+  const preset = entry.preset;
+  const isCurrent = currentPresetName === preset.name;
+  const oscType = preset.params.oscType || 'sawtooth';
+  const filterType = preset.params.filterType || 'lowpass';
+  const cutoff = preset.params.filterCutoff || 2000;
+  const meta = getCategoryMeta(preset.category);
 
-    return (
-      <div
-        className={`card p-0 border transition-all group relative ${
-          isCurrent
-            ? 'bg-primary/10 border-primary shadow-md ring-1 ring-primary/50'
-            : 'bg-base-200 border-base-300 hover:border-primary/50 hover:bg-base-300'
-        }`}
+  return (
+    <div
+      className={`card p-0 border transition-all group relative ${
+        isCurrent
+          ? 'bg-primary/10 border-primary shadow-md ring-1 ring-primary/50'
+          : 'bg-base-200 border-base-300 hover:border-primary/50 hover:bg-base-300'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => onSelect(preset)}
+        className="w-full text-left p-3 cursor-pointer"
       >
-        <button
-          type="button"
-          onClick={() => onSelectPreset(preset)}
-          className="w-full text-left p-3 cursor-pointer"
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <h4 className="font-semibold text-xs text-base-content truncate group-hover:text-primary transition-colors">
-                  {preset.name}
-                </h4>
-                {isCurrent && (
-                  <span className="badge badge-xs badge-primary py-0.5 font-bold uppercase tracking-wider">
-                    Active
-                  </span>
-                )}
-                <span
-                  className={`${meta.badgeClass} badge-xs py-0.5`}
-                >
-                  {preset.category}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h4 className="font-semibold text-xs text-base-content truncate group-hover:text-primary transition-colors">
+                {preset.name}
+              </h4>
+              {isCurrent && (
+                <span className="badge badge-xs badge-primary py-0.5 font-bold uppercase tracking-wider">
+                  Active
+                </span>
+              )}
+              <span className={`${meta.badgeClass} badge-xs py-0.5`}>{preset.category}</span>
+            </div>
+
+            {preset.description && (
+              <p
+                className={`text-[11px] text-base-content/60 line-clamp-1 ${showSoundBadges ? 'mb-2' : ''}`}
+              >
+                {preset.description}
+              </p>
+            )}
+
+            {/* Sound Badge Attributes */}
+            {showSoundBadges && (
+              <div className="flex items-center gap-1.5 text-[10px] text-base-content/60">
+                <span className="badge badge-sm badge-ghost gap-1">
+                  <Activity className="w-2.5 h-2.5 text-primary" />
+                  {oscType}
+                </span>
+                <span className="badge badge-sm badge-ghost tabular-nums gap-1">
+                  <Sliders className="w-2.5 h-2.5 text-accent" />
+                  {filterType === 'lowpass' ? 'LPF' : filterType === 'highpass' ? 'HPF' : 'BPF'} {Math.round(cutoff)}Hz
                 </span>
               </div>
-
-              {preset.description && (
-                <p
-                  className={`text-[11px] text-base-content/60 line-clamp-1 ${showSoundBadges ? 'mb-2' : ''}`}
-                >
-                  {preset.description}
-                </p>
-              )}
-
-              {/* Sound Badge Attributes */}
-              {showSoundBadges && (
-                <div className="flex items-center gap-1.5 text-[10px] text-base-content/60">
-                  <span className="badge badge-sm badge-ghost gap-1">
-                    <Activity className="w-2.5 h-2.5 text-primary" />
-                    {oscType}
-                  </span>
-                  <span className="badge badge-sm badge-ghost tabular-nums gap-1">
-                    <Sliders className="w-2.5 h-2.5 text-accent" />
-                    {filterType === 'lowpass' ? 'LPF' : filterType === 'highpass' ? 'HPF' : 'BPF'} {Math.round(cutoff)}Hz
-                  </span>
-                </div>
-              )}
-            </div>
+            )}
           </div>
-        </button>
-
-        {/* Action buttons */}
-        <div className="absolute top-3 right-3 flex items-center gap-1 shrink-0">
-          <IconButton
-            label="Audition Sound (Play Note)"
-            icon={<Volume2 className="w-3.5 h-3.5" />}
-            size="xs"
-            className="hover:btn-primary"
-            onClick={() => handleAudition(preset)}
-          />
-
-          {!preset.isFactory && (
-            <IconButton
-              label="Delete Custom Preset"
-              icon={<Trash2 className="w-3.5 h-3.5" />}
-              size="xs"
-              className="hover:btn-error"
-              onClick={() => handleDelete(preset.id, preset.name)}
-            />
-          )}
         </div>
-      </div>
-    );
-  };
+      </button>
 
-  // PORT of the original toolbar action row (original lines ~206-234): the
-  // Save Current Sound button is the generic's saveButton; the icon-only
-  // Export/Import buttons follow it in the same flex row.
-  const toolbarActions = (
+      {/* Action buttons */}
+      <div className="absolute top-3 right-3 flex items-center gap-1 shrink-0">
+        <IconButton
+          label="Audition Sound (Play Note)"
+          icon={<Volume2 className="w-3.5 h-3.5" />}
+          size="xs"
+          className="hover:btn-primary"
+          onClick={() => onAudition(preset)}
+        />
+
+        {!preset.isFactory && (
+          <IconButton
+            label="Delete Custom Preset"
+            icon={<Trash2 className="w-3.5 h-3.5" />}
+            size="xs"
+            className="hover:btn-error"
+            onClick={() => onRequestDelete(preset.id, preset.name)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// PORT of the original toolbar action row (original lines ~206-234): the
+// Save Current Sound button is the generic's saveButton; the icon-only
+// Export/Import buttons follow it in the same flex row.
+function SynthLibraryFiles({
+  exportDisabled,
+  onExport,
+  onImport,
+}: {
+  exportDisabled: boolean;
+  onExport: () => void;
+  onImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
     <>
       <IconButton
         label="Export User Presets to JSON"
         icon={<Download className="w-3.5 h-3.5" />}
         size="sm"
         className="disabled:opacity-40"
-        disabled={customPresets.length === 0}
-        onClick={handleExport}
+        disabled={exportDisabled}
+        onClick={onExport}
       />
 
       <label
@@ -374,29 +441,43 @@ export function SynthPresetLibrary({
         <input
           type="file"
           accept=".json"
-          onChange={handleImport}
+          onChange={onImport}
           className="hidden"
           aria-label="Import Presets from JSON"
         />
       </label>
     </>
   );
+}
 
-  // PORT of the original footer (original lines ~418-427): LocalStorage note +
-  // Done button. Guarded on isOpen for the same reason as ChordPresetLibrary's
-  // footer -- PresetLibrary bails to null while closed, but this JSX was still
-  // built and discarded on every parent render without the guard.
-  const footer = !isOpen ? null : (
+// PORT of the original footer (original lines ~418-427): LocalStorage note +
+// Done button. Guarded on isOpen for the same reason as ChordPresetLibrary's
+// footer -- PresetLibrary bails to null while closed, but this JSX was still
+// built and discarded on every parent render without the guard.
+function SynthLibraryFooter({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  if (!isOpen) return null;
+  return (
     <div className="p-3 border-t border-base-300 bg-base-200 flex items-center justify-between text-[11px] text-base-content/60">
       <span>Storage: Browser LocalStorage</span>
-      <button
-        onClick={onClose}
-        className="btn btn-sm btn-ghost font-medium"
-      >
+      <button onClick={onClose} className="btn btn-sm btn-ghost font-medium">
         Done
       </button>
     </div>
   );
+}
+
+export function SynthPresetLibrary({
+  currentParams,
+  onSelectPreset,
+  target,
+  showSoundBadges = true,
+  isOpen,
+  onClose,
+}: SynthPresetLibraryProps) {
+  const { allPresets, activeEntryId, entries, categories, filterEntries } =
+    useSynthLibraryIndex(currentParams);
+  const { toastMsg, toastTone, showToast } = useSynthPresetToast();
+  const actions = useSynthPresetActions({ currentParams, onSelectPreset, showToast });
 
   return (
     <>
@@ -419,7 +500,13 @@ export function SynthPresetLibrary({
         panelTintClass={SYNTH_TARGET_STYLES[target].tint}
         activeEntryId={activeEntryId}
         saveButton={{ label: 'Save Current Sound', inToolbar: true }}
-        toolbarActions={toolbarActions}
+        toolbarActions={
+          <SynthLibraryFiles
+            exportDisabled={!actions.hasCustomPresets}
+            onExport={actions.handleExport}
+            onImport={actions.handleImport}
+          />
+        }
         toast={toastMsg}
         toastPlacement="toolbar"
         toastTone={toastTone}
@@ -428,11 +515,22 @@ export function SynthPresetLibrary({
         entries={entries}
         categories={categories}
         listContainerClass="flex-1 overflow-y-auto p-3 space-y-3"
-        groupEntries={groupEntries}
-        renderEntry={renderEntry}
-        emptyState={emptyState}
+        groupEntries={groupSynthEntries}
+        renderEntry={(entry) => (
+          <SynthPresetCard
+            entry={entry}
+            currentPresetName={currentParams.preset}
+            showSoundBadges={showSoundBadges}
+            onSelect={onSelectPreset}
+            onAudition={actions.handleAudition}
+            onRequestDelete={actions.requestDelete}
+          />
+        )}
+        emptyState={(query, category, openSave) => (
+          <SynthEmptyState query={query} category={category} openSave={openSave} />
+        )}
         filterEntries={filterEntries}
-        footer={footer}
+        footer={<SynthLibraryFooter isOpen={isOpen} onClose={onClose} />}
         save={{
           heading: 'Save New Preset to LocalStorage',
           buttonLabel: 'Save Preset',
@@ -446,21 +544,18 @@ export function SynthPresetLibrary({
         onSelect={(entry) => onSelectPreset(entry.preset)}
         onDelete={(id) => {
           const entry = entries.find((en) => en.id === id);
-          if (entry) setPendingDelete({ id, name: entry.name });
+          if (entry) actions.requestDelete(id, entry.name);
         }}
-        onSave={handleSave}
+        onSave={actions.handleSave}
       />
-      {pendingDelete && (
+      {actions.pendingDelete && (
         <ConfirmDialog
           title="Delete preset"
-          message={<>Are you sure you want to delete preset <strong>{pendingDelete.name}</strong>?</>}
+          message={<>Are you sure you want to delete preset <strong>{actions.pendingDelete.name}</strong>?</>}
           confirmLabel="Delete"
           danger
-          onConfirm={() => {
-            deletePreset(pendingDelete.id);
-            setPendingDelete(null);
-          }}
-          onCancel={() => setPendingDelete(null)}
+          onConfirm={actions.confirmDelete}
+          onCancel={actions.cancelDelete}
         />
       )}
     </>

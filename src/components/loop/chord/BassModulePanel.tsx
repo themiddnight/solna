@@ -1,24 +1,24 @@
 import React, { useMemo } from "react";
-import { Volume2 } from "lucide-react";
 import { useAppStore } from "@/store/store";
 import { BASS_STYLE_GROUPS } from "@/audio/bassPatterns";
 import { type BassStepChoice } from "@/data/bassPatterns";
 import {
+  applyPreset,
   getAllSynthPresets,
-  findPresetByName,
   getPresetsGroupedByCategory,
 } from "@/audio/presetRegistry";
-import { patternMeterTitle, patternOptionLabel } from "@/components/meterSelect";
 import { getMeter } from "@/utils/meter";
 import { stepCells } from "@/components/sequencerGrid";
-import { FIELD_LABEL, FIELD_SELECT } from "@/components/ui/fieldClasses";
-import { Slider } from "@/components/ui/Slider";
-import { PlayingStepRow, STEP_ROW_CLASS } from "@/components/ui/StepRow";
-import { PlayingStepHeader } from "@/components/ui/StepHeader";
-import { IconButton } from "@/components/ui/IconButton";
+import { PlayingStepRow } from "@/components/ui/StepRow";
 import { ModulePanelCard } from "./ModulePanelCard";
 import { ModulePasteButton } from "../ModulePasteButton";
-import { PresetSelect } from "./PresetSelect";
+import {
+  CustomPatternSteps,
+  FeelSlider,
+  OctaveSelect,
+  PatternSelect,
+  SoundPresetField,
+} from "./moduleFields";
 import { bassStepLabel, nextBassStepChoice } from "./bassStepChoice";
 
 export interface BassModulePanelProps {
@@ -26,6 +26,53 @@ export interface BassModulePanelProps {
   onPatternPreviewUp: (e: React.MouseEvent | React.TouchEvent) => void;
   /** Owned by ChordView, not this panel; passed through only to gate the PlayingStepRow ring. */
   isPlaying: boolean;
+}
+
+/** The bass line's register, narrower at the top than the chord card's. */
+const BASS_OCTAVES = [1, 2, 3, 4];
+
+/**
+ * The custom step grid: the same `PlayingStepRow` the chord and drum grids use,
+ * stepping through the tone cycle rather than toggling a boolean.
+ *
+ * Reads the grid and its meter itself, so the card above renders one element
+ * for the whole `custom` branch and never re-renders when a step is edited.
+ */
+function BassStepEditor({ isPlaying }: { isPlaying: boolean }) {
+  const meterId = useAppStore((s) => s.meterId);
+  const customBassPattern = useAppStore((s) => s.customBassPattern);
+  const setCustomBassPattern = useAppStore((s) => s.setCustomBassPattern);
+
+  const cells = useMemo(() => stepCells(getMeter(meterId)), [meterId]);
+
+  return (
+    <CustomPatternSteps
+      className="mt-3"
+      labelId="label-custom-bass-pattern"
+      label="Custom Bass Pattern"
+      cells={cells}
+      isPlaying={isPlaying}
+    >
+      {/* The tone letters bassStepLabel draws are only legible once a block is
+          wider than the letter itself. */}
+      <PlayingStepRow<BassStepChoice>
+        player="chords"
+        cells={cells}
+        steps={customBassPattern}
+        isPlaying={isPlaying}
+        color="bg-module-bass text-module-bass-content"
+        isActive={(v) => v !== 'rest'}
+        getLabel={bassStepLabel}
+        onStepClick={(i) =>
+          setCustomBassPattern(
+            customBassPattern.map((v, idx) =>
+              idx === i ? nextBassStepChoice(v) : v,
+            ),
+          )
+        }
+      />
+    </CustomPatternSteps>
+  );
 }
 
 export function BassModulePanel({
@@ -43,12 +90,9 @@ export function BassModulePanel({
   const setBassPatternId = useAppStore((s) => s.setBassPatternId);
   const bassPatternMode = useAppStore((s) => s.bassPatternMode);
   const setBassPatternMode = useAppStore((s) => s.setBassPatternMode);
-  const customBassPattern = useAppStore((s) => s.customBassPattern);
-  const setCustomBassPattern = useAppStore((s) => s.setCustomBassPattern);
   const bassFeel = useAppStore((s) => s.bassFeel);
   const setBassFeel = useAppStore((s) => s.setBassFeel);
 
-  const chordCells = useMemo(() => stepCells(getMeter(meterId)), [meterId]);
   const allPresets = useMemo(
     () => getAllSynthPresets(customPresets),
     [customPresets],
@@ -57,6 +101,17 @@ export function BassModulePanel({
     () => getPresetsGroupedByCategory(allPresets),
     [allPresets],
   );
+
+  // `Custom…` swaps the dropdown's job for the step grid below it: the mode is
+  // what the grid is gated on, and the id is what the dropdown shows.
+  const selectBassPattern = (value: string) => {
+    if (value === 'custom') {
+      setBassPatternMode('custom');
+      return;
+    }
+    setBassPatternMode('preset');
+    setBassPatternId(value);
+  };
 
   // No `mt-4`, and `role="group"` names this card for a screen reader — see the
   // note in ChordModulePanel for both.
@@ -73,144 +128,52 @@ export function BassModulePanel({
       actions={<ModulePasteButton groups={['bass-sound', 'bass-pattern']} />}
     >
       <div className="flex flex-row flex-wrap items-end gap-3">
-          <PresetSelect
+          <SoundPresetField
             id="select-bass-sound-preset"
-            label="Preset"
             title="Bass sound preset — any factory, bass, or saved preset, synced with the synth page"
             placeholder="Bass Preset…"
             groups={presetGroups}
+            allPresets={allPresets}
             value={bassSynthParams.preset ?? ""}
-            onSelect={(name) => {
-              const preset = findPresetByName(name, allPresets);
-              if (!preset) return;
-              setBassSynthParams({
-                ...bassSynthParams,
-                ...preset.params,
-                preset: preset.name,
-              });
-            }}
+            onPick={(preset) =>
+              setBassSynthParams(applyPreset(bassSynthParams, preset))
+            }
           />
 
-          <div>
-            <label className={FIELD_LABEL} htmlFor="select-bass-octave">Octave</label>
-            <select
-              id="select-bass-octave"
-              value={bassOctave}
-              onChange={(e) => setBassOctave(parseInt(e.target.value, 10))}
-              className={FIELD_SELECT}
-              title="Register for the bass line (embedded in the note names)"
-            >
-              {[1, 2, 3, 4].map((o) => (
-                <option key={o} value={o}>
-                  Oct {o}
-                </option>
-              ))}
-            </select>
-          </div>
+          <OctaveSelect
+            id="select-bass-octave"
+            label="Octave"
+            title="Register for the bass line (embedded in the note names)"
+            value={bassOctave}
+            onChange={setBassOctave}
+            octaves={BASS_OCTAVES}
+          />
 
-          <div>
-            <label className={FIELD_LABEL} htmlFor="select-bass-rhythm-pattern">Pattern</label>
-            <div className="flex items-center gap-1.5">
-              <select
-                id="select-bass-rhythm-pattern"
-                value={bassPatternMode === 'custom' ? 'custom' : bassPatternId}
-                onChange={(e) => {
-                  if (e.target.value === 'custom') {
-                    setBassPatternMode('custom');
-                  } else {
-                    setBassPatternMode('preset');
-                    setBassPatternId(e.target.value);
-                  }
-                }}
-                className={FIELD_SELECT}
-                title="Bass pattern (16th-note grid, deterministic)"
-              >
-                <option value="custom">Custom…</option>
-                {BASS_STYLE_GROUPS.map((group) => (
-                  <optgroup key={group.style} label={group.style}>
-                    {group.patterns.map((p) => (
-                      <option
-                        key={p.id}
-                        value={p.id}
-                        title={patternMeterTitle(p.name, p.meter, meterId)}
-                      >
-                        {patternOptionLabel(p.name, p.meter, meterId)}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              <IconButton
-                id="btn-preview-bass-pattern"
-                label="Hold to Preview Bass Pattern Loop"
-                icon={<Volume2 className="w-3 h-3" />}
-                size="xs"
-                className="text-module-bass select-none"
-                onMouseDown={onPatternPreviewDown}
-                onMouseUp={onPatternPreviewUp}
-                onMouseLeave={onPatternPreviewUp}
-                onTouchStart={onPatternPreviewDown}
-                onTouchEnd={onPatternPreviewUp}
-              />
-            </div>
-          </div>
+          <PatternSelect
+            id="select-bass-rhythm-pattern"
+            label="Pattern"
+            selectTitle="Bass pattern (16th-note grid, deterministic)"
+            previewId="btn-preview-bass-pattern"
+            previewLabel="Hold to Preview Bass Pattern Loop"
+            previewTint="text-module-bass"
+            value={bassPatternMode === 'custom' ? 'custom' : bassPatternId}
+            groups={BASS_STYLE_GROUPS}
+            onChange={selectBassPattern}
+            onPreviewDown={onPatternPreviewDown}
+            onPreviewUp={onPatternPreviewUp}
+            meterId={meterId}
+          />
 
-          {/* Bass Feel Slider (tight ↔ loose) */}
-          <div>
-            <label className={FIELD_LABEL} htmlFor="slider-bass-feel">Feel</label>
-            <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
-              <span className="text-[9px] text-base-content/60 shrink-0">
-                tight
-              </span>
-              <Slider
-                id="slider-bass-feel"
-                min={0}
-                max={1}
-                step={0.01}
-                value={bassFeel}
-                onChange={setBassFeel}
-                className="range range-xs w-20 text-module-bass [--range-thumb:var(--color-module-bass-content)]"
-                title="Bass note length: tight (short holds) ↔ loose (long holds)"
-              />
-              <span className="text-[9px] text-base-content/60 shrink-0">
-                loose
-              </span>
-            </div>
-          </div>
+          <FeelSlider
+            id="slider-bass-feel"
+            value={bassFeel}
+            onChange={setBassFeel}
+            tint="text-module-bass [--range-thumb:var(--color-module-bass-content)]"
+            title="Bass note length: tight (short holds) ↔ loose (long holds)"
+          />
         </div>
 
-        {/* Full-width step editor — see ChordModulePanel for why this left the
-            "Bass Pattern" field cell. The tone letters bassStepLabel draws are
-            only legible once a block is wider than the letter itself. */}
-        {bassPatternMode === 'custom' && (
-          <div className="overflow-x-auto mt-3">
-            <span className={FIELD_LABEL} id="label-custom-bass-pattern">Custom Bass Pattern</span>
-            <div className="min-w-[420px] sm:min-w-[520px]" role="group" aria-labelledby="label-custom-bass-pattern">
-              <PlayingStepHeader
-                player="chords"
-                cells={chordCells}
-                isPlaying={isPlaying}
-                className={`${STEP_ROW_CLASS} mb-1.5`}
-              />
-              <PlayingStepRow<BassStepChoice>
-                player="chords"
-                cells={chordCells}
-                steps={customBassPattern}
-                isPlaying={isPlaying}
-                color="bg-module-bass text-module-bass-content"
-                isActive={(v) => v !== 'rest'}
-                getLabel={bassStepLabel}
-                onStepClick={(i) =>
-                  setCustomBassPattern(
-                    customBassPattern.map((v, idx) =>
-                      idx === i ? nextBassStepChoice(v) : v,
-                    ),
-                  )
-                }
-              />
-            </div>
-          </div>
-        )}
+        {bassPatternMode === 'custom' && <BassStepEditor isPlaying={isPlaying} />}
     </ModulePanelCard>
   );
 }

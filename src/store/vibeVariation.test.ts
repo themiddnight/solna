@@ -283,7 +283,7 @@ function allDraws(v: (typeof RESOLVED_VIBES)[number]) {
   return out;
 }
 
-describe('resolveVibeVariation', () => {
+describe('resolveVibeVariation: what a draw preserves', () => {
   test('genre identity is copied verbatim under every draw', () => {
     for (const v of RESOLVED_VIBES) {
       for (const { vibe: out } of allDraws(v)) {
@@ -363,6 +363,9 @@ describe('resolveVibeVariation', () => {
     }
   });
 
+});
+
+describe('resolveVibeVariation: what a draw writes', () => {
   test('a scripted draw produces one exact, nameable vibe', () => {
     const lofi = RESOLVED_VIBES.find((v) => v.id === 'lofi-chill')!;
     const r = lofi.random!;
@@ -460,6 +463,7 @@ describe('resolveVibeVariation', () => {
     const bare = { ...RESOLVED_VIBES[0], random: undefined };
     expect(() => resolveVibeVariation(bare, authoredCurrent(bare), firstDraw)).toThrow();
   });
+
 });
 
 import { formatVariationSummary } from './vibeVariation';

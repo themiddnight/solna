@@ -23,11 +23,21 @@ function manualFrames() {
   return { scheduler, tick, armed: () => queued.size };
 }
 
+/**
+ * The fixture every case below starts from: a hand-driven frame scheduler, the
+ * apply log it feeds, and the coalescer under test. `log` is generic so the
+ * capped-gesture case can record frame numbers rather than key names.
+ */
+function fixture<T = string>() {
+  const frames = manualFrames();
+  const log: T[] = [];
+  const c = createFrameCoalescer(frames.scheduler);
+  return { frames, log, c };
+}
+
 describe('createFrameCoalescer', () => {
   test('the first value for a key applies synchronously (discrete change, no latency)', () => {
-    const frames = manualFrames();
-    const log: string[] = [];
-    const c = createFrameCoalescer(frames.scheduler);
+    const { frames, log, c } = fixture();
 
     c.push('synth', () => log.push('a'));
 
@@ -38,9 +48,7 @@ describe('createFrameCoalescer', () => {
   test('several DISTINCT keys in one tick all apply immediately', () => {
     // A vibe apply writes synthParams + chordSynthParams + bassSynthParams +
     // effects in one action; none of them may be delayed.
-    const frames = manualFrames();
-    const log: string[] = [];
-    const c = createFrameCoalescer(frames.scheduler);
+    const { log, c } = fixture();
 
     c.push('effects', () => log.push('fx'));
     c.push('synth', () => log.push('s'));
@@ -52,9 +60,7 @@ describe('createFrameCoalescer', () => {
   });
 
   test('a repeat of the SAME key inside the window defers, and only the last one lands', () => {
-    const frames = manualFrames();
-    const log: string[] = [];
-    const c = createFrameCoalescer(frames.scheduler);
+    const { frames, log, c } = fixture();
 
     c.push('synth', () => log.push('v1'));
     c.push('synth', () => log.push('v2'));
@@ -69,9 +75,7 @@ describe('createFrameCoalescer', () => {
   });
 
   test('a sustained gesture is capped at one apply per frame', () => {
-    const frames = manualFrames();
-    const log: number[] = [];
-    const c = createFrameCoalescer(frames.scheduler);
+    const { frames, log, c } = fixture<number>();
 
     // Two pointer events per frame for four frames. Each value is snapshotted
     // into its own binding before push() — a deferred thunk runs later, so
@@ -91,9 +95,7 @@ describe('createFrameCoalescer', () => {
   });
 
   test('a frame that drains nothing does not re-arm, so the next push is leading again', () => {
-    const frames = manualFrames();
-    const log: string[] = [];
-    const c = createFrameCoalescer(frames.scheduler);
+    const { frames, log, c } = fixture();
 
     c.push('synth', () => log.push('a'));
     frames.tick(); // nothing pending
@@ -104,8 +106,7 @@ describe('createFrameCoalescer', () => {
   });
 
   test('a frame that DID drain re-arms, so the cap holds across a long gesture', () => {
-    const frames = manualFrames();
-    const c = createFrameCoalescer(frames.scheduler);
+    const { frames, c } = fixture();
 
     c.push('synth', () => {});
     c.push('synth', () => {});
@@ -115,9 +116,7 @@ describe('createFrameCoalescer', () => {
   });
 
   test('flush() applies pending work now and cancels the frame', () => {
-    const frames = manualFrames();
-    const log: string[] = [];
-    const c = createFrameCoalescer(frames.scheduler);
+    const { frames, log, c } = fixture();
 
     c.push('synth', () => log.push('a'));
     c.push('synth', () => log.push('b'));
@@ -130,9 +129,7 @@ describe('createFrameCoalescer', () => {
   });
 
   test('cancel() drops pending work without applying it', () => {
-    const frames = manualFrames();
-    const log: string[] = [];
-    const c = createFrameCoalescer(frames.scheduler);
+    const { frames, log, c } = fixture();
 
     c.push('synth', () => log.push('a'));
     c.push('synth', () => log.push('b'));
@@ -144,9 +141,7 @@ describe('createFrameCoalescer', () => {
   });
 
   test('keys are independent: a busy key never blocks a quiet one', () => {
-    const frames = manualFrames();
-    const log: string[] = [];
-    const c = createFrameCoalescer(frames.scheduler);
+    const { frames, log, c } = fixture();
 
     c.push('synth', () => log.push('s1'));
     c.push('synth', () => log.push('s2')); // deferred
@@ -158,9 +153,7 @@ describe('createFrameCoalescer', () => {
   });
 
   test('a throwing thunk does not strand the coalescer', () => {
-    const frames = manualFrames();
-    const log: string[] = [];
-    const c = createFrameCoalescer(frames.scheduler);
+    const { frames, log, c } = fixture();
 
     c.push('synth', () => log.push('a'));
     c.push('synth', () => {

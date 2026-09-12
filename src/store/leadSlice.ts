@@ -140,6 +140,186 @@ export const MELODY_ACTIONS: Record<MelodyTrackId, {
  * TypeScript cannot check a dynamically-keyed object literal against a fixed
  * many-field interface without one.)
  */
+/**
+ * Every note add/remove funnels through here, whatever started it: a click,
+ * a keyboard activation, or one cell of a drag-to-paint stroke. `mode` is
+ * what separates them — 'draw' never removes and 'erase' never adds, so a
+ * stroke that crosses a filled cell cannot start eating what it just drew,
+ * which a per-cell toggle would do.
+ *
+ * Once notes have length, melody[stepIndex] is NOT "is this cell filled": a
+ * len-4 note at step 0 fills steps 0-3 while slots 1-3 stay empty, so an
+ * unguarded append would put a second C4 inside the first one. A covered
+ * cell renders filled and carries aria-pressed="true", so what the user
+ * sees and what `covered` says are the same thing.
+ */
+function paintMelodyNote(
+  set: Set,
+  track: MelodyTrack,
+  stepIndex: number,
+  note: string,
+  mode: LeadNotePaintMode,
+): void {
+  set((state) => {
+    const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+    const stride = strideFor(state[track.stepResolution]);
+    const stepInLoop = leadActivePosAt(stepIndex, stepsPerBar, stride);
+    // A DORMANT slot has no active position, so "what covers it" has no
+    // answer: the slot's own contents are the only honest test, and that
+    // beats searching from a fictitious position in another bar — which
+    // never matched, so a second click used to ADD a duplicate note.
+    const coveringIdx =
+      stepInLoop < 0
+        ? (state[track.steps][stepIndex]?.some((n) => n.note === note) ? stepIndex : -1)
+        : leadCoveringNoteIndex(state[track.steps], stepInLoop, stepsPerBar, stride, note);
+    const covered = coveringIdx >= 0;
+    if (mode === 'draw' && covered) return {};
+    if (mode === 'erase' && !covered) return {};
+
+    // A covered cell is deleted from the index where the note STARTS, not
+    // where it was clicked. (Rejected: truncating the covering note and
+    // creating a new one at the click point. More DAW-like, but one click
+    // producing two notes is harder to explain, and nothing asks for it.)
+    const target = covered ? coveringIdx : stepIndex;
+    const row = state[track.steps][target];
+    // No such slot, no edit. (The map this replaces expressed the same
+    // thing by matching no index — but it also rebuilt the whole stored
+    // array, once per cell of a drag stroke, to change one row.)
+    if (!row) return {};
+    const next = [...state[track.steps]];
+    // The editor writes whole CELLS, and a cell is `stride` ticks. A
+    // literal 1 here would draw a note a fraction of a cell long the
+    // moment the resolution is anything but the finest.
+    next[target] = covered
+      ? row.filter((n) => n.note !== note)
+      : [...row, { note, len: stride }];
+    return { [track.steps]: next };
+  });
+}
+
+/**
+ * All three invariants live here, never at a call site — a call site that
+ * can violate an invariant is a call site that eventually will.
+ *   1. Same-row overlap SWALLOWS the covered note (what Ableton and Logic
+ *      do; anything else makes a drag either silently fail or need a modal).
+ *      Only forward, from this note's start: the spec's rule is about
+ *      EXTENDING over a note, so notes that start earlier keep their length.
+ *   2. start + len never crosses the loop end — clamped on write, so notes
+ *      never wrap and leadSoundingNotes can stop its scan at step 0.
+ *   3. len is an integer >= 1.
+ */
+function setMelodyNoteLength(
+  set: Set,
+  track: MelodyTrack,
+  stepIndex: number,
+  note: string,
+  len: number,
+): void {
+  set((state) => {
+    const row = state[track.steps][stepIndex];
+    if (!row || !row.some((n) => n.note === note)) return {};
+
+    const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+    const stride = strideFor(state[track.stepResolution]);
+    const activePos = leadActivePosAt(stepIndex, stepsPerBar, stride);
+    // Invariant 2 is measured against the loop end, which a dormant slot
+    // has no position in: refuse rather than clamp against a fictitious
+    // one. Nothing can reach this today (the grid renders active columns
+    // only) and the melody survives untouched, as a meter change requires.
+    if (activePos < 0) return {};
+    const maxLen = Math.max(
+      stride,
+      state[track.loopLength] * stepsPerBar * TICKS_PER_SIXTEENTH - activePos * stride,
+    );
+    // The editor writes whole CELLS, so the floor is one cell, not one
+    // tick — the same rule paintNote follows. Sub-cell lengths stay
+    // REPRESENTABLE (a 1/32-authored note read at 1/8), they just are
+    // never created here.
+    const nextLen = Number.isFinite(len)
+      ? Math.min(maxLen, Math.max(stride, Math.round(len)))
+      : stride;
+
+    const next = [...state[track.steps]];
+    next[stepIndex] = row.map((n) => (n.note === note ? { note, len: nextLen } : n));
+    // Walk TICKS, not columns — the same rule pasteLeadBar follows.
+    // Invariant 1 is a rule about STORAGE, so a same-pitch note on a
+    // tick the current resolution cannot reach is still underneath this
+    // one and must go: leaving it would put two of a pitch on the same
+    // span, audible the moment the loop is read at a finer grid.
+    // "Quiet, not gone" protects a change of VIEW, never an explicit
+    // edit.
+    for (let k = 1; k < nextLen; k++) {
+      const idx = leadStoredIndexAtTick(activePos * stride + k, stepsPerBar);
+      const covered = next[idx];
+      if (covered?.some((n: LeadNote) => n.note === note)) {
+        next[idx] = covered.filter((n: LeadNote) => n.note !== note);
+      }
+    }
+    return { [track.steps]: next };
+  });
+}
+
+/**
+ * Live capture's write path, per track. Returns whether it actually
+ * WROTE, so a caller can tell a captured note from one the grid refused —
+ * store/leadRecord.ts uses that answer to decide whether to hold the note
+ * for its note-off to lengthen.
+ */
+function recordMelodyNote(
+  set: Set,
+  get: Get,
+  track: MelodyTrack,
+  note: string,
+  column?: number,
+): boolean {
+  const state = get();
+  // The ARMED track, not "is recording". Both bridges observe the one
+  // note-input bus and both call their own record action; this line is
+  // what makes exactly one of them write.
+  if (state.recordingTrack !== track.id) return false;
+
+  // Both guards exist to keep one promise: a recorded note is visible on
+  // the grid the moment it is recorded. Storing what the grid cannot draw
+  // would leave notes that play back but cannot be seen or erased.
+  if (
+    state[track.view] === 'scale-locked' &&
+    !isNoteInScale(note, state.scaleRoot, state.scaleType)
+  ) {
+    return false;
+  }
+  const octave = leadRecordOctave(
+    note,
+    state[track.octave],
+    LEAD_WINDOW_OCTAVES,
+    LEAD_OCTAVE_MIN,
+    LEAD_OCTAVE_MAX,
+  );
+  if (octave === null) return false;
+
+  const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+  const stride = strideFor(state[track.stepResolution]);
+  // Clamped whichever head it came from: a meter or loop-length change can
+  // narrow the window under a column that was legal when it was chosen.
+  const target = clampLeadCursor(
+    column ?? state[track.cursor],
+    state[track.loopLength],
+    stepsPerBar,
+    stride,
+  );
+  if (octave !== state[track.octave]) set({ [track.octave]: octave });
+  // 'draw', never 'toggle': playing a note that is already at this column
+  // must be a no-op, not a delete. A performer repeating a note expects
+  // nothing to happen, not the note to vanish.
+  const before = state[track.steps];
+  paintMelodyNote(set, track, leadStoredIndexAt(target, stepsPerBar, stride), note, 'draw');
+  // And a no-op must REPORT as one. 'draw' declines a column already
+  // covered by a note that started earlier, and the live recorder uses
+  // this answer to register a held note against that row — told true, it
+  // would hold a row that does not contain the pitch, and the note-off's
+  // setNoteLength would silently find nothing to lengthen.
+  return get()[track.steps] !== before;
+}
+
 export function createMelodySlice(
   track: MelodyTrack,
   set: Set,
@@ -148,54 +328,6 @@ export function createMelodySlice(
   // `set`'s updater form and never reads.
   get: Get,
 ): Partial<AppStore> {
-  // Every note add/remove funnels through here, whatever started it: a click,
-  // a keyboard activation, or one cell of a drag-to-paint stroke. `mode` is
-  // what separates them — 'draw' never removes and 'erase' never adds, so a
-  // stroke that crosses a filled cell cannot start eating what it just drew,
-  // which a per-cell toggle would do.
-  //
-  // Once notes have length, melody[stepIndex] is NOT "is this cell filled": a
-  // len-4 note at step 0 fills steps 0-3 while slots 1-3 stay empty, so an
-  // unguarded append would put a second C4 inside the first one. A covered
-  // cell renders filled and carries aria-pressed="true", so what the user
-  // sees and what `covered` says are the same thing.
-  const paintNote = (stepIndex: number, note: string, mode: LeadNotePaintMode) =>
-    set((state) => {
-      const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-      const stride = strideFor(state[track.stepResolution]);
-      const stepInLoop = leadActivePosAt(stepIndex, stepsPerBar, stride);
-      // A DORMANT slot has no active position, so "what covers it" has no
-      // answer: the slot's own contents are the only honest test, and that
-      // beats searching from a fictitious position in another bar — which
-      // never matched, so a second click used to ADD a duplicate note.
-      const coveringIdx =
-        stepInLoop < 0
-          ? (state[track.steps][stepIndex]?.some((n) => n.note === note) ? stepIndex : -1)
-          : leadCoveringNoteIndex(state[track.steps], stepInLoop, stepsPerBar, stride, note);
-      const covered = coveringIdx >= 0;
-      if (mode === 'draw' && covered) return {};
-      if (mode === 'erase' && !covered) return {};
-
-      // A covered cell is deleted from the index where the note STARTS, not
-      // where it was clicked. (Rejected: truncating the covering note and
-      // creating a new one at the click point. More DAW-like, but one click
-      // producing two notes is harder to explain, and nothing asks for it.)
-      const target = covered ? coveringIdx : stepIndex;
-      const row = state[track.steps][target];
-      // No such slot, no edit. (The map this replaces expressed the same
-      // thing by matching no index — but it also rebuilt the whole stored
-      // array, once per cell of a drag stroke, to change one row.)
-      if (!row) return {};
-      const next = [...state[track.steps]];
-      // The editor writes whole CELLS, and a cell is `stride` ticks. A
-      // literal 1 here would draw a note a fraction of a cell long the
-      // moment the resolution is anything but the finest.
-      next[target] = covered
-        ? row.filter((n) => n.note !== note)
-        : [...row, { note, len: stride }];
-      return { [track.steps]: next };
-    });
-
   const actions = MELODY_ACTIONS[track.id];
 
   const slice: Record<string, unknown> = {
@@ -275,115 +407,16 @@ export function createMelodySlice(
     // ceiling stops a note overlapping into the next step, which is the
     // overlap invariant 1 exists to prevent.
     [actions.setGate]: (gate: number) => set({ [track.gate]: clampFinite(gate, 0.05, 1, DEFAULT_LEAD_GATE) }),
-    [actions.toggleNote]: (stepIndex: number, note: string) => paintNote(stepIndex, note, 'toggle'),
+    [actions.toggleNote]: (stepIndex: number, note: string) =>
+      paintMelodyNote(set, track, stepIndex, note, 'toggle'),
 
-    [actions.paintNote]: paintNote,
-
-    // All three invariants live here, never at a call site — a call site that
-    // can violate an invariant is a call site that eventually will.
-    //   1. Same-row overlap SWALLOWS the covered note (what Ableton and Logic
-    //      do; anything else makes a drag either silently fail or need a modal).
-    //      Only forward, from this note's start: the spec's rule is about
-    //      EXTENDING over a note, so notes that start earlier keep their length.
-    //   2. start + len never crosses the loop end — clamped on write, so notes
-    //      never wrap and leadSoundingNotes can stop its scan at step 0.
-    //   3. len is an integer >= 1.
+    [actions.paintNote]: (stepIndex: number, note: string, mode: LeadNotePaintMode) =>
+      paintMelodyNote(set, track, stepIndex, note, mode),
     [actions.setNoteLength]: (stepIndex: number, note: string, len: number) =>
-      set((state) => {
-        const row = state[track.steps][stepIndex];
-        if (!row || !row.some((n) => n.note === note)) return {};
+      setMelodyNoteLength(set, track, stepIndex, note, len),
 
-        const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-        const stride = strideFor(state[track.stepResolution]);
-        const activePos = leadActivePosAt(stepIndex, stepsPerBar, stride);
-        // Invariant 2 is measured against the loop end, which a dormant slot
-        // has no position in: refuse rather than clamp against a fictitious
-        // one. Nothing can reach this today (the grid renders active columns
-        // only) and the melody survives untouched, as a meter change requires.
-        if (activePos < 0) return {};
-        const maxLen = Math.max(
-          stride,
-          state[track.loopLength] * stepsPerBar * TICKS_PER_SIXTEENTH - activePos * stride,
-        );
-        // The editor writes whole CELLS, so the floor is one cell, not one
-        // tick — the same rule paintNote follows. Sub-cell lengths stay
-        // REPRESENTABLE (a 1/32-authored note read at 1/8), they just are
-        // never created here.
-        const nextLen = Number.isFinite(len)
-          ? Math.min(maxLen, Math.max(stride, Math.round(len)))
-          : stride;
-
-        const next = [...state[track.steps]];
-        next[stepIndex] = row.map((n) => (n.note === note ? { note, len: nextLen } : n));
-        // Walk TICKS, not columns — the same rule pasteLeadBar follows.
-        // Invariant 1 is a rule about STORAGE, so a same-pitch note on a
-        // tick the current resolution cannot reach is still underneath this
-        // one and must go: leaving it would put two of a pitch on the same
-        // span, audible the moment the loop is read at a finer grid.
-        // "Quiet, not gone" protects a change of VIEW, never an explicit
-        // edit.
-        for (let k = 1; k < nextLen; k++) {
-          const idx = leadStoredIndexAtTick(activePos * stride + k, stepsPerBar);
-          const covered = next[idx];
-          if (covered?.some((n: LeadNote) => n.note === note)) {
-            next[idx] = covered.filter((n: LeadNote) => n.note !== note);
-          }
-        }
-        return { [track.steps]: next };
-      }),
-
-    // Live capture's write path, per track. Returns whether it actually
-    // WROTE, so a caller can tell a captured note from one the grid refused —
-    // store/leadRecord.ts uses that answer to decide whether to hold the note
-    // for its note-off to lengthen.
-    [actions.record]: (note: string, column?: number): boolean => {
-      const state = get();
-      // The ARMED track, not "is recording". Both bridges observe the one
-      // note-input bus and both call their own record action; this line is
-      // what makes exactly one of them write.
-      if (state.recordingTrack !== track.id) return false;
-
-      // Both guards exist to keep one promise: a recorded note is visible on
-      // the grid the moment it is recorded. Storing what the grid cannot draw
-      // would leave notes that play back but cannot be seen or erased.
-      if (
-        state[track.view] === 'scale-locked' &&
-        !isNoteInScale(note, state.scaleRoot, state.scaleType)
-      ) {
-        return false;
-      }
-      const octave = leadRecordOctave(
-        note,
-        state[track.octave],
-        LEAD_WINDOW_OCTAVES,
-        LEAD_OCTAVE_MIN,
-        LEAD_OCTAVE_MAX,
-      );
-      if (octave === null) return false;
-
-      const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-      const stride = strideFor(state[track.stepResolution]);
-      // Clamped whichever head it came from: a meter or loop-length change can
-      // narrow the window under a column that was legal when it was chosen.
-      const target = clampLeadCursor(
-        column ?? state[track.cursor],
-        state[track.loopLength],
-        stepsPerBar,
-        stride,
-      );
-      if (octave !== state[track.octave]) set({ [track.octave]: octave });
-      // 'draw', never 'toggle': playing a note that is already at this column
-      // must be a no-op, not a delete. A performer repeating a note expects
-      // nothing to happen, not the note to vanish.
-      const before = state[track.steps];
-      paintNote(leadStoredIndexAt(target, stepsPerBar, stride), note, 'draw');
-      // And a no-op must REPORT as one. 'draw' declines a column already
-      // covered by a note that started earlier, and the live recorder uses
-      // this answer to register a held note against that row — told true, it
-      // would hold a row that does not contain the pitch, and the note-off's
-      // setNoteLength would silently find nothing to lengthen.
-      return get()[track.steps] !== before;
-    },
+    [actions.record]: (note: string, column?: number): boolean =>
+      recordMelodyNote(set, get, track, note, column),
   };
 
   return slice as Partial<AppStore>;

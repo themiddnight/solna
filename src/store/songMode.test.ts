@@ -99,26 +99,39 @@ const resetState = () => {
 beforeEach(resetState);
 afterEach(resetState);
 
-describe('song mode coordinator', () => {
-  // Every test below ends with its own stop(), which is the readable form —
-  // but a FAILING assertion skips it, and a leaked coordinator keeps
-  // subscribing to the shared store: its reconcile then hard-stops players,
-  // nulls the cursor and steals clock subscriptions inside every later test's
-  // setState, in this file and (bun shares the process) in every file after it.
-  // One real failure would cascade into a dozen fake ones. Registered on the
-  // INNER describe so it drains before the module-level afterEach(resetState)
-  // navigates the store one last time.
+
+/**
+ * Tracking for the live coordinators each test below starts. Every one of them
+ * ends with its own stop(), which is the readable form — but a FAILING
+ * assertion skips it, and a leaked coordinator keeps subscribing to the shared
+ * store: its reconcile then hard-stops players, nulls the cursor and steals
+ * clock subscriptions inside every later test's setState, in this file and (bun
+ * shares the process) in every file after it. One real failure would cascade
+ * into a dozen fake ones.
+ *
+ * Called INSIDE a describe, so its drain afterEach registers on that suite and
+ * runs before the module-level afterEach(resetState) navigates the store one
+ * last time.
+ */
+function trackLiveSyncs() {
   const liveSyncs: Array<() => void> = [];
-  const startSync = (deps: Parameters<typeof startSongModeSync>[0]) => {
-    const stop = startSongModeSync(deps);
-    liveSyncs.push(stop);
-    return stop;
-  };
   afterEach(() => {
     // stop() is idempotent (unsubStore is a no-op on a second call, stopClock
     // guards its null), so draining here never conflicts with a test's own.
     while (liveSyncs.length > 0) liveSyncs.pop()?.();
   });
+  return {
+    startSync: (deps: Parameters<typeof startSongModeSync>[0]) => {
+      const stop = startSongModeSync(deps);
+      liveSyncs.push(stop);
+      return stop;
+    },
+  };
+}
+
+
+describe('song mode coordinator: entering and advancing', () => {
+  const { startSync } = trackLiveSyncs();
 
   test('entering song mode keeps the active loop and subscribes the clock', () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
@@ -210,6 +223,11 @@ describe('song mode coordinator', () => {
     }
   });
 
+});
+
+describe('song mode coordinator: leaving and re-entering', () => {
+  const { startSync } = trackLiveSyncs();
+
   test('a user-initiated Stop still clears the song scope after a boundary crossing', async () => {
     const loopB = {
       ...createDefaultLoop(),
@@ -283,6 +301,11 @@ describe('song mode coordinator', () => {
     expect(useAppStore.getState().activeLoopId).toBe('loop-c');
     stop();
   });
+
+});
+
+describe('song mode coordinator: the playback-scope rows', () => {
+  const { startSync } = trackLiveSyncs();
 
   // §6's table, one test per row, asserted on PLAYER STATE — the spec's test
   // obligations require that rather than assertions on the scope alone.
@@ -376,6 +399,11 @@ describe('song mode coordinator', () => {
     stop();
   });
 
+});
+
+describe('song mode coordinator: scope and cursor reconciliation', () => {
+  const { startSync } = trackLiveSyncs();
+
   // The advance subscription requires a SONG scope, not merely "not a loop".
   // Running the arrangement under `none` would assert the opposite of this
   // phase's premise — that the song may play while nothing owns the transport
@@ -462,6 +490,11 @@ describe('song mode coordinator', () => {
     stop();
   });
 
+});
+
+describe('song mode coordinator: solo-loop isolation', () => {
+  const { startSync } = trackLiveSyncs();
+
   test('boundary song→loop while playing hard-stops the players and drops the cursor', () => {
     useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1' });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
@@ -532,6 +565,11 @@ describe('song mode coordinator', () => {
     expect(useAppStore.getState().activeLoopId).toBe('loop-b');
     stop();
   });
+
+});
+
+describe('song mode coordinator: Play All again, and reaching the end', () => {
+  const { startSync } = trackLiveSyncs();
 
   // Reported bug: "press Play All, it works. Play one loop from its card.
   // Every Play All after that plays just that loop, solo, until refresh."
@@ -627,6 +665,11 @@ describe('song mode coordinator', () => {
     stop();
   });
 
+});
+
+describe('song mode coordinator: single-loop endings', () => {
+  const { startSync } = trackLiveSyncs();
+
   test('a single-loop arrangement ends too, after its repeats', async () => {
     // Audition play is the feature for "loop one thing forever"; song mode is
     // a piece with an ending, at every arrangement size.
@@ -694,6 +737,11 @@ describe('song mode coordinator', () => {
     expect(clock.count).toBe(1);
     stop();
   });
+
+});
+
+describe('song mode coordinator: KNOWN ISSUE — advance-subscription ordering', () => {
+  const { startSync } = trackLiveSyncs();
 
   // The two tests below CHARACTERIZE a known issue rather than pin a decision:
   // they record behaviour that is wrong, so that it stops being invisible. The
@@ -788,4 +836,6 @@ describe('song mode coordinator', () => {
     expect(clock.current).toBe(hookStub);
     stop();
   });
+
 });
+

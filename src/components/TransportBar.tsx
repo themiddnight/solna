@@ -11,6 +11,7 @@ import { MidiIndicator } from "./ui/MidiIndicator";
 import { aggregateAllPlayers, transportDisplayState } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 import type { Loop } from '../store/types';
+import type { MeterId } from '@/utils/meter';
 import { loopLabel } from '@/store/loop';
 import { layerForTab } from '@/types';
 import { playTargetLabel } from './transportAction';
@@ -23,6 +24,204 @@ export function songModeLabel(
   if (songLoopIndex === null) return null;
   const loop = loops[songLoopIndex];
   return loop ? `Song · ${loopLabel(loop)}` : null;
+}
+
+/**
+ * The tempo field.
+ *
+ * `bpmDraft` is a nullable DRAFT, not a mirror of the store. Non-null only
+ * while the user is mid-edit, so the field can be freely cleared and retyped —
+ * writing straight to the store on every keystroke clamps a cleared/partial
+ * value back to the floor mid-typing (setBpm's clamp is right for the store,
+ * wrong for what is being typed). Committed on blur/Enter, then dropped back to
+ * null, which makes the store the only thing the field can display when it is
+ * not being edited.
+ *
+ * This replaced a `bpmText` mirror + a `bpmFocused` ref + a `[bpm]` sync
+ * effect. That arrangement could get stuck: the effect was the only resync, so
+ * a rejected entry that clamped to the value already stored changed nothing,
+ * never re-ran the effect, and left the box showing a tempo the transport was
+ * not playing. A null draft cannot desync because there is nothing to keep in
+ * step.
+ */
+function TempoField({ bpm, setBpm }: { bpm: number; setBpm: (bpm: number) => void }) {
+  const [bpmDraft, setBpmDraft] = React.useState<string | null>(null);
+
+  const commitBpm = () => {
+    if (bpmDraft !== null) setBpm(Number(bpmDraft));
+    setBpmDraft(null);
+  };
+
+  return (
+    <div className={TRANSPORT_FIELD_SHELL}>
+      <span className={TRANSPORT_FIELD_LABEL}>BPM</span>
+      <IconButton
+        label="Decrease BPM"
+        icon={<Minus className="w-3 h-3" />}
+        size="xs"
+        onClick={() => setBpm(Math.max(40, bpm - 1))}
+      />
+      <input
+        id="input-transport-bpm"
+        type="number"
+        min={40}
+        max={240}
+        value={bpmDraft ?? String(bpm)}
+        onChange={(e) => setBpmDraft(e.target.value)}
+        onBlur={commitBpm}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+        className="input input-xs input-ghost w-8 sm:w-12 px-0 text-center tabular-nums font-bold text-primary text-xs"
+      />
+      <IconButton
+        label="Increase BPM"
+        icon={<Plus className="w-3 h-3" />}
+        size="xs"
+        onClick={() => setBpm(Math.min(240, bpm + 1))}
+      />
+    </div>
+  );
+}
+
+/** The time-signature select. */
+function MeterField({ meterId, setMeter }: { meterId: MeterId; setMeter: (id: MeterId) => void }) {
+  return (
+    <div className={TRANSPORT_FIELD_SHELL}>
+      <span className={TRANSPORT_FIELD_LABEL}>Meter</span>
+      <select
+        id="select-transport-meter"
+        value={meterId}
+        onChange={(e) => setMeter(coerceMeterChoice(e.target.value, meterId))}
+        className="select select-xs select-ghost focus:outline-none font-bold text-primary w-16 ps-1 pe-6"
+        title="Time signature"
+      >
+        {METER_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value} title={option.title}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/** The metronome toggle; the engine mirror happens via useEngineSync, one render later. */
+function MetronomeToggle({ active, onToggle }: { active: boolean; onToggle: () => void }) {
+  return (
+    <button
+      id="btn-transport-metronome"
+      onClick={onToggle}
+      className={`btn btn-sm btn-square sm:btn-md sm:w-auto sm:px-2 gap-1 text-xs ${
+        active ? "btn-primary" : "btn-ghost"
+      }`}
+      title="Metronome"
+    >
+      <Clock className="w-3.5 h-3.5" />
+      <span className="hidden lg:inline text-[11px]">Click</span>
+    </button>
+  );
+}
+
+interface MasterTransportProps {
+  displayState: ReturnType<typeof transportDisplayState>;
+  hardStopDisabled: boolean;
+  onPlay: () => void;
+  onSoftStop: () => void;
+  onHardStop: () => void;
+  /** What Play will start: 'Song' on the song layer, the loop being edited on the loop layer. */
+  target: string;
+  songLabel: string | null;
+}
+
+/**
+ * The master transport cluster: the play/stop button plus what Play will start.
+ *
+ * The target is visible at every width — a click does one of two different
+ * things and the single Play button gives no other clue below `sm`, where the
+ * button's own text label hides. Its `id` ties it to the button via
+ * `aria-describedby`: the button itself announces only "Play", so a screen
+ * reader reading the button alone gets no target without this tie. `max-w-20`
+ * is the live narrow-width cap now that this always renders; `sm:max-w-32`
+ * widens it once the song badge and BPM/meter controls have room too.
+ */
+function MasterTransport({
+  displayState,
+  hardStopDisabled,
+  onPlay,
+  onSoftStop,
+  onHardStop,
+  target,
+  songLabel,
+}: MasterTransportProps) {
+  return (
+    <>
+      {/* Master transport: drives both automation players together. */}
+      <PlayerTransport
+        id="btn-bottom-transport"
+        state={displayState}
+        size="sm"
+        showHardStop
+        hardStopDisabled={hardStopDisabled}
+        onPlay={onPlay}
+        onSoftStop={onSoftStop}
+        onHardStop={onHardStop}
+        showLabel
+        describedBy="label-transport-play-target"
+      />
+
+      <span
+        id="label-transport-play-target"
+        className="text-xs text-base-content/70 truncate max-w-20 sm:max-w-32 min-w-0"
+      >
+        {target}
+      </span>
+
+      {songLabel && (
+        <span
+          id="badge-song-mode"
+          className="badge badge-sm badge-ghost font-bold text-primary hidden md:inline-flex"
+          title="Song mode: loops play in order in the song layer"
+        >
+          {songLabel}
+        </span>
+      )}
+    </>
+  );
+}
+
+/**
+ * The master output fader.
+ *
+ * The taper, the readout, the -inf detent and double-click-to-unity all live in
+ * VolumeFader — this bar states only the width and which readout it can afford.
+ * The readout's visibility tracks the bar's own layout, not screen size in the
+ * usual direction: below `sm` the bar is two rows and the readout fits, from
+ * `sm` to `lg` it is ONE row whose two content-sized groups summed to 803px at
+ * a 768px tablet, so the 56px readout is what has to go there, and it returns
+ * at `lg`. The level stays readable from the fader position and exact in the
+ * `title` wherever it is hidden.
+ */
+function MasterFader({
+  valueDb,
+  onChangeDb,
+}: {
+  valueDb: number;
+  onChangeDb: (volume: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-box">
+      <Volume2 className="w-3.5 h-3.5 text-base-content/60 shrink-0" />
+      <VolumeFader
+        id="slider-transport-master"
+        label="Master"
+        valueDb={valueDb}
+        onChangeDb={onChangeDb}
+        className="range range-xs range-primary w-16"
+        readoutClassName="tabular-nums text-[10px] text-base-content/60 w-14 text-right inline sm:hidden lg:inline"
+      />
+    </div>
+  );
 }
 
 export const TransportBar = React.memo(function TransportBar() {
@@ -44,26 +243,6 @@ export const TransportBar = React.memo(function TransportBar() {
   const playbackScope = useAppStore((s) => s.playbackScope);
   const activeTab = useAppStore((s) => s.activeTab);
   const activeLoopId = useAppStore((s) => s.activeLoopId);
-
-  // A nullable DRAFT, not a mirror of the store. Non-null only while the user
-  // is mid-edit, so the field can be freely cleared and retyped — writing
-  // straight to the store on every keystroke clamps a cleared/partial value
-  // back to the floor mid-typing (setBpm's clamp is right for the store, wrong
-  // for what is being typed). Committed on blur/Enter, then dropped back to
-  // null, which makes the store the only thing the field can display when it
-  // is not being edited.
-  //
-  // This replaced a `bpmText` mirror + a `bpmFocused` ref + a `[bpm]` sync
-  // effect. That arrangement could get stuck: the effect was the only resync,
-  // so a rejected entry that clamped to the value already stored changed
-  // nothing, never re-ran the effect, and left the box showing a tempo the
-  // transport was not playing. A null draft cannot desync because there is
-  // nothing to keep in step.
-  const [bpmDraft, setBpmDraft] = React.useState<string | null>(null);
-  const commitBpm = () => {
-    if (bpmDraft !== null) setBpm(Number(bpmDraft));
-    setBpmDraft(null);
-  };
 
   const aggregate = useAppStore(aggregateAllPlayers);
   const layer = layerForTab(activeTab);
@@ -99,11 +278,6 @@ export const TransportBar = React.memo(function TransportBar() {
     soloLoop(activeLoopId);
   };
 
-  const handleToggleMetronome = () => {
-    // Engine mirror happens via useEngineSync (one render later)
-    toggleMetronome();
-  };
-
   return (
     // Side columns are `minmax(max-content, 1fr)`: equal (so the playhead readout
     // sits dead-centre in the viewport) whenever there is room, and floored at
@@ -124,45 +298,15 @@ export const TransportBar = React.memo(function TransportBar() {
             once the bar is a single row again, leaving the original flat
             child order and gaps untouched. */}
         <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 sm:contents">
-        {/* Master transport: drives both automation players together. */}
-        <PlayerTransport
-          id="btn-bottom-transport"
-          state={displayState}
-          size="sm"
-          showHardStop
-          hardStopDisabled={hardStopDisabled}
-          onPlay={onPlay}
-          onSoftStop={softStopAll}
-          onHardStop={hardStopAll}
-          showLabel
-          describedBy="label-transport-play-target"
-        />
-
-        {/* What Play will start: 'Song' on the song layer, the loop being
-            edited on the loop layer. Visible at every width — a click does
-            one of two different things and the single Play button gives no
-            other clue below `sm`, where the button's own text label hides.
-            `id` ties it to the button via `aria-describedby` below: the
-            button itself announces only "Play", so a screen reader reading
-            the button alone gets no target without this tie. `max-w-20` is
-            the live narrow-width cap now that this always renders; `sm:max-w-32`
-            widens it once the song badge and BPM/meter controls have room too. */}
-        <span
-          id="label-transport-play-target"
-          className="text-xs text-base-content/70 truncate max-w-20 sm:max-w-32 min-w-0"
-        >
-          {playTargetLabel(layer, activeLoopName)}
-        </span>
-
-        {songLabel && (
-          <span
-            id="badge-song-mode"
-            className="badge badge-sm badge-ghost font-bold text-primary hidden md:inline-flex"
-            title="Song mode: loops play in order in the song layer"
-          >
-            {songLabel}
-          </span>
-        )}
+          <MasterTransport
+            displayState={displayState}
+            hardStopDisabled={hardStopDisabled}
+            onPlay={onPlay}
+            onSoftStop={softStopAll}
+            onHardStop={hardStopAll}
+            target={playTargetLabel(layer, activeLoopName)}
+            songLabel={songLabel}
+          />
         </div>
 
         {/* Tempo and meter, the mobile first row's right half. Same
@@ -170,52 +314,10 @@ export const TransportBar = React.memo(function TransportBar() {
             above it. */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 sm:contents">
         {/* Tempo BPM Control */}
-        <div className={TRANSPORT_FIELD_SHELL}>
-          <span className={TRANSPORT_FIELD_LABEL}>BPM</span>
-          <IconButton
-            label="Decrease BPM"
-            icon={<Minus className="w-3 h-3" />}
-            size="xs"
-            onClick={() => setBpm(Math.max(40, bpm - 1))}
-          />
-          <input
-            id="input-transport-bpm"
-            type="number"
-            min={40}
-            max={240}
-            value={bpmDraft ?? String(bpm)}
-            onChange={(e) => setBpmDraft(e.target.value)}
-            onBlur={commitBpm}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-            }}
-            className="input input-xs input-ghost w-8 sm:w-12 px-0 text-center tabular-nums font-bold text-primary text-xs"
-          />
-          <IconButton
-            label="Increase BPM"
-            icon={<Plus className="w-3 h-3" />}
-            size="xs"
-            onClick={() => setBpm(Math.min(240, bpm + 1))}
-          />
-        </div>
+        <TempoField bpm={bpm} setBpm={setBpm} />
 
         {/* Time Signature */}
-        <div className={TRANSPORT_FIELD_SHELL}>
-          <span className={TRANSPORT_FIELD_LABEL}>Meter</span>
-          <select
-            id="select-transport-meter"
-            value={meterId}
-            onChange={(e) => setMeter(coerceMeterChoice(e.target.value, meterId))}
-            className="select select-xs select-ghost focus:outline-none font-bold text-primary w-16 ps-1 pe-6"
-            title="Time signature"
-          >
-            {METER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value} title={option.title}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <MeterField meterId={meterId} setMeter={setMeter} />
         </div>
       </div>
 
@@ -230,18 +332,8 @@ export const TransportBar = React.memo(function TransportBar() {
           instead of scattering five controls evenly. */}
       <div className="flex items-center gap-1 sm:gap-2 w-full sm:w-auto justify-between sm:justify-start shrink-0">
         <div className="flex items-center gap-1 sm:gap-2 sm:contents">
-        {/* Metronome Toggle */}
-        <button
-          id="btn-transport-metronome"
-          onClick={handleToggleMetronome}
-          className={`btn btn-sm btn-square sm:btn-md sm:w-auto sm:px-2 gap-1 text-xs ${
-            metronomeActive ? "btn-primary" : "btn-ghost"
-          }`}
-          title="Metronome"
-        >
-          <Clock className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline text-[11px]">Click</span>
-        </button>
+        {/* Metronome Toggle. Engine mirror happens via useEngineSync (one render later) */}
+        <MetronomeToggle active={metronomeActive} onToggle={toggleMetronome} />
 
         {/* MIDI Activity Indicator. Visible at every width now that the bar
             wraps to two rows below `sm` — the row it shares with the meter and
@@ -254,26 +346,7 @@ export const TransportBar = React.memo(function TransportBar() {
         <VuMeter isPlaying={isPlaying} />
 
         {/* Master Output Fader */}
-        <div className="flex items-center gap-1 bg-base-200 border border-base-300 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-box">
-          <Volume2 className="w-3.5 h-3.5 text-base-content/60 shrink-0" />
-          {/* The taper, the readout, the -inf detent and double-click-to-unity
-              all live in VolumeFader — this bar states only the width and
-              which readout it can afford. The readout's visibility tracks the
-              bar's own layout, not screen size in the usual direction: below
-              `sm` the bar is two rows and the readout fits, from `sm` to `lg`
-              it is ONE row whose two content-sized groups summed to 803px at a
-              768px tablet, so the 56px readout is what has to go there, and it
-              returns at `lg`. The level stays readable from the fader position
-              and exact in the `title` wherever it is hidden. */}
-          <VolumeFader
-            id="slider-transport-master"
-            label="Master"
-            valueDb={masterVolume}
-            onChangeDb={setMasterVolume}
-            className="range range-xs range-primary w-16"
-            readoutClassName="tabular-nums text-[10px] text-base-content/60 w-14 text-right inline sm:hidden lg:inline"
-          />
-        </div>
+        <MasterFader valueDb={masterVolume} onChangeDb={setMasterVolume} />
         </div>
       </div>
     </div>

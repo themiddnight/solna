@@ -148,7 +148,11 @@ describe('DRUM_GRIDS data sanity', () => {
     }
     expect(collisions).toEqual([]);
   });
+});
 
+// The per-genre verdicts: each one is a claim about what a style actually
+// plays, so it is pinned per grid rather than swept as a rule.
+describe('DRUM_GRIDS genre voicing', () => {
   // genre-drum-voice-selection.md §2, one line per verdict. A clap is a drum
   // machine sound; six of these genres have no drum machine in them at all, and
   // two of them have no snare — the clap IS the backbeat. Pinned per grid,
@@ -229,7 +233,9 @@ describe('DRUM_GRIDS data sanity', () => {
     const stragglers = ALL_IDS.filter((id) => DRUM_GRIDS[id].kit === '808 Vintage');
     expect(stragglers).toEqual([]);
   });
+});
 
+describe('DRUM_GRIDS row shape', () => {
   // The seven voices a sequencer track can actually play today, derived rather
   // than restated: `bass` was never one of them — no DrumKit field, no
   // triggerDrum case, no track — which is why slice 2 deleted the row instead

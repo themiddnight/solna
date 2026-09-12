@@ -1,17 +1,17 @@
 import React, { useMemo } from "react";
 import { useAppStore } from "@/store/store";
 import {
+  applyPreset,
   getAllSynthPresets,
-  findPresetByName,
   getPresetsGroupedByCategory,
 } from "@/audio/presetRegistry";
-import { FIELD_LABEL, FIELD_SELECT, JOIN_LANE } from "@/components/ui/fieldClasses";
+import { FIELD_LABEL, JOIN_LANE } from "@/components/ui/fieldClasses";
 import { SYNTH_TARGET_STYLES } from "@/utils/synthControl";
 import { PAD_INTERVALS } from "@/types";
 import type { PadInterval, PadVoicing } from "@/types";
 import { ModulePanelCard } from "./ModulePanelCard";
 import { ModulePasteButton } from "../ModulePasteButton";
-import { PresetSelect } from "./PresetSelect";
+import { OctaveSelect, SoundPresetField } from "./moduleFields";
 import { droneDegreeButtons, padPresetGroups } from "./padPanel";
 
 // Oct 1 reaches a bass-register drone, Oct 5 a high pad. Wider at the bottom
@@ -69,9 +69,102 @@ function PadToggleButton({
   );
 }
 
-export function PadModulePanel() {
+/**
+ * The drone mode's two field groups: the scale degree it holds and the
+ * intervals stacked over it.
+ *
+ * Reads its own slice rather than taking eight props — the same rule the three
+ * module cards follow, and the reason a mode swap costs no prop threading. The
+ * drone's controls stay dormant-but-persisted while pad mode shows, so nothing
+ * here is gated on the mode; the swap is the parent's.
+ */
+function PadDroneFields() {
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
+  const padDroneDegree = useAppStore((s) => s.padDroneDegree);
+  const setPadDroneDegree = useAppStore((s) => s.setPadDroneDegree);
+  const padDroneIntervals = useAppStore((s) => s.padDroneIntervals);
+  const togglePadDroneInterval = useAppStore((s) => s.togglePadDroneInterval);
+
+  return (
+    <>
+      <div>
+        <span className={FIELD_LABEL} id="label-pad-drone-degree">Drone Degree</span>
+        <div
+          className={JOIN_LANE}
+          role="group"
+          aria-labelledby="label-pad-drone-degree"
+        >
+          {droneDegreeButtons(scaleRoot, scaleType, padDroneDegree).map(
+            ({ index, label, active }) => (
+              <PadToggleButton
+                id={`btn-pad-drone-degree-${index}`}
+                key={index}
+                active={active}
+                onClick={() => setPadDroneDegree(index)}
+                title={`Drone on scale degree ${label}`}
+              >
+                {label}
+              </PadToggleButton>
+            ),
+          )}
+        </div>
+      </div>
+
+      <div>
+        <span className={FIELD_LABEL} id="label-pad-drone-intervals">Drone Intervals</span>
+        <div
+          className={JOIN_LANE}
+          role="group"
+          aria-labelledby="label-pad-drone-intervals"
+        >
+          {PAD_INTERVALS.map((interval) => (
+            <PadToggleButton
+              id={`btn-pad-drone-interval-${interval}`}
+              key={interval}
+              active={padDroneIntervals.includes(interval)}
+              onClick={() => togglePadDroneInterval(interval)}
+              title={`Toggle drone interval ${interval} (${PAD_INTERVAL_NAMES[interval]})`}
+            >
+              {interval}
+            </PadToggleButton>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** The pad mode's one field: how the chord progression is voiced. */
+function PadVoicingField() {
+  const padVoicing = useAppStore((s) => s.padVoicing);
+  const setPadVoicing = useAppStore((s) => s.setPadVoicing);
+
+  return (
+    <div>
+      <span className={FIELD_LABEL} id="label-pad-voicing">Voicing</span>
+      <div
+        className={JOIN_LANE}
+        role="group"
+        aria-labelledby="label-pad-voicing"
+      >
+        {PAD_VOICINGS.map(({ value, label }) => (
+          <PadToggleButton
+            id={`btn-pad-voicing-${value}`}
+            key={value}
+            active={padVoicing === value}
+            onClick={() => setPadVoicing(value)}
+            title={`Pad voicing: ${label}`}
+          >
+            {label}
+          </PadToggleButton>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function PadModulePanel() {
   const padSynthParams = useAppStore((s) => s.padSynthParams);
   const setPadSynthParams = useAppStore((s) => s.setPadSynthParams);
   const customPresets = useAppStore((s) => s.customSynthPresets);
@@ -79,12 +172,6 @@ export function PadModulePanel() {
   const setPadMode = useAppStore((s) => s.setPadMode);
   const padOctave = useAppStore((s) => s.padOctave);
   const setPadOctave = useAppStore((s) => s.setPadOctave);
-  const padVoicing = useAppStore((s) => s.padVoicing);
-  const setPadVoicing = useAppStore((s) => s.setPadVoicing);
-  const padDroneDegree = useAppStore((s) => s.padDroneDegree);
-  const setPadDroneDegree = useAppStore((s) => s.setPadDroneDegree);
-  const padDroneIntervals = useAppStore((s) => s.padDroneIntervals);
-  const togglePadDroneInterval = useAppStore((s) => s.togglePadDroneInterval);
 
   const presetName = padSynthParams.preset ?? "";
   const allPresets = useMemo(
@@ -114,43 +201,27 @@ export function PadModulePanel() {
       actions={<ModulePasteButton groups={['pad-sound', 'pad-pattern']} />}
     >
       <div className="flex flex-row flex-wrap items-end gap-3">
-        <PresetSelect
+        <SoundPresetField
           id="select-pad-sound-preset"
-          label="Preset"
           title="Pad sound preset — factory Pad presets, synced with the synth page"
           placeholder="Pad Preset…"
           groups={presetGroups}
+          allPresets={allPresets}
           value={presetName}
-          onSelect={(name) => {
-            const preset = findPresetByName(name, allPresets);
-            if (!preset) return;
-            setPadSynthParams({
-              ...padSynthParams,
-              ...preset.params,
-              preset: preset.name,
-            });
-          }}
+          onPick={(preset) => setPadSynthParams(applyPreset(padSynthParams, preset))}
         />
 
         {/* Octave sits OUTSIDE the mode branch: padOctave feeds resolveDroneNotes as
             well as the chord-following path, so hiding it in pad mode left the drone
             with a register the ear could hear and the hand could not reach. */}
-        <div>
-          <label className={FIELD_LABEL} htmlFor="select-pad-octave">Octave</label>
-          <select
-            id="select-pad-octave"
-            value={padOctave}
-            onChange={(e) => setPadOctave(parseInt(e.target.value, 10))}
-            className={FIELD_SELECT}
-            title="Register for the pad voicing or the held drone"
-          >
-            {PAD_OCTAVES.map((o) => (
-              <option key={o} value={o}>
-                Oct {o}
-              </option>
-            ))}
-          </select>
-        </div>
+        <OctaveSelect
+          id="select-pad-octave"
+          label="Octave"
+          title="Register for the pad voicing or the held drone"
+          value={padOctave}
+          onChange={setPadOctave}
+          octaves={PAD_OCTAVES}
+        />
 
         {/* Ahead of the blocks it governs, and after Preset/Octave so those two
             columns line up with the chord and bass cards. */}
@@ -180,74 +251,7 @@ export function PadModulePanel() {
             disabled: a greyed-out control invites the user to work out why it
             does nothing, and each set stays dormant-but-persisted while the
             other shows. */}
-        {padMode === "drone" ? (
-          <>
-            <div>
-              <span className={FIELD_LABEL} id="label-pad-drone-degree">Drone Degree</span>
-              <div
-                className={JOIN_LANE}
-                role="group"
-                aria-labelledby="label-pad-drone-degree"
-              >
-                {droneDegreeButtons(scaleRoot, scaleType, padDroneDegree).map(
-                  ({ index, label, active }) => (
-                    <PadToggleButton
-                      id={`btn-pad-drone-degree-${index}`}
-                      key={index}
-                      active={active}
-                      onClick={() => setPadDroneDegree(index)}
-                      title={`Drone on scale degree ${label}`}
-                    >
-                      {label}
-                    </PadToggleButton>
-                  ),
-                )}
-              </div>
-            </div>
-
-            <div>
-              <span className={FIELD_LABEL} id="label-pad-drone-intervals">Drone Intervals</span>
-              <div
-                className={JOIN_LANE}
-                role="group"
-                aria-labelledby="label-pad-drone-intervals"
-              >
-                {PAD_INTERVALS.map((interval) => (
-                  <PadToggleButton
-                    id={`btn-pad-drone-interval-${interval}`}
-                    key={interval}
-                    active={padDroneIntervals.includes(interval)}
-                    onClick={() => togglePadDroneInterval(interval)}
-                    title={`Toggle drone interval ${interval} (${PAD_INTERVAL_NAMES[interval]})`}
-                  >
-                    {interval}
-                  </PadToggleButton>
-                ))}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div>
-            <span className={FIELD_LABEL} id="label-pad-voicing">Voicing</span>
-            <div
-              className={JOIN_LANE}
-              role="group"
-              aria-labelledby="label-pad-voicing"
-            >
-              {PAD_VOICINGS.map(({ value, label }) => (
-                <PadToggleButton
-                  id={`btn-pad-voicing-${value}`}
-                  key={value}
-                  active={padVoicing === value}
-                  onClick={() => setPadVoicing(value)}
-                  title={`Pad voicing: ${label}`}
-                >
-                  {label}
-                </PadToggleButton>
-              ))}
-            </div>
-          </div>
-        )}
+        {padMode === "drone" ? <PadDroneFields /> : <PadVoicingField />}
       </div>
     </ModulePanelCard>
   );

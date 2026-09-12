@@ -46,11 +46,20 @@ function manualScheduler() {
   return { scheduler, run, size: () => queued.size };
 }
 
+/**
+ * The fixture every case below starts from: a recording base (optionally made
+ * to throw), a scheduler driven by hand, and the adapter over the two.
+ */
+function fixture(opts: { throwOnSet?: boolean } = {}) {
+  const base = recordingStorage(opts);
+  const sched = manualScheduler();
+  const storage = createCoalescedStorage(base.storage, sched.scheduler);
+  return { base, sched, storage };
+}
+
 describe('createCoalescedStorage', () => {
   test('setItem buffers instead of writing through', () => {
-    const base = recordingStorage();
-    const sched = manualScheduler();
-    const storage = createCoalescedStorage(base.storage, sched.scheduler);
+    const { base, storage } = fixture();
 
     storage.setItem('k', 'v1');
 
@@ -59,9 +68,7 @@ describe('createCoalescedStorage', () => {
   });
 
   test('N writes to one name collapse into one write of the LAST value', () => {
-    const base = recordingStorage();
-    const sched = manualScheduler();
-    const storage = createCoalescedStorage(base.storage, sched.scheduler);
+    const { base, sched, storage } = fixture();
 
     storage.setItem('k', 'v1');
     storage.setItem('k', 'v2');
@@ -74,9 +81,7 @@ describe('createCoalescedStorage', () => {
   });
 
   test('one flush is scheduled per burst, not one per write', () => {
-    const base = recordingStorage();
-    const sched = manualScheduler();
-    const storage = createCoalescedStorage(base.storage, sched.scheduler);
+    const { base, sched, storage } = fixture();
 
     storage.setItem('k', 'v1');
     storage.setItem('k', 'v2');
@@ -88,9 +93,7 @@ describe('createCoalescedStorage', () => {
   });
 
   test('getItem reads back a buffered write before it has been flushed', () => {
-    const base = recordingStorage();
-    const sched = manualScheduler();
-    const storage = createCoalescedStorage(base.storage, sched.scheduler);
+    const { base, storage } = fixture();
 
     storage.setItem('k', 'pending');
 
@@ -101,9 +104,7 @@ describe('createCoalescedStorage', () => {
   });
 
   test('removeItem drops the buffered write and deletes through immediately', () => {
-    const base = recordingStorage();
-    const sched = manualScheduler();
-    const storage = createCoalescedStorage(base.storage, sched.scheduler);
+    const { base, sched, storage } = fixture();
     base.storage.setItem('k', 'old');
     base.calls.length = 0;
 
@@ -118,9 +119,7 @@ describe('createCoalescedStorage', () => {
   });
 
   test('flush() writes synchronously and cancels the scheduled callback', () => {
-    const base = recordingStorage();
-    const sched = manualScheduler();
-    const storage = createCoalescedStorage(base.storage, sched.scheduler);
+    const { base, sched, storage } = fixture();
 
     storage.setItem('k', 'v');
     storage.flush();
@@ -132,9 +131,7 @@ describe('createCoalescedStorage', () => {
   });
 
   test('flush() with nothing buffered never touches the base', () => {
-    const base = recordingStorage();
-    const sched = manualScheduler();
-    const storage = createCoalescedStorage(base.storage, sched.scheduler);
+    const { base, storage } = fixture();
 
     storage.flush();
 
@@ -142,9 +139,7 @@ describe('createCoalescedStorage', () => {
   });
 
   test('discard() drops buffered writes without writing them', () => {
-    const base = recordingStorage();
-    const sched = manualScheduler();
-    const storage = createCoalescedStorage(base.storage, sched.scheduler);
+    const { base, sched, storage } = fixture();
 
     storage.setItem('k', 'v');
     storage.discard();
@@ -158,9 +153,7 @@ describe('createCoalescedStorage', () => {
     // Safari private mode / blocked cookies / embedded webviews: setItem
     // throws rather than returning. The buffer must still clear and later
     // writes must keep working.
-    const base = recordingStorage({ throwOnSet: true });
-    const sched = manualScheduler();
-    const storage = createCoalescedStorage(base.storage, sched.scheduler);
+    const { base, sched, storage } = fixture({ throwOnSet: true });
 
     storage.setItem('k', 'v1');
     expect(() => sched.run()).not.toThrow();
@@ -189,9 +182,7 @@ describe('createCoalescedStorage', () => {
   });
 
   test('flushing again after a flush is a no-op', () => {
-    const base = recordingStorage();
-    const sched = manualScheduler();
-    const storage = createCoalescedStorage(base.storage, sched.scheduler);
+    const { base, storage } = fixture();
 
     storage.setItem('k', 'v');
     storage.flush();

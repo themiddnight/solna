@@ -453,13 +453,12 @@ export function persistTheme(theme: SolnaTheme, storage?: Pick<Storage, 'setItem
   persistGuardedStorageValue(THEME_STORAGE_KEY, theme, storage);
 }
 
-export const Header = React.memo(function Header() {
-  const activeTab = useAppStore((s) => s.activeTab);
-  const layer = layerForTab(activeTab);
-  const setActiveTab = useAppStore((s) => s.setActiveTab);
-  const scaleRoot = useAppStore((s) => s.scaleRoot);
-  const scaleType = useAppStore((s) => s.scaleType);
-
+/**
+ * The header's theme, from the DOM attribute the index.html bootstrap already
+ * resolved (that is what prevents the FOUC) through to the toggle that writes
+ * the attribute and localStorage.
+ */
+function useTheme(): { currentTheme: SolnaTheme; toggleTheme: () => void } {
   const [currentTheme, setCurrentTheme] = React.useState<SolnaTheme>(() =>
     resolveInitialTheme(
       typeof document !== "undefined"
@@ -494,6 +493,102 @@ export const Header = React.memo(function Header() {
     setCurrentTheme((prev) => (prev === resolved ? prev : resolved));
   }, []);
 
+  return { currentTheme, toggleTheme };
+}
+
+/** The Loop/Song toggle; clicking the layer already shown is a no-op. */
+function LayerSwitcher({
+  layer,
+  onSelectTab,
+}: {
+  layer: Layer;
+  onSelectTab: (tab: ViewMode) => void;
+}) {
+  return (
+    <div className={HEADER_GROUP}>
+      {LAYER_META.map(({ layer: l, label }) => {
+        const isActive = layer === l;
+        return (
+          <button
+            key={l}
+            id={`layer-${l}`}
+            type="button"
+            aria-current={isActive ? 'page' : undefined}
+            onClick={() => {
+              const target = layerToggleTarget(layer, l);
+              if (target) onSelectTab(target);
+            }}
+            className={`btn btn-sm join-item text-xs font-bold ${
+              isActive ? 'btn-active btn-primary' : 'btn-ghost'
+            }`}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The master key/scale group: an inline field from `xl` up, a dropdown below it. */
+function ScaleMenu({ scaleRoot, scaleType }: { scaleRoot: string; scaleType: string }) {
+  return (
+    <>
+      {/* Scale Picker Compact (Desktop >= xl) */}
+      <div className={`hidden xl:flex ${HEADER_FIELD_SHELL}`}>
+        <ScaleSelects idPrefix="select-master-scale" />
+      </div>
+
+      {/* Below `xl` (mobile and landscape/portrait tablet): Compact Scale Picker Dropdown */}
+      {/* Centre-aligned on a phone, NOT `dropdown-end`. The panel is
+          224px wide and this summary's right edge sits ~169px into a
+          375px phone, so right-aligning it put both selects 50px off the
+          left of the screen — and the header clips (the app root is
+          `overflow-hidden`), so there was nothing to scroll to.
+          Start-aligning fixes that width and breaks 320px, where the
+          summary sits far enough right to push the panel off the other
+          edge; centring on the summary is the one alignment that clears
+          BOTH, because the summary sits near the middle of a phone
+          header either way. From `sm` up there is room to spare and the
+          panel goes back to hanging off the trigger's right edge. */}
+      <details className="dropdown dropdown-center sm:dropdown-end xl:hidden">
+        <summary
+          id="btn-scale-dropdown"
+          className="btn btn-sm btn-ghost gap-1 px-2 text-xs font-bold list-none bg-base-200/70 border border-base-300"
+          title={`Key & Scale — ${formatKeyLabel(scaleRoot, scaleType, { long: true })}`}
+        >
+          <span className="text-primary">{getTonicSpelling(scaleRoot, scaleType)}</span>
+          {/* Dropped below 390px — the width at which brand + this group
+              stop sharing one row and the navbar grows a third one. The
+              cut is `max-[390px]` rather than `sm` so the 390px+ phones
+              that DO fit keep the scale name; narrower ones keep the root
+              note, the full name in the `title`, and both selects one tap
+              away in the dropdown. */}
+          <span className="text-[10px] text-base-content/70 max-w-12 truncate max-[390px]:hidden">
+            {SCALES[scaleType]?.name?.slice(0, 4) ?? scaleType}
+          </span>
+          <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
+        </summary>
+        <div className="dropdown-content z-50 mt-1 w-56 p-2.5 flex flex-col gap-2 bg-base-100 border border-base-300 rounded-box shadow-xl">
+          <div className="text-[11px] font-bold text-base-content/60 uppercase tracking-wider px-1">
+            Master Key & Scale
+          </div>
+          <ScaleSelects idPrefix="select-master-scale-compact" stacked />
+        </div>
+      </details>
+    </>
+  );
+}
+
+export const Header = React.memo(function Header() {
+  const activeTab = useAppStore((s) => s.activeTab);
+  const layer = layerForTab(activeTab);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const scaleType = useAppStore((s) => s.scaleType);
+
+  const { currentTheme, toggleTheme } = useTheme();
+
   return (
     <header className="navbar min-h-0 shrink-0 bg-base-100 border-b border-base-300 px-2.5 sm:px-4 py-2 select-none sticky top-0 z-40 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 sm:gap-x-3 gap-y-2 text-sm">
       {/* Brand & Layer Switcher */}
@@ -503,28 +598,7 @@ export const Header = React.memo(function Header() {
             navbar a third row on a phone. The mark alone still identifies the
             app. */}
         <ProjectMenu textClassName="hidden sm:inline" />
-        <div className={HEADER_GROUP}>
-          {LAYER_META.map(({ layer: l, label }) => {
-            const isActive = layer === l;
-            return (
-              <button
-                key={l}
-                id={`layer-${l}`}
-                type="button"
-                aria-current={isActive ? 'page' : undefined}
-                onClick={() => {
-                  const target = layerToggleTarget(layer, l);
-                  if (target) setActiveTab(target);
-                }}
-                className={`btn btn-sm join-item text-xs font-bold ${
-                  isActive ? 'btn-active btn-primary' : 'btn-ghost'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
+        <LayerSwitcher layer={layer} onSelectTab={setActiveTab} />
       </div>
 
       {/* Subject, Key/Scale, Tabs & Theme Actions, in that order — broad to
@@ -563,52 +637,7 @@ export const Header = React.memo(function Header() {
             left of the theme toggle on both layers, instead of jumping ~200px
             sideways whenever the layer changed and this loop-only group
             appeared or vanished. */}
-        {layer === 'loop' && (
-          <>
-            {/* Scale Picker Compact (Desktop >= xl) */}
-            <div className={`hidden xl:flex ${HEADER_FIELD_SHELL}`}>
-              <ScaleSelects idPrefix="select-master-scale" />
-            </div>
-
-            {/* Below `xl` (mobile and landscape/portrait tablet): Compact Scale Picker Dropdown */}
-            {/* Centre-aligned on a phone, NOT `dropdown-end`. The panel is
-                224px wide and this summary's right edge sits ~169px into a
-                375px phone, so right-aligning it put both selects 50px off the
-                left of the screen — and the header clips (the app root is
-                `overflow-hidden`), so there was nothing to scroll to.
-                Start-aligning fixes that width and breaks 320px, where the
-                summary sits far enough right to push the panel off the other
-                edge; centring on the summary is the one alignment that clears
-                BOTH, because the summary sits near the middle of a phone
-                header either way. From `sm` up there is room to spare and the
-                panel goes back to hanging off the trigger's right edge. */}
-            <details className="dropdown dropdown-center sm:dropdown-end xl:hidden">
-              <summary
-                id="btn-scale-dropdown"
-                className="btn btn-sm btn-ghost gap-1 px-2 text-xs font-bold list-none bg-base-200/70 border border-base-300"
-                title={`Key & Scale — ${formatKeyLabel(scaleRoot, scaleType, { long: true })}`}
-              >
-                <span className="text-primary">{getTonicSpelling(scaleRoot, scaleType)}</span>
-                {/* Dropped below 390px — the width at which brand + this group
-                    stop sharing one row and the navbar grows a third one. The
-                    cut is `max-[390px]` rather than `sm` so the 390px+ phones
-                    that DO fit keep the scale name; narrower ones keep the root
-                    note, the full name in the `title`, and both selects one tap
-                    away in the dropdown. */}
-                <span className="text-[10px] text-base-content/70 max-w-12 truncate max-[390px]:hidden">
-                  {SCALES[scaleType]?.name?.slice(0, 4) ?? scaleType}
-                </span>
-                <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
-              </summary>
-              <div className="dropdown-content z-50 mt-1 w-56 p-2.5 flex flex-col gap-2 bg-base-100 border border-base-300 rounded-box shadow-xl">
-                <div className="text-[11px] font-bold text-base-content/60 uppercase tracking-wider px-1">
-                  Master Key & Scale
-                </div>
-                <ScaleSelects idPrefix="select-master-scale-compact" stacked />
-              </div>
-            </details>
-          </>
-        )}
+        {layer === 'loop' && <ScaleMenu scaleRoot={scaleRoot} scaleType={scaleType} />}
         {/* Primary navigation: the active layer's tabs.
             ONE branch over `tabsForLayer`, the same function the router
             validates a URL with, so the nav and the routes cannot name

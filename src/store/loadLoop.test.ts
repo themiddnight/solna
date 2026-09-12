@@ -37,7 +37,7 @@ const resetStore = () => {
 beforeEach(resetStore);
 afterEach(resetStore);
 
-describe('loadLoop', () => {
+describe('loadLoop: the swap', () => {
   test('swaps the flat slices to the target loop and updates activeLoopId', () => {
     const loopB: Loop = {
       ...createDefaultLoop(),
@@ -95,6 +95,16 @@ describe('loadLoop', () => {
     }
   });
 
+  test('is a safe no-op for an unknown id', () => {
+    useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1', scaleRoot: 'A' });
+    loadLoop('loop-missing');
+    expect(useAppStore.getState().scaleRoot).toBe('A');
+    expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
+  });
+
+});
+
+describe('loadLoop: a song advance', () => {
   test('a song advance never stops a player and never cuts a bus', () => {
     // The whole point of the seamless path: a hard stop is what made both
     // playback hooks cut 'chord', 'bass' and 'synth' to 20 ms, so the advance
@@ -195,6 +205,9 @@ describe('loadLoop', () => {
     }
   });
 
+});
+
+describe('loadLoop: mute and pad handling at a boundary', () => {
   test('a muted outgoing FX track stays closed until the next loop boundary', () => {
     const loopA: Loop = { ...createDefaultLoop(), fxMuted: true };
     const loopB: Loop = {
@@ -307,12 +320,6 @@ describe('loadLoop', () => {
     }
   });
 
-  test('is a safe no-op for an unknown id', () => {
-    useAppStore.setState({ loops: [createDefaultLoop()], activeLoopId: 'loop-default-1', scaleRoot: 'A' });
-    loadLoop('loop-missing');
-    expect(useAppStore.getState().scaleRoot).toBe('A');
-    expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
-  });
 });
 
 describe('loadLoop leaves a scope that matches what is sounding', () => {

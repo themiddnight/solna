@@ -188,16 +188,34 @@ export function fakeCtx(opts: FakeOpts = {}) {
   };
 }
 
+/**
+ * Binds a fake context to every subsystem on a test engine — the `bind()` half of
+ * `bindContext`, without `setupMasterChain`, so a test can hand-build only the
+ * nodes its assertion reads.
+ *
+ * A test used to write `(engine as any).ctx = ctx`, which reached the engine and
+ * nothing else. Each subsystem keeps its OWN context reference now (a node belongs
+ * to the context that made it), so one field assignment no longer arms any of them
+ * and this is the door that does.
+ */
+export function bindFakeCtx(engine: EngineInstance, ctx: unknown): void {
+  // Spelled as a widened structural cast rather than `(engine as any).ctx` so the
+  // mechanical cast-rewriter that walks this tree cannot rewrite this line into a
+  // call to itself.
+  (engine as unknown as { ctx: unknown }).ctx = ctx;
+  (engine as any).bindSubsystems();
+}
+
 export function freshEngine(opts: FakeOpts = {}) {
   const engine = makeEngine();
   const ctx = fakeCtx(opts);
-  (engine as any).ctx = ctx;
-  (engine as any).dryGain = fakeNode(opts);
-  (engine as any).drumBusFilter = fakeNode(opts);
-  (engine as any).drumSendFilter = fakeNode(opts);
-  (engine as any).delayNode = undefined;
-  (engine as any).reverbNode = undefined;
-  (engine as any).distortionNode = undefined;
+  bindFakeCtx(engine, ctx);
+  (engine as any).masterRack.dryGain = fakeNode(opts);
+  (engine as any).masterRack.drumBusFilter = fakeNode(opts);
+  (engine as any).masterRack.drumSendFilter = fakeNode(opts);
+  (engine as any).masterRack.delayNode = undefined;
+  (engine as any).masterRack.reverbNode = undefined;
+  (engine as any).masterRack.distortionNode = undefined;
   return { engine, ctx };
 }
 

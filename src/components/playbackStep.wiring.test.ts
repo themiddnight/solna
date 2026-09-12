@@ -52,17 +52,21 @@ const WIRINGS: Array<{
       expected: 'player',
     },
     // PlayingStepRow and PlayingStepHeader both take their id at runtime, so
-    // the literal that actually binds 'chords' lives at each call site. Each
-    // module panel holds a pair — the step-number strip and the buttons under
-    // it must read the SAME player or the numbers would highlight a different
-    // column than the one lit up below them.
+    // the literal that actually binds 'chords' lives at each call site. The
+    // step-number strip (PlayingStepHeader) was consolidated into the shared
+    // `CustomPatternSteps` in moduleFields.tsx — hardcoded to "chords" once,
+    // serving both panels — while each panel keeps its own buttons row
+    // (PlayingStepRow). Strip and buttons must still read the SAME player or
+    // the numbers would highlight a different column than the one lit up
+    // below them; the count is one shared strip + two panels' buttons = 3.
     consumerCallSites: {
       files: [
+        'src/components/loop/chord/moduleFields.tsx',
         'src/components/loop/chord/ChordModulePanel.tsx',
         'src/components/loop/chord/BassModulePanel.tsx',
       ],
       regex: /\bplayer\s*=\s*"chords"/g,
-      expectedCount: 4,
+      expectedCount: 3,
     },
   },
   {

@@ -30,6 +30,16 @@ const byKey = (rows: ReturnType<typeof getScaleLockedKeyboardNotes>) =>
     [...rows.homeRow, ...rows.topRow].map((n) => [n.key, n.note]),
   );
 
+/**
+ * Whether a scale's triad row and melody row bind no key in common. The three
+ * layout guards below differ only in the scale they name.
+ */
+function rowsShareNoKeys(...args: Parameters<typeof getChordKeyboardRows>): boolean {
+  const rows = getChordKeyboardRows(...args);
+  const triadKeys = new Set(rows.triadRow.map((b) => b.key));
+  return rows.melodyRow.every((b) => !triadKeys.has(b.key));
+}
+
 describe('getScaleLockedKeyboardNotes', () => {
   test('maps the top row Q..] to the tonic going up the scale', () => {
     const byKeyMap = byKey(getScaleLockedKeyboardNotes('C', 'Major', 0));
@@ -121,7 +131,7 @@ describe('clampKeyboardOctave', () => {
   });
 });
 
-describe('getChordKeyboardRows', () => {
+describe('getChordKeyboardRows — triad row', () => {
   test('degree count follows the scale length: 7 for Major', () => {
     const rows = getChordKeyboardRows('C', 'Major', 0);
     expect(rows.triadRow.length).toBe(7);
@@ -173,7 +183,9 @@ describe('getChordKeyboardRows', () => {
     const chordCodes = rows.triadRow.map((b) => b.key);
     expect(chordCodes.every((c) => !drumCodes.has(c))).toBe(true);
   });
+});
 
+describe('getChordKeyboardRows — melody row', () => {
   test('melody row keys are exactly the nine melody keys, in order', () => {
     const rows = getChordKeyboardRows('C', 'Major', 0);
     expect(rows.melodyRow.map((b) => b.key)).toEqual([
@@ -231,26 +243,19 @@ describe('getChordKeyboardRows', () => {
     }
     expect(notes[0]).toBe('G4');
   });
+});
 
+describe('getChordKeyboardRows — key layout', () => {
   test('melody keys and triad-row keys are disjoint for a 7-degree scale', () => {
-    const rows = getChordKeyboardRows('C', 'Major', 0);
-    const triadKeys = new Set(rows.triadRow.map((b) => b.key));
-    const melodyKeys = rows.melodyRow.map((b) => b.key);
-    expect(melodyKeys.every((k) => !triadKeys.has(k))).toBe(true);
+    expect(rowsShareNoKeys('C', 'Major', 0)).toBe(true);
   });
 
   test('melody keys and triad-row keys are disjoint for a 5-degree scale (Hirajoshi)', () => {
-    const rows = getChordKeyboardRows('C', 'Hirajoshi', 0);
-    const triadKeys = new Set(rows.triadRow.map((b) => b.key));
-    const melodyKeys = rows.melodyRow.map((b) => b.key);
-    expect(melodyKeys.every((k) => !triadKeys.has(k))).toBe(true);
+    expect(rowsShareNoKeys('C', 'Hirajoshi', 0)).toBe(true);
   });
 
   test('melody keys and triad-row keys are disjoint for a 6-degree scale (Blues)', () => {
-    const rows = getChordKeyboardRows('C', 'Blues', 0);
-    const triadKeys = new Set(rows.triadRow.map((b) => b.key));
-    const melodyKeys = rows.melodyRow.map((b) => b.key);
-    expect(melodyKeys.every((k) => !triadKeys.has(k))).toBe(true);
+    expect(rowsShareNoKeys('C', 'Blues', 0)).toBe(true);
   });
 
   test('MELODY_KEYS is exactly HOME_ROW_KEYS[7..10] followed by TOP_ROW_KEYS[7..11]', () => {

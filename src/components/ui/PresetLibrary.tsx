@@ -572,9 +572,142 @@ function PresetEntryList<T extends PresetLibraryEntry>(props: {
   );
 }
 
-export function PresetLibrary<T extends PresetLibraryEntry>({
-  isOpen, onClose, title, headerSubtitle, headerBadge, headerAccessory, panelTintClass, activeEntryId, saveButton, renderHeaderActions, toolbarActions, toast, toastPlacement, toastTone, searchPlaceholder, variant, entries, categories, listContainerClass, subtitle, renderEntryActions, renderEntry, groupEntries, emptyState, filterEntries, footer, save, onSelect, onDelete, onSave,
-}: PresetLibraryProps<T>) {
+/**
+ * Reveals the active entry as soon as the drawer opens, so the current preset
+ * never has to be hunted for in a long list. Scrolls the list container itself
+ * rather than calling scrollIntoView, which would also scroll every ancestor —
+ * including the page sitting behind the overlay.
+ */
+function useRevealActiveEntry(
+  listRef: React.RefObject<HTMLDivElement | null>,
+  isOpen: boolean,
+  activeEntryId: string | undefined,
+): void {
+  useEffect(() => {
+    if (!isOpen || !activeEntryId) return;
+    const container = listRef.current;
+    const entry = container?.querySelector(`[data-entry-id=${JSON.stringify(activeEntryId)}]`);
+    if (!container || !entry) return;
+    container.scrollTop += centerScrollDelta(
+      container.getBoundingClientRect(),
+      entry.getBoundingClientRect()
+    );
+    // `listRef` is in the deps only because the rule cannot tell a parameter
+    // apart from a value it must track: the caller's `useRef` returns one
+    // object for the life of the drawer, so this never re-runs on its account.
+  }, [isOpen, activeEntryId, listRef]);
+}
+
+interface PresetDrawerPanelProps<T extends PresetLibraryEntry> extends PresetLibraryProps<T> {
+  chrome: ReturnType<typeof variantChrome>;
+  query: string;
+  setQuery: (query: string) => void;
+  category: string;
+  setCategory: (category: string) => void;
+  showSave: boolean;
+  setShowSave: React.Dispatch<React.SetStateAction<boolean>>;
+  draft: PresetSaveDraft;
+  setDraft: React.Dispatch<React.SetStateAction<PresetSaveDraft>>;
+  openSave: () => void;
+  onSubmitSave: (e: React.FormEvent) => void;
+  filtered: T[];
+  groups: PresetLibraryGroup<T>[];
+  listRef: React.RefObject<HTMLDivElement | null>;
+}
+
+/**
+ * The drawer's panel column: header, search/filter toolbar, the inline save
+ * form, the entry list and the caller's footer. The overlay shell and the
+ * centred save modal stay outside it, in `PresetLibrary` — a fixed-position
+ * overlay under the panel's own `overflow-hidden`/animation would be clipped.
+ */
+function PresetDrawerPanel<T extends PresetLibraryEntry>(panelProps: PresetDrawerPanelProps<T>) {
+  const {
+    title, headerSubtitle, headerBadge, headerAccessory, panelTintClass, saveButton,
+    renderHeaderActions, toolbarActions, toast, toastPlacement, toastTone, searchPlaceholder,
+    save, categories, listContainerClass, subtitle, renderEntryActions, renderEntry,
+    emptyState, footer, onSelect, onDelete, onClose,
+    chrome, query, setQuery, category, setCategory, showSave, setShowSave, draft, setDraft,
+    openSave, onSubmitSave, filtered, groups, listRef,
+  } = panelProps;
+
+  return (
+    <aside
+      className={`w-full max-w-md h-full bg-base-100 border-l border-base-300 flex flex-col shadow-2xl overflow-hidden animate-slide-in-right ${panelTintClass ?? ''}`}
+    >
+      <PresetLibraryHeader
+        title={title}
+        headerBadge={headerBadge}
+        headerAccessory={headerAccessory}
+        headerSubtitle={headerSubtitle}
+        saveButton={saveButton}
+        saveButtonClass={chrome.saveButtonClass}
+        openSave={openSave}
+        renderHeaderActions={renderHeaderActions}
+        onClose={onClose}
+        toast={toast}
+        toastPlacement={toastPlacement}
+        toastTone={toastTone}
+      />
+
+      {/* Search & Filter Toolbar */}
+      <PresetLibraryToolbar
+        toolbarClass={chrome.toolbarClass}
+        saveButton={saveButton}
+        saveButtonClass={chrome.saveButtonClass}
+        openSave={openSave}
+        toolbarActions={toolbarActions}
+        searchIconClass={chrome.searchIconClass}
+        searchPlaceholder={searchPlaceholder}
+        query={query}
+        setQuery={setQuery}
+        clearBtnClass={chrome.clearBtnClass}
+        chipsRowClass={chrome.chipsRowClass}
+        categories={categories}
+        category={category}
+        setCategory={setCategory}
+        toast={toast}
+        toastPlacement={toastPlacement}
+        toastTone={toastTone}
+      />
+
+      {/* Inline Save Form (synth original) */}
+      <InlineSaveForm
+        showSave={showSave}
+        save={save}
+        draft={draft}
+        setDraft={setDraft}
+        setShowSave={setShowSave}
+        categories={categories}
+        onSubmit={onSubmitSave}
+      />
+
+      {/* List Content */}
+      <PresetEntryList
+        listRef={listRef}
+        listContainerClass={listContainerClass}
+        filtered={filtered}
+        emptyState={emptyState}
+        query={query}
+        category={category}
+        openSave={openSave}
+        groups={groups}
+        renderEntry={renderEntry}
+        subtitle={subtitle}
+        renderEntryActions={renderEntryActions}
+        onSelect={onSelect}
+        onDelete={onDelete}
+      />
+
+      {/* Footer */}
+      {footer}
+    </aside>
+  );
+}
+
+export function PresetLibrary<T extends PresetLibraryEntry>(props: PresetLibraryProps<T>) {
+  const { isOpen, onClose, activeEntryId, saveButton, variant, entries, filterEntries, groupEntries, save, onSave } = props;
+
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [showSave, setShowSave] = useState(false);
@@ -591,33 +724,18 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
     [entries, category, query, filterEntries],
   );
 
-  // Reveal the active entry as soon as the drawer opens, so the current preset
-  // never has to be hunted for in a long list. Scrolls the list container itself
-  // rather than calling scrollIntoView, which would also scroll every ancestor —
-  // including the page sitting behind the overlay.
-  useEffect(() => {
-    if (!isOpen || !activeEntryId) return;
-    const container = listRef.current;
-    const entry = container?.querySelector(`[data-entry-id=${JSON.stringify(activeEntryId)}]`);
-    if (!container || !entry) return;
-    container.scrollTop += centerScrollDelta(
-      container.getBoundingClientRect(),
-      entry.getBoundingClientRect()
-    );
-  }, [isOpen, activeEntryId]);
+  useRevealActiveEntry(listRef, isOpen, activeEntryId);
 
   if (!isOpen) return null;
 
-  const isChord = variant === 'chord';
-  const chrome = variantChrome(isChord, saveButton);
+  const chrome = variantChrome(variant === 'chord', saveButton);
   const groups = buildGroups(groupEntries, filtered, query, category);
 
   const handleSubmitSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const ok = onSave(draft);
     // Only close on success: a false return (wrapper guard, e.g. empty chord
     // grid) keeps the form open so the user sees nothing was saved.
-    if (ok) {
+    if (onSave(draft)) {
       setShowSave(false);
     }
   };
@@ -642,76 +760,23 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
           onClick={onClose}
         />
         {/* Sidebar Drawer */}
-        <aside
-          className={`w-full max-w-md h-full bg-base-100 border-l border-base-300 flex flex-col shadow-2xl overflow-hidden animate-slide-in-right ${panelTintClass ?? ''}`}
-        >
-          <PresetLibraryHeader
-            title={title}
-            headerBadge={headerBadge}
-            headerAccessory={headerAccessory}
-            headerSubtitle={headerSubtitle}
-            saveButton={saveButton}
-            saveButtonClass={chrome.saveButtonClass}
-            openSave={openSave}
-            renderHeaderActions={renderHeaderActions}
-            onClose={onClose}
-            toast={toast}
-            toastPlacement={toastPlacement}
-            toastTone={toastTone}
-          />
-
-          {/* Search & Filter Toolbar */}
-          <PresetLibraryToolbar
-            toolbarClass={chrome.toolbarClass}
-            saveButton={saveButton}
-            saveButtonClass={chrome.saveButtonClass}
-            openSave={openSave}
-            toolbarActions={toolbarActions}
-            searchIconClass={chrome.searchIconClass}
-            searchPlaceholder={searchPlaceholder}
-            query={query}
-            setQuery={setQuery}
-            clearBtnClass={chrome.clearBtnClass}
-            chipsRowClass={chrome.chipsRowClass}
-            categories={categories}
-            category={category}
-            setCategory={setCategory}
-            toast={toast}
-            toastPlacement={toastPlacement}
-            toastTone={toastTone}
-          />
-
-          {/* Inline Save Form (synth original) */}
-          <InlineSaveForm
-            showSave={showSave}
-            save={save}
-            draft={draft}
-            setDraft={setDraft}
-            setShowSave={setShowSave}
-            categories={categories}
-            onSubmit={handleSubmitSave}
-          />
-
-          {/* List Content */}
-          <PresetEntryList
-            listRef={listRef}
-            listContainerClass={listContainerClass}
-            filtered={filtered}
-            emptyState={emptyState}
-            query={query}
-            category={category}
-            openSave={openSave}
-            groups={groups}
-            renderEntry={renderEntry}
-            subtitle={subtitle}
-            renderEntryActions={renderEntryActions}
-            onSelect={onSelect}
-            onDelete={onDelete}
-          />
-
-          {/* Footer */}
-          {footer}
-        </aside>
+        <PresetDrawerPanel
+          {...props}
+          chrome={chrome}
+          query={query}
+          setQuery={setQuery}
+          category={category}
+          setCategory={setCategory}
+          showSave={showSave}
+          setShowSave={setShowSave}
+          draft={draft}
+          setDraft={setDraft}
+          openSave={openSave}
+          onSubmitSave={handleSubmitSave}
+          filtered={filtered}
+          groups={groups}
+          listRef={listRef}
+        />
       </div>
 
       {/* Save Progression Modal Dialog (chord variant) */}
@@ -721,7 +786,7 @@ export function PresetLibrary<T extends PresetLibraryEntry>({
         draft={draft}
         setDraft={setDraft}
         setShowSave={setShowSave}
-        categories={categories}
+        categories={props.categories}
         onSubmit={handleSubmitSave}
       />
     </div>

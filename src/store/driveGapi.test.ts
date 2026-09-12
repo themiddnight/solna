@@ -53,6 +53,13 @@ function fakeAuth() {
   return { auth, state };
 }
 
+/** A transport wired to a fake gapi client and a fake auth, plus both doubles. */
+function transportFor(requestImpl?: (request: GapiRequest) => Promise<GapiResponse>) {
+  const gapi = fakeGapi(requestImpl);
+  const { auth, state } = fakeAuth();
+  return { gapi, state, transport: createGapiTransport(async () => gapi.root, auth) };
+}
+
 describe('multipartBody', () => {
   test('frames each part and terminates with the boundary', () => {
     expect(multipartBody([{ contentType: 'application/json', body: '{"a":1}' }])).toBe(
@@ -170,9 +177,7 @@ describe('toUserProfile', () => {
 
 describe('createGapiTransport', () => {
   test('lists through the files endpoint with the solna query, as strings', async () => {
-    const gapi = fakeGapi(async () => ({ result: { files: [{ id: 'f1', name: 'a.solna' }] } }));
-    const { auth } = fakeAuth();
-    const transport = createGapiTransport(async () => gapi.root, auth);
+    const { gapi, transport } = transportFor(async () => ({ result: { files: [{ id: 'f1', name: 'a.solna' }] } }));
     const page = await transport.list({ q: DRIVE_LIST_QUERY, pageSize: 100, orderBy: DRIVE_LIST_ORDER, fields: DRIVE_LIST_FIELDS });
 
     expect(gapi.tokens).toEqual([{ access_token: 'token-1' }]);
@@ -187,27 +192,21 @@ describe('createGapiTransport', () => {
   });
 
   test('forwards a page token only when one was given', async () => {
-    const gapi = fakeGapi();
-    const { auth } = fakeAuth();
-    const transport = createGapiTransport(async () => gapi.root, auth);
+    const { gapi, transport } = transportFor();
     await transport.list({ q: 'q', pageSize: 100, orderBy: 'o', fields: 'f', pageToken: 'p2' });
     expect(gapi.calls[0].params?.pageToken).toBe('p2');
   });
 
   test('reads media with alt=media and hands back the text gapi could not parse', async () => {
     // The realistic shape: an unparsed body for a vnd.solna content type.
-    const gapi = fakeGapi(async () => ({ result: false, body: '{"v":3}' }));
-    const { auth } = fakeAuth();
-    const transport = createGapiTransport(async () => gapi.root, auth);
+    const { gapi, transport } = transportFor(async () => ({ result: false, body: '{"v":3}' }));
     expect(await transport.readText('file-9')).toBe('{"v":3}');
     expect(gapi.calls[0].path).toBe(`${DRIVE_API_BASE}${DRIVE_FILES_PATH}/file-9`);
     expect(gapi.calls[0].params).toEqual({ alt: 'media' });
   });
 
   test('reads the account identity through the about endpoint', async () => {
-    const gapi = fakeGapi(async () => ({ result: { user: { emailAddress: 'ann@example.com', displayName: 'Ann' } } }));
-    const { auth } = fakeAuth();
-    const transport = createGapiTransport(async () => gapi.root, auth);
+    const { gapi, transport } = transportFor(async () => ({ result: { user: { emailAddress: 'ann@example.com', displayName: 'Ann' } } }));
     const profile = await transport.userProfile();
     expect(gapi.calls[0].path).toBe(`${DRIVE_API_BASE}${DRIVE_ABOUT_PATH}`);
     expect(gapi.calls[0].method).toBe('GET');
@@ -216,9 +215,7 @@ describe('createGapiTransport', () => {
   });
 
   test('creates with a multipart upload carrying metadata and media', async () => {
-    const gapi = fakeGapi(async () => ({ result: { id: 'new-1', name: 'a.solna', mimeType: SOLNA_DRIVE_MIME, modifiedTime: 'x' } }));
-    const { auth } = fakeAuth();
-    const transport = createGapiTransport(async () => gapi.root, auth);
+    const { gapi, transport } = transportFor(async () => ({ result: { id: 'new-1', name: 'a.solna', mimeType: SOLNA_DRIVE_MIME, modifiedTime: 'x' } }));
     const created = await transport.create({ name: 'a.solna', mimeType: SOLNA_DRIVE_MIME, text: '{"v":1}' });
 
     expect(gapi.calls[0].path).toBe(`${DRIVE_API_BASE}${DRIVE_UPLOAD_PATH}`);
@@ -231,9 +228,7 @@ describe('createGapiTransport', () => {
   });
 
   test('updates with a PATCH to the file path and a multipart body without a name', async () => {
-    const gapi = fakeGapi(async () => ({ result: { id: 'file-9' } }));
-    const { auth } = fakeAuth();
-    const transport = createGapiTransport(async () => gapi.root, auth);
+    const { gapi, transport } = transportFor(async () => ({ result: { id: 'file-9' } }));
     const updated = await transport.update({ fileId: 'file-9', mimeType: SOLNA_DRIVE_MIME, text: '{"v":2}' });
 
     expect(gapi.calls[0].path).toBe(`${DRIVE_API_BASE}${DRIVE_UPLOAD_PATH}/file-9`);
@@ -244,9 +239,7 @@ describe('createGapiTransport', () => {
   });
 
   test('an echo with no id is thrown, not returned as a half record', async () => {
-    const gapi = fakeGapi(async () => ({ result: { name: 'a.solna' } }));
-    const { auth } = fakeAuth();
-    const transport = createGapiTransport(async () => gapi.root, auth);
+    const { transport } = transportFor(async () => ({ result: { name: 'a.solna' } }));
     let caught: unknown;
     try {
       await transport.update({ fileId: 'f', mimeType: SOLNA_DRIVE_MIME, text: '{}' });
@@ -259,13 +252,11 @@ describe('createGapiTransport', () => {
 
   test('a 401 invalidates the token and requires a later user-initiated reconnect', async () => {
     let attempts = 0;
-    const gapi = fakeGapi(async () => {
+    const { gapi, state, transport } = transportFor(async () => {
       attempts++;
       if (attempts === 1) throw { status: 401 };
       return { result: { files: [] } };
     });
-    const { auth, state } = fakeAuth();
-    const transport = createGapiTransport(async () => gapi.root, auth);
     const err = await transport.list({ q: 'q', pageSize: 100, orderBy: 'o', fields: 'f' }).catch((thrown: unknown) => thrown);
     expect(err instanceof DriveAuthError).toBe(true);
     expect(attempts).toBe(1);

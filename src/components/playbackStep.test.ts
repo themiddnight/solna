@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { createStepPublisher } from './playbackStep';
+import { createStepPublisher, type StepPlayerId } from './playbackStep';
+
+/** A publisher whose subscriber on `player` counts the notifications it gets. */
+function countingPublisher(player: StepPlayerId = 'lead') {
+  const pub = createStepPublisher();
+  let notified = 0;
+  pub.subscribe(player, () => {
+    notified += 1;
+  });
+  return { pub, count: (): number => notified };
+}
 
 describe('createStepPublisher', () => {
   test('every player starts at step 0', () => {
@@ -9,34 +19,48 @@ describe('createStepPublisher', () => {
     expect(pub.getStep('sequencer')).toBe(0);
   });
 
+  test('instances are isolated from each other', () => {
+    const a = createStepPublisher();
+    const b = createStepPublisher();
+
+    a.publish('lead', 8);
+
+    expect(b.getStep('lead')).toBe(0);
+  });
+});
+
+describe('createStepPublisher — publishing notifies', () => {
   test('publish records the step and notifies that player', () => {
-    const pub = createStepPublisher();
-    let notified = 0;
-    pub.subscribe('lead', () => {
-      notified += 1;
-    });
+    const { pub, count } = countingPublisher();
 
     pub.publish('lead', 5);
 
     expect(pub.getStep('lead')).toBe(5);
-    expect(notified).toBe(1);
+    expect(count()).toBe(1);
   });
 
   test('publishing the SAME step again does not notify', () => {
     // The bail-out matters: the clock re-dispatches a step whenever the stall
     // detector re-anchors the grid, and a repeated notification would be a
     // guaranteed re-render for an unchanged value.
+    const { pub, count } = countingPublisher();
+
+    pub.publish('lead', 5);
+    pub.publish('lead', 5);
+    pub.publish('lead', 5);
+
+    expect(count()).toBe(1);
+  });
+
+  test('every listener on a player is notified', () => {
     const pub = createStepPublisher();
-    let notified = 0;
-    pub.subscribe('lead', () => {
-      notified += 1;
-    });
+    const seen: string[] = [];
+    pub.subscribe('chords', () => seen.push('a'));
+    pub.subscribe('chords', () => seen.push('b'));
 
-    pub.publish('lead', 5);
-    pub.publish('lead', 5);
-    pub.publish('lead', 5);
+    pub.publish('chords', 1);
 
-    expect(notified).toBe(1);
+    expect(seen).toEqual(['a', 'b']);
   });
 
   test('players are independent', () => {
@@ -54,18 +78,9 @@ describe('createStepPublisher', () => {
     expect(pub.getStep('lead')).toBe(3);
     expect(pub.getStep('sequencer')).toBe(7);
   });
+});
 
-  test('every listener on a player is notified', () => {
-    const pub = createStepPublisher();
-    const seen: string[] = [];
-    pub.subscribe('chords', () => seen.push('a'));
-    pub.subscribe('chords', () => seen.push('b'));
-
-    pub.publish('chords', 1);
-
-    expect(seen).toEqual(['a', 'b']);
-  });
-
+describe('createStepPublisher — unsubscribing', () => {
   test('unsubscribing stops notifications and is safe to repeat', () => {
     const pub = createStepPublisher();
     let notified = 0;
@@ -79,50 +94,6 @@ describe('createStepPublisher', () => {
     pub.publish('chords', 2);
 
     expect(notified).toBe(1);
-    expect(pub.getStep('chords')).toBe(2);
-  });
-
-  test('reset(player) returns it to 0 and notifies only on a real change', () => {
-    const pub = createStepPublisher();
-    let notified = 0;
-    pub.subscribe('lead', () => {
-      notified += 1;
-    });
-
-    pub.publish('lead', 9);
-    expect(notified).toBe(1);
-
-    pub.reset('lead');
-    expect(pub.getStep('lead')).toBe(0);
-    expect(notified).toBe(2);
-
-    pub.reset('lead'); // already 0
-    expect(notified).toBe(2);
-  });
-
-  test('reset() with no argument resets every player', () => {
-    const pub = createStepPublisher();
-    pub.publish('chords', 4);
-    pub.publish('lead', 5);
-    pub.publish('sequencer', 6);
-
-    pub.reset();
-
-    expect(pub.getStep('chords')).toBe(0);
-    expect(pub.getStep('lead')).toBe(0);
-    expect(pub.getStep('sequencer')).toBe(0);
-  });
-
-  test('a throwing listener does not stop the others or corrupt the value', () => {
-    const pub = createStepPublisher();
-    const seen: string[] = [];
-    pub.subscribe('chords', () => {
-      throw new Error('render exploded');
-    });
-    pub.subscribe('chords', () => seen.push('b'));
-
-    expect(() => pub.publish('chords', 2)).not.toThrow();
-    expect(seen).toEqual(['b']);
     expect(pub.getStep('chords')).toBe(2);
   });
 
@@ -160,13 +131,46 @@ describe('createStepPublisher', () => {
     expect(seen).toEqual(['a', 'b']);
   });
 
-  test('instances are isolated from each other', () => {
-    const a = createStepPublisher();
-    const b = createStepPublisher();
+  test('a throwing listener does not stop the others or corrupt the value', () => {
+    const pub = createStepPublisher();
+    const seen: string[] = [];
+    pub.subscribe('chords', () => {
+      throw new Error('render exploded');
+    });
+    pub.subscribe('chords', () => seen.push('b'));
 
-    a.publish('lead', 8);
+    expect(() => pub.publish('chords', 2)).not.toThrow();
+    expect(seen).toEqual(['b']);
+    expect(pub.getStep('chords')).toBe(2);
+  });
+});
 
-    expect(b.getStep('lead')).toBe(0);
+describe('createStepPublisher — reset', () => {
+  test('reset(player) returns it to 0 and notifies only on a real change', () => {
+    const { pub, count } = countingPublisher();
+
+    pub.publish('lead', 9);
+    expect(count()).toBe(1);
+
+    pub.reset('lead');
+    expect(pub.getStep('lead')).toBe(0);
+    expect(count()).toBe(2);
+
+    pub.reset('lead'); // already 0
+    expect(count()).toBe(2);
+  });
+
+  test('reset() with no argument resets every player', () => {
+    const pub = createStepPublisher();
+    pub.publish('chords', 4);
+    pub.publish('lead', 5);
+    pub.publish('sequencer', 6);
+
+    pub.reset();
+
+    expect(pub.getStep('chords')).toBe(0);
+    expect(pub.getStep('lead')).toBe(0);
+    expect(pub.getStep('sequencer')).toBe(0);
   });
 });
 

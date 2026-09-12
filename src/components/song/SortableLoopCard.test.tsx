@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
+import type React from 'react';
 import { renderToString } from 'react-dom/server';
 import { createDefaultLoop } from '@/store/loopSlice';
 import { getActiveChordIndex, renameFromDraft, SortableLoopCard } from './SortableLoopCard';
@@ -74,51 +75,45 @@ describe('getActiveChordIndex', () => {
   });
 });
 
-describe('SortableLoopCard', () => {
-  const defaultLoop = createDefaultLoop();
+// Every callback below is a no-op: these suites assert markup, never interaction.
+const noopCallbacks = {
+  onSelect: () => {},
+  onEdit: () => {},
+  onDuplicate: () => {},
+  onCopyInto: () => {},
+  onDelete: () => {},
+  onReorder: () => {},
+  onRename: () => {},
+  onSetRepeat: () => {},
+  onTogglePlayLoop: () => {},
+  onSetMix: () => {},
+};
 
-  // Shared no-op callbacks + loop/index scaffolding for scope-driven tests
-  // that only care about one prop at a time.
-  const baseProps = {
-    loop: defaultLoop,
-    index: 0,
-    totalLoops: 2,
-    label: 'untitled-1',
-    isPlaying: false,
-    isActive: false,
-    onSelect: () => {},
-    onEdit: () => {},
-    onDuplicate: () => {},
-    onCopyInto: () => {},
-    onDelete: () => {},
-    onReorder: () => {},
-    onRename: () => {},
-    onSetRepeat: () => {},
-    onTogglePlayLoop: () => {},
-    onSetMix: () => {},
-  };
+type CardProps = React.ComponentProps<typeof SortableLoopCard>;
 
+/** The card's full prop set: a fresh default loop, and every callback stubbed. */
+const cardProps = (overrides: Partial<CardProps> = {}): CardProps => ({
+  loop: createDefaultLoop(),
+  index: 0,
+  totalLoops: 2,
+  label: 'untitled-1',
+  isPlaying: false,
+  isActive: false,
+  ...noopCallbacks,
+  ...overrides,
+});
+
+/** Renders one card; `overrides` moves a single axis off that baseline. */
+const renderCard = (overrides: Partial<CardProps> = {}) =>
+  renderToString(<SortableLoopCard {...cardProps(overrides)} />);
+
+/** The Copy-into suite's baseline: a named, active card. */
+const renderVerseCard = (overrides: Partial<CardProps> = {}) =>
+  renderCard({ label: 'Verse', isActive: true, ...overrides });
+
+describe('SortableLoopCard content', () => {
   test('renders card container with id and cursor-pointer for full-card click selection', () => {
-    const html = renderToString(
-      <SortableLoopCard
-        loop={defaultLoop}
-        index={0}
-        totalLoops={2}
-        label="untitled-1"
-        isPlaying={false}
-        isActive={true}
-        onSelect={() => {}}
-        onEdit={() => {}}
-        onDuplicate={() => {}}
-        onCopyInto={() => {}}
-        onDelete={() => {}}
-        onReorder={() => {}}
-        onRename={() => {}}
-        onSetRepeat={() => {}}
-        onTogglePlayLoop={() => {}}
-        onSetMix={() => {}}
-      />
-    );
+    const html = renderCard({ isActive: true });
 
     // Card outer element ID and clickability
     expect(html).toContain('id="card-loop-loop-default-1"');
@@ -126,26 +121,7 @@ describe('SortableLoopCard', () => {
   });
 
   test('renders loop name, key/scale, and chord progression', () => {
-    const html = renderToString(
-      <SortableLoopCard
-        loop={{ ...defaultLoop, name: 'Chorus' }}
-        index={0}
-        totalLoops={2}
-        label="Chorus"
-        isPlaying={false}
-        isActive={true}
-        onSelect={() => {}}
-        onEdit={() => {}}
-        onDuplicate={() => {}}
-        onCopyInto={() => {}}
-        onDelete={() => {}}
-        onReorder={() => {}}
-        onRename={() => {}}
-        onSetRepeat={() => {}}
-        onTogglePlayLoop={() => {}}
-        onSetMix={() => {}}
-      />
-    );
+    const html = renderCard({ loop: { ...createDefaultLoop(), name: 'Chorus' }, label: 'Chorus', isActive: true });
 
     // Name and index
     expect(html).toContain('Chorus');
@@ -169,27 +145,7 @@ describe('SortableLoopCard', () => {
   });
 
   test('renders isolated Play button and repeat count selector', () => {
-    const customLoop = { ...defaultLoop, repeatCount: 4 };
-    const html = renderToString(
-      <SortableLoopCard
-        loop={customLoop}
-        index={0}
-        totalLoops={2}
-        label="untitled-1"
-        isPlaying={false}
-        isActive={false}
-        onSelect={() => {}}
-        onEdit={() => {}}
-        onDuplicate={() => {}}
-        onCopyInto={() => {}}
-        onDelete={() => {}}
-        onReorder={() => {}}
-        onRename={() => {}}
-        onSetRepeat={() => {}}
-        onTogglePlayLoop={() => {}}
-        onSetMix={() => {}}
-      />
-    );
+    const html = renderCard({ loop: { ...createDefaultLoop(), repeatCount: 4 } });
 
     // Isolated Play button
     expect(html).toContain('id="btn-loop-play-loop-default-1"');
@@ -202,42 +158,25 @@ describe('SortableLoopCard', () => {
   });
 
   test('renders progress bar, playing status, and active chord highlighting when isPlaying is true', () => {
-    const loopWithChords = {
-      ...defaultLoop,
+    const html = renderCard({
+      loop: {
+        ...createDefaultLoop(),
+        repeatCount: 2,
+        chords: [
+          { id: 'c1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] },
+          { id: 'c2', root: 'F', quality: 'maj7', bars: 1, notes: ['F3', 'A3', 'C4', 'E4'] },
+        ],
+      },
+      isPlaying: true,
+      isActive: true,
+      progressPercent: 50,
+      currentStepInLoop: 8,
+      totalStepsInLoop: 64,
+      singleCycleSteps: 32,
+      currentRep: 1,
       repeatCount: 2,
-      chords: [
-        { id: 'c1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] },
-        { id: 'c2', root: 'F', quality: 'maj7', bars: 1, notes: ['F3', 'A3', 'C4', 'E4'] },
-      ],
-    };
-
-    const html = renderToString(
-      <SortableLoopCard
-        loop={loopWithChords}
-        index={0}
-        totalLoops={2}
-        label="untitled-1"
-        isPlaying={true}
-        isActive={true}
-        progressPercent={50}
-        currentStepInLoop={8}
-        totalStepsInLoop={64}
-        singleCycleSteps={32}
-        currentRep={1}
-        repeatCount={2}
-        stepsPerBar={16}
-        onSelect={() => {}}
-        onEdit={() => {}}
-        onDuplicate={() => {}}
-        onCopyInto={() => {}}
-        onDelete={() => {}}
-        onReorder={() => {}}
-        onRename={() => {}}
-        onSetRepeat={() => {}}
-        onTogglePlayLoop={() => {}}
-        onSetMix={() => {}}
-      />
-    );
+      stepsPerBar: 16,
+    });
 
     // Shows rep counter
     expect(html).toContain('Playing 9/64 (Rep 1/2)');
@@ -249,31 +188,15 @@ describe('SortableLoopCard', () => {
   });
 
   test('renders the audition state with Stop button when isAuditioning is true', () => {
-    const html = renderToString(
-      <SortableLoopCard
-        loop={defaultLoop}
-        index={0}
-        totalLoops={2}
-        label="untitled-1"
-        isPlaying={true}
-        isAuditioning={true}
-        isActive={true}
-        progressPercent={25}
-        currentStepInLoop={4}
-        totalStepsInLoop={16}
-        singleCycleSteps={16}
-        onSelect={() => {}}
-        onEdit={() => {}}
-        onDuplicate={() => {}}
-        onCopyInto={() => {}}
-        onDelete={() => {}}
-        onReorder={() => {}}
-        onRename={() => {}}
-        onSetRepeat={() => {}}
-        onTogglePlayLoop={() => {}}
-        onSetMix={() => {}}
-      />
-    );
+    const html = renderCard({
+      isPlaying: true,
+      isAuditioning: true,
+      isActive: true,
+      progressPercent: 25,
+      currentStepInLoop: 4,
+      totalStepsInLoop: 16,
+      singleCycleSteps: 16,
+    });
 
     expect(html).toContain('id="btn-loop-play-loop-default-1"');
     expect(html).toContain('Stop');
@@ -282,26 +205,7 @@ describe('SortableLoopCard', () => {
   });
 
   test('renders 4-channel mixer strips with correct volume and mute buttons', () => {
-    const html = renderToString(
-      <SortableLoopCard
-        loop={defaultLoop}
-        index={0}
-        totalLoops={1}
-        label="untitled-1"
-        isPlaying={false}
-        isActive={true}
-        onSelect={() => {}}
-        onEdit={() => {}}
-        onDuplicate={() => {}}
-        onCopyInto={() => {}}
-        onDelete={() => {}}
-        onReorder={() => {}}
-        onRename={() => {}}
-        onSetRepeat={() => {}}
-        onTogglePlayLoop={() => {}}
-        onSetMix={() => {}}
-      />
-    );
+    const html = renderCard({ totalLoops: 1, isActive: true });
 
     expect(html).toContain('id="btn-mute-synth-loop-default-1"');
     expect(html).toContain('id="slider-synth-loop-default-1"');
@@ -313,68 +217,8 @@ describe('SortableLoopCard', () => {
     expect(html).toContain('id="slider-bass-loop-default-1"');
   });
 
-  test('the play button is disabled when the scope forbids it', () => {
-    const html = renderToString(<SortableLoopCard {...baseProps} playDisabled />);
-    const button = html.match(/<button id="btn-loop-play-loop-default-1"[^>]*>/)?.[0];
-    expect(button).toBeDefined();
-    expect(button).toContain('disabled:opacity-30');
-    // `disabled:opacity-30` itself contains the substring "disabled", and the
-    // card's other buttons (e.g. "Move up" at index 0) render their own
-    // disabled="" independently of this prop — scope to this button and pin
-    // the actual HTML boolean attribute, not a class-name substring.
-    expect(button).toContain('disabled=""');
-  });
-
-  test('the play button is not disabled when the scope allows it', () => {
-    const html = renderToString(<SortableLoopCard {...baseProps} playDisabled={false} />);
-    const button = html.match(/<button id="btn-loop-play-loop-default-1"[^>]*>/)?.[0];
-    expect(button).toBeDefined();
-    expect(button).not.toContain('disabled=""');
-  });
-
-  test('the auditioning card shows Stop and the AUDITION badge, and is not disabled', () => {
-    const html = renderToString(<SortableLoopCard {...baseProps} isPlaying isAuditioning />);
-    expect(html).toContain('badge badge-sm badge-accent');
-    expect(html).toContain('Audition ');
-    expect(html).toContain('btn btn-xs gap-1 font-bold shadow-xs transition-all btn-error');
-  });
-
-  test('a card that is not auditioning shows no AUDITION badge', () => {
-    const html = renderToString(<SortableLoopCard {...baseProps} isPlaying />);
-    expect(html).not.toContain('badge-accent');
-  });
-
-  test('does not leak raw color literals or dark classes', () => {
-    const html = renderToString(
-      <SortableLoopCard
-        loop={defaultLoop}
-        index={0}
-        totalLoops={1}
-        label="untitled-1"
-        isPlaying={true}
-        isActive={true}
-        onSelect={() => {}}
-        onEdit={() => {}}
-        onDuplicate={() => {}}
-        onCopyInto={() => {}}
-        onDelete={() => {}}
-        onReorder={() => {}}
-        onRename={() => {}}
-        onSetRepeat={() => {}}
-        onTogglePlayLoop={() => {}}
-        onSetMix={() => {}}
-      />
-    );
-
-    expect(html).not.toContain('text-white');
-    expect(html).not.toContain('bg-black');
-    expect(html).not.toContain('indigo-');
-    expect(html).not.toContain('dark:');
-    expect(html).not.toContain('rgba(');
-  });
-
   test('a loop card renders a pad mix channel', () => {
-    const html = renderToString(<SortableLoopCard {...baseProps} />);
+    const html = renderCard();
     expect(html).toContain('id="btn-mute-pad-loop-default-1"');
     expect(html).toContain('id="slider-pad-loop-default-1"');
     expect(html).toContain('Pad');
@@ -383,9 +227,10 @@ describe('SortableLoopCard', () => {
   test('renders the label prop, not the raw name, for an unnamed loop', () => {
     // The card is handed a resolved label; it must never fall back to
     // loop.name, which is '' on every loop nobody has renamed.
-    const html = renderToString(
-      <SortableLoopCard {...baseProps} loop={{ ...defaultLoop, name: '', tempName: 'Synthwave 80s' }} label="Synthwave 80s" />
-    );
+    const html = renderCard({
+      loop: { ...createDefaultLoop(), name: '', tempName: 'Synthwave 80s' },
+      label: 'Synthwave 80s',
+    });
     expect(html).toContain('Synthwave 80s');
     // Every aria-label goes through the same string — a missed one is a screen
     // reader announcing "Delete " and nothing visible in review.
@@ -398,6 +243,49 @@ describe('SortableLoopCard', () => {
     expect(html).toContain('aria-label="Delete Synthwave 80s"');
     expect(html).toContain('aria-label="Repeat count for Synthwave 80s"');
     expect(html).toContain('aria-label="Play only Synthwave 80s"');
+  });
+});
+
+describe('SortableLoopCard play scope and theming', () => {
+  test('the play button is disabled when the scope forbids it', () => {
+    const html = renderCard({ playDisabled: true });
+    const button = html.match(/<button id="btn-loop-play-loop-default-1"[^>]*>/)?.[0];
+    expect(button).toBeDefined();
+    expect(button).toContain('disabled:opacity-30');
+    // `disabled:opacity-30` itself contains the substring "disabled", and the
+    // card's other buttons (e.g. "Move up" at index 0) render their own
+    // disabled="" independently of this prop — scope to this button and pin
+    // the actual HTML boolean attribute, not a class-name substring.
+    expect(button).toContain('disabled=""');
+  });
+
+  test('the play button is not disabled when the scope allows it', () => {
+    const html = renderCard({ playDisabled: false });
+    const button = html.match(/<button id="btn-loop-play-loop-default-1"[^>]*>/)?.[0];
+    expect(button).toBeDefined();
+    expect(button).not.toContain('disabled=""');
+  });
+
+  test('the auditioning card shows Stop and the AUDITION badge, and is not disabled', () => {
+    const html = renderCard({ isPlaying: true, isAuditioning: true });
+    expect(html).toContain('badge badge-sm badge-accent');
+    expect(html).toContain('Audition ');
+    expect(html).toContain('btn btn-xs gap-1 font-bold shadow-xs transition-all btn-error');
+  });
+
+  test('a card that is not auditioning shows no AUDITION badge', () => {
+    const html = renderCard({ isPlaying: true });
+    expect(html).not.toContain('badge-accent');
+  });
+
+  test('does not leak raw color literals or dark classes', () => {
+    const html = renderCard({ totalLoops: 1, isPlaying: true, isActive: true });
+
+    expect(html).not.toContain('text-white');
+    expect(html).not.toContain('bg-black');
+    expect(html).not.toContain('indigo-');
+    expect(html).not.toContain('dark:');
+    expect(html).not.toContain('rgba(');
   });
 
   test('the rename input uses the label as placeholder, not the current name', () => {
@@ -437,29 +325,8 @@ describe('renameFromDraft', () => {
 
 
 describe('the Copy into… button', () => {
-  const noop = () => {};
+  const renderCard = (totalLoops: number) => renderVerseCard({ totalLoops });
 
-  const renderCard = (totalLoops: number) =>
-    renderToString(
-      <SortableLoopCard
-        loop={createDefaultLoop()}
-        label="Verse"
-        index={0}
-        totalLoops={totalLoops}
-        isPlaying={false}
-        isActive
-        onSelect={noop}
-        onEdit={noop}
-        onDuplicate={noop}
-        onDelete={noop}
-        onCopyInto={noop}
-        onReorder={noop}
-        onRename={noop}
-        onSetRepeat={noop}
-        onTogglePlayLoop={noop}
-        onSetMix={noop}
-      />,
-    );
 
   test('renders beside Duplicate, labelled through the resolved loop label', () => {
     const html = renderCard(3);

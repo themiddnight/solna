@@ -172,17 +172,20 @@ describe('LeadMelodyGrid cells', () => {
   });
 });
 
-describe('LeadMelodyHeaders', () => {
-  const meter = getMeter('4/4');
-  const cellsPerBar = stepCells(meter);
-  const headerProps = (columns: number, cursor = 0): React.ComponentProps<typeof LeadMelodyHeaders> => ({
-    columns,
-    cellsPerBar,
-    cursor,
-    selectedBar: Math.floor(cursor / meter.stepsPerBar),
-    onSelectColumn: () => {},
-    columnsPerBar: meter.stepsPerBar,
-  });
+// The header suites below share one rig: the header takes explicit props, so
+// renderToString needs no playing store state to exercise it.
+const headersMeter = getMeter('4/4');
+const headersCellsPerBar = stepCells(headersMeter);
+const headerProps = (columns: number, cursor = 0): React.ComponentProps<typeof LeadMelodyHeaders> => ({
+  columns,
+  cellsPerBar: headersCellsPerBar,
+  cursor,
+  selectedBar: Math.floor(cursor / headersMeter.stepsPerBar),
+  onSelectColumn: () => {},
+  columnsPerBar: headersMeter.stepsPerBar,
+});
+
+describe('LeadMelodyHeaders geometry', () => {
 
   test('renders one cell per column in both strips, numbering bars and beats', () => {
     const html = renderToString(
@@ -205,7 +208,7 @@ describe('LeadMelodyHeaders', () => {
     // cursor's PIXELS belong to the marker now (DEV-377), so the strip carries
     // only the a11y state.
     const html = renderToString(<LeadMelodyHeaders {...headerProps(32, 20)} />);
-    expect(html.split('aria-pressed="true"').length - 1).toBe(meter.stepsPerBar + 1);
+    expect(html.split('aria-pressed="true"').length - 1).toBe(headersMeter.stepsPerBar + 1);
     expect(html).toContain('bg-primary/20 text-primary');
     expect(html).not.toContain('bg-secondary');
   });
@@ -237,10 +240,12 @@ describe('LeadMelodyHeaders', () => {
     expect(html.split('<button').length - 1).toBe(32);
     expect(html).toContain('aria-label="Bar 1"');
     expect(html).toContain('aria-label="Bar 1 step 6"');
-    expect(html.split('aria-pressed="true"').length - 1).toBe(meter.stepsPerBar + 1);
+    expect(html.split('aria-pressed="true"').length - 1).toBe(headersMeter.stepsPerBar + 1);
     expect(html.split('width:20px').length - 1).toBe(32);
   });
+});
 
+describe('LeadMelodyHeaders rendering stability', () => {
   test('output is byte-identical to the same props rendered twice', () => {
     const render = () =>
       renderToString(
@@ -277,7 +282,7 @@ describe('LeadMelodyHeaders', () => {
         <LeadMelodyHeaders
           {...headerProps(colsPerBar, 0)}
           columnsPerBar={colsPerBar}
-          cellsPerBar={leadColumnCells(meter, (16 * 2) / colsPerBar)}
+          cellsPerBar={leadColumnCells(headersMeter, (16 * 2) / colsPerBar)}
         />,
       );
 
@@ -301,7 +306,7 @@ describe('LeadMelodyHeaders', () => {
       <LeadMelodyHeaders
         {...headerProps(32, 0)}
         columnsPerBar={32}
-        cellsPerBar={leadColumnCells(meter, 1)}
+        cellsPerBar={leadColumnCells(headersMeter, 1)}
       />,
     );
     expect(wide.split('width:20px').length - 1).toBe(64);

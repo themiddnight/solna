@@ -27,7 +27,7 @@ afterEach(() => {
   stopEngineSync();
 });
 
-describe('engineSync', () => {
+describe('engineSync: bootstrap and transport transitions', () => {
   test('fireImmediately bootstrap pushes the current state into the engine', () => {
     const setMasterVolume = spyOn(audioEngine, 'setMasterVolume').mockClear();
     const setClockBpm = spyOn(audioEngine, 'setClockBpm').mockClear();
@@ -94,6 +94,9 @@ describe('engineSync', () => {
     expect(resetClock).not.toHaveBeenCalled();
   });
 
+});
+
+describe('engineSync: transport and effects pushes', () => {
   test('playAll from fully-stopped inits and resets the clock (0 -> 3)', () => {
     const init = spyOn(audioEngine, 'init').mockImplementation(() => {}).mockClear();
     const resetClock = spyOn(audioEngine, 'resetClock').mockClear();
@@ -156,6 +159,9 @@ describe('engineSync', () => {
     updateEffects.mockRestore();
   });
 
+});
+
+describe('engineSync: synth params and drum levels', () => {
   test('a respread synthParams object does not re-target live voices', () => {
     const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockImplementation(() => {});
     startEngineSync();
@@ -253,9 +259,10 @@ describe('engineSync', () => {
     useAppStore.getState().setBpm(131);
     expect(setDrumTrackGain).not.toHaveBeenCalled();
   });
+
 });
 
-describe('engineSync meter bridge', () => {
+describe('engineSync meter bridge: the meter and the snapshot', () => {
   test('fireImmediately pushes the current meter into the engine at startup', () => {
     useAppStore.setState({ meterId: '4/4' });
     const setMeter = spyOn(audioEngine, 'setMeter').mockClear();
@@ -301,6 +308,10 @@ describe('engineSync meter bridge', () => {
   // pad. Deleting the faderDbToGain wrap for any one of the other four used
   // to leave the whole suite green — an un-converted -6 dB bus would reach
   // setSourceGain as -6, which the engine clamp floors to 0 (silence).
+
+});
+
+describe('engineSync meter bridge: effects debounce and bus faders', () => {
   test('applyEngineSnapshot converts every bus fader from dB to linear gain', () => {
     useAppStore.setState({
       synthVolume: -6,
@@ -329,6 +340,7 @@ describe('engineSync meter bridge', () => {
   // drag with the Synth view's Target set to Pad reshapes nothing that is
   // already sounding — and a drone holds for a whole loop pass, so the knob
   // looks dead for seconds at a time while chord and bass reshape instantly.
+
   test('padSynthParams reaches updateSynthParams, in the snapshot and live', () => {
     const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockClear();
     applyEngineSnapshot();
@@ -381,6 +393,9 @@ describe('engineSync meter bridge', () => {
     setReverbDecay.mockRestore();
   });
 
+});
+
+describe('engineSync meter bridge: every bus fader from dB to gain', () => {
   test('applyEngineSnapshot applies the decay directly, bypassing the debounce', () => {
     const setReverbDecay = spyOn(audioEngine, 'setReverbDecay').mockImplementation(() => {});
     useAppStore.setState((s) => ({ effects: { ...s.effects, reverbDecay: 3.3 } }));
@@ -396,6 +411,7 @@ describe('engineSync meter bridge', () => {
   // BEFORE startEngineSync() exercises the fireImmediately bootstrap itself
   // (nothing else in this file does), rather than a warm-up write whose only
   // job was to make the next write fire.
+
   test('the fireImmediately bootstrap converts every bus fader from dB to linear gain', () => {
     useAppStore.setState({
       synthVolume: -3,
@@ -427,6 +443,7 @@ describe('engineSync meter bridge', () => {
   // conversion could be deleted with the suite green: pad's live edit is
   // covered by 'the pad bus is bootstrapped and then tracks the store'
   // above, synth/chord/sequencer by the bootstrap test's neighbours below.
+
   test('each bus fader tracks a live edit, converted to linear gain', () => {
     const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
     startEngineSync();
@@ -466,6 +483,7 @@ describe('engineSync meter bridge', () => {
   // to chase. The level itself is asserted where it is audible, in
   // engine.test.ts ("a voice's peak gain carries its own preset's calibration
   // trim") and presetPreview.test.ts.
+
   test('neither the snapshot nor a preset change writes the calibration trim override', () => {
     const setPresetTrim = spyOn(audioEngine, 'setPresetTrim').mockClear();
 
@@ -487,6 +505,7 @@ describe('engineSync meter bridge', () => {
       padSynthParams: s.padSynthParams,
     });
   });
+
 });
 
 describe('EFFECT_KEYS_EXCEPT_DECAY', () => {

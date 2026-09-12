@@ -16,23 +16,14 @@ const AVAILABLE_TARGETS = [
   { key: 'notes', label: 'Keyboard Notes (Note On/Off)' },
 ];
 
-export function MidiSettingsModal() {
-  const isOpen = useAppStore((s) => s.isMidiSettingsOpen);
-  const setIsOpen = useAppStore((s) => s.setIsMidiSettingsOpen);
-  const midiMappings = useAppStore((s) => s.midiMappings);
-  const updateMidiMapping = useAppStore((s) => s.updateMidiMapping);
-  const addMidiMapping = useAppStore((s) => s.addMidiMapping);
-  const removeMidiMapping = useAppStore((s) => s.removeMidiMapping);
-  const resetMidiMappings = useAppStore((s) => s.resetMidiMappings);
-  const midiLearnTargetId = useAppStore((s) => s.midiLearnTargetId);
-  const setMidiLearnTargetId = useAppStore((s) => s.setMidiLearnTargetId);
+interface MidiInput {
+  id: string;
+  name: string;
+}
 
-  const selectedMidiInputId = useAppStore((s) => s.selectedMidiInputId);
-  const setSelectedMidiInputId = useAppStore((s) => s.setSelectedMidiInputId);
-
-  const [inputs, setInputs] = useState<Array<{ id: string; name: string }>>([]);
-  const [newTargetKey, setNewTargetKey] = useState('filterCutoff');
-  const [newCcNumber, setNewCcNumber] = useState(20);
+/** The Web MIDI device list, re-read on every open and on every state change. */
+function useMidiInputs(isOpen: boolean): MidiInput[] {
+  const [inputs, setInputs] = useState<MidiInput[]>([]);
 
   useEffect(() => {
     if (!isOpen || typeof navigator === 'undefined' || !('requestMIDIAccess' in navigator)) {
@@ -43,7 +34,7 @@ export function MidiSettingsModal() {
       .then((access) => {
         if (!access) return;
         const updateDevices = () => {
-          const list: Array<{ id: string; name: string }> = [];
+          const list: MidiInput[] = [];
           for (const input of access.inputs.values()) {
             list.push({ id: input.id, name: input.name || 'Unnamed MIDI Device' });
           }
@@ -57,22 +48,226 @@ export function MidiSettingsModal() {
       });
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  return inputs;
+}
+
+/** Connected MIDI inputs, under the "Active Input Device" picker. */
+function MidiDeviceSection({
+  inputs,
+  selectedInputId,
+  onSelectInput,
+}: {
+  inputs: MidiInput[];
+  selectedInputId: string;
+  onSelectInput: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className={`${SECTION_HEADER}/60 flex items-center gap-1.5`}>
+          <Radio className="w-3.5 h-3.5 text-primary" /> Connected MIDI Inputs ({inputs.length})
+        </h4>
+      </div>
+
+      <div className="bg-base-200 border border-base-300 rounded-box p-3 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs font-semibold">Active Input Device:</span>
+          <select
+            value={selectedInputId}
+            onChange={(e) => onSelectInput(e.target.value)}
+            className="select select-sm select-bordered text-xs max-w-xs flex-1"
+          >
+            <option value="all">All Connected Devices (Omni)</option>
+            {inputs.map((input) => (
+              <option key={input.id} value={input.id}>
+                {input.name} ({input.id.slice(0, 8)}...)
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {inputs.length > 0 ? (
+          <ul className="space-y-1.5 border-t border-base-300 pt-2.5">
+            {inputs.map((input) => {
+              const isActive = selectedInputId === 'all' || selectedInputId === input.id;
+              return (
+                <li key={input.id} className="flex items-center justify-between text-xs text-base-content">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-success animate-pulse' : 'bg-base-content/30'}`} />
+                    <span>{input.name}</span>
+                  </div>
+                  <span className="badge badge-xs badge-ghost text-[10px]">
+                    {isActive ? 'Listening' : 'Bypassed'}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-xs text-base-content/60 italic">
+            No MIDI input devices detected or Web MIDI permission not granted. Connect a USB MIDI keyboard or controller.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The banner shown while a mapping is armed for MIDI Learn. */
+function MidiLearnAlert({ onCancel }: { onCancel: () => void }) {
+  return (
+    <div className="alert alert-warning py-2 text-xs flex items-center justify-between">
+      <span>🔴 <b>MIDI Learn Active:</b> Twist a knob or press a control on your MIDI device...</span>
+      <button type="button" onClick={onCancel} className="btn btn-xs btn-ghost">
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+interface MappingRowProps {
+  mapping: MidiMapping;
+  isLearning: boolean;
+  onToggleLearn: () => void;
+  onUpdate: (updates: Partial<MidiMapping>) => void;
+  onRemove: () => void;
+}
+
+/** One row of the mappings table: the binding's identity, its learn/enable controls. */
+function MappingRow({ mapping, isLearning, onToggleLearn, onUpdate, onRemove }: MappingRowProps) {
+  return (
+    <div
+      className={`flex items-center justify-between p-3 gap-3 hover:bg-base-200/50 transition-colors ${
+        !mapping.enabled ? 'opacity-50' : ''
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <input
+          type="checkbox"
+          checked={mapping.enabled}
+          onChange={(e) => onUpdate({ enabled: e.target.checked })}
+          className="checkbox checkbox-xs checkbox-primary"
+          title="Enable/Disable binding"
+        />
+        <div>
+          <div className="font-semibold text-xs text-base-content flex items-center gap-2">
+            {mapping.targetLabel}
+            <span className="badge badge-xs badge-ghost">
+              {mapping.type.toUpperCase()}
+            </span>
+          </div>
+          <div className="text-[10px] text-base-content/60">
+            {mapping.type === 'cc' ? `CC #${mapping.ccNumber}` : 'Note On/Off (0-127)'}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {mapping.type === 'cc' && (
+          <button
+            type="button"
+            onClick={onToggleLearn}
+            className={`btn btn-xs ${isLearning ? 'btn-error animate-pulse' : 'btn-outline btn-primary'}`}
+          >
+            {isLearning ? 'Listening...' : 'Learn CC'}
+          </button>
+        )}
+        {mapping.type === 'cc' && (
+          <input
+            type="number"
+            min="0"
+            max="127"
+            value={mapping.ccNumber ?? 0}
+            onChange={(e) => onUpdate({ ccNumber: parseInt(e.target.value) || 0 })}
+            className="input input-xs input-bordered w-14 tabular-nums text-center"
+            title="Edit CC number"
+          />
+        )}
+        <IconButton
+          label="Clear binding"
+          icon={<Trash2 className="w-3.5 h-3.5" />}
+          size="xs"
+          className="text-error"
+          onClick={onRemove}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The custom-binding form: a target, a CC number unless the target is `notes`, then Add. */
+function AddMappingForm({ onAdd }: { onAdd: (mapping: MidiMapping) => void }) {
+  const [newTargetKey, setNewTargetKey] = useState('filterCutoff');
+  const [newCcNumber, setNewCcNumber] = useState(20);
 
   const handleAddCustom = (e: React.FormEvent) => {
     e.preventDefault();
     const targetObj = AVAILABLE_TARGETS.find((t) => t.key === newTargetKey);
     const isNote = newTargetKey === 'notes';
-    const newMapping: MidiMapping = {
+    onAdd({
       id: `custom-${Date.now()}`,
       type: isNote ? 'note' : 'cc',
       ccNumber: isNote ? undefined : Number(newCcNumber),
       targetKey: newTargetKey,
       targetLabel: targetObj?.label || newTargetKey,
       enabled: true,
-    };
-    addMidiMapping(newMapping);
+    });
   };
+
+  return (
+    <form onSubmit={handleAddCustom} className="border-t border-base-300 pt-4 flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+      <div className="form-control flex-1">
+        <label className="label label-text text-xs" htmlFor="select-midi-target">Target Parameter</label>
+        <select
+          id="select-midi-target"
+          value={newTargetKey}
+          onChange={(e) => setNewTargetKey(e.target.value)}
+          className="select select-sm select-bordered w-full text-xs"
+        >
+          {AVAILABLE_TARGETS.map((t) => (
+            <option key={t.key} value={t.key}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {newTargetKey !== 'notes' && (
+        <div className="form-control w-full sm:w-24">
+          <label className="label label-text text-xs" htmlFor="input-midi-cc">CC Number</label>
+          <input
+            id="input-midi-cc"
+            type="number"
+            min="0"
+            max="127"
+            value={newCcNumber}
+            onChange={(e) => setNewCcNumber(parseInt(e.target.value) || 0)}
+            className="input input-sm input-bordered w-full tabular-nums text-center text-xs"
+          />
+        </div>
+      )}
+      <button type="submit" className="btn btn-sm btn-primary gap-1 w-full sm:w-auto">
+        <Plus className="w-4 h-4" /> Add Mapping
+      </button>
+    </form>
+  );
+}
+
+export function MidiSettingsModal() {
+  const isOpen = useAppStore((s) => s.isMidiSettingsOpen);
+  const setIsOpen = useAppStore((s) => s.setIsMidiSettingsOpen);
+  const midiMappings = useAppStore((s) => s.midiMappings);
+  const updateMidiMapping = useAppStore((s) => s.updateMidiMapping);
+  const addMidiMapping = useAppStore((s) => s.addMidiMapping);
+  const removeMidiMapping = useAppStore((s) => s.removeMidiMapping);
+  const resetMidiMappings = useAppStore((s) => s.resetMidiMappings);
+  const midiLearnTargetId = useAppStore((s) => s.midiLearnTargetId);
+  const setMidiLearnTargetId = useAppStore((s) => s.setMidiLearnTargetId);
+  const selectedMidiInputId = useAppStore((s) => s.selectedMidiInputId);
+  const setSelectedMidiInputId = useAppStore((s) => s.setSelectedMidiInputId);
+
+  const inputs = useMidiInputs(isOpen);
+
+  if (!isOpen) return null;
 
   return (
     <Modal
@@ -84,67 +279,15 @@ export function MidiSettingsModal() {
       title={<><Sliders className="w-5 h-5 text-primary" />MIDI Controller &amp; Mappings</>}
     >
       {/* Connected Devices & Input Selection */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className={`${SECTION_HEADER}/60 flex items-center gap-1.5`}>
-            <Radio className="w-3.5 h-3.5 text-primary" /> Connected MIDI Inputs ({inputs.length})
-          </h4>
-        </div>
-
-        <div className="bg-base-200 border border-base-300 rounded-box p-3 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs font-semibold">Active Input Device:</span>
-            <select
-              value={selectedMidiInputId}
-              onChange={(e) => setSelectedMidiInputId(e.target.value)}
-              className="select select-sm select-bordered text-xs max-w-xs flex-1"
-            >
-              <option value="all">All Connected Devices (Omni)</option>
-              {inputs.map((input) => (
-                <option key={input.id} value={input.id}>
-                  {input.name} ({input.id.slice(0, 8)}...)
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {inputs.length > 0 ? (
-            <ul className="space-y-1.5 border-t border-base-300 pt-2.5">
-              {inputs.map((input) => {
-                const isActive = selectedMidiInputId === 'all' || selectedMidiInputId === input.id;
-                return (
-                  <li key={input.id} className="flex items-center justify-between text-xs text-base-content">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-success animate-pulse' : 'bg-base-content/30'}`} />
-                      <span>{input.name}</span>
-                    </div>
-                    <span className="badge badge-xs badge-ghost text-[10px]">
-                      {isActive ? 'Listening' : 'Bypassed'}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="text-xs text-base-content/60 italic">
-              No MIDI input devices detected or Web MIDI permission not granted. Connect a USB MIDI keyboard or controller.
-            </p>
-          )}
-        </div>
-      </div>
+      <MidiDeviceSection
+        inputs={inputs}
+        selectedInputId={selectedMidiInputId}
+        onSelectInput={setSelectedMidiInputId}
+      />
 
       {/* MIDI Learn status alert */}
       {midiLearnTargetId && (
-        <div className="alert alert-warning py-2 text-xs flex items-center justify-between">
-          <span>🔴 <b>MIDI Learn Active:</b> Twist a knob or press a control on your MIDI device...</span>
-          <button
-            type="button"
-            onClick={() => setMidiLearnTargetId(null)}
-            className="btn btn-xs btn-ghost"
-          >
-            Cancel
-          </button>
-        </div>
+        <MidiLearnAlert onCancel={() => setMidiLearnTargetId(null)} />
       )}
 
       {/* Mappings Table */}
@@ -166,105 +309,21 @@ export function MidiSettingsModal() {
           {midiMappings.map((mapping) => {
             const isLearning = midiLearnTargetId === mapping.id;
             return (
-              <div
+              <MappingRow
                 key={mapping.id}
-                className={`flex items-center justify-between p-3 gap-3 hover:bg-base-200/50 transition-colors ${
-                  !mapping.enabled ? 'opacity-50' : ''
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={mapping.enabled}
-                    onChange={(e) => updateMidiMapping(mapping.id, { enabled: e.target.checked })}
-                    className="checkbox checkbox-xs checkbox-primary"
-                    title="Enable/Disable binding"
-                  />
-                  <div>
-                    <div className="font-semibold text-xs text-base-content flex items-center gap-2">
-                      {mapping.targetLabel}
-                      <span className="badge badge-xs badge-ghost">
-                        {mapping.type.toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-base-content/60">
-                      {mapping.type === 'cc' ? `CC #${mapping.ccNumber}` : 'Note On/Off (0-127)'}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {mapping.type === 'cc' && (
-                    <button
-                      type="button"
-                      onClick={() => setMidiLearnTargetId(isLearning ? null : mapping.id)}
-                      className={`btn btn-xs ${isLearning ? 'btn-error animate-pulse' : 'btn-outline btn-primary'}`}
-                    >
-                      {isLearning ? 'Listening...' : 'Learn CC'}
-                    </button>
-                  )}
-                  {mapping.type === 'cc' && (
-                    <input
-                      type="number"
-                      min="0"
-                      max="127"
-                      value={mapping.ccNumber ?? 0}
-                      onChange={(e) =>
-                        updateMidiMapping(mapping.id, { ccNumber: parseInt(e.target.value) || 0 })
-                      }
-                      className="input input-xs input-bordered w-14 tabular-nums text-center"
-                      title="Edit CC number"
-                    />
-                  )}
-                  <IconButton
-                    label="Clear binding"
-                    icon={<Trash2 className="w-3.5 h-3.5" />}
-                    size="xs"
-                    className="text-error"
-                    onClick={() => removeMidiMapping(mapping.id)}
-                  />
-                </div>
-              </div>
+                mapping={mapping}
+                isLearning={isLearning}
+                onToggleLearn={() => setMidiLearnTargetId(isLearning ? null : mapping.id)}
+                onUpdate={(updates) => updateMidiMapping(mapping.id, updates)}
+                onRemove={() => removeMidiMapping(mapping.id)}
+              />
             );
           })}
         </div>
       </div>
 
       {/* Add Custom Binding Form */}
-      <form onSubmit={handleAddCustom} className="border-t border-base-300 pt-4 flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
-        <div className="form-control flex-1">
-          <label className="label label-text text-xs" htmlFor="select-midi-target">Target Parameter</label>
-          <select
-            id="select-midi-target"
-            value={newTargetKey}
-            onChange={(e) => setNewTargetKey(e.target.value)}
-            className="select select-sm select-bordered w-full text-xs"
-          >
-            {AVAILABLE_TARGETS.map((t) => (
-              <option key={t.key} value={t.key}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        {newTargetKey !== 'notes' && (
-          <div className="form-control w-full sm:w-24">
-            <label className="label label-text text-xs" htmlFor="input-midi-cc">CC Number</label>
-            <input
-              id="input-midi-cc"
-              type="number"
-              min="0"
-              max="127"
-              value={newCcNumber}
-              onChange={(e) => setNewCcNumber(parseInt(e.target.value) || 0)}
-              className="input input-sm input-bordered w-full tabular-nums text-center text-xs"
-            />
-          </div>
-        )}
-        <button type="submit" className="btn btn-sm btn-primary gap-1 w-full sm:w-auto">
-          <Plus className="w-4 h-4" /> Add Mapping
-        </button>
-      </form>
+      <AddMappingForm onAdd={addMidiMapping} />
 
       {/* Footer Actions */}
       <div className="modal-action">

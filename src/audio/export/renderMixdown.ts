@@ -55,7 +55,8 @@ import { barDurationSec, generateBlockChordNotes, stepDurationSec } from '@/util
 import { TICKS_PER_SIXTEENTH, columnsPerBar, strideFor, type LeadStepResolutionId } from '@/utils/stepResolution';
 import { arpStepFor, getMeter, type MeterId } from '@/utils/meter';
 import { encodeWav } from '@/utils/encodeWav';
-import type { BassStepChoice } from '@/data/bassPatterns';
+import type { BassPattern, BassStepChoice } from '@/data/bassPatterns';
+import type { RhythmPattern } from '@/data/chordRhythms';
 import type { DrumKit } from '@/data/drumKits';
 import type {
   ChordItem,
@@ -316,6 +317,104 @@ export interface LoopVoices {
   bassHoldScale: number;
 }
 
+/**
+ * The loop's chord and bass patterns, resolved once for the whole loop at the
+ * ACTIVE meter. A custom grid is synthesized at the active meter and is stamped
+ * with it, so adaptRhythmPattern returns it unchanged — the same two-step the
+ * live hook performs, in the same order.
+ */
+function resolveLoopPatterns(
+  loop: MixdownLoop,
+  meterId: MeterId,
+  stepsPerBar: number,
+): { rhythmPattern: RhythmPattern; bassPattern: BassPattern } {
+  const rhythmPattern = adaptRhythmPattern(
+    resolvePlaybackRhythmPattern(
+      loop.chordRhythmMode,
+      loop.chordRhythmId,
+      loop.customChordRhythm,
+      stepsPerBar,
+      meterId,
+    ),
+    stepsPerBar,
+  );
+  const bassPattern = adaptBassPattern(
+    resolvePlaybackBassPattern(
+      loop.bassPatternMode,
+      loop.bassPatternId,
+      loop.customBassPattern,
+      stepsPerBar,
+      meterId,
+    ),
+    stepsPerBar,
+  );
+  return { rhythmPattern, bassPattern };
+}
+
+/**
+ * One chord's bass events: empty when the pattern is arpeggiated or a full hold
+ * (`skip` is the caller's `bassFullHold || bassArp`, computed once for the
+ * loop), otherwise the steps resolved against the chord at `chordIndex`.
+ */
+function bassEventsForChord(
+  loop: MixdownLoop,
+  bassPattern: BassPattern,
+  chordIndex: number,
+  bpm: number,
+  bassHoldScale: number,
+  skip: boolean,
+): BarInvariantEvent[] {
+  if (skip) return [];
+  // The chord INDEX matters, not the chord object: resolveBassSteps walks
+  // `chords[(i + 1) % length]` for its approach tones, which is what makes
+  // the last chord lead back into the first at the loop seam.
+  return resolveBassSteps(
+    bassPattern,
+    loop.chords,
+    chordIndex,
+    loop.bassOctave,
+    loop.scaleRoot,
+    loop.scaleType,
+    bpm,
+    bassHoldScale,
+  ).map((ev) => ({
+    step: ev.step,
+    noteName: ev.noteName,
+    velocity: ev.velocity,
+    timeOffset: 0,
+    hold: ev.holdSec,
+    // Approach tones lead into the NEXT chord, so they belong on the last bar.
+    lastBarOnly: isApproachToken(ev.token),
+  }));
+}
+
+/**
+ * The note a full-hold bass pattern starts on, or null when the pattern is not
+ * a full hold. holdScale 1: the live hook resolves the full-hold bass at full
+ * length and applies the feel only through fullHoldDuration, so the note-off
+ * and the hold it is paired with are measured the same way.
+ */
+function fullHoldBassNote(
+  loop: MixdownLoop,
+  bassPattern: BassPattern,
+  chordIndex: number,
+  bpm: number,
+  fullHold: boolean,
+): { noteName: string; velocity: number } | null {
+  if (!fullHold) return null;
+  const root = resolveBassSteps(
+    bassPattern,
+    loop.chords,
+    chordIndex,
+    loop.bassOctave,
+    loop.scaleRoot,
+    loop.scaleType,
+    bpm,
+    1,
+  )[0];
+  return root ? { noteName: root.noteName, velocity: root.velocity } : null;
+}
+
 export function buildLoopVoices(
   loop: MixdownLoop,
   meterId: MeterId,
@@ -342,29 +441,7 @@ export function buildLoopVoices(
   const chordHoldScale = feelToHoldScale(loop.chordFeel);
   const bassHoldScale = feelToHoldScale(loop.bassFeel);
 
-  // One resolution for the whole loop. A custom grid is synthesized at the
-  // ACTIVE meter and is stamped with it, so adaptRhythmPattern returns it
-  // unchanged — the same two-step the live hook performs, in the same order.
-  const rhythmPattern = adaptRhythmPattern(
-    resolvePlaybackRhythmPattern(
-      loop.chordRhythmMode,
-      loop.chordRhythmId,
-      loop.customChordRhythm,
-      stepsPerBar,
-      meterId,
-    ),
-    stepsPerBar,
-  );
-  const bassPattern = adaptBassPattern(
-    resolvePlaybackBassPattern(
-      loop.bassPatternMode,
-      loop.bassPatternId,
-      loop.customBassPattern,
-      stepsPerBar,
-      meterId,
-    ),
-    stepsPerBar,
-  );
+  const { rhythmPattern, bassPattern } = resolveLoopPatterns(loop, meterId, stepsPerBar);
   const chordFullHold = !chordArp && isFullHoldRhythm(rhythmPattern, stepsPerBar);
   const bassFullHold = !bassArp && isFullHoldBass(bassPattern, stepsPerBar);
 
@@ -388,42 +465,12 @@ export function buildLoopVoices(
         : buildChordEvents(rhythmPattern, notes, stepDur, chordHoldScale),
     );
 
-    if (bassFullHold || bassArp) {
-      bassEvents.push([]);
-    } else {
-      // The chord INDEX matters, not the chord object: resolveBassSteps walks
-      // `chords[(i + 1) % length]` for its approach tones, which is what makes
-      // the last chord lead back into the first at the loop seam.
-      bassEvents.push(
-        resolveBassSteps(
-          bassPattern,
-          loop.chords,
-          i,
-          loop.bassOctave,
-          loop.scaleRoot,
-          loop.scaleType,
-          bpm,
-          bassHoldScale,
-        ).map((ev) => ({
-          step: ev.step,
-          noteName: ev.noteName,
-          velocity: ev.velocity,
-          timeOffset: 0,
-          hold: ev.holdSec,
-          // Approach tones lead into the NEXT chord, so they belong on the last bar.
-          lastBarOnly: isApproachToken(ev.token),
-        })),
-      );
-    }
+    bassEvents.push(
+      bassEventsForChord(loop, bassPattern, i, bpm, bassHoldScale, bassFullHold || bassArp),
+    );
 
     chordHoldSec.push(chordFullHold ? fullHoldDuration(bars, barDur, chordHoldScale) : 0);
-    const bassRoot = bassFullHold
-      // holdScale 1: the live hook resolves the full-hold bass at full length
-      // and applies the feel only through fullHoldDuration, so the note-off
-      // and the hold it is paired with are measured the same way.
-      ? resolveBassSteps(bassPattern, loop.chords, i, loop.bassOctave, loop.scaleRoot, loop.scaleType, bpm, 1)[0]
-      : undefined;
-    bassHoldNotes.push(bassRoot ? { noteName: bassRoot.noteName, velocity: bassRoot.velocity } : null);
+    bassHoldNotes.push(fullHoldBassNote(loop, bassPattern, i, bpm, bassFullHold));
     bassHoldSec.push(bassFullHold ? fullHoldDuration(bars, barDur, bassHoldScale) : 0);
   }
   return {

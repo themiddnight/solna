@@ -282,57 +282,27 @@ export function subscribeArpState(ref: ArpStateRef): () => void {
   };
 }
 
-/** Plays notes (synth + drums) and owns the global QWERTY listeners. Mounted
- *  exactly once, at App level. The dock is a purely visual surface — it never
- *  gates these listeners. */
-export function useInputDeck(): {
-  keyboardProps: InputDeckKeyboardProps;
-  drumProps: InputDeckDrumProps;
-} {
-  const keyboardMode = useAppStore((s) => s.keyboardMode);
-  const setKeyboardMode = useAppStore((s) => s.setKeyboardMode);
-  const scaleRoot = useAppStore((s) => s.scaleRoot);
-  const scaleType = useAppStore((s) => s.scaleType);
-  // Deliberately two PRIMITIVE selectors, not `(s) => s.synthParams`. This hook
-  // is mounted in App, and `synthParams` is a fresh object on every knob
-  // pointermove (60-120 Hz), so selecting the object re-rendered App and with
-  // it SoundView + SequencerView + ArrangeView + BottomInputDock — three of
-  // them on hidden tabs. These two scalars are the ONLY reactive reads; the
-  // full params object reaches the arp through arpStateRef below.
-  const arpActive = useAppStore(selectArpActive);
-  const release = useAppStore(selectSynthRelease);
+type NoteHandler = (note: string) => void;
 
-  const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
-  // Keyboard display octave — independent from synth pitch octave (params.octave)
-  const [keyboardOctave, setKeyboardOctave] = useState<number>(0);
-  // Chord mode: maps a held KeyboardEvent.code to the exact notes it played,
-  // so key-up releases those notes even if key/scale/octave changed while the
-  // key was held — never recompute the chord at release time.
-  const chordKeyNotesRef = useRef<Map<string, string[]>>(new Map());
-
-  // Keep the live arp state in a ref so the clock listener reads it without
-  // re-subscribing or stopping voices on every keystroke or parameter tweak.
-  // `heldTargets` is written synchronously by handleNoteOn/handleNoteOff — in
-  // the arp branch too, which is why the old commit-time mirror of
-  // `activeNotes` is gone: the arp builds its sequence from this map, so it
-  // must never lag a keypress by a render.
-  const arpStateRef = useRef<ArpStateRef['current']>({
-    heldTargets: new Map(),
-    params: resolveFocusedSynthParams(useAppStore.getState()),
-    target: synthTargetForFocus(useAppStore.getState().focusTrack),
-    triggeredTargets: new Set(),
-    bpm: useAppStore.getState().bpm,
-  });
-  // params/bpm/target come straight off the store — no render subscription needed.
-  useEffect(() => subscribeArpState(arpStateRef), []);
-
+/**
+ * The note-on/note-off pair every input source calls.
+ *
+ * Both are `useCallback` with a stable identity: they keep it by reading the
+ * live arp state off `arpStateRef` — refreshed by an imperative store
+ * subscription rather than by a render dependency — where a version that
+ * depended on the params objects changed identity on every knob move and tore
+ * down and re-registered the window keydown/keyup listeners ~60 times a second
+ * during a drag.
+ */
+function useNoteHandlers(
+  arpStateRef: ArpStateRef,
+  setActiveNotes: Dispatch<SetStateAction<Set<string>>>,
+): { handleNoteOn: NoteHandler; handleNoteOff: NoteHandler } {
   const handleNoteOn = useCallback(
     (note: string) => {
       // Params come from arpStateRef, kept fresh by an imperative store
-      // subscription (subscribeArpState) rather than a render dependency, so
-      // this reads the latest value without the callback identity changing
-      // on every knob move — which used to tear down and re-register the
-      // window keydown/keyup listeners ~60 times a second during a drag.
+      // subscription (subscribeArpState), so this reads the latest value
+      // without the callback identity changing on every knob move.
       const liveParams = arpStateRef.current.params;
       // The bus focus names RIGHT NOW. Read once, used for both the engine
       // call and the map entry, so the note is captured on exactly the bus it
@@ -359,7 +329,7 @@ export function useInputDeck(): {
       });
       setActiveNotes((prev) => new Set(prev).add(note));
     },
-    [],
+    [arpStateRef, setActiveNotes],
   );
 
   const handleNoteOff = useCallback(
@@ -384,14 +354,40 @@ export function useInputDeck(): {
         return next;
       });
     },
-    [],
+    [arpStateRef, setActiveNotes],
   );
 
-  // Arpeggiator playback: parameterized clock subscriber (the 4 rate branches
-  // collapsed into computeArpTriggers, proven equivalent by the exhaustive
-  // sweep in src/audio/playback/arpPlayback.test.ts)
-  useArpPlayback(arpStateRef, arpActive);
+  return { handleNoteOn, handleNoteOff };
+}
 
+interface HeldNoteRelease {
+  arpStateRef: ArpStateRef;
+  /** Held key code → the exact notes it played, so key-up never recomputes a chord. */
+  chordKeyNotesRef: React.RefObject<Map<string, string[]>>;
+  handleNoteOff: NoteHandler;
+  keyboardMode: KeyboardMode;
+}
+
+/**
+ * The two backstops for a release gesture that never arrives.
+ *
+ * A keyboard-mode change (and the unmount that ends this hook) releases every
+ * note still sounding and clears the chord key-tracking ref: without it, a mode
+ * switch while a key is held leaves its voices hanging forever, because the
+ * key-up handler that would have released them now branches on the NEW mode and
+ * finds nothing to release. Separately, Cmd-Tab / alt-tab / an OS dialog steals
+ * the keyup that would have released a held note, and window blur plus
+ * visibilitychange (tab hidden) are the only two signals a page gets for "the
+ * user is no longer interacting with this tab" — so both release everything
+ * held. Both read the refs at cleanup time, because that is when the live set
+ * is the one to release.
+ */
+function useHeldNoteRelease({
+  arpStateRef,
+  chordKeyNotesRef,
+  handleNoteOff,
+  keyboardMode,
+}: HeldNoteRelease): void {
   // Kept fresh every render so the mode-change release effect below always
   // calls the latest handleNoteOff without needing it in its dependency array
   // (which would fire the release on every params/controlTarget change, not
@@ -401,67 +397,91 @@ export function useInputDeck(): {
     handleNoteOffRef.current = handleNoteOff;
   });
 
-  // Bug fix: release every note still sounding whenever the keyboard mode
-  // changes (or this hook's owner unmounts), and clear the chord key-tracking
-  // ref. Without this, a mode switch while a key/button is held leaves its
-  // voices hanging forever — the key-up/pointer-up handler that would have
-  // released them now branches on the *new* mode and finds nothing to release.
   useEffect(() => {
     return () => {
       // The notes to release are whichever are held WHEN the mode changes, so
       // both refs must be read at cleanup time; a copy taken at effect setup
       // would release the wrong set and clear the wrong map.
-      const held = notesToReleaseOnKeyboardModeChange(
-        arpStateRef.current.heldTargets.keys(),
-      );
-      held.forEach((note) => handleNoteOffRef.current(note));
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+      releaseAllHeldNotes(arpStateRef.current.heldTargets.keys(), handleNoteOffRef.current);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- read at cleanup time by design
       chordKeyNotesRef.current.clear();
       // Cleared with it: handleNoteOff deletes each note it releases, but a
       // note released by any other path would otherwise leave a stale entry
       // naming a bus that has nothing sounding on it.
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- read at cleanup time by design
       arpStateRef.current.heldTargets.clear();
     };
-  }, [keyboardMode]);
+    // The two refs are parameters here, so the rule asks for them by name; both
+    // are the caller's `useRef` objects, whose identity never changes.
+  }, [keyboardMode, arpStateRef, chordKeyNotesRef]);
 
-  // Silence lingering arp voices when all keys are released in arp mode.
-  // Releases every bus the arp actually triggered on — a hold that spanned a
-  // focus change left voices on more than one.
   useEffect(() => {
-    if (arpActive && activeNotes.size === 0 && hasSynthPlaybackContext()) {
-      releaseTriggeredTargets(
-        arpStateRef.current.triggeredTargets,
-        release,
-        releaseSynthPlaybackVoices,
-      );
-    }
-  }, [arpActive, activeNotes.size, release]);
+    const releaseHeld = () => {
+      releaseAllHeldNotes(arpStateRef.current.heldTargets.keys(), handleNoteOffRef.current);
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) releaseHeld();
+    };
+    window.addEventListener('blur', releaseHeld);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('blur', releaseHeld);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [arpStateRef]);
+}
 
+/** The chord / scale-locked / chromatic note tables for the current key and octave. */
+function useKeyboardNoteTables(scaleRoot: string, scaleType: string, keyboardOctave: number) {
+  // The keyboard listeners below used to rebuild these from tonal on every
+  // keystroke, and the rows variant was called fresh in the JSX on every
+  // render while its sibling chordKeyboardRows was already memoized.
   const chordKeyboardRows = useMemo(
     () => getChordKeyboardRows(scaleRoot, scaleType, keyboardOctave),
     [scaleRoot, scaleType, keyboardOctave],
   );
-
-  // The keyboard handlers below used to rebuild these from tonal on every
-  // keystroke, and the rows variant was called fresh in the JSX on every
-  // render while its sibling chordKeyboardRows was already memoized.
   const scaleLockedNotesFlat = useMemo(
     () => getScaleLockedKeyboardNotesFlat(scaleRoot, scaleType, keyboardOctave),
     [scaleRoot, scaleType, keyboardOctave],
   );
-
   const scaleLockedRows = useMemo(
     () => getScaleLockedKeyboardNotes(scaleRoot, scaleType, keyboardOctave),
     [scaleRoot, scaleType, keyboardOctave],
   );
-
   const chromaticNotes = useMemo(
     () => getChromaticKeyboardNotes(keyboardOctave),
     [keyboardOctave],
   );
+  return { chordKeyboardRows, scaleLockedNotesFlat, scaleLockedRows, chromaticNotes };
+}
 
-  // QWERTY Computer Keyboard mapping — uses keyboardOctave, NOT params.octave
+interface QwertyNoteListeners {
+  keyboardMode: KeyboardMode;
+  chordKeyboardRows: ReturnType<typeof getChordKeyboardRows>;
+  scaleLockedNotesFlat: ReturnType<typeof getScaleLockedKeyboardNotesFlat>;
+  chromaticNotes: ReturnType<typeof getChromaticKeyboardNotes>;
+  chordKeyNotesRef: React.RefObject<Map<string, string[]>>;
+  setKeyboardOctave: Dispatch<SetStateAction<number>>;
+  handleNoteOn: NoteHandler;
+  handleNoteOff: NoteHandler;
+}
+
+/**
+ * The computer keyboard's note listener. A key that means nothing in the
+ * current mode is a no-op, and in chord mode the notes a key played are
+ * captured at key-down so key-up releases exactly those, whatever the key,
+ * scale or octave has become since.
+ */
+function useQwertyNoteListeners({
+  keyboardMode,
+  chordKeyboardRows,
+  scaleLockedNotesFlat,
+  chromaticNotes,
+  chordKeyNotesRef,
+  setKeyboardOctave,
+  handleNoteOn,
+  handleNoteOff,
+}: QwertyNoteListeners): void {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;
@@ -518,45 +538,35 @@ export function useInputDeck(): {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [
-    // handleNoteOn/handleNoteOff are useCallback([]) now, so they never
-    // change — kept here because the effect genuinely calls them. scaleRoot,
-    // scaleType and keyboardOctave are no longer read directly: they reach
-    // the handlers through the three memos above, which change identity only
+    // handleNoteOn/handleNoteOff are useCallback with a stable identity, so
+    // they never change — kept here because the effect genuinely calls them.
+    // scaleRoot, scaleType and keyboardOctave are no longer read directly: they
+    // reach the handlers through the tables above, which change identity only
     // when the notes actually change. keyboardOctave is still *written* by
-    // handleKeyDown, but only through the setKeyboardOctave((o) => ...)
-    // updater form, which never reads the current value from the closure.
+    // handleKeyDown, but only through the setKeyboardOctave((o) => ...) updater
+    // form, which never reads the current value from the closure. The two refs
+    // are the caller's `useRef` objects — named here because they are
+    // parameters, and never re-created.
     handleNoteOn,
     handleNoteOff,
     keyboardMode,
     chordKeyboardRows,
     scaleLockedNotesFlat,
     chromaticNotes,
+    chordKeyNotesRef,
+    setKeyboardOctave,
   ]);
+}
 
-  // Cmd-Tab / alt-tab / an OS-level dialog steals the keyup that would have
-  // released a held note — window blur and visibilitychange (tab hidden) are
-  // the only two signals a page gets for "the user is no longer interacting
-  // with this tab", so both release every held note. Reads activeNotes from
-  // the ref (not the closed-over activeNotes state) for the same reason
-  // handleNoteOn/handleNoteOff already do — see the comment above arpStateRef.
-  useEffect(() => {
-    const releaseHeld = () => {
-      releaseAllHeldNotes(arpStateRef.current.heldTargets.keys(), handleNoteOffRef.current);
-    };
-    const handleVisibilityChange = () => {
-      if (document.hidden) releaseHeld();
-    };
-    window.addEventListener('blur', releaseHeld);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      window.removeEventListener('blur', releaseHeld);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
-
-  // Drums: pad state + trigger, and the QWERTY drum listener (verbatim from
-  // DrumPads, including the isTypingTarget guard, e.repeat skip, and the
-  // [pads, triggerPad] deps).
+/**
+ * Drum pad state and the QWERTY drum listener (verbatim from DrumPads,
+ * including the isTypingTarget guard, the e.repeat skip and the [pads,
+ * triggerPad] deps). Returns the memoized prop bundle the dock renders from:
+ * App mounts every tab at once and calls this hook once at the top, so a fresh
+ * object per render would defeat React.memo on every consumer downstream no
+ * matter how stable their other props are.
+ */
+function useDrumPads(): InputDeckDrumProps {
   const [pads, setPads] = useState<DrumPad[]>(DEFAULT_PADS);
   const [activePadId, setActivePadId] = useState<string | null>(null);
 
@@ -584,6 +594,106 @@ export function useInputDeck(): {
   const handlePadVolumeChange = useCallback((padId: string, volume: number) => {
     setPads((prev) => prev.map((p) => (p.id === padId ? { ...p, volume } : p)));
   }, []);
+
+  return useMemo<InputDeckDrumProps>(
+    () => ({
+      pads,
+      activePadId,
+      onTriggerPad: triggerPad,
+      onPadVolumeChange: handlePadVolumeChange,
+    }),
+    [pads, activePadId, triggerPad, handlePadVolumeChange],
+  );
+}
+
+/** Plays notes (synth + drums) and owns the global QWERTY listeners. Mounted
+ *  exactly once, at App level. The dock is a purely visual surface — it never
+ *  gates these listeners. */
+export function useInputDeck(): {
+  keyboardProps: InputDeckKeyboardProps;
+  drumProps: InputDeckDrumProps;
+} {
+  const keyboardMode = useAppStore((s) => s.keyboardMode);
+  const setKeyboardMode = useAppStore((s) => s.setKeyboardMode);
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const scaleType = useAppStore((s) => s.scaleType);
+  // Deliberately two PRIMITIVE selectors, not `(s) => s.synthParams`. This hook
+  // is mounted in App, and `synthParams` is a fresh object on every knob
+  // pointermove (60-120 Hz), so selecting the object re-rendered App and with
+  // it SoundView + SequencerView + ArrangeView + BottomInputDock — three of
+  // them on hidden tabs. These two scalars are the ONLY reactive reads; the
+  // full params object reaches the arp through arpStateRef below.
+  const arpActive = useAppStore(selectArpActive);
+  const release = useAppStore(selectSynthRelease);
+
+  const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
+  // Keyboard display octave — independent from synth pitch octave (params.octave)
+  const [keyboardOctave, setKeyboardOctave] = useState<number>(0);
+  // Chord mode: maps a held KeyboardEvent.code to the exact notes it played,
+  // so key-up releases those notes even if key/scale/octave changed while the
+  // key was held — never recompute the chord at release time.
+  const chordKeyNotesRef = useRef<Map<string, string[]>>(new Map());
+
+  // Keep the live arp state in a ref so the clock listener reads it without
+  // re-subscribing or stopping voices on every keystroke or parameter tweak.
+  // `heldTargets` is written synchronously by handleNoteOn/handleNoteOff — in
+  // the arp branch too, which is why the old commit-time mirror of
+  // `activeNotes` is gone: the arp builds its sequence from this map, so it
+  // must never lag a keypress by a render.
+  const arpStateRef = useRef<ArpStateRef['current']>({
+    heldTargets: new Map(),
+    params: resolveFocusedSynthParams(useAppStore.getState()),
+    target: synthTargetForFocus(useAppStore.getState().focusTrack),
+    triggeredTargets: new Set(),
+    bpm: useAppStore.getState().bpm,
+  });
+  // params/bpm/target come straight off the store — no render subscription needed.
+  useEffect(() => subscribeArpState(arpStateRef), []);
+
+  const { handleNoteOn, handleNoteOff } = useNoteHandlers(arpStateRef, setActiveNotes);
+
+  // Arpeggiator playback: parameterized clock subscriber (the 4 rate branches
+  // collapsed into computeArpTriggers, proven equivalent by the exhaustive
+  // sweep in src/audio/playback/arpPlayback.test.ts)
+  useArpPlayback(arpStateRef, arpActive);
+
+  // Both backstops for a release gesture that never arrives: release every note
+  // still sounding when the keyboard mode changes or this hook's owner unmounts,
+  // and release everything held when the window loses focus.
+  useHeldNoteRelease({ arpStateRef, chordKeyNotesRef, handleNoteOff, keyboardMode });
+
+  // Silence lingering arp voices when all keys are released in arp mode.
+  // Releases every bus the arp actually triggered on — a hold that spanned a
+  // focus change left voices on more than one.
+  useEffect(() => {
+    if (arpActive && activeNotes.size === 0 && hasSynthPlaybackContext()) {
+      releaseTriggeredTargets(
+        arpStateRef.current.triggeredTargets,
+        release,
+        releaseSynthPlaybackVoices,
+      );
+    }
+  }, [arpActive, activeNotes.size, release]);
+
+  const { chordKeyboardRows, scaleLockedNotesFlat, scaleLockedRows, chromaticNotes } =
+    useKeyboardNoteTables(scaleRoot, scaleType, keyboardOctave);
+
+  // QWERTY Computer Keyboard mapping — uses keyboardOctave, NOT params.octave
+  useQwertyNoteListeners({
+    keyboardMode,
+    chordKeyboardRows,
+    scaleLockedNotesFlat,
+    chromaticNotes,
+    chordKeyNotesRef,
+    setKeyboardOctave,
+    handleNoteOn,
+    handleNoteOff,
+  });
+
+  // Drums: pad state + trigger, and the QWERTY drum listener (verbatim from
+  // DrumPads, including the isTypingTarget guard, e.repeat skip, and the
+  // [pads, triggerPad] deps).
+  const drumProps = useDrumPads();
 
   // App mounts every tab simultaneously and calls this hook once at the top,
   // so a fresh object here on every render defeats React.memo on every
@@ -615,16 +725,6 @@ export function useInputDeck(): {
       handleNoteOn,
       handleNoteOff,
     ],
-  );
-
-  const drumProps = useMemo<InputDeckDrumProps>(
-    () => ({
-      pads,
-      activePadId,
-      onTriggerPad: triggerPad,
-      onPadVolumeChange: handlePadVolumeChange,
-    }),
-    [pads, activePadId, triggerPad, handlePadVolumeChange],
   );
 
   return { keyboardProps, drumProps };

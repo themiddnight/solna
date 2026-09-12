@@ -184,25 +184,62 @@ export function replaceConfirmMessage(exporting: boolean): string {
  * pass through one confirm. Save, Save As and Disconnect Drive write a file the
  * user chose or touch nothing at all, so they need none.
  */
-export function ProjectMenu({ textClassName }: { textClassName?: string }) {
-  const [confirming, setConfirming] = useState<ReplacingAction | null>(null);
-  const [browser, setBrowser] = useState<'open' | 'save-as' | null>(null);
-  const [pending, setPending] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+/** Which half of the Drive browser the menu opened. */
+type ProjectBrowseMode = 'open' | 'save-as';
 
+/** What each row does, as one dispatch — this is why the JSX holds no action logic. */
+interface MenuActionHandlers {
+  confirm: (action: ReplacingAction) => void;
+  save: () => void;
+  saveAs: () => void;
+  browseSaveAs: () => void;
+  disconnectDrive: () => void;
+}
+
+function runMenuAction(action: ProjectMenuAction, handlers: MenuActionHandlers): void {
+  if (replacesProject(action)) {
+    handlers.confirm(action);
+    return;
+  }
+  if (action === 'save') {
+    handlers.save();
+    return;
+  }
+  if (action === 'save-as') {
+    handlers.saveAs();
+    return;
+  }
+  if (action === 'save-as-drive') {
+    handlers.browseSaveAs();
+    return;
+  }
+  if (action === 'disconnect-drive') {
+    // No confirm: it costs no work. The body, the autosaved slot and the
+    // local session are untouched — only the Drive pointer and the token go.
+    handlers.disconnectDrive();
+    return;
+  }
+}
+
+/**
+ * Every project-file command the menu can run, with the store actions behind
+ * it. The component below owns only which dialog is open; what a row DOES
+ * lives here, so the markup and the operations can be read separately.
+ */
+function useProjectFileCommands({
+  setPending,
+  setBrowser,
+  fileInputRef,
+}: {
+  setPending: (label: string | null) => void;
+  setBrowser: (mode: ProjectBrowseMode | null) => void;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+}) {
   const openProjectFile = useLiveStore((s) => s.openProjectFile);
   const exportProjectFile = useLiveStore((s) => s.exportProjectFile);
-  const newProject = useLiveStore((s) => s.newProject);
   const setProjectNotice = useLiveStore((s) => s.setProjectNotice);
   const saveProject = useLiveStore((s) => s.saveProject);
   const saveProjectAsLocal = useLiveStore((s) => s.saveProjectAsLocal);
-  const projectName = useLiveStore((s) => s.projectName);
-  const exporting = useLiveStore(selectMixdownBusy);
-  const projectSource = useLiveStore((s) => s.projectSource);
-  const driveAvailable = useLiveStore((s) => s.driveAvailable);
-  const driveSignedIn = useLiveStore((s) => s.driveSignedIn);
-  const driveUser = useLiveStore((s) => s.driveUser);
-  const connectDrive = useLiveStore((s) => s.connectDrive);
   const disconnectDrive = useLiveStore((s) => s.disconnectDrive);
   const openFromDrive = useLiveStore((s) => s.openFromDrive);
   const listDriveProjects = useLiveStore((s) => s.listDriveProjects);
@@ -322,34 +359,97 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
       await openParsed(parsed, { kind: 'local', handle: picked.handle });
     });
 
-  const choose = (action: ProjectMenuAction) => {
-    if (replacesProject(action)) {
-      setConfirming(action);
-      return;
-    }
-    if (action === 'save') {
-      void runSave();
-      return;
-    }
-    if (action === 'save-as') {
-      void runSaveAs();
-      return;
-    }
-    if (action === 'save-as-drive') {
-      setBrowser('save-as');
-      return;
-    }
-    if (action === 'disconnect-drive') {
-      // No confirm: it costs no work. The body, the autosaved slot and the
-      // local session are untouched — only the Drive pointer and the token go.
-      void disconnectDrive();
-      return;
-    }
+  return {
+    runSave,
+    runSaveAs,
+    runOpenLocal,
+    runOpenFromDrive,
+    runSaveAsToDrive,
+    listDrive,
+    onPickFile,
+    disconnectDrive,
   };
+}
 
-  const confirmReplace = () => {
+/** The dropdown's rows: three sections, with Save's label and the Drive account placed. */
+function ProjectMenuSections({
+  driveAvailable,
+  driveSignedIn,
+  sourceKind,
+  driveUser,
+  onChoose,
+}: {
+  driveAvailable: boolean;
+  driveSignedIn: boolean;
+  sourceKind: ProjectSource['kind'];
+  driveUser: DriveUserProfile | null;
+  onChoose: (action: ProjectMenuAction) => void;
+}) {
+  return (
+    <>
+      {visibleMenuSections(driveAvailable, driveSignedIn, sourceKind, driveUser).map((section, i) => (
+        <Fragment key={section.heading ?? `section-${i}`}>
+          {section.heading !== null && (
+            <li className="menu-title">
+              {section.heading}
+              {section.subtitle && (
+                <span className="block truncate text-xs font-normal text-base-content/50">{section.subtitle}</span>
+              )}
+            </li>
+          )}
+          {section.rows.map(({ action, label, icon: Icon }) => (
+            <li key={action}>
+              <button type="button" id={`project-menu-${action}`} onClick={() => onChoose(action)}>
+                <Icon className="w-4 h-4" aria-hidden="true" />
+                {label}
+              </button>
+            </li>
+          ))}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+export function ProjectMenu({ textClassName }: { textClassName?: string }) {
+  const [confirming, setConfirming] = useState<ReplacingAction | null>(null);
+  const [browser, setBrowser] = useState<ProjectBrowseMode | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const projectName = useLiveStore((s) => s.projectName);
+  const exporting = useLiveStore(selectMixdownBusy);
+  const projectSource = useLiveStore((s) => s.projectSource);
+  const driveAvailable = useLiveStore((s) => s.driveAvailable);
+  const driveSignedIn = useLiveStore((s) => s.driveSignedIn);
+  const driveUser = useLiveStore((s) => s.driveUser);
+  const connectDrive = useLiveStore((s) => s.connectDrive);
+  const newProject = useLiveStore((s) => s.newProject);
+
+  const {
+    runSave,
+    runSaveAs,
+    runOpenLocal,
+    runOpenFromDrive,
+    runSaveAsToDrive,
+    listDrive,
+    onPickFile,
+    disconnectDrive,
+  } = useProjectFileCommands({ setPending, setBrowser, fileInputRef });
+
+  const choose = (action: ProjectMenuAction) =>
+    runMenuAction(action, {
+      confirm: setConfirming,
+      save: () => void runSave(),
+      saveAs: () => void runSaveAs(),
+      browseSaveAs: () => setBrowser('save-as'),
+      disconnectDrive: () => void disconnectDrive(),
+    });
+
+  const onConfirmReplace = () => {
     const action = confirming;
     setConfirming(null);
+    if (action === null) return;
     if (action === 'open') void runOpenLocal();
     if (action === 'open-drive') setBrowser('open');
     if (action === 'new') newProject();
@@ -367,26 +467,13 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
         tabIndex={0}
         className="dropdown-content menu menu-sm z-50 mt-2 min-w-44 max-w-[calc(100vw-2rem)] rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
       >
-        {visibleMenuSections(driveAvailable, driveSignedIn, projectSource.kind, driveUser).map((section, i) => (
-          <Fragment key={section.heading ?? `section-${i}`}>
-            {section.heading !== null && (
-              <li className="menu-title">
-                {section.heading}
-                {section.subtitle && (
-                  <span className="block truncate text-xs font-normal text-base-content/50">{section.subtitle}</span>
-                )}
-              </li>
-            )}
-            {section.rows.map(({ action, label, icon: Icon }) => (
-              <li key={action}>
-                <button type="button" id={`project-menu-${action}`} onClick={() => choose(action)}>
-                  <Icon className="w-4 h-4" aria-hidden="true" />
-                  {label}
-                </button>
-              </li>
-            ))}
-          </Fragment>
-        ))}
+        <ProjectMenuSections
+          driveAvailable={driveAvailable}
+          driveSignedIn={driveSignedIn}
+          sourceKind={projectSource.kind}
+          driveUser={driveUser}
+          onChoose={choose}
+        />
       </ul>
       <input
         ref={fileInputRef}
@@ -401,7 +488,7 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
           title={CONFIRM_COPY[confirming].title}
           message={replaceConfirmMessage(exporting)}
           confirmLabel={CONFIRM_COPY[confirming].label}
-          onConfirm={confirmReplace}
+          onConfirm={onConfirmReplace}
           onCancel={() => setConfirming(null)}
         />
       )}

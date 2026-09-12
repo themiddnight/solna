@@ -1,29 +1,72 @@
 import React, { useMemo } from "react";
-import { Volume2 } from "lucide-react";
 import { useAppStore } from "@/store/store";
 import { CHORD_RHYTHM_STYLE_GROUPS } from '@/audio/chordRhythms';
 import {
+  applyPreset,
   getAllSynthPresets,
-  findPresetByName,
   getPresetsGroupedByCategory,
 } from "@/audio/presetRegistry";
-import { patternMeterTitle, patternOptionLabel } from "@/components/meterSelect";
 import { getMeter } from "@/utils/meter";
 import { stepCells } from "@/components/sequencerGrid";
-import { FIELD_LABEL, FIELD_SELECT } from "@/components/ui/fieldClasses";
-import { Slider } from "@/components/ui/Slider";
-import { PlayingStepRow, STEP_ROW_CLASS } from "@/components/ui/StepRow";
-import { PlayingStepHeader } from "@/components/ui/StepHeader";
-import { IconButton } from "@/components/ui/IconButton";
+import { PlayingStepRow } from "@/components/ui/StepRow";
 import { ModulePanelCard } from "./ModulePanelCard";
 import { ModulePasteButton } from "../ModulePasteButton";
-import { PresetSelect } from "./PresetSelect";
+import {
+  CustomPatternSteps,
+  FeelSlider,
+  OctaveSelect,
+  PatternSelect,
+  SoundPresetField,
+} from "./moduleFields";
 
 export interface ChordModulePanelProps {
   onPatternPreviewDown: (e: React.MouseEvent | React.TouchEvent) => void;
   onPatternPreviewUp: (e: React.MouseEvent | React.TouchEvent) => void;
   /** Owned by ChordView, not this panel; passed through only to gate the PlayingStepRow ring. */
   isPlaying: boolean;
+}
+
+/** The chord voicing's register — above the bass card's, below the pad's. */
+const CHORD_OCTAVES = [2, 3, 4, 5, 6];
+
+/**
+ * The custom comping grid: the `custom` branch of the pattern field, below the
+ * field row rather than inside the "Chord Pattern" field cell, where its 16
+ * buttons shared the width of one dropdown and rendered ~7px wide. Same
+ * `StepRow` the drum sequencer uses; only the container changed.
+ *
+ * Reads the grid and its meter itself, so the card above renders one element
+ * for the whole branch and never re-renders when a step is toggled.
+ */
+function ChordPatternEditor({ isPlaying }: { isPlaying: boolean }) {
+  const meterId = useAppStore((s) => s.meterId);
+  const customChordRhythm = useAppStore((s) => s.customChordRhythm);
+  const setCustomChordRhythm = useAppStore((s) => s.setCustomChordRhythm);
+
+  const cells = useMemo(() => stepCells(getMeter(meterId)), [meterId]);
+
+  return (
+    <CustomPatternSteps
+      labelId="label-custom-chord-pattern"
+      label="Custom Chord Pattern"
+      cells={cells}
+      isPlaying={isPlaying}
+    >
+      <PlayingStepRow<boolean>
+        player="chords"
+        cells={cells}
+        steps={customChordRhythm}
+        isPlaying={isPlaying}
+        color="bg-module-chord text-module-chord-content"
+        isActive={(v) => v === true}
+        onStepClick={(i) =>
+          setCustomChordRhythm(
+            customChordRhythm.map((v, idx) => (idx === i ? !v : v)),
+          )
+        }
+      />
+    </CustomPatternSteps>
+  );
 }
 
 /**
@@ -56,11 +99,8 @@ export function ChordModulePanel({
   const setChordOctave = useAppStore((s) => s.setChordOctave);
   const chordRhythmMode = useAppStore((s) => s.chordRhythmMode);
   const setChordRhythmMode = useAppStore((s) => s.setChordRhythmMode);
-  const customChordRhythm = useAppStore((s) => s.customChordRhythm);
-  const setCustomChordRhythm = useAppStore((s) => s.setCustomChordRhythm);
   const customPresets = useAppStore((s) => s.customSynthPresets);
 
-  const chordCells = useMemo(() => stepCells(getMeter(meterId)), [meterId]);
   const allPresets = useMemo(
     () => getAllSynthPresets(customPresets),
     [customPresets],
@@ -69,6 +109,16 @@ export function ChordModulePanel({
     () => getPresetsGroupedByCategory(allPresets),
     [allPresets],
   );
+
+  // `Custom…` swaps the dropdown's job for the step grid below it.
+  const selectChordPattern = (value: string) => {
+    if (value === 'custom') {
+      setChordRhythmMode('custom');
+      return;
+    }
+    setChordRhythmMode('preset');
+    setChordRhythmId(value);
+  };
 
   // No `mt-4`: the GroupFrame in ChordView owns the spacing between these three
   // cards now (`p-1` + `gap-3 sm:gap-4`). The margin was left over from when
@@ -91,151 +141,52 @@ export function ChordModulePanel({
       actions={<ModulePasteButton groups={['chord-sound', 'chord-pattern']} />}
     >
       <div className="flex flex-row flex-wrap items-end gap-3">
-          {/* Chord Sound Preset Select */}
-          <PresetSelect
+          <SoundPresetField
             id="select-chord-sound-preset"
-            label="Preset"
             title="Chord sound preset — factory and saved presets, synced with the synth page"
             placeholder="Chord Preset…"
             groups={presetGroups}
+            allPresets={allPresets}
             value={chordSynthParams.preset ?? ""}
-            onSelect={(name) => {
-              const preset = findPresetByName(name, allPresets);
-              if (!preset) return;
-              setChordSynthParams({
-                ...chordSynthParams,
-                ...preset.params,
-                preset: preset.name,
-              });
-            }}
+            onPick={(preset) =>
+              setChordSynthParams(applyPreset(chordSynthParams, preset))
+            }
           />
 
-          {/* Chord Octave Select */}
-          <div>
-            <label className={FIELD_LABEL} htmlFor="select-chord-octave">Octave</label>
-            <select
-              id="select-chord-octave"
-              value={chordOctave}
-              onChange={(e) => setChordOctave(parseInt(e.target.value, 10))}
-              className={FIELD_SELECT}
-              title="Octave for chord playback"
-            >
-              {[2, 3, 4, 5, 6].map((o) => (
-                <option key={o} value={o}>
-                  Oct {o}
-                </option>
-              ))}
-            </select>
-          </div>
+          <OctaveSelect
+            id="select-chord-octave"
+            label="Octave"
+            title="Octave for chord playback"
+            value={chordOctave}
+            onChange={setChordOctave}
+            octaves={CHORD_OCTAVES}
+          />
 
-          {/* Chord Rhythm Pattern Select */}
-          <div>
-            <label className={FIELD_LABEL} htmlFor="select-chord-rhythm-pattern">Pattern</label>
-            <div className="flex items-center gap-1.5">
-              <select
-                id="select-chord-rhythm-pattern"
-                value={chordRhythmMode === 'custom' ? 'custom' : rhythmId}
-                onChange={(e) => {
-                  if (e.target.value === 'custom') {
-                    setChordRhythmMode('custom');
-                  } else {
-                    setChordRhythmMode('preset');
-                    setChordRhythmId(e.target.value);
-                  }
-                }}
-                className={FIELD_SELECT}
-                title="Rhythm pattern for chord playback"
-              >
-                <option value="custom">Custom…</option>
-                {CHORD_RHYTHM_STYLE_GROUPS.map((group) => (
-                  <optgroup key={group.style} label={group.style}>
-                    {group.patterns.map((p) => (
-                      <option
-                        key={p.id}
-                        value={p.id}
-                        title={patternMeterTitle(p.name, p.meter, meterId)}
-                      >
-                        {patternOptionLabel(p.name, p.meter, meterId)}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              <IconButton
-                id="btn-preview-chord-pattern"
-                label="Hold to Preview Chord Pattern Loop"
-                icon={<Volume2 className="w-3 h-3" />}
-                size="xs"
-                className="text-module-chord select-none"
-                onMouseDown={onPatternPreviewDown}
-                onMouseUp={onPatternPreviewUp}
-                onMouseLeave={onPatternPreviewUp}
-                onTouchStart={onPatternPreviewDown}
-                onTouchEnd={onPatternPreviewUp}
-              />
-            </div>
-          </div>
+          <PatternSelect
+            id="select-chord-rhythm-pattern"
+            label="Pattern"
+            selectTitle="Rhythm pattern for chord playback"
+            previewId="btn-preview-chord-pattern"
+            previewLabel="Hold to Preview Chord Pattern Loop"
+            previewTint="text-module-chord"
+            value={chordRhythmMode === 'custom' ? 'custom' : rhythmId}
+            groups={CHORD_RHYTHM_STYLE_GROUPS}
+            onChange={selectChordPattern}
+            onPreviewDown={onPatternPreviewDown}
+            onPreviewUp={onPatternPreviewUp}
+            meterId={meterId}
+          />
 
-          {/* Chord Feel Slider (tight ↔ loose) */}
-          <div>
-            <label className={FIELD_LABEL} htmlFor="slider-chord-feel">Feel</label>
-            <div className="flex items-center gap-1.5 bg-base-100 border border-base-300 rounded-box px-2.5 py-1 text-xs h-8">
-              <span className="text-[9px] text-base-content/60 shrink-0">
-                tight
-              </span>
-              <Slider
-                id="slider-chord-feel"
-                min={0}
-                max={1}
-                step={0.01}
-                value={chordFeel}
-                onChange={setChordFeel}
-                className="range range-xs w-20 text-module-chord [--range-thumb:var(--color-module-chord-content)]"
-                title="Chord note length: tight (short holds) ↔ loose (long holds)"
-              />
-              <span className="text-[9px] text-base-content/60 shrink-0">
-                loose
-              </span>
-            </div>
-          </div>
+          <FeelSlider
+            id="slider-chord-feel"
+            value={chordFeel}
+            onChange={setChordFeel}
+            tint="text-module-chord [--range-thumb:var(--color-module-chord-content)]"
+            title="Chord note length: tight (short holds) ↔ loose (long holds)"
+          />
         </div>
 
-        {/* Full-width step editor. It sits BELOW the field row rather than
-            inside the "Chord Pattern" field cell, where its 16 buttons shared
-            the width of one dropdown and rendered ~7px wide. Same StepRow the
-            drum sequencer uses; only the container changed. */}
-        {chordRhythmMode === 'custom' && (
-          <div className="overflow-x-auto">
-            <span className={FIELD_LABEL} id="label-custom-chord-pattern">Custom Chord Pattern</span>
-            {/* min-w keeps a narrow window scrolling rather than squeezing the
-                blocks back down. Above `sm` it matches the drum grid's step
-                area (its 700px less the 176px track-label gutter). A phone
-                takes a smaller floor instead of that grid's: this one has no
-                label gutter to scroll out of view, so less width per step buys
-                less scrolling at no cost in orientation. */}
-            <div className="min-w-[420px] sm:min-w-[520px]" role="group" aria-labelledby="label-custom-chord-pattern">
-              <PlayingStepHeader
-                player="chords"
-                cells={chordCells}
-                isPlaying={isPlaying}
-                className={`${STEP_ROW_CLASS} mb-1.5`}
-              />
-              <PlayingStepRow<boolean>
-                player="chords"
-                cells={chordCells}
-                steps={customChordRhythm}
-                isPlaying={isPlaying}
-                color="bg-module-chord text-module-chord-content"
-                isActive={(v) => v === true}
-                onStepClick={(i) =>
-                  setCustomChordRhythm(
-                    customChordRhythm.map((v, idx) => (idx === i ? !v : v)),
-                  )
-                }
-              />
-            </div>
-          </div>
-        )}
+        {chordRhythmMode === 'custom' && <ChordPatternEditor isPlaying={isPlaying} />}
     </ModulePanelCard>
   );
 }

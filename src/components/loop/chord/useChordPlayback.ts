@@ -45,7 +45,7 @@ import type { AccompanimentSource } from "@/audio/playback/playbackEngine";
 import { getMeter } from "@/utils/meter";
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "@/components/playerStop";
 import type { PlayerState } from "@/store/types";
-import type { ChordItem } from "@/types";
+import type { ChordItem, SynthParams } from "@/types";
 import { publishStepAt, resetStep } from "@/components/playbackStep";
 import { padHoldsAcrossLoop, resolvePadArm } from "@/audio/playback/padPlayback";
 import { loopBars } from "@/utils/songStructure";
@@ -332,7 +332,23 @@ export function chordStepAction(
 // (layering rule 1: audio/ must not import store/) — the hook reads store
 // state, so it is a component-layer concern; the engine is reached only
 // through the audio-layer bridge in playbackEngine.ts (layering rule 3).
-function useChordPlaybackState() {
+
+/** Everything this module reads out of the store, in one shape. */
+interface ChordPlaybackState {
+  chords: ChordItem[];
+  bpm: number;
+  chordSynthParams: SynthParams;
+  chordOctave: number;
+  chordFeel: number;
+  bassSynthParams: SynthParams;
+  bassOctave: number;
+  bassFeel: number;
+  scaleRoot: string;
+  scaleType: string;
+  playerState: PlayerState;
+}
+
+function useChordPlaybackState(): ChordPlaybackState {
   const chords = useAppStore((s) => s.chords);
   const bpm = useAppStore((s) => s.bpm);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
@@ -351,18 +367,21 @@ function useChordPlaybackState() {
   return { chords, bpm, chordSynthParams, chordOctave, chordFeel, bassSynthParams, bassOctave, bassFeel, scaleRoot, scaleType, playerState };
 }
 
-export function useChordPlayback() {
-  const state = useChordPlaybackState();
-  const { chords, bpm, chordSynthParams, chordOctave, chordFeel, bassSynthParams, bassOctave, bassFeel, scaleRoot, scaleType, playerState } = state;
-  const isPlaying = playerState !== 'stopped';
-
-  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
-  const [activeChordId, setActiveChordId] = useState<string | null>(null);
-
-  // Pattern previews only. These are driven by a bar timer rather than the
-  // shared clock, so they still lay the whole chord down in one call; the
-  // transport path arms a ChordPlan and emits it step by step instead.
-  const playChordWithRhythm = useCallback(
+/**
+ * The chord layer's audition player: a card's hold-to-preview, and the
+ * auto-preview that fires when a chord is picked.
+ *
+ * Pattern previews only. These are driven by a bar timer rather than the
+ * shared clock, so they still lay the whole chord down in one call; the
+ * transport path arms a ChordPlan and emits it step by step instead.
+ */
+function useChordPatternPreview({
+  bpm,
+  chordSynthParams,
+  chordOctave,
+  chordFeel,
+}: ChordPlaybackState) {
+  return useCallback(
     (chord: ChordItem, startTime: number, pattern: RhythmPattern) => {
       initPlaybackEngine();
 
@@ -402,8 +421,25 @@ export function useChordPlayback() {
     },
     [bpm, chordSynthParams, chordOctave, chordFeel],
   );
+}
 
-  const playBassWithPattern = useCallback(
+/**
+ * The bass line's audition player, the bass half of the same preview pair.
+ *
+ * `chordContext` is what lets a caller audition against a progression other
+ * than the one in the store (the library's own preview); omitted, it falls back
+ * to the live `chords`, which is what the card's hold-to-preview passes.
+ */
+function useBassPatternPreview({
+  chords,
+  bassOctave,
+  scaleRoot,
+  scaleType,
+  bpm,
+  bassSynthParams,
+  bassFeel,
+}: ChordPlaybackState) {
+  return useCallback(
     (
       chord: ChordItem,
       startTime: number,
@@ -469,7 +505,17 @@ export function useChordPlayback() {
     },
     [chords, bassOctave, scaleRoot, scaleType, bpm, bassSynthParams, bassFeel],
   );
+}
 
+/**
+ * The mutable state the two subscriptions below share: where the scheduler is,
+ * the chord being emitted, and whether a soft stop still owes a release.
+ *
+ * Refs rather than state, and held together because the stop handler and the
+ * clock callback reset the same three together — one reset site is what makes
+ * that reset identical on both paths.
+ */
+function useChordScheduler() {
   const armingRef = useRef<ChordArming>(createChordArming());
 
   // The chord currently being emitted step by step. Cleared on every stop so a
@@ -481,40 +527,58 @@ export function useChordPlayback() {
   // fire a second, immediate stopSource and clip the tail.
   const softStopPendingRef = useRef(false);
 
-  // Latest release values via ref: the clock
-  // effect's dep array must not gain chordSynthParams/bassSynthParams (that
-  // would resubscribe on every param slide), but the soft-stop path must
-  // still use whatever release is currently configured, not a stale one
-  // captured when the clock subscription was created.
-  const releasesRef = useRef({
-    chord: chordSynthParams.release,
-    bass: bassSynthParams.release,
-  });
-  useEffect(() => {
-    releasesRef.current = {
-      chord: chordSynthParams.release,
-      bass: bassSynthParams.release,
-    };
-  });
+  return { armingRef, planRef, softStopPendingRef };
+}
 
-  // Stop handling. Subscribed to the store directly instead of keyed on the
-  // rendered `playerState`, because React cannot be relied on to SEE the
-  // stop: the Instant Vibe swap hard-stops and restarts inside one batched
-  // click handler, so the rendered value goes 'playing' -> 'playing' and an
-  // effect keyed on it never re-runs (measured: one 'playing' render while
-  // the store passed through 'stopped'). Zustand notifies synchronously on
-  // every setState, so this sees every transition, in order.
-  //
-  // Cut ALL THREE sources: the Chords player drives the bass line and the pad
-  // layer, so silencing 'chord' alone would leave the bass and the pad
-  // droning — and a drone holds the longest note in the app.
-  //
-  // playbackStopOwnedVoices, not playbackStopSource: keyboard/arp input can
-  // land on 'chord'/'bass'/'pad' too via focus routing, and a whole-bus stop
-  // would cut a held key or arp note off that bus the moment this player
-  // stops — the same bug per-voice provenance fixed for lead/FX. This
-  // player's own hits all carry owner 'sequencer' (chordPlayback.ts), which
-  // is what the wrapper pins.
+/**
+ * The current release times of the two layers this player emits, mirrored into
+ * a ref the clock callback reads.
+ *
+ * Via ref because the clock
+ * effect's dep array must not gain chordSynthParams/bassSynthParams (that
+ * would resubscribe on every param slide), but the soft-stop path must
+ * still use whatever release is currently configured, not a stale one
+ * captured when the clock subscription was created.
+ */
+function useChordReleases(chordRelease: number, bassRelease: number) {
+  const releasesRef = useRef({ chord: chordRelease, bass: bassRelease });
+  useEffect(() => {
+    releasesRef.current = { chord: chordRelease, bass: bassRelease };
+  });
+  return releasesRef;
+}
+
+/** Everything that reads or resets the scheduler's shared refs. */
+interface ChordSchedulerRefs {
+  armingRef: { current: ChordArming };
+  planRef: { current: ChordPlan | null };
+  softStopPendingRef: { current: boolean };
+}
+
+/**
+ * Stop handling. Subscribed to the store directly instead of keyed on the
+ * rendered `playerState`, because React cannot be relied on to SEE the
+ * stop: the Instant Vibe swap hard-stops and restarts inside one batched
+ * click handler, so the rendered value goes 'playing' -> 'playing' and an
+ * effect keyed on it never re-runs (measured: one 'playing' render while
+ * the store passed through 'stopped'). Zustand notifies synchronously on
+ * every setState, so this sees every transition, in order.
+ *
+ * Cut ALL THREE sources: the Chords player drives the bass line and the pad
+ * layer, so silencing 'chord' alone would leave the bass and the pad
+ * droning — and a drone holds the longest note in the app.
+ *
+ * playbackStopOwnedVoices, not playbackStopSource: keyboard/arp input can
+ * land on 'chord'/'bass'/'pad' too via focus routing, and a whole-bus stop
+ * would cut a held key or arp note off that bus the moment this player
+ * stops — the same bug per-voice provenance fixed for lead/FX. This
+ * player's own hits all carry owner 'sequencer' (chordPlayback.ts), which
+ * is what the wrapper pins.
+ */
+function useChordStopHandler(
+  { armingRef, planRef, softStopPendingRef }: ChordSchedulerRefs,
+  clearChordUi: () => void,
+): void {
   useEffect(
     () =>
       useAppStore.subscribe(
@@ -527,10 +591,7 @@ export function useChordPlayback() {
             // engineSync just reset to 0.
             resetChordArming(armingRef.current);
             planRef.current = null;
-            setPlayingIndex(null);
-            resetStep('chords');
-            setActiveChordId(null);
-            useAppStore.getState().setPlayheadChord(null);
+            clearChordUi();
           }
           if (!shouldHardStopNow(prev, next, softStopPendingRef.current)) {
             // Only 'stopping' means a soft stop is still pending its bar-line
@@ -554,17 +615,44 @@ export function useChordPlayback() {
           }
         },
       ),
+    // The three scheduler refs and `clearChordUi` (a stable useCallback) are
+    // not render inputs: nothing here changes identity for the life of the
+    // hook, so depending on them would only re-subscribe on nothing. The
+    // subscription must also outlive the commits that skip this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+}
+
+/**
+ * The clock subscription: arm a chord on a bar line, emit its plan step by
+ * step, and cut all three sources on a soft-stop boundary.
+ *
+ * One effect owns both the subscription and its teardown, so nothing but
+ * `isPlaying`/`chords` can ever leave a clock listener behind.
+ */
+function useChordClock({
+  scheduler,
+  releasesRef,
+  isPlaying,
+  chords,
+  clearChordUi,
+  showChord,
+}: {
+  scheduler: ChordSchedulerRefs;
+  releasesRef: { current: { chord: number; bass: number } };
+  isPlaying: boolean;
+  chords: ChordItem[];
+  clearChordUi: () => void;
+  showChord: (index: number, chord: ChordItem) => void;
+}): void {
+  const { armingRef, planRef, softStopPendingRef } = scheduler;
 
   useEffect(() => {
     if (!isPlaying || chords.length === 0) {
       resetChordArming(armingRef.current);
       planRef.current = null;
-      setPlayingIndex(null);
-      resetStep('chords');
-      setActiveChordId(null);
-      useAppStore.getState().setPlayheadChord(null);
+      clearChordUi();
       return;
     }
 
@@ -616,8 +704,7 @@ export function useChordPlayback() {
         const chord = liveChords[index];
         planRef.current = startChordPlan(chord, step, time);
         armPad(chord, index === 0, time);
-        setPlayingIndex(index);
-        setActiveChordId(chord.id);
+        showChord(index, chord);
         // The beat the chord was triggered on is what every beat counter measures
         // its progress from — a multi-bar chord spans several bar lines.
         useAppStore.getState().setPlayheadChord(index, beat);
@@ -637,7 +724,56 @@ export function useChordPlayback() {
       }
       emitChordPlanStep(plan, pos, step, time);
     });
+    // Deliberately these two and no more. The scheduler refs and `releasesRef`
+    // are stable, and `clearChordUi`/`showChord` are stable useCallbacks — a
+    // clock subscription that rebuilt when any of them changed identity would
+    // re-arm mid-bar. `chordSynthParams`/`bassSynthParams` are read live
+    // through `releasesRef` for the same reason (see its docblock), and the
+    // progression is read live inside the callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, chords]);
+}
+
+export function useChordPlayback() {
+  const state = useChordPlaybackState();
+  const { chords, chordSynthParams, bassSynthParams, playerState } = state;
+  const isPlaying = playerState !== 'stopped';
+
+  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  const [activeChordId, setActiveChordId] = useState<string | null>(null);
+
+  const playChordWithRhythm = useChordPatternPreview(state);
+  const playBassWithPattern = useBassPatternPreview(state);
+
+  const scheduler = useChordScheduler();
+  const releasesRef = useChordReleases(
+    chordSynthParams.release,
+    bassSynthParams.release,
+  );
+
+  // Both subscriptions clear the same three pieces of chord UI — the beat
+  // markers, the highlighted card, and the transport's chord readout.
+  const clearChordUi = useCallback(() => {
+    setPlayingIndex(null);
+    resetStep('chords');
+    setActiveChordId(null);
+    useAppStore.getState().setPlayheadChord(null);
+  }, []);
+
+  const showChord = useCallback((index: number, chord: ChordItem) => {
+    setPlayingIndex(index);
+    setActiveChordId(chord.id);
+  }, []);
+
+  useChordStopHandler(scheduler, clearChordUi);
+  useChordClock({
+    scheduler,
+    releasesRef,
+    isPlaying,
+    chords,
+    clearChordUi,
+    showChord,
+  });
 
   return { playChordWithRhythm, playBassWithPattern, playingIndex, setPlayingIndex, activeChordId, setActiveChordId, isPlaying };
 }

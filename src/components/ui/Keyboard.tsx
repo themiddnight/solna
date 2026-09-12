@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   getScaleNotes,
   rootSemitone,
@@ -472,6 +473,59 @@ export function ChordKeyboard({
   );
 }
 
+// The two key colours differ only in geometry and state classes; naming them
+// keeps both render sites below reading as the same key in two shapes.
+const BLACK_KEY_CLASS =
+  'absolute z-10 w-[var(--chromatic-key-black-w)] h-25 rounded-b-field border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none';
+const WHITE_KEY_CLASS =
+  'w-[calc(var(--chromatic-key-stride)-4px)] h-full rounded-b-field border border-base-300 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none';
+const BLACK_KEY_ACTIVE = 'bg-primary text-primary-content shadow-lg shadow-primary/50 scale-[0.98]';
+const BLACK_KEY_IDLE = 'bg-key-black text-key-black-content hover:brightness-125';
+const WHITE_KEY_ACTIVE = 'bg-primary text-primary-content shadow-inner scale-[0.99]';
+const WHITE_KEY_IDLE = 'bg-key-white text-key-white-content hover:brightness-105';
+
+function chromaticKeyClass(isBlack: boolean, isActive: boolean): string {
+  const geometry = isBlack ? BLACK_KEY_CLASS : WHITE_KEY_CLASS;
+  const state = isBlack
+    ? isActive
+      ? BLACK_KEY_ACTIVE
+      : BLACK_KEY_IDLE
+    : isActive
+      ? WHITE_KEY_ACTIVE
+      : WHITE_KEY_IDLE;
+  return `${geometry} ${state}`;
+}
+
+/** Space and Enter are the key's own activation keys; each mirrors a pointer press. */
+function chromaticKeyActivation(note: string, fire: (note: string) => void) {
+  return (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      fire(note);
+    }
+  };
+}
+
+/** A key's pitch label and the computer key that plays it. */
+function ChromaticKeyCaption({
+  label,
+  keyName,
+  isBlack,
+}: {
+  label: string;
+  keyName: string;
+  isBlack: boolean;
+}) {
+  return (
+    <>
+      <span className={isBlack ? 'text-[9px] font-bold text-key-black-content' : 'text-[10px] font-bold'}>
+        {label}
+      </span>
+      <kbd className="kbd-key">{shortcutLabel(keyName)}</kbd>
+    </>
+  );
+}
+
 export function ChromaticKeyboard({
   octaveOffset,
   activeNotes,
@@ -502,18 +556,8 @@ export function ChromaticKeyboard({
               onMouseDown={() => onNoteOn(k.note)}
               onMouseUp={() => onNoteOff(k.note)}
               onMouseLeave={() => isActive && onNoteOff(k.note)}
-              onKeyDown={(e) => {
-                if (e.key === " " || e.key === "Enter") {
-                  e.preventDefault();
-                  onNoteOn(k.note);
-                }
-              }}
-              onKeyUp={(e) => {
-                if (e.key === " " || e.key === "Enter") {
-                  e.preventDefault();
-                  onNoteOff(k.note);
-                }
-              }}
+              onKeyDown={chromaticKeyActivation(k.note, onNoteOn)}
+              onKeyUp={chromaticKeyActivation(k.note, onNoteOff)}
               onTouchStart={(e) => {
                 e.preventDefault();
                 onNoteOn(k.note);
@@ -523,19 +567,10 @@ export function ChromaticKeyboard({
                 onNoteOff(k.note);
               }}
               onTouchCancel={() => onNoteOff(k.note)}
-              className={`absolute z-10 w-[var(--chromatic-key-black-w)] h-25 rounded-b-field border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
-                isActive
-                  ? "bg-primary text-primary-content shadow-lg shadow-primary/50 scale-[0.98]"
-                  : "bg-key-black text-key-black-content hover:brightness-125"
-              }`}
+              className={chromaticKeyClass(true, isActive)}
               style={{ left: getBlackKeyLeft(noteIndex) }}
             >
-              <span className="text-[9px] font-bold text-key-black-content">
-                {k.label}
-              </span>
-              <kbd className="kbd-key">
-                {shortcutLabel(k.key)}
-              </kbd>
+              <ChromaticKeyCaption label={k.label} keyName={k.key} isBlack />
             </button>
           );
         }
@@ -550,18 +585,8 @@ export function ChromaticKeyboard({
             onMouseDown={() => onNoteOn(k.note)}
             onMouseUp={() => onNoteOff(k.note)}
             onMouseLeave={() => isActive && onNoteOff(k.note)}
-            onKeyDown={(e) => {
-              if (e.key === " " || e.key === "Enter") {
-                e.preventDefault();
-                onNoteOn(k.note);
-              }
-            }}
-            onKeyUp={(e) => {
-              if (e.key === " " || e.key === "Enter") {
-                e.preventDefault();
-                onNoteOff(k.note);
-              }
-            }}
+            onKeyDown={chromaticKeyActivation(k.note, onNoteOn)}
+            onKeyUp={chromaticKeyActivation(k.note, onNoteOff)}
             onTouchStart={(e) => {
               e.preventDefault();
               onNoteOn(k.note);
@@ -571,18 +596,9 @@ export function ChromaticKeyboard({
               onNoteOff(k.note);
             }}
             onTouchCancel={() => onNoteOff(k.note)}
-            className={`w-[calc(var(--chromatic-key-stride)-4px)] h-full rounded-b-field border border-base-300 mx-0.5 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
-              isActive
-                ? "bg-primary text-primary-content shadow-inner scale-[0.99]"
-                : "bg-key-white text-key-white-content hover:brightness-105"
-            }`}
+            className={chromaticKeyClass(false, isActive)}
           >
-            <span className="text-[10px] font-bold">
-              {k.label}
-            </span>
-            <kbd className="kbd-key">
-              {shortcutLabel(k.key)}
-            </kbd>
+            <ChromaticKeyCaption label={k.label} keyName={k.key} isBlack={false} />
           </button>
         );
       })}

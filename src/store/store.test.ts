@@ -424,6 +424,72 @@ describe('chords initial octave', () => {
   // asserted now, at one site instead of two.
 });
 
+/** The allow-list `partializeAppState` must declare, key for key. */
+const PERSISTED_KEYS = [
+  'metronomeActive',
+  'selectedVibeId',
+  'focusTrack',
+  'customSynthPresets',
+  'customChordProgressions',
+  'activeLoopId',
+];
+
+/**
+ * Everything a persisted payload must NOT carry: session and view state,
+ * `playing` state, actions, and (v6) the eight representative per-loop fields —
+ * the split moved them into loops[], so they must be absent at the top level.
+ */
+const NON_PERSISTED_KEYS = [
+  'bpm',
+  'meterId',
+  'masterVolume',
+  'effects',
+  'loops',
+  'projectName',
+  'projectStoreStatus',
+  'projectNotice',
+  'activeTab',
+  'patternSegment',
+  'controlTarget',
+  'keyboardMode',
+  'isInputPanelOpen',
+  'inputPanelMode',
+  'sequencerPlayer',
+  'chordsPlayer',
+  'playheadBeat',
+  'playheadChordIndex',
+  'playheadChordStartBeat',
+  'setPlayheadBeat',
+  'setPlayheadChord',
+  'setBpm',
+  'setMasterVolume',
+  'toggleMetronome',
+  'play',
+  'softStop',
+  'hardStop',
+  'playAll',
+  'softStopAll',
+  'hardStopAll',
+  'setSelectedVibeId',
+  'setChordOctave',
+  'replaceDrumPattern',
+  'setEffects',
+  'setActiveTab',
+  'setKeyboardMode',
+  'saveCustomPreset',
+  'deleteCustomPreset',
+  'saveCustomChordProgression',
+  'deleteCustomChordProgression',
+  'scaleRoot',
+  'scaleType',
+  'synthParams',
+  'chordSynthParams',
+  'bassSynthParams',
+  'chords',
+  'sequencerTracks',
+  'leadMelodySteps',
+];
+
 describe('persist partialize', () => {
   test('hydration drops old project content and non-persisted keys before merging', async () => {
     const { useAppStore } = await getStore();
@@ -451,71 +517,11 @@ describe('persist partialize', () => {
     expect(partialize).toBeDefined();
     const snapshot = partialize!(useAppStore.getState());
 
-    const persistedKeys = [
-      'metronomeActive',
-      'selectedVibeId',
-      'focusTrack',
-      'customSynthPresets',
-      'customChordProgressions',
-      'activeLoopId',
-    ];
-    for (const key of persistedKeys) {
+    for (const key of PERSISTED_KEYS) {
       expect(snapshot).toHaveProperty(key);
     }
 
-    const excludedKeys = [
-      'bpm',
-      'meterId',
-      'masterVolume',
-      'effects',
-      'loops',
-      'projectName',
-      'projectStoreStatus',
-      'projectNotice',
-      'activeTab',
-      'patternSegment',
-      'controlTarget',
-      'keyboardMode',
-      'isInputPanelOpen',
-      'inputPanelMode',
-      'sequencerPlayer',
-      'chordsPlayer',
-      'playheadBeat',
-      'playheadChordIndex',
-      'playheadChordStartBeat',
-      'setPlayheadBeat',
-      'setPlayheadChord',
-      'setBpm',
-      'setMasterVolume',
-      'toggleMetronome',
-      'play',
-      'softStop',
-      'hardStop',
-      'playAll',
-      'softStopAll',
-      'hardStopAll',
-      'setSelectedVibeId',
-      'setChordOctave',
-      'replaceDrumPattern',
-      'setEffects',
-      'setActiveTab',
-      'setKeyboardMode',
-      'saveCustomPreset',
-      'deleteCustomPreset',
-      'saveCustomChordProgression',
-      'deleteCustomChordProgression',
-      // v6: the eight representative per-loop fields — the split moved them
-      // into loops[], so they must be absent at the top level.
-      'scaleRoot',
-      'scaleType',
-      'synthParams',
-      'chordSynthParams',
-      'bassSynthParams',
-      'chords',
-      'sequencerTracks',
-      'leadMelodySteps',
-    ];
-    for (const key of excludedKeys) {
+    for (const key of NON_PERSISTED_KEYS) {
       expect(snapshot).not.toHaveProperty(key);
     }
 

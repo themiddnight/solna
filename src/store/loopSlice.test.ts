@@ -32,7 +32,7 @@ function makeSlice(initial?: Partial<AppStore>) {
   };
 }
 
-describe('loopSlice', () => {
+describe('loopSlice: defaults, add and duplicate', () => {
   test('starts with one default loop whose name is empty and whose tempName is untitled-1', () => {
     const s = makeSlice().state;
     expect(s.loops).toHaveLength(1);
@@ -115,6 +115,7 @@ describe('loopSlice', () => {
   // the source — see nextDuplicateLabel's docblock in loop.ts for why a
   // shared tempName would resurface as a collision once both names are
   // cleared.
+
   test('duplicateLoop increments a user name and its tempName, independently', () => {
     const h = makeSlice();
     const id = h.state.loops[0].id;
@@ -125,6 +126,9 @@ describe('loopSlice', () => {
     expect(clone.tempName).toBe('untitled-2');
   });
 
+});
+
+describe('loopSlice: delete and reorder', () => {
   test('deleteLoop of the active loop returns a fallback id and activates it', () => {
     const h = makeSlice();
     const first = h.state.loops[0];
@@ -226,6 +230,9 @@ describe('loopSlice', () => {
     expect(h.state.songLoopIndex).toBe(null);
   });
 
+});
+
+describe('loopSlice: the flat setters', () => {
   test('setActiveLoop updates the active id without touching the list', () => {
     const h = makeSlice();
     h.state.addLoop();
@@ -277,6 +284,7 @@ describe('loopSlice', () => {
     expect(h.state.loops.map((r) => r.id)).toEqual([l2.id, l1.id]);
     expect(h.state.songLoopIndex).toBe(1); // l1 is now at index 1
   });
+
 });
 
 describe('a cursor move carries the scope with it', () => {

@@ -67,7 +67,7 @@ describe('preview handle lifetimes', () => {
     try {
       const handle = previewSequencerNote('C4', SYNTH, 0.8);
       const voices = Array.from(
-        (audioEngine as any).sourceVoices.get('preview') as Set<{ gains: { gain: { cancels: number[] } }[] }>,
+        (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<{ gains: { gain: { cancels: number[] } }[] }>,
       );
       expect(voices).toHaveLength(1);
 
@@ -91,7 +91,7 @@ describe('preview handle lifetimes', () => {
       const handle = previewChordProgression(chords, SYNTH);
 
       const voices = Array.from(
-        (audioEngine as any).sourceVoices.get('preview') as Set<{ startTime: number }>,
+        (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<{ startTime: number }>,
       );
       const future = voices.find((v) => v.startTime > ctx.currentTime);
       expect(future).toBeTruthy();
@@ -101,7 +101,7 @@ describe('preview handle lifetimes', () => {
       // stopSource hard-silences (removes from tracking) any voice whose
       // startTime is still in the future, rather than ramping it from the
       // GainNode's intrinsic 1.0.
-      const after = (audioEngine as any).sourceVoices.get('preview') as Set<unknown>;
+      const after = (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<unknown>;
       expect(after.has(future)).toBe(false);
     } finally {
       restore();
@@ -129,7 +129,7 @@ describe('preview handle lifetimes', () => {
       const current = previewSequencerNote('E4', SYNTH, 0.8);
 
       const voices = Array.from(
-        (audioEngine as any).sourceVoices.get('preview') as Set<{
+        (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<{
           noteName: string;
           gains: { gain: { cancels: number[] } }[];
         }>,
@@ -159,7 +159,7 @@ describe('previewSequencerNote default gate', () => {
     try {
       const handle = previewSequencerNote('C4', SYNTH, 0.8);
       const voice = Array.from(
-        (audioEngine as any).sourceVoices.get('preview') as Set<{
+        (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<{
           startTime: number;
           releaseScheduledAt: number;
         }>,
@@ -248,7 +248,7 @@ describe('progression audition streams instead of bursting', () => {
       const { scheduler } = fakeScheduler(10);
       previewProgression(sixteenChords, SYNTH, scheduler);
 
-      const voices = (audioEngine as any).sourceVoices.get('preview') as Set<unknown>;
+      const voices = (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<unknown>;
       // 4 chords inside the 1.5 s horizon x 4 notes = 16 voices, not 64.
       expect(voices.size).toBe(16);
     } finally {
@@ -262,7 +262,7 @@ describe('progression audition streams instead of bursting', () => {
       const { scheduler, state } = fakeScheduler(10);
       previewProgression(sixteenChords, SYNTH, scheduler);
 
-      const voices = (audioEngine as any).sourceVoices.get('preview') as Set<{ noteName: string }>;
+      const voices = (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<{ noteName: string }>;
       const afterFirst = voices.size;
 
       state.advanceTo(11.0); // horizon 12.5 -> chords 0..5 due, 4 already done
@@ -283,7 +283,7 @@ describe('progression audition streams instead of bursting', () => {
       state.advanceTo(20);
 
       const voices = Array.from(
-        (audioEngine as any).sourceVoices.get('preview') as Set<{ startTime: number }>,
+        (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<{ startTime: number }>,
       );
       expect(voices.length).toBe(64);
       const starts = Array.from(new Set(voices.map((v) => v.startTime))).sort((a, b) => a - b);
@@ -317,10 +317,10 @@ describe('progression audition streams instead of bursting', () => {
       handle();
       expect(state.unsubscribed).toBe(1);
 
-      const before = ((audioEngine as any).sourceVoices.get('preview') as Set<unknown>).size;
+      const before = ((audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<unknown>).size;
       state.advanceTo(20);
       // No further chords are scheduled after disposal.
-      expect(((audioEngine as any).sourceVoices.get('preview') as Set<unknown>).size)
+      expect(((audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<unknown>).size)
         .toBeLessThanOrEqual(before);
     } finally {
       restore();
@@ -362,8 +362,8 @@ describe('a grid audition is not a performance', () => {
       // The engine keys voices by `${source}:${note}`, so an audition on the
       // 'synth' bus would seize — and then release — the very voice a player
       // holding C4 is sounding. That is what this bus separation prevents.
-      expect(((audioEngine as any).sourceVoices.get('synth') as Set<unknown> | undefined)?.size ?? 0).toBe(0);
-      expect(((audioEngine as any).sourceVoices.get('preview') as Set<unknown>).size).toBe(1);
+      expect(((audioEngine as any).synthVoices.sourceVoices.get('synth') as Set<unknown> | undefined)?.size ?? 0).toBe(0);
+      expect(((audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<unknown>).size).toBe(1);
     } finally {
       restore();
     }
@@ -399,7 +399,7 @@ describe('a preview carries its own patch\'s calibration trim', () => {
   // tests guarded against has no state left to live in.
   const lastPreviewPeak = (): number => {
     const voices = Array.from(
-      (audioEngine as any).sourceVoices.get('preview') as Set<any>,
+      (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<any>,
     );
     return voices[voices.length - 1].gains[0].gain.ramps[0].v;
   };
@@ -451,7 +451,7 @@ describe('a preview carries its own patch\'s calibration trim', () => {
     // preview writes it at all — assert the absence, not an overwrite.
     const { restore } = withFakeAudioEngine();
     try {
-      const trims = (audioEngine as unknown as { presetTrims: Map<string, number> }).presetTrims;
+      const trims = ((audioEngine as any).synthVoices as unknown as { presetTrims: Map<string, number> }).presetTrims;
       trims.delete('preview');
       previewSequencerNote('C4', SYNTH);
       previewSynthPreset({ id: 'p1', name: 'Some Patch', category: 'Lead', params: {} }, SYNTH);

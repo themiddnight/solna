@@ -118,6 +118,87 @@ function detentAngleFor(
   return detent !== undefined ? detentAngle(detent, min, max, scale) : null;
 }
 
+/** The knob's resolved props, as the drag hook needs them. */
+interface KnobDrag {
+  value: number;
+  min: number;
+  max: number;
+  step: number | undefined;
+  scale: KnobScale;
+  disabled: boolean;
+  onChange: (value: number) => void;
+}
+
+/**
+ * Pointer behaviour for the knob, on a `useRef` that survives re-renders
+ * mid-drag: pointer capture, the axis with the larger accumulated delta winning
+ * (past AXIS_PICK_THRESHOLD_PX) and sticking for the whole gesture, right/up
+ * increasing and left/down decreasing, Shift dividing sensitivity by 10.
+ */
+function useKnobDrag({ value, min, max, scale, step, disabled, onChange }: KnobDrag) {
+  const gestureRef = useRef<GestureState | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (disabled) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    gestureRef.current = {
+      axis: null,
+      startT: clamp(valueToT(value, min, max, scale), 0, 1),
+      startX: e.clientX,
+      startY: e.clientY,
+    };
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const gesture = gestureRef.current;
+    if (disabled || !gesture) return;
+    const dx = e.clientX - gesture.startX;
+    const dy = e.clientY - gesture.startY;
+    if (gesture.axis === null) {
+      if (Math.abs(dx) < AXIS_PICK_THRESHOLD_PX && Math.abs(dy) < AXIS_PICK_THRESHOLD_PX) {
+        return;
+      }
+      gesture.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    }
+    const delta = gesture.axis === 'x' ? dx : -dy;
+    const nextT = clamp(gesture.startT + dragDeltaT(delta, e.shiftKey), 0, 1);
+    onChange(snapToStep(tToValue(nextT, min, max, scale), min, step));
+  };
+
+  const endGesture = (e: React.PointerEvent<SVGSVGElement>) => {
+    gestureRef.current = null;
+    e.currentTarget.blur();
+  };
+
+  return { handlePointerDown, handlePointerMove, endGesture };
+}
+
+/**
+ * The direction a key asks for, or null when the key is not the knob's
+ * (spec §4.3: arrows, page, Home/End).
+ */
+function keyDirFor(key: string): KeyDir | null {
+  switch (key) {
+    case 'ArrowUp':
+    case 'ArrowRight':
+      return 'inc';
+    case 'ArrowDown':
+    case 'ArrowLeft':
+      return 'dec';
+    case 'PageUp':
+      return 'page-inc';
+    case 'PageDown':
+      return 'page-dec';
+    case 'Home':
+      return 'min';
+    case 'End':
+      return 'max';
+    default:
+      return null;
+  }
+}
+
 /** Ring rendering behind the needle, per `indicator`: progress arc on a dark
     270° ring, thin uniform ring (pan/balance), or full static ring. */
 const IndicatorRing = ({ indicator, dash }: { indicator: KnobIndicator; dash: number }) => (
@@ -285,7 +366,6 @@ export const Knob = ({
   className,
   layout = 'vertical',
 }: KnobProps) => {
-  const gestureRef = useRef<GestureState | null>(null);
   const pixelSize = SIZE_PX[size];
   const t = clamp(valueToT(value, min, max, scale), 0, 1);
   const angle = angleForT(t);
@@ -293,66 +373,20 @@ export const Knob = ({
   const display = format(value);
   const detentAngleDeg = detentAngleFor(detent, min, max, scale);
 
-  const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (disabled) return;
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    gestureRef.current = {
-      axis: null,
-      startT: clamp(valueToT(value, min, max, scale), 0, 1),
-      startX: e.clientX,
-      startY: e.clientY,
-    };
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    const gesture = gestureRef.current;
-    if (disabled || !gesture) return;
-    const dx = e.clientX - gesture.startX;
-    const dy = e.clientY - gesture.startY;
-    if (gesture.axis === null) {
-      if (Math.abs(dx) < AXIS_PICK_THRESHOLD_PX && Math.abs(dy) < AXIS_PICK_THRESHOLD_PX) {
-        return;
-      }
-      gesture.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-    }
-    const delta = gesture.axis === 'x' ? dx : -dy;
-    const nextT = clamp(gesture.startT + dragDeltaT(delta, e.shiftKey), 0, 1);
-    onChange(snapToStep(tToValue(nextT, min, max, scale), min, step));
-  };
-
-  const endGesture = (e: React.PointerEvent<SVGSVGElement>) => {
-    gestureRef.current = null;
-    e.currentTarget.blur();
-  };
+  const { handlePointerDown, handlePointerMove, endGesture } = useKnobDrag({
+    value,
+    min,
+    max,
+    scale,
+    step,
+    disabled,
+    onChange,
+  });
 
   const handleKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {
     if (disabled) return;
-    let dir: KeyDir | null;
-    switch (e.key) {
-      case 'ArrowUp':
-      case 'ArrowRight':
-        dir = 'inc';
-        break;
-      case 'ArrowDown':
-      case 'ArrowLeft':
-        dir = 'dec';
-        break;
-      case 'PageUp':
-        dir = 'page-inc';
-        break;
-      case 'PageDown':
-        dir = 'page-dec';
-        break;
-      case 'Home':
-        dir = 'min';
-        break;
-      case 'End':
-        dir = 'max';
-        break;
-      default:
-        return;
-    }
+    const dir = keyDirFor(e.key);
+    if (!dir) return;
     e.preventDefault();
     onChange(nextKeyValue(value, min, max, step, dir));
   };

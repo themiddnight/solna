@@ -232,6 +232,356 @@ function DynamicsCard({
   );
 }
 
+/** The two props every FX unit card takes: the master effects, and its writer. */
+interface FxUnitProps {
+  effects: MasterEffects;
+  updateFx: (updates: Partial<MasterEffects>) => void;
+}
+
+/**
+ * One unit of the FX chain: the card shell, its numbered header and its power
+ * toggle. `engagedClassName` is passed whole rather than composed from a tone,
+ * because a Tailwind class built at runtime is a class the build never sees —
+ * the four units ring in three different tones and each names its own.
+ */
+function FxCard({
+  badge,
+  icon,
+  title,
+  engagedClassName,
+  bypassed,
+  power,
+  children,
+}: {
+  badge: number;
+  icon: React.ReactNode;
+  title: string;
+  engagedClassName: string;
+  /** Optional on MasterEffects, so undefined is passed through rather than defaulted. */
+  bypassed: boolean | undefined;
+  power: { id: string; name: string; onToggle: () => void };
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={`card bg-panel border shadow-md transition-all ${
+        bypassed ? "border-base-300 opacity-60" : engagedClassName
+      }`}
+    >
+      <div className="card-body p-3 sm:p-4 space-y-3">
+        <ModuleHeader
+          badge={badge}
+          icon={icon}
+          title={title}
+          right={
+            <PowerToggle
+              id={power.id}
+              on={!bypassed}
+              onToggle={power.onToggle}
+              name={power.name}
+              tone="accent"
+              size="xs"
+              iconOnly
+            />
+          }
+        />
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** The centred knob row the reverb, delay and EQ units all lay their knobs out in. */
+function FxKnobRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-around gap-2 w-full min-w-max mx-auto">
+      {children}
+    </div>
+  );
+}
+
+/** 1. Algorithmic Reverb Unit */
+function ReverbUnit({ effects, updateFx }: FxUnitProps) {
+  return (
+    <FxCard
+      badge={1}
+      icon={<Waves className="w-3.5 h-3.5 text-accent" />}
+      title="Space Reverb"
+      engagedClassName="border-accent/40 ring-1 ring-accent/20"
+      bypassed={effects.reverbBypass}
+      power={{
+        id: "btn-bypass-reverb",
+        name: "Reverb",
+        onToggle: () => updateFx({ reverbBypass: !effects.reverbBypass }),
+      }}
+    >
+      <FxKnobRow>
+        <Knob
+          id="slider-reverb-wet"
+          label="Mix"
+          color="text-accent"
+          value={effects.reverbWet}
+          min={0}
+          max={1}
+          step={0.01}
+          disabled={effects.reverbBypass}
+          format={(v) => `${(v * 100).toFixed(0)}%`}
+          onChange={(v) => updateFx({ reverbWet: v })}
+        />
+        <Knob
+          id="slider-reverb-decay"
+          label="Decay"
+          color="text-accent"
+          value={effects.reverbDecay}
+          min={0.5}
+          max={6.0}
+          step={0.1}
+          disabled={effects.reverbBypass}
+          descriptor={reverbDecayDescriptor(effects.reverbDecay)}
+          format={(v) => `${v.toFixed(1)}s`}
+          onChange={(v) => updateFx({ reverbDecay: v })}
+        />
+      </FxKnobRow>
+    </FxCard>
+  );
+}
+
+/** 2. Stereo Delay Unit */
+function DelayUnit({ effects, updateFx }: FxUnitProps) {
+  return (
+    <FxCard
+      badge={2}
+      icon={<Activity className="w-3.5 h-3.5 text-accent" />}
+      title="Stereo Echo"
+      engagedClassName="border-accent/40 ring-1 ring-accent/20"
+      bypassed={effects.delayBypass}
+      power={{
+        id: "btn-bypass-delay",
+        name: "Delay",
+        onToggle: () => updateFx({ delayBypass: !effects.delayBypass }),
+      }}
+    >
+      <FxKnobRow>
+        <Knob
+          id="slider-delay-wet"
+          label="Mix"
+          color="text-accent"
+          value={effects.delayWet}
+          min={0}
+          max={1}
+          step={0.01}
+          disabled={effects.delayBypass}
+          format={(v) => `${(v * 100).toFixed(0)}%`}
+          onChange={(v) => updateFx({ delayWet: v })}
+        />
+        <Knob
+          id="slider-delay-feedback"
+          label="Feedback"
+          color="text-accent"
+          value={effects.delayFeedback}
+          min={0}
+          max={0.9}
+          step={0.01}
+          disabled={effects.delayBypass}
+          descriptor={delayFeedbackDescriptor(effects.delayFeedback)}
+          format={(v) => `${(v * 100).toFixed(0)}%`}
+          onChange={(v) => updateFx({ delayFeedback: v })}
+        />
+      </FxKnobRow>
+    </FxCard>
+  );
+}
+
+/** 3. Wave Distortion / Warmth Unit */
+function DistortionUnit({ effects, updateFx }: FxUnitProps) {
+  return (
+    <FxCard
+      badge={3}
+      icon={<Sparkles className="w-3.5 h-3.5 text-primary" />}
+      title="Distortion"
+      engagedClassName="border-primary/40 ring-1 ring-primary/20"
+      bypassed={effects.distortionBypass}
+      power={{
+        id: "btn-bypass-distortion",
+        name: "Distortion",
+        onToggle: () => updateFx({ distortionBypass: !effects.distortionBypass }),
+      }}
+    >
+      <Knob
+        id="slider-distortion-wet"
+        label="Drive / Crunch"
+        color="text-primary"
+        value={effects.distortionWet}
+        min={0}
+        max={1}
+        step={0.01}
+        disabled={effects.distortionBypass}
+        descriptor={distortionDriveDescriptor(effects.distortionWet)}
+        format={(v) => `${(v * 100).toFixed(0)}%`}
+        onChange={(v) => updateFx({ distortionWet: v })}
+      />
+    </FxCard>
+  );
+}
+
+/** One EQ band. The three bands differ only in which value they read and write. */
+function EqBandKnob({
+  id,
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  disabled: boolean | undefined;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <Knob
+      id={id}
+      label={label}
+      color="text-secondary"
+      value={value}
+      min={-15}
+      max={15}
+      step={1}
+      detent={0}
+      disabled={disabled}
+      format={(v) => `${v > 0 ? `+${v}` : v}dB`}
+      onChange={onChange}
+    />
+  );
+}
+
+/** 4. 3-Band Equalizer */
+function EqUnit({ effects, updateFx }: FxUnitProps) {
+  return (
+    <FxCard
+      badge={4}
+      icon={<Sliders className="w-3.5 h-3.5 text-secondary" />}
+      title="3-Band EQ"
+      engagedClassName="border-secondary/40 ring-1 ring-secondary/20"
+      bypassed={effects.eqBypass}
+      power={{
+        id: "btn-bypass-eq",
+        name: "Equalizer",
+        onToggle: () => updateFx({ eqBypass: !effects.eqBypass }),
+      }}
+    >
+      <FxKnobRow>
+        <EqBandKnob
+          id="slider-eq-low"
+          label="LOW"
+          value={effects.eqLow}
+          disabled={effects.eqBypass}
+          onChange={(v) => updateFx({ eqLow: v })}
+        />
+        <EqBandKnob
+          id="slider-eq-mid"
+          label="MID"
+          value={effects.eqMid}
+          disabled={effects.eqBypass}
+          onChange={(v) => updateFx({ eqMid: v })}
+        />
+        <EqBandKnob
+          id="slider-eq-high"
+          label="HIGH"
+          value={effects.eqHigh}
+          disabled={effects.eqBypass}
+          onChange={(v) => updateFx({ eqHigh: v })}
+        />
+      </FxKnobRow>
+    </FxCard>
+  );
+}
+
+/** The four-stage FX chain, in signal order. */
+function FxChain({ effects, updateFx }: FxUnitProps) {
+  return (
+    <section className="space-y-2">
+      <h3 className={`${SECTION_HEADER} px-1`}>FX Chain</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <ReverbUnit effects={effects} updateFx={updateFx} />
+        <DelayUnit effects={effects} updateFx={updateFx} />
+        <DistortionUnit effects={effects} updateFx={updateFx} />
+        <EqUnit effects={effects} updateFx={updateFx} />
+      </div>
+    </section>
+  );
+}
+
+/** The two master dynamics stages, each one card off the DYNAMICS_CARDS table. */
+function MasterDynamicsSection({ effects, updateFx }: FxUnitProps) {
+  return (
+    <section className="space-y-2">
+      <h3 className={`${SECTION_HEADER} px-1`}>Master Dynamics</h3>
+      <p className="px-1 text-[11px] text-base-content/60">
+        Both stages sit after the master fader and after the meter, so the level you see is
+        the mix you made. The limiter starts on as a safety net for the occasional over; the
+        compressor starts off. Switch either one to taste.
+      </p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+        {DYNAMICS_CARDS.map((spec) => (
+          <DynamicsCard key={spec.stage} spec={spec} effects={effects} updateFx={updateFx} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** The monitor panel: the visualizer's mode switcher, and the visualizer itself. */
+function MonitorSection({
+  vizMode,
+  onModeChange,
+  paused,
+}: {
+  vizMode: VisualizerMode;
+  onModeChange: (mode: VisualizerMode) => void;
+  paused: boolean;
+}) {
+  return (
+    <section className="space-y-2">
+      <h3 className={`${SECTION_HEADER} px-1`}>Monitor</h3>
+      <PanelCard>
+        <div className="card-body p-3 sm:p-4 gap-3">
+          <div className="join self-start">
+            {VISUALIZER_MODES.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => onModeChange(mode)}
+                className={`btn btn-xs join-item text-[11px] font-semibold ${
+                  vizMode === mode ? "btn-active btn-primary" : "btn-ghost"
+                }`}
+              >
+                {VISUALIZER_MODE_LABEL[mode]}
+              </button>
+            ))}
+          </div>
+          <AudioVisualizer
+            mode={vizMode}
+            height={120}
+            className="w-full rounded-box"
+            colorTheme="primary"
+
+            // This view owns `vizMode` and renders its own switcher above,
+            // so the visualizer must be controlled — otherwise a canvas
+            // click and this switcher fight over two separate copies of
+            // the mode (see AudioVisualizer's `onModeChange` doc comment).
+            onModeChange={onModeChange}
+            // Master FX is the only tab that renders this visualizer;
+            // App.tsx keeps the tab mounted while hidden, so gate the
+            // rAF loop on the active tab to avoid burning CPU off-screen.
+            paused={paused}
+          />
+        </div>
+      </PanelCard>
+    </section>
+  );
+}
+
 export const EffectsRackView = React.memo(function EffectsRackView() {
   const effects = useAppStore((s) => s.effects);
   const setEffects = useAppStore((s) => s.setEffects);
@@ -247,296 +597,15 @@ export const EffectsRackView = React.memo(function EffectsRackView() {
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       <ViewHeader view="master" />
 
-      <section className="space-y-2">
-        <h3 className={`${SECTION_HEADER} px-1`}>
-          FX Chain
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {/* 1. Algorithmic Reverb Unit */}
-          <div
-            className={`card bg-panel border shadow-md transition-all ${
-              effects.reverbBypass
-                ? "border-base-300 opacity-60"
-                : "border-accent/40 ring-1 ring-accent/20"
-            }`}
-          >
-            <div className="card-body p-3 sm:p-4 space-y-3">
-              <ModuleHeader
-                badge={1}
-                icon={<Waves className="w-3.5 h-3.5 text-accent" />}
-                title="Space Reverb"
-                right={
-                  <PowerToggle
-                    id="btn-bypass-reverb"
-                    on={!effects.reverbBypass}
-                    onToggle={() => updateFx({ reverbBypass: !effects.reverbBypass })}
-                    name="Reverb"
-                    tone="accent"
-                    size="xs"
-                    iconOnly
-                  />
-                }
-              />
+      <FxChain effects={effects} updateFx={updateFx} />
 
-              <div className="flex items-start justify-around gap-2 w-full min-w-max mx-auto">
-                <Knob
-                  id="slider-reverb-wet"
-                  label="Mix"
-                  color="text-accent"
-                  value={effects.reverbWet}
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  disabled={effects.reverbBypass}
-                  format={(v) => `${(v * 100).toFixed(0)}%`}
-                  onChange={(v) => updateFx({ reverbWet: v })}
-                />
-                <Knob
-                  id="slider-reverb-decay"
-                  label="Decay"
-                  color="text-accent"
-                  value={effects.reverbDecay}
-                  min={0.5}
-                  max={6.0}
-                  step={0.1}
-                  disabled={effects.reverbBypass}
-                  descriptor={reverbDecayDescriptor(effects.reverbDecay)}
-                  format={(v) => `${v.toFixed(1)}s`}
-                  onChange={(v) => updateFx({ reverbDecay: v })}
-                />
-              </div>
-            </div>
-          </div>
+      <MasterDynamicsSection effects={effects} updateFx={updateFx} />
 
-          {/* 2. Stereo Delay Unit */}
-          <div
-            className={`card bg-panel border shadow-md transition-all ${
-              effects.delayBypass
-                ? "border-base-300 opacity-60"
-                : "border-accent/40 ring-1 ring-accent/20"
-            }`}
-          >
-            <div className="card-body p-3 sm:p-4 space-y-3">
-              <ModuleHeader
-                badge={2}
-                icon={<Activity className="w-3.5 h-3.5 text-accent" />}
-                title="Stereo Echo"
-                right={
-                  <PowerToggle
-                    id="btn-bypass-delay"
-                    on={!effects.delayBypass}
-                    onToggle={() => updateFx({ delayBypass: !effects.delayBypass })}
-                    name="Delay"
-                    tone="accent"
-                    size="xs"
-                    iconOnly
-                  />
-                }
-              />
-
-              <div className="flex items-start justify-around gap-2 w-full min-w-max mx-auto">
-                <Knob
-                  id="slider-delay-wet"
-                  label="Mix"
-                  color="text-accent"
-                  value={effects.delayWet}
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  disabled={effects.delayBypass}
-                  format={(v) => `${(v * 100).toFixed(0)}%`}
-                  onChange={(v) => updateFx({ delayWet: v })}
-                />
-                <Knob
-                  id="slider-delay-feedback"
-                  label="Feedback"
-                  color="text-accent"
-                  value={effects.delayFeedback}
-                  min={0}
-                  max={0.9}
-                  step={0.01}
-                  disabled={effects.delayBypass}
-                  descriptor={delayFeedbackDescriptor(effects.delayFeedback)}
-                  format={(v) => `${(v * 100).toFixed(0)}%`}
-                  onChange={(v) => updateFx({ delayFeedback: v })}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 3. Wave Distortion / Warmth Unit */}
-          <div
-            className={`card bg-panel border shadow-md transition-all ${
-              effects.distortionBypass
-                ? "border-base-300 opacity-60"
-                : "border-primary/40 ring-1 ring-primary/20"
-            }`}
-          >
-            <div className="card-body p-3 sm:p-4 space-y-3">
-              <ModuleHeader
-                badge={3}
-                icon={<Sparkles className="w-3.5 h-3.5 text-primary" />}
-                title="Distortion"
-                right={
-                  <PowerToggle
-                    id="btn-bypass-distortion"
-                    on={!effects.distortionBypass}
-                    onToggle={() =>
-                      updateFx({ distortionBypass: !effects.distortionBypass })
-                    }
-                    name="Distortion"
-                    tone="accent"
-                    size="xs"
-                    iconOnly
-                  />
-                }
-              />
-
-              <Knob
-                id="slider-distortion-wet"
-                label="Drive / Crunch"
-                color="text-primary"
-                value={effects.distortionWet}
-                min={0}
-                max={1}
-                step={0.01}
-                disabled={effects.distortionBypass}
-                descriptor={distortionDriveDescriptor(effects.distortionWet)}
-                format={(v) => `${(v * 100).toFixed(0)}%`}
-                onChange={(v) => updateFx({ distortionWet: v })}
-              />
-            </div>
-          </div>
-
-          {/* 4. 3-Band Equalizer */}
-          <div
-            className={`card bg-panel border shadow-md transition-all ${
-              effects.eqBypass
-                ? "border-base-300 opacity-60"
-                : "border-secondary/40 ring-1 ring-secondary/20"
-            }`}
-          >
-            <div className="card-body p-3 sm:p-4 space-y-3">
-              <ModuleHeader
-                badge={4}
-                icon={<Sliders className="w-3.5 h-3.5 text-secondary" />}
-                title="3-Band EQ"
-                right={
-                  <PowerToggle
-                    id="btn-bypass-eq"
-                    on={!effects.eqBypass}
-                    onToggle={() => updateFx({ eqBypass: !effects.eqBypass })}
-                    name="Equalizer"
-                    tone="accent"
-                    size="xs"
-                    iconOnly
-                  />
-                }
-              />
-
-              <div className="flex items-start justify-around gap-2 w-full min-w-max mx-auto">
-                <Knob
-                  id="slider-eq-low"
-                  label="LOW"
-                  color="text-secondary"
-                  value={effects.eqLow}
-                  min={-15}
-                  max={15}
-                  step={1}
-                  detent={0}
-                  disabled={effects.eqBypass}
-                  format={(v) => `${v > 0 ? `+${v}` : v}dB`}
-                  onChange={(v) => updateFx({ eqLow: v })}
-                />
-
-                <Knob
-                  id="slider-eq-mid"
-                  label="MID"
-                  color="text-secondary"
-                  value={effects.eqMid}
-                  min={-15}
-                  max={15}
-                  step={1}
-                  detent={0}
-                  disabled={effects.eqBypass}
-                  format={(v) => `${v > 0 ? `+${v}` : v}dB`}
-                  onChange={(v) => updateFx({ eqMid: v })}
-                />
-
-                <Knob
-                  id="slider-eq-high"
-                  label="HIGH"
-                  color="text-secondary"
-                  value={effects.eqHigh}
-                  min={-15}
-                  max={15}
-                  step={1}
-                  detent={0}
-                  disabled={effects.eqBypass}
-                  format={(v) => `${v > 0 ? `+${v}` : v}dB`}
-                  onChange={(v) => updateFx({ eqHigh: v })}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="space-y-2">
-        <h3 className={`${SECTION_HEADER} px-1`}>
-          Master Dynamics
-        </h3>
-        <p className="px-1 text-[11px] text-base-content/60">
-          Both stages sit after the master fader and after the meter, so the level you see is
-          the mix you made. The limiter starts on as a safety net for the occasional over; the
-          compressor starts off. Switch either one to taste.
-        </p>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-          {DYNAMICS_CARDS.map((spec) => (
-            <DynamicsCard key={spec.stage} spec={spec} effects={effects} updateFx={updateFx} />
-          ))}
-        </div>
-      </section>
-
-      <section className="space-y-2">
-        <h3 className={`${SECTION_HEADER} px-1`}>
-          Monitor
-        </h3>
-        <PanelCard>
-          <div className="card-body p-3 sm:p-4 gap-3">
-            <div className="join self-start">
-              {VISUALIZER_MODES.map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setVizMode(mode)}
-                  className={`btn btn-xs join-item text-[11px] font-semibold ${
-                    vizMode === mode ? "btn-active btn-primary" : "btn-ghost"
-                  }`}
-                >
-                  {VISUALIZER_MODE_LABEL[mode]}
-                </button>
-              ))}
-            </div>
-            <AudioVisualizer
-              mode={vizMode}
-              height={120}
-              className="w-full rounded-box"
-              colorTheme="primary"
-
-              // This view owns `vizMode` and renders its own switcher above,
-              // so the visualizer must be controlled — otherwise a canvas
-              // click and this switcher fight over two separate copies of
-              // the mode (see AudioVisualizer's `onModeChange` doc comment).
-              onModeChange={setVizMode}
-              // Master FX is the only tab that renders this visualizer;
-              // App.tsx keeps the tab mounted while hidden, so gate the
-              // rAF loop on the active tab to avoid burning CPU off-screen.
-              paused={activeTab !== "master"}
-            />
-          </div>
-        </PanelCard>
-      </section>
+      <MonitorSection
+        vizMode={vizMode}
+        onModeChange={setVizMode}
+        paused={activeTab !== "master"}
+      />
     </div>
   );
 });
