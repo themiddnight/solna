@@ -3,79 +3,16 @@ import { subscribePlaybackClock } from '../audio/playback/playbackEngine';
 import { layerForTab } from '../types';
 import type { Layer } from '../types';
 import { getMeter } from '../utils/meter';
+import { songAdvanceDecision } from '../utils/songStructure';
 import { loadLoop } from './loadLoop';
-import { loopBars } from './loop';
 import { playbackScopeReducer } from './playbackScope';
 import { useAppStore } from './store';
 import { aggregateAllPlayers, playerStatesKey } from './transportSlice';
-import type { Loop } from './types';
-
-/** A loop's length in steps = Σ chord.bars × stepsPerBar. */
-export function loopLengthSteps(chords: readonly { bars?: number }[], stepsPerBar: number): number {
-  return loopBars(chords) * stepsPerBar;
-}
 
 /** Where the song starts: the active loop's list index, else the top. */
 export function enterSongIndex(loops: readonly { id: string }[], activeLoopId: string): number {
   const index = loops.findIndex((r) => r.id === activeLoopId);
   return index === -1 ? 0 : index;
-}
-
-/**
- * What the arrangement does at this clock step.
- *
- * Three answers, not two, and the third is why this is a union: `hold` is
- * "not a transition boundary" — every non-boundary step, loop mode, an
- * out-of-range cursor — while `end` is "the song is over". The old
- * `string | null` return spelled both of them `null`, so the caller could not
- * stop on one and do nothing on the other, and the arrangement could only
- * ever wrap.
- */
-export type SongAdvance =
-  | { kind: 'hold' }
-  | { kind: 'advance'; loopId: string }
-  | { kind: 'end' };
-
-/** Nothing happens on this step. */
-export const SONG_HOLD: SongAdvance = Object.freeze({ kind: 'hold' });
-
-/** The last loop's last repeat just completed: the song is over. */
-export const SONG_END: SongAdvance = Object.freeze({ kind: 'end' });
-
-/**
- * The decision for one clock step. `step` is measured from the shared clock's
- * reset origin — every advance re-anchors the grid at the boundary, so each
- * loop's boundary is `loopLength` steps from 0 (the same alignment the Instant
- * Vibe swap relies on).
- *
- * The last slot ENDS the song; it does not wrap. A single-loop arrangement is
- * no exception, and the exception that used to be here — "reloading the loop
- * we are already in would hard-stop the players and reset the shared clock on
- * every pass" — was answering a question this no longer asks: ending reloads
- * nothing. The user-facing reason is a separation of duties. Auditioning a
- * loop card already means "loop one thing forever"; song mode means a piece
- * with an ending, and one arrangement size must not silently switch which of
- * the two the Play button does.
- */
-export function songAdvanceDecision(
-  loops: readonly Loop[],
-  songLoopIndex: number | null,
-  step: number,
-  stepsPerBar: number,
-): SongAdvance {
-  if (songLoopIndex === null) return SONG_HOLD;
-  const loop = loops[songLoopIndex];
-  if (!loop) return SONG_HOLD;
-  const length = loopLengthSteps(loop.chords, stepsPerBar);
-  // A loop with no chords is a silent bar, not a dead end: dwell it for one
-  // bar so the song keeps flowing instead of freezing (a 0 length can never
-  // hit the `step % length === 0` boundary).
-  const effectiveLength = Math.max(length, stepsPerBar);
-  const repeats = Math.max(1, loop.repeatCount ?? 1);
-  const totalSteps = effectiveLength * repeats;
-  if (step <= 0 || step % totalSteps !== 0) return SONG_HOLD;
-  const next = loops[songLoopIndex + 1];
-  return next ? { kind: 'advance', loopId: next.id } : SONG_END;
 }
 
 export interface SongModeDeps {

@@ -1,20 +1,12 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
-import { INITIAL_CHORDS } from './initialState';
 import { loadLoop } from './loadLoop';
 import { createDefaultLoop } from './loopSlice';
 import { loopStatePatch } from './loop';
 import { scopedLoopId } from './playbackScope';
 import { useAppStore } from './store';
 import { isSongLayer } from '../types';
-import {
-  enterSongIndex,
-  loopLengthSteps,
-  SONG_END,
-  SONG_HOLD,
-  songAdvanceDecision,
-  startSongModeSync,
-} from './songMode';
+import { enterSongIndex, startSongModeSync } from './songMode';
 import type { Loop } from './types';
 
 function shortLoop(id: string, bars: number): Loop {
@@ -33,76 +25,9 @@ describe('song mode pure helpers', () => {
     expect(isSongLayer('sound')).toBe(false);
   });
 
-  test('loopLengthSteps multiplies bars by stepsPerBar', () => {
-    expect(loopLengthSteps([{ bars: 2 }, { bars: 1 }], 16)).toBe(48);
-    expect(loopLengthSteps([{ bars: 0 }], 16)).toBe(16);
-    expect(loopLengthSteps(INITIAL_CHORDS, 16)).toBe(64);
-  });
-
   test('enterSongIndex resolves the active loop to its list index, defaulting to 0', () => {
     expect(enterSongIndex([{ id: 'a' }, { id: 'b' }], 'b')).toBe(1);
     expect(enterSongIndex([{ id: 'a' }], 'missing')).toBe(0);
-  });
-
-  test('songAdvanceDecision advances exactly on the boundary and holds everywhere else', () => {
-    const loops = [shortLoop('a', 4), shortLoop('b', 2), shortLoop('c', 1)];
-    expect(songAdvanceDecision(loops, 0, 63, 16)).toBe(SONG_HOLD);
-    expect(songAdvanceDecision(loops, 0, 64, 16)).toEqual({ kind: 'advance', loopId: 'b' });
-    expect(songAdvanceDecision(loops, 1, 31, 16)).toBe(SONG_HOLD);
-    expect(songAdvanceDecision(loops, 1, 32, 16)).toEqual({ kind: 'advance', loopId: 'c' });
-  });
-
-  test('songAdvanceDecision ENDS the song after the last loop instead of wrapping', () => {
-    const loops = [shortLoop('a', 4), shortLoop('b', 2)];
-    // The song has an ending: the last slot does not wrap back to the top.
-    expect(songAdvanceDecision(loops, 1, 32, 16)).toBe(SONG_END);
-    // ...and only on its own boundary. A mid-loop step still holds.
-    expect(songAdvanceDecision(loops, 1, 31, 16)).toBe(SONG_HOLD);
-  });
-
-  test('songAdvanceDecision ends a SINGLE-loop arrangement too', () => {
-    // The old rule made this the one arrangement that played forever, for a
-    // technical reason (reloading the loop we are already in would hard-stop
-    // the players and rewind the clock every pass) that stopping does not
-    // have. Auditioning a card is the feature for "loop one thing forever";
-    // song mode is the feature for a piece with an ending.
-    const loops = [shortLoop('a', 4)];
-    expect(songAdvanceDecision(loops, 0, 64, 16)).toBe(SONG_END);
-  });
-
-  test('songAdvanceDecision multiplies loop length by repeatCount before deciding', () => {
-    const loopA = { ...shortLoop('a', 2), repeatCount: 3 }; // 2 bars x 16 steps x 3 repeats
-    const loopB = { ...shortLoop('b', 1), repeatCount: 2 }; // 1 bar x 16 steps x 2 repeats
-    const loops = [loopA, loopB];
-    expect(songAdvanceDecision(loops, 0, 32, 16)).toBe(SONG_HOLD); // after rep 1
-    expect(songAdvanceDecision(loops, 0, 64, 16)).toBe(SONG_HOLD); // after rep 2
-    expect(songAdvanceDecision(loops, 0, 95, 16)).toBe(SONG_HOLD);
-    expect(songAdvanceDecision(loops, 0, 96, 16)).toEqual({ kind: 'advance', loopId: 'b' });
-    // The last loop's repeats are counted before the ending, too.
-    expect(songAdvanceDecision(loops, 1, 16, 16)).toBe(SONG_HOLD); // after rep 1
-    expect(songAdvanceDecision(loops, 1, 32, 16)).toBe(SONG_END); // after rep 2
-  });
-
-  test('songAdvanceDecision holds on step 0, in loop mode and on an out-of-range cursor', () => {
-    // Every one of these was `null` before, indistinguishable from the ending.
-    const loops = [shortLoop('a', 4)];
-    expect(songAdvanceDecision(loops, null, 64, 16)).toBe(SONG_HOLD);
-    expect(songAdvanceDecision(loops, 0, 0, 16)).toBe(SONG_HOLD);
-    expect(songAdvanceDecision(loops, 99, 64, 16)).toBe(SONG_HOLD);
-    expect(songAdvanceDecision([], 0, 64, 16)).toBe(SONG_HOLD);
-  });
-
-  test('songAdvanceDecision dwells an empty loop one bar then advances', () => {
-    const empty: Loop = {
-      ...createDefaultLoop(),
-      id: 'empty',
-      name: 'Empty',
-      chords: [],
-    };
-    const loops = [empty, shortLoop('b', 1)];
-    expect(songAdvanceDecision(loops, 0, 0, 16)).toBe(SONG_HOLD); // step 0
-    expect(songAdvanceDecision(loops, 0, 15, 16)).toBe(SONG_HOLD); // mid-bar
-    expect(songAdvanceDecision(loops, 0, 16, 16)).toEqual({ kind: 'advance', loopId: 'b' });
   });
 });
 

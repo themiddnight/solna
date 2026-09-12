@@ -56,15 +56,6 @@ export const LOOP_FLAT_KEYS = [
   'drumMuted',
 ] as const;
 
-/**
- * A loop's length in bars — the same total the chord player already
- * advances through (`chord.bars × stepsPerBar` per chord), so the loop
- * boundary is exactly where the progression wraps.
- */
-export function loopBars(chords: readonly { bars?: number }[]): number {
-  return chords.reduce((sum, c) => sum + (c.bars || 1), 0);
-}
-
 /** Loop ids are new and unique per project (same style as presetsSlice). */
 export function newLoopId(): string {
   return `loop-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;

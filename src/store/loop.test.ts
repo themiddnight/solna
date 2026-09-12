@@ -11,7 +11,6 @@ import {
   fallbackActiveLoopId,
   newLoopId,
   nextDuplicateLabel,
-  loopBars,
   loopLabel,
   nextUntitledName,
   loopStatePatch,
@@ -21,6 +20,7 @@ import {
 import { createDefaultLoop } from './loopSlice';
 import type { Loop } from './types';
 import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
+import { loopBars, loopLengthSteps } from '@/utils/songStructure';
 
 function makeLoop(overrides: Partial<Loop> = {}): Loop {
   return {
@@ -68,13 +68,15 @@ function makeLoop(overrides: Partial<Loop> = {}): Loop {
   };
 }
 
-describe('loopBars', () => {
-  test('sums chord bars with a 1-bar default for bar-less chords', () => {
-    expect(loopBars([])).toBe(0);
-    expect(loopBars([{ bars: 2 }, { bars: 1 }, { bars: 4 }])).toBe(7);
-    expect(loopBars([{ bars: 0 }])).toBe(1);
-    expect(loopBars([{ bars: undefined }])).toBe(1);
+/**
+ * The MOVED maths is covered in src/utils/songStructure.test.ts. What stays
+ * here is the CONTENT: the store's factory progression is four bars, and every
+ * loop-length readout in the app is calibrated against that number.
+ */
+describe('the factory progression', () => {
+  test('is four bars, 64 steps in 4/4', () => {
     expect(loopBars(INITIAL_CHORDS)).toBe(4);
+    expect(loopLengthSteps(INITIAL_CHORDS, 16)).toBe(64);
   });
 });
 

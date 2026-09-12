@@ -132,6 +132,10 @@ export function createProjectSlice(
     activeLoopId: string | null = null,
     source: ProjectSource = UNTITLED_SOURCE,
   ): void => {
+    // An export owns a snapshot of the outgoing project. Invalidate that job
+    // before the live session changes so it can never publish progress or
+    // download its old audio into the incoming project's UI.
+    get().cancelMixdown();
     get().hardStopAll();
     for (const source of ACCOMPANIMENT_SOURCES) {
       audioEngine.stopSource(source, INSTALL_RELEASE);

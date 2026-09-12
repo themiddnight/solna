@@ -19,6 +19,7 @@ import { createLoopCopySlice } from './loopCopySlice';
 import { migrateLegacyPresets, removeLegacyKeys, LEGACY_PERSIST_KEY } from './migrate';
 import { createLoopMirroringSet } from './loopSync';
 import { createProjectSlice } from './projectSlice';
+import { createMixdownSlice } from './mixdownSlice';
 import { createDriveAuth, driveClientId, DriveUnavailableError } from './driveAuth';
 import { createDriveClient } from './driveClient';
 import { createGapiTransport } from './driveGapi';
@@ -287,6 +288,7 @@ export const useAppStore = create<AppStore>()(
         ...createLoopSlice(setWithLoopMirror, get),
         ...createLoopCopySlice(setWithLoopMirror, get),
         ...createProjectSlice(setWithLoopMirror, get, projectStore),
+        ...createMixdownSlice(setWithLoopMirror, get),
         ...createDriveSlice(setWithLoopMirror, get, {
           auth: driveAuth,
           client: driveClient,
