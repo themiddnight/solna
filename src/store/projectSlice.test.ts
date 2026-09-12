@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import { createMemoryBackend, createProjectStore } from './projectStore';
+import { UNTITLED_SOURCE, type ProjectSlotRecord } from './projectSource';
 import { unknownLibraryReferences } from './projectFile';
 import { buildProjectContent, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
 import { DEFAULT_LOOP_ID, createDefaultLoop } from './loopSlice';
@@ -23,7 +24,7 @@ beforeAll(() => {
 });
 
 /** A fresh slice bound to the live store but to ITS OWN memory backend. */
-async function sliceWithBackend(seed?: ProjectBody) {
+async function sliceWithBackend(seed?: ProjectBody | ProjectSlotRecord) {
   const { useAppStore } = await storeModule;
   const { createProjectSlice } = await import('./projectSlice');
   const backend = createMemoryBackend(seed);
@@ -167,13 +168,13 @@ describe('loadProject (boot)', () => {
 
 describe('save (autosave write)', () => {
   test('writes the live content under the current envelope and publishes status', async () => {
-    const { useAppStore, backend, slice } = await sliceWithBackend();
+    const { useAppStore, store, slice } = await sliceWithBackend();
     useAppStore.setState({ bpm: 155 });
     const result = await slice.save();
     expect(result.ok).toBe(true);
-    const row = backend.slot.get('current');
-    expect(row?.content.bpm).toBe(155);
-    expect(row?.name).toBe('');
+    const loaded = await store.load();
+    expect(loaded.ok && loaded.value.body.content.bpm).toBe(155);
+    expect(loaded.ok && loaded.value.body.name).toBe('');
     expect(useAppStore.getState().projectStoreStatus).toBe('ready');
   });
 
@@ -194,7 +195,7 @@ describe('save (autosave write)', () => {
 describe('newProject', () => {
   test('installs factory content, clears the name and writes the empty project', async () => {
     const p = stored('Alpha', 77);
-    const { useAppStore, backend, slice } = await sliceWithBackend(p);
+    const { useAppStore, store, slice } = await sliceWithBackend(p);
     await slice.loadProject();
     useAppStore.setState({ bpm: 200 });
     useAppStore.getState().newProject();
@@ -205,19 +206,22 @@ describe('newProject', () => {
     // and forgotten (`void get().save()`) over the async ProjectStore, so one
     // macrotask lets it land before the slot is read.
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(backend.slot.get('current')?.content.bpm).toBe(120);
+    const loaded = await store.load();
+    expect(loaded.ok && loaded.value.body.content.bpm).toBe(120);
   });
 });
 
 describe('openProjectFile', () => {
   test('adopts the file’s envelope, installs its content and becomes the autosaved project', async () => {
-    const { useAppStore, backend, slice } = await sliceWithBackend();
+    const { useAppStore, store, slice } = await sliceWithBackend();
     const file = stored('From Disk', 99);
     const result = await slice.openProjectFile(file);
     expect(result.ok).toBe(true);
+    expect(result.ok && result.value.body.name).toBe('From Disk');
     expect(useAppStore.getState().projectName).toBe('From Disk');
     expect(useAppStore.getState().bpm).toBe(99);
-    expect(backend.slot.get('current')?.id).toBe(file.id);
+    const loaded = await store.load();
+    expect(loaded.ok && loaded.value.body.id).toBe(file.id);
   });
 
   // DEFENSIVE CONTRACT — no production caller reaches this. Both readers run
@@ -331,5 +335,66 @@ describe('the loop-mirroring set', () => {
       expect(s[key]).toEqual(s.loops[0][key]);
     }
     expect(unknownLibraryReferences(s.exportProjectFile().content)).toEqual([]);
+  });
+});
+
+describe('the project source', () => {
+  test('a stored record restores its source, so Save still knows where it writes', async () => {
+    const record: ProjectSlotRecord = { body: stored('Resume', 110), source: { kind: 'drive', fileId: 'drive-1' } };
+    const { useAppStore, slice } = await sliceWithBackend(record);
+    await slice.loadProject();
+    expect(useAppStore.getState().projectSource).toEqual({ kind: 'drive', fileId: 'drive-1' });
+  });
+
+  test('an empty slot leaves the source untitled', async () => {
+    const { useAppStore, slice } = await sliceWithBackend();
+    await slice.loadProject();
+    expect(useAppStore.getState().projectSource).toEqual(UNTITLED_SOURCE);
+  });
+
+  test('a local handle survives the slot round-trip and comes back as the source', async () => {
+    const handle = { name: 'sketch.solna', kind: 'file' } as unknown as FileSystemFileHandle;
+    const record: ProjectSlotRecord = { body: stored('Resume', 110), source: { kind: 'local', handle } };
+    const { useAppStore, slice } = await sliceWithBackend(record);
+    await slice.loadProject();
+    expect(useAppStore.getState().projectSource).toEqual({ kind: 'local', handle });
+  });
+
+  test('openProjectFile adopts the source it was opened from', async () => {
+    const { useAppStore, slice } = await sliceWithBackend();
+    await slice.openProjectFile(stored('FromDrive', 100), { kind: 'drive', fileId: 'drive-9' });
+    expect(useAppStore.getState().projectSource).toEqual({ kind: 'drive', fileId: 'drive-9' });
+  });
+
+  test('a file picker open is untitled — a File is read-only, so Save must ask where to write', async () => {
+    const { useAppStore, slice } = await sliceWithBackend();
+    await slice.openProjectFile(stored('Picked', 100));
+    expect(useAppStore.getState().projectSource).toEqual(UNTITLED_SOURCE);
+  });
+
+  test('newProject drops the source: a new project belongs to no file', async () => {
+    const record: ProjectSlotRecord = { body: stored('Old', 100), source: { kind: 'drive', fileId: 'drive-1' } };
+    const { useAppStore, slice } = await sliceWithBackend(record);
+    await slice.loadProject();
+    slice.newProject();
+    expect(useAppStore.getState().projectSource).toEqual(UNTITLED_SOURCE);
+  });
+
+  test('the autosave writes the current source into the record and never changes it', async () => {
+    const { useAppStore, store, slice } = await sliceWithBackend();
+    useAppStore.setState({ projectSource: { kind: 'drive', fileId: 'drive-1' } });
+    const result = await slice.save();
+    expect(result.ok).toBe(true);
+    const loaded = await store.load();
+    expect(loaded.ok && loaded.value.source).toEqual({ kind: 'drive', fileId: 'drive-1' });
+    expect(useAppStore.getState().projectSource).toEqual({ kind: 'drive', fileId: 'drive-1' });
+  });
+
+  test('the source is nowhere in the exported body — it does not travel in the file', async () => {
+    const { useAppStore, slice } = await sliceWithBackend();
+    useAppStore.setState({ projectSource: { kind: 'drive', fileId: 'drive-1' } });
+    const serialised = JSON.stringify(slice.exportProjectFile());
+    expect(serialised).not.toContain('drive-1');
+    expect(serialised).not.toContain('source');
   });
 });

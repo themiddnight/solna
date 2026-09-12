@@ -1,4 +1,5 @@
 import { normalizeStoredBody } from './projectFile';
+import { sanitizeSlotRecord, type ProjectSlotRecord } from './projectSource';
 import type { ProjectBody } from './projectFormat';
 
 /**
@@ -11,8 +12,8 @@ import type { ProjectBody } from './projectFormat';
 export const PROJECT_SLOT_KEY = 'current';
 
 export interface ProjectStoreBackend {
-  getBody(): Promise<ProjectBody | undefined>;
-  put(body: ProjectBody): Promise<void>;
+  getRecord(): Promise<unknown>;
+  putRecord(record: ProjectSlotRecord): Promise<void>;
   remove(): Promise<void>;
 }
 
@@ -30,8 +31,8 @@ export const FAILED_MESSAGE = 'Project storage failed. Export the session to kee
 
 export interface ProjectStore {
   status(): ProjectStoreStatus;
-  load(): Promise<ProjectStoreResult<ProjectBody>>;
-  save(body: ProjectBody): Promise<ProjectStoreResult<ProjectBody>>;
+  load(): Promise<ProjectStoreResult<ProjectSlotRecord>>;
+  save(record: ProjectSlotRecord): Promise<ProjectStoreResult<ProjectSlotRecord>>;
   clear(): Promise<ProjectStoreResult<null>>;
 }
 
@@ -79,17 +80,22 @@ export function createProjectStore(openBackend: () => Promise<ProjectStoreBacken
     status: () => status,
     load: () =>
       run(async (b) => {
-        const body = await b.getBody();
-        // Every body LEAVES storage through here, so the format chain runs at
+        // The slot VALUE widened from a body to a record; the shape test lives
+        // in sanitizeSlotRecord, so this is where a pre-source slot widens and
+        // there is no version gate anywhere for it.
+        const record = sanitizeSlotRecord(await b.getRecord());
+        if (!record) return { ok: false as const, error: 'not-found' as const, message: NOT_FOUND_MESSAGE };
+        // Every body LEAVES storage through here, so the format pass runs at
         // the one read site rather than at each caller.
-        return body
-          ? { ok: true as const, value: normalizeStoredBody(body) }
-          : { ok: false as const, error: 'not-found' as const, message: NOT_FOUND_MESSAGE };
+        return {
+          ok: true as const,
+          value: { body: normalizeStoredBody(record.body), source: record.source },
+        };
       }),
-    save: (body) =>
+    save: (record) =>
       run(async (b) => {
-        await b.put(body);
-        return { ok: true as const, value: body };
+        await b.putRecord(record);
+        return { ok: true as const, value: record };
       }),
     clear: () =>
       run(async (b) => {
@@ -99,15 +105,19 @@ export function createProjectStore(openBackend: () => Promise<ProjectStoreBacken
   };
 }
 
-/** Test double and the shape the IndexedDB backend must match. */
-export function createMemoryBackend(seed?: ProjectBody) {
-  const slot = new Map<string, ProjectBody>();
+/**
+ * Test double and the shape the IndexedDB backend must match. The seed accepts
+ * a bare `ProjectBody` on purpose: that is the shape a slot written before
+ * sources existed carries, and seeding one is how the widening rule is pinned.
+ */
+export function createMemoryBackend(seed?: ProjectBody | ProjectSlotRecord) {
+  const slot = new Map<string, unknown>();
   if (seed) slot.set(PROJECT_SLOT_KEY, structuredClone(seed));
   const backend: ProjectStoreBackend & { slot: typeof slot } = {
     slot,
-    getBody: async () => slot.get(PROJECT_SLOT_KEY),
-    put: async (body) => {
-      slot.set(PROJECT_SLOT_KEY, structuredClone(body));
+    getRecord: async () => slot.get(PROJECT_SLOT_KEY),
+    putRecord: async (record) => {
+      slot.set(PROJECT_SLOT_KEY, structuredClone(record));
     },
     remove: async () => {
       slot.delete(PROJECT_SLOT_KEY);

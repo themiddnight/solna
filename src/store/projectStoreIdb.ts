@@ -1,6 +1,5 @@
 import type { ProjectStoreBackend } from './projectStore';
 import { PROJECT_SLOT_KEY } from './projectStore';
-import type { ProjectBody } from './projectFormat';
 
 export const PROJECT_DB_NAME = 'solna-projects';
 /**
@@ -83,13 +82,15 @@ export function openIndexedDbBackend(dbName = PROJECT_DB_NAME): Promise<ProjectS
   }).then((db): ProjectStoreBackend => ({
     // A keyPath-less store takes an explicit key on every put; one fixed key
     // means put() overwrites the slot and the store never grows past one row.
-    getBody: async () => {
+    // The value is the whole record — a FileSystemFileHandle is
+    // structured-cloneable, so it rides here and never through JSON.stringify.
+    getRecord: async () => {
       const tx = db.transaction(SLOT, 'readonly');
-      return requestToPromise(tx.objectStore(SLOT).get(PROJECT_SLOT_KEY) as IDBRequest<ProjectBody | undefined>);
+      return requestToPromise(tx.objectStore(SLOT).get(PROJECT_SLOT_KEY) as IDBRequest<unknown>);
     },
-    put: async (body) => {
+    putRecord: async (record) => {
       const tx = db.transaction(SLOT, 'readwrite');
-      tx.objectStore(SLOT).put(body, PROJECT_SLOT_KEY);
+      tx.objectStore(SLOT).put(record, PROJECT_SLOT_KEY);
       await transactionDone(tx);
     },
     remove: async () => {

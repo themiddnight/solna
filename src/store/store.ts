@@ -19,11 +19,17 @@ import { createLoopCopySlice } from './loopCopySlice';
 import { migrateLegacyPresets, removeLegacyKeys, LEGACY_PERSIST_KEY } from './migrate';
 import { createLoopMirroringSet } from './loopSync';
 import { createProjectSlice } from './projectSlice';
+import { createDriveAuth, driveClientId, DriveUnavailableError } from './driveAuth';
+import { createDriveClient } from './driveClient';
+import { createGapiTransport } from './driveGapi';
+import { createDriveSlice } from './driveSlice';
 import { createProjectAutosave } from './projectAutosave';
 import { createProjectStore } from './projectStore';
 import { openIndexedDbBackend } from './projectStoreIdb';
 import { isMixLayerId } from './focusTrack';
 import { createCoalescedStorage } from '../utils/coalescedStorage';
+import { loadGapi, loadGis } from '../utils/googleScriptLoader';
+import type { GapiRoot } from '../utils/googleScriptLoader';
 import type { AppStore, PersistedState } from './types';
 import { asBoolean } from './sanitize';
 
@@ -213,6 +219,33 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   return sanitized as unknown as Partial<AppStore>;
 }
 
+/**
+ * One auth and one client for the whole app, built once and shared. The token
+ * cannot be per-surface: two `DriveAuth` instances would mean two consent
+ * prompts and two tokens, and whichever expired first would sign out a session
+ * the other was still using.
+ *
+ * Module scope is safe because neither constructor touches Google — the auth
+ * holds no token until `token()` is called and the transport calls `getGapi()`
+ * only on its first request, so importing this file still loads nothing.
+ */
+const driveAuth = createDriveAuth({ loadOauth2: loadGis, clientId: driveClientId() });
+
+/**
+ * `createGapiTransport` wants a `getGapi` that THROWS on failure, while
+ * `loadGapi` reports one as a `LoadResult` — so the adapter is where the two
+ * conventions meet, not a caller's job.
+ */
+const getGapi = async (): Promise<GapiRoot> => {
+  const loaded = await loadGapi();
+  if (loaded.ok === false) throw new DriveUnavailableError(loaded.message);
+  return loaded.value;
+};
+
+const driveClient = createDriveClient(createGapiTransport(getGapi, driveAuth));
+/** Read once: an unset VITE_GOOGLE_CLIENT_ID is a normal degraded state, not a boot failure. */
+const DRIVE_AVAILABLE = driveClientId() !== '';
+
 export const useAppStore = create<AppStore>()(
   persist(
     subscribeWithSelector((set, get, api) => {
@@ -238,6 +271,11 @@ export const useAppStore = create<AppStore>()(
         ...createLoopSlice(setWithLoopMirror, get),
         ...createLoopCopySlice(setWithLoopMirror, get),
         ...createProjectSlice(setWithLoopMirror, get, projectStore),
+        ...createDriveSlice(setWithLoopMirror, get, {
+          auth: driveAuth,
+          client: driveClient,
+          available: DRIVE_AVAILABLE,
+        }),
       };
     }),
     {

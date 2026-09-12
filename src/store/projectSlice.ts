@@ -1,28 +1,68 @@
 import type { StoreApi } from 'zustand';
 import { audioEngine } from '../audio/engine';
 import { ACCOMPANIMENT_SOURCES } from '../audio/playback/playbackEngine';
+import {
+  ensureWritePermission,
+  fileNameWithoutExtension,
+  pickLocalSaveHandle,
+  writeTextToHandle,
+} from '../utils/localFileSave';
+import { projectFileName } from '../utils/projectFileIO';
 import type { AppStore } from './types';
 import {
-  PROJECT_FORMAT_VERSION,
   applyProjectContent,
   buildProjectContent,
   factoryProjectContent,
   makeEnvelope,
-  newProjectId,
   type ProjectBody,
   type ProjectContent,
   type ProjectEnvelope,
 } from './projectFormat';
-import { unknownLibraryReferences } from './projectFile';
+import { serializeProject, unknownLibraryReferences } from './projectFile';
 import { loopStatePatch, resolveActiveLoop } from './loop';
 import type { ProjectStore, ProjectStoreResult, ProjectStoreStatus } from './projectStore';
+import {
+  UNTITLED_SOURCE,
+  envelopeForSave,
+  envelopeForSaveAs,
+  newDocumentIdentity,
+  saveTarget,
+  type DocumentIdentity,
+  type ProjectSlotRecord,
+  type ProjectSource,
+} from './projectSource';
 
 type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
 
+export type ProjectSaveDestination = 'local' | 'drive' | 'download' | 'cancelled';
+
+/**
+ * `download` is an INSTRUCTION, not a failure: the browser has no
+ * showSaveFilePicker (Safari, Firefox, a permissions-policy iframe), so the
+ * caller must write a copy with downloadTextFile. The store cannot do it —
+ * src/store/ does not touch `document`, and a `.solna` copy is exactly what
+ * `exportProjectFile` already hands the component layer.
+ *
+ * `cancelled` is likewise a success with no effect: the user dismissed the
+ * picker, so nothing was written and the source did not move.
+ */
+export type ProjectSaveResult =
+  | { ok: true; destination: ProjectSaveDestination }
+  | { ok: false; message: string };
+
+export const SAVE_FAILED_MESSAGE = 'Could not write the project file. Your work is still autosaved on this device.';
+export const SAVE_HANDLE_DENIED_MESSAGE = 'Write permission for that file was denied. Use Save As to pick another one.';
+
 export interface ProjectSlice {
   /** The envelope's name. null = untitled (never named, or a fresh slot). */
   projectName: string | null;
+  /**
+   * Where explicit Save writes back to. Session-plus-slot state, NOT a persist
+   * key: it lives in the IndexedDB slot record beside the body (see
+   * projectSource.ts) and must never join partializeAppState.
+   */
+  projectSource: ProjectSource;
   projectStoreStatus: ProjectStoreStatus;
   /** A non-blocking toast surface: unknown references, quota, unavailable. */
   projectNotice: string | null;
@@ -31,9 +71,27 @@ export interface ProjectSlice {
   /** Boot: read the one slot and install it (or keep the factory session). */
   loadProject: () => Promise<void>;
   /** The autosave write. Never throws; a failure surfaces as a notice. */
-  save: () => Promise<ProjectStoreResult<ProjectBody>>;
+  save: () => Promise<ProjectStoreResult<ProjectSlotRecord>>;
+  /** Explicit Save. A pure function of the source — see saveTarget(). */
+  saveProject: () => Promise<ProjectSaveResult>;
+  /** Save As to this device: pick a target, write it, then re-point. */
+  saveProjectAsLocal: () => Promise<ProjectSaveResult>;
+  /**
+   * The body a Save As writes — built BEFORE the write, adopted after it. Split
+   * deliberately: a failed write must leave the live document's identity alone.
+   */
+  saveAsBody: (name: string) => { body: ProjectBody; identity: DocumentIdentity };
+  /** Adopt a Save As that actually landed: identity, name and source, then persist. */
+  adoptSaveAs: (identity: DocumentIdentity, name: string, source: ProjectSource) => Promise<void>;
+  /**
+   * Re-point the source WITHOUT touching content, then persist. The one caller
+   * is driveSlice.disconnectDrive: a `drive` id is meaningless once the token
+   * is revoked. The slot must learn that too, or a reload resumes a project
+   * pointing at a file the browser can no longer reach.
+   */
+  applyProjectSource: (source: ProjectSource) => Promise<void>;
   newProject: () => void;
-  openProjectFile: (body: ProjectBody) => Promise<ProjectStoreResult<ProjectBody>>;
+  openProjectFile: (body: ProjectBody, source?: ProjectSource) => Promise<ProjectStoreResult<ProjectSlotRecord>>;
   exportProjectFile: () => ProjectBody;
 }
 
@@ -48,17 +106,6 @@ export const INSTALL_RELEASE = 0.02;
 function normalizeName(name: string): string | null {
   const trimmed = name.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-/**
- * The project's envelope, minus the name (which lives in the store so the
- * header can render it). The `id` is kept but INERT: it rides the `.solna`
- * contract and is adopted from an opened file, but the storage slot is a fixed
- * key, so nothing looks a project up by it.
- */
-interface SlotIdentity {
-  id: string;
-  createdAt: number;
 }
 
 /**
@@ -77,9 +124,14 @@ export function createProjectSlice(
   projectStore: ProjectStore,
   now: () => number = Date.now,
 ): ProjectSlice {
-  let slot: SlotIdentity = { id: newProjectId(), createdAt: now() };
+  let slot: DocumentIdentity = newDocumentIdentity(now());
 
-  const install = (content: ProjectContent, identity: ProjectEnvelope, activeLoopId: string | null = null): void => {
+  const install = (
+    content: ProjectContent,
+    identity: ProjectEnvelope,
+    activeLoopId: string | null = null,
+    source: ProjectSource = UNTITLED_SOURCE,
+  ): void => {
     get().hardStopAll();
     for (const source of ACCOMPANIMENT_SOURCES) {
       audioEngine.stopSource(source, INSTALL_RELEASE);
@@ -112,6 +164,10 @@ export function createProjectSlice(
       // resolve to unrelated content after the swap.
       loopClipboard: null,
       projectName: normalizeName(identity.name),
+      // The source is part of what an install replaces: opening a file that
+      // came from Drive must not leave the previous project's handle behind, or
+      // the first Save would overwrite a file the user never opened.
+      projectSource: source,
     });
   };
 
@@ -133,8 +189,23 @@ export function createProjectSlice(
     set({ activeLoopId: active.id, ...loopStatePatch(active) });
   };
 
+  const buildBody = (envelope: ProjectEnvelope): ProjectBody => ({
+    ...envelope,
+    content: buildProjectContent(get()),
+  });
+
+  const writeText = async (handle: FileSystemFileHandle, text: string): Promise<ProjectSaveResult> => {
+    try {
+      await writeTextToHandle(handle, text);
+      return { ok: true, destination: 'local' };
+    } catch {
+      return { ok: false, message: SAVE_FAILED_MESSAGE };
+    }
+  };
+
   return {
     projectName: null,
+    projectSource: UNTITLED_SOURCE,
     projectStoreStatus: 'unknown',
     projectNotice: null,
 
@@ -150,15 +221,16 @@ export function createProjectSlice(
           // Empty slot: a normal first run. Keep the factory content the
           // slices already booted with — no install, so nothing is announced
           // and the engine is not touched. The first autosave writes the slot.
-          slot = { id: newProjectId(), createdAt: now() };
+          slot = newDocumentIdentity(now());
+          set({ projectSource: UNTITLED_SOURCE });
         } else {
           set({ projectNotice: result.message });
         }
         reconcileActiveLoop();
         return;
       }
-      const body = result.value;
-      install(body.content, body, get().activeLoopId);
+      const { body, source } = result.value;
+      install(body.content, body, get().activeLoopId, source);
       const warnings = unknownLibraryReferences(body.content);
       set({
         projectNotice:
@@ -167,8 +239,12 @@ export function createProjectSlice(
     },
 
     save: async () => {
-      const body = get().exportProjectFile();
-      const result = await projectStore.save(body);
+      // The record, not the body: the slot carries the source so a reload
+      // resumes a project that still knows which file it belongs to. Autosave
+      // READS the source and never changes it — only Open, Save As, New and a
+      // Drive sign-out re-point it.
+      const record: ProjectSlotRecord = { body: get().exportProjectFile(), source: get().projectSource };
+      const result = await projectStore.save(record);
       publishStatus();
       // A failed autosave never blocks the app and never rolls the live
       // session back — the notice is the only signal. The failure is not
@@ -180,6 +256,77 @@ export function createProjectSlice(
       return result;
     },
 
+    saveProject: async () => {
+      const target = saveTarget(get().projectSource);
+      switch (target.kind) {
+        case 'save-as':
+          // No target to overwrite, so Save IS Save As. Nothing is clobbered.
+          return get().saveProjectAsLocal();
+        case 'drive-update':
+          return get().saveToDrive();
+        case 'local-write': {
+          if (!(await ensureWritePermission(target.handle))) {
+            return { ok: false, message: SAVE_HANDLE_DENIED_MESSAGE };
+          }
+          return writeText(target.handle, serializeProject(get().exportProjectFile()));
+        }
+      }
+    },
+
+    saveProjectAsLocal: async () => {
+      const picked = await pickLocalSaveHandle(projectFileName(get().projectName ?? ''));
+      if (picked.ok === false) {
+        return { ok: true, destination: picked.reason === 'cancelled' ? 'cancelled' : 'download' };
+      }
+      if (!(await ensureWritePermission(picked.handle))) {
+        return { ok: false, message: SAVE_HANDLE_DENIED_MESSAGE };
+      }
+      const name = fileNameWithoutExtension(picked.handle.name);
+      const { body, identity } = get().saveAsBody(name);
+      const written = await writeText(picked.handle, serializeProject(body));
+      if (written.ok === false) return written;
+      await get().adoptSaveAs(identity, name, { kind: 'local', handle: picked.handle });
+      return { ok: true, destination: 'local' };
+    },
+
+    saveAsBody: (name) => {
+      // One clock read, carried by the identity: a document created at
+      // 12:00:00.000 and "updated" at 12:00:00.004 is a lie the envelope should
+      // not have to tell, and envelopeForSaveAs takes no second `now` for
+      // exactly that reason.
+      const identity = newDocumentIdentity(now());
+      return { body: buildBody(envelopeForSaveAs(identity, name)), identity };
+    },
+
+    adoptSaveAs: async (identity, name, source) => {
+      slot = identity;
+      set({ projectName: normalizeName(name), projectSource: source });
+      // Explicit, not left to the autosave subscription: `projectSource` is not
+      // a content key, so a re-point that changed no content would otherwise
+      // never reach the slot, and a reload would resume a project that forgot
+      // which file it belongs to.
+      //
+      // AWAITED, and that is why this is async: the slot write has to have
+      // landed before the action that triggered it resolves, or a caller (or a
+      // test) that reads the slot next sees the old source and the ordering
+      // depends on how many microtask hops the backend happens to take.
+      await get().save();
+    },
+
+    applyProjectSource: async (source) => {
+      const current = get().projectSource;
+      const unchanged =
+        (current.kind === 'untitled' && source.kind === 'untitled') ||
+        (current.kind === 'drive' && source.kind === 'drive' && current.fileId === source.fileId) ||
+        (current.kind === 'local' && source.kind === 'local' && current.handle === source.handle);
+      if (unchanged) return;
+      set({ projectSource: source });
+      // Explicit, like adoptSaveAs: the source is not a content key, so nothing
+      // else would schedule a write and the slot would keep the stale pointer.
+      // Awaited, so that a caller which reads the slot next sees this write.
+      await get().save();
+    },
+
     newProject: () => {
       install(factoryProjectContent(), makeEnvelope('', now()));
       set({ projectNotice: null });
@@ -189,8 +336,8 @@ export function createProjectSlice(
       void get().save();
     },
 
-    openProjectFile: async (body) => {
-      install(body.content, body);
+    openProjectFile: async (body, source = UNTITLED_SOURCE) => {
+      install(body.content, body, null, source);
       const result = await get().save();
       const warnings = unknownLibraryReferences(body.content);
       // `save()` has already published its own failure notice, and this set()
@@ -207,13 +354,6 @@ export function createProjectSlice(
       return result;
     },
 
-    exportProjectFile: (): ProjectBody => ({
-      formatVersion: PROJECT_FORMAT_VERSION,
-      id: slot.id,
-      name: get().projectName ?? '',
-      createdAt: slot.createdAt,
-      updatedAt: now(),
-      content: buildProjectContent(get()),
-    }),
+    exportProjectFile: (): ProjectBody => buildBody(envelopeForSave(slot, get().projectName ?? '', now())),
   };
 }

@@ -20,6 +20,7 @@ import type { LoopCopyGroupId } from './loopCopy';
 import type { LeadStepResolutionId } from '../utils/stepResolution';
 import type { MelodyTrackId } from './melodyTracks';
 import type { PlaybackScope } from './playbackScope';
+import type { DriveSlice } from './driveSlice';
 import type { ProjectSlice } from './projectSlice';
 import type { SoloTrack } from './trackAudibility';
 import type { MixLayerId } from './focusTrack';
@@ -649,6 +650,7 @@ export interface AppStore
     UiSlice,
     PresetsSlice,
     LoopSlice,
+    DriveSlice,
     ProjectSlice {}
 
 // The exact allow-list shape produced by the persist `partialize` config — this

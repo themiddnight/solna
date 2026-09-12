@@ -67,7 +67,7 @@ async function freshApp(seed?: ProjectBody) {
  * the load:
  *
  * 1. `events` is stamped by the storage boundary the load actually awaits
- *    (`getBody`) and by `projectAutosave.arm` itself. Arming first pushes
+ *    (`getRecord`) and by `projectAutosave.arm` itself. Arming first pushes
  *    'arm' before 'load'.
  * 2. `isScheduled()` is read from inside that awaited boundary, and again
  *    after boot. The install `loadProject` performs IS a content write, so if
@@ -89,10 +89,10 @@ describe('bootProject: load first, arm autosave after', () => {
 
     const backend: ProjectStoreBackend = {
       ...app.memory,
-      getBody: async () => {
+      getRecord: async () => {
         events.push('load');
         scheduledDuringLoad.push(projectAutosave.isScheduled());
-        const body = await app.memory.getBody();
+        const body = await app.memory.getRecord();
         scheduledDuringLoad.push(projectAutosave.isScheduled());
         return body;
       },
