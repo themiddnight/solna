@@ -1,7 +1,7 @@
 import type { StoreApi } from 'zustand';
 import type { DriveListOutcome } from '../utils/driveBrowser';
 import { DriveAuthError, driveErrorMessage, type DriveAuth } from './driveAuth';
-import type { DriveClient } from './driveClient';
+import type { DriveClient, DriveUserProfile } from './driveClient';
 import { UNTITLED_SOURCE } from './projectSource';
 import type { ProjectSaveResult } from './projectSlice';
 import type { AppStore } from './types';
@@ -23,6 +23,8 @@ export interface DriveSlice {
   /** Mirrors DriveAuth.signedIn(). Never persisted — see .claude/rules and the design's token hygiene. */
   driveSignedIn: boolean;
   driveAvailable: boolean;
+  /** The connected account's identity for the Drive section heading; null when signed out. */
+  driveUser: DriveUserProfile | null;
   /** Ask for a token. Returns whether the app is now connected. */
   connectDrive: () => Promise<boolean>;
   /** Revoke at Google and sign out; a `drive` source reverts to untitled. */
@@ -64,6 +66,7 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
   return {
     driveSignedIn: false,
     driveAvailable: deps.available,
+    driveUser: null,
 
     connectDrive: async () => {
       if (!deps.available) {
@@ -73,7 +76,10 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
       try {
         await deps.auth.token();
         setSignedIn(true);
-        set({ projectNotice: null });
+        // Best-effort: a failed `about` read must not fail the connect the user
+        // already granted, so the heading simply falls back to "Drive".
+        const profile = await deps.client.userProfile().catch(() => null);
+        set({ driveUser: profile, projectNotice: null });
         return true;
       } catch (err) {
         setSignedIn(false);
@@ -85,6 +91,7 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
     disconnectDrive: async () => {
       await deps.auth.revoke();
       setSignedIn(false);
+      set({ driveUser: null });
       // The design's sign-out row: the id is meaningless once the token is
       // revoked, so the project falls back to untitled. The body and the
       // autosaved slot are untouched — nothing here costs the user work.

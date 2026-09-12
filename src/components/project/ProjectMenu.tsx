@@ -1,31 +1,32 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { Cloud, CloudOff, Download, FileDown, FilePlus, Save, Upload } from 'lucide-react';
+import React, { Fragment, useCallback, useRef, useState } from 'react';
+import { Cloud, CloudOff, CloudUpload, FileDown, FilePlus, Save, Upload } from 'lucide-react';
 import { defaultSaveName } from '@/utils/driveBrowser';
 import { PROJECT_FILE_ACCEPT, PROJECT_FILE_MIME, parseProjectFile, serializeProject } from '@/store/projectFile';
 import type { ProjectSaveResult } from '@/store/projectSlice';
+import type { ProjectSource } from '@/store/projectSource';
+import type { DriveUserProfile } from '@/store/driveClient';
 import { pickLocalOpenHandle, readTextFromHandle } from '@/utils/localFileSave';
 import { downloadTextFile, projectFileName, readFileAsText } from '@/utils/projectFileIO';
+import { ProjectLoading } from '../ProjectLoading';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useLiveStore } from '../ui/useLiveStore';
 import { Wordmark } from '../ui/Wordmark';
 import { DriveFileBrowserModal } from './DriveFileBrowserModal';
-import { SaveAsTargetDialog } from './SaveAsTargetDialog';
 
 export type ProjectMenuAction =
+  | 'new'
   | 'open'
-  | 'open-drive'
   | 'save'
   | 'save-as'
-  | 'export'
-  | 'new'
+  | 'open-drive'
+  | 'save-as-drive'
   | 'disconnect-drive';
 
 /**
  * Only the actions that REPLACE the one autosaved project confirm. Save writes
- * to a target the user already chose, Save As asks where first and then creates
- * a new file, Export only reads, and Disconnect Drive costs no work at all —
- * none of the four can lose anything, so none of them may put a dialog in the
- * way of a deliberate save.
+ * to a target the user already chose, Save As creates a new file (locally or in
+ * Drive), and Disconnect Drive costs no work at all — none of them can lose
+ * anything, so none of them may put a dialog in the way of a deliberate save.
  */
 export type ReplacingAction = 'open' | 'open-drive' | 'new';
 
@@ -40,38 +41,111 @@ export function replacesProject(action: ProjectMenuAction): action is ReplacingA
   return REPLACING_ACTIONS.some((replacing) => replacing === action);
 }
 
-/** Open, Open from Drive and New replace the one autosaved project; the rest never touch it. */
-export const PROJECT_MENU_ACTIONS: ReadonlyArray<{
+export interface ProjectMenuRow {
   action: ProjectMenuAction;
   label: string;
   icon: typeof Upload;
-}> = [
-  { action: 'open', label: 'Open .solna', icon: Upload },
-  { action: 'open-drive', label: 'Open from Drive', icon: Cloud },
-  { action: 'save', label: 'Save', icon: Save },
-  { action: 'save-as', label: 'Save as…', icon: FileDown },
-  { action: 'export', label: 'Export .solna', icon: Download },
-  { action: 'new', label: 'New project', icon: FilePlus },
-  { action: 'disconnect-drive', label: 'Disconnect Drive', icon: CloudOff },
-];
+}
+
+export interface ProjectMenuSection {
+  /** Rendered as a non-interactive menu title; null for the unlabelled first group. */
+  heading: string | null;
+  /** A second, muted line under the heading — the Drive account, when connected. */
+  subtitle?: string;
+  rows: readonly ProjectMenuRow[];
+}
 
 /**
- * Which rows this session can actually use. A pure function, not two `&&`s in
- * the render: the rule is testable without a DOM and lives in one place.
- *
- * `open-drive` needs a configured deployment but NOT a connection — the modal
- * is where connecting happens. `disconnect-drive` needs an actual connection,
- * because a sign-out row on a signed-out app is a row that does nothing.
+ * The menu in three groups: the document itself (New), the local filesystem
+ * (Open/Save/Save As), and the optional Drive surface. Drive is a section
+ * rather than a few rows scattered among the local ones because it is the one
+ * group that vanishes entirely when the deployment has no client id.
  */
-export function visibleMenuActions(
+export const PROJECT_MENU_SECTIONS: readonly ProjectMenuSection[] = [
+  {
+    heading: null,
+    rows: [{ action: 'new', label: 'New project', icon: FilePlus }],
+  },
+  {
+    heading: 'Local',
+    rows: [
+      { action: 'open', label: 'Open .solna', icon: Upload },
+      { action: 'save', label: 'Save', icon: Save },
+      { action: 'save-as', label: 'Save as…', icon: FileDown },
+    ],
+  },
+  {
+    heading: 'Drive',
+    rows: [
+      { action: 'open-drive', label: 'Open from Drive', icon: Cloud },
+      { action: 'save-as-drive', label: 'Save as to Drive…', icon: CloudUpload },
+      { action: 'disconnect-drive', label: 'Disconnect Drive', icon: CloudOff },
+    ],
+  },
+];
+
+/** Save names its target only when that target is not obvious — a Drive-bound file. */
+export function saveLabel(sourceKind: ProjectSource['kind']): string {
+  return sourceKind === 'drive' ? 'Save to Drive' : 'Save';
+}
+
+/** The connected account's email, or name when Drive hides the email. Null when signed out. */
+export function driveAccountLabel(user: DriveUserProfile | null): string | null {
+  const identity = user && (user.email || user.name);
+  return identity || null;
+}
+
+/**
+ * Which sections this session can actually use, with the Save row placed and
+ * labelled. A pure function, not several `&&`s in the render: the rule is
+ * testable without a DOM and lives in one place.
+ *
+ * The Drive rows need a configured deployment; Disconnect additionally needs an
+ * actual connection (a sign-out row on a signed-out app is a row that does
+ * nothing). A section whose rows all vanish drops out entirely, so an
+ * unconfigured build renders no "Drive" heading. Save is the one
+ * source-dependent row: it follows the file into the section that binds it —
+ * Local for a local/untitled file, Drive for a Drive-bound one — and the Drive
+ * heading carries the connected account.
+ */
+export function visibleMenuSections(
   driveAvailable: boolean,
   driveSignedIn: boolean,
-): typeof PROJECT_MENU_ACTIONS {
-  return PROJECT_MENU_ACTIONS.filter(({ action }) => {
-    if (action === 'open-drive') return driveAvailable;
-    if (action === 'disconnect-drive') return driveAvailable && driveSignedIn;
-    return true;
-  });
+  sourceKind: ProjectSource['kind'],
+  driveUser: DriveUserProfile | null,
+): readonly ProjectMenuSection[] {
+  const isDrive = sourceKind === 'drive';
+
+  const sections = PROJECT_MENU_SECTIONS.map((section) => ({
+    heading: section.heading,
+    rows: section.rows.filter(({ action }) => {
+      if (action === 'open-drive' || action === 'save-as-drive') return driveAvailable;
+      if (action === 'disconnect-drive') return driveAvailable && driveSignedIn;
+      return true;
+    }),
+  }));
+
+  if (isDrive) {
+    for (const section of sections) {
+      if (section.heading === 'Local') {
+        section.rows = section.rows.filter((row) => row.action !== 'save');
+      } else if (section.heading === 'Drive') {
+        section.rows = section.rows.flatMap((row) =>
+          row.action === 'open-drive' ? [row, { action: 'save', label: 'Save', icon: Save }] : [row],
+        );
+      }
+    }
+  }
+
+  return sections
+    .filter((section) => section.rows.length > 0)
+    .map((section) => ({
+      ...section,
+      subtitle: section.heading === 'Drive' ? (driveAccountLabel(driveUser) ?? undefined) : undefined,
+      rows: section.rows.map((row) =>
+        row.action === 'save' ? { ...row, label: saveLabel(sourceKind) } : row,
+      ),
+    }));
 }
 
 /** Only the three replacing actions ever reach the confirm — see replacesProject. */
@@ -97,13 +171,13 @@ export const REPLACE_CONFIRM_MESSAGE =
  *
  * Open, Open from Drive and New all replace the single autosaved project, which
  * is destructive and irreversible once the slot is overwritten, so all three
- * pass through one confirm. Save, Save As, Export and Disconnect Drive write a
- * file the user chose or touch nothing at all, so they need none.
+ * pass through one confirm. Save, Save As and Disconnect Drive write a file the
+ * user chose or touch nothing at all, so they need none.
  */
 export function ProjectMenu({ textClassName }: { textClassName?: string }) {
   const [confirming, setConfirming] = useState<ReplacingAction | null>(null);
-  const [choosingTarget, setChoosingTarget] = useState(false);
   const [browser, setBrowser] = useState<'open' | 'save-as' | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const openProjectFile = useLiveStore((s) => s.openProjectFile);
@@ -113,8 +187,10 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
   const saveProject = useLiveStore((s) => s.saveProject);
   const saveProjectAsLocal = useLiveStore((s) => s.saveProjectAsLocal);
   const projectName = useLiveStore((s) => s.projectName);
+  const projectSource = useLiveStore((s) => s.projectSource);
   const driveAvailable = useLiveStore((s) => s.driveAvailable);
   const driveSignedIn = useLiveStore((s) => s.driveSignedIn);
+  const driveUser = useLiveStore((s) => s.driveUser);
   const connectDrive = useLiveStore((s) => s.connectDrive);
   const disconnectDrive = useLiveStore((s) => s.disconnectDrive);
   const openFromDrive = useLiveStore((s) => s.openFromDrive);
@@ -123,22 +199,26 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
 
   const report = (message: string | null) => setProjectNotice(message);
 
-  const runExport = () => {
+  /**
+   * The no-File-System-Access fallback for Save As (Safari, Firefox): a
+   * download is the closest those browsers can get to a local save, and it
+   * leaves the source untitled rather than pretending a handle was kept.
+   */
+  const downloadCopy = () => {
     const body = exportProjectFile();
     try {
       downloadTextFile(projectFileName(body.name), serializeProject(body), PROJECT_FILE_MIME);
       report(null);
     } catch {
       // downloadTextFile's anchor/blob path can throw in a restricted
-      // embedding; exporting is best-effort and the live session is untouched.
+      // embedding; downloading is best-effort and the live session is untouched.
       report('Could not write the file. Check the browser’s download settings.');
     }
   };
 
   /**
    * The one place a save result becomes UI. `download` is the no-File-System-
-   * Access fallback (Safari, Firefox): Save degrades to writing a copy, which is
-   * exactly what Export does — so it reuses it rather than duplicating it.
+   * Access fallback (Safari, Firefox): Save As degrades to a downloaded copy.
    * `cancelled` is a dismissed picker: nothing happened, so nothing is said.
    */
   const finishSave = (result: ProjectSaveResult) => {
@@ -147,20 +227,35 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
       return;
     }
     if (result.destination === 'download') {
-      runExport();
+      downloadCopy();
       return;
     }
     if (result.destination !== 'cancelled') report(null);
   };
 
-  const runSave = async () => finishSave(await saveProject());
-  const runSaveAs = async () => finishSave(await saveProjectAsLocal());
-  const runSaveAsToDrive = async (name: string) => finishSave(await saveAsToDrive(name));
-
-  const runOpenFromDrive = async (fileId: string) => {
-    setBrowser(null);
-    await openFromDrive(fileId);
+  /**
+   * One pending overlay for every explicit save/open, cleared in `finally` so a
+   * failure still dismisses it. The autosave is deliberately NOT wrapped — it is
+   * background and must stay invisible.
+   */
+  const run = async (label: string, op: () => Promise<void>): Promise<void> => {
+    setPending(label);
+    try {
+      await op();
+    } finally {
+      setPending(null);
+    }
   };
+
+  const runSave = () => run('Saving…', async () => finishSave(await saveProject()));
+  const runSaveAs = () => run('Saving…', async () => finishSave(await saveProjectAsLocal()));
+  const runSaveAsToDrive = (name: string) => run('Saving to Drive…', async () => finishSave(await saveAsToDrive(name)));
+
+  const runOpenFromDrive = (fileId: string) =>
+    run('Opening from Drive…', async () => {
+      setBrowser(null);
+      await openFromDrive(fileId);
+    });
 
   /**
    * Wrapped in useCallback because the modal lists from an effect keyed on it:
@@ -176,13 +271,15 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    const parsed = parseProjectFile(await readFileAsText(file));
-    if (parsed.ok === false) {
-      report(parsed.message);
-      return;
-    }
-    const result = await openProjectFile(parsed.body);
-    if (result.ok === false && result.error !== 'unavailable') report(result.message);
+    await run('Opening…', async () => {
+      const parsed = parseProjectFile(await readFileAsText(file));
+      if (parsed.ok === false) {
+        report(parsed.message);
+        return;
+      }
+      const result = await openProjectFile(parsed.body);
+      if (result.ok === false && result.error !== 'unavailable') report(result.message);
+    });
   };
 
   /**
@@ -192,32 +289,37 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
    * read-only File and therefore an untitled project — the honest degradation,
    * not a silent one. `cancelled` does nothing at all.
    */
-  const runOpenLocal = async () => {
-    const picked = await pickLocalOpenHandle();
-    if (picked.ok === false) {
-      if (picked.reason === 'unavailable') fileInputRef.current?.click();
-      return;
-    }
-    const parsed = parseProjectFile(await readTextFromHandle(picked.handle));
-    if (parsed.ok === false) {
-      report(parsed.message);
-      return;
-    }
-    const result = await openProjectFile(parsed.body, { kind: 'local', handle: picked.handle });
-    if (result.ok === false && result.error !== 'unavailable') report(result.message);
-  };
+  const runOpenLocal = () =>
+    run('Opening…', async () => {
+      const picked = await pickLocalOpenHandle();
+      if (picked.ok === false) {
+        if (picked.reason === 'unavailable') fileInputRef.current?.click();
+        return;
+      }
+      const parsed = parseProjectFile(await readTextFromHandle(picked.handle));
+      if (parsed.ok === false) {
+        report(parsed.message);
+        return;
+      }
+      const result = await openProjectFile(parsed.body, { kind: 'local', handle: picked.handle });
+      if (result.ok === false && result.error !== 'unavailable') report(result.message);
+    });
 
   const choose = (action: ProjectMenuAction) => {
     if (replacesProject(action)) {
       setConfirming(action);
       return;
     }
-    if (action === 'export') {
-      runExport();
-      return;
-    }
     if (action === 'save') {
       void runSave();
+      return;
+    }
+    if (action === 'save-as') {
+      void runSaveAs();
+      return;
+    }
+    if (action === 'save-as-drive') {
+      setBrowser('save-as');
       return;
     }
     if (action === 'disconnect-drive') {
@@ -226,7 +328,6 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
       void disconnectDrive();
       return;
     }
-    setChoosingTarget(true);
   };
 
   const confirmReplace = () => {
@@ -239,7 +340,7 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
 
   return (
     <div className="dropdown">
-      <Wordmark textClassName={textClassName} ariaLabel="Project menu" />
+      <Wordmark textClassName={textClassName} ariaLabel="Project menu" chevron />
       <ul
         // daisyUI's dropdown holds itself open on :focus-within, so the panel
         // must be focusable or the menu closes the moment a pointer-down lands
@@ -247,15 +348,27 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
         // rows inside are what the keyboard actually reaches.
         // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
         tabIndex={0}
-        className="dropdown-content menu menu-sm z-50 mt-2 w-44 rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
+        className="dropdown-content menu menu-sm z-50 mt-2 min-w-44 max-w-[calc(100vw-2rem)] rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
       >
-        {visibleMenuActions(driveAvailable, driveSignedIn).map(({ action, label, icon: Icon }) => (
-          <li key={action}>
-            <button type="button" id={`project-menu-${action}`} onClick={() => choose(action)}>
-              <Icon className="w-4 h-4" aria-hidden="true" />
-              {label}
-            </button>
-          </li>
+        {visibleMenuSections(driveAvailable, driveSignedIn, projectSource.kind, driveUser).map((section, i) => (
+          <Fragment key={section.heading ?? `section-${i}`}>
+            {section.heading !== null && (
+              <li className="menu-title">
+                {section.heading}
+                {section.subtitle && (
+                  <span className="block truncate text-xs font-normal text-base-content/50">{section.subtitle}</span>
+                )}
+              </li>
+            )}
+            {section.rows.map(({ action, label, icon: Icon }) => (
+              <li key={action}>
+                <button type="button" id={`project-menu-${action}`} onClick={() => choose(action)}>
+                  <Icon className="w-4 h-4" aria-hidden="true" />
+                  {label}
+                </button>
+              </li>
+            ))}
+          </Fragment>
         ))}
       </ul>
       <input
@@ -275,21 +388,6 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
           onCancel={() => setConfirming(null)}
         />
       )}
-      {choosingTarget && (
-        <SaveAsTargetDialog
-          open
-          driveAvailable={driveAvailable}
-          onClose={() => setChoosingTarget(false)}
-          onLocal={() => {
-            setChoosingTarget(false);
-            void runSaveAs();
-          }}
-          onDrive={() => {
-            setChoosingTarget(false);
-            setBrowser('save-as');
-          }}
-        />
-      )}
       {browser !== null && (
         <DriveFileBrowserModal
           open
@@ -306,6 +404,7 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
           }}
         />
       )}
+      {pending !== null && <ProjectLoading overlay label={pending} />}
     </div>
   );
 }

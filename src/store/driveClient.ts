@@ -27,6 +27,15 @@ export interface DrivePage {
 }
 
 /**
+ * The authenticated account's identity, for the Drive section heading. Both
+ * fields default to '' — Drive omits the address when the user has hidden it.
+ */
+export interface DriveUserProfile {
+  email: string;
+  name: string;
+}
+
+/**
  * Every solna project this app can see, wherever it lives. A CONSTANT, not a
  * function of a folder: under `drive.file` the listing already contains only
  * files this app created, so there is nothing to narrow — and narrowing by
@@ -54,6 +63,8 @@ export interface DriveTransport {
   readText(fileId: string): Promise<string>;
   create(params: { name: string; mimeType: string; text: string }): Promise<DriveFileMeta>;
   update(params: { fileId: string; mimeType: string; text: string }): Promise<DriveFileMeta>;
+  /** The connected account, read from `about` — under `drive.file`, no wider scope. */
+  userProfile(): Promise<DriveUserProfile>;
 }
 
 export interface DriveClient {
@@ -62,6 +73,7 @@ export interface DriveClient {
   readProject(fileId: string): Promise<ProjectParseResult>;
   createProject(name: string, body: ProjectBody): Promise<DriveFileMeta>;
   updateProject(fileId: string, body: ProjectBody): Promise<DriveFileMeta>;
+  userProfile(): Promise<DriveUserProfile>;
 }
 
 export function createDriveClient(transport: DriveTransport): DriveClient {
@@ -90,5 +102,7 @@ export function createDriveClient(transport: DriveTransport): DriveClient {
 
     updateProject: (fileId, body) =>
       transport.update({ fileId, mimeType: SOLNA_DRIVE_MIME, text: serializeProject(body) }),
+
+    userProfile: () => transport.userProfile(),
   };
 }

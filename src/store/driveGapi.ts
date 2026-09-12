@@ -1,6 +1,6 @@
 import type { GapiClient, GapiRequest, GapiResponse, GapiRoot } from '../utils/googleScriptLoader';
 import { withDriveToken, type DriveAuth } from './driveAuth';
-import type { DriveFileMeta, DrivePage, DriveTransport } from './driveClient';
+import type { DriveFileMeta, DrivePage, DriveTransport, DriveUserProfile } from './driveClient';
 
 /**
  * Absolute paths, not discovery documents: `gapi.client.request` accepts a full
@@ -9,6 +9,7 @@ import type { DriveFileMeta, DrivePage, DriveTransport } from './driveClient';
  */
 export const DRIVE_API_BASE = 'https://www.googleapis.com';
 export const DRIVE_FILES_PATH = '/drive/v3/files';
+export const DRIVE_ABOUT_PATH = '/drive/v3/about';
 export const DRIVE_UPLOAD_PATH = '/upload/drive/v3/files';
 export const DRIVE_BOUNDARY = 'solna-drive-boundary';
 export const DRIVE_META_FIELDS = 'id, name, mimeType, modifiedTime';
@@ -45,7 +46,17 @@ export function createFileBody(
 
 /** Update: media only. The name and mimeType already exist on the file. */
 export function updateFileBody(text: string, mimeType: string, boundary: string = DRIVE_BOUNDARY): string {
-  return multipartBody([{ contentType: mimeType, body: text }], boundary);
+  // A multipart update still needs the metadata part: without it Drive reads
+  // the single media part's `application/vnd.solna` as the metadata type and
+  // rejects it with "Unsupported content with type" (400). The name is omitted
+  // deliberately — an update keeps the file's existing name.
+  return multipartBody(
+    [
+      { contentType: 'application/json; charset=UTF-8', body: JSON.stringify({ mimeType }) },
+      { contentType: mimeType, body: text },
+    ],
+    boundary,
+  );
 }
 
 /**
@@ -72,6 +83,18 @@ export function toDrivePage(result: unknown): DrivePage {
   const rows = Array.isArray(raw.files) ? raw.files : [];
   const files = rows.map(toDriveFileMeta).filter((meta): meta is DriveFileMeta => meta !== null);
   return typeof raw.nextPageToken === 'string' ? { files, nextPageToken: raw.nextPageToken } : { files };
+}
+
+/**
+ * Drive discloses the account's address only when the user has made it visible
+ * to the app; both fields fall back to '' so the heading degrades gracefully.
+ */
+export function toUserProfile(raw: unknown): DriveUserProfile {
+  const user = (raw as { user?: { emailAddress?: unknown; displayName?: unknown } } | null | undefined)?.user;
+  return {
+    email: typeof user?.emailAddress === 'string' ? user.emailAddress : '',
+    name: typeof user?.displayName === 'string' ? user.displayName : '',
+  };
 }
 
 /**
@@ -143,6 +166,16 @@ export function createGapiTransport(getGapi: () => Promise<GapiRoot>, auth: Driv
         });
         // The WHOLE response, not `.result` — see readResultText.
         return readResultText(response);
+      }),
+
+    userProfile: () =>
+      run(async (client) => {
+        const response = await client.request({
+          path: `${DRIVE_API_BASE}${DRIVE_ABOUT_PATH}`,
+          method: 'GET',
+          params: { fields: 'user(emailAddress, displayName)' },
+        });
+        return toUserProfile(response.result);
       }),
 
     // No `parents`: Drive's own default is My Drive, and any folder id this app

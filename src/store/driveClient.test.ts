@@ -42,6 +42,10 @@ function stub(overrides: Partial<DriveTransport> = {}) {
       calls.push(['update', params]);
       return meta(params.fileId, 'updated.solna', params.mimeType);
     },
+    userProfile: async () => {
+      calls.push(['userProfile', undefined]);
+      return { email: '', name: '' };
+    },
     ...overrides,
   };
   return { transport, calls };
@@ -167,5 +171,13 @@ describe('updateProject', () => {
     const [, params] = calls[0] as [string, { text: string }];
     const parsed = parseProjectFile(params.text);
     expect(parsed.ok && parsed.body.content.bpm).toBe(145);
+  });
+});
+
+describe('userProfile', () => {
+  test('passes through to the transport that owns the about call', async () => {
+    const { transport } = stub({ userProfile: async () => ({ email: 'ann@example.com', name: 'Ann' }) });
+    const client = createDriveClient(transport);
+    expect(await client.userProfile()).toEqual({ email: 'ann@example.com', name: 'Ann' });
   });
 });

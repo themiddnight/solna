@@ -39,6 +39,7 @@ function okClient(overrides: Partial<DriveClient> = {}): DriveClient {
     readProject: async () => ({ ok: false, error: 'malformed', message: MALFORMED_MESSAGE }),
     createProject: async () => META,
     updateProject: async () => META,
+    userProfile: async () => ({ email: '', name: '' }),
     ...overrides,
   };
 }
@@ -101,6 +102,27 @@ describe('connectDrive', () => {
     expect(await drive.connectDrive()).toBe(false);
     expect(useAppStore.getState().driveAvailable).toBe(false);
     expect(useAppStore.getState().projectNotice).toBe(DRIVE_NOT_CONFIGURED_MESSAGE);
+  });
+
+  test('records the connected account for the Drive heading', async () => {
+    const { useAppStore, drive } = await freshStore({
+      client: okClient({ userProfile: async () => ({ email: 'ann@example.com', name: 'Ann' }) }),
+    });
+    expect(await drive.connectDrive()).toBe(true);
+    expect(useAppStore.getState().driveUser).toEqual({ email: 'ann@example.com', name: 'Ann' });
+  });
+
+  test('a failed profile read still connects, with no account shown', async () => {
+    const { useAppStore, drive } = await freshStore({
+      client: okClient({
+        userProfile: async () => {
+          throw new Error('about failed');
+        },
+      }),
+    });
+    expect(await drive.connectDrive()).toBe(true);
+    expect(useAppStore.getState().driveSignedIn).toBe(true);
+    expect(useAppStore.getState().driveUser).toBeNull();
   });
 });
 
@@ -314,5 +336,12 @@ describe('disconnectDrive', () => {
     useAppStore.setState({ driveSignedIn: true, projectSource: { kind: 'local', handle } });
     await drive.disconnectDrive();
     expect(useAppStore.getState().projectSource).toEqual({ kind: 'local', handle });
+  });
+
+  test('clears the account identity it was showing', async () => {
+    const { useAppStore, drive } = await freshStore();
+    useAppStore.setState({ driveUser: { email: 'ann@example.com', name: 'Ann' } });
+    await drive.disconnectDrive();
+    expect(useAppStore.getState().driveUser).toBeNull();
   });
 });

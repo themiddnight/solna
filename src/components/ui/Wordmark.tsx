@@ -1,4 +1,5 @@
 import React from "react";
+import { ChevronDown } from "lucide-react";
 
 interface WordmarkProps {
   /** Hide the "Solna" text and show the logo mark only. */
@@ -13,6 +14,8 @@ interface WordmarkProps {
   textClassName?: string;
   /** Overridden by ProjectMenu, which names the control it wraps. */
   ariaLabel?: string;
+  /** Show a dropdown chevron after the text — the ProjectMenu trigger's hint. */
+  chevron?: boolean;
 }
 
 /**
@@ -26,6 +29,7 @@ export function Wordmark({
   className = "",
   textClassName = "",
   ariaLabel,
+  chevron = false,
 }: WordmarkProps) {
   return (
     <span
@@ -47,6 +51,9 @@ export function Wordmark({
         >
           solna
         </span>
+      )}
+      {chevron && (
+        <ChevronDown className="w-4 h-4 text-base-content/60" aria-hidden="true" />
       )}
     </span>
   );

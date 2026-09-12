@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  DRIVE_ABOUT_PATH,
   DRIVE_API_BASE,
   DRIVE_BOUNDARY,
   DRIVE_FILES_PATH,
@@ -10,6 +11,7 @@ import {
   readResultText,
   toDriveFileMeta,
   toDrivePage,
+  toUserProfile,
   updateFileBody,
 } from './driveGapi';
 import { DriveUnavailableError, driveErrorMessage, type DriveAuth } from './driveAuth';
@@ -85,9 +87,19 @@ describe('createFileBody', () => {
 });
 
 describe('updateFileBody', () => {
-  test('carries media only — the metadata already exists on the file', () => {
+  test('carries metadata and media — Drive rejects a media-only update body', () => {
     expect(updateFileBody('{"v":2}', SOLNA_DRIVE_MIME)).toBe(
-      [`--${DRIVE_BOUNDARY}`, `Content-Type: ${SOLNA_DRIVE_MIME}`, '', '{"v":2}', `--${DRIVE_BOUNDARY}--`].join('\r\n'),
+      [
+        `--${DRIVE_BOUNDARY}`,
+        'Content-Type: application/json; charset=UTF-8',
+        '',
+        `{"mimeType":"${SOLNA_DRIVE_MIME}"}`,
+        `--${DRIVE_BOUNDARY}`,
+        `Content-Type: ${SOLNA_DRIVE_MIME}`,
+        '',
+        '{"v":2}',
+        `--${DRIVE_BOUNDARY}--`,
+      ].join('\r\n'),
     );
   });
 });
@@ -142,6 +154,20 @@ describe('toDrivePage', () => {
   });
 });
 
+describe('toUserProfile', () => {
+  test('reads the disclosed address and name', () => {
+    expect(toUserProfile({ user: { emailAddress: 'a@b.c', displayName: 'Ann' } })).toEqual({
+      email: 'a@b.c',
+      name: 'Ann',
+    });
+  });
+
+  test('falls back to empty strings when Drive hides them', () => {
+    expect(toUserProfile({ user: {} })).toEqual({ email: '', name: '' });
+    expect(toUserProfile(undefined)).toEqual({ email: '', name: '' });
+  });
+});
+
 describe('createGapiTransport', () => {
   test('lists through the files endpoint with the solna query, as strings', async () => {
     const gapi = fakeGapi(async () => ({ result: { files: [{ id: 'f1', name: 'a.solna' }] } }));
@@ -178,6 +204,17 @@ describe('createGapiTransport', () => {
     expect(gapi.calls[0].params).toEqual({ alt: 'media' });
   });
 
+  test('reads the account identity through the about endpoint', async () => {
+    const gapi = fakeGapi(async () => ({ result: { user: { emailAddress: 'ann@example.com', displayName: 'Ann' } } }));
+    const { auth } = fakeAuth();
+    const transport = createGapiTransport(async () => gapi.root, auth);
+    const profile = await transport.userProfile();
+    expect(gapi.calls[0].path).toBe(`${DRIVE_API_BASE}${DRIVE_ABOUT_PATH}`);
+    expect(gapi.calls[0].method).toBe('GET');
+    expect(gapi.calls[0].params).toEqual({ fields: 'user(emailAddress, displayName)' });
+    expect(profile).toEqual({ email: 'ann@example.com', name: 'Ann' });
+  });
+
   test('creates with a multipart upload carrying metadata and media', async () => {
     const gapi = fakeGapi(async () => ({ result: { id: 'new-1', name: 'a.solna', mimeType: SOLNA_DRIVE_MIME, modifiedTime: 'x' } }));
     const { auth } = fakeAuth();
@@ -193,7 +230,7 @@ describe('createGapiTransport', () => {
     expect(created.id).toBe('new-1');
   });
 
-  test('updates with a PATCH to the file path and a media-only body', async () => {
+  test('updates with a PATCH to the file path and a multipart body without a name', async () => {
     const gapi = fakeGapi(async () => ({ result: { id: 'file-9' } }));
     const { auth } = fakeAuth();
     const transport = createGapiTransport(async () => gapi.root, auth);
@@ -202,6 +239,7 @@ describe('createGapiTransport', () => {
     expect(gapi.calls[0].path).toBe(`${DRIVE_API_BASE}${DRIVE_UPLOAD_PATH}/file-9`);
     expect(gapi.calls[0].method).toBe('PATCH');
     expect(gapi.calls[0].body).not.toContain('"name"');
+    expect(gapi.calls[0].body).toContain('"mimeType":"application/vnd.solna"');
     expect(updated).toEqual({ id: 'file-9', name: '', mimeType: '', modifiedTime: '' });
   });
 
