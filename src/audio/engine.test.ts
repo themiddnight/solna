@@ -2141,6 +2141,72 @@ describe('drum reverb sends', () => {
     expect(created.some((g) => g.connectedTo.includes(reverbNode))).toBe(false);
   });
 
+  test('the Beat gate sits before the convolver, so mute preserves an existing reverb tail', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+
+    const sendFilter = (engine as any).drumSendFilter;
+    const sendGate = (engine as any).drumSendGate;
+    const reverb = (engine as any).reverbNode;
+
+    // A gate downstream of the convolver would erase its existing tail. A
+    // direct filter -> convolver edge would let newly-triggered muted hits
+    // leak into it. The only topology satisfying both source-mute semantics
+    // is filter -> gate -> convolver.
+    expect(sendGate).toBeDefined();
+    if (!sendGate) return;
+    expect(sendFilter._connectTargets).toEqual([sendGate]);
+    expect(sendGate._connectTargets).toEqual([reverb]);
+  });
+
+  test('the Beat source mute and fader govern new drum reverb input', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+
+    const dryBus = (engine as any).sourceBuses.get('sequencer');
+    const sendGate = (engine as any).drumSendGate;
+    expect(sendGate).toBeDefined();
+    if (!sendGate) return;
+
+    engine.setSourceGain('sequencer', 0.25);
+    expect(dryBus.gain.targets.at(-1)!.v).toBe(0.25);
+    expect(sendGate.gain.targets.at(-1)!.v).toBe(0.25);
+
+    engine.setSourceMuted('sequencer', true);
+    expect(dryBus.gain.targets.at(-1)!.v).toBe(0);
+    expect(sendGate.gain.targets.at(-1)!.v).toBe(0);
+
+    // Moving the fader while muted must not reopen either branch. Unmuting
+    // restores the newly-stored level to both in the same operation.
+    engine.setSourceGain('sequencer', 0.6);
+    expect(dryBus.gain.targets.at(-1)!.v).toBe(0);
+    expect(sendGate.gain.targets.at(-1)!.v).toBe(0);
+    engine.setSourceMuted('sequencer', false);
+    expect(dryBus.gain.targets.at(-1)!.v).toBe(0.6);
+    expect(sendGate.gain.targets.at(-1)!.v).toBe(0.6);
+
+    const drumTargets = sendGate.gain.targets.length;
+    engine.setSourceMuted('bass', true);
+    expect(sendGate.gain.targets).toHaveLength(drumTargets);
+  });
+
+  test('a Beat mute set before graph creation seeds both drum branches closed', () => {
+    const engine = makeEngine();
+    engine.setSourceGain('sequencer', 0.4);
+    engine.setSourceMuted('sequencer', true);
+
+    const ctx = masterChainCtx();
+    (engine as any).ctx = ctx;
+    (engine as any).setupMasterChain();
+
+    expect((engine as any).sourceBuses.get('sequencer').gain.value).toBe(0);
+    expect((engine as any).drumSendGate.gain.value).toBe(0);
+  });
+
   test('a kit with reverbSend 0 creates no send node at all', () => {
     const { engine, ctx } = drumEngine();
     engine.setDrumKit({ clap: { ...(engine as any).drumKit.clap, reverbSend: 0 } });

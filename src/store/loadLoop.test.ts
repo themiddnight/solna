@@ -4,6 +4,7 @@ import { loopStatePatch } from './loop';
 import { createDefaultLoop } from './loopSlice';
 import { loadLoop, LOAD_LOOP_RELEASE } from './loadLoop';
 import { SCOPE_NONE } from './playbackScope';
+import { startEngineSync, stopEngineSync } from './engineSync';
 import { useAppStore } from './store';
 import type { Loop } from './types';
 
@@ -134,6 +135,62 @@ describe('loadLoop', () => {
     } finally {
       stopSource.mockRestore();
       drop.mockRestore();
+      resetClock.mockRestore();
+    }
+  });
+
+  test('a song advance applies every incoming track mute before re-arming step 0', () => {
+    const loopA = createDefaultLoop();
+    const loopB: Loop = {
+      ...createDefaultLoop(),
+      id: 'loop-b',
+      name: 'B',
+      synthMuted: true,
+      fxMuted: true,
+      chordMuted: true,
+      bassMuted: true,
+      padMuted: true,
+      drumMuted: true,
+    };
+    useAppStore.setState({
+      loops: [loopA, loopB],
+      activeLoopId: loopA.id,
+      ...loopStatePatch(loopA),
+      soloTracks: [],
+      songLoopIndex: 0,
+      playbackScope: { kind: 'song' },
+    });
+
+    const order: string[] = [];
+    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockImplementation(
+      (source, muted) => {
+        if (muted) order.push(`mute:${source}`);
+      },
+    );
+    const resetClock = spyOn(audioEngine, 'resetClock').mockImplementation(() => {
+      order.push('reset');
+    });
+    try {
+      startEngineSync();
+      order.length = 0; // discard fireImmediately bootstrap
+
+      loadLoop(loopB.id, { atBoundary: 42.5 });
+
+      expect(order).toEqual([
+        'mute:synth',
+        'mute:chord',
+        'mute:bass',
+        'mute:pad',
+        'mute:fx',
+        'mute:sequencer',
+        'reset',
+      ]);
+      // The clock reset is the action that lets every player schedule the
+      // incoming loop's step 0. Every bus must already be closed when it runs.
+      expect(useAppStore.getState().activeLoopId).toBe(loopB.id);
+    } finally {
+      stopEngineSync();
+      setSourceMuted.mockRestore();
       resetClock.mockRestore();
     }
   });

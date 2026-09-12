@@ -301,6 +301,15 @@ class AudioEngine {
   // on ringing tails that the shared node exists to provide. A second shared
   // filter fed by the per-voice send gains gets both.
   private drumSendFilter: BiquadFilterNode | null = null;
+  /**
+   * The Beat source fader/mute for authored drum reverb sends. Drum sends do
+   * not use getSourceBus('sequencer'): that bus fans out to the dry path and
+   * the generic master effects, while these sends must reach only reverb.
+   * Mirroring the sequencer bus here keeps the authored send on that same
+   * source control without putting a gate after the convolver, where muting
+   * Beat would incorrectly erase a tail that was already ringing.
+   */
+  private drumSendGate: GainNode | null = null;
   private drumFilterCutoff = 12000;
   private drumFilterResonance = 0.7;
   private drumFilterType: FilterType = 'lowpass';
@@ -865,6 +874,11 @@ class AudioEngine {
     this.drumSendFilter.type = this.drumFilterType;
     this.drumSendFilter.frequency.value = this.drumFilterCutoff;
     this.drumSendFilter.Q.value = this.drumFilterResonance;
+    this.drumSendGate = this.ctx.createGain();
+    // getSourceTap('sequencer') above has already created and seeded the dry
+    // bus from sourceGains/sourceMuted. Copy that exact source level so a
+    // pre-init snapshot starts both branches in the same state.
+    this.drumSendGate.gain.value = this.getSourceBus('sequencer').gain.value;
 
     // Every wet send and EQ gain is seeded at ZERO. The audible defaults are
     // INITIAL_EFFECTS and arrive through applyEngineSnapshot() on the first
@@ -900,7 +914,10 @@ class AudioEngine {
     this.reverbGain.gain.value = 0;
 
     this.reverbNode.connect(this.reverbGain);
-    this.drumSendFilter.connect(this.reverbNode);
+    // Gate BEFORE the convolver: mute blocks new drum input while the reverb
+    // tail already inside the shared processor keeps decaying naturally.
+    this.drumSendFilter.connect(this.drumSendGate);
+    this.drumSendGate.connect(this.reverbNode);
 
     // Connect effects back to EQ chain
     this.dryGain.connect(this.eqLowNode);
@@ -1759,30 +1776,43 @@ class AudioEngine {
     return tap;
   }
 
-  // Mute/unmute an entire source layer on its bus: ~10 ms ramp (click-free),
-  // instantly cuts tails/effects, and survives across effect/param updates.
+  /** Apply one click-free source level to every branch that source owns. */
+  private rampSourceLevel(source: string, targetGain: number, now: number): void {
+    const bus = this.sourceBuses.get(source) ?? this.getSourceBus(source);
+    const nodes = source === 'sequencer' && this.drumSendGate
+      ? [bus, this.drumSendGate]
+      : [bus];
+    for (const node of nodes) {
+      node.gain.cancelScheduledValues(now);
+      node.gain.setTargetAtTime(targetGain, now, 0.01);
+    }
+  }
+
+  // Mute/unmute an entire source layer with a ~10 ms click-free ramp. The
+  // source stops feeding every downstream branch; effect tails already inside
+  // the shared processors remain free to decay.
   setSourceMuted(source: string, muted: boolean): void {
     this.sourceMuted.set(source, muted);
     if (!this.ctx) return;
-    const bus = this.sourceBuses.get(source) ?? this.getSourceBus(source);
     const now = this.ctx.currentTime;
     const targetGain = muted ? 0 : (this.sourceGains.get(source) ?? 1);
-    bus.gain.cancelScheduledValues(now);
-    bus.gain.setTargetAtTime(targetGain, now, 0.01);
+    this.rampSourceLevel(source, targetGain, now);
   }
 
   // Set gain/volume for an entire source layer (e.g. chord, bass, synth)
   setSourceGain(source: string, volume: number): void {
     this.sourceGains.set(source, volume);
     if (!this.ctx) return;
-    const bus = this.sourceBuses.get(source) ?? this.getSourceBus(source);
     const now = this.ctx.currentTime;
     const isMuted = this.sourceMuted.get(source);
-    bus.gain.cancelScheduledValues(now);
     // Derived from the fader range (MAX_FADER_GAIN is dbToGain(FADER_MAX_DB)),
     // not an independent literal. It used to be 1.5 — +3.5 dB — so a fader
     // that displayed +12 dB stopped responding two-thirds of the way up.
-    bus.gain.setTargetAtTime(isMuted ? 0 : Math.max(0, Math.min(MAX_FADER_GAIN, volume)), now, 0.01);
+    this.rampSourceLevel(
+      source,
+      isMuted ? 0 : Math.max(0, Math.min(MAX_FADER_GAIN, volume)),
+      now,
+    );
   }
 
   /**
