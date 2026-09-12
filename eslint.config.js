@@ -98,6 +98,23 @@ export default tseslint.config(
     plugins: { 'react-hooks': reactHooks },
     rules: {
       complexity: ['warn', 20],
+      // Anti god-file guard, landed directly at `error` (not D5's warn-first
+      // phasing) on request: `bun run eslint` enumerates every file over the
+      // limit immediately, so an oversized file is a red gate no reviewer can
+      // miss, not a `warn` line buried in a long report. The 750 ceiling is
+      // SonarQube's S104 default and, like it, counts lines of code — blank
+      // lines and comments are skipped, matching the function guard below.
+      // Split the file, never raise the cap to clear a red gate.
+      'max-lines': ['error', { max: 750, skipBlankLines: true, skipComments: true }],
+      // Same guard at function scope. Blank lines and comments are skipped
+      // because this repo's functions run long-but-linear (DSP, switch/case,
+      // test setup) — a docblock-heavy function is not a god function, and
+      // cyclomatic `complexity` is already clean at 20, so raw line count
+      // would flag hundreds of linear functions while this cap catches the ones that
+      // have actually grown out of control. Landed at `error` alongside
+      // max-lines for the same reason: a long function is a red gate, not a
+      // `warn` buried in a long report.
+      'max-lines-per-function': ['error', { max: 100, skipBlankLines: true, skipComments: true }],
       // A hook called conditionally is a bug, not a style choice — error from day one.
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
@@ -286,6 +303,12 @@ export default tseslint.config(
     files: ['src/data/**/*.{ts,tsx}'],
     ignores: ['src/data/**/*.test.{ts,tsx}'],
     rules: {
+      // Data tables are content, not code — a 900-line registry is reviewed
+      // as a diff, not as a function to split. Exempt from the line-count
+      // gates so a deliberately large table is not flagged as a god file.
+      'max-lines': 'off',
+      'max-lines-per-function': 'off',
+
       // The import ban. The base rule MUST be off for the TS-aware one to run —
       // measured: without this line the variant below never fires at all.
       'no-restricted-imports': 'off',
@@ -373,6 +396,12 @@ export default tseslint.config(
       // The exemption stops at this file — SoundMixer renders it and imports
       // no engine of its own.
       'src/components/ui/SourceMeter.tsx',
+      // The shared audio test harness. Not a `.test.ts` only because bun would
+      // then treat it as a suite of its own; it exists for the test files that
+      // do import it and is exempt for exactly their reason (`fxWith` builds an
+      // effects payload from the store's INITIAL_EFFECTS so a test can never
+      // drift from it).
+      'src/audio/engineTestHelpers.ts',
       '**/*.test.ts',
       '**/*.test.tsx',
     ],
