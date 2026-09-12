@@ -3,3 +3,7 @@ dist
 
 .worktrees/
 .superpowers/
+
+# Local secrets. `.env.example` is the tracked invitation; the filled-in file is not.
+.env
+.env.local

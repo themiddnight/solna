@@ -88,7 +88,12 @@ shows it, never in a slice.
    persisted shape change is handled by validating the new key in `merge`'s
    `sanitizePersistedState`/`sanitizeLoops`, not by bumping the version. See the "no migration
    chains" note further down for why, and for the precondition under which that stops being
-   true.
+   true. **`store/driveAuth.ts` holds the only Google access token, in a closure** — no getter
+   hands it out, and **no slice may read it**: `driveSignedIn` in the drive slice is a
+   *mirror* of "an unexpired token is held", not the token, and every Drive call acquires one
+   through `withDriveToken` at the moment it needs it. A token in a slice would be a token in
+   `partialize` the first time someone added it to the list, and a token in the store is a
+   token in the devtools panel.
 4. `src/components/` — dumb views; must not import `audio/engine`. Only `AudioVisualizer.tsx`,
    `ui/VuMeter.tsx`, `ui/AmbientBackdrop.tsx`, `ui/GainReductionMeter.tsx` and `ui/SourceMeter.tsx`
    (read-only analyser consumers) and test files are exempt — routing their per-frame analyser
@@ -98,7 +103,16 @@ shows it, never in a slice.
 
 `src/utils/` stays outside the chain, above `data/`: it may read `data/` at runtime
 (`musicTheory.ts` imports `SCALES`), but nothing in `data/` may read it back except through an
-`import type` (e.g. `MeterId`), which is erased at compile.
+`import type` (e.g. `MeterId`), which is erased at compile. **One deliberate inversion is
+recorded here so a reader does not have to discover it: `utils/localFileSave.ts` and
+`utils/driveBrowser.ts` import *types and constants* from `src/store/`** — the `.solna` MIME
+type and the Drive MIME type. It is an exception because the alternative is duplicating a
+contract string in two places, where the two copies can disagree silently and only one of them
+is the one `projectFile.ts` actually parses against; the honest fix (a leaf module under
+`src/utils/` both layers import) was considered and rejected, because it would move constants
+out of already-shipped, already-reviewed search-and-save code for a docs-only change. It is an
+import of a *value that never varies*, never a call into the store: no file in `utils/` reads
+store state, subscribes, or names a slice.
 
 **A per-degree chord quality is derived, and a note name is spelled only where it is read.**
 `SCALES` states `intervals` — content a reviewer can check by eye, pinned to `tonal` by
@@ -393,13 +407,26 @@ cookies, embedded webviews), not just return null — `store.ts` falls back to a
 `StateStorage`, and helpers like `Header.tsx`'s theme functions take an injectable storage param
 and read it *inside* a `try`, never in a default-parameter expression.
 
-**Three storage zones, not two.** `localStorage` holds the live session (persist, above);
-`sessionStorage` nothing; and **IndexedDB holds the saved project library**, reached only
-through `store/projectStore.ts`. That wrapper resolves availability *once, lazily* and turns
+**Four storage zones, not three.** `localStorage` holds the live session (persist, above);
+`sessionStorage` nothing; **IndexedDB holds the one project slot**, reached only
+through `store/projectStore.ts`; and **Google Drive is the optional remote source an explicit
+Save commits to** — absent, not disabled, when `VITE_GOOGLE_CLIENT_ID` is unset. That wrapper
+resolves availability *once, lazily* and turns
 every failure into a typed result — a device that cannot store projects is a **normal degraded
 state the UI renders, never an exception path**, the same discipline `resolveStorage()` follows.
 Bodies and metadata live in **separate object stores** so listing the library never deserialises
-a single project body; every write touches both in one transaction. A **project body is the
+a single project body; every write touches both in one transaction. The slot's value is a
+**record, `{ body, source }`** (`ProjectSlotRecord` in `store/projectSource.ts`): `source` is
+where an explicit Save writes back — `untitled`, a Drive `fileId`, or a local
+`FileSystemFileHandle` — and it is held **beside** the body, never inside it, because a file id
+is location metadata and a handle is not serialisable, so neither may reach `serializeProject`.
+**The source never travels in the `.solna` body**, and **`projectSource` is not a *localStorage*
+persist key** — it is deliberately absent from `partializeAppState` and `PROJECT_CONTENT_KEYS`
+— but it lives in the IndexedDB slot record beside the body, so a reload restores the source
+from the slot record; only the `.solna` file carries no pointer to where it came from.
+`sanitizeSlotRecord` accepts a slot written before sources existed and reads it as
+`{ body, source: untitled }`; there is no version gate for that widening, by the same "no
+migration chains" rule as everything else here. A **project body is the
 content set only** (see `PROJECT_CONTENT_KEYS`) — view, session and library state are excluded
 by construction — and its `formatVersion` is deliberately **independent of the persist
 `version`**: that one is stamped for private `localStorage` reshapes, this one for the `.solna`
