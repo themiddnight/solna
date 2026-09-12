@@ -1,4 +1,5 @@
 import { audioEngine } from './engine';
+import type { SynthParams } from '@/types';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the engine exports no
    internals; tests deliberately reach private fields (ctx, buses,
@@ -198,4 +199,42 @@ export function freshEngine(opts: FakeOpts = {}) {
   (engine as any).reverbNode = undefined;
   (engine as any).distortionNode = undefined;
   return { engine, ctx };
+}
+
+/**
+ * A SynthParams literal mirroring the store's `INITIAL_SYNTH_PARAMS`. It lives
+ * here rather than being imported because src/audio/ may not import
+ * src/store/ — the eslint block for this directory has no allowTypeImports
+ * exemption — and a test that had to build one inline would drift from the
+ * default patch the moment the store's changed.
+ */
+export function synthParamsFixture(over: Partial<SynthParams> = {}): SynthParams {
+  return {
+    oscType: 'sawtooth',
+    subOscVolume: 0.3,
+    noiseVolume: 0.02,
+    detune: 6,
+    filterType: 'lowpass',
+    filterCutoff: 2400,
+    filterResonance: 3.0,
+    filterEnvAmount: 1200,
+    attack: 0.02,
+    decay: 0.4,
+    sustain: 0.6,
+    release: 0.5,
+    filterAttack: 0.02,
+    filterDecay: 0.4,
+    filterSustain: 0,
+    filterRelease: 0.5,
+    lfoRate: 3.5,
+    lfoDepth: 0.2,
+    lfoTarget: 'cutoff',
+    octave: 0,
+    arpActive: false,
+    arpMode: 'up',
+    arpRate: '16n',
+    arpOctaves: 1,
+    preset: 'Cosmic Lead',
+    ...over,
+  };
 }

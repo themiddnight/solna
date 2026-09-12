@@ -48,7 +48,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SYNTH_PRESETS } from '@/data/synthPresets';
 import { dbToGain, toDecibels } from '@/utils/gainUnits';
-import { encodeWav } from './encodeWav.ts';
+import { encodeWav } from '@/utils/encodeWav';
 import { measureLoudness } from './measureLoudness.ts';
 import { CALIBRATION_HEADROOM_DB, CALIBRATION_SAMPLE_RATE, renderDrumKit, renderPreset } from './renderOffline.ts';
 
@@ -113,7 +113,7 @@ async function measureCandidate(candidateDb: number, sources: Float32Array[][]):
   }
   const peakDbfs = peak > 0 ? 20 * Math.log10(peak) : Number.NEGATIVE_INFINITY;
 
-  const wav = encodeWav(summed, CALIBRATION_SAMPLE_RATE);
+  const wav = new Uint8Array(await encodeWav(summed, CALIBRATION_SAMPLE_RATE).arrayBuffer());
   const dir = mkdtempSync(join(tmpdir(), 'solna-bus-headroom-'));
   try {
     const wavPath = join(dir, `candidate-${candidateDb}.wav`);

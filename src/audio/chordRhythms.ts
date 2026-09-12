@@ -5,7 +5,10 @@
 
 import { groupByStyle } from './groupByStyle';
 import { CHORD_RHYTHMS, type RhythmHit, type RhythmPattern } from '@/data/chordRhythms';
-import type { MeterId } from '../utils/meter';
+import { BASS_PATTERNS, type BassPattern, type BassStepChoice } from '@/data/bassPatterns';
+import { customBassPattern } from './bassPatterns';
+import { adaptStepEvents } from '../utils/eventAdapt';
+import { getMeter, type MeterId } from '../utils/meter';
 
 // Rhythms grouped by style, computed once at module load for the style-grouped
 // select UI.
@@ -50,4 +53,89 @@ export function customRhythmPattern(
     }
   }
   return { id: 'custom', name: 'Custom', style: 'Custom', meter, hits };
+}
+
+/**
+ * Patterns that hold one voice across the whole chord instead of re-striking.
+ *
+ * `stepsPerBar` is the ACTIVE bar length, not the constant 16: in 12/8 a bar is
+ * 24 steps, and a 16-step hold there covers two thirds of a bar, not all of it.
+ * Exported so the pure-logic tests can reach them without React.
+ */
+export function isFullHoldRhythm(pattern: RhythmPattern, stepsPerBar: number): boolean {
+  return (
+    pattern.id === "sustained" ||
+    (pattern.hits.length === 1 &&
+      pattern.hits[0].step === 0 &&
+      (pattern.hits[0].holdSteps ?? 1) >= stepsPerBar)
+  );
+}
+
+export function isFullHoldBass(pattern: BassPattern, stepsPerBar: number): boolean {
+  return (
+    pattern.id === "whole-note-root" ||
+    (pattern.steps.length === 1 &&
+      pattern.steps[0].step === 0 &&
+      (pattern.steps[0].holdSteps ?? 1) >= stepsPerBar)
+  );
+}
+
+function resolveRhythmPattern(id: string): RhythmPattern {
+  return CHORD_RHYTHMS.find((p) => p.id === id) ?? CHORD_RHYTHMS[0];
+}
+
+function resolveBassPattern(id: string): BassPattern {
+  return BASS_PATTERNS.find((p) => p.id === id) ?? BASS_PATTERNS[0];
+}
+
+/**
+ * Mode-aware pattern resolution for playback. Custom grids are synthesized at
+ * the ACTIVE meter, so the returned pattern is stamped with `meterId` and
+ * `adaptRhythmPattern`/`adaptBassPattern` return it unchanged there.
+ */
+export function resolvePlaybackRhythmPattern(
+  mode: 'preset' | 'custom',
+  rhythmId: string,
+  customGrid: readonly boolean[],
+  stepsPerBar: number,
+  meterId: MeterId,
+): RhythmPattern {
+  return mode === 'custom'
+    ? customRhythmPattern(customGrid, stepsPerBar, meterId)
+    : resolveRhythmPattern(rhythmId);
+}
+
+export function resolvePlaybackBassPattern(
+  mode: 'preset' | 'custom',
+  patternId: string,
+  customGrid: readonly BassStepChoice[],
+  stepsPerBar: number,
+  meterId: MeterId,
+): BassPattern {
+  return mode === 'custom'
+    ? customBassPattern(customGrid, stepsPerBar, meterId)
+    : resolveBassPattern(patternId);
+}
+
+/**
+ * Playback-time adaptation. Chord and bass rhythms are picked by id and never
+ * edited by the user, so the library stays byte-identical on disk and a meter
+ * change re-adapts on the next chord — no migration, no lossy write-back.
+ * (The drum grid is the opposite case: it is user-editable, so preset
+ * adaptation there is materialised at APPLY time in the sequencer slice.)
+ *
+ * Returns the SAME object when no adaptation is needed, so the identity checks
+ * and id comparisons downstream (isFullHoldRhythm/isFullHoldBass) are unaffected
+ * in 4/4.
+ */
+export function adaptRhythmPattern(pattern: RhythmPattern, stepsPerBar: number): RhythmPattern {
+  const sourceSteps = getMeter(pattern.meter).stepsPerBar;
+  if (sourceSteps === stepsPerBar) return pattern;
+  return { ...pattern, hits: adaptStepEvents(pattern.hits, sourceSteps, stepsPerBar) };
+}
+
+export function adaptBassPattern(pattern: BassPattern, stepsPerBar: number): BassPattern {
+  const sourceSteps = getMeter(pattern.meter).stepsPerBar;
+  if (sourceSteps === stepsPerBar) return pattern;
+  return { ...pattern, steps: adaptStepEvents(pattern.steps, sourceSteps, stepsPerBar) };
 }

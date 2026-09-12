@@ -622,6 +622,22 @@ describe('drum bus filter', () => {
     expect(filter.type).toBe('bandpass');
   });
 
+  test('setDrumFilter can schedule cutoff and resonance on the audio timeline', () => {
+    const { engine } = freshEngine();
+    const filter = fakeNode();
+    (engine as any).drumBusFilter = filter;
+
+    (engine.setDrumFilter as unknown as (
+      cutoff: number,
+      resonance: number,
+      type: 'lowpass',
+      time: number,
+    ) => void)(500, 2, 'lowpass', 42);
+
+    expect(filter.frequency.targets.at(-1)).toEqual({ v: 500, t: 42, tc: 0.03 });
+    expect(filter.Q.targets.at(-1)).toEqual({ v: 2, t: 42, tc: 0.03 });
+  });
+
   test('setDrumFilter before the drum bus filter exists is a safe no-op', () => {
     const { engine } = freshEngine();
     let threw = false;

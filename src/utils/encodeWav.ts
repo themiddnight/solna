@@ -1,10 +1,16 @@
 /**
- * Rendered `AudioBuffer` channels -> a 16-bit PCM WAV, because ffmpeg reads files
- * and `OfflineAudioContext.startRendering()` returns Float32 channel data.
+ * Rendered `AudioBuffer` channels -> a 16-bit PCM WAV, because a file is what
+ * the user asked for and `startRendering()` returns Float32 channel data.
  *
  * 16-bit is deliberate and not a shortcut: the quantization floor is about
- * -96 dBFS and every calibration measurement sits near -18 dBFS, so the encoding
- * contributes nothing measurable to a number that is reported to 0.1 dB.
+ * -96 dBFS while a Solna mix sits near -18 dBFS, so the encoding contributes
+ * nothing measurable. The calibration harness measured against this same
+ * argument for a year.
+ *
+ * Live in src/utils/ rather than scripts/ because it is no longer only a
+ * harness concern: it is above data/, reachable from both src/audio/ and
+ * src/components/, and free of DOM events — this function does not download
+ * anything, it only encodes.
  */
 const HEADER_BYTES = 44;
 const BYTES_PER_SAMPLE = 2;
@@ -13,12 +19,22 @@ function writeAscii(view: DataView, offset: number, text: string): void {
   for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
 }
 
-export function encodeWav(channels: Float32Array[], sampleRate: number): Uint8Array {
+/**
+ * The 44-byte RIFF/WAVE header, little-endian samples, clamped to +/-1.
+ *
+ * The return type names `ArrayBuffer` rather than the bare `Uint8Array` it
+ * would default to: a plain `Uint8Array` is `Uint8Array<ArrayBufferLike>`, and
+ * `BlobPart` requires a view over a non-shared `ArrayBuffer`, so the wide form
+ * does not type-check at `encodeWav`'s `new Blob`. Narrowing is the honest fix
+ * — the buffer is always freshly allocated here, never a SharedArrayBuffer —
+ * where a cast at the Blob would silence a real distinction.
+ */
+export function encodeWavBytes(channels: Float32Array[], sampleRate: number): Uint8Array<ArrayBuffer> {
   const channelCount = channels.length;
   if (channelCount === 0) {
     throw new Error('encodeWav requires at least one channel; got an empty array.');
   }
-  const frameCount = channels[0]?.length ?? 0;
+  const frameCount = channels[0].length;
   for (const [index, channel] of channels.entries()) {
     if (channel.length !== frameCount) {
       throw new Error(
@@ -48,7 +64,7 @@ export function encodeWav(channels: Float32Array[], sampleRate: number): Uint8Ar
   let offset = HEADER_BYTES;
   for (let frame = 0; frame < frameCount; frame += 1) {
     for (let channel = 0; channel < channelCount; channel += 1) {
-      const sample = channels[channel]?.[frame] ?? 0;
+      const sample = channels[channel][frame];
       // Clamp, never wrap: a sample past +1 wrapping to -32768 would turn an
       // over-hot voice into a measurement that reads plausible.
       const clamped = Math.max(-1, Math.min(1, sample));
@@ -57,4 +73,14 @@ export function encodeWav(channels: Float32Array[], sampleRate: number): Uint8Ar
     }
   }
   return bytes;
+}
+
+/**
+ * The download-shaped wrapper. `Blob` rather than `Uint8Array` because that is
+ * what `downloadBlob` and `ProjectSaveResult.destination: 'download'` take;
+ * the harness adapts with `new Uint8Array(await blob.arrayBuffer())` instead of
+ * keeping a second implementation.
+ */
+export function encodeWav(channels: Float32Array[], sampleRate: number): Blob {
+  return new Blob([encodeWavBytes(channels, sampleRate)], { type: 'audio/wav' });
 }

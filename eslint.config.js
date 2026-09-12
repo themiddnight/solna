@@ -170,7 +170,15 @@ export default tseslint.config(
     // so every other `Math` member stays unrestricted. This is still not
     // exhaustive — see rng.ts's docblock for what remains uncoverable.
     files: ['src/audio/**/*.{ts,tsx}'],
-    ignores: ['src/audio/rng.ts', 'src/audio/rng.test.ts'],
+    ignores: [
+      'src/audio/rng.ts',
+      'src/audio/rng.test.ts',
+      // The mixdown renderer's test patches `Math.random` to a sentinel so it
+      // can assert the render restores the default random source as an exact
+      // value rather than a statistical claim — the same reason rng.test.ts is
+      // exempted, and the same idiom that test uses.
+      'src/audio/export/renderMixdown.test.ts',
+    ],
     rules: {
       'no-restricted-syntax': [
         'error',

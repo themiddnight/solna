@@ -98,7 +98,11 @@ export interface PreviewScheduler {
   subscribe(tick: () => void): () => void;
 }
 
-function liveScheduler(ctx: AudioContext): PreviewScheduler {
+// BaseAudioContext, not AudioContext: this reads `currentTime` and nothing else.
+// getAudioContext() widened for the offline render seam, and an audition only
+// ever needs a clock to schedule against — narrowing it back here would be a
+// lie about what a scheduler requires rather than a safety.
+function liveScheduler(ctx: BaseAudioContext): PreviewScheduler {
   return {
     now: () => ctx.currentTime,
     // subscribeClock starts the shared 25 ms timer if it is not already

@@ -1,23 +1,12 @@
 /**
- * A tiny deterministic PRNG (mulberry32) for the calibration harness only. It
- * lives here rather than in `src/audio/` because it is a calibration concern,
- * not an engine one — the engine only ever knows about `src/audio/rng.ts`'s
- * `random()`/`setRandomSource()` seam.
- *
- * Not cryptographically random and not meant to be: the only requirement is
- * that the same seed produces the same stream of `[0, 1)` values every time,
- * on every platform, so a render is reproducible.
+ * The calibration harness's seeded PRNG. `mulberry32` itself now lives in
+ * src/audio/rng.ts, beside the `setRandomSource` seam it feeds, because the
+ * offline mixdown renderer needs it too and `src/` cannot import from
+ * `scripts/`. Re-exported rather than duplicated: two implementations of "the
+ * seeded stream" is the shape that drifts silently, and the pinning test in
+ * src/audio/rng.test.ts is what holds this one honest.
  */
-export function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return function next(): number {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+export { mulberry32 } from '@/audio/rng';
 
 /** The fixed seed every calibration render is reset to. Not a secret, just a
  *  constant: any value works as long as it never changes between renders. */

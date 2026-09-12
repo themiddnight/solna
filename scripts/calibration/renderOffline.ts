@@ -1,11 +1,13 @@
 /**
  * The render half of the calibration harness. It drives the REAL AudioEngine — the
  * same `triggerDrum` / `triggerSynthNoteOn` a player hits — against a
- * `node-web-audio-api` OfflineAudioContext, through the injection seam
- * `src/audio/testFakes.ts` already establishes: the engine class is not exported,
- * so a fresh instance comes from the singleton's constructor and its private `ctx`
- * is assigned directly. Measuring anything else would measure a model of the
- * engine rather than the engine.
+ * `node-web-audio-api` OfflineAudioContext, through the engine's own render seam,
+ * `createRenderEngine(ctx)`: a throwaway instance bound to the caller's context with
+ * the master chain built on it. That replaced the `makeEngine() as any; engine.ctx =
+ * ctx; engine.setupMasterChain()` dance this file used to perform; the `as any` that
+ * remains is for the private send nodes reached AFTER binding, not for constructing
+ * an engine. Measuring anything else would measure a model of the engine rather than
+ * the engine.
  *
  * Two departures from a live session, both deliberate:
  *  - the three parallel sends (reverb, delay, distortion) are zeroed, so the
@@ -28,17 +30,17 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { OfflineAudioContext } from 'node-web-audio-api';
-import { makeEngine } from '@/audio/testFakes';
+import { createRenderEngine } from '@/audio/engine';
 import { applyPreset } from '@/audio/presetRegistry';
 import { synthTrimGainFor } from '@/audio/trims';
-import { setRandomSource } from '@/audio/rng';
+import { withSeededRandom } from '@/audio/rng';
 import { DRUM_KITS, type DrumType } from '@/data/drumKits';
 import type { SynthPresetItem } from '@/data/synthPresets';
 import { INITIAL_SYNTH_PARAMS } from '@/store/initialState';
 import { dbToGain, toDbfs, toDecibels, type Dbfs } from '@/utils/gainUnits';
-import { encodeWav } from './encodeWav.ts';
+import { encodeWav } from '@/utils/encodeWav';
 import { measureLoudness } from './measureLoudness.ts';
-import { CALIBRATION_SEED, mulberry32 } from './seededRandom.ts';
+import { CALIBRATION_SEED } from './seededRandom.ts';
 
 export const CALIBRATION_SAMPLE_RATE = 44100;
 export const CALIBRATION_CHANNELS = 2;
@@ -167,9 +169,10 @@ export const SYNTH_NOTE_COUNT = 4;
 /** The preset's own `octave` shifts this, exactly as a player hears it. */
 export const SYNTH_CALIBRATION_NOTE = 'C3';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- the engine exports no
-   internals; this script reaches its private ctx, master chain and send gains the
-   same way src/audio/testFakes.ts does, and for the same reason. */
+/* eslint-disable @typescript-eslint/no-explicit-any -- constructing the engine goes
+   through the supported createRenderEngine seam now, but the send gains it reaches
+   afterwards (reverbGain and the dry-only loop's siblings) are still private, the
+   same way src/audio/testFakes.ts reaches engine internals. */
 
 interface Harness {
   engine: any;
@@ -182,9 +185,7 @@ function createHarness(seconds: number, headroomDb = 0): Harness {
     Math.round(CALIBRATION_SAMPLE_RATE * seconds),
     CALIBRATION_SAMPLE_RATE,
   );
-  const engine = makeEngine() as any;
-  engine.ctx = ctx;
-  engine.setupMasterChain();
+  const engine = createRenderEngine(ctx) as any;
   // Dry only. Zeroing the send gains is one line each and beats building a whole
   // neutral MasterEffects literal that would then need maintaining alongside the
   // real one. The `reverbSend` field is excluded from the config hash on the
@@ -209,31 +210,15 @@ function createHarness(seconds: number, headroomDb = 0): Harness {
   return { engine, ctx };
 }
 
-/**
- * Resets `src/audio/rng.ts` to a fresh `mulberry32` stream seeded at
- * `CALIBRATION_SEED`, runs `render`, then restores the real `Math.random` —
- * on both the success and the error path. The reset happens at the START of
- * EVERY call, not once per process: the generator renders the whole
- * catalogue in sequence, and a single voice re-rendered on its own must
- * produce the identical bytes a full-catalogue run produced for it, which
- * only holds if the stream never carries state across renders.
- */
-async function withSeededRandom<T>(render: () => Promise<T>): Promise<T> {
-  setRandomSource(mulberry32(CALIBRATION_SEED));
-  try {
-    return await render();
-  } finally {
-    setRandomSource(null);
-  }
-}
-
 async function renderToWav(ctx: any): Promise<Uint8Array> {
   const buffer = await ctx.startRendering();
   const channels: Float32Array[] = [];
   for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
     channels.push(buffer.getChannelData(channel));
   }
-  return encodeWav(channels, CALIBRATION_SAMPLE_RATE);
+  // The shared encoder returns a Blob; the harness writes bytes to a file, so
+  // it adapts here rather than keeping a second implementation of the format.
+  return new Uint8Array(await encodeWav(channels, CALIBRATION_SAMPLE_RATE).arrayBuffer());
 }
 
 /**
@@ -256,7 +241,7 @@ async function renderToWav(ctx: any): Promise<Uint8Array> {
 export async function renderDrumKit(kitName: string, applyTrim = false): Promise<Uint8Array> {
   const kit = DRUM_KITS[kitName];
   if (!kit) throw new Error(`No such drum kit: ${kitName}`);
-  return withSeededRandom(async () => {
+  return withSeededRandom(CALIBRATION_SEED, async () => {
     // Same headroom whether or not the trim is applied — the trimmed path peaks
     // even hotter (Tight Pocket measured 2.02 pre-headroom), so applyTrim=true
     // needs the clamp-avoidance at least as much as the uncalibrated render.
@@ -283,7 +268,7 @@ export async function renderDrumKit(kitName: string, applyTrim = false): Promise
  */
 export async function renderPreset(preset: SynthPresetItem, applyTrim = false): Promise<Uint8Array> {
   const params = applyPreset(INITIAL_SYNTH_PARAMS, preset);
-  return withSeededRandom(async () => {
+  return withSeededRandom(CALIBRATION_SEED, async () => {
     const { engine, ctx } = createHarness(SYNTH_RENDER_SECONDS);
     engine.setPresetTrim('calibration', applyTrim ? synthTrimGainFor(preset.name) : 1);
     for (let note = 0; note < SYNTH_NOTE_COUNT; note += 1) {

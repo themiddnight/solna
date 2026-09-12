@@ -107,7 +107,7 @@ export function wrapColumn(column: number, columns: number): number {
 /**
  * A loop TICK as a grid column: tick -> column -> wrapped into the loop.
  * THE primitive under clockStepToGridColumn and under every scheduler that
- * already holds a tick — leadScheduleHits in useLeadPlayback.ts reaches it
+ * already holds a tick — leadScheduleHits in leadMelody.ts reaches it
  * rather than keeping its own `wrapColumn(Math.floor(tick / stride), ...)`,
  * because two copies of a floor-then-wrap agree only by coincidence.
  */

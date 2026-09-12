@@ -65,6 +65,12 @@ export function playbackNowSec(): number | null {
   return audioEngine.getAudioContext()?.currentTime ?? null;
 }
 
+/** The latency fields a realtime context may report. Both optional: absent is 0. */
+interface LatencySource {
+  outputLatency?: number;
+  baseLatency?: number;
+}
+
 /**
  * The delay between the context reaching a time and the sound leaving the
  * speaker. Pure and separately exported because it is read in BOTH
@@ -81,15 +87,19 @@ export function playbackNowSec(): number | null {
  * every playhead and every captured press uncorrected. Erring toward
  * baseLatency costs a few ms in the one case the claim was true.
  */
-export function outputLatencySec(
-  ctx: { outputLatency?: number; baseLatency?: number } | null | undefined,
-): number {
+export function outputLatencySec(ctx: LatencySource | null | undefined): number {
   if (!ctx) return 0;
   return ctx.outputLatency || ctx.baseLatency || 0;
 }
 
 export function playbackOutputLatencySec(): number {
-  return outputLatencySec(audioEngine.getAudioContext());
+  // The cast is the widening, not a shortcut: getAudioContext() is a
+  // BaseAudioContext since the offline render seam, and BaseAudioContext
+  // declares neither latency field — an offline context has no output stage to
+  // measure one on. Reading both as absent is therefore correct rather than
+  // convenient: it returns 0 through the same `||` fallback a browser that never
+  // filled outputLatency in takes.
+  return outputLatencySec(audioEngine.getAudioContext() as LatencySource | null);
 }
 
 /**

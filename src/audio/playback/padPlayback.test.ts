@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { Note } from 'tonal';
-import { applyPadVoicing, padHoldSec, resolveDroneNotes } from './padPlayback';
+import {
+  applyPadVoicing,
+  padHoldSec,
+  resolveDroneNotes,
+  resolvePadArm,
+  shouldArmPad,
+  type PadArmInput,
+} from './padPlayback';
 
 const midi = (n: string) => Note.midi(n)!;
 
@@ -91,5 +98,75 @@ describe('padHoldSec', () => {
   test('a zero-bar chord or loop never produces a negative hold', () => {
     expect(padHoldSec('pad', 0, 0, 2)).toBe(2);
     expect(padHoldSec('drone', 0, 0, 2)).toBe(2);
+  });
+});
+
+describe('shouldArmPad', () => {
+  // Pad mode re-strikes the voicing on every chord; the outgoing chord's
+  // release tail overlapping the incoming attack IS the legato.
+  test('pad mode arms on every chord', () => {
+    expect(shouldArmPad('pad', true)).toBe(true);
+    expect(shouldArmPad('pad', false)).toBe(true);
+  });
+
+  // Drone mode arms once per loop pass and holds across every chord change.
+  // `isLoopStart` is `arming.chordIndex % chords.length === 0`, a value the
+  // caller already computes — no "loop boundary" concept is introduced.
+  test('drone mode arms only at the top of a loop pass', () => {
+    expect(shouldArmPad('drone', true)).toBe(true);
+    expect(shouldArmPad('drone', false)).toBe(false);
+  });
+});
+
+describe('resolvePadArm', () => {
+  const base: PadArmInput = {
+    mode: 'pad',
+    isLoopStart: false,
+    chord: { id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] },
+    // 0-based: degree 0 is the scale's tonic, so 1 would be D, not C.
+    degree: 0,
+    intervals: [1, 5, 8],
+    padOctave: 4,
+    voicing: 'triad',
+    scaleRoot: 'C',
+    scaleType: 'major',
+    barDur: 2,
+    loopBarCount: 8,
+  };
+
+  /** Narrowing helper: `expect(x).not.toBeNull()` does not narrow `x`. */
+  function mustArm(input: PadArmInput): { notes: string[]; holdSec: number } {
+    const arm = resolvePadArm(input);
+    if (!arm) throw new Error('expected an arm');
+    return arm;
+  }
+
+  test('pad mode arms on every chord, however the pass started', () => {
+    const arm = mustArm({ ...base, isLoopStart: false });
+    expect(arm.holdSec).toBe(2); // one bar
+    expect(arm.notes.length).toBeGreaterThan(0);
+    expect(mustArm({ ...base, isLoopStart: true }).holdSec).toBe(2);
+  });
+
+  test('drone mode arms only at the top of a loop pass, holding the whole loop', () => {
+    expect(resolvePadArm({ ...base, mode: 'drone', isLoopStart: false })).toBeNull();
+    // degree I in C major over [1, 5, 8] is root, fifth, octave...
+    expect(mustArm({ ...base, mode: 'drone', isLoopStart: true })).toEqual({
+      notes: ['C4', 'G4', 'C5'],
+      // ...and it holds loopBarCount bars, not the chord's one.
+      holdSec: 16,
+    });
+  });
+
+  test('a zero-bar chord never produces a hold shorter than a bar', () => {
+    const arm = mustArm({ ...base, chord: { ...base.chord, bars: 0 } });
+    expect(arm.holdSec).toBe(2);
+  });
+
+  // The brief for this move called for an `off` mode here; `PAD_MODES` is
+  // ['pad', 'drone'] and has no off state, so the reachable "nothing sounds"
+  // case is a drone that resolves no notes. It pins the same early return.
+  test('a drone with no intervals resolves no notes and never arms', () => {
+    expect(resolvePadArm({ ...base, mode: 'drone', isLoopStart: true, intervals: [] })).toBeNull();
   });
 });

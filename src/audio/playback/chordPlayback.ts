@@ -1,4 +1,4 @@
-import { audioEngine, STEPS_PER_BAR } from "../engine";
+import { audioEngine, STEPS_PER_BAR, type AudioEngine } from "../engine";
 import { equalPowerVelocityScale } from "../chordRhythms";
 import type { RhythmPattern } from "@/data/chordRhythms";
 import { buildArpSequence } from "../arpeggiator";
@@ -102,17 +102,26 @@ export function emitStepEvents(
   source: string,
   time: number,
   chordEnd: number,
+  /**
+   * The engine to play on. Defaults to the singleton, so every live call site
+   * is unchanged; the offline renderer passes its own render engine. The
+   * parameter exists rather than a copy of this function existing in the
+   * renderer, because the clamp below is one rule — a strum's later notes can
+   * start past `chordEnd` at high bpm — and a second copy would be the copy
+   * no live test exercises.
+   */
+  engine: AudioEngine = audioEngine,
 ): void {
   for (const ev of events) {
     const start = time + ev.timeOffset;
-    audioEngine.triggerSynthNoteOn(ev.noteName, params, ev.velocity, start, source, 1, "sequencer");
+    engine.triggerSynthNoteOn(ev.noteName, params, ev.velocity, start, source, 1, "sequencer");
     // The clamp to chordEnd stops a long feel hold from overlapping the next
     // chord — but a strum's later notes start up to (n-1)*30 ms after `time`,
     // and on a chord's LAST step at high bpm (200 bpm = 0.075 s/step) that
     // start is already past chordEnd. Floor the gate at 10 ms so the note-off
     // can never precede its own note-on.
     const off = Math.max(start + 0.01, Math.min(start + ev.hold, chordEnd));
-    audioEngine.triggerSynthNoteOff(ev.noteName, params.release, off, source);
+    engine.triggerSynthNoteOff(ev.noteName, params.release, off, source);
   }
 }
 
@@ -218,9 +227,10 @@ export function playFullHoldChord(
   startTime: number,
   holdSec: number,
   source: string,
+  engine: AudioEngine = audioEngine,
 ): void {
   for (const n of notes) {
-    audioEngine.triggerSynthNoteOn(
+    engine.triggerSynthNoteOn(
       n,
       params,
       DEFAULT_VELOCITY * equalPowerVelocityScale(notes.length),
@@ -229,7 +239,7 @@ export function playFullHoldChord(
       1,
       "sequencer",
     );
-    audioEngine.triggerSynthNoteOff(
+    engine.triggerSynthNoteOff(
       n,
       params.release,
       startTime + holdSec,

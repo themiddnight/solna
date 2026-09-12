@@ -32,6 +32,7 @@ declare module 'bun:test' {
     not: Matchers<T>;
     toEqual(expected: unknown): void;
     toBe(expected: unknown): void;
+    toBeInstanceOf(expected: unknown): void;
     toContain(expected: unknown): void;
     toContainEqual(expected: unknown): void;
     toBeCloseTo(expected: number, numDigits?: number): void;

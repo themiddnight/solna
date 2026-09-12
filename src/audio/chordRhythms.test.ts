@@ -1,6 +1,18 @@
 import { describe, expect, test } from 'bun:test';
-import { customRhythmPattern, equalPowerVelocityScale, feelToHoldScale, fullHoldDuration } from './chordRhythms';
-import { CHORD_RHYTHMS } from '@/data/chordRhythms';
+import {
+  adaptBassPattern,
+  adaptRhythmPattern,
+  customRhythmPattern,
+  equalPowerVelocityScale,
+  feelToHoldScale,
+  fullHoldDuration,
+  isFullHoldBass,
+  isFullHoldRhythm,
+  resolvePlaybackBassPattern,
+  resolvePlaybackRhythmPattern,
+} from './chordRhythms';
+import { CHORD_RHYTHMS, type RhythmPattern } from '@/data/chordRhythms';
+import { BASS_PATTERNS, type BassPattern, type BassStepChoice } from '@/data/bassPatterns';
 import { getMeter } from '../utils/meter';
 import type { MeterId } from '../utils/meter';
 
@@ -179,5 +191,202 @@ describe('customRhythmPattern — boolean grid to RhythmPattern', () => {
       { step: 2, type: 'block', velocity: 1, holdSteps: 1 },
       { step: 3, type: 'block', velocity: 1, holdSteps: 1 },
     ]);
+  });
+});
+
+const FOUR_ON_FLOOR_RHYTHM: RhythmPattern = {
+  id: 'test-four',
+  name: 'Test Four',
+  style: 'Test',
+  meter: '4/4',
+  hits: [
+    { step: 0, type: 'block', holdSteps: 4 },
+    { step: 4, type: 'block', holdSteps: 4 },
+    { step: 8, type: 'block', holdSteps: 4 },
+    { step: 12, type: 'block', holdSteps: 4 },
+  ],
+};
+
+const WALKING: BassPattern = {
+  id: 'test-walk',
+  name: 'Test Walk',
+  style: 'Test',
+  meter: '4/4',
+  steps: [
+    { step: 0, note: 'root', holdSteps: 4 },
+    { step: 4, note: 'third', holdSteps: 4 },
+    { step: 8, note: 'fifth', holdSteps: 4 },
+    { step: 12, note: 'seventh', holdSteps: 4 },
+  ],
+};
+
+describe('adaptRhythmPattern', () => {
+  test('a 4/4 pattern in a 16-step bar is returned untouched, same identity', () => {
+    expect(adaptRhythmPattern(FOUR_ON_FLOOR_RHYTHM, 16)).toBe(FOUR_ON_FLOOR_RHYTHM);
+  });
+
+  test('into a 12-step bar it drops the step-12 hit and keeps its id', () => {
+    const out = adaptRhythmPattern(FOUR_ON_FLOOR_RHYTHM, 12);
+    expect(out.id).toBe('test-four');
+    expect(out.hits.map((h) => h.step)).toEqual([0, 4, 8]);
+  });
+
+  test('a hold is clamped so nothing rings past the bar line', () => {
+    const long: RhythmPattern = {
+      ...FOUR_ON_FLOOR_RHYTHM,
+      hits: [{ step: 8, type: 'block', holdSteps: 8 }],
+    };
+    expect(adaptRhythmPattern(long, 12).hits[0].holdSteps).toBe(4);
+  });
+
+  test('into a 20-step bar it loops from step 0', () => {
+    const out = adaptRhythmPattern(FOUR_ON_FLOOR_RHYTHM, 20);
+    expect(out.hits.map((h) => h.step)).toEqual([0, 4, 8, 12, 16]);
+  });
+
+  test('a pattern with no declared meter is treated as 4/4', () => {
+    const untagged: RhythmPattern = { ...FOUR_ON_FLOOR_RHYTHM, meter: undefined };
+    expect(adaptRhythmPattern(untagged, 12).hits.map((h) => h.step)).toEqual([0, 4, 8]);
+  });
+});
+
+describe('adaptBassPattern', () => {
+  test('a 4/4 pattern in a 16-step bar is returned untouched, same identity', () => {
+    expect(adaptBassPattern(WALKING, 16)).toBe(WALKING);
+  });
+
+  test('into a 12-step bar it drops the step-12 note and keeps its id', () => {
+    const out = adaptBassPattern(WALKING, 12);
+    expect(out.id).toBe('test-walk');
+    expect(out.steps.map((s) => s.step)).toEqual([0, 4, 8]);
+    expect(out.steps.map((s) => s.note)).toEqual(['root', 'third', 'fifth']);
+  });
+
+  test('into a 24-step bar it loops once and a half', () => {
+    const out = adaptBassPattern(WALKING, 24);
+    expect(out.steps.map((s) => s.step)).toEqual([0, 4, 8, 12, 16, 20]);
+    expect(out.steps[4].note).toBe('root');
+  });
+
+  test('every surviving note ends at or before the bar line', () => {
+    for (const bar of [12, 14, 20, 24]) {
+      for (const s of adaptBassPattern(WALKING, bar).steps) {
+        expect(s.step + (s.holdSteps ?? 1)).toBeLessThanOrEqual(bar);
+      }
+    }
+  });
+});
+
+describe('isFullHoldRhythm / isFullHoldBass measure the hold against the ACTIVE bar', () => {
+  const oneHitAt = (holdSteps: number): RhythmPattern => ({
+    id: 'probe-rhythm',
+    name: 'Probe',
+    style: 'Test',
+    meter: '4/4',
+    hits: [{ step: 0, type: 'block', velocity: 1, holdSteps }],
+  });
+
+  const oneStepAt = (holdSteps: number): BassPattern => ({
+    id: 'probe-bass',
+    name: 'Probe',
+    style: 'Test',
+    meter: '4/4',
+    steps: [{ step: 0, note: 'root', holdSteps }],
+  });
+
+  test('a 16-step hold is a full hold in a 16-step bar — the 4/4 behaviour, unchanged', () => {
+    expect(isFullHoldRhythm(oneHitAt(16), 16)).toBe(true);
+    expect(isFullHoldBass(oneStepAt(16), 16)).toBe(true);
+  });
+
+  test('a 16-step hold is NOT a full hold in a 24-step 12/8 bar — it covers two thirds of it', () => {
+    expect(isFullHoldRhythm(oneHitAt(16), 24)).toBe(false);
+    expect(isFullHoldBass(oneStepAt(16), 24)).toBe(false);
+  });
+
+  test('a 12-step hold IS a full hold in a 12-step 3/4 or 6/8 bar', () => {
+    expect(isFullHoldRhythm(oneHitAt(12), 12)).toBe(true);
+    expect(isFullHoldBass(oneStepAt(12), 12)).toBe(true);
+  });
+
+  test('a hold longer than the bar still counts — adaptStepEvents clamps it, this only classifies', () => {
+    expect(isFullHoldRhythm(oneHitAt(16), 12)).toBe(true);
+    expect(isFullHoldBass(oneStepAt(16), 12)).toBe(true);
+  });
+
+  test('the two id short-circuits survive: they are full holds in every meter', () => {
+    const sustained = CHORD_RHYTHMS.find((p) => p.id === 'sustained')!;
+    const wholeNote = BASS_PATTERNS.find((p) => p.id === 'whole-note-root')!;
+    for (const stepsPerBar of [12, 14, 16, 20, 24]) {
+      expect(isFullHoldRhythm(sustained, stepsPerBar)).toBe(true);
+      expect(isFullHoldBass(wholeNote, stepsPerBar)).toBe(true);
+    }
+  });
+
+  test('a multi-hit pattern is never a full hold, whatever its holds are', () => {
+    const twoHits: RhythmPattern = {
+      id: 'probe-two',
+      name: 'Probe Two',
+      style: 'Test',
+      meter: '4/4',
+      hits: [
+        { step: 0, type: 'block', velocity: 1, holdSteps: 16 },
+        { step: 8, type: 'block', velocity: 1, holdSteps: 16 },
+      ],
+    };
+    expect(isFullHoldRhythm(twoHits, 16)).toBe(false);
+  });
+});
+
+describe('playback pattern resolution honours the mode', () => {
+  test('preset mode resolves the library pattern by id', () => {
+    const pattern = resolvePlaybackRhythmPattern('preset', 'offbeatStabs', [true], 16, '4/4');
+    expect(pattern.id).toBe('offbeatStabs');
+    const bass = resolvePlaybackBassPattern('preset', 'classic-walk', ['root'], 16, '4/4');
+    expect(bass.id).toBe('classic-walk');
+  });
+
+  test('custom mode synthesizes a grid into a custom pattern', () => {
+    const grid = [
+      true, false, false, false,
+      true, false, false, false,
+      true, false, false, false,
+      true, false, false, false,
+    ];
+    const pattern = resolvePlaybackRhythmPattern('custom', 'offbeatStabs', grid, 16, '4/4');
+    expect(pattern.id).toBe('custom');
+    expect(pattern.hits).toHaveLength(4);
+  });
+
+  test('bass custom mode maps choices to steps with no approach tokens', () => {
+    const choices: BassStepChoice[] = [
+      'root', 'rest', 'third', 'rest', 'fifth', 'rest', 'seventh', 'rest',
+      'octave', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest',
+    ];
+    const pattern = resolvePlaybackBassPattern('custom', 'classic-walk', choices, 16, '4/4');
+    expect(pattern.id).toBe('custom');
+    expect(pattern.steps.map((s) => s.note)).toEqual(['root', 'third', 'fifth', 'seventh', 'root']);
+  });
+});
+
+describe('custom patterns flow through the playback pipeline', () => {
+  test('a custom rhythm pattern is never a full-hold and adapts to other meters', () => {
+    const grid = [
+      true, false, false, false,
+      true, false, false, false,
+      true, false, false, false,
+      true, false, false, false,
+    ];
+    const custom = resolvePlaybackRhythmPattern('custom', 'sustained', grid, 16, '4/4');
+    expect(isFullHoldRhythm(custom, 16)).toBe(false);
+    const adapted = adaptRhythmPattern(custom, 24);
+    expect(adapted.hits.map((h) => h.step)).toEqual([0, 4, 8, 12, 16, 20]);
+  });
+
+  test('a custom bass pattern is never a full-hold and is returned unchanged in 4/4', () => {
+    const choices: BassStepChoice[] = ['root', ...new Array<BassStepChoice>(15).fill('rest')];
+    const custom = resolvePlaybackBassPattern('custom', 'whole-note-root', choices, 16, '4/4');
+    expect(isFullHoldBass(custom, 16)).toBe(false);
+    expect(adaptBassPattern(custom, 16)).toBe(custom);
   });
 });

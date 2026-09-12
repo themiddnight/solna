@@ -1,6 +1,6 @@
 import { transpose } from 'tonal';
-import { getDiatonicChordForDegree } from '@/utils/musicTheory';
-import type { PadInterval, PadMode, PadVoicing } from '@/types';
+import { generateBlockChordNotes, getDiatonicChordForDegree } from '@/utils/musicTheory';
+import type { ChordItem, PadInterval, PadMode, PadVoicing } from '@/types';
 
 /**
  * Interval names for `tonal`. `12P` is a perfect twelfth — one interval name,
@@ -76,13 +76,6 @@ export function applyPadVoicing(
 }
 
 /**
- * How long one arm holds. Pad mode is armed per chord and holds for that
- * chord; drone mode is armed once per loop pass and holds for the whole pass.
- *
- * Both floor at a single bar so a malformed chord (`bars: 0`) or an empty
- * progression can never schedule a note-off at or before its own note-on.
- */
-/**
  * Whether this chord arm should also arm the pad.
  *
  * Pad mode re-strikes on every chord. Drone mode holds one voicing for a whole
@@ -90,8 +83,8 @@ export function applyPadVoicing(
  * `arming.chordIndex % liveChords.length === 0` the caller already has.
  *
  * Lives here rather than in the hook so the rule is testable without React and
- * sits beside padHoldSec, which decides how long that arm then holds; see
- * padArm.test.ts.
+ * sits beside padHoldSec, which decides how long that arm then holds; see the
+ * shouldArmPad/resolvePadArm suites in padPlayback.test.ts.
  */
 export function shouldArmPad(mode: PadMode, isLoopStart: boolean): boolean {
   return mode === 'pad' || isLoopStart;
@@ -109,12 +102,73 @@ export function padHoldsAcrossLoop(mode: PadMode): boolean {
   return mode === 'drone';
 }
 
+/**
+ * How long one arm holds. Pad mode is armed per chord and holds for that
+ * chord; drone mode is armed once per loop pass and holds for the whole pass.
+ *
+ * Both floor at a single bar so a malformed chord (`bars: 0`) or an empty
+ * progression can never schedule a note-off at or before its own note-on.
+ *
+ * The third parameter is `loopBarCount`, not `loopBars`: `loopBars` is now a
+ * function imported from `@/utils/songStructure`, and a parameter wearing the
+ * function's name reads as if the parameter were the function.
+ */
 export function padHoldSec(
   mode: PadMode,
   chordBars: number,
-  loopBars: number,
+  loopBarCount: number,
   barDur: number,
 ): number {
-  const bars = padHoldsAcrossLoop(mode) ? loopBars : chordBars;
+  const bars = padHoldsAcrossLoop(mode) ? loopBarCount : chordBars;
   return Math.max(1, bars) * barDur;
+}
+
+/**
+ * The decision half of the hook's `armPad`, with its store reads turned into
+ * parameters — the hook passes `get()`-derived values, the offline renderer
+ * passes snapshot values, and this function knows nothing about either.
+ *
+ * Returns `null` when nothing should sound; otherwise the notes and the hold.
+ * The TRIGGER stays out of here on purpose: `playFullHoldChord` touches the
+ * engine, and a function that touches the engine cannot be called by a test
+ * with no engine.
+ *
+ * The caller owns `loopBarCount` because only drone mode reads it, and
+ * `loopBars` walks the whole progression — pad mode arms on EVERY chord and
+ * must not pay for it.
+ */
+export interface PadArmInput {
+  mode: PadMode;
+  /** Whether this arm lands on the first chord of a loop pass. */
+  isLoopStart: boolean;
+  chord: ChordItem;
+  degree: number;
+  intervals: readonly PadInterval[];
+  padOctave: number;
+  voicing: PadVoicing;
+  scaleRoot: string;
+  scaleType: string;
+  barDur: number;
+  /** The loop's total bars. Read by drone mode only. */
+  loopBarCount: number;
+}
+
+export function resolvePadArm(input: PadArmInput): { notes: string[]; holdSec: number } | null {
+  if (!shouldArmPad(input.mode, input.isLoopStart)) return null;
+
+  const notes =
+    input.mode === 'drone'
+      ? resolveDroneNotes(input.degree, input.intervals, input.padOctave, input.scaleRoot, input.scaleType)
+      : applyPadVoicing(
+          generateBlockChordNotes(input.chord.quality, input.chord.root, input.padOctave),
+          input.voicing,
+        );
+  if (notes.length === 0) return null;
+
+  return {
+    notes,
+    // No `|| 1` guard on chord.bars: padHoldSec already floors at one bar, so
+    // a malformed `bars: 0` cannot schedule a note-off at its own note-on.
+    holdSec: padHoldSec(input.mode, input.chord.bars, input.loopBarCount, input.barDur),
+  };
 }

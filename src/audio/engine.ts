@@ -217,8 +217,17 @@ interface SoundingHat {
   stopAt: number;
 }
 
-class AudioEngine {
-  private ctx: AudioContext | null = null;
+export class AudioEngine {
+  /**
+   * The audio context this engine is bound to. `BaseAudioContext`, not
+   * `AudioContext`: an offline render binds an `OfflineAudioContext`, which
+   * implements the node factories, `currentTime`, `destination` and — like
+   * every `BaseAudioContext` — `state`, `resume()` and `suspend()`. What it
+   * does not have is `close()`, and `startRendering()` is the member only it
+   * has. Every realtime-only path narrows back through `realtimeCtx()` below
+   * rather than assuming the narrower type.
+   */
+  private ctx: BaseAudioContext | null = null;
   private isInitialized = false;
 
   // Master bus nodes
@@ -481,6 +490,31 @@ class AudioEngine {
    */
   private readonly soundingHats = new Map<string, SoundingHat[]>();
 
+  /**
+   * The bound context, narrowed to a realtime one, or null.
+   *
+   * This is the ONE place the widened field is narrowed back.
+   *
+   * The test is `startRendering`, not `resume` or `state`: in the Web Audio
+   * spec `state`, `resume()` and `suspend()` are all on `BaseAudioContext` and
+   * on `OfflineAudioContext` — only `close()` and `startRendering()` are not
+   * shared — so an offline render context PASSES a `'resume' in ctx` check and
+   * would then arm the idle timer and reach an argument-less `suspend()` that
+   * `OfflineAudioContext` rejects with "1 argument required, but only 0
+   * present". `startRendering()` is the offline-only member, so its presence is
+   * what answers the question this method actually asks.
+   *
+   * Duck-typed rather than `instanceof AudioContext`: that global does not
+   * exist under `bun test`. `src/audio/testFakes.ts`'s fake context implements
+   * neither member, which keeps it on the realtime side — deliberately, because
+   * the engine suite's idle-suspend tests drive resume()/suspend() through it.
+   */
+  private realtimeCtx(): AudioContext | null {
+    const ctx = this.ctx;
+    if (!ctx || 'startRendering' in ctx) return null;
+    return ctx as AudioContext;
+  }
+
   async init(): Promise<void> {
     if (!this.ctx) {
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -489,9 +523,10 @@ class AudioEngine {
       this.createClickBuffers();
     }
 
-    if (this.ctx.state === 'suspended') {
+    const ctx = this.realtimeCtx();
+    if (ctx?.state === 'suspended') {
       try {
-        await this.ctx.resume();
+        await ctx.resume();
         this.rearmVoiceTeardowns();
         // This resume already happened, whoever it was for — a stale true
         // here would make the next wakeIfIdle() redundantly resume() and
@@ -503,6 +538,23 @@ class AudioEngine {
     }
     this.markActivity();
     this.isInitialized = true;
+  }
+
+  /**
+   * Binds an already-constructed context and builds the master chain on it.
+   *
+   * The seam an offline render comes through: `init()` creates a realtime
+   * context and is untouched, while a render engine binds the caller's
+   * `OfflineAudioContext` with this. Public rather than private because the
+   * module-level `createRenderEngine` is not a member of the class, and
+   * `setupMasterChain` stays private — this is the one door to it.
+   *
+   * A render engine is never stored in the singleton, never reaches
+   * engineSync.ts, and never outlives its `startRendering()` call.
+   */
+  bindContext(ctx: BaseAudioContext): void {
+    this.ctx = ctx;
+    this.setupMasterChain();
   }
 
   /**
@@ -604,11 +656,12 @@ class AudioEngine {
 
   /** Suspend if and only if shouldSuspendWhenIdle agrees. */
   private maybeSuspendNow(): void {
-    if (!this.ctx) return;
+    const ctx = this.realtimeCtx();
+    if (!ctx) return;
     const ok = shouldSuspendWhenIdle({
       clockListenerCount: this.clockListeners.size,
       liveVoiceCount: this.liveVoiceCount(),
-      contextState: this.ctx.state,
+      contextState: ctx.state,
     });
     if (!ok) {
       // Something is still running: re-arm rather than giving up for the
@@ -618,7 +671,7 @@ class AudioEngine {
       return;
     }
     try {
-      const suspending = Promise.resolve(this.ctx.suspend());
+      const suspending = Promise.resolve(ctx.suspend());
       // Set true only once suspend() has actually been issued without
       // throwing synchronously — otherwise wakeIfIdle would believe there is
       // a suspend of ITS OWN to resume that never actually started.
@@ -640,7 +693,14 @@ class AudioEngine {
    * Safe before init() and safe to call on every pointer event.
    */
   wakeIfIdle(): void {
-    if (!this.ctx) return;
+    // An offline render engine has no idle lifecycle. There is nothing to
+    // resume, the wall clock plays no part in a render, and arming
+    // markActivity's setTimeout here would keep a `bun test` process alive
+    // for IDLE_SUSPEND_MS after every render test. triggerDrum and
+    // triggerSynthNoteOn both reach this on every event, so the guard is on
+    // the hot path for renders, not a rare branch.
+    const ctx = this.realtimeCtx();
+    if (!ctx) return;
     if (!this.suspendedForIdle) {
       // Nothing of ours to resume, but the gesture is still activity: without
       // this, an ordinary click on a context that was never idle-suspended
@@ -649,7 +709,7 @@ class AudioEngine {
       this.markActivity();
       return;
     }
-    void Promise.resolve(this.ctx.resume())
+    void Promise.resolve(ctx.resume())
       .then(() => {
         this.suspendedForIdle = false;
       })
@@ -1337,21 +1397,26 @@ class AudioEngine {
     // make this a no-op on every voice that was released normally — see
     // teardownVoiceNodes, which clears this timer on every real teardown path.
     const voiceKey = `${source}:${noteName}`;
-    voice.lifetimeGuardTimer = setTimeout(() => {
-      if (this.activeVoices.get(voiceKey) !== voice) return;
-      if (voice.releaseScheduledAt !== undefined) return;
-      if (!this.ctx) return;
-      const releasedAt = this.ctx.currentTime;
-      // Same requirement as stealOldestVoice below: releaseVoice() does not
-      // set releaseScheduledAt itself, and this voice is still in
-      // sourceVoices. Leaving it undefined would keep it reshapeable through
-      // its 0.05 s release tail, so a knob move or new note-on landing in
-      // that window re-targets it toward sustain right as teardown stops the
-      // oscillator — an audible click on a voice that is meant to be dying.
-      voice.releaseScheduledAt = releasedAt;
-      voice.releaseTime = 0.05;
-      this.releaseVoice(voice, 0.05, releasedAt);
-    }, this.maxVoiceLifetimeMs);
+    // Offline, every voice gets an explicit release at schedule time, so the
+    // guard can never fire — and arming it anyway would leave thousands of
+    // pending wall-clock timers alive past the end of the render.
+    if (this.realtimeCtx()) {
+      voice.lifetimeGuardTimer = setTimeout(() => {
+        if (this.activeVoices.get(voiceKey) !== voice) return;
+        if (voice.releaseScheduledAt !== undefined) return;
+        if (!this.ctx) return;
+        const releasedAt = this.ctx.currentTime;
+        // Same requirement as stealOldestVoice below: releaseVoice() does not
+        // set releaseScheduledAt itself, and this voice is still in
+        // sourceVoices. Leaving it undefined would keep it reshapeable through
+        // its 0.05 s release tail, so a knob move or new note-on landing in
+        // that window re-targets it toward sustain right as teardown stops the
+        // oscillator — an audible click on a voice that is meant to be dying.
+        voice.releaseScheduledAt = releasedAt;
+        voice.releaseTime = 0.05;
+        this.releaseVoice(voice, 0.05, releasedAt);
+      }, this.maxVoiceLifetimeMs);
+    }
 
     if (voicesOfSource.size > this.maxVoicesPerSource) {
       this.stealOldestVoice(voicesOfSource, voice, now);
@@ -1473,12 +1538,10 @@ class AudioEngine {
     const alreadyFading = voice.ampReleaseAt !== undefined && voice.ampReleaseAt < now;
     // Computed up front (outside the try below) because a throw partway
     // through AudioParam scheduling must never leave the voice without a
-    // teardown timer — these values are pure arithmetic and cannot throw,
-    // so the `finally` block can always use them to schedule teardown.
+    // teardown plan — these values are pure arithmetic and cannot throw,
+    // so the `finally` block can always use them.
     const filterRelease = Math.max(0.01, voice.filterRelease);
     const teardownAt = this.plannedTeardownAt(releaseTime, now);
-    const teardownDelayMs =
-      (teardownAt - now + Math.max(0, now - this.ctx.currentTime)) * 1000;
 
     try {
       // The release has to begin at the value the envelope ACTUALLY has at
@@ -1517,21 +1580,35 @@ class AudioEngine {
       voice.filter.frequency.exponentialRampToValueAtTime(clampCutoff(voice.filterCutoff), now + filterRelease);
     } catch {
       // ignore — scheduling failed partway through, but the voice still gets
-      // torn down below via the `finally` so it can never hang forever.
+      // a realtime teardown or offline audio-clock stop in `finally`.
     } finally {
-      // The old timer is cleared and the replacement is scheduled together,
-      // right here, so a throw above can never leave the voice with no
-      // teardown timer at all (it would otherwise stay in `activeVoices`/
-      // `sourceVoices` forever and the same-note dedup at the top of
-      // `triggerSynthNoteOn` would refuse to release it again).
       voice.ampReleaseAt = now;
-      // Recorded on the AUDIO clock as well as armed on the wall clock:
-      // rearmVoiceTeardowns() re-derives the delay from this after any resume,
-      // because currentTime freezes while the context is suspended and the
-      // wall-clock timer does not.
       voice.teardownAt = teardownAt;
       if (voice.teardownTimer !== undefined) clearTimeout(voice.teardownTimer);
-      voice.teardownTimer = setTimeout(() => this.finishVoiceTeardown(voice), teardownDelayMs);
+      if (this.realtimeCtx()) {
+        // Realtime contexts need a wall-clock cleanup after the audio-clock
+        // release. rearmVoiceTeardowns() re-derives this delay after suspend,
+        // because currentTime freezes while the wall clock does not.
+        const teardownDelayMs =
+          (teardownAt - now + Math.max(0, now - this.ctx.currentTime)) * 1000;
+        voice.teardownTimer = setTimeout(() => this.finishVoiceTeardown(voice), teardownDelayMs);
+      } else {
+        // An OfflineAudioContext may render slower than wall time. A timer can
+        // therefore disconnect a scheduled voice before the offline timeline
+        // reaches it — synth buses disappear while drum one-shots survive.
+        // Stop sources on the AUDIO clock and keep the graph connected until
+        // the throwaway context is discarded after rendering.
+        voice.teardownTimer = undefined;
+        voice.oscs.forEach((osc) => {
+          try { osc.stop(teardownAt); } catch { /* already stopped */ }
+        });
+        if (voice.lfo) {
+          try { voice.lfo.stop(teardownAt); } catch { /* already stopped */ }
+        }
+        if (voice.noise) {
+          try { voice.noise.stop(teardownAt); } catch { /* already stopped */ }
+        }
+      }
     }
   }
 
@@ -2140,12 +2217,12 @@ class AudioEngine {
   }
 
   /** Live drum-bus filter control (SequencerView "Drum Filter" card). */
-  setDrumFilter(cutoff: number, resonance: number, type: FilterType): void {
+  setDrumFilter(cutoff: number, resonance: number, type: FilterType, time?: number): void {
     this.drumFilterCutoff = cutoff;
     this.drumFilterResonance = resonance;
     this.drumFilterType = type;
     if (!this.ctx) return;
-    const now = this.ctx.currentTime;
+    const now = Math.max(time ?? this.ctx.currentTime, this.ctx.currentTime);
     for (const node of [this.drumBusFilter, this.drumSendFilter]) {
       if (!node) continue;
       node.frequency.setTargetAtTime(cutoff, now, 0.03);
@@ -2991,7 +3068,7 @@ class AudioEngine {
     }
   }
 
-  getAudioContext(): AudioContext | null {
+  getAudioContext(): BaseAudioContext | null {
     return this.ctx;
   }
 
@@ -3127,3 +3204,20 @@ class AudioEngine {
 export { STEPS_PER_BAR };
 
 export const audioEngine = new AudioEngine();
+
+/**
+ * A throwaway engine bound to a caller-supplied context, for offline renders.
+ *
+ * Replaces the `makeEngine() as any; engine.ctx = ctx; engine.setupMasterChain()`
+ * dance scripts/calibration/renderOffline.ts used to perform — the same three
+ * steps, through a supported door instead of a cast.
+ *
+ * The singleton above is deliberately NOT involved: a render must not disturb
+ * the session's engine, and the session's engine must not be audible in the
+ * render.
+ */
+export function createRenderEngine(ctx: BaseAudioContext): AudioEngine {
+  const engine = new AudioEngine();
+  engine.bindContext(ctx);
+  return engine;
+}
