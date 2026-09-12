@@ -77,6 +77,10 @@ shows it, never in a slice.
 2. `src/audio/` — never imports `store/` or `components/`; may import `data/`. Pure DSP + a
    single `audioEngine` singleton built on the **raw Web Audio API** (no Tone.js; `tonal` is used
    for theory only). All engine setters no-op until `init()` creates the `AudioContext`.
+   **One door on that singleton is deliberately open: `createRenderEngine(ctx)` returns a
+   throwaway engine bound to a caller-supplied context, which is how the offline mixdown render
+   (`src/audio/export/renderMixdown.ts`) works — it never touches `audioEngine`, and the snapshot
+   it renders is assembled by `store/mixdownSlice.ts`, because `src/audio/` may not read the store.**
 3. `src/store/` — never imports `components/`. One Zustand store composed from slices
    (`transport`, `musicContext`, `synth`, `chords`, `bass`, `sequencer`, `effects`, `ui`,
    `presets`, `loop`, `lead`, `project`), with `persist` (key `musibox_project_state_v1`, `partialize` +
