@@ -2,9 +2,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 
 import type { StoreApi } from 'zustand';
 import { audioEngine } from '../audio/engine';
 import { createChordsSlice } from './chordsSlice';
+import { createBassSlice } from './bassSlice';
+import { customBassSpans, customChordSpans } from './loop';
 import { presetById } from '../audio/presetRegistry';
 import { DEFAULT_BASS_PRESET_ID } from './initialState';
-import { BASS_PATTERNS } from '@/data/bassPatterns';
+import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
 import { deriveChordNotes } from '../utils/musicTheory';
 import type { SynthPresetItem } from '../data/synthPresets';
 import type { CustomChordProgressionItem } from '../types';
@@ -16,7 +18,7 @@ import {
   INITIAL_SYNTH_PARAMS,
 } from './initialState';
 import type { AppStore } from './types';
-import { getMeter, MAX_STEPS_PER_BAR } from '../utils/meter';
+import { getMeter, MAX_STEPS_PER_BAR, type MeterId } from '../utils/meter';
 
 // ---------------------------------------------------------------------------
 // Fake browser environment (bun has none of these globals). The store module
@@ -487,7 +489,20 @@ const NON_PERSISTED_KEYS = [
   'bassSynthParams',
   'chords',
   'sequencerTracks',
+  // A live top-level LeadSlice field with no partialize entry — the same
+  // leak guard as `chords` above, and the mistake this list already made once
+  // by swapping it for the custom-pattern keys instead of adding to them.
   'leadMelodySteps',
+  // Its FX twin, live for the same reason and unpersisted for the same
+  // reason: one melody lane carrying a guard and the other not is how the
+  // first omission went unnoticed.
+  'fxMelodySteps',
+  'customChordRhythm',
+  'customChordLoopLength',
+  'customChordHoldSteps',
+  'customBassPattern',
+  'customBassLoopLength',
+  'customBassHoldSteps',
 ];
 
 describe('persist partialize', () => {
@@ -537,6 +552,154 @@ describe('persist partialize', () => {
     expect('bpm' in stored.state).toBe(false);
     expect('loops' in stored.state).toBe(false);
     expect('effects' in stored.state).toBe(false);
+  });
+
+  // The four custom pattern fields are per-loop CONTENT, like `chords`, so a
+  // payload still carrying them — one written before loops moved to IndexedDB —
+  // must not resurrect them through the merge. This is the persistence half of
+  // the cross-boundary fixture: the lanes travel through the `.solna` body and
+  // the IndexedDB slot record, and nowhere else.
+  test('a stale payload carrying the custom pattern lanes is dropped whole', async () => {
+    const { useAppStore } = await getStore();
+    const initial = useAppStore.getInitialState();
+    const merge = useAppStore.persist.getOptions().merge!;
+
+    const chord = new Array<boolean>(2 * MAX_STEPS_PER_BAR).fill(false);
+    chord[0] = true;
+    chord[MAX_STEPS_PER_BAR] = true;
+    const bass = new Array<BassStepChoice>(4 * MAX_STEPS_PER_BAR).fill('rest');
+    bass[3 * MAX_STEPS_PER_BAR] = 'seventh';
+
+    const merged = merge(
+      {
+        loops: [{ id: 'loop-default-1', customChordRhythm: chord, customBassPattern: bass }],
+        customChordRhythm: chord,
+        customChordLoopLength: 2,
+        customChordHoldSteps: new Array<number>(2 * MAX_STEPS_PER_BAR).fill(12),
+        customBassPattern: bass,
+        customBassLoopLength: 4,
+        customBassHoldSteps: new Array<number>(4 * MAX_STEPS_PER_BAR).fill(12),
+      },
+      initial,
+    );
+
+    expect(merged.loops).toBe(initial.loops);
+    expect(merged.customChordRhythm).toBe(initial.customChordRhythm);
+    expect(merged.customChordLoopLength).toBe(initial.customChordLoopLength);
+    expect(merged.customChordHoldSteps).toBe(initial.customChordHoldSteps);
+    expect(merged.customBassPattern).toBe(initial.customBassPattern);
+    expect(merged.customBassLoopLength).toBe(initial.customBassLoopLength);
+    expect(merged.customBassHoldSteps).toBe(initial.customBassHoldSteps);
+  });
+});
+
+/**
+ * A chord + bass slice pair over ONE mutable state object, driven at a meter
+ * the test chooses.
+ *
+ * Built from the factories rather than the singleton for the same reason the
+ * octave test below is: earlier tests mutate the shared store, and these lanes
+ * have to be exercised in a NON-4/4 meter without disturbing the transport
+ * state the rest of this file reads. `set` applies each updater to the
+ * harness's own object, so both lanes resolve their bar length through
+ * `getMeter(state.meterId)` exactly as they do in the composed store.
+ */
+function customPatternLanes(meterId: MeterId) {
+  let state = {} as unknown as AppStore;
+  const set = ((partial: unknown) => {
+    const patch =
+      typeof partial === 'function'
+        ? (partial as (s: AppStore) => Partial<AppStore>)(state)
+        : (partial as Partial<AppStore>);
+    state = { ...state, ...patch } as unknown as AppStore;
+  }) as StoreApi<AppStore>['setState'];
+
+  const slice = { ...createChordsSlice(set), ...createBassSlice(set) };
+  state = { ...slice, meterId } as unknown as AppStore;
+  return { slice, state: () => state };
+}
+
+/**
+ * The cross-boundary fixture's meter: a twelve-column bar. The lanes store
+ * bar-major at `MAX_STEPS_PER_BAR`, so in this meter a visible column and its
+ * stored slot are never the same number above bar one.
+ */
+const THREE_FOUR = 12; // `METERS['3/4'].stepsPerBar`
+
+describe('the custom pattern lanes in a non-4/4 meter', () => {
+  // 3/4 is a twelve-step bar; storage is bar-major at MAX_STEPS_PER_BAR (24),
+  // so a column and its stored slot agree only in the widest meter.
+  test('a write lands on the STORED slot while the lane reads back active-meter columns', () => {
+    const lanes = customPatternLanes('3/4');
+    lanes.slice.setCustomChordLoopLength(2);
+
+    // Column 12 is bar two beat one of a 3/4 bar → stored slot 24.
+    lanes.slice.setCustomChordEvent(12, true);
+    lanes.slice.setCustomChordEventLength(12, 12);
+
+    const s = lanes.state();
+    expect(s.customChordRhythm).toHaveLength(2 * MAX_STEPS_PER_BAR);
+    expect(s.customChordRhythm[MAX_STEPS_PER_BAR]).toBe(true);
+    expect(s.customChordRhythm[12]).toBe(false);
+    expect(s.customChordHoldSteps[MAX_STEPS_PER_BAR]).toBe(THREE_FOUR);
+    expect(s.customChordHoldSteps[12]).toBe(1);
+
+    // The same lane is TWO bars wide to whoever plays it — 24 columns, not the
+    // 48 stored slots — and the span the player reads is the stored one.
+    const spans = customChordSpans(s);
+    expect(spans.stepsPerBar).toBe(THREE_FOUR);
+    expect(spans.cycleSteps).toBe(2 * THREE_FOUR);
+    expect(spans.holds[MAX_STEPS_PER_BAR]).toBe(THREE_FOUR);
+  });
+
+  test('a span is capped by the folded chord boundary in the ACTIVE meter', () => {
+    const lanes = customPatternLanes('3/4');
+    lanes.slice.setCustomChordLoopLength(2);
+    lanes.slice.setCustomChordEvent(0, true);
+
+    // Four one-bar chords fold a boundary onto column 12 of a two-bar 3/4
+    // cycle, so two whole bars is twelve columns, not twenty-four steps.
+    lanes.slice.setCustomChordEventLength(0, 24);
+
+    const s = lanes.state();
+    expect(s.customChordHoldSteps[0]).toBe(THREE_FOUR);
+    // The span stops short of the next bar's onset rather than swallowing it.
+    expect(s.customChordRhythm[0]).toBe(true);
+  });
+
+  test('each lane’s cycle is its own divisor of the progression', () => {
+    const lanes = customPatternLanes('3/4');
+    lanes.slice.setCustomChordLoopLength(2);
+    lanes.slice.setCustomBassLoopLength(4);
+
+    const s = lanes.state();
+    expect(s.customChordLoopLength).toBe(2);
+    expect(s.customBassLoopLength).toBe(4);
+    expect(s.customChordRhythm).toHaveLength(2 * MAX_STEPS_PER_BAR);
+    expect(s.customBassPattern).toHaveLength(4 * MAX_STEPS_PER_BAR);
+    expect(customBassSpans(s).cycleSteps).toBe(4 * THREE_FOUR);
+
+    // The bass lane's four bars do not move when the chord lane is resized.
+    lanes.slice.setCustomChordLoopLength(4);
+    expect(lanes.state().customBassLoopLength).toBe(4);
+
+    // A length the progression cannot divide repeats unevenly, so it lowers to
+    // the largest divisor at or below it: 3 bars over four one-bar chords → 2.
+    lanes.slice.setCustomChordLoopLength(3);
+    expect(lanes.state().customChordLoopLength).toBe(2);
+  });
+
+  test('the bass lane writes stored slots too, and keeps its own holds', () => {
+    const lanes = customPatternLanes('3/4');
+    lanes.slice.setCustomBassLoopLength(4);
+
+    lanes.slice.setCustomBassEvent(12, 'fifth');
+    lanes.slice.setCustomBassEventLength(12, THREE_FOUR);
+
+    const s = lanes.state();
+    expect(s.customBassPattern[MAX_STEPS_PER_BAR]).toBe('fifth');
+    expect(s.customBassPattern[12]).toBe('rest');
+    expect(s.customBassHoldSteps[MAX_STEPS_PER_BAR]).toBe(THREE_FOUR);
   });
 });
 

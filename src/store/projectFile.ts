@@ -48,10 +48,11 @@ const malformed = (): ProjectParseResult => ({ ok: false, error: 'malformed', me
  */
 export function sanitizeContent(raw: unknown): ProjectContent {
   const c = isPlainObject(raw) ? raw : {};
-  const loops = sanitizeLoops(c.loops) ?? [createDefaultLoop()];
+  const meterId = isMeterId(c.meterId) ? c.meterId : DEFAULT_METER_ID;
+  const loops = sanitizeLoops(c.loops, meterId) ?? [createDefaultLoop()];
   return {
     bpm: clampFinite(c.bpm, 20, 300, 120),
-    meterId: isMeterId(c.meterId) ? c.meterId : DEFAULT_METER_ID,
+    meterId,
     masterVolume: asFaderDb(c.masterVolume),
     effects: sanitizeEffectsValue(c.effects) as MasterEffects,
     loops: loops.map(pickLoopContent),

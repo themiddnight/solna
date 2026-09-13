@@ -15,8 +15,9 @@ import { loopLabel, loopStatePatch } from './loop';
 import { SCOPE_NONE } from './playbackScope';
 import { defaultPadState, INITIAL_EFFECTS } from './initialState';
 import { DEFAULT_BPM } from './transportSlice';
-import { DEFAULT_METER_ID } from '../utils/meter';
+import { DEFAULT_METER_ID, MAX_STEPS_PER_BAR } from '../utils/meter';
 import { gainToDb, toLinearGain } from '../utils/gainUnits';
+import type { ChordItem } from '../types';
 
 /**
  * Every vibe, resolved once. Most of this file asserts on spec fields, which a
@@ -279,6 +280,63 @@ describe('vibe preset id resolution', () => {
     expect(state.chordSynthParams.preset).toBe(presetById(synthwave.chordPresetId)!.name);
     expect(state.bassSynthParams.preset).toBe(presetById(synthwave.bassPresetId)!.name);
     useAppStore.getState().hardStopAll();
+  });
+});
+
+/**
+ * A vibe replaces the whole progression, and a custom pattern's cycle is
+ * defined against that progression — so applying one has to re-clamp both
+ * custom lanes' loop lengths and holds in the same write. It is an AUTOMATIC
+ * clamp, not an explicit selection: the length moves to the nearest divisor of
+ * the new bar count and the arrays are left at their stored width, exactly as
+ * Lead/FX leave the bars a shorter cycle can no longer reach.
+ */
+describe('applyVibeToStore re-clamps the custom pattern lanes', () => {
+  beforeEach(resetStore);
+  afterEach(resetStore);
+
+  // Three bars, so 4/4's divisors are 1 and 3 rather than the factory's 1, 2, 4.
+  const THREE_BAR_CHORDS: ChordItem[] = [
+    { id: 'c1', root: 'A', quality: 'min7', bars: 2, notes: ['A3', 'C4', 'E4', 'G4'] },
+    { id: 'c2', root: 'F', quality: 'maj7', bars: 1, notes: ['F3', 'A3', 'C4', 'E4'] },
+  ];
+
+  test('the new progression lowers the dormant cycle without deleting its bars', () => {
+    useAppStore.setState({ meterId: '4/4' });
+    useAppStore.getState().setChords(THREE_BAR_CHORDS);
+    useAppStore.getState().setCustomChordLoopLength(3);
+    useAppStore.getState().setCustomBassLoopLength(3);
+    useAppStore.getState().setCustomChordEvent(32, true); // bar three, offset 0
+    useAppStore.getState().setCustomBassEvent(0, 'root');
+
+    applyVibeToStore(RESOLVED_VIBES[0]); // four one-bar chords
+
+    const s = useAppStore.getState();
+    expect(s.chordRhythmMode).toBe('preset');
+    expect(s.bassPatternMode).toBe('preset');
+    // 3 is not a divisor of 4, so both cycles lower to 2...
+    expect(s.customChordLoopLength).toBe(2);
+    expect(s.customBassLoopLength).toBe(2);
+    // ...and the third bar survives: the dormant onset is still stored, so
+    // raising the length again brings it back instead of losing the work.
+    expect(s.customChordRhythm).toHaveLength(3 * MAX_STEPS_PER_BAR);
+    expect(s.customChordRhythm[2 * MAX_STEPS_PER_BAR]).toBe(true);
+    expect(s.customBassPattern).toHaveLength(3 * MAX_STEPS_PER_BAR);
+    expect(s.customBassPattern[0]).toBe('root');
+  });
+
+  test('a cycle the new progression can still divide is left alone', () => {
+    useAppStore.setState({ meterId: '4/4' });
+    useAppStore.getState().setCustomChordLoopLength(2);
+    useAppStore.getState().setCustomChordEvent(16, true); // bar two, offset 0
+    useAppStore.getState().setCustomBassLoopLength(4);
+
+    applyVibeToStore(RESOLVED_VIBES[0]); // four bars, so 2 and 4 both still divide
+
+    const s = useAppStore.getState();
+    expect(s.customChordLoopLength).toBe(2);
+    expect(s.customBassLoopLength).toBe(4);
+    expect(s.customChordRhythm[MAX_STEPS_PER_BAR]).toBe(true);
   });
 });
 

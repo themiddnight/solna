@@ -2,6 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { asLeadNoteMatrix, clampFinite, sanitizeEffectsValue, sanitizeLoops, sanitizeSynthParams } from './sanitize';
 import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
 import { createDefaultLoop } from './loopSlice';
+import type { BassStepChoice } from '@/data/bassPatterns';
+import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { MAX_CUSTOM_PATTERN_BARS } from './loop';
+import type { ChordItem } from '../types';
 
 describe('sanitize (shared by persist hydration and project import)', () => {
   test('clampFinite rejects NaN, strings and out-of-range numbers', () => {
@@ -200,6 +204,17 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
     ['a chord with zero bars', 'chords', [{ id: 'c', root: 'A', quality: 'min', bars: 0, notes: ['A3'] }]],
     ['customChordRhythm of strings', 'customChordRhythm', ['on', 'off']],
     ['customBassPattern outside the union', 'customBassPattern', ['root', 'ninth']],
+    // A hold is a finite positive integer, so a zero, a negative, a fraction or
+    // a string is invalid INPUT — and the whole array falls back rather than
+    // repairing element by element, so one bad slot cannot leave a lane whose
+    // holds no longer line up with its values.
+    ['customChordHoldSteps with a zero', 'customChordHoldSteps', [1, 0]],
+    ['customChordHoldSteps with a negative', 'customChordHoldSteps', [1, -4]],
+    ['customBassHoldSteps with a fraction', 'customBassHoldSteps', [1, 1.5]],
+    ['customBassHoldSteps of strings', 'customBassHoldSteps', ['one', 'two']],
+    ['customChordHoldSteps that is not an array', 'customChordHoldSteps', 'ones'],
+    ['customChordLoopLength of zero', 'customChordLoopLength', 0],
+    ['customBassLoopLength of a string', 'customBassLoopLength', 'two'],
     ['leadMelodySteps that is not a matrix', 'leadMelodySteps', ['C4', 'D4']],
     ['leadMelodySteps of numbers', 'leadMelodySteps', [[60], [62]]],
   ];
@@ -239,10 +254,178 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
 
   test('valid elements are kept as they are', () => {
     const loop = createDefaultLoop();
-    const [out] = sanitizeLoops([{ ...loop, customBassPattern: ['rest', 'root', 'octave'] }]) ?? [];
+    const bass: BassStepChoice[] = new Array<BassStepChoice>(MAX_STEPS_PER_BAR).fill('rest');
+    bass[0] = 'rest';
+    bass[1] = 'root';
+    bass[2] = 'octave';
+    const [out] = sanitizeLoops([{ ...loop, customBassPattern: bass }]) ?? [];
     expect(out.chords).toEqual(loop.chords);
     expect(out.sequencerTracks).toEqual(loop.sequencerTracks);
-    expect(out.customBassPattern).toEqual(['rest', 'root', 'octave']);
+    expect(out.customBassPattern).toEqual(bass);
+  });
+
+  test('a short value array is padded out to the lane width, not left ragged', () => {
+    // The lane's arrays are always exactly `loopLength * MAX_STEPS_PER_BAR`
+    // long, in the storage space every consumer indexes bar-major. A short
+    // array from a hand-edited file would otherwise leave the tail undefined.
+    const [out] = sanitizeLoops([
+      { ...createDefaultLoop(), customBassPattern: ['rest', 'root', 'octave'] },
+    ]) ?? [];
+    expect(out.customBassPattern).toHaveLength(MAX_STEPS_PER_BAR);
+    expect(out.customBassPattern.slice(0, 3)).toEqual(['rest', 'root', 'octave']);
+    expect(out.customBassPattern.slice(3).every((v) => v === 'rest')).toBe(true);
+  });
+});
+
+// The four keys this feature adds, on the read path. There is no version-gated
+// upgrade: a body written before the keys existed simply lacks them, and every
+// missing key takes its default through the same validation every other key
+// goes through.
+describe('sanitizeLoops validates the custom pattern spans without a migration gate', () => {
+  const threeBarChords = (): ChordItem[] => [
+    { id: 'c1', root: 'A', quality: 'min7', bars: 2, notes: ['A3', 'C4', 'E4', 'G4'] },
+    { id: 'c2', root: 'F', quality: 'maj7', bars: 1, notes: ['F3', 'A3', 'C4', 'E4'] },
+  ];
+
+  const bareLoop = (): Record<string, unknown> => {
+    const bare = { ...createDefaultLoop() } as unknown as Record<string, unknown>;
+    delete bare.customChordLoopLength;
+    delete bare.customChordHoldSteps;
+    delete bare.customBassLoopLength;
+    delete bare.customBassHoldSteps;
+    return bare;
+  };
+
+  test('a body with no custom pattern keys reads back at one bar of one-step holds', () => {
+    const [out] = sanitizeLoops([bareLoop()]) ?? [];
+    expect(out.customChordLoopLength).toBe(1);
+    expect(out.customChordHoldSteps).toEqual(new Array<number>(MAX_STEPS_PER_BAR).fill(1));
+    expect(out.customBassLoopLength).toBe(1);
+    expect(out.customBassHoldSteps).toEqual(new Array<number>(MAX_STEPS_PER_BAR).fill(1));
+  });
+
+  test('the old shape keeps its onsets and defaults every hold to one step', () => {
+    const old = new Array<boolean>(MAX_STEPS_PER_BAR).fill(false);
+    old[0] = true;
+    old[8] = true;
+    const [out] = sanitizeLoops([{ ...bareLoop(), customChordRhythm: old }]) ?? [];
+    expect(out.customChordRhythm[0]).toBe(true);
+    expect(out.customChordRhythm[8]).toBe(true);
+    expect(out.customChordHoldSteps[0]).toBe(1);
+    expect(out.customChordHoldSteps[8]).toBe(1);
+    expect(out.customChordRhythm).toHaveLength(MAX_STEPS_PER_BAR);
+  });
+
+  test('a valid hold array survives and an imported crossing hold clamps to the cycle', () => {
+    // Two 4/4 bars: the cycle is 32 visible columns even though storage keeps
+    // a 24-slot stride. The four one-bar chords fold a boundary onto column 16,
+    // so a hold reaching far past bar one is cut there —
+    // and an onset sitting on that boundary keeps its own legal length rather
+    // than being swallowed by the span before it.
+    const values = new Array<boolean>(MAX_STEPS_PER_BAR * 2).fill(false);
+    values[0] = true;
+    values[MAX_STEPS_PER_BAR] = true;
+    const holds = new Array<number>(MAX_STEPS_PER_BAR * 2).fill(1);
+    holds[0] = 99; // reaches far past the folded chord boundary at column 16
+    holds[MAX_STEPS_PER_BAR] = 4;
+    const [out] = sanitizeLoops([
+      {
+        ...createDefaultLoop(),
+        customChordLoopLength: 2,
+        customChordRhythm: values,
+        customChordHoldSteps: holds,
+      },
+    ]) ?? [];
+    expect(out.customChordHoldSteps[0]).toBe(16);
+    expect(out.customChordHoldSteps[MAX_STEPS_PER_BAR]).toBe(4);
+  });
+
+  test('an imported span deletes the onsets it covers, deterministically', () => {
+    const values = new Array<boolean>(MAX_STEPS_PER_BAR).fill(false);
+    values[0] = true;
+    values[4] = true;
+    const holds = new Array<number>(MAX_STEPS_PER_BAR).fill(1);
+    holds[0] = 8;
+    const [out] = sanitizeLoops([
+      { ...createDefaultLoop(), customChordRhythm: values, customChordHoldSteps: holds },
+    ]) ?? [];
+    expect(out.customChordRhythm[0]).toBe(true);
+    expect(out.customChordHoldSteps[0]).toBe(8);
+    expect(out.customChordRhythm[4]).toBe(false);
+    expect(out.customChordHoldSteps[4]).toBe(1);
+  });
+
+  test('the loop length clamps to a divisor of the progression and resizes the arrays', () => {
+    // Four one-bar chords: 3 is not a cycle they repeat evenly, so the cycle
+    // lowers to 2 and both arrays come back two bars wide.
+    const [out] = sanitizeLoops([{ ...createDefaultLoop(), customChordLoopLength: 3 }]) ?? [];
+    expect(out.customChordLoopLength).toBe(2);
+    expect(out.customChordRhythm).toHaveLength(2 * MAX_STEPS_PER_BAR);
+    expect(out.customChordHoldSteps).toHaveLength(2 * MAX_STEPS_PER_BAR);
+  });
+
+  test('a longer length is kept when the progression can divide it', () => {
+    const [out] = sanitizeLoops([
+      {
+        ...createDefaultLoop(),
+        chords: threeBarChords(),
+        customBassLoopLength: 3,
+      },
+    ]) ?? [];
+    expect(out.customBassLoopLength).toBe(3);
+    expect(out.customBassPattern).toHaveLength(3 * MAX_STEPS_PER_BAR);
+  });
+});
+
+// The two read-time rules the store-schema review turned up, both about what an
+// UNTRUSTED body can make this path do: widen the arrays under a dormant bar,
+// or size an allocation no project could hold.
+describe('sanitizeLoops keeps the custom pattern lanes dormant-safe and bounded', () => {
+  test('a lane stored wider than its clamped cycle keeps its dormant bars', () => {
+    // Three stored bars under a two-bar cycle — the shape a save leaves behind
+    // after setChords lowered the length. Reading it back is not the gesture
+    // that gets to delete the third bar: raising the length again is what
+    // brings its onsets back, and that promise has to survive save -> load.
+    const values = new Array<boolean>(MAX_STEPS_PER_BAR * 3).fill(false);
+    values[2 * MAX_STEPS_PER_BAR] = true;
+    const holds = new Array<number>(MAX_STEPS_PER_BAR * 3).fill(1);
+    const [out] = sanitizeLoops([
+      {
+        ...createDefaultLoop(),
+        customChordLoopLength: 2,
+        customChordRhythm: values,
+        customChordHoldSteps: holds,
+      },
+    ]) ?? [];
+    expect(out.customChordLoopLength).toBe(2);
+    expect(out.customChordRhythm).toHaveLength(3 * MAX_STEPS_PER_BAR);
+    expect(out.customChordRhythm[2 * MAX_STEPS_PER_BAR]).toBe(true);
+    expect(out.customChordHoldSteps).toHaveLength(3 * MAX_STEPS_PER_BAR);
+  });
+
+  test('a crafted bar count sanitizes to a bounded cycle without throwing', () => {
+    // Both inputs are accepted by their own validators — a positive integer
+    // loop length, a finite positive `bars` — and their product is the lane's
+    // width, so without a ceiling this body asks for ~2.4e10 slots. Treated as
+    // an ordinary input: the cycle comes back as a real divisor at the ceiling
+    // and the arrays are that cycle wide, not the crafted number.
+    const [out] = sanitizeLoops([
+      {
+        ...createDefaultLoop(),
+        chords: [{ id: 'c', root: 'A', quality: 'min', bars: 1e9, notes: ['A3'] }],
+        customChordLoopLength: 1e9,
+        customBassLoopLength: 1e9,
+      },
+    ]) ?? [];
+    expect(out.customChordLoopLength).toBe(MAX_CUSTOM_PATTERN_BARS);
+    expect(out.customChordRhythm).toHaveLength(MAX_CUSTOM_PATTERN_BARS * MAX_STEPS_PER_BAR);
+    expect(out.customChordHoldSteps).toHaveLength(MAX_CUSTOM_PATTERN_BARS * MAX_STEPS_PER_BAR);
+    expect(out.customBassLoopLength).toBe(MAX_CUSTOM_PATTERN_BARS);
+    expect(out.customBassPattern).toHaveLength(MAX_CUSTOM_PATTERN_BARS * MAX_STEPS_PER_BAR);
+    // Every hold survived the arithmetic as a real hold, not as a NaN the pad
+    // path would have produced from a non-finite width.
+    expect(out.customChordHoldSteps.every((hold) => Number.isInteger(hold) && hold >= 1)).toBe(true);
+    expect(out.customBassHoldSteps.every((hold) => Number.isInteger(hold) && hold >= 1)).toBe(true);
   });
 });
 

@@ -80,6 +80,13 @@ describe('buildMixdownSnapshot', () => {
         resonance: 1,
         type: 'lowpass',
       });
+      // The renderer resolves each lane's cycle from the SNAPSHOT, so the
+      // custom pattern's own length and holds must survive the store boundary
+      // — src/audio/ may not reach back into the store for them.
+      expect(snapshot.loops[0].customChordLoopLength).toBe(loop.customChordLoopLength);
+      expect(snapshot.loops[0].customChordHoldSteps).toEqual(loop.customChordHoldSteps);
+      expect(snapshot.loops[0].customBassLoopLength).toBe(loop.customBassLoopLength);
+      expect(snapshot.loops[0].customBassHoldSteps).toEqual(loop.customBassHoldSteps);
     } finally {
       useAppStore.setState({
         loops: before.loops,

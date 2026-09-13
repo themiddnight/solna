@@ -6,6 +6,7 @@ import { unknownLibraryReferences } from './projectFile';
 import { buildProjectContent, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
 import { DEFAULT_LOOP_ID, createDefaultLoop } from './loopSlice';
 import { LOOP_FLAT_KEYS } from './loop';
+import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import type { AppStore } from './types';
 
 class FakeLocalStorage {
@@ -163,6 +164,45 @@ describe('loadProject (boot)', () => {
     useAppStore.setState({ activeLoopId: 'loop-from-a-previous-project' });
     await slice.loadProject();
     expect(useAppStore.getState().activeLoopId).toBe(useAppStore.getState().loops[0].id);
+  });
+});
+
+// Split out of the boot describe above: it is the same install, but the four
+// custom-pattern keys reach BOTH homes at once — the flat slices the engine
+// reads and the loop those slices mirror — which is worth its own failure name
+// when the mirroring set's generic key list ever stops carrying one of them.
+describe('loadProject (boot) — the custom pattern spans', () => {
+  test('install into loops[] and the flat slices together', async () => {
+    const values = new Array<boolean>(MAX_STEPS_PER_BAR * 2).fill(false);
+    values[0] = true;
+    const holds = new Array<number>(MAX_STEPS_PER_BAR * 2).fill(1);
+    holds[0] = 3;
+    const p = stored('Spans', 110);
+    p.content.loops = [
+      {
+        ...createDefaultLoop(),
+        id: DEFAULT_LOOP_ID,
+        customChordLoopLength: 2,
+        customChordRhythm: values,
+        customChordHoldSteps: holds,
+        customBassLoopLength: 2,
+      },
+    ];
+
+    const { useAppStore, slice } = await sliceWithBackend(p);
+    await slice.loadProject();
+
+    const s = useAppStore.getState();
+    // Into the flat slices the engine reads...
+    expect(s.customChordLoopLength).toBe(2);
+    expect(s.customChordRhythm).toHaveLength(MAX_STEPS_PER_BAR * 2);
+    expect(s.customChordHoldSteps[0]).toBe(3);
+    expect(s.customBassLoopLength).toBe(2);
+    expect(s.customBassHoldSteps).toHaveLength(MAX_STEPS_PER_BAR * 2);
+    // ...and into the loop those slices mirror, in the same install.
+    expect(s.loops[0].customChordLoopLength).toBe(2);
+    expect(s.loops[0].customChordHoldSteps[0]).toBe(3);
+    expect(s.loops[0].customBassLoopLength).toBe(2);
   });
 });
 

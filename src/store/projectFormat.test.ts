@@ -14,6 +14,7 @@ import { parseProjectFile } from './projectFile';
 import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
 import { LOOP_FLAT_KEYS } from './loop';
 import { createDefaultLoop } from './loopSlice';
+import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import { INITIAL_EFFECTS } from './initialState';
 import { DEFAULT_BPM } from './transportSlice';
 import type { Loop } from './types';
@@ -96,6 +97,34 @@ describe('applyProjectContent (the reset rules)', () => {
     const patch = applyProjectContent(buildProjectContent(liveState as never)) as unknown as Record<string, unknown>;
     expect('focusTrack' in patch).toBe(false);
     expect('metronomeActive' in patch).toBe(false);
+  });
+});
+
+// The custom chord and bass spans are loop CONTENT: they belong in a saved
+// body, in the dirty fingerprint, and in the flat patch an install writes.
+describe('the custom pattern spans are project content', () => {
+  test('factory content carries all four keys', () => {
+    const loop = factoryProjectContent().loops[0];
+    expect(loop.customChordLoopLength).toBe(1);
+    expect(loop.customChordHoldSteps).toHaveLength(MAX_STEPS_PER_BAR);
+    expect(loop.customBassLoopLength).toBe(1);
+    expect(loop.customBassHoldSteps).toHaveLength(MAX_STEPS_PER_BAR);
+  });
+
+  test('applyProjectContent installs them into the flat patch with the rest of the loop', () => {
+    const loop: Loop = {
+      ...createDefaultLoop(),
+      id: 'loop-spans',
+      customChordLoopLength: 2,
+      customBassLoopLength: 2,
+    };
+    const patch = applyProjectContent(
+      buildProjectContent({ ...liveState, loops: [loop] } as never),
+    ) as unknown as Record<string, unknown>;
+    expect(patch.customChordLoopLength).toBe(2);
+    expect(patch.customBassLoopLength).toBe(2);
+    expect(patch.customChordHoldSteps).toEqual(loop.customChordHoldSteps);
+    expect(patch.customBassHoldSteps).toEqual(loop.customBassHoldSteps);
   });
 });
 

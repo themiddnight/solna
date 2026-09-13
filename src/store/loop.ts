@@ -1,3 +1,19 @@
+import {
+  isVisiblePatternColumn,
+  normalizePatternSpans,
+  resizePatternBars,
+  writePatternSpan,
+  type PatternSpans,
+  type PatternSpansResult,
+} from '@/utils/customPattern';
+import { getMeter } from '@/utils/meter';
+import {
+  clampLoopLength,
+  foldPatternBoundaries,
+  patternStoredIndexAt,
+} from '@/utils/patternTimeline';
+import type { BassStepChoice } from '../data/bassPatterns';
+import type { ChordItem } from '../types';
 import type { Loop, LoopStatePatch } from './types';
 
 /** Every per-loop persisted field, in one source of truth. */
@@ -11,11 +27,15 @@ export const LOOP_FLAT_KEYS = [
   'chordRhythmId',
   'chordRhythmMode',
   'customChordRhythm',
+  'customChordLoopLength',
+  'customChordHoldSteps',
   'chordFeel',
   'chordOctave',
   'bassPatternId',
   'bassPatternMode',
   'customBassPattern',
+  'customBassLoopLength',
+  'customBassHoldSteps',
   'bassFeel',
   'bassOctave',
   'padSynthParams',
@@ -59,6 +79,271 @@ export const LOOP_FLAT_KEYS = [
 /** Loop ids are new and unique per project (same style as presetsSlice). */
 export function newLoopId(): string {
   return `loop-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+}
+
+/**
+ * The most bars a custom pattern's cycle may span — and, because a lane's width
+ * is `loopLength * MAX_STEPS_PER_BAR`, the most stored slots either lane may
+ * hold. Set at four times the longest factory progression (16 bars).
+ *
+ * It guards the READ path, and it is one choke point rather than a check per
+ * arithmetic site. Both inputs it bounds arrive from an untrusted `.solna`
+ * body: `customChordLoopLength` is only checked to be a positive integer, and a
+ * chord's `bars` only to be finite and positive — so a crafted body claiming
+ * 1e9 bars makes the divisor clamp return 1e9 and asks the sanitizer to
+ * allocate 2.4e10 slots. `progressionBars` caps the bar count, and every width
+ * in this file is that number times `MAX_STEPS_PER_BAR`, so capping it there
+ * bounds all of them at once. The live setters read the same function, so the
+ * two paths cannot disagree about what a legal cycle is.
+ */
+export const MAX_CUSTOM_PATTERN_BARS = 64;
+
+/**
+ * The bar count a custom pattern's cycle is measured against: the sum of the
+ * progression's chord durations, floored at one and ceilinged at
+ * `MAX_CUSTOM_PATTERN_BARS`. Floored rather than trusted because a zero-bar
+ * total would make every divisor test degenerate and hand back a zero-length
+ * cycle; a chord whose `bars` is not finite contributes nothing, so a corrupt
+ * row cannot poison the sum with NaN.
+ */
+export function progressionBars(chords: readonly ChordItem[]): number {
+  let bars = 0;
+  for (const chord of chords) {
+    if (Number.isFinite(chord.bars)) bars += chord.bars;
+  }
+  return Math.min(MAX_CUSTOM_PATTERN_BARS, Math.max(1, bars));
+}
+
+/**
+ * The inputs a custom chord or bass span edit reads, in one object rather than
+ * six positional arguments: two of the six are `number`s and two more are
+ * arrays, so a positional call is one transposition away from a silent bug.
+ */
+export interface CustomPatternState<TValue> {
+  /** The onset/value array and its parallel holds, both `loopLength * MAX_STEPS_PER_BAR` long. */
+  readonly values: readonly TValue[];
+  readonly holds: readonly number[];
+  /** The progression the cycle folds its boundaries onto. */
+  readonly chords: readonly ChordItem[];
+  /** The lane's own cycle in bars. */
+  readonly loopLength: number;
+  /** The ACTIVE meter's bar length in 16th steps (`METERS[id].stepsPerBar`). */
+  readonly stepsPerBar: number;
+  /** The value a rest slot carries — the lane's own "nothing here". */
+  readonly empty: TValue;
+}
+
+/**
+ * The `PatternSpans` every custom chord and bass edit reads, derived in one
+ * place so the store's live setters and the read-time sanitizer can never
+ * disagree about where a chord boundary falls — the sanitizer passes the
+ * storage bar length, the setters the active meter's, and everything else
+ * about the map is shared.
+ *
+ * The boundary map is the whole substance: a pattern shorter than the
+ * progression repeats, so a chord end is folded onto the cycle with `%` by
+ * `foldPatternBoundaries` — a two-bar pattern under a one-plus-three-bar
+ * progression sees a boundary in the MIDDLE of every repetition, and that is
+ * the only stored length that is legal on every repetition.
+ *
+ * Durations are absolute 16th steps, never `ChordItem.bars` directly, so a
+ * later fractional-duration chord supplies its own step length without
+ * changing this contract (see the phase-1 spec's timeline model).
+ */
+export function customPatternSpans<TValue>(state: CustomPatternState<TValue>): PatternSpans<TValue> {
+  const cycleSteps = state.loopLength * state.stepsPerBar;
+  return {
+    values: state.values,
+    holds: state.holds,
+    stepsPerBar: state.stepsPerBar,
+    cycleSteps,
+    boundaries: foldPatternBoundaries(
+      state.chords.map((chord) => chord.bars * state.stepsPerBar),
+      cycleSteps,
+    ),
+    empty: state.empty,
+  };
+}
+
+/**
+ * Set the length of the span that STARTS at `column`, or null when no onset
+ * starts there. A drag handle only ever belongs to a block's head, but a
+ * column arriving from a stale pointer stream must not CREATE an onset — that
+ * is `setCustomChordEvent`'s job, and a length gesture that quietly wrote one
+ * would make a drag on empty space compose music.
+ *
+ * The requested length clamps at the next folded chord boundary and at the
+ * cycle end inside `writePatternSpan`, which also deletes every onset the span
+ * covers — the same one-lane non-overlap rule every custom edit goes through.
+ */
+export function resizePatternSpanAt<TValue>(
+  spans: PatternSpans<TValue>,
+  column: number,
+  holdSteps: number,
+): PatternSpansResult<TValue> | null {
+  if (!isVisiblePatternColumn(column, spans.cycleSteps)) return null;
+  const head = patternStoredIndexAt(column, spans.stepsPerBar);
+  if (!Number.isInteger(head) || head < 0 || head >= spans.values.length) return null;
+  if (spans.values[head] === spans.empty) return null;
+  return changedPatternResult(
+    spans,
+    writePatternSpan({ ...spans, column, value: spans.values[head], holdSteps }),
+  );
+}
+
+/** Drop a freshly allocated edit when it changed no stored slot. */
+function changedPatternResult<TValue>(
+  before: PatternSpans<TValue>,
+  after: PatternSpansResult<TValue>,
+): PatternSpansResult<TValue> | null {
+  if (before.values.length !== after.values.length || before.holds.length !== after.holds.length) {
+    return after;
+  }
+  for (let i = 0; i < after.values.length; i += 1) {
+    if (before.values[i] !== after.values[i] || before.holds[i] !== after.holds[i]) return after;
+  }
+  return null;
+}
+
+/**
+ * Write one explicit event at `column`: a new onset holding a single step, or —
+ * when the caller writes the lane's own empty value — the whole span starting
+ * there cleared back to empty. Erasing a span is a WRITE, not a deletion: the
+ * head keeps its slot with a one-step hold and the slots the span covered
+ * become empty, which is the same result a per-lane non-overlap model gives
+ * and the reason `replaceDrumPattern`-style clearing is not needed here.
+ *
+ * **A click on a slot that already holds an onset edits the token, never the
+ * length.** Re-clicking a note tool inside a span re-voices it and keeps the
+ * span's own hold, and writing the value it already holds changes nothing at
+ * all. A one-step hold is what an onset NEWLY created on an empty slot gets;
+ * asking for it on a slot that already sounds made every bass note-tool click
+ * collapse a held note to a stab, which is an edit the user did not ask for.
+ * The rule is value-relative rather than lane-specific, so it holds for both
+ * callers: the bass lane's tokens differ from its `rest`, and the chord lane's
+ * single non-empty value is `true`, where a same-value write is the no-op the
+ * panels' own edit-fire discipline already relies on.
+ *
+ * The clearing branch reuses the span's OWN hold as the write length, so the
+ * covered slots are the ones the span was actually drawing on — a `holdSteps`
+ * of 1 would erase the head and leave the rest of the block behind.
+ */
+export function writePatternEvent<TValue>(input: {
+  spans: PatternSpans<TValue>;
+  column: number;
+  value: TValue;
+}): PatternSpansResult<TValue> | null {
+  const { spans, column, value } = input;
+  if (!isVisiblePatternColumn(column, spans.cycleSteps)) return null;
+  const head = patternStoredIndexAt(column, spans.stepsPerBar);
+  const existing = spans.values[head];
+  if (existing === value) return null;
+  if (value !== spans.empty && existing !== spans.empty) {
+    return writePatternSpan({ ...spans, column, value, holdSteps: spans.holds[head] });
+  }
+  const holdSteps = value === spans.empty ? spans.holds[head] : 1;
+  return writePatternSpan({ ...spans, column, value, holdSteps });
+}
+
+/**
+ * A lane's arrays re-cut to `requestedBars` whole bars, with the request
+ * clamped down to a divisor of the progression so the pattern still repeats
+ * evenly against the chords above it. Growing pads with `empty`/one-step
+ * holds; trimming drops the trailing bars outright, because an explicit length
+ * change is the one edit allowed to discard them.
+ */
+export function resizedCustomPattern<TValue>(input: {
+  chords: readonly ChordItem[];
+  values: readonly TValue[];
+  holds: readonly number[];
+  requestedBars: number;
+  empty: TValue;
+}): { loopLength: number; values: TValue[]; holds: number[] } {
+  const loopLength = clampLoopLength(
+    Math.floor(input.requestedBars),
+    progressionBars(input.chords),
+  );
+  return { loopLength, ...resizePatternBars(input.values, input.holds, loopLength, input.empty) };
+}
+
+/**
+ * A lane's arrays normalized against the boundaries its cycle folds the
+ * progression onto: every hold re-clamped to the next boundary or the cycle
+ * end, every onset a stretched hold covers deleted, rest slots reset to a
+ * one-step hold. The bar length is a parameter, not a meter lookup, because
+ * the read path has no meter to look up — see `sanitizeCustomPatternSpans`.
+ */
+export function normalizeCustomPattern<TValue>(
+  input: CustomPatternState<TValue>,
+): PatternSpansResult<TValue> {
+  return normalizePatternSpans(customPatternSpans(input));
+}
+
+/**
+ * A lane re-clamped after the PROGRESSION changed — not after the user asked
+ * for a shorter pattern, which is why nothing is trimmed here.
+ *
+ * Two things move and only two: the cycle drops to the largest divisor of the
+ * new bar count that the old one still fits inside, and every hold is
+ * re-clamped against the boundaries that progression now folds onto the cycle.
+ * The arrays keep their full stored width, so a bar the new cycle cannot reach
+ * is DORMANT rather than deleted and raising the length again brings its
+ * onsets back — the same non-destructive rule the meter and the lead
+ * resolution follow.
+ */
+export function reclampCustomPattern<TValue>(input: {
+  chords: readonly ChordItem[];
+  values: readonly TValue[];
+  holds: readonly number[];
+  loopLength: number;
+  /** The ACTIVE meter's bar length in 16th steps. */
+  stepsPerBar: number;
+  empty: TValue;
+}): { loopLength: number; values: TValue[]; holds: number[] } {
+  const loopLength = clampLoopLength(input.loopLength, progressionBars(input.chords));
+  return { loopLength, ...normalizeCustomPattern({ ...input, loopLength }) };
+}
+
+/** The live state (or any Loop-plus-meter view of it) a custom chord edit reads. */
+export interface CustomChordLaneState {
+  chords: readonly ChordItem[];
+  meterId: string;
+  customChordRhythm: readonly boolean[];
+  customChordHoldSteps: readonly number[];
+  customChordLoopLength: number;
+}
+
+/** The chord lane's spans. Named rather than inlined so the field pairing lives in one place. */
+export function customChordSpans(state: CustomChordLaneState): PatternSpans<boolean> {
+  return customPatternSpans({
+    values: state.customChordRhythm,
+    holds: state.customChordHoldSteps,
+    chords: state.chords,
+    loopLength: state.customChordLoopLength,
+    stepsPerBar: getMeter(state.meterId).stepsPerBar,
+    empty: false,
+  });
+}
+
+/** The live state (or any Loop-plus-meter view of it) a custom bass edit reads. */
+export interface CustomBassLaneState {
+  chords: readonly ChordItem[];
+  meterId: string;
+  customBassPattern: readonly BassStepChoice[];
+  customBassHoldSteps: readonly number[];
+  customBassLoopLength: number;
+}
+
+/** The bass lane's spans — the same boundary map, over its own arrays and its own cycle. */
+export function customBassSpans(state: CustomBassLaneState): PatternSpans<BassStepChoice> {
+  return customPatternSpans({
+    values: state.customBassPattern,
+    holds: state.customBassHoldSteps,
+    chords: state.chords,
+    loopLength: state.customBassLoopLength,
+    stepsPerBar: getMeter(state.meterId).stepsPerBar,
+    empty: 'rest',
+  });
 }
 
 /**

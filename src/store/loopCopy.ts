@@ -96,7 +96,15 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
     track: 'chord',
     aspect: 'pattern',
     label: 'Chords rhythm',
-    keys: ['chordRhythmId', 'chordRhythmMode', 'customChordRhythm', 'chordFeel', 'chordOctave'],
+    keys: [
+      'chordRhythmId',
+      'chordRhythmMode',
+      'customChordRhythm',
+      'customChordLoopLength',
+      'customChordHoldSteps',
+      'chordFeel',
+      'chordOctave',
+    ],
   },
   { id: 'bass-sound', track: 'bass', aspect: 'sound', label: 'Bass sound', keys: ['bassSynthParams'] },
   {
@@ -104,7 +112,15 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
     track: 'bass',
     aspect: 'pattern',
     label: 'Bass pattern',
-    keys: ['bassPatternId', 'bassPatternMode', 'customBassPattern', 'bassFeel', 'bassOctave'],
+    keys: [
+      'bassPatternId',
+      'bassPatternMode',
+      'customBassPattern',
+      'customBassLoopLength',
+      'customBassHoldSteps',
+      'bassFeel',
+      'bassOctave',
+    ],
   },
   { id: 'pad-sound', track: 'pad', aspect: 'sound', label: 'Pad sound', keys: ['padSynthParams'] },
   {
@@ -192,8 +208,9 @@ export function buildLoopCopyPatch(
   }
   // Deep-clone the whole assembled patch, the same way cloneLoop deep-clones
   // a duplicated loop and for the same reason: sequencerTracks,
-  // leadMelodySteps, chords, customChordRhythm, customBassPattern and
-  // padDroneIntervals are mutable substructure the target must own outright.
+  // leadMelodySteps, chords, customChordRhythm, customChordHoldSteps,
+  // customBassPattern, customBassHoldSteps and padDroneIntervals are mutable
+  // substructure the target must own outright.
   return structuredClone(patch) as Partial<LoopStatePatch>;
 }
 

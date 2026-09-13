@@ -5,6 +5,44 @@ import { createDefaultLoop, createLoopSlice } from './loopSlice';
 import { SCOPE_NONE } from './playbackScope';
 import { useAppStore } from './store';
 import type { AppStore } from './types';
+import type { Loop } from './types';
+import type { BassStepChoice } from '@/data/bassPatterns';
+
+// The cross-boundary fixture, spelled out here as it is at each boundary it
+// crosses: a TWO-bar Chord lane over a FOUR-bar Bass lane in 3/4, with an
+// explicit hold on every onset. The hold is `THREE_FOUR` on purpose — 12 is a
+// legal span in BOTH coordinate spaces (the stored slot at the widest meter
+// and the column in 3/4), so neither read is forced to rewrite it and the
+// fixture keeps asserting what it claims to.
+const THREE_FOUR = 12; // `METERS['3/4'].stepsPerBar`
+
+function customPatternLoop(): Loop {
+  const chord = new Array<boolean>(2 * MAX_STEPS_PER_BAR).fill(false);
+  chord[0] = true;
+  chord[MAX_STEPS_PER_BAR] = true;
+  const chordHolds = new Array<number>(2 * MAX_STEPS_PER_BAR).fill(1);
+  chordHolds[0] = THREE_FOUR;
+  chordHolds[MAX_STEPS_PER_BAR] = THREE_FOUR;
+
+  const bass = new Array<BassStepChoice>(4 * MAX_STEPS_PER_BAR).fill('rest');
+  const bassHolds = new Array<number>(4 * MAX_STEPS_PER_BAR).fill(1);
+  const tones: BassStepChoice[] = ['root', 'third', 'fifth', 'seventh'];
+  tones.forEach((tone, bar) => {
+    bass[bar * MAX_STEPS_PER_BAR] = tone;
+    bassHolds[bar * MAX_STEPS_PER_BAR] = THREE_FOUR;
+  });
+
+  return {
+    ...createDefaultLoop(),
+    id: 'loop-custom',
+    customChordRhythm: chord,
+    customChordHoldSteps: chordHolds,
+    customChordLoopLength: 2,
+    customBassPattern: bass,
+    customBassHoldSteps: bassHolds,
+    customBassLoopLength: 4,
+  };
+}
 
 function makeSlice(initial?: Partial<AppStore>) {
   let state = {} as AppStore;
@@ -53,6 +91,18 @@ describe('loopSlice: defaults, add and duplicate', () => {
     expect(loop.customBassPattern).toEqual(
       new Array<'rest'>(MAX_STEPS_PER_BAR).fill('rest'),
     );
+  });
+
+  test('default loop ships one-bar custom patterns with one-step holds', () => {
+    // The factory value of the four keys this feature adds is also what an old
+    // saved loop reads back as: sanitizeLoops fills a missing key with the
+    // default rather than running a version-gated upgrade, so the two must not
+    // drift apart.
+    const loop = createDefaultLoop();
+    expect(loop.customChordLoopLength).toBe(1);
+    expect(loop.customChordHoldSteps).toEqual(new Array<number>(MAX_STEPS_PER_BAR).fill(1));
+    expect(loop.customBassLoopLength).toBe(1);
+    expect(loop.customBassHoldSteps).toEqual(new Array<number>(MAX_STEPS_PER_BAR).fill(1));
   });
 
   test('addLoop appends a deep copy of the active loop and auto-activates it', () => {
@@ -125,7 +175,62 @@ describe('loopSlice: defaults, add and duplicate', () => {
     expect(clone.name).toBe('Drop 2');
     expect(clone.tempName).toBe('untitled-2');
   });
+});
 
+// The DUPLICATION boundary of the cross-boundary fixture: the same two-bar
+// Chord / four-bar Bass custom loop the serialization, merge and copy tests
+// round-trip, taken through `duplicateLoop` → `cloneLoop` → `structuredClone`
+// rather than through a copy patch. A duplicate is the one path where the four
+// lane fields are carried by the whole-object clone instead of by a key list,
+// so nothing else would notice `cloneLoop` ceasing to be a deep clone — or a
+// lane's width being flattened into the other lane's.
+describe('the custom pattern fixture survives a duplicate', () => {
+  function duplicateFixture() {
+    const fixture = customPatternLoop();
+    const h = makeSlice({ loops: [fixture], activeLoopId: fixture.id });
+    // Auto-activates, so the clone lands at index 1 with a fresh id.
+    expect(h.state.duplicateLoop(fixture.id)).toBe(null);
+    return { fixture, clone: h.state.loops[1] };
+  }
+
+  test('each lane keeps its own width, bar-major values and holds', () => {
+    const { fixture, clone } = duplicateFixture();
+    expect(clone.id).not.toBe(fixture.id);
+
+    // 2 bars of chord against a 4-bar progression, beside 4 bars of bass: the
+    // two widths are asserted together so a clone that defaulted both to the
+    // factory's one bar could not pass by coincidence.
+    expect(clone.customChordLoopLength).toBe(2);
+    expect(clone.customBassLoopLength).toBe(4);
+
+    // The STORED slot at MAX_STEPS_PER_BAR, not the 3/4 column the lane plays.
+    expect(clone.customChordRhythm).toHaveLength(2 * MAX_STEPS_PER_BAR);
+    expect(clone.customChordHoldSteps).toHaveLength(2 * MAX_STEPS_PER_BAR);
+    expect(clone.customChordRhythm[0]).toBe(true);
+    expect(clone.customChordRhythm[MAX_STEPS_PER_BAR]).toBe(true);
+    expect(clone.customChordHoldSteps[0]).toBe(THREE_FOUR);
+    expect(clone.customChordHoldSteps[MAX_STEPS_PER_BAR]).toBe(THREE_FOUR);
+
+    expect(clone.customBassPattern).toHaveLength(4 * MAX_STEPS_PER_BAR);
+    expect(clone.customBassHoldSteps).toHaveLength(4 * MAX_STEPS_PER_BAR);
+    ['root', 'third', 'fifth', 'seventh'].forEach((tone, bar) => {
+      expect(clone.customBassPattern[bar * MAX_STEPS_PER_BAR]).toBe(tone);
+      expect(clone.customBassHoldSteps[bar * MAX_STEPS_PER_BAR]).toBe(THREE_FOUR);
+    });
+  });
+
+  test('the copy is deep, so an edit to the source lane cannot reach it', () => {
+    const { fixture, clone } = duplicateFixture();
+    // One level down in each lane: a spread-only clone passes a `!==` check on
+    // the outer array and still shares every element.
+    fixture.customChordRhythm[MAX_STEPS_PER_BAR] = false;
+    fixture.customChordHoldSteps[0] = 1;
+    fixture.customBassPattern[0] = 'rest';
+
+    expect(clone.customChordRhythm[MAX_STEPS_PER_BAR]).toBe(true);
+    expect(clone.customChordHoldSteps[0]).toBe(THREE_FOUR);
+    expect(clone.customBassPattern[0]).toBe('root');
+  });
 });
 
 describe('loopSlice: delete and reorder', () => {

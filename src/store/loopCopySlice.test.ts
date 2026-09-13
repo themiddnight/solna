@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { loopStatePatch } from './loop';
 import { createDefaultLoop } from './loopSlice';
+import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import { SCOPE_NONE } from './playbackScope';
 import { useAppStore } from './store';
 import type { Loop } from './types';
@@ -90,6 +91,33 @@ describe('applyLoopCopy — target is NOT the active loop', () => {
     useAppStore.getState().applyLoopCopy('loop-source', 'loop-source', ['mix']);
     expect(useAppStore.getState().loops).toBe(loopsBefore);
   });
+
+  test('a pattern group carries its loop length and holds onto the target', () => {
+    seedTwoLoops('loop-source');
+    const sourceLane = {
+      customChordLoopLength: 2,
+      customChordHoldSteps: new Array<number>(MAX_STEPS_PER_BAR * 2).fill(3),
+      customBassLoopLength: 2,
+      customBassHoldSteps: new Array<number>(MAX_STEPS_PER_BAR * 2).fill(2),
+    };
+    useAppStore.setState({
+      loops: useAppStore.getState().loops.map((loop) =>
+        loop.id === 'loop-source' ? { ...loop, ...sourceLane } : loop,
+      ),
+    });
+
+    useAppStore.getState().applyLoopCopy('loop-target', 'loop-source', ['chord-pattern', 'bass-pattern']);
+
+    const patched = useAppStore.getState().loops.find((loop) => loop.id === 'loop-target')!;
+    // A pattern is its onsets AND the cycle they repeat over, so the length and
+    // the holds travel with the grid.
+    expect(patched.customChordLoopLength).toBe(2);
+    expect(patched.customChordHoldSteps).toEqual(sourceLane.customChordHoldSteps);
+    expect(patched.customBassLoopLength).toBe(2);
+    expect(patched.customBassHoldSteps).toEqual(sourceLane.customBassHoldSteps);
+    // The target was not active, so nothing of this reached the flat slices.
+    expect(useAppStore.getState().customChordLoopLength).toBe(1);
+  });
 });
 
 describe('applyLoopCopy — target IS the active loop', () => {
@@ -132,6 +160,26 @@ describe('applyLoopCopy — target IS the active loop', () => {
     const stored = useAppStore.getState().loops.find((loop) => loop.id === 'loop-target')!;
     expect(stored.sequencerTracks).not.toBe(source.sequencerTracks);
     expect(stored.sequencerTracks[0]).not.toBe(source.sequencerTracks[0]);
+  });
+
+  test('the copied lane length and holds reach the flat slices through loadLoop', () => {
+    seedTwoLoops('loop-target');
+    const sourceLane = {
+      customChordLoopLength: 2,
+      customChordHoldSteps: new Array<number>(MAX_STEPS_PER_BAR * 2).fill(3),
+    };
+    useAppStore.setState({
+      loops: useAppStore.getState().loops.map((loop) =>
+        loop.id === 'loop-source' ? { ...loop, ...sourceLane } : loop,
+      ),
+    });
+
+    useAppStore.getState().applyLoopCopy('loop-target', 'loop-source', ['chord-pattern']);
+
+    const after = useAppStore.getState();
+    expect(after.customChordLoopLength).toBe(2);
+    expect(after.customChordHoldSteps).toEqual(sourceLane.customChordHoldSteps);
+    expect(loopStatePatch(after)).toEqual(loopStatePatch(after.loops.find((l) => l.id === 'loop-target')!));
   });
 
   test('neither label field moves on the active branch either', () => {

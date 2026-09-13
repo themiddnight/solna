@@ -15,6 +15,10 @@ import { DRUM_KITS, DRUM_TYPES } from '@/data/drumKits';
 import { CHORD_RHYTHMS } from '@/data/chordRhythms';
 import { SCALES } from '@/data/scales';
 import { createDefaultLoop } from './loopSlice';
+import { MAX_CUSTOM_PATTERN_BARS, normalizeCustomPattern, progressionBars } from './loop';
+import { resizePatternBars } from '../utils/customPattern';
+import { DEFAULT_METER_ID, getMeter, MAX_STEPS_PER_BAR, type MeterId } from '../utils/meter';
+import { clampLoopLength } from '../utils/patternTimeline';
 import { LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
 import type { Loop } from './types';
 import type { LeadNote } from '../audio/leadMelody';
@@ -461,8 +465,9 @@ function resolveTempName(
  * device (projectFile.ts), so `{"chords": [1, 2, 3]}` must never reach the
  * chord scheduler.
  */
-export function sanitizeLoops(value: unknown): Loop[] | undefined {
+export function sanitizeLoops(value: unknown, meterId: MeterId = DEFAULT_METER_ID): Loop[] | undefined {
   if (!Array.isArray(value)) return undefined;
+  const stepsPerBar = getMeter(meterId).stepsPerBar;
   // Every EXPLICIT tempName the raw array already carries, gathered up front.
   // The positional fallback below picks an `untitled-N` ordinal one row at a
   // time and must never land on a number some OTHER row in this same array
@@ -505,7 +510,7 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
     const tempName = resolved.tempName;
     nextOrdinal = resolved.nextOrdinal;
     usedTempNames.add(tempName); // claim it: no later row, explicit or positional, may reuse it
-    loops.push({
+    loops.push(sanitizeCustomPatternSpans({
       id: typeof r.id === 'string' && r.id.length > 0 ? r.id : `loop-${loops.length}`,
       // Trimmed for the same reason tempName is above: renameFromDraft
       // (SortableLoopCard.tsx) never lets a user save a whitespace-only name
@@ -525,11 +530,15 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
       chordRhythmId: asChordRhythmId(r.chordRhythmId, fallback.chordRhythmId),
       chordRhythmMode: asPatternMode(r.chordRhythmMode, fallback.chordRhythmMode),
       customChordRhythm: asCheckedArray<boolean>(r.customChordRhythm, (v) => typeof v === 'boolean', fallback.customChordRhythm),
+      customChordLoopLength: asPositiveInteger(r.customChordLoopLength, fallback.customChordLoopLength),
+      customChordHoldSteps: asCheckedArray<number>(r.customChordHoldSteps, isPositiveInteger, fallback.customChordHoldSteps),
       chordFeel: clampFinite(r.chordFeel, 0, 1, fallback.chordFeel),
       chordOctave: clampFinite(r.chordOctave, 0, 8, fallback.chordOctave),
       bassPatternId: asBassPatternId(r.bassPatternId, fallback.bassPatternId),
       bassPatternMode: asPatternMode(r.bassPatternMode, fallback.bassPatternMode),
       customBassPattern: asCheckedArray<BassStepChoice>(r.customBassPattern, isBassStepChoice, fallback.customBassPattern),
+      customBassLoopLength: asPositiveInteger(r.customBassLoopLength, fallback.customBassLoopLength),
+      customBassHoldSteps: asCheckedArray<number>(r.customBassHoldSteps, isPositiveInteger, fallback.customBassHoldSteps),
       bassFeel: clampFinite(r.bassFeel, 0, 1, fallback.bassFeel),
       bassOctave: clampFinite(r.bassOctave, 0, 8, fallback.bassOctave),
       padSynthParams: sanitizeSynthParams(r.padSynthParams),
@@ -581,7 +590,106 @@ export function sanitizeLoops(value: unknown): Loop[] | undefined {
       fxMuted: asBoolean(r.fxMuted),
       masterSequencerVolume: asFaderDb(r.masterSequencerVolume, fallback.masterSequencerVolume),
       drumMuted: asBoolean(r.drumMuted),
-    });
+    }, stepsPerBar));
   }
   return loops.length > 0 ? loops : undefined;
+}
+
+/**
+ * The two custom lanes as they should be READ, applied to every loop this
+ * function returns.
+ *
+ * Three things happen and none of them is a version gate. A missing key has
+ * already taken its default through the validation above, so a body written
+ * before these fields existed arrives here at one bar of one-step holds; the
+ * cycle is clamped to a divisor of the progression the loop actually carries;
+ * and each lane's arrays are grown to `loopLength * MAX_STEPS_PER_BAR` slots —
+ * never cut down, so a bar beyond the clamped cycle stays dormant and comes
+ * back when the length is raised again (see `padPatternWidth`) — with every
+ * hold re-clamped onto the boundaries that progression folds onto the cycle and
+ * every onset a stretched hold covers deleted. A hold of 99 in a hand-edited
+ * file therefore reads back as a legitimate one-cycle span rather than as a
+ * span no renderer can draw.
+ *
+ * The caller supplies the active meter's bar length. A `.solna` project stores
+ * `meterId` alongside its loops, so import can normalize only the columns that
+ * meter exposes and leave the remaining fixed-width slots dormant. Callers
+ * without an explicit meter use 4/4, the application's project default.
+ */
+function sanitizeCustomPatternSpans(loop: Loop, stepsPerBar: number): Loop {
+  const { chords } = loop;
+
+  const chordLength = clampLoopLength(loop.customChordLoopLength, progressionBars(chords));
+  const chord = padPatternWidth(
+    loop.customChordRhythm,
+    loop.customChordHoldSteps,
+    chordLength * MAX_STEPS_PER_BAR,
+    false,
+  );
+  const chordSpans = normalizeCustomPattern({
+    chords,
+    values: chord.values,
+    holds: chord.holds,
+    loopLength: chordLength,
+    stepsPerBar,
+    empty: false,
+  });
+
+  const bassLength = clampLoopLength(loop.customBassLoopLength, progressionBars(chords));
+  const bass = padPatternWidth(
+    loop.customBassPattern,
+    loop.customBassHoldSteps,
+    bassLength * MAX_STEPS_PER_BAR,
+    'rest',
+  );
+  const bassSpans = normalizeCustomPattern<BassStepChoice>({
+    chords,
+    values: bass.values,
+    holds: bass.holds,
+    loopLength: bassLength,
+    stepsPerBar,
+    empty: 'rest',
+  });
+
+  return {
+    ...loop,
+    customChordLoopLength: chordLength,
+    customChordRhythm: chordSpans.values,
+    customChordHoldSteps: chordSpans.holds,
+    customBassLoopLength: bassLength,
+    customBassPattern: bassSpans.values,
+    customBassHoldSteps: bassSpans.holds,
+  };
+}
+
+/**
+ * A lane's arrays grown to `width` stored slots, and never cut down to it.
+ *
+ * `resizePatternBars` is the EXPLICIT selection path and trims, which is right
+ * when the user asks for a shorter pattern. Reading a file back is not that
+ * gesture: the design's rule is that a bar the clamped cycle cannot currently
+ * reach stays DORMANT, so raising the length again brings its onsets back — and
+ * that promise has to survive save -> load. `normalizePatternSpans` is already
+ * dormant-safe (it walks only the columns the cycle exposes), so everything
+ * past the clamped width arrives at it exactly as it was stored.
+ *
+ * The `MAX_CUSTOM_PATTERN_BARS` ceiling is the untrusted-input guard and the
+ * only upper bound on this allocation: a crafted body can name a bar count no
+ * project could hold, and `width` is derived from it. Within the ceiling a
+ * longer stored lane is preserved whole; beyond it the read is defensive, which
+ * is the same rule the bar count itself is capped by.
+ */
+function padPatternWidth<TValue>(
+  values: readonly TValue[],
+  holds: readonly number[],
+  width: number,
+  empty: TValue,
+): { values: TValue[]; holds: number[] } {
+  const cap = MAX_CUSTOM_PATTERN_BARS * MAX_STEPS_PER_BAR;
+  const target = Math.min(width, cap);
+  const retained = Math.min(values.length, cap);
+  if (retained >= target) {
+    return { values: values.slice(0, retained), holds: holds.slice(0, retained) };
+  }
+  return resizePatternBars(values, holds, target / MAX_STEPS_PER_BAR, empty);
 }

@@ -106,8 +106,22 @@ export interface ChordsSlice {
   chordRhythmId: string;
   chordRhythmMode: 'preset' | 'custom';
   customChordRhythm: boolean[];
+  customChordLoopLength: number;
+  customChordHoldSteps: number[];
   setChordRhythmMode: (mode: 'preset' | 'custom') => void;
   setCustomChordRhythm: (steps: boolean[]) => void;
+  /**
+   * Resize the custom chord lane to `bars`, clamped down to the nearest
+   * positive divisor of the progression's bar count.
+   */
+  setCustomChordLoopLength: (bars: number) => void;
+  /**
+   * Toggle the block-chord onset at `column` — a 16th-step position in the
+   * ACTIVE meter, and the head of the drawn block, never a slot a span covers.
+   */
+  setCustomChordEvent: (column: number, active: boolean) => void;
+  /** Set the visible column's onset to `holdSteps`, clamped at the next folded chord boundary. */
+  setCustomChordEventLength: (column: number, holdSteps: number) => void;
   chordFeel: number;
   chordOctave: number;
   chordMuted: boolean;
@@ -126,8 +140,22 @@ export interface BassSlice {
   bassPatternId: string;
   bassPatternMode: 'preset' | 'custom';
   customBassPattern: BassStepChoice[];
+  customBassLoopLength: number;
+  customBassHoldSteps: number[];
   setBassPatternMode: (mode: 'preset' | 'custom') => void;
   setCustomBassPattern: (steps: BassStepChoice[]) => void;
+  /**
+   * Resize the custom bass lane to `bars`, clamped down to the nearest
+   * positive divisor of the progression's bar count.
+   */
+  setCustomBassLoopLength: (bars: number) => void;
+  /**
+   * Write `value` at `column` — a 16th-step position in the ACTIVE meter, and
+   * the head of the drawn block. `'rest'` erases the span that starts there.
+   */
+  setCustomBassEvent: (column: number, value: BassStepChoice) => void;
+  /** Set the visible column's onset to `holdSteps`, clamped at the next folded chord boundary. */
+  setCustomBassEventLength: (column: number, holdSteps: number) => void;
   bassFeel: number;
   bassOctave: number;
   bassMuted: boolean;
@@ -557,11 +585,24 @@ export interface Loop extends PadState, FxState {
   chordRhythmId: string;
   chordRhythmMode: 'preset' | 'custom';
   customChordRhythm: boolean[];
+  /**
+   * The custom chord lane's cycle in BARS — a positive divisor of the
+   * progression's total bar count, so the pattern repeats evenly against the
+   * chords it is playing under. Its two arrays are `loopLength *
+   * MAX_STEPS_PER_BAR` long, bar-major, exactly as the sequencer's rows are.
+   */
+  customChordLoopLength: number;
+  /** Parallel to `customChordRhythm`: each stored slot's audible length in 16th steps, >= 1. */
+  customChordHoldSteps: number[];
   chordFeel: number;
   chordOctave: number;
   bassPatternId: string;
   bassPatternMode: 'preset' | 'custom';
   customBassPattern: BassStepChoice[];
+  /** The bass lane's own cycle; independent of the chord lane's. See `customChordLoopLength`. */
+  customBassLoopLength: number;
+  /** Parallel to `customBassPattern`. See `customChordHoldSteps`. */
+  customBassHoldSteps: number[];
   bassFeel: number;
   bassOctave: number;
   leadMelodySteps: LeadNote[][];
