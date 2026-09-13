@@ -227,6 +227,46 @@ slot is dormant either because the meter cannot reach it or because the resoluti
 **both tests live in `leadActivePosAt` and nowhere else**; and a change of view never writes — an
 explicit edit writes, changing meter or resolution does not.
 
+**Three step layouts, and each lane keeps its own.** The drum voices are the only thing on the
+fixed one-cell `StepRow`: a drum cell is one hit at one step and has no length. An event that HAS a
+length gets a one-lane span timeline instead, and there are two of them — Chord and Bass — drawn
+as bars of cells where an event is one block owning the columns it holds. The melody tracks stay on
+the pitch matrix, where a length is a field on the note rather than a column count. Rendering one
+of these three for a lane belonging to another is a design change, not a refactor, and
+`playbackStep.wiring.test.ts` pins the drum half of it.
+
+**The three span editors share headless pointer mechanics, never a renderer.** Resizing a span is
+`useSpanResize` over the pure arithmetic in `spanResize.ts`, and neither knows what a span IS
+beyond an opaque identity the feature hands it. Chord and Bass reach it through one shared timeline
+component; Lead reaches it through its own grid. The mechanics are shared because a gesture that
+must commit once on `pointerup`, write nothing on cancel, and keep its preview in local state is
+the same gesture everywhere; the renderers are not, because a note in a pitch matrix and an event
+on a bar lane do not draw the same thing.
+
+**A custom Chord or Bass pattern is stored fixed-width and bar-major, and its active length is an
+independent divisor of the progression's bars.** Every bar is `MAX_STEPS_PER_BAR` slots whatever
+the active meter is, so a stored row never moves when the meter changes — only which of its slots
+the view can reach. The two lanes' cycles are independent of each other, so a two-bar chord lane
+under a four-bar bass lane is normal, and each is clamped to a divisor of the progression so the
+pattern repeats evenly against the chords above it. A bar the current cycle cannot reach is
+DORMANT, not deleted: raising the length again brings its onsets back, which is why the read path
+pads a lane's width and never cuts it.
+
+**A folded chord boundary caps every custom span, and a full-cycle span retriggers at the seam.**
+The boundary map is the progression's chord durations folded onto the lane's cycle with `%`: a lane
+shorter than the progression repeats, so a chord change can fall in the MIDDLE of every repetition.
+A span may cross neither that boundary nor its own cycle end, and the write clamps to the nearer of
+the two — so a span drawn longer stops at the chord change instead of swallowing it. A custom span
+covering a whole cycle is a length the user drew, so it releases and retriggers at the seam: the
+whole-chord full-hold fast path is preset-only and no custom pattern may borrow it, which is what
+the `isFullHoldRhythmCycle`/`isFullHoldBassCycle` wrappers exist to make unforgettable.
+
+**The Chord publisher emits a progression-relative ABSOLUTE step, and each reader folds it
+locally.** One playback source feeds the chord lane and the bass lane, and their cycles have
+different widths, so a bar-relative step would name a column only one of them has. The step is
+published once in progression coordinates and every reader modulos it by its OWN cycle width; a
+producer that folded it would hand an independently sized reader a column that does not exist.
+
 **FX is the lead track's twin, and the symmetry comes from a table rather than a rename.**
 `MELODY_TRACKS` (`store/melodyTracks.ts`) has one row per melody track and spells its store field
 names out as table data — the `SOURCE_BUSES` precedent — because the LEAD row is irregular in four
