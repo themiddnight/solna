@@ -10,15 +10,15 @@ import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useAppStore } from '@/store/store';
 import { useChordPlayback } from './useChordPlayback';
 import {
-  resolvePlaybackBassPattern,
-  resolvePlaybackRhythmPattern,
+  resolvePlaybackBassCycle,
+  resolvePlaybackRhythmCycle,
 } from '@/audio/chordRhythms';
 import {
   ensurePreviewEngine,
   hasPreviewEngine,
   playChordLegatoWithEngine,
-  previewBarSeconds,
   previewChordForScale,
+  previewCycleSeconds,
   previewEngineTime,
   startPatternLoop,
   stopBassPreviewSource,
@@ -71,6 +71,10 @@ export function useChordViewState() {
   const customChordRhythm = useAppStore((s) => s.customChordRhythm);
   const bassPatternMode = useAppStore((s) => s.bassPatternMode);
   const customBassPattern = useAppStore((s) => s.customBassPattern);
+  const customChordHoldSteps = useAppStore((s) => s.customChordHoldSteps);
+  const customChordLoopLength = useAppStore((s) => s.customChordLoopLength);
+  const customBassHoldSteps = useAppStore((s) => s.customBassHoldSteps);
+  const customBassLoopLength = useAppStore((s) => s.customBassLoopLength);
   const bpm = useAppStore((s) => s.bpm);
   const playback = useChordPlayback();
 
@@ -81,35 +85,58 @@ export function useChordViewState() {
   // Same pattern as ArrangeView.tsx's loopIds.
   const chordIds = useMemo(() => chords.map((c) => c.id), [chords]);
 
-  const rhythmPattern = useMemo(
+  // Each lane resolves its OWN cycle: a preset lands on one bar, a custom row
+  // on its own `loopLength * stepsPerBar`, and the two may span different
+  // numbers of bars. The progression is what the custom boundaries fold onto —
+  // the same duration array `customPatternSpans` feeds the store edits, never
+  // `ChordItem.bars` raw.
+  const stepsPerBar = getMeter(meterId).stepsPerBar;
+  const chordDurations = useMemo(
+    () => chords.map((chord) => Math.max(1, chord.bars || 1) * stepsPerBar),
+    [chords, stepsPerBar],
+  );
+
+  const chordCycle = useMemo(
     () =>
-      resolvePlaybackRhythmPattern(
+      resolvePlaybackRhythmCycle(
         chordRhythmMode,
         rhythmId,
         customChordRhythm,
-        getMeter(meterId).stepsPerBar,
+        customChordHoldSteps,
+        customChordLoopLength,
+        stepsPerBar,
         getMeter(meterId).id,
+        chordDurations,
       ),
-    [chordRhythmMode, customChordRhythm, rhythmId, meterId],
+    [
+      chordRhythmMode, customChordRhythm, customChordHoldSteps, customChordLoopLength,
+      rhythmId, stepsPerBar, meterId, chordDurations,
+    ],
   );
 
-  const bassPattern = useMemo(
+  const bassCycle = useMemo(
     () =>
-      resolvePlaybackBassPattern(
+      resolvePlaybackBassCycle(
         bassPatternMode,
         bassPatternId,
         customBassPattern,
-        getMeter(meterId).stepsPerBar,
+        customBassHoldSteps,
+        customBassLoopLength,
+        stepsPerBar,
         getMeter(meterId).id,
+        chordDurations,
       ),
-    [bassPatternMode, customBassPattern, bassPatternId, meterId],
+    [
+      bassPatternMode, customBassPattern, customBassHoldSteps, customBassLoopLength,
+      bassPatternId, stepsPerBar, meterId, chordDurations,
+    ],
   );
 
   return {
     chords, setChords, playheadBeat, playheadChordIndex, playheadChordStartBeat, meterId,
     scaleRoot, scaleType, spellingKey, synthParams, chordSynthParams, rhythmId, chordOctave,
     bassPatternId, chordRhythmMode, customChordRhythm, bassPatternMode, customBassPattern, bpm,
-    playback, chordIds, rhythmPattern, bassPattern,
+    playback, chordIds, chordCycle, bassCycle,
   };
 }
 
@@ -448,7 +475,7 @@ export type HeldChordPreview = ReturnType<typeof useHeldChordPreview>;
  * I triad as their sound source until the mouse is released.
  */
 export function usePatternPreviews(state: ChordViewState) {
-  const { bpm, meterId, scaleRoot, scaleType, chordOctave, rhythmPattern, bassPattern } = state;
+  const { bpm, scaleRoot, scaleType, chordOctave, chordCycle, bassCycle } = state;
   const { playChordWithRhythm, playBassWithPattern } = state.playback;
   const chordPatternPreviewStopRef = useRef<(() => void) | null>(null);
   const bassPatternPreviewStopRef = useRef<(() => void) | null>(null);
@@ -464,24 +491,24 @@ export function usePatternPreviews(state: ChordViewState) {
     [],
   );
 
-  /** The scale's I triad, and how long one of its bars lasts at the active tempo. */
-  const previewSource = () => {
-    const previewChord = previewChordForScale(scaleRoot, scaleType, chordOctave);
-    const barSeconds =
-      previewBarSeconds(bpm, getMeter(meterId).stepsPerBar) * (previewChord.bars || 1);
-    return { previewChord, barSeconds };
-  };
+  /**
+   * The scale's I triad, auditioned under the lane's own cycle. The timer and
+   * the scheduler callback are handed the SAME cycle, so the interval is
+   * exactly the material the callback lays down — one bar for a preset, the
+   * lane's own `loopLength * stepsPerBar` for a custom row.
+   */
+  const previewSource = () => previewChordForScale(scaleRoot, scaleType, chordOctave);
 
   const handleChordPatternPreviewMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     e.preventDefault();
     ensurePreviewEngine();
 
-    const { previewChord, barSeconds } = previewSource();
+    const previewChord = previewSource();
     chordPatternPreviewStopRef.current?.();
     chordPatternPreviewStopRef.current = startPatternLoop(
-      (time) => playChordWithRhythm(previewChord, time, rhythmPattern),
-      barSeconds,
+      (time) => playChordWithRhythm(previewChord, time, chordCycle),
+      previewCycleSeconds(chordCycle.cycleSteps, bpm),
       previewEngineTime,
     );
   };
@@ -501,11 +528,11 @@ export function usePatternPreviews(state: ChordViewState) {
     e.preventDefault();
     ensurePreviewEngine();
 
-    const { previewChord, barSeconds } = previewSource();
+    const previewChord = previewSource();
     bassPatternPreviewStopRef.current?.();
     bassPatternPreviewStopRef.current = startPatternLoop(
-      (time) => playBassWithPattern(previewChord, time, bassPattern, [previewChord]),
-      barSeconds,
+      (time) => playBassWithPattern(previewChord, time, bassCycle, [previewChord]),
+      previewCycleSeconds(bassCycle.cycleSteps, bpm),
       previewEngineTime,
     );
   };

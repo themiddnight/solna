@@ -60,9 +60,21 @@ describe('chord scheduler arming', () => {
   });
 
   test('resetChordArming rewinds the progression, not just the gate', () => {
-    const arming: ChordArming = { armed: true, chordIndex: 7, nextBarStep: 960, lastStep: 123 };
+    const arming: ChordArming = {
+      armed: true,
+      chordIndex: 7,
+      nextBarStep: 960,
+      lastStep: 123,
+      playbackOriginStep: 128,
+    };
     resetChordArming(arming);
-    expect(arming).toEqual({ armed: false, chordIndex: 0, nextBarStep: 0, lastStep: 0 });
+    expect(arming).toEqual({
+      armed: false,
+      chordIndex: 0,
+      nextBarStep: 0,
+      lastStep: 0,
+      playbackOriginStep: 0,
+    });
   });
 
   test('rewindChordOnClockReset rewinds only when the clock steps backwards', () => {
@@ -78,8 +90,15 @@ describe('chord scheduler arming', () => {
     arming.armed = true;
     arming.chordIndex = 5;
     arming.nextBarStep = 80;
+    arming.playbackOriginStep = 64;
     rewindChordOnClockReset(arming, 0);
-    expect(arming).toEqual({ armed: false, chordIndex: 0, nextBarStep: 0, lastStep: 0 });
+    expect(arming).toEqual({
+      armed: false,
+      chordIndex: 0,
+      nextBarStep: 0,
+      lastStep: 0,
+      playbackOriginStep: 0,
+    });
   });
 
   test('a seamless song advance lands on the NEW loop\'s first chord', () => {
@@ -88,11 +107,73 @@ describe('chord scheduler arming', () => {
     // counting from the outgoing loop and `chordIndex % chords.length` picks a
     // chord in the middle of the incoming one whenever the two loops hold a
     // different number of chords — 4 chords played, 3 in the new loop, 4 % 3 = 1.
-    const arming: ChordArming = { armed: true, chordIndex: 4, nextBarStep: 64, lastStep: 63 };
+    const arming: ChordArming = {
+      armed: true,
+      chordIndex: 4,
+      nextBarStep: 64,
+      lastStep: 63,
+      playbackOriginStep: 48,
+    };
 
     rewindChordOnClockReset(arming, 0);
     expect(chordStepAction('playing', 0, arming, 16)).toBe('play');
     expect(arming.chordIndex % 3).toBe(0);
+    // The outgoing loop's origin must not survive either: the new loop's first
+    // tick is column zero of BOTH cycles, not the column the old run was at.
+    expect(arming.playbackOriginStep).toBe(0);
+  });
+});
+
+/**
+ * The clock step the current run began on. Every cycle column is measured from
+ * this one number, so it is what lets a two-bar chord cycle and a three-bar
+ * bass cycle stay in phase over a six-bar progression — and it is set at the
+ * moment the run arms, never per clock tick.
+ */
+describe('chord scheduler playback origin', () => {
+  test('is set once, on the bar line a stopped player arms on', () => {
+    const arming = createChordArming();
+    expect(arming.playbackOriginStep).toBe(0);
+
+    // Steps before the first bar line neither arm nor re-origin anything.
+    for (let step = 5; step < BAR; step++) {
+      expect(chordStepAction('playing', step, arming, BAR)).toBe('idle');
+    }
+    expect(arming.playbackOriginStep).toBe(0);
+
+    expect(chordStepAction('playing', BAR, arming, BAR)).toBe('play');
+    expect(arming.playbackOriginStep).toBe(BAR);
+    // The tick that arms is column zero of the run, whatever the clock says.
+    expect(BAR - arming.playbackOriginStep).toBe(0);
+  });
+
+  test('survives every chord after it, so both cycles keep phase across the loop', () => {
+    const arming = createChordArming();
+    expect(run('playing', 5, 48, arming)).toEqual([16, 32]);
+
+    // It is NOT re-origined per chord: a second chord starts at progression
+    // step 16, which is what a two-bar cycle reads as bar two.
+    expect(arming.playbackOriginStep).toBe(BAR);
+    expect(48 - arming.playbackOriginStep).toBe(2 * BAR);
+  });
+
+  test('a run that joins a clock already counting origins at its own bar line', () => {
+    const arming = createChordArming();
+    expect(run('playing', 100, 128, arming)).toEqual([112]);
+    expect(arming.playbackOriginStep).toBe(112);
+    expect(112 - arming.playbackOriginStep).toBe(0);
+  });
+
+  test('a stop empties the origin, so the next run starts at its own zero', () => {
+    const arming = createChordArming();
+    run('playing', 5, 48, arming);
+    expect(arming.playbackOriginStep).toBe(BAR);
+
+    resetChordArming(arming);
+    expect(arming.playbackOriginStep).toBe(0);
+
+    expect(run('playing', 100, 128, arming)).toEqual([112]);
+    expect(arming.playbackOriginStep).toBe(112);
   });
 });
 
@@ -103,7 +184,13 @@ describe('chord scheduler stop timing', () => {
     // step 16 and marks the player stopped, but React has not committed, so
     // the old code re-read a stale 'stopping' from a ref and let a whole new
     // chord through a sixteenth after the cut.
-    const arming: ChordArming = { armed: true, chordIndex: 1, nextBarStep: 16, lastStep: 15 };
+    const arming: ChordArming = {
+      armed: true,
+      chordIndex: 1,
+      nextBarStep: 16,
+      lastStep: 15,
+      playbackOriginStep: 0,
+    };
     expect(chordStepAction('stopping', 16, arming, BAR)).toBe('soft-stop');
     // stale ref (what the bug read) would have played:
     expect(chordStepAction('stopping', 17, { ...arming }, BAR)).toBe('play');
@@ -118,7 +205,13 @@ describe('chord scheduler stop timing', () => {
   });
 
   test('a soft stop only lands on a bar line', () => {
-    const arming: ChordArming = { armed: true, chordIndex: 1, nextBarStep: 32, lastStep: 19 };
+    const arming: ChordArming = {
+      armed: true,
+      chordIndex: 1,
+      nextBarStep: 32,
+      lastStep: 19,
+      playbackOriginStep: 0,
+    };
     expect(chordStepAction('stopping', 20, arming, BAR)).toBe('idle');
     expect(chordStepAction('stopping', 32, arming, BAR)).toBe('soft-stop');
   });

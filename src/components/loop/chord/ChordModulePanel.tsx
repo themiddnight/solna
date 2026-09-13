@@ -7,14 +7,15 @@ import {
   getPresetsGroupedByCategory,
 } from "@/audio/presetRegistry";
 import { getMeter } from "@/utils/meter";
-import { stepCells } from "@/components/sequencerGrid";
-import { PlayingStepRow } from "@/components/ui/StepRow";
+import { foldPatternBoundaries, loopLengthDivisors, patternStoredIndexAt } from "@/utils/patternTimeline";
+import { loopBars } from "@/utils/songStructure";
 import { ModulePanelCard } from "./ModulePanelCard";
 import { ModulePasteButton } from "../ModulePasteButton";
+import { CustomPatternTimeline } from "./CustomPatternTimeline";
 import {
-  CustomPatternSteps,
   FeelSlider,
   OctaveSelect,
+  PatternBarsField,
   PatternSelect,
   SoundPresetField,
 } from "./moduleFields";
@@ -22,7 +23,7 @@ import {
 export interface ChordModulePanelProps {
   onPatternPreviewDown: (e: React.MouseEvent | React.TouchEvent) => void;
   onPatternPreviewUp: (e: React.MouseEvent | React.TouchEvent) => void;
-  /** Owned by ChordView, not this panel; passed through only to gate the PlayingStepRow ring. */
+  /** Owned by ChordView, not this panel; passed through only to gate the timeline's playhead. */
   isPlaying: boolean;
 }
 
@@ -30,65 +31,100 @@ export interface ChordModulePanelProps {
 const CHORD_OCTAVES = [2, 3, 4, 5, 6];
 
 /**
- * The custom comping grid: the `custom` branch of the pattern field, below the
- * field row rather than inside the "Chord Pattern" field cell, where its 16
- * buttons shared the width of one dropdown and rendered ~7px wide. Same
- * `StepRow` the drum sequencer uses; only the container changed.
+ * What an activation on `column` writes: an empty column starts a one-step
+ * onset, an already-active head clears it.
  *
- * Reads the grid and its meter itself, so the card above renders one element
- * for the whole branch and never re-renders when a step is toggled.
+ * It reads the value FIRST, because that is what makes the gesture a toggle —
+ * re-firing `setCustomChordEvent(column, true)` at a head that is already on is
+ * a write with no state change behind it, and the second click would do
+ * nothing.
+ *
+ * The value comes from the STORED slot and not from `values[column]`: storage
+ * is bar-major at `MAX_STEPS_PER_BAR`, so an index into it agrees with the
+ * column only in the widest meter — the same reason the draw path goes through
+ * `customPatternCells`.
+ *
+ * Exported so the toggle is pinned without a DOM, which this repo does not have.
+ */
+export function chordActivationValue(
+  values: readonly boolean[],
+  column: number,
+  stepsPerBar: number,
+): boolean {
+  return !values[patternStoredIndexAt(column, stepsPerBar)];
+}
+
+/**
+ * The chord lane: the `custom` branch of the pattern field, rendered below the
+ * field row rather than inside the "Chord Pattern" cell, where its buttons
+ * shared the width of one dropdown and rendered ~7px wide.
+ *
+ * A chord event has a LENGTH, so this is the span timeline and not one of the
+ * drum sequencer's `StepRow`s: a held chord is one block the user can resize,
+ * not a run of identical one-step cells that cannot say where it ends.
+ *
+ * It reads its own lane and its own meter, so the card above renders one
+ * element for the whole branch and never re-renders when a step is toggled.
  */
 function ChordPatternEditor({ isPlaying }: { isPlaying: boolean }) {
   const meterId = useAppStore((s) => s.meterId);
+  const chords = useAppStore((s) => s.chords);
   const customChordRhythm = useAppStore((s) => s.customChordRhythm);
-  const setCustomChordRhythm = useAppStore((s) => s.setCustomChordRhythm);
+  const customChordHoldSteps = useAppStore((s) => s.customChordHoldSteps);
+  const customChordLoopLength = useAppStore((s) => s.customChordLoopLength);
+  const setCustomChordEvent = useAppStore((s) => s.setCustomChordEvent);
+  const setCustomChordEventLength = useAppStore((s) => s.setCustomChordEventLength);
 
-  const cells = useMemo(() => stepCells(getMeter(meterId)), [meterId]);
+  const { stepsPerBar, accentGroups } = getMeter(meterId);
+  const cycleSteps = customChordLoopLength * stepsPerBar;
+  // The boundary map the store clamps a hold against (`customChordSpans`),
+  // derived here from the same two inputs it uses. The lane must not draw a
+  // block wider than the store will ever let the span become.
+  const boundaries = useMemo(
+    () => foldPatternBoundaries(
+      chords.map((chord) => chord.bars * stepsPerBar),
+      cycleSteps,
+    ),
+    [chords, stepsPerBar, cycleSteps],
+  );
 
   return (
-    <CustomPatternSteps
-      labelId="label-custom-chord-pattern"
-      label="Custom Chord Pattern"
-      cells={cells}
+    <CustomPatternTimeline
+      className="mt-3"
+      values={customChordRhythm}
+      holds={customChordHoldSteps}
+      loopLength={customChordLoopLength}
+      stepsPerBar={stepsPerBar}
+      accentGroups={accentGroups}
+      boundaries={boundaries}
+      empty={false}
+      label="Chord"
+      color="bg-module-chord text-module-chord-content"
       isPlaying={isPlaying}
-    >
-      <PlayingStepRow<boolean>
-        player="chords"
-        cells={cells}
-        steps={customChordRhythm}
-        isPlaying={isPlaying}
-        color="bg-module-chord text-module-chord-content"
-        isActive={(v) => v === true}
-        onStepClick={(i) =>
-          setCustomChordRhythm(
-            customChordRhythm.map((v, idx) => (idx === i ? !v : v)),
-          )
-        }
-      />
-    </CustomPatternSteps>
+      onActivate={(column) =>
+        setCustomChordEvent(column, chordActivationValue(customChordRhythm, column, stepsPerBar))
+      }
+      onErase={(column) => setCustomChordEvent(column, false)}
+      onResize={setCustomChordEventLength}
+    />
   );
 }
 
 /**
- * The chord layer's own card — sibling to BassModulePanel and PadModulePanel,
- * and holding the same kind of controls they do: sound, register, comping
- * rhythm, feel, level.
+ * The card's control row: sound, register, comping pattern and its length,
+ * feel.
  *
- * What it deliberately does NOT hold is Re-harmonize / Auto-Reharmonize. Those
- * two call `setChords` — they rewrite the progression every layer reads, not
- * this layer's voice of it — so they live in ChordView's progression card,
- * beside the `Auto-Reharmonized to …` badge that reports their effect.
- *
- * Reads its own slice of the store; the two pattern-preview handlers cannot be
- * derived here (they own ChordView's preview refs and the resolved rhythm
- * pattern) and come in as props, already stable useCallbacks in ChordView.
+ * Reads its own slice rather than taking eight props — the same rule the three
+ * module cards follow. The two preview handlers cannot be derived here (they
+ * own ChordView's preview refs and the resolved rhythm pattern) and come in as
+ * props, already stable useCallbacks in ChordView.
  */
-export function ChordModulePanel({
+function ChordPatternFields({
   onPatternPreviewDown,
   onPatternPreviewUp,
-  isPlaying,
-}: ChordModulePanelProps) {
+}: Pick<ChordModulePanelProps, 'onPatternPreviewDown' | 'onPatternPreviewUp'>) {
   const meterId = useAppStore((s) => s.meterId);
+  const chords = useAppStore((s) => s.chords);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
   const setChordSynthParams = useAppStore((s) => s.setChordSynthParams);
   const rhythmId = useAppStore((s) => s.chordRhythmId);
@@ -99,6 +135,8 @@ export function ChordModulePanel({
   const setChordOctave = useAppStore((s) => s.setChordOctave);
   const chordRhythmMode = useAppStore((s) => s.chordRhythmMode);
   const setChordRhythmMode = useAppStore((s) => s.setChordRhythmMode);
+  const customChordLoopLength = useAppStore((s) => s.customChordLoopLength);
+  const setCustomChordLoopLength = useAppStore((s) => s.setCustomChordLoopLength);
   const customPresets = useAppStore((s) => s.customSynthPresets);
 
   const allPresets = useMemo(
@@ -109,8 +147,13 @@ export function ChordModulePanel({
     () => getPresetsGroupedByCategory(allPresets),
     [allPresets],
   );
+  // Only the divisors of the progression: a length it cannot divide leaves a
+  // gap at the end of every repetition. The slice clamps to the same set, so
+  // this field offers choices that survive the write rather than filtering
+  // afterwards.
+  const barOptions = useMemo(() => loopLengthDivisors(loopBars(chords)), [chords]);
 
-  // `Custom…` swaps the dropdown's job for the step grid below it.
+  // `Custom…` swaps the dropdown's job for the span timeline below the row.
   const selectChordPattern = (value: string) => {
     if (value === 'custom') {
       setChordRhythmMode('custom');
@@ -120,27 +163,8 @@ export function ChordModulePanel({
     setChordRhythmId(value);
   };
 
-  // No `mt-4`: the GroupFrame in ChordView owns the spacing between these three
-  // cards now (`p-1` + `gap-3 sm:gap-4`). The margin was left over from when
-  // they were direct children of a `space-y` root, and inside the frame it
-  // double-counted — a 20px top inset against 4px on the other three sides, and
-  // 28px between cards where the gap says 12.
-  // `role="group"` + the heading as its label is what lets every field below
-  // drop its `Chord ` prefix: the context a screen reader needs comes from the
-  // group, not from repeating the word five times.
   return (
-    <ModulePanelCard
-      target="chord"
-      title="Chord Module"
-      description={
-        <>
-          How the chord layer voices the progression above: its sound,
-              register and comping rhythm.
-        </>
-      }
-      actions={<ModulePasteButton groups={['chord-sound', 'chord-pattern']} />}
-    >
-      <div className="flex flex-row flex-wrap items-end gap-3">
+    <div className="flex flex-row flex-wrap items-end gap-3">
           <SoundPresetField
             id="select-chord-sound-preset"
             title="Chord sound preset — factory and saved presets, synced with the synth page"
@@ -177,6 +201,17 @@ export function ChordModulePanel({
             meterId={meterId}
           />
 
+          {/* Beside the pattern it lengthens, and only while that pattern is
+              this lane's own: a preset already states its own length. */}
+          {chordRhythmMode === 'custom' && (
+            <PatternBarsField
+              id="select-chord-pattern-bars"
+              value={customChordLoopLength}
+              options={barOptions}
+              onChange={setCustomChordLoopLength}
+            />
+          )}
+
           <FeelSlider
             id="slider-chord-feel"
             value={chordFeel}
@@ -185,8 +220,54 @@ export function ChordModulePanel({
             title="Chord note length: tight (short holds) ↔ loose (long holds)"
           />
         </div>
+  );
+}
 
-        {chordRhythmMode === 'custom' && <ChordPatternEditor isPlaying={isPlaying} />}
+/**
+ * The chord layer's own card — sibling to BassModulePanel and PadModulePanel,
+ * and holding the same kind of controls they do: sound, register, comping
+ * rhythm, feel, level.
+ *
+ * What it deliberately does NOT hold is Re-harmonize / Auto-Reharmonize. Those
+ * two call `setChords` — they rewrite the progression every layer reads, not
+ * this layer's voice of it — so they live in ChordView's progression card,
+ * beside the `Auto-Reharmonized to …` badge that reports their effect.
+ *
+ * All it gates itself is the lane below the field row.
+ */
+export function ChordModulePanel({
+  onPatternPreviewDown,
+  onPatternPreviewUp,
+  isPlaying,
+}: ChordModulePanelProps) {
+  const chordRhythmMode = useAppStore((s) => s.chordRhythmMode);
+
+  // No `mt-4`: the GroupFrame in ChordView owns the spacing between these three
+  // cards now (`p-1` + `gap-3 sm:gap-4`). The margin was left over from when
+  // they were direct children of a `space-y` root, and inside the frame it
+  // double-counted — a 20px top inset against 4px on the other three sides, and
+  // 28px between cards where the gap says 12.
+  // `role="group"` + the heading as its label is what lets every field below
+  // drop its `Chord ` prefix: the context a screen reader needs comes from the
+  // group, not from repeating the word five times.
+  return (
+    <ModulePanelCard
+      target="chord"
+      title="Chord Module"
+      description={
+        <>
+          How the chord layer voices the progression above: its sound,
+              register and comping rhythm.
+        </>
+      }
+      actions={<ModulePasteButton groups={['chord-sound', 'chord-pattern']} />}
+    >
+      <ChordPatternFields
+        onPatternPreviewDown={onPatternPreviewDown}
+        onPatternPreviewUp={onPatternPreviewUp}
+      />
+
+      {chordRhythmMode === 'custom' && <ChordPatternEditor isPlaying={isPlaying} />}
     </ModulePanelCard>
   );
 }

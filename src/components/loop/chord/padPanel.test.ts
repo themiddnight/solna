@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import type { CategoryPresetGroup } from '@/audio/presetRegistry';
 import { droneDegreeButtons, padPresetGroups } from './padPanel';
 
@@ -81,5 +82,31 @@ describe('padPresetGroups', () => {
   test('an unresolved preset name (deleted custom preset) does not add a phantom group', () => {
     const shown = padPresetGroups(groups, 'Deleted Custom Preset');
     expect(shown.map((g) => g.category)).toEqual(['Pad']);
+  });
+});
+
+/**
+ * The resizable custom lane is a Chord/Bass thing: those two are the layers
+ * whose pattern is a HAND-DRAWN cycle, so only they need a bar selector and a
+ * span timeline. The pad follows the progression (or drones across all of it),
+ * and has no per-lane cycle to shorten.
+ *
+ * Pinned against the source rather than a render: the pad card is the third
+ * module in the same column as its two siblings, so a copy-paste of their lane
+ * is the likely way one appears — and a rendered assertion cannot tell "the pad
+ * has no bar field" from "the pad has one that happens to be hidden".
+ */
+describe('the pad card grows no custom lane', () => {
+  const src = readFileSync(new URL('./PadModulePanel.tsx', import.meta.url), 'utf8');
+
+  test('it renders neither the bar selector nor a span timeline', () => {
+    expect(src).not.toContain('PatternBarsField');
+    expect(src).not.toContain('CustomPatternTimeline');
+  });
+
+  test('it invents no pad-side custom pattern state to store', () => {
+    // The lane's state lives in the chord and bass slices; there is no
+    // `customPad*` field and no pad setter for one.
+    expect(src).not.toContain('customPad');
   });
 });

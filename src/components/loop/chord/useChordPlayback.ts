@@ -5,22 +5,22 @@ import {
   buildChordEvents,
   chordPlanPosition,
   emitStepEvents,
-  eventsForStep,
+  eventsForCycleStep,
   playFullHoldChord,
   scheduleWholeChord,
 } from "@/audio/playback/chordPlayback";
 import type { BarInvariantEvent } from "@/audio/playback/chordPlayback";
 import type { RhythmPattern } from "@/data/chordRhythms";
 import {
-  adaptBassPattern,
-  adaptRhythmPattern,
+  cycleHoldScale,
   feelToHoldScale,
   fullHoldDuration,
-  isFullHoldBass,
-  isFullHoldRhythm,
-  resolvePlaybackBassPattern,
-  resolvePlaybackRhythmPattern,
+  isFullHoldBassCycle,
+  isFullHoldRhythmCycle,
+  resolvePlaybackBassCycle,
+  resolvePlaybackRhythmCycle,
 } from "@/audio/chordRhythms";
+import type { PlaybackPatternCycle } from "@/audio/chordRhythms";
 import {
   isApproachToken,
   resolveBassSteps,
@@ -42,9 +42,9 @@ import {
   subscribePlaybackClock,
 } from "@/audio/playback/playbackEngine";
 import type { AccompanimentSource } from "@/audio/playback/playbackEngine";
-import { getMeter } from "@/utils/meter";
+import { getMeter, type MeterId } from "@/utils/meter";
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "@/components/playerStop";
-import type { PlayerState } from "@/store/types";
+import type { AppStore, PlayerState } from "@/store/types";
 import type { ChordItem, SynthParams } from "@/types";
 import { publishStepAt, resetStep } from "@/components/playbackStep";
 import { padHoldsAcrossLoop, resolvePadArm } from "@/audio/playback/padPlayback";
@@ -61,10 +61,19 @@ export interface ChordArming {
   nextBarStep: number;
   /** Previous clock step, tracked so a resetClock rewind (step going backwards) can be detected. */
   lastStep: number;
+  /**
+   * The clock step this playback RUN began on — the bar line the stopped
+   * player armed on, set once and never re-set per chord. Every cycle column is
+   * measured from it (`step - playbackOriginStep`), so a two-bar chord cycle
+   * and a three-bar bass cycle keep phase across the chords that follow, and
+   * the first tick of a run is column zero of both even when the shared clock
+   * was already counting.
+   */
+  playbackOriginStep: number;
 }
 
 export function createChordArming(): ChordArming {
-  return { armed: false, chordIndex: 0, nextBarStep: 0, lastStep: 0 };
+  return { armed: false, chordIndex: 0, nextBarStep: 0, lastStep: 0, playbackOriginStep: 0 };
 }
 
 /**
@@ -80,6 +89,10 @@ export function resetChordArming(arming: ChordArming): void {
   arming.chordIndex = 0;
   arming.nextBarStep = 0;
   arming.lastStep = 0;
+  // The origin goes with the rest of the arming, deliberately: the next run
+  // must measure its cycles from ITS OWN first bar line, not from one the
+  // outgoing run left behind.
+  arming.playbackOriginStep = 0;
 }
 
 /**
@@ -120,7 +133,14 @@ export function activeStepsPerBar(): number {
  * param is read live at emit time.
  */
 interface ChordPlan {
-  startStep: number;
+  /**
+   * The progression step this chord was armed on — measured from the run's
+   * `playbackOriginStep`, like the step every tick is scheduled against, so
+   * `chordPlanPosition` needs no second origin. Plans tile a run: each is
+   * armed exactly one chord after the last, so this is a multiple of the
+   * chord's own span.
+   */
+  startProgressionStep: number;
   totalBars: number;
   chordNotes: string[];
   bassNotes: string[];
@@ -128,6 +148,16 @@ interface ChordPlan {
   bassArp: boolean;
   chordEvents: BarInvariantEvent[];
   bassEvents: BarInvariantEvent[];
+  /**
+   * The two lanes' cycle widths, in 16th columns, resolved when the plan was
+   * armed and carried for its whole life. A clock tick must never read the
+   * store for one: a mid-chord resize would then re-phase a pattern that is
+   * already sounding. A preset's cycle is one bar; a custom lane's is its own
+   * `loopLength * stepsPerBar`, which is what makes column 20 of a two-bar
+   * pattern addressable at all.
+   */
+  chordCycleSteps: number;
+  bassCycleSteps: number;
 }
 
 /**
@@ -166,109 +196,198 @@ function armPad(chord: ChordItem, isLoopStart: boolean, time: number): void {
 }
 
 /**
+ * The scalars both lanes of one plan resolve against — the meter's bar length,
+ * the plan's own duration, and the progression a custom lane folds its
+ * boundaries onto, in columns of the ACTIVE meter (the same quantity
+ * `customPatternSpans` derives for the store edits, never `ChordItem.bars`
+ * directly).
+ */
+interface PlanLaneContext {
+  totalBars: number;
+  barDur: number;
+  stepDur: number;
+  stepsPerBar: number;
+  meterId: MeterId;
+  chordDurations: readonly number[];
+  /** The audio time the plan was armed at. */
+  time: number;
+}
+
+/** One lane of an armed plan: the cycle it repeats over, and its events. */
+interface PlanLane {
+  cycleSteps: number;
+  events: BarInvariantEvent[];
+}
+
+/**
+ * The chord lane of a plan: its own cycle, resolved once from the state the
+ * plan starts against. A full-hold cycle is PRESET-only (`isFullHoldRhythmCycle`),
+ * so a custom span covering the whole cycle stays a span — it strikes, releases
+ * at the seam and strikes again, which is the length the user drew.
+ */
+function resolveChordLane(
+  s: AppStore,
+  chordNotes: string[],
+  ctx: PlanLaneContext,
+): PlanLane {
+  const cycle = resolvePlaybackRhythmCycle(
+    s.chordRhythmMode,
+    s.chordRhythmId,
+    s.customChordRhythm,
+    s.customChordHoldSteps,
+    s.customChordLoopLength,
+    ctx.stepsPerBar,
+    ctx.meterId,
+    ctx.chordDurations,
+  );
+  // Feel may only TIGHTEN a span the user drew, so the cycle's own custom flag
+  // picks the scale; a preset keeps the whole loose range.
+  const holdScale = cycleHoldScale(cycle.custom, s.chordFeel);
+  if (isFullHoldRhythmCycle(cycle)) {
+    playFullHoldChord(
+      chordNotes,
+      s.chordSynthParams,
+      ctx.time,
+      fullHoldDuration(ctx.totalBars, ctx.barDur, holdScale),
+      "chord",
+    );
+    return { cycleSteps: cycle.cycleSteps, events: [] };
+  }
+  return {
+    cycleSteps: cycle.cycleSteps,
+    events: buildChordEvents(cycle.pattern, chordNotes, ctx.stepDur, holdScale),
+  };
+}
+
+/** The bass lane's twin, over its own cycle, hold scale and tone resolution. */
+function resolveBassLane(
+  s: AppStore,
+  chord: ChordItem,
+  ctx: PlanLaneContext,
+): PlanLane {
+  const cycle = resolvePlaybackBassCycle(
+    s.bassPatternMode,
+    s.bassPatternId,
+    s.customBassPattern,
+    s.customBassHoldSteps,
+    s.customBassLoopLength,
+    ctx.stepsPerBar,
+    ctx.meterId,
+    ctx.chordDurations,
+  );
+  const chordIdx = Math.max(0, s.chords.indexOf(chord));
+  const resolveWithHold = (holdScale: number) =>
+    resolveBassSteps(
+      cycle.pattern,
+      s.chords,
+      chordIdx,
+      s.bassOctave,
+      s.scaleRoot,
+      s.scaleType,
+      s.bpm,
+      holdScale,
+    );
+
+  if (isFullHoldBassCycle(cycle)) {
+    const rootEvent = resolveWithHold(1)[0];
+    if (rootEvent) {
+      playbackNoteOn(rootEvent.noteName, s.bassSynthParams, rootEvent.velocity, ctx.time, "bass");
+      playbackNoteOff(
+        rootEvent.noteName,
+        s.bassSynthParams.release,
+        ctx.time + fullHoldDuration(ctx.totalBars, ctx.barDur, cycleHoldScale(cycle.custom, s.bassFeel)),
+        "bass",
+      );
+    }
+    return { cycleSteps: cycle.cycleSteps, events: [] };
+  }
+  return {
+    cycleSteps: cycle.cycleSteps,
+    events: resolveWithHold(cycleHoldScale(cycle.custom, s.bassFeel)).map((ev) => ({
+      step: ev.step,
+      noteName: ev.noteName,
+      velocity: ev.velocity,
+      timeOffset: 0,
+      hold: ev.holdSec,
+      // Approach tones lead into the NEXT chord, so they belong to the last bar.
+      lastBarOnly: isApproachToken(ev.token),
+    })),
+  };
+}
+
+/**
  * Arms a chord: resolves its notes and pattern events, and fires the one-shot
  * voices of the full-hold patterns (those are single long voices that
  * updateSynthParams can already re-shape live, so they need no per-step work).
+ *
+ * ONE read of the loop state per plan: the meter, the progression and both
+ * lanes' cycles all come from this snapshot, and neither cycle is re-read on a
+ * clock tick. An active arp replaces its lane's pattern outright, so that lane
+ * resolves no cycle and reports the one bar its stride is measured against.
  */
-function startChordPlan(chord: ChordItem, startStep: number, time: number): ChordPlan {
+function startChordPlan(
+  chord: ChordItem,
+  startProgressionStep: number,
+  time: number,
+): ChordPlan {
   initPlaybackEngine();
   const s = useAppStore.getState();
-  const stepDur = stepDurationSec(s.bpm);
-  const stepsPerBar = activeStepsPerBar();
-  const barDur = barDurationSec(s.bpm, stepsPerBar);
+  const meter = getMeter(s.meterId);
+  const stepsPerBar = meter.stepsPerBar;
   const totalBars = chord.bars || 1;
+  const ctx: PlanLaneContext = {
+    totalBars,
+    barDur: barDurationSec(s.bpm, stepsPerBar),
+    stepDur: stepDurationSec(s.bpm),
+    stepsPerBar,
+    meterId: meter.id,
+    chordDurations: s.chords.map((c) => c.bars * stepsPerBar),
+    time,
+  };
 
   const chordNotes = generateBlockChordNotes(chord.quality, chord.root, s.chordOctave);
   const bassNotes = generateBlockChordNotes(chord.quality, chord.root, s.bassOctave);
   const chordArp = !!s.chordSynthParams.arpActive;
   const bassArp = !!s.bassSynthParams.arpActive;
+  const idleLane: PlanLane = { cycleSteps: stepsPerBar, events: [] };
 
-  let chordEvents: BarInvariantEvent[] = [];
-  if (!chordArp) {
-    const pattern = adaptRhythmPattern(
-      resolvePlaybackRhythmPattern(
-        s.chordRhythmMode,
-        s.chordRhythmId,
-        s.customChordRhythm,
-        stepsPerBar,
-        getMeter(s.meterId).id,
-      ),
-      stepsPerBar,
-    );
-    const holdScale = feelToHoldScale(s.chordFeel);
-    if (isFullHoldRhythm(pattern, stepsPerBar)) {
-      playFullHoldChord(
-        chordNotes,
-        s.chordSynthParams,
-        time,
-        fullHoldDuration(totalBars, barDur, holdScale),
-        "chord",
-      );
-    } else {
-      chordEvents = buildChordEvents(pattern, chordNotes, stepDur, holdScale);
-    }
-  }
+  const chordLane = chordArp ? idleLane : resolveChordLane(s, chordNotes, ctx);
+  const bassLane = bassArp ? idleLane : resolveBassLane(s, chord, ctx);
 
-  let bassEvents: BarInvariantEvent[] = [];
-  if (!bassArp) {
-    const pattern = adaptBassPattern(
-      resolvePlaybackBassPattern(
-        s.bassPatternMode,
-        s.bassPatternId,
-        s.customBassPattern,
-        stepsPerBar,
-        getMeter(s.meterId).id,
-      ),
-      stepsPerBar,
-    );
-    const chordIdx = Math.max(0, s.chords.indexOf(chord));
-    const resolveWithHold = (holdScale: number) =>
-      resolveBassSteps(
-        pattern,
-        s.chords,
-        chordIdx,
-        s.bassOctave,
-        s.scaleRoot,
-        s.scaleType,
-        s.bpm,
-        holdScale,
-      );
-
-    if (isFullHoldBass(pattern, stepsPerBar)) {
-      const rootEvent = resolveWithHold(1)[0];
-      if (rootEvent) {
-        playbackNoteOn(rootEvent.noteName, s.bassSynthParams, rootEvent.velocity, time, "bass");
-        playbackNoteOff(
-          rootEvent.noteName,
-          s.bassSynthParams.release,
-          time + fullHoldDuration(totalBars, barDur, feelToHoldScale(s.bassFeel)),
-          "bass",
-        );
-      }
-    } else {
-      bassEvents = resolveWithHold(feelToHoldScale(s.bassFeel)).map((ev) => ({
-        step: ev.step,
-        noteName: ev.noteName,
-        velocity: ev.velocity,
-        timeOffset: 0,
-        hold: ev.holdSec,
-        // Approach tones lead into the NEXT chord, so they belong to the last bar.
-        lastBarOnly: isApproachToken(ev.token),
-      }));
-    }
-  }
-
-  return { startStep, totalBars, chordNotes, bassNotes, chordArp, bassArp, chordEvents, bassEvents };
+  return {
+    startProgressionStep,
+    totalBars,
+    chordNotes,
+    bassNotes,
+    chordArp,
+    bassArp,
+    chordEvents: chordLane.events,
+    bassEvents: bassLane.events,
+    chordCycleSteps: chordLane.cycleSteps,
+    bassCycleSteps: bassLane.cycleSteps,
+  };
 }
 
 /**
  * Fires the chord and bass voices that land on this clock step. Params come
  * from the store at call time, so every timbre knob is heard on the very next
  * hit; the arp reads the ABSOLUTE step so it keeps stride across chords.
+ *
+ * The phase the rhythm patterns are matched at is `progressionStep`, supplied
+ * by the caller because the origin it is measured from is arming state this
+ * function does not own — and folded onto each lane's OWN cycle width, so a
+ * two-bar chord cycle and a three-bar bass cycle advance independently from
+ * that one number. Both folds are `eventsForCycleStep`'s: a second copy of the
+ * seam rule here is exactly how a preview and the transport come to disagree
+ * about where a cycle starts.
+ *
+ * `step` stays ABSOLUTE for the arp, which keeps its stride across chords and
+ * bar lines rather than restarting on every one.
  */
 function emitChordPlanStep(
   plan: ChordPlan,
-  pos: { stepInBar: number; isLastBar: boolean; stepsRemaining: number },
+  progressionStep: number,
+  pos: { isLastBar: boolean; stepsRemaining: number },
   step: number,
   time: number,
 ): void {
@@ -280,7 +399,7 @@ function emitChordPlanStep(
   emitStepEvents(
     plan.chordArp
       ? arpEventsForStep(plan.chordNotes, s.chordSynthParams, step, stepDur, feelToHoldScale(s.chordFeel), stepsPerBar)
-      : eventsForStep(plan.chordEvents, pos.stepInBar, pos.isLastBar),
+      : eventsForCycleStep(plan.chordEvents, progressionStep, plan.chordCycleSteps, pos.isLastBar),
     s.chordSynthParams,
     "chord",
     time,
@@ -290,7 +409,7 @@ function emitChordPlanStep(
   emitStepEvents(
     plan.bassArp
       ? arpEventsForStep(plan.bassNotes, s.bassSynthParams, step, stepDur, feelToHoldScale(s.bassFeel), stepsPerBar)
-      : eventsForStep(plan.bassEvents, pos.stepInBar, pos.isLastBar),
+      : eventsForCycleStep(plan.bassEvents, progressionStep, plan.bassCycleSteps, pos.isLastBar),
     s.bassSynthParams,
     "bass",
     time,
@@ -323,6 +442,9 @@ export function chordStepAction(
   if (!wasArmed) {
     arming.chordIndex = 0;
     arming.nextBarStep = step;
+    // The run's one origin, set here and nowhere else: this is the tick the
+    // first chord is armed on, so it is also column zero of both cycles.
+    arming.playbackOriginStep = step;
   }
   if (step < arming.nextBarStep) return 'idle';
   return 'play';
@@ -371,9 +493,14 @@ function useChordPlaybackState(): ChordPlaybackState {
  * The chord layer's audition player: a card's hold-to-preview, and the
  * auto-preview that fires when a chord is picked.
  *
- * Pattern previews only. These are driven by a bar timer rather than the
- * shared clock, so they still lay the whole chord down in one call; the
- * transport path arms a ChordPlan and emits it step by step instead.
+ * Pattern previews only. These are driven by a timer rather than the shared
+ * clock, so they still lay the whole cycle down in one call; the transport
+ * path arms a ChordPlan and emits it step by step instead.
+ *
+ * The caller hands in the RESOLVED cycle, not a pattern: a preset's cycle is
+ * one bar and a custom lane's is its own `loopLength * stepsPerBar`, and the
+ * timer the caller loops at must be that same length. Deriving the walk from
+ * the one-bar preview chord instead scheduled a single step for every preset.
  */
 function useChordPatternPreview({
   bpm,
@@ -382,41 +509,42 @@ function useChordPatternPreview({
   chordFeel,
 }: ChordPlaybackState) {
   return useCallback(
-    (chord: ChordItem, startTime: number, pattern: RhythmPattern) => {
+    (chord: ChordItem, startTime: number, cycle: PlaybackPatternCycle<RhythmPattern>) => {
       initPlaybackEngine();
 
       const stepsPerBar = activeStepsPerBar();
-      const adapted = adaptRhythmPattern(pattern, stepsPerBar);
-
+      const barDur = barDurationSec(bpm, stepsPerBar);
       const notes = generateBlockChordNotes(
         chord.quality,
         chord.root,
         chordOctave,
       );
       const stepDur = stepDurationSec(bpm);
-      const totalBars = chord.bars || 1;
-      const holdScale = feelToHoldScale(chordFeel);
+      // Feel may only TIGHTEN a span the user drew, so the cycle's own custom
+      // flag picks the scale — the same rule the transport lane follows.
+      const holdScale = cycleHoldScale(cycle.custom, chordFeel);
 
-      if (isFullHoldRhythm(adapted, stepsPerBar)) {
-        const barDur = barDurationSec(bpm, stepsPerBar);
+      if (isFullHoldRhythmCycle(cycle)) {
+        // A preset cycle is one bar, so this is the whole-chord fast path; a
+        // custom span covering the cycle is a span and stays on the walk below.
         playFullHoldChord(
           notes,
           chordSynthParams,
           startTime,
-          fullHoldDuration(totalBars, barDur, holdScale),
+          fullHoldDuration(cycle.cycleSteps / stepsPerBar, barDur, holdScale),
           "chord",
         );
         return;
       }
 
       scheduleWholeChord(
-        buildChordEvents(adapted, notes, stepDur, holdScale),
+        buildChordEvents(cycle.pattern, notes, stepDur, holdScale),
         chordSynthParams,
         "chord",
         startTime,
         stepDur,
-        totalBars,
-        stepsPerBar,
+        cycle.cycleSteps,
+        cycle.cycleSteps,
       );
     },
     [bpm, chordSynthParams, chordOctave, chordFeel],
@@ -443,30 +571,29 @@ function useBassPatternPreview({
     (
       chord: ChordItem,
       startTime: number,
-      pattern: BassPattern,
+      cycle: PlaybackPatternCycle<BassPattern>,
       chordContext?: ChordItem[],
     ) => {
       initPlaybackEngine();
       const stepsPerBar = activeStepsPerBar();
-      const adapted = adaptBassPattern(pattern, stepsPerBar);
+      const barDur = barDurationSec(bpm, stepsPerBar);
       const context = chordContext ?? chords;
       const chordIdx = Math.max(0, context.indexOf(chord));
       const stepDur = stepDurationSec(bpm);
-      const totalBars = chord.bars || 1;
-      const resolveWithHold = (holdScale: number) =>
+      const holdScale = cycleHoldScale(cycle.custom, bassFeel);
+      const resolveWithHold = (scale: number) =>
         resolveBassSteps(
-          adapted,
+          cycle.pattern,
           context,
           chordIdx,
           bassOctave,
           scaleRoot,
           scaleType,
           bpm,
-          holdScale,
+          scale,
         );
 
-      if (isFullHoldBass(adapted, stepsPerBar)) {
-        const barDur = barDurationSec(bpm, stepsPerBar);
+      if (isFullHoldBassCycle(cycle)) {
         const rootEvent = resolveWithHold(1)[0];
         if (rootEvent) {
           playbackNoteOn(
@@ -479,7 +606,7 @@ function useBassPatternPreview({
           playbackNoteOff(
             rootEvent.noteName,
             bassSynthParams.release,
-            startTime + fullHoldDuration(totalBars, barDur, feelToHoldScale(bassFeel)),
+            startTime + fullHoldDuration(cycle.cycleSteps / stepsPerBar, barDur, holdScale),
             "bass",
           );
         }
@@ -487,7 +614,7 @@ function useBassPatternPreview({
       }
 
       scheduleWholeChord(
-        resolveWithHold(feelToHoldScale(bassFeel)).map((ev) => ({
+        resolveWithHold(holdScale).map((ev) => ({
           step: ev.step,
           noteName: ev.noteName,
           velocity: ev.velocity,
@@ -499,8 +626,8 @@ function useBassPatternPreview({
         "bass",
         startTime,
         stepDur,
-        totalBars,
-        stepsPerBar,
+        cycle.cycleSteps,
+        cycle.cycleSteps,
       );
     },
     [chords, bassOctave, scaleRoot, scaleType, bpm, bassSynthParams, bassFeel],
@@ -662,8 +789,17 @@ function useChordClock({
       // Live store read, not a ref: see chordStepAction's doc comment.
       const playerState = useAppStore.getState().chordsPlayer;
       const stepsPerBar = activeStepsPerBar();
-      publishStepAt('chords', step % stepsPerBar, time);
       const action = chordStepAction(playerState, step, arming, stepsPerBar);
+
+      // The run's step: one subtraction, and the ONLY place the origin is
+      // applied. Everything below schedules from this number, and the publish
+      // sits AFTER the arming transition above because that transition is what
+      // sets the origin — the tick that arms reports 0, so both custom cycles
+      // begin at column zero even when the shared clock was already counting.
+      // The value stays absolute within the run, never reduced modulo a bar:
+      // each timeline reader folds it by its own cycle width.
+      const progressionStep = step - arming.playbackOriginStep;
+      publishStepAt('chords', progressionStep, time);
 
       // Soft stop: schedule the release exactly on the bar line the clock is
       // handing us, then mark the player stopped. Using the clock's `time`
@@ -702,7 +838,7 @@ function useChordClock({
         if (liveChords.length === 0) return;
         const index = arming.chordIndex % liveChords.length;
         const chord = liveChords[index];
-        planRef.current = startChordPlan(chord, step, time);
+        planRef.current = startChordPlan(chord, progressionStep, time);
         armPad(chord, index === 0, time);
         showChord(index, chord);
         // The beat the chord was triggered on is what every beat counter measures
@@ -717,12 +853,12 @@ function useChordClock({
       if (playerState === 'stopped') return;
       const plan = planRef.current;
       if (!plan) return;
-      const pos = chordPlanPosition(plan, step, stepsPerBar);
+      const pos = chordPlanPosition(plan, progressionStep, stepsPerBar);
       if (!pos) {
         planRef.current = null;
         return;
       }
-      emitChordPlanStep(plan, pos, step, time);
+      emitChordPlanStep(plan, progressionStep, pos, step, time);
     });
     // Deliberately these two and no more. The scheduler refs and `releasesRef`
     // are stable, and `clearChordUi`/`showChord` are stable useCallbacks — a

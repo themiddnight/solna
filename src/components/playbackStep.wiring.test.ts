@@ -47,26 +47,28 @@ const WIRINGS: Array<{
       regex: /publishStepAt\(\s*'([^']+)'/,
     },
     consumer: {
-      file: 'src/components/ui/StepRow.tsx',
-      regex: /export function PlayingStepRow[\s\S]*?useCurrentStep\(\s*(?:'([^']+)'|(\w+))\s*\)/,
-      expected: 'player',
+      // The chord lane's reader is its own timeline now. The drum-row shell it
+      // replaced (CustomPatternSteps wrapping a PlayingStepRow, whose player id
+      // arrived as a prop) is gone with this change, so what is pinned here is
+      // the literal in the file that actually renders the playhead. Which
+      // PANEL files mount that timeline is the panels' own contract —
+      // `consumerCallSites` below re-binds it at the two call sites, because a
+      // timeline nobody renders draws no playhead and no other test in this
+      // repo would notice.
+      file: 'src/components/loop/chord/CustomPatternTimeline.tsx',
+      regex: /useCurrentStep\(\s*'([^']+)'\s*\)/,
+      expected: 'chords',
     },
-    // PlayingStepRow and PlayingStepHeader both take their id at runtime, so
-    // the literal that actually binds 'chords' lives at each call site. The
-    // step-number strip (PlayingStepHeader) was consolidated into the shared
-    // `CustomPatternSteps` in moduleFields.tsx — hardcoded to "chords" once,
-    // serving both panels — while each panel keeps its own buttons row
-    // (PlayingStepRow). Strip and buttons must still read the SAME player or
-    // the numbers would highlight a different column than the one lit up
-    // below them; the count is one shared strip + two panels' buttons = 3.
     consumerCallSites: {
+      // One lane per panel, and one published step behind both: the chord and
+      // bass lanes fold the SAME absolute step by their own cycle width, which
+      // is why both readers subscribe to this one player id.
       files: [
-        'src/components/loop/chord/moduleFields.tsx',
         'src/components/loop/chord/ChordModulePanel.tsx',
         'src/components/loop/chord/BassModulePanel.tsx',
       ],
-      regex: /\bplayer\s*=\s*"chords"/g,
-      expectedCount: 3,
+      regex: /<CustomPatternTimeline\b/g,
+      expectedCount: 2,
     },
   },
   {
@@ -155,6 +157,42 @@ describe('playbackStep producer/consumer wiring', () => {
   }
 });
 
+/**
+ * The chords producer's VALUE contract, not just its id: there is one playback
+ * source behind two timeline readers (the chord lane and the bass lane), so it
+ * publishes a progression-relative ABSOLUTE step and each reader folds it by
+ * its own cycle width. A producer that folded it by a bar here would hand both
+ * readers the same 16-column width, and column 20 of a two-bar custom cycle
+ * would have no reader that could name it.
+ *
+ * Pinned against the source because the clock callback needs a DOM harness to
+ * run, which this repo deliberately does not have — the same reason the id
+ * wiring above is read out of the file.
+ */
+describe('the chords producer publishes a progression-relative step', () => {
+  const producerSource = (): string =>
+    readFileSync(join(process.cwd(), 'src/components/loop/chord/useChordPlayback.ts'), 'utf8');
+
+  test('publishes `progressionStep`, not the clock step or a bar remainder', () => {
+    const match = producerSource().match(/publishStepAt\(\s*'chords',\s*([^,]+),/);
+
+    expect(match).not.toBeNull();
+    expect(match![1].trim()).toBe('progressionStep');
+  });
+
+  test('publishes it AFTER the arming transition for that tick', () => {
+    // The arm is what sets the run's origin, so a publish placed above it
+    // would report the pre-arm step for the tick that starts the run — the
+    // first visible column would be the clock's, never zero.
+    const source = producerSource();
+    const armed = source.indexOf('const action = chordStepAction(');
+    const published = source.indexOf("publishStepAt('chords'");
+
+    expect(armed).toBeGreaterThan(-1);
+    expect(published).toBeGreaterThan(armed);
+  });
+});
+
 // renderToString runs no effects, so ArrangeView's tab-gating cannot be
 // observed by mounting the component — the guard is asserted directly
 // against the source instead. Without this, dropping the `activeTab`
@@ -175,5 +213,28 @@ describe('ArrangeView\'s clock effect is gated on both isPlaying and the active 
     // condition's actual content should.
     const condition = match![1].replace(/\s+/g, ' ').trim();
     expect(condition).toBe("!isPlaying || activeTab !== 'arrange'");
+  });
+});
+
+/**
+ * The other half of the chord-lane change: only the MELODIC and CHORD lanes
+ * moved to a span timeline. A drum voice is still one hit at one step, so the
+ * sequencer keeps the shared `StepRow` — and TrackRow must keep importing and
+ * rendering it rather than an inline copy or the new timeline.
+ *
+ * Asserted against the source for the same reason as everything above: a drum
+ * grid that rendered a span timeline would be a design change, not a
+ * refactor, and it would compile clean.
+ */
+describe('the drum sequencer keeps the one-hit step row', () => {
+  const trackRowSource = (): string =>
+    readFileSync(join(process.cwd(), 'src/components/loop/sequencer/TrackRow.tsx'), 'utf8');
+
+  test('TrackRow.tsx still imports and renders StepRow for drums', () => {
+    expect(trackRowSource()).toMatch(
+      /import \{ StepRow \} from ['"]@\/components\/ui\/StepRow['"]/,
+    );
+    expect(trackRowSource()).toMatch(/<StepRow</);
+    expect(trackRowSource()).not.toContain('CustomPatternTimeline');
   });
 });

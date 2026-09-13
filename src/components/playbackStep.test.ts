@@ -80,6 +80,47 @@ describe('createStepPublisher — publishing notifies', () => {
   });
 });
 
+// The 'chords' slot is the ONE playback source behind two timeline readers —
+// the chord lane and the bass lane — and each reader folds it by its OWN cycle
+// width. So the value the producer publishes is a progression-relative ABSOLUTE
+// step, and the publisher must hand it on untouched: a publisher that reduced
+// it by a bar would give both readers the same 16-column width and leave column
+// 20 of a two-bar custom cycle unaddressable.
+describe('createStepPublisher — the chords playhead is not folded onto a bar', () => {
+  const STEPS_PER_BAR = 16;
+
+  /** Every value a 'chords' subscriber is notified with, in order. */
+  function publishedChords(): { pub: ReturnType<typeof createStepPublisher>; steps: number[] } {
+    const pub = createStepPublisher();
+    const steps: number[] = [];
+    pub.subscribe('chords', () => steps.push(pub.getStep('chords')));
+    return { pub, steps };
+  }
+
+  test('reports steps past the bar edge instead of wrapping at it', () => {
+    const { pub, steps: publishedSteps } = publishedChords();
+
+    for (let step = 0; step <= STEPS_PER_BAR + 1; step++) pub.publish('chords', step);
+
+    // Column 0 is the initial value, so the publisher's identity check makes it
+    // no notification at all — the first one is column 1. What matters is that
+    // 16 and 17 arrive intact rather than being folded into 0 and 1.
+    expect(publishedSteps).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+    ]);
+  });
+
+  test('a value past the bar edge keeps the column a wider cycle draws it on', () => {
+    // 20 is column 4 of a 16-column cycle and column 20 of a 32-column one;
+    // which one it means is the reader's decision, so the value stays 20.
+    const pub = createStepPublisher();
+
+    pub.publish('chords', 20);
+
+    expect(pub.getStep('chords')).toBe(20);
+  });
+});
+
 describe('createStepPublisher — unsubscribing', () => {
   test('unsubscribing stops notifications and is safe to repeat', () => {
     const pub = createStepPublisher();

@@ -236,7 +236,7 @@ function LeadMelodyCell({
         // optional — a pointer-only editing affordance is an
         // accessibility regression with jsx-a11y at error.
         e.preventDefault();
-        // leadResizeLen counts CELLS, because that is what the
+        // The keyboard nudge counts CELLS, because that is what the
         // pointer moves over; the write counts TICKS, because
         // that is what a length IS. The conversion happens once,
         // here, at the boundary.

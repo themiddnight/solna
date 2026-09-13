@@ -320,22 +320,6 @@ export function resolveLeadCellSpan(
 }
 
 /**
- * The drag arithmetic, kept pure and out of the pointer handlers: the gesture
- * itself can never be tested (renderToString has no DOM), so everything that
- * can be a function is one. `maxLen` derives from the loop end ONLY, never
- * from the next note's position, because extending swallows (invariant 1).
- */
-export function leadResizeLen(
-  startLen: number,
-  dxPx: number,
-  cellWidth: number,
-  maxLen: number,
-): number {
-  const raw = startLen + Math.round(dxPx / cellWidth);
-  return Math.min(Math.max(1, maxLen), Math.max(1, raw));
-}
-
-/**
  * The classes that turn a run of per-cell buttons into one continuous bar:
  * the start rounds its left corners, body and end drop their left border
  * (box-sizing is border-box, so the cell keeps its column width and the

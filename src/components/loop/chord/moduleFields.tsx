@@ -5,23 +5,19 @@ import { findPresetByName } from "@/audio/presetRegistry";
 import type { CategoryPresetGroup } from "@/audio/presetRegistry";
 import type { MeterId } from "@/utils/meter";
 import { patternMeterTitle, patternOptionLabel } from "@/components/meterSelect";
-import type { StepCell } from "@/components/sequencerGrid";
-import { cx } from "@/components/ui/cx";
 import { FIELD_LABEL, FIELD_SELECT } from "@/components/ui/fieldClasses";
 import { Slider } from "@/components/ui/Slider";
-import { STEP_ROW_CLASS } from "@/components/ui/StepRow";
-import { PlayingStepHeader } from "@/components/ui/StepHeader";
 import { IconButton } from "@/components/ui/IconButton";
 import { PresetSelect } from "./PresetSelect";
 
 /**
- * The three fields every accompaniment module card's control row is built from,
+ * The fields every accompaniment module card's control row is built from,
  * extracted the way `PresetSelect` was — each was spelled out once per card,
  * and the copies were already drifting.
  *
  * What is deliberately NOT here: the card shell (`ModulePanelCard`), the sound
  * preset dropdown (`PresetSelect`) and each layer's own controls (the pad's
- * mode toggles, the bass's step cycle). Only the fields whose markup AND
+ * mode toggles, the bass's note palette). Only the fields whose markup AND
  * meaning are identical across cards live in this file.
  */
 
@@ -248,58 +244,36 @@ export function FeelSlider({ id, value, onChange, tint, title }: FeelSliderProps
   );
 }
 
-export interface CustomPatternStepsProps {
-  /** DOM id of the caption that also labels the group. */
-  labelId: string;
-  label: string;
-  cells: StepCell[];
-  isPlaying: boolean;
-  /**
-   * Extra classes on the scrolling shell. Only the bass card passes any
-   * (`mt-3`): its editor is a sibling of the field row, while the chord card's
-   * already sits in a spaced stack.
-   */
-  className?: string;
-  /**
-   * The `PlayingStepRow` itself. It is the one part that differs: the bass
-   * steps through a tone cycle, the chord grid toggles a boolean.
-   */
-  children: React.ReactNode;
+export interface PatternBarsFieldProps {
+  /** DOM id of the `<select>`; the label's `htmlFor` follows it. */
+  id: string;
+  /** The lane's cycle in bars — always a divisor of the progression. */
+  value: number;
+  /** The divisors of the progression in bars, ascending (1, 2, 4 for four). */
+  options: readonly number[];
+  onChange: (bars: number) => void;
 }
 
 /**
- * The full-width step editor a card shows once its pattern mode is `custom`.
+ * How many bars the lane's pattern runs before it repeats.
  *
- * It sits BELOW the field row rather than inside the pattern field cell, where
- * its 16 buttons shared the width of one dropdown and rendered ~7px wide — the
- * bass card's version stayed behind in the field cell long after the chord
- * card's moved out, which is why the two are one component now.
- *
- * `min-w` keeps a narrow window scrolling rather than squeezing the blocks back
- * down, and the floor is the drum grid's step area less its label gutter. A
- * phone takes a smaller one: this grid has no gutter to scroll out of view, so
- * less width per step buys less scrolling at no cost in orientation.
+ * The cap the bass card's comment used to describe — a length the progression
+ * cannot divide leaves a gap at the end of every repetition — is why `options`
+ * is `loopLengthDivisors(loopBars(chords))` and not `1..totalBars`: a length
+ * that divides the progression is the only one that lines up when the pattern
+ * repeats under it. The STORE is still the authority — it clamps whatever it is
+ * asked for onto the same divisor set — so this field only ever offers choices
+ * that will survive the write.
  */
-export function CustomPatternSteps({
-  labelId,
-  label,
-  cells,
-  isPlaying,
-  className,
-  children,
-}: CustomPatternStepsProps) {
+export function PatternBarsField({ id, value, options, onChange }: PatternBarsFieldProps) {
   return (
-    <div className={cx('overflow-x-auto', className)}>
-      <span className={FIELD_LABEL} id={labelId}>{label}</span>
-      <div className="min-w-[420px] sm:min-w-[520px]" role="group" aria-labelledby={labelId}>
-        <PlayingStepHeader
-          player="chords"
-          cells={cells}
-          isPlaying={isPlaying}
-          className={`${STEP_ROW_CLASS} mb-1.5`}
-        />
-        {children}
-      </div>
+    <div>
+      <label className={FIELD_LABEL} htmlFor={id}>Bars</label>
+      <select id={id} className={FIELD_SELECT} value={value}
+        onChange={(event) => onChange(Number(event.target.value))}>
+        {options.map((bars) => <option key={bars} value={bars}>{bars}</option>)}
+      </select>
     </div>
   );
 }
+

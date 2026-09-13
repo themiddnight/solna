@@ -1,6 +1,5 @@
 import React from "react";
 import type { StepCell } from "../sequencerGrid";
-import { useCurrentStep, type StepPlayerId } from "../playbackStep";
 
 /**
  * The drum grid's own container. The left padding clears TrackRow's label
@@ -35,6 +34,12 @@ export interface StepHeaderProps {
 /**
  * Step-number strip above the sequencer lanes. Memoized so the header is the
  * only thing that reconciles when nothing but the transport moved.
+ *
+ * `SequencerGrid` is its only caller, and it hands the step down — the
+ * self-subscribing variant that mirrored `PlayingStepRow` was deleted with its
+ * last caller. The chord and bass lanes never return to this strip: they moved
+ * to their own span timeline, which reads the shared step itself through
+ * `useCurrentStep('chords')` in `CustomPatternTimeline.tsx`.
  */
 export const StepHeader = React.memo(
   function StepHeader({ cells, currentStep, isPlaying, className = DRUM_HEADER_CLASS }: StepHeaderProps) {
@@ -61,14 +66,3 @@ export const StepHeader = React.memo(
     );
   },
 );
-
-/**
- * A StepHeader that reads the transport position itself, mirroring
- * `PlayingStepRow`. The chord and bass grids have no owner above them holding
- * the step — ChordModulePanel must not re-render 8x/sec just to move a number
- * strip, which is the whole reason the row subscribes at the leaf.
- */
-export function PlayingStepHeader({ player, ...rest }: Omit<StepHeaderProps, 'currentStep'> & { player: StepPlayerId }) {
-  const currentStep = useCurrentStep(player);
-  return <StepHeader {...rest} currentStep={currentStep} />;
-}

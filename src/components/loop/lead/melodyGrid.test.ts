@@ -11,7 +11,6 @@ import {
   leadRowLabelTone,
   leadPitchRows,
   leadRowLabel,
-  leadResizeLen,
   leadSpanClasses,
   resolveLeadCellSpan,
   type LeadCellKind,
@@ -214,29 +213,6 @@ describe('resolveLeadCellSpan', () => {
       endsSpan: false,
       startCol: -1,
     });
-  });
-});
-
-describe('leadResizeLen', () => {
-  test('rounds the drag distance to the nearest whole cell', () => {
-    expect(leadResizeLen(1, 0, 20, 16)).toBe(1);
-    expect(leadResizeLen(1, 9, 20, 16)).toBe(1);
-    expect(leadResizeLen(1, 10, 20, 16)).toBe(2);
-    expect(leadResizeLen(1, 31, 20, 16)).toBe(3);
-    expect(leadResizeLen(2, -21, 20, 16)).toBe(1);
-  });
-
-  test('clamps to 1 at the bottom, however far left the drag goes', () => {
-    expect(leadResizeLen(3, -400, 20, 16)).toBe(1);
-  });
-
-  test('clamps to maxLen at the top, however far right the drag goes', () => {
-    expect(leadResizeLen(3, 4000, 20, 16)).toBe(16);
-    expect(leadResizeLen(1, 100, 20, 2)).toBe(2);
-  });
-
-  test('a maxLen below 1 still yields 1', () => {
-    expect(leadResizeLen(1, 100, 20, 0)).toBe(1);
   });
 });
 

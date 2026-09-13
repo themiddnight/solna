@@ -328,28 +328,33 @@ describe('shouldClearReharmonizeIndicator', () => {
   });
 });
 
-import { nextBassStepChoice, bassStepLabel } from './chord/bassStepChoice';
+import { BASS_TOOLS, bassStepLabel, bassToolValue } from './chord/bassStepChoice';
 import type { BassStepChoice } from '@/data/bassPatterns';
 
-describe('ChordView custom step grid helpers', () => {
-  test('bass steps cycle rest → root → third → fifth → seventh → octave → rest', () => {
-    let value: BassStepChoice = 'rest';
-    const seen: BassStepChoice[] = [value];
-    for (let i = 0; i < 6; i++) {
-      value = nextBassStepChoice(value);
-      seen.push(value);
-    }
-    expect(seen).toEqual(['rest', 'root', 'third', 'fifth', 'seventh', 'octave', 'rest']);
+describe('the bass editor’s note tools', () => {
+  test('a note tool names its interval, and Erase names the lane’s rest', () => {
+    expect(bassToolValue('root')).toBe('root');
+    expect(bassToolValue('third')).toBe('third');
+    expect(bassToolValue('fifth')).toBe('fifth');
+    expect(bassToolValue('seventh')).toBe('seventh');
+    expect(bassToolValue('octave')).toBe('octave');
+    expect(bassToolValue('erase')).toBe('rest');
   });
 
-  test('bass step labels abbreviate each tone', () => {
-    expect(bassStepLabel('root')).toBe('R');
-    expect(bassStepLabel('third')).toBe('3');
-    expect(bassStepLabel('fifth')).toBe('5');
-    expect(bassStepLabel('seventh')).toBe('7');
-    expect(bassStepLabel('octave')).toBe('8');
-    expect(bassStepLabel('rest')).toBe('');
+  test('bass step labels abbreviate every stored choice', () => {
+    const stored: BassStepChoice[] = ['rest', 'root', 'third', 'fifth', 'seventh', 'octave'];
+    expect(stored.map(bassStepLabel)).toEqual(['', 'R', '3', '5', '7', '8']);
   });
+
+  test('the palette’s letter for a note IS that note’s label', () => {
+    // One table, two readers: the toolbar shows `label` and the span head
+    // shows bassStepLabel. A retyped letter in either would fail here.
+    for (const choice of BASS_TOOLS) {
+      if (choice.tool === 'erase') continue;
+      expect(bassStepLabel(bassToolValue(choice.tool))).toBe(choice.label);
+    }
+  });
+
 });
 
 describe('ChordView custom step grids', () => {
@@ -363,6 +368,9 @@ describe('ChordView custom step grids', () => {
     const presetHtml = renderToString(<ChordView />);
     expect(presetHtml).toContain('>Custom…<');
     expect(presetHtml).not.toContain('bg-module-chord text-module-chord-content');
+    // Preset mode shows neither the lane's timeline nor its bar selector.
+    expect(presetHtml).not.toContain('aria-label="Chord pattern"');
+    expect(presetHtml).not.toContain('id="select-chord-pattern-bars"');
 
     const initial = useAppStore.getInitialState();
     initial.chordRhythmMode = 'custom';
@@ -370,6 +378,8 @@ describe('ChordView custom step grids', () => {
     const customHtml = renderToString(<ChordView />);
     // The active step 0 of the chord grid wears the module fill.
     expect(customHtml).toContain('bg-module-chord text-module-chord-content');
+    expect(customHtml).toContain('aria-label="Chord pattern"');
+    expect(customHtml).toContain('id="select-chord-pattern-bars"');
     // The chord grid has no per-step labels, so no tone letter can appear.
     expect(customHtml).not.toContain('>R<');
 
@@ -384,9 +394,11 @@ describe('ChordView custom step grids', () => {
     initial.bassPatternMode = 'custom';
     initial.customBassPattern = ['root', ...new Array<BassStepChoice>(15).fill('rest')];
     const customHtml = renderToString(<ChordView />);
-    // The active step 0 of the bass grid wears the module fill and its label.
+    // The active step 0 of the bass grid wears the module fill and heads with
+    // its tone letter — the name is the timeline's, not the palette's.
     expect(customHtml).toContain('bg-module-bass text-module-bass-content');
-    expect(customHtml).toContain('>R<');
+    expect(customHtml).toContain('aria-label="Bass R at bar 1 beat 1 step 1"');
+    expect(customHtml).toContain('id="select-bass-pattern-bars"');
     initial.bassPatternMode = 'preset';
     initial.customBassPattern = new Array<BassStepChoice>(16).fill('rest');
     useAppStore.getState().setBassPatternMode('preset');

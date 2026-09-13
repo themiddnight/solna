@@ -9,11 +9,10 @@ import { loopBars } from '@/utils/songStructure';
 import { columnsPerBar, strideFor } from '@/utils/stepResolution';
 import {
   clampLeadCursor,
-  clampLeadLoopLength,
   leadCursorBar,
-  loopLengthDivisors,
   type LeadNote,
 } from '@/audio/leadMelody';
+import { clampLoopLength, loopLengthDivisors } from '@/utils/patternTimeline';
 import { previewSequencerNote } from '@/audio/playback/presetPreview';
 import {
   LEAD_WINDOW_OCTAVES,
@@ -112,7 +111,7 @@ export function useLeadGridModel(trackId: MelodyTrackId) {
   // in the bars that fell out of the loop (they stay dormant and return if the
   // loop length is raised again).
   useEffect(() => {
-    const clamped = clampLeadLoopLength(melodyLoopLength, totalBars);
+    const clamped = clampLoopLength(melodyLoopLength, totalBars);
     if (clamped !== melodyLoopLength) setMelodyLoopLengthPreserve(clamped);
   }, [totalBars, melodyLoopLength, setMelodyLoopLengthPreserve]);
 
