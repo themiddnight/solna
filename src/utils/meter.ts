@@ -72,7 +72,7 @@ export function getMeter(id: string | null | undefined): Meter {
  * Out-of-range steps clamp instead of returning NaN: a negative step reports
  * beat 0 and an overrun reports the last beat.
  */
-export function beatIndexAt(stepInBar: number, accentGroups: number[]): number {
+export function beatIndexAt(stepInBar: number, accentGroups: readonly number[]): number {
   if (accentGroups.length === 0) return 0;
   if (stepInBar <= 0) return 0;
   let cursor = 0;
