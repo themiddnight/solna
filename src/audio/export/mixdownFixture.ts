@@ -9,6 +9,7 @@
  */
 import { synthParamsFixture } from '../testFakes';
 import { DEFAULT_DRUM_KIT, DRUM_TYPES } from '@/data/drumKits';
+import { MAX_STEPS_PER_BAR } from '@/utils/meter';
 import type { MasterEffects, SynthParams } from '@/types';
 import type { MixdownLoop, MixdownSnapshot } from './renderMixdown';
 
@@ -38,12 +39,18 @@ export function mixdownLoop(over: Partial<MixdownLoop> = {}): MixdownLoop {
     chordRhythmId: 'sustained',
     chordRhythmMode: 'preset',
     customChordRhythm: [],
+    // One bar of the widest-meter row: the store's own default, so a preset
+    // loop's cycle resolves to `stepsPerBar` exactly as it does live.
+    customChordLoopLength: 1,
+    customChordHoldSteps: new Array<number>(MAX_STEPS_PER_BAR).fill(1),
     chordFeel: 0.5,
     chordOctave: 4,
     bassSynthParams: synthFixture(),
     bassPatternId: 'whole-note-root',
     bassPatternMode: 'preset',
     customBassPattern: [],
+    customBassLoopLength: 1,
+    customBassHoldSteps: new Array<number>(MAX_STEPS_PER_BAR).fill(1),
     bassFeel: 0.5,
     bassOctave: 2,
     padSynthParams: synthFixture(),

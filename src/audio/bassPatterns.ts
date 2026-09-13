@@ -6,6 +6,8 @@ import { DEFAULT_VELOCITY } from './constants';
 import { groupByStyle } from './groupByStyle';
 import type { MeterId } from '../utils/meter';
 import { BASS_PATTERNS, type BassNoteToken, type BassPattern, type BassStep, type BassStepChoice } from '@/data/bassPatterns';
+import { normalizePatternSpans } from '../utils/customPattern';
+import { patternStoredIndexAt } from '../utils/patternTimeline';
 
 export interface ResolvedBassEvent {
   noteName: string;        // 'C2' style, octave embedded
@@ -141,28 +143,55 @@ export function isApproachToken(token: BassNoteToken): boolean {
 export const BASS_STYLE_GROUPS = groupByStyle(BASS_PATTERNS);
 
 /**
- * Synthesize a BassPattern from the user's custom bass grid. Each non-rest step
- * is a single 16th hit (holdSteps defaults to 1, no staccato/alternate);
- * 'octave' maps to root + octaveShift 1 (the +12 the resolver's own 'octave'
- * token would give, expressed per the SP1 spec). Authored at the ACTIVE meter.
- * Resolution is NOT reimplemented here — resolveBassSteps consumes this the
- * same way it consumes any library pattern.
+ * Synthesize a BassPattern from a STORED span row at the active meter.
+ *
+ * The row is `loopLength * MAX_STEPS_PER_BAR` slots wide and bar-major; the
+ * walk below is over COLUMNS (a cycle is `loopLength * stepsPerBar` of them)
+ * through `patternStoredIndexAt`, which is what keeps a slot the active meter
+ * cannot reach DORMANT rather than moving it.
+ *
+ * `normalizePatternSpans` runs first, against the ACTIVE boundaries, because a
+ * meter or progression change never writes: a slot that was dormant when the
+ * user drew it can become visible — and over-long against a boundary nobody
+ * had when it was stored — without any edit having happened. Normalizing at
+ * read time is what makes that legal without making the round trip lossy.
+ *
+ * Each visible onset becomes one step at its CYCLE column carrying the stored
+ * hold; the lane offers no velocity, staccato or alternate control, so none is
+ * invented here. `octave` stays what this lane means by it — root plus
+ * octaveShift 1 — never a second token the resolver would have to learn.
  */
-export function customBassPattern(
-  choices: readonly BassStepChoice[],
+export function customBassPatternFromSpans(
+  values: readonly BassStepChoice[],
+  holds: readonly number[],
   stepsPerBar: number,
+  cycleSteps: number,
+  boundaries: readonly number[],
   meter: MeterId,
 ): BassPattern {
+  // The type argument is explicit for the same reason the store's
+  // `reclampCustomPattern<BassStepChoice>` spells it out: `empty: 'rest'` is a
+  // candidate too, and inference across both would widen the row to `string`.
+  const normalized = normalizePatternSpans<BassStepChoice>({
+    values,
+    holds,
+    stepsPerBar,
+    cycleSteps,
+    boundaries,
+    empty: 'rest',
+  });
+
   const steps: BassStep[] = [];
-  const length = Math.min(choices.length, stepsPerBar);
-  for (let step = 0; step < length; step++) {
-    const choice = choices[step];
-    if (choice === 'rest') continue;
-    steps.push(
-      choice === 'octave'
-        ? { step, note: 'root' as const, octaveShift: 1 }
-        : { step, note: choice },
-    );
+  for (let column = 0; column < cycleSteps; column += 1) {
+    const index = patternStoredIndexAt(column, stepsPerBar);
+    const choice = index < normalized.values.length ? normalized.values[index] : undefined;
+    if (choice === undefined || choice === 'rest') continue;
+    const holdSteps = normalized.holds[index];
+    if (choice === 'octave') {
+      steps.push({ step: column, note: 'root', octaveShift: 1, holdSteps });
+      continue;
+    }
+    steps.push({ step: column, note: choice, holdSteps });
   }
   return { id: 'custom', name: 'Custom', style: 'Custom', meter, steps };
 }

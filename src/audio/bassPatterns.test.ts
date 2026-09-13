@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { BASS_STYLE_GROUPS, customBassPattern, resolveBassSteps } from './bassPatterns';
+import { BASS_STYLE_GROUPS, customBassPatternFromSpans, resolveBassSteps } from './bassPatterns';
 import { BASS_PATTERNS } from '@/data/bassPatterns';
 import type { BassPattern, BassStepChoice } from '@/data/bassPatterns';
 import type { ChordItem } from '../types';
-import { getMeter } from '../utils/meter';
+import { getMeter, MAX_STEPS_PER_BAR } from '../utils/meter';
 import type { MeterId } from '../utils/meter';
 
 const Cmaj7: ChordItem = { id: 'c1', root: 'C', quality: 'maj7', bars: 1, notes: ['C4', 'E4', 'G4', 'B4'] };
@@ -222,41 +222,18 @@ describe('the 6/8 bass lines lean on steps 0 and 6, never on 4 and 8', () => {
 
 const FOUR_FOUR: MeterId = '4/4';
 
-describe('customBassPattern — choice grid to BassPattern', () => {
-  test('root/third/fifth/seventh map to one 16th step each; octave maps to root + octaveShift', () => {
-    const choices: BassStepChoice[] = [
-      'root', 'rest', 'third', 'rest', 'fifth', 'rest', 'seventh', 'rest',
-      'rest', 'rest', 'rest', 'rest', 'octave', 'rest', 'rest', 'rest',
-    ];
-    const pattern = customBassPattern(choices, 16, FOUR_FOUR);
-    expect(pattern.id).toBe('custom');
-    expect(pattern.meter).toBe('4/4');
-    expect(pattern.steps).toEqual([
-      { step: 0, note: 'root' },
-      { step: 2, note: 'third' },
-      { step: 4, note: 'fifth' },
-      { step: 6, note: 'seventh' },
-      { step: 12, note: 'root', octaveShift: 1 },
-    ]);
-  });
+/** One bar of the active meter, built through the cycle-aware span reader. */
+const oneBarPattern = (choices: BassStepChoice[]): BassPattern =>
+  customBassPatternFromSpans(
+    choices,
+    new Array<number>(choices.length).fill(1),
+    16,
+    16,
+    [0, 16],
+    FOUR_FOUR,
+  );
 
-  test('all-rest grid yields no steps', () => {
-    const choices: BassStepChoice[] = new Array(16).fill('rest');
-    expect(customBassPattern(choices, 16, FOUR_FOUR).steps).toEqual([]);
-  });
-
-  test('steps at or past stepsPerBar are ignored', () => {
-    const choices: BassStepChoice[] = ['root', 'root', 'root', 'root', 'root'];
-    expect(customBassPattern(choices, 4, FOUR_FOUR).steps).toEqual([
-      { step: 0, note: 'root' },
-      { step: 1, note: 'root' },
-      { step: 2, note: 'root' },
-      { step: 3, note: 'root' },
-    ]);
-  });
-});
-
-describe('customBassPattern — resolution reuses the existing quality-aware resolver', () => {
+describe('custom pattern resolution reuses the existing quality-aware resolver', () => {
   const maj7: ChordItem = {
     id: 't', root: 'C', quality: 'maj7', bars: 1,
     notes: ['C4', 'E4', 'G4', 'B4'],
@@ -265,7 +242,7 @@ describe('customBassPattern — resolution reuses the existing quality-aware res
   test('octave resolves an octave above the bass root', () => {
     const choices: BassStepChoice[] = ['octave', ...new Array<BassStepChoice>(15).fill('rest')];
     const events = resolveBassSteps(
-      customBassPattern(choices, 16, FOUR_FOUR),
+      oneBarPattern(choices),
       [maj7], 0, 2, 'C', 'major', 120,
     );
     expect(events[0].noteName).toBe('C3'); // bass octave 2 → C2, +12 → C3
@@ -278,9 +255,60 @@ describe('customBassPattern — resolution reuses the existing quality-aware res
     };
     const choices: BassStepChoice[] = ['seventh', ...new Array<BassStepChoice>(15).fill('rest')];
     const events = resolveBassSteps(
-      customBassPattern(choices, 16, FOUR_FOUR),
+      oneBarPattern(choices),
       [triad], 0, 2, 'C', 'major', 120,
     );
     expect(events[0].noteName).toBe('G2'); // C2 + 7 semitones
+  });
+});
+
+/** A two-bar stored row: bar-major at MAX_STEPS_PER_BAR, holds parallel. */
+function row(): { values: BassStepChoice[]; holds: number[] } {
+  return {
+    values: new Array<BassStepChoice>(2 * MAX_STEPS_PER_BAR).fill('rest'),
+    holds: new Array<number>(2 * MAX_STEPS_PER_BAR).fill(1),
+  };
+}
+
+/** Four one-bar chords in columns — the boundaries a two-bar cycle folds. */
+const ONE_BAR_CHORDS = [0, 16, 32];
+
+describe('customBassPatternFromSpans — a stored row at the active meter', () => {
+  test('walks every visible column, copies holds, and keeps octave as root + octaveShift 1', () => {
+    const { values, holds } = row();
+    values[0] = 'seventh';
+    holds[0] = 2;
+    values[MAX_STEPS_PER_BAR + 4] = 'octave'; // bar one, column 20
+    holds[MAX_STEPS_PER_BAR + 4] = 4;
+
+    const pattern = customBassPatternFromSpans(values, holds, 16, 32, ONE_BAR_CHORDS, FOUR_FOUR);
+
+    expect(pattern.id).toBe('custom');
+    expect(pattern.meter).toBe('4/4');
+    expect(pattern.steps).toEqual([
+      { step: 0, note: 'seventh', holdSteps: 2 },
+      { step: 20, note: 'root', octaveShift: 1, holdSteps: 4 },
+    ]);
+  });
+
+  test('a hold reaching past the next folded boundary is clamped to it', () => {
+    const { values, holds } = row();
+    values[0] = 'root';
+    holds[0] = 20; // 16 steps reach the boundary at column 16
+
+    const pattern = customBassPatternFromSpans(values, holds, 16, 32, ONE_BAR_CHORDS, FOUR_FOUR);
+
+    expect(pattern.steps).toEqual([{ step: 0, note: 'root', holdSteps: 16 }]);
+  });
+
+  test('a slot the active meter cannot reach is skipped, not normalized', () => {
+    const { values, holds } = row();
+    values[20] = 'root'; // dormant in 4/4; 12/8 draws it as column 20
+    holds[20] = 6;
+
+    expect(customBassPatternFromSpans(values, holds, 16, 32, ONE_BAR_CHORDS, FOUR_FOUR).steps).toEqual([]);
+    expect(customBassPatternFromSpans(values, holds, 24, 48, [0, 48], '12/8').steps).toEqual([
+      { step: 20, note: 'root', holdSteps: 6 },
+    ]);
   });
 });

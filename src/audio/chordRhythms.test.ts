@@ -2,18 +2,22 @@ import { describe, expect, test } from 'bun:test';
 import {
   adaptBassPattern,
   adaptRhythmPattern,
-  customRhythmPattern,
+  cycleHoldScale,
+  cycleStepAt,
   equalPowerVelocityScale,
   feelToHoldScale,
   fullHoldDuration,
   isFullHoldBass,
+  isFullHoldBassCycle,
   isFullHoldRhythm,
-  resolvePlaybackBassPattern,
-  resolvePlaybackRhythmPattern,
+  isFullHoldRhythmCycle,
+  resolvePlaybackBassCycle,
+  resolvePlaybackRhythmCycle,
+  type PlaybackPatternCycle,
 } from './chordRhythms';
 import { CHORD_RHYTHMS, type RhythmPattern } from '@/data/chordRhythms';
 import { BASS_PATTERNS, type BassPattern, type BassStepChoice } from '@/data/bassPatterns';
-import { getMeter } from '../utils/meter';
+import { getMeter, MAX_STEPS_PER_BAR } from '../utils/meter';
 import type { MeterId } from '../utils/meter';
 
 describe('feelToHoldScale', () => {
@@ -153,44 +157,6 @@ describe('the 6/8 chord rhythms group in twos, not threes', () => {
     for (const id of ['waltzOompah', 'waltzArpRoll']) {
       expect(strongOnsets(id), id).not.toEqual([0, 6]);
     }
-  });
-});
-
-const FOUR_FOUR: MeterId = '4/4';
-
-const FOUR_ON_FLOOR = [
-  true, false, false, false,
-  true, false, false, false,
-  true, false, false, false,
-  true, false, false, false,
-];
-
-describe('customRhythmPattern — boolean grid to RhythmPattern', () => {
-  test('every true step becomes one block hit at that step', () => {
-    const pattern = customRhythmPattern(FOUR_ON_FLOOR, 16, FOUR_FOUR);
-    expect(pattern.id).toBe('custom');
-    expect(pattern.name).toBe('Custom');
-    expect(pattern.meter).toBe('4/4');
-    expect(pattern.hits).toEqual([
-      { step: 0, type: 'block', velocity: 1, holdSteps: 1 },
-      { step: 4, type: 'block', velocity: 1, holdSteps: 1 },
-      { step: 8, type: 'block', velocity: 1, holdSteps: 1 },
-      { step: 12, type: 'block', velocity: 1, holdSteps: 1 },
-    ]);
-  });
-
-  test('all-false grid yields no hits', () => {
-    expect(customRhythmPattern(new Array(16).fill(false), 16, FOUR_FOUR).hits).toEqual([]);
-  });
-
-  test('steps at or past stepsPerBar are ignored even if the array is longer', () => {
-    const grid = [true, true, true, true, true];
-    expect(customRhythmPattern(grid, 4, FOUR_FOUR).hits).toEqual([
-      { step: 0, type: 'block', velocity: 1, holdSteps: 1 },
-      { step: 1, type: 'block', velocity: 1, holdSteps: 1 },
-      { step: 2, type: 'block', velocity: 1, holdSteps: 1 },
-      { step: 3, type: 'block', velocity: 1, holdSteps: 1 },
-    ]);
   });
 });
 
@@ -338,55 +304,176 @@ describe('isFullHoldRhythm / isFullHoldBass measure the hold against the ACTIVE 
   });
 });
 
-describe('playback pattern resolution honours the mode', () => {
-  test('preset mode resolves the library pattern by id', () => {
-    const pattern = resolvePlaybackRhythmPattern('preset', 'offbeatStabs', [true], 16, '4/4');
-    expect(pattern.id).toBe('offbeatStabs');
-    const bass = resolvePlaybackBassPattern('preset', 'classic-walk', ['root'], 16, '4/4');
-    expect(bass.id).toBe('classic-walk');
+describe('cycleStepAt folds an absolute step onto a cycle', () => {
+  test('is the identity inside the cycle and wraps at its seam', () => {
+    expect(cycleStepAt(0, 32)).toBe(0);
+    expect(cycleStepAt(31, 32)).toBe(31);
+    expect(cycleStepAt(32, 32)).toBe(0);
+    expect(cycleStepAt(52, 32)).toBe(20);
   });
 
-  test('custom mode synthesizes a grid into a custom pattern', () => {
-    const grid = [
-      true, false, false, false,
-      true, false, false, false,
-      true, false, false, false,
-      true, false, false, false,
-    ];
-    const pattern = resolvePlaybackRhythmPattern('custom', 'offbeatStabs', grid, 16, '4/4');
-    expect(pattern.id).toBe('custom');
-    expect(pattern.hits).toHaveLength(4);
+  test('folds a negative step forward instead of reporting a negative column', () => {
+    expect(cycleStepAt(-1, 32)).toBe(31);
+    expect(cycleStepAt(-33, 32)).toBe(31);
   });
 
-  test('bass custom mode maps choices to steps with no approach tokens', () => {
-    const choices: BassStepChoice[] = [
-      'root', 'rest', 'third', 'rest', 'fifth', 'rest', 'seventh', 'rest',
-      'octave', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest',
-    ];
-    const pattern = resolvePlaybackBassPattern('custom', 'classic-walk', choices, 16, '4/4');
-    expect(pattern.id).toBe('custom');
-    expect(pattern.steps.map((s) => s.note)).toEqual(['root', 'third', 'fifth', 'seventh', 'root']);
+  test('a one-step cycle is always its own start', () => {
+    expect(cycleStepAt(7, 1)).toBe(0);
   });
 });
 
-describe('custom patterns flow through the playback pipeline', () => {
-  test('a custom rhythm pattern is never a full-hold and adapts to other meters', () => {
-    const grid = [
-      true, false, false, false,
-      true, false, false, false,
-      true, false, false, false,
-      true, false, false, false,
-    ];
-    const custom = resolvePlaybackRhythmPattern('custom', 'sustained', grid, 16, '4/4');
-    expect(isFullHoldRhythm(custom, 16)).toBe(false);
-    const adapted = adaptRhythmPattern(custom, 24);
-    expect(adapted.hits.map((h) => h.step)).toEqual([0, 4, 8, 12, 16, 20]);
+describe('cycleHoldScale — Feel moves a drawn span without extending it', () => {
+  test('a custom cycle is capped at x1, so Feel can only tighten', () => {
+    expect(cycleHoldScale(true, 0.5)).toBe(1);
+    expect(cycleHoldScale(true, 0.9)).toBe(1);
+    expect(cycleHoldScale(true, 0.9)).toBe(Math.min(1, feelToHoldScale(0.9)));
+    expect(cycleHoldScale(true, 0.3)).toBeCloseTo(feelToHoldScale(0.3), 5);
   });
 
-  test('a custom bass pattern is never a full-hold and is returned unchanged in 4/4', () => {
-    const choices: BassStepChoice[] = ['root', ...new Array<BassStepChoice>(15).fill('rest')];
-    const custom = resolvePlaybackBassPattern('custom', 'whole-note-root', choices, 16, '4/4');
-    expect(isFullHoldBass(custom, 16)).toBe(false);
-    expect(adaptBassPattern(custom, 16)).toBe(custom);
+  test('a preset cycle keeps the whole x0.5..x2 Feel range', () => {
+    expect(cycleHoldScale(false, 1)).toBeCloseTo(2, 5);
+    expect(cycleHoldScale(false, 0)).toBeCloseTo(0.5, 5);
+  });
+});
+
+/**
+ * A custom lane row written the way the store stores it: bar-major at
+ * `MAX_STEPS_PER_BAR`, with a parallel hold array. Two bars of it, in every
+ * fixture below, so a cycle the active meter cannot reach is expressible.
+ */
+function booleanRow(): { values: boolean[]; holds: number[] } {
+  return {
+    values: new Array<boolean>(2 * MAX_STEPS_PER_BAR).fill(false),
+    holds: new Array<number>(2 * MAX_STEPS_PER_BAR).fill(1),
+  };
+}
+
+function bassRow(): { values: BassStepChoice[]; holds: number[] } {
+  return {
+    values: new Array<BassStepChoice>(2 * MAX_STEPS_PER_BAR).fill('rest'),
+    holds: new Array<number>(2 * MAX_STEPS_PER_BAR).fill(1),
+  };
+}
+
+/** Four one-bar chords in columns — the four boundaries a two-bar cycle folds. */
+const ONE_BAR_CHORDS = [16, 16, 16, 16];
+
+describe('resolvePlaybackRhythmCycle', () => {
+  test('a preset resolves to one active bar, which is its whole cycle', () => {
+    const cycle = resolvePlaybackRhythmCycle('preset', 'offbeatStabs', [], [], 1, 16, '4/4', ONE_BAR_CHORDS);
+    expect(cycle.cycleSteps).toBe(16);
+    expect(cycle.custom).toBe(false);
+    expect(cycle.pattern.id).toBe('offbeatStabs');
+  });
+
+  test('a preset is adapted to the active meter, so its one bar is the active bar', () => {
+    // waltzOompah is authored 3/4 (hits at 0/4/8) and 12/8 is a 24-step bar:
+    // one authored bar plus the loop the adaptation already did, nothing more.
+    const cycle = resolvePlaybackRhythmCycle('preset', 'waltzOompah', [], [], 1, 24, '12/8', [24, 24, 24, 24]);
+    expect(cycle.cycleSteps).toBe(24);
+    expect(cycle.pattern.hits.map((hit) => hit.step)).toEqual([0, 4, 8, 12, 16, 20]);
+  });
+
+  test('a preset in its own meter is the library entry itself, untouched', () => {
+    const cycle = resolvePlaybackRhythmCycle('preset', 'offbeatStabs', [], [], 1, 16, '4/4', ONE_BAR_CHORDS);
+    expect(cycle.pattern).toBe(CHORD_RHYTHMS.find((p) => p.id === 'offbeatStabs')!);
+  });
+
+  test('a custom cycle spans every selected bar and copies each onset hold', () => {
+    const { values, holds } = booleanRow();
+    values[24 + 4] = true; // bar one, column 20 of the cycle
+    holds[24 + 4] = 4;
+
+    const cycle = resolvePlaybackRhythmCycle('custom', 'sustained', values, holds, 2, 16, '4/4', ONE_BAR_CHORDS);
+
+    expect(cycle.cycleSteps).toBe(32);
+    expect(cycle.custom).toBe(true);
+    expect(cycle.pattern.hits).toContainEqual({
+      step: 20, type: 'block', velocity: 1, holdSteps: 4,
+    });
+  });
+
+  test('a hold reaching past the next folded boundary is clamped to it, not copied', () => {
+    const { values, holds } = booleanRow();
+    values[24 + 4] = true;
+    holds[24 + 4] = 20; // 12 steps reach the boundary at column 32
+
+    const cycle = resolvePlaybackRhythmCycle('custom', 'sustained', values, holds, 2, 16, '4/4', ONE_BAR_CHORDS);
+
+    expect(cycle.pattern.hits).toEqual([
+      { step: 20, type: 'block', velocity: 1, holdSteps: 12 },
+    ]);
+  });
+
+  test('a slot the active meter cannot reach stays dormant, and the wider meter brings it back', () => {
+    const { values, holds } = booleanRow();
+    values[20] = true; // dormant in 4/4 — column 20 is bar one's step 4 there
+    holds[20] = 6;
+
+    const narrow = resolvePlaybackRhythmCycle('custom', 'sustained', values, holds, 2, 16, '4/4', ONE_BAR_CHORDS);
+    expect(narrow.pattern.hits).toEqual([]);
+
+    const wide = resolvePlaybackRhythmCycle('custom', 'sustained', values, holds, 2, 24, '12/8', [48, 48]);
+    expect(wide.cycleSteps).toBe(48);
+    expect(wide.pattern.hits).toEqual([
+      { step: 20, type: 'block', velocity: 1, holdSteps: 6 },
+    ]);
+  });
+});
+
+describe('resolvePlaybackBassCycle', () => {
+  test('a preset bass cycle is one active bar of the library pattern', () => {
+    const cycle = resolvePlaybackBassCycle('preset', 'classic-walk', [], [], 1, 16, '4/4', ONE_BAR_CHORDS);
+    expect(cycle.cycleSteps).toBe(16);
+    expect(cycle.custom).toBe(false);
+    expect(cycle.pattern.id).toBe('classic-walk');
+  });
+
+  test('retains octave -> root + octaveShift 1 and copies holds across the cycle', () => {
+    const { values, holds } = bassRow();
+    values[24 + 4] = 'octave';
+    holds[24 + 4] = 4;
+
+    const cycle = resolvePlaybackBassCycle('custom', 'whole-note-root', values, holds, 2, 16, '4/4', ONE_BAR_CHORDS);
+
+    expect(cycle.cycleSteps).toBe(32);
+    expect(cycle.custom).toBe(true);
+    expect(cycle.pattern.steps).toContainEqual({ step: 20, note: 'root', octaveShift: 1, holdSteps: 4 });
+  });
+});
+
+describe('the whole-chord full-hold fast path is preset-only', () => {
+  test('a preset full hold still satisfies the cycle predicate', () => {
+    const sustained = CHORD_RHYTHMS.find((p) => p.id === 'sustained')!;
+    const cycle: PlaybackPatternCycle<RhythmPattern> = {
+      pattern: adaptRhythmPattern(sustained, 16),
+      cycleSteps: 16,
+      custom: false,
+    };
+    expect(isFullHoldRhythmCycle(cycle)).toBe(true);
+  });
+
+  test('a custom chord onset holding the whole cycle does not — it retriggers at the seam', () => {
+    const { values, holds } = booleanRow();
+    values[0] = true;
+    holds[0] = 16;
+
+    const cycle = resolvePlaybackRhythmCycle('custom', 'sustained', values, holds, 1, 16, '4/4', ONE_BAR_CHORDS);
+
+    // The raw predicate would say yes on a one-bar cycle; the cycle-aware
+    // wrapper is what makes a custom span release and retrigger at the seam.
+    expect(isFullHoldRhythm(cycle.pattern, cycle.cycleSteps)).toBe(true);
+    expect(isFullHoldRhythmCycle(cycle)).toBe(false);
+  });
+
+  test('a custom bass note holding the whole cycle does not either', () => {
+    const { values, holds } = bassRow();
+    values[0] = 'root';
+    holds[0] = 16;
+
+    const cycle = resolvePlaybackBassCycle('custom', 'whole-note-root', values, holds, 1, 16, '4/4', ONE_BAR_CHORDS);
+
+    expect(isFullHoldBass(cycle.pattern, cycle.cycleSteps)).toBe(true);
+    expect(isFullHoldBassCycle(cycle)).toBe(false);
   });
 });

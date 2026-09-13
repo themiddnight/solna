@@ -6,9 +6,11 @@
 import { groupByStyle } from './groupByStyle';
 import { CHORD_RHYTHMS, type RhythmHit, type RhythmPattern } from '@/data/chordRhythms';
 import { BASS_PATTERNS, type BassPattern, type BassStepChoice } from '@/data/bassPatterns';
-import { customBassPattern } from './bassPatterns';
+import { customBassPatternFromSpans } from './bassPatterns';
 import { adaptStepEvents } from '../utils/eventAdapt';
 import { getMeter, type MeterId } from '../utils/meter';
+import { normalizePatternSpans } from '../utils/customPattern';
+import { foldPatternBoundaries, patternStoredIndexAt } from '../utils/patternTimeline';
 
 // Rhythms grouped by style, computed once at module load for the style-grouped
 // select UI.
@@ -34,23 +36,40 @@ export function fullHoldDuration(totalBars: number, barDur: number, holdScale: n
 }
 
 /**
- * Synthesize a RhythmPattern from the user's custom chord grid. Every true step
- * is one block hit (no strum); the pattern is authored at the ACTIVE meter, so
- * the meter is stamped on it and `adaptRhythmPattern` returns it unchanged in
- * that meter. Never full-hold: holdSteps is always 1, so `isFullHoldRhythm`
- * resolves false even for a one-hit grid.
+ * Synthesize a RhythmPattern from a STORED span row at the active meter.
+ *
+ * Same walk and the same defensive `normalizePatternSpans` as
+ * `customBassPatternFromSpans`: columns, not stored slots, and against the
+ * ACTIVE boundaries, so a slot a meter change just made visible is clamped
+ * here rather than during the view change that would have to write.
+ *
+ * A hit's `step` is its CYCLE column, not its step inside a bar: the pattern
+ * this returns is drawn across the whole cycle and is paired with the
+ * `cycleSteps` that says how wide that is (see `PlaybackPatternCycle`). Nothing
+ * downstream may re-adapt it — it is authored at the active meter already.
  */
-export function customRhythmPattern(
-  grid: readonly boolean[],
+export function customRhythmPatternFromSpans(
+  values: readonly boolean[],
+  holds: readonly number[],
   stepsPerBar: number,
+  cycleSteps: number,
+  boundaries: readonly number[],
   meter: MeterId,
 ): RhythmPattern {
+  const normalized = normalizePatternSpans({
+    values,
+    holds,
+    stepsPerBar,
+    cycleSteps,
+    boundaries,
+    empty: false,
+  });
+
   const hits: RhythmHit[] = [];
-  const length = Math.min(grid.length, stepsPerBar);
-  for (let step = 0; step < length; step++) {
-    if (grid[step] === true) {
-      hits.push({ step, type: 'block' as const, velocity: 1, holdSteps: 1 });
-    }
+  for (let column = 0; column < cycleSteps; column += 1) {
+    const index = patternStoredIndexAt(column, stepsPerBar);
+    if (normalized.values[index] !== true) continue;
+    hits.push({ step: column, type: 'block', velocity: 1, holdSteps: normalized.holds[index] });
   }
   return { id: 'custom', name: 'Custom', style: 'Custom', meter, hits };
 }
@@ -89,32 +108,133 @@ function resolveBassPattern(id: string): BassPattern {
 }
 
 /**
- * Mode-aware pattern resolution for playback. Custom grids are synthesized at
- * the ACTIVE meter, so the returned pattern is stamped with `meterId` and
- * `adaptRhythmPattern`/`adaptBassPattern` return it unchanged there.
+ * A pattern resolved for playback together with its cycle: how many columns one
+ * pass of it spans, and whether it is the user's own row. `custom` is carried
+ * rather than re-derived from an id or a hold length because two decisions turn
+ * on it and would answer wrongly from the pattern alone — the whole-chord
+ * full-hold fast path is preset-only (`isFullHoldRhythmCycle`), and Feel may
+ * only tighten a length the user drew (`cycleHoldScale`).
  */
-export function resolvePlaybackRhythmPattern(
-  mode: 'preset' | 'custom',
-  rhythmId: string,
-  customGrid: readonly boolean[],
-  stepsPerBar: number,
-  meterId: MeterId,
-): RhythmPattern {
-  return mode === 'custom'
-    ? customRhythmPattern(customGrid, stepsPerBar, meterId)
-    : resolveRhythmPattern(rhythmId);
+export interface PlaybackPatternCycle<T> {
+  pattern: T;
+  cycleSteps: number;
+  custom: boolean;
 }
 
-export function resolvePlaybackBassPattern(
+/**
+ * Where an absolute step falls inside a cycle of `cycleSteps`. The one seam
+ * rule live scheduling, preview and offline rendering share: writing the `%`
+ * per consumer is how a preview and the transport come to disagree about where
+ * a cycle starts. A negative remainder is raised by the cycle, so an unsigned
+ * step yields a column an event can actually match.
+ */
+export function cycleStepAt(absoluteStep: number, cycleSteps: number): number {
+  return ((absoluteStep % cycleSteps) + cycleSteps) % cycleSteps;
+}
+
+/**
+ * The Feel multiplier a resolved cycle's holds are scaled by. A custom span is
+ * a length the user DREW, so Feel may only tighten it — without the cap, a
+ * preset's loose x2 would silently overrule an explicit resize. Presets keep
+ * the whole x0.5..x2 range, unchanged.
+ */
+export function cycleHoldScale(custom: boolean, feel: number): number {
+  const scale = feelToHoldScale(feel);
+  return custom ? Math.min(1, scale) : scale;
+}
+
+/** The cycle a custom lane resolves against: its width and its folded boundaries. */
+function customCycle(
+  chordDurations: readonly number[],
+  loopLength: number,
+  stepsPerBar: number,
+): { cycleSteps: number; boundaries: number[] } {
+  const cycleSteps = loopLength * stepsPerBar;
+  return { cycleSteps, boundaries: foldPatternBoundaries(chordDurations, cycleSteps) };
+}
+
+/**
+ * Mode-aware chord-cycle resolution for playback — the shape live scheduling,
+ * previews and the offline renderer all consume.
+ *
+ * A preset resolves to ONE ACTIVE BAR: the library pattern adapted to
+ * `stepsPerBar`, so it must not be adapted again downstream. A custom lane
+ * walks its stored row across its own independent cycle and reports that
+ * cycle's width; the row is normalized at read time against the boundaries the
+ * CURRENT progression folds onto the cycle, which is what makes a slot a meter
+ * or progression change brought back into view legal without either change
+ * having written anything.
+ *
+ * `chordDurations` are the progression's chord lengths in COLUMNS of the active
+ * meter — never `ChordItem.bars` directly — so a later fractional-length chord
+ * supplies its own column count without changing this contract.
+ */
+export function resolvePlaybackRhythmCycle(
   mode: 'preset' | 'custom',
-  patternId: string,
-  customGrid: readonly BassStepChoice[],
+  rhythmId: string,
+  values: readonly boolean[],
+  holds: readonly number[],
+  loopLength: number,
   stepsPerBar: number,
   meterId: MeterId,
-): BassPattern {
-  return mode === 'custom'
-    ? customBassPattern(customGrid, stepsPerBar, meterId)
-    : resolveBassPattern(patternId);
+  chordDurations: readonly number[],
+): PlaybackPatternCycle<RhythmPattern> {
+  if (mode !== 'custom') {
+    return {
+      pattern: adaptRhythmPattern(resolveRhythmPattern(rhythmId), stepsPerBar),
+      cycleSteps: stepsPerBar,
+      custom: false,
+    };
+  }
+  const { cycleSteps, boundaries } = customCycle(chordDurations, loopLength, stepsPerBar);
+  return {
+    pattern: customRhythmPatternFromSpans(values, holds, stepsPerBar, cycleSteps, boundaries, meterId),
+    cycleSteps,
+    custom: true,
+  };
+}
+
+/** The bass half of `resolvePlaybackRhythmCycle`, same contract and same split. */
+export function resolvePlaybackBassCycle(
+  mode: 'preset' | 'custom',
+  patternId: string,
+  values: readonly BassStepChoice[],
+  holds: readonly number[],
+  loopLength: number,
+  stepsPerBar: number,
+  meterId: MeterId,
+  chordDurations: readonly number[],
+): PlaybackPatternCycle<BassPattern> {
+  if (mode !== 'custom') {
+    return {
+      pattern: adaptBassPattern(resolveBassPattern(patternId), stepsPerBar),
+      cycleSteps: stepsPerBar,
+      custom: false,
+    };
+  }
+  const { cycleSteps, boundaries } = customCycle(chordDurations, loopLength, stepsPerBar);
+  return {
+    pattern: customBassPatternFromSpans(values, holds, stepsPerBar, cycleSteps, boundaries, meterId),
+    cycleSteps,
+    custom: true,
+  };
+}
+
+/**
+ * The whole-chord full-hold fast path as a property of a resolved CYCLE, and
+ * preset-only: a custom span covering the whole cycle is a length the user
+ * drew, so it must release and retrigger at the seam rather than become one
+ * held voice. These wrappers exist so no call site can ask the raw predicates
+ * (`isFullHoldRhythm`/`isFullHoldBass`) about a custom pattern and get the
+ * wrong answer — which it would, since the custom row copies its holds verbatim
+ * and a full-cycle hold therefore looks exactly like a full hold.
+ */
+export function isFullHoldRhythmCycle(cycle: PlaybackPatternCycle<RhythmPattern>): boolean {
+  return !cycle.custom && isFullHoldRhythm(cycle.pattern, cycle.cycleSteps);
+}
+
+export function isFullHoldBassCycle(cycle: PlaybackPatternCycle<BassPattern>): boolean {
+  return !cycle.custom && isFullHoldBass(cycle.pattern, cycle.cycleSteps);
 }
 
 /**

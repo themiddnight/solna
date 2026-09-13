@@ -2,7 +2,7 @@ import { describe, expect, test, spyOn } from 'bun:test';
 import { audioEngine } from '@/audio/engine';
 import { freshEngine } from '@/audio/testFakes';
 import type { ChordItem, SynthParams } from '@/types';
-import { equalPowerVelocityScale } from '@/audio/chordRhythms';
+import { cycleStepAt, equalPowerVelocityScale } from '@/audio/chordRhythms';
 import type { RhythmPattern } from '@/data/chordRhythms';
 import { arpStepFor } from '@/utils/meter';
 import {
@@ -10,13 +10,14 @@ import {
   buildChordEvents,
   chordPlanPosition,
   emitStepEvents,
-  eventsForStep,
+  eventsForCycleStep,
   playChordLegato,
   playFullHoldChord,
   scheduleWholeChord,
   startPatternLoop,
   previewChordForScale,
   previewBarSeconds,
+  previewCycleSeconds,
 } from './chordPlayback';
 import type { BarInvariantEvent } from './chordPlayback';
 
@@ -279,23 +280,100 @@ describe('pattern preview chord & timing', () => {
   test('a 12/8 bar (24 steps) previews as 1.5x a 4/4 bar at the same bpm', () => {
     expect(previewBarSeconds(120, 24)).toBeCloseTo(previewBarSeconds(120) * 1.5, 12);
   });
+
+  test('a cycle of N steps lasts N sixteenths at the given bpm', () => {
+    // 32 sixteenths at 120 bpm = two 4/4 bars = 4 s. This is the exact value
+    // both preview buttons hand their loop timer, so a custom two-bar preview
+    // loops at the cycle seam rather than at a bar.
+    expect(previewCycleSeconds(32, 120)).toBe(4);
+    expect(previewCycleSeconds(32, 120)).toBe(2 * previewBarSeconds(120));
+    expect(previewCycleSeconds(16, 120)).toBe(previewBarSeconds(120));
+  });
 });
 
-describe('eventsForStep', () => {
+describe('scheduleWholeChord walks exactly the cycle it is handed', () => {
+  test('a two-bar custom cycle reaches its bar-two column before the seam', () => {
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    // Column 20 of a 32-step cycle. A one-bar filter (stepInBar 20 % 16 = 4,
+    // or a walk that stops at the first bar) can never reach it.
+    scheduleWholeChord(
+      [{ step: 20, noteName: 'E4', velocity: 1, timeOffset: 0, hold: 0.125 }],
+      SYNTH,
+      'chord',
+      0,
+      0.125,
+      32,
+      32,
+    );
+    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, 1, 2.5, 'chord', 1, 'sequencer');
+    onSpy.mockRestore();
+  });
+
+  test('a one-bar preset cycle schedules its own column, unchanged', () => {
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    scheduleWholeChord(
+      [{ step: 4, noteName: 'E4', velocity: 1, timeOffset: 0, hold: 0.125 }],
+      SYNTH,
+      'chord',
+      0,
+      0.125,
+      16,
+      16,
+    );
+    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, 1, 0.5, 'chord', 1, 'sequencer');
+    onSpy.mockRestore();
+  });
+
+  test('a full-cycle span strikes at the cycle start and releases at the seam', () => {
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
+    // A span covering the whole 32-step cycle: one strike at column 0 and a
+    // release exactly at the seam (32 * 0.125 = 4 s) — the hold is the cycle,
+    // not the chord it is previewed under.
+    scheduleWholeChord(
+      [{ step: 0, noteName: 'C4', velocity: 1, timeOffset: 0, hold: 4 }],
+      SYNTH,
+      'chord',
+      0,
+      0.125,
+      32,
+      32,
+    );
+    expect(onSpy).toHaveBeenCalledTimes(1);
+    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, 1, 0, 'chord', 1, 'sequencer');
+    expect(offSpy).toHaveBeenCalledWith('C4', SYNTH.release, 4, 'chord');
+    onSpy.mockRestore();
+    offSpy.mockRestore();
+  });
+});
+
+describe('eventsForCycleStep folds a progression step onto the cycle it is given', () => {
   const EVENTS: BarInvariantEvent[] = [
     { step: 0, noteName: 'C4', velocity: 0.8, timeOffset: 0, hold: 0.25 },
-    { step: 4, noteName: 'E4', velocity: 0.7, timeOffset: 0.03, hold: 0.25 },
+    { step: 20, noteName: 'E4', velocity: 0.7, timeOffset: 0.03, hold: 0.25 },
     { step: 12, noteName: 'G4', velocity: 0.6, timeOffset: 0, hold: 0.25, lastBarOnly: true },
   ];
 
-  test('returns only the events landing on the given step', () => {
-    expect(eventsForStep(EVENTS, 4, false).map((e) => e.noteName)).toEqual(['E4']);
-    expect(eventsForStep(EVENTS, 1, false)).toEqual([]);
+  test('fires a bar-two event where a one-bar filter never would', () => {
+    expect(eventsForCycleStep(EVENTS, 20, 32, false).map((e) => e.noteName)).toEqual(['E4']);
   });
 
-  test('withholds a lastBarOnly event until the final bar', () => {
-    expect(eventsForStep(EVENTS, 12, false)).toEqual([]);
-    expect(eventsForStep(EVENTS, 12, true).map((e) => e.noteName)).toEqual(['G4']);
+  test('folds a step past the cycle seam back onto the same column', () => {
+    expect(eventsForCycleStep(EVENTS, 52, 32, false).map((e) => e.noteName)).toEqual(['E4']);
+  });
+
+  test('repeats a one-bar preset cycle inside a longer progression step', () => {
+    const preset: BarInvariantEvent[] = [
+      { step: 4, noteName: 'E4', velocity: 0.7, timeOffset: 0, hold: 0.25 },
+    ];
+    expect(eventsForCycleStep(preset, 4, 16, false)).toHaveLength(1);
+    expect(eventsForCycleStep(preset, 20, 16, false)).toHaveLength(1);
+    expect(eventsForCycleStep(preset, 21, 16, false)).toEqual([]);
+  });
+
+  test('withholds a lastBarOnly approach until the active chord decides it', () => {
+    expect(eventsForCycleStep(EVENTS, 12, 32, false)).toEqual([]);
+    expect(eventsForCycleStep(EVENTS, 12, 32, true).map((e) => e.noteName)).toEqual(['G4']);
   });
 });
 
@@ -396,7 +474,7 @@ describe('emitStepEvents note-off clamping', () => {
 describe('scheduleWholeChord', () => {
   // The pattern previews are driven by a bar timer, not the shared clock, so
   // they still lay the whole chord down in one burst. 16th = 0.125 s.
-  test('lays every bar of the chord down from one call', () => {
+  test('lays every step of the requested span down from one call', () => {
     const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
 
     scheduleWholeChord(
@@ -405,7 +483,8 @@ describe('scheduleWholeChord', () => {
       'chord',
       10,
       0.125,
-      2,
+      32,
+      16,
     );
 
     expect(onSpy.mock.calls.map((c) => c[3])).toEqual([10, 12]);
@@ -425,7 +504,8 @@ describe('scheduleWholeChord', () => {
       'chord',
       10,
       0.125,
-      2,
+      32,
+      16,
     );
 
     // Bar 0's C4 may ring over the bar line at 12; bar 1's is cut at the chord
@@ -438,25 +518,154 @@ describe('scheduleWholeChord', () => {
 
     offSpy.mockRestore();
   });
+
+  test('schedules exactly the cycle it is given, not a bar-wrapped view of it', () => {
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+
+    // A bar-relative filter (step % stepsPerBar) could never reach column 20 of
+    // a two-bar cycle; the cycle-aware one fires it once, in bar two.
+    scheduleWholeChord(
+      [{ step: 20, noteName: 'E4', velocity: 0.7, timeOffset: 0, hold: 0.25 }],
+      SYNTH,
+      'chord',
+      10,
+      0.125,
+      32,
+      32,
+    );
+
+    expect(onSpy.mock.calls.map((c) => c[3])).toEqual([12.5]);
+
+    onSpy.mockRestore();
+  });
 });
 
-describe('chordPlanPosition', () => {
-  // A two-bar chord armed on absolute step 32 spans steps 32..63.
-  const PLAN = { startStep: 32, totalBars: 2 };
+describe('chordPlanPosition measures a step from the run origin', () => {
+  // A two-bar chord that a run armed on its first bar line: progression step 0
+  // through 31. The second chord of that run is armed on progression step 32.
+  const PLAN = { startProgressionStep: 0, totalBars: 2 };
 
-  test('maps an absolute step to its bar-local step', () => {
-    expect(chordPlanPosition(PLAN, 32)).toEqual({ stepInBar: 0, isLastBar: false, stepsRemaining: 32 });
-    expect(chordPlanPosition(PLAN, 36)).toEqual({ stepInBar: 4, isLastBar: false, stepsRemaining: 28 });
+  test('maps a progression step to its place in the chord', () => {
+    expect(chordPlanPosition(PLAN, 0)).toEqual({ isLastBar: false, stepsRemaining: 32 });
+    expect(chordPlanPosition(PLAN, 4)).toEqual({ isLastBar: false, stepsRemaining: 28 });
   });
 
   test('flags the final bar so approach notes fire only there', () => {
-    expect(chordPlanPosition(PLAN, 48)).toEqual({ stepInBar: 0, isLastBar: true, stepsRemaining: 16 });
-    expect(chordPlanPosition(PLAN, 63)).toEqual({ stepInBar: 15, isLastBar: true, stepsRemaining: 1 });
+    expect(chordPlanPosition(PLAN, 16)).toEqual({ isLastBar: true, stepsRemaining: 16 });
+    expect(chordPlanPosition(PLAN, 31)).toEqual({ isLastBar: true, stepsRemaining: 1 });
   });
 
   test('returns null outside the chord span', () => {
-    expect(chordPlanPosition(PLAN, 31)).toBeNull();
-    expect(chordPlanPosition(PLAN, 64)).toBeNull();
+    // 31 is the chord's last step; the next one belongs to the chord that
+    // follows, which arms a plan of its own.
+    expect(chordPlanPosition(PLAN, -1)).toBeNull();
+    expect(chordPlanPosition(PLAN, 32)).toBeNull();
+  });
+
+  test('the second chord of a run is measured from the same origin, not from bar zero', () => {
+    // Armed 32 progression steps into the run (two chords of two bars each).
+    const second = { startProgressionStep: 32, totalBars: 2 };
+    expect(chordPlanPosition(second, 32)).toEqual({ isLastBar: false, stepsRemaining: 32 });
+    expect(chordPlanPosition(second, 48)).toEqual({ isLastBar: true, stepsRemaining: 16 });
+    expect(chordPlanPosition(second, 31)).toBeNull();
+  });
+});
+
+describe('a plan folds each chord and bass cycle by its own resolved width', () => {
+  const BAR = 16;
+  // A six-bar progression, a two-bar chord cycle (32 columns) over a
+  // three-bar bass cycle (48), both resolved when the plan was armed. One
+  // progression-relative step feeds both folds.
+  const PLAN = {
+    startProgressionStep: 0,
+    totalBars: 6,
+    chordCycleSteps: 2 * BAR,
+    bassCycleSteps: 3 * BAR,
+  };
+  // The one subtraction the clock callback makes, before it publishes: the
+  // clock step minus the step the run armed on. The arming state that supplies
+  // the origin is pinned in useChordPlayback.test.ts; what is under test here
+  // is what the two lanes do with the number it produces.
+  const progressionStepAt = (step: number, origin = 0): number => step - origin;
+  const inPlan = (step: number, origin = 0) =>
+    chordPlanPosition(PLAN, progressionStepAt(step, origin));
+
+  test('a two-bar chord custom event at column 20 fires in bar two', () => {
+    const events: BarInvariantEvent[] = [
+      { step: 20, noteName: 'E4', velocity: 0.7, timeOffset: 0, hold: 0.25 },
+    ];
+    const at = (step: number) =>
+      eventsForCycleStep(events, progressionStepAt(step), PLAN.chordCycleSteps, false);
+
+    expect(cycleStepAt(progressionStepAt(20), PLAN.chordCycleSteps)).toBe(20);
+    expect(at(20).map((e) => e.noteName)).toEqual(['E4']);
+    expect(at(19)).toEqual([]);
+    // Column 20 is bar two of EVERY repetition, not a one-off.
+    expect(at(20 + PLAN.chordCycleSteps).map((e) => e.noteName)).toEqual(['E4']);
+  });
+
+  test('a one-bar preset still repeats once per bar inside a multi-bar chord', () => {
+    const preset: BarInvariantEvent[] = [
+      { step: 4, noteName: 'E4', velocity: 0.7, timeOffset: 0, hold: 0.25 },
+    ];
+    const at = (step: number) =>
+      eventsForCycleStep(preset, progressionStepAt(step), BAR, false);
+
+    expect([4, 20, 36, 52].map((step) => at(step).length)).toEqual([1, 1, 1, 1]);
+    expect(at(5)).toEqual([]);
+  });
+
+  test('independent chord and bass cycles phase from the same progression step', () => {
+    const phases = [0, 16, 32, 48, 64, 80].map((step) => {
+      const progressionStep = progressionStepAt(step);
+      return [
+        cycleStepAt(progressionStep, PLAN.chordCycleSteps),
+        cycleStepAt(progressionStep, PLAN.bassCycleSteps),
+      ];
+    });
+
+    expect(phases).toEqual([
+      [0, 0],   // both cycles begin together
+      [16, 16],
+      [0, 32],  // the two-bar chord cycle wraps; the three-bar bass does not
+      [16, 0],  // the bass wraps a bar later; the chord does not
+      [0, 16],
+      [16, 32],
+    ]);
+  });
+
+  test('playback that began on a running clock starts both cycles at column zero', () => {
+    // The shared clock has been counting since app start; the run armed on the
+    // bar line at 112, so that tick is progression step 0 for both lanes —
+    // never clock step 112, whose own bar column is 0 but whose cycle column
+    // would be 112 % 32 = 16.
+    const origin = 112;
+
+    expect(inPlan(origin, origin)).not.toBeNull();
+    expect(inPlan(origin + 1, origin)).not.toBeNull();
+    expect([
+      cycleStepAt(progressionStepAt(origin, origin), PLAN.chordCycleSteps),
+      cycleStepAt(progressionStepAt(origin, origin), PLAN.bassCycleSteps),
+    ]).toEqual([0, 0]);
+
+    // One step in, both cycles are one column in.
+    expect([
+      cycleStepAt(progressionStepAt(origin + 1, origin), PLAN.chordCycleSteps),
+      cycleStepAt(progressionStepAt(origin + 1, origin), PLAN.bassCycleSteps),
+    ]).toEqual([1, 1]);
+  });
+
+  test('a custom span covering the whole cycle retriggers at column zero of the next', () => {
+    const span: BarInvariantEvent[] = [
+      { step: 0, noteName: 'C4', velocity: 0.8, timeOffset: 0, hold: 2 },
+    ];
+    const at = (step: number) =>
+      eventsForCycleStep(span, progressionStepAt(step), PLAN.chordCycleSteps, false);
+
+    expect(at(0).map((e) => e.noteName)).toEqual(['C4']); // the cycle's strike
+    expect(at(31)).toEqual([]);                          // sealed until the seam
+    expect(at(32).map((e) => e.noteName)).toEqual(['C4']); // seam: release, restrike
+    expect(at(64).map((e) => e.noteName)).toEqual(['C4']); // and on every repetition
   });
 });
 
@@ -598,7 +807,7 @@ describe('buildChordEvents', () => {
   });
 });
 
-describe('eventsForStep output is unchanged by the single-pass rewrite', () => {
+describe('eventsForCycleStep output is unchanged by the single-pass rewrite', () => {
   const events: BarInvariantEvent[] = [
     { step: 0, noteName: 'C4', velocity: 0.8, timeOffset: 0, hold: 0.5 },
     { step: 0, noteName: 'E4', velocity: 0.7, timeOffset: 0.01, hold: 0.5 },
@@ -616,16 +825,16 @@ describe('eventsForStep output is unchanged by the single-pass rewrite', () => {
   test('matches the reference across every step and both bar positions', () => {
     for (let step = 0; step < 16; step++) {
       for (const isLastBar of [false, true]) {
-        expect(eventsForStep(events, step, isLastBar)).toEqual(reference(step, isLastBar));
+        expect(eventsForCycleStep(events, step, 16, isLastBar)).toEqual(reference(step, isLastBar));
       }
     }
   });
 
   test('returns a fresh array of fresh objects with exactly the four StepEvent keys', () => {
-    const a = eventsForStep(events, 0, true);
-    expect(a).not.toBe(eventsForStep(events, 0, true));
+    const a = eventsForCycleStep(events, 0, 16, true);
+    expect(a).not.toBe(eventsForCycleStep(events, 0, 16, true));
     expect(a[0]).not.toBe(events[0]);
     expect(Object.keys(a[0]).sort()).toEqual(['hold', 'noteName', 'timeOffset', 'velocity']);
-    expect(eventsForStep([], 0, true)).toEqual([]);
+    expect(eventsForCycleStep([], 0, 16, true)).toEqual([]);
   });
 });

@@ -36,17 +36,16 @@ import {
   type LeadTrigger,
 } from '../leadMelody';
 import { isApproachToken, resolveBassSteps } from '../bassPatterns';
-import { buildChordEvents, emitStepEvents, eventsForStep, arpEventsForStep, playFullHoldChord, type BarInvariantEvent } from '../playback/chordPlayback';
+import { buildChordEvents, emitStepEvents, eventsForCycleStep, arpEventsForStep, playFullHoldChord, type BarInvariantEvent, type StepEvent } from '../playback/chordPlayback';
 import { resolvePadArm } from '../playback/padPlayback';
 import {
-  adaptBassPattern,
-  adaptRhythmPattern,
-  feelToHoldScale,
+  cycleHoldScale,
   fullHoldDuration,
-  isFullHoldBass,
-  isFullHoldRhythm,
-  resolvePlaybackBassPattern,
-  resolvePlaybackRhythmPattern,
+  isFullHoldBassCycle,
+  isFullHoldRhythmCycle,
+  resolvePlaybackBassCycle,
+  resolvePlaybackRhythmCycle,
+  type PlaybackPatternCycle,
 } from '../chordRhythms';
 import { MIXDOWN_SEED, withSeededRandom } from '../rng';
 import { DEFAULT_VELOCITY } from '../constants';
@@ -157,11 +156,22 @@ export interface MixdownLoop {
   chordRhythmId: string;
   chordRhythmMode: 'preset' | 'custom';
   customChordRhythm: boolean[];
+  /**
+   * The custom chord lane's OWN cycle, in bars, and its holds. The renderer
+   * resolves the lane's cycle from these — `src/audio/` may not reach back
+   * into the store for them, so the snapshot carries them like any other loop
+   * field.
+   */
+  customChordLoopLength: number;
+  customChordHoldSteps: number[];
   chordFeel: number;
   chordOctave: number;
   bassPatternId: string;
   bassPatternMode: 'preset' | 'custom';
   customBassPattern: BassStepChoice[];
+  /** The bass lane's own cycle. See `customChordLoopLength`. */
+  customBassLoopLength: number;
+  customBassHoldSteps: number[];
   bassFeel: number;
   bassOctave: number;
   padMode: PadMode;
@@ -315,40 +325,96 @@ export interface LoopVoices {
   bassHoldSec: number[];
   chordHoldScale: number;
   bassHoldScale: number;
+  /** The chord lane's cycle width in 16th columns (one bar for a preset). */
+  chordCycleSteps: number;
+  /** The bass lane's cycle width in 16th columns. */
+  bassCycleSteps: number;
 }
 
 /**
- * The loop's chord and bass patterns, resolved once for the whole loop at the
- * ACTIVE meter. A custom grid is synthesized at the active meter and is stamped
- * with it, so adaptRhythmPattern returns it unchanged — the same two-step the
- * live hook performs, in the same order.
+ * The chord events a pass emits at `stepInPass` — the render's own fold, and
+ * deliberately the SAME call live playback makes at `progressionStep`.
+ *
+ * `stepInPass` is progression-relative (a pass restarts the progression, so
+ * column 0 of a pass is column 0 of both cycles), which is what makes a
+ * custom lane's second bar reachable here at all: folding by `stepInBar`
+ * instead maps column 20 of a 32-step cycle onto column 4 of a one-bar one.
+ * `isLastBar` is the ACTIVE CHORD's last bar, exactly as the live plan
+ * measures it, so a preset's approach tone still lands only there.
  */
-function resolveLoopPatterns(
+export function renderChordEventsAt(
+  voices: LoopVoices,
+  chordIndex: number,
+  stepInPass: number,
+  isLastBar: boolean,
+): StepEvent[] {
+  return eventsForCycleStep(
+    voices.chordEvents[chordIndex],
+    stepInPass,
+    voices.chordCycleSteps,
+    isLastBar,
+  );
+}
+
+/** The bass lane's twin, over its own cycle width. */
+export function renderBassEventsAt(
+  voices: LoopVoices,
+  chordIndex: number,
+  stepInPass: number,
+  isLastBar: boolean,
+): StepEvent[] {
+  return eventsForCycleStep(
+    voices.bassEvents[chordIndex],
+    stepInPass,
+    voices.bassCycleSteps,
+    isLastBar,
+  );
+}
+
+/**
+ * Both lanes' cycles, resolved once per render snapshot — the SAME resolvers
+ * and the same progression-duration array live playback arms its plans with.
+ *
+ * The renderer previously resolved a one-bar pattern and folded every step by
+ * `stepInBar`, so a custom lane's second bar was unreachable (and the two
+ * producers could disagree about the seam). It also converted the custom grid
+ * TWICE, `adapt*Pattern` re-adapting what the resolver had already stamped at
+ * the active meter; the cycle resolvers do that once.
+ */
+function resolveLoopCycles(
   loop: MixdownLoop,
   meterId: MeterId,
   stepsPerBar: number,
-): { rhythmPattern: RhythmPattern; bassPattern: BassPattern } {
-  const rhythmPattern = adaptRhythmPattern(
-    resolvePlaybackRhythmPattern(
-      loop.chordRhythmMode,
-      loop.chordRhythmId,
-      loop.customChordRhythm,
-      stepsPerBar,
-      meterId,
-    ),
-    stepsPerBar,
+): {
+  chordCycle: PlaybackPatternCycle<RhythmPattern>;
+  bassCycle: PlaybackPatternCycle<BassPattern>;
+} {
+  // Chord selection is driven by the PROGRESSION's duration, never by a
+  // pattern's cycle length — a lane's loop is a divisor of it by construction.
+  const chordDurations = loop.chords.map(
+    (chord) => Math.max(1, chord.bars || 1) * stepsPerBar,
   );
-  const bassPattern = adaptBassPattern(
-    resolvePlaybackBassPattern(
-      loop.bassPatternMode,
-      loop.bassPatternId,
-      loop.customBassPattern,
-      stepsPerBar,
-      meterId,
-    ),
+  const chordCycle = resolvePlaybackRhythmCycle(
+    loop.chordRhythmMode,
+    loop.chordRhythmId,
+    loop.customChordRhythm,
+    loop.customChordHoldSteps,
+    loop.customChordLoopLength,
     stepsPerBar,
+    meterId,
+    chordDurations,
   );
-  return { rhythmPattern, bassPattern };
+  const bassCycle = resolvePlaybackBassCycle(
+    loop.bassPatternMode,
+    loop.bassPatternId,
+    loop.customBassPattern,
+    loop.customBassHoldSteps,
+    loop.customBassLoopLength,
+    stepsPerBar,
+    meterId,
+    chordDurations,
+  );
+  return { chordCycle, bassCycle };
 }
 
 /**
@@ -438,12 +504,18 @@ export function buildLoopVoices(
 
   const chordArp = !!loop.chordSynthParams.arpActive;
   const bassArp = !!loop.bassSynthParams.arpActive;
-  const chordHoldScale = feelToHoldScale(loop.chordFeel);
-  const bassHoldScale = feelToHoldScale(loop.bassFeel);
 
-  const { rhythmPattern, bassPattern } = resolveLoopPatterns(loop, meterId, stepsPerBar);
-  const chordFullHold = !chordArp && isFullHoldRhythm(rhythmPattern, stepsPerBar);
-  const bassFullHold = !bassArp && isFullHoldBass(bassPattern, stepsPerBar);
+  const { chordCycle, bassCycle } = resolveLoopCycles(loop, meterId, stepsPerBar);
+  // The cycle wrappers are PRESET-only for the full-hold fast path, so a
+  // custom span covering the whole cycle stays a per-step span here exactly as
+  // it does live.
+  const chordFullHold = !chordArp && isFullHoldRhythmCycle(chordCycle);
+  const bassFullHold = !bassArp && isFullHoldBassCycle(bassCycle);
+
+  // Feel may only TIGHTEN a span the user drew, so a custom cycle picks the
+  // scale — the same rule the live lane follows.
+  const chordHoldScale = cycleHoldScale(chordCycle.custom, loop.chordFeel);
+  const bassHoldScale = cycleHoldScale(bassCycle.custom, loop.bassFeel);
 
   let barCursor = 0;
   for (let i = 0; i < loop.chords.length; i += 1) {
@@ -462,15 +534,15 @@ export function buildLoopVoices(
     chordEvents.push(
       chordFullHold || chordArp
         ? []
-        : buildChordEvents(rhythmPattern, notes, stepDur, chordHoldScale),
+        : buildChordEvents(chordCycle.pattern, notes, stepDur, chordHoldScale),
     );
 
     bassEvents.push(
-      bassEventsForChord(loop, bassPattern, i, bpm, bassHoldScale, bassFullHold || bassArp),
+      bassEventsForChord(loop, bassCycle.pattern, i, bpm, bassHoldScale, bassFullHold || bassArp),
     );
 
     chordHoldSec.push(chordFullHold ? fullHoldDuration(bars, barDur, chordHoldScale) : 0);
-    bassHoldNotes.push(fullHoldBassNote(loop, bassPattern, i, bpm, bassFullHold));
+    bassHoldNotes.push(fullHoldBassNote(loop, bassCycle.pattern, i, bpm, bassFullHold));
     bassHoldSec.push(bassFullHold ? fullHoldDuration(bars, barDur, bassHoldScale) : 0);
   }
   return {
@@ -488,6 +560,8 @@ export function buildLoopVoices(
     bassHoldSec,
     chordHoldScale,
     bassHoldScale,
+    chordCycleSteps: chordCycle.cycleSteps,
+    bassCycleSteps: bassCycle.cycleSteps,
   };
 }
 
@@ -650,7 +724,7 @@ function scheduleArrangement(
           }
         } else {
           emitStepEvents(
-            eventsForStep(voices.chordEvents[chordIndex], stepInBar, isLastBar),
+            renderChordEventsAt(voices, chordIndex, stepInPass, isLastBar),
             chordParams, 'chord', time, chordEnd, engine,
           );
         }
@@ -670,7 +744,7 @@ function scheduleArrangement(
           }
         } else {
           emitStepEvents(
-            eventsForStep(voices.bassEvents[chordIndex], stepInBar, isLastBar),
+            renderBassEventsAt(voices, chordIndex, stepInPass, isLastBar),
             bassParams, 'bass', time, chordEnd, engine,
           );
         }

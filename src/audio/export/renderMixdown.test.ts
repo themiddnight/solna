@@ -5,11 +5,21 @@ import {
   MIXDOWN_SAMPLE_RATE,
   planArrangement,
   planLoopAudioAutomation,
+  renderBassEventsAt,
+  renderChordEventsAt,
   renderMixdown,
+  type MixdownLoop,
   type MixdownRenderProgress,
 } from './renderMixdown';
 import { mixdownLoop, mixdownSnapshot, FACTORY_EFFECTS } from './mixdownFixture';
 import { random } from '../rng';
+import { cycleHoldScale, resolvePlaybackBassCycle, resolvePlaybackRhythmCycle } from '../chordRhythms';
+import { buildChordEvents, eventsForCycleStep } from '../playback/chordPlayback';
+import { isApproachToken, resolveBassSteps } from '../bassPatterns';
+import { patternStoredIndexAt } from '@/utils/patternTimeline';
+import { generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
+import { MAX_STEPS_PER_BAR } from '@/utils/meter';
+import type { BassStepChoice } from '@/data/bassPatterns';
 
 // The capability probe reads `globalThis.OfflineAudioContext`, so the TEST
 // provides it — the same way a browser does. There is no injection seam in
@@ -149,6 +159,176 @@ describe('buildLoopVoices', () => {
     expect(voices.chordHoldSec[0]).toBe(0);
     expect(voices.chordEvents[0].length).toBeGreaterThan(0);
     expect(voices.bassHoldNotes[0]).toBeNull();
+  });
+});
+
+/**
+ * The chords a render emits at a step and the chords live playback emits at
+ * the same step must be the SAME events: the mixdown is the loop, offline, and
+ * a custom pattern's second bar is the part a one-bar fold used to lose.
+ *
+ * Three one-bar chords under a two-bar custom cycle, so column 20 belongs to
+ * the second bar and to the third chord — a step a bar-relative filter maps
+ * onto column 4, under a different chord.
+ */
+const CHORD_DURATIONS = [16, 16, 16];
+const STEP_DUR = stepDurationSec(120);
+
+function customCycleLoop(): MixdownLoop {
+  const chordRow = new Array<boolean>(2 * MAX_STEPS_PER_BAR).fill(false);
+  chordRow[patternStoredIndexAt(0, 16)] = true;
+  chordRow[patternStoredIndexAt(20, 16)] = true;
+  const bassRow = new Array<BassStepChoice>(2 * MAX_STEPS_PER_BAR).fill('rest');
+  bassRow[patternStoredIndexAt(0, 16)] = 'root';
+  bassRow[patternStoredIndexAt(20, 16)] = 'fifth';
+  return mixdownLoop({
+    chords: [
+      { id: 'a', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] },
+      { id: 'b', root: 'F', quality: 'maj', bars: 1, notes: ['F4', 'A4', 'C5'] },
+      { id: 'c', root: 'G', quality: 'maj', bars: 1, notes: ['G4', 'B4', 'D5'] },
+    ],
+    chordRhythmMode: 'custom',
+    customChordRhythm: chordRow,
+    customChordHoldSteps: new Array<number>(2 * MAX_STEPS_PER_BAR).fill(1),
+    customChordLoopLength: 2,
+    bassPatternMode: 'custom',
+    customBassPattern: bassRow,
+    customBassHoldSteps: new Array<number>(2 * MAX_STEPS_PER_BAR).fill(1),
+    customBassLoopLength: 2,
+  });
+}
+
+/** The chord covering a pass-relative step; every chord here is one bar. */
+const chordIndexAt = (step: number) => Math.min(Math.floor(step / 16), 2);
+
+/**
+ * The asymmetric fixture the contract-locking suites share the shape of: a
+ * TWO-bar Chord lane and a FOUR-bar Bass lane over one four-bar progression,
+ * played in 3/4 — a twelve-column bar, not the widest meter's twenty-four.
+ *
+ * Everything is STORED bar-major at `MAX_STEPS_PER_BAR`, so the onsets sit on
+ * slots 0/24 for the chord lane and 0/24/48/72 for the bass lane, and each
+ * carries a hold of twelve columns. Reading the stored width as if it were the
+ * playing width is the exact defect this test exists to catch: it would report
+ * 48- and 96-step cycles and leave column 12 of the chord lane unreachable.
+ */
+const THREE_FOUR_STEPS = 12;
+
+function asymmetricCycleLoop(): MixdownLoop {
+  const chordRow = new Array<boolean>(2 * MAX_STEPS_PER_BAR).fill(false);
+  const chordHolds = new Array<number>(2 * MAX_STEPS_PER_BAR).fill(1);
+  for (const bar of [0, 1]) {
+    chordRow[bar * MAX_STEPS_PER_BAR] = true;
+    chordHolds[bar * MAX_STEPS_PER_BAR] = THREE_FOUR_STEPS;
+  }
+
+  const bassRow = new Array<BassStepChoice>(4 * MAX_STEPS_PER_BAR).fill('rest');
+  const bassHolds = new Array<number>(4 * MAX_STEPS_PER_BAR).fill(1);
+  const tones: BassStepChoice[] = ['root', 'third', 'fifth', 'seventh'];
+  tones.forEach((tone, bar) => {
+    bassRow[bar * MAX_STEPS_PER_BAR] = tone;
+    bassHolds[bar * MAX_STEPS_PER_BAR] = THREE_FOUR_STEPS;
+  });
+
+  return mixdownLoop({
+    chords: [
+      { id: 'a', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] },
+      { id: 'b', root: 'F', quality: 'maj', bars: 1, notes: ['F4', 'A4', 'C5'] },
+      { id: 'c', root: 'G', quality: 'maj', bars: 1, notes: ['G4', 'B4', 'D5'] },
+      { id: 'd', root: 'A', quality: 'min', bars: 1, notes: ['A3', 'C4', 'E4'] },
+    ],
+    chordRhythmMode: 'custom',
+    customChordRhythm: chordRow,
+    customChordHoldSteps: chordHolds,
+    customChordLoopLength: 2,
+    bassPatternMode: 'custom',
+    customBassPattern: bassRow,
+    customBassHoldSteps: bassHolds,
+    customBassLoopLength: 4,
+  });
+}
+
+describe('offline rendering consumes the resolved cycles', () => {
+  test('each lane plays its own cycle in the ACTIVE meter, not the stored row width', () => {
+    const voices = buildLoopVoices(asymmetricCycleLoop(), '3/4', 120, THREE_FOUR_STEPS);
+
+    // Two bars of a twelve-column bar, and four — the lanes' independent
+    // cycles, measured in the meter they are played in.
+    expect(voices.chordCycleSteps).toBe(2 * THREE_FOUR_STEPS);
+    expect(voices.bassCycleSteps).toBe(4 * THREE_FOUR_STEPS);
+
+    // The onsets sit on CYCLE COLUMNS one active bar apart, not on their
+    // stored slots (which are one widest bar apart).
+    expect([...new Set(voices.chordEvents[0].map((event) => event.step))]).toEqual([0, 12]);
+    const bassColumns = [
+      ...new Set(voices.bassEvents.flat().map((event) => event.step)),
+    ].sort((a, b) => a - b);
+    expect(bassColumns).toEqual([0, 12, 24, 36]);
+
+    // The hold is one 3/4 bar of time — the same twelve columns the row was
+    // drawn with — not one widest-meter bar, which happens to be the same
+    // number of STEPS here and so is only distinguishable through the cycle.
+    const barSec = THREE_FOUR_STEPS * stepDurationSec(120);
+    expect(voices.chordEvents[0][0].hold).toBeCloseTo(barSec, 6);
+
+    // The contrast that proves the numbers above came from the ACTIVE bar
+    // length and not from a stored width read as if it were one: in 12/8 a bar
+    // IS `MAX_STEPS_PER_BAR`, so a column and its stored slot coincide and the
+    // very same rows report cycles twice as wide. That degeneracy is why the
+    // bug is invisible in the widest meter and only shows up elsewhere.
+    const widest = buildLoopVoices(asymmetricCycleLoop(), '12/8', 120, MAX_STEPS_PER_BAR);
+    expect(widest.chordCycleSteps).toBe(2 * MAX_STEPS_PER_BAR);
+    expect(widest.bassCycleSteps).toBe(4 * MAX_STEPS_PER_BAR);
+  });
+
+  test('a custom two-bar cycle reaches its second bar', () => {
+    const voices = buildLoopVoices(customCycleLoop(), '4/4', 120, 16);
+    expect(voices.chordCycleSteps).toBe(32);
+    expect(voices.bassCycleSteps).toBe(32);
+    // Column 20 is bar two of the cycle; a one-bar resolution drops it.
+    expect(voices.chordEvents[0].map((e) => e.step)).toContain(20);
+  });
+
+  test('render and live produce identical Chord/Bass events at every step', () => {
+    const loop = customCycleLoop();
+    const voices = buildLoopVoices(loop, '4/4', 120, 16);
+    const chordCycle = resolvePlaybackRhythmCycle(
+      loop.chordRhythmMode, loop.chordRhythmId, loop.customChordRhythm,
+      loop.customChordHoldSteps, loop.customChordLoopLength, 16, '4/4', CHORD_DURATIONS,
+    );
+    const bassCycle = resolvePlaybackBassCycle(
+      loop.bassPatternMode, loop.bassPatternId, loop.customBassPattern,
+      loop.customBassHoldSteps, loop.customBassLoopLength, 16, '4/4', CHORD_DURATIONS,
+    );
+    const chordScale = cycleHoldScale(chordCycle.custom, loop.chordFeel);
+    const bassScale = cycleHoldScale(bassCycle.custom, loop.bassFeel);
+
+    // Live arms ONE plan per chord off the run origin, then folds that step
+    // onto each lane's own cycle — this mirrors emitChordPlanStep's call.
+    const liveChord = (step: number) => {
+      const i = chordIndexAt(step);
+      const notes = generateBlockChordNotes(loop.chords[i].quality, loop.chords[i].root, loop.chordOctave);
+      return eventsForCycleStep(
+        buildChordEvents(chordCycle.pattern, notes, STEP_DUR, chordScale),
+        step, chordCycle.cycleSteps, true,
+      );
+    };
+    const liveBass = (step: number) => {
+      const i = chordIndexAt(step);
+      const events = resolveBassSteps(
+        bassCycle.pattern, loop.chords, i, loop.bassOctave, loop.scaleRoot, loop.scaleType, 120, bassScale,
+      ).map((ev) => ({
+        step: ev.step, noteName: ev.noteName, velocity: ev.velocity,
+        timeOffset: 0, hold: ev.holdSec, lastBarOnly: isApproachToken(ev.token),
+      }));
+      return eventsForCycleStep(events, step, bassCycle.cycleSteps, true);
+    };
+
+    for (const step of [0, 15, 16, 20, 31, 32, 47]) {
+      const i = chordIndexAt(step);
+      expect(renderChordEventsAt(voices, i, step, true), `chord ${step}`).toEqual(liveChord(step));
+      expect(renderBassEventsAt(voices, i, step, true), `bass ${step}`).toEqual(liveBass(step));
+    }
   });
 });
 

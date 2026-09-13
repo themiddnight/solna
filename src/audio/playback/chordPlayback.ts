@@ -1,5 +1,5 @@
 import { audioEngine, STEPS_PER_BAR, type AudioEngine } from "../engine";
-import { equalPowerVelocityScale } from "../chordRhythms";
+import { cycleStepAt, equalPowerVelocityScale } from "../chordRhythms";
 import type { RhythmPattern } from "@/data/chordRhythms";
 import { buildArpSequence } from "../arpeggiator";
 import { arpFiresOnStep, computeArpTriggers } from "../arpSchedule";
@@ -9,6 +9,7 @@ import {
   getDiatonicChordForDegree,
   shiftNoteOctave,
   barDurationSec,
+  stepDurationSec,
 } from "@/utils/musicTheory";
 import { DEFAULT_VELOCITY } from "../constants";
 import type { ChordItem, SynthParams } from "@/types";
@@ -63,20 +64,22 @@ export function buildChordEvents(
 }
 
 /**
- * The events of one bar-invariant set that land on `stepInBar`. Approach notes
- * lead into the NEXT chord, so `lastBarOnly` events are withheld until the
- * chord's final bar.
+ * The one event-phase filter. `stepInCycle` has already been folded onto the
+ * cycle the caller schedules, so this is a plain match; the folding is
+ * `cycleStepAt`'s job and a second copy of it here is exactly how a preview and
+ * the transport came to disagree about a bar line.
+ *
+ * A single pass avoids the intermediate array `.filter().map()` would allocate;
+ * this runs twice per 16th step (chord + bass) for the session.
  */
-export function eventsForStep(
+function phaseEventsForStep(
   events: BarInvariantEvent[],
-  stepInBar: number,
+  stepInCycle: number,
   isLastBar: boolean,
 ): StepEvent[] {
-  // A single pass avoids the intermediate array .filter().map() would
-  // allocate; this runs twice per 16th step (chord + bass) for the session.
   const out: StepEvent[] = [];
   for (const ev of events) {
-    if (ev.step !== stepInBar) continue;
+    if (ev.step !== stepInCycle) continue;
     if (!isLastBar && ev.lastBarOnly) continue;
     out.push({
       noteName: ev.noteName,
@@ -86,6 +89,21 @@ export function eventsForStep(
     });
   }
   return out;
+}
+
+/**
+ * The events of one bar-invariant set that land on the cycle column a
+ * progression-relative step falls on. Approach notes lead into the NEXT chord,
+ * so `lastBarOnly` events are withheld until the active chord's final bar: a
+ * preset's one-bar cycle repeats, but its approach still fires once.
+ */
+export function eventsForCycleStep(
+  events: BarInvariantEvent[],
+  progressionStep: number,
+  cycleSteps: number,
+  isLastBar: boolean,
+): StepEvent[] {
+  return phaseEventsForStep(events, cycleStepAt(progressionStep, cycleSteps), isLastBar);
 }
 
 /**
@@ -126,10 +144,20 @@ export function emitStepEvents(
 }
 
 /**
- * Lays a whole chord down in one burst, the way the transport used to before
- * it moved to just-in-time emission. Still the right shape for the pattern
- * previews, which are driven by a bar timer instead of the shared clock and so
- * have no per-step tick to hang events on.
+ * Lays a whole cycle down in one burst — or `totalSteps` of one, which may be
+ * several repetitions of it. Still the right shape for the pattern previews,
+ * which are driven by a bar timer instead of the shared clock and so have no
+ * per-step tick to hang events on.
+ *
+ * `totalSteps` and `cycleSteps` are both stated by the caller rather than
+ * assumed to be a bar: a custom lane's cycle is `loopLength * stepsPerBar`, and
+ * a bar-relative modulo would silently drop every event past column
+ * `stepsPerBar - 1` — a bar two of a two-bar pattern would simply never sound.
+ * The phase filter is `eventsForCycleStep`, the same one live scheduling and the
+ * offline renderer use, so a preview cannot drift from what actually plays.
+ *
+ * An approach note fires on the last repetition of the cycle, matching the
+ * preset rule that it belongs to the chord's final bar.
  */
 export function scheduleWholeChord(
   events: BarInvariantEvent[],
@@ -137,15 +165,15 @@ export function scheduleWholeChord(
   source: string,
   startTime: number,
   stepDur: number,
-  totalBars: number,
-  stepsPerBar: number = STEPS_PER_BAR,
+  totalSteps: number,
+  cycleSteps: number,
 ): void {
-  const totalSteps = totalBars * stepsPerBar;
   const chordEnd = startTime + totalSteps * stepDur;
+  const lastCycle = Math.ceil(totalSteps / cycleSteps) - 1;
   for (let s = 0; s < totalSteps; s++) {
-    const isLastBar = Math.floor(s / stepsPerBar) === totalBars - 1;
+    const isLastBar = Math.floor(s / cycleSteps) === lastCycle;
     emitStepEvents(
-      eventsForStep(events, s % stepsPerBar, isLastBar),
+      eventsForCycleStep(events, s, cycleSteps, isLastBar),
       params,
       source,
       startTime + s * stepDur,
@@ -155,19 +183,35 @@ export function scheduleWholeChord(
 }
 
 /**
- * Where an absolute clock step falls inside the chord armed at
- * `plan.startStep`, or null when the step is outside the chord's span.
+ * Where a PROGRESSION-relative step falls inside the chord armed at
+ * `plan.startProgressionStep`, or null when the step is outside the chord's
+ * span.
+ *
+ * Both the step and the plan's start are measured from the step the PLAYBACK
+ * RUN began on (`playbackOriginStep`, held by the caller's arming state) —
+ * never from a bar line, and never from the plan's own start. One plan is one
+ * chord and a run spans many, so the count has to survive every chord after
+ * it, and the plans tile the run exactly: each is armed one whole chord after
+ * the last. That is what keeps a two-bar chord cycle and a three-bar bass
+ * cycle in phase over a six-bar progression. Each lane folds this one number by
+ * its own resolved `cycleSteps` with `eventsForCycleStep`; the fold is
+ * deliberately not here, because the two widths differ and this function knows
+ * neither.
+ *
+ * `stepInBar` used to be returned here, and its presence was the one-bar
+ * assumption this signature removes: a bar-relative column cannot address
+ * column 20 of a two-bar custom cycle, and every caller that wanted one had to
+ * reconstruct the cycle it came from.
  */
 export function chordPlanPosition(
-  plan: { startStep: number; totalBars: number },
-  step: number,
+  plan: { startProgressionStep: number; totalBars: number },
+  progressionStep: number,
   stepsPerBar: number = STEPS_PER_BAR,
-): { stepInBar: number; isLastBar: boolean; stepsRemaining: number } | null {
+): { isLastBar: boolean; stepsRemaining: number } | null {
   const totalSteps = plan.totalBars * stepsPerBar;
-  const stepInChord = step - plan.startStep;
+  const stepInChord = progressionStep - plan.startProgressionStep;
   if (stepInChord < 0 || stepInChord >= totalSteps) return null;
   return {
-    stepInBar: stepInChord % stepsPerBar,
     isLastBar: Math.floor(stepInChord / stepsPerBar) === plan.totalBars - 1,
     stepsRemaining: totalSteps - stepInChord,
   };
@@ -363,6 +407,19 @@ export function previewChordForScale(
  */
 export function previewBarSeconds(bpm: number, stepsPerBar: number = STEPS_PER_BAR): number {
   return barDurationSec(bpm, stepsPerBar);
+}
+
+/**
+ * How long one PATTERN CYCLE lasts at `bpm`, in seconds.
+ *
+ * This is the duration both preview buttons loop at, and it is measured from
+ * the cycle the lane actually resolved — one bar for a preset, the lane's own
+ * `loopLength * stepsPerBar` for a custom row. The preview timer and the
+ * scheduler callback it re-fires are handed the same number, so a two-bar
+ * preview cannot lay down its first bar and then restart early.
+ */
+export function previewCycleSeconds(cycleSteps: number, bpm: number): number {
+  return cycleSteps * stepDurationSec(bpm);
 }
 
 // --- Component preview bridge (layering rule 3) ---

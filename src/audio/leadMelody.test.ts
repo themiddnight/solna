@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import {
   clampLeadCursor,
-  clampLeadLoopLength,
   copyLeadBar,
   leadCursorBar,
   pasteLeadBar,
@@ -12,7 +11,6 @@ import {
   leadStoredIndexAt,
   leadDispatchTicks,
   leadScheduleHits,
-  loopLengthDivisors,
   remapLeadMelodyByScale,
   resizeLeadMelody,
   resolveLeadStepTriggers,
@@ -26,29 +24,6 @@ import {
   TICKS_PER_SIXTEENTH,
   columnsPerBar,
 } from '../utils/stepResolution';
-
-describe('loopLengthDivisors', () => {
-  test('lists every positive divisor ascending', () => {
-    expect(loopLengthDivisors(4)).toEqual([1, 2, 4]);
-    expect(loopLengthDivisors(6)).toEqual([1, 2, 3, 6]);
-    expect(loopLengthDivisors(1)).toEqual([1]);
-  });
-});
-
-describe('clampLeadLoopLength', () => {
-  test('returns the current value when it already divides', () => {
-    expect(clampLeadLoopLength(2, 4)).toBe(2);
-    expect(clampLeadLoopLength(4, 4)).toBe(4);
-  });
-  test('clamps DOWN to the largest divisor <= current', () => {
-    expect(clampLeadLoopLength(3, 4)).toBe(2);
-    expect(clampLeadLoopLength(5, 6)).toBe(3);
-    expect(clampLeadLoopLength(3, 2)).toBe(2);
-  });
-  test('a zero/invalid total falls back to 1', () => {
-    expect(clampLeadLoopLength(4, 0)).toBe(1);
-  });
-});
 
 describe('resizeLeadMelody', () => {
   const twoBars = Array.from({ length: 96 }, (_, i) =>

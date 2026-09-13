@@ -182,29 +182,6 @@ export function leadCoveringNoteIndex(
   return leadStoredIndexAt(columnInLoop - covering.age / stride, stepsPerBar, stride);
 }
 
-/** Positive divisors of totalBars, ascending (e.g. 4 → [1, 2, 4]). */
-export function loopLengthDivisors(totalBars: number): number[] {
-  const divisors: number[] = [];
-  for (let n = 1; n <= totalBars; n++) {
-    if (totalBars % n === 0) divisors.push(n);
-  }
-  return divisors;
-}
-
-/**
- * Clamp down to the largest divisor of totalBars that is <= current. Falls
- * back to 1 for a zero/invalid totalBars. Always returns a divisor, so a
- * stored loopLength never runs past the progression.
- */
-export function clampLeadLoopLength(current: number, totalBars: number): number {
-  const divisors = loopLengthDivisors(totalBars);
-  let best = 1;
-  for (const d of divisors) {
-    if (d <= current) best = d;
-  }
-  return best;
-}
-
 /**
  * Resize the melody by whole bars: trim trailing bars, pad empty bars. Each
  * "bar" is LEAD_TICKS_PER_BAR slots, so a loopLength change never drops
