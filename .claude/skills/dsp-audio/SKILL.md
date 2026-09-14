@@ -14,11 +14,25 @@ Everything lives in one singleton: `src/audio/engine.ts` → `export const audio
 
 1. **Never call an engine setter from a component.** Add the value to a store slice and wire one
    subscription in `src/store/engineSync.ts`. eslint blocks `audio/engine` imports from
-   `src/components/**` (exempt: `AudioVisualizer.tsx`, `TransportBar.tsx`, test files).
+   `src/components/**`; the exempt list is the one in `eslint.config.js` (the read-only analyser
+   consumers — `AudioVisualizer.tsx`, `ui/VuMeter.tsx`, `ui/AmbientBackdrop.tsx`,
+   `ui/GainReductionMeter.tsx`, `ui/SourceMeter.tsx` — plus test files). That file is the list
+   that binds; this one has drifted behind it before.
 2. **`src/audio/` must not import `src/store/` or `src/components/`.** The engine takes plain
-   params (`SynthParams`, `MasterEffects`, `DrumKit`) and knows nothing about Zustand.
+   data (`ActiveSynth`, `MasterEffects`, `DrumKit`) and knows nothing about Zustand. The one
+   door left open is `createRenderEngine(ctx)`, which binds a throwaway engine to a
+   caller-supplied context for the offline mixdown.
 3. **Every setter no-ops before `init()`.** They all start `if (!this.ctx) return;`. That is why
    `applyEngineSnapshot()` exists.
+4. **Every automation anchor is COMPUTED, never read off `param.value`.** `value` is the param's
+   [[current value]] — its intrinsic value at the START of the current render quantum — so it
+   answers a question about now, never about the time being scheduled, and a note-off or a
+   polyphony re-balance is routinely booked ahead. `cancelScheduledValues(at)` compounds it: it
+   removes every event at time >= `at`, and a ramp is anchored only by its END event, so
+   cancelling inside a ramp erases the ramp WHOLE — including the part before `at` that has not
+   been rendered. Compute the anchor (`envelopeValueAt` / `linearValueAt`), then re-draw the
+   erased segment before anchoring. `releaseScheduledParamTo` in `synth/modulation.ts` is the
+   shape to copy; both defects above were shipped and measured.
 
 ## AudioContext lifecycle
 
@@ -40,7 +54,10 @@ instance and read when nodes are later created.
 ## Signal graph (from `setupMasterChain()`)
 
 ```
-synth/chord/bass voice: osc1 + subOsc (+ noise) -> BiquadFilter (VCF) -> GainNode (VCA) -> tremoloGain (unity)
+synth voice (one per bus): osc1/osc2 + sub (+ noise), each through its own level gain
+   -> drive (WaveShaper) -> BiquadFilter (VCF) -> ampGain (ENV1's VCA)
+   -> tremoloGain (unity; ENV2's amplitude route and the LFO)
+   -> polyGain (equal-power polyphony) -> StereoPanner -> the source TAP
                                                                                            |
                                                                                            v
                         per-source TAP GainNode (unity, lazy)  [TAP: getSourceAnalyser -> per-layer scope]
@@ -119,7 +136,9 @@ Key consequences:
 
 ## Voices and per-source buses
 
-- `triggerSynthNoteOn(noteName, params, velocity, time, source='synth', scaleFactor=1, owner)`.
+- `triggerSynthNoteOn(noteName, synth, velocity, time, source, scaleFactor, owner)` takes a whole
+  `ActiveSynth` (engine id + patch + `sourcePresetId`) and RETURNS a `VoiceId | null` — the only
+  handle a note-off can address, and dropping it is how a note drones forever.
   Sources in use: `'synth'`, `'fx'`, `'chord'`, `'bass'`, `'pad'`, `'preview'`. `owner` is a
   `VoiceOwner` (`src/audio/voiceOwner.ts`: `live` / `arp` / `sequencer` / `preview`), is
   **required with no default**, and is stored on the voice. The bridges in `audio/playback/`
@@ -156,13 +175,29 @@ Key consequences:
   `stopSource('preview', …)` without also cutting the user's own held notes. One consequence:
   previews are NOT affected by the synth/chord/bass bus mute or gain (`setSourceMuted`/
   `setSourceGain`) — muting the chord bus does not silence a chord-progression audition.
-- `updateSynthParams(params, source?)` re-shapes only voices that are already sounding; voices
-  scheduled in the future and voices already in their release tail are skipped on purpose —
-  re-targeting them cancels their scheduled ramps and makes them silent.
-- The LFO's `'volume'` target drives a **series** `tremoloGain` between the VCA and the bus.
-  Connecting a node to `gains[0].gain` would SUM with the amp envelope: the release would never
-  reach silence and the sum would invert phase on the downswing. Depth 0 stops and disconnects
-  the LFO after ~5 time constants; `setTargetAtTime(0, …)` alone never reaches zero.
+- `updateSynthPatch(previous, next, source)` (→ `SynthVoiceManager.updatePatch`) re-shapes the
+  voices sounding on one bus, and only the CONTINUOUS controls move — envelope timing, unison
+  count and the route list shape a voice at construction, so they take effect on the next note.
+  Two things release the bus instead of morphing it: a change of voice MODE or ENGINE
+  (`changesTopology`), and a PRESET arriving (`installsDifferentPreset` — a non-null
+  `sourcePresetId` that differs from the one playing; a knob move CLEARS that id, which is why
+  a bare inequality would stop the bus on the first knob turn).
+- A destination ENV2 already owns is SKIPPED by a live update rather than written: a
+  `setValueAtTime` on a param carrying a scheduled contour re-anchors that contour, heard as the
+  modulation collapsing the moment an unrelated knob moves.
+- **ENV2 and the LFO write different params on purpose.** The ENV2 router computes absolute
+  endpoints and writes the INTRINSIC value (`filter.frequency`, `oscillators[n].frequency`); the
+  LFO CONNECTS a signal and therefore lands on the offset (`filter.detune`, `.detune`), where it
+  sums instead of overwriting. A connected modulator arrives in the PARAM's unit, so every LFO
+  destination carries a `unitScale` — without it 12 semitones reached a `detune` as 12 cents.
+- The `amplitude` target drives the **series** `tremoloGain` between the VCA and the panner.
+  Connecting a node to `ampGain.gain` would SUM with the amp envelope: the release would never
+  reach silence and the sum would invert phase on the downswing. A depth of 0 tears the LFO down
+  through `SynthLfoBank`'s `pendingTeardowns` sweep, on the AUDIO clock, so the node is
+  disconnected only once its last ramp has actually been rendered.
+- `setPolyphonyScale(source, scale, at)` ducks a whole bus equal-power as keys go down and lifts
+  it as they come up. It is a RAMP on a gain of its own — never a write to `ampGain` or
+  `tremoloGain`, both of which carry contours a write would re-anchor.
 
 ## Shared clock
 
@@ -189,10 +224,14 @@ Follow how distortion is wired — it is the smallest complete example.
 3. `src/store/initialState.ts`: add the default to `INITIAL_EFFECTS`.
 4. No new subscription is needed — `engineSync.ts` already subscribes to the whole `effects`
    object and calls `updateEffects`. Only add a subscription for state outside `effects`.
-5. Bump the persist `version` in `src/store/store.ts` if the shape change breaks old saves.
+5. Do NOT bump the persist `version` for it. There are no migration chains any more: a persisted
+   shape change is handled by validating the new key on every read
+   (`sanitizePersistedState`/`sanitizeLoops` in `store.ts`), not by a version-gated branch. See
+   CLAUDE.md's "no migration chains" note for the precondition under which that stops being true.
 
-**Legacy trap:** `MasterEffects` still declares `chorusWet`/`chorusRate`/`chorusDepth`/`delayTime`.
-Nothing implements them; `store.ts`'s migrate strips them. Don't wire UI to those fields.
+**Legacy trap:** `chorusWet`/`chorusRate`/`chorusDepth`/`delayTime` are GONE from `MasterEffects`,
+and `sanitize.ts` deletes them from any old payload so they cannot resurrect. Don't wire UI to
+them, and don't re-add one to the type to "support old saves".
 
 ## Adding store state that must reach the engine
 
@@ -231,21 +270,32 @@ Adding or editing a kit means running `bun run check:drums`. `bun run verify` in
 
 ## Synth presets
 
-`src/data/synthPresets.ts` exports `SYNTH_PRESETS` (29 entries, `SynthPresetItem` …); the lookups
-(`presetById`, `applyPreset`, `getAllSynthPresets`, `getPresetsGroupedByCategory`) are in
-`src/audio/presetRegistry.ts`. Presets are plain `SynthParams` data — they reach the engine only
-by being set into a store slice, which `engineSync.ts` forwards to `updateSynthParams`.
+`src/data/synthPresets.ts` exports `SYNTH_PRESETS`: a table of `SynthPreset` literals, each
+carrying a COMPLETE `patch` (there is no base to merge over any more, so an audition is the sound
+the card promises). The lookups — `presetById`, `applySynthPreset`, `getAllSynthPresets`,
+`groupPresets`, `findPresetByName`, `resolveFactorySynth` — are in `src/utils/synthPresets.ts`;
+there is no `src/audio/presetRegistry.ts`.
+
+A preset reaches the engine only by being written into a store slice as an `ActiveSynth`, which
+`engineSync.ts` forwards through `updateSynthPatch`. `applySynthPreset` stamps
+`sourcePresetId`, and that id is what makes a preset install stop the bus rather than morph it
+(see the voices section). Every patch a preset yields is `structuredClone`d — the library is
+module-scope literal data, and one knob drag on a shared object would rewrite the factory entry
+for the rest of the session.
 
 ## Debugging checklist
 
 | Symptom | Likely cause |
 |---|---|
 | Nothing audible at all | No user click yet — `ctx` is null and every setter no-opped |
-| Knob does nothing until next note | Param not handled in `updateSynthParams` (only live voices are re-shaped) |
+| Knob does nothing until next note | Param not handled in `updateVoice` (subtractiveVoice.ts) — or deliberately deferred there, as `noiseEnabled`/`noiseColor` are |
 | New effect silent | Missing `bus.connect(this.fooNode)` in `getSourceBus()` |
-| Note drones forever | Release path skipped — check `releaseScheduledAt` / `releaseVoice` teardown timeout |
-| Scheduled pattern notes vanish | Something called `updateSynthParams`/`stopSource` on future voices and cancelled their ramps |
+| Note drones forever | A bridge dropped the `VoiceId` `triggerSynthNoteOn` returned, so no `triggerSynthNoteOff` can address the voice. There is NO wall-clock lifetime backstop — see `voiceManager.ts` rule 5 — so trace the bridge, not the manager |
+| Scheduled pattern notes vanish | Something called `updateSynthPatch`/`stopSource` on future voices and cancelled their ramps |
 | Clicks on mute | Bypassed the `setTargetAtTime(…, 0.01)` ramp in `setSourceMuted` |
 
-Gate: `bun run verify` (test + lint + check:keys + check:drums + build). Engine tests live in
-`src/audio/engine.test.ts`.
+Gate: `bun run verify` — see CLAUDE.md for what it runs; `bun run eslint` is part of it and must
+report nothing at all. Engine tests live in `src/audio/engine.test.ts`, and what the synth voice
+SOUNDS like is measured off rendered samples in `src/audio/synth/subtractiveSignal.test.ts`. A
+graph assertion proves a param was scheduled; only a render proves what came out, and every ratio
+there is guarded against a silent denominator.

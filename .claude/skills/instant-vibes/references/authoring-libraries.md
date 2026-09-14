@@ -108,13 +108,10 @@ One array now: append to `SYNTH_PRESETS` in `src/data/synthPresets.ts`, `categor
 selecting the bass role. Ids follow the file's convention: `factory-*` for most, `bass-*` for
 the five that predate the merge. **Both id and name must be unique** across
 `SYNTH_PRESETS` — pinned by `src/data/synthPresets.test.ts` and
-`src/audio/presetRegistry.test.ts`. Name uniqueness matters because
-`resolveVibeSynthParams` stamps the resolved entry's `name` into `params.preset`, and
-the preset UI selects back by name.
+`src/utils/synthPresets.test.ts` (there is no `src/audio/presetRegistry.ts` any more).
 
-`params` is a `Partial<SynthParams>`; anything omitted falls back to
-`INITIAL_SYNTH_PARAMS`. Prefer authoring the full timbre set — every existing entry
-does, so a half-specified preset reads as an accident.
+An entry carries a COMPLETE `patch`, not a partial: there is no base to merge over, so
+every field is authored. A vibe names a preset by ID and `resolveVibe` resolves it.
 
 ### Four engine facts that decide whether your numbers do anything
 

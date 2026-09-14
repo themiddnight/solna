@@ -354,24 +354,119 @@ plays Lead whatever the focus is** — `store/midiInput.ts` names `'synth'` outr
 routing it needs a drum-pad ↔ GM-note mapping this app does not have and does not need, being
 designed to require no external device.
 
-**Every voice records the PLAYER that created it, and a release names one.** `SynthVoice` carries
-an `owner: VoiceOwner` from `src/audio/voiceOwner.ts` — `live`, `arp`, `sequencer`, `preview` —
-written at the engine's single voice-construction site and **required with no default** at
-`triggerSynthNoteOn`. Three players share each melodic bus (live input, the arp, the melody-track
-sequencer), so an owner-blind release is a bug rather than a shortcut: an arp key-up used to cut
-short a melody track's sounding note, and a melody-grid stop used to cut the key the player was
-holding. `releaseSoundingVoices(source, releaseTime, owner)` and
-`stopOwnedVoices(source, owner, …)` are the scoped calls; `stopSource` keeps its whole-bus meaning
+**A note-on returns the identity a note-off addresses, and every voice records the PLAYER that
+created it.** `triggerSynthNoteOn` hands back a `VoiceId` (`src/audio/synth/voiceId.ts`) and
+`triggerSynthNoteOff` takes one, so a bridge releases the instance it started. A source-and-note
+pair is NOT an identity: three players share each melodic bus (live input, the arp, the
+melody-track sequencer), so the old `` `${source}:${noteName}` `` key named as many voices as
+happened to be sounding that note, and an arp key-up cut short a melody track's note. Every voice
+also carries an `owner: VoiceOwner` from `src/audio/voiceOwner.ts` — `live`, `arp`, `sequencer`,
+`preview` — **required with no default** at `triggerSynthNoteOn`, because the bulk calls are
+owner-scoped: `releaseSoundingVoices(source, releaseTime, owner)` releases what one player holds
+and skips anything already releasing (so an arp key-up cannot cancel notes the clock has planned),
+while `stopOwnedVoices(source, owner, …)` reaches that player's booked tails too — which is why
+the two are different methods and not one with a flag. `stopSource` keeps its whole-bus meaning
 for a project install, a loop load and a vibe swap, which genuinely mean "silence this bus,
 whatever is on it". **Whole-bus reach therefore requires calling a method whose name says so, and
 can never be reached by omitting an argument** — which is exactly how the defect came to exist,
-and the same scar `applySynthVelocityScale`'s required `source` carries. The owner is chosen by
-the bridges in `src/audio/playback/` and **no file in `src/components/` names one**, so the
-layering rules do not move and a view cannot pick the wrong owner. What is NOT fixed: `activeVoices`
-is still keyed `` `${source}:${noteName}` `` and keeps one voice per key, so two players sounding
-the same note on one bus still cut each other short — recorded as a comment at `activeVoices`, at
-the cause, and deliberately deferred because unpicking it means revisiting the same-note dedup,
-the bass mono-kill, voice stealing and `updateSynthParams` together.
+and the same scar `applySynthVelocityScale`'s required `source` carries (see the polyphony note
+below). The owner is chosen by the bridges in `src/audio/playback/` and **no file in
+`src/components/` names one**, so the layering rules do not move and a view cannot pick the wrong
+owner. A mono bus is the one SHARED voice: several players can hold notes on it, `group.owner`
+records only which of them built it, and every decision about it is therefore taken on the held-note
+stack — keying one off the owner stranded a sounding voice and left another player's id resolving
+to nothing.
+
+**Equal-power polyphony rides a gain of its own, never the envelope.** One bus's total level stays
+flat as keys are added to it: `applySynthVelocityScale(scale, source)` reaches
+`SynthVoiceManager.setPolyphonyScale`, which ramps a dedicated `polyGain` sitting between the
+voice's tremolo gain and its panner. It has to be separable from both neighbours — an amp envelope
+cannot be re-planned mid-note without a click (the legacy engine folded the scale into its peak and
+had to cancel and re-plan every held voice's ramps), and `tremoloGain` carries whatever contour
+ENV2's amplitude route and the LFO have scheduled, which a write would re-anchor. The COUNT is the
+caller's: `useInputDeck` counts the notes held on that bus, so the arp and the melody sequencer,
+which share these buses, never enter into it — and the manager skips any group already releasing,
+so a key-down cannot duck what the transport is playing and a key-up cannot re-lift a fading tail.
+The note itself is played at plain velocity and the rebalance runs AFTER it, one call covering the
+arriving voice and the ones already sounding: keydowns are sequential, so a scale baked into each
+note's velocity would leave a chord pressed key by key at 1, 1/√2, 1/√3 by press order.
+
+**A patch names its ENGINE, and that tag is what a reader dispatches on.** A synth channel holds an
+`ActiveSynth` (`src/types/synth.ts`): an `engine` tag, a `patch` of `{ common, synth }`, and a
+`sourcePresetId` that is display provenance and **never a DSP input**. `SynthEngineId` has one
+member and deliberately no placeholder second one — an FM or wavetable id nothing implements is a
+branch every reader must handle and no test can reach. Adding an engine means adding its params
+type to `EnginePatchMap` and a case wherever the tag is read; `common` is the half that does NOT
+move, because a voice mode, a glide, a unison spread and an output calibration mean the same thing
+whatever makes the sound. A stored body whose `engine` is not a member is never repaired:
+`sanitizeTrackSynth` hands back that track's default, by the same "validate, don't migrate" rule as
+everything else here.
+
+**A preset is a COMPLETE patch, and applying one installs it whole.** `applySynthPreset(currentArp,
+preset)` returns `{ activeSynth, arpSettings }` whose patch is a `structuredClone` of the preset's
+own — never a `Partial` merged over what the track was already holding. Merging is what the flat
+shape it replaced did, and it meant the sound you got depended on the sound you had: two tracks on
+the same preset could differ and nothing said so. Three rules follow. Every entry in
+`src/data/synthPresets.ts` states a whole `EnginePatch`, so there is no such thing as a preset that
+inherits. **Output calibration lives in the patch** — `common.outputGainDb`, not a preset-id trim
+table beside the engine — so a patch a user edits or saves stays self-contained and a renamed preset
+cannot silently lose its level. And the clone is load-bearing: handing out the library object would
+let the next knob edit write back into the factory table.
+
+**Arp is performance state, stored beside the patch and never inside it.** Each track carries its
+own Arp field beside the `ActiveSynth` its sound lives in — `chordArpSettings` next to
+`chordSynthParams`, and so on for every track — so installing a preset replaces the sound and
+leaves the arpeggiation running exactly as it was — which is why `applySynthPreset` takes the
+current Arp and hands it straight back rather than reading one out of the preset. An arp buried in
+the patch is a performance setting a preset would overwrite, which is the defect this split exists
+to make unrepresentable. `ArpSettings` (`src/types/synth.ts`) inlines its own literal unions rather
+than reusing the `ArpMode`/`ArpRate` in `src/types.ts`, which belong to the arp SCHEDULER
+(`audio/arpSchedule.ts`, `audio/arpeggiator.ts`); the two modules therefore export no colliding
+names and neither imports the other.
+
+**Every patch field carries its unit in its name, and the conversion to linear gain happens at the
+`AudioParam`.** Levels are dB (`levelDb`, `subLevelDb`, `noiseLevelDb`, `driveDb`, `outputGainDb`),
+envelope and glide times are seconds, frequency is Hz (`cutoffHz`), pitch offsets are an integer
+`octave`/`semitone` pair plus `fineCents`/`unisonDetuneCents`, and `resonance`, `keyTrack`,
+`stereoWidth`, `velocityToAmplitude` and LFO `depth` are unitless 0..1. **Nothing stored is a linear
+gain and nothing stored is `-Infinity`** — `enabled: false` is how a source represents silence, and
+`SYNTH_GAIN_FLOOR_DB` (`src/utils/synthPatch.ts`) is the floor both directions of the conversion
+clamp to, so every field stays a number a slider can produce and a validator can range-check. A
+modulation amount is the one value whose unit could not be read off its name, so `ModRoute` is
+discriminated BY TARGET and carries `unit` in the type: semitones for pitch and cutoff, dB for
+levels and amplitude, a normalized delta for resonance, -1..1 for pan. `src/utils/synthPatch.ts` is
+the only place that math lives, and it deliberately does not import `utils/gainUnits.ts` — that one
+is a branded fader/meter contract kept in sync with murva, while a patch level is a plain unbranded
+number with its own floor.
+
+**No timer guards a voice's lifetime, and two paths depend on a later event rather than on the
+audio clock.** The flat engine armed a 30-second wall-clock backstop per voice against a note-off
+that never arrived. `SynthVoiceManager` has no counterpart on purpose (rule 5 in its header records
+the whole argument): nearly every `triggerSynthNoteOn` in the app calls `triggerSynthNoteOff` in the
+same synchronous block on the audio clock — arp, preview, all four sequencer bridges, the offline
+render — so for those nothing can fail to arrive. The exceptions are **live keyboard input**, whose
+key-up carries its own backstop in `useInputDeck.ts` (every held note released on `window` blur and
+on `visibilitychange`), and **the held chord preview**, which does not. `playChordLegato` schedules
+no note-off and drops the `VoiceId`s outright; release is `stopSource('chord')` from a pointer
+event, and `useInputDeck`'s backstop releases what the KEYBOARD holds and knows nothing about a
+chord held with the mouse. That one is narrowed rather than closed — every surface binds
+`onMouseLeave` and `onTouchEnd` beside `onMouseUp`, and `playChordLegato` opens by stopping its own
+bus, so a stranded preview lasts until the next preview, loop load, project install or vibe swap.
+Closing it properly means a blur/`visibilitychange` backstop for that preview, never a timer in the
+manager. A new caller that keeps a `VoiceId` across an await, a React render or a user event is
+adding a third such path and owes itself the same treatment. The per-source budget
+(`maxVoicesPerSource`) bounds the voice COUNT and is not a leak guard; a voice that does drone means
+a bridge dropped its id, so trace the bridge and not the manager.
+
+**One synth implementation serves the speakers and the mixdown; the context is the only difference.**
+`createSubtractiveVoice` builds on whatever `BaseAudioContext` it is handed and
+`SynthVoiceManager` holds no module-level state, so `createRenderEngine(ctx)` renders with the same
+voices the live engine plays. What keeps that true is that **every scheduled time is an argument**:
+the voice module never reads `ctx.currentTime`, and the manager's single read sits behind the
+realtime teardown timer, whose offline branch forgets the group immediately instead. A realtime-only
+concern narrows through `realtimeCtx()` — idle suspend, `resume()`, a `setTimeout` — and a
+subsystem that cannot narrow has no business in the offline path. Treat "the render needs its own
+copy of this" as a defect report about the shared code, not as a second implementation to write.
 
 **`persist` serialises on every `set()`; only the `localStorage` write is coalesced.** Every
 `set()` that touches a key returned by `partialize` re-serialises that slice on the spot. The

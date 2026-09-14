@@ -1,0 +1,624 @@
+<!doctype html>
+<!--
+  APPROVED VISUAL SOURCE — implementation reference, not production code.
+  Variant A is the locked Subtractive Pro design.
+  Variant B is the locked Subtractive Simple design.
+  Variant C is historical exploration and is non-normative.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solna Synth Lab — UI prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700&family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --sky: #070914;
+      --shell: #17131b;
+      --panel: #241e25;
+      --well: #120f14;
+      --line: #403542;
+      --text: #f4edf0;
+      --muted: #9f929d;
+      --gold: #f2b95f;
+      --gold-2: #ffe0a4;
+      --osc: #ef719f;
+      --filter: #66d9a8;
+      --env: #f0c86d;
+      --lfo: #70cce9;
+      --voice: #bd91ef;
+      --arp: #e68ce8;
+      --danger: #ff786f;
+      --radius: 15px;
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--sky); }
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--text);
+      font-family: Figtree, Anuphan, sans-serif;
+      background:
+        radial-gradient(circle at 18% -15%, rgba(239,113,159,.12), transparent 33%),
+        radial-gradient(circle at 87% 4%, rgba(112,204,233,.08), transparent 28%),
+        var(--sky);
+    }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+
+    .prototype-note {
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      background: #0d0b10;
+      border-bottom: 1px solid #2a232d;
+      color: #b9aeb6;
+      font-size: 11px;
+      letter-spacing: .02em;
+    }
+    .prototype-note b { color: var(--gold-2); font-weight: 650; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+
+    .appbar {
+      height: 64px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      background: rgba(24,18,25,.94);
+      border-bottom: 1px solid #3a2b36;
+      box-shadow: 0 12px 35px rgba(0,0,0,.25);
+    }
+    .brand { display: flex; align-items: center; gap: 11px; margin-right: 14px; }
+    .brand-mark {
+      width: 31px; height: 31px; border-radius: 10px;
+      border: 1px solid #614b39;
+      background:
+        linear-gradient(180deg, transparent 43%, #f0b75b 44% 50%, transparent 51%),
+        radial-gradient(ellipse at 50% 68%, #f0995a 0 14%, #38222a 15% 45%, #17121a 46%);
+      box-shadow: inset 0 0 12px rgba(242,185,95,.18);
+    }
+    .brand-name { color: var(--gold); font-size: 21px; letter-spacing: .12em; font-weight: 520; }
+    .segmented { display: inline-flex; padding: 3px; border: 1px solid #332a34; border-radius: 11px; background: #100d12; }
+    .segmented span { padding: 8px 16px; border-radius: 8px; font-size: 12px; color: var(--muted); }
+    .segmented .active { color: #1b1410; background: var(--gold); font-weight: 700; box-shadow: 0 2px 9px rgba(242,185,95,.22); }
+    .appbar-spacer { flex: 1; }
+    .toolbar-box { height: 38px; display: flex; align-items: center; padding: 0 13px; gap: 10px; border: 1px solid #332a34; background: #100d12; border-radius: 10px; color: #c2b7bf; font-size: 12px; }
+    .toolbar-box strong { color: var(--text); }
+
+    .workspace { padding: 18px 18px 104px; }
+    .view-head {
+      min-height: 67px;
+      display: flex; align-items: center; gap: 18px;
+      padding: 15px 18px;
+      border: 1px solid #382e39;
+      border-radius: var(--radius);
+      background: rgba(34,27,35,.82);
+    }
+    .view-title { font-size: 16px; font-weight: 750; display: flex; gap: 10px; align-items: center; }
+    .view-title .icon { color: var(--gold); }
+    .focus-row { display:flex; align-items:center; gap:5px; margin-left:auto; }
+    .focus-label { color: var(--muted); font-size: 10px; margin-right: 5px; }
+    .focus-chip { padding: 6px 11px; border: 1px solid #403542; border-radius: 8px; background:#161218; color:#b7aab4; font-size:11px; }
+    .focus-chip.active { color:#17110d; background:#d8ee91; border-color:#d8ee91; font-weight:700; }
+
+    .presetbar {
+      margin-top: 12px; padding: 13px 16px;
+      display:flex; align-items:center; gap:14px;
+      border: 1px solid #4a3d46;
+      border-radius: 14px 14px 8px 8px;
+      background: linear-gradient(180deg, rgba(53,44,48,.97), rgba(39,32,38,.97));
+    }
+    .preset-title { font-size: 20px; font-weight: 760; letter-spacing:-.02em; }
+    .pill { border:1px solid currentColor; border-radius:999px; padding:4px 9px; font-size:10px; color:var(--osc); background:rgba(239,113,159,.08); }
+    .preset-copy { color:var(--muted); font-size:11px; }
+    .preset-actions { margin-left:auto; display:flex; align-items:center; gap:8px; }
+    .ghost-button, .solid-button { border-radius:9px; padding:8px 12px; border:1px solid #544553; background:#181319; font-size:11px; }
+    .solid-button { color:#1b140f; background:var(--gold); border-color:var(--gold); font-weight:750; }
+
+    .variant { display:none; }
+    body[data-variant="a"] .variant-a,
+    body[data-variant="b"] .variant-b,
+    body[data-variant="c"] .variant-c { display:block; }
+
+    .stage-label { display:flex; align-items:center; gap:7px; color:#ddd2d9; font-size:11px; font-weight:720; }
+    .stage-label i { width:7px; height:7px; border-radius:50%; background:currentColor; box-shadow:0 0 9px currentColor; }
+    .module {
+      min-width:0;
+      border:1px solid #3a303b;
+      border-radius:12px;
+      padding:13px;
+      background:linear-gradient(180deg, rgba(25,21,27,.98), rgba(16,14,18,.98));
+      position:relative;
+      overflow:hidden;
+    }
+    .module::before { content:""; position:absolute; inset:0 0 auto; height:2px; background:var(--module-color, var(--line)); opacity:.78; }
+    .module.osc { --module-color: var(--osc); }
+    .module.filter { --module-color: var(--filter); }
+    .module.env { --module-color: var(--env); }
+    .module.lfo { --module-color: var(--lfo); }
+    .module.voice { --module-color: var(--voice); }
+    .module.arp { --module-color: var(--arp); }
+    .module-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .module-kicker { font-size:10px; color:var(--muted); }
+    .on-chip { padding:3px 7px; border-radius:999px; border:1px solid color-mix(in srgb, var(--module-color) 65%, #403542); color:var(--module-color); font-size:9px; }
+
+    .wave-buttons { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin-bottom:12px; }
+    .wave-buttons span { min-width:0; height:30px; display:flex; align-items:center; justify-content:center; text-align:center; padding:5px 3px; color:#91858e; background:#100d12; border:1px solid #302832; border-radius:6px; font-size:9px; }
+    .wave-buttons span.active { color:#180e13; border-color:var(--osc); background:var(--osc); font-weight:800; }
+    .wave-icon { width:29px; height:14px; overflow:visible; }
+    .wave-icon path, .wave-icon polyline { fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+    .filter-buttons { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; }
+    .filter-buttons span { height:31px; display:flex; align-items:center; justify-content:center; border:1px solid #392f3a; border-radius:6px; color:#90848d; background:#100d12; }
+    .filter-buttons span.active { color:#101512; background:var(--filter); border-color:var(--filter); }
+    .filter-icon { width:31px; height:15px; overflow:visible; }
+    .filter-icon path { fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+
+    .controls { display:grid; grid-template-columns:repeat(3,1fr); gap:10px 6px; align-items:start; }
+    .controls.two { grid-template-columns:repeat(2,1fr); }
+    .controls.four { grid-template-columns:repeat(4,1fr); }
+    .control { min-width:0; text-align:center; }
+    .control label { display:block; color:#a99ca5; font-size:9px; margin-bottom:6px; white-space:nowrap; }
+    .control strong { display:block; color:#e9dfe5; font-size:9px; margin-top:4px; font-variant-numeric:tabular-nums; }
+    .knob {
+      --value: 65%;
+      --knob-color: var(--module-color, var(--gold));
+      width:42px; height:42px; margin:auto; border-radius:50%; position:relative;
+      background:
+        radial-gradient(circle at 50% 50%, #1b171d 0 47%, transparent 49%),
+        conic-gradient(from 225deg, var(--knob-color) 0 var(--value), #3b323d var(--value) 75%, transparent 75%);
+      box-shadow: inset 0 0 0 1px #4a3e49, 0 4px 10px rgba(0,0,0,.3);
+    }
+    .knob::after { content:""; position:absolute; width:2px; height:12px; left:20px; top:6px; border-radius:2px; background:var(--knob-color); transform-origin:1px 15px; transform:rotate(calc(-132deg + (var(--value-num, .65) * 264deg))); box-shadow:0 0 5px var(--knob-color); }
+    .knob.sm { width:35px; height:35px; }
+    .knob.sm::after { left:17px; top:5px; height:9px; transform-origin:1px 12px; }
+
+    .mini-select { height:27px; padding:0 8px; display:flex; align-items:center; justify-content:space-between; border:1px solid #3b303c; background:#100d12; border-radius:7px; color:#d6cad2; font-size:9px; }
+    .toggle-row { display:flex; gap:4px; }
+    .toggle-row span { flex:1; text-align:center; border:1px solid #392f3a; padding:5px 4px; border-radius:6px; color:#90848d; font-size:9px; background:#100d12; }
+    .toggle-row span.active { color:#131015; background:var(--module-color); border-color:var(--module-color); font-weight:750; }
+    .slider { height:5px; border-radius:5px; background:linear-gradient(90deg,var(--module-color) 0 var(--fill,50%),#312934 var(--fill,50%)); position:relative; margin:10px 3px 7px; }
+    .slider::after { content:""; position:absolute; width:11px; height:11px; border-radius:50%; top:-3px; left:calc(var(--fill,50%) - 5px); background:#f6eff3; border:2px solid var(--module-color); box-shadow:0 2px 6px rgba(0,0,0,.5); }
+    .route { display:grid; grid-template-columns:1fr 22px 1fr 36px; gap:5px; align-items:center; margin-top:7px; }
+    .route span { border:1px solid #3a303a; background:#110e13; border-radius:6px; padding:6px; font-size:9px; color:#c3b7bf; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .route .arrow { border:0; background:transparent; color:var(--module-color); text-align:center; padding:0; }
+    .route .amount { text-align:center; color:var(--module-color); }
+
+    .signal-line { height:1px; background:linear-gradient(90deg,var(--osc),var(--filter),var(--env)); opacity:.65; position:relative; }
+    .signal-line::after { content:"›"; position:absolute; right:-2px; top:-10px; color:var(--env); font-size:17px; }
+
+    /* Variant A: a literal left-to-right instrument circuit. */
+    .flow-ribbon {
+      padding:9px 15px; display:flex; align-items:center; gap:11px;
+      border-left:1px solid #4a3d46; border-right:1px solid #4a3d46;
+      background:#1d181e; color:#837780; font-size:9px;
+    }
+    .flow-ribbon .step { color:#d5c9d1; display:flex; align-items:center; gap:6px; }
+    .flow-ribbon .step i { width:18px; height:1px; background:currentColor; opacity:.6; }
+    .flow-ribbon .source { color:var(--osc); }
+    .flow-ribbon .shape { color:var(--filter); }
+    .flow-ribbon .motion { color:var(--lfo); }
+    .flow-ribbon .output { color:var(--env); }
+    .flow-layout { display:grid; grid-template-columns:1.45fr 1.08fr 1fr 1.1fr; gap:9px; padding:9px; border:1px solid #4a3d46; border-radius:0 0 14px 14px; background:rgba(34,28,34,.96); align-items:stretch; }
+    .osc-stack { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .osc-unit { min-width:0; padding:10px; border:1px solid #3a2f3a; border-radius:9px; background:linear-gradient(180deg,rgba(31,24,31,.96),rgba(14,12,16,.96)); box-shadow:inset 0 1px rgba(255,255,255,.025); }
+    .osc-unit-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:9px; }
+    .osc-unit-name { display:flex; align-items:center; gap:6px; color:#d8ccd4; font-size:10px; font-weight:720; }
+    .osc-unit-name::before { content:""; width:3px; height:13px; border-radius:3px; background:var(--osc); box-shadow:0 0 7px rgba(239,113,159,.55); }
+    .mixer-lanes { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; height:146px; margin-top:7px; }
+    .lane { display:flex; flex-direction:column; align-items:center; gap:5px; color:#a599a2; font-size:8px; }
+    .v-fader { width:5px; flex:1; background:#342a35; border-radius:6px; position:relative; }
+    .v-fader::before { content:""; position:absolute; inset:auto 0 0; height:var(--fill,50%); background:var(--osc); border-radius:6px; }
+    .v-fader::after { content:""; position:absolute; left:-4px; bottom:calc(var(--fill,50%) - 4px); width:13px; height:6px; background:#f0e7ec; border-radius:3px; box-shadow:0 2px 6px #000; }
+    .modulation-row { grid-column:1 / -1; display:grid; grid-template-columns:1.22fr 1.08fr .94fr 1.08fr; gap:9px; }
+    .utility-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+    .utility-source { min-width:0; padding:8px; border:1px solid #332a34; border-radius:8px; background:#100d12; }
+    .utility-title { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; color:#cfc3ca; font-size:9px; }
+    .filter-primary, .env-primary { display:flex; flex-direction:column; }
+    .filter-primary > .controls { margin-block:auto !important; }
+    .env-primary > .mini-select { margin-top:auto !important; }
+
+    /* Variant B: quick shaping. One continuous deck, grouped by listening intent. */
+    .simple-layout { border:1px solid #4a3d46; border-radius:0 0 14px 14px; overflow:hidden; background:rgba(34,28,34,.96); }
+    .simple-intro { min-height:86px; display:flex; align-items:center; gap:20px; padding:17px 20px; border-bottom:1px solid #40343e; background:linear-gradient(110deg,#171319 0%,#231b24 58%,#17161d 100%); }
+    .simple-intro-copy { min-width:230px; }
+    .simple-intro h2 { margin:0 0 4px; font-size:17px; letter-spacing:-.02em; }
+    .simple-intro p { margin:0; color:#948891; font-size:10px; }
+    .simple-wave { flex:1; min-width:180px; height:48px; opacity:.85; }
+    .sound-profile { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid #443845; border-radius:9px; background:#100d12; font-size:9px; color:#91858e; }
+    .sound-profile strong { color:#e8dce4; font-size:10px; }
+    .simple-groups { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }
+    .simple-group { --group-color:var(--gold); position:relative; min-width:0; padding:15px 13px 17px; border-right:1px solid #40343e; background:linear-gradient(180deg,rgba(28,23,29,.96),rgba(18,15,20,.96)); }
+    .simple-group:last-child { border-right:0; }
+    .simple-group::before { content:""; position:absolute; inset:0 0 auto; height:2px; background:var(--group-color); opacity:.75; box-shadow:0 0 10px var(--group-color); }
+    .simple-group-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:15px; }
+    .simple-group-head h3 { margin:0; color:#ded2da; font-size:11px; }
+    .simple-group-head span { color:#70656e; font-size:8px; }
+    .simple-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .simple-control { min-width:0; text-align:center; }
+    .simple-control label { display:block; color:#b4a8b0; font-size:10px; margin-bottom:8px; }
+    .simple-control .knob { --knob-color:var(--group-color); margin-inline:auto; }
+    .simple-reading { margin-top:7px; color:var(--group-color); font-size:10px; font-weight:720; }
+    .simple-hint { min-height:22px; margin-top:3px; color:#746a72; font-size:8px; line-height:1.3; }
+    .simple-performance { display:grid; grid-template-columns:minmax(180px,.75fr) minmax(440px,1.7fr) auto; gap:12px; align-items:center; padding:13px 16px; border-top:1px solid #40343e; background:#171318; }
+    .simple-section-label { display:block; margin-bottom:5px; color:#766b73; font-size:8px; }
+    .simple-toggle { display:inline-grid; grid-auto-flow:column; gap:3px; padding:3px; border:1px solid #392f3a; border-radius:8px; background:#0f0d11; }
+    .simple-toggle span { min-width:54px; padding:6px 10px; border-radius:5px; color:#847982; text-align:center; font-size:9px; }
+    .simple-toggle span.active { color:#17110d; background:var(--voice); font-weight:750; }
+    .simple-arp { display:flex; align-items:end; gap:12px; }
+    .simple-arp-block { min-width:0; }
+    .simple-arp .simple-toggle span { min-width:44px; }
+    .simple-arp-state { align-self:center; display:flex; align-items:center; gap:7px; color:var(--arp); font-size:9px; font-weight:720; }
+    .simple-arp-state i { width:7px; height:7px; border-radius:50%; background:var(--arp); box-shadow:0 0 8px var(--arp); }
+    .pro-lock { justify-self:end; padding:7px 9px; border:1px solid #3a303a; border-radius:8px; color:#796e76; font-size:8px; white-space:nowrap; }
+
+    body[data-variant="b"] .mode-simple { color:#1b1410; background:var(--gold); font-weight:700; box-shadow:0 2px 9px rgba(242,185,95,.22); }
+    body[data-variant="b"] .mode-pro { color:var(--muted); background:transparent; box-shadow:none; font-weight:400; }
+
+    /* Variant C: macros remain the front door; the rack unfolds beneath. */
+    .macro-deck { display:grid; grid-template-columns:repeat(4,1fr) 1.18fr; gap:8px; padding:10px; border-left:1px solid #4a3d46; border-right:1px solid #4a3d46; background:#211b21; }
+    .macro-card { min-height:112px; border:1px solid #3c323d; background:#120f14; border-radius:10px; padding:11px; display:flex; align-items:center; gap:11px; }
+    .macro-card .knob { flex:0 0 auto; }
+    .macro-copy { min-width:0; }
+    .macro-copy h3 { margin:0 0 4px; font-size:11px; }
+    .macro-copy b { font-size:13px; font-variant-numeric:tabular-nums; }
+    .macro-copy p { margin:4px 0 0; color:var(--muted); font-size:9px; line-height:1.25; }
+    .rack-nav { padding:8px 11px; display:flex; gap:5px; border-left:1px solid #4a3d46; border-right:1px solid #4a3d46; background:#19151a; }
+    .rack-nav span { padding:7px 11px; border-radius:7px; color:#948890; font-size:10px; border:1px solid transparent; }
+    .rack-nav span.active { color:var(--osc); background:rgba(239,113,159,.08); border-color:rgba(239,113,159,.35); }
+    .rack-layout { display:grid; grid-template-columns:1.3fr .78fr 1fr 1fr; gap:9px; padding:9px; border:1px solid #4a3d46; border-radius:0 0 14px 14px; background:rgba(34,28,34,.96); }
+    .rack-source { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .rack-wide { grid-column:1 / -1; display:grid; grid-template-columns:1.1fr 1fr 1fr; gap:9px; }
+
+    .phase-legend { display:flex; align-items:center; gap:10px; margin-top:10px; padding:8px 11px; border:1px dashed #403541; border-radius:10px; color:#8f838c; font-size:9px; }
+    .phase-legend b { color:#d6cbd2; }
+    .phase-tag { padding:3px 7px; border-radius:999px; background:#17131a; border:1px solid #3e3441; color:#b8abb4; }
+
+    .variant-switcher {
+      position:fixed; z-index:20; left:50%; bottom:18px; transform:translateX(-50%);
+      display:flex; gap:3px; padding:5px;
+      border:1px solid #685569; border-radius:14px;
+      background:rgba(12,10,14,.96); box-shadow:0 15px 45px rgba(0,0,0,.58);
+      backdrop-filter:blur(16px);
+    }
+    .variant-switcher button { border:0; border-radius:9px; padding:9px 13px; background:transparent; color:#a99da5; cursor:pointer; font-size:11px; }
+    .variant-switcher button.active { color:#1b130d; background:var(--gold); font-weight:750; }
+    .variant-switcher .caption { display:flex; align-items:center; color:#665a63; padding:0 8px 0 5px; font-size:9px; }
+
+    @media (max-width: 1180px) {
+      .workspace { padding-left:10px; padding-right:10px; }
+      .flow-layout { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .main-osc, .env-primary, .modulation-row { grid-column:1 / -1; }
+      .modulation-row { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .env-primary > .controls { width:min(680px,100%); margin:12px auto !important; }
+      .env-primary > .mini-select { width:min(680px,100%); margin:16px auto 0 !important; }
+      .simple-groups { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .simple-group:nth-child(2) { border-right:0; }
+      .simple-group:nth-child(-n+2) { border-bottom:1px solid #40343e; }
+      .simple-performance { grid-template-columns:180px 1fr; }
+      .pro-lock { display:none; }
+    }
+
+    @media (max-width: 760px) {
+      .prototype-note { height:auto; min-height:28px; padding:6px 12px; text-align:center; }
+      .appbar { height:auto; min-height:58px; padding:9px 12px; gap:9px; flex-wrap:wrap; }
+      .appbar .toolbar-box { display:none; }
+      .brand { margin-right:0; }
+      .appbar-spacer { min-width:12px; }
+      .workspace { padding:10px 8px 92px; }
+      .view-head { align-items:flex-start; flex-wrap:wrap; padding:12px; }
+      .focus-row { width:100%; margin-left:0; overflow-x:auto; padding-bottom:3px; }
+      .focus-chip { flex:0 0 auto; }
+      .presetbar { flex-wrap:wrap; padding:11px 12px; }
+      .preset-title { font-size:17px; }
+      .preset-copy { flex-basis:100%; order:3; }
+      .preset-actions { margin-left:auto; }
+      .flow-ribbon { overflow-x:auto; white-space:nowrap; }
+      .flow-layout { grid-template-columns:minmax(0,1fr); padding:7px; }
+      .main-osc, .env-primary, .modulation-row { grid-column:1; }
+      .modulation-row { grid-template-columns:minmax(0,1fr); }
+      .osc-stack { grid-template-columns:1fr 1fr; }
+      .filter-primary > .controls, .env-primary > .controls,
+      .env-primary > .mini-select { width:100%; }
+      .phase-legend { overflow-x:auto; white-space:nowrap; }
+      .variant-switcher { width:calc(100% - 20px); overflow-x:auto; justify-content:flex-start; }
+      .variant-switcher button { white-space:nowrap; }
+      .variant-switcher .caption { display:none; }
+      .simple-intro { flex-wrap:wrap; gap:10px; padding:14px; }
+      .simple-intro-copy { min-width:0; flex:1 1 220px; }
+      .simple-wave { order:3; flex-basis:100%; }
+      .simple-performance { grid-template-columns:1fr; align-items:start; }
+      .simple-arp { flex-wrap:wrap; }
+    }
+
+    @media (max-width: 500px) {
+      .brand-name { display:none; }
+      .appbar > .segmented:last-of-type { margin-left:auto; }
+      .osc-stack, .utility-grid { grid-template-columns:1fr; }
+      .flow-ribbon .step i { width:10px; }
+      .controls.four { gap-inline:2px; }
+      .control label { font-size:8px; }
+      .route { grid-template-columns:.8fr 16px 1.25fr 34px; }
+      .simple-groups { grid-template-columns:1fr; }
+      .simple-group, .simple-group:nth-child(2) { border-right:0; border-bottom:1px solid #40343e; }
+      .simple-group:last-child { border-bottom:0; }
+      .simple-wave { min-width:0; }
+      .sound-profile { width:100%; justify-content:space-between; }
+    }
+  </style>
+</head>
+<body data-variant="a">
+  <div class="prototype-note"><span class="dot"></span><b>Visual prototype</b><span>Static controls · no audio engine · no saved state</span></div>
+
+  <header class="appbar">
+    <div class="brand"><div class="brand-mark"></div><div class="brand-name">solna</div></div>
+    <div class="segmented"><span class="active">Loop</span><span>Song</span></div>
+    <div class="toolbar-box">Loop <strong>Neon dusk</strong>⌄</div>
+    <div class="toolbar-box"><strong>A</strong> Natural Minor⌄</div>
+    <div class="appbar-spacer"></div>
+    <div class="segmented"><span class="active">Sound</span><span>Pattern</span></div>
+    <div class="toolbar-box">☼</div>
+  </header>
+
+  <main class="workspace">
+    <section class="view-head">
+      <div class="view-title"><span class="icon">⚙</span> Synth Lab</div>
+      <div class="segmented"><span class="mode-simple">Simple</span><span class="mode-pro active">Pro</span></div>
+      <div class="focus-row">
+        <span class="focus-label">Focus</span>
+        <span class="focus-chip active">Lead</span><span class="focus-chip">FX</span>
+        <span class="focus-chip">Chord</span><span class="focus-chip">Bass</span><span class="focus-chip">Pad</span>
+      </div>
+    </section>
+
+    <section class="presetbar">
+      <span class="pill">Lead</span>
+      <span class="preset-title">Cosmic Lead II</span>
+      <span class="preset-copy">Dual oscillator · synced motion · wide unison</span>
+      <div class="preset-actions"><button class="ghost-button">Save</button><button class="solid-button">Sounds&nbsp; 36</button></div>
+    </section>
+
+    <!-- Variant A: signal flow -->
+    <section class="variant variant-a">
+      <div class="flow-ribbon">
+        <span class="step source">SOURCE <i></i></span><span>OSC 1 + OSC 2 + SUB + NOISE</span>
+        <span class="step shape">SHAPE <i></i></span><span>DRIVE + FILTER</span>
+        <span class="step motion">MOTION <i></i></span><span>ENV + LFO</span>
+        <span class="step output">VOICE <i></i></span><span>AMP + UNISON</span>
+      </div>
+      <div class="flow-layout">
+        <article class="module osc main-osc">
+          <div class="module-head"><div class="stage-label"><i></i> Oscillators</div><span class="module-kicker">dual source</span></div>
+          <div class="osc-stack">
+            <div class="osc-unit">
+              <div class="osc-unit-head"><span class="osc-unit-name">OSC 1</span><span class="on-chip">ON</span></div>
+              <div class="wave-buttons">
+                <span class="active" title="Sawtooth" aria-label="Sawtooth"><svg class="wave-icon" viewBox="0 0 32 16" aria-hidden="true"><path d="M2 13 L10 3 L10 13 L18 3 L18 13 L26 3 L26 13 L30 8"/></svg></span>
+                <span title="Square" aria-label="Square"><svg class="wave-icon" viewBox="0 0 32 16" aria-hidden="true"><path d="M2 13 V3 H10 V13 H18 V3 H26 V13 H30"/></svg></span>
+                <span title="Triangle" aria-label="Triangle"><svg class="wave-icon" viewBox="0 0 32 16" aria-hidden="true"><path d="M2 13 L9 3 L16 13 L23 3 L30 13"/></svg></span>
+                <span title="Sine" aria-label="Sine"><svg class="wave-icon" viewBox="0 0 32 16" aria-hidden="true"><path d="M2 8 C6 1 10 1 14 8 S22 15 30 8"/></svg></span>
+              </div>
+              <div class="controls four">
+                <div class="control"><label>Oct</label><div class="knob sm" style="--value:50%;--value-num:.5"></div><strong>0</strong></div>
+                <div class="control"><label>Shape</label><div class="knob sm" style="--value:67%;--value-num:.67"></div><strong>67%</strong></div>
+                <div class="control"><label>Fine</label><div class="knob sm" style="--value:54%;--value-num:.54"></div><strong>+4 ct</strong></div>
+                <div class="control"><label>Level</label><div class="knob sm" style="--value:76%;--value-num:.76"></div><strong>76%</strong></div>
+              </div>
+            </div>
+            <div class="osc-unit">
+              <div class="osc-unit-head"><span class="osc-unit-name">OSC 2</span><span class="on-chip">ON</span></div>
+              <div class="wave-buttons">
+                <span title="Sawtooth" aria-label="Sawtooth"><svg class="wave-icon" viewBox="0 0 32 16" aria-hidden="true"><path d="M2 13 L10 3 L10 13 L18 3 L18 13 L26 3 L26 13 L30 8"/></svg></span>
+                <span class="active" title="Square" aria-label="Square"><svg class="wave-icon" viewBox="0 0 32 16" aria-hidden="true"><path d="M2 13 V3 H10 V13 H18 V3 H26 V13 H30"/></svg></span>
+                <span title="Triangle" aria-label="Triangle"><svg class="wave-icon" viewBox="0 0 32 16" aria-hidden="true"><path d="M2 13 L9 3 L16 13 L23 3 L30 13"/></svg></span>
+                <span title="Sine" aria-label="Sine"><svg class="wave-icon" viewBox="0 0 32 16" aria-hidden="true"><path d="M2 8 C6 1 10 1 14 8 S22 15 30 8"/></svg></span>
+              </div>
+              <div class="controls four">
+                <div class="control"><label>Oct</label><div class="knob sm" style="--value:50%;--value-num:.5"></div><strong>0</strong></div>
+                <div class="control"><label>Semi</label><div class="knob sm" style="--value:58%;--value-num:.58"></div><strong>+7</strong></div>
+                <div class="control"><label>Fine</label><div class="knob sm" style="--value:46%;--value-num:.46"></div><strong>−5 ct</strong></div>
+                <div class="control"><label>Level</label><div class="knob sm" style="--value:48%;--value-num:.48"></div><strong>48%</strong></div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="module osc utility-osc">
+          <div class="module-head"><div class="stage-label"><i></i> OSC 3</div><span class="module-kicker">utility</span></div>
+          <div class="utility-grid">
+            <div class="utility-source">
+              <div class="utility-title"><span>SUB OSC</span><span class="on-chip">SINE</span></div>
+              <div class="toggle-row"><span class="active">−1 OCT</span><span>−2 OCT</span></div>
+              <div class="control" style="margin-top:10px"><label>Sub level</label><div class="knob sm" style="--value:25%;--value-num:.25"></div><strong>25%</strong></div>
+            </div>
+            <div class="utility-source">
+              <div class="utility-title"><span>NOISE</span><span class="on-chip">ON</span></div>
+              <div class="mini-select" title="Noise type"><span>Noise type</span><strong>White⌄</strong></div>
+              <div class="control" style="margin-top:10px"><label>Noise level</label><div class="knob sm" style="--value:18%;--value-num:.18"></div><strong>8%</strong></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="module filter filter-primary">
+          <div class="module-head"><div class="stage-label"><i></i> Filter + drive</div><span class="on-chip">24 dB</span></div>
+          <div class="filter-buttons">
+            <span class="active" title="Low-pass" aria-label="Low-pass"><svg class="filter-icon" viewBox="0 0 34 16" aria-hidden="true"><path d="M2 4 H13 C18 4 18 13 31 13"/></svg></span>
+            <span title="Band-pass" aria-label="Band-pass"><svg class="filter-icon" viewBox="0 0 34 16" aria-hidden="true"><path d="M2 13 C8 13 9 4 17 4 C25 4 26 13 32 13"/></svg></span>
+            <span title="High-pass" aria-label="High-pass"><svg class="filter-icon" viewBox="0 0 34 16" aria-hidden="true"><path d="M2 13 C15 13 15 4 21 4 H32"/></svg></span>
+            <span title="Notch" aria-label="Notch"><svg class="filter-icon" viewBox="0 0 34 16" aria-hidden="true"><path d="M2 4 H11 L17 13 L23 4 H32"/></svg></span>
+          </div>
+          <div class="controls four" style="margin-top:17px">
+            <div class="control"><label>Cutoff</label><div class="knob" style="--value:61%;--value-num:.61"></div><strong>3.2 kHz</strong></div>
+            <div class="control"><label>Reso</label><div class="knob" style="--value:37%;--value-num:.37"></div><strong>3.7</strong></div>
+            <div class="control"><label>Drive</label><div class="knob" style="--value:44%;--value-num:.44"></div><strong>Warm</strong></div>
+            <div class="control"><label>Key track</label><div class="knob" style="--value:54%;--value-num:.54"></div><strong>54%</strong></div>
+          </div>
+        </article>
+
+        <article class="module env env-primary">
+          <div class="module-head"><div class="stage-label"><i></i> ENV 1</div><span class="on-chip">AMP · LOCKED</span></div>
+          <div class="controls four" style="margin-top:20px">
+            <div class="control"><label>Attack</label><div class="knob" style="--value:18%;--value-num:.18"></div><strong>18 ms</strong></div>
+            <div class="control"><label>Decay</label><div class="knob" style="--value:43%;--value-num:.43"></div><strong>320 ms</strong></div>
+            <div class="control"><label>Sustain</label><div class="knob" style="--value:68%;--value-num:.68"></div><strong>68%</strong></div>
+            <div class="control"><label>Release</label><div class="knob" style="--value:48%;--value-num:.48"></div><strong>540 ms</strong></div>
+          </div>
+          <div class="mini-select" style="margin-top:24px;color:var(--env);border-color:rgba(240,200,109,.3)"><span>Destination</span><strong>Amplitude</strong></div>
+        </article>
+
+        <div class="modulation-row">
+          <article class="module env">
+            <div class="module-head"><div class="stage-label"><i></i> ENV 2</div><span class="on-chip">MOD</span></div>
+            <div class="controls four">
+              <div class="control"><label>Attack</label><div class="knob sm" style="--value:12%;--value-num:.12"></div><strong>8 ms</strong></div>
+              <div class="control"><label>Decay</label><div class="knob sm" style="--value:36%;--value-num:.36"></div><strong>220 ms</strong></div>
+              <div class="control"><label>Sustain</label><div class="knob sm" style="--value:28%;--value-num:.28"></div><strong>28%</strong></div>
+              <div class="control"><label>Release</label><div class="knob sm" style="--value:30%;--value-num:.3"></div><strong>180 ms</strong></div>
+            </div>
+            <div class="route"><span>Target 1</span><span class="arrow">›</span><span>Filter cutoff⌄</span><span class="amount">+42</span></div>
+            <div class="route"><span>Target 2</span><span class="arrow">›</span><span>OSC 2 level⌄</span><span class="amount">−18</span></div>
+          </article>
+          <article class="module lfo">
+            <div class="module-head"><div class="stage-label"><i></i> LFO</div><span class="on-chip">SYNC</span></div>
+            <div class="toggle-row"><span class="active">SINE</span><span>TRI</span><span>SAW</span><span>S&amp;H</span></div>
+            <div class="controls four" style="margin-top:12px">
+              <div class="control"><label>Rate</label><div class="knob sm" style="--value:60%;--value-num:.6"></div><strong>1/8</strong></div>
+              <div class="control"><label>Depth</label><div class="knob sm" style="--value:34%;--value-num:.34"></div><strong>34%</strong></div>
+              <div class="control"><label>Phase</label><div class="knob sm" style="--value:25%;--value-num:.25"></div><strong>90°</strong></div>
+              <div class="control"><label>Trigger</label><div class="mini-select">Transport⌄</div></div>
+            </div>
+            <div class="route"><span>LFO</span><span class="arrow">›</span><span>OSC shape</span><span class="amount">+28</span></div>
+          </article>
+          <article class="module voice">
+            <div class="module-head"><div class="stage-label"><i></i> Voice</div><span class="on-chip">POLY 8</span></div>
+            <div class="toggle-row"><span>MONO</span><span class="active">POLY</span></div>
+            <div class="controls four" style="margin-top:13px">
+              <div class="control"><label>Unison</label><div class="knob sm" style="--value:50%;--value-num:.5"></div><strong>4</strong></div>
+              <div class="control"><label>Spread</label><div class="knob sm" style="--value:67%;--value-num:.67"></div><strong>67%</strong></div>
+              <div class="control"><label>Glide</label><div class="knob sm" style="--value:20%;--value-num:.2"></div><strong>42 ms</strong></div>
+              <div class="control"><label>Drift</label><div class="knob sm" style="--value:23%;--value-num:.23"></div><strong>23%</strong></div>
+            </div>
+          </article>
+          <article class="module arp">
+            <div class="module-head"><div class="stage-label"><i></i> Arpeggiator</div><span class="on-chip">ON</span></div>
+            <div class="toggle-row"><span>1/8</span><span class="active">1/16</span><span>1/32</span></div>
+            <div class="toggle-row" style="margin-top:6px"><span class="active">UP</span><span>DOWN</span><span>UP/DN</span><span>RND</span></div>
+            <div class="controls three" style="margin-top:12px">
+              <div class="control"><label>Octaves</label><div class="knob sm" style="--value:42%;--value-num:.42"></div><strong>2</strong></div>
+              <div class="control"><label>Gate</label><div class="knob sm" style="--value:68%;--value-num:.68"></div><strong>68%</strong></div>
+              <div class="control"><label>Swing</label><div class="knob sm" style="--value:16%;--value-num:.16"></div><strong>8%</strong></div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Variant B: simple quick shaping -->
+    <section class="variant variant-b">
+      <div class="simple-layout">
+        <header class="simple-intro">
+          <div class="simple-intro-copy"><h2>Shape the sound</h2><p>Eight musical controls for fast changes. Open Pro when you need the routing underneath.</p></div>
+          <svg class="simple-wave" viewBox="0 0 700 70" preserveAspectRatio="none" aria-hidden="true"><path d="M0 36 C25 8 46 65 70 36 S116 8 140 36 S186 66 210 36 S256 9 280 36 S326 64 350 36 S396 7 420 36 S466 66 490 36 S536 9 560 36 S606 63 630 36 S676 12 700 36" fill="none" stroke="#ef719f" stroke-width="2.5"/><path d="M0 36 C34 62 65 11 98 36 S163 62 196 36 S261 10 294 36 S359 63 392 36 S457 9 490 36 S555 62 588 36 S653 11 700 36" fill="none" stroke="#70cce9" stroke-width="1.4" opacity=".5"/></svg>
+          <div class="sound-profile"><span>Current feel</span><strong>Wide &amp; vivid</strong></div>
+        </header>
+
+        <div class="simple-groups">
+          <section class="simple-group" style="--group-color:var(--osc)">
+            <div class="simple-group-head"><h3>Source</h3><span>core character</span></div>
+            <div class="simple-controls">
+              <div class="simple-control"><label>Shape</label><div class="knob" style="--value:64%;--value-num:.64"></div><div class="simple-reading">Edgy</div><div class="simple-hint">wave blend</div></div>
+              <div class="simple-control"><label>Weight</label><div class="knob" style="--value:46%;--value-num:.46"></div><div class="simple-reading">Full</div><div class="simple-hint">body + sub</div></div>
+            </div>
+          </section>
+
+          <section class="simple-group" style="--group-color:var(--filter)">
+            <div class="simple-group-head"><h3>Tone</h3><span>colour &amp; impact</span></div>
+            <div class="simple-controls">
+              <div class="simple-control"><label>Brightness</label><div class="knob" style="--value:61%;--value-num:.61"></div><div class="simple-reading">Open</div><div class="simple-hint">dark to bright</div></div>
+              <div class="simple-control"><label>Bite</label><div class="knob" style="--value:38%;--value-num:.38"></div><div class="simple-reading">Warm</div><div class="simple-hint">edge + drive</div></div>
+            </div>
+          </section>
+
+          <section class="simple-group" style="--group-color:var(--env)">
+            <div class="simple-group-head"><h3>Feel</h3><span>note response</span></div>
+            <div class="simple-controls">
+              <div class="simple-control"><label>Attack</label><div class="knob" style="--value:22%;--value-num:.22"></div><div class="simple-reading">Quick</div><div class="simple-hint">soft to punchy</div></div>
+              <div class="simple-control"><label>Tail</label><div class="knob" style="--value:48%;--value-num:.48"></div><div class="simple-reading">Natural</div><div class="simple-hint">short to lasting</div></div>
+            </div>
+          </section>
+
+          <section class="simple-group" style="--group-color:var(--lfo)">
+            <div class="simple-group-head"><h3>Motion</h3><span>movement &amp; size</span></div>
+            <div class="simple-controls">
+              <div class="simple-control"><label>Movement</label><div class="knob" style="--value:34%;--value-num:.34"></div><div class="simple-reading">Gentle</div><div class="simple-hint">steady to animated</div></div>
+              <div class="simple-control"><label>Width</label><div class="knob" style="--value:67%;--value-num:.67"></div><div class="simple-reading">Wide</div><div class="simple-hint">focus to spread</div></div>
+            </div>
+          </section>
+        </div>
+
+        <footer class="simple-performance">
+          <div><span class="simple-section-label">Play style</span><div class="simple-toggle"><span>Mono</span><span class="active">Poly</span></div></div>
+          <div class="simple-arp">
+            <div class="simple-arp-state"><i></i> Arp on</div>
+            <div class="simple-arp-block"><span class="simple-section-label">Speed</span><div class="simple-toggle"><span>1/8</span><span class="active">1/16</span><span>1/32</span></div></div>
+            <div class="simple-arp-block"><span class="simple-section-label">Direction</span><div class="simple-toggle"><span class="active" aria-label="Up">↑</span><span aria-label="Down">↓</span><span aria-label="Up and down">⇅</span><span aria-label="Random">◆</span></div></div>
+          </div>
+          <div class="pro-lock">Detailed routing stays in Pro</div>
+        </footer>
+      </div>
+    </section>
+
+    <!-- Variant C: progressive rack -->
+    <section class="variant variant-c">
+      <div class="macro-deck">
+        <article class="macro-card" style="--module-color:var(--osc)"><div class="knob" style="--value:68%;--value-num:.68"></div><div class="macro-copy"><h3>Body</h3><b>68%</b><p>Dual-osc blend with a firm sub.</p></div></article>
+        <article class="macro-card" style="--module-color:var(--filter)"><div class="knob" style="--value:54%;--value-num:.54"></div><div class="macro-copy"><h3>Tone</h3><b>Balanced</b><p>Open enough to keep the attack bright.</p></div></article>
+        <article class="macro-card" style="--module-color:var(--lfo)"><div class="knob" style="--value:34%;--value-num:.34"></div><div class="macro-copy"><h3>Motion</h3><b>Gentle</b><p>Synced shape movement at 1/8.</p></div></article>
+        <article class="macro-card" style="--module-color:var(--env)"><div class="knob" style="--value:47%;--value-num:.47"></div><div class="macro-copy"><h3>Space</h3><b>Natural</b><p>Medium sustain with a soft tail.</p></div></article>
+        <article class="module arp"><div class="module-head"><div class="stage-label"><i></i> Auto-Arp</div><span class="on-chip">ON</span></div><div class="toggle-row"><span>1/8</span><span class="active">1/16</span><span>1/32</span></div><div class="toggle-row" style="margin-top:6px"><span class="active">↑</span><span>↓</span><span>⇅</span><span>◆</span></div></article>
+      </div>
+      <div class="rack-nav"><span class="active">Source</span><span>Shape</span><span>Motion</span><span>Voice</span><span>Expression</span><span style="margin-left:auto;color:#d0c3cb">All modules shown</span></div>
+      <div class="rack-layout">
+        <article class="module osc"><div class="module-head"><div class="stage-label"><i></i> Source</div><span class="module-kicker">OSC 1 + OSC 2</span></div><div class="rack-source"><div><div class="module-head"><span class="module-kicker">OSC 1 · SAW</span><span class="on-chip">ON</span></div><div class="controls four"><div class="control"><label>Shape</label><div class="knob sm" style="--value:67%;--value-num:.67"></div><strong>67%</strong></div><div class="control"><label>Oct</label><div class="knob sm" style="--value:50%;--value-num:.5"></div><strong>0</strong></div><div class="control"><label>Fine</label><div class="knob sm" style="--value:54%;--value-num:.54"></div><strong>+4</strong></div><div class="control"><label>Level</label><div class="knob sm" style="--value:76%;--value-num:.76"></div><strong>76%</strong></div></div></div><div><div class="module-head"><span class="module-kicker">OSC 2 · SQUARE</span><span class="on-chip">ON</span></div><div class="controls four"><div class="control"><label>Shape</label><div class="knob sm" style="--value:42%;--value-num:.42"></div><strong>42%</strong></div><div class="control"><label>Semi</label><div class="knob sm" style="--value:58%;--value-num:.58"></div><strong>+7</strong></div><div class="control"><label>Fine</label><div class="knob sm" style="--value:46%;--value-num:.46"></div><strong>−5</strong></div><div class="control"><label>Level</label><div class="knob sm" style="--value:48%;--value-num:.48"></div><strong>48%</strong></div></div></div></div><div class="route"><span>SUB 25%</span><span class="arrow">+</span><span>NOISE 8%</span><span class="amount">−4 dB</span></div></article>
+        <article class="module filter"><div class="module-head"><div class="stage-label"><i></i> Shape</div><span class="on-chip">LP 24</span></div><div class="toggle-row"><span class="active">LP</span><span>BP</span><span>HP</span></div><div class="controls two" style="margin-top:13px"><div class="control"><label>Cutoff</label><div class="knob" style="--value:61%;--value-num:.61"></div><strong>3.2 kHz</strong></div><div class="control"><label>Reso</label><div class="knob" style="--value:37%;--value-num:.37"></div><strong>3.7</strong></div><div class="control"><label>Drive</label><div class="knob" style="--value:44%;--value-num:.44"></div><strong>Warm</strong></div><div class="control"><label>Key track</label><div class="knob" style="--value:54%;--value-num:.54"></div><strong>54%</strong></div></div></article>
+        <article class="module env"><div class="module-head"><div class="stage-label"><i></i> Amp</div><span class="module-kicker">ADSR</span></div><svg viewBox="0 0 300 83" width="100%" height="76" aria-hidden="true"><path d="M8 74 L58 12 L119 47 L219 47 L289 74" fill="none" stroke="#f0c86d" stroke-width="3"/></svg><div class="controls four"><div class="control"><label>A</label><strong>18 ms</strong></div><div class="control"><label>D</label><strong>320 ms</strong></div><div class="control"><label>S</label><strong>68%</strong></div><div class="control"><label>R</label><strong>540 ms</strong></div></div></article>
+        <article class="module voice"><div class="module-head"><div class="stage-label"><i></i> Voice</div><span class="on-chip">POLY 8</span></div><div class="toggle-row"><span>MONO</span><span>LEGATO</span><span class="active">POLY</span></div><div class="controls four" style="margin-top:16px"><div class="control"><label>Unison</label><div class="knob" style="--value:50%;--value-num:.5"></div><strong>4</strong></div><div class="control"><label>Spread</label><div class="knob" style="--value:67%;--value-num:.67"></div><strong>67%</strong></div><div class="control"><label>Glide</label><div class="knob" style="--value:20%;--value-num:.2"></div><strong>42 ms</strong></div><div class="control"><label>Drift</label><div class="knob" style="--value:23%;--value-num:.23"></div><strong>23%</strong></div></div></article>
+        <div class="rack-wide">
+          <article class="module env"><div class="module-head"><div class="stage-label"><i></i> Mod envelope</div><span class="on-chip">ENV 2</span></div><svg viewBox="0 0 300 55" width="100%" height="45"><path d="M8 48 L34 7 L89 39 L209 39 L289 48" fill="none" stroke="#f0c86d" stroke-width="3"/></svg><div class="route"><span>ENV 2</span><span class="arrow">›</span><span>Cutoff</span><span class="amount">+42</span></div><div class="route"><span>ENV 2</span><span class="arrow">›</span><span>OSC 2 level</span><span class="amount">−18</span></div></article>
+          <article class="module lfo"><div class="module-head"><div class="stage-label"><i></i> LFO</div><span class="on-chip">1/8 SYNC</span></div><div class="toggle-row"><span class="active">SINE</span><span>TRI</span><span>SAW</span><span>S&amp;H</span></div><div class="controls four" style="margin-top:11px"><div class="control"><label>Rate</label><div class="knob sm" style="--value:60%;--value-num:.6"></div><strong>1/8</strong></div><div class="control"><label>Depth</label><div class="knob sm" style="--value:34%;--value-num:.34"></div><strong>34%</strong></div><div class="control"><label>Phase</label><div class="knob sm" style="--value:25%;--value-num:.25"></div><strong>90°</strong></div><div class="control"><label>Trigger</label><div class="mini-select">Transport⌄</div></div></div><div class="route"><span>LFO</span><span class="arrow">›</span><span>OSC shape</span><span class="amount">+28</span></div></article>
+          <article class="module voice"><div class="module-head"><div class="stage-label"><i></i> Expression</div><span class="module-kicker">touch response</span></div><div class="route"><span>Velocity</span><span class="arrow">›</span><span>Volume</span><span class="amount">+72</span></div><div class="route"><span>Velocity</span><span class="arrow">›</span><span>Cutoff</span><span class="amount">+35</span></div><div class="route"><span>Key track</span><span class="arrow">›</span><span>Filter</span><span class="amount">+54</span></div></article>
+        </div>
+      </div>
+    </section>
+
+    <div class="phase-legend"><b>Included in every concept</b><span class="phase-tag">Phase 1 · Dual OSC + synced LFO</span><span class="phase-tag">Phase 2 · Mod ENV + routing</span><span class="phase-tag">Phase 3 · Shape + drive + unison</span></div>
+  </main>
+
+  <nav class="variant-switcher" aria-label="Prototype variant">
+    <button class="active" data-target="a">A · Pro (locked)</button>
+    <button data-target="b">B · Simple (locked)</button>
+    <button data-target="c">C · Earlier concept</button>
+    <span class="caption">preview only</span>
+  </nav>
+
+  <script>
+    const buttons = document.querySelectorAll('[data-target]');
+    const setVariant = (key) => {
+      document.body.dataset.variant = key;
+      buttons.forEach((button) => button.classList.toggle('active', button.dataset.target === key));
+      const url = new URL(window.location.href);
+      url.searchParams.set('variant', key);
+      history.replaceState(null, '', url);
+    };
+    const initial = new URLSearchParams(window.location.search).get('variant');
+    if (['a', 'b', 'c'].includes(initial)) setVariant(initial);
+    buttons.forEach((button) => button.addEventListener('click', () => setVariant(button.dataset.target)));
+  </script>
+</body>
+</html>

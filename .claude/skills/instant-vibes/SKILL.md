@@ -88,13 +88,37 @@ Vibe "lofi-chill" references unknown drum grid id: nope
 Unknown vibe effect chain id: nope
 ```
 
-## Two things a vibe must not carry
+## Arp: a vibe states it, in full
 
-- **No arp.** No vibe sets `arpActive`/`arpMode`/`arpRate`/`arpOctaves`, and no
-  preset does either. The arpeggiator is a performance control the user drives
-  from the UI, and a vibe must not switch it on behind them.
-  `INITIAL_SYNTH_PARAMS.arpActive` is already `false`, so simply omit the fields —
-  never write an explicit `arpActive: false`.
+**This rule was inverted by the synth-engine change — do not follow an older
+copy of it.** A vibe used to carry no arp at all, on the grounds that the
+arpeggiator is a performance control and a vibe must not switch it on behind
+the user. Half of that still holds; the omission does not.
+
+- **Every vibe carries `arp`, and it names all five synth-capable tracks.**
+  `VibeSpec.arp` is a required `Record<SynthControlTarget, ArpSettings>` —
+  `synth`, `fx`, `chord`, `bass`, `pad` — and `applyVibeToStore` writes all
+  five. Omitting a track is the bug the completeness is here to prevent: an
+  unwritten track would keep whatever the PREVIOUS vibe armed, so "apply Lo-Fi
+  Chill" would mean different things depending on history. Same rule, same
+  reason as a drum grid writing every row its origin group defines, empty or
+  not. `vibes.test.ts` fails on a missing key.
+- **Write `{ active: false, mode: 'up', rate: '16n', octaves: 1 }` explicitly**
+  for a track the vibe does not arpeggiate. That is the shape to copy; there is
+  no "omit it and inherit a default" any more.
+- **Arming one is a decision, and the table records how many exist.** Exactly
+  one row in `VIBES` is `active: true` today — Cyber EDM's lead, where a 16th
+  up-arpeggio over two octaves IS the genre — and a test pins that it is the
+  only one. The old concern is answered by that test rather than by a blanket
+  ban: arming an arpeggiator now requires editing a pinned count, which a
+  reviewer sees, instead of being reachable by a stray default.
+- **The flat fields are still forbidden.** `arpActive`/`arpMode`/`arpRate`/
+  `arpOctaves` belong to the deleted flat `SynthParams` shape. A vibe writes
+  `ArpSettings` objects (`active`/`mode`/`rate`/`octaves`) and a synth preset
+  carries no Arp at all — `synthPresets.test.ts` rejects one that does.
+
+## One thing a vibe must not carry
+
 - **No presentational fields.** `color`, `bgGradient`, `borderColor`, `textColor`
   are forbidden; the chip's look comes from theme tokens in `InstantVibesBar`. An
   invariant test in `store/vibes.test.ts` pins this.
