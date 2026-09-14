@@ -31,6 +31,8 @@ import type {
   PadVoicing,
 } from '@/types';
 import type { MeterId } from '@/utils/meter';
+import type { ArpSettings } from '@/types/synth';
+import type { SynthControlTarget } from '@/utils/synthControl';
 
 /**
  * What the dice may reroll, per vibe.
@@ -161,6 +163,34 @@ export interface VibeSpec {
    */
   fxPresetId: string;
 
+  /**
+   * The arpeggiator state this vibe wants, per synth-capable track.
+   *
+   * COMPLETE, never partial: applying a vibe writes all five, so a vibe is
+   * the same sound whatever was applied before it. The precedent is
+   * `DRUM_GRIDS`, where every grid writes every row its origin group defines,
+   * empty or not, because a grid should state what it plays.
+   *
+   * THIS FIELD RELAXED A RULE, and the rule is recorded here rather than only
+   * beside the one entry that exercises it. Before the synth-engine change a
+   * vibe carried no arp at all: "the arpeggiator is a performance control the
+   * user drives from the UI, and a vibe must not switch it on behind them."
+   * The design doc makes Arp one of the three axes a vibe sets independently
+   * (alongside synth presets and the effect chain), so the ban is gone — but
+   * the concern behind it is not, and it is now answered by a COUNT instead of
+   * by an absence. `active: false` is the default for a row, exactly one row
+   * in the whole table is `true` (Cyber EDM's lead), and `vibes.test.ts`
+   * asserts that list verbatim. Arming a second one is therefore an edit to a
+   * pinned test that a reviewer reads, not something a stray default can do.
+   *
+   * Two things the relaxation does NOT reach. A synth PRESET still carries no
+   * Arp — that stays banned outright, because a preset is reused in roles its
+   * author never saw (`synthPresets.test.ts`). And `TRACK_ARP_DEFAULTS` in
+   * `store/initialState.ts` is still silent on every track, so a new project
+   * and a hand-built loop never start armed.
+   */
+  arp: Record<SynthControlTarget, ArpSettings>;
+
   /** Library reference into EFFECT_CHAINS. */
   effectChainId: string;
 
@@ -207,6 +237,16 @@ export const VIBES: VibeSpec[] = [
 
     // Pad: glue under the e-piano, not a foreground voice.
     pad: { volume: 0.30, presetId: 'factory-warm-polypad', mode: 'pad', octave: 3, voicing: 'open5', droneDegree: 0, droneIntervals: [1, 5, 8] },
+
+    // Arp, per track. Stated in full — an omitted track would leave the
+    // arpeggiator wherever the PREVIOUS vibe left it. A swung e-piano vibe plays nothing gridded.
+    arp: {
+      synth: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      fx: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      chord: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      bass: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      pad: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+    },
 
     effectChainId: 'lofi-tape-room',
 
@@ -267,6 +307,16 @@ export const VIBES: VibeSpec[] = [
     // Pad: the sustained half of the genre's two-layer chord stack.
     pad: { volume: 0.65, presetId: 'factory-string-ensemble', mode: 'pad', octave: 3, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
 
+    // Arp, per track. Stated in full — an omitted track would leave the
+    // arpeggiator wherever the PREVIOUS vibe left it. Synthwave's lead is a held supersaw, not a pattern.
+    arp: {
+      synth: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      fx: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      chord: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      bass: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      pad: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+    },
+
     effectChainId: 'synthwave-neon-hall',
 
     // synthwave-80s
@@ -325,6 +375,19 @@ export const VIBES: VibeSpec[] = [
 
     // Pad: supersaw holding under the trance-pluck stabs.
     pad: { volume: 0.50, presetId: 'factory-neon-poly-saw', mode: 'pad', octave: 3, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
+
+    // Arp, per track. The ONE armed arpeggiator in the table, and the
+    // reason the axis exists: a hard 16th pluck lead at this tempo IS an
+    // arpeggio in this genre, so the vibe states it instead of asking the
+    // user to find the Arp panel. Two octaves, up — the shape the style
+    // is built on. Every other track stays off.
+    arp: {
+      synth: { active: true, mode: 'up', rate: '16n', octaves: 2 },
+      fx: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      chord: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      bass: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      pad: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+    },
 
     effectChainId: 'edm-club-drive',
 
@@ -385,6 +448,16 @@ export const VIBES: VibeSpec[] = [
     // Pad: a pedal tone under the Lydian progression is the genre's gesture.
     pad: { volume: 0.55, presetId: 'factory-dark-sub-pad', mode: 'drone', octave: 2, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
 
+    // Arp, per track. Stated in full — an omitted track would leave the
+    // arpeggiator wherever the PREVIOUS vibe left it. Ambient is sustained by definition; a grid would break it.
+    arp: {
+      synth: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      fx: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      chord: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      bass: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      pad: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+    },
+
     effectChainId: 'ambient-cathedral-wash',
 
     // deep-ambient
@@ -436,6 +509,16 @@ export const VIBES: VibeSpec[] = [
 
     // FX: the vinyl-crackle riser easing into a turnaround.
     fxPresetId: 'factory-noise-riser-fx',
+
+    // Arp, per track. Stated in full — an omitted track would leave the
+    // arpeggiator wherever the PREVIOUS vibe left it. Boom bap is played, not sequenced.
+    arp: {
+      synth: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      fx: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      chord: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      bass: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      pad: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+    },
 
     effectChainId: 'boombap-dry-room',
 
@@ -496,6 +579,16 @@ export const VIBES: VibeSpec[] = [
     // Pad: the sustained shō of gagaku, a direct ancestor of drone music.
     pad: { volume: 0.40, presetId: 'factory-warm-polypad', mode: 'drone', octave: 2, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
 
+    // Arp, per track. Stated in full — an omitted track would leave the
+    // arpeggiator wherever the PREVIOUS vibe left it. Zen Garden's koto and bell are struck by hand.
+    arp: {
+      synth: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      fx: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      chord: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      bass: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      pad: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+    },
+
     effectChainId: 'zen-temple-air',
 
     // zen-garden
@@ -552,6 +645,16 @@ export const VIBES: VibeSpec[] = [
     // Pad: same treatment as lofi-chill.
     pad: { volume: 0.30, presetId: 'factory-warm-polypad', mode: 'pad', octave: 3, voicing: 'open5', droneDegree: 0, droneIntervals: [1, 5, 8] },
 
+    // Arp, per track. Stated in full — an omitted track would leave the
+    // arpeggiator wherever the PREVIOUS vibe left it. A waltz arpeggio would fight the 3/4 chord rhythm.
+    arp: {
+      synth: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      fx: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      chord: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      bass: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      pad: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+    },
+
     effectChainId: 'lofi-tape-room',
 
     // lofi-waltz
@@ -607,6 +710,16 @@ export const VIBES: VibeSpec[] = [
     // FX: a low cyber drone under the bell groove, the same texture as
     // zen-garden's bell lead.
     fxPresetId: 'factory-cyber-drone',
+
+    // Arp, per track. Stated in full — an omitted track would leave the
+    // arpeggiator wherever the PREVIOUS vibe left it. Afro 6/8's pulse is in the drums, not in a gate.
+    arp: {
+      synth: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      fx: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      chord: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      bass: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+      pad: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+    },
 
     effectChainId: 'boombap-dry-room',
 

@@ -53,7 +53,7 @@ export interface LoopCopyGroup {
  * declared in.
  */
 export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
-  { id: 'lead-sound', track: 'lead', aspect: 'sound', label: 'Lead sound', keys: ['synthParams'] },
+  { id: 'lead-sound', track: 'lead', aspect: 'sound', label: 'Lead sound', keys: ['synthParams', 'synthArpSettings'] },
   {
     id: 'lead-pattern',
     track: 'lead',
@@ -68,7 +68,7 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
       'leadGate',
     ],
   },
-  { id: 'fx-sound', track: 'fx', aspect: 'sound', label: 'FX sound', keys: ['fxSynthParams'] },
+  { id: 'fx-sound', track: 'fx', aspect: 'sound', label: 'FX sound', keys: ['fxSynthParams', 'fxArpSettings'] },
   {
     id: 'fx-pattern',
     track: 'fx',
@@ -83,7 +83,7 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
       'fxGate',
     ],
   },
-  { id: 'chord-sound', track: 'chord', aspect: 'sound', label: 'Chords sound', keys: ['chordSynthParams'] },
+  { id: 'chord-sound', track: 'chord', aspect: 'sound', label: 'Chords sound', keys: ['chordSynthParams', 'chordArpSettings'] },
   {
     id: 'chord-progression',
     track: 'chord',
@@ -106,7 +106,7 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
       'chordOctave',
     ],
   },
-  { id: 'bass-sound', track: 'bass', aspect: 'sound', label: 'Bass sound', keys: ['bassSynthParams'] },
+  { id: 'bass-sound', track: 'bass', aspect: 'sound', label: 'Bass sound', keys: ['bassSynthParams', 'bassArpSettings'] },
   {
     id: 'bass-pattern',
     track: 'bass',
@@ -122,7 +122,7 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
       'bassOctave',
     ],
   },
-  { id: 'pad-sound', track: 'pad', aspect: 'sound', label: 'Pad sound', keys: ['padSynthParams'] },
+  { id: 'pad-sound', track: 'pad', aspect: 'sound', label: 'Pad sound', keys: ['padSynthParams', 'padArpSettings'] },
   {
     id: 'pad-pattern',
     track: 'pad',

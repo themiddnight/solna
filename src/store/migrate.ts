@@ -1,24 +1,37 @@
-import type { SynthPresetItem } from '../data/synthPresets';
+import type { SynthPreset } from '../data/synthPresets';
 import type { CustomChordProgressionItem } from '../types';
+import { sanitizeCustomSynthPresets } from './sanitize';
 
 // Legacy localStorage keys written by the pre-Zustand app:
-// - synth presets:   src/audio/presetRegistry.ts (STORAGE_KEY)
+// - synth presets:   the preset registry that preceded src/utils/synthPresets.ts (STORAGE_KEY)
 // - chord progressions: src/components/loop/ChordPresetLibrary.tsx
 export const LEGACY_SYNTH_PRESETS_KEY = 'murva_synth_custom_presets_v1';
 export const LEGACY_CHORD_PROGRESSIONS_KEY = 'murva_chord_custom_progressions_v1';
 export const LEGACY_PERSIST_KEY = 'murva_project_state_v1';
 
 export interface LegacyPresetsState {
-  customSynthPresets?: SynthPresetItem[];
+  customSynthPresets?: SynthPreset[];
   customChordProgressions?: CustomChordProgressionItem[];
 }
 
-function readLegacySynthPresets(): SynthPresetItem[] | null {
+/**
+ * Validated here rather than by `merge`'s `sanitizePersistedState`, because
+ * adoption runs AFTER that pass: a legacy entry read straight through would be
+ * the one custom preset in the app that never met the validator. Every entry
+ * in this key predates the engine cutover unless the user re-saved it, so in
+ * practice this is where the pre-cutover flat patch bodies are dropped.
+ *
+ * `null` still means "nothing to adopt" and an emptied array still means
+ * "there was a key, and none of it survived" — the caller only replaces an
+ * empty target, so the difference does not change what it does, but it keeps
+ * "key absent" and "key unreadable" distinguishable here.
+ */
+function readLegacySynthPresets(): SynthPreset[] | null {
   try {
     const raw = localStorage.getItem(LEGACY_SYNTH_PRESETS_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : null;
+    return Array.isArray(parsed) ? sanitizeCustomSynthPresets(parsed) : null;
   } catch {
     return null;
   }

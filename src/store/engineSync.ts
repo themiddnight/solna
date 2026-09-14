@@ -15,6 +15,7 @@ import { isTrackAudible } from './trackAudibility';
 import { SOURCE_BUSES, SYNTH_PARAM_FIELD, SYNTH_PARAM_TARGETS, type SourceBus } from './sourceBuses';
 import { sourceTransitionTime } from './sourceTransition';
 import type { AppStore } from './types';
+import type { ActiveSynth } from '@/types/synth';
 
 /**
  * One-way bridge from the Zustand store into the audioEngine singleton,
@@ -215,6 +216,34 @@ function pushDrumTrackGains(tracks: readonly SequencerTrack[]): void {
   }
 }
 
+/**
+ * The patch each bus was last given, so the next push can tell the engine what
+ * actually MOVED.
+ *
+ * `updateSynthPatch` diffs previous against next and writes only the
+ * continuous controls that changed. The subscription cannot simply hand over
+ * zustand's own `previousValue`: knob moves are coalesced to one engine call
+ * per animation frame, so the intermediate patches never reach the engine, and
+ * diffing against one of them would leave everything that moved in the dropped
+ * frames unapplied. Diffing against what was last APPLIED is exact under any
+ * amount of coalescing.
+ *
+ * Module scope, and cleared when the bridge stops: a new bridge on a new
+ * engine must start from "nothing applied yet".
+ */
+const appliedPatches = new Map<string, ActiveSynth>();
+
+function pushSynthPatch(source: string, next: ActiveSynth): void {
+  const previous = appliedPatches.get(source) ?? next;
+  // The engine call FIRST: `createFrameCoalescer.runThunk` swallows a throw so
+  // the key does not count as applied and is retried on the next frame. Marking
+  // it applied before the call would make that retry a no-op — `previous` would
+  // already be `next`, the diff would be empty, and every knob turn made before
+  // the throw would be lost from the sounding voices with nothing to show it.
+  audioEngine.updateSynthPatch(previous, next, source);
+  appliedPatches.set(source, next);
+}
+
 function applySliceState(): void {
   const s = useAppStore.getState();
   audioEngine.setClockBpm(s.bpm);
@@ -237,18 +266,18 @@ function applySliceState(): void {
   // right after init(), when every earlier setter was a no-op, so the impulse
   // must exist before the first note.
   audioEngine.setReverbDecay(s.effects.reverbDecay);
-  // No setPresetTrim pass here any more. These four calls used to be paired
-  // with one, precisely because setPresetTrim did NOT no-op before init() and
-  // a snapshot taken before the first click would otherwise leave a source
-  // without a trim until its own subscription next fired. That ordering
-  // hazard is gone rather than handled: triggerSynthNoteOn now derives the
-  // trim from the `params.preset` it is handed, so there is no map to seed and
-  // no window in which a source can be playing a patch the engine has not been
-  // told about.
+  // No trim pass here: a patch carries its own `common.outputGainDb`, so
+  // there is no per-source map to seed and no window in which a bus can be
+  // playing a patch the engine has not been told about.
+  //
   // Off SYNTH_PARAM_FIELD, like the subscription block below: a hand-listed
   // copy here and a table there is how a new bus reaches one and not the other.
+  //
+  // Arp is absent from this loop and from the subscription block below on
+  // purpose: it is performance state consumed by the Arp player, never a DSP
+  // parameter, so an Arp toggle must not reach `updateSynthPatch` at all.
   for (const target of SYNTH_PARAM_TARGETS) {
-    audioEngine.updateSynthParams(s[SYNTH_PARAM_FIELD[target]], target);
+    pushSynthPatch(target, s[SYNTH_PARAM_FIELD[target]]);
   }
 }
 
@@ -263,7 +292,7 @@ export function startEngineSync(): Stop {
   const subs: Array<() => void> = [];
 
   // The parameter bridge is capped at one engine call per key per animation
-  // frame. updateSynthParams re-targets EVERY live voice with ~15-20
+  // frame. updateSynthPatch re-targets EVERY live voice with a dozen or more
   // timeline-locking AudioParam operations, so an unthrottled knob drag with
   // 8 held voices is thousands of lock acquisitions a second on the same
   // thread as the 25 ms scheduler. The coalescer is leading-edge, so a
@@ -320,13 +349,11 @@ export function startEngineSync(): Stop {
     ),
   );
 
-  // effects + synth params: identity selectors compared with `shallow`, so the
-  // subscription fires only on a real VALUE change. Keying on object identity
-  // alone re-ran updateEffects / updateSynthParams for any action that merely
-  // respread the object — and updateSynthParams re-targets every live voice,
-  // cancelling and re-planning their ramps for nothing. Both types are flat
-  // records of primitives (MasterEffects, SynthParams), so shallow equality is
-  // exact — and unlike the JSON encoding it needs no assumption about key order.
+  // effects: an identity selector compared with `shallow`, so the subscription
+  // fires only on a real VALUE change. Keying on object identity alone re-ran
+  // updateEffects for any action that merely respread the object.
+  // `MasterEffects` is a flat record of primitives, so shallow equality is
+  // exact — and unlike a JSON encoding it needs no assumption about key order.
   subs.push(
     useAppStore.subscribe(
       (s) => s.effects,
@@ -362,22 +389,31 @@ export function startEngineSync(): Stop {
     ),
   );
 
+  // One subscription per synth bus's PATCH. Reference equality, not `shallow`:
+  // an `ActiveSynth` is a tree (common block, engine params, oscillator array,
+  // route list), and a shallow compare of its three top-level keys would call
+  // two patches equal whenever only something nested changed — which is every
+  // knob on the panel. Every writer replaces the object immutably, so identity
+  // is exactly "something in this patch changed".
+  //
+  // What the engine is told the patch WAS comes from `appliedPatches`, not
+  // from zustand's previous selected value — see that map's docblock for why
+  // coalescing makes the two different questions. There is no Arp
+  // subscription here at all: Arp is read by the Arp player off the store.
   for (const source of SYNTH_PARAM_TARGETS) {
     const field = SYNTH_PARAM_FIELD[source];
     subs.push(
       useAppStore.subscribe(
         (s) => s[field],
-        (params, prevParams) => {
-          // The preset trim used to be pushed here, ahead of the params and
-          // deliberately outside the frame coalescer, because it is a scalar the
-          // NEXT voice reads and a debounced push would have let one note sound
-          // at the previous patch's trim. The engine derives it from
-          // `params.preset` at the moment it builds a voice now, so a trim can no
-          // longer lag the params it belongs to — there is nothing left to order.
-          if (params === prevParams) audioEngine.updateSynthParams(params, source);
-          else paramFrames.push(source, () => audioEngine.updateSynthParams(params, source));
+        (synth, previousSelected) => {
+          // subscribeWithSelector's fireImmediately calls the listener with the
+          // SAME reference twice, which is the one reliable signal that this is
+          // the bootstrap rather than an edit — and the coalescer must never
+          // see it, or the next genuine edit is pushed into the following frame.
+          if (synth === previousSelected) pushSynthPatch(source, synth);
+          else paramFrames.push(source, () => pushSynthPatch(source, synth));
         },
-        { equalityFn: shallow, fireImmediately: true },
+        { fireImmediately: true },
       ),
     );
   }
@@ -418,6 +454,10 @@ export function startEngineSync(): Stop {
     // subscription was already torn down.
     paramFrames.cancel();
     decayCommit.cancel();
+    // A later bridge may be pointed at a different engine, and every voice on
+    // the old one is gone; "what this engine has already been told" cannot
+    // survive that.
+    appliedPatches.clear();
     syncStarted = false;
     stopCurrent = null;
   };

@@ -1,5 +1,4 @@
 import type {
-  SynthParams,
   ChordItem,
   SequencerTrack,
   MasterEffects,
@@ -12,8 +11,9 @@ import type {
   PadMode,
   PadVoicing,
 } from '../types';
+import type { ActiveSynth, ArpSettings } from '../types/synth';
 import type { MeterId } from '../utils/meter';
-import type { SynthPresetItem, SynthPresetCategory } from '../data/synthPresets';
+import type { SynthPreset, SynthPresetCategory } from '../data/synthPresets';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { LeadNote } from '../audio/leadMelody';
 import type { LoopCopyGroupId } from './loopCopy';
@@ -87,16 +87,32 @@ export interface MusicContextSlice {
 }
 
 export interface SynthSlice {
-  synthParams: SynthParams;
-  chordSynthParams: SynthParams;
-  bassSynthParams: SynthParams;
+  /**
+   * The five per-track patch fields keep their names and change type: the
+   * value is a complete `ActiveSynth` — engine tag, whole patch, provenance —
+   * not a flat record of knob positions.
+   *
+   * Arp lives BESIDE the patch, never inside it. It is performance state: two
+   * tracks can share a patch and arpeggiate differently, and a preset that
+   * carried an arp would silently re-arm the player's arpeggiator every time
+   * they auditioned a sound.
+   */
+  synthParams: ActiveSynth;
+  chordSynthParams: ActiveSynth;
+  bassSynthParams: ActiveSynth;
+  synthArpSettings: ArpSettings;
+  chordArpSettings: ArpSettings;
+  bassArpSettings: ArpSettings;
   /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at
    *  the store->engine boundary in engineSync.ts, never in a component. */
   synthVolume: number;
   synthMuted: boolean;
-  setSynthParams: (params: SynthParams) => void;
-  setChordSynthParams: (params: SynthParams) => void;
-  setBassSynthParams: (params: SynthParams) => void;
+  setSynthParams: (synth: ActiveSynth) => void;
+  setChordSynthParams: (synth: ActiveSynth) => void;
+  setBassSynthParams: (synth: ActiveSynth) => void;
+  setSynthArpSettings: (arp: ArpSettings) => void;
+  setChordArpSettings: (arp: ArpSettings) => void;
+  setBassArpSettings: (arp: ArpSettings) => void;
   setSynthVolume: (volume: number) => void;
   toggleSynthMuted: () => void;
 }
@@ -176,7 +192,8 @@ export interface BassSlice {
  * copy quietly drifts from the others.
  */
 export interface PadState {
-  padSynthParams: SynthParams;
+  padSynthParams: ActiveSynth;
+  padArpSettings: ArpSettings;
   padMode: PadMode;
   padOctave: number;
   padVoicing: PadVoicing;
@@ -189,7 +206,8 @@ export interface PadState {
 }
 
 export interface PadSlice extends PadState {
-  setPadSynthParams: (params: SynthParams) => void;
+  setPadSynthParams: (synth: ActiveSynth) => void;
+  setPadArpSettings: (arp: ArpSettings) => void;
   setPadMode: (mode: PadMode) => void;
   setPadOctave: (octave: number) => void;
   setPadVoicing: (voicing: PadVoicing) => void;
@@ -326,13 +344,15 @@ export interface FxSlice {
   /** Write a PERFORMED note — see LeadSlice.recordLeadNote. Declines unless
    *  `recordingTrack === 'fx'`. */
   recordFxNote: (note: string, column?: number) => boolean;
-  /** The FX synth voice's live params. */
-  fxSynthParams: SynthParams;
+  /** The FX synth voice's live patch. */
+  fxSynthParams: ActiveSynth;
+  fxArpSettings: ArpSettings;
   /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at
    *  the store->engine boundary in engineSync.ts, never in a component. */
   fxVolume: number;
   fxMuted: boolean;
-  setFxSynthParams: (params: SynthParams) => void;
+  setFxSynthParams: (synth: ActiveSynth) => void;
+  setFxArpSettings: (arp: ArpSettings) => void;
   setFxVolume: (volume: number) => void;
   toggleFxMuted: () => void;
 }
@@ -521,15 +541,15 @@ export interface UiSlice {
 }
 
 export interface PresetsSlice {
-  customSynthPresets: SynthPresetItem[];
+  customSynthPresets: SynthPreset[];
   customChordProgressions: CustomChordProgressionItem[];
   saveCustomPreset: (
     name: string,
-    params: SynthParams,
+    activeSynth: ActiveSynth,
     category?: SynthPresetCategory,
     description?: string
-  ) => SynthPresetItem;
-  deleteCustomPreset: (id: string) => SynthPresetItem[];
+  ) => SynthPreset;
+  deleteCustomPreset: (id: string) => SynthPreset[];
   saveCustomChordProgression: (
     name: string,
     chords: ChordItem[],
@@ -558,7 +578,8 @@ export interface FxState {
   fxMelodyView: LeadMelodyView;
   fxMelodyOctave: number;
   fxGate: number;
-  fxSynthParams: SynthParams;
+  fxSynthParams: ActiveSynth;
+  fxArpSettings: ArpSettings;
   fxVolume: number;
   fxMuted: boolean;
 }
@@ -578,9 +599,12 @@ export interface Loop extends PadState, FxState {
   repeatCount?: number; // default 1, number of times this loop plays before advancing in song mode
   scaleRoot: string;
   scaleType: string;
-  synthParams: SynthParams;
-  chordSynthParams: SynthParams;
-  bassSynthParams: SynthParams;
+  synthParams: ActiveSynth;
+  chordSynthParams: ActiveSynth;
+  bassSynthParams: ActiveSynth;
+  synthArpSettings: ArpSettings;
+  chordArpSettings: ArpSettings;
+  bassArpSettings: ArpSettings;
   chords: ChordItem[];
   chordRhythmId: string;
   chordRhythmMode: 'preset' | 'custom';
@@ -703,7 +727,7 @@ export interface PersistedState {
   metronomeActive: boolean;
   selectedVibeId: string | null;
   focusTrack: MixLayerId;
-  customSynthPresets: SynthPresetItem[];
+  customSynthPresets: SynthPreset[];
   customChordProgressions: CustomChordProgressionItem[];
   activeLoopId: string;
 }

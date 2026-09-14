@@ -1,42 +1,22 @@
 import { describe, expect, test } from 'bun:test';
 import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from './synthControl';
-import type { SynthControlTarget, SynthParamChannel } from './synthControl';
-import type { SynthParams } from '../types';
-import { INITIAL_SYNTH_PARAMS } from '../store/initialState';
+import type { SynthChannel, SynthControlTarget } from './synthControl';
+import type { ActiveSynth } from '../types/synth';
+import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import { soloTrackForFocus } from '../store/trackAudibility';
 
-const baseParams: SynthParams = {
-  oscType: 'sine',
-  subOscVolume: 0,
-  noiseVolume: 0,
-  detune: 0,
-  filterType: 'lowpass',
-  filterCutoff: 500,
-  filterResonance: 1,
-  filterEnvAmount: 0,
-  attack: 0.01,
-  decay: 0.2,
-  sustain: 0.8,
-  release: 0.3,
-  filterAttack: 0.01,
-  filterDecay: 0.2,
-  filterSustain: 1,
-  filterRelease: 0.3,
-  lfoRate: 0,
-  lfoDepth: 0,
-  lfoTarget: 'volume',
-  octave: 0,
-  arpActive: false,
-  arpMode: 'up',
-  arpRate: '16n',
-  arpOctaves: 1,
-  preset: '',
-};
-
-function channel(name: string): SynthParamChannel {
+/**
+ * A channel whose patch is identifiable by its `sourcePresetId`. Provenance
+ * is display-only and never a DSP input, which makes it the right field for a
+ * test that only needs to tell five channels apart.
+ */
+function channel(name: string): SynthChannel {
+  const activeSynth: ActiveSynth = { ...SUBTRACTIVE_INIT, sourcePresetId: name };
   return {
-    params: { ...baseParams, preset: name },
-    setParams: () => {},
+    activeSynth,
+    arpSettings: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+    setActiveSynth: () => {},
+    setArpSettings: () => {},
   };
 }
 
@@ -103,16 +83,10 @@ describe('the fx control target', () => {
   });
 
   test('resolveSynthControlChannel routes fx to the fx channel', () => {
-    const A: SynthParams = { ...INITIAL_SYNTH_PARAMS, preset: 'a' };
-    const B: SynthParams = { ...INITIAL_SYNTH_PARAMS, preset: 'b' };
-    const channels = {
-      synth: { params: A, setParams: () => {} },
-      chord: { params: A, setParams: () => {} },
-      bass: { params: A, setParams: () => {} },
-      pad: { params: A, setParams: () => {} },
-      fx: { params: B, setParams: () => {} },
-    };
-    expect(resolveSynthControlChannel('fx', channels).params).toBe(B);
+    const a = channel('a');
+    const b = channel('b');
+    const channels = { synth: a, chord: a, bass: a, pad: a, fx: b };
+    expect(resolveSynthControlChannel('fx', channels).activeSynth).toBe(b.activeSynth);
   });
 
   /**

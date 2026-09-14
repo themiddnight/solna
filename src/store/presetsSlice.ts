@@ -1,5 +1,5 @@
 import type { StoreApi } from 'zustand';
-import type { SynthPresetItem } from '../data/synthPresets';
+import type { SynthPreset } from '../data/synthPresets';
 import type { AppStore, PresetsSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -11,33 +11,51 @@ type Get = StoreApi<AppStore>['getState'];
  * writes — see migrate.ts for the one-time adoption of those legacy keys).
  *
  * These actions are called directly by the UI layer (the thin store-wrapper
- * helpers in src/audio/presetRegistry.ts and src/components/loop/ChordPresetLibrary.tsx
- * were deleted; components call the slice actions themselves).
+ * helpers that used to live beside the preset registry and in
+ * ChordPresetLibrary.tsx were deleted; components call the slice actions
+ * themselves).
  */
 export function createPresetsSlice(set: Set): PresetsSlice {
   return {
     customSynthPresets: [],
     customChordProgressions: [],
 
-    saveCustomPreset: (name, params, category = 'User', description = '') => {
-      // Extract pure sound params (drop the preset label)
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- preset is intentionally dropped from the spread
-      const { preset, ...pureParams } = params;
-      const newPreset: SynthPresetItem = {
+    /**
+     * Capture the track's CURRENT sound as a custom preset.
+     *
+     * It takes an `ActiveSynth` and stores the engine plus a deep copy of the
+     * complete patch, so a saved preset is the same shape as a factory one and
+     * loads through the same `applySynthPreset`. Three things are deliberately
+     * dropped rather than stored:
+     *
+     * - `sourcePresetId`, because the saved entry IS the new source; keeping
+     *   the old id would make every derived patch claim to be the factory one
+     *   it was tweaked from.
+     * - Arp, because it is performance state and never travelled in a patch.
+     * - The master effect chain, which is not this track's and not a sound.
+     *
+     * `tags: []` is honest, not a stub: the save form collects a name, a
+     * category and a description, and inventing tags from the patch would put
+     * words in the user's mouth that the browser's filter then acts on.
+     */
+    saveCustomPreset: (name, activeSynth, category = 'User', description = '') => {
+      const newPreset: SynthPreset = {
         id: `user-preset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         name: name.trim() || 'Untitled Preset',
         category,
+        engine: activeSynth.engine,
+        patch: structuredClone(activeSynth.patch),
+        tags: [],
         isFactory: false,
         createdAt: Date.now(),
         description: description.trim() || 'Custom user preset',
-        params: { ...pureParams },
       };
       set((state) => ({ customSynthPresets: [newPreset, ...state.customSynthPresets] }));
       return newPreset;
     },
 
     deleteCustomPreset: (id) => {
-      let updated: SynthPresetItem[] = [];
+      let updated: SynthPreset[] = [];
       set((state) => {
         updated = state.customSynthPresets.filter((p) => p.id !== id);
         return { customSynthPresets: updated };

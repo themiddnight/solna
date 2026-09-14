@@ -5,7 +5,19 @@
 // test suite is declared. If @types/bun is ever installed, delete this file.
 declare module 'bun:test' {
   export function describe(name: string, fn: () => void): void;
-  export function test(name: string, fn: () => void): void;
+
+  /**
+   * `test` plus the modifiers the suite uses. `skip` is a real part of the
+   * surface, not a convenience: a test parked against a named follow-up has to
+   * keep type-checking, or a file with one skipped case stops being checked at
+   * all and every other assertion in it goes unverified with nothing failing.
+   */
+  interface TestFn {
+    (name: string, fn: () => void): void;
+    skip(name: string, fn: () => void): void;
+    todo(name: string, fn?: () => void): void;
+  }
+  export const test: TestFn;
   export function beforeAll(fn: () => void | Promise<void>): void;
   export function beforeEach(fn: () => void | Promise<void>): void;
   export function afterEach(fn: () => void | Promise<void>): void;

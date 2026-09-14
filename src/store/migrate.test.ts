@@ -6,6 +6,7 @@ import {
   migrateLegacyPresets,
   removeLegacyKeys,
 } from './migrate';
+import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 
 /**
  * DEV-388 deleted the 15-step `if (version < N)` persist migration chain
@@ -57,12 +58,35 @@ afterEach(() => {
 
 describe('migrateLegacyPresets', () => {
   test('adopts both legacy keys when the target arrays are empty', () => {
-    fakeLocalStorage.setItem(LEGACY_SYNTH_PRESETS_KEY, JSON.stringify([{ id: 's1' }]));
+    const legacyPreset = {
+      id: 's1',
+      name: 'Legacy Patch',
+      category: 'Lead',
+      engine: 'subtractive',
+      patch: SUBTRACTIVE_INIT.patch,
+      tags: [],
+      description: '',
+      isFactory: false,
+    };
+    fakeLocalStorage.setItem(LEGACY_SYNTH_PRESETS_KEY, JSON.stringify([legacyPreset]));
     fakeLocalStorage.setItem(LEGACY_CHORD_PROGRESSIONS_KEY, JSON.stringify([{ id: 'c1' }]));
 
     const result = migrateLegacyPresets({ customSynthPresets: [], customChordProgressions: [] });
-    expect(result.customSynthPresets).toEqual([{ id: 's1' }] as never);
+    expect(result.customSynthPresets).toEqual([legacyPreset] as never);
     expect(result.customChordProgressions).toEqual([{ id: 'c1' }] as never);
+  });
+
+  test('a legacy entry that is not a complete patch is dropped, not adopted', () => {
+    // The pre-cutover shape: a flat `Partial<SynthParams>` under `params`, with
+    // no engine and no patch. Adoption is the one path that reaches the store
+    // AFTER `sanitizePersistedState` has run, so it validates for itself.
+    fakeLocalStorage.setItem(
+      LEGACY_SYNTH_PRESETS_KEY,
+      JSON.stringify([{ id: 's1', name: 'Flat', category: 'Lead', params: { detune: 8 } }]),
+    );
+
+    const result = migrateLegacyPresets({ customSynthPresets: [], customChordProgressions: [] });
+    expect(result.customSynthPresets).toEqual([]);
   });
 
   test('already-persisted presets win over the legacy keys', () => {

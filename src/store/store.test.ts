@@ -4,19 +4,19 @@ import { audioEngine } from '../audio/engine';
 import { createChordsSlice } from './chordsSlice';
 import { createBassSlice } from './bassSlice';
 import { customBassSpans, customChordSpans } from './loop';
-import { presetById } from '../audio/presetRegistry';
-import { DEFAULT_BASS_PRESET_ID } from './initialState';
 import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
 import { deriveChordNotes } from '../utils/musicTheory';
-import type { SynthPresetItem } from '../data/synthPresets';
+import type { SynthPreset } from '../data/synthPresets';
 import type { CustomChordProgressionItem } from '../types';
 import { faderDbToGain } from './levelUnits';
 import {
   INITIAL_CHORDS,
   INITIAL_EFFECTS,
   INITIAL_SEQUENCER_TRACKS,
-  INITIAL_SYNTH_PARAMS,
+  TRACK_ARP_DEFAULTS,
 } from './initialState';
+import { TRACK_SYNTH_DEFAULTS } from '@/store/initialState';
+import { SYNTH_ARP_FIELD, SYNTH_PARAM_FIELD, SYNTH_PARAM_TARGETS } from './sourceBuses';
 import type { AppStore } from './types';
 import { getMeter, MAX_STEPS_PER_BAR, type MeterId } from '../utils/meter';
 
@@ -180,20 +180,22 @@ describe('store defaults', () => {
     expect(s.focusTrack).toBe('synth');
     expect(s.activeTab).toBe('sound');
     expect(s.keyboardMode).toBe('scale-locked');
-    expect(s.synthParams).toEqual(INITIAL_SYNTH_PARAMS);
-    expect(s.chordSynthParams).toEqual(INITIAL_SYNTH_PARAMS);
-    // Pinned by ID, never by index. `bass-deep-sine` was FACTORY_BASS_PRESETS[0]
-    // before the arrays merged; SYNTH_PRESETS[0] is `factory-cosmic-lead`, a
-    // Lead patch. Asserting the same index the slice reads makes this test agree
-    // with the bug instead of catching it — which is what it did, verbatim,
-    // until this line. Revert to an index and this must go red.
-    const defaultBassPreset = presetById(DEFAULT_BASS_PRESET_ID);
-    expect(defaultBassPreset).toBeDefined();
-    expect(defaultBassPreset!.category).toBe('Bass');
-    expect(s.bassSynthParams).toEqual({
-      ...INITIAL_SYNTH_PARAMS,
-      ...defaultBassPreset!.params,
-    });
+    // Every track starts at its OWN factory patch, and at its own Arp
+    // settings beside it. Value equality, not identity: each default is a
+    // fresh copy, so one loop editing a nested array can never reach the
+    // shared table or another loop.
+    for (const target of SYNTH_PARAM_TARGETS) {
+      expect(s[SYNTH_PARAM_FIELD[target]]).toEqual(TRACK_SYNTH_DEFAULTS[target]);
+      expect(s[SYNTH_PARAM_FIELD[target]]).not.toBe(TRACK_SYNTH_DEFAULTS[target]);
+      expect(s[SYNTH_ARP_FIELD[target]]).toEqual(TRACK_ARP_DEFAULTS[target]);
+    }
+    // Arp is OFF everywhere by default: it is an opt-in performance mode, not
+    // a sound, so no preset or factory default may arrive with it armed.
+    for (const target of SYNTH_PARAM_TARGETS) {
+      expect(s[SYNTH_ARP_FIELD[target]].active).toBe(false);
+    }
+    // And no patch carries an Arp field at all — Arp lives beside the sound.
+    expect(s.synthParams.patch).not.toHaveProperty('arpActive');
     expect(s.chords).toEqual(INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)));
     expect(s.sequencerTracks).toEqual(INITIAL_SEQUENCER_TRACKS);
     expect(s.effects).toEqual(INITIAL_EFFECTS);
@@ -756,17 +758,32 @@ describe('legacy preset migration', () => {
   test('hydrate adopts the legacy localStorage presets and removeLegacyKeys cleans them up', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
 
-    const legacySynthPresets: SynthPresetItem[] = [
+    // One adoptable entry (the complete engine-discriminated shape) and one
+    // pre-cutover flat body. Both come in through the legacy key; only the
+    // first survives `sanitizeCustomSynthPresets`, because a flat body is not
+    // an old version of a patch, it is an invalid one.
+    const legacySynthPresets: SynthPreset[] = [
       {
         id: 'user-1',
         name: 'My Lead',
         category: 'Lead',
+        engine: 'subtractive',
+        patch: TRACK_SYNTH_DEFAULTS.synth.patch,
+        tags: [],
         isFactory: false,
         createdAt: 1000,
         description: 'Custom user preset',
-        params: { detune: 12, oscType: 'sawtooth' },
       },
     ];
+    const flatLegacyPreset = {
+      id: 'user-flat',
+      name: 'Pre-Cutover Lead',
+      category: 'Lead',
+      isFactory: false,
+      createdAt: 900,
+      description: 'Custom user preset',
+      params: { detune: 12, oscType: 'sawtooth' },
+    };
     const legacyChordProgressions: CustomChordProgressionItem[] = [
       {
         id: 'chord-prog-1',
@@ -779,7 +796,10 @@ describe('legacy preset migration', () => {
       },
     ];
 
-    fakeLocalStorage.setItem('murva_synth_custom_presets_v1', JSON.stringify(legacySynthPresets));
+    fakeLocalStorage.setItem(
+      'murva_synth_custom_presets_v1',
+      JSON.stringify([...legacySynthPresets, flatLegacyPreset]),
+    );
     fakeLocalStorage.setItem('murva_chord_custom_progressions_v1', JSON.stringify(legacyChordProgressions));
 
     // Start from a fresh persisted project state so this exercises the
@@ -788,6 +808,7 @@ describe('legacy preset migration', () => {
     await useAppStore.persist.rehydrate();
 
     expect(useAppStore.getState().customSynthPresets).toEqual(legacySynthPresets);
+    expect(useAppStore.getState().customSynthPresets.map((p) => p.id)).not.toContain('user-flat');
     expect(useAppStore.getState().customChordProgressions).toEqual(legacyChordProgressions);
 
     // Legacy keys are removed only after the merged state was written back
@@ -802,7 +823,7 @@ describe('legacy preset migration', () => {
     const { useAppStore } = await getStore();
 
     // Write a real preset into the persisted project state first
-    useAppStore.getState().saveCustomPreset('Persisted Pad', INITIAL_SYNTH_PARAMS, 'Pad');
+    useAppStore.getState().saveCustomPreset('Persisted Pad', TRACK_SYNTH_DEFAULTS.pad, 'Pad');
     const savedId = useAppStore.getState().customSynthPresets[0].id;
     expect(savedId).toBeTruthy();
 

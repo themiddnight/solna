@@ -1,4 +1,4 @@
-import type { SynthParams } from '../types';
+import type { ActiveSynth, ArpSettings } from '../types/synth';
 
 export type SynthControlTarget = 'synth' | 'chord' | 'bass' | 'pad' | 'fx';
 
@@ -108,21 +108,32 @@ export const SYNTH_TARGET_STYLES: Record<
   },
 };
 
-export interface SynthParamChannel {
-  params: SynthParams;
-  setParams: (params: SynthParams) => void;
+/**
+ * Everything an editing surface needs for ONE track: its complete patch, its
+ * Arp settings, and the writer for each.
+ *
+ * Two values and two writers, not one of each, because Arp is performance
+ * state and the patch is the sound — a panel that wrote them together would
+ * have a preset load re-arm the arpeggiator, and an Arp toggle would push a
+ * patch change to every sounding voice.
+ */
+export interface SynthChannel {
+  activeSynth: ActiveSynth;
+  arpSettings: ArpSettings;
+  setActiveSynth: (synth: ActiveSynth) => void;
+  setArpSettings: (arp: ArpSettings) => void;
 }
 
 /**
  * One channel per `SynthControlTarget`, keyed by the union itself — so a sixth
  * bus is a compile error here rather than a shape two files agree on by hand.
  */
-export type SynthParamChannels = Record<SynthControlTarget, SynthParamChannel>;
+export type SynthChannels = Record<SynthControlTarget, SynthChannel>;
 
 export function resolveSynthControlChannel(
   target: SynthControlTarget,
-  channels: SynthParamChannels,
-): SynthParamChannel {
+  channels: SynthChannels,
+): SynthChannel {
   // Unknown runtime values (e.g. a persisted target predating this union) fall back to synth
   return channels[target] ?? channels.synth;
 }

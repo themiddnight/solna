@@ -1,40 +1,86 @@
-import type { SynthParams, SequencerTrack, ChordItem, MasterEffects, SongArrangement } from '../types';
-import { applyPreset, presetById } from '../audio/presetRegistry';
+import type { SequencerTrack, ChordItem, MasterEffects, SongArrangement } from '../types';
+import type { ArpSettings } from '@/types/synth';
+import type { SynthControlTarget } from '@/utils/synthControl';
+import type { ActiveSynth } from '@/types/synth';
+import { resolveFactorySynth } from '@/utils/synthPresets';
 import type { PadState, FxState } from './types';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import { DEFAULT_BUS_TRIM_DB, DEFAULT_FADER_DB } from './levelUnits';
 import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
 import { DEFAULT_LEAD_STEP_RESOLUTION, LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 
-// Moved verbatim from src/App.tsx — the app's original useState initial values.
-
-export const INITIAL_SYNTH_PARAMS: SynthParams = {
-  oscType: 'sawtooth',
-  subOscVolume: 0.3,
-  noiseVolume: 0.02,
-  detune: 6,
-  filterType: 'lowpass',
-  filterCutoff: 2400,
-  filterResonance: 3.0,
-  filterEnvAmount: 1200,
-  attack: 0.02,
-  decay: 0.4,
-  sustain: 0.6,
-  release: 0.5,
-  filterAttack: 0.02,
-  filterDecay: 0.4,
-  filterSustain: 0,
-  filterRelease: 0.5,
-  lfoRate: 3.5,
-  lfoDepth: 0.2,
-  lfoTarget: 'cutoff',
-  octave: 0,
-  arpActive: false,
-  arpMode: 'up',
-  arpRate: '16n',
-  arpOctaves: 1,
-  preset: 'Cosmic Lead',
+/**
+ * The factory preset each synth-capable track starts from, by id.
+ *
+ * Keyed by `SynthControlTarget`, so a sixth bus is a compile error here rather
+ * than a track silently inheriting the init patch. Resolved by ID and never by
+ * index: these were `FACTORY_BASS_PRESETS[0]` once, and when the arrays merged
+ * index 0 became a lead patch and both bass defaults silently turned into
+ * leads, with the test agreeing because it asserted the same index expression.
+ * `synthPresets.test.ts` pins that each id resolves and that its category fits
+ * the track.
+ *
+ * The neutral init patch is NOT in this table and is not re-exported from
+ * here: no track starts there, and it belongs to the library rather than to
+ * new-project policy. It is `SUBTRACTIVE_INIT` in `utils/synthPresets.ts`, and
+ * it lives there rather than here because `src/audio/` may not import
+ * `src/store/` and the engine's own fixtures need it.
+ */
+export const TRACK_SYNTH_PRESET_IDS: Record<SynthControlTarget, string> = {
+  synth: 'factory-cosmic-lead',
+  // The DOWN-SWEEP, not the noise riser, and the difference is the attack. A
+  // riser's envelope is 1.8 s of attack: a short FX note on a brand-new
+  // project would stop about 19 dB below the patch's own peak, so the first
+  // thing a new user hears from this track is almost nothing. The down-sweep
+  // has zero attack and speaks on the first sample, which is what the FX
+  // track's pre-cutover default did too. The riser is one card away in the
+  // library for anyone who wants it.
+  fx: 'factory-fx-down-sweep',
+  chord: 'factory-mellow-epiano',
+  bass: 'bass-deep-sine',
+  pad: 'factory-warm-polypad',
 };
+
+/** Explicit, role-appropriate complete patches for all five synth-capable tracks. */
+export const TRACK_SYNTH_DEFAULTS: Record<SynthControlTarget, ActiveSynth<'subtractive'>> = {
+  synth: resolveFactorySynth(TRACK_SYNTH_PRESET_IDS.synth),
+  fx: resolveFactorySynth(TRACK_SYNTH_PRESET_IDS.fx),
+  chord: resolveFactorySynth(TRACK_SYNTH_PRESET_IDS.chord),
+  bass: resolveFactorySynth(TRACK_SYNTH_PRESET_IDS.bass),
+  pad: resolveFactorySynth(TRACK_SYNTH_PRESET_IDS.pad),
+};
+
+/**
+ * Arp is performance state, not patch state (design:
+ * docs/superpowers/specs/2026-09-14-synth-engine-and-presets-design.md,
+ * "Domain model" — "Arp is a separate performance-layer object"), so it lives
+ * beside the patch defaults rather than inside a preset. Every track starts
+ * silent — Arp is an opt-in performance mode, not a default sound.
+ */
+export const TRACK_ARP_DEFAULTS: Record<SynthControlTarget, ArpSettings> = {
+  synth: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+  fx: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+  chord: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+  bass: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+  pad: { active: false, mode: 'up', rate: '16n', octaves: 1 },
+};
+
+/**
+ * A fresh copy of one track's factory patch, and of its Arp settings.
+ *
+ * COPIES, not the shared literals. A patch holds arrays (`oscillators`,
+ * `env2Routes`) and a loop holds five patches, so handing every loop the same
+ * object would let one in-place write — a splice into `env2Routes`, a sort —
+ * reach every loop and every future default at once. The same reason
+ * `defaultPadState` is a factory rather than a constant.
+ */
+export function defaultTrackSynth(target: SynthControlTarget): ActiveSynth {
+  return structuredClone(TRACK_SYNTH_DEFAULTS[target]);
+}
+
+export function defaultTrackArp(target: SynthControlTarget): ArpSettings {
+  return structuredClone(TRACK_ARP_DEFAULTS[target]);
+}
 
 /**
  * One empty bar at the widest storable width. Spread at each use site, never
@@ -376,49 +422,6 @@ export const INITIAL_ARRANGEMENT: SongArrangement = {
 };
 
 /**
- * The Bass-category factory preset a fresh bass module starts from.
- *
- * Resolved by ID, never by index. This was `FACTORY_BASS_PRESETS[0]` in
- * synthSlice.ts and loopSlice.ts until the preset arrays merged, at which point
- * index 0 became `factory-cosmic-lead` and both defaults silently turned into a
- * lead patch — with store.test.ts agreeing, because it asserted against the
- * same index expression. store.test.ts now pins this id and initialState.test.ts
- * pins that it resolves; reverting either to an index turns both red.
- */
-export const DEFAULT_BASS_PRESET_ID = 'bass-deep-sine';
-
-const DEFAULT_BASS_PRESET = presetById(DEFAULT_BASS_PRESET_ID);
-
-/**
- * The shared synth defaults with the bass preset laid over them.
- *
- * Deliberately NOT `applyPreset(...)`: applyPreset also stamps
- * `preset: preset.name`, and today's default carries no `preset` field. Using
- * it here would change a persisted default value, which this refactor forbids.
- *
- * Falls back to the bare defaults if the id ever stops resolving —
- * initialState.test.ts is what makes that fallback loud instead of silent.
- */
-export const INITIAL_BASS_SYNTH_PARAMS: SynthParams = DEFAULT_BASS_PRESET
-  ? { ...INITIAL_SYNTH_PARAMS, ...DEFAULT_BASS_PRESET.params }
-  : INITIAL_SYNTH_PARAMS;
-
-/** The Pad-category factory preset a fresh pad starts from. */
-export const PAD_DEFAULT_PRESET_ID = 'factory-warm-polypad';
-
-const PAD_DEFAULT_PRESET = presetById(PAD_DEFAULT_PRESET_ID);
-
-/**
- * Built the same way `createDefaultLoop` builds `bassSynthParams`: the shared
- * synth defaults with a factory preset laid over them. Falls back to the bare
- * defaults if the id ever stops resolving — initialState.test.ts is what makes
- * that fallback loud instead of silent.
- */
-export const INITIAL_PAD_SYNTH_PARAMS: SynthParams = PAD_DEFAULT_PRESET
-  ? applyPreset(INITIAL_SYNTH_PARAMS, PAD_DEFAULT_PRESET)
-  : INITIAL_SYNTH_PARAMS;
-
-/**
  * Every pad key with its NEW-project value. Both migration chains call this
  * and then override `padMuted` to `true`, because a project saved before the
  * pad existed must reopen sounding the way it sounded when it was closed.
@@ -434,7 +437,8 @@ export const INITIAL_PAD_SYNTH_PARAMS: SynthParams = PAD_DEFAULT_PRESET
  */
 export function defaultPadState(): PadState {
   return {
-    padSynthParams: INITIAL_PAD_SYNTH_PARAMS,
+    padSynthParams: defaultTrackSynth('pad'),
+    padArpSettings: defaultTrackArp('pad'),
     padMode: 'pad',
     padOctave: 3,
     padVoicing: 'triad',
@@ -444,7 +448,6 @@ export function defaultPadState(): PadState {
     padMuted: false,
   };
 }
-
 
 /**
  * The FX track's factory state. A function, not a frozen constant, because
@@ -475,9 +478,10 @@ export function defaultFxState(): FxState {
  * default cannot give a new SESSION and a new LOOP different FX state — the
  * `padVolume` failure `PROJECT_DB_LEVEL_KEYS` records, in advance.
  */
-export function defaultFxBusState(): Pick<FxState, 'fxSynthParams' | 'fxVolume' | 'fxMuted'> {
+export function defaultFxBusState(): Pick<FxState, 'fxSynthParams' | 'fxArpSettings' | 'fxVolume' | 'fxMuted'> {
   return {
-    fxSynthParams: INITIAL_SYNTH_PARAMS,
+    fxSynthParams: defaultTrackSynth('fx'),
+    fxArpSettings: defaultTrackArp('fx'),
     fxVolume: DEFAULT_BUS_TRIM_DB,
     fxMuted: false,
   };

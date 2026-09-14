@@ -8,7 +8,24 @@ import {
   stopEngineSync,
 } from './engineSync';
 import { getMeter } from '../utils/meter';
-import type { MasterEffects, SynthParams } from '../types';
+import type { MasterEffects } from '../types';
+import type { ActiveSynth } from '../types/synth';
+
+/**
+ * `base` with one nested DSP field moved. Cutoff is the field these tests
+ * reach for because it is continuous, is applied to sounding voices, and is
+ * nowhere near the `common` block the topology rules read — so a change here
+ * is unambiguously "an ordinary knob moved".
+ */
+function withCutoff(base: ActiveSynth, cutoffHz: number): ActiveSynth {
+  return {
+    ...base,
+    patch: {
+      ...base.patch,
+      synth: { ...base.patch.synth, filter: { ...base.patch.synth.filter, cutoffHz } },
+    },
+  };
+}
 import { DEFAULT_FADER_DB, faderDbToGain } from './levelUnits';
 
 // bun's parallel workers share module singletons (the store) across test
@@ -162,55 +179,62 @@ describe('engineSync: transport and effects pushes', () => {
 });
 
 describe('engineSync: synth params and drum levels', () => {
-  test('a respread synthParams object does not re-target live voices', () => {
-    const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockImplementation(() => {});
-    startEngineSync();
-    updateSynthParams.mockClear();
-
-    useAppStore.setState((s) => ({ synthParams: { ...s.synthParams } }));
-
-    // updateSynthParams re-shapes every live voice; re-running it for no value
-    // change cancels and re-plans their ramps for nothing.
-    expect(updateSynthParams).not.toHaveBeenCalled();
-    updateSynthParams.mockRestore();
-  });
-
-  test('a one-shot params change reaches the engine in the same tick', () => {
+  test('a one-shot patch change reaches the engine in the same tick', () => {
     // The coalescer is leading-edge on purpose: a preset load or a vibe apply
     // must NOT wait for an animation frame.
-    const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockImplementation(
+    const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockImplementation(
       () => {},
     );
     startEngineSync();
-    updateSynthParams.mockClear();
+    updateSynthPatch.mockClear();
 
-    useAppStore.setState((s) => ({ synthParams: { ...s.synthParams, detune: 11 } }));
+    useAppStore.setState((s) => ({ synthParams: withCutoff(s.synthParams, 1111) }));
 
-    expect(updateSynthParams).toHaveBeenCalledTimes(1);
-    expect((updateSynthParams.mock.calls[0][0] as SynthParams).detune).toBe(11);
-    expect(updateSynthParams.mock.calls[0][1]).toBe('synth');
-    updateSynthParams.mockRestore();
+    expect(updateSynthPatch).toHaveBeenCalledTimes(1);
+    const [previous, next, source] = updateSynthPatch.mock.calls[0] as [ActiveSynth, ActiveSynth, string];
+    expect(next.patch.synth.filter.cutoffHz).toBe(1111);
+    expect(source).toBe('synth');
+    // The engine is told what the patch WAS as well, so it can apply only the
+    // controls that actually moved.
+    expect(previous.patch.synth.filter.cutoffHz).not.toBe(1111);
+    updateSynthPatch.mockRestore();
   });
 
-  test('one action touching three param sources applies all three immediately', () => {
-    const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockImplementation(
+  test('changing only Arp never touches the DSP', () => {
+    // Arp is performance state consumed by the Arp player. A toggle that
+    // reached updateSynthPatch would cancel and re-plan the ramps of every
+    // voice sounding on the bus for a value no voice reads.
+    const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockImplementation(() => {});
+    startEngineSync();
+    updateSynthPatch.mockClear();
+
+    const arp = useAppStore.getState().synthArpSettings;
+    useAppStore.getState().setSynthArpSettings({ ...arp, active: !arp.active });
+
+    expect(updateSynthPatch).not.toHaveBeenCalled();
+    useAppStore.getState().setSynthArpSettings(arp);
+    updateSynthPatch.mockRestore();
+  });
+
+  test('one action touching three patch sources applies all three immediately', () => {
+    const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockImplementation(
       () => {},
     );
     startEngineSync();
-    updateSynthParams.mockClear();
+    updateSynthPatch.mockClear();
 
     useAppStore.setState((s) => ({
-      synthParams: { ...s.synthParams, detune: 3 },
-      chordSynthParams: { ...s.chordSynthParams, detune: 4 },
-      bassSynthParams: { ...s.bassSynthParams, detune: 5 },
+      synthParams: withCutoff(s.synthParams, 301),
+      chordSynthParams: withCutoff(s.chordSynthParams, 302),
+      bassSynthParams: withCutoff(s.bassSynthParams, 303),
     }));
 
-    expect(updateSynthParams.mock.calls.map((c) => c[1]).sort()).toEqual([
+    expect(updateSynthPatch.mock.calls.map((c) => c[2]).sort()).toEqual([
       'bass',
       'chord',
       'synth',
     ]);
-    updateSynthParams.mockRestore();
+    updateSynthPatch.mockRestore();
   });
 
   test('a per-track drum level converts dB to linear gain at the boundary', () => {
@@ -341,19 +365,19 @@ describe('engineSync meter bridge: effects debounce and bus faders', () => {
   // already sounding — and a drone holds for a whole loop pass, so the knob
   // looks dead for seconds at a time while chord and bass reshape instantly.
 
-  test('padSynthParams reaches updateSynthParams, in the snapshot and live', () => {
-    const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockClear();
+  test('padSynthParams reaches updateSynthPatch, in the snapshot and live', () => {
+    const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockClear();
     applyEngineSnapshot();
-    expect(updateSynthParams).toHaveBeenCalledWith(
-      useAppStore.getState().padSynthParams,
-      'pad',
-    );
+    const padCall = updateSynthPatch.mock.calls.find((c) => c[2] === 'pad') as [ActiveSynth, ActiveSynth, string];
+    expect(padCall[1]).toBe(useAppStore.getState().padSynthParams);
 
-    updateSynthParams.mockClear();
+    updateSynthPatch.mockClear();
     startEngineSync();
-    const next = { ...useAppStore.getState().padSynthParams, filterCutoff: 3210 };
+    const next = withCutoff(useAppStore.getState().padSynthParams, 3210);
     useAppStore.getState().setPadSynthParams(next);
-    expect(updateSynthParams).toHaveBeenCalledWith(next, 'pad');
+    const live = updateSynthPatch.mock.calls.at(-1) as [ActiveSynth, ActiveSynth, string];
+    expect(live[1]).toBe(next);
+    expect(live[2]).toBe('pad');
   });
 
   test('the pad bus is bootstrapped and then tracks the store', () => {
@@ -473,38 +497,15 @@ describe('engineSync meter bridge: every bus fader from dB to gain', () => {
   });
 
   // DEV-387 shipped this as four setPresetTrim calls in the snapshot path plus
-  // one per synth-params subscription, and these tests asserted each of those
-  // calls. The trim is derived from `params.preset` inside triggerSynthNoteOn
-  // now, so there is nothing left to push and nothing that can lag the params
-  // it belongs to. What the store side still owes is the NEGATIVE: it must
-  // never write the calibration override, because that override is consulted
-  // BEFORE the derivation and a store-side write to it would pin a source at a
-  // trim its patch does not have — the exact staleness the five pushes existed
-  // to chase. The level itself is asserted where it is audible, in
-  // engine.test.ts ("a voice's peak gain carries its own preset's calibration
-  // trim") and presetPreview.test.ts.
-
-  test('neither the snapshot nor a preset change writes the calibration trim override', () => {
-    const setPresetTrim = spyOn(audioEngine, 'setPresetTrim').mockClear();
-
-    applyEngineSnapshot();
-    expect(setPresetTrim).not.toHaveBeenCalled();
-
-    startEngineSync();
-    const s = useAppStore.getState();
-    useAppStore.getState().setSynthParams({ ...s.synthParams, preset: 'Some Other Patch' });
-    useAppStore.getState().setChordSynthParams({ ...s.chordSynthParams, preset: 'Some Other Patch' });
-    useAppStore.getState().setBassSynthParams({ ...s.bassSynthParams, preset: 'Some Other Patch' });
-    useAppStore.getState().setPadSynthParams({ ...s.padSynthParams, preset: 'Some Other Patch' });
-    expect(setPresetTrim).not.toHaveBeenCalled();
-
-    useAppStore.setState({
-      synthParams: s.synthParams,
-      chordSynthParams: s.chordSynthParams,
-      bassSynthParams: s.bassSynthParams,
-      padSynthParams: s.padSynthParams,
-    });
-  });
+  // one per synth-params subscription, and a test here asserted each of those
+  // calls. A patch carries its own `common.outputGainDb` now, so there is
+  // nothing left to push and nothing that can lag the patch it belongs to.
+  //
+  // A test asserting the store never writes the calibration trim override stood
+  // here after that. It is gone with the override itself: `setPresetTrim` is no
+  // longer on `AudioEngine`, so "the store must not call it" is a sentence the
+  // compiler now enforces, and a spy on a method that does not exist is a test
+  // that can only ever pass.
 
 });
 

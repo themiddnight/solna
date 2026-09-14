@@ -37,7 +37,7 @@ export interface FrameCoalescer {
  * knob drag (many values on one key) collapses to one apply per frame.
  *
  * Used by store/engineSync.ts, where each application is an
- * updateSynthParams / updateEffects call that re-targets every live voice with
+ * updateSynthPatch / updateEffects call that re-targets every live voice with
  * ~15-20 timeline-locking AudioParam operations apiece.
  */
 export function createFrameCoalescer(

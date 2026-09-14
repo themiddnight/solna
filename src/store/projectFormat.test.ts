@@ -129,22 +129,24 @@ describe('the custom pattern spans are project content', () => {
 });
 
 describe('provenance is preserved verbatim', () => {
-  test('unknown preset names, pattern ids and kit names round-trip byte-identical', () => {
+  test('unknown preset ids, pattern ids and kit names round-trip byte-identical', () => {
     const ghost: Loop = {
       ...createDefaultLoop(),
       id: 'g',
-      synthParams: { ...createDefaultLoop().synthParams, preset: 'Ghost Lead' },
-      chordSynthParams: { ...createDefaultLoop().chordSynthParams, preset: 'Ghost Pad' },
-      bassSynthParams: { ...createDefaultLoop().bassSynthParams, preset: 'Ghost Bass' },
+      // `sourcePresetId` is display provenance only — never a DSP input and
+      // never resolved — so an id no library has must still round-trip.
+      synthParams: { ...createDefaultLoop().synthParams, sourcePresetId: 'ghost-lead' },
+      chordSynthParams: { ...createDefaultLoop().chordSynthParams, sourcePresetId: 'ghost-pad' },
+      bassSynthParams: { ...createDefaultLoop().bassSynthParams, sourcePresetId: 'ghost-bass' },
       chordRhythmId: 'rhythm-that-does-not-exist',
       bassPatternId: 'bass-that-does-not-exist',
       soundKit: 'Kit From The Future',
     };
     const content = buildProjectContent({ ...liveState, loops: [ghost] } as never);
     const patch = applyProjectContent(content);
-    expect(patch.synthParams.preset).toBe('Ghost Lead');
-    expect(patch.chordSynthParams.preset).toBe('Ghost Pad');
-    expect(patch.bassSynthParams.preset).toBe('Ghost Bass');
+    expect(patch.synthParams.sourcePresetId).toBe('ghost-lead');
+    expect(patch.chordSynthParams.sourcePresetId).toBe('ghost-pad');
+    expect(patch.bassSynthParams.sourcePresetId).toBe('ghost-bass');
     expect(patch.chordRhythmId).toBe('rhythm-that-does-not-exist');
     expect(patch.bassPatternId).toBe('bass-that-does-not-exist');
     expect(patch.soundKit).toBe('Kit From The Future');

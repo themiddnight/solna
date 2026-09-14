@@ -25,6 +25,7 @@ export function createFxSlice(
     // spelled in both places drifts into a session and a loop disagreeing.
     ...defaultFxBusState(),
     setFxSynthParams: (fxSynthParams) => set({ fxSynthParams }),
+    setFxArpSettings: (fxArpSettings) => set({ fxArpSettings }),
     setFxVolume: (fxVolume) => set({ fxVolume }),
     toggleFxMuted: () => set((state) => ({ fxMuted: !state.fxMuted })),
   } as FxSlice;

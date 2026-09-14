@@ -8,7 +8,7 @@ import { CHORD_RHYTHMS } from '../data/chordRhythms';
 import { BASS_PATTERNS } from '../data/bassPatterns';
 import { DRUM_KITS } from '../data/drumKits';
 import { DRUM_GRIDS } from '../data/drumGrids';
-import { presetById } from '../audio/presetRegistry';
+import { presetById } from '@/utils/synthPresets';
 import { useAppStore } from './store';
 import { createDefaultLoop } from './loopSlice';
 import { loopLabel, loopStatePatch } from './loop';
@@ -135,11 +135,11 @@ describe('Instant Vibes Mode', () => {
     expect(state.soundKit).toBe(lofiVibe.soundKit);
     expect(state.chordRhythmId).toBe(lofiVibe.chordRhythmId);
     expect(state.chordFeel).toBe(lofiVibe.chordFeel);
-    expect(state.chordSynthParams.preset).toBe(presetById(lofiVibe.chordPresetId)!.name);
+    expect(state.chordSynthParams.sourcePresetId).toBe(presetById(lofiVibe.chordPresetId)!.id);
     expect(state.bassPatternId).toBe(lofiVibe.bassPatternId);
     expect(state.bassFeel).toBe(lofiVibe.bassFeel);
-    expect(state.bassSynthParams.preset).toBe(presetById(lofiVibe.bassPresetId)!.name);
-    expect(state.synthParams.preset).toBe(presetById(lofiVibe.synthPresetId)!.name);
+    expect(state.bassSynthParams.sourcePresetId).toBe(presetById(lofiVibe.bassPresetId)!.id);
+    expect(state.synthParams.sourcePresetId).toBe(presetById(lofiVibe.synthPresetId)!.id);
   });
 
   test('applyVibeToStore actually rewrites the sequencer track steps to match the vibe drum pattern', () => {
@@ -200,7 +200,7 @@ describe('Instant Vibes Mode', () => {
     }
   });
 
-  test('applies synthwave vibe with tight feel and no arpeggiator', () => {
+  test('applies synthwave vibe with tight feel and its own arp setting', () => {
     const synthwave = RESOLVED_VIBES.find((v) => v.id === 'synthwave-80s')!;
     applyVibeToStore(synthwave);
 
@@ -208,9 +208,12 @@ describe('Instant Vibes Mode', () => {
     expect(state.bpm).toBe(118);
     expect(state.chordFeel < 0.2).toBe(true); // tight feel
     expect(state.bassFeel < 0.2).toBe(true); // tight feel
-    // No vibe turns the arpeggiator on: it is a performance setting the user
-    // drives from the UI, and INITIAL_SYNTH_PARAMS.arpActive is already false.
-    expect(state.synthParams.arpActive).toBe(false);
+    // A vibe CAN reach the arpeggiator now — `VibeSpec.arp` is one of the
+    // three axes it sets — so this asserts the table, not an absence.
+    // Synthwave's lead is a held supersaw and states `active: false`; the
+    // "exactly one vibe arms an arpeggiator" test below owns the rule itself.
+    expect(state.synthArpSettings).toEqual(synthwave.arp.synth);
+    expect(synthwave.arp.synth.active).toBe(false);
   });
 });
 
@@ -251,7 +254,20 @@ describe('vibe preset id resolution', () => {
     ]);
   });
 
-  test('no vibe carries arp data of any kind', () => {
+  test('every vibe states Arp for all five tracks, as literal data', () => {
+    // A vibe is a complete setting of the loop, and Arp is part of what the
+    // user hears. Leaving a track out would make "apply Lo-Fi Chill" mean
+    // something different depending on what the previous vibe had armed.
+    for (const vibe of RESOLVED_VIBES) {
+      expect(Object.keys(vibe.arp).sort(), vibe.id).toEqual(['bass', 'chord', 'fx', 'pad', 'synth']);
+      for (const [target, arp] of Object.entries(vibe.arp)) {
+        expect(`${vibe.id}.${target}=${typeof arp.active}/${typeof arp.mode}/${typeof arp.rate}/${typeof arp.octaves}`)
+          .toBe(`${vibe.id}.${target}=boolean/string/string/number`);
+      }
+    }
+  });
+
+  test('no vibe carries the legacy flat arp fields', () => {
     const ARP_FIELDS = ['synthArp', 'chordArp', 'bassArp', 'arpActive', 'arpMode', 'arpRate', 'arpOctaves'];
     for (const vibe of RESOLVED_VIBES) {
       for (const field of ARP_FIELDS) {
@@ -261,13 +277,43 @@ describe('vibe preset id resolution', () => {
     }
   });
 
-  test('applying any vibe leaves all three voices with the arpeggiator off', () => {
+  test('applying a vibe installs exactly the Arp settings it declares', () => {
     for (const vibe of RESOLVED_VIBES) {
       applyVibeToStore(vibe);
       const s = useAppStore.getState();
-      expect(`${vibe.id}.synth=${s.synthParams.arpActive}`).toBe(`${vibe.id}.synth=false`);
-      expect(`${vibe.id}.chord=${s.chordSynthParams.arpActive}`).toBe(`${vibe.id}.chord=false`);
-      expect(`${vibe.id}.bass=${s.bassSynthParams.arpActive}`).toBe(`${vibe.id}.bass=false`);
+      expect(s.synthArpSettings, vibe.id).toEqual(vibe.arp.synth);
+      expect(s.chordArpSettings, vibe.id).toEqual(vibe.arp.chord);
+      expect(s.bassArpSettings, vibe.id).toEqual(vibe.arp.bass);
+      expect(s.fxArpSettings, vibe.id).toEqual(vibe.arp.fx);
+      expect(s.padArpSettings, vibe.id).toEqual(vibe.arp.pad);
+    }
+    useAppStore.getState().hardStopAll();
+  });
+
+  test('exactly one vibe arms an arpeggiator, and it is Cyber EDM’s lead', () => {
+    // Pinned so that arming one is always a decision somebody made, never a
+    // default that spread. A vibe that switches the arpeggiator on behind the
+    // user's back is the failure the previous "always off" rule guarded
+    // against; stating it per vibe keeps the guard and makes the axis real.
+    const armed = RESOLVED_VIBES.flatMap((vibe) =>
+      Object.entries(vibe.arp)
+        .filter(([, arp]) => arp.active)
+        .map(([target]) => `${vibe.id}.${target}`),
+    );
+    expect(armed).toEqual(['cyber-edm.synth']);
+  });
+
+  test('applying a vibe installs each named preset’s own patch on its own bus', () => {
+    for (const vibe of RESOLVED_VIBES) {
+      applyVibeToStore(vibe);
+      const s = useAppStore.getState();
+      expect(s.synthParams.patch, vibe.id).toEqual(presetById(vibe.synthPresetId)!.patch);
+      expect(s.chordSynthParams.patch, vibe.id).toEqual(presetById(vibe.chordPresetId)!.patch);
+      expect(s.bassSynthParams.patch, vibe.id).toEqual(presetById(vibe.bassPresetId)!.patch);
+      expect(s.fxSynthParams.patch, vibe.id).toEqual(presetById(vibe.fxPresetId)!.patch);
+      if (vibe.pad) {
+        expect(s.padSynthParams.patch, vibe.id).toEqual(presetById(vibe.pad.presetId)!.patch);
+      }
     }
     useAppStore.getState().hardStopAll();
   });
@@ -276,9 +322,9 @@ describe('vibe preset id resolution', () => {
     const synthwave = RESOLVED_VIBES.find((v) => v.id === 'synthwave-80s')!;
     applyVibeToStore(synthwave);
     const state = useAppStore.getState();
-    expect(state.synthParams.preset).toBe(presetById(synthwave.synthPresetId)!.name);
-    expect(state.chordSynthParams.preset).toBe(presetById(synthwave.chordPresetId)!.name);
-    expect(state.bassSynthParams.preset).toBe(presetById(synthwave.bassPresetId)!.name);
+    expect(state.synthParams.sourcePresetId).toBe(presetById(synthwave.synthPresetId)!.id);
+    expect(state.chordSynthParams.sourcePresetId).toBe(presetById(synthwave.chordPresetId)!.id);
+    expect(state.bassSynthParams.sourcePresetId).toBe(presetById(synthwave.bassPresetId)!.id);
     useAppStore.getState().hardStopAll();
   });
 });
@@ -746,7 +792,7 @@ describe('applying a vibe writes its pad', () => {
     expect(s.padVoicing).toBe(vibe.pad!.voicing);
     expect(s.padDroneDegree).toBe(vibe.pad!.droneDegree);
     expect(s.padDroneIntervals).toEqual(vibe.pad!.droneIntervals);
-    expect(s.padSynthParams.preset).toBe(presetById(vibe.pad!.presetId)!.name);
+    expect(s.padSynthParams.sourcePresetId).toBe(presetById(vibe.pad!.presetId)!.id);
   });
 
   // Muting is reversible and resetting is not: Boom Bap -> Synthwave -> Boom
@@ -913,7 +959,7 @@ describe('applyVibeToStore — the FX track', () => {
     const vibe = resolveVibe(VIBES.find((v) => v.id === 'synthwave-80s')!);
     applyVibeToStore(vibe);
     expect(useAppStore.getState().fxSynthParams).toEqual(
-      resolveVibeSynthParams(vibe.fxPresetId),
+      resolveVibeSynthParams(vibe.fxPresetId, 'fx'),
     );
   });
 

@@ -1,7 +1,11 @@
-import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
+import { INITIAL_EFFECTS, TRACK_ARP_DEFAULTS, TRACK_SYNTH_DEFAULTS } from './initialState';
+import { sanitizeActiveSynth, sanitizeArpSettings, validateActiveSynth } from './sanitizeSynth';
+import { SYNTH_CATEGORIES, SYNTH_TAGS } from '@/data/synthPresets';
+import type { SynthPreset, SynthPresetCategory, SynthTag } from '@/data/synthPresets';
+import type { ActiveSynth, ArpSettings } from '@/types/synth';
+import type { SynthControlTarget } from '@/utils/synthControl';
 import { EFFECT_LIMITS, clampEffectValue, type EffectNumericKey } from '../audio/effectLimits';
 import type {
-  SynthParams,
   ChordItem,
   SequencerTrack,
   FilterType,
@@ -33,11 +37,7 @@ import { asFaderDb } from './levelUnits';
 // Wrong-typed values survive JSON.parse and would flow straight into engine
 // setters (`bpm: "fast"` -> NaN clock, a string volume -> setTargetAtTime(NaN)),
 // so both readers go through this one module — see projectFile.ts.
-const OSC_TYPES = new Set(['sawtooth', 'square', 'sine', 'triangle']);
 export const FILTER_TYPES = new Set(['lowpass', 'highpass', 'bandpass']);
-const LFO_TARGETS = new Set(['cutoff', 'pitch', 'volume']);
-const ARP_MODES = new Set(['up', 'down', 'updown', 'random']);
-const ARP_RATES = new Set(['4n', '8n', '16n', '32n']);
 
 /**
  * A stored step-resolution id, or the fallback. Its own rule rather than an
@@ -52,36 +52,93 @@ export function asLeadStepResolution(
 }
 
 /**
- * Synth params are written straight onto AudioParams, so a wrong-typed
- * persisted value (a string cutoff, a null attack) would land as
- * setValueAtTime(NaN) and silence the voice. Each field keeps its stored value
- * only when the type matches the factory default — and, for the enum fields,
- * only when the engine and arpeggiator actually understand it.
+ * One track's patch, validated against the complete `ActiveSynth` shape.
+ *
+ * Delegates to `sanitizeActiveSynth` (store/sanitizeSynth.ts) and does NOT
+ * re-state the engine's enums here: a patch has four of them and a second copy
+ * of any one would accept a value the voice cannot build the day the two
+ * disagree. This wrapper exists only to name the per-target FALLBACK, which
+ * `sanitizeSynth.ts` has no business knowing.
+ *
+ * Whole-value, never a partial merge: an incompatible legacy flat
+ * `SynthParams` body has no valid engine tag, so it falls back to the target's
+ * complete default rather than being widened field by field. That is the
+ * recorded decision behind "there are no migration chains" — a flat body is
+ * not an old version of this shape, it is an invalid one.
  */
-export function sanitizeSynthParams(value: unknown): SynthParams {
-  const fallback = INITIAL_SYNTH_PARAMS;
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return fallback;
-  const raw = value as Record<string, unknown>;
-  const out = { ...fallback } as Record<string, unknown>;
+export function sanitizeTrackSynth(value: unknown, target: SynthControlTarget): ActiveSynth {
+  return sanitizeActiveSynth(value, TRACK_SYNTH_DEFAULTS[target]).value;
+}
 
-  for (const [key, def] of Object.entries(fallback)) {
-    const stored = raw[key];
-    if (typeof def === 'number') {
-      out[key] = typeof stored === 'number' && Number.isFinite(stored) ? stored : def;
-    } else if (typeof def === 'boolean') {
-      out[key] = typeof stored === 'boolean' ? stored : def;
-    } else if (typeof def === 'string') {
-      out[key] = typeof stored === 'string' ? stored : def;
-    }
+const PRESET_CATEGORIES = new Set<string>(SYNTH_CATEGORIES.map((c) => c.id));
+const KNOWN_TAGS = new Set<string>(SYNTH_TAGS);
+
+/**
+ * The user's saved presets, read back out of `localStorage`.
+ *
+ * DROPS rather than repairs. Every other sanitizer here substitutes a default,
+ * because the track it guards must end up holding something playable; a preset
+ * library is a list, and a list can be one item shorter. Substituting would
+ * leave an entry sitting in the browser under the name the user gave it while
+ * sounding like the init patch — the one outcome that reads as the app having
+ * silently edited their work.
+ *
+ * The legacy flat `Partial<SynthParams>` entries saved before the engine
+ * cutover carry no `engine` and no `patch`, so they fail `validateActiveSynth`
+ * and are dropped here. That is the recorded "no migration chains" decision
+ * applied to this key: a flat body is not an old version of a patch, it is an
+ * invalid one, and under the no-real-users precondition guessing at units is
+ * worse than losing a browser-local patch.
+ *
+ * Unknown tags are filtered out of a surviving entry rather than invalidating
+ * it: a tag is a filter label, and dropping a whole sound over one is a trade
+ * nobody would choose.
+ */
+export function sanitizeCustomSynthPresets(value: unknown): SynthPreset[] {
+  if (!Array.isArray(value)) return [];
+  const kept: SynthPreset[] = [];
+  for (const raw of value) {
+    if (typeof raw !== 'object' || raw === null) continue;
+    const entry = raw as Record<string, unknown>;
+    if (typeof entry.id !== 'string' || entry.id === '') continue;
+    if (typeof entry.name !== 'string' || entry.name === '') continue;
+    // `sourcePresetId` is supplied here rather than read: a preset entry has
+    // no provenance field of its own — it IS the source — and the shared
+    // validator rejects an `undefined` one.
+    const { value: activeSynth } = validateActiveSynth({
+      engine: entry.engine,
+      patch: entry.patch,
+      sourcePresetId: null,
+    });
+    if (!activeSynth) continue;
+    const category = PRESET_CATEGORIES.has(entry.category as string)
+      ? (entry.category as SynthPresetCategory)
+      : 'User';
+    kept.push({
+      id: entry.id,
+      name: entry.name,
+      category,
+      engine: activeSynth.engine,
+      patch: activeSynth.patch,
+      tags: Array.isArray(entry.tags)
+        ? (entry.tags.filter((t) => typeof t === 'string' && KNOWN_TAGS.has(t)) as SynthTag[])
+        : [],
+      description: typeof entry.description === 'string' ? entry.description : '',
+      // A factory entry cannot be stored here: the library is code, and an
+      // entry claiming `isFactory` would sort into a category group it is not
+      // in and offer no delete button.
+      isFactory: false,
+      ...(typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
+        ? { createdAt: entry.createdAt }
+        : {}),
+    });
   }
+  return kept;
+}
 
-  if (!OSC_TYPES.has(out.oscType as string)) out.oscType = fallback.oscType;
-  if (!FILTER_TYPES.has(out.filterType as string)) out.filterType = fallback.filterType;
-  if (!LFO_TARGETS.has(out.lfoTarget as string)) out.lfoTarget = fallback.lfoTarget;
-  if (!ARP_MODES.has(out.arpMode as string)) out.arpMode = fallback.arpMode;
-  if (!ARP_RATES.has(out.arpRate as string)) out.arpRate = fallback.arpRate;
-
-  return out as unknown as SynthParams;
+/** One track's Arp settings, whole-value, falling back to that track's default. */
+export function sanitizeTrackArp(value: unknown, target: SynthControlTarget): ArpSettings {
+  return sanitizeArpSettings(value, TRACK_ARP_DEFAULTS[target]);
 }
 
 // The MasterEffects payload: plain-object check (a partial effects object
@@ -523,9 +580,12 @@ export function sanitizeLoops(value: unknown, meterId: MeterId = DEFAULT_METER_I
       repeatCount: clampFinite(asPositiveInteger(r.repeatCount, fallback.repeatCount ?? 1), 1, 32, 1),
       scaleRoot: asRootNote(r.scaleRoot, fallback.scaleRoot),
       scaleType: asScaleType(r.scaleType, fallback.scaleType),
-      synthParams: sanitizeSynthParams(r.synthParams),
-      chordSynthParams: sanitizeSynthParams(r.chordSynthParams),
-      bassSynthParams: sanitizeSynthParams(r.bassSynthParams),
+      synthParams: sanitizeTrackSynth(r.synthParams, 'synth'),
+      chordSynthParams: sanitizeTrackSynth(r.chordSynthParams, 'chord'),
+      bassSynthParams: sanitizeTrackSynth(r.bassSynthParams, 'bass'),
+      synthArpSettings: sanitizeTrackArp(r.synthArpSettings, 'synth'),
+      chordArpSettings: sanitizeTrackArp(r.chordArpSettings, 'chord'),
+      bassArpSettings: sanitizeTrackArp(r.bassArpSettings, 'bass'),
       chords: asCheckedArray<ChordItem>(r.chords, isChordItem, fallback.chords),
       chordRhythmId: asChordRhythmId(r.chordRhythmId, fallback.chordRhythmId),
       chordRhythmMode: asPatternMode(r.chordRhythmMode, fallback.chordRhythmMode),
@@ -541,8 +601,10 @@ export function sanitizeLoops(value: unknown, meterId: MeterId = DEFAULT_METER_I
       customBassHoldSteps: asCheckedArray<number>(r.customBassHoldSteps, isPositiveInteger, fallback.customBassHoldSteps),
       bassFeel: clampFinite(r.bassFeel, 0, 1, fallback.bassFeel),
       bassOctave: clampFinite(r.bassOctave, 0, 8, fallback.bassOctave),
-      padSynthParams: sanitizeSynthParams(r.padSynthParams),
-      fxSynthParams: sanitizeSynthParams(r.fxSynthParams),
+      padSynthParams: sanitizeTrackSynth(r.padSynthParams, 'pad'),
+      padArpSettings: sanitizeTrackArp(r.padArpSettings, 'pad'),
+      fxSynthParams: sanitizeTrackSynth(r.fxSynthParams, 'fx'),
+      fxArpSettings: sanitizeTrackArp(r.fxArpSettings, 'fx'),
       padMode: asPadMode(r.padMode, fallback.padMode),
       padOctave: clampFinite(r.padOctave, 0, 8, fallback.padOctave),
       padVoicing: asPadVoicing(r.padVoicing, fallback.padVoicing),

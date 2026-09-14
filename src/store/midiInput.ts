@@ -1,5 +1,7 @@
 import { Note } from 'tonal';
 import { audioEngine } from '../audio/engine';
+import type { VoiceId } from '../audio/synth/voiceId';
+import type { ActiveSynth, SubtractiveParams } from '../types/synth';
 import { synthPlaybackNoteOff, synthPlaybackNoteOn } from '../audio/playback/synthPlayback';
 import { useAppStore } from './store';
 // A MIDI CC is a fader position (0..127 normalised to 0..1), not a dB ramp:
@@ -24,30 +26,44 @@ export function computeDisconnectedInputIds(
   return previousIds.filter((id) => !current.has(id));
 }
 
+/** A note a device is still holding, and the voice it started. */
+export interface HeldMidiNote {
+  note: string;
+  voiceId: VoiceId | null;
+}
+
 // Tracks which notes are currently on, per input device id, so a device
 // that disappears mid-note (unplugged, put to sleep, a USB hub dropping
 // out) can have its stuck notes released even though its note-off will
 // never arrive.
+//
+// Keyed by note name and VALUED by the voice that note started: the flush
+// below has to release those exact voices, and the MIDI bus is the lead
+// bus, shared with the on-screen keyboard, the arp and the melody grid.
 export function createHeldNoteTracker() {
-  const notesByInput = new Map<string, Set<string>>();
+  const notesByInput = new Map<string, Map<string, VoiceId | null>>();
   return {
-    noteOn(inputId: string, note: string): void {
-      let set = notesByInput.get(inputId);
-      if (!set) {
-        set = new Set();
-        notesByInput.set(inputId, set);
+    noteOn(inputId: string, note: string, voiceId: VoiceId | null): void {
+      let notes = notesByInput.get(inputId);
+      if (!notes) {
+        notes = new Map();
+        notesByInput.set(inputId, notes);
       }
-      set.add(note);
+      notes.set(note, voiceId);
     },
-    noteOff(inputId: string, note: string): void {
-      notesByInput.get(inputId)?.delete(note);
+    /** The voice this note started, and forgets it. `null` if it was never tracked. */
+    noteOff(inputId: string, note: string): VoiceId | null {
+      const notes = notesByInput.get(inputId);
+      const voiceId = notes?.get(note) ?? null;
+      notes?.delete(note);
+      return voiceId;
     },
-    release(inputId: string): string[] {
-      const set = notesByInput.get(inputId);
-      if (!set) return [];
-      const notes = Array.from(set);
+    release(inputId: string): HeldMidiNote[] {
+      const notes = notesByInput.get(inputId);
+      if (!notes) return [];
+      const held = Array.from(notes, ([note, voiceId]) => ({ note, voiceId }));
       notesByInput.delete(inputId);
-      return notes;
+      return held;
     },
   };
 }
@@ -63,10 +79,32 @@ let knownInputIds: string[] = [];
 // any CC can arrive. Pushing `setMasterVolume(faderDbToGain(db))` here as
 // well duplicated the one dB->linear boundary — two call sites that must
 // agree about the taper forever, for a value the subscription was already
-// going to deliver on the same tick. The synth-param branches below still
-// push directly: `updateSynthParams` re-shapes voices that are ALREADY
+// going to deliver on the same tick. The synth-patch branches below still
+// push directly: `updateSynthPatch` re-shapes voices that are ALREADY
 // sounding, and engineSync routes that call through a frame coalescer, so a
 // CC sweep must not wait a frame to be heard on a held note.
+
+/**
+ * Writes one CC-mapped control into the Lead patch and pushes the result to
+ * the store AND straight to the engine.
+ *
+ * `edit` returns the new `SubtractiveParams`; the common block and the
+ * provenance are carried through untouched, so a CC sweep can never widen
+ * into a field it does not map. The previous patch goes to the engine beside
+ * the next one, because `updateSynthPatch` diffs them to decide which
+ * continuous controls actually moved.
+ */
+function writeLeadSynth(edit: (synth: SubtractiveParams) => SubtractiveParams): void {
+  const s = useAppStore.getState();
+  const previous = s.synthParams;
+  const next: ActiveSynth<'subtractive'> = {
+    ...previous,
+    patch: { ...previous.patch, synth: edit(previous.patch.synth) },
+  };
+  s.setSynthParams(next);
+  audioEngine.updateSynthPatch(previous, next, 'synth');
+}
+
 function applyCcMapping(ccNumber: number, ccValue: number): void {
   const s = useAppStore.getState();
   const mapping = s.midiMappings.find(
@@ -84,30 +122,37 @@ function applyCcMapping(ccNumber: number, ccValue: number): void {
     s.setMasterVolume(sliderPosTodB(normalized));
   } else if (mapping.targetKey === 'filterCutoff') {
     const hz = 20 * Math.pow(1000, normalized);
-    const updated = { ...s.synthParams, filterCutoff: Math.round(hz) };
-    s.setSynthParams(updated);
-    audioEngine.updateSynthParams(updated, 'synth');
+    writeLeadSynth((synth) => ({ ...synth, filter: { ...synth.filter, cutoffHz: Math.round(hz) } }));
   } else if (mapping.targetKey === 'filterResonance') {
-    const res = normalized * 20;
-    const updated = { ...s.synthParams, filterResonance: Number(res.toFixed(1)) };
-    s.setSynthParams(updated);
-    audioEngine.updateSynthParams(updated, 'synth');
+    // The whole CC range onto the whole knob range. Resonance is a unitless
+    // 0..1 synth control now, not the `Q` the biquad adapter maps it onto, so
+    // the old `normalized * 20` would have pinned every CC above 1/20 of
+    // travel to maximum.
+    writeLeadSynth((synth) => ({
+      ...synth,
+      filter: { ...synth.filter, resonance: Number(normalized.toFixed(3)) },
+    }));
   } else if (mapping.targetKey === 'attack') {
     const atk = 0.001 + normalized * 1.999;
-    const updated = { ...s.synthParams, attack: Number(atk.toFixed(3)) };
-    s.setSynthParams(updated);
-    audioEngine.updateSynthParams(updated, 'synth');
+    writeLeadSynth((synth) => ({
+      ...synth,
+      ampEnvelope: { ...synth.ampEnvelope, attack: Number(atk.toFixed(3)) },
+    }));
   } else if (mapping.targetKey === 'release') {
     const rel = 0.01 + normalized * 4.99;
-    const updated = { ...s.synthParams, release: Number(rel.toFixed(3)) };
-    s.setSynthParams(updated);
-    audioEngine.updateSynthParams(updated, 'synth');
+    writeLeadSynth((synth) => ({
+      ...synth,
+      ampEnvelope: { ...synth.ampEnvelope, release: Number(rel.toFixed(3)) },
+    }));
   } else if (mapping.targetKey === 'oscType') {
     const types = ['sine', 'triangle', 'sawtooth', 'square'] as const;
     const idx = Math.min(types.length - 1, Math.floor(normalized * types.length));
-    const updated = { ...s.synthParams, oscType: types[idx] };
-    s.setSynthParams(updated);
-    audioEngine.updateSynthParams(updated, 'synth');
+    // Slot 1 only. A CC that re-voiced both oscillators would collapse the
+    // two-oscillator patch into one sound on the first knob move.
+    writeLeadSynth((synth) => ({
+      ...synth,
+      oscillators: [{ ...synth.oscillators[0], waveform: types[idx] }, synth.oscillators[1]],
+    }));
   }
 }
 
@@ -163,15 +208,17 @@ export function startMidiInputBridge(): void {
           if (noteMapping) {
             const noteName = Note.fromMidi(data1);
             if (!noteName) return;
-            const params = s.synthParams;
+            const synth = s.synthParams;
             const velocity = data2;
             const inputId = sourceInput?.id ?? '';
             if (command === 0x90 && velocity > 0) {
-              heldNotes.noteOn(inputId, noteName);
-              synthPlaybackNoteOn(noteName, params, velocity / 127, undefined, 'synth', 1);
+              heldNotes.noteOn(
+                inputId,
+                noteName,
+                synthPlaybackNoteOn(noteName, synth, velocity / 127, undefined, 'synth'),
+              );
             } else {
-              heldNotes.noteOff(inputId, noteName);
-              synthPlaybackNoteOff(noteName, 0.3, undefined, 'synth');
+              synthPlaybackNoteOff(heldNotes.noteOff(inputId, noteName), noteName, 0.3);
             }
           }
         } else if (command === 0xB0) {
@@ -180,8 +227,8 @@ export function startMidiInputBridge(): void {
       };
 
       const flushInputNotes = (inputId: string): void => {
-        heldNotes.release(inputId).forEach((note) => {
-          synthPlaybackNoteOff(note, 0.05, undefined, 'synth');
+        heldNotes.release(inputId).forEach(({ note, voiceId }) => {
+          synthPlaybackNoteOff(voiceId, note, 0.05);
         });
       };
 

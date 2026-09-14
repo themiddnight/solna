@@ -5,10 +5,10 @@ import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import {
   defaultFxState,
   defaultPadState,
-  INITIAL_BASS_SYNTH_PARAMS,
+  defaultTrackArp,
+  defaultTrackSynth,
   INITIAL_CHORDS,
   INITIAL_SEQUENCER_TRACKS,
-  INITIAL_SYNTH_PARAMS,
 } from './initialState';
 import { cloneLoop, fallbackActiveLoopId, newLoopId, nextDuplicateLabel, nextUntitledName } from './loop';
 import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
@@ -32,9 +32,12 @@ export function createDefaultLoop(): Loop {
     repeatCount: 1,
     scaleRoot: 'A',
     scaleType: 'Natural Minor',
-    synthParams: INITIAL_SYNTH_PARAMS,
-    chordSynthParams: INITIAL_SYNTH_PARAMS,
-    bassSynthParams: INITIAL_BASS_SYNTH_PARAMS,
+    synthParams: defaultTrackSynth('synth'),
+    chordSynthParams: defaultTrackSynth('chord'),
+    bassSynthParams: defaultTrackSynth('bass'),
+    synthArpSettings: defaultTrackArp('synth'),
+    chordArpSettings: defaultTrackArp('chord'),
+    bassArpSettings: defaultTrackArp('bass'),
     chords: INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)),
     chordRhythmId: 'sustained',
     chordRhythmMode: 'preset',

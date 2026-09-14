@@ -32,7 +32,7 @@ import { createCoalescedStorage } from '../utils/coalescedStorage';
 import { loadGapi, loadGis } from '../utils/googleScriptLoader';
 import type { GapiRoot } from '../utils/googleScriptLoader';
 import type { AppStore, PersistedState } from './types';
-import { asBoolean } from './sanitize';
+import { asBoolean, sanitizeCustomSynthPresets } from './sanitize';
 
 export const PERSIST_KEY = 'musibox_project_state_v1';
 
@@ -209,9 +209,13 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (typeof sanitized.selectedVibeId !== 'string' && sanitized.selectedVibeId !== null) {
     delete sanitized.selectedVibeId;
   }
-  for (const key of ['customSynthPresets', 'customChordProgressions']) {
-    if (!Array.isArray(sanitized[key])) delete sanitized[key];
-  }
+  if (!Array.isArray(sanitized.customChordProgressions)) delete sanitized.customChordProgressions;
+  // Custom presets get a real read, not just an array check: they are the one
+  // persisted key holding a complete engine patch, and a legacy flat entry
+  // saved before the engine cutover would otherwise reach the voice manager.
+  // Invalid entries are DROPPED — see sanitizeCustomSynthPresets for why they
+  // are not repaired into the init patch under the user's own name.
+  sanitized.customSynthPresets = sanitizeCustomSynthPresets(sanitized.customSynthPresets);
   // Only the TYPE is checked here. Whether the id names a loop can only be
   // decided once the loops themselves have loaded from IndexedDB, which happens
   // after hydration — `reconcileActiveLoop` in projectSlice.ts owns that.

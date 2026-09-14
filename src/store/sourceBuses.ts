@@ -66,7 +66,7 @@ export function sourceBus(id: SourceBusId): SourceBus {
  * the new bus's patch, and the arp went on reading Lead's.
  *
  * `satisfies` rather than a type annotation, so the values stay literal — a
- * caller indexing the store with one gets `SynthParams`, not the union of
+ * caller indexing the store with one gets `ActiveSynth`, not the union of
  * every `AppStore` field's type.
  */
 export const SYNTH_PARAM_FIELD = {
@@ -75,6 +75,50 @@ export const SYNTH_PARAM_FIELD = {
   bass: 'bassSynthParams',
   pad: 'padSynthParams',
   fx: 'fxSynthParams',
+} as const satisfies Record<SynthControlTarget, keyof AppStore>;
+
+/**
+ * The store field holding each bus's Arp settings, keyed by the same control
+ * target.
+ *
+ * A SECOND table rather than a `${target}ArpSettings` convention derived from
+ * the one above, for the reason `SOURCE_BUSES` spells its irregular names out:
+ * a convention has to be right for every row forever, and the moment one row
+ * needs an exception the convention becomes a special case nobody can see from
+ * the call site. Two tables side by side are checkable by eye.
+ *
+ * Arp is NOT in `SYNTH_PARAM_FIELD`'s patches, deliberately: it is performance
+ * state, not patch state, so `engineSync` pushes a patch change to the DSP and
+ * an Arp change reaches only the Arp player.
+ */
+export const SYNTH_ARP_FIELD = {
+  synth: 'synthArpSettings',
+  chord: 'chordArpSettings',
+  bass: 'bassArpSettings',
+  pad: 'padArpSettings',
+  fx: 'fxArpSettings',
+} as const satisfies Record<SynthControlTarget, keyof AppStore>;
+
+/**
+ * The store ACTION that writes each bus's patch, keyed by the same control
+ * target — the write half of `SYNTH_PARAM_FIELD`.
+ *
+ * A third table beside the two above rather than a convention, for the reason
+ * spelled out there: the names are irregular (`setSynthParams`, not
+ * `setLeadSynthParams`) and two tables side by side are checkable by eye. It
+ * It exists for the ONE module that writes a patch to a target chosen at
+ * runtime: `store/synthPresetInstall.ts`, which every preset surface goes
+ * through — the Sound-tab browser follows the focused track, and the three
+ * module panels hand it their own fixed target. A panel writing its own bus
+ * for any other reason (a knob, a toggle) names its setter directly and must
+ * not reach through here.
+ */
+export const SYNTH_SETTER_FIELD = {
+  synth: 'setSynthParams',
+  chord: 'setChordSynthParams',
+  bass: 'setBassSynthParams',
+  pad: 'setPadSynthParams',
+  fx: 'setFxSynthParams',
 } as const satisfies Record<SynthControlTarget, keyof AppStore>;
 
 /** The control targets, in canonical order, derived from the map above. */

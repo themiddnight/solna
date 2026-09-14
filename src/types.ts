@@ -1,5 +1,25 @@
 
 /**
+ * The engine-discriminated synth domain lives in `src/types/synth.ts`; the
+ * legacy flat `SynthParams` that used to sit in this file is gone. The names
+ * below are re-exported here so `@/types` call sites reach the synth domain
+ * without also importing `@/types/synth` directly.
+ */
+import type { ActiveSynth } from './types/synth';
+
+export type {
+  ActiveSynth,
+  ArpSettings,
+  CommonVoiceParams,
+  EnginePatch,
+  EnginePatchMap,
+  LfoParams,
+  ModRoute,
+  SubtractiveParams,
+  SynthEngineId,
+} from './types/synth';
+
+/**
  * The four tabs, two per layer. The loop layer's split is a rule, not a
  * grouping of what happened to exist: changes the SOUND but not the notes →
  * `sound`; changes the NOTES or the rhythm → `pattern`. Oscillator, filter,
@@ -112,6 +132,14 @@ export interface LeadNote {
   velocity?: number;
 }
 
+/**
+ * UNBUILT. The Arrange feature's region payload: `SongArrangement` is reachable
+ * only from this file and from `INITIAL_ARRANGEMENT`, which no code reads. The
+ * fields below are therefore a sketch, not a contract — `synthParams` carries
+ * an `ActiveSynth` because that is the only patch shape there is, not because
+ * anything writes or reads one here. Deleting the shape is a product decision
+ * about the Arrange tab, which is why it is marked rather than removed.
+ */
 export interface ArrangementRegionData {
   // Chords data
   chords?: ChordItem[];
@@ -128,7 +156,7 @@ export interface ArrangementRegionData {
   bassOctave?: number;
   bassPresetId?: string;
   // Lead / Synth data
-  synthParams?: SynthParams;
+  synthParams?: ActiveSynth;
   leadNotes?: LeadNote[];
 }
 
@@ -160,46 +188,16 @@ export type InputPanelMode = 'keyboard' | 'drums';
 
 /**
  * Arpeggiator order and rate. Declared here rather than in audio/arpeggiator.ts
- * and audio/arpSchedule.ts because SynthParams needs them and this file imports
- * only the leaf module `utils/meter` and must stay acyclic. Both audio modules
- * re-export them, so their existing import paths keep working — the point is
- * that there is one definition instead of an inline copy here and a named
- * copy there that could drift.
+ * and audio/arpSchedule.ts because both of those modules need them and this
+ * file imports only the leaf module `utils/meter`, so it must stay acyclic.
+ * Both audio modules re-export them, so their existing import paths keep
+ * working — the point is that there is one definition instead of an inline
+ * copy here and a named copy there that could drift. `ArpSettings`
+ * (`src/types/synth.ts`) deliberately inlines its own literal unions instead,
+ * so that module stays independent of this one.
  */
 export type ArpMode = 'up' | 'down' | 'updown' | 'random';
 export type ArpRate = '4n' | '8n' | '16n' | '32n';
-
-export interface SynthParams {
-  oscType: 'sawtooth' | 'square' | 'sine' | 'triangle';
-  subOscVolume: number;
-  noiseVolume: number;
-  detune: number;
-  filterType: FilterType;
-  filterCutoff: number;
-  filterResonance: number;
-  filterEnvAmount: number;
-  attack: number;
-  decay: number;
-  sustain: number;
-  release: number;
-  filterAttack: number;
-  filterDecay: number;
-  filterSustain: number;
-  filterRelease: number;
-  lfoRate: number;
-  lfoDepth: number;
-  lfoTarget: 'cutoff' | 'pitch' | 'volume';
-  octave: number;
-  // Required, not optional: INITIAL_SYNTH_PARAMS always sets all four and
-  // sanitizeSynthParams always restores them, so the `?? 'up'` / `?? '16n'` /
-  // `?? 1` / `?? false` that used to sit at 13 read sites were dead defaults
-  // hiding the real contract.
-  arpActive: boolean;
-  arpMode: ArpMode;
-  arpRate: ArpRate;
-  arpOctaves: number;
-  preset: string;
-}
 
 export interface DrumPad {
   id: string;

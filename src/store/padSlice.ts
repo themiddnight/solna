@@ -18,6 +18,7 @@ export function createPadSlice(set: Set): PadSlice {
     ...defaultPadState(),
 
     setPadSynthParams: (padSynthParams) => set({ padSynthParams }),
+    setPadArpSettings: (padArpSettings) => set({ padArpSettings }),
     setPadMode: (padMode) => set({ padMode }),
     setPadOctave: (padOctave) => set({ padOctave }),
     setPadVoicing: (padVoicing) => set({ padVoicing }),

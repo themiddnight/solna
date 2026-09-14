@@ -1,42 +1,81 @@
 import { describe, expect, test } from 'bun:test';
 import { resolveVibeSynthParams } from './vibes';
-import { INITIAL_SYNTH_PARAMS } from './initialState';
-import { presetById } from '../audio/presetRegistry';
+import { TRACK_SYNTH_DEFAULTS } from '@/store/initialState';
+import { presetById } from '@/utils/synthPresets';
 
+/**
+ * A vibe voices a track by naming a library preset, and now that every entry
+ * is a complete patch that is exactly what it installs — the preset's own
+ * sound, on the bus the vibe asked for.
+ *
+ * The interim version of this resolver installed the TARGET's factory patch
+ * and merely recorded the requested id as provenance, because the flat library
+ * could not produce an `ActiveSynth` at all. The tests below are what make
+ * that shortcut impossible to reintroduce: an id now has to change the sound.
+ */
 describe('resolveVibeSynthParams', () => {
-  test('takes its sound from the resolved preset, not from a literal override', () => {
-    const params = resolveVibeSynthParams('factory-mellow-epiano');
+  test('installs the named preset’s own complete patch', () => {
     const preset = presetById('factory-mellow-epiano')!;
-    for (const [key, value] of Object.entries(preset.params)) {
-      expect(`${key}=${JSON.stringify(params[key as keyof typeof params])}`)
-        .toBe(`${key}=${JSON.stringify(value)}`);
-    }
+    const resolved = resolveVibeSynthParams('factory-mellow-epiano', 'chord');
+    expect(resolved.patch).toEqual(preset.patch);
+    expect(resolved.engine).toBe(preset.engine);
   });
 
-  test('stamps the resolved preset name into the display field', () => {
-    expect(resolveVibeSynthParams('factory-mellow-epiano').preset).toBe('Mellow E-Piano');
-    expect(resolveVibeSynthParams('bass-deep-sine').preset).toBe('Deep Sine Sub');
+  test('the same id gives the same sound on every bus', () => {
+    // The interim resolver answered per TARGET, so a bass id on the pad bus
+    // produced the pad's default patch. A preset is a sound, not a role.
+    const bass = resolveVibeSynthParams('bass-deep-sine', 'bass');
+    const pad = resolveVibeSynthParams('bass-deep-sine', 'pad');
+    expect(bass.patch).toEqual(pad.patch);
+    expect(bass.patch).toEqual(presetById('bass-deep-sine')!.patch);
   });
 
-  test('falls back to INITIAL_SYNTH_PARAMS for fields the preset omits', () => {
-    // FACTORY_PRESETS entries set 20 timbre fields and omit the four arp
-    // fields; the base supplies those. (Some presets also set `preset`, but
-    // resolveVibeSynthParams always overwrites it with the resolved name.)
-    const params = resolveVibeSynthParams('factory-hyper-saw-lead');
-    expect(params.arpOctaves).toBe(INITIAL_SYNTH_PARAMS.arpOctaves);
-    expect(params.arpMode).toBe(INITIAL_SYNTH_PARAMS.arpMode);
-    expect(params.arpRate).toBe(INITIAL_SYNTH_PARAMS.arpRate);
+  test('two different ids give two different sounds', () => {
+    const lead = resolveVibeSynthParams('factory-hyper-saw-lead', 'synth');
+    const keys = resolveVibeSynthParams('factory-glocken-bell', 'synth');
+    expect(lead.patch).not.toEqual(keys.patch);
   });
 
-  test('never turns the arpeggiator on — that is the user’s call, not the vibe’s', () => {
+  test('records the preset it resolved as display provenance', () => {
+    expect(resolveVibeSynthParams('factory-mellow-epiano', 'chord').sourcePresetId)
+      .toBe('factory-mellow-epiano');
+    expect(resolveVibeSynthParams('bass-deep-sine', 'bass').sourcePresetId).toBe('bass-deep-sine');
+  });
+
+  test('returns an engine-tagged patch the voice manager can actually build', () => {
+    const resolved = resolveVibeSynthParams('factory-hyper-saw-lead', 'synth');
+    expect(resolved.engine).toBe('subtractive');
+    expect(resolved.patch.synth.oscillators).toHaveLength(2);
+  });
+
+  test('hands back a copy, so applying a vibe can never edit the library', () => {
+    const a = resolveVibeSynthParams('bass-deep-sine', 'bass');
+    a.patch.synth.filter.cutoffHz = 9_999;
+    expect(presetById('bass-deep-sine')!.patch.synth.filter.cutoffHz).not.toBe(9_999);
+  });
+
+  test('carries no Arp at all — a vibe states that separately', () => {
+    // Not "arp is off" but "arp is unreachable from here": Arp lives beside
+    // the patch, so a resolver that only produces a patch cannot arm it.
     for (const id of ['factory-dream-keys', 'factory-glocken-bell', 'factory-pluck', 'bass-warm-tri']) {
-      expect(`${id}:${resolveVibeSynthParams(id).arpActive}`).toBe(`${id}:false`);
+      const resolved = resolveVibeSynthParams(id, 'synth') as unknown as Record<string, unknown>;
+      expect(`${id}:${'arpActive' in resolved}`).toBe(`${id}:false`);
+      expect(`${id}:${'active' in (resolved.patch as Record<string, unknown>)}`).toBe(`${id}:false`);
     }
   });
 
-  test('throws on an id no preset carries, so an authoring typo is never silent', () => {
-    expect(() => resolveVibeSynthParams('factory-does-not-exist')).toThrow(
-      'Vibe references unknown synth preset id: factory-does-not-exist',
-    );
+  test('an id no preset carries falls back to the TARGET’s default, and does not throw', () => {
+    // The design doc's rule: "Missing factory references fail data tests;
+    // runtime resolution falls back to the relevant track default." The data
+    // test in vibes.test.ts is what makes an authoring typo loud — at runtime
+    // a vibe that half-applies because one id was wrong is worse than a vibe
+    // that plays one track on its factory sound.
+    const bass = resolveVibeSynthParams('factory-does-not-exist', 'bass');
+    expect(bass.patch).toEqual(TRACK_SYNTH_DEFAULTS.bass.patch);
+    const pad = resolveVibeSynthParams('factory-does-not-exist', 'pad');
+    expect(pad.patch).toEqual(TRACK_SYNTH_DEFAULTS.pad.patch);
+    // Provenance names the sound that is actually playing, never the id that
+    // failed to resolve.
+    expect(bass.sourcePresetId).toBe(TRACK_SYNTH_DEFAULTS.bass.sourcePresetId);
   });
 });

@@ -117,9 +117,13 @@ describe('loop live-write sync (now folded into set)', () => {
 
   test('nested edits (synthParams) sync by reference change', () => {
     const id = useAppStore.getState().activeLoopId;
-    useAppStore.getState().setSynthParams({ ...useAppStore.getState().synthParams, detune: 42 });
+    const base = useAppStore.getState().synthParams;
+    useAppStore.getState().setSynthParams({
+      ...base,
+      patch: { ...base.patch, common: { ...base.patch.common, glideSeconds: 0.42 } },
+    });
     const loop = useAppStore.getState().loops.find((r) => r.id === id)!;
-    expect(loop.synthParams.detune).toBe(42);
+    expect(loop.synthParams.patch.common.glideSeconds).toBe(0.42);
   });
 
   test('one edit produces ONE store notification, not two', () => {

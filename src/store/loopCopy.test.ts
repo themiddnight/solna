@@ -50,7 +50,9 @@ describe('buildLoopCopyPatch', () => {
 
   test('one group contributes exactly its own keys', () => {
     const patch = buildLoopCopyPatch(sourceLoop(), targetLoop(), ['lead-sound']);
-    expect(Object.keys(patch)).toEqual(['synthParams']);
+    // A sound group carries the track's Arp settings with its patch: copying a
+    // track's sound and leaving its arpeggiator behind copies half a sound.
+    expect(Object.keys(patch)).toEqual(['synthParams', 'synthArpSettings']);
   });
 
   test('chord-progression copies only the progression; chord-pattern only the rhythm', () => {
@@ -127,7 +129,9 @@ describe('buildLoopCopyPatch', () => {
       'lead-sound',
       'not-a-real-group' as LoopCopyGroupId,
     ]);
-    expect(Object.keys(patch)).toEqual(['synthParams']);
+    // A sound group carries the track's Arp settings with its patch: copying a
+    // track's sound and leaving its arpeggiator behind copies half a sound.
+    expect(Object.keys(patch)).toEqual(['synthParams', 'synthArpSettings']);
   });
 });
 

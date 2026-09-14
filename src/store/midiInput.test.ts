@@ -8,6 +8,13 @@ import {
 import { computeDisconnectedInputIds, createHeldNoteTracker, startMidiInputBridge } from './midiInput';
 import { useAppStore } from './store';
 import { sliderPosTodB } from '../utils/gainUnits';
+import type { VoiceId } from '../audio/synth/voiceId';
+import type { ActiveSynth } from '../types/synth';
+
+/** The NEXT patch of one `updateSynthPatch` call — argument 1, not argument 0.
+ *  Argument 0 is what the engine is told the patch WAS; the pair is what the
+ *  engine diffs to decide which continuous controls actually moved. */
+const nextPatch = (call: unknown[] | undefined): ActiveSynth => (call as unknown[])[1] as ActiveSynth;
 
 describe('computeDisconnectedInputIds', () => {
   test('returns ids present before but missing now', () => {
@@ -24,23 +31,31 @@ describe('computeDisconnectedInputIds', () => {
 });
 
 describe('createHeldNoteTracker', () => {
-  test('release returns every note currently on for that input and clears it', () => {
+  test('release returns every note currently on for that input, WITH its voice, and clears it', () => {
     const tracker = createHeldNoteTracker();
-    tracker.noteOn('dev-1', 'C4');
-    tracker.noteOn('dev-1', 'E4');
-    tracker.noteOn('dev-2', 'G3');
+    tracker.noteOn('dev-1', 'C4', 'v1' as VoiceId);
+    tracker.noteOn('dev-1', 'E4', 'v2' as VoiceId);
+    tracker.noteOn('dev-2', 'G3', 'v3' as VoiceId);
 
-    expect(tracker.release('dev-1').sort()).toEqual(['C4', 'E4']);
+    // The voice, not just the note: a flush has to release the exact
+    // instances this device started, and the lead bus carries the on-screen
+    // keyboard, the arp and the melody grid as well.
+    expect(tracker.release('dev-1')).toEqual([
+      { note: 'C4', voiceId: 'v1' as VoiceId },
+      { note: 'E4', voiceId: 'v2' as VoiceId },
+    ]);
     expect(tracker.release('dev-1')).toEqual([]);
-    expect(tracker.release('dev-2')).toEqual(['G3']);
+    expect(tracker.release('dev-2')).toEqual([{ note: 'G3', voiceId: 'v3' as VoiceId }]);
   });
 
-  test('noteOff removes a note before it would be released', () => {
+  test('noteOff hands back the voice it was tracking and forgets the note', () => {
     const tracker = createHeldNoteTracker();
-    tracker.noteOn('dev-1', 'C4');
-    tracker.noteOff('dev-1', 'C4');
+    tracker.noteOn('dev-1', 'C4', 'v1' as VoiceId);
 
+    expect(tracker.noteOff('dev-1', 'C4')).toBe('v1' as VoiceId);
     expect(tracker.release('dev-1')).toEqual([]);
+    // A note the tracker never saw has no voice to release.
+    expect(tracker.noteOff('dev-1', 'C4')).toBeNull();
   });
 
   test('release on an unknown input id is a no-op', () => {
@@ -115,55 +130,80 @@ function disconnectByRemoval(input: FakeMidiInput): void {
   access.onstatechange?.({ port: null });
 }
 
+/**
+ * Spies the note pair, handing each note-on an id derived from its note name.
+ *
+ * The engine has no context in these tests, so a real `triggerSynthNoteOn`
+ * returns `null` and every release would be skipped — the assertions below
+ * would pass vacuously against an empty call list. Mocking a returned id is
+ * what keeps them about the flush rather than about the missing context.
+ */
+function spyNotePair() {
+  const on = spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation(
+    (note: string) => `voice-${note}` as VoiceId,
+  );
+  const off = spyOn(audioEngine, 'triggerSynthNoteOff').mockClear();
+  return {
+    on,
+    off,
+    /** The NOTES the releases addressed, recovered from the ids they were given. */
+    releasedNotes: () => off.mock.calls.map((call) => String(call[0]).replace('voice-', '')),
+    restore: () => {
+      on.mockRestore();
+      off.mockRestore();
+    },
+  };
+}
+
 describe('startMidiInputBridge releases held notes on disconnect (state flip — Chromium shape)', () => {
-  test('a note held at disconnect is released', () => {
-    const triggerSynthNoteOff = spyOn(audioEngine, 'triggerSynthNoteOff').mockClear();
+  test('a note held at disconnect is released, by the voice it started', () => {
+    const spies = spyNotePair();
     const input = connect('dev-a');
     noteOn(input, 60); // C4
 
     disconnectByStateFlip(input);
 
-    expect(triggerSynthNoteOff.mock.calls.map((call) => call[0])).toEqual(['C4']);
-    triggerSynthNoteOff.mockRestore();
+    expect(spies.off.mock.calls.map((call) => call[0])).toEqual(['voice-C4' as VoiceId]);
+    spies.restore();
   });
 
   test('several held notes are all released', () => {
-    const triggerSynthNoteOff = spyOn(audioEngine, 'triggerSynthNoteOff').mockClear();
+    const spies = spyNotePair();
     const input = connect('dev-b');
     noteOn(input, 60); // C4
     noteOn(input, 64); // E4
 
     disconnectByStateFlip(input);
 
-    expect(triggerSynthNoteOff.mock.calls.map((call) => call[0]).sort()).toEqual(['C4', 'E4']);
-    triggerSynthNoteOff.mockRestore();
+    expect(spies.releasedNotes().sort()).toEqual(['C4', 'E4']);
+    spies.restore();
   });
 
   test('a disconnect with nothing held fires no release', () => {
-    const triggerSynthNoteOff = spyOn(audioEngine, 'triggerSynthNoteOff').mockClear();
+    const spies = spyNotePair();
     const input = connect('dev-c');
 
     disconnectByStateFlip(input);
 
-    expect(triggerSynthNoteOff).not.toHaveBeenCalled();
-    triggerSynthNoteOff.mockRestore();
+    expect(spies.off).not.toHaveBeenCalled();
+    spies.restore();
   });
 });
 
 describe('startMidiInputBridge releases held notes on disconnect (map removal fallback)', () => {
   test('a note held is released when the port is removed from the map instead of flipped', () => {
-    const triggerSynthNoteOff = spyOn(audioEngine, 'triggerSynthNoteOff').mockClear();
+    const spies = spyNotePair();
     const input = connect('dev-d');
     noteOn(input, 67); // G4
 
     disconnectByRemoval(input);
 
-    expect(triggerSynthNoteOff.mock.calls.map((call) => call[0])).toEqual(['G4']);
-    triggerSynthNoteOff.mockRestore();
+    expect(spies.releasedNotes()).toEqual(['G4']);
+    spies.restore();
   });
 
   test('a device caught by both the state flip and the map removal is flushed once, not twice', () => {
-    const triggerSynthNoteOff = spyOn(audioEngine, 'triggerSynthNoteOff').mockClear();
+    const spies = spyNotePair();
     const input = connect('dev-e');
     noteOn(input, 60); // C4
 
@@ -174,8 +214,8 @@ describe('startMidiInputBridge releases held notes on disconnect (map removal fa
     access.inputs.delete(input.id);
     access.onstatechange?.({ port: input });
 
-    expect(triggerSynthNoteOff.mock.calls.map((call) => call[0])).toEqual(['C4']);
-    triggerSynthNoteOff.mockRestore();
+    expect(spies.releasedNotes()).toEqual(['C4']);
+    spies.restore();
   });
 });
 
@@ -255,10 +295,10 @@ describe('MIDI CC drives masterVolume on the fader taper, not a linear dB ramp',
 // filterResonance, attack, release, oscType) push to audioEngine directly, in
 // addition to writing the store. That is not leftover duplication: engineSync
 // (not started in this file — see its own subscription tests) routes
-// updateSynthParams through a per-key frame coalescer
+// updateSynthPatch through a per-key frame coalescer
 // (src/utils/frameCoalescer.ts) that applies only the FIRST value for a key
 // inside an animation-frame window and defers any repeat to the next frame.
-// updateSynthParams re-shapes voices that are ALREADY sounding, so a CC sweep
+// updateSynthPatch re-shapes voices that are ALREADY sounding, so a CC sweep
 // on a held note must hear every intermediate value, not one per frame — the
 // direct call here is what delivers that, and removing it would make a sweep
 // step instead of glide. This test pins that every one of the five branches
@@ -267,37 +307,43 @@ describe('MIDI CC drives masterVolume on the fader taper, not a linear dB ramp',
 // own timing, which frameCoalescer.test.ts and engineSync.test.ts already own.
 describe('MIDI CC pushes the five synth-param branches straight to the engine', () => {
   test('filterCutoff (CC 74) computes Hz from the CC value and pushes it directly', () => {
-    const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockClear();
+    const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockClear();
     const input = connect('dev-cc-filter-cutoff');
 
     input.onmidimessage?.({ data: [0xb0, 74, 64], target: input });
 
     const expectedHz = Math.round(20 * Math.pow(1000, 64 / 127));
-    expect(useAppStore.getState().synthParams.filterCutoff).toBe(expectedHz);
-    const lastCall = updateSynthParams.mock.calls.at(-1);
-    expect(lastCall?.[1]).toBe('synth');
-    expect((lastCall?.[0] as { filterCutoff: number }).filterCutoff).toBe(expectedHz);
+    expect(useAppStore.getState().synthParams.patch.synth.filter.cutoffHz).toBe(expectedHz);
+    const lastCall = updateSynthPatch.mock.calls.at(-1);
+    expect(lastCall?.[2]).toBe('synth');
+    // Argument 1 is the patch the engine is told it WAS, argument 2 what it
+    // now IS — `updateSynthPatch` diffs them to decide what actually moved.
+    expect(nextPatch(lastCall).patch.synth.filter.cutoffHz).toBe(expectedHz);
 
-    updateSynthParams.mockRestore();
+    updateSynthPatch.mockRestore();
   });
 
   test('filterResonance (CC 71), attack (CC 73), release (CC 72) and oscType (CC 16) all push directly too', () => {
-    const updateSynthParams = spyOn(audioEngine, 'updateSynthParams').mockClear();
+    const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockClear();
     const input = connect('dev-cc-other-synth-targets');
+    const slot2Before = useAppStore.getState().synthParams.patch.synth.oscillators[1].waveform;
 
     input.onmidimessage?.({ data: [0xb0, 71, 64], target: input });
     input.onmidimessage?.({ data: [0xb0, 73, 64], target: input });
     input.onmidimessage?.({ data: [0xb0, 72, 64], target: input });
     input.onmidimessage?.({ data: [0xb0, 16, 64], target: input });
 
-    const s = useAppStore.getState().synthParams;
-    const calls = updateSynthParams.mock.calls.filter(([, source]) => source === 'synth');
+    const patch = useAppStore.getState().synthParams.patch.synth;
+    const calls = updateSynthPatch.mock.calls.filter(([, , source]) => source === 'synth');
     expect(calls.length).toBe(4);
-    expect((calls.at(-4)?.[0] as { filterResonance: number }).filterResonance).toBe(s.filterResonance);
-    expect((calls.at(-3)?.[0] as { attack: number }).attack).toBe(s.attack);
-    expect((calls.at(-2)?.[0] as { release: number }).release).toBe(s.release);
-    expect((calls.at(-1)?.[0] as { oscType: string }).oscType).toBe(s.oscType);
+    expect(nextPatch(calls.at(-4)).patch.synth.filter.resonance).toBe(patch.filter.resonance);
+    expect(nextPatch(calls.at(-3)).patch.synth.ampEnvelope.attack).toBe(patch.ampEnvelope.attack);
+    expect(nextPatch(calls.at(-2)).patch.synth.ampEnvelope.release).toBe(patch.ampEnvelope.release);
+    expect(nextPatch(calls.at(-1)).patch.synth.oscillators[0].waveform).toBe(patch.oscillators[0].waveform);
+    // Slot 2 is untouched: a CC that re-voiced both oscillators would
+    // collapse a two-oscillator patch into one sound on the first knob move.
+    expect(patch.oscillators[1].waveform).toBe(slot2Before);
 
-    updateSynthParams.mockRestore();
+    updateSynthPatch.mockRestore();
   });
 });

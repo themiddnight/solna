@@ -44,9 +44,17 @@ describe('the nine FX loop keys', () => {
     ]);
   });
 
-  test('fxSynthParams sits with the other per-loop patches', () => {
+  test('fxSynthParams sits with the other per-loop patches, with its Arp beside it', () => {
     const keys = [...LOOP_FLAT_KEYS] as string[];
-    expect(keys.indexOf('fxSynthParams')).toBe(keys.indexOf('padSynthParams') + 1);
+    // Each patch is immediately followed by its own Arp settings: Arp is
+    // performance state that travels WITH a track's sound, not inside it, and
+    // reading them as a pair is what makes that visible in the key list.
+    expect(keys.slice(keys.indexOf('padSynthParams'), keys.indexOf('padSynthParams') + 4)).toEqual([
+      'padSynthParams',
+      'padArpSettings',
+      'fxSynthParams',
+      'fxArpSettings',
+    ]);
   });
 
   test('the fx bus pair sits with the other bus pairs', () => {

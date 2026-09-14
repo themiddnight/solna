@@ -1,34 +1,46 @@
 import { describe, expect, test } from 'bun:test';
-import { presetById } from '../audio/presetRegistry';
+import { presetById } from '@/utils/synthPresets';
 import { PAD_INTERVALS } from '../types';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import { DRUM_TYPES } from '../data/drumKits';
-import {
-  defaultPadState,
-  DEFAULT_BASS_PRESET_ID,
-  INITIAL_BASS_SYNTH_PARAMS,
-  INITIAL_PAD_SYNTH_PARAMS,
-  INITIAL_SEQUENCER_TRACKS,
-  INITIAL_SYNTH_PARAMS,
-  PAD_DEFAULT_PRESET_ID,
-} from './initialState';
+import { defaultPadState, defaultTrackSynth, INITIAL_SEQUENCER_TRACKS, TRACK_SYNTH_PRESET_IDS } from './initialState';
+import { SUBTRACTIVE_INIT, SUBTRACTIVE_INIT_PRESET_ID } from '@/utils/synthPresets';
+
+describe('track patch defaults', () => {
+  // Each default is resolved by id at module load. If an id is ever renamed in
+  // synthPresets.ts the resolver THROWS rather than falling back — there is no
+  // second literal patch body left to fall back to. These tests are what keep
+  // that throw unreachable.
+  test('every track default resolves to a preset and installs its patch whole', () => {
+    for (const [target, id] of Object.entries(TRACK_SYNTH_PRESET_IDS)) {
+      const preset = presetById(id);
+      expect(preset, `${target} -> ${id}`).toBeDefined();
+      const resolved = defaultTrackSynth(target as keyof typeof TRACK_SYNTH_PRESET_IDS);
+      expect(resolved.patch, target).toEqual(preset!.patch);
+      expect(resolved.sourcePresetId, target).toBe(id);
+    }
+  });
+
+  test('a track default is a fresh copy, never the library entry', () => {
+    // A patch holds arrays (`oscillators`, `env2Routes`) and every loop holds
+    // five patches: a shared object would let one in-place write reach the
+    // factory table and every future default at once.
+    const a = defaultTrackSynth('pad');
+    const b = defaultTrackSynth('pad');
+    expect(a).toEqual(b);
+    expect(a).not.toBe(b);
+    expect(a.patch.synth.oscillators).not.toBe(b.patch.synth.oscillators);
+    a.patch.synth.oscillators[0].levelDb = -42;
+    expect(defaultTrackSynth('pad').patch.synth.oscillators[0].levelDb).not.toBe(-42);
+  });
+
+  test('the init patch is the library entry it names', () => {
+    expect(SUBTRACTIVE_INIT.sourcePresetId).toBe(SUBTRACTIVE_INIT_PRESET_ID);
+    expect(SUBTRACTIVE_INIT.patch).toEqual(presetById(SUBTRACTIVE_INIT_PRESET_ID)!.patch);
+  });
+});
 
 describe('pad defaults', () => {
-  // The default is resolved by id at module load. If the id is ever renamed in
-  // synthPresets.ts, INITIAL_PAD_SYNTH_PARAMS would silently fall back to the
-  // bare INITIAL_SYNTH_PARAMS and every new project would ship a raw saw as its
-  // "pad". This test is the only thing that makes that rename loud.
-  test('the default pad preset id resolves to a Pad-category preset', () => {
-    const preset = presetById(PAD_DEFAULT_PRESET_ID);
-    expect(preset?.category).toBe('Pad');
-  });
-
-  test('INITIAL_PAD_SYNTH_PARAMS is the resolved preset, not the bare synth default', () => {
-    const preset = presetById(PAD_DEFAULT_PRESET_ID);
-    expect(INITIAL_PAD_SYNTH_PARAMS.oscType).toBe(preset!.params.oscType!);
-    expect(INITIAL_PAD_SYNTH_PARAMS.filterCutoff).toBe(preset!.params.filterCutoff!);
-  });
-
   // padMuted:false is the NEW-project default. The migrations deliberately
   // override it to true. See the migration task; collapsing the two is the
   // failure this pair of expectations exists to catch.
@@ -45,25 +57,6 @@ describe('pad defaults', () => {
     for (const i of defaultPadState().padDroneIntervals) {
       expect(PAD_INTERVALS).toContain(i);
     }
-  });
-});
-
-describe('bass defaults', () => {
-  test('the default bass preset id resolves to a Bass-category preset', () => {
-    const preset = presetById(DEFAULT_BASS_PRESET_ID);
-    expect(preset?.category).toBe('Bass');
-  });
-
-  test('INITIAL_BASS_SYNTH_PARAMS is the resolved preset, not the bare synth default', () => {
-    const preset = presetById(DEFAULT_BASS_PRESET_ID);
-    expect(INITIAL_BASS_SYNTH_PARAMS.oscType).toBe(preset!.params.oscType!);
-    expect(INITIAL_BASS_SYNTH_PARAMS.filterCutoff).toBe(preset!.params.filterCutoff!);
-  });
-
-  // applyPreset stamps `preset: preset.name`; the historical bass default did
-  // not. Keeping the field absent is what makes this a move and not a change.
-  test('the bass default carries no preset name, matching the pre-merge value', () => {
-    expect(INITIAL_BASS_SYNTH_PARAMS.preset).toBe(INITIAL_SYNTH_PARAMS.preset);
   });
 });
 

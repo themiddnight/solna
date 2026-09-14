@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { asLeadNoteMatrix, clampFinite, sanitizeEffectsValue, sanitizeLoops, sanitizeSynthParams } from './sanitize';
-import { INITIAL_EFFECTS, INITIAL_SYNTH_PARAMS } from './initialState';
+import {
+  asLeadNoteMatrix,
+  clampFinite,
+  sanitizeEffectsValue,
+  sanitizeLoops,
+  sanitizeTrackArp,
+  sanitizeTrackSynth,
+} from './sanitize';
+import { INITIAL_EFFECTS, TRACK_ARP_DEFAULTS } from './initialState';
+import { TRACK_SYNTH_DEFAULTS } from '@/store/initialState';
 import { createDefaultLoop } from './loopSlice';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
@@ -15,10 +23,50 @@ describe('sanitize (shared by persist hydration and project import)', () => {
     expect(clampFinite(90, 20, 300, 120)).toBe(90);
   });
 
-  test('sanitizeSynthParams keeps a valid value and falls back per field', () => {
-    const out = sanitizeSynthParams({ ...INITIAL_SYNTH_PARAMS, filterCutoff: 'loud', oscType: 'sawtooth' });
-    expect(out.filterCutoff).toBe(INITIAL_SYNTH_PARAMS.filterCutoff);
-    expect(out.oscType).toBe('sawtooth');
+  test('sanitizeTrackSynth passes a complete valid patch through unchanged', () => {
+    const valid = structuredClone(TRACK_SYNTH_DEFAULTS.bass);
+    expect(sanitizeTrackSynth(valid, 'bass')).toEqual(valid);
+  });
+
+  test('sanitizeTrackSynth clamps a finite out-of-range value in place', () => {
+    const patch = structuredClone(TRACK_SYNTH_DEFAULTS.synth);
+    patch.patch.synth.filter.resonance = 40;
+    const out = sanitizeTrackSynth(patch, 'synth');
+    // Clamped, not discarded: a number in the right unit that is merely out of
+    // range is a value to pull back, not a body to throw away.
+    expect(out.patch.synth.filter.resonance).toBe(1);
+    expect(out.patch.synth.filter.cutoffHz).toBe(TRACK_SYNTH_DEFAULTS.synth.patch.synth.filter.cutoffHz);
+  });
+
+  test('a flat legacy SynthParams body falls back to the TARGET\'s complete default', () => {
+    // A flat body is not an old version of this shape, it is an invalid one —
+    // there are no migration chains, so it is validated and replaced whole.
+    // The fallback is the TARGET's default, so importing a legacy bass body
+    // gives a bass sound rather than Lead's.
+    const legacy = { oscType: 'sawtooth', filterCutoff: 2400, attack: 0.02, release: 0.5 };
+    expect(sanitizeTrackSynth(legacy, 'bass')).toEqual(TRACK_SYNTH_DEFAULTS.bass);
+    expect(sanitizeTrackSynth(legacy, 'pad')).toEqual(TRACK_SYNTH_DEFAULTS.pad);
+  });
+
+  test('an unknown engine falls back whole rather than keeping the patch', () => {
+    const alien = { ...structuredClone(TRACK_SYNTH_DEFAULTS.synth), engine: 'fm' };
+    expect(sanitizeTrackSynth(alien, 'synth')).toEqual(TRACK_SYNTH_DEFAULTS.synth);
+  });
+
+  test('the fallback is a fresh copy, so a sanitised loop can never alias the factory default', () => {
+    const out = sanitizeTrackSynth('nonsense', 'synth');
+    expect(out).toEqual(TRACK_SYNTH_DEFAULTS.synth);
+    expect(out).not.toBe(TRACK_SYNTH_DEFAULTS.synth);
+    expect(out.patch.synth.oscillators).not.toBe(TRACK_SYNTH_DEFAULTS.synth.patch.synth.oscillators);
+  });
+
+  test('sanitizeTrackArp keeps a valid value and falls back whole on any invalid field', () => {
+    expect(sanitizeTrackArp({ active: true, mode: 'down', rate: '8n', octaves: 2 }, 'synth'))
+      .toEqual({ active: true, mode: 'down', rate: '8n', octaves: 2 });
+    // Whole-value, never a partial merge: `mode` is not an arp mode, so the
+    // valid `active: true` beside it goes with it.
+    expect(sanitizeTrackArp({ active: true, mode: 'sideways', rate: '8n', octaves: 2 }, 'synth'))
+      .toEqual(TRACK_ARP_DEFAULTS.synth);
   });
 
   test('sanitizeEffectsValue clones the shared default instead of returning it', () => {
