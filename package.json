@@ -13,12 +13,14 @@
     "check:drums": "bun scripts/check-drum-kit-separation.ts",
     "check:contrast": "bun scripts/check-contrast.ts",
     "check:levels": "bun scripts/check-levels.ts",
+    "check:dead-code": "knip",
+    "check:dead-code:production": "knip --strict --include files,dependencies,unlisted,binaries,unresolved",
     "calibration:generate": "bun scripts/calibration/generateTrimTable.ts",
     "calibration:smoke": "bun scripts/calibration/renderOffline.smoke.ts",
     "calibration:verify": "bun scripts/calibration/verifyApplied.smoke.ts",
     "report:library": "bun scripts/report-library-coverage.ts",
     "report:drums-diff": "bun scripts/report-drum-diff.ts",
-    "verify": "bun test && bun run lint && bun run eslint && bun run check:keys && bun run check:drums && bun run check:contrast && bun run check:levels && bun run build"
+    "verify": "bun test && bun run lint && bun run eslint && bun run check:keys && bun run check:drums && bun run check:contrast && bun run check:levels && bun run check:dead-code && bun run check:dead-code:production && bun run build"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
