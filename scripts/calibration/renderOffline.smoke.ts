@@ -12,6 +12,7 @@ import {
   renderPreset,
 } from './renderOffline.ts';
 import { SYNTH_PRESETS } from '@/data/synthPresets';
+import { dbToGain, toDecibels } from '@/utils/gainUnits';
 
 let failures = 0;
 
@@ -71,6 +72,17 @@ const pad = SYNTH_PRESETS.find((p) => p.category === 'Pad');
 if (!pad) throw new Error('Unreachable: SYNTH_PRESETS ships at least one Pad patch');
 const padWav = await renderPreset(pad);
 report(`a rendered pad preset (${pad.name}) is not silent`, peakOf(padWav) > 0.01, `peak ${peakOf(padWav).toFixed(3)}`);
+// The uncalibrated pass neutralises `common.outputGainDb`, which is the field
+// that otherwise holds a stacked patch down — a multi-voice unison pad summing
+// two oscillators, a sub and noise per voice is exactly the case that clips
+// without CALIBRATION_HEADROOM_DB, and this pad rendered a clamped 1.000 the
+// first time it ran without it. A clamped peak reads as a plausible dBFS number
+// several tenths low, so the clip has to be caught here rather than believed.
+report(
+  `the uncalibrated pass leaves headroom (${pad.name})`,
+  peakOf(padWav) < 0.99,
+  `peak ${peakOf(padWav).toFixed(3)}, clamped at 1.000 would mean clipping`,
+);
 
 const padWavAgain = await renderPreset(pad);
 report(
@@ -101,64 +113,30 @@ report(
   `Retro Drive ${peakOf(retroKit).toFixed(3)} vs 808 Vintage ${peakOf(otherKit).toFixed(3)}`,
 );
 
-// `renderPreset` resolves the trim gain caller-side via `synthTrimGainFor(preset.name)`,
-// which is keyed by NAME but reads an index built from `PRESET_TRIMS`, which is keyed
-// by preset ID (`src/audio/trims.ts`'s `TRIM_GAIN_BY_PRESET_NAME`). That id -> name
-// bridge is never exercised by the checks above, because `PRESET_TRIMS` is still empty
-// (Task 11 fills it) and both calls above use `applyTrim = false` regardless. Proving it
-// resolves requires a fresh module graph with `@/data/trimTable` mocked BEFORE
-// `renderOffline.ts` (and, transitively, `trims.ts`) is ever imported — `trims.ts` builds
-// its name index once, at import time, so re-importing `./renderOffline.ts` in *this*
-// process would just return the already-cached, already-real module. A spawned child
-// process is what gives the mock a module graph of its own.
-// bun-types is deliberately not a devDependency (see ffmpegPath.ts) so this
-// declares the one Bun global this function needs, scoped to this module only.
-declare const Bun: {
-  spawnSync(cmd: string[], opts: { cwd: string }): { exitCode: number; stdout: { toString(): string }; stderr: { toString(): string } };
-};
-
-async function checkPresetTrimBridge(padPreset: { id: string; name: string }): Promise<void> {
-  const trimDb = -6;
-  const childScript = `
-    import { mock } from 'bun:test';
-    mock.module('@/data/trimTable', () => ({
-      DRUM_TRIMS: {},
-      PRESET_TRIMS: { ${JSON.stringify(padPreset.id)}: { measuredDbfs: 0, trimDb: ${trimDb}, configHash: 'smoke-check' } },
-    }));
-    const { renderPreset } = await import(${JSON.stringify(new URL('./renderOffline.ts', import.meta.url).href)});
-    const { SYNTH_PRESETS } = await import('@/data/synthPresets');
-    const preset = SYNTH_PRESETS.find((p) => p.id === ${JSON.stringify(padPreset.id)});
-    function peakOf(wav) {
-      const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
-      let peak = 0;
-      for (let offset = 44; offset + 1 < wav.byteLength; offset += 2) {
-        peak = Math.max(peak, Math.abs(view.getInt16(offset, true)) / 32768);
-      }
-      return peak;
-    }
-    const untrimmed = await renderPreset(preset, false);
-    const trimmed = await renderPreset(preset, true);
-    console.log(JSON.stringify({ ratio: peakOf(trimmed) / peakOf(untrimmed) }));
-    process.exit(0);
-  `;
-  const child = Bun.spawnSync(['bun', '-e', childScript], { cwd: process.cwd() });
-  if (child.exitCode !== 0) {
-    report('preset trim resolves through the real id -> name bridge', false, child.stderr.toString().slice(0, 200));
-    return;
-  }
-  const { ratio } = JSON.parse(child.stdout.toString().trim()) as { ratio: number };
-  // Expected gain ratio for -6 dB is ~0.501. The band is wide (0.3-0.7, roughly
-  // ±3.5 dB either side) because the pad carries noise, whose level is not yet
-  // seeded/deterministic across runs (tracked separately, not this task's fix) —
-  // this only needs to prove the trim landed at all, not measure it precisely.
-  report(
-    `preset trim resolves through the real id -> name bridge (${padPreset.name})`,
-    ratio > 0.3 && ratio < 0.7,
-    `untrimmed:trimmed peak ratio ${ratio.toFixed(3)}, expected ~0.501 for ${trimDb} dB`,
-  );
-}
-
-await checkPresetTrimBridge(pad);
+// The applied-gain half. `renderPreset(preset, true)` installs the patch with its
+// authored `common.outputGainDb`; `false` neutralises that one field to 0 dB and
+// changes nothing else. So the ratio between the two peaks is the whole of what
+// the calibration now does, and it is checkable in process with no mock and no
+// spawned child — the id -> name trim bridge this used to have to prove through a
+// fresh module graph does not exist any more.
+//
+// The down sweep is the fixture: one sine, no noise, no unison, so its peak is a
+// clean number rather than a stochastic one. `dbToGain` is imported rather than
+// re-derived, so a change to the dB convention moves the expectation with it.
+const sweep = SYNTH_PRESETS.find((p) => p.id === 'factory-fx-down-sweep');
+if (!sweep) throw new Error('Unreachable: SYNTH_PRESETS ships factory-fx-down-sweep');
+const neutralSweep = await renderPreset(sweep, false);
+const gainedSweep = await renderPreset(sweep, true);
+const expectedRatio = dbToGain(toDecibels(sweep.patch.common.outputGainDb));
+const actualRatio = peakOf(gainedSweep) / peakOf(neutralSweep);
+// A tight band: this is arithmetic on one gain node, not a loudness measurement.
+// 3% absorbs 16-bit quantisation of the peak sample and nothing else — a patch
+// whose gain silently failed to apply would read 1.0 here.
+report(
+  `a preset renders at its own common.outputGainDb (${sweep.name}, ${sweep.patch.common.outputGainDb} dB)`,
+  Math.abs(actualRatio - expectedRatio) < 0.03 * expectedRatio,
+  `peak ratio ${actualRatio.toFixed(4)}, expected ${expectedRatio.toFixed(4)}`,
+);
 
 console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

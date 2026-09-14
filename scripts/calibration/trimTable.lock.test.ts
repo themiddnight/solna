@@ -1,6 +1,7 @@
 import { DRUM_TRIMS, PRESET_TRIMS } from '@/data/trimTable';
 import { DRUM_KITS } from '@/data/drumKits';
 import { SYNTH_PRESETS } from '@/data/synthPresets';
+import { TARGET_DBFS } from '@/utils/trimMath';
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import {
   findDriftedEntries,
@@ -29,7 +30,9 @@ describe('the committed trim table is a lock on today s defaults', () => {
     expect(ids(findDriftedEntries()).join(', ')).toBe('');
   });
 
-  test('every committed measurement plus its trim lands within the tolerance band', () => {
+  test('every committed measurement plus the gain that is actually applied lands within the tolerance band', () => {
+    // For a kit that is `measuredDbfs + trimDb`; for a preset it is
+    // `measuredDbfs + patch.common.outputGainDb`, read off the live library.
     expect(ids(findOutOfToleranceEntries()).join(', ')).toBe('');
   });
 
@@ -37,6 +40,50 @@ describe('the committed trim table is a lock on today s defaults', () => {
     const started = performance.now();
     findDriftedEntries();
     expect(performance.now() - started).toBeLessThan(1000);
+  });
+});
+
+/**
+ * `trimDb` is ADVISORY for a preset, and this is the assertion that keeps it
+ * honest.
+ *
+ * Nothing applies it: the engine reads `patch.common.outputGainDb`, and
+ * `findOutOfToleranceEntries` combines `measuredDbfs` with that. What the
+ * table's `trimDb` is FOR is the regenerate-and-review loop — it is the
+ * recommendation a human copies into the patch, and it is only useful if it
+ * still means `TARGET_DBFS - measuredDbfs`. A second copy of a number with
+ * nothing reading it is exactly where a stale value hides, so the derivation
+ * is pinned here rather than trusted.
+ *
+ * The drum half is deliberately included: there `trimDb` IS applied
+ * (`drumTrimGainFor`), and the same identity must hold for the same reason.
+ *
+ * Placed ABOVE the two `mock.module` describes on purpose: this one reads the
+ * imported bindings directly rather than through `levelChecks`, and a swapped
+ * module leaks into them. Moving it below makes the count assertion fail, which
+ * is the right failure mode but a confusing one to debug from scratch.
+ */
+describe('the committed trimDb is still TARGET minus the measurement', () => {
+  test('every entry, both halves — a trim that drifted from its own measurement is a stale number', () => {
+    const entries = [...Object.entries(DRUM_TRIMS), ...Object.entries(PRESET_TRIMS)];
+    // Ruling 8 again, in the small: this walks the COMMITTED entries, so on an
+    // empty table it would iterate nothing and pass having checked nothing —
+    // the same vacuity the empty-table guard below exists for. `findMissing`
+    // owns "the table is empty"; what this needs is only that it did not
+    // silently become a no-op. One live kit and one live preset is the floor.
+    expect(entries.length).toBeGreaterThanOrEqual(
+      Object.keys(DRUM_KITS).length + SYNTH_PRESETS.length,
+    );
+
+    const offenders: string[] = [];
+    for (const [id, entry] of entries) {
+      // Both fields are written rounded to 2 dp by the generator, so the
+      // identity holds to within one rounding step in each, not exactly.
+      if (Math.abs(entry.trimDb - (TARGET_DBFS - entry.measuredDbfs)) > 0.02) {
+        offenders.push(`${id}: ${entry.trimDb} != ${TARGET_DBFS} - ${entry.measuredDbfs}`);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });
 
@@ -70,5 +117,48 @@ describe('an empty table fails loudly, and for the right reason (Ruling 8)', () 
     expect(ids(findOrphanEntries())).toEqual([]);
     expect(ids(findDriftedEntries())).toEqual([]);
     expect(ids(findOutOfToleranceEntries())).toEqual([]);
+  });
+});
+
+/**
+ * A preset's applied gain is no longer in this table — it is
+ * `patch.common.outputGainDb`, inside the patch a user can edit and save. The
+ * committed entry records only what the NEUTRALISED render measured, so the
+ * tolerance question is "does the live patch's own gain land that measurement
+ * on target", and a collector still reading the table's `trimDb` would answer
+ * a question nobody asks any more.
+ *
+ * Both fixtures below set `trimDb` to the value that would make a trimDb-based
+ * check give the OPPOSITE answer, so neither can pass by accident.
+ */
+describe('the preset tolerance check reads the live patch, not the table', () => {
+  const preset = SYNTH_PRESETS[0];
+  if (!preset) throw new Error('Unreachable: SYNTH_PRESETS is non-empty');
+  const outputGainDb = preset.patch.common.outputGainDb;
+
+  afterEach(() => {
+    mock.module('@/data/trimTable', () => ({ DRUM_TRIMS, PRESET_TRIMS }));
+  });
+
+  test('a measurement the live output gain lands on target passes, whatever trimDb says', () => {
+    mock.module('@/data/trimTable', () => ({
+      DRUM_TRIMS: {},
+      PRESET_TRIMS: {
+        [preset.id]: { measuredDbfs: -18 - outputGainDb, trimDb: 999, configHash: 'x' },
+      },
+    }));
+    expect(ids(findOutOfToleranceEntries())).toEqual([]);
+  });
+
+  test('a measurement the live output gain leaves 30 dB low fails, even with a perfect trimDb', () => {
+    const measuredDbfs = -18 - outputGainDb - 30;
+    mock.module('@/data/trimTable', () => ({
+      DRUM_TRIMS: {},
+      PRESET_TRIMS: {
+        // -18 - measuredDbfs: exactly what a trimDb-based check would accept.
+        [preset.id]: { measuredDbfs, trimDb: -18 - measuredDbfs, configHash: 'x' },
+      },
+    }));
+    expect(ids(findOutOfToleranceEntries())).toEqual([preset.id]);
   });
 });

@@ -4,7 +4,8 @@ import type { ArpRate } from './arpPlayback';
 import type { HeldNoteTargets } from './heldNotes';
 import type { SynthControlTarget } from '@/utils/synthControl';
 import type { VoiceOwner } from '../voiceOwner';
-import { INITIAL_SYNTH_PARAMS } from '@/store/initialState';
+import { TRACK_ARP_DEFAULTS } from '@/store/initialState';
+import type { VoiceId } from '../synth/voiceId';
 
 // Reference implementation: the original 4-branch subscriber logic from
 // SoundView.tsx 281-405, transcribed 1:1 into pure form.
@@ -122,14 +123,14 @@ describe('computeArpTick', () => {
   // pulled out of it so both halves are.
   function heldWith(target: SynthControlTarget, ...notes: string[]): HeldNoteTargets {
     const held: HeldNoteTargets = new Map();
-    for (const note of notes) held.set(note, target);
+    for (const note of notes) held.set(note, { target, voiceId: `voice-${note}` as VoiceId });
     return held;
   }
 
   test('a firing tick records the target as triggered and returns its triggers', () => {
     const triggered = new Set<SynthControlTarget>();
-    const params = { ...INITIAL_SYNTH_PARAMS, arpActive: true };
-    const result = computeArpTick(triggered, 'synth', heldWith('synth', 'C4'), params, 120, 0, 16);
+    const arp = { ...TRACK_ARP_DEFAULTS.synth, active: true };
+    const result = computeArpTick(triggered, 'synth', heldWith('synth', 'C4'), arp, 120, 0, 16);
 
     expect(result.triggers.length).toBeGreaterThan(0);
     expect(result.sequence).toEqual(['C4']);
@@ -141,12 +142,12 @@ describe('computeArpTick', () => {
     // computeArpTick must sequence and record only the one it was called
     // for, never the other bus's notes leaking into this tick's trigger set.
     const triggered = new Set<SynthControlTarget>();
-    const params = { ...INITIAL_SYNTH_PARAMS, arpActive: true };
+    const arp = { ...TRACK_ARP_DEFAULTS.synth, active: true };
     const held: HeldNoteTargets = new Map([
-      ['C4', 'synth' as SynthControlTarget],
-      ['E4', 'fx' as SynthControlTarget],
+      ['C4', { target: 'synth' as SynthControlTarget, voiceId: 'voice-1' as VoiceId }],
+      ['E4', { target: 'fx' as SynthControlTarget, voiceId: 'voice-2' as VoiceId }],
     ]);
-    const result = computeArpTick(triggered, 'fx', held, params, 120, 0, 16);
+    const result = computeArpTick(triggered, 'fx', held, arp, 120, 0, 16);
 
     expect(result.triggers.length).toBeGreaterThan(0);
     expect(result.sequence).toEqual(['E4']);
@@ -157,8 +158,8 @@ describe('computeArpTick', () => {
 
   test('the arp being off records nothing and triggers nothing', () => {
     const triggered = new Set<SynthControlTarget>();
-    const params = { ...INITIAL_SYNTH_PARAMS, arpActive: false };
-    const result = computeArpTick(triggered, 'synth', heldWith('synth', 'C4'), params, 120, 0, 16);
+    const arp = { ...TRACK_ARP_DEFAULTS.synth, active: false };
+    const result = computeArpTick(triggered, 'synth', heldWith('synth', 'C4'), arp, 120, 0, 16);
 
     expect(result.triggers).toEqual([]);
     expect(triggered.size).toBe(0);
@@ -166,8 +167,8 @@ describe('computeArpTick', () => {
 
   test('nothing held on the target bus records nothing and triggers nothing', () => {
     const triggered = new Set<SynthControlTarget>();
-    const params = { ...INITIAL_SYNTH_PARAMS, arpActive: true };
-    const result = computeArpTick(triggered, 'synth', new Map(), params, 120, 0, 16);
+    const arp = { ...TRACK_ARP_DEFAULTS.synth, active: true };
+    const result = computeArpTick(triggered, 'synth', new Map(), arp, 120, 0, 16);
 
     expect(result.triggers).toEqual([]);
     expect(triggered.size).toBe(0);
@@ -175,9 +176,9 @@ describe('computeArpTick', () => {
 
   test('a step the rate does not fire on records nothing', () => {
     const triggered = new Set<SynthControlTarget>();
-    const params = { ...INITIAL_SYNTH_PARAMS, arpActive: true, arpRate: '4n' as const };
+    const arp = { ...TRACK_ARP_DEFAULTS.synth, active: true, rate: '4n' as const };
     // Step 1 is not a multiple of 4, so '4n' does not fire here.
-    const result = computeArpTick(triggered, 'synth', heldWith('synth', 'C4'), params, 120, 1, 16);
+    const result = computeArpTick(triggered, 'synth', heldWith('synth', 'C4'), arp, 120, 1, 16);
 
     expect(result.triggers).toEqual([]);
     expect(triggered.size).toBe(0);

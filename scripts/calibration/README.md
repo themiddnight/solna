@@ -11,7 +11,7 @@ measured trim multiplies on top, in `src/audio/trims.ts`.
 ## When to re-run
 
 - A drum-kit voice's `gain`, envelope, pitch or filter changed.
-- A synth preset's params changed, or `INITIAL_SYNTH_PARAMS` / `DEFAULT_DRUM_KIT` did.
+- A synth preset's patch changed, or `TRACK_SYNTH_DEFAULTS` / `DEFAULT_DRUM_KIT` did.
 - A kit, a voice or a preset was added or removed.
 - `bun run check:levels` failed — it means one of the above happened without a re-run.
 
@@ -212,11 +212,21 @@ Both are sized by the EBU gate and median-plateau reasoning above, not by taste.
 
 - **EBU R128's 3-second gate** — see "Render duration is load-bearing" above.
 - **"No valid LUFS readings" is not always a duration bug** — see above.
-- **`PRESET_TRIMS` is keyed by preset id, but the engine only sees `params.preset`,**
-  which `applyPreset` sets to the preset **name**. `src/audio/trims.ts` bridges that
-  with an index built over the factory library. A user preset that reuses a factory
-  patch's name inherits that patch's trim — bounded, documented, and the reason
-  `src/audio/trims.test.ts` asserts factory names are unique.
+- **A preset's trim is not applied from this table.** `PRESET_TRIMS[id].trimDb` is
+  what the measurement RECOMMENDS; what the engine applies is
+  `patch.common.outputGainDb`, inside the patch, and `bun run check:levels` combines
+  `measuredDbfs` with that live value. So regenerating does not by itself change how
+  anything sounds — it changes the recommendation, and a human copies it into the
+  patch. There is no longer a preset-id-to-name bridge (`synthTrimGainFor` is gone);
+  a user preset that reuses a factory patch's name no longer inherits its trim,
+  because a patch carries its own. The DRUM half is unchanged: a kit has no patch, so
+  `DRUM_TRIMS` is still keyed by name and still applied by `drumTrimGainFor`.
+- **A synth note is held for `attack + decay`, not a fixed gate.** Each preset is
+  measured playing a note long enough to reach its own sustain plateau (floored at
+  `SYNTH_NOTE_GATE_FLOOR_S`), so a patch whose attack outlasts a fixed gate is
+  measured at the level it settles to rather than mid-attack. The fixed 1.3 s gate
+  read Noise Riser (1.8 s attack) 13 dB low and asked for +18 dB of correction.
+  Render length grows to fit; a long-envelope patch takes noticeably longer.
 - **A trim is a default, not live auto-gain.** Turn a preset's cutoff knob and the
   patch keeps its measured trim. That is intentional; live measurement-driven trim is
   a different feature.

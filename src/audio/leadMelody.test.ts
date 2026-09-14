@@ -18,6 +18,7 @@ import {
   type LeadNote,
 } from './leadMelody';
 import { buildArpSequence } from './arpeggiator';
+import type { ArpSettings } from '@/types/synth';
 import { computeArpTriggers } from './arpSchedule';
 import {
   LEAD_TICKS_PER_BAR,
@@ -140,7 +141,8 @@ describe('leadSoundingNotes', () => {
   });
 });
 
-const ARP_PARAMS = { arpMode: 'up' as const, arpRate: '16n' as const, arpOctaves: 1 };
+const ARP_OFF: ArpSettings = { active: false, mode: 'up', rate: '16n', octaves: 1 };
+const ARP_ON: ArpSettings = { ...ARP_OFF, active: true };
 const STEP_DUR = 0.125;
 /** The fixed 1/16 stride every pre-DEV-375 fixture is expressed at. */
 const STRIDE = TICKS_PER_SIXTEENTH;
@@ -152,29 +154,29 @@ describe('resolveLeadStepTriggers — block mode', () => {
   test('holdSec is (cells - 1 + gate) * cellDurSec', () => {
     const one = [{ note: 'C4', len: 2, age: 0 }];
     const three = [{ note: 'C4', len: 6, age: 0 }];
-    expect(resolveLeadStepTriggers(one, false, 0, ARP_PARAMS, TICK_DUR, 0.5, STRIDE, WHOLE_BAR)[0].holdSec).toBe(0.0625);
-    expect(resolveLeadStepTriggers(one, false, 0, ARP_PARAMS, TICK_DUR, 1, STRIDE, WHOLE_BAR)[0].holdSec).toBe(0.125);
-    expect(resolveLeadStepTriggers(one, false, 0, ARP_PARAMS, TICK_DUR, 0.85, STRIDE, WHOLE_BAR)[0].holdSec).toBeCloseTo(0.10625, 10);
-    expect(resolveLeadStepTriggers(three, false, 0, ARP_PARAMS, TICK_DUR, 0.5, STRIDE, WHOLE_BAR)[0].holdSec).toBe(0.3125);
-    expect(resolveLeadStepTriggers(three, false, 0, ARP_PARAMS, TICK_DUR, 1, STRIDE, WHOLE_BAR)[0].holdSec).toBe(0.375);
-    expect(resolveLeadStepTriggers(three, false, 0, ARP_PARAMS, TICK_DUR, 0.85, STRIDE, WHOLE_BAR)[0].holdSec).toBeCloseTo(0.35625, 10);
+    expect(resolveLeadStepTriggers(one, ARP_OFF, 0, TICK_DUR, 0.5, STRIDE, WHOLE_BAR)[0].holdSec).toBe(0.0625);
+    expect(resolveLeadStepTriggers(one, ARP_OFF, 0, TICK_DUR, 1, STRIDE, WHOLE_BAR)[0].holdSec).toBe(0.125);
+    expect(resolveLeadStepTriggers(one, ARP_OFF, 0, TICK_DUR, 0.85, STRIDE, WHOLE_BAR)[0].holdSec).toBeCloseTo(0.10625, 10);
+    expect(resolveLeadStepTriggers(three, ARP_OFF, 0, TICK_DUR, 0.5, STRIDE, WHOLE_BAR)[0].holdSec).toBe(0.3125);
+    expect(resolveLeadStepTriggers(three, ARP_OFF, 0, TICK_DUR, 1, STRIDE, WHOLE_BAR)[0].holdSec).toBe(0.375);
+    expect(resolveLeadStepTriggers(three, ARP_OFF, 0, TICK_DUR, 0.85, STRIDE, WHOLE_BAR)[0].holdSec).toBeCloseTo(0.35625, 10);
   });
 
   test('at gate 1.0 a note ends exactly where the next step begins (legato)', () => {
-    const t = resolveLeadStepTriggers([{ note: 'C4', len: 4, age: 0 }], false, 0, ARP_PARAMS, TICK_DUR, 1, STRIDE, WHOLE_BAR);
+    const t = resolveLeadStepTriggers([{ note: 'C4', len: 4, age: 0 }], ARP_OFF, 0, TICK_DUR, 1, STRIDE, WHOLE_BAR);
     expect(t[0].holdSec).toBe(2 * STEP_DUR);
   });
 
   test('notes with age > 0 emit nothing — their note-off is already scheduled', () => {
     const t = resolveLeadStepTriggers(
       [{ note: 'G4', len: 2, age: 0 }, { note: 'C4', len: 8, age: 4 }],
-      false, 0, ARP_PARAMS, TICK_DUR, 0.85, STRIDE, WHOLE_BAR,
+      ARP_OFF, 0, TICK_DUR, 0.85, STRIDE, WHOLE_BAR,
     );
     expect(t.map((x) => x.note)).toEqual(['G4']);
   });
 
   test('a step where every sounding note is held from earlier emits nothing', () => {
-    expect(resolveLeadStepTriggers([{ note: 'C4', len: 8, age: 4 }], false, 0, ARP_PARAMS, TICK_DUR, 0.85, STRIDE, WHOLE_BAR)).toEqual([]);
+    expect(resolveLeadStepTriggers([{ note: 'C4', len: 8, age: 4 }], ARP_OFF, 0, TICK_DUR, 0.85, STRIDE, WHOLE_BAR)).toEqual([]);
   });
 });
 
@@ -195,7 +197,7 @@ describe('resolveLeadStepTriggers — invariant 2 is capped at READ time', () =>
     // loop is 32 ticks, so the note may sound for at most 16 columns.
     const t = resolveLeadStepTriggers(
       [{ note: 'C4', len: 40, age: 0 }],
-      false, 0, ARP_PARAMS, TICK_DUR, 1, STRIDE, { tickInLoop: 0, melodyTicks: 32 },
+      ARP_OFF, 0, TICK_DUR, 1, STRIDE, { tickInLoop: 0, melodyTicks: 32 },
     );
     expect(t[0].holdSec).toBe(16 * STEP_DUR);
     // Uncapped it would ring for 20 columns — 1.25 bars, straight over the seam.
@@ -207,7 +209,7 @@ describe('resolveLeadStepTriggers — invariant 2 is capped at READ time', () =>
     // remaining capacity is measured from the note's start tick.
     const t = resolveLeadStepTriggers(
       [{ note: 'C4', len: 40, age: 0 }],
-      false, 0, ARP_PARAMS, TICK_DUR, 1, STRIDE, { tickInLoop: 16, melodyTicks: 32 },
+      ARP_OFF, 0, TICK_DUR, 1, STRIDE, { tickInLoop: 16, melodyTicks: 32 },
     );
     expect(t[0].holdSec).toBe(8 * STEP_DUR);
   });
@@ -215,7 +217,7 @@ describe('resolveLeadStepTriggers — invariant 2 is capped at READ time', () =>
   test('a note that still fits is untouched', () => {
     const t = resolveLeadStepTriggers(
       [{ note: 'C4', len: 8, age: 0 }],
-      false, 0, ARP_PARAMS, TICK_DUR, 1, STRIDE, { tickInLoop: 0, melodyTicks: 32 },
+      ARP_OFF, 0, TICK_DUR, 1, STRIDE, { tickInLoop: 0, melodyTicks: 32 },
     );
     expect(t[0].holdSec).toBe(4 * STEP_DUR);
   });
@@ -223,7 +225,7 @@ describe('resolveLeadStepTriggers — invariant 2 is capped at READ time', () =>
   test('the cap never drops a note below one cell', () => {
     const t = resolveLeadStepTriggers(
       [{ note: 'C4', len: 18, age: 0 }],
-      false, 0, ARP_PARAMS, TICK_DUR, 0.85, STRIDE, { tickInLoop: 40, melodyTicks: 32 },
+      ARP_OFF, 0, TICK_DUR, 0.85, STRIDE, { tickInLoop: 40, melodyTicks: 32 },
     );
     expect(t[0].holdSec).toBeCloseTo(0.85 * STEP_DUR, 10);
   });
@@ -239,18 +241,18 @@ describe('resolveLeadStepTriggers — arp mode', () => {
       { note: 'E4', len: 2, age: 0 },
       { note: 'G4', len: 2, age: 0 },
     ];
-    const t = resolveLeadStepTriggers(sounding, true, 0, ARP_PARAMS, TICK_DUR, 0.85, STRIDE, WHOLE_BAR);
+    const t = resolveLeadStepTriggers(sounding, ARP_ON, 0, TICK_DUR, 0.85, STRIDE, WHOLE_BAR);
     expect(t).toEqual([{ note: 'C4', timeOffsetSec: 0, holdSec: 0.10625 }]);
   });
 
   test('all sounding notes feed the arp pool, including age > 0 (asserted by note name)', () => {
     const withHeld = resolveLeadStepTriggers(
       [{ note: 'G4', len: 2, age: 0 }, { note: 'C4', len: 8, age: 4 }],
-      true, 0, ARP_PARAMS, TICK_DUR, 0.85, STRIDE, WHOLE_BAR,
+      ARP_ON, 0, TICK_DUR, 0.85, STRIDE, WHOLE_BAR,
     );
     const startsOnly = resolveLeadStepTriggers(
       [{ note: 'G4', len: 2, age: 0 }],
-      true, 0, ARP_PARAMS, TICK_DUR, 0.85, STRIDE, WHOLE_BAR,
+      ARP_ON, 0, TICK_DUR, 0.85, STRIDE, WHOLE_BAR,
     );
     // C4 (midi 60) sorts before G4 (midi 67): once the age-2 C4 joins the
     // pool it plays FIRST on step 0 instead of G4 alone.
@@ -261,11 +263,11 @@ describe('resolveLeadStepTriggers — arp mode', () => {
   test('gate does not reach the arp — its hold comes from arpRate', () => {
     const atLowGate = resolveLeadStepTriggers(
       [{ note: 'C4', len: 2, age: 0 }, { note: 'E4', len: 2, age: 0 }],
-      true, 0, ARP_PARAMS, TICK_DUR, 0.05, STRIDE, WHOLE_BAR,
+      ARP_ON, 0, TICK_DUR, 0.05, STRIDE, WHOLE_BAR,
     );
     const atFullGate = resolveLeadStepTriggers(
       [{ note: 'C4', len: 2, age: 0 }, { note: 'E4', len: 2, age: 0 }],
-      true, 0, ARP_PARAMS, TICK_DUR, 1, STRIDE, WHOLE_BAR,
+      ARP_ON, 0, TICK_DUR, 1, STRIDE, WHOLE_BAR,
     );
     expect(atLowGate).toEqual(atFullGate);
   });
@@ -289,45 +291,45 @@ describe('no-op guarantee — an all-len-1 melody at gate 0.85', () => {
       timeOffsetSec: 0,
       holdSec: LEGACY_GATE * STEP_DUR,
     }));
-    expect(resolveLeadStepTriggers(sounding, false, 0, ARP_PARAMS, TICK_DUR, LEGACY_GATE, STRIDE, WHOLE_BAR)).toEqual(legacy);
+    expect(resolveLeadStepTriggers(sounding, ARP_OFF, 0, TICK_DUR, LEGACY_GATE, STRIDE, WHOLE_BAR)).toEqual(legacy);
   });
 
   test('arp ON expands octaves through the arpeggiator (unchanged)', () => {
     // Every other arp test runs at arpOctaves 1, where dropping the argument
     // in resolveLeadStepTriggers would change nothing and break no test. This
     // one runs at 2, so the octave expansion is actually pinned.
-    const twoOctaves = { ...ARP_PARAMS, arpOctaves: 2 };
+    const twoOctaves = { ...ARP_ON, octaves: 2 };
     const pair = ['C4', 'E4'];
     const soundingPair = pair.map((note) => ({ note, len: STRIDE, age: 0 }));
-    const sequence = buildArpSequence(pair, ARP_PARAMS.arpMode, 2);
+    const sequence = buildArpSequence(pair, ARP_ON.mode, 2);
     expect(sequence).toEqual(['C4', 'E4', 'C5', 'E5']);
 
     for (const arpStep of [0, 1, 2, 3, 5]) {
-      const legacy = computeArpTriggers(arpStep, sequence.length, ARP_PARAMS.arpRate, STEP_DUR).map(
+      const legacy = computeArpTriggers(arpStep, sequence.length, ARP_ON.rate, STEP_DUR).map(
         (t) => ({ note: sequence[t.noteIndex], timeOffsetSec: t.timeOffsetSec, holdSec: t.holdSec }),
       );
       expect(
-        resolveLeadStepTriggers(soundingPair, true, arpStep, twoOctaves, TICK_DUR, LEGACY_GATE, STRIDE, WHOLE_BAR),
+        resolveLeadStepTriggers(soundingPair, twoOctaves, arpStep, TICK_DUR, LEGACY_GATE, STRIDE, WHOLE_BAR),
       ).toEqual(legacy);
     }
 
     // And the octave count is load-bearing: at step 2 the two-octave sequence
     // plays C5 where the one-octave one plays C4.
     expect(
-      resolveLeadStepTriggers(soundingPair, true, 2, twoOctaves, TICK_DUR, LEGACY_GATE, STRIDE, WHOLE_BAR)[0].note,
+      resolveLeadStepTriggers(soundingPair, twoOctaves, 2, TICK_DUR, LEGACY_GATE, STRIDE, WHOLE_BAR)[0].note,
     ).toBe('C5');
     expect(
-      resolveLeadStepTriggers(soundingPair, true, 2, ARP_PARAMS, TICK_DUR, LEGACY_GATE, STRIDE, WHOLE_BAR)[0].note,
+      resolveLeadStepTriggers(soundingPair, ARP_ON, 2, TICK_DUR, LEGACY_GATE, STRIDE, WHOLE_BAR)[0].note,
     ).toBe('C4');
   });
 
   test('arp mode matches buildArpSequence + computeArpTriggers unchanged', () => {
     for (const arpStep of [0, 1, 2, 3, 4, 7]) {
-      const sequence = buildArpSequence(notes, ARP_PARAMS.arpMode, ARP_PARAMS.arpOctaves);
-      const legacy = computeArpTriggers(arpStep, sequence.length, ARP_PARAMS.arpRate, STEP_DUR).map(
+      const sequence = buildArpSequence(notes, ARP_ON.mode, ARP_ON.octaves);
+      const legacy = computeArpTriggers(arpStep, sequence.length, ARP_ON.rate, STEP_DUR).map(
         (t) => ({ note: sequence[t.noteIndex], timeOffsetSec: t.timeOffsetSec, holdSec: t.holdSec }),
       );
-      expect(resolveLeadStepTriggers(sounding, true, arpStep, ARP_PARAMS, TICK_DUR, LEGACY_GATE, STRIDE, WHOLE_BAR)).toEqual(legacy);
+      expect(resolveLeadStepTriggers(sounding, ARP_ON, arpStep, TICK_DUR, LEGACY_GATE, STRIDE, WHOLE_BAR)).toEqual(legacy);
     }
   });
 });
@@ -672,14 +674,12 @@ describe('leadSoundingNotes carries age in ticks', () => {
 });
 
 describe('resolveLeadStepTriggers rounds up to whole cells', () => {
-  const params = { arpMode: 'up' as const, arpRate: '16n' as const, arpOctaves: 1 };
   const tickDur = 0.125 / TICKS_PER_SIXTEENTH; // 120 bpm 16th, halved
   const hold = (len: number, stride: number): number =>
     resolveLeadStepTriggers(
       [{ note: 'C4', len, age: 0 }],
-      false,
+      ARP_OFF,
       0,
-      params,
       tickDur,
       0.85,
       stride,
@@ -713,9 +713,8 @@ describe('resolveLeadStepTriggers rounds up to whole cells', () => {
   test('the loop end caps the audible length in ticks', () => {
     const triggers = resolveLeadStepTriggers(
       [{ note: 'C4', len: 64, age: 0 }],
-      false,
+      ARP_OFF,
       0,
-      params,
       tickDur,
       1,
       2,

@@ -5,7 +5,8 @@ import { arpFiresOnStep, computeArpTriggers } from '../arpSchedule';
 import { heldCountFor, heldNotesFor, type HeldNoteTargets } from './heldNotes';
 import { stepDurationSec } from '@/utils/musicTheory';
 import { arpStepFor } from '@/utils/meter';
-import type { SynthParams } from '@/types';
+import type { ActiveSynth, ArpSettings } from '@/types/synth';
+import { synthReleaseSeconds } from '@/utils/synthPatch';
 import type { SynthControlTarget } from '@/utils/synthControl';
 import type { VoiceOwner } from '../voiceOwner';
 
@@ -18,7 +19,13 @@ export interface ArpStateRef {
   current: {
     /** Every held note and the bus it is sounding on — see ./heldNotes.ts. */
     heldTargets: HeldNoteTargets;
-    params: SynthParams;
+    synth: ActiveSynth;
+    /**
+     * Arp is performance state, not patch state, so it arrives beside the
+     * patch rather than inside it — the reason `ArpSettings` is deliberately
+     * not part of `ActiveSynth`.
+     */
+    arp: ArpSettings;
     /**
      * The bus the NEXT tick plays on: the focused melodic track, or `null`
      * when focus is on the drum track and there is nothing melodic to play.
@@ -96,12 +103,12 @@ export function computeArpTick(
   triggeredTargets: Set<SynthControlTarget>,
   target: SynthControlTarget,
   heldTargets: HeldNoteTargets,
-  params: SynthParams,
+  arp: ArpSettings,
   bpm: number,
   step: number,
   stepsPerBar: number,
 ): ArpTick {
-  if (!params.arpActive) return EMPTY_ARP_TICK;
+  if (!arp.active) return EMPTY_ARP_TICK;
   // The cheap question first — heldCountFor allocates nothing, while
   // heldNotesFor builds an array, and this runs inside the lookahead
   // callback where steady-state garbage becomes a scheduling stall.
@@ -112,16 +119,16 @@ export function computeArpTick(
   // per note per octave, inside the lookahead callback.
   const stepDur16 = stepDurationSec(bpm);
   const arpStep = arpStepFor(step, stepsPerBar);
-  if (!arpFiresOnStep(arpStep, params.arpRate)) return EMPTY_ARP_TICK;
+  if (!arpFiresOnStep(arpStep, arp.rate)) return EMPTY_ARP_TICK;
 
   const sequence = buildArpSequence(
     heldNotesFor(heldTargets, target),
-    params.arpMode,
-    params.arpOctaves,
+    arp.mode,
+    arp.octaves,
   );
   if (sequence.length === 0) return EMPTY_ARP_TICK;
 
-  const triggers = computeArpTriggers(arpStep, sequence.length, params.arpRate, stepDur16);
+  const triggers = computeArpTriggers(arpStep, sequence.length, arp.rate, stepDur16);
   if (triggers.length > 0) {
     triggeredTargets.add(target);
   }
@@ -131,8 +138,9 @@ export function computeArpTick(
 /**
  * Arpeggiator clock subscriber, moved from SoundView 281-405 with the 4 rate
  * branches collapsed into computeArpTriggers. `stateRef` mirrors the deck's
- * live arp state: which notes are held and on which bus, the params, the bus
- * the next tick plays on, the buses already triggered on, and the bpm.
+ * live arp state: which notes are held and on which bus, the patch and the Arp
+ * settings, the bus the next tick plays on, the buses already triggered on,
+ * and the bpm.
  *
  * `release` and the targets are read from `stateRef.current`, NOT taken as
  * parameters: having them in the effect's dependency array made every
@@ -154,9 +162,9 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
     if (!active) return;
 
     const unsubscribe = audioEngine.subscribeClock((step, _beat, time) => {
-      const { heldTargets, params, target, bpm } = stateRef.current;
+      const { heldTargets, synth, arp, target, bpm } = stateRef.current;
 
-      if (!params.arpActive) return;
+      if (!arp.active) return;
       // Focus is on the drum track: the melodic keyboard has nothing to play,
       // so the arp has nothing to arpeggiate.
       if (target === null) return;
@@ -165,16 +173,22 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
         stateRef.current.triggeredTargets,
         target,
         heldTargets,
-        params,
+        arp,
         bpm,
         step,
         audioEngine.getMeter().stepsPerBar,
       );
 
+      const releaseSeconds = synthReleaseSeconds(synth);
       for (const t of triggers) {
         const note = sequence[t.noteIndex];
-        audioEngine.triggerSynthNoteOn(note, params, 0.9, time + t.timeOffsetSec, target, 1, 'arp');
-        audioEngine.triggerSynthNoteOff(note, params.release, time + t.timeOffsetSec + t.holdSec, target);
+        const at = time + t.timeOffsetSec;
+        // The ID is held only long enough to book this hit's own note-off.
+        // Nothing outlives the tick: a key-up releases through
+        // `releaseTriggeredTargets` below, which is owner-scoped and reaches
+        // whatever the arp still has sounding on the bus.
+        const voiceId = audioEngine.triggerSynthNoteOn(note, synth, 0.9, at, target, 1, 'arp');
+        if (voiceId) audioEngine.triggerSynthNoteOff(voiceId, releaseSeconds, at + t.holdSec);
       }
     });
 
@@ -195,8 +209,8 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
         // Reading the LATEST ref at cleanup time is the whole point;
         // copying it into the effect body would restore the stale-target bug.
         // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
-        const { triggeredTargets, params } = stateRef.current;
-        releaseTriggeredTargets(triggeredTargets, params.release, (target, releaseTime, owner) => {
+        const { triggeredTargets, synth } = stateRef.current;
+        releaseTriggeredTargets(triggeredTargets, synthReleaseSeconds(synth), (target, releaseTime, owner) => {
           audioEngine.releaseSoundingVoices(target, releaseTime, owner);
         });
       }

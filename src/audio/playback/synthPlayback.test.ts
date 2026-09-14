@@ -8,7 +8,7 @@ import {
   subscribeNoteInput,
   type NoteInputEvent,
 } from './noteInputBus';
-import { INITIAL_SYNTH_PARAMS } from '@/store/initialState';
+import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 
 afterEach(() => resetNoteInputListeners());
 
@@ -24,13 +24,15 @@ function heard(): NoteInputEvent[] {
 describe('synthPlayback → note-input bus', () => {
   test('a played note is announced, with its velocity and time', () => {
     const events = heard();
-    synthPlaybackNoteOn('C4', INITIAL_SYNTH_PARAMS, 0.5, 3.25);
+    synthPlaybackNoteOn('C4', SUBTRACTIVE_INIT, 0.5, 3.25);
     expect(events).toEqual([{ kind: 'on', note: 'C4', velocity: 0.5, time: 3.25 }]);
   });
 
   test('a release is announced too, so a listener can tell when the key came up', () => {
     const events = heard();
-    synthPlaybackNoteOff('C4', 0.3);
+    // No context, so note-on returned no id — and the bus still has to hear
+    // the key come up, or an armed recorder would never close the note.
+    synthPlaybackNoteOff(null, 'C4', 0.3);
     expect(events).toEqual([{ kind: 'off', note: 'C4', velocity: 0, time: undefined }]);
   });
 
@@ -38,7 +40,7 @@ describe('synthPlayback → note-input bus', () => {
     // The keyboard auditions on its own target; a listener cares that a
     // person played C4, not which voice pool it landed in.
     const events = heard();
-    synthPlaybackNoteOn('C4', INITIAL_SYNTH_PARAMS, 1, undefined, 'keyboard-audition', 0.7);
+    synthPlaybackNoteOn('C4', SUBTRACTIVE_INIT, 1, undefined, 'keyboard-audition', 0.7);
     expect(events).toHaveLength(1);
     expect(events[0].note).toBe('C4');
   });
@@ -58,11 +60,11 @@ describe('synthPlayback → note-input bus', () => {
     // Two guarantees, not one. Ordering gives the first: the engine call
     // happens before the emit, so the sound is already scheduled by the time
     // a listener can misbehave. Ordering does NOT give the second — the emit
-    // sits in the MIDDLE of its callers (useInputDeck re-scales polyphony and
-    // clears the held-note set AFTER synthPlaybackNoteOff returns), so a
-    // propagating throw would leave the key stuck and the voices mis-levelled.
+    // sits in the MIDDLE of its callers (useInputDeck clears the held-note
+    // set AFTER synthPlaybackNoteOff returns), so a propagating throw would
+    // leave the key stuck.
     // Isolation per listener is what makes the bus safe to subscribe to.
-    expect(() => synthPlaybackNoteOn('C4', INITIAL_SYNTH_PARAMS)).not.toThrow();
+    expect(() => synthPlaybackNoteOn('C4', SUBTRACTIVE_INIT)).not.toThrow();
     expect(events.map((e) => e.note)).toEqual(['C4']);
     expect(after).toEqual(['C4']);
   });

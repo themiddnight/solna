@@ -1,13 +1,14 @@
 import { audioEngine } from "../engine";
 import { emitNoteInput } from "./noteInputBus";
-import type { SynthParams } from "@/types";
+import type { ActiveSynth } from "@/types/synth";
+import type { VoiceId } from "../synth/voiceId";
 import type { SynthControlTarget } from "@/utils/synthControl";
 import type { VoiceOwner } from "../voiceOwner";
 
 // Thin engine bridge for SoundView's keyboard/arp handlers (layering rule 3):
 // the view never touches audio/engine directly. The handlers keep all their
-// logic (equal-power velocity scaling with held.size, arp state) — only the
-// engine calls move here, one per wrapper, bodies verbatim.
+// logic (equal-power velocity from held.size, arp state); only the engine
+// calls live here, one per wrapper.
 export function initSynthPlayback(): void {
   audioEngine.init();
 }
@@ -16,13 +17,19 @@ export function hasSynthPlaybackContext(): boolean {
   return !!audioEngine.getAudioContext();
 }
 
+/**
+ * Equal-power polyphony: the level every voice on ONE bus settles to while
+ * `n` keys are held there. The count is the CALLER's — `useInputDeck` counts
+ * the notes held on that bus — so the arp and the melody sequencer, which
+ * share these buses, never enter into it.
+ */
 export function applySynthPlaybackVelocityScale(
   scale: number,
   target: SynthControlTarget,
 ): void {
   // audioEngine.applySynthVelocityScale deliberately stays typed `source:
-  // string` (see releaseSynthPlaybackVoices below) — the narrowing happens
-  // here, at the store-facing wrapper.
+  // string` (see releaseSynthPlaybackVoices below) — the narrowing to the
+  // store's target vocabulary happens here, at the store-facing wrapper.
   audioEngine.applySynthVelocityScale(scale, target);
 }
 
@@ -41,15 +48,15 @@ export function applySynthPlaybackVelocityScale(
  */
 export function synthPlaybackNoteOn(
   note: string,
-  params: SynthParams,
+  synth: ActiveSynth,
   velocity = 0.8,
   time?: number,
   target = "synth",
   scaleFactor = 1,
-): void {
-  audioEngine.triggerSynthNoteOn(
+): VoiceId | null {
+  const voiceId = audioEngine.triggerSynthNoteOn(
     note,
-    params,
+    synth,
     velocity,
     time,
     target,
@@ -59,16 +66,28 @@ export function synthPlaybackNoteOn(
   // After the engine call, never before: a subscriber that throws must not be
   // able to swallow the note the user played.
   emitNoteInput({ kind: "on", note, velocity, time });
+  // The caller keeps this and releases THAT voice. `null` before the context
+  // exists, which is the one case a caller has nothing to hold on to — and
+  // nothing sounded either, so there is nothing to release.
+  return voiceId;
 }
 
-/** The release half of synthPlaybackNoteOn; announced on the same bus. */
+/**
+ * The release half of synthPlaybackNoteOn; announced on the same bus.
+ *
+ * Takes the ID `synthPlaybackNoteOn` returned, not a note name: the live
+ * keyboard shares its bus with the arp and the melody sequencer, and a release
+ * resolved by name would cut whichever of the three the engine happened to
+ * find. `note` is still passed, for the note-input bus alone — the recorder
+ * needs the pitch, and a voice id is not one.
+ */
 export function synthPlaybackNoteOff(
+  voiceId: VoiceId | null,
   note: string,
-  releaseTime = 0.3,
+  releaseSeconds = 0.3,
   time?: number,
-  target = "synth",
 ): void {
-  audioEngine.triggerSynthNoteOff(note, releaseTime, time, target);
+  if (voiceId) audioEngine.triggerSynthNoteOff(voiceId, releaseSeconds, time);
   emitNoteInput({ kind: "off", note, velocity: 0, time });
 }
 

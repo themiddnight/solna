@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
 import { sequencerStepEvents } from './sequencerSteps';
-import { synthParamsFixture } from './testFakes';
+import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import type { SequencerTrack } from '@/types';
 
 const track = (over: Partial<SequencerTrack>): SequencerTrack => ({
@@ -15,7 +15,16 @@ const track = (over: Partial<SequencerTrack>): SequencerTrack => ({
 });
 
 describe('sequencerStepEvents', () => {
-  const params = synthParamsFixture({ release: 0.4 });
+  const params = {
+    ...SUBTRACTIVE_INIT,
+    patch: {
+      ...SUBTRACTIVE_INIT.patch,
+      synth: {
+        ...SUBTRACTIVE_INIT.patch.synth,
+        ampEnvelope: { ...SUBTRACTIVE_INIT.patch.synth.ampEnvelope, release: 0.4 },
+      },
+    },
+  };
 
   test('an empty pattern (no tracks) contributes nothing', () => {
     expect(sequencerStepEvents([], 0, params, 120)).toEqual([]);

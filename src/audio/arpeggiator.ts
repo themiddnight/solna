@@ -20,7 +20,7 @@ export function buildArpSequenceUncached(
     return midiA - midiB;
   });
 
-  // `octaves` is a required number (SynthParams.arpOctaves); only the clamp is
+  // `octaves` is a required number (`ArpSettings.octaves`); only the clamp is
   // load-bearing — a 0 or negative value would produce an empty sequence.
   const octCount = Math.max(1, octaves);
   const expanded: string[] = [];

@@ -1,5 +1,6 @@
 import { audioEngine } from "../engine";
-import type { SynthParams } from "@/types";
+import type { ActiveSynth } from "@/types/synth";
+import type { VoiceId } from "../synth/voiceId";
 
 // Engine bridge for the component-layer playback hooks (layering rules 1+3):
 // the store-reading hooks (useChordPlayback, useSequencerPlayback) moved out
@@ -18,23 +19,30 @@ export function initPlaybackEngine(): void {
  */
 export function playbackNoteOn(
   noteName: string,
-  params: SynthParams,
+  synth: ActiveSynth,
   velocity = 0.8,
   time?: number,
   source = "synth",
-): void {
+): VoiceId | null {
   // 'sequencer' — the transport playing back written material. The bridge
   // decides the owner; no component names one.
-  audioEngine.triggerSynthNoteOn(noteName, params, velocity, time, source, 1, "sequencer");
+  //
+  // The returned ID is not optional bookkeeping: a scheduled hit must be
+  // released by the instance it started, or a pattern that plays the same note
+  // twice inside one tail — or a grid playing a note the player is also
+  // holding — cuts the wrong voice. Every caller books its note-off with the
+  // ID it got here, in the same tick, while the hit is still just a plan on
+  // the audio clock.
+  return audioEngine.triggerSynthNoteOn(noteName, synth, velocity, time, source, 1, "sequencer");
 }
 
 export function playbackNoteOff(
-  noteName: string,
-  releaseTime = 0.3,
+  voiceId: VoiceId | null,
+  releaseSeconds = 0.3,
   time?: number,
-  source = "synth",
 ): void {
-  audioEngine.triggerSynthNoteOff(noteName, releaseTime, time, source);
+  if (!voiceId) return;
+  audioEngine.triggerSynthNoteOff(voiceId, releaseSeconds, time);
 }
 
 export function subscribePlaybackClock(

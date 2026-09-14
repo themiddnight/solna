@@ -1,14 +1,17 @@
-import { SynthParams, MasterEffects, FilterType } from '../types';
+import { MasterEffects, FilterType } from '../types';
 import { STEPS_PER_BAR } from '../utils/musicTheory';
 import type { Meter } from '../utils/meter';
 import { DEFAULT_VELOCITY } from './constants';
 import type { DrumKit } from '@/data/drumKits';
+import type { ActiveSynth } from '@/types/synth';
 import type { VoiceOwner } from './voiceOwner';
 import { IDLE_SUSPEND_MS, shouldSuspendWhenIdle } from './idleSuspend';
 import { MasterRack } from './masterRack';
-import { SynthVoices } from './synthVoices';
 import { DrumSynth } from './drumSynth';
 import { Clock } from './clock';
+import { SynthVoiceManager } from './synth/voiceManager';
+import { SynthLfoBank } from './synth/synthLfo';
+import type { VoiceId } from './synth/voiceId';
 import type { EngineHooks } from './masterRack';
 
 export class AudioEngine {
@@ -52,9 +55,20 @@ export class AudioEngine {
    * first and handed to each of them.
    */
   private readonly masterRack = new MasterRack();
-  private readonly synthVoices = new SynthVoices(this.masterRack, this.hooks);
   private readonly drumSynth = new DrumSynth(this.masterRack, this.hooks);
   private readonly clock = new Clock(this.masterRack, this.hooks);
+
+  /**
+   * The synth, and the LFO bank its voices join. Both are context-bound and
+   * therefore null until `init()` or `bindContext()` — the same "setters
+   * no-op before the first user click" contract every other engine method
+   * follows, which is why `triggerSynthNoteOn` returns `null` rather than
+   * throwing.
+   */
+  private synthManager: SynthVoiceManager | null = null;
+  private lfoBank: SynthLfoBank | null = null;
+  /** The clock subscription that phase-locks transport LFOs; dropped on rebind. */
+  private stopTransportOriginSync: (() => void) | null = null;
 
   // --- delegates to the composed subsystems --------------------------------
 
@@ -108,7 +122,15 @@ export class AudioEngine {
 
   scheduleAfterClockStep(task: () => void): void { this.clock.scheduleAfterCurrentStep(task); }
 
-  setClockBpm(bpm: number): void { this.clock.setClockBpm(bpm); }
+  /**
+   * Tempo reaches TWO subsystems: the 16th grid, and every sync-rated LFO
+   * generator currently running. The bank re-rates in place at `currentTime`
+   * rather than on the next note, so a tempo change is heard on a held pad.
+   */
+  setClockBpm(bpm: number): void {
+    this.clock.setClockBpm(bpm);
+    if (this.ctx) this.lfoBank?.setBpm(bpm, this.ctx.currentTime);
+  }
 
   setMeter(meter: Meter): void { this.clock.setMeter(meter); }
 
@@ -143,54 +165,121 @@ export class AudioEngine {
 
   __drumTrackGainCountForTests(): number { return this.drumSynth.__drumTrackGainCountForTests(); }
 
-  // SynthVoices
+  // SynthVoiceManager
+  /**
+   * Starts one logical voice and hands back the identity that addresses it.
+   *
+   * The return value is the whole point of this API: three players share every
+   * melodic bus (the live keyboard, the arp, the melody-track sequencer), so a
+   * `` `${source}:${noteName}` `` lookup names as many voices as happen to be
+   * sounding that note and a note-off resolved that way cuts whichever one it
+   * finds. A bridge keeps the ID it was given and releases THAT instance.
+   *
+   * `null` before the AudioContext exists — the same no-op-before-init
+   * contract every setter on this class follows.
+   */
   triggerSynthNoteOn(
     noteName: string,
-    params: SynthParams,
+    synth: ActiveSynth,
     velocity = DEFAULT_VELOCITY,
     time: number | undefined,
     source: string,
     scaleFactor: number,
     owner: VoiceOwner,
-  ): void {
-    this.synthVoices.triggerSynthNoteOn(noteName, params, velocity, time, source, scaleFactor, owner);
+  ): VoiceId | null {
+    const ctx = this.ctx;
+    if (!ctx || !this.synthManager) return null;
+    // wakeIfIdle() re-arms the idle countdown itself on every reachable path,
+    // so there is no second markActivity() here. Every caller reaches this
+    // choke point, MIDI input included, which has no gesture path of its own.
+    this.hooks.wakeIfIdle();
+    return this.synthManager.noteOn({
+      source,
+      owner,
+      noteName,
+      velocity,
+      at: time ?? ctx.currentTime,
+      scaleFactor,
+      synth,
+    });
   }
 
-  triggerSynthNoteOff(noteName: string, releaseTime = 0.3, time?: number, source = 'synth', pinRelease = false): void {
-    this.synthVoices.triggerSynthNoteOff(noteName, releaseTime, time, source, pinRelease);
+  /** Releases exactly the voice `voiceId` names. Unknown or already-released ids are a no-op. */
+  triggerSynthNoteOff(voiceId: VoiceId, releaseSeconds = 0.3, time?: number): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.synthManager) return;
+    this.synthManager.noteOff(voiceId, time ?? ctx.currentTime, releaseSeconds);
   }
 
+  /**
+   * Releases what ONE player is holding on ONE bus, leaving every other
+   * player's voices sounding — the arp's key-up. A hit that player has already
+   * booked a release for is left alone, so a key-up never cancels notes the
+   * clock has planned.
+   */
   releaseSoundingVoices(source: string, releaseTime: number, owner: VoiceOwner): void {
-    this.synthVoices.releaseSoundingVoices(source, releaseTime, owner);
+    const ctx = this.ctx;
+    if (!ctx || !this.synthManager) return;
+    this.synthManager.releaseOwner(source, owner, ctx.currentTime, releaseTime);
   }
 
+  /**
+   * Silences a whole bus whatever is on it — a project install, a loop load, a
+   * vibe swap. Whole-bus reach is deliberately the method with the whole-bus
+   * name and can never be reached by omitting an argument to a narrower one.
+   */
   stopSource(source: string, releaseTime = 0.1, time?: number): void {
-    this.synthVoices.stopSource(source, releaseTime, time);
+    const ctx = this.ctx;
+    if (!ctx || !this.synthManager) return;
+    this.synthManager.stopSource(source, time ?? ctx.currentTime, releaseTime);
   }
 
+  /**
+   * `stopSource` narrowed to one player: its sounding voices AND the hits it
+   * has booked ahead of the transport. What a melody grid's stop needs, since
+   * the grid shares its bus with live input and the arp.
+   */
   stopOwnedVoices(
     source: string,
     owner: VoiceOwner,
     releaseTime = 0.1,
     time?: number,
   ): void {
-    this.synthVoices.stopOwnedVoices(source, owner, releaseTime, time);
+    const ctx = this.ctx;
+    if (!ctx || !this.synthManager) return;
+    this.synthManager.stopOwner(source, owner, time ?? ctx.currentTime, releaseTime);
+  }
+
+  /**
+   * Equal-power polyphony for ONE bus: holds its total level flat as keys are
+   * added, on a gain the manager can ramp at any time rather than on the amp
+   * envelope, which cannot be re-planned mid-note.
+   *
+   * `source` is REQUIRED, and that is a scar, not a style. It used to be
+   * omittable, and omitting it re-shaped every sounding voice on every bus —
+   * a keyboard press quietly ducked the chord, bass and pad layers under a
+   * held note. Voices already releasing are skipped by the manager, so
+   * sequenced material is never ducked by a key-down.
+   */
+  applySynthVelocityScale(scale: number, source: string): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.synthManager) return;
+    this.synthManager.setPolyphonyScale(source, scale, ctx.currentTime);
   }
 
   dropVoicesScheduledFrom(source: string, time: number): void {
-    this.synthVoices.dropVoicesScheduledFrom(source, time);
+    this.synthManager?.dropScheduledFrom(source, time);
   }
 
-  applySynthVelocityScale(scale: number, source: string): void {
-    this.synthVoices.applySynthVelocityScale(scale, source);
-  }
-
-  updateSynthParams(params: SynthParams, source?: string): void {
-    this.synthVoices.updateSynthParams(params, source);
-  }
-
-  setPresetTrim(source: string, trimGain: number): void {
-    this.synthVoices.setPresetTrim(source, trimGain);
+  /**
+   * Pushes a patch change to every voice sounding on one bus. Only the
+   * continuous controls move; envelope timing and unison count take effect on
+   * the next note, and a change of voice MODE releases the bus instead.
+   */
+  updateSynthPatch(previous: ActiveSynth, next: ActiveSynth, source: string): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.synthManager) return;
+    this.synthManager.updatePatch(source, previous, next, ctx.currentTime);
   }
 
   /**
@@ -231,7 +320,7 @@ export class AudioEngine {
     if (ctx?.state === 'suspended') {
       try {
         await ctx.resume();
-        this.synthVoices.rearmVoiceTeardowns();
+        this.synthManager?.rearmTeardowns();
         // This resume already happened, whoever it was for — a stale true
         // here would make the next wakeIfIdle() redundantly resume() and
         // sweep every voice's teardown again for nothing.
@@ -271,16 +360,52 @@ export class AudioEngine {
     const ctx = this.ctx;
     if (!ctx) return;
     this.masterRack.bind(ctx);
-    this.synthVoices.bind(ctx);
     this.drumSynth.bind(ctx);
     this.clock.bind(ctx);
+    this.bindSynth(ctx);
   }
 
-  /** Every voice still live OR still releasing, across every source. */
-  private liveVoiceCount(): number {
-    let count = 0;
-    for (const voices of this.synthVoices.sourceVoices.values()) count += voices.size;
-    return count;
+  /**
+   * Builds the synth and its LFO bank on `ctx`, and wires the one edge Task 5
+   * deliberately left open: the clock's transport origin.
+   *
+   * A transport-triggered LFO is ONE phase-locked generator per bus, and the
+   * instant it locks to has to be the instant the grid anchors step 0 to —
+   * `Clock.resetClock` publishes exactly that resolved time, never a separate
+   * read of `currentTime`, so the LFO and the grid cannot drift apart by the
+   * width of a re-anchor.
+   *
+   * Idempotent across a rebind: the previous subscription is dropped first, or
+   * a re-bound engine would hold a listener writing into a bank whose context
+   * is gone.
+   */
+  private bindSynth(ctx: BaseAudioContext): void {
+    this.stopTransportOriginSync?.();
+    const lfoBank = new SynthLfoBank(ctx);
+    this.lfoBank = lfoBank;
+    this.synthManager = new SynthVoiceManager({
+      ctx,
+      // Null until the master chain exists, which is what makes a note-on
+      // before the first user click a no-op rather than a throw:
+      // getSourceTap() raises without dryGain.
+      destinationsFor: (source) =>
+        this.masterRack.dryGain ? { output: this.masterRack.getSourceTap(source) } : null,
+      lfoBank,
+    });
+    this.stopTransportOriginSync = this.clock.subscribeTransportOrigin((time) => {
+      lfoBank.setTransportOrigin(time);
+    });
+  }
+
+  /**
+   * Every voice still live OR still releasing, across every source.
+   *
+   * Read off the voice manager, which owns allocation now. Load-bearing for
+   * idle suspend: a context suspended while a release tail is still in the air
+   * freezes that tail rather than finishing it.
+   */
+  liveVoiceCount(): number {
+    return this.synthManager?.liveVoiceCount() ?? 0;
   }
 
   /**
@@ -363,7 +488,7 @@ export class AudioEngine {
     // .then() above. It protects a fake context that resolves resume() on a
     // microtask, and a real one that may take a frame, from either letting a
     // stale wall-clock timer fire first.
-    this.synthVoices.rearmVoiceTeardowns();
+    this.synthManager?.rearmTeardowns();
     this.markActivity();
   }
 

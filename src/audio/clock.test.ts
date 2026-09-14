@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { bindFakeCtx, fakeCtx, freshEngine, makeEngine, type EngineInstance } from './testFakes';
 import { barDurationSec, STEPS_PER_BAR, stepDurationSec } from '../utils/musicTheory';
 import { getMeter } from '../utils/meter';
-import { SYNTH, suspendableEngine } from './engineTestHelpers';
+import { ACTIVE_SYNTH, suspendableEngine } from './engineTestHelpers';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the engine exports no
    internals; these tests drive the private clockTick and read private clock
@@ -394,6 +394,63 @@ describe('resetClock anchoring', () => {
   });
 });
 
+
+describe('subscribeTransportOrigin', () => {
+  test('fires with the exact resolved origin — the explicit anchor when honored', () => {
+    const { engine, ctx } = clockEngine();
+    const received: number[] = [];
+    (engine as any).clock.subscribeTransportOrigin((time: number) => received.push(time));
+
+    const target = ctx.currentTime + 0.075;
+    engine.resetClock(target);
+
+    expect(received).toEqual([target]);
+  });
+
+  test('fires with the re-anchor fallback when no explicit anchor is honored', () => {
+    const { engine, ctx } = clockEngine();
+    const received: number[] = [];
+    (engine as any).clock.subscribeTransportOrigin((time: number) => received.push(time));
+
+    engine.resetClock();
+
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBeCloseTo(ctx.currentTime + 0.05, 6);
+  });
+
+  test('an unsubscribed listener receives nothing from a later reset', () => {
+    const { engine, ctx } = clockEngine();
+    const received: number[] = [];
+    const unsubscribe = (engine as any).clock.subscribeTransportOrigin((time: number) => received.push(time));
+    unsubscribe();
+
+    engine.resetClock(ctx.currentTime + 0.075);
+
+    expect(received).toHaveLength(0);
+  });
+
+  test('a throwing listener does not prevent the reset itself or other listeners', () => {
+    const errors = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { engine, ctx } = clockEngine();
+      const received: number[] = [];
+      (engine as any).clock.subscribeTransportOrigin(() => {
+        throw new Error('boom');
+      });
+      (engine as any).clock.subscribeTransportOrigin((time: number) => received.push(time));
+
+      const target = ctx.currentTime + 0.075;
+      expect(() => engine.resetClock(target)).not.toThrow();
+
+      expect(received).toEqual([target]);
+      expect((engine as any).clock.clockNextStepTime).toBe(target);
+      expect(errors).toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+    }
+  });
+});
+
 describe('song boundary alignment', () => {
   /**
    * Drives the real clock to a loop boundary and re-anchors from inside the
@@ -480,6 +537,21 @@ describe('the metronome does not run the clock', () => {
 });
 
 
+/**
+ * Cancels every teardown timer the voice manager still has booked.
+ *
+ * A release schedules a real `setTimeout` for the end of its tail, and these
+ * tests deliberately leave voices mid-release — without this the suite would
+ * hold live timers after the assertions it cares about have already run.
+ */
+function cancelPendingTeardowns(engine: EngineInstance): void {
+  const manager = (engine as any).synthManager;
+  if (!manager) return;
+  for (const groups of manager.groups.values()) {
+    for (const group of groups) group.cancelTeardown?.();
+  }
+}
+
 describe("idle suspend and wakeIfIdle", () => {
 
   test('an idle engine suspends when its idle timer fires', () => {
@@ -490,7 +562,7 @@ describe("idle suspend and wakeIfIdle", () => {
 
   test('a live voice blocks the suspend', () => {
     const { engine, ctx } = suspendableEngine();
-    (engine as any).synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     (engine as any).maybeSuspendNow();
     expect(ctx.suspendCalls).toBe(0);
   });
@@ -537,34 +609,22 @@ describe("idle suspend and wakeIfIdle", () => {
 
 describe("a suspended context freezes the audio clock", () => {
 
-  test('a released voice records its teardown time on the AUDIO clock', () => {
-    const { engine, ctx } = suspendableEngine();
-    const e = engine as any;
-    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
-    e.synthVoices.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
-
-    const voice = e.synthVoices.activeVoices.get('synth:C4');
-    // max(release 0.5, filterRelease 0.5) + 0.1 grace
-    expect(voice.teardownAt).toBeCloseTo(ctx.currentTime + 0.6, 5);
-  });
-
   test('a releasing voice also blocks the suspend — a release tail must never be cut', () => {
     const { engine, ctx } = suspendableEngine();
     const e = engine as any;
-    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
-    e.synthVoices.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
+    const id = engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOff(id!, 0.5, ctx.currentTime);
     e.maybeSuspendNow();
     expect(ctx.suspendCalls).toBe(0);
-    clearTimeout(e.synthVoices.activeVoices.get('synth:C4').teardownTimer);
+    cancelPendingTeardowns(engine);
   });
 
-  test('wakeIfIdle re-arms a pending teardown against the frozen audio clock, when THIS engine idle-suspended', () => {
+  test('wakeIfIdle re-arms every pending teardown against the frozen audio clock, when THIS engine idle-suspended', () => {
     const { engine, ctx } = suspendableEngine();
     const e = engine as any;
-    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
-    e.synthVoices.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
-    const voice = e.synthVoices.activeVoices.get('synth:C4');
-    const firstTimer = voice.teardownTimer;
+    const id = engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOff(id!, 0.5, ctx.currentTime);
+    const rearm = spyOn(e.synthManager, 'rearmTeardowns');
 
     // A releasing voice blocks maybeSuspendNow (proven above), so this drives
     // wakeIfIdle's own resume/re-arm branch directly by forcing the internal
@@ -576,21 +636,21 @@ describe("a suspended context freezes the audio clock", () => {
     e.suspendedForIdle = true;
     engine.wakeIfIdle();
 
-    // The timer was replaced, and the voice is still tracked — the old wall
-    // clock timer would have torn it down 10 s into a 0.6 s release.
-    expect(voice.teardownTimer).not.toBe(firstTimer);
-    expect(e.synthVoices.activeVoices.get('synth:C4')).toBe(voice);
-    clearTimeout(voice.teardownTimer);
+    expect(rearm).toHaveBeenCalled();
+    // The voice is still held: the wall-clock timer would otherwise have torn
+    // it down 10 s into a 0.6 s release.
+    expect(engine.liveVoiceCount()).toBeGreaterThan(0);
+    rearm.mockRestore();
+    cancelPendingTeardowns(engine);
   });
 
   test('init resumes and re-arms a pending teardown when the BROWSER suspended the context', async () => {
     const { engine, ctx } = suspendableEngine();
     const e = engine as any;
     ctx.state = 'suspended';
-    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
-    e.synthVoices.triggerSynthNoteOff('C4', 0.5, ctx.currentTime, 'synth');
-    const voice = e.synthVoices.activeVoices.get('synth:C4');
-    const firstTimer = voice.teardownTimer;
+    const id = engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOff(id!, 0.5, ctx.currentTime);
+    const rearm = spyOn(e.synthManager, 'rearmTeardowns');
 
     // This is the genuine backgrounded-tab scenario: the browser suspends on
     // its own schedule, with no idle flag of ours ever set. init()'s existing
@@ -598,8 +658,9 @@ describe("a suspended context freezes the audio clock", () => {
     await e.init();
 
     expect(ctx.resumeCalls).toBe(1);
-    expect(voice.teardownTimer).not.toBe(firstTimer);
-    clearTimeout(voice.teardownTimer);
+    expect(rearm).toHaveBeenCalled();
+    rearm.mockRestore();
+    cancelPendingTeardowns(engine);
   });
 });
 
@@ -614,7 +675,7 @@ describe("every activity path re-arms the idle countdown", () => {
     e.maybeSuspendNow();
     expect(ctx.state).toBe('suspended');
 
-    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     expect(ctx.resumeCalls).toBe(1);
   });
 
@@ -644,7 +705,7 @@ describe("every activity path re-arms the idle countdown", () => {
     const { engine, ctx } = freshEngine();
     const e = engine as any;
     expect(e.idleTimer).toBeNull();
-    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     expect(e.idleTimer).not.toBeNull();
   });
 
@@ -740,7 +801,7 @@ describe("activity marks and the resume-failure path", () => {
     // Prove recoverability end-to-end: the very next sound-producing trigger
     // retries resume(), it is not stuck silent forever.
     ctx.resume = async () => { resumeAttempts++; ctx.state = 'running'; };
-    e.synthVoices.triggerSynthNoteOn('C4', SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     expect(resumeAttempts).toBe(2);
   });
 });

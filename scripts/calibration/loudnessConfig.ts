@@ -32,10 +32,8 @@
  */
 import { createHash } from 'node:crypto';
 import { mergeDrumKit } from '@/audio/drumKits';
-import { applyPreset } from '@/audio/presetRegistry';
 import { DRUM_KITS, DRUM_TYPES } from '@/data/drumKits';
-import type { SynthPresetItem } from '@/data/synthPresets';
-import { INITIAL_SYNTH_PARAMS } from '@/store/initialState';
+import type { SynthPreset } from '@/data/synthPresets';
 
 /**
  * `reverbSend` only feeds the drum reverb send, and the calibration render zeroes
@@ -48,13 +46,27 @@ import { INITIAL_SYNTH_PARAMS } from '@/store/initialState';
 export const DRUM_HASH_EXCLUDED = ['reverbSend'] as const;
 
 /**
- * `preset` is a display name. The four arp fields drive a SCHEDULER above the
- * engine: the calibration pattern triggers notes directly, the arpeggiator never
- * runs, and it cannot change what one triggered note sounds like. Everything else
- * in SynthParams is in — including lfoTarget/lfoRate/lfoDepth (the 'volume' target
- * is literally a tremolo gain) and octave (pitch, therefore K-weighted energy).
+ * One field, from `patch.common` — NOT from the top level, which is why
+ * `presetLoudnessHash` omits it one level down rather than through the same
+ * top-level `omit()` the drum half uses.
+ *
+ * The list used to hold the display name and the four arpeggiator fields,
+ * because a flat `SynthParams` carried all five inside the thing being
+ * measured. It no longer does: a name is a sibling of `patch`, not a field in
+ * it, and Arp is performance state that never enters a patch at all.
+ *
+ * `outputGainDb` is here because it is the one field of an `EnginePatch` the
+ * measurement provably cannot see: `renderPreset` neutralises it for the
+ * uncalibrated pass (renderOffline.ts), so `measuredDbfs` is the same number
+ * whatever it is set to. Hashing it would make retuning a preset's applied
+ * gain demand a multi-minute regeneration that reproduced the identical
+ * measurement — and would train people to regenerate without thinking, which
+ * is exactly what the two short exclusion lists exist to prevent. Nothing is
+ * left unguarded by the omission: `findOutOfToleranceEntries` reads
+ * `outputGainDb` off the LIVE patch on every `check:levels` run, so a retune
+ * that lands the preset outside the band fails in milliseconds instead.
  */
-export const SYNTH_HASH_EXCLUDED = ['preset', 'arpActive', 'arpMode', 'arpRate', 'arpOctaves'] as const;
+export const SYNTH_HASH_EXCLUDED = ['outputGainDb'] as const;
 
 /** Recursively sort object keys so the digest is order-independent: a reformat of
  *  a data table must not read as a retune. Arrays keep their order — position is
@@ -114,9 +126,16 @@ export function drumLoudnessHash(kitName: string): string {
   return hashLoudnessConfig({ kit: kitName, voices });
 }
 
-export function presetLoudnessHash(preset: SynthPresetItem): string {
-  // The RESOLVED params, for the same reason: a change to INITIAL_SYNTH_PARAMS
-  // changes what a partial preset renders as.
-  const params = applyPreset(INITIAL_SYNTH_PARAMS, preset) as unknown as Record<string, unknown>;
-  return hashLoudnessConfig({ preset: preset.id, params: omit(params, SYNTH_HASH_EXCLUDED) });
+export function presetLoudnessHash(preset: SynthPreset): string {
+  // The patch as authored — there is no resolution step any more, because an
+  // entry is complete. A preset's measured level therefore depends on that
+  // entry alone, where it used to move whenever the shared flat defaults did.
+  // `common` is rebuilt without the applied output gain; every other field of
+  // both blocks is hashed. See SYNTH_HASH_EXCLUDED for why that one is out.
+  const patch = {
+    engine: preset.engine,
+    ...preset.patch,
+    common: omit(preset.patch.common as unknown as Record<string, unknown>, SYNTH_HASH_EXCLUDED),
+  } as unknown as Record<string, unknown>;
+  return hashLoudnessConfig({ preset: preset.id, params: patch });
 }

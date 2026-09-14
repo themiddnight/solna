@@ -7,7 +7,7 @@
  * - `'arp'`       — the arpeggiator's clock.
  * - `'sequencer'` — the transport playing back written material. Same string
  *                   as the engine's drum-sequencer bus name, but a different
- *                   vocabulary — `stopOwnedVoices('sequencer', 'sequencer', …)`
+ *                   vocabulary — `releaseOwner('sequencer', 'sequencer', …)`
  *                   would compile and read confusingly. Harmless today because
  *                   drums hold no synth voices, but worth a future reader's
  *                   double take.
@@ -16,6 +16,13 @@
  * A tuple AND a type, not one of them: a union declared alone cannot be
  * enumerated at runtime, and a roster declared alone cannot be checked at
  * compile time. `voiceOwner.test.ts` pins the two together in both directions.
+ *
+ * An owner is not an identity. Three of these players share every melodic
+ * bus, so "the `live` voice on `synth`" names as many voices as happen to be
+ * sounding; `SynthVoiceManager` (`synth/voiceManager.ts`) addresses one voice
+ * by `VoiceId` and uses an owner only for the deliberately wider reach of
+ * `releaseOwner(source, owner, at)` — "everything this player holds on this
+ * bus", which is what an arp cleanup or a melody-track stop actually means.
  *
  * Its own leaf module rather than an export of `engine.ts` because every bridge
  * in `audio/playback/` needs the type and none of them should widen its

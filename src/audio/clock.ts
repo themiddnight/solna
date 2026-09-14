@@ -26,6 +26,17 @@ export class Clock {
   // this. Set through store/engineSync.ts, never from a component.
   private meter: Meter = getMeter(DEFAULT_METER_ID);
   private clockListeners = new Set<(step: number, beat: number, time: number) => void>();
+  /**
+   * Task 5 (synth engine + presets): who wants to know the transport's
+   * origin/reset instant. `SynthLfoBank` phase-locks a shared transport LFO
+   * to this exact time, so it must be the same audio-clock value step 0 is
+   * anchored to below — not a derived approximation. Deliberately a plain
+   * `Set` of callbacks kept on `Clock` itself, not a new `EngineHooks`
+   * member: `EngineHooks` is implemented by `AudioEngine`, and this LFO bank
+   * does not exist there yet (Task 7's wiring). `AudioEngine` subscribes
+   * here once it does, same shape as `subscribeClock`.
+   */
+  private transportOriginListeners = new Set<(time: number) => void>();
   private afterStepTasks: Array<() => void> = [];
   private dispatchingStep = false;
   private static readonly CLOCK_LOOKAHEAD = 0.1; // schedule events this far ahead
@@ -127,6 +138,21 @@ export class Clock {
     this.meter = meter;
   }
 
+  /**
+   * Subscribe to the transport origin/reset instant `resetClock` anchors
+   * step 0 to. Fires once per `resetClock` call with the exact resolved
+   * audio-clock time (the explicit `atTime` when it was honored, the
+   * re-anchor fallback otherwise) — never a separate read of `currentTime`,
+   * so a subscriber's shared LFO starts in phase with the grid it is meant
+   * to lock to.
+   */
+  subscribeTransportOrigin(listener: (time: number) => void): () => void {
+    this.transportOriginListeners.add(listener);
+    return () => {
+      this.transportOriginListeners.delete(listener);
+    };
+  }
+
   getMeter(): Meter {
     return this.meter;
   }
@@ -157,6 +183,13 @@ export class Clock {
     const fallback = this.ctx.currentTime + Clock.CLOCK_REANCHOR_DELAY;
     this.clockNextStepTime =
       atTime !== undefined && atTime > this.ctx.currentTime ? atTime : fallback;
+    this.transportOriginListeners.forEach((listener) => {
+      try {
+        listener(this.clockNextStepTime);
+      } catch (err) {
+        console.error('[audioEngine] transport origin listener threw; continuing', err);
+      }
+    });
   }
 
   // The shared clock keeps its grid position across stop/start and

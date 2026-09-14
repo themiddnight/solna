@@ -1,9 +1,10 @@
 /**
  * Proves the AC end to end rather than by arithmetic: re-renders representative
  * drum KITS (DEV-387: a trim is per kit, not per voice — see the comment on
- * `DRUM_TRIMS` in src/data/trimTable.ts) and synth presets WITH the committed
- * trim applied, and measures the result again, asserting each lands within
- * TOLERANCE_DB of TARGET_DBFS.
+ * `DRUM_TRIMS` in src/data/trimTable.ts) with the committed trim applied, and
+ * representative synth presets with their own `common.outputGainDb` applied,
+ * and measures the result again, asserting each lands within TOLERANCE_DB of
+ * TARGET_DBFS.
  *
  * `check:levels` asserts the same guarantee from the recorded numbers in
  * milliseconds; this is the occasional confirmation that those numbers describe
@@ -30,11 +31,29 @@ import { measureDrumKit, measurePreset } from './renderOffline.ts';
 
 /** A spread of measured levels and one deliberately extreme case: Trap Beat and
  *  Tight Pocket sit at the low and high ends of the committed kit range
- *  (-15.6 / -21.7 dBFS uncalibrated), and factory-cyber-drone is the one flagged
- *  entry — +13.3 dB, past the +/-12 dB fader range — so this also proves that
- *  entry lands on target once its (honoured, unclamped) trim is applied. */
+ *  uncalibrated, so this proves the band is cleared at both ends. */
 const SAMPLE_KITS = ['Retro Drive', '808 Vintage', 'Trap Beat', 'Tight Pocket'];
-const SAMPLE_PRESETS = ['factory-cosmic-lead', 'factory-cyber-drone'];
+/**
+ * One patch per family the library's output gains are authored BY (see the
+ * header of src/data/synthPresets.ts): a bass, a lead, a six-voice unison lead,
+ * a pad and an FX one-shot. A preset's applied gain is `common.outputGainDb`
+ * inside its own patch now, so what this proves is no longer "the table's trim
+ * resolves" but "the patch as shipped plays on target" — and the families are
+ * where an authored estimate is most likely to be wrong, because they were
+ * authored as a mix-role ladder rather than measured one at a time.
+ */
+const SAMPLE_PRESETS = [
+  'bass-deep-sine',
+  'factory-cosmic-lead',
+  'factory-hyper-saw-lead',
+  'factory-celestial-shimmer',
+  'factory-fx-down-sweep',
+  // The two ends of the applied-gain range, which is where a rounding or a sign
+  // error shows up first: Cyber Drone carries the library's largest BOOST
+  // (+9 dB) and Trance Pluck its highest peak (1.32 pre-bus).
+  'factory-cyber-drone',
+  'factory-trance-pluck',
+];
 
 let failures = 0;
 let worstDeviationDb = 0;
@@ -60,7 +79,7 @@ for (const kitName of SAMPLE_KITS) {
 for (const id of SAMPLE_PRESETS) {
   const preset = SYNTH_PRESETS.find((p) => p.id === id);
   if (!preset) throw new Error(`No such preset: ${id}`);
-  report(`${id} with its trim applied`, await measurePreset(preset, true));
+  report(`${id} at its own outputGainDb`, await measurePreset(preset, true));
 }
 
 console.log(`\nWorst deviation from target: ${worstDeviationDb.toFixed(2)} dB.`);

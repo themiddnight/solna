@@ -22,7 +22,7 @@
  *    every loop boundary, matching the per-loop state live song mode installs
  *    as it advances. Drum track faders are still applied once; BiquadFilter
  *    `type` is not an AudioParam and therefore cannot be time-automated.
- *  - `updateSynthParams` is not called at all: it only reshapes voices that
+ *  - `updateSynthPatch` is not called at all: it only reshapes voices that
  *    are already live, and there are none before the first note. Each voice
  *    gets its params at trigger time, which is where they come from anyway.
  */
@@ -65,8 +65,9 @@ import type {
   PadMode,
   PadVoicing,
   SequencerTrack,
-  SynthParams,
 } from '@/types';
+import type { ActiveSynth, ArpSettings } from '@/types/synth';
+import { synthReleaseSeconds } from '@/utils/synthPatch';
 
 export const MIXDOWN_SAMPLE_RATE = 44100;
 export const MIXDOWN_CHANNELS = 2;
@@ -106,7 +107,9 @@ export interface MixdownMelodyTrack {
   loopLength: number;
   stepResolution: LeadStepResolutionId;
   gate: number;
-  params: SynthParams;
+  params: ActiveSynth;
+  /** Beside the patch, never inside it — Arp is performance state. */
+  arp: ArpSettings;
   source: string;
 }
 
@@ -117,6 +120,7 @@ function mixdownLeadTrack(loop: MixdownLoop): MixdownMelodyTrack {
     stepResolution: loop.leadStepResolution,
     gate: loop.leadGate,
     params: loop.synthParams,
+    arp: loop.synthArpSettings,
     source: 'synth',
   };
 }
@@ -128,6 +132,7 @@ function mixdownFxTrack(loop: MixdownLoop): MixdownMelodyTrack {
     stepResolution: loop.fxStepResolution,
     gate: loop.fxGate,
     params: loop.fxSynthParams,
+    arp: loop.fxArpSettings,
     source: 'fx',
   };
 }
@@ -148,11 +153,16 @@ export interface MixdownLoop {
   scaleRoot: string;
   scaleType: string;
   chords: ChordItem[];
-  synthParams: SynthParams;
-  chordSynthParams: SynthParams;
-  bassSynthParams: SynthParams;
-  padSynthParams: SynthParams;
-  fxSynthParams: SynthParams;
+  synthParams: ActiveSynth;
+  chordSynthParams: ActiveSynth;
+  bassSynthParams: ActiveSynth;
+  padSynthParams: ActiveSynth;
+  fxSynthParams: ActiveSynth;
+  synthArpSettings: ArpSettings;
+  chordArpSettings: ArpSettings;
+  bassArpSettings: ArpSettings;
+  padArpSettings: ArpSettings;
+  fxArpSettings: ArpSettings;
   chordRhythmId: string;
   chordRhythmMode: 'preset' | 'custom';
   customChordRhythm: boolean[];
@@ -206,8 +216,8 @@ export interface MixdownSnapshot {
   drumKit: Partial<DrumKit>;
   drumKitName: string | undefined;
   drumFilter: MixdownDrumFilter;
-  /** The flat `synthParams` — what a sequencer note voice uses (the DEV-386 note). */
-  sequencerParams: SynthParams;
+  /** Lead's patch — what a sequencer NOTE row voices on (the DEV-386 note). */
+  sequencerParams: ActiveSynth;
   loops: MixdownLoop[];
 }
 
@@ -502,8 +512,8 @@ export function buildLoopVoices(
   const bassHoldNotes: ({ noteName: string; velocity: number } | null)[] = [];
   const bassHoldSec: number[] = [];
 
-  const chordArp = !!loop.chordSynthParams.arpActive;
-  const bassArp = !!loop.bassSynthParams.arpActive;
+  const chordArp = loop.chordArpSettings.active;
+  const bassArp = loop.bassArpSettings.active;
 
   const { chordCycle, bassCycle } = resolveLoopCycles(loop, meterId, stepsPerBar);
   // The cycle wrappers are PRESET-only for the full-hold fast path, so a
@@ -632,16 +642,15 @@ function scheduleMelodyStep(
   const columns = track.loopLength * columnsPerBar(stepsPerBar, stride);
   const melodyTicks = track.loopLength * stepsPerBar * TICKS_PER_SIXTEENTH;
   const arpStep = arpStepFor(stepInPass, stepsPerBar);
-  const hits = leadScheduleHits(stepInPass, stride, columns, track.params.arpActive, tickDur);
+  const hits = leadScheduleHits(stepInPass, stride, columns, track.arp.active, tickDur);
 
   for (const hit of hits) {
     const at = time + hit.offsetSec;
     const sounding = leadSoundingNotes(track.steps, hit.column, stepsPerBar, stride);
     const triggers: LeadTrigger[] = resolveLeadStepTriggers(
       sounding,
-      track.params.arpActive,
+      track.arp,
       arpStep,
-      track.params,
       tickDur,
       track.gate,
       stride,
@@ -649,8 +658,10 @@ function scheduleMelodyStep(
     );
     for (const trigger of triggers) {
       const start = at + trigger.timeOffsetSec;
-      engine.triggerSynthNoteOn(trigger.note, track.params, DEFAULT_VELOCITY, start, track.source, 1, 'sequencer');
-      engine.triggerSynthNoteOff(trigger.note, track.params.release, start + trigger.holdSec, track.source);
+      const voiceId = engine.triggerSynthNoteOn(trigger.note, track.params, DEFAULT_VELOCITY, start, track.source, 1, 'sequencer');
+      if (voiceId) {
+        engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(track.params), start + trigger.holdSec);
+      }
     }
   }
 }
@@ -695,8 +706,8 @@ function scheduleArrangement(
       // explicit time the render needs.
       for (const ev of sequencerStepEvents(loop.sequencerTracks, stepInBar, snapshot.sequencerParams, snapshot.bpm)) {
         if (ev.kind === 'note') {
-          engine.triggerSynthNoteOn(ev.note, snapshot.sequencerParams, DEFAULT_VELOCITY, time, 'synth', 1, 'sequencer');
-          engine.triggerSynthNoteOff(ev.note, ev.release, time + ev.offsetSec, 'synth');
+          const voiceId = engine.triggerSynthNoteOn(ev.note, snapshot.sequencerParams, DEFAULT_VELOCITY, time, 'synth', 1, 'sequencer');
+          if (voiceId) engine.triggerSynthNoteOff(voiceId, ev.release, time + ev.offsetSec);
         } else {
           engine.triggerDrum(ev.instrument, DEFAULT_VELOCITY, time);
         }
@@ -715,7 +726,7 @@ function scheduleArrangement(
         // otherwise the bar-invariant events are filtered to this step.
         if (voices.chordArp) {
           emitStepEvents(
-            arpEventsForStep(voices.chordNotes[chordIndex], chordParams, step, stepDur, voices.chordHoldScale, stepsPerBar),
+            arpEventsForStep(voices.chordNotes[chordIndex], loop.chordArpSettings, step, stepDur, voices.chordHoldScale, stepsPerBar),
             chordParams, 'chord', time, chordEnd, engine,
           );
         } else if (voices.chordHoldSec[chordIndex] > 0) {
@@ -733,14 +744,16 @@ function scheduleArrangement(
         const bassParams = loop.bassSynthParams;
         if (voices.bassArp) {
           emitStepEvents(
-            arpEventsForStep(voices.bassNotes[chordIndex], bassParams, step, stepDur, voices.bassHoldScale, stepsPerBar),
+            arpEventsForStep(voices.bassNotes[chordIndex], loop.bassArpSettings, step, stepDur, voices.bassHoldScale, stepsPerBar),
             bassParams, 'bass', time, chordEnd, engine,
           );
         } else if (voices.bassHoldSec[chordIndex] > 0) {
           const root = voices.bassHoldNotes[chordIndex];
           if (root && stepsIntoChord === 0) {
-            engine.triggerSynthNoteOn(root.noteName, bassParams, root.velocity, time, 'bass', 1, 'sequencer');
-            engine.triggerSynthNoteOff(root.noteName, bassParams.release, time + voices.bassHoldSec[chordIndex], 'bass');
+            const voiceId = engine.triggerSynthNoteOn(root.noteName, bassParams, root.velocity, time, 'bass', 1, 'sequencer');
+            if (voiceId) {
+              engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(bassParams), time + voices.bassHoldSec[chordIndex]);
+            }
           }
         } else {
           emitStepEvents(

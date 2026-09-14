@@ -7,10 +7,12 @@
  * is easier to read against the smallest arrangement that produces sound than
  * against a five-loop fixture whose silent bar could be hiding the bug.
  */
-import { synthParamsFixture } from '../testFakes';
 import { DEFAULT_DRUM_KIT, DRUM_TYPES } from '@/data/drumKits';
 import { MAX_STEPS_PER_BAR } from '@/utils/meter';
-import type { MasterEffects, SynthParams } from '@/types';
+import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
+import type { MasterEffects } from '@/types';
+import type { ActiveSynth, ArpSettings } from '@/types/synth';
+import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import type { MixdownLoop, MixdownSnapshot } from './renderMixdown';
 
 /**
@@ -25,6 +27,27 @@ import type { MixdownLoop, MixdownSnapshot } from './renderMixdown';
  */
 const BUSES = ['synth', 'chord', 'bass', 'pad', 'fx', 'sequencer'] as const;
 
+/**
+ * One bar of a melody track holding a single note at tick 0, four 16ths long.
+ *
+ * Bar-major at `LEAD_TICKS_PER_BAR`, the stored coordinate space — NOT the
+ * active resolution — because that is what the two melody columns hold; the
+ * renderer strides into it. A fixture that indexed by 16th would put the note
+ * at the wrong tick the moment a test changed `leadStepResolution`.
+ *
+ * Both melody tracks default to EMPTY above, and this is opt-in, because most
+ * of the renderer's assertions are about the chord/bass/drum material and a
+ * lead note sounding over all of them is energy in every window they measure.
+ */
+export function mixdownMelodyBar(note: string): { note: string; len: number }[][] {
+  const bar: { note: string; len: number }[][] = Array.from(
+    { length: LEAD_TICKS_PER_BAR },
+    () => [],
+  );
+  bar[0] = [{ note, len: 4 * TICKS_PER_SIXTEENTH }];
+  return bar;
+}
+
 /** The kick row of a one-bar 4/4 grid: steps 0 and 8. */
 const KICK_STEPS = Array.from({ length: 16 }, (_, i) => i === 0 || i === 8);
 
@@ -36,6 +59,7 @@ export function mixdownLoop(over: Partial<MixdownLoop> = {}): MixdownLoop {
     scaleType: 'major',
     chords: [{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] }],
     chordSynthParams: synthFixture(),
+    chordArpSettings: arpFixture(),
     chordRhythmId: 'sustained',
     chordRhythmMode: 'preset',
     customChordRhythm: [],
@@ -46,6 +70,7 @@ export function mixdownLoop(over: Partial<MixdownLoop> = {}): MixdownLoop {
     chordFeel: 0.5,
     chordOctave: 4,
     bassSynthParams: synthFixture(),
+    bassArpSettings: arpFixture(),
     bassPatternId: 'whole-note-root',
     bassPatternMode: 'preset',
     customBassPattern: [],
@@ -54,6 +79,7 @@ export function mixdownLoop(over: Partial<MixdownLoop> = {}): MixdownLoop {
     bassFeel: 0.5,
     bassOctave: 2,
     padSynthParams: synthFixture(),
+    padArpSettings: arpFixture(),
     padMode: 'drone',
     padOctave: 4,
     padVoicing: 'triad',
@@ -72,6 +98,8 @@ export function mixdownLoop(over: Partial<MixdownLoop> = {}): MixdownLoop {
     ],
     synthParams: synthFixture(),
     fxSynthParams: synthFixture(),
+    synthArpSettings: arpFixture(),
+    fxArpSettings: arpFixture(),
     leadMelodySteps: [],
     leadLoopLength: 1,
     leadStepResolution: '1/16',
@@ -135,7 +163,18 @@ export const FACTORY_EFFECTS: MasterEffects = {
   limiterRelease: 0.15,
 };
 
-/** The store's `INITIAL_SYNTH_PARAMS`, mirrored — see testFakes' synthParamsFixture. */
-function synthFixture(): SynthParams {
-  return synthParamsFixture();
+/**
+ * The factory patch, one fresh copy per call.
+ *
+ * A COPY, for the same reason `defaultTrackSynth` clones: a fixture loop holds
+ * five patches, and a test that edited one shared object would change the
+ * snapshot every other test in the file builds.
+ */
+function synthFixture(): ActiveSynth {
+  return structuredClone(SUBTRACTIVE_INIT);
+}
+
+/** Arp off — a fixture renders what is written, never an arpeggio over it. */
+function arpFixture(): ArpSettings {
+  return { active: false, mode: 'up', rate: '16n', octaves: 1 };
 }

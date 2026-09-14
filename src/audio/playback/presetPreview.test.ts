@@ -1,9 +1,10 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../engine';
 import { freshEngine } from '../testFakes';
-import { NEUTRAL_TRIM_GAIN, synthTrimGainFor } from '../trims';
-import type { SynthParams, ChordItem } from '@/types';
-import { previewChordProgression, previewSequencerNote, previewSynthPreset } from './presetPreview';
+import type { ChordItem } from '@/types';
+import type { ActiveSynth } from '@/types/synth';
+import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
+import { previewChordProgression, previewSequencerNote, previewSynthPatch } from './presetPreview';
 import {
   resetNoteInputListeners,
   subscribeNoteInput,
@@ -13,33 +14,7 @@ import {
 /* eslint-disable @typescript-eslint/no-explicit-any -- tests deliberately
    reach private engine fields (sourceVoices) via casts, same as engine.test.ts. */
 
-const SYNTH: SynthParams = {
-  oscType: 'sawtooth',
-  subOscVolume: 0.3,
-  noiseVolume: 0,
-  detune: 0,
-  filterType: 'lowpass',
-  filterCutoff: 2400,
-  filterResonance: 3,
-  filterEnvAmount: 1200,
-  attack: 0.02,
-  decay: 0.4,
-  sustain: 0.6,
-  release: 0.5,
-  filterAttack: 0.02,
-  filterDecay: 0.4,
-  filterSustain: 0,
-  filterRelease: 0.5,
-  lfoRate: 3.5,
-  lfoDepth: 0,
-  lfoTarget: 'cutoff',
-  octave: 0,
-  arpActive: false,
-  arpMode: 'up',
-  arpRate: '16n',
-  arpOctaves: 1,
-  preset: 'Test',
-};
+const SYNTH: ActiveSynth<'subtractive'> = SUBTRACTIVE_INIT;
 
 /**
  * presetPreview.ts only ever reaches the shared `audioEngine` singleton
@@ -61,19 +36,38 @@ function withFakeAudioEngine() {
   };
 }
 
+/**
+ * The voice groups the manager is holding on the shared preview bus.
+ *
+ * One entry per NOTE-ON (a unison stack is one group), with the note it
+ * sounds, the audio-clock instant it starts and whether it has been released.
+ * Reached through the manager's private map because the engine deliberately
+ * exposes no per-source voice accessor — a public one would be a door into
+ * voice state for `src/components/`, which may not have it.
+ */
+interface PreviewGroup {
+  noteName: string;
+  startedAt: number;
+  releasing: boolean;
+  voices: { nodes: { ampGain: { gain: { cancels: number[] } } } }[];
+}
+
+function previewGroups(): PreviewGroup[] {
+  const manager = (audioEngine as any).synthManager;
+  return Array.from((manager?.groups.get('preview') ?? []) as Iterable<PreviewGroup>);
+}
+
 describe('preview handle lifetimes', () => {
   test('the disposer silences a sounding preview note', () => {
     const { ctx, restore } = withFakeAudioEngine();
     try {
       const handle = previewSequencerNote('C4', SYNTH, 0.8);
-      const voices = Array.from(
-        (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<{ gains: { gain: { cancels: number[] } }[] }>,
-      );
-      expect(voices).toHaveLength(1);
+      const groups = previewGroups();
+      expect(groups).toHaveLength(1);
 
       handle();
 
-      expect(voices[0].gains[0].gain.cancels).toContain(ctx.currentTime);
+      expect(groups[0].voices[0].nodes.ampGain.gain.cancels).toContain(ctx.currentTime);
     } finally {
       restore();
     }
@@ -90,19 +84,15 @@ describe('preview handle lifetimes', () => {
       ];
       const handle = previewChordProgression(chords, SYNTH);
 
-      const voices = Array.from(
-        (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<{ startTime: number }>,
-      );
-      const future = voices.find((v) => v.startTime > ctx.currentTime);
+      const future = previewGroups().find((g) => g.startedAt > ctx.currentTime);
       expect(future).toBeTruthy();
 
       handle();
 
-      // stopSource hard-silences (removes from tracking) any voice whose
-      // startTime is still in the future, rather than ramping it from the
-      // GainNode's intrinsic 1.0.
-      const after = (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<unknown>;
-      expect(after.has(future)).toBe(false);
+      // stopSource reaches a voice whose note-on is still ahead of the clock,
+      // not only the ones already sounding — otherwise every chord the
+      // audition had queued would play on after the panel was closed.
+      expect(future!.releasing).toBe(true);
     } finally {
       restore();
     }
@@ -120,7 +110,7 @@ describe('preview handle lifetimes', () => {
   });
 
   test('a superseded handle is a no-op once a newer preview has started', () => {
-    const { ctx, restore } = withFakeAudioEngine();
+    const { restore } = withFakeAudioEngine();
     try {
       const stale = previewSequencerNote('C4', SYNTH, 0.8);
       // Starting a 2nd preview intentionally cuts the 1st (existing
@@ -128,20 +118,16 @@ describe('preview handle lifetimes', () => {
       // to reach into the 2nd preview it no longer owns.
       const current = previewSequencerNote('E4', SYNTH, 0.8);
 
-      const voices = Array.from(
-        (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<{
-          noteName: string;
-          gains: { gain: { cancels: number[] } }[];
-        }>,
-      );
-      const currentVoice = voices.find((v) => v.noteName === 'E4')!;
-      expect(currentVoice).toBeTruthy();
+      const currentGroup = previewGroups().find((g) => g.noteName === 'E4')!;
+      expect(currentGroup).toBeTruthy();
+      const cancels = currentGroup.voices[0].nodes.ampGain.gain.cancels;
+      const before = cancels.length;
 
       stale();
-      expect(currentVoice.gains[0].gain.cancels).not.toContain(ctx.currentTime);
+      expect(cancels.length).toBe(before);
 
       current();
-      expect(currentVoice.gains[0].gain.cancels).toContain(ctx.currentTime);
+      expect(cancels.length).toBeGreaterThan(before);
     } finally {
       restore();
     }
@@ -156,17 +142,17 @@ describe('previewSequencerNote default gate', () => {
   // rows with it.
   test('holds 0.5 s when the caller states no length', () => {
     const { restore } = withFakeAudioEngine();
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
     try {
       const handle = previewSequencerNote('C4', SYNTH, 0.8);
-      const voice = Array.from(
-        (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<{
-          startTime: number;
-          releaseScheduledAt: number;
-        }>,
-      )[0];
-      expect(voice.releaseScheduledAt - voice.startTime).toBeCloseTo(0.5, 10);
+      const startedAt = onSpy.mock.calls[0][3] as number;
+      const releasedAt = offSpy.mock.calls[0][2] as number;
+      expect(releasedAt - startedAt).toBeCloseTo(0.5, 10);
       handle();
     } finally {
+      onSpy.mockRestore();
+      offSpy.mockRestore();
       restore();
     }
   });
@@ -248,9 +234,8 @@ describe('progression audition streams instead of bursting', () => {
       const { scheduler } = fakeScheduler(10);
       previewProgression(sixteenChords, SYNTH, scheduler);
 
-      const voices = (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<unknown>;
       // 4 chords inside the 1.5 s horizon x 4 notes = 16 voices, not 64.
-      expect(voices.size).toBe(16);
+      expect(previewGroups()).toHaveLength(16);
     } finally {
       restore();
     }
@@ -262,14 +247,13 @@ describe('progression audition streams instead of bursting', () => {
       const { scheduler, state } = fakeScheduler(10);
       previewProgression(sixteenChords, SYNTH, scheduler);
 
-      const voices = (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<{ noteName: string }>;
-      const afterFirst = voices.size;
+      const afterFirst = previewGroups().length;
 
       state.advanceTo(11.0); // horizon 12.5 -> chords 0..5 due, 4 already done
-      expect(voices.size).toBe(afterFirst + 8);
+      expect(previewGroups()).toHaveLength(afterFirst + 8);
 
       state.advanceTo(11.0); // same time again: nothing new
-      expect(voices.size).toBe(afterFirst + 8);
+      expect(previewGroups()).toHaveLength(afterFirst + 8);
     } finally {
       restore();
     }
@@ -282,11 +266,9 @@ describe('progression audition streams instead of bursting', () => {
       previewProgression(sixteenChords, SYNTH, scheduler);
       state.advanceTo(20);
 
-      const voices = Array.from(
-        (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<{ startTime: number }>,
-      );
-      expect(voices.length).toBe(64);
-      const starts = Array.from(new Set(voices.map((v) => v.startTime))).sort((a, b) => a - b);
+      const groups = previewGroups();
+      expect(groups.length).toBe(64);
+      const starts = Array.from(new Set(groups.map((g) => g.startedAt))).sort((a, b) => a - b);
       expect(starts).toEqual(sixteenChords.map((_, i) => 10 + i * PREVIEW_CHORD_DURATION));
     } finally {
       restore();
@@ -317,11 +299,10 @@ describe('progression audition streams instead of bursting', () => {
       handle();
       expect(state.unsubscribed).toBe(1);
 
-      const before = ((audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<unknown>).size;
+      const before = previewGroups().length;
       state.advanceTo(20);
       // No further chords are scheduled after disposal.
-      expect(((audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<unknown>).size)
-        .toBeLessThanOrEqual(before);
+      expect(previewGroups().length).toBeLessThanOrEqual(before);
     } finally {
       restore();
     }
@@ -359,11 +340,12 @@ describe('a grid audition is not a performance', () => {
     try {
       previewSequencerNote('C4', SYNTH, 0.8, { holdSec: 0.22, releaseSec: 0.5 });
 
-      // The engine keys voices by `${source}:${note}`, so an audition on the
-      // 'synth' bus would seize — and then release — the very voice a player
-      // holding C4 is sounding. That is what this bus separation prevents.
-      expect(((audioEngine as any).synthVoices.sourceVoices.get('synth') as Set<unknown> | undefined)?.size ?? 0).toBe(0);
-      expect(((audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<unknown>).size).toBe(1);
+      // Its own bus, not the one carrying the player's held keys: a disposer
+      // firing on 'synth' would cut whatever the player is holding, and the
+      // separation is what keeps an audition from ever reaching it.
+      const manager = (audioEngine as any).synthManager;
+      expect((manager.groups.get('synth') as Set<unknown> | undefined)?.size ?? 0).toBe(0);
+      expect(previewGroups()).toHaveLength(1);
     } finally {
       restore();
     }
@@ -385,82 +367,61 @@ describe('a grid audition is not a performance', () => {
   });
 });
 
-/** A factory patch the committed trim table actually calibrates. */
-const CALIBRATED_PRESET = 'Cosmic Lead';
-
-describe('a preview carries its own patch\'s calibration trim', () => {
-  // PREVIEW_SOURCE is one bus shared by all three preview entry points. While
-  // the trim lived in a persistent per-source map, each of them had to
-  // overwrite it or inherit the previous audition's patch trim — three call
-  // sites whose only job was to undo each other, and the one that forgot would
-  // have auditioned a patch at another patch's level with nothing to see. The
-  // engine derives the trim from the params handed to triggerSynthNoteOn now,
-  // so these assert the LEVEL rather than the plumbing: the staleness the old
-  // tests guarded against has no state left to live in.
-  const lastPreviewPeak = (): number => {
-    const voices = Array.from(
-      (audioEngine as any).synthVoices.sourceVoices.get('preview') as Set<any>,
-    );
-    return voices[voices.length - 1].gains[0].gain.ramps[0].v;
+describe('a preview auditions the patch it is handed', () => {
+  // The per-preset trim lookup this block used to guard is gone: a patch
+  // carries its own `common.outputGainDb`, so there is no per-source trim map
+  // for one audition to leave behind for the next. What is left to prove HERE
+  // is the bridge's own contract — each entry point hands the engine the
+  // complete patch it was given, on the shared preview bus, as a 'preview'
+  // voice. That the level then follows `outputGainDb` is asserted where the
+  // envelope is built, in `synth/subtractiveVoice.test.ts`.
+  const LOUD: ActiveSynth<'subtractive'> = {
+    ...SYNTH,
+    patch: { ...SYNTH.patch, common: { ...SYNTH.patch.common, outputGainDb: -3 } },
   };
 
-  test('two auditions on the one shared bus differ in peak by the table\'s ratio', () => {
+  test('previewSequencerNote plays the patch it was given, on the preview bus', () => {
     const { restore } = withFakeAudioEngine();
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
     try {
-      const trim = synthTrimGainFor(CALIBRATED_PRESET);
-      expect(trim).not.toBe(NEUTRAL_TRIM_GAIN);
-
-      previewSequencerNote('C4', { ...SYNTH, preset: CALIBRATED_PRESET });
-      const calibrated = lastPreviewPeak();
-      // A name no factory preset has: neutral, on the same bus, immediately
-      // after the calibrated one. Under the old map this note would have kept
-      // the previous audition's trim unless something overwrote it.
-      previewSequencerNote('E4', { ...SYNTH, preset: 'A Name No Factory Preset Has' });
-      const neutral = lastPreviewPeak();
-
-      expect(calibrated / neutral).toBeCloseTo(trim, 6);
+      previewSequencerNote('C4', LOUD, 0.8);
+      const [note, synth, velocity, , source, scaleFactor, owner] = onSpy.mock.calls[0];
+      expect([note, synth, velocity, source, scaleFactor, owner]).toEqual(
+        ['C4', LOUD, 0.8, 'preview', 1, 'preview'],
+      );
     } finally {
+      onSpy.mockRestore();
       restore();
     }
   });
 
-  test('previewSynthPreset auditions at the patch it is auditioning, not the last one', () => {
+  test('previewSynthPatch plays the patch it was given, not a merge over another', () => {
     const { restore } = withFakeAudioEngine();
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
     try {
-      // Both through previewSynthPreset, which auditions at its own fixed
-      // velocity — the ratio must isolate the trim, not the entry point.
-      previewSynthPreset(
-        { id: 'p1', name: CALIBRATED_PRESET, category: 'Lead', params: {} },
-        SYNTH,
+      previewSynthPatch(LOUD);
+      const [note, synth, , , source, scaleFactor, owner] = onSpy.mock.calls[0];
+      expect([note, synth, source, scaleFactor, owner]).toEqual(
+        ['C4', LOUD, 'preview', 1, 'preview'],
       );
-      const calibrated = lastPreviewPeak();
-      previewSynthPreset(
-        { id: 'p2', name: 'A Name No Factory Preset Has', category: 'Lead', params: {} },
-        SYNTH,
-      );
-      expect(calibrated / lastPreviewPeak()).toBeCloseTo(synthTrimGainFor(CALIBRATED_PRESET), 6);
     } finally {
+      onSpy.mockRestore();
       restore();
     }
   });
 
-  test('no preview path writes the per-source trim override', () => {
-    // `presetTrims` survives as a calibration-harness override and is consulted
-    // BEFORE the derivation, so an app-side write to it would be exactly the
-    // stale value the old tests existed to catch. The guarantee now is that no
-    // preview writes it at all — assert the absence, not an overwrite.
+  test('previewChordProgression plays every note of a chord on the same patch', () => {
     const { restore } = withFakeAudioEngine();
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
     try {
-      const trims = ((audioEngine as any).synthVoices as unknown as { presetTrims: Map<string, number> }).presetTrims;
-      trims.delete('preview');
-      previewSequencerNote('C4', SYNTH);
-      previewSynthPreset({ id: 'p1', name: 'Some Patch', category: 'Lead', params: {} }, SYNTH);
       previewChordProgression(
-        [{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] }] as ChordItem[],
-        SYNTH,
+        [{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4'] }] as ChordItem[],
+        LOUD,
       );
-      expect(trims.has('preview')).toBe(false);
+      expect(onSpy).toHaveBeenCalledTimes(2);
+      for (const call of onSpy.mock.calls) expect(call[1]).toBe(LOUD);
     } finally {
+      onSpy.mockRestore();
       restore();
     }
   });

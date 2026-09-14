@@ -3,7 +3,9 @@
  *  1. every drum kit and every synth preset has an entry;
  *  2. no entry names a kit or preset that no longer exists;
  *  3. no entry's loudness-affecting config has drifted since it was calibrated;
- *  4. every entry's measured + trim lands within TOLERANCE_DB of TARGET_DBFS.
+ *  4. every entry's measurement plus the gain actually applied on top of it — a
+ *     kit's committed trim, a preset's own `common.outputGainDb` — lands within
+ *     TOLERANCE_DB of TARGET_DBFS.
  *
  * Reads the table and hashes data. It NEVER renders audio and never spawns ffmpeg:
  * that is `bun run calibration:generate`, which is manual and takes minutes.
@@ -34,7 +36,7 @@ console.log(`Calibration target ${TARGET_DBFS} dBFS, tolerance +/-${TOLERANCE_DB
 report('every kit and preset has a committed entry', findMissingEntries());
 report('no entry outlives the kit or preset it names', findOrphanEntries());
 report('no loudness-affecting default has drifted since calibration', findDriftedEntries());
-report('every committed measurement + trim lands within tolerance', findOutOfToleranceEntries());
+report('every measurement plus its applied gain lands within tolerance', findOutOfToleranceEntries());
 
 console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

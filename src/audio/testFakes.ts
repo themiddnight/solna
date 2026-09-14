@@ -1,5 +1,4 @@
 import { audioEngine } from './engine';
-import type { SynthParams } from '@/types';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the engine exports no
    internals; tests deliberately reach private fields (ctx, buses,
@@ -25,9 +24,14 @@ export function fakeParam(opts: FakeOpts = {}) {
     // Ramps are recorded so a test can prove a release ramp that has not
     // started yet is re-armed with a newly turned Release knob.
     ramps: [] as { v: number; t: number }[],
+    // Linear ramps are kept in their own log rather than folded into `ramps`:
+    // the subtractive voice's envelopes ramp linearly while every legacy
+    // engine envelope ramps exponentially, and dozens of assertions read
+    // `ramps` expecting only the exponential ones.
+    linearRamps: [] as { v: number; t: number }[],
     // The automation timeline in call order, so valueAt() can evaluate the
     // curve the engine actually scheduled instead of a test re-deriving it.
-    events: [] as { kind: 'set' | 'exp' | 'target'; v: number; t: number; tc?: number }[],
+    events: [] as { kind: 'set' | 'exp' | 'ramp' | 'target'; v: number; t: number; tc?: number }[],
     setValueAtTime(v: number, t: number) {
       this.value = v;
       this.events.push({ kind: 'set', v, t });
@@ -60,6 +64,10 @@ export function fakeParam(opts: FakeOpts = {}) {
       this.ramps.push({ v, t });
       this.events.push({ kind: 'exp', v, t });
     },
+    linearRampToValueAtTime(v: number, t: number) {
+      this.linearRamps.push({ v, t });
+      this.events.push({ kind: 'ramp', v, t });
+    },
     setTargetAtTime(v: number, t: number, tc: number) {
       this.targets.push({ v, t, tc });
       this.events.push({ kind: 'target', v, t, tc });
@@ -67,7 +75,8 @@ export function fakeParam(opts: FakeOpts = {}) {
     /**
      * Web Audio's value-at-time for the automation the envelope path uses:
      * setValueAtTime holds, exponentialRampToValueAtTime interpolates
-     * geometrically from the previous event. setTargetAtTime never ends, so
+     * geometrically and linearRampToValueAtTime arithmetically from the
+     * previous event. setTargetAtTime never ends, so
      * every later event's start value would depend on it — rather than model
      * that approximately and have tests quietly trust a wrong number, this
      * refuses to evaluate a timeline containing one.
@@ -89,9 +98,13 @@ export function fakeParam(opts: FakeOpts = {}) {
           curT = e.t;
           continue;
         }
-        if (e.kind !== 'exp') return cur;
+        if (e.kind !== 'exp' && e.kind !== 'ramp') return cur;
         const span = e.t - curT;
-        return span <= 0 ? e.v : cur * Math.pow(e.v / cur, (t - curT) / span);
+        if (span <= 0) return e.v;
+        const progress = (t - curT) / span;
+        return e.kind === 'ramp'
+          ? cur + (e.v - cur) * progress
+          : cur * Math.pow(e.v / cur, progress);
       }
       return cur;
     },
@@ -108,18 +121,49 @@ export function fakeNode(opts: FakeOpts = {}) {
     // Connections are recorded so a test can assert routing, not just levels:
     // a source wired past the filter still produces the right gain value.
     connectedTo: [] as unknown[],
+    /** Set by `setPeriodicWave`, so a test can tell a custom wave from a named one. */
+    periodicWave: null as unknown,
+    // WaveShaperNode's two fields. Present on every node for the same reason
+    // `gain`/`frequency`/`Q` are: this is one fake standing in for every node
+    // kind, and splitting it per kind would mean re-teaching every existing
+    // engine test which factory made which node.
+    curve: null as unknown,
+    oversample: 'none',
     connect(target: unknown) {
       this.connectedTo.push(target);
+      return target;
     },
-    disconnect() {
-      this.connectedTo.length = 0;
+    /**
+     * Mirrors the real `AudioNode.disconnect(destination?)` overload: with no
+     * argument it severs everything, with one it severs exactly that edge and
+     * THROWS if the edge does not exist. The throw is the point — `SynthLfoBank`
+     * is the one caller that disconnects a single `AudioParam`, and a forgiving
+     * fake is what let a double-disconnect through before (see the same strict
+     * fake in `synth/synthLfo.test.ts`).
+     */
+    disconnect(target?: unknown) {
+      if (target === undefined) {
+        this.connectedTo.length = 0;
+        return;
+      }
+      const index = this.connectedTo.indexOf(target);
+      if (index === -1) {
+        throw new Error('InvalidAccessError: the given destination is not connected');
+      }
+      this.connectedTo.splice(index, 1);
     },
     start() {},
     stop() {},
+    setPeriodicWave(wave: unknown) {
+      this.periodicWave = wave;
+      this.type = 'custom';
+    },
     gain: fakeParam(opts),
     frequency: fakeParam(opts),
     detune: fakeParam(opts),
     Q: fakeParam(opts),
+    pan: fakeParam(opts),
+    playbackRate: fakeParam(opts),
   };
 }
 
@@ -151,13 +195,35 @@ export function fakeCtx(opts: FakeOpts = {}) {
   const gains: ReturnType<typeof fakeNode>[] = [];
   const filters: ReturnType<typeof fakeNode>[] = [];
   const bufferSources: ReturnType<typeof fakeBufferSource>[] = [];
+  const oscillators: ReturnType<typeof fakeNode>[] = [];
+  const panners: ReturnType<typeof fakeNode>[] = [];
+  const shapers: ReturnType<typeof fakeNode>[] = [];
   return {
     currentTime: 10,
     // Deliberately tiny: createNoiseNode fills sampleRate * 2 samples with
     // Math.random(), and the real 44_100 would make every test that touches
     // noise fill 88_200 floats for no added coverage.
     sampleRate: 64,
-    createOscillator: () => fakeNode(opts),
+    createOscillator: () => {
+      const o = fakeNode(opts);
+      oscillators.push(o);
+      return o;
+    },
+    // The three the subtractive voice graph and the LFO bank need, which the
+    // legacy voice path never called. `createPeriodicWave` returns an opaque
+    // token: nothing reads it back except `setPeriodicWave`, and modelling the
+    // Fourier coefficients would be a fake with an opinion about DSP.
+    createStereoPanner: () => {
+      const p = fakeNode(opts);
+      panners.push(p);
+      return p;
+    },
+    createWaveShaper: () => {
+      const s = fakeNode(opts);
+      shapers.push(s);
+      return s;
+    },
+    createPeriodicWave: (real: Float32Array, imag: Float32Array) => ({ real, imag }),
     createGain: () => {
       const g = fakeNode(opts);
       gains.push(g);
@@ -185,6 +251,9 @@ export function fakeCtx(opts: FakeOpts = {}) {
     _gains: gains,
     _filters: filters,
     _bufferSources: bufferSources,
+    _oscillators: oscillators,
+    _panners: panners,
+    _shapers: shapers,
   };
 }
 
@@ -217,42 +286,4 @@ export function freshEngine(opts: FakeOpts = {}) {
   (engine as any).masterRack.reverbNode = undefined;
   (engine as any).masterRack.distortionNode = undefined;
   return { engine, ctx };
-}
-
-/**
- * A SynthParams literal mirroring the store's `INITIAL_SYNTH_PARAMS`. It lives
- * here rather than being imported because src/audio/ may not import
- * src/store/ — the eslint block for this directory has no allowTypeImports
- * exemption — and a test that had to build one inline would drift from the
- * default patch the moment the store's changed.
- */
-export function synthParamsFixture(over: Partial<SynthParams> = {}): SynthParams {
-  return {
-    oscType: 'sawtooth',
-    subOscVolume: 0.3,
-    noiseVolume: 0.02,
-    detune: 6,
-    filterType: 'lowpass',
-    filterCutoff: 2400,
-    filterResonance: 3.0,
-    filterEnvAmount: 1200,
-    attack: 0.02,
-    decay: 0.4,
-    sustain: 0.6,
-    release: 0.5,
-    filterAttack: 0.02,
-    filterDecay: 0.4,
-    filterSustain: 0,
-    filterRelease: 0.5,
-    lfoRate: 3.5,
-    lfoDepth: 0.2,
-    lfoTarget: 'cutoff',
-    octave: 0,
-    arpActive: false,
-    arpMode: 'up',
-    arpRate: '16n',
-    arpOctaves: 1,
-    preset: 'Cosmic Lead',
-    ...over,
-  };
 }

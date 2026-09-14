@@ -30,13 +30,11 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { OfflineAudioContext } from 'node-web-audio-api';
-import { createRenderEngine } from '@/audio/engine';
-import { applyPreset } from '@/audio/presetRegistry';
-import { synthTrimGainFor } from '@/audio/trims';
+import { createRenderEngine, type AudioEngine } from '@/audio/engine';
 import { withSeededRandom } from '@/audio/rng';
 import { DRUM_KITS, type DrumType } from '@/data/drumKits';
-import type { SynthPresetItem } from '@/data/synthPresets';
-import { INITIAL_SYNTH_PARAMS } from '@/store/initialState';
+import type { SynthPreset } from '@/data/synthPresets';
+import type { ActiveSynth, EnginePatch } from '@/types/synth';
 import { dbToGain, toDbfs, toDecibels, type Dbfs } from '@/utils/gainUnits';
 import { encodeWav } from '@/utils/encodeWav';
 import { measureLoudness } from './measureLoudness.ts';
@@ -122,11 +120,29 @@ export const DRUM_KIT_RENDER_SECONDS = 5;
  * unclipped level exactly — this is not an approximation. Measured cost of NOT
  * doing this: re-rendering six kits with headroom and correcting differs from
  * the clipped numbers by only 0.04 dB, below ffmpeg's own 0.1 dB readout, so no
- * committed number materially depended on the clip — but Task 12's
- * `verifyApplied` check for Tight Pocket, which re-measures WITH the trim
+ * committed number materially depended on the clip — but the `verifyApplied`
+ * check for Tight Pocket, which re-measures WITH the trim
  * applied (the loudest case, 2.02 peak), reads 0.34 dB low purely from clipping
  * without this fix. 12 dB comfortably clears the largest observed pre-headroom
  * peak (Retro Drive 1.55 => ~3.8 dB over) with margin for the trimmed path too.
+ *
+ * THE PRESET RENDER NEEDS IT TOO, and did not always. A preset used to be one
+ * oscillator, a sub and a noise source on a flat shape whose calibration lived
+ * outside it, so a single voice could not stack past full scale and this file
+ * said so. An `EnginePatch` can: up to six unison voices, each with two
+ * oscillators plus sub plus noise, and the uncalibrated pass neutralises
+ * `common.outputGainDb` — which is precisely the field that would otherwise
+ * hold it down. Warm PolyPad (four unison voices) rendered a clamped peak of
+ * exactly 1.000 at 0 dB, i.e. clipped, the first time the neutralised pass ran.
+ * So `renderPreset` takes the same headroom and `measurePreset` adds the same
+ * number back, for the same reason and with the same exactness.
+ *
+ * 12 dB covers the APPLIED pass too, and that needed checking rather than
+ * assuming: 26 of the library's 32 patches carry an attenuation, for which the
+ * neutralised pass is the louder one, but six carry a boost (up to +10 dB on
+ * Cyber Drone). Measured across all 32 at their committed gains, the highest
+ * true pre-bus peak is 1.32 (Trance Pluck) and every other patch is under
+ * 0.86 — so both passes clear the clamp with margin.
  */
 export const CALIBRATION_HEADROOM_DB = 12;
 /** 120 BPM. Fixed, not authored per kit: uniformity is what makes kit numbers
@@ -160,22 +176,126 @@ export const DRUM_KIT_BAR: readonly DrumKitPatternHit[] = [
   { voice: 'hihat', beat: 3.5 },
 ];
 
-export const SYNTH_RENDER_SECONDS = 6.5;
 export const SYNTH_FIRST_NOTE_S = 0.25;
-export const SYNTH_NOTE_INTERVAL_S = 1.5;
-/** Long enough that a pad with attack up to ~1.0 s reaches sustain inside the gate. */
-export const SYNTH_NOTE_GATE_S = 1.3;
 export const SYNTH_NOTE_COUNT = 4;
-/** The preset's own `octave` shifts this, exactly as a player hears it. */
-export const SYNTH_CALIBRATION_NOTE = 'C3';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- constructing the engine goes
-   through the supported createRenderEngine seam now, but the send gains it reaches
-   afterwards (reverbGain and the dry-only loop's siblings) are still private, the
-   same way src/audio/testFakes.ts reaches engine internals. */
+/**
+ * The shortest note a preset is measured with. It used to be the ONLY note
+ * length, fixed at 1.3 s with a comment reading "long enough that a pad with
+ * attack up to ~1.0 s reaches sustain inside the gate" — a rule, stated on the
+ * constant, that the re-authored library broke: Cyber Drone attacks over 1.6 s
+ * and Noise Riser over 1.8, so a 1.3 s gate released both MID-ATTACK and
+ * measured a level neither patch ever plays at. The first run of this pass read
+ * Noise Riser at -36.1 dBFS and asked for +18.1 dB of correction, which is not
+ * a quiet patch, it is an unmeasured one.
+ *
+ * `synthGateSeconds` below is that comment turned into the code: hold every
+ * note until its own amp envelope has reached its sustain plateau, with this as
+ * the floor so a short patch is measured exactly as it was before.
+ */
+export const SYNTH_NOTE_GATE_FLOOR_S = 1.3;
+/** Silence between the end of one gate and the start of the next note. */
+export const SYNTH_NOTE_SPACING_S = 0.2;
+/** Tail after the last note's release, so nothing is truncated by the boundary. */
+export const SYNTH_RENDER_TAIL_S = 1;
+/**
+ * The shortest render, whatever the patch. `ebur128`'s short-term window is
+ * 3 s and a median over too few frames is not a median, so a fast patch keeps
+ * the 6.5 s render every committed number before this change was taken at.
+ */
+export const SYNTH_RENDER_FLOOR_SECONDS = 6.5;
+
+/**
+ * How long ONE note is held for this patch.
+ *
+ * Per-patch rather than fixed, and that asymmetry with `DRUM_KIT_BAR` — which
+ * is deliberately identical for every kit — is worth stating, because the two
+ * look like the same decision and are not. A drum pattern is MUSIC the kit did
+ * not write, so holding it constant is what makes two kits comparable. A note
+ * length is not music; it is how long the key is down, and a patch whose
+ * attack outlasts the gate is not being measured quietly, it is not being
+ * measured at all. Holding every patch to its own sustain plateau is what
+ * makes two PRESETS comparable — each is measured at the level it settles to.
+ *
+ * `attack + decay` is exactly where the plateau starts. Below the floor it is
+ * the floor, so nothing shorter than the old fixed gate moves.
+ *
+ * It is a measurement rule only, and never was a workaround — it was briefly
+ * recorded here as one, and that entry was WRONG in a way worth preserving as a
+ * warning rather than deleting.
+ *
+ * The claim was that holding past the plateau kept the note-off clear of the
+ * release defect (`releaseScheduledParamTo` used to let its own
+ * `cancelScheduledValues` erase the ramp it interrupted), and that the patches
+ * left exposed were the ones whose MOD envelope outlasted their amp envelope.
+ * Both halves are false, and the second is exactly backwards. This function
+ * returns `attack + decay` EXACTLY, the amp decay ramp ends at exactly that
+ * time, and `cancelScheduledValues(at)` removes events at time **>= at**. So
+ * the gate did not clear the ramp — it landed precisely ON it, and the amp
+ * envelope of every patch reaching the floor was erased. Reading
+ * `ampEnvelope` only is correct and stays; the tie was the whole mechanism.
+ *
+ * That rule predicts the damage exactly, which is why it is the one to believe:
+ * 11 of the 32 presets have amp `attack + decay >= SYNTH_NOTE_GATE_FLOOR_S`,
+ * and when the release was repaired precisely those 11 `measuredDbfs` entries
+ * moved — zero misses, zero false positives. Glockenspiel (-5.3 dB) and Koto
+ * (-4.4) were cited for the mod-envelope story and refute it outright: their
+ * mod `attack + decay` are 0.501 s and 0.503 s against gates of 2.201 and
+ * 1.603, far SHORTER than their amp envelopes, not longer.
+ *
+ * The defect is fixed at its source now and these numbers were regenerated on
+ * the fix, so nothing here depends on the tie either way. It is recorded
+ * because a boundary tie between a constant and a `>=` is invisible in both
+ * files that create it, and because reasoning from the wrong cause is how the
+ * gate rule nearly grew a mod-envelope term it does not need.
+ */
+export function synthGateSeconds(patch: EnginePatch<'subtractive'>): number {
+  const env = patch.synth.ampEnvelope;
+  return Math.max(SYNTH_NOTE_GATE_FLOOR_S, env.attack + env.decay);
+}
+
+/** Gate plus spacing: where the next note starts. */
+export function synthNoteIntervalSeconds(patch: EnginePatch<'subtractive'>): number {
+  return synthGateSeconds(patch) + SYNTH_NOTE_SPACING_S;
+}
+
+/** Long enough for four notes at this patch's own gate, plus its release tail. */
+export function synthRenderSeconds(patch: EnginePatch<'subtractive'>): number {
+  const last = SYNTH_FIRST_NOTE_S + (SYNTH_NOTE_COUNT - 1) * synthNoteIntervalSeconds(patch);
+  const end = last + synthGateSeconds(patch) + patch.synth.ampEnvelope.release + SYNTH_RENDER_TAIL_S;
+  return Math.max(SYNTH_RENDER_FLOOR_SECONDS, end);
+}
+/** The patch's own oscillator tuning shifts this, exactly as a player hears it. */
+export const SYNTH_CALIBRATION_NOTE = 'C3';
+/**
+ * The bus a calibration render plays on. Any name works — the harness builds its
+ * own engine and no bus fader is touched — but it must be ONE name, because
+ * polyphony ducking is per bus and a render that spread its four notes over four
+ * buses would measure a different level than one that did not.
+ */
+export const CALIBRATION_SOURCE = 'calibration';
+/**
+ * Unity, as a dB. What `common.outputGainDb` is forced to for the uncalibrated
+ * pass: a voice's peak is `velocityGain * dbToGain(outputGainDb) / sqrt(unison)`,
+ * so 0 dB is the multiplier vanishing and the raw voicing being what is measured.
+ */
+export const NEUTRAL_OUTPUT_GAIN_DB = 0;
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- the engine's public surface
+   is typed against the DOM's BaseAudioContext and node-web-audio-api implements the
+   same spec with its own class objects, so the CONTEXT stays `any` at that seam; so
+   do the send gain nodes the dry-only loop reaches, which are private the same way
+   src/audio/testFakes.ts reaches engine internals. The ENGINE is not `any` any
+   more — it used to be, and that cast silently swallowed the Task 10 voice-ID
+   cutover: `triggerSynthNoteOn` grew two required arguments and
+   `triggerSynthNoteOff` started taking a `VoiceId`, and this file went on passing
+   the note NAME to a note-off that then matched nothing and released nothing. Four
+   notes that never stop is not a small measurement error, and `bun run lint` covers
+   scripts/calibration — so typing this field is what makes the compiler the thing
+   that catches the next signature change. */
 
 interface Harness {
-  engine: any;
+  engine: AudioEngine;
   ctx: any;
 }
 
@@ -185,18 +305,23 @@ function createHarness(seconds: number, headroomDb = 0): Harness {
     Math.round(CALIBRATION_SAMPLE_RATE * seconds),
     CALIBRATION_SAMPLE_RATE,
   );
-  const engine = createRenderEngine(ctx) as any;
+  const engine = createRenderEngine(ctx as unknown as BaseAudioContext);
   // Dry only. Zeroing the send gains is one line each and beats building a whole
   // neutral MasterEffects literal that would then need maintaining alongside the
   // real one. The `reverbSend` field is excluded from the config hash on the
   // strength of THIS loop actually zeroing `reverbGain` — a skipped, renamed or
   // unbuilt field must fail the render loudly, not silently leave a wet path in
   // the measurement while this comment keeps claiming it is dry.
+  // One hop deeper than it used to be: the send gains moved onto `masterRack`
+  // when the engine was split into subsystems, and this loop went on reading
+  // `engine.reverbGain` and throwing — which is what the guard is FOR, and is
+  // how the move was caught here rather than by a silently wet measurement.
+  const rack = (engine as any).masterRack;
   for (const send of ['reverbGain', 'delayGain', 'distortionGain']) {
-    const node = engine[send];
+    const node = rack?.[send];
     if (!node) {
       throw new Error(
-        `createHarness: engine.${send} is missing after setupMasterChain(). The ` +
+        `createHarness: masterRack.${send} is missing after setupMasterChain(). The ` +
           'dry-only guarantee (and the reverbSend exclusion from the config hash ' +
           'it backs) depends on zeroing every parallel send node here — refusing ' +
           'to render rather than silently measuring a wet voice.',
@@ -258,23 +383,64 @@ export async function renderDrumKit(kitName: string, applyTrim = false): Promise
 }
 
 /**
- * Resolves the trim gain caller-side, via `synthTrimGainFor(preset.name)` — the
- * same function production calls, so this is not a reimplementation, but it does
- * mean this function alone never proves the id ("PRESET_TRIMS` is keyed by preset
- * ID") -> name (what `synthTrimGainFor` is actually looked up by) bridge resolves
- * correctly end to end. `renderOffline.smoke.ts`'s preset-trim-bridge check covers
- * that, by mocking `@/data/trimTable` in a spawned child process (a fresh module
- * graph is required: `trims.ts` builds its name index once at import time).
+ * Renders a preset by INSTALLING ITS PATCH — there is no trim lookup left on
+ * either side of this call. `common.outputGainDb` travels inside the patch, so
+ * the only difference between the two passes is which value that one field
+ * carries: the authored one, or 0 dB.
+ *
+ * Neutralising it is what makes the uncalibrated pass measure the patch's raw
+ * voicing, which is the number a calibration is computed FROM; an engine-side
+ * override (the old `setPresetTrim(source, 1)`) could express the same thing
+ * only because the gain used to live outside the patch. Rebuilding `common`
+ * here rather than mutating `preset.patch` matters: `SYNTH_PRESETS` is a shared
+ * module-level array, and a run that mutated it would leave every later render
+ * in the same process measuring a library it had quietly edited.
  */
-export async function renderPreset(preset: SynthPresetItem, applyTrim = false): Promise<Uint8Array> {
-  const params = applyPreset(INITIAL_SYNTH_PARAMS, preset);
+export async function renderPreset(preset: SynthPreset, applyOutputGain = false): Promise<Uint8Array> {
+  // The preset's OWN complete patch. It used to be `applyPreset` over the
+  // shared flat defaults, because an entry was a partial — so what a preset
+  // measured as depended on a global. A complete library removes that variable
+  // from the measurement entirely.
+  const synth: ActiveSynth = {
+    engine: preset.engine,
+    patch: {
+      ...preset.patch,
+      common: {
+        ...preset.patch.common,
+        outputGainDb: applyOutputGain ? preset.patch.common.outputGainDb : NEUTRAL_OUTPUT_GAIN_DB,
+      },
+    },
+    sourcePresetId: preset.id,
+  };
+  const release = preset.patch.synth.ampEnvelope.release;
+  const gate = synthGateSeconds(preset.patch);
+  const interval = synthNoteIntervalSeconds(preset.patch);
   return withSeededRandom(CALIBRATION_SEED, async () => {
-    const { engine, ctx } = createHarness(SYNTH_RENDER_SECONDS);
-    engine.setPresetTrim('calibration', applyTrim ? synthTrimGainFor(preset.name) : 1);
+    // Same headroom as the kit render, and for the same reason — see
+    // CALIBRATION_HEADROOM_DB. `measurePreset` adds it straight back, and both
+    // passes take it, so a peak RATIO between them is unaffected by it.
+    const { engine, ctx } = createHarness(synthRenderSeconds(preset.patch), CALIBRATION_HEADROOM_DB);
     for (let note = 0; note < SYNTH_NOTE_COUNT; note += 1) {
-      const at = SYNTH_FIRST_NOTE_S + note * SYNTH_NOTE_INTERVAL_S;
-      engine.triggerSynthNoteOn(SYNTH_CALIBRATION_NOTE, params, CALIBRATION_VELOCITY, at, 'calibration');
-      engine.triggerSynthNoteOff(SYNTH_CALIBRATION_NOTE, params.release, at + SYNTH_NOTE_GATE_S, 'calibration');
+      const at = SYNTH_FIRST_NOTE_S + note * interval;
+      // The ID the engine hands back is the only thing that releases THIS
+      // instance; the note name is not an address any more.
+      const voiceId = engine.triggerSynthNoteOn(
+        SYNTH_CALIBRATION_NOTE,
+        synth,
+        CALIBRATION_VELOCITY,
+        at,
+        CALIBRATION_SOURCE,
+        1,
+        'sequencer',
+      );
+      if (!voiceId) {
+        throw new Error(
+          `renderPreset(${preset.id}): triggerSynthNoteOn returned no voice id. The engine ` +
+            'no-ops every setter before its context exists, so this means the harness ' +
+            'context never bound — refusing to render four notes of silence.',
+        );
+      }
+      engine.triggerSynthNoteOff(voiceId, release, at + gate);
     }
     return renderToWav(ctx);
   });
@@ -315,19 +481,23 @@ export async function measureDrumKit(kitName: string, applyTrim = false): Promis
 }
 
 /**
- * Same render+measure contract for a synth preset, with no compensation to
- * apply: `renderPreset` deliberately never attenuates. A preset plays ONE
- * voice at a time, not nine simultaneous ones, so it cannot stack the way the
- * kit reference pattern does. The hazard `CALIBRATION_HEADROOM_DB` exists for
- * is PEAK, not loudness, so the evidence for this asymmetry is a peak result,
- * not a loudness number: `verifyApplied.smoke.ts` renders `factory-cyber-drone`
- * — the largest boost in the committed table, +13.3 dB — WITH its trim applied
- * and measures no clipping. If a preset render ever needed headroom too, that
- * proof would fail before any number silently drifted. That asymmetry between
- * the two families is intentional and lives entirely inside these two
- * functions; a caller of either never needs to know it exists.
+ * Same render+measure contract for a synth preset, and — since the patch became
+ * a complete `EnginePatch` — the same `CALIBRATION_HEADROOM_DB` compensation
+ * the kit path takes. See that constant for why a single preset voice can now
+ * stack past full scale when its own output gain is neutralised, and why
+ * subtracting headroom before the render and adding it back after the
+ * measurement recovers the true level exactly rather than approximately.
+ *
+ * It lives HERE, once, for the reason `measureDrumKit` records: a call site
+ * that had to remember to add the number back got it wrong the first time, and
+ * a subtler slip in the same place looks like a plausible measurement.
+ *
+ * `applyOutputGain` false is the pass a calibration is computed FROM: the patch
+ * with `common.outputGainDb` neutralised, i.e. its raw voicing. True is the
+ * patch exactly as a player hears it.
  */
-export async function measurePreset(preset: SynthPresetItem, applyTrim = false): Promise<Dbfs> {
-  const wav = await renderPreset(preset, applyTrim);
-  return measureWav(wav, preset.id, preset.id);
+export async function measurePreset(preset: SynthPreset, applyOutputGain = false): Promise<Dbfs> {
+  const wav = await renderPreset(preset, applyOutputGain);
+  const raw = await measureWav(wav, preset.id, preset.id);
+  return toDbfs(raw + CALIBRATION_HEADROOM_DB);
 }

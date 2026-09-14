@@ -1,4 +1,4 @@
-import type { ArpMode, ArpRate } from '../types';
+import type { ArpSettings } from '@/types/synth';
 import { buildArpSequence } from './arpeggiator';
 import { arpFiresOnStep, computeArpTriggers } from './arpSchedule';
 import {
@@ -310,16 +310,20 @@ function leadAudibleLen(
  */
 export function resolveLeadStepTriggers(
   sounding: readonly LeadSounding[],
-  arpActive: boolean,
+  /**
+   * The track's Arp settings — the whole object, not an `active` flag plus a
+   * three-field bag. Arp is one value in the store now, so a caller that
+   * could pass a stale `active` beside a fresh mode/rate is unrepresentable.
+   */
+  arp: ArpSettings,
   arpStep: number,
-  params: { arpMode: ArpMode; arpRate: ArpRate; arpOctaves: number },
   tickDurSec: number,
   gate: number,
   stride: number,
   loop: { tickInLoop: number; melodyTicks: number },
 ): LeadTrigger[] {
   if (sounding.length === 0) return [];
-  if (!arpActive) {
+  if (!arp.active) {
     return sounding
       .filter((s) => s.age === 0)
       .map((s) => {
@@ -337,11 +341,11 @@ export function resolveLeadStepTriggers(
         };
       });
   }
-  if (!arpFiresOnStep(arpStep, params.arpRate)) return [];
+  if (!arpFiresOnStep(arpStep, arp.rate)) return [];
   const sequence = buildArpSequence(
     sounding.map((s) => s.note),
-    params.arpMode,
-    params.arpOctaves,
+    arp.mode,
+    arp.octaves,
   );
   if (sequence.length === 0) return [];
   // The arp runs on the clock's 16ths, not on the grid's resolution: this
@@ -351,7 +355,7 @@ export function resolveLeadStepTriggers(
   return computeArpTriggers(
     arpStep,
     sequence.length,
-    params.arpRate,
+    arp.rate,
     tickDurSec * TICKS_PER_SIXTEENTH,
   ).map((t) => ({
     note: sequence[t.noteIndex],

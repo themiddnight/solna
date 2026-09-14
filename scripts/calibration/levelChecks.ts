@@ -7,6 +7,12 @@
  * because it is on the `bun run verify` critical path and the generator that
  * produced the table is not.
  *
+ * The two halves are no longer symmetric in what they APPLY: a kit's trim is the
+ * committed `trimDb`, resolved by name at `setDrumKit`; a preset's is
+ * `patch.common.outputGainDb`, inside the patch itself, so the committed entry
+ * records only the measurement and its provenance. `TrimDomain.appliedDb` is
+ * where that difference lives, and it is the only place it does.
+ *
  * DEV-387 design change: `DRUM_TRIMS` is keyed by drum KIT, not by kit+voice — a
  * drum kit's voices are not independent, so one measurement and one trim cover
  * the whole kit (see the comment on `DRUM_TRIMS` in src/data/trimTable.ts). Every
@@ -55,6 +61,21 @@ interface TrimDomain {
   liveIds: () => string[];
   /** Recomputes the loudness-config hash for a live id from current data. */
   hashOf: (id: string) => string;
+  /**
+   * The dB that is ACTUALLY applied on top of `measuredDbfs`, or null when
+   * nothing live claims the id.
+   *
+   * The two halves answer this from different places, and that asymmetry is
+   * the whole shape of the synth-engine change: a kit's trim is a measured
+   * number this table owns and `setDrumKit` resolves by name, while a
+   * preset's is `patch.common.outputGainDb` — inside the patch, so a patch a
+   * user edits, saves or exports carries its own calibration. Reading the
+   * table's `trimDb` for a preset would check a number nothing applies.
+   *
+   * null for a committed entry no live id claims: there is no applied gain to
+   * combine, and an orphan is `findOrphanEntries`' finding, not this one's.
+   */
+  appliedDb: (id: string, entry: TrimEntry) => number | null;
 }
 
 /** Live presets by id, so a domain's `hashOf` is a lookup rather than a scan. */
@@ -66,6 +87,9 @@ const TRIM_DOMAINS: readonly TrimDomain[] = [
     trims: () => DRUM_TRIMS,
     liveIds: () => Object.keys(DRUM_KITS),
     hashOf: (id) => drumLoudnessHash(id),
+    // A kit's trim is applied by name (`setDrumKit` -> `drumTrimGainFor`), so
+    // the table IS the live value and an orphan entry is still self-checkable.
+    appliedDb: (_id, entry) => entry.trimDb,
   },
   {
     noun: 'preset',
@@ -73,6 +97,7 @@ const TRIM_DOMAINS: readonly TrimDomain[] = [
     liveIds: () => [...PRESETS_BY_ID.keys()],
     // Only ever called with an id `liveIds` just produced, so the lookup cannot miss.
     hashOf: (id) => presetLoudnessHash(PRESETS_BY_ID.get(id)!),
+    appliedDb: (id) => PRESETS_BY_ID.get(id)?.patch.common.outputGainDb ?? null,
   },
 ];
 
@@ -138,23 +163,35 @@ export function findDriftedEntries(): LevelFinding[] {
 }
 
 /**
- * A hand-edited or corrupted table, not an unusual patch: `factory-cyber-drone`
- * needs +13.3 dB, past the +/-12 dB fader range, but its trim is HONOURED (the
- * engine applies it directly, not through a fader), so `measuredDbfs + trimDb`
- * still lands at TARGET_DBFS and this check passes it. The fader-range flag is
+ * "Does the measurement, plus the gain that is actually applied on top of it,
+ * land on target" — where `domain.appliedDb` is what "actually applied" means
+ * for each half, and they differ (see its docblock).
+ *
+ * A hand-edited or corrupted table, not an unusual patch: a kit needing more
+ * than the +/-12 dB fader range still PASSES here, because its trim is honoured
+ * (the engine applies it directly, not through a fader) and so
+ * `measuredDbfs + trimDb` still lands at TARGET_DBFS. The fader-range flag is
  * a generator-time advisory for a human, not a tolerance failure — it does not
  * live here.
+ *
+ * For a preset this is the ONLY gate on `common.outputGainDb`, since that field
+ * is deliberately outside the config hash: an authored gain that leaves the
+ * patch outside the band fails here, in milliseconds, with no render.
  */
 export function findOutOfToleranceEntries(): LevelFinding[] {
   const findings: LevelFinding[] = [];
-  // The COMMITTED entries, not the live ids: this asks whether the numbers in the
-  // table are self-consistent, which an entry no live id claims can still fail.
+  // The COMMITTED entries, not the live ids: this asks whether the measurement
+  // and the applied gain agree, which an entry that has drifted out of range
+  // fails whether or not anything else in the table is wrong.
   for (const domain of TRIM_DOMAINS) {
     for (const [id, entry] of Object.entries(domain.trims())) {
-      if (!isWithinTolerance(toDbfs(entry.measuredDbfs), toDecibels(entry.trimDb))) {
+      const appliedDb = domain.appliedDb(id, entry);
+      // Nothing live applies a gain for this id — findOrphanEntries' finding.
+      if (appliedDb === null) continue;
+      if (!isWithinTolerance(toDbfs(entry.measuredDbfs), toDecibels(appliedDb))) {
         findings.push({
           id,
-          detail: `${entry.measuredDbfs.toFixed(1)} dBFS + ${entry.trimDb.toFixed(1)} dB lands outside the band`,
+          detail: `${entry.measuredDbfs.toFixed(1)} dBFS + ${appliedDb.toFixed(1)} dB lands outside the band`,
         });
       }
     }

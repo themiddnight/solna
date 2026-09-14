@@ -3,7 +3,7 @@ import { INITIAL_EFFECTS } from '../store/initialState';
 import type { MasterEffects } from '../types';
 import { bindFakeCtx, fakeNode, fakeParam, freshEngine, makeEngine } from './testFakes';
 import { FADER_MAX_DB, MAX_FADER_GAIN, dbToGain, toDecibels } from '../utils/gainUnits';
-import { SYNTH, masterChainCtx } from './engineTestHelpers';
+import { ACTIVE_SYNTH, masterChainCtx } from './engineTestHelpers';
 
 /** A complete effects patch without setReverbDecay's separately-owned key. */
 function fxWith(overrides: Partial<MasterEffects>): Omit<MasterEffects, 'reverbDecay'> {
@@ -637,7 +637,7 @@ describe("updateEffects clamps and yields to bypass", () => {
 describe('source bus level control', () => {
   test('setSourceGain ramps instead of stepping, and clamps to 0..MAX_FADER_GAIN', () => {
     const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'chord', 1, 'live');
+    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, undefined, 'chord', 1, 'live');
     const bus = (engine as any).masterRack.sourceBuses.get('chord');
 
     engine.setSourceGain('chord', 0.4);
@@ -655,7 +655,7 @@ describe('source bus level control', () => {
 
   test('setSourceMuted ramps to 0 and back to the stored gain', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'bass', 1, 'live');
+    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, undefined, 'bass', 1, 'live');
     const bus = (engine as any).masterRack.sourceBuses.get('bass');
     engine.setSourceGain('bass', 0.6);
 
@@ -669,7 +669,7 @@ describe('source bus level control', () => {
 
   test('a future source mute changes the bus at the song boundary, not at scheduler time', () => {
     const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'fx', 1, 'live');
+    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, undefined, 'fx', 1, 'live');
     const bus = (engine as any).masterRack.sourceBuses.get('fx');
     const boundary = ctx.currentTime + 0.075;
 
@@ -681,7 +681,7 @@ describe('source bus level control', () => {
 
   test('a future source fader change also waits for the song boundary', () => {
     const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'fx', 1, 'live');
+    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, undefined, 'fx', 1, 'live');
     const bus = (engine as any).masterRack.sourceBuses.get('fx');
     const boundary = ctx.currentTime + 0.075;
 
@@ -708,7 +708,7 @@ describe('source bus level control', () => {
 
   test('a gain set while muted does not un-mute the bus', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 0.8, undefined, 'bass', 1, 'live');
+    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, undefined, 'bass', 1, 'live');
     const bus = (engine as any).masterRack.sourceBuses.get('bass');
 
     engine.setSourceMuted('bass', true);
@@ -816,7 +816,7 @@ describe('getSourceAnalyser', () => {
   // is the only place setupMasterChain (where that edge is wired) actually runs.
   test('a voice feeds the tap, which feeds the bus', () => {
     const { engine } = freshEngine();
-    engine.triggerSynthNoteOn('C4', SYNTH, 1, undefined, 'chord', 1, 'live');
+    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 1, undefined, 'chord', 1, 'live');
 
     const chordTap = (engine as any).masterRack.sourceTaps.get('chord');
     const chordBus = (engine as any).masterRack.sourceBuses.get('chord');

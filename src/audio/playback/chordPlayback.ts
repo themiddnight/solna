@@ -12,7 +12,9 @@ import {
   stepDurationSec,
 } from "@/utils/musicTheory";
 import { DEFAULT_VELOCITY } from "../constants";
-import type { ChordItem, SynthParams } from "@/types";
+import type { ChordItem } from "@/types";
+import type { ActiveSynth, ArpSettings } from "@/types/synth";
+import { synthReleaseSeconds } from "@/utils/synthPatch";
 
 /**
  * One note of a chord's rhythm pattern, positioned on the 16th grid rather
@@ -109,14 +111,14 @@ export function eventsForCycleStep(
 /**
  * Fires one step's worth of events on the audio clock.
  *
- * `params` is read by the caller at emit time, not at chord-arm time: this is
+ * `synth` is read by the caller at emit time, not at chord-arm time: this is
  * what makes a knob tweak audible on the very next hit instead of only on the
  * next chord. Note-offs are clamped to `chordEnd` so a long feel hold never
  * overlaps the chord that follows.
  */
 export function emitStepEvents(
   events: StepEvent[],
-  params: SynthParams,
+  synth: ActiveSynth,
   source: string,
   time: number,
   chordEnd: number,
@@ -130,16 +132,20 @@ export function emitStepEvents(
    */
   engine: AudioEngine = audioEngine,
 ): void {
+  const releaseSeconds = synthReleaseSeconds(synth);
   for (const ev of events) {
     const start = time + ev.timeOffset;
-    engine.triggerSynthNoteOn(ev.noteName, params, ev.velocity, start, source, 1, "sequencer");
+    const voiceId = engine.triggerSynthNoteOn(ev.noteName, synth, ev.velocity, start, source, 1, "sequencer");
     // The clamp to chordEnd stops a long feel hold from overlapping the next
     // chord — but a strum's later notes start up to (n-1)*30 ms after `time`,
     // and on a chord's LAST step at high bpm (200 bpm = 0.075 s/step) that
     // start is already past chordEnd. Floor the gate at 10 ms so the note-off
     // can never precede its own note-on.
     const off = Math.max(start + 0.01, Math.min(start + ev.hold, chordEnd));
-    engine.triggerSynthNoteOff(ev.noteName, params.release, off, source);
+    // Released by the ID this hit started, never by name: a pattern that plays
+    // one note twice inside its own tail has two voices on the bus, and a
+    // by-name release would end whichever the engine reached first.
+    if (voiceId) engine.triggerSynthNoteOff(voiceId, releaseSeconds, off);
   }
 }
 
@@ -161,7 +167,7 @@ export function emitStepEvents(
  */
 export function scheduleWholeChord(
   events: BarInvariantEvent[],
-  params: SynthParams,
+  synth: ActiveSynth,
   source: string,
   startTime: number,
   stepDur: number,
@@ -174,7 +180,7 @@ export function scheduleWholeChord(
     const isLastBar = Math.floor(s / cycleSteps) === lastCycle;
     emitStepEvents(
       eventsForCycleStep(events, s, cycleSteps, isLastBar),
-      params,
+      synth,
       source,
       startTime + s * stepDur,
       chordEnd,
@@ -230,23 +236,23 @@ const ARP_VELOCITY = 0.9;
  */
 export function arpEventsForStep(
   notes: string[],
-  params: SynthParams,
+  arp: ArpSettings,
   step: number,
   stepDur: number,
   holdScale: number,
   stepsPerBar: number = STEPS_PER_BAR,
 ): StepEvent[] {
   const arpStep = arpStepFor(step, stepsPerBar);
-  if (!arpFiresOnStep(arpStep, params.arpRate)) return [];
+  if (!arpFiresOnStep(arpStep, arp.rate)) return [];
 
   const sequence = buildArpSequence(
     notes,
-    params.arpMode,
-    params.arpOctaves,
+    arp.mode,
+    arp.octaves,
   );
   if (sequence.length === 0) return [];
 
-  return computeArpTriggers(arpStep, sequence.length, params.arpRate, stepDur).map(
+  return computeArpTriggers(arpStep, sequence.length, arp.rate, stepDur).map(
     (t) => ({
       noteName: sequence[t.noteIndex],
       velocity: ARP_VELOCITY,
@@ -267,28 +273,25 @@ export function arpEventsForStep(
 // `playFullHoldPad` would leave two implementations to keep in step.
 export function playFullHoldChord(
   notes: string[],
-  params: SynthParams,
+  synth: ActiveSynth,
   startTime: number,
   holdSec: number,
   source: string,
   engine: AudioEngine = audioEngine,
 ): void {
   for (const n of notes) {
-    engine.triggerSynthNoteOn(
+    const voiceId = engine.triggerSynthNoteOn(
       n,
-      params,
+      synth,
       DEFAULT_VELOCITY * equalPowerVelocityScale(notes.length),
       startTime,
       source,
       1,
       "sequencer",
     );
-    engine.triggerSynthNoteOff(
-      n,
-      params.release,
-      startTime + holdSec,
-      source,
-    );
+    if (voiceId) {
+      engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(synth), startTime + holdSec);
+    }
   }
 }
 
@@ -316,14 +319,14 @@ export type PreviewEngine = Pick<
 // once, then quiet" on a patch with a low sustain level.
 export function playChordLegato(
   chord: ChordItem,
-  params: SynthParams,
+  synth: ActiveSynth,
   engine: PreviewEngine,
 ): void {
   engine.stopSource("chord", 0.05);
   for (const note of chord.notes) {
     engine.triggerSynthNoteOn(
       note,
-      params,
+      synth,
       DEFAULT_VELOCITY * equalPowerVelocityScale(chord.notes.length),
       undefined,
       "chord",
@@ -448,7 +451,7 @@ export function stopBassPreviewSource(fade: number): void {
 
 export function playChordLegatoWithEngine(
   chord: ChordItem,
-  params: SynthParams,
+  synth: ActiveSynth,
 ): void {
-  playChordLegato(chord, params, audioEngine);
+  playChordLegato(chord, synth, audioEngine);
 }

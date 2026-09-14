@@ -1,8 +1,8 @@
 import { audioEngine } from '../engine';
 import { DEFAULT_VELOCITY } from '../constants';
-import type { SynthParams, ChordItem } from '@/types';
-import { applyPreset } from '../presetRegistry';
-import type { SynthPresetItem } from '@/data/synthPresets';
+import type { ChordItem } from '@/types';
+import type { ActiveSynth } from '@/types/synth';
+import { synthReleaseSeconds } from '@/utils/synthPatch';
 
 /**
  * One-shot previews for library entries (synth patches, chord templates,
@@ -131,19 +131,16 @@ function liveScheduler(ctx: BaseAudioContext): PreviewScheduler {
  */
 export function previewChordProgression(
   chords: ChordItem[],
-  params: SynthParams,
+  synth: ActiveSynth,
   scheduler?: PreviewScheduler,
 ): PreviewHandle {
   audioEngine.init();
   const ctx = audioEngine.getAudioContext();
   if (!ctx) return NOOP;
 
-  // No trim to set. All three preview functions share PREVIEW_SOURCE, so while
-  // the trim lived in a persistent per-source map each of them had to overwrite
-  // it or inherit the previous audition's patch trim — three call sites whose
-  // only job was to undo each other. The engine derives the trim from the
-  // `params` handed to triggerSynthNoteOn now, so a shared bus carries no trim
-  // at all and there is nothing for an earlier audition to leave behind.
+  // No trim to set: a patch carries its own `common.outputGainDb`, so the
+  // shared preview bus holds no per-source trim for an earlier audition to
+  // leave behind.
   const clock = scheduler ?? liveScheduler(ctx);
   const startTime = clock.now();
   let unsubscribe: (() => void) | null = null;
@@ -165,13 +162,10 @@ export function previewChordProgression(
     for (; nextIndex < end; nextIndex++) {
       const start = startTime + nextIndex * PREVIEW_CHORD_DURATION;
       for (const n of chords[nextIndex].notes) {
-        audioEngine.triggerSynthNoteOn(n, params, 0.75, start, PREVIEW_SOURCE, 1, "preview");
-        audioEngine.triggerSynthNoteOff(
-          n,
-          0.3,
-          start + PREVIEW_CHORD_DURATION * 0.85,
-          PREVIEW_SOURCE,
-        );
+        const voiceId = audioEngine.triggerSynthNoteOn(n, synth, 0.75, start, PREVIEW_SOURCE, 1, "preview");
+        if (voiceId) {
+          audioEngine.triggerSynthNoteOff(voiceId, 0.3, start + PREVIEW_CHORD_DURATION * 0.85);
+        }
       }
     }
     if (nextIndex >= chords.length && unsubscribe) {
@@ -198,24 +192,25 @@ export function previewChordProgression(
   };
 }
 
-/** Synth preset audition: C4 with the preset merged over the current params. */
-export function previewSynthPreset(
-  preset: SynthPresetItem,
-  currentParams: SynthParams,
-): PreviewHandle {
+/**
+ * Synth patch audition: one C4 on the preview bus.
+ *
+ * Takes the complete `ActiveSynth` the caller wants to HEAR rather than a
+ * preset plus a base to merge it over. A preset is a complete patch now, so
+ * there is nothing left to merge — and the level comes from the patch's own
+ * `common.outputGainDb`, which is why no trim is pushed here.
+ */
+export function previewSynthPatch(synth: ActiveSynth): PreviewHandle {
   audioEngine.init();
   const ctx = audioEngine.getAudioContext();
   if (!ctx) return NOOP;
 
-  const testParams = applyPreset(currentParams, preset);
   const handle = beginPreview();
   const start = ctx.currentTime;
-  // An audition at the wrong level is exactly what calibration is for, and the
-  // preview bus is a source like any other — so it gets the trim too. It gets it
-  // from `testParams.preset`, which applyPreset just stamped: the engine reads
-  // that on the trigger below rather than from anything this file has to push.
-  audioEngine.triggerSynthNoteOn('C4', testParams, 0.85, start, PREVIEW_SOURCE, 1, "preview");
-  audioEngine.triggerSynthNoteOff('C4', testParams.release || 0.4, start + 0.45, PREVIEW_SOURCE);
+  const voiceId = audioEngine.triggerSynthNoteOn('C4', synth, 0.85, start, PREVIEW_SOURCE, 1, "preview");
+  if (voiceId) {
+    audioEngine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(synth), start + 0.45);
+  }
   return handle;
 }
 
@@ -234,7 +229,7 @@ export function previewSynthPreset(
  */
 export function previewSequencerNote(
   note: string,
-  params: SynthParams,
+  synth: ActiveSynth,
   velocity = DEFAULT_VELOCITY,
   { holdSec = 0.5, releaseSec = 0.3 }: { holdSec?: number; releaseSec?: number } = {},
 ): PreviewHandle {
@@ -244,7 +239,7 @@ export function previewSequencerNote(
 
   const handle = beginPreview();
   const start = ctx.currentTime;
-  audioEngine.triggerSynthNoteOn(note, params, velocity, start, PREVIEW_SOURCE, 1, "preview");
-  audioEngine.triggerSynthNoteOff(note, releaseSec, start + holdSec, PREVIEW_SOURCE);
+  const voiceId = audioEngine.triggerSynthNoteOn(note, synth, velocity, start, PREVIEW_SOURCE, 1, "preview");
+  if (voiceId) audioEngine.triggerSynthNoteOff(voiceId, releaseSec, start + holdSec);
   return handle;
 }

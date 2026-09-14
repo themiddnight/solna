@@ -67,15 +67,39 @@ describe('the drum hash', () => {
 });
 
 describe('the synth hash', () => {
-  test('excludes the display name and the four arpeggiator fields, and nothing else', () => {
-    expect(SYNTH_HASH_EXCLUDED).toEqual(['preset', 'arpActive', 'arpMode', 'arpRate', 'arpOctaves']);
+  test('excludes the applied output gain and nothing else', () => {
+    // The display name and the four arp fields used to be excluded because a
+    // flat SynthParams carried them INSIDE the measured object; neither is in
+    // an `EnginePatch`, so neither is here any more. `common.outputGainDb` is,
+    // for a different reason: the uncalibrated measurement pass NEUTRALISES it
+    // (renderOffline.ts), so it provably cannot move `measuredDbfs`. Hashing it
+    // would demand a multi-minute regeneration to reproduce a number that
+    // cannot have changed — and the field is already guarded, by the tolerance
+    // check that reads it live.
+    expect(SYNTH_HASH_EXCLUDED).toEqual(['outputGainDb']);
   });
 
-  test('an arpeggiator-only difference does not change the hash', () => {
+  test('retuning the applied output gain does NOT move the hash', () => {
     const base = SYNTH_PRESETS[0];
     if (!base) throw new Error('Unreachable: SYNTH_PRESETS is non-empty');
-    const arped = { ...base, params: { ...base.params, arpActive: true, arpOctaves: 3 } };
-    expect(presetLoudnessHash(arped)).toBe(presetLoudnessHash(base));
+    const louder = structuredClone(base);
+    louder.patch.common.outputGainDb = base.patch.common.outputGainDb + 4;
+    expect(presetLoudnessHash(louder)).toBe(presetLoudnessHash(base));
+  });
+
+  test('every OTHER common field still moves the hash — the exclusion is one field, not the block', () => {
+    const base = SYNTH_PRESETS[0];
+    if (!base) throw new Error('Unreachable: SYNTH_PRESETS is non-empty');
+    const wider = structuredClone(base);
+    wider.patch.common.stereoWidth = base.patch.common.stereoWidth === 1 ? 0.5 : 1;
+    expect(presetLoudnessHash(wider)).not.toBe(presetLoudnessHash(base));
+  });
+
+  test('a patch is hashed by value, so a copy of one entry hashes as that entry', () => {
+    const base = SYNTH_PRESETS[0];
+    if (!base) throw new Error('Unreachable: SYNTH_PRESETS is non-empty');
+    expect(presetLoudnessHash({ ...base, patch: structuredClone(base.patch) }))
+      .toBe(presetLoudnessHash(base));
   });
 
   test('a rename does not change the hash', () => {
@@ -87,7 +111,8 @@ describe('the synth hash', () => {
   test('a filter cutoff change DOES change the hash — ebur128 is K-weighted, so spectrum is level', () => {
     const base = SYNTH_PRESETS[0];
     if (!base) throw new Error('Unreachable: SYNTH_PRESETS is non-empty');
-    const brighter = { ...base, params: { ...base.params, filterCutoff: 9000 } };
+    const brighter = structuredClone(base);
+    brighter.patch.synth.filter.cutoffHz = 9000;
     expect(presetLoudnessHash(brighter)).not.toBe(presetLoudnessHash(base));
   });
 

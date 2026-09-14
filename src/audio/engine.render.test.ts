@@ -6,7 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
 import { AudioEngine, createRenderEngine } from './engine';
 import { DEFAULT_DRUM_KIT } from '@/data/drumKits';
-import { synthParamsFixture } from './testFakes';
+import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 
 /** A real offline context, at the app's working rate and channel count. */
 function offlineCtx(seconds: number): any {
@@ -40,10 +40,19 @@ describe('createRenderEngine', () => {
   test('a synth voice survives wall-clock delay until the offline timeline renders it', async () => {
     const ctx = offlineCtx(0.5);
     const engine = createRenderEngine(ctx);
-    const params = synthParamsFixture({ release: 0.05 });
+    const synth = {
+      ...SUBTRACTIVE_INIT,
+      patch: {
+        ...SUBTRACTIVE_INIT.patch,
+        synth: {
+          ...SUBTRACTIVE_INIT.patch.synth,
+          ampEnvelope: { ...SUBTRACTIVE_INIT.patch.synth.ampEnvelope, release: 0.05 },
+        },
+      },
+    };
     engine.setMasterVolume(1);
-    engine.triggerSynthNoteOn('C4', params, 1, 0, 'synth', 1, 'sequencer');
-    engine.triggerSynthNoteOff('C4', params.release, 0.05, 'synth');
+    const voiceId = engine.triggerSynthNoteOn('C4', synth, 1, 0, 'synth', 1, 'sequencer');
+    engine.triggerSynthNoteOff(voiceId!, 0.05, 0.05);
 
     // The release used to arm a wall-clock teardown for 200 ms. A long
     // offline render could therefore disconnect this voice before its audio

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
 import {
   buildLoopVoices,
@@ -11,7 +11,8 @@ import {
   type MixdownLoop,
   type MixdownRenderProgress,
 } from './renderMixdown';
-import { mixdownLoop, mixdownSnapshot, FACTORY_EFFECTS } from './mixdownFixture';
+import { mixdownLoop, mixdownMelodyBar, mixdownSnapshot, FACTORY_EFFECTS } from './mixdownFixture';
+import { audioEngine } from '../engine';
 import { random } from '../rng';
 import { cycleHoldScale, resolvePlaybackBassCycle, resolvePlaybackRhythmCycle } from '../chordRhythms';
 import { buildChordEvents, eventsForCycleStep } from '../playback/chordPlayback';
@@ -516,4 +517,147 @@ describe('renderMixdown: determinism', () => {
     }
   });
 
+});
+
+/**
+ * The engine-discriminated cutover, asked of the RENDER rather than of the
+ * snapshot shape. Every assertion below changes exactly one field of one
+ * `EnginePatch` — `common.outputGainDb`, which is inside the patch and
+ * therefore could not exist before the cutover — and reads the result off the
+ * samples. A renderer that had kept scheduling a shared flat patch, or that
+ * had wired two sources to one column, passes every type check and fails here.
+ */
+describe('renderMixdown: every melodic source plays its own patch', () => {
+  /** No wet sends and no limiter: the comparisons below are about level, and
+   *  both would compress the difference they are measuring. */
+  const DRY_EFFECTS = {
+    ...FACTORY_EFFECTS,
+    reverbWet: 0,
+    delayWet: 0,
+    distortionWet: 0,
+    limiterEnabled: false,
+  };
+
+  /** The five melodic patch columns, spelled as the store spells them — the
+   *  Lead row's irregular name (`synthParams`) included, which is the whole
+   *  reason `MELODY_TRACKS` exists and this fixture cannot derive them. */
+  const PATCH_FIELDS = [
+    'synthParams',
+    'chordSynthParams',
+    'bassSynthParams',
+    'padSynthParams',
+    'fxSynthParams',
+  ] as const;
+
+  /** A loop where all five melodic sources actually sound. */
+  function fiveSourceLoop(over: Partial<MixdownLoop> = {}): MixdownLoop {
+    return mixdownLoop({
+      // Drums would add energy no patch change can move, diluting every ratio.
+      sequencerTracks: [],
+      leadMelodySteps: mixdownMelodyBar('C4'),
+      fxMelodySteps: mixdownMelodyBar('G4'),
+      ...over,
+    });
+  }
+
+  function silencedOn(field: (typeof PATCH_FIELDS)[number]): MixdownLoop {
+    const loop = fiveSourceLoop();
+    const patch = loop[field];
+    return {
+      ...loop,
+      [field]: {
+        ...patch,
+        patch: {
+          ...patch.patch,
+          common: { ...patch.patch.common, outputGainDb: SILENT_GAIN_DB },
+        },
+      },
+    };
+  }
+
+  /** Far below anything audible, so the source's contribution is gone rather
+   *  than merely quieter — a renderer that ignored the field entirely is what
+   *  this has to separate from one that applied it. */
+  const SILENT_GAIN_DB = -80;
+
+  async function energyOf(loop: MixdownLoop): Promise<number> {
+    const result = await renderMixdown(mixdownSnapshot({ effects: DRY_EFFECTS, loops: [loop] }));
+    if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result.reason)}`);
+    const left = result.buffer.getChannelData(0);
+    let sum = 0;
+    for (let i = 0; i < left.length; i += 1) sum += left[i] ** 2;
+    return sum;
+  }
+
+  for (const field of PATCH_FIELDS) {
+    test(`silencing ${field}'s own patch quietens the render`, async () => {
+      const full = await energyOf(fiveSourceLoop());
+      const muted = await energyOf(silencedOn(field));
+      // Strictly less, by a margin no rounding reaches: each source is one of
+      // five, so removing one has to move the total by far more than epsilon.
+      expect(muted).toBeLessThan(full * 0.99);
+    });
+  }
+});
+
+describe('renderMixdown: Arp reads each track`s own settings', () => {
+  const DRY_EFFECTS = {
+    ...FACTORY_EFFECTS,
+    reverbWet: 0,
+    delayWet: 0,
+    distortionWet: 0,
+    limiterEnabled: false,
+  };
+  const ARP_ON = { active: true, mode: 'up' as const, rate: '16n' as const, octaves: 1 };
+
+  async function samplesOf(over: Partial<MixdownLoop>): Promise<Float32Array> {
+    const loop = mixdownLoop({ sequencerTracks: [], ...over });
+    const result = await renderMixdown(mixdownSnapshot({ effects: DRY_EFFECTS, loops: [loop] }));
+    if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result.reason)}`);
+    return result.buffer.getChannelData(0);
+  }
+
+  const same = (a: Float32Array, b: Float32Array): boolean => {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
+    return true;
+  };
+
+  test('the chord arp and the bass arp are two settings, not one', async () => {
+    // Arp used to be four fields INSIDE the flat synth params, so a track's
+    // arp travelled with its patch and there was one shape to get wrong. It
+    // is a separate per-track record now, and these three renders are what
+    // says so: each is deterministic (MIXDOWN_SEED), so identical bytes mean
+    // the renderer read the same setting twice rather than each track's own.
+    const neither = await samplesOf({});
+    const chordOnly = await samplesOf({ chordArpSettings: ARP_ON });
+    const bassOnly = await samplesOf({ bassArpSettings: ARP_ON });
+
+    expect(same(chordOnly, neither)).toBe(false);
+    expect(same(bassOnly, neither)).toBe(false);
+    expect(same(chordOnly, bassOnly)).toBe(false);
+  });
+});
+
+describe('renderMixdown: the session engine is not involved', () => {
+  test('a render neither binds nor plays a note on the singleton', async () => {
+    const noteOn = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const drum = spyOn(audioEngine, 'triggerDrum');
+    try {
+      // The singleton has no context until the first user click, and a render
+      // must not be what creates one: `createRenderEngine` builds its own.
+      expect(audioEngine.getAudioContext()).toBeNull();
+
+      const result = await renderMixdown(mixdownSnapshot());
+      if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result.reason)}`);
+
+      expect(noteOn).not.toHaveBeenCalled();
+      expect(drum).not.toHaveBeenCalled();
+      expect(audioEngine.getAudioContext()).toBeNull();
+      expect(audioEngine.liveVoiceCount()).toBe(0);
+    } finally {
+      noteOn.mockRestore();
+      drum.mockRestore();
+    }
+  });
 });

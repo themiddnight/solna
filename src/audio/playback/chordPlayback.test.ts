@@ -1,7 +1,11 @@
 import { describe, expect, test, spyOn } from 'bun:test';
 import { audioEngine } from '@/audio/engine';
 import { freshEngine } from '@/audio/testFakes';
-import type { ChordItem, SynthParams } from '@/types';
+import type { ChordItem } from '@/types';
+import type { ActiveSynth, ArpSettings } from '@/types/synth';
+import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
+import { TRACK_ARP_DEFAULTS } from '@/store/initialState';
+import type { VoiceId } from '../synth/voiceId';
 import { cycleStepAt, equalPowerVelocityScale } from '@/audio/chordRhythms';
 import type { RhythmPattern } from '@/data/chordRhythms';
 import { arpStepFor } from '@/utils/meter';
@@ -21,37 +25,38 @@ import {
 } from './chordPlayback';
 import type { BarInvariantEvent } from './chordPlayback';
 
-const SYNTH: SynthParams = {
-  oscType: 'sawtooth',
-  subOscVolume: 0.3,
-  noiseVolume: 0,
-  detune: 0,
-  filterType: 'lowpass',
-  filterCutoff: 2400,
-  filterResonance: 3,
-  filterEnvAmount: 1200,
-  attack: 0.02,
-  decay: 0.4,
-  sustain: 0.6,
-  release: 0.5,
-  filterAttack: 0.02,
-  filterDecay: 0.4,
-  filterSustain: 0,
-  filterRelease: 0.5,
-  lfoRate: 3.5,
-  lfoDepth: 0,
-  lfoTarget: 'cutoff',
-  octave: 0,
-  arpActive: false,
-  arpMode: 'up',
-  arpRate: '16n',
-  arpOctaves: 1,
-  preset: 'Test',
-};
+const SYNTH: ActiveSynth<'subtractive'> = SUBTRACTIVE_INIT;
+
+/** The amp release every note-off in this file is expected to be handed. */
+const RELEASE = SUBTRACTIVE_INIT.patch.synth.ampEnvelope.release;
+
+/**
+ * A voice id derived from the note name, so an assertion can name the voice a
+ * note-off is expected to address without threading return values by hand.
+ * One id per NOTE rather than per note-on: no test here plays the same note
+ * twice inside one assertion, and `toHaveBeenCalledWith` only needs the pair
+ * to agree.
+ */
+const voiceIdFor = (note: string) => `voice-${note}` as VoiceId;
+
+/** The inverse of `voiceIdFor`, for a spy that logs by note name. */
+const noteOfVoice = (voiceId: VoiceId) => voiceId.replace('voice-', '');
+
+/**
+ * The note-on spy every scheduling test needs. It must RETURN an id: the
+ * bridges book a note-off only for a note-on that actually produced a voice,
+ * so a bare `spyOn` (which returns undefined) would silently swallow every
+ * release the test is about to assert on.
+ */
+function spyNoteOn() {
+  return spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation((note: string) =>
+    voiceIdFor(note),
+  );
+}
 
 describe('legato chord preview', () => {
   test('triggers every chord note once immediately, silences prior voices, and schedules no note-offs', () => {
-    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const onSpy = spyNoteOn();
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
     const stopSpy = spyOn(audioEngine, 'stopSource');
 
@@ -293,7 +298,7 @@ describe('pattern preview chord & timing', () => {
 
 describe('scheduleWholeChord walks exactly the cycle it is handed', () => {
   test('a two-bar custom cycle reaches its bar-two column before the seam', () => {
-    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const onSpy = spyNoteOn();
     // Column 20 of a 32-step cycle. A one-bar filter (stepInBar 20 % 16 = 4,
     // or a walk that stops at the first bar) can never reach it.
     scheduleWholeChord(
@@ -310,7 +315,7 @@ describe('scheduleWholeChord walks exactly the cycle it is handed', () => {
   });
 
   test('a one-bar preset cycle schedules its own column, unchanged', () => {
-    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const onSpy = spyNoteOn();
     scheduleWholeChord(
       [{ step: 4, noteName: 'E4', velocity: 1, timeOffset: 0, hold: 0.125 }],
       SYNTH,
@@ -325,7 +330,7 @@ describe('scheduleWholeChord walks exactly the cycle it is handed', () => {
   });
 
   test('a full-cycle span strikes at the cycle start and releases at the seam', () => {
-    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const onSpy = spyNoteOn();
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
     // A span covering the whole 32-step cycle: one strike at column 0 and a
     // release exactly at the seam (32 * 0.125 = 4 s) — the hold is the cycle,
@@ -341,7 +346,7 @@ describe('scheduleWholeChord walks exactly the cycle it is handed', () => {
     );
     expect(onSpy).toHaveBeenCalledTimes(1);
     expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, 1, 0, 'chord', 1, 'sequencer');
-    expect(offSpy).toHaveBeenCalledWith('C4', SYNTH.release, 4, 'chord');
+    expect(offSpy).toHaveBeenCalledWith(voiceIdFor('C4'), RELEASE, 4);
     onSpy.mockRestore();
     offSpy.mockRestore();
   });
@@ -381,7 +386,7 @@ describe('emitStepEvents note-off clamping', () => {
   // The step lands at t=11.5 and the hit holds 1.5 s, so it would ring to 13 —
   // past a chord that ends at 12. The note-off must be clamped to the end.
   test('clamps a note-off to the chord end', () => {
-    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const onSpy = spyNoteOn();
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
 
     emitStepEvents(
@@ -393,13 +398,14 @@ describe('emitStepEvents note-off clamping', () => {
     );
 
     expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, 0.8, 11.5, 'chord', 1, 'sequencer');
-    expect(offSpy).toHaveBeenCalledWith('C4', SYNTH.release, 12, 'chord');
+    expect(offSpy).toHaveBeenCalledWith(voiceIdFor('C4'), RELEASE, 12);
 
     onSpy.mockRestore();
     offSpy.mockRestore();
   });
 
   test('lets an in-bounds hold ring past the bar it started in', () => {
+    const onSpy = spyNoteOn();
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
 
     // Bar 0 of a two-bar chord: the hold drags over the bar line at 12 but
@@ -412,13 +418,14 @@ describe('emitStepEvents note-off clamping', () => {
       14,
     );
 
-    expect(offSpy).toHaveBeenCalledWith('C4', SYNTH.release, 13, 'chord');
+    expect(offSpy).toHaveBeenCalledWith(voiceIdFor('C4'), RELEASE, 13);
 
+    onSpy.mockRestore();
     offSpy.mockRestore();
   });
 
   test('offsets a strum voice by its spread before clamping', () => {
-    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const onSpy = spyNoteOn();
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
 
     emitStepEvents(
@@ -430,7 +437,7 @@ describe('emitStepEvents note-off clamping', () => {
     );
 
     expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, 0.7, 11.53, 'chord', 1, 'sequencer');
-    expect(offSpy).toHaveBeenCalledWith('E4', SYNTH.release, 11.78, 'chord');
+    expect(offSpy).toHaveBeenCalledWith(voiceIdFor('E4'), RELEASE, 11.78);
 
     onSpy.mockRestore();
     offSpy.mockRestore();
@@ -439,10 +446,13 @@ describe('emitStepEvents note-off clamping', () => {
   test('a strummed note on a chord last step never gets an off before its on', () => {
     const calls: Array<{ kind: 'on' | 'off'; note: string; time: number }> = [];
     const spyOn_ = spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation(
-      (note, _p, _v, time) => { calls.push({ kind: 'on', note, time: time ?? 0 }); },
+      (note: string, _s, _v, time) => {
+        calls.push({ kind: 'on', note, time: time ?? 0 });
+        return voiceIdFor(note);
+      },
     );
     const spyOff = spyOn(audioEngine, 'triggerSynthNoteOff').mockImplementation(
-      (note, _r, time) => { calls.push({ kind: 'off', note, time: time ?? 0 }); },
+      (voiceId, _r, time) => { calls.push({ kind: 'off', note: noteOfVoice(voiceId), time: time ?? 0 }); },
     );
     try {
       // 200 BPM: one 16th is 0.075 s. A 4-note strum spreads 3 * 30 ms = 0.09 s,
@@ -475,7 +485,7 @@ describe('scheduleWholeChord', () => {
   // The pattern previews are driven by a bar timer, not the shared clock, so
   // they still lay the whole chord down in one burst. 16th = 0.125 s.
   test('lays every step of the requested span down from one call', () => {
-    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const onSpy = spyNoteOn();
 
     scheduleWholeChord(
       [{ step: 0, noteName: 'C4', velocity: 0.8, timeOffset: 0, hold: 0.25 }],
@@ -493,6 +503,7 @@ describe('scheduleWholeChord', () => {
   });
 
   test('clamps the final hold to the chord end and holds back approach notes', () => {
+    const onSpy = spyNoteOn();
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
 
     scheduleWholeChord(
@@ -511,16 +522,17 @@ describe('scheduleWholeChord', () => {
     // Bar 0's C4 may ring over the bar line at 12; bar 1's is cut at the chord
     // end (14). The approach note fires only on the last bar.
     expect(offSpy.mock.calls).toEqual([
-      ['C4', SYNTH.release, 13, 'chord'],
-      ['C4', SYNTH.release, 14, 'chord'],
-      ['B3', SYNTH.release, 14, 'chord'],
+      [voiceIdFor('C4'), RELEASE, 13],
+      [voiceIdFor('C4'), RELEASE, 14],
+      [voiceIdFor('B3'), RELEASE, 14],
     ]);
 
+    onSpy.mockRestore();
     offSpy.mockRestore();
   });
 
   test('schedules exactly the cycle it is given, not a bar-wrapped view of it', () => {
-    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const onSpy = spyNoteOn();
 
     // A bar-relative filter (step % stepsPerBar) could never reach column 20 of
     // a two-bar cycle; the cycle-aware one fires it once, in bar two.
@@ -670,7 +682,7 @@ describe('a plan folds each chord and bass cycle by its own resolved width', () 
 });
 
 describe('arpEventsForStep', () => {
-  const ARP: SynthParams = { ...SYNTH, arpActive: true, arpMode: 'up', arpOctaves: 1, arpRate: '16n' };
+  const ARP: ArpSettings = { ...TRACK_ARP_DEFAULTS.chord, active: true, mode: 'up', octaves: 1, rate: '16n' };
   const NOTES = ['C4', 'E4', 'G4'];
 
   test('walks the chord tones in arp order, one per sixteenth step', () => {
@@ -682,14 +694,14 @@ describe('arpEventsForStep', () => {
   });
 
   test('honours arpRate by staying silent on steps the rate skips', () => {
-    const eighths = { ...ARP, arpRate: '8n' as const };
+    const eighths = { ...ARP, rate: '8n' as const };
     expect(arpEventsForStep(NOTES, eighths, 0, 0.125, 1).map((e) => e.noteName)).toEqual(['C4']);
     expect(arpEventsForStep(NOTES, eighths, 1, 0.125, 1)).toEqual([]);
     expect(arpEventsForStep(NOTES, eighths, 2, 0.125, 1).map((e) => e.noteName)).toEqual(['E4']);
   });
 
   test('stacks octaves and follows arpMode', () => {
-    const down = { ...ARP, arpMode: 'down' as const, arpOctaves: 2 };
+    const down = { ...ARP, mode: 'down' as const, octaves: 2 };
     // up-order across 2 octaves is C4 E4 G4 C5 E5 G5, so down starts at G5.
     expect(arpEventsForStep(NOTES, down, 0, 0.125, 1).map((e) => e.noteName)).toEqual(['G5']);
   });
@@ -737,7 +749,7 @@ describe('arpEventsForStep', () => {
 
 describe('full-hold chord scheduling', () => {
   test('plays every note at 1/√n velocity and releases at the hold end', () => {
-    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    const onSpy = spyNoteOn();
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
 
     const notes = ['C4', 'E4', 'G4', 'B4', 'D5', 'F5', 'A5'];
@@ -746,7 +758,7 @@ describe('full-hold chord scheduling', () => {
     const scaled = 0.8 * equalPowerVelocityScale(7);
     for (const n of notes) {
       expect(onSpy).toHaveBeenCalledWith(n, SYNTH, scaled, 10, 'chord', 1, 'sequencer');
-      expect(offSpy).toHaveBeenCalledWith(n, SYNTH.release, 14, 'chord');
+      expect(offSpy).toHaveBeenCalledWith(voiceIdFor(n), RELEASE, 14);
     }
     expect(onSpy).toHaveBeenCalledTimes(7);
 

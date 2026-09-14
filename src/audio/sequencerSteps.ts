@@ -1,5 +1,7 @@
 import { stepDurationSec } from '../utils/musicTheory';
-import type { SequencerTrack, SynthParams } from '../types';
+import type { SequencerTrack } from '../types';
+import type { ActiveSynth } from '@/types/synth';
+import { synthReleaseSeconds } from '@/utils/synthPatch';
 
 /** What one sequencer step must trigger. Pure so the per-step decision is
  *  testable without a clock, an AudioContext or a React render. */
@@ -10,7 +12,7 @@ export type SequencerStepEvent =
 export function sequencerStepEvents(
   tracks: readonly SequencerTrack[],
   stepIndex: number,
-  synthParams: SynthParams,
+  synth: ActiveSynth,
   bpm: number,
 ): SequencerStepEvent[] {
   const events: SequencerStepEvent[] = [];
@@ -29,7 +31,7 @@ export function sequencerStepEvents(
       events.push({
         kind: 'note',
         note: track.instrument === 'bass' ? 'C2' : 'C4',
-        release: synthParams.release,
+        release: synthReleaseSeconds(synth),
         offsetSec,
       });
     } else {

@@ -1,10 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { heldCountFor, heldNotesFor, noteTargetFor } from './heldNotes';
+import { heldCountFor, heldNotesFor, heldVoiceFor, noteTargetFor } from './heldNotes';
 import type { HeldNoteTargets } from './heldNotes';
+import type { VoiceId } from '../synth/voiceId';
 import type { SynthControlTarget } from '@/utils/synthControl';
 
+/** `[note, bus]`, with a voice id derived from the note so each entry has its own. */
 function held(...entries: [string, SynthControlTarget][]): HeldNoteTargets {
-  return new Map<string, SynthControlTarget>(entries);
+  return new Map(
+    entries.map(([note, target]) => [note, { target, voiceId: `voice-${note}` as VoiceId }]),
+  );
 }
 
 describe('noteTargetFor', () => {
@@ -23,9 +27,26 @@ describe('noteTargetFor', () => {
     // would land on a bus the voice was never on and the voice would drone.
     const map = held(['C4', 'synth']);
     // ...focus moves to FX; the next note-on would capture 'fx'...
-    map.set('E4', 'fx');
+    map.set('E4', { target: 'fx', voiceId: 'voice-E4' as VoiceId });
     expect(noteTargetFor(map, 'C4')).toBe('synth');
     expect(noteTargetFor(map, 'E4')).toBe('fx');
+  });
+});
+
+describe('heldVoiceFor', () => {
+  test('returns the voice the key actually started, not a name-derived lookup', () => {
+    // The bus and the note together do NOT name a voice: the arp and the
+    // melody sequencer play the same bus, so the ID captured at note-on is
+    // the only thing that can address the key's own voice.
+    expect(heldVoiceFor(held(['C4', 'synth'], ['G4', 'fx']), 'C4')).toBe('voice-C4' as VoiceId);
+    expect(heldVoiceFor(held(['C4', 'synth']), 'D4')).toBeNull();
+  });
+
+  test('a key pressed before the context existed has no voice to release', () => {
+    const map: HeldNoteTargets = new Map([['C4', { target: 'synth', voiceId: null }]]);
+    expect(heldVoiceFor(map, 'C4')).toBeNull();
+    // It is still HELD, or the key would never leave activeNotes.
+    expect(noteTargetFor(map, 'C4')).toBe('synth');
   });
 });
 
