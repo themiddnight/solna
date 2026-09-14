@@ -24,7 +24,7 @@
 import { DRUM_KITS } from '@/data/drumKits';
 import { SYNTH_PRESETS } from '@/data/synthPresets';
 import { FADER_MAX_DB } from '@/utils/gainUnits';
-import { TARGET_DBFS, computeTrimDb } from '@/utils/trimMath';
+import { TARGET_DBFS, computeTrimDb } from './trimMath';
 import { resolveFfmpegPath } from './ffmpegPath.ts';
 import { drumLoudnessHash, presetLoudnessHash } from './loudnessConfig.ts';
 import { measureDrumKit, measurePreset } from './renderOffline.ts';

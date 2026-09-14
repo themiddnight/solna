@@ -240,7 +240,7 @@ function ProjectBootGate() {
  * error thrown by Workspace's own render — a slice selector, a theme lookup —
  * could not be caught by a boundary that Workspace rendered itself.
  */
-export function App() {
+function App() {
   return (
     <ErrorBoundary showDetails={import.meta.env.DEV === true}>
       <ProjectBootGate />

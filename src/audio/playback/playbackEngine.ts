@@ -116,30 +116,16 @@ export function playbackOutputLatencySec(): number {
 
 /**
  * Release time for a HARD stop: short enough to read as an instant cut, long
- * enough not to click. Lives beside playbackStopSource, which owns the
- * semantics — it was declared verbatim in both note-based playback hooks, and
+ * enough not to click. It was declared verbatim in both note-based playback hooks, and
  * a tuning constant for an audible fade must not have two copies to drift.
  */
 export const HARD_STOP_RELEASE = 0.02;
 
 /**
- * Silences a whole playback source — sounding voices AND hits already
- * scheduled ahead of the transport. `time` anchors the release on the audio
- * clock so a soft stop lands exactly on a bar line.
- */
-export function playbackStopSource(
-  source: string,
-  releaseTime = 0.1,
-  time?: number,
-): void {
-  audioEngine.stopSource(source, releaseTime, time);
-}
-
-/**
  * Silences one PLAYER's voices on a source — its sounding voices and the hits
  * it has scheduled ahead of the transport — and nothing else on that bus.
  *
- * The melody-track version of `playbackStopSource`. A melody grid shares its
+ * A melody grid shares its
  * bus with live input and the arp (the lead track's engine source is 'synth',
  * the FX track's is 'fx'), so a whole-bus stop cut the note the player was
  * holding down and every arp voice on that bus. `'sequencer'` is pinned here,
@@ -158,8 +144,7 @@ export function playbackStopOwnedVoices(
  * The pitched buses the Chords player owns. Everything that silences the
  * accompaniment silences ALL of them: one transport drives chord, bass and
  * pad, so cutting a subset leaves the rest ringing — and a drone holds the
- * longest note in the app. Declared beside playbackStopSource, which owns the
- * semantics, so a fourth voice is one edit here instead of five hand-written
+ * longest note in the app. A fourth voice is one edit here instead of five hand-written
  * triplets (loadLoop, projectSlice, instantVibes and the chord hook's two stop
  * paths). Drums are fire-and-forget one-shots that hold no voices, so they are
  * deliberately absent.

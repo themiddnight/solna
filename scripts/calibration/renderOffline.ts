@@ -41,14 +41,14 @@ import { measureLoudness } from './measureLoudness.ts';
 import { CALIBRATION_SEED } from './seededRandom.ts';
 
 export const CALIBRATION_SAMPLE_RATE = 44100;
-export const CALIBRATION_CHANNELS = 2;
+const CALIBRATION_CHANNELS = 2;
 /** Max velocity — the AC calibrates "at max velocity", not at DEFAULT_VELOCITY. */
-export const CALIBRATION_VELOCITY = 1;
+const CALIBRATION_VELOCITY = 1;
 
 /** Where the first hit of a render lands. Late enough that the engine's own
  *  first-node setup never truncates it, early enough that two bars of pattern
  *  still finish with tail inside DRUM_KIT_RENDER_SECONDS. */
-export const DRUM_FIRST_HIT_S = 0.25;
+const DRUM_FIRST_HIT_S = 0.25;
 
 /**
  * The fixed reference pattern used to measure a whole KIT's level (DEV-387: drum
@@ -148,9 +148,9 @@ export const CALIBRATION_HEADROOM_DB = 12;
 /** 120 BPM. Fixed, not authored per kit: uniformity is what makes kit numbers
  *  comparable across the roster — one tempo for every kit, so a difference in
  *  the measured number is a difference in the kit and never in the pattern. */
-export const DRUM_KIT_BEAT_S = 0.5;
-export const DRUM_KIT_BAR_COUNT = 2;
-export const DRUM_KIT_BEATS_PER_BAR = 4;
+const DRUM_KIT_BEAT_S = 0.5;
+const DRUM_KIT_BAR_COUNT = 2;
+const DRUM_KIT_BEATS_PER_BAR = 4;
 
 interface DrumKitPatternHit {
   voice: DrumType;
@@ -161,7 +161,7 @@ interface DrumKitPatternHit {
 
 /** One bar of the backbeat: kick on 1 & 3, snare on 2 & 4, closed hihat on every
  *  8th note (the four on-beat hits plus the four off-beat 8ths). */
-export const DRUM_KIT_BAR: readonly DrumKitPatternHit[] = [
+const DRUM_KIT_BAR: readonly DrumKitPatternHit[] = [
   { voice: 'kick', beat: 0 },
   { voice: 'hihat', beat: 0 },
   { voice: 'hihat', beat: 0.5 },
@@ -176,8 +176,8 @@ export const DRUM_KIT_BAR: readonly DrumKitPatternHit[] = [
   { voice: 'hihat', beat: 3.5 },
 ];
 
-export const SYNTH_FIRST_NOTE_S = 0.25;
-export const SYNTH_NOTE_COUNT = 4;
+const SYNTH_FIRST_NOTE_S = 0.25;
+const SYNTH_NOTE_COUNT = 4;
 
 /**
  * The shortest note a preset is measured with. It used to be the ONLY note
@@ -193,17 +193,17 @@ export const SYNTH_NOTE_COUNT = 4;
  * note until its own amp envelope has reached its sustain plateau, with this as
  * the floor so a short patch is measured exactly as it was before.
  */
-export const SYNTH_NOTE_GATE_FLOOR_S = 1.3;
+const SYNTH_NOTE_GATE_FLOOR_S = 1.3;
 /** Silence between the end of one gate and the start of the next note. */
-export const SYNTH_NOTE_SPACING_S = 0.2;
+const SYNTH_NOTE_SPACING_S = 0.2;
 /** Tail after the last note's release, so nothing is truncated by the boundary. */
-export const SYNTH_RENDER_TAIL_S = 1;
+const SYNTH_RENDER_TAIL_S = 1;
 /**
  * The shortest render, whatever the patch. `ebur128`'s short-term window is
  * 3 s and a median over too few frames is not a median, so a fast patch keeps
  * the 6.5 s render every committed number before this change was taken at.
  */
-export const SYNTH_RENDER_FLOOR_SECONDS = 6.5;
+const SYNTH_RENDER_FLOOR_SECONDS = 6.5;
 
 /**
  * How long ONE note is held for this patch.
@@ -249,37 +249,37 @@ export const SYNTH_RENDER_FLOOR_SECONDS = 6.5;
  * files that create it, and because reasoning from the wrong cause is how the
  * gate rule nearly grew a mod-envelope term it does not need.
  */
-export function synthGateSeconds(patch: EnginePatch<'subtractive'>): number {
+function synthGateSeconds(patch: EnginePatch<'subtractive'>): number {
   const env = patch.synth.ampEnvelope;
   return Math.max(SYNTH_NOTE_GATE_FLOOR_S, env.attack + env.decay);
 }
 
 /** Gate plus spacing: where the next note starts. */
-export function synthNoteIntervalSeconds(patch: EnginePatch<'subtractive'>): number {
+function synthNoteIntervalSeconds(patch: EnginePatch<'subtractive'>): number {
   return synthGateSeconds(patch) + SYNTH_NOTE_SPACING_S;
 }
 
 /** Long enough for four notes at this patch's own gate, plus its release tail. */
-export function synthRenderSeconds(patch: EnginePatch<'subtractive'>): number {
+function synthRenderSeconds(patch: EnginePatch<'subtractive'>): number {
   const last = SYNTH_FIRST_NOTE_S + (SYNTH_NOTE_COUNT - 1) * synthNoteIntervalSeconds(patch);
   const end = last + synthGateSeconds(patch) + patch.synth.ampEnvelope.release + SYNTH_RENDER_TAIL_S;
   return Math.max(SYNTH_RENDER_FLOOR_SECONDS, end);
 }
 /** The patch's own oscillator tuning shifts this, exactly as a player hears it. */
-export const SYNTH_CALIBRATION_NOTE = 'C3';
+const SYNTH_CALIBRATION_NOTE = 'C3';
 /**
  * The bus a calibration render plays on. Any name works — the harness builds its
  * own engine and no bus fader is touched — but it must be ONE name, because
  * polyphony ducking is per bus and a render that spread its four notes over four
  * buses would measure a different level than one that did not.
  */
-export const CALIBRATION_SOURCE = 'calibration';
+const CALIBRATION_SOURCE = 'calibration';
 /**
  * Unity, as a dB. What `common.outputGainDb` is forced to for the uncalibrated
  * pass: a voice's peak is `velocityGain * dbToGain(outputGainDb) / sqrt(unison)`,
  * so 0 dB is the multiplier vanishing and the raw voicing being what is measured.
  */
-export const NEUTRAL_OUTPUT_GAIN_DB = 0;
+const NEUTRAL_OUTPUT_GAIN_DB = 0;
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the engine's public surface
    is typed against the DOM's BaseAudioContext and node-web-audio-api implements the

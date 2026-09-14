@@ -26,7 +26,7 @@
  * Run: bun run calibration:verify
  */
 import { SYNTH_PRESETS } from '@/data/synthPresets';
-import { TARGET_DBFS, TOLERANCE_DB } from '@/utils/trimMath';
+import { TARGET_DBFS, TOLERANCE_DB } from './trimMath';
 import { measureDrumKit, measurePreset } from './renderOffline.ts';
 
 /** A spread of measured levels and one deliberately extreme case: Trap Beat and

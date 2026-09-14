@@ -127,7 +127,7 @@ export type SynthVoiceFactory = (
  * there, so a rate or waveform edit took effect on no voice and on no
  * subsequent note either (a transport channel's generator is cached).
  */
-export interface VoiceLfoBank {
+interface VoiceLfoBank {
   connectVoice(voice: LfoVoiceHandle, params: LfoParams, at: number): void;
   disconnectVoice(voice: LfoVoiceHandle): void;
   retireVoiceOffline(voice: LfoVoiceHandle, at: number): void;

@@ -161,7 +161,7 @@ export const KEYBOARD_NOTES = [
 // same arithmetic over the dock's `[@media(max-height:560px)]:h-36`:
 // (144 - 16 - 2 - 6) / 2 = 60px = h-15. A landscape phone would otherwise
 // push two 78px rows out through the bottom of a 144px box.
-export function KeyCap({
+function KeyCap({
   id,
   ariaLabel,
   isActive,
@@ -626,7 +626,7 @@ const KEY_BLACK_WIDTH_VAR = '--chromatic-key-black-w';
  * the original desktop size. `mx-0.5` on each white key eats 4px of the stride,
  * hence the `-4px` in its width.
  */
-export const CHROMATIC_KEYBOARD_CLASS =
+const CHROMATIC_KEYBOARD_CLASS =
   'relative flex [--chromatic-key-stride:46px] [--chromatic-key-black-w:26px] ' +
   'sm:[--chromatic-key-stride:68px] sm:[--chromatic-key-black-w:36px]';
 

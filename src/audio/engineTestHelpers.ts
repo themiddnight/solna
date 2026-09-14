@@ -74,9 +74,6 @@ export function masterChainCtx() {
  */
 export const ACTIVE_SYNTH: ActiveSynth<'subtractive'> = SUBTRACTIVE_INIT;
 
-/** The amp release `ACTIVE_SYNTH` fades over — what a test hands a note-off. */
-export const ACTIVE_SYNTH_RELEASE = SUBTRACTIVE_INIT.patch.synth.ampEnvelope.release;
-
 // Collects every node the engine creates during one call, by kind. Module
 // scope: every drum task's tests use it.
 export function recordNodes(ctx: any) {

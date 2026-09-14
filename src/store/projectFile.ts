@@ -16,7 +16,7 @@ export const PROJECT_FILE_EXTENSION = '.solna';
 /** `.json` too: some mobile file providers rewrite an unknown extension. */
 export const PROJECT_FILE_ACCEPT = '.solna,.json';
 
-export const NEWER_VERSION_MESSAGE = 'This project was saved by a newer version of Solna.';
+const NEWER_VERSION_MESSAGE = 'This project was saved by a newer version of Solna.';
 export const MALFORMED_MESSAGE = 'This file is not a Solna project.';
 
 export type ProjectParseResult =
@@ -49,7 +49,7 @@ const malformed = (): ProjectParseResult => ({ ok: false, error: 'malformed', me
  * OTHER producer of a `ProjectContent`, and a `ProjectLoop` must never carry
  * `tempName` regardless of which producer built it.
  */
-export function sanitizeContent(raw: unknown): ProjectContent {
+function sanitizeContent(raw: unknown): ProjectContent {
   const c = isPlainObject(raw) ? raw : {};
   const meterId = isMeterId(c.meterId) ? c.meterId : DEFAULT_METER_ID;
   const loops = sanitizeLoops(c.loops, meterId) ?? [createDefaultLoop()];
@@ -92,7 +92,7 @@ const TRACK_LABELS: Record<SynthControlTarget, string> = {
  * own, so a body with a corrupt Bass patch still imports the Lead, Chords,
  * Pad and FX sounds the author saved.
  */
-export function unreadableSynthPatches(raw: unknown): string[] {
+function unreadableSynthPatches(raw: unknown): string[] {
   const content = isPlainObject(raw) ? raw : {};
   const loops = Array.isArray(content.loops) ? content.loops : [];
   const found = new Set<string>();

@@ -15,8 +15,8 @@
  * measurement is ABSOLUTE (Dbfs, 0 = ceiling), a trim is RELATIVE (Decibels,
  * 0 = unity).
  *
- * Lives in src/utils/ so `bun run lint` type-checks it and DEV-388 can pin it.
- * Only `scripts/calibration/` imports it, so it never enters the vite bundle.
+ * Lives with the calibration tooling because no production path imports it.
+ * `tsconfig.json` includes this directory, so `bun run lint` still checks it.
  */
 import { toDbfs, toDecibels, type Dbfs, type Decibels } from '@/utils/gainUnits';
 

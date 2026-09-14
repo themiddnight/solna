@@ -23,12 +23,17 @@ bun run check:keys     # drum-pad vs synth key-binding collision check
 bun run check:drums    # drum-kit audible-separation check
 bun run check:contrast # drum- and module-palette AA contrast floor (both themes)
 bun run check:levels   # calibration trim table still matches today's kit/preset defaults
-bun run verify         # test + lint + eslint + check:keys + check:drums + check:contrast + check:levels + build (the gate)
+bun run check:dead-code             # unused files, exports, types and dependencies across app + tooling
+bun run check:dead-code:production  # strict shipped-code file and dependency graph
+bun run verify         # all tests, static/domain checks, both dead-code scans, and the production build
 ```
 
 `bun run verify` is the completion gate — run it before claiming work is done. It runs
 `bun run eslint`, which currently reports **nothing at all** — no errors and no warnings — and
-that is the state to keep it in. Per decision D5 a new rule lands as `warn` and flips to
+both Knip scans, which likewise have a zero-finding baseline. The default Knip graph includes
+tests and manually invoked tooling; the production graph excludes tests and narrowly named
+test-support fixtures, so code kept alive only by tests still appears as an unused production
+file while intentional test infrastructure does not. Per decision D5 a new rule lands as `warn` and flips to
 `error` in the change that empties it, which is why the `React.FC` ban, the `../../` ban and
 `consistent-type-definitions` are now errors (see the ESLint rule matrix in
 `docs/superpowers/specs/2026-09-04-codebase-hygiene-and-restructure-design.md`).

@@ -39,7 +39,7 @@ export const groupInCategory = (groupCategory: string, categoryId: string): bool
  *  every custom preset regardless of its saved category, plus factory entries
  *  stored under 'User'. One predicate, so the chip's count, the chip's click
  *  and the step navigation cannot disagree about what a filter selects. */
-export const presetInCategory = (preset: SynthPreset, categoryId: string): boolean =>
+const presetInCategory = (preset: SynthPreset, categoryId: string): boolean =>
   categoryId === "All"
     ? true
     : categoryId === "User"

@@ -312,15 +312,3 @@ export function scanRepo(rootDir: string): Map<string, Violation[]> {
 
   return results;
 }
-
-/** Human-readable report used by both the test and `bun run check:theme`. */
-export function formatReport(results: Map<string, Violation[]>): string {
-  const lines: string[] = [];
-  for (const [file, violations] of [...results].sort()) {
-    lines.push(file);
-    for (const v of violations) {
-      lines.push(`  ${String(v.line).padStart(4)}  ${v.rule.padEnd(16)}  ${v.snippet}`);
-    }
-  }
-  return lines.join('\n');
-}

@@ -155,7 +155,7 @@ export interface CustomPatternState<TValue> {
  * later fractional-duration chord supplies its own step length without
  * changing this contract (see the phase-1 spec's timeline model).
  */
-export function customPatternSpans<TValue>(state: CustomPatternState<TValue>): PatternSpans<TValue> {
+function customPatternSpans<TValue>(state: CustomPatternState<TValue>): PatternSpans<TValue> {
   const cycleSteps = state.loopLength * state.stepsPerBar;
   return {
     values: state.values,

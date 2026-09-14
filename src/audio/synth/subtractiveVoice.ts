@@ -105,7 +105,7 @@ export interface SubtractiveVoiceEvent {
  * oscillator slots, so the length is part of the contract rather than
  * something a reader has to check.
  */
-export type OscillatorSlots<T> = [T | null, T | null];
+type OscillatorSlots<T> = [T | null, T | null];
 
 /**
  * The voice's nodes, grouped.
@@ -116,7 +116,7 @@ export type OscillatorSlots<T> = [T | null, T | null];
  * (`osc1-pitch`, `osc2-level`), so a dense array would silently re-point a
  * route at the wrong oscillator the moment slot 1 was the only one enabled.
  */
-export interface SubtractiveVoiceNodes {
+interface SubtractiveVoiceNodes {
   oscillators: OscillatorSlots<OscillatorNode>;
   oscillatorGains: OscillatorSlots<GainNode>;
   sub: OscillatorNode | null;

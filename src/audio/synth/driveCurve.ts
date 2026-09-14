@@ -20,7 +20,7 @@ import { dbToGain } from '@/utils/synthPatch';
  * the stage would apply a small DC offset to every voice that passes through
  * it, drive or no drive. 1025 is 1024 + the center sample.
  */
-export const DRIVE_CURVE_SAMPLES = 1025;
+const DRIVE_CURVE_SAMPLES = 1025;
 
 /**
  * Builds the waveshaper curve for `driveDb`.

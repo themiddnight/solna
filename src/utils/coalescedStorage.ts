@@ -12,7 +12,7 @@ import type { StateStorage } from 'zustand/middleware';
  * that window to this timeout — a second tab that writes and closes inside
  * it can still be silently overwritten when this tab's delayed flush lands.
  */
-export const IDLE_FLUSH_TIMEOUT_MS = 250;
+const IDLE_FLUSH_TIMEOUT_MS = 250;
 
 export interface WriteScheduler {
   schedule: (flush: () => void) => number;

@@ -6,8 +6,6 @@ import { PanelCard } from '@/components/ui/PanelCard';
 import { FIELD_LABEL } from '@/components/ui/fieldClasses';
 import { defaultRouteFor, MOD_ROUTE_RANGES } from '@/utils/synthPatch';
 
-// Re-exported so a Pro panel keeps reaching its controls through one module.
-export { defaultRouteFor };
 import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
 import type { EnginePatch, ModRoute, ModTarget } from '@/types/synth';
 
@@ -306,7 +304,7 @@ export function ModuleChip({ color, children }: { color: ProModuleColor; childre
  * The nine destinations, in the order the signal meets them, with the words a
  * musician reads rather than the union's kebab-case ids.
  */
-export const MOD_TARGET_LABELS: Record<ModTarget, string> = {
+const MOD_TARGET_LABELS: Record<ModTarget, string> = {
   'pitch-all': 'Pitch (all)',
   'osc1-pitch': 'OSC 1 pitch',
   'osc2-pitch': 'OSC 2 pitch',
@@ -318,14 +316,14 @@ export const MOD_TARGET_LABELS: Record<ModTarget, string> = {
   pan: 'Pan',
 };
 
-export const MOD_TARGETS = Object.keys(MOD_TARGET_LABELS) as ModTarget[];
+const MOD_TARGETS = Object.keys(MOD_TARGET_LABELS) as ModTarget[];
 
 /** The empty slot's option value. Not a `ModTarget`, so it cannot be stored. */
-export const NO_ROUTE = 'none';
+const NO_ROUTE = 'none';
 
 
 /** The amount knob's range and readout for a route, by the unit it carries. */
-export function amountControlFor(
+function amountControlFor(
   route: ModRoute,
   // An LFO route caps deeper in dB than an ENV2 route does — it is summed
   // bipolar into a gain based at 1, so past `LFO_DB_ROUTE_LIMIT` the trough

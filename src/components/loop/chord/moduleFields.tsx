@@ -22,14 +22,14 @@ import { PresetSelect } from "./PresetSelect";
  */
 
 /** One entry of a `groupByStyle` pattern catalogue (`bassPatterns`, `chordRhythms`). */
-export interface PatternChoice {
+interface PatternChoice {
   id: string;
   name: string;
   meter?: MeterId;
 }
 
 /** One `style` group of a pattern catalogue, as `groupByStyle` returns it. */
-export interface PatternChoiceGroup {
+interface PatternChoiceGroup {
   style: string;
   patterns: PatternChoice[];
 }

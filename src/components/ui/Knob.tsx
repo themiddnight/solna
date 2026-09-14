@@ -15,7 +15,7 @@ import {
 } from '@/utils/knob';
 import type { KeyDir, KnobIndicator, KnobScale, KnobSize } from '@/utils/knob';
 
-export type { KnobIndicator, KnobScale, KnobSize };
+export type { KnobScale, KnobSize };
 
 /** Runtime list so tests can assert the badge map is exhaustive. */
 export const KNOB_COLORS = [

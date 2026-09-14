@@ -3,7 +3,7 @@ import { shallow } from 'zustand/shallow';
 import { useAppStore } from './store';
 import { layerForTab } from '../types';
 import type { AppStore } from './types';
-import { createNavSignature, type NavSignature } from './navSignature';
+import { createNavSignature } from './navSignature';
 
 /**
  * The navigation axes that empty the track-solo set: a change of LAYER (Loop
@@ -60,8 +60,6 @@ const SOLO_NAV_SOURCES = {
  */
 export const { keys: SOLO_NAV_KEYS, signature: soloNavSignature } =
   createNavSignature(SOLO_NAV_SOURCES);
-
-export type SoloNavSignature = NavSignature<typeof SOLO_NAV_SOURCES>;
 
 /**
  * Starts the clear. Returns the unsubscribe, mirroring startSongModeSync.

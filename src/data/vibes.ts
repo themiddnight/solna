@@ -53,7 +53,7 @@ import type { SynthControlTarget } from '@/utils/synthControl';
  * the current value when it is the sole member, so such an axis stops rerolling
  * — which is what a one-member pool means.
  */
-export interface VibeRandomRule {
+interface VibeRandomRule {
   /** Roots that suit the vibe. The dice picks one. Always contains scaleRoot. */
   keys: string[];
   /** Inclusive [min, max] integer BPM. Always contains the vibe's own bpm. */

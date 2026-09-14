@@ -504,7 +504,7 @@ export { STEPS_PER_BAR };
 
 // Re-exported from drumSynth so the drum tables keep one definition while every
 // `import { DRUM_ALIASES } from '../engine'` keeps resolving.
-export { DRUM_ALIASES, METAL_BAND_A_HZ, METAL_BAND_B_HZ, METAL_RATIOS } from './drumSynth';
+export { DRUM_ALIASES, METAL_BAND_B_HZ, METAL_RATIOS } from './drumSynth';
 
 export const audioEngine = new AudioEngine();
 

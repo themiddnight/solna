@@ -113,9 +113,9 @@ export function isBeatBoundary(stepInBar: number, accentGroups: number[]): boole
  * It is the IDENTITY whenever `stepsPerBar` is already a multiple of 4 — which
  * covers every meter in the table except 7/8 — so 4/4 output is byte-identical.
  */
-export const ARP_PHASE_QUANTUM = 4;
+const ARP_PHASE_QUANTUM = 4;
 
-export function arpBarPhaseLength(stepsPerBar: number): number {
+function arpBarPhaseLength(stepsPerBar: number): number {
   return Math.ceil(stepsPerBar / ARP_PHASE_QUANTUM) * ARP_PHASE_QUANTUM;
 }
 

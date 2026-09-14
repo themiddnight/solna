@@ -1,0 +1,20 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/main.tsx!",
+    ".claude/skills/instant-vibes/scripts/vibe-inventory.ts",
+    "scripts/calibration/busHeadroom.smoke.ts",
+    "scripts/gen-diatonic-characterization.ts",
+    "scripts/gen-spelling-characterization.ts",
+    "scripts/verify-borrowed.mts"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}!",
+    "src/**/*.css!",
+    "!src/**/*.test.{ts,tsx}!",
+    "!src/**/{engineTestHelpers,testFakes,*Fixture,*Fixtures}.{ts,tsx}!",
+    "scripts/**/*.{ts,mts}",
+    ".claude/skills/**/scripts/**/*.ts"
+  ],
+  "includeEntryExports": true
+}

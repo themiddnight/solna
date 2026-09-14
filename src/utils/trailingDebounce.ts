@@ -3,7 +3,7 @@ export interface DebounceScheduler {
   cancel: (handle: number) => void;
 }
 
-export const timerDebounceScheduler: DebounceScheduler = {
+const timerDebounceScheduler: DebounceScheduler = {
   schedule: (fn, delayMs) => setTimeout(fn, delayMs) as unknown as number,
   cancel: (handle) => clearTimeout(handle as unknown as ReturnType<typeof setTimeout>),
 };

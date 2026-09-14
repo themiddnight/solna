@@ -10,7 +10,7 @@ export interface FrameScheduler {
 const HAS_RAF =
   typeof requestAnimationFrame === 'function' && typeof cancelAnimationFrame === 'function';
 
-export const rafScheduler: FrameScheduler = {
+const rafScheduler: FrameScheduler = {
   request: (fn) =>
     HAS_RAF ? requestAnimationFrame(fn) : (setTimeout(fn, 16) as unknown as number),
   cancel: (handle) => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { toDbfs, toDecibels } from '@/utils/gainUnits';
-import { TARGET_DBFS, TOLERANCE_DB, computeTrimDb, isWithinTolerance } from '@/utils/trimMath';
+import { TARGET_DBFS, TOLERANCE_DB, computeTrimDb, isWithinTolerance } from './trimMath';
 
 describe('the contract constants', () => {
   test('TARGET_DBFS is -18, the value the shared contract states', () => {

@@ -5,7 +5,7 @@ import { cx } from './cx';
 import { IconButton } from './IconButton';
 import { syncDialogOpen } from './syncDialogOpen';
 
-export type ModalSize = 'sm' | 'md' | 'lg';
+type ModalSize = 'sm' | 'md' | 'lg';
 
 /** `lg` is `max-w-2xl` because that is the width the two wide dialogs use. */
 const SIZE_CLASS: Record<ModalSize, string> = {

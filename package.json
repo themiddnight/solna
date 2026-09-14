@@ -13,22 +13,22 @@
     "check:drums": "bun scripts/check-drum-kit-separation.ts",
     "check:contrast": "bun scripts/check-contrast.ts",
     "check:levels": "bun scripts/check-levels.ts",
+    "check:dead-code": "knip",
+    "check:dead-code:production": "knip --strict --include files,dependencies,unlisted,binaries,unresolved",
     "calibration:generate": "bun scripts/calibration/generateTrimTable.ts",
     "calibration:smoke": "bun scripts/calibration/renderOffline.smoke.ts",
     "calibration:verify": "bun scripts/calibration/verifyApplied.smoke.ts",
     "report:library": "bun scripts/report-library-coverage.ts",
     "report:drums-diff": "bun scripts/report-drum-diff.ts",
-    "verify": "bun test && bun run lint && bun run eslint && bun run check:keys && bun run check:drums && bun run check:contrast && bun run check:levels && bun run build"
+    "verify": "bun test && bun run lint && bun run eslint && bun run check:keys && bun run check:drums && bun run check:contrast && bun run check:levels && bun run check:dead-code && bun run check:dead-code:production && bun run build"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.4.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
-    "@vitejs/plugin-react": "^6.1.1",
     "daisyui": "^5.7.22",
     "lucide-react": "^1.37.0",
     "react": "^19.2.8",
@@ -36,16 +36,19 @@
     "tailwindcss": "^4.3.3",
     "tonal": "^6.4.3",
     "typescript": "^6.0.3",
-    "vite": "^8.2.2",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.1",
     "eslint": "^10.9.1",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "knip": "^6.35.1",
     "node-web-audio-api": "2.2.0",
     "typescript-eslint": "^8.68.0",
+    "vite": "^8.2.2",
     "vite-plugin-pwa": "^1.3.0"
   }
 }

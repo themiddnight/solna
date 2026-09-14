@@ -14,7 +14,7 @@ export const PANEL_CARD = 'card bg-panel border border-base-300 shadow-md';
  * idiom the oscilloscope box and `JOIN_LANE` already use, so a nested panel
  * looks like part of its parent and not a sibling that landed there.
  */
-export const PANEL_CARD_INSET = 'card bg-base-200 border border-base-300';
+const PANEL_CARD_INSET = 'card bg-base-200 border border-base-300';
 
 export interface PanelCardProps {
   /**

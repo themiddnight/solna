@@ -1,24 +1,3 @@
-
-/**
- * The engine-discriminated synth domain lives in `src/types/synth.ts`; the
- * legacy flat `SynthParams` that used to sit in this file is gone. The names
- * below are re-exported here so `@/types` call sites reach the synth domain
- * without also importing `@/types/synth` directly.
- */
-import type { ActiveSynth } from './types/synth';
-
-export type {
-  ActiveSynth,
-  ArpSettings,
-  CommonVoiceParams,
-  EnginePatch,
-  EnginePatchMap,
-  LfoParams,
-  ModRoute,
-  SubtractiveParams,
-  SynthEngineId,
-} from './types/synth';
-
 /**
  * The four tabs, two per layer. The loop layer's split is a rule, not a
  * grouping of what happened to exist: changes the SOUND but not the notes →
@@ -93,8 +72,6 @@ export function layerForTab(tab: ViewMode): Layer {
   return isSongLayer(tab) ? 'song' : 'loop';
 }
 
-export type ArrangementTrackType = 'chords' | 'drums' | 'bass' | 'lead';
-
 /**
  * The pad layer's two articulations. `pad` follows the chords; `drone` does not.
  *
@@ -124,59 +101,6 @@ export type PadInterval = 1 | 4 | 5 | 8 | 12;
 
 /** Render order for the interval toggles, and the validation set for sanitize. */
 export const PAD_INTERVALS: readonly PadInterval[] = [1, 4, 5, 8, 12];
-
-export interface LeadNote {
-  note: string;
-  step: number; // 0-based step within the region
-  durationSteps: number; // in 16th steps
-  velocity?: number;
-}
-
-/**
- * UNBUILT. The Arrange feature's region payload: `SongArrangement` is reachable
- * only from this file and from `INITIAL_ARRANGEMENT`, which no code reads. The
- * fields below are therefore a sketch, not a contract — `synthParams` carries
- * an `ActiveSynth` because that is the only patch shape there is, not because
- * anything writes or reads one here. Deleting the shape is a product decision
- * about the Arrange tab, which is why it is marked rather than removed.
- */
-export interface ArrangementRegionData {
-  // Chords data
-  chords?: ChordItem[];
-  chordRhythmId?: string;
-  chordFeel?: number;
-  chordOctave?: number;
-  chordPresetId?: string;
-  // Drums data
-  drumPattern?: Record<string, boolean[]>;
-  soundKit?: string;
-  // Bass data
-  bassPatternId?: string;
-  bassFeel?: number;
-  bassOctave?: number;
-  bassPresetId?: string;
-  // Lead / Synth data
-  synthParams?: ActiveSynth;
-  leadNotes?: LeadNote[];
-}
-
-export interface ArrangementRegion {
-  id: string;
-  trackType: ArrangementTrackType;
-  name: string;
-  startBar: number; // 0-based bar index
-  lengthBars: number; // in bars (e.g. 2, 4, 8)
-  color?: string; // semantic tag e.g. 'primary' | 'secondary' | 'accent' | 'warning' | 'info' | 'success'
-  data: ArrangementRegionData;
-}
-
-export interface SongArrangement {
-  totalBars: number;
-  loopEnabled: boolean;
-  loopStartBar: number;
-  loopEndBar: number;
-  regions: ArrangementRegion[];
-}
 
 export type FilterType = 'lowpass' | 'highpass' | 'bandpass';
 
@@ -290,4 +214,3 @@ export interface MasterEffects {
   /** Seconds. */
   limiterRelease: number;
 }
-

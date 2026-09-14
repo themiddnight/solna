@@ -15,7 +15,7 @@
  * of the helper, and it is why the helper must stay in this file, four lines
  * above the table it builds.
  */
-export type ProgressionCategory =
+type ProgressionCategory =
   | 'Pop & EDM'
   | 'Jazz & Neo-Soul'
   | 'Lofi & R&B'
@@ -25,7 +25,7 @@ export type ProgressionCategory =
   | 'Classical & Baroque'
   | 'Ambient & Zen';
 
-export interface ProgressionStep {
+interface ProgressionStep {
   /** 0-based scale degree; wraps modulo the scale's own length. */
   degree: number;
   /**

@@ -19,7 +19,7 @@
  */
 import type { MeterId } from '@/utils/meter';
 
-export type RhythmHitType = 'block' | 'strum';
+type RhythmHitType = 'block' | 'strum';
 
 export interface RhythmHit {
   /** 16th-note position within the bar (0–15) */
