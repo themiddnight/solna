@@ -12,7 +12,7 @@
  * What reaches the bus is exactly what a person played. Sequenced notes do
  * not: playback goes through playbackEngine, not through here.
  */
-export type NoteInputKind = 'on' | 'off';
+type NoteInputKind = 'on' | 'off';
 
 export interface NoteInputEvent {
   kind: NoteInputKind;

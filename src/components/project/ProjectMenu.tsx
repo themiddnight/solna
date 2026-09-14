@@ -43,7 +43,7 @@ export function replacesProject(action: ProjectMenuAction): action is ReplacingA
   return REPLACING_ACTIONS.some((replacing) => replacing === action);
 }
 
-export interface ProjectMenuRow {
+interface ProjectMenuRow {
   action: ProjectMenuAction;
   label: string;
   icon: typeof Upload;
@@ -160,7 +160,7 @@ export function visibleMenuSections(
 }
 
 /** Only the three replacing actions ever reach the confirm — see replacesProject. */
-export const CONFIRM_COPY: Record<ReplacingAction, { title: string; label: string }> = {
+const CONFIRM_COPY: Record<ReplacingAction, { title: string; label: string }> = {
   open: { title: 'Open a project file', label: 'Choose a file' },
   'open-drive': { title: 'Open from Google Drive', label: 'Browse Drive' },
   new: { title: 'Start a new project', label: 'New project' },

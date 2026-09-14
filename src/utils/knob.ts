@@ -15,7 +15,7 @@ export const SWEEP_DEG = 270;
 /** Pointer drag distance (px) that covers the full range. */
 export const DRAG_RANGE_PX = 200;
 /** Shift+drag divides drag sensitivity by this factor (fine control). */
-export const FINE_DRAG_DIVISOR = 10;
+const FINE_DRAG_DIVISOR = 10;
 /** Accumulated |delta| (px) before the drag axis is committed (anti-jitter). */
 export const AXIS_PICK_THRESHOLD_PX = 3;
 /** Progress arc length at t=1 on a pathLength=100 circle: 270/360 × 100. */

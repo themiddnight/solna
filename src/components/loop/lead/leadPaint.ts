@@ -2,7 +2,7 @@ import type { LeadNotePaintMode } from '@/store/types';
 import type { LeadCellKind } from './melodyGrid';
 
 /** A stroke can only draw or erase — 'toggle' is the click's business. */
-export type LeadPaintMode = Exclude<LeadNotePaintMode, 'toggle'>;
+type LeadPaintMode = Exclude<LeadNotePaintMode, 'toggle'>;
 
 export interface LeadPaintCommit {
   stepIndex: number;
@@ -117,13 +117,13 @@ export function createLeadPaintController(
 
 
 /** The parts of a pointer event the paint handlers read. */
-export interface LeadPaintPointerLike {
+interface LeadPaintPointerLike {
   pointerId: number;
   button?: number;
 }
 
 /** The part of a click event that says whether a keyboard produced it. */
-export interface LeadPaintClickLike {
+interface LeadPaintClickLike {
   detail: number;
 }
 

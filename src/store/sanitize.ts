@@ -37,14 +37,14 @@ import { asFaderDb } from './levelUnits';
 // Wrong-typed values survive JSON.parse and would flow straight into engine
 // setters (`bpm: "fast"` -> NaN clock, a string volume -> setTargetAtTime(NaN)),
 // so both readers go through this one module — see projectFile.ts.
-export const FILTER_TYPES = new Set(['lowpass', 'highpass', 'bandpass']);
+const FILTER_TYPES = new Set(['lowpass', 'highpass', 'bandpass']);
 
 /**
  * A stored step-resolution id, or the fallback. Its own rule rather than an
  * inline ternary because BOTH readers need it: the loop body below and the
  * flat persisted key that store.ts sanitizes.
  */
-export function asLeadStepResolution(
+function asLeadStepResolution(
   value: unknown,
   fallback: LeadStepResolutionId,
 ): LeadStepResolutionId {
@@ -217,20 +217,11 @@ export function asBoolean(value: unknown): boolean {
   return typeof value === 'boolean' ? value : false;
 }
 
-export function asString(value: unknown, fallback: string): string {
-  return typeof value === 'string' ? value : fallback;
-}
-
-/** For a persisted field whose absence is meaningful (no project, no baseline). */
-export function asNullableString(value: unknown): string | null {
-  return typeof value === 'string' ? value : null;
-}
-
-export function isPatternMode(value: unknown): value is 'preset' | 'custom' {
+function isPatternMode(value: unknown): value is 'preset' | 'custom' {
   return value === 'preset' || value === 'custom';
 }
 
-export function asPatternMode(value: unknown, fallback: 'preset' | 'custom'): 'preset' | 'custom' {
+function asPatternMode(value: unknown, fallback: 'preset' | 'custom'): 'preset' | 'custom' {
   return isPatternMode(value) ? value : fallback;
 }
 
@@ -256,7 +247,7 @@ const memberOr =
   (value: unknown, fallback: T): T =>
     isMember(value) ? (value as T) : fallback;
 
-export const asFilterType = memberOr<FilterType>(memberTest(FILTER_TYPES));
+const asFilterType = memberOr<FilterType>(memberTest(FILTER_TYPES));
 
 // Five persisted ids/labels that each name a real library entry, not just a
 // string: the deleted migrateDrumVoices step used to carry a rename
@@ -273,17 +264,17 @@ const CHORD_RHYTHM_ID_SET = new Set(CHORD_RHYTHMS.map((p) => p.id));
 const BASS_PATTERN_ID_SET = new Set(BASS_PATTERNS.map((p) => p.id));
 const SOUND_KIT_SET = new Set(Object.keys(DRUM_KITS));
 
-export const isRootNote = memberTest(ROOT_SET);
-export const isScaleType = memberTest(SCALE_TYPE_SET);
-export const isChordRhythmId = memberTest(CHORD_RHYTHM_ID_SET);
-export const isBassPatternId = memberTest(BASS_PATTERN_ID_SET);
+const isRootNote = memberTest(ROOT_SET);
+const isScaleType = memberTest(SCALE_TYPE_SET);
+const isChordRhythmId = memberTest(CHORD_RHYTHM_ID_SET);
+const isBassPatternId = memberTest(BASS_PATTERN_ID_SET);
 const isSoundKit = memberTest(SOUND_KIT_SET);
 
-export const asRootNote = memberOr<string>(isRootNote);
-export const asScaleType = memberOr<string>(isScaleType);
-export const asChordRhythmId = memberOr<string>(isChordRhythmId);
-export const asBassPatternId = memberOr<string>(isBassPatternId);
-export const asSoundKit = memberOr<string>(isSoundKit);
+const asRootNote = memberOr<string>(isRootNote);
+const asScaleType = memberOr<string>(isScaleType);
+const asChordRhythmId = memberOr<string>(isChordRhythmId);
+const asBassPatternId = memberOr<string>(isBassPatternId);
+const asSoundKit = memberOr<string>(isSoundKit);
 
 // Built from the const arrays the unions derive from, never re-typed here: a
 // hand-written set has no link to the union, so a value the UI offers and the
@@ -322,11 +313,11 @@ export function asPadIntervals(value: unknown, fallback: PadInterval[]): PadInte
   return normalizePadIntervals(value);
 }
 
-export function isPositiveInteger(value: unknown): value is number {
+function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1;
 }
 
-export function asPositiveInteger(value: unknown, fallback: number): number {
+function asPositiveInteger(value: unknown, fallback: number): number {
   return isPositiveInteger(value) ? value : fallback;
 }
 
@@ -393,10 +384,10 @@ function asCheckedArray<T>(value: unknown, isElement: (v: unknown) => boolean, f
  * A chord is read by deriveChordNotes and played straight out of `notes`, so
  * every field the chord path dereferences must be the right type — a missing
  * `notes` array is a crash in the chord scheduler, not a wrong sound.
- * Exported so `store.ts` can apply the same element check to the flat
- * top-level `chords` key (a pre-loop-wrap shape sanitizeLoops never sees).
+ * The same element check is applied to the flat top-level `chords` key, a
+ * pre-loop-wrap shape sanitizeLoops never sees.
  */
-export function isChordItem(value: unknown): boolean {
+function isChordItem(value: unknown): boolean {
   if (!isPlainObject(value)) return false;
   return (
     typeof value.id === 'string' &&
@@ -444,11 +435,11 @@ function isSequencerTrack(value: unknown): boolean {
  * that already exist), so a loop whose every row was stale would otherwise
  * be permanently drumless with no recovery. `value` not being an array at
  * all is the same failure (no set to filter) and both fall back to
- * `fallback` whole. Exported so `store.ts`'s `sanitizeFlatSequencerTracks`
+ * `fallback` whole. The flat-key sanitizer
  * (the flat top-level key, a pre-loop-wrap shape this function never sees)
  * applies the same rule.
  */
-export function sanitizeSequencerTracks(
+function sanitizeSequencerTracks(
   value: unknown,
   fallback: SequencerTrack[],
 ): SequencerTrack[] {
@@ -466,8 +457,8 @@ const BASS_STEP_CHOICES: Record<BassStepChoice, true> = {
   rest: true, root: true, third: true, fifth: true, seventh: true, octave: true,
 };
 
-// Exported for the same reason as isChordItem: store.ts's flat `customBassPattern` key.
-export function isBassStepChoice(value: unknown): boolean {
+// Shared with the flat `customBassPattern` sanitizer for the same reason as isChordItem.
+function isBassStepChoice(value: unknown): boolean {
   return typeof value === 'string' && Object.hasOwn(BASS_STEP_CHOICES, value);
 }
 

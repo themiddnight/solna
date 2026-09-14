@@ -13,7 +13,7 @@ type Get = StoreApi<AppStore>['getState'];
 /** The transport's default tempo; factoryProjectContent() reads it so a new project matches a fresh session. */
 export const DEFAULT_BPM = 120;
 
-export type PlayerField = 'sequencerPlayer' | 'chordsPlayer' | 'leadPlayer' | 'fxPlayer';
+type PlayerField = 'sequencerPlayer' | 'chordsPlayer' | 'leadPlayer' | 'fxPlayer';
 
 /** Just the player fields of the store — all `allPlayerStates` and the two
  *  folds below read, so a caller holding only those (leadRecord's clock

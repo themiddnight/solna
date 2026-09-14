@@ -17,7 +17,7 @@ export type ShowSaveFilePicker = (options?: {
   types?: FilePickerType[];
 }) => Promise<FileSystemFileHandle>;
 
-export type ShowOpenFilePicker = (options?: {
+type ShowOpenFilePicker = (options?: {
   multiple?: boolean;
   types?: FilePickerType[];
 }) => Promise<FileSystemFileHandle[]>;
@@ -55,7 +55,7 @@ export function resolveSaveFilePicker(scope: unknown): ShowSaveFilePicker | null
 }
 
 /** The same probe for the open direction: null means "fall back to the input". */
-export function resolveOpenFilePicker(scope: unknown): ShowOpenFilePicker | null {
+function resolveOpenFilePicker(scope: unknown): ShowOpenFilePicker | null {
   return resolvePickerMethod<ShowOpenFilePicker>(scope, 'showOpenFilePicker');
 }
 

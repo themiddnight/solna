@@ -17,7 +17,7 @@ import { formatKeyLabel, getTonicSpelling } from '@/utils/noteSpelling';
  */
 let vibeActionsPromise: Promise<typeof import('./vibeActions')> | null = null;
 
-export function loadVibeActions() {
+function loadVibeActions() {
   if (!vibeActionsPromise) {
     vibeActionsPromise = import('./vibeActions');
   }

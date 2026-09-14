@@ -13,7 +13,7 @@ import type { VoiceOwner } from '../voiceOwner';
 // The rate table and trigger math live in audio/arpSchedule.ts so the chord
 // scheduler can share them without pulling this React hook into its module.
 export { computeArpTriggers };
-export type { ArpRate, ArpTrigger } from '../arpSchedule';
+export type { ArpRate } from '../arpSchedule';
 
 export interface ArpStateRef {
   current: {

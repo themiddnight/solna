@@ -48,7 +48,7 @@ export function fullHoldDuration(totalBars: number, barDur: number, holdScale: n
  * `cycleSteps` that says how wide that is (see `PlaybackPatternCycle`). Nothing
  * downstream may re-adapt it — it is authored at the active meter already.
  */
-export function customRhythmPatternFromSpans(
+function customRhythmPatternFromSpans(
   values: readonly boolean[],
   holds: readonly number[],
   stepsPerBar: number,

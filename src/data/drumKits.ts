@@ -20,7 +20,7 @@ export const DRUM_TYPES = ['kick', 'snare', 'rimshot', 'clap', 'hihat', 'openhat
 
 export type DrumType = (typeof DRUM_TYPES)[number];
 
-export interface KickParams {
+interface KickParams {
   freqStart: number;
   freqEnd: number;
   pitchTime: number;
@@ -70,14 +70,14 @@ export interface HatParams {
   metal: number;
 }
 
-export interface ClapParams {
+interface ClapParams {
   filter: number;
   decay: number;
   gain: number;
   reverbSend: number;
 }
 
-export interface TomParams {
+interface TomParams {
   freqStart: number;
   freqEnd: number;
   pitchTime: number;
@@ -87,7 +87,7 @@ export interface TomParams {
   reverbSend: number;
 }
 
-export interface CrashParams {
+interface CrashParams {
   filter: number;
   decay: number;
   gain: number;
@@ -96,7 +96,7 @@ export interface CrashParams {
   metal: number;
 }
 
-export interface RideParams {
+interface RideParams {
   tone: number;        // bank fundamental, 120-150 Hz: a bigger plate rings lower
   ping: number;        // 0..1 crossfade, 1 = all ping, 0 = all wash
   pingFilter: number;  // ping band centre, 3.5-5 kHz
@@ -109,7 +109,7 @@ export interface RideParams {
   reverbSend: number;
 }
 
-export interface BellParams {
+interface BellParams {
   freq1: number;       // 800 Hz (808 cowbell) .. 1700 Hz (ride bell)
   freq2: number;       // freq1 / 1.481 - a detuned fifth, so the two beat
   filter: number;      // bandpass centre, ~1.1x freq1

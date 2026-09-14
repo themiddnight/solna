@@ -32,7 +32,7 @@ import { AdjustSynthButton } from './AdjustSynthButton';
  * over from when they were direct children of a `space-y` root, and inside the
  * frame it double-counted — a 20px top inset against 4px on the other sides.
  */
-export type ModuleTarget = 'chord' | 'bass' | 'pad';
+type ModuleTarget = 'chord' | 'bass' | 'pad';
 
 /**
  * The per-module classes, as a table rather than three sets of literals.

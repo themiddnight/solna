@@ -5,8 +5,7 @@
  *
  * This module is the only synth patch shape there is — the flat `SynthParams`
  * that `src/types.ts` used to own is gone. It stays deliberately independent
- * of that file — no import either direction, so re-exporting from
- * `src/types.ts` never creates a cycle. `ArpMode`/`ArpRate` still live there
+ * of that file — no import either direction. `ArpMode`/`ArpRate` still live there
  * for the arpeggiator scheduler; `ArpSettings` below inlines its own literal
  * unions rather than reusing those names, so the two modules never export
  * colliding names.
@@ -168,7 +167,7 @@ export interface CommonVoiceParams {
   outputGainDb: number;
 }
 
-export interface EnginePatchMap {
+interface EnginePatchMap {
   subtractive: SubtractiveParams;
 }
 

@@ -1,13 +1,13 @@
 import type { ProjectStoreBackend } from './projectStore';
 import { PROJECT_SLOT_KEY } from './projectStore';
 
-export const PROJECT_DB_NAME = 'solna-projects';
+const PROJECT_DB_NAME = 'solna-projects';
 /**
  * Bumped from 1: the single slot replaces the old two-store library layout
  * outright. Solna has no real users, so the upgrade is a drop — the old
  * `projects` / `projectMeta` stores are not read and not migrated.
  */
-export const PROJECT_DB_VERSION = 2;
+const PROJECT_DB_VERSION = 2;
 const SLOT = 'project';
 
 /**

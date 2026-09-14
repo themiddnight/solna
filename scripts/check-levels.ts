@@ -13,7 +13,7 @@
  * Run with: bun run check:levels
  * Exit code 1 if any check fails.
  */
-import { TARGET_DBFS, TOLERANCE_DB } from '../src/utils/trimMath.ts';
+import { TARGET_DBFS, TOLERANCE_DB } from './calibration/trimMath.ts';
 import {
   findDriftedEntries,
   findMissingEntries,

@@ -118,7 +118,7 @@ interface HeldNote {
  * while the music played. The collector follows the transport; only writing
  * follows the arm.
  */
-export function startLiveClockCollector(deps: LeadRecordDeps = REAL_CLOCK): () => void {
+function startLiveClockCollector(deps: LeadRecordDeps = REAL_CLOCK): () => void {
   let stopClock: (() => void) | null = null;
 
   const syncClock = (active: boolean): void => {
@@ -160,7 +160,7 @@ export function startLiveClockCollector(deps: LeadRecordDeps = REAL_CLOCK): () =
  * the user put it — which is what makes "stop returns the marker to where
  * you put it" free, with no save-and-restore step to get wrong.
  */
-export function startMelodyRecordBridge(
+function startMelodyRecordBridge(
   track: MelodyTrack,
   deps: LeadRecordDeps = REAL_CLOCK,
 ): () => void {
@@ -297,7 +297,7 @@ const { signature: recordArmNavSignature } = createNavSignature(RECORD_ARM_NAV_S
  * track IS the focused track and that rule has nothing left to fix. Do not
  * reintroduce one.
  */
-export function startRecordArmSync(): () => void {
+function startRecordArmSync(): () => void {
   return useAppStore.subscribe(
     recordArmNavSignature,
     (curr, prev) => {

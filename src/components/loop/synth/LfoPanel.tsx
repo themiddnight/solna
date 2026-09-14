@@ -56,7 +56,7 @@ export const DEFAULT_PARKED_RATE: ParkedLfoRate = {
 };
 
 /** The parked pair that remembers whichever mode `rate` is NOT in. */
-export function parkedRateFor(rate: LfoRate): ParkedLfoRate {
+function parkedRateFor(rate: LfoRate): ParkedLfoRate {
   return rate.mode === 'hz'
     ? { ...DEFAULT_PARKED_RATE, hz: rate.hz }
     : { ...DEFAULT_PARKED_RATE, division: rate.division };

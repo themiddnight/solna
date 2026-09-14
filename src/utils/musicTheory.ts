@@ -3,8 +3,6 @@ import { ChordItem } from '../types';
 import { METERS } from './meter';
 
 export const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
-export type RootNote = typeof ROOTS[number];
-
 // SCALES is authored content and lives in src/data/, below this file in the
 // layering: data -> audio -> store -> components. Reading DOWN into it, as
 // this line does, is the allowed direction. The other way is not: src/data/

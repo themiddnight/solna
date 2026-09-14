@@ -40,12 +40,6 @@ export type SourceBusId = (typeof SOURCE_BUSES)[number]['source'];
 /** One row of the table, for callers that take a bus rather than a name. */
 export type SourceBus = (typeof SOURCE_BUSES)[number];
 
-/** The store field holding a bus's fader level, in dB. */
-export type SourceBusVolumeKey = SourceBus['volume'];
-
-/** The store field holding a bus's mute flag. */
-export type SourceBusMuteKey = SourceBus['muted'];
-
 /** Narrow a bus name to its row. Undefined is impossible for a `SourceBusId`. */
 export function sourceBus(id: SourceBusId): SourceBus {
   return SOURCE_BUSES.find((bus) => bus.source === id) as SourceBus;

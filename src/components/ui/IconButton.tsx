@@ -1,8 +1,8 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { cx } from './cx';
 
-export type IconButtonSize = 'xs' | 'sm' | 'md';
-export type IconButtonVariant = 'ghost' | 'outline' | 'primary' | 'warning' | 'error';
+type IconButtonSize = 'xs' | 'sm' | 'md';
+type IconButtonVariant = 'ghost' | 'outline' | 'primary' | 'warning' | 'error';
 
 /** The shape every icon button shares; the guard test regexes for it. */
 export const ICON_BUTTON_BASE = 'btn btn-square';

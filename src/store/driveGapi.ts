@@ -12,7 +12,7 @@ export const DRIVE_FILES_PATH = '/drive/v3/files';
 export const DRIVE_ABOUT_PATH = '/drive/v3/about';
 export const DRIVE_UPLOAD_PATH = '/upload/drive/v3/files';
 export const DRIVE_BOUNDARY = 'solna-drive-boundary';
-export const DRIVE_META_FIELDS = 'id, name, mimeType, modifiedTime';
+const DRIVE_META_FIELDS = 'id, name, mimeType, modifiedTime';
 
 export interface MultipartPart {
   contentType: string;

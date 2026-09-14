@@ -18,16 +18,16 @@ export interface ProjectStoreBackend {
 }
 
 export type ProjectStoreStatus = 'unknown' | 'ready' | 'unavailable';
-export type ProjectStoreError = 'unavailable' | 'quota' | 'not-found' | 'failed';
+type ProjectStoreError = 'unavailable' | 'quota' | 'not-found' | 'failed';
 export type ProjectStoreResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: ProjectStoreError; message: string };
 
 export const QUOTA_MESSAGE = 'There is not enough storage space to save this project';
-export const UNAVAILABLE_MESSAGE =
+const UNAVAILABLE_MESSAGE =
   'Project storage is unavailable on this device (private browsing or blocked site storage). Autosave is off, so export a .solna file to keep your work.';
-export const NOT_FOUND_MESSAGE = 'No project is stored on this device yet.';
-export const FAILED_MESSAGE = 'Project storage failed. Export the session to keep your work.';
+const NOT_FOUND_MESSAGE = 'No project is stored on this device yet.';
+const FAILED_MESSAGE = 'Project storage failed. Export the session to keep your work.';
 
 /**
  * A slot read: the record, plus what reading it could not carry across —
@@ -37,7 +37,7 @@ export const FAILED_MESSAGE = 'Project storage failed. Export the session to kee
  * the two fields the slot holds, so a loaded record handed straight back can
  * never write a warning into storage.
  */
-export interface LoadedProject extends ProjectSlotRecord {
+interface LoadedProject extends ProjectSlotRecord {
   warnings: readonly string[];
 }
 

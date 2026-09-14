@@ -1,6 +1,6 @@
 import { BEATS_PER_BAR, groupBeats } from '@/utils/playhead';
 
-export type BeatDotsTone = 'chord' | 'contrast';
+type BeatDotsTone = 'chord' | 'contrast';
 
 export interface BeatDotsProps {
   /** Length of the counter in beats — a two-bar chord counts eight. */

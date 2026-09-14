@@ -33,7 +33,7 @@ export interface Rgb {
   b: number;
 }
 
-export const THEME_TOKENS: readonly ThemeToken[] = [
+const THEME_TOKENS: readonly ThemeToken[] = [
   '--color-primary',
   '--color-secondary',
   '--color-accent',

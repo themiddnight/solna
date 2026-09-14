@@ -70,24 +70,24 @@ import type { ActiveSynth, ArpSettings } from '@/types/synth';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
 
 export const MIXDOWN_SAMPLE_RATE = 44100;
-export const MIXDOWN_CHANNELS = 2;
+const MIXDOWN_CHANNELS = 2;
 /** The floor on the tail: release + reverb. Never shorter than this. */
-export const MIXDOWN_TAIL_SEC = 2;
+const MIXDOWN_TAIL_SEC = 2;
 
 /** One source bus, its gain already converted from the store's dB to linear. */
-export interface MixdownBusState {
+interface MixdownBusState {
   source: string;
   gain: number;
   muted: boolean;
 }
 
 /** One drum track's fader, already converted from dB to linear. */
-export interface MixdownDrumTrack {
+interface MixdownDrumTrack {
   instrument: string;
   gain: number;
 }
 
-export interface MixdownDrumFilter {
+interface MixdownDrumFilter {
   cutoff: number;
   resonance: number;
   type: FilterType;
@@ -101,7 +101,7 @@ export interface MixdownDrumFilter {
  * (`synthParams`, not `leadSynthParams`) and that irregularity is exactly what
  * `MELODY_TRACKS` exists to encode — a table this module may not import.
  */
-export interface MixdownMelodyTrack {
+interface MixdownMelodyTrack {
   steps: LeadNote[][];
   /** Bars. The melody loop's own length, not the chord loop's. */
   loopLength: number;
@@ -243,7 +243,7 @@ export type MixdownRenderResult =
   | { ok: false; reason: MixdownFailureReason };
 
 /** One loop's dwell in the arrangement, as a range of absolute steps. */
-export interface ArrangementPass {
+interface ArrangementPass {
   loopIndex: number;
   startStep: number;
   /** One pass: the loop's own length, floored at a bar for a chordless loop. */

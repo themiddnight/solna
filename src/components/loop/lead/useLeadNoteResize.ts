@@ -19,7 +19,7 @@ export interface LeadResizePreview {
  * looks inside it, which is exactly what lets Chord/Bass hand it a step
  * instead of a note.
  */
-export interface LeadResizeIdentity {
+interface LeadResizeIdentity {
   stepIndex: number;
   note: string;
 }

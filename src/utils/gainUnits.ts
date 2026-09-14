@@ -58,14 +58,10 @@ export type LinearGain = number & { readonly __brand: 'LinearGain' };
  * epic's decision D-383-3 — `masterSequencerVolume` was doing exactly the first of those, which
  * made the drum fader's law `volume²`.
  */
-export type Velocity = number & { readonly __brand: 'Velocity' };
-
 /** Unchecked casts. These are the only place a raw number becomes a branded one. */
 export const toDecibels = (value: number): Decibels => value as Decibels;
 export const toDbfs = (value: number): Dbfs => value as Dbfs;
 export const toLinearGain = (value: number): LinearGain => value as LinearGain;
-export const toVelocity = (value: number): Velocity => value as Velocity;
-
 export const UNITY_DB: Decibels = toDecibels(0);
 export const UNITY_GAIN: LinearGain = toLinearGain(1);
 

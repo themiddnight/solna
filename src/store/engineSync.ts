@@ -39,7 +39,7 @@ let stopCurrent: Stop | null = null;
  * enough to read as immediate. The wet amount is a separate, continuous
  * AudioParam ramp, so the knob still sounds live while the tail length waits.
  */
-export const REVERB_DECAY_COMMIT_MS = 180;
+const REVERB_DECAY_COMMIT_MS = 180;
 
 /**
  * Every MasterEffects field EXCEPT reverbDecay, which has its own debounced
@@ -114,8 +114,8 @@ function effectsEqualExceptDecay(a: MasterEffects, b: MasterEffects): boolean {
 }
 
 /**
- * The bus table lives in `store/sourceBuses.ts`, not here, and is re-exported
- * for the callers that already reach for it through this module.
+ * The bus table lives in `store/sourceBuses.ts`, not here. This module retains
+ * only the `SourceBusId` type re-export used by its callers.
  *
  * It moved because `components/mixLayers.ts` carries the same bus↔store-field
  * mapping in its own rows and nothing checked that the two agree — a row
@@ -125,12 +125,8 @@ function effectsEqualExceptDecay(a: MasterEffects, b: MasterEffects): boolean {
  * (this one cannot, per layering rule 4), which is what lets
  * `mixLayers.test.ts` assert the two tables row for row.
  */
-export { SOURCE_BUSES, sourceBus } from './sourceBuses';
 export type {
-  SourceBus,
   SourceBusId,
-  SourceBusMuteKey,
-  SourceBusVolumeKey,
 } from './sourceBuses';
 
 /**

@@ -32,7 +32,7 @@ export function isAllowedGoogleScript(url: string): boolean {
 
 export type LoadResult<T> = { ok: true; value: T } | { ok: false; message: string };
 
-export interface ScriptElement {
+interface ScriptElement {
   src: string;
   async: boolean;
   onload: (() => void) | null;

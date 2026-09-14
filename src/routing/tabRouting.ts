@@ -1,7 +1,7 @@
 import type { Layer, ViewMode } from '../types';
 import { LOOP_TABS, SONG_TABS } from '../types';
 
-export const LAYER_PATHS: Record<Layer, string> = { loop: 'loop', song: 'song' };
+const LAYER_PATHS: Record<Layer, string> = { loop: 'loop', song: 'song' };
 
 export function parseLayerPath(pathname: string): Layer {
   const first = pathname.split('/').filter(Boolean)[0] ?? '';

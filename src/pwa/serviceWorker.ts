@@ -10,7 +10,7 @@
  */
 
 /** Where vite-plugin-pwa's generateSW writes the worker. */
-export const SERVICE_WORKER_URL = '/sw.js';
+const SERVICE_WORKER_URL = '/sw.js';
 
 /**
  * The message a waiting worker is told to act on. Workbox's generated worker

@@ -1,7 +1,7 @@
 import { DRUM_TRIMS, PRESET_TRIMS } from '@/data/trimTable';
 import { DRUM_KITS } from '@/data/drumKits';
 import { SYNTH_PRESETS } from '@/data/synthPresets';
-import { TARGET_DBFS } from '@/utils/trimMath';
+import { TARGET_DBFS } from './trimMath';
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import {
   findDriftedEntries,

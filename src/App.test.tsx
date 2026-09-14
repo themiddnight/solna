@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 import * as routing from './routing/useRouteSync';
-import { App, registerFirstGesture, registerIdleWake } from './App';
+import App, { registerFirstGesture, registerIdleWake } from './App';
 
 /**
  * A minimal EventTarget stand-in: no DOM, just enough of the

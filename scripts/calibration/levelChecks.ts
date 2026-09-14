@@ -22,7 +22,7 @@ import { DRUM_KITS } from '@/data/drumKits';
 import { SYNTH_PRESETS } from '@/data/synthPresets';
 import { DRUM_TRIMS, PRESET_TRIMS, type TrimEntry } from '@/data/trimTable';
 import { toDbfs, toDecibels } from '@/utils/gainUnits';
-import { isWithinTolerance } from '@/utils/trimMath';
+import { isWithinTolerance } from './trimMath';
 import { drumLoudnessHash, presetLoudnessHash } from './loudnessConfig.ts';
 
 export interface LevelFinding {

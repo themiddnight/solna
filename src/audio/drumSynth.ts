@@ -16,13 +16,11 @@ import type { EngineHooks, MasterRack } from './masterRack';
 export const METAL_RATIOS = [1, 1.483, 1.8, 2.546, 2.63, 3.897] as const;
 
 /**
- * The 808's two parallel band centres, each with its own VCA (§1.2). Exported
- * so a module-scope `const` is not "assigned a value but never used" —
- * `metallicBurst` takes `bandA.freq`/`bandB.freq` as caller-supplied
- * parameters and does not reference these directly, so leaving them
- * unexported is two eslint errors, not a warning, and fails the `verify` gate.
+ * The 808's two parallel band centres, each with its own VCA (§1.2).
+ * `METAL_BAND_B_HZ` remains part of the engine's imported constant surface;
+ * `METAL_BAND_A_HZ` is used only inside this module.
  */
-export const METAL_BAND_A_HZ = 7100;
+const METAL_BAND_A_HZ = 7100;
 export const METAL_BAND_B_HZ = 3440;
 
 /** The 808's own bank fundamental; hats keep it so `filter` stays the kit axis. */

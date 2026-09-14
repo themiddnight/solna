@@ -421,7 +421,7 @@ export interface EffectsSlice {
  * pre-selected group list — which groups move is decided per paste.
  * Session-only and never persisted.
  */
-export interface LoopClipboard {
+interface LoopClipboard {
   sourceLoopId: string;
 }
 

@@ -35,7 +35,7 @@ import {
 type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
 
-export type ProjectSaveDestination = 'local' | 'drive' | 'download' | 'cancelled';
+type ProjectSaveDestination = 'local' | 'drive' | 'download' | 'cancelled';
 
 /**
  * `download` is an INSTRUCTION, not a failure: the browser has no
@@ -109,7 +109,7 @@ export interface ProjectSlice {
  * loadLoop.ts). Not imported from there: loadLoop imports the store module,
  * and this slice is part of building it.
  */
-export const INSTALL_RELEASE = 0.02;
+const INSTALL_RELEASE = 0.02;
 
 /** Untitled reads as an empty name on disk; `null` is its in-store spelling. */
 function normalizeName(name: string): string | null {

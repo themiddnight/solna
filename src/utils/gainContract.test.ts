@@ -15,7 +15,7 @@ import {
 } from './gainUnits';
 import { ZONE_GOOD_MAX, ZONE_HOT_MAX, ZONE_TOO_QUIET_MAX, classifyZone } from './meterZones';
 import { METER_SCALE_CEILING_DBFS, METER_TICK_DBFS, dbfsToPercent } from './meterScale';
-import { TARGET_DBFS, TOLERANCE_DB } from './trimMath';
+import { TARGET_DBFS, TOLERANCE_DB } from '@scripts/calibration/trimMath';
 
 /**
  * The interop tripwire between solna and murva. These modules are COPIES, by

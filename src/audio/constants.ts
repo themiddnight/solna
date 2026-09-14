@@ -14,15 +14,6 @@ export const DEFAULT_VELOCITY = 0.8;
  */
 export const ENV_FLOOR = 0.0001;
 
-/** The lower floor used for a full release — quieter than ENV_FLOOR by 20 dB. */
-export const SILENCE = 0.00001;
-
-/** BiquadFilter cutoff bounds: below 20 Hz or above 20 kHz is inaudible and
- *  an exponential ramp through 0 is illegal. */
-export function clampCutoff(hz: number): number {
-  return Math.min(20000, Math.max(20, hz));
-}
-
 /** Velocity is a 0..1 scalar; a caller passing 3 clips at `ctx.destination`. The
  *  master limiter (default ON since DEV-383) only catches the summed mix near
  *  full scale — it does not validate one voice's velocity multiplier, so this

@@ -170,7 +170,7 @@ export function fakeNode(opts: FakeOpts = {}) {
 // A buffer source stands in for the noise generator: `loop` and `buffer` are
 // recorded so a test can prove the noise is looped (createNoiseNode's buffer is
 // 2 s, shorter than a long pad release).
-export function fakeBufferSource(opts: FakeOpts = {}) {
+function fakeBufferSource(opts: FakeOpts = {}) {
   const node = {
     ...fakeNode(opts),
     buffer: null as unknown,
