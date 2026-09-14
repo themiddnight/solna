@@ -171,6 +171,35 @@ describe('loadProject (boot)', () => {
 // custom-pattern keys reach BOTH homes at once — the flat slices the engine
 // reads and the loop those slices mirror — which is worth its own failure name
 // when the mirroring set's generic key list ever stops carrying one of them.
+/**
+ * What boot SAYS about the body it just installed. Separate from the install
+ * describe above because the notice has one rule of its own: the read's
+ * warnings and the body's unresolved references are one sentence, and silence
+ * means the project came back whole.
+ */
+describe('loadProject (boot) — the notice', () => {
+  // The defect this pins: the slot read sanitised with no warnings while
+  // opening a `.solna` had just learned to warn — so on the first boot after a
+  // patch shape change, every track came back at its factory default and the
+  // app said nothing. This is the path every session takes.
+  test('a stored body whose synth patch cannot be read says so in the boot notice', async () => {
+    const p = stored('Stale Sound', 100);
+    (p.content.loops[0] as unknown as Record<string, unknown>).synthParams = { engine: 'nope', patch: 7 };
+    const { useAppStore, slice } = await sliceWithBackend(p);
+    await slice.loadProject();
+
+    // It still loads — the notice is the only signal, never a refusal.
+    expect(useAppStore.getState().bpm).toBe(100);
+    expect(useAppStore.getState().projectNotice ?? '').toContain('Lead sound (reset to the default)');
+  });
+
+  test('a stored body every track of which reads fine leaves the notice empty', async () => {
+    const { useAppStore, slice } = await sliceWithBackend(stored('Fine', 101));
+    await slice.loadProject();
+    expect(useAppStore.getState().projectNotice).toBeNull();
+  });
+});
+
 describe('loadProject (boot) — the custom pattern spans', () => {
   test('install into loops[] and the flat slices together', async () => {
     const values = new Array<boolean>(MAX_STEPS_PER_BAR * 2).fill(false);
@@ -322,6 +351,33 @@ describe('openProjectFile', () => {
     expect(notice).toContain('unrecognised references');
     expect(notice).toContain('drum kit "Nonexistent Kit"');
   });
+
+  // The defect this pins: parseProjectFile computes a warning set for an
+  // incompatible synth patch reset to its track default, and both callers
+  // (ProjectMenu's local open, driveSlice's Drive open) used to discard it
+  // rather than pass it here — this is the one place both routes install a
+  // body, so it is the seam that must carry it through.
+  test('importWarnings from the parser reach the same notice unresolved references do', async () => {
+    const { useAppStore, slice } = await sliceWithBackend();
+    const file = stored('From Disk', 99);
+    await slice.openProjectFile(file, undefined, ['Lead sound (reset to the default)']);
+    const notice = useAppStore.getState().projectNotice ?? '';
+    expect(notice).toContain('unrecognised references');
+    expect(notice).toContain('Lead sound (reset to the default)');
+  });
+
+  test('importWarnings and a failed save both reach the notice, without erasing each other', async () => {
+    const { useAppStore } = await storeModule;
+    const { createProjectSlice } = await import('./projectSlice');
+    const failed = createProjectStore(async () => { throw new Error('blocked'); });
+    const slice = createProjectSlice(useAppStore.setState, useAppStore.getState, failed, () => 5_000);
+    useAppStore.setState({ ...slice, projectName: null });
+    await slice.openProjectFile(stored('From Disk', 99), undefined, ['Bass sound (reset to the default)']);
+    const notice = useAppStore.getState().projectNotice ?? '';
+    expect(notice).toContain('storage is unavailable');
+    expect(notice).toContain('unrecognised references');
+    expect(notice).toContain('Bass sound (reset to the default)');
+  });
 });
 
 describe('exportProjectFile', () => {
@@ -435,6 +491,11 @@ describe('the project source', () => {
     useAppStore.setState({ projectSource: { kind: 'drive', fileId: 'drive-1' } });
     const serialised = JSON.stringify(slice.exportProjectFile());
     expect(serialised).not.toContain('drive-1');
-    expect(serialised).not.toContain('source');
+    // The KEY, not the bare word: a patch legitimately carries
+    // `sourcePresetId` (display provenance), so a substring check on
+    // 'source' would now pass or fail for reasons that have nothing to do
+    // with where the project came from.
+    expect(serialised).not.toContain('"source"');
+    expect(serialised).not.toContain('projectSource');
   });
 });

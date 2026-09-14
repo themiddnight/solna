@@ -1,5 +1,5 @@
 import { PROJECT_FILE_EXTENSION, PROJECT_FILE_MIME } from '../store/projectFile';
-import { readFileAsText } from './projectFileIO';
+import { readFileAsText, type FileReadResult } from './projectFileIO';
 
 /**
  * Neither picker is in lib.dom.d.ts, so both are declared here rather than
@@ -109,15 +109,19 @@ export async function pickLocalOpenHandle(scope: unknown = globalThis): Promise<
 
 /**
  * Read for the parse, through the same handle that will later be written back.
- * Empty text on failure, matching `readFileAsText`: the caller runs it through
- * `parseProjectFile`, which reports "not a Solna project" — one failure surface
- * for every unreadable open, rather than a DOMException at one call site.
+ * A failure here — `getFile()` throwing, or `readFileAsText` itself failing —
+ * is reported as `{ ok: false }` rather than laundered into empty text: an
+ * unreadable handle (permission revoked, the file moved or deleted) is a
+ * different problem from an invalid one, and collapsing them used to report a
+ * perfectly valid project as "not a Solna project" with the real cause
+ * discarded before anyone could see it.
  */
-export async function readTextFromHandle(handle: FileSystemFileHandle): Promise<string> {
+export async function readTextFromHandle(handle: FileSystemFileHandle): Promise<FileReadResult> {
   try {
     return await readFileAsText(await handle.getFile());
-  } catch {
-    return '';
+  } catch (cause) {
+    console.error('readTextFromHandle: handle.getFile() failed', cause);
+    return { ok: false, cause };
   }
 }
 

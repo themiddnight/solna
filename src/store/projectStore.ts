@@ -29,9 +29,21 @@ export const UNAVAILABLE_MESSAGE =
 export const NOT_FOUND_MESSAGE = 'No project is stored on this device yet.';
 export const FAILED_MESSAGE = 'Project storage failed. Export the session to keep your work.';
 
+/**
+ * A slot read: the record, plus what reading it could not carry across —
+ * `normalizeStoredBody`'s warnings, which exist only on the way OUT. The two
+ * travel together rather than in a nested pair because every caller wants the
+ * record and only the boot install wants the warnings; `save` narrows back to
+ * the two fields the slot holds, so a loaded record handed straight back can
+ * never write a warning into storage.
+ */
+export interface LoadedProject extends ProjectSlotRecord {
+  warnings: readonly string[];
+}
+
 export interface ProjectStore {
   status(): ProjectStoreStatus;
-  load(): Promise<ProjectStoreResult<ProjectSlotRecord>>;
+  load(): Promise<ProjectStoreResult<LoadedProject>>;
   save(record: ProjectSlotRecord): Promise<ProjectStoreResult<ProjectSlotRecord>>;
   clear(): Promise<ProjectStoreResult<null>>;
 }
@@ -86,16 +98,20 @@ export function createProjectStore(openBackend: () => Promise<ProjectStoreBacken
         const record = sanitizeSlotRecord(await b.getRecord());
         if (!record) return { ok: false as const, error: 'not-found' as const, message: NOT_FOUND_MESSAGE };
         // Every body LEAVES storage through here, so the format pass runs at
-        // the one read site rather than at each caller.
-        return {
-          ok: true as const,
-          value: { body: normalizeStoredBody(record.body), source: record.source },
-        };
+        // the one read site rather than at each caller — and so does its
+        // warning set, which cannot be recomputed above this line: the pass is
+        // lossy, and by the time a caller holds the body the reset patch it
+        // would report is already gone.
+        const { body, warnings } = normalizeStoredBody(record.body);
+        return { ok: true as const, value: { body, source: record.source, warnings } };
       }),
     save: (record) =>
       run(async (b) => {
-        await b.putRecord(record);
-        return { ok: true as const, value: record };
+        // Narrowed to the two fields the slot holds, so handing a loaded
+        // record straight back cannot write a read-time warning into storage.
+        const stored: ProjectSlotRecord = { body: record.body, source: record.source };
+        await b.putRecord(stored);
+        return { ok: true as const, value: stored };
       }),
     clear: () =>
       run(async (b) => {

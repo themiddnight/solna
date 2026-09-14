@@ -62,12 +62,25 @@ export function downloadTextFile(
   downloadBlob(fileName, new Blob([text], { type: mime }), doc, url);
 }
 
-/** A directory or a zero-byte pick reads as '' and is then reported as malformed. */
-export async function readFileAsText(file: Pick<File, 'text' | 'size'>): Promise<string> {
-  if (file.size === 0) return '';
+/**
+ * Read succeeded (possibly with empty content — a directory or a zero-byte
+ * pick genuinely has none, and the caller's JSON parse correctly calls that
+ * malformed) versus read FAILED, which is a different problem with a
+ * different remedy and must not be reported as an invalid file. `cause` keeps
+ * the original error available for diagnosis instead of discarding it.
+ */
+export type FileReadResult = { ok: true; text: string } | { ok: false; cause: unknown };
+
+export const UNREADABLE_FILE_MESSAGE =
+  'Could not read the file. It may have been moved, deleted, or its storage access revoked.';
+
+/** A directory or a zero-byte pick reads as ok:true with empty text. */
+export async function readFileAsText(file: Pick<File, 'text' | 'size'>): Promise<FileReadResult> {
+  if (file.size === 0) return { ok: true, text: '' };
   try {
-    return await file.text();
-  } catch {
-    return '';
+    return { ok: true, text: await file.text() };
+  } catch (cause) {
+    console.error('readFileAsText: file.text() failed', cause);
+    return { ok: false, cause };
   }
 }

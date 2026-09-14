@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { downloadBlob, downloadTextFile, projectFileName, readFileAsText, slugifyProjectName } from './projectFileIO';
 
 describe('slugifyProjectName / projectFileName', () => {
@@ -102,7 +102,26 @@ describe('downloadBlob', () => {
 
 describe('readFileAsText', () => {
   test('reads text and treats a zero-byte file as empty', async () => {
-    expect(await readFileAsText({ size: 2, text: async () => '{}' })).toBe('{}');
-    expect(await readFileAsText({ size: 0, text: async () => 'ignored' })).toBe('');
+    expect(await readFileAsText({ size: 2, text: async () => '{}' })).toEqual({ ok: true, text: '{}' });
+    expect(await readFileAsText({ size: 0, text: async () => 'ignored' })).toEqual({ ok: true, text: '' });
+  });
+
+  // The defect this pins: a read that THROWS must not be laundered into empty
+  // text, which `parseProjectFile('')` reports as "not a Solna project" —
+  // exactly the false message a user with a perfectly valid file was shown.
+  test('a read that rejects is reported as unreadable, not as empty text', async () => {
+    const errors = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const cause = new DOMException('permission revoked', 'NotAllowedError');
+      const result = await readFileAsText({
+        size: 4,
+        text: async () => {
+          throw cause;
+        },
+      });
+      expect(result).toEqual({ ok: false, cause });
+    } finally {
+      errors.mockRestore();
+    }
   });
 });

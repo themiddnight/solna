@@ -1,17 +1,47 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { useAppStore } from '@/store/store';
+import { MALFORMED_MESSAGE, type ProjectParseResult } from '@/store/projectFile';
+import type { ProjectBody } from '@/store/projectFormat';
+import type { ProjectStoreResult } from '@/store/projectStore';
+import type { ProjectSlotRecord } from '@/store/projectSource';
+import { UNREADABLE_FILE_MESSAGE, type FileReadResult } from '@/utils/projectFileIO';
+import type { PickHandleResult } from '@/utils/localFileSave';
 import {
   PROJECT_MENU_SECTIONS,
   ProjectMenu,
   REPLACE_CONFIRM_MESSAGE,
   REPLACING_ACTIONS,
   driveAccountLabel,
+  openParsedProjectFile,
+  openPickedLocalFile,
+  openReadResult,
   replaceConfirmMessage,
   replacesProject,
   saveLabel,
   visibleMenuSections,
+  type OpenProjectFile,
 } from './ProjectMenu';
+
+const FAKE_BODY = { id: 'p1', name: 'x', createdAt: 0, updatedAt: 0 } as unknown as ProjectBody;
+
+/** Records every call and answers with a fixed result — `openProjectFile` never actually installs anything here. */
+function fakeOpenProjectFile(
+  result: ProjectStoreResult<ProjectSlotRecord> = { ok: true, value: {} as ProjectSlotRecord },
+) {
+  const calls: Array<[ProjectBody, unknown, readonly string[] | undefined]> = [];
+  const openProjectFile: OpenProjectFile = async (body, source, importWarnings) => {
+    calls.push([body, source, importWarnings]);
+    return result;
+  };
+  return { openProjectFile, calls };
+}
+
+/** Records every message `report` was called with. */
+function recordingReport() {
+  const messages: Array<string | null> = [];
+  return { report: (m: string | null) => messages.push(m), messages };
+}
 
 const allActions = () => PROJECT_MENU_SECTIONS.flatMap((section) => section.rows.map((row) => row.action));
 
@@ -130,6 +160,133 @@ describe('ProjectMenu menu composition', () => {
       `${REPLACE_CONFIRM_MESSAGE} The export in progress will be cancelled.`,
     );
     expect(replaceConfirmMessage(false)).toBe(REPLACE_CONFIRM_MESSAGE);
+  });
+});
+
+describe('openReadResult', () => {
+  // The defect this pins: a file that FAILED to read used to be laundered
+  // through parseProjectFile('') and reported as "not a Solna project" — the
+  // false message a user with a perfectly valid, unreadable file was shown.
+  test('a read failure is reported as unreadable and never reaches the parser', async () => {
+    const { openProjectFile, calls } = fakeOpenProjectFile();
+    const { report, messages } = recordingReport();
+    const read: FileReadResult = { ok: false, cause: new Error('permission revoked') };
+    await openReadResult(read, openProjectFile, report);
+    expect(messages).toEqual([UNREADABLE_FILE_MESSAGE]);
+    expect(calls).toEqual([]);
+  });
+
+  // The other half of the same distinction: content that was actually read but
+  // is genuinely not JSON must still read as "not a Solna project".
+  test('content that reads fine but is not JSON still reports malformed', async () => {
+    const { openProjectFile, calls } = fakeOpenProjectFile();
+    const { report, messages } = recordingReport();
+    const read: FileReadResult = { ok: true, text: 'not json at all' };
+    await openReadResult(read, openProjectFile, report);
+    expect(messages).toEqual([MALFORMED_MESSAGE]);
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('openPickedLocalFile', () => {
+  const HANDLE = { name: 'song.solna' } as unknown as FileSystemFileHandle;
+  const VALID = JSON.stringify({ formatVersion: 1, id: 'p1', name: 'Song', createdAt: 1, updatedAt: 2, content: {} });
+
+  function harness(picked: PickHandleResult, read: FileReadResult) {
+    const { openProjectFile, calls } = fakeOpenProjectFile();
+    const { report, messages } = recordingReport();
+    let inputClicks = 0;
+    const run = () =>
+      openPickedLocalFile({
+        pick: async () => picked,
+        readHandle: async () => read,
+        openWithInput: () => { inputClicks += 1; },
+        openProjectFile,
+        report,
+      });
+    return { run, calls, messages, inputs: () => inputClicks };
+  }
+
+  // The defect this pins, and it is the case a user actually hit: in an
+  // embedded webview `showOpenFilePicker` EXISTS, so the capability probe says
+  // yes and the `unavailable` fallback never fires — but the handle it hands
+  // back cannot read the file. The user was told the file was unreadable and
+  // given no way forward, with their perfectly valid project blamed for it.
+  // Feature detection standing in for the capability WORKING is the bug; a
+  // successful read is the only thing that confirms the probe's answer.
+  test('a handle that picks fine but cannot be read falls back to the <input> path', async () => {
+    const h = harness({ ok: true, handle: HANDLE }, { ok: false, cause: new Error('webview') });
+    await h.run();
+
+    expect(h.inputs()).toBe(1);
+    // Still said out loud: the second dialog is a route forward, not a denial
+    // that the first attempt failed.
+    expect(h.messages).toEqual([UNREADABLE_FILE_MESSAGE]);
+    expect(h.calls).toEqual([]);
+  });
+
+  test('a picker the environment does not have goes straight to the <input>, silently', async () => {
+    const h = harness({ ok: false, reason: 'unavailable' }, { ok: true, text: VALID });
+    await h.run();
+
+    expect(h.inputs()).toBe(1);
+    // An honest degradation, not a failure: nothing went wrong to report.
+    expect(h.messages).toEqual([]);
+  });
+
+  test('a cancelled pick does nothing at all', async () => {
+    const h = harness({ ok: false, reason: 'cancelled' }, { ok: true, text: VALID });
+    await h.run();
+
+    expect(h.inputs()).toBe(0);
+    expect(h.messages).toEqual([]);
+    expect(h.calls).toEqual([]);
+  });
+
+  test('a read that succeeds keeps the handle as the source and never opens the <input>', async () => {
+    const h = harness({ ok: true, handle: HANDLE }, { ok: true, text: VALID });
+    await h.run();
+
+    expect(h.inputs()).toBe(0);
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0]![1]).toEqual({ kind: 'local', handle: HANDLE });
+  });
+});
+
+describe('openParsedProjectFile', () => {
+  test('a parse failure reports its message and never calls openProjectFile', async () => {
+    const { openProjectFile, calls } = fakeOpenProjectFile();
+    const { report, messages } = recordingReport();
+    const parsed: ProjectParseResult = { ok: false, error: 'malformed', message: MALFORMED_MESSAGE };
+    await openParsedProjectFile(parsed, openProjectFile, report);
+    expect(messages).toEqual([MALFORMED_MESSAGE]);
+    expect(calls).toEqual([]);
+  });
+
+  // The other defect this pins: the parser's own warnings (an incompatible
+  // synth patch reset to its default) used to be read here and discarded —
+  // openProjectFile received the body and nothing else. They must now ride
+  // along as the third argument, which is the seam projectSlice.ts folds them
+  // into the same notice unknownLibraryReferences feeds.
+  test('carries the parser’s warnings through to openProjectFile', async () => {
+    const { openProjectFile, calls } = fakeOpenProjectFile();
+    const { report } = recordingReport();
+    const warnings = ['Lead sound (reset to the default)'];
+    const parsed: ProjectParseResult = { ok: true, body: FAKE_BODY, warnings };
+    await openParsedProjectFile(parsed, openProjectFile, report);
+    expect(calls).toEqual([[FAKE_BODY, undefined, warnings]]);
+  });
+
+  test('an install failure reports it, unless it is the storage-unavailable degrade', async () => {
+    const { report, messages } = recordingReport();
+    const failing = fakeOpenProjectFile({ ok: false, error: 'failed', message: 'boom' }).openProjectFile;
+    await openParsedProjectFile({ ok: true, body: FAKE_BODY, warnings: [] }, failing, report);
+    expect(messages).toEqual(['boom']);
+
+    const { report: report2, messages: messages2 } = recordingReport();
+    const unavailable = fakeOpenProjectFile({ ok: false, error: 'unavailable', message: 'nope' }).openProjectFile;
+    await openParsedProjectFile({ ok: true, body: FAKE_BODY, warnings: [] }, unavailable, report2);
+    expect(messages2).toEqual([]);
   });
 });
 

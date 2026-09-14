@@ -91,7 +91,16 @@ export interface ProjectSlice {
    */
   applyProjectSource: (source: ProjectSource) => Promise<void>;
   newProject: () => void;
-  openProjectFile: (body: ProjectBody, source?: ProjectSource) => Promise<ProjectStoreResult<ProjectSlotRecord>>;
+  /**
+   * `importWarnings` is the parser's own warning set (an incompatible synth
+   * patch reset to its track default) — see openProjectBody for why it is
+   * combined with `unknownLibraryReferences` rather than replacing it.
+   */
+  openProjectFile: (
+    body: ProjectBody,
+    source?: ProjectSource,
+    importWarnings?: readonly string[],
+  ) => Promise<ProjectStoreResult<ProjectSlotRecord>>;
   exportProjectFile: () => ProjectBody;
 }
 
@@ -242,9 +251,14 @@ async function loadProjectFromStore(ctx: ProjectContext): Promise<void> {
     reconcileActiveLoop(ctx);
     return;
   }
-  const { body, source } = result.value;
+  const { body, source, warnings: readWarnings } = result.value;
   installProject(ctx, body.content, body, ctx.get().activeLoopId, source);
-  const warnings = unknownLibraryReferences(body.content);
+  // The read's own warnings first, for the same reason `openProjectBody` folds
+  // `importWarnings` into one notice: a synth patch the stored body could not
+  // carry has already been replaced by the track default, and the boot path is
+  // where a user meets that — every session starts here, and no `.solna` need
+  // ever be opened.
+  const warnings = [...readWarnings, ...unknownLibraryReferences(body.content)];
   ctx.set({
     projectNotice:
       warnings.length > 0 ? `Opened with unrecognised references: ${warnings.join(', ')}` : null,
@@ -366,15 +380,25 @@ function startNewProject(ctx: ProjectContext): void {
   void ctx.get().save();
 }
 
-/** Install a body handed in from outside (a `.solna` file, or a Drive copy), then save it into the slot. */
+/**
+ * Install a body handed in from outside (a `.solna` file, or a Drive copy),
+ * then save it into the slot. `importWarnings` is the parser's own warning set
+ * — an incompatible synth patch reset to its track default — computed by
+ * `parseProjectFile`/`DriveClient.readProject` against the RAW body before
+ * this function ever sees it (sanitisation is lossy by design, so by the time
+ * `body.content` exists here the corrupt patch is already gone). It is folded
+ * into the SAME notice `unknownLibraryReferences` feeds, rather than reported
+ * separately, so a caller that discards one set does not discard the other.
+ */
 async function openProjectBody(
   ctx: ProjectContext,
   body: ProjectBody,
   source: ProjectSource = UNTITLED_SOURCE,
+  importWarnings: readonly string[] = [],
 ): Promise<ProjectStoreResult<ProjectSlotRecord>> {
   installProject(ctx, body.content, body, null, source);
   const result = await ctx.get().save();
-  const warnings = unknownLibraryReferences(body.content);
+  const warnings = [...importWarnings, ...unknownLibraryReferences(body.content)];
   // `save()` has already published its own failure notice, and this set()
   // runs after it. Writing the warnings unconditionally would ERASE it: an
   // ordinary file has no warnings, so a file opened on a device with
@@ -428,7 +452,8 @@ export function createProjectSlice(
 
     newProject: () => startNewProject(ctx),
 
-    openProjectFile: (body, source = UNTITLED_SOURCE) => openProjectBody(ctx, body, source),
+    openProjectFile: (body, source = UNTITLED_SOURCE, importWarnings = []) =>
+      openProjectBody(ctx, body, source, importWarnings),
 
     exportProjectFile: (): ProjectBody =>
       buildProjectBody(

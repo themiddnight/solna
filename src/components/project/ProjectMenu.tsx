@@ -6,8 +6,9 @@ import type { ProjectSaveResult } from '@/store/projectSlice';
 import { selectMixdownBusy } from '@/store/mixdownSlice';
 import type { ProjectSource } from '@/store/projectSource';
 import type { DriveUserProfile } from '@/store/driveClient';
-import { pickLocalOpenHandle, readTextFromHandle } from '@/utils/localFileSave';
-import { downloadTextFile, projectFileName, readFileAsText } from '@/utils/projectFileIO';
+import type { AppStore } from '@/store/types';
+import { pickLocalOpenHandle, readTextFromHandle, type PickHandleResult } from '@/utils/localFileSave';
+import { UNREADABLE_FILE_MESSAGE, downloadTextFile, projectFileName, readFileAsText, type FileReadResult } from '@/utils/projectFileIO';
 import { ProjectLoading } from '../ProjectLoading';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useLiveStore } from '../ui/useLiveStore';
@@ -221,6 +222,103 @@ function runMenuAction(action: ProjectMenuAction, handlers: MenuActionHandlers):
   }
 }
 
+/** The store's own `openProjectFile` shape, named here so the pure helpers below need no store import. */
+export type OpenProjectFile = AppStore['openProjectFile'];
+
+/**
+ * The one path a parsed body takes: a parse failure reports and stops; an
+ * open failure reports unless it is the "storage unavailable" degrade, which
+ * is the same notice-free outcome as a missing slot. `parsed.warnings` — an
+ * incompatible synth patch reset to its track default, an unresolved library
+ * id — is carried through to `openProjectFile` so it lands in the same notice
+ * the install path already writes, rather than being read here and dropped.
+ *
+ * Exported standalone rather than left as a hook-local closure, so it is
+ * testable the way this repo tests helpers: called directly, with no render.
+ */
+export async function openParsedProjectFile(
+  parsed: ProjectParseResult,
+  openProjectFile: OpenProjectFile,
+  report: (message: string | null) => void,
+  source?: ProjectSource,
+): Promise<void> {
+  if (parsed.ok === false) {
+    report(parsed.message);
+    return;
+  }
+  const result = await openProjectFile(parsed.body, source, parsed.warnings);
+  if (result.ok === false && result.error !== 'unavailable') report(result.message);
+}
+
+/**
+ * The full path from a raw read to an installed project. A read failure is
+ * reported as itself (UNREADABLE_FILE_MESSAGE) and never reaches the JSON
+ * parser — laundering it through `parseProjectFile` used to report a file
+ * that was never actually read as "not a Solna project", discarding the real
+ * cause (a revoked permission, a moved or deleted file) along the way.
+ */
+export async function openReadResult(
+  read: FileReadResult,
+  openProjectFile: OpenProjectFile,
+  report: (message: string | null) => void,
+  source?: ProjectSource,
+): Promise<void> {
+  if (read.ok === false) {
+    report(UNREADABLE_FILE_MESSAGE);
+    return;
+  }
+  await openParsedProjectFile(parseProjectFile(read.text), openProjectFile, report, source);
+}
+
+/**
+ * The writable open, from the picker to an installed project.
+ *
+ * Two ways to end up on the `<input type=file>` fallback, and the second is
+ * the one a user reported. The first is the picker being absent (Safari,
+ * Firefox, a permissions-policy iframe): `pickLocalOpenHandle` reports
+ * `unavailable` and the `<input>` yields a read-only `File`, so the project
+ * opens untitled — the honest degradation. The second is the picker being
+ * PRESENT and its handle still not reading: in an embedded webview
+ * `showOpenFilePicker` exists, so the capability probe answers yes and
+ * `unavailable` never fires, and the read through the handle fails anyway.
+ * Feature detection standing in for the capability working is what had the app
+ * blaming a valid project; only a successful READ confirms the probe.
+ *
+ * So a failed read takes the same fallback, and still reports: the second
+ * dialog is a route forward, not a denial that the first attempt failed. A
+ * `cancelled` pick does nothing at all.
+ *
+ * Exported standalone, and its four seams injected, for the same reason
+ * `openReadResult` is: this repo tests helpers by calling them, never by
+ * driving a rendered menu.
+ */
+export async function openPickedLocalFile({
+  pick,
+  readHandle,
+  openWithInput,
+  openProjectFile,
+  report,
+}: {
+  pick: () => Promise<PickHandleResult>;
+  readHandle: (handle: FileSystemFileHandle) => Promise<FileReadResult>;
+  openWithInput: () => void;
+  openProjectFile: OpenProjectFile;
+  report: (message: string | null) => void;
+}): Promise<void> {
+  const picked = await pick();
+  if (picked.ok === false) {
+    if (picked.reason === 'unavailable') openWithInput();
+    return;
+  }
+  const read = await readHandle(picked.handle);
+  if (read.ok === false) {
+    report(UNREADABLE_FILE_MESSAGE);
+    openWithInput();
+    return;
+  }
+  await openReadResult(read, openProjectFile, report, { kind: 'local', handle: picked.handle });
+}
+
 /**
  * Every project-file command the menu can run, with the store actions behind
  * it. The component below owns only which dialog is open; what a row DOES
@@ -246,20 +344,6 @@ function useProjectFileCommands({
   const saveAsToDrive = useLiveStore((s) => s.saveAsToDrive);
 
   const report = (message: string | null) => setProjectNotice(message);
-
-  /**
-   * The one path a parsed body takes: a parse failure reports and stops; an
-   * open failure reports unless it is the "storage unavailable" degrade, which
-   * is the same notice-free outcome as a missing slot.
-   */
-  const openParsed = async (parsed: ProjectParseResult, source?: ProjectSource) => {
-    if (parsed.ok === false) {
-      report(parsed.message);
-      return;
-    }
-    const result = await openProjectFile(parsed.body, source);
-    if (result.ok === false && result.error !== 'unavailable') report(result.message);
-  };
 
   /**
    * The no-File-System-Access fallback for Save As (Safari, Firefox): a
@@ -336,28 +420,25 @@ function useProjectFileCommands({
     e.target.value = '';
     if (!file) return;
     await run('Opening…', async () => {
-      const parsed = parseProjectFile(await readFileAsText(file));
-      await openParsed(parsed);
+      await openReadResult(await readFileAsText(file), openProjectFile, report);
     });
   };
 
   /**
    * The writable open, and the whole reason Save can overwrite: the picker
    * hands back a handle, the handle is read for the parse and then KEPT as the
-   * source. `unavailable` falls through to the `<input>`, which yields a
-   * read-only File and therefore an untitled project — the honest degradation,
-   * not a silent one. `cancelled` does nothing at all.
+   * source. See `openPickedLocalFile` for the two routes to the `<input>`.
    */
   const runOpenLocal = () =>
-    run('Opening…', async () => {
-      const picked = await pickLocalOpenHandle();
-      if (picked.ok === false) {
-        if (picked.reason === 'unavailable') fileInputRef.current?.click();
-        return;
-      }
-      const parsed = parseProjectFile(await readTextFromHandle(picked.handle));
-      await openParsed(parsed, { kind: 'local', handle: picked.handle });
-    });
+    run('Opening…', () =>
+      openPickedLocalFile({
+        pick: pickLocalOpenHandle,
+        readHandle: readTextFromHandle,
+        openWithInput: () => fileInputRef.current?.click(),
+        openProjectFile,
+        report,
+      }),
+    );
 
   return {
     runSave,

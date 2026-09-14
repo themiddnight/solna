@@ -6,6 +6,9 @@ import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
 import { createDefaultLoop } from './loopSlice';
 import { PROJECT_FORMAT_VERSION, pickLoopContent, type ProjectBody, type ProjectContent } from './projectFormat';
 import { clampFinite, sanitizeEffectsValue, sanitizeLoops } from './sanitize';
+import { validateActiveSynth } from './sanitizeSynth';
+import { SYNTH_PARAM_FIELD } from './sourceBuses';
+import type { SynthControlTarget } from '@/utils/synthControl';
 import { asFaderDb } from './levelUnits';
 
 export const PROJECT_FILE_MIME = 'application/json';
@@ -60,10 +63,71 @@ export function sanitizeContent(raw: unknown): ProjectContent {
 }
 
 /**
+ * The user-facing name of each synth track, for an import notice.
+ *
+ * Spelled here rather than imported from `SYNTH_TARGET_STYLES`: that table is
+ * the UI's per-target STYLING and carries Tailwind class strings, and pulling
+ * it into the store to borrow five words would make a class-name edit a
+ * store-layer change.
+ */
+const TRACK_LABELS: Record<SynthControlTarget, string> = {
+  synth: 'Lead',
+  chord: 'Chords',
+  bass: 'Bass',
+  pad: 'Pad',
+  fx: 'FX',
+};
+
+/**
+ * Every synth patch in the RAW body that cannot be read, named by its track.
+ *
+ * Run against the raw content rather than the sanitised result, because
+ * sanitisation is lossy by design: an unreadable patch has already become the
+ * track's complete default by the time `ProjectContent` exists, and a user
+ * whose file silently lost the sound they saved deserves to be told which
+ * track it was. Re-validating is cheap here — this runs once per import, not
+ * per frame.
+ *
+ * ONE track's failure never touches its siblings: each is validated on its
+ * own, so a body with a corrupt Bass patch still imports the Lead, Chords,
+ * Pad and FX sounds the author saved.
+ */
+export function unreadableSynthPatches(raw: unknown): string[] {
+  const content = isPlainObject(raw) ? raw : {};
+  const loops = Array.isArray(content.loops) ? content.loops : [];
+  const found = new Set<string>();
+  for (const loop of loops) {
+    if (!isPlainObject(loop)) continue;
+    for (const [target, field] of Object.entries(SYNTH_PARAM_FIELD) as [SynthControlTarget, string][]) {
+      // An ABSENT patch is not an unreadable one: a body written before this
+      // field existed is simply old, and reporting every missing key would
+      // make the notice noise rather than a signal.
+      if (loop[field] === undefined) continue;
+      // Did validation fail WHOLE, not "were there issues". A patch carrying one
+      // out-of-range number is clamped and KEPT, and that pushes an issue as
+      // well — reading the issue list here told a user whose stored cutoff was
+      // merely too high that their Lead sound had been replaced, on every boot,
+      // since `projectStore.load` runs this on each IndexedDB read. A notice
+      // that cries loss over a value that survived is one people learn to
+      // ignore, which costs them the one time it is true.
+      //
+      // `validateActiveSynth` rather than `sanitizeActiveSynth`: this is a
+      // PROBE, and the sanitizing wrapper would `structuredClone` a default
+      // patch for every unreadable one just to have it thrown away here.
+      if (validateActiveSynth(loop[field]).value === null) {
+        found.add(`${TRACK_LABELS[target]} sound (reset to the default)`);
+      }
+    }
+  }
+  return [...found];
+}
+
+/**
  * Soft references a loop carries by id or name. The file is still valid when
  * one is unknown — the resolution paths already degrade (CHORD_RHYTHMS[0],
  * BASS_PATTERNS[0], the default kit) — so this only names them for a notice.
- * SynthParams.preset is a label nobody resolves and is not checked.
+ * A patch's `sourcePresetId` is display provenance nobody resolves and is not
+ * checked.
  */
 export function unknownLibraryReferences(content: ProjectContent): string[] {
   const rhythmIds = new Set(CHORD_RHYTHMS.map((p) => p.id));
@@ -116,7 +180,7 @@ export function parseProjectFile(text: string): ProjectParseResult {
       updatedAt: raw.updatedAt,
       content,
     },
-    warnings: unknownLibraryReferences(content),
+    warnings: [...unknownLibraryReferences(content), ...unreadableSynthPatches(raw.content)],
   };
 }
 
@@ -140,14 +204,29 @@ export function parseProjectFile(text: string): ProjectParseResult {
  * "newer-version", and sanitising it would strip the fields that build added
  * and then persist the loss on the next save. Leaving it alone keeps it
  * readable by the build that wrote it.
+ *
+ * `warnings` is the same set `parseProjectFile` returns and is computed the
+ * same way — against the RAW content, before `sanitizeContent` erases what it
+ * describes. It is here because this is the path a user hits FIRST and most
+ * often: the project sitting in the slot was written by whatever build last
+ * saved it, so if a synth patch in it no longer reads, all five tracks come
+ * back at factory defaults on the next boot. Opening a `.solna` says so
+ * already; a boot that silently replaced the user's sounds and said nothing is
+ * the same loss with the notice taken away.
+ *
+ * A newer body warns about nothing, because nothing was sanitised out of it.
  */
-export function normalizeStoredBody(body: ProjectBody): ProjectBody {
+export function normalizeStoredBody(body: ProjectBody): { body: ProjectBody; warnings: string[] } {
   const raw = body as unknown as Record<string, unknown>;
   const version = isFiniteNumber(raw.formatVersion) ? raw.formatVersion : 1;
-  if (version > PROJECT_FORMAT_VERSION) return body;
+  if (version > PROJECT_FORMAT_VERSION) return { body, warnings: [] };
+  const warnings = unreadableSynthPatches(raw.content);
   return {
-    ...(raw as unknown as ProjectBody),
-    formatVersion: PROJECT_FORMAT_VERSION,
-    content: sanitizeContent(raw.content),
+    body: {
+      ...(raw as unknown as ProjectBody),
+      formatVersion: PROJECT_FORMAT_VERSION,
+      content: sanitizeContent(raw.content),
+    },
+    warnings,
   };
 }

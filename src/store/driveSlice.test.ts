@@ -197,6 +197,22 @@ describe('openFromDrive', () => {
     expect(withFile.useAppStore.getState().projectNotice).toBeNull();
   });
 
+  // The defect this pins: `openFromDrive` used to hand `read.value.body` alone
+  // to `openProjectFile`, discarding `read.value.warnings` — a Drive-opened
+  // file with an incompatible synth patch installed the fallback silently,
+  // with no notice at all, unlike a local open through the same body.
+  test('a Drive file’s parse warnings reach the notice the same way a local open’s do', async () => {
+    const { useAppStore } = await freshStore();
+    const body = useAppStore.getState().exportProjectFile();
+    const withFile = await freshStore({
+      client: okClient({
+        readProject: async () => ({ ok: true, body, warnings: ['Lead sound (reset to the default)'] }),
+      }),
+    });
+    await withFile.drive.openFromDrive('drive-77');
+    expect(withFile.useAppStore.getState().projectNotice).toContain('Lead sound (reset to the default)');
+  });
+
   test('a malformed file reports the parse message and installs nothing', async () => {
     const { useAppStore, drive } = await freshStore();
     useAppStore.setState({ projectName: 'Keep me' });

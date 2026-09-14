@@ -26,7 +26,7 @@ describe('project body: masterVolume is left exactly as written, at any version'
       updatedAt: 2,
       content: { bpm: 128, masterVolume: 0.85, loops: [] },
     } as unknown as ProjectBody;
-    const next = normalizeStoredBody(body);
+    const next = normalizeStoredBody(body).body;
     expect(next.content.masterVolume).toBe(0.85);
     expect(next.content.bpm).toBe(128);
     expect(next.id).toBe('p1');
@@ -45,7 +45,7 @@ describe('project body: the five bus faders are left exactly as written, at any 
         ],
       },
     } as unknown as ProjectBody;
-    const content = normalizeStoredBody(body).content;
+    const content = normalizeStoredBody(body).body.content;
     const loop = content.loops[0] as unknown as Record<string, number>;
     expect(content.masterVolume).toBe(-6);
     expect(loop.synthVolume).toBe(1);
@@ -62,7 +62,7 @@ describe('project body: sequencer track volumes are left exactly as written, at 
       formatVersion: 9,
       content: { loops: [{ id: 'l1', sequencerTracks: [{ id: 't1', instrument: 'kick', volume: 0.85, steps: [] }] }] },
     } as unknown as ProjectBody;
-    const content = normalizeStoredBody(body).content;
+    const content = normalizeStoredBody(body).body.content;
     const loop = content.loops[0] as unknown as Record<string, unknown>;
     expect((loop.sequencerTracks as Record<string, number>[])[0].volume).toBe(0.85);
   });
@@ -72,7 +72,7 @@ describe('project body: sequencer track volumes are left exactly as written, at 
       formatVersion: 10,
       content: { loops: [{ sequencerTracks: [{ instrument: 'kick', volume: -9, steps: [] }] }] },
     } as unknown as ProjectBody;
-    const content = normalizeStoredBody(body).content;
+    const content = normalizeStoredBody(body).body.content;
     const loop = content.loops[0] as unknown as Record<string, unknown>;
     expect((loop.sequencerTracks as Record<string, number>[])[0].volume).toBe(-9);
   });

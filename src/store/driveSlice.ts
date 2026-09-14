@@ -127,8 +127,10 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
         return;
       }
       // One install path for every open — local file, Drive file, boot. Only
-      // the source differs, and openProjectFile persists it.
-      await get().openProjectFile(read.value.body, { kind: 'drive', fileId });
+      // the source differs, and openProjectFile persists it. The parser's own
+      // warnings (an incompatible synth patch reset to its track default) ride
+      // along too, or a Drive-opened file would lose the notice a local open keeps.
+      await get().openProjectFile(read.value.body, { kind: 'drive', fileId }, read.value.warnings);
     },
 
     saveToDrive: async () => {

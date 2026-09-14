@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseProjectFile, serializeProject, unknownLibraryReferences } from './projectFile';
+import { normalizeStoredBody, parseProjectFile, serializeProject, unknownLibraryReferences } from './projectFile';
 import { PROJECT_FORMAT_VERSION, factoryProjectContent, makeEnvelope } from './projectFormat';
 import { createDefaultLoop } from './loopSlice';
 import { LOOP_FLAT_KEYS, MAX_CUSTOM_PATTERN_BARS } from './loop';
@@ -160,6 +160,40 @@ describe('parseProjectFile sanitises wrong-typed content instead of refusing', (
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect((result.body.content.loops[0] as unknown as Record<string, unknown>).tempName).toBeUndefined();
+  });
+});
+
+// The defect this pins: `normalizeStoredBody` is the IndexedDB slot reader —
+// the path EVERY session takes, before any file is opened — and it sanitised
+// with no warnings at all while opening a `.solna` had just learned to warn. A
+// user whose stored project held a patch this build cannot read got all five
+// track sounds replaced by factory defaults on the first boot, silently.
+describe('normalizeStoredBody names what the read could not carry', () => {
+  const storedWith = (loop: Record<string, unknown>) =>
+    ({
+      ...makeEnvelope('In The Slot', 1_700_000_000_000),
+      content: { ...factoryProjectContent(), loops: [{ ...createDefaultLoop(), ...loop }] },
+    }) as unknown as Parameters<typeof normalizeStoredBody>[0];
+
+  test('an unreadable synth patch is reported by its track name', () => {
+    const { body, warnings } = normalizeStoredBody(storedWith({ synthParams: { engine: 'nope', patch: 7 } }));
+    expect(warnings).toEqual(['Lead sound (reset to the default)']);
+    // And the body still loads — sanitisation resets the patch, it never
+    // refuses the project.
+    expect(body.content.loops[0].synthParams.engine).toBe('subtractive');
+  });
+
+  test('a body every track of which reads fine warns about nothing', () => {
+    expect(normalizeStoredBody(storedWith({})).warnings).toEqual([]);
+  });
+
+  test('a body from a newer build is returned verbatim and warns about nothing', () => {
+    const newer = { ...storedWith({ synthParams: { engine: 'nope', patch: 7 } }), formatVersion: PROJECT_FORMAT_VERSION + 1 };
+    const { body, warnings } = normalizeStoredBody(newer);
+    // Nothing was sanitised out of it, so there is nothing to report — and the
+    // patch this build cannot read is still there for the build that can.
+    expect(warnings).toEqual([]);
+    expect(body).toBe(newer);
   });
 });
 

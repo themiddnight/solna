@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import {
   SOLNA_OPEN_TYPE,
   SOLNA_SAVE_TYPE,
@@ -118,18 +118,26 @@ describe('readTextFromHandle', () => {
     const target = {
       getFile: async () => ({ text: async () => '{"a":1}', size: 7 }),
     } as unknown as FileSystemFileHandle;
-    expect(await readTextFromHandle(target)).toBe('{"a":1}');
+    expect(await readTextFromHandle(target)).toEqual({ ok: true, text: '{"a":1}' });
   });
 
-  test('an unreadable handle yields empty text, which parses as malformed', async () => {
-    // Same contract as readFileAsText: the caller reports "not a Solna project"
-    // rather than catching a DOMException of its own.
-    const target = {
-      getFile: async () => {
-        throw new DOMException('gone', 'NotFoundError');
-      },
-    } as unknown as FileSystemFileHandle;
-    expect(await readTextFromHandle(target)).toBe('');
+  // The defect this pins: an unreadable handle used to yield empty text, which
+  // parsed as "not a Solna project" for a file that may be perfectly valid —
+  // the read failed, the content was never seen. It must now surface as its
+  // own distinguishable outcome, with the cause kept for diagnosis.
+  test('an unreadable handle is reported as unreadable, not as empty text', async () => {
+    const errors = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const cause = new DOMException('gone', 'NotFoundError');
+      const target = {
+        getFile: async () => {
+          throw cause;
+        },
+      } as unknown as FileSystemFileHandle;
+      expect(await readTextFromHandle(target)).toEqual({ ok: false, cause });
+    } finally {
+      errors.mockRestore();
+    }
   });
 });
 
