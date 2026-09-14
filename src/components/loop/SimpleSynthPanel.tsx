@@ -1,329 +1,398 @@
-import React from "react";
-import { Sparkles, Sun, Flame, Waves, Compass, type LucideIcon } from "lucide-react";
-import { SynthParams } from "@/types";
-import { Knob } from "../ui/Knob";
-import type { KnobColor } from "../ui/Knob";
-import { PanelCard } from "../ui/PanelCard";
-
-interface SimpleSynthPanelProps {
-  params: SynthParams;
-  onChangeParams: (params: SynthParams) => void;
-}
-
-/** What one macro dial reads out: the value it shows and the phrase under it. */
-interface MacroReading {
-  value: number;
-  descriptor: string;
-}
-
-/** The Simple view's four readings, keyed by the macro they belong to. */
-interface MacroReadings {
-  tone: MacroReading;
-  space: MacroReading;
-  vibe: MacroReading;
-  punch: MacroReading;
-}
+import type { ReactNode } from 'react';
+import { ChevronRight } from 'lucide-react';
+import { Knob } from '../ui/Knob';
+import type { KnobScale } from '../ui/Knob';
+import { PanelCard } from '../ui/PanelCard';
+import { ToggleButton, ToggleRow, type ProModuleColor } from './synth/proControls';
+import type { SynthChannel } from '@/utils/synthControl';
+import { SYNTH_GAIN_FLOOR_DB } from '@/utils/synthPatch';
+import {
+  readSubtractiveSimple,
+  simpleFeelSummary,
+  writeSubtractiveSimple,
+  type SimpleControlId,
+  type SimpleReading,
+} from '@/utils/subtractiveSimple';
 
 /**
- * The three-band phrase every macro uses: below `low`, below `high`, above.
+ * The approved Subtractive Simple surface — prototype Variant B, reconstructed
+ * with production components
+ * (docs/superpowers/prototypes/2026-09-14-synth-lab-approved-ui.html; Variant C
+ * is historical and non-normative).
  *
- * The four macros were four nested ternaries with the same shape, which is
- * exactly the sort of thing where one band's edge drifts and nothing catches
- * it — the phrasing IS the behaviour of this view.
- */
-function describe(
-  value: number,
-  low: number,
-  high: number,
-  under: string,
-  mid: string,
-  over: string,
-): string {
-  if (value < low) return under;
-  if (value < high) return mid;
-  return over;
-}
-
-/**
- * The Simple view's four macro readings.
+ * It is a VIEW of the patch Pro edits and holds no state of its own: every
+ * reading is computed by `utils/subtractiveSimple.ts` on render and every
+ * gesture writes one canonical parameter straight back. Switching depth
+ * therefore writes nothing at all — asserted in `SimpleSynthPanel.test.tsx`,
+ * because a projection that normalised the patch on mount would mark a project
+ * dirty just for looking at it.
  *
- * Pure and exported: each macro stands in for a group of Pro-mode parameters
- * with a pair of thresholds, so what this view actually does is decide a value
- * and name it — testable without a DOM, and readable without the markup around
- * it. Each `?? default` is the macro's own resting value for a patch that has
- * never carried that parameter.
+ * ONE continuous deck with four visually separated groups, not one card per
+ * knob: the groups are Source / Tone / Feel / Motion, which is how a listener
+ * describes a sound, and a card each would make eight equal-weight objects out
+ * of four decisions.
+ *
+ * **Pro vocabulary stays in Pro.** No cent, no Q, no ENV 2 destination, no key
+ * tracking, no unison detune appears on this surface — not as a caption, a
+ * readout or a tooltip. The test holds the list.
  */
-export function simpleMacroReadings(params: SynthParams): MacroReadings {
-  const cutoffValue = params.filterCutoff ?? 4000;
-  const releaseValue = params.release ?? 0.3;
-  const detuneValue = params.detune ?? 10;
-  const subValue = params.subOscVolume ?? 0.2;
 
-  return {
-    tone: {
-      value: cutoffValue,
-      descriptor: describe(cutoffValue, 1800, 5500, "Deep & Warm", "Balanced Tone", "Bright & Crisp"),
-    },
-    space: {
-      value: releaseValue,
-      descriptor: describe(releaseValue, 0.18, 0.8, "Tight & Punchy", "Natural Tail", "Lush & Dreamy"),
-    },
-    vibe: {
-      value: detuneValue,
-      descriptor: describe(detuneValue, 8, 25, "Clean & Solid", "Stereo Shimmer", "Wavy & Lush"),
-    },
-    punch: {
-      value: subValue,
-      descriptor: describe(subValue, 0.15, 0.5, "Smooth / Light", "Balanced Punch", "Heavy Sub Power"),
-    },
-  };
-}
-
-interface MacroDialCardProps {
-  id: string;
-  /** The macro's name, shown beside its icon. */
-  title: string;
+/** Everything the deck needs to draw ONE control, beside the id it writes. */
+interface SimpleControlSpec {
+  /** The caption above the knob, and the knob's accessible name. */
+  label: string;
+  /** The one-line hint under the reading. Plain language, never a unit name. */
+  hint: string;
   /**
-   * The `module-*` identity token. It tints the icon, the name and the dial at
-   * once — the three are one colour, which is why it is a token rather than
-   * three class strings that have to agree.
+   * The knob's module identity — the colour its canonical parameter wears in
+   * Pro, so a knob keeps its identity across a mode switch.
+   *
+   * Width is the one that does not match its GROUP: `common.stereoWidth` lives
+   * in Pro's Voice module (`module-env-vca`) while Variant B files Width under
+   * Motion. The identity follows the parameter, not the box it is drawn in.
    */
-  tone: KnobColor;
-  Icon: LucideIcon;
-  reading: MacroReading;
+  color: ProModuleColor;
   min: number;
   max: number;
-  step: number;
-  format: (v: number) => string;
-  onChange: (v: number) => void;
+  step?: number;
+  scale?: KnobScale;
+  format: (value: number) => string;
 }
 
+/** Milliseconds while it is one, seconds after — the Pro envelope readout. */
+const envTime = (value: number) => (value < 1 ? `${Math.round(value * 1000)} ms` : `${value.toFixed(2)} s`);
+const percent = (value: number) => `${Math.round(value * 100)}%`;
+
 /**
- * One macro dial and its caption. What differs between the four is what they
- * WRITE, and that stays at the call site: Space also moves `sustain`, Vibe
- * also moves `lfoDepth`, Punch clamps `attack` — three different edits that
- * only look alike because each dial happens to be drawn the same way.
+ * The eight controls. Each range is the SAME range Pro offers for the same
+ * parameter — a Simple knob that could not reach a value Pro can set would
+ * make a preset loadable and then unrecoverable from this surface.
  */
-function MacroDialCard({
+export const SIMPLE_CONTROL_SPECS: Record<SimpleControlId, SimpleControlSpec> = {
+  shape: {
+    label: 'Shape',
+    hint: 'layer blend',
+    color: 'text-module-osc',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    format: percent,
+  },
+  weight: {
+    label: 'Weight',
+    hint: 'low-end body',
+    color: 'text-module-osc',
+    // The floor, not -60: factory presets park a silent sub at
+    // `SYNTH_GAIN_FLOOR_DB`, and a knob that cannot reach it reports a value
+    // below its own minimum (see UtilitySourcePanel).
+    min: SYNTH_GAIN_FLOOR_DB,
+    max: 0,
+    step: 0.5,
+    format: (v) => `${v.toFixed(1)} dB`,
+  },
+  brightness: {
+    label: 'Brightness',
+    hint: 'dark to bright',
+    color: 'text-module-filter',
+    min: 20,
+    max: 20_000,
+    step: 1,
+    scale: 'log',
+    format: (v) => (v >= 1000 ? `${(v / 1000).toFixed(2)} kHz` : `${Math.round(v)} Hz`),
+  },
+  bite: {
+    label: 'Bite',
+    hint: 'smooth to sharp',
+    color: 'text-module-filter',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    format: percent,
+  },
+  attack: {
+    label: 'Attack',
+    hint: 'soft to punchy',
+    color: 'text-module-env-vca',
+    min: 0.001,
+    max: 8,
+    scale: 'log',
+    format: envTime,
+  },
+  tail: {
+    label: 'Tail',
+    hint: 'short to lasting',
+    color: 'text-module-env-vca',
+    min: 0.001,
+    max: 8,
+    scale: 'log',
+    format: envTime,
+  },
+  movement: {
+    label: 'Movement',
+    hint: 'steady to animated',
+    color: 'text-module-lfo',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    format: percent,
+  },
+  width: {
+    label: 'Width',
+    hint: 'narrow to wide',
+    color: 'text-module-env-vca',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    format: percent,
+  },
+};
+
+/** The four listening-intent groups, in Variant B's order. */
+const SIMPLE_GROUPS: readonly {
+  id: string;
+  title: string;
+  kicker: string;
+  color: ProModuleColor;
+  controls: readonly SimpleControlId[];
+}[] = [
+  {
+    id: 'source',
+    title: 'Source',
+    kicker: 'core character',
+    color: 'text-module-osc',
+    controls: ['shape', 'weight'],
+  },
+  {
+    id: 'tone',
+    title: 'Tone',
+    kicker: 'colour & impact',
+    color: 'text-module-filter',
+    controls: ['brightness', 'bite'],
+  },
+  {
+    id: 'feel',
+    title: 'Feel',
+    kicker: 'note response',
+    color: 'text-module-env-vca',
+    controls: ['attack', 'tail'],
+  },
+  {
+    id: 'motion',
+    title: 'Motion',
+    kicker: 'movement & size',
+    color: 'text-module-lfo',
+    controls: ['movement', 'width'],
+  },
+];
+
+/** One knob, its caption, its derived phrase and its hint. */
+function SimpleControl({
   id,
-  title,
-  tone,
-  Icon,
   reading,
-  min,
-  max,
-  step,
-  format,
   onChange,
-}: MacroDialCardProps) {
+}: {
+  id: SimpleControlId;
+  reading: SimpleReading;
+  onChange: (value: number) => void;
+}) {
+  const spec = SIMPLE_CONTROL_SPECS[id];
   return (
-    <PanelCard inset>
-      <div className="card-body p-3 flex flex-col items-center justify-between text-center">
-        <div className="flex items-center gap-1 text-xs font-bold text-base-content">
-          <Icon className={`w-3.5 h-3.5 ${tone}`} />
-          <span>{title}</span>
-        </div>
-
-        <div className="my-1.5">
-          <Knob
-            id={id}
-            label=""
-            color={tone}
-            descriptor={reading.descriptor}
-            value={reading.value}
-            min={min}
-            max={max}
-            step={step}
-            format={format}
-            onChange={onChange}
-          />
-        </div>
-      </div>
-    </PanelCard>
-  );
-}
-
-/**
- * The 1-Click Easy Arpeggiator card.
- *
- * The only macro card that does not go through `PanelCard`: it keeps its own
- * `module-arp` border, and a border colour passed alongside the shell's
- * `border-base-300` would be two utilities setting one property — decided by
- * stylesheet order, not by the order they are written here. It wears the
- * recessed surface by hand instead, so it still sits level with the four
- * beside it inside the Synth section.
- *
- * Its two join-rows are deliberately NOT one component: the rate row's
- * read-out repeats its buttons' own text in a `tabular-nums` cell, the mode
- * row's shows the stored word in a `capitalize` one while the buttons carry
- * arrows, and the mode row's wrapper drops the `my-1.5` the other two carry.
- */
-function EasyArpCard({ params, onChangeParams }: SimpleSynthPanelProps) {
-  const arpOn =
-    "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]";
-
-  return (
-    <div
-      className="col-span-2 sm:col-span-1 lg:col-span-1 card bg-base-200 border border-module-arp/30"
-    >
-      <div className="card-body p-3 flex flex-col justify-between">
-        <div className="flex items-center justify-between border-b border-base-300 pb-1.5">
-          <span className="text-xs font-bold text-module-arp flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-module-arp" />
-            Auto-Arp
-          </span>
-          <button
-            id="btn-simple-toggle-arp"
-            onClick={() => {
-              onChangeParams({
-                ...params,
-                arpActive: !params.arpActive,
-              });
-            }}
-            className={`btn btn-xs rounded-full text-[10px] font-bold uppercase ${
-              params.arpActive ? arpOn : "btn-outline"
-            }`}
-          >
-            {params.arpActive ? "ON" : "OFF"}
-          </button>
-        </div>
-
-        {/* Arp Speed Selector */}
-        <div className="space-y-1 my-1.5">
-          <div className="flex items-center justify-between text-[10px] text-base-content/60">
-            <span>Speed:</span>
-            <span className="tabular-nums text-module-arp font-bold">
-              {params.arpRate === "8n"
-                ? "1/8"
-                : params.arpRate === "32n"
-                  ? "1/32"
-                  : "1/16"}
-            </span>
-          </div>
-          <div className="join w-full">
-            {(["8n", "16n", "32n"] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => onChangeParams({ ...params, arpRate: r })}
-                className={`btn join-item btn-xs flex-1 text-[10px] font-semibold ${
-                  params.arpRate === r ? arpOn : "btn-outline"
-                }`}
-              >
-                {r === "8n" ? "1/8" : r === "16n" ? "1/16" : "1/32"}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Arp Style Selector */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-[10px] text-base-content/60">
-            <span>Mode:</span>
-            <span className="capitalize text-module-arp font-bold">
-              {params.arpMode}
-            </span>
-          </div>
-          <div className="join w-full">
-            {(["up", "down", "updown", "random"] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => onChangeParams({ ...params, arpMode: m })}
-                className={`btn join-item btn-xs flex-1 text-[10px] font-semibold ${
-                  params.arpMode === m ? arpOn : "btn-outline"
-                }`}
-                title={`Mode: ${m}`}
-              >
-                {m === "up"
-                  ? "↑"
-                  : m === "down"
-                    ? "↓"
-                    : m === "updown"
-                      ? "⇅"
-                      : "🎲"}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+    <div className="min-w-0 flex flex-col items-center text-center">
+      <Knob
+        id={`slider-simple-${id}`}
+        label={spec.label}
+        color={spec.color}
+        size="md"
+        descriptor={reading.descriptor}
+        value={reading.value}
+        min={spec.min}
+        max={spec.max}
+        step={spec.step}
+        scale={spec.scale}
+        format={spec.format}
+        onChange={onChange}
+      />
+      <span className="mt-1 text-[10px] leading-tight text-base-content/50">{spec.hint}</span>
     </div>
   );
 }
 
-export const SimpleSynthPanel = React.memo(
-  function SimpleSynthPanel({ params, onChangeParams }: SimpleSynthPanelProps) {
-    const macro = simpleMacroReadings(params);
-    const set = (patch: Partial<SynthParams>) =>
-      onChangeParams({ ...params, ...patch });
-
-    return (
-      <div className="space-y-4">
-        {/* 2. Four Friendly Macro Dials + 1-Click Arp */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <MacroDialCard
-            id="simple-macro-tone"
-            title="Tone"
-            tone="text-module-filter"
-            Icon={Sun}
-            reading={macro.tone}
-            min={300}
-            max={12000}
-            step={50}
-            format={(v) => `${(v / 1000).toFixed(1)}k`}
-            onChange={(v) => set({ filterCutoff: v })}
-          />
-
-          <MacroDialCard
-            id="simple-macro-space"
-            title="Space"
-            tone="text-module-env-vca"
-            Icon={Compass}
-            reading={macro.space}
-            min={0.05}
-            max={2.5}
-            step={0.05}
-            format={(v) => `${v.toFixed(2)}s`}
-            onChange={(v) =>
-              set({
-                release: v,
-                sustain: Math.min(1.0, Math.max(0.2, v * 0.4 + 0.3)),
-              })
-            }
-          />
-
-          <MacroDialCard
-            id="simple-macro-vibe"
-            title="Vibe"
-            tone="text-module-lfo"
-            Icon={Waves}
-            reading={macro.vibe}
-            min={0}
-            max={50}
-            step={1}
-            format={(v) => `${v} ct`}
-            onChange={(v) => set({ detune: v, lfoDepth: v > 15 ? 0.2 : 0.05 })}
-          />
-
-          <MacroDialCard
-            id="simple-macro-punch"
-            title="Punch"
-            tone="text-module-osc"
-            Icon={Flame}
-            reading={macro.punch}
-            min={0}
-            max={1}
-            step={0.02}
-            format={(v) => `${(v * 100).toFixed(0)}%`}
-            onChange={(v) =>
-              set({
-                subOscVolume: v,
-                attack: v > 0.4 ? 0.01 : Math.max(0.01, params.attack),
-              })
-            }
-          />
-
-          <EasyArpCard params={params} onChangeParams={onChangeParams} />
-        </div>
+/**
+ * The deck's header: what this surface is, and one derived line naming the
+ * sound as a whole. The wave is decorative and says so — it is a drawing, not
+ * an analyser, so it carries no data and no `aria` role.
+ */
+function SimpleIntro({ summary }: { summary: string }) {
+  return (
+    <header className="flex flex-wrap items-center gap-x-5 gap-y-3 px-4 py-3 border-b border-base-300">
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm font-bold text-base-content">Shape the sound</h2>
+        <p className="text-[10px] text-base-content/60">
+          Eight musical controls for fast changes. Open Pro when you need the routing underneath.
+        </p>
       </div>
-    );
-  },
-);
+      <svg
+        className="hidden md:block flex-1 min-w-40 h-10 text-module-osc/70"
+        viewBox="0 0 700 70"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M0 36 C25 8 46 65 70 36 S116 8 140 36 S186 66 210 36 S256 9 280 36 S326 64 350 36 S396 7 420 36 S466 66 490 36 S536 9 560 36 S606 63 630 36 S676 12 700 36"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.5}
+        />
+      </svg>
+      <div className="flex items-center gap-2 rounded-box border border-base-300 bg-base-100 px-2.5 py-1.5">
+        <span className="text-[10px] text-base-content/60">Current feel</span>
+        <strong className="text-[11px] font-semibold text-base-content">{summary}</strong>
+      </div>
+    </header>
+  );
+}
+
+/** Play style, the Arp strip, and the one honest note about what Pro adds. */
+function SimplePerformance({
+  channel,
+  onSwitchToPro,
+}: {
+  channel: SynthChannel;
+  onSwitchToPro: () => void;
+}) {
+  const { activeSynth, arpSettings } = channel;
+  const common = activeSynth.patch.common;
+  return (
+    <footer className="grid gap-3 lg:grid-cols-[auto_1fr_auto] lg:items-end px-4 py-3 border-t border-base-300 bg-base-100/50">
+      <ToggleRow
+        idPrefix="btn-simple-voice"
+        caption="Play style"
+        color="text-module-env-vca"
+        value={common.voiceMode}
+        options={[
+          { value: 'mono', label: 'Mono, monophonic', content: 'Mono' },
+          { value: 'poly', label: 'Poly, polyphonic', content: 'Poly' },
+        ]}
+        onSelect={(voiceMode) =>
+          channel.setActiveSynth({
+            ...activeSynth,
+            patch: { ...activeSynth.patch, common: { ...common, voiceMode } },
+          })
+        }
+      />
+
+      <div className="grid gap-2 sm:grid-cols-[auto_1fr_1fr] sm:items-end min-w-0">
+        <ToggleButton
+          id="btn-simple-arp-toggle"
+          label={`Arp ${arpSettings.active ? 'on' : 'off'}`}
+          pressed={arpSettings.active}
+          color="text-module-arp"
+          onPress={() => channel.setArpSettings({ ...arpSettings, active: !arpSettings.active })}
+        >
+          {arpSettings.active ? 'Arp on' : 'Arp off'}
+        </ToggleButton>
+
+        {/* All four rates and all four directions, though Variant B draws three
+            rates: a setting the stored Arp can hold and this surface cannot
+            reach is one a user can load and never get back to. */}
+        <ToggleRow
+          idPrefix="btn-simple-arp-rate"
+          caption="Speed"
+          color="text-module-arp"
+          value={arpSettings.rate}
+          options={[
+            { value: '4n', label: '1/4, quarter notes', content: '1/4' },
+            { value: '8n', label: '1/8, eighth notes', content: '1/8' },
+            { value: '16n', label: '1/16, sixteenth notes', content: '1/16' },
+            { value: '32n', label: '1/32, thirty-second notes', content: '1/32' },
+          ]}
+          onSelect={(rate) => channel.setArpSettings({ ...arpSettings, rate })}
+        />
+
+        <ToggleRow
+          idPrefix="btn-simple-arp-mode"
+          caption="Direction"
+          color="text-module-arp"
+          value={arpSettings.mode}
+          options={[
+            { value: 'up', label: 'Up', content: '↑' },
+            { value: 'down', label: 'Down', content: '↓' },
+            { value: 'updown', label: 'Up and down', content: '⇅' },
+            { value: 'random', label: 'Random', content: '◆' },
+          ]}
+          onSelect={(mode) => channel.setArpSettings({ ...arpSettings, mode })}
+        />
+      </div>
+
+      <button
+        id="btn-switch-pro-hint"
+        type="button"
+        onClick={onSwitchToPro}
+        className="btn btn-xs btn-ghost justify-self-start lg:justify-self-end text-[10px] font-semibold text-base-content/60 gap-1"
+      >
+        Detailed routing stays in Pro
+        <ChevronRight className="w-3 h-3" aria-hidden="true" />
+      </button>
+    </footer>
+  );
+}
+
+/** One group: its coloured rule, its heading pair, and its two controls. */
+function SimpleGroup({
+  group,
+  children,
+}: {
+  group: (typeof SIMPLE_GROUPS)[number];
+  children: ReactNode;
+}) {
+  return (
+    <section className="relative min-w-0 px-3 pt-4 pb-4 border-b border-base-300 last:border-b-0 sm:border-r sm:[&:nth-child(2n)]:border-r-0 xl:border-r xl:[&:nth-child(2n)]:border-r xl:last:border-r-0">
+      <span
+        aria-hidden="true"
+        className={`absolute inset-x-0 top-0 h-0.5 bg-current opacity-70 ${group.color}`}
+      />
+      <div className="flex items-baseline justify-between gap-2 mb-3">
+        <h3 className="text-[11px] font-bold text-base-content">{group.title}</h3>
+        <span className="text-[10px] text-base-content/50 truncate">{group.kicker}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 min-w-0">{children}</div>
+    </section>
+  );
+}
+
+export function SimpleSynthPanel({
+  channel,
+  onSwitchToPro,
+}: {
+  channel: SynthChannel;
+  onSwitchToPro: () => void;
+}) {
+  const activeSynth = channel.activeSynth;
+  const readings = readSubtractiveSimple(activeSynth);
+  // The ONE wiring site: a control's id picks both its reading and its write,
+  // so a mis-wired knob is a type error rather than a knob that edits its
+  // neighbour's parameter.
+  const write = (id: SimpleControlId, value: number) =>
+    channel.setActiveSynth(writeSubtractiveSimple(activeSynth, id, value));
+
+  return (
+    <PanelCard inset className="w-full min-w-0 overflow-hidden">
+      <SimpleIntro summary={simpleFeelSummary(activeSynth)} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+        {SIMPLE_GROUPS.map((group) => (
+          <SimpleGroup key={group.id} group={group}>
+            {group.controls.map((id) => (
+              <SimpleControl
+                key={id}
+                id={id}
+                reading={readings[id]}
+                onChange={(value) => write(id, value)}
+              />
+            ))}
+          </SimpleGroup>
+        ))}
+      </div>
+      <SimplePerformance channel={channel} onSwitchToPro={onSwitchToPro} />
+    </PanelCard>
+  );
+}

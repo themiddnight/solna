@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Music, Play, Sparkles, Trash2, Upload } from 'lucide-react';
-import type { ChordItem, SynthParams, CustomChordProgressionItem } from '@/types';
+import type { ChordItem, CustomChordProgressionItem } from '@/types';
+import type { ActiveSynth } from '@/types/synth';
 import { useAppStore } from '@/store/store';
 import { CHORD_PROGRESSIONS, type ChordProgression } from '@/data/chordProgressions';
 import { resolveProgression } from '@/audio/chordProgressions';
@@ -55,7 +56,7 @@ interface ChordPresetLibraryProps {
   scaleRoot: string;
   scaleType: string;
   autoReharmonize: boolean;
-  synthParams: SynthParams;
+  synthParams: ActiveSynth;
   onApplyChords: (chords: ChordItem[]) => void;
   isOpen: boolean;
   onClose: () => void;
@@ -227,7 +228,7 @@ function useChordLibraryCommands({
   scaleRoot: string;
   scaleType: string;
   autoReharmonize: boolean;
-  synthParams: SynthParams;
+  synthParams: ActiveSynth;
   onApplyChords: (chords: ChordItem[]) => void;
   onClose: () => void;
   showToast: (msg: string, tone?: 'success' | 'error') => void;

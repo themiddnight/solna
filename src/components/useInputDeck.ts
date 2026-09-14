@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { equalPowerVelocityScale } from '@/audio/chordRhythms';
 import { useArpPlayback, releaseTriggeredTargets, type ArpStateRef } from '../audio/playback/arpPlayback';
-import { heldCountFor, noteTargetFor, type HeldNoteTargets } from '../audio/playback/heldNotes';
+import {
+  heldCountFor,
+  heldVoiceFor,
+  noteTargetFor,
+  type HeldNoteTargets,
+} from '../audio/playback/heldNotes';
 import {
   applySynthPlaybackVelocityScale,
   hasSynthPlaybackContext,
@@ -22,12 +27,15 @@ import {
   getScaleLockedKeyboardNotesFlat,
   getChordKeyboardRows,
 } from './ui/Keyboard';
-import type { DrumPad, KeyboardMode, SynthParams } from '../types';
+import type { DrumPad, KeyboardMode } from '../types';
+import type { ActiveSynth, ArpSettings } from '../types/synth';
+import type { VoiceId } from '../audio/synth/voiceId';
+import { synthReleaseSeconds } from '../utils/synthPatch';
 import type { SynthControlTarget } from '../utils/synthControl';
 import { isTypingTarget } from '../utils/keyboard';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
 import { synthTargetForFocus } from '../store/focusTrack';
-import { SYNTH_PARAM_FIELD } from '../store/sourceBuses';
+import { SYNTH_ARP_FIELD, SYNTH_PARAM_FIELD } from '../store/sourceBuses';
 
 // The keyboard, the on-screen keyboard and the arp all play the FOCUSED track
 // (`focusTrack` in the ui slice). They used to be pinned to a module constant
@@ -99,20 +107,26 @@ export function releaseAllHeldNotes(
 export function performNoteOff(
   note: string,
   held: HeldNoteTargets,
-  liveParams: SynthParams,
+  releaseSeconds: number,
+  arpActive: boolean,
   actions: {
-    releaseNote: (note: string, releaseTime: number, target: SynthControlTarget) => void;
+    releaseVoice: (voiceId: VoiceId | null, note: string, releaseSeconds: number) => void;
     rescale: (scale: number, target: SynthControlTarget) => void;
     announce: (note: string) => void;
   },
 ): void {
   const target = noteTargetFor(held, note);
+  const voiceId = heldVoiceFor(held, note);
   held.delete(note);
   if (target === undefined) return;
-  actions.releaseNote(note, liveParams.release, target);
-  if (!liveParams.arpActive) {
-    // Release first (marks the voice so re-scaling skips it), then let the
-    // voices still held ON THAT BUS rise back toward full level.
+  // The VOICE this key started, never a lookup by bus and note: the arp and
+  // the melody sequencer play the same bus, and a by-name release would cut
+  // whichever of the three the engine reached first.
+  actions.releaseVoice(voiceId, note, releaseSeconds);
+  if (!arpActive) {
+    // Release first — the engine skips a voice that is already releasing, so
+    // the tail this key just started is not re-lifted — then let the voices
+    // still held ON THAT BUS rise back toward full level.
     actions.rescale(equalPowerVelocityScale(heldCountFor(held, target)), target);
   } else {
     // Arp branch — see handleNoteOn's comment on the arp swallowing the key.
@@ -134,58 +148,73 @@ export function performNoteOff(
  * with the arp off, then re-pressed on a different bus after focus moved and
  * the arp was switched on, stranded the first bus's sounding voice with no
  * map entry left to reach it — a drone that survived until reload.
- *
- * The old bus is also rescaled after its release: the voices still held
- * there were counted assuming one more voice than is now sounding, so
- * leaving them at the old scale would keep them quieter than equal power
- * calls for. The note is dropped from `held` before that rescale, or
- * `heldCountFor` would still count it as sounding on the bus it just left.
  */
 export function performNoteOn(
   note: string,
   target: SynthControlTarget,
   held: HeldNoteTargets,
-  liveParams: SynthParams,
+  releaseSeconds: number,
+  arpActive: boolean,
   actions: {
     initEngine: () => void;
-    playNote: (note: string, target: SynthControlTarget, scale: number) => void;
-    releaseNote: (note: string, releaseTime: number, target: SynthControlTarget) => void;
+    playNote: (note: string, target: SynthControlTarget) => VoiceId | null;
+    releaseVoice: (voiceId: VoiceId | null, note: string, releaseSeconds: number) => void;
     rescale: (scale: number, target: SynthControlTarget) => void;
     announce: (note: string) => void;
   },
 ): void {
   actions.initEngine();
   const previous = noteTargetFor(held, note);
-  if (previous !== undefined && previous !== target) {
-    actions.releaseNote(note, liveParams.release, previous);
+  if (previous !== undefined) {
+    // Release whatever this note already holds, on WHICHEVER bus it holds it.
+    // The map is keyed by note, so the write below would otherwise overwrite
+    // the entry and strand its `VoiceId` — unreachable by the key that named
+    // it, unreachable by the blur backstop (which walks `held`), and with no
+    // wall-clock backstop in the manager by design: the same drone this
+    // function's docblock describes, reached from the SAME bus rather than a
+    // different one. Same-bus repeats are ordinary play, not an edge case:
+    // chord mode fans one key out to several notes, so any two diatonic triads
+    // a third apart re-trigger the two notes they share.
+    actions.releaseVoice(heldVoiceFor(held, note), note, releaseSeconds);
     held.delete(note);
-    actions.rescale(equalPowerVelocityScale(heldCountFor(held, previous)), previous);
-  }
-  // Computed AFTER the re-press guard above (which may just have deleted this
-  // note from `held` on a cross-bus re-press), not before it: "new" here means
-  // new to the bus it is about to sound on, not new to `held` overall — a
-  // cross-bus re-press left this false when computed from `previous`, so the
-  // arriving bus was never rescaled to include the voice that just landed on
-  // it, leaving it a hair quieter than every note already on that bus.
-  const isNewNote = !held.has(note);
-  if (!liveParams.arpActive) {
-    // Equal-power polyphony: a new note lowers every voice held ON THIS BUS
-    // so that instrument's total level stays flat as keys are added. The map
-    // mirrors the held set synchronously so rapid presses see each other.
-    held.set(note, target);
-    const scale = equalPowerVelocityScale(heldCountFor(held, target));
-    if (isNewNote) {
-      actions.rescale(scale, target);
+    // The bus it LEFT was balanced for one more voice than it now has, so it
+    // rises back. The note is dropped from `held` first, or `heldCountFor`
+    // would still count it on the bus it just left.
+    //
+    // Skipped on a same-bus repeat, where the trailing rescale below covers the
+    // same bus a moment later with the right count — both values are 1 there
+    // (`equalPowerVelocityScale` floors its count at 1), so doing it twice only
+    // walks every group and voice on the bus and schedules a polyGain ramp for
+    // nothing, on a path chord mode hits for every tone two adjacent triads
+    // share. The arp branch is the exception: it never reaches that trailing
+    // rescale, so it still needs this one.
+    if (previous !== target || arpActive) {
+      actions.rescale(equalPowerVelocityScale(heldCountFor(held, previous)), previous);
     }
-    actions.playNote(note, target, scale);
+  }
+  if (!arpActive) {
+    // Equal-power polyphony: every voice on THIS bus, the arriving one
+    // included, settles at the level that keeps the bus's total flat for the
+    // number of keys now down. The map mirrors the held set synchronously so
+    // rapid presses see each other.
+    //
+    // Play FIRST, then rescale: one call then covers the new voice and the
+    // ones already sounding, so a three-note chord pressed key by key ends at
+    // one level instead of 1, 1/√2, 1/√3 by press order. The scale rides a
+    // dedicated gain the engine ramps (`setPolyphonyScale`), not the note's
+    // velocity and not the amp envelope — an envelope cannot be re-planned
+    // mid-note without a click, which is exactly why the legacy engine's
+    // version had to cancel and re-plan every held voice's ramps.
+    held.set(note, { target, voiceId: actions.playNote(note, target) });
+    actions.rescale(equalPowerVelocityScale(heldCountFor(held, target)), target);
   } else {
     // The arp swallows the key: it schedules the note itself, so nothing
     // plays it directly and the bus would never hear about a key the user
     // genuinely pressed. Announce it here instead, or arming the recorder
     // with the arp on would silently capture nothing. The map is still
     // written — the arp builds its sequence from the notes held on the bus
-    // it is playing.
-    held.set(note, target);
+    // it is playing — with no voice id, because this key started none.
+    held.set(note, { target, voiceId: null });
     actions.announce(note);
   }
 }
@@ -211,8 +240,9 @@ export interface InputDeckDrumProps {
   onPadVolumeChange: (padId: string, volume: number) => void;
 }
 
-// The synth params the keyboard/arp actually play: the FOCUSED track's, not
-// always Lead's. Routes through `synthTargetForFocus` — the same store-layer
+// The patch and the Arp settings the keyboard/arp actually play: the FOCUSED
+// track's, not always Lead's. Two reads off two tables, because Arp is
+// performance state and deliberately not part of the patch. Routes through `synthTargetForFocus` — the same store-layer
 // projection the Pro/Simple panels resolve their channel from — so a drum
 // focus is not re-decided here. Its `?? 'synth'` fallback is inert for
 // playback: every path that would read this value for a drum focus already
@@ -226,20 +256,25 @@ export interface InputDeckDrumProps {
 // just on a relevant change — and the map is the same one engineSync drives
 // the engine from, so the arp cannot end up reading a different bus's patch
 // than the one being played.
-function resolveFocusedSynthParams(s: AppStore): SynthParams {
+function resolveFocusedSynth(s: AppStore): ActiveSynth {
   return s[SYNTH_PARAM_FIELD[synthTargetForFocus(s.focusTrack) ?? 'synth']];
 }
 
+function resolveFocusedArp(s: AppStore): ArpSettings {
+  return s[SYNTH_ARP_FIELD[synthTargetForFocus(s.focusTrack) ?? 'synth']];
+}
+
 // Named (not inline) so a test can pin their behaviour directly: given two
-// `synthParams` objects differing only in a field the hook does not read
-// reactively, each selector must still return the SAME primitive — that
-// equality is what lets `useAppStore(selectArpActive)` skip a re-render on
-// every unrelated knob move.
-export const selectArpActive = (s: AppStore): boolean => resolveFocusedSynthParams(s).arpActive;
-export const selectSynthRelease = (s: AppStore): number => resolveFocusedSynthParams(s).release;
+// patch objects differing only in a field the hook does not read reactively,
+// each selector must still return the SAME primitive — that equality is what
+// lets `useAppStore(selectArpActive)` skip a re-render on every unrelated knob
+// move.
+export const selectArpActive = (s: AppStore): boolean => resolveFocusedArp(s).active;
+export const selectSynthRelease = (s: AppStore): number =>
+  synthReleaseSeconds(resolveFocusedSynth(s));
 
 /**
- * Keeps `arpStateRef.current.params` / `.bpm` / `.target` fresh by IMPERATIVE
+ * Keeps `arpStateRef.current.synth` / `.arp` / `.bpm` / `.target` fresh by IMPERATIVE
  * store subscription instead of by a render-driven effect. The hook used to
  * select the whole `synthParams` object at App level purely to feed this ref,
  * which re-rendered the entire application tree on every knob pointermove.
@@ -255,9 +290,16 @@ export function subscribeArpState(ref: ArpStateRef): () => void {
   // `synthParams`), so one subscription covers both triggers the fix calls
   // for — no separate focus-driven refresh of `.params` is needed.
   const unsubParams = useAppStore.subscribe(
-    resolveFocusedSynthParams,
-    (params) => {
-      ref.current.params = params;
+    resolveFocusedSynth,
+    (synth) => {
+      ref.current.synth = synth;
+    },
+    { fireImmediately: true },
+  );
+  const unsubArp = useAppStore.subscribe(
+    resolveFocusedArp,
+    (arp) => {
+      ref.current.arp = arp;
     },
     { fireImmediately: true },
   );
@@ -277,6 +319,7 @@ export function subscribeArpState(ref: ArpStateRef): () => void {
   );
   return () => {
     unsubParams();
+    unsubArp();
     unsubBpm();
     unsubFocus();
   };
@@ -303,7 +346,7 @@ function useNoteHandlers(
       // Params come from arpStateRef, kept fresh by an imperative store
       // subscription (subscribeArpState), so this reads the latest value
       // without the callback identity changing on every knob move.
-      const liveParams = arpStateRef.current.params;
+      const { synth: liveSynth, arp: liveArp } = arpStateRef.current;
       // The bus focus names RIGHT NOW. Read once, used for both the engine
       // call and the map entry, so the note is captured on exactly the bus it
       // was played on even if focus moves during this callback.
@@ -320,10 +363,11 @@ function useNoteHandlers(
         return;
       }
       const held = arpStateRef.current.heldTargets;
-      performNoteOn(note, target, held, liveParams, {
+      performNoteOn(note, target, held, synthReleaseSeconds(liveSynth), liveArp.active, {
         initEngine: initSynthPlayback,
-        playNote: (n, t, scale) => synthPlaybackNoteOn(n, liveParams, 1.0, undefined, t, scale),
-        releaseNote: (n, releaseTime, t) => synthPlaybackNoteOff(n, releaseTime, undefined, t),
+        playNote: (n, t) => synthPlaybackNoteOn(n, liveSynth, 1.0, undefined, t),
+        releaseVoice: (voiceId, n, releaseSeconds) =>
+          synthPlaybackNoteOff(voiceId, n, releaseSeconds),
         rescale: (scale, t) => applySynthPlaybackVelocityScale(scale, t),
         announce: (n) => emitNoteInput({ kind: 'on', note: n, velocity: 1.0 }),
       });
@@ -335,16 +379,16 @@ function useNoteHandlers(
   const handleNoteOff = useCallback(
     (note: string) => {
       // Same ref read as handleNoteOn — see the note there.
-      const liveParams = arpStateRef.current.params;
+      const { synth: liveSynth, arp: liveArp } = arpStateRef.current;
       const held = arpStateRef.current.heldTargets;
       // The bus this note was PLAYED on, never the bus focus names right now:
       // recomputing would send the release to an engine the voice was never
       // on and the held voice would drone until the same key was pressed
       // again on the same track. See audio/playback/heldNotes.ts and
       // performNoteOff above.
-      performNoteOff(note, held, liveParams, {
-        releaseNote: (n, releaseTime, target) =>
-          synthPlaybackNoteOff(n, releaseTime, undefined, target),
+      performNoteOff(note, held, synthReleaseSeconds(liveSynth), liveArp.active, {
+        releaseVoice: (voiceId, n, releaseSeconds) =>
+          synthPlaybackNoteOff(voiceId, n, releaseSeconds),
         rescale: (scale, target) => applySynthPlaybackVelocityScale(scale, target),
         announce: (n) => emitNoteInput({ kind: 'off', note: n, velocity: 0 }),
       });
@@ -642,12 +686,13 @@ export function useInputDeck(): {
   // must never lag a keypress by a render.
   const arpStateRef = useRef<ArpStateRef['current']>({
     heldTargets: new Map(),
-    params: resolveFocusedSynthParams(useAppStore.getState()),
+    synth: resolveFocusedSynth(useAppStore.getState()),
+    arp: resolveFocusedArp(useAppStore.getState()),
     target: synthTargetForFocus(useAppStore.getState().focusTrack),
     triggeredTargets: new Set(),
     bpm: useAppStore.getState().bpm,
   });
-  // params/bpm/target come straight off the store — no render subscription needed.
+  // synth/arp/bpm/target come straight off the store — no render subscription needed.
   useEffect(() => subscribeArpState(arpStateRef), []);
 
   const { handleNoteOn, handleNoteOff } = useNoteHandlers(arpStateRef, setActiveNotes);

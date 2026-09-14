@@ -13,7 +13,7 @@ import { getMeter } from "../utils/meter";
 import { DEFAULT_VELOCITY } from "../audio/constants";
 import { armOnBarLine, isSoftStopBoundary } from "./playerStop";
 import type { PlayerState } from "../store/types";
-import type { SynthParams } from "../types";
+import type { ActiveSynth } from "../types/synth";
 
 /** Whether the stepper has caught a bar line and started running. */
 export interface SequencerArming {
@@ -59,13 +59,13 @@ export function sequencerStepAction(
  */
 export function fireSequencerStepEvents(
   events: readonly SequencerStepEvent[],
-  synthParams: SynthParams,
+  synth: ActiveSynth,
   time: number,
 ): void {
   for (const event of events) {
     if (event.kind === 'note') {
-      playbackNoteOn(event.note, synthParams, DEFAULT_VELOCITY, time);
-      playbackNoteOff(event.note, event.release, time + event.offsetSec);
+      const voiceId = playbackNoteOn(event.note, synth, DEFAULT_VELOCITY, time);
+      playbackNoteOff(voiceId, event.release, time + event.offsetSec);
     } else {
       triggerPad(event.instrument, DEFAULT_VELOCITY, time);
     }

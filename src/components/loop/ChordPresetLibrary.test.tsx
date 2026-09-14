@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { ChordPresetLibrary, isProgressionAvailable, templateAuditionClassName, customAuditionClassName } from './ChordPresetLibrary';
-import { INITIAL_SYNTH_PARAMS } from '@/store/initialState';
+import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
 import { progressionById } from '@/audio/chordProgressions';
 import { SCALES } from '@/data/scales';
@@ -18,7 +18,7 @@ const html = renderToString(
     scaleRoot="C"
     scaleType="Major"
     autoReharmonize
-    synthParams={INITIAL_SYNTH_PARAMS}
+    synthParams={SUBTRACTIVE_INIT}
     onApplyChords={noop}
   />
 );
@@ -136,7 +136,7 @@ describe('ChordPresetLibrary closed', () => {
         scaleRoot="C"
         scaleType="Major"
         autoReharmonize
-        synthParams={INITIAL_SYNTH_PARAMS}
+        synthParams={SUBTRACTIVE_INIT}
         onApplyChords={noop}
       />,
     );

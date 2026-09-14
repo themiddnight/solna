@@ -1,6 +1,6 @@
 import { SCALES } from '@/data/scales';
 import { getDiatonicChordForDegree } from '@/utils/musicTheory';
-import type { CategoryPresetGroup } from '@/audio/presetRegistry';
+import type { CategoryPresetGroup } from '@/utils/synthPresets';
 
 /**
  * One button per degree of the ACTIVE scale — five for Hirajoshi, seven for
@@ -37,12 +37,13 @@ export function droneDegreeButtons(
  */
 export function padPresetGroups(
   groups: CategoryPresetGroup[],
-  selectedPresetName: string,
+  selectedPresetId: string | null,
 ): CategoryPresetGroup[] {
   return groups.filter(
     (g) =>
       g.category === 'Pad' ||
-      (selectedPresetName !== '' &&
-        g.presets.some((p) => p.name === selectedPresetName)),
+      (selectedPresetId !== null &&
+        selectedPresetId !== '' &&
+        g.presets.some((p) => p.id === selectedPresetId)),
   );
 }

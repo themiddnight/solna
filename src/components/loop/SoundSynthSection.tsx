@@ -10,7 +10,6 @@ import {
   ChevronRight,
   AudioWaveform,
 } from "lucide-react";
-import { useAppStore } from "@/store/store";
 import { soloTrackForFocus } from "@/store/trackAudibility";
 import { SoloButton } from "../ui/SoloButton";
 import {
@@ -22,7 +21,7 @@ import {
   type MixLayerId,
 } from "@/store/focusTrack";
 import { MIX_LAYER_LABELS } from "../mixLayers";
-import type { SynthPresetItem, SynthPresetCategory } from "@/data/synthPresets";
+import type { SynthPreset, SynthPresetCategory } from "@/data/synthPresets";
 import { SYNTH_CATEGORIES } from "@/data/synthPresets";
 // The drawer is never needed on first paint — PresetLibrary early-returns
 // null when closed — so it is code-split out of the main chunk.
@@ -30,13 +29,10 @@ const SynthPresetLibrary = React.lazy(() =>
   import("./SynthPresetLibrary").then((m) => ({ default: m.SynthPresetLibrary })),
 );
 import { AudioVisualizer } from "../AudioVisualizer";
+import { SubtractiveProPanel } from "./synth/SubtractiveProPanel";
 import { SimpleSynthPanel } from "./SimpleSynthPanel";
-import { OscillatorPanel } from "./synth/OscillatorPanel";
-import { FilterPanel } from "./synth/FilterPanel";
-import { EnvelopePanel } from "./synth/EnvelopePanel";
-import { LfoPanel } from "./synth/LfoPanel";
-import { ArpeggiatorPanel } from "./synth/ArpeggiatorPanel";
-import { synthChannelForFocus } from "./synth/useSynthChannel";
+import { useSynthChannel } from "./synth/useSynthChannel";
+import type { SynthChannel } from "./synth/useSynthChannel";
 import { ModulePasteButton } from "./ModulePasteButton";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
 import { ViewHeader } from "../ui/ViewHeader";
@@ -49,7 +45,6 @@ import type { LoopCopyGroupId } from "@/store/loopCopy";
 import { GroupFrame } from "../ui/GroupFrame";
 import { TOOLBAR_BUTTON_IDLE } from "@/components/ui/Toolbar";
 import { SegmentedButton, SegmentedGroup } from "@/components/ui/SegmentedControl";
-import type { SynthParams } from "@/types";
 import {
   categoryPresetCount,
   groupInCategory,
@@ -407,8 +402,9 @@ function ProCategoryTabs({ browser }: { browser: SynthPresetBrowser }) {
  * steppers stopped reading as a pair. Letting the dropdown take the leftover
  * width instead keeps all four on one row at every width.
  */
-function ProPresetPicker({ params, browser }: { params: SynthParams; browser: SynthPresetBrowser }) {
+function ProPresetPicker({ browser }: { browser: SynthPresetBrowser }) {
   const {
+    activePresetItem,
     categoryGroups,
     selectedCategoryFilter,
     activeCategoryMeta,
@@ -441,7 +437,7 @@ function ProPresetPicker({ params, browser }: { params: SynthParams; browser: Sy
         <Sparkles className="w-3.5 h-3.5 text-accent shrink-0" />
         <select
           id="select-synth-preset"
-          value={params.preset}
+          value={activePresetItem?.name ?? ''}
           onChange={(e) => selectByName(e.target.value)}
           className="select select-sm select-ghost bg-transparent border-0 text-base-content text-xs focus:outline-none pr-2 font-medium min-w-0 max-w-60 truncate"
         >
@@ -477,25 +473,24 @@ function ProPresetPicker({ params, browser }: { params: SynthParams; browser: Sy
 /** Pro Mode: the categorized preset selection bar above the control panels. */
 function ProPresetBar({
   synthTarget,
-  params,
   browser,
 }: {
   synthTarget: SynthControlTarget;
-  params: SynthParams;
   browser: SynthPresetBrowser;
 }) {
   return (
     <div className={`flex flex-wrap items-center justify-between gap-2.5 bg-base-300 border border-base-300 p-2 rounded-box ${SYNTH_TARGET_STYLES[synthTarget].tint}`}>
       <ProCategoryTabs browser={browser} />
-      <ProPresetPicker params={params} browser={browser} />
+      <ProPresetPicker browser={browser} />
     </div>
   );
 }
 
 /** Simple Mode: the preset selector, the category chips and the quick filters. */
-function SimplePresetBar({ params, browser }: { params: SynthParams; browser: SynthPresetBrowser }) {
+function SimplePresetBar({ browser }: { browser: SynthPresetBrowser }) {
   const {
     allPresets,
+    activePresetItem,
     activeCategoryMeta,
     selectedCategoryFilter,
     stepPreset,
@@ -516,7 +511,7 @@ function SimplePresetBar({ params, browser }: { params: SynthParams; browser: Sy
             </span>
           )}
           <p className="text-2xl leading-6 font-extrabold text-base-content tracking-tight truncate">
-            {params.preset || "Default Sound"}
+            {activePresetItem?.name ?? "Default Sound"}
           </p>
         </div>
 
@@ -532,7 +527,7 @@ function SimplePresetBar({ params, browser }: { params: SynthParams; browser: Sy
 
           <select
             id="select-simple-preset"
-            value={params.preset}
+            value={activePresetItem?.name ?? ''}
             onChange={(e) => {
               const found = allPresets.find(
                 (p) => p.name === e.target.value,
@@ -589,72 +584,44 @@ function SimplePresetBar({ params, browser }: { params: SynthParams; browser: Sy
 function SynthPresetBar({
   synthViewMode,
   synthTarget,
-  params,
   browser,
 }: {
   synthViewMode: 'simple' | 'pro';
   synthTarget: SynthControlTarget;
-  params: SynthParams;
   browser: SynthPresetBrowser;
 }) {
   if (synthViewMode === 'pro') {
-    return <ProPresetBar synthTarget={synthTarget} params={params} browser={browser} />;
+    return <ProPresetBar synthTarget={synthTarget} browser={browser} />;
   }
-  return <SimplePresetBar params={params} browser={browser} />;
+  return <SimplePresetBar browser={browser} />;
 }
 
 /**
  * Simple vs Pro Mode body panels. Inside the Synth section now: they edit the
  * target the row above selects, so a card boundary between the two said they
  * were separate things.
+ *
+ * Both are views of the SAME `SynthChannel`, and switching between them writes
+ * nothing — Simple stores nothing of its own (see `SimpleSynthPanel`), so the
+ * toggle is a change of depth, not of state.
+ *
+ * The "switch to Pro" invitation lives inside the Simple deck's own footer
+ * rather than in a banner under it: Variant B gives it a slot, and a banner
+ * repeating the footer would state the same fact twice on one screen.
  */
 function SynthPanels({
   synthViewMode,
-  params,
-  onChangeParams,
+  channel,
   onSwitchToPro,
 }: {
   synthViewMode: 'simple' | 'pro';
-  params: SynthParams;
-  onChangeParams: (params: SynthParams) => void;
+  channel: SynthChannel;
   onSwitchToPro: () => void;
 }) {
   if (synthViewMode === 'pro') {
-    return (
-      /* Pro Mode: Control Panels Grid */
-      <div className="w-full flex flex-wrap gap-3">
-        <OscillatorPanel />
-        <FilterPanel />
-        <EnvelopePanel />
-        <LfoPanel />
-        <ArpeggiatorPanel />
-      </div>
-    );
+    return <SubtractiveProPanel channel={channel} />;
   }
-
-  return (
-    <>
-      <SimpleSynthPanel params={params} onChangeParams={onChangeParams} />
-
-      {/* Friendly Pro Mode Hint */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-2 bg-base-100/70 border border-base-300 px-4 py-2.5 rounded-box text-xs text-base-content">
-        <div className="flex items-center gap-2 text-base-content/60">
-          <Sparkles className="w-3.5 h-3.5 text-accent shrink-0" />
-          <span>
-            Want deep modular control over 5 oscillators, ADSR envelopes,
-            filters & LFO modulation?
-          </span>
-        </div>
-        <button
-          id="btn-switch-pro-hint"
-          onClick={onSwitchToPro}
-          className="btn btn-xs btn-link text-accent font-bold whitespace-nowrap no-underline"
-        >
-          Switch to Pro Mode →
-        </button>
-      </div>
-    </>
-  );
+  return <SimpleSynthPanel channel={channel} onSwitchToPro={onSwitchToPro} />;
 }
 
 /**
@@ -690,16 +657,16 @@ function SynthQuickSaveOverlay({ overlays }: { overlays: SynthOverlays }) {
  */
 function SynthPresetDrawer({
   overlays,
-  params,
   synthTarget,
   showSoundBadges,
   onSelectPreset,
+  onSavedPreset,
 }: {
   overlays: SynthOverlays;
-  params: SynthParams;
   synthTarget: SynthControlTarget;
   showSoundBadges: boolean;
-  onSelectPreset: (preset: SynthPresetItem) => void;
+  onSelectPreset: (preset: SynthPreset) => void;
+  onSavedPreset: (preset: SynthPreset) => void;
 }) {
   return (
     <Suspense
@@ -714,11 +681,14 @@ function SynthPresetDrawer({
       <SynthPresetLibrary
         isOpen={overlays.isLibraryOpen}
         onClose={overlays.closeLibrary}
-        currentParams={params}
         target={synthTarget}
         showSoundBadges={showSoundBadges}
         onSelectPreset={(preset) => {
           onSelectPreset(preset);
+          overlays.closeLibrary();
+        }}
+        onSavedPreset={(preset) => {
+          onSavedPreset(preset);
           overlays.closeLibrary();
         }}
       />
@@ -734,8 +704,7 @@ function SynthPresetDrawer({
 function SynthCard({
   focusTrack,
   synthViewMode,
-  params,
-  onChangeParams,
+  channel,
   browser,
   overlays,
   soundGroups,
@@ -743,8 +712,7 @@ function SynthCard({
 }: {
   focusTrack: MixLayerId;
   synthViewMode: 'simple' | 'pro';
-  params: SynthParams;
-  onChangeParams: (params: SynthParams) => void;
+  channel: SynthChannel;
   browser: SynthPresetBrowser;
   overlays: SynthOverlays;
   soundGroups: Record<SynthControlTarget, LoopCopyGroupId>;
@@ -784,7 +752,10 @@ function SynthCard({
           presetCount={browser.allPresets.length}
           toast={browser.saveToast}
           onQuickSave={() =>
-            overlays.openQuickSave(params.preset, browser.activePresetItem?.category)
+            overlays.openQuickSave(
+              browser.activePresetItem?.name ?? '',
+              browser.activePresetItem?.category,
+            )
           }
           onOpenLibrary={overlays.openLibrary}
         />
@@ -793,13 +764,11 @@ function SynthCard({
       <SynthPresetBar
         synthViewMode={synthViewMode}
         synthTarget={synthTarget}
-        params={params}
         browser={browser}
       />
       <SynthPanels
         synthViewMode={synthViewMode}
-        params={params}
-        onChangeParams={onChangeParams}
+        channel={channel}
         onSwitchToPro={onSwitchToPro}
       />
     </SectionCard>
@@ -825,38 +794,19 @@ export function SoundSynthSection({
    *  paste button follows the FOCUS rather than the tab. */
   soundGroups: Record<SynthControlTarget, LoopCopyGroupId>;
 }) {
-  const synthParams = useAppStore((s) => s.synthParams);
-  const chordSynthParams = useAppStore((s) => s.chordSynthParams);
-  const bassSynthParams = useAppStore((s) => s.bassSynthParams);
-  const onChangeSynthParams = useAppStore((s) => s.setSynthParams);
-  const onChangeChordSynthParams = useAppStore((s) => s.setChordSynthParams);
-  const onChangeBassSynthParams = useAppStore((s) => s.setBassSynthParams);
-  const padSynthParams = useAppStore((s) => s.padSynthParams);
-  const setPadSynthParams = useAppStore((s) => s.setPadSynthParams);
-  const fxSynthParams = useAppStore((s) => s.fxSynthParams);
-  const setFxSynthParams = useAppStore((s) => s.setFxSynthParams);
-
-  // Route the control panel (knobs, preset selects) to the selected
-  // destination.
-  const channels = {
-    synth: { params: synthParams, setParams: onChangeSynthParams },
-    chord: { params: chordSynthParams, setParams: onChangeChordSynthParams },
-    bass: { params: bassSynthParams, setParams: onChangeBassSynthParams },
-    pad: { params: padSynthParams, setParams: setPadSynthParams },
-    fx: { params: fxSynthParams, setParams: setFxSynthParams },
-  };
-  const channel = synthChannelForFocus(focusTrack, channels);
-  const params = channel.params;
-  const onChangeParams = channel.onChangeParams;
+  // The focused track's patch, its Arp and the writer for each. The five-way
+  // routing lives in `useSynthChannel` now — it was a sixth hand-maintained
+  // copy of the same table here.
+  const channel = useSynthChannel(focusTrack);
   const synthTarget = synthTargetForFocus(focusTrack);
 
   const { synthViewMode, handleToggleSynthViewMode } = useSynthViewMode();
-  const browser = useSynthPresetBrowser(params, onChangeParams);
+  const browser = useSynthPresetBrowser(synthTarget ?? 'synth');
   const overlays = useSynthOverlays({
     focusTrack,
-    params,
+    target: synthTarget ?? 'synth',
     reloadPresets: browser.reloadPresets,
-    onSaved: browser.notifySaved,
+    onSaved: browser.adoptSavedPreset,
   });
 
   return (
@@ -898,8 +848,7 @@ export function SoundSynthSection({
       <SynthCard
         focusTrack={focusTrack}
         synthViewMode={synthViewMode}
-        params={params}
-        onChangeParams={onChangeParams}
+        channel={channel}
         browser={browser}
         overlays={overlays}
         soundGroups={soundGroups}
@@ -911,10 +860,10 @@ export function SoundSynthSection({
       {synthTarget !== null && (
         <SynthPresetDrawer
           overlays={overlays}
-          params={params}
           synthTarget={synthTarget}
           showSoundBadges={synthViewMode === "pro"}
           onSelectPreset={browser.selectPreset}
+          onSavedPreset={browser.adoptSavedPreset}
         />
       )}
     </>

@@ -1,119 +1,98 @@
-import React from "react";
-import { Sparkles } from "lucide-react";
-import { ModuleHeader } from "@/components/ui/ModuleHeader";
-import { PanelCard } from "@/components/ui/PanelCard";
-import { FIELD_LABEL } from "@/components/ui/fieldClasses";
-import { initSynthPlayback } from "@/audio/playback/synthPlayback";
-import { useSynthChannel } from "./useSynthChannel";
-import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
+import type { ArpSettings } from '@/types/synth';
+import { KnobGrid, ProModule, ToggleButton, ToggleRow } from './proControls';
 
 /**
- * Pro-Mode panel — Arpeggiator. Reads the active synth channel from the
- * store rather than taking props, so SoundView renders `<ArpeggiatorPanel />`
- * with no wiring. Its identity colour is `module-arp` (docs/design.md
- * §6.5); the token is named in the class strings that moved with the markup.
+ * Pro-Mode module 8 — the Arpeggiator (prototype Variant A's modulation row).
+ *
+ * It takes `arp`/`onArp` and NO patch at all. Arp is performance state, not
+ * patch state: a panel holding both writers could push a patch to every
+ * sounding voice on an Arp toggle, and the type is what makes that impossible
+ * rather than a convention someone has to remember.
+ *
+ * Arming it reaches no engine. It used to call `initSynthPlayback()` so the
+ * AudioContext existed by the time the arp ran, which made a toggle with
+ * nothing to play create an audio graph — the same shape as the metronome that
+ * once started the transport. An armed arp is silent until a note is held, and
+ * every note path (`useInputDeck`) inits the engine itself.
+ *
+ * Two prototype controls are deliberately not built, for the same reason as
+ * Voice's Drift: `ArpSettings` has no gate and no swing, so both knobs would
+ * write nowhere. They are their own spec.
  */
-export function ArpeggiatorPanel() {
-  const { params, onChangeParams } = useSynthChannel();
-  // 5. Arpeggiator
+const ARP_COLOR = 'text-module-arp' as const;
+
+export interface ArpeggiatorPanelProps {
+  arp: ArpSettings;
+  onArp: (next: ArpSettings) => void;
+}
+
+export function ArpeggiatorPanel({ arp, onArp }: ArpeggiatorPanelProps) {
   return (
-          <PanelCard inset className="flex-1">
-            <div className="card-body p-4 space-y-3.5">
-            <ModuleHeader
-              badge={5}
-              icon={<Sparkles className="w-3.5 h-3.5 text-module-arp" />}
-              title="Arpeggiator"
-              right={
-                <button
-                  id="btn-toggle-arp"
-                  onClick={() => {
-                    initSynthPlayback();
-                    onChangeParams({
-                      ...params,
-                      arpActive: !params.arpActive,
-                    });
-                  }}
-                  className={`btn btn-xs text-[10px] font-bold uppercase tracking-wider ${
-                    params.arpActive
-                      ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)] shadow-md shadow-module-arp/30"
-                      : TOOLBAR_BUTTON_IDLE
-                  }`}
-                >
-                  {params.arpActive ? "Active" : "Bypass"}
-                </button>
-              }
-            />
+    <ProModule
+      badge={8}
+      title="Arpeggiator"
+      color={ARP_COLOR}
+      chip={
+        <ToggleButton
+          id="btn-toggle-arp"
+          label={`Arpeggiator ${arp.active ? 'ON' : 'BYPASS'}`}
+          pressed={arp.active}
+          color={ARP_COLOR}
+          onPress={() => onArp({ ...arp, active: !arp.active })}
+        >
+          {arp.active ? 'ON' : 'BYPASS'}
+        </ToggleButton>
+      }
+    >
+      <ToggleRow
+        idPrefix="btn-arp-rate"
+        caption="Rate"
+        color={ARP_COLOR}
+        value={arp.rate}
+        options={[
+          // Each name opens with the visible fraction: a speech-input user
+          // says what is on the button (WCAG 2.5.3), and the words after it
+          // are what a screen reader needs to hear "1/16" as a note length.
+          { value: '4n', label: '1/4, quarter notes', content: '1/4' },
+          { value: '8n', label: '1/8, eighth notes', content: '1/8' },
+          { value: '16n', label: '1/16, sixteenth notes', content: '1/16' },
+          { value: '32n', label: '1/32, thirty-second notes', content: '1/32' },
+        ]}
+        onSelect={(rate) => onArp({ ...arp, rate })}
+      />
 
-            <div>
-              <span className={FIELD_LABEL} id="label-arp-mode">
-                Arp Mode
-              </span>
-              <div className="grid grid-cols-4 gap-1" role="group" aria-labelledby="label-arp-mode">
-                {(["up", "down", "updown", "random"] as const).map((m) => (
-                  <button
-                    key={m}
-                    id={`btn-arp-mode-${m}`}
-                    onClick={() => onChangeParams({ ...params, arpMode: m })}
-                    className={`btn btn-xs text-[10px] font-semibold capitalize ${
-                      params.arpMode === m
-                        ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
-                        : TOOLBAR_BUTTON_IDLE
-                    }`}
-                  >
-                    {m === "updown" ? "Up/Dn" : m}
-                  </button>
-                ))}
-              </div>
-            </div>
+      <ToggleRow
+        idPrefix="btn-arp-mode"
+        caption="Direction"
+        color={ARP_COLOR}
+        value={arp.mode}
+        options={[
+          { value: 'up', label: 'UP', content: 'UP' },
+          { value: 'down', label: 'DOWN', content: 'DOWN' },
+          { value: 'updown', label: 'UP/DN, up and down', content: 'UP/DN' },
+          { value: 'random', label: 'RND, random', content: 'RND' },
+        ]}
+        onSelect={(mode) => onArp({ ...arp, mode })}
+      />
 
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <span className={FIELD_LABEL} id="label-arp-rate">
-                  Rate
-                </span>
-                <div className="flex gap-1" role="group" aria-labelledby="label-arp-rate">
-                  {(["16n", "8n", "32n"] as const).map((r) => (
-                    <button
-                      key={r}
-                      id={`btn-arp-rate-${r}`}
-                      onClick={() => onChangeParams({ ...params, arpRate: r })}
-                      className={`btn btn-xs text-[11px] tabular-nums font-semibold ${
-                        params.arpRate === r
-                          ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
-                          : TOOLBAR_BUTTON_IDLE
-                      }`}
-                    >
-                      {r === "16n" ? "1/16" : r === "8n" ? "1/8" : "1/32"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <span className={FIELD_LABEL} id="label-arp-octaves">
-                  Octaves
-                </span>
-                <div className="flex gap-1" role="group" aria-labelledby="label-arp-octaves">
-                  {[1, 2, 3].map((oct) => (
-                    <button
-                      key={oct}
-                      id={`btn-arp-octave-${oct}`}
-                      onClick={() =>
-                        onChangeParams({ ...params, arpOctaves: oct })
-                      }
-                      className={`btn btn-xs w-7 min-h-0 text-xs tabular-nums font-bold ${
-                        params.arpOctaves === oct
-                          ? "[--btn-color:var(--color-module-arp)] [--btn-fg:var(--color-module-arp-content)]"
-                          : TOOLBAR_BUTTON_IDLE
-                      }`}
-                    >
-                      +{oct}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            </div>
-          </PanelCard>
+      <KnobGrid
+        color={ARP_COLOR}
+        columns={1}
+        className="justify-items-start"
+        specs={[
+          {
+            id: 'slider-arp-octaves',
+            label: 'Octaves',
+            ariaLabel: 'Arpeggiator Octaves',
+            value: arp.octaves,
+            min: 1,
+            max: 4,
+            step: 1,
+            format: (v) => String(Math.round(v)),
+            onChange: (octaves) => onArp({ ...arp, octaves }),
+          },
+        ]}
+      />
+    </ProModule>
   );
 }

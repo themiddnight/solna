@@ -1,8 +1,8 @@
 import React from "react";
 import { Volume2 } from "lucide-react";
-import type { SynthPresetItem } from "@/data/synthPresets";
-import { findPresetByName } from "@/audio/presetRegistry";
-import type { CategoryPresetGroup } from "@/audio/presetRegistry";
+import type { SynthPreset } from "@/data/synthPresets";
+import { findPresetByName } from "@/utils/synthPresets";
+import type { CategoryPresetGroup } from "@/utils/synthPresets";
 import type { MeterId } from "@/utils/meter";
 import { patternMeterTitle, patternOptionLabel } from "@/components/meterSelect";
 import { FIELD_LABEL, FIELD_SELECT } from "@/components/ui/fieldClasses";
@@ -42,25 +42,33 @@ export interface SoundPresetFieldProps {
   placeholder: string;
   groups: CategoryPresetGroup[];
   /** The full library the chosen name is resolved against. */
-  allPresets: SynthPresetItem[];
-  /** The layer's currently selected preset NAME, or `''` for none. */
-  value: string;
+  allPresets: SynthPreset[];
   /**
-   * Receives the resolved preset. The caller merges it over its own params —
-   * `applyPreset` (`audio/presetRegistry`) is that merge, and every card uses
-   * it so the three cannot disagree about what picking a preset overwrites.
+   * The layer's currently selected preset ID — `ActiveSynth.sourcePresetId` —
+   * or `null` when the patch has been edited away from any library entry.
+   *
+   * An ID rather than the displayed name, because that is what the store
+   * holds: taking a name here would make every card resolve the same id back
+   * to a name, three times, with three chances to disagree.
    */
-  onPick: (preset: SynthPresetItem) => void;
+  selectedPresetId: string | null;
+  /**
+   * Receives the resolved preset. The caller installs it with
+   * `applySynthPreset` (`utils/synthPresets`), which replaces the whole patch
+   * and keeps the track's Arp — every card uses it, so the three cannot
+   * disagree about what picking a preset overwrites.
+   */
+  onPick: (preset: SynthPreset) => void;
 }
 
 /**
  * The sound-preset field, wrapping `PresetSelect` in the one thing every card
  * did on top of it: resolve the picked NAME back to a preset and merge it.
  *
- * The name -> preset resolution is the part worth centralising. It reads as
- * three lines and is a silent failure when it goes wrong — `PresetSelect`
- * hands back a name, the library is keyed by name, and a card that skipped the
- * lookup would store a preset name with no params behind it.
+ * The id <-> name translation is the part worth centralising. `PresetSelect`
+ * speaks NAMES in both directions while the store holds an ID, so this is
+ * where the two meet: a card that did its own lookup would be one silent
+ * mismatch away from showing a preset it is not playing.
  */
 export function SoundPresetField({
   id,
@@ -68,9 +76,12 @@ export function SoundPresetField({
   placeholder,
   groups,
   allPresets,
-  value,
+  selectedPresetId,
   onPick,
 }: SoundPresetFieldProps) {
+  const selectedName = selectedPresetId
+    ? allPresets.find((p) => p.id === selectedPresetId)?.name ?? ""
+    : "";
   return (
     <PresetSelect
       id={id}
@@ -78,7 +89,7 @@ export function SoundPresetField({
       title={title}
       placeholder={placeholder}
       groups={groups}
-      value={value}
+      value={selectedName}
       onSelect={(name) => {
         const preset = findPresetByName(name, allPresets);
         if (!preset) return;

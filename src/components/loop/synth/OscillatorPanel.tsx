@@ -1,92 +1,159 @@
-import React from "react";
-import { Activity } from "lucide-react";
-import { Knob } from "@/components/ui/Knob";
-import { ModuleHeader } from "@/components/ui/ModuleHeader";
-import { PanelCard } from "@/components/ui/PanelCard";
-import { FIELD_LABEL } from "@/components/ui/fieldClasses";
-import { useSynthChannel } from "./useSynthChannel";
-import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
+import type { OscillatorParams, OscillatorWaveform } from '@/types/synth';
+import { SYNTH_GAIN_FLOOR_DB } from '@/utils/synthPatch';
+import { OSCILLATOR_WAVEFORMS, WAVEFORM_LABELS, WaveformIcon } from './WaveformIcon';
+import {
+  KnobGrid,
+  ModuleChip,
+  ProModule,
+  ToggleButton,
+  type PatchPanelProps,
+} from './proControls';
 
 /**
- * Pro-Mode panel — Oscillators. Reads the active synth channel from the
- * store rather than taking props, so SoundView renders `<OscillatorPanel />`
- * with no wiring. Its identity colour is `module-osc` (docs/design.md
- * §6.5); the token is named in the class strings that moved with the markup.
+ * Pro-Mode module 1 — the two full oscillators (prototype Variant A's
+ * `main-osc`).
+ *
+ * Two INSET units rather than one row of eight knobs: OSC 1 and OSC 2 hold the
+ * same five parameters, and a flat row of "Oct / Semi / Fine / Level / Oct /
+ * Semi / Fine / Level" gives a reader nothing to tell the halves apart.
+ *
+ * A recorded departure from the prototype, alongside Voice's Drift: the
+ * prototype's OSC 1 carries a "Shape" knob. `OscillatorParams` has no shape or
+ * pulse-width parameter, so that knob would write nowhere; OSC 1 shows the same
+ * Semi trim OSC 2 does, and a shape control is its own spec.
  */
-export function OscillatorPanel() {
-  const { params, onChangeParams } = useSynthChannel();
-  // 1. Oscillators Section
+const OSC_COLOR = 'text-module-osc' as const;
+
+const signedInt = (value: number) => (value > 0 ? `+${value}` : String(value));
+
+/** One oscillator: its on/off state, its waveform, and its four trims. */
+function OscUnit({
+  index,
+  osc,
+  onOsc,
+}: {
+  index: 0 | 1;
+  osc: OscillatorParams;
+  onOsc: (next: OscillatorParams) => void;
+}) {
+  const name = `OSC ${index + 1}`;
+  const id = `osc${index + 1}`;
   return (
-          <PanelCard inset className="flex-1">
-            <div className="card-body p-4 space-y-3.5">
-            <ModuleHeader
-              badge={1}
-              icon={<Activity className="w-3.5 h-3.5 text-module-osc" />}
-              title="Oscillators"
-            />
+    <div className="min-w-0 rounded-box border border-base-300 bg-base-100 p-2 space-y-2">
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-[10px] font-bold text-base-content">{name}</span>
+        <ToggleButton
+          id={`btn-${id}-enabled`}
+          label={`${name} ${osc.enabled ? 'ON' : 'OFF'}`}
+          pressed={osc.enabled}
+          color={OSC_COLOR}
+          onPress={() => onOsc({ ...osc, enabled: !osc.enabled })}
+        >
+          {osc.enabled ? 'ON' : 'OFF'}
+        </ToggleButton>
+      </div>
 
-            <div>
-              <span className={FIELD_LABEL} id="label-osc-wave">
-                Waveform
-              </span>
-              <div className="grid grid-cols-4 gap-1" role="group" aria-labelledby="label-osc-wave">
-                {(["sawtooth", "square", "sine", "triangle"] as const).map(
-                  (w) => (
-                    <button
-                      key={w}
-                      id={`btn-wave-${w}`}
-                      onClick={() => onChangeParams({ ...params, oscType: w })}
-                      className={`btn btn-xs text-[11px] font-semibold capitalize ${
-                        params.oscType === w
-                          ? "[--btn-color:var(--color-module-osc)] [--btn-fg:var(--color-module-osc-content)]"
-                          : TOOLBAR_BUTTON_IDLE
-                      }`}
-                    >
-                      {w.slice(0, 4)}
-                    </button>
-                  ),
-                )}
-              </div>
-            </div>
+      <div
+        role="group"
+        aria-label={`${name} waveform`}
+        className="grid grid-cols-4 gap-1"
+      >
+        {OSCILLATOR_WAVEFORMS.map((waveform: OscillatorWaveform) => (
+          <ToggleButton
+            key={waveform}
+            id={`btn-${id}-wave-${waveform}`}
+            label={`${name} ${WAVEFORM_LABELS[waveform]}`}
+            pressed={osc.waveform === waveform}
+            color={OSC_COLOR}
+            onPress={() => onOsc({ ...osc, waveform })}
+            className="px-0"
+          >
+            <WaveformIcon waveform={waveform} />
+          </ToggleButton>
+        ))}
+      </div>
 
-            <div className="flex items-start justify-between gap-2">
-              <Knob
-                id="slider-sub-osc"
-                label="Sub-Osc"
-                color="text-module-osc"
-                value={params.subOscVolume}
-                min={0}
-                max={1}
-                step={0.01}
-                format={(v) => `${(v * 100).toFixed(0)}%`}
-                onChange={(v) => onChangeParams({ ...params, subOscVolume: v })}
-              />
+      <KnobGrid
+        color={OSC_COLOR}
+        specs={[
+          {
+            id: `slider-${id}-octave`,
+            label: 'Oct',
+            ariaLabel: `${name} Oct`,
+            value: osc.octave,
+            min: -4,
+            max: 4,
+            step: 1,
+            format: signedInt,
+            onChange: (octave) => onOsc({ ...osc, octave }),
+          },
+          {
+            id: `slider-${id}-semitone`,
+            label: 'Semi',
+            ariaLabel: `${name} Semi`,
+            value: osc.semitone,
+            min: -12,
+            max: 12,
+            step: 1,
+            format: signedInt,
+            onChange: (semitone) => onOsc({ ...osc, semitone }),
+          },
+          {
+            id: `slider-${id}-fine`,
+            label: 'Fine',
+            ariaLabel: `${name} Fine`,
+            value: osc.fineCents,
+            min: -100,
+            max: 100,
+            step: 1,
+            format: (v) => `${signedInt(v)} ct`,
+            onChange: (fineCents) => onOsc({ ...osc, fineCents }),
+          },
+          {
+            id: `slider-${id}-level`,
+            label: 'Level',
+            ariaLabel: `${name} Level`,
+            value: osc.levelDb,
+            // The patch's own floor, not a comfortable-looking round number:
+            // 50 factory presets park a disabled-sounding oscillator at
+            // -96 dB, and a knob whose min stopped at -60 reported an
+            // aria-valuenow below its own aria-valuemin and could never be
+            // dragged back down to the value it was loaded with.
+            min: SYNTH_GAIN_FLOOR_DB,
+            max: 0,
+            step: 0.5,
+            format: (v) => `${v.toFixed(1)} dB`,
+            onChange: (levelDb) => onOsc({ ...osc, levelDb }),
+          },
+        ]}
+      />
+    </div>
+  );
+}
 
-              <Knob
-                id="slider-detune"
-                label="Detune"
-                color="text-module-osc"
-                value={params.detune}
-                min={0}
-                max={50}
-                step={1}
-                format={(v) => `${v} ct`}
-                onChange={(v) => onChangeParams({ ...params, detune: v })}
-              />
+export function OscillatorPanel({ patch, onPatch }: PatchPanelProps) {
+  const [osc1, osc2] = patch.synth.oscillators;
+  const writeOsc = (index: 0 | 1, next: OscillatorParams) =>
+    onPatch({
+      ...patch,
+      synth: {
+        ...patch.synth,
+        oscillators: index === 0 ? [next, osc2] : [osc1, next],
+      },
+    });
 
-              <Knob
-                id="slider-noise"
-                label="Noise"
-                color="text-module-osc"
-                value={params.noiseVolume}
-                min={0}
-                max={0.5}
-                step={0.01}
-                format={(v) => `${(v * 100).toFixed(0)}%`}
-                onChange={(v) => onChangeParams({ ...params, noiseVolume: v })}
-              />
-            </div>
-            </div>
-          </PanelCard>
+  return (
+    <ProModule
+      badge={1}
+      title="Oscillators"
+      color={OSC_COLOR}
+      chip={<ModuleChip color={OSC_COLOR}>dual source</ModuleChip>}
+      className="md:col-span-2 xl:col-span-1"
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <OscUnit index={0} osc={osc1} onOsc={(next) => writeOsc(0, next)} />
+        <OscUnit index={1} osc={osc2} onOsc={(next) => writeOsc(1, next)} />
+      </div>
+    </ProModule>
   );
 }

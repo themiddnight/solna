@@ -1,11 +1,11 @@
 import React, { useMemo } from "react";
 import { useAppStore } from "@/store/store";
+import type { SynthPreset } from "@/data/synthPresets";
 import { CHORD_RHYTHM_STYLE_GROUPS } from '@/audio/chordRhythms';
 import {
-  applyPreset,
   getAllSynthPresets,
-  getPresetsGroupedByCategory,
-} from "@/audio/presetRegistry";
+  groupPresets,
+} from "@/utils/synthPresets";
 import { getMeter } from "@/utils/meter";
 import { foldPatternBoundaries, loopLengthDivisors, patternStoredIndexAt } from "@/utils/patternTimeline";
 import { loopBars } from "@/utils/songStructure";
@@ -19,6 +19,7 @@ import {
   PatternSelect,
   SoundPresetField,
 } from "./moduleFields";
+import { loadSynthPreset } from '@/store/synthPresetInstall';
 
 export interface ChordModulePanelProps {
   onPatternPreviewDown: (e: React.MouseEvent | React.TouchEvent) => void;
@@ -126,7 +127,6 @@ function ChordPatternFields({
   const meterId = useAppStore((s) => s.meterId);
   const chords = useAppStore((s) => s.chords);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
-  const setChordSynthParams = useAppStore((s) => s.setChordSynthParams);
   const rhythmId = useAppStore((s) => s.chordRhythmId);
   const setChordRhythmId = useAppStore((s) => s.setChordRhythmId);
   const chordFeel = useAppStore((s) => s.chordFeel);
@@ -144,7 +144,7 @@ function ChordPatternFields({
     [customPresets],
   );
   const presetGroups = useMemo(
-    () => getPresetsGroupedByCategory(allPresets),
+    () => groupPresets(allPresets),
     [allPresets],
   );
   // Only the divisors of the progression: a length it cannot divide leaves a
@@ -163,6 +163,13 @@ function ChordPatternFields({
     setChordRhythmId(value);
   };
 
+  // The bus stop, the Arp read and the patch write all live in
+  // `store/synthPresetInstall.ts` — see there for why a load stops the bus and
+  // adopting a just-saved preset does not.
+  const pickPreset = (preset: SynthPreset) => {
+    loadSynthPreset('chord', preset);
+  };
+
   return (
     <div className="flex flex-row flex-wrap items-end gap-3">
           <SoundPresetField
@@ -171,10 +178,8 @@ function ChordPatternFields({
             placeholder="Chord Preset…"
             groups={presetGroups}
             allPresets={allPresets}
-            value={chordSynthParams.preset ?? ""}
-            onPick={(preset) =>
-              setChordSynthParams(applyPreset(chordSynthParams, preset))
-            }
+            selectedPresetId={chordSynthParams.sourcePresetId}
+            onPick={pickPreset}
           />
 
           <OctaveSelect

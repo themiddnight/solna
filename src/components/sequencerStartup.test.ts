@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
+import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import { audioEngine } from '../audio/engine';
-import { freshEngine, synthParamsFixture } from '../audio/testFakes';
+import { freshEngine } from '../audio/testFakes';
 import { sequencerStepEvents } from '../audio/sequencerSteps';
 import { INITIAL_SEQUENCER_TRACKS } from '../store/initialState';
 import { fireSequencerStepEvents, sequencerStepAction } from './useSequencerPlayback';
@@ -33,8 +34,8 @@ describe('sequencer song-start kick', () => {
       const action = sequencerStepAction('playing', step, arming, 16);
       if (action !== 'play') return;
       fireSequencerStepEvents(
-        sequencerStepEvents(INITIAL_SEQUENCER_TRACKS, step % 16, synthParamsFixture(), 120),
-        synthParamsFixture(),
+        sequencerStepEvents(INITIAL_SEQUENCER_TRACKS, step % 16, SUBTRACTIVE_INIT, 120),
+        SUBTRACTIVE_INIT,
         time,
       );
     });

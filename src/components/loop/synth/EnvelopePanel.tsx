@@ -1,150 +1,183 @@
-import React from "react";
-import { Volume2 } from "lucide-react";
-import { Knob } from "@/components/ui/Knob";
-import type { KnobColor } from "@/components/ui/Knob";
-import { ModuleHeader } from "@/components/ui/ModuleHeader";
-import { PanelCard } from "@/components/ui/PanelCard";
-import { useSynthChannel } from "./useSynthChannel";
-import type { SynthParams } from "@/types";
+import type { AdsrParams, ModRoute } from '@/types/synth';
+import { FIELD_LABEL } from '@/components/ui/fieldClasses';
+import {
+  KnobGrid,
+  ModuleChip,
+  ProModule,
+  RouteRow,
+  type PatchPanelProps,
+  type ProModuleColor,
+} from './proControls';
 
 /**
- * The eight envelope parameters, narrowed to the numeric keys a knob can write
- * — `keyof SynthParams` would also admit the patch's string and boolean fields
- * and make `params[key]` a union `Knob`'s `value` would reject.
- */
-type EnvelopeParamKey =
-  | 'attack' | 'decay' | 'sustain' | 'release'
-  | 'filterAttack' | 'filterDecay' | 'filterSustain' | 'filterRelease';
-
-const seconds = (v: number) => `${v.toFixed(2)}s`;
-const percent = (v: number) => `${(v * 100).toFixed(0)}%`;
-
-/**
- * The four controls of an ADSR row, in order.
+ * Pro-Mode modules 4 and 5 — the two envelopes (prototype Variant A's
+ * `env-primary` and the modulation row's `ENV 2`).
  *
- * Amp and filter read out identically at each position — a time in seconds,
- * a time, a percentage, a time — and their ranges match too, so the only thing
- * that differs between the two rows is which params they write and which token
- * tints them. That is what makes the two halves one component rather than two
- * near-copies: the copy that had drifted was the row wrapper, not the knobs.
+ * One file, two exported panels: they are the same four knobs over two
+ * different destinations, and the thing that must never drift between them is
+ * the knob set. What differs is what they reach — ENV 1 is wired to amplitude
+ * and says so, ENV 2 owns two assignable routes.
  */
-const ADSR_CONTROLS = [
-  { name: 'attack', label: 'ATT', min: 0.005, max: 2.0, format: seconds },
-  { name: 'decay', label: 'DEC', min: 0.01, max: 2.0, format: seconds },
-  { name: 'sustain', label: 'SUS', min: 0, max: 1.0, format: percent },
-  { name: 'release', label: 'REL', min: 0.01, max: 3.0, format: seconds },
-] as const;
+const AMP_COLOR = 'text-module-env-vca' as const;
+const MOD_COLOR = 'text-module-env-vcf' as const;
 
-/** The amp half's four params, in `ADSR_CONTROLS` order. */
-const AMP_KEYS: readonly EnvelopeParamKey[] = ['attack', 'decay', 'sustain', 'release'];
+/** The envelope time readout: milliseconds while it is one, seconds after. */
+const envTime = (value: number) =>
+  value < 1 ? `${Math.round(value * 1000)} ms` : `${value.toFixed(2)} s`;
 
-/** The filter half's, tinted `module-env-vcf` rather than `module-env-vca`. */
-const FILTER_KEYS: readonly EnvelopeParamKey[] = [
-  'filterAttack', 'filterDecay', 'filterSustain', 'filterRelease',
-];
-
-interface AdsrRowProps {
-  /** The caps caption naming the half, e.g. `AMP / VCA`. */
-  caption: string;
-  /** The `module-env-*` identity token this half's knobs and caption wear. */
-  tone: KnobColor;
-  /** The four params the knobs write, in `ADSR_CONTROLS` order. */
-  keys: readonly EnvelopeParamKey[];
-  /**
-   * The knob ids' middle fragment: empty for the amp half, `filter-` for the
-   * filter half, so ids stay `slider-env-attack` / `slider-env-filter-attack`.
-   */
+/**
+ * The four ADSR knobs.
+ *
+ * Times run on a LOG taper from 1 ms: an envelope's useful detail is at the
+ * short end — the difference between 8 ms and 40 ms of attack is the difference
+ * between a pluck and a pad — and a linear 0..8 s knob spends nine tenths of its
+ * travel on times nobody sets by hand.
+ */
+function AdsrKnobs({
+  idPrefix,
+  moduleName,
+  envelope,
+  color,
+  onEnvelope,
+}: {
   idPrefix: string;
-  /** Wrapper classes. The filter half is spaced off the amp half above it. */
-  className?: string;
-  /** The knob-row classes. Kept per row: the filter row carries no gap. */
-  rowClassName: string;
-  params: SynthParams;
-  onChangeParams: (next: SynthParams) => void;
+  /** Qualifies each knob's accessible name — both envelopes caption theirs
+   *  "Attack", "Decay", "Sustain", "Release". */
+  moduleName: string;
+  envelope: AdsrParams;
+  color: ProModuleColor;
+  onEnvelope: (next: AdsrParams) => void;
+}) {
+  return (
+    <KnobGrid
+      color={color}
+      size={idPrefix === 'env1' ? 'md' : 'sm'}
+      specs={[
+        {
+          id: `slider-${idPrefix}-attack`,
+          label: 'Attack',
+          ariaLabel: `${moduleName} Attack`,
+          value: envelope.attack,
+          min: 0.001,
+          max: 8,
+          scale: 'log',
+          format: envTime,
+          onChange: (attack) => onEnvelope({ ...envelope, attack }),
+        },
+        {
+          id: `slider-${idPrefix}-decay`,
+          label: 'Decay',
+          ariaLabel: `${moduleName} Decay`,
+          value: envelope.decay,
+          min: 0.001,
+          max: 8,
+          scale: 'log',
+          format: envTime,
+          onChange: (decay) => onEnvelope({ ...envelope, decay }),
+        },
+        {
+          id: `slider-${idPrefix}-sustain`,
+          label: 'Sustain',
+          ariaLabel: `${moduleName} Sustain`,
+          value: envelope.sustain,
+          min: 0,
+          max: 1,
+          step: 0.01,
+          format: (v) => `${Math.round(v * 100)}%`,
+          onChange: (sustain) => onEnvelope({ ...envelope, sustain }),
+        },
+        {
+          id: `slider-${idPrefix}-release`,
+          label: 'Release',
+          ariaLabel: `${moduleName} Release`,
+          value: envelope.release,
+          min: 0.001,
+          max: 8,
+          scale: 'log',
+          format: envTime,
+          onChange: (release) => onEnvelope({ ...envelope, release }),
+        },
+      ]}
+    />
+  );
 }
 
-/** One ADSR half: a caps caption, its hairline rule, and four knobs. */
-function AdsrRow({
-  caption,
-  tone,
-  keys,
-  idPrefix,
-  className,
-  rowClassName,
-  params,
-  onChangeParams,
-}: AdsrRowProps) {
+/** ENV 1: the amp envelope, whose destination is a fact rather than a choice. */
+export function AmpEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
   return (
-    <div className={className}>
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className={`text-[10px] ${tone} uppercase tracking-wider`}>
-          {caption}
-        </span>
-        <span className="flex-1 h-px bg-base-300" />
+    <ProModule
+      badge={4}
+      title="ENV 1"
+      color={AMP_COLOR}
+      chip={<ModuleChip color={AMP_COLOR}>AMP · LOCKED</ModuleChip>}
+      className="md:col-span-2 xl:col-span-1"
+    >
+      <AdsrKnobs
+        idPrefix="env1"
+        moduleName="ENV 1"
+        envelope={patch.synth.ampEnvelope}
+        color={AMP_COLOR}
+        onEnvelope={(ampEnvelope) => onPatch({ ...patch, synth: { ...patch.synth, ampEnvelope } })}
+      />
+      {/* Read-only by construction, not a disabled control: ENV 1 is wired to
+          amplitude in the engine and `SubtractiveParams` has no field that
+          could hold anything else, so there is nothing here to operate. */}
+      <div
+        id="env1-destination"
+        className="flex items-center justify-between gap-2 rounded-box border border-base-300 bg-base-100 px-2 py-1.5 mt-auto"
+      >
+        <span className={`${FIELD_LABEL} mb-0`}>Destination</span>
+        <span className={`text-[11px] font-semibold ${AMP_COLOR}`}>Amplitude</span>
       </div>
-      <div className={rowClassName}>
-        {ADSR_CONTROLS.map((control, i) => (
-          <Knob
-            key={control.label}
-            id={`slider-env-${idPrefix}${control.name}`}
-            label={control.label}
-            color={tone}
-            value={params[keys[i]]}
-            min={control.min}
-            max={control.max}
-            step={0.01}
-            format={control.format}
-            onChange={(v) => onChangeParams({ ...params, [keys[i]]: v })}
-          />
-        ))}
-      </div>
-    </div>
+    </ProModule>
   );
 }
 
 /**
- * Pro-Mode panel — Envelopes (amp and filter ADSR). Reads the active synth
- * channel from the store rather than taking props, so SoundView renders
- * `<EnvelopePanel />` with no wiring. Its two halves carry the
- * `module-env-vca` and `module-env-vcf` identity colours (docs/design.md
- * §6.5); the tokens are named in the class strings that moved with the
- * markup.
+ * ENV 2: the same envelope over two assignable routes.
+ *
+ * The two slots are POSITIONAL in the view and a plain list in the patch — the
+ * validator caps `env2Routes` at two. Setting a slot to Off drops it, so a
+ * second route left assigned moves up into the first slot on the next render;
+ * that is the honest consequence of a list, and the alternative (a fixed pair
+ * with holes) would make "no routes assigned" unrepresentable in the type.
  */
-export function EnvelopePanel() {
-  const { params, onChangeParams } = useSynthChannel();
-  // 3. Envelope ADSR
+export function ModEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
+  const routes = patch.synth.env2Routes;
+  const writeRoute = (index: number, next: ModRoute | null) => {
+    const slots: (ModRoute | null)[] = [routes[0] ?? null, routes[1] ?? null];
+    slots[index] = next;
+    onPatch({
+      ...patch,
+      synth: { ...patch.synth, env2Routes: slots.filter((slot): slot is ModRoute => slot !== null) },
+    });
+  };
+
   return (
-          <PanelCard inset className="flex-1">
-            <div className="card-body p-4 space-y-3">
-            <ModuleHeader
-              badge={3}
-              icon={<Volume2 className="w-3.5 h-3.5 text-module-env-vca" />}
-              title="ADSR Envelope"
-            />
-
-            {/* AMP / VCA */}
-            <AdsrRow
-              caption="AMP / VCA"
-              tone="text-module-env-vca"
-              keys={AMP_KEYS}
-              idPrefix=""
-              rowClassName="flex items-start justify-around gap-2"
-              params={params}
-              onChangeParams={onChangeParams}
-            />
-
-            {/* FILTER / VCF */}
-            <AdsrRow
-              className="pt-2.5"
-              caption="FILTER / VCF"
-              tone="text-module-env-vcf"
-              keys={FILTER_KEYS}
-              idPrefix="filter-"
-              rowClassName="flex items-start justify-around"
-              params={params}
-              onChangeParams={onChangeParams}
-            />
-            </div>
-          </PanelCard>
+    <ProModule
+      badge={5}
+      title="ENV 2"
+      color={MOD_COLOR}
+      chip={<ModuleChip color={MOD_COLOR}>MOD</ModuleChip>}
+    >
+      <AdsrKnobs
+        idPrefix="env2"
+        moduleName="ENV 2"
+        envelope={patch.synth.modEnvelope}
+        color={MOD_COLOR}
+        onEnvelope={(modEnvelope) => onPatch({ ...patch, synth: { ...patch.synth, modEnvelope } })}
+      />
+      {[0, 1].map((index) => (
+        <RouteRow
+          key={index}
+          idPrefix={`env2-route-${index}`}
+          caption={`Target ${index + 1}`}
+          amountLabel={`ENV 2 target ${index + 1} Amount`}
+          route={routes[index] ?? null}
+          color={MOD_COLOR}
+          onChange={(next) => writeRoute(index, next)}
+        />
+      ))}
+    </ProModule>
   );
 }

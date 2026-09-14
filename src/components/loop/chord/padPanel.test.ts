@@ -1,8 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import type { CategoryPresetGroup } from '@/audio/presetRegistry';
+import type { CategoryPresetGroup } from '@/utils/synthPresets';
+import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import { droneDegreeButtons, padPresetGroups } from './padPanel';
 
+/**
+ * A group of stand-in presets. `id` is the name lower-cased and hyphenated so
+ * the two axes the selector uses — what is SHOWN (name) and what is STORED
+ * (id) — cannot be accidentally interchangeable in these assertions.
+ */
 function group(category: string, presetNames: string[]): CategoryPresetGroup {
   return {
     category: category as CategoryPresetGroup['category'],
@@ -10,10 +16,14 @@ function group(category: string, presetNames: string[]): CategoryPresetGroup {
     badgeClass: '',
     description: '',
     presets: presetNames.map((name) => ({
-      id: name,
+      id: name.toLowerCase().replace(/ /g, '-'),
       name,
       category: category as CategoryPresetGroup['category'],
-      params: {},
+      engine: 'subtractive' as const,
+      patch: SUBTRACTIVE_INIT.patch,
+      tags: [],
+      description: '',
+      isFactory: true,
     })),
   };
 }
@@ -65,22 +75,22 @@ describe('padPresetGroups', () => {
   const groups = [group('Pad', ['Warm Pad']), group('Keys', ['Rhodes'])];
 
   test('no selection shows only the curated Pad category', () => {
-    const shown = padPresetGroups(groups, '');
+    const shown = padPresetGroups(groups, null);
     expect(shown.map((g) => g.category)).toEqual(['Pad']);
   });
 
   test('a preset loaded from outside Pad still shows in its own group', () => {
-    const shown = padPresetGroups(groups, 'Rhodes');
+    const shown = padPresetGroups(groups, 'rhodes');
     expect(shown.map((g) => g.category)).toEqual(['Pad', 'Keys']);
   });
 
   test('a Pad-category selection does not duplicate the group', () => {
-    const shown = padPresetGroups(groups, 'Warm Pad');
+    const shown = padPresetGroups(groups, 'warm-pad');
     expect(shown.map((g) => g.category)).toEqual(['Pad']);
   });
 
-  test('an unresolved preset name (deleted custom preset) does not add a phantom group', () => {
-    const shown = padPresetGroups(groups, 'Deleted Custom Preset');
+  test('an unresolved preset id (deleted custom preset) does not add a phantom group', () => {
+    const shown = padPresetGroups(groups, 'deleted-custom-preset');
     expect(shown.map((g) => g.category)).toEqual(['Pad']);
   });
 });

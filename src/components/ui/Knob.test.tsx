@@ -43,6 +43,26 @@ describe('Knob layout variants', () => {
   });
 });
 
+describe('Knob accessible name', () => {
+  const render = (ariaLabel?: string) =>
+    renderToString(
+      <Knob value={500} onChange={() => {}} label="Oct" ariaLabel={ariaLabel} format={String} />,
+    );
+
+  test('defaults to the visible label', () => {
+    expect(render()).toContain('aria-label="Oct"');
+  });
+
+  test('an explicit name replaces it while the caption stays short', () => {
+    const html = render('OSC 1 Oct');
+    expect(html).toContain('aria-label="OSC 1 Oct"');
+    // The visible caption is untouched — that is the whole point of the prop,
+    // and the name still CONTAINS it (WCAG 2.5.3).
+    expect(html).toContain('>Oct<');
+    expect(html).not.toContain('aria-label="Oct"');
+  });
+});
+
 describe('Knob theme tokens', () => {
   const html = renderToString(
     <Knob

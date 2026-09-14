@@ -45,7 +45,9 @@ import type { AccompanimentSource } from "@/audio/playback/playbackEngine";
 import { getMeter, type MeterId } from "@/utils/meter";
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "@/components/playerStop";
 import type { AppStore, PlayerState } from "@/store/types";
-import type { ChordItem, SynthParams } from "@/types";
+import type { ChordItem } from "@/types";
+import type { ActiveSynth } from "@/types/synth";
+import { synthReleaseSeconds } from "@/utils/synthPatch";
 import { publishStepAt, resetStep } from "@/components/playbackStep";
 import { padHoldsAcrossLoop, resolvePadArm } from "@/audio/playback/padPlayback";
 import { loopBars } from "@/utils/songStructure";
@@ -291,12 +293,11 @@ function resolveBassLane(
   if (isFullHoldBassCycle(cycle)) {
     const rootEvent = resolveWithHold(1)[0];
     if (rootEvent) {
-      playbackNoteOn(rootEvent.noteName, s.bassSynthParams, rootEvent.velocity, ctx.time, "bass");
+      const voiceId = playbackNoteOn(rootEvent.noteName, s.bassSynthParams, rootEvent.velocity, ctx.time, "bass");
       playbackNoteOff(
-        rootEvent.noteName,
-        s.bassSynthParams.release,
+        voiceId,
+        synthReleaseSeconds(s.bassSynthParams),
         ctx.time + fullHoldDuration(ctx.totalBars, ctx.barDur, cycleHoldScale(cycle.custom, s.bassFeel)),
-        "bass",
       );
     }
     return { cycleSteps: cycle.cycleSteps, events: [] };
@@ -318,7 +319,7 @@ function resolveBassLane(
 /**
  * Arms a chord: resolves its notes and pattern events, and fires the one-shot
  * voices of the full-hold patterns (those are single long voices that
- * updateSynthParams can already re-shape live, so they need no per-step work).
+ * updateSynthPatch can already re-shape live, so they need no per-step work).
  *
  * ONE read of the loop state per plan: the meter, the progression and both
  * lanes' cycles all come from this snapshot, and neither cycle is re-read on a
@@ -347,8 +348,11 @@ function startChordPlan(
 
   const chordNotes = generateBlockChordNotes(chord.quality, chord.root, s.chordOctave);
   const bassNotes = generateBlockChordNotes(chord.quality, chord.root, s.bassOctave);
-  const chordArp = !!s.chordSynthParams.arpActive;
-  const bassArp = !!s.bassSynthParams.arpActive;
+  // Off the Arp fields, never off the patch: Arp is performance state, so a
+  // preset load must not re-arm the arpeggiator and an Arp toggle must not
+  // re-push the patch to every sounding voice.
+  const chordArp = s.chordArpSettings.active;
+  const bassArp = s.bassArpSettings.active;
   const idleLane: PlanLane = { cycleSteps: stepsPerBar, events: [] };
 
   const chordLane = chordArp ? idleLane : resolveChordLane(s, chordNotes, ctx);
@@ -398,7 +402,7 @@ function emitChordPlanStep(
 
   emitStepEvents(
     plan.chordArp
-      ? arpEventsForStep(plan.chordNotes, s.chordSynthParams, step, stepDur, feelToHoldScale(s.chordFeel), stepsPerBar)
+      ? arpEventsForStep(plan.chordNotes, s.chordArpSettings, step, stepDur, feelToHoldScale(s.chordFeel), stepsPerBar)
       : eventsForCycleStep(plan.chordEvents, progressionStep, plan.chordCycleSteps, pos.isLastBar),
     s.chordSynthParams,
     "chord",
@@ -408,7 +412,7 @@ function emitChordPlanStep(
 
   emitStepEvents(
     plan.bassArp
-      ? arpEventsForStep(plan.bassNotes, s.bassSynthParams, step, stepDur, feelToHoldScale(s.bassFeel), stepsPerBar)
+      ? arpEventsForStep(plan.bassNotes, s.bassArpSettings, step, stepDur, feelToHoldScale(s.bassFeel), stepsPerBar)
       : eventsForCycleStep(plan.bassEvents, progressionStep, plan.bassCycleSteps, pos.isLastBar),
     s.bassSynthParams,
     "bass",
@@ -459,10 +463,10 @@ export function chordStepAction(
 interface ChordPlaybackState {
   chords: ChordItem[];
   bpm: number;
-  chordSynthParams: SynthParams;
+  chordSynthParams: ActiveSynth;
   chordOctave: number;
   chordFeel: number;
-  bassSynthParams: SynthParams;
+  bassSynthParams: ActiveSynth;
   bassOctave: number;
   bassFeel: number;
   scaleRoot: string;
@@ -596,7 +600,7 @@ function useBassPatternPreview({
       if (isFullHoldBassCycle(cycle)) {
         const rootEvent = resolveWithHold(1)[0];
         if (rootEvent) {
-          playbackNoteOn(
+          const voiceId = playbackNoteOn(
             rootEvent.noteName,
             bassSynthParams,
             rootEvent.velocity,
@@ -604,10 +608,9 @@ function useBassPatternPreview({
             "bass",
           );
           playbackNoteOff(
-            rootEvent.noteName,
-            bassSynthParams.release,
+            voiceId,
+            synthReleaseSeconds(bassSynthParams),
             startTime + fullHoldDuration(cycle.cycleSteps / stepsPerBar, barDur, holdScale),
-            "bass",
           );
         }
         return;
@@ -814,7 +817,7 @@ function useChordClock({
         // an inconsistency kept deliberately rather than widening either.
         const releases: Record<AccompanimentSource, number> = {
           ...releasesRef.current,
-          pad: useAppStore.getState().padSynthParams.release,
+          pad: synthReleaseSeconds(useAppStore.getState().padSynthParams),
         };
         for (const source of ACCOMPANIMENT_SOURCES) {
           playbackStopOwnedVoices(source, releases[source], time);
@@ -883,8 +886,8 @@ export function useChordPlayback() {
 
   const scheduler = useChordScheduler();
   const releasesRef = useChordReleases(
-    chordSynthParams.release,
-    bassSynthParams.release,
+    synthReleaseSeconds(chordSynthParams),
+    synthReleaseSeconds(bassSynthParams),
   );
 
   // Both subscriptions clear the same three pieces of chord UI — the beat

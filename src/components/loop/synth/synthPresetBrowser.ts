@@ -2,15 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAppStore } from '@/store/store';
 import { isMelodicFocus, type MixLayerId } from '@/store/focusTrack';
-import type { SynthPresetItem, SynthPresetCategory } from '@/data/synthPresets';
+import type { SynthPreset, SynthPresetCategory } from '@/data/synthPresets';
 import {
-  applyPreset,
   findPresetByName,
   getAllSynthPresets,
-  getPresetsGroupedByCategory,
+  groupPresets,
   getCategoryMeta,
-} from '@/audio/presetRegistry';
-import type { SynthParams } from '@/types';
+} from '@/utils/synthPresets';
+import { SYNTH_PARAM_FIELD } from '@/store/sourceBuses';
+import { adoptSavedSynthPreset, loadSynthPreset } from '@/store/synthPresetInstall';
+import type { SynthControlTarget } from '@/utils/synthControl';
 
 /**
  * `isLibraryOpen` / `isQuickSaving` are SoundSynthSection's own `useState`, and
@@ -38,7 +39,7 @@ export const groupInCategory = (groupCategory: string, categoryId: string): bool
  *  every custom preset regardless of its saved category, plus factory entries
  *  stored under 'User'. One predicate, so the chip's count, the chip's click
  *  and the step navigation cannot disagree about what a filter selects. */
-export const presetInCategory = (preset: SynthPresetItem, categoryId: string): boolean =>
+export const presetInCategory = (preset: SynthPreset, categoryId: string): boolean =>
   categoryId === "All"
     ? true
     : categoryId === "User"
@@ -47,12 +48,12 @@ export const presetInCategory = (preset: SynthPresetItem, categoryId: string): b
 
 /** The presets a category chip selects. */
 const presetsInCategory = (
-  allPresets: SynthPresetItem[],
+  allPresets: SynthPreset[],
   categoryId: string,
-): SynthPresetItem[] => allPresets.filter((p) => presetInCategory(p, categoryId));
+): SynthPreset[] => allPresets.filter((p) => presetInCategory(p, categoryId));
 
 /** What a category chip's badge counts. */
-export const categoryPresetCount = (allPresets: SynthPresetItem[], categoryId: string): number =>
+export const categoryPresetCount = (allPresets: SynthPreset[], categoryId: string): number =>
   presetsInCategory(allPresets, categoryId).length;
 
 /** Simple vs Pro UI Mode, with its localStorage persistence. */
@@ -84,24 +85,32 @@ export function useSynthViewMode() {
  * list, and `customPresets` is a local mirror of the store's list, refreshed by
  * `reloadPresets` whenever the drawer opens.
  */
-export function useSynthPresetBrowser(
-  params: SynthParams,
-  onChangeParams: (params: SynthParams) => void,
-) {
-  const [customPresets, setCustomPresets] = useState<SynthPresetItem[]>([]);
+export function useSynthPresetBrowser(target: SynthControlTarget) {
+  const [customPresets, setCustomPresets] = useState<SynthPreset[]>([]);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
   const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  // The browser follows the FOCUSED track, so it reads and writes its patch
+  // through the shared target tables rather than being handed a value and a
+  // writer. Before the engine cutover it took `params`/`onChangeParams` from
+  // SoundView's channel record — a fourth hand-maintained copy of the same
+  // routing, which is exactly what `SYNTH_PARAM_FIELD` exists to end.
+  const activeSynth = useAppStore((s) => s[SYNTH_PARAM_FIELD[target]]);
 
   const allPresets = useMemo(() => getAllSynthPresets(customPresets), [customPresets]);
 
   const categoryGroups = useMemo(
-    () => getPresetsGroupedByCategory(allPresets),
+    () => groupPresets(allPresets),
     [allPresets],
   );
 
+  // Matched by ID, not by name. `sourcePresetId` is what applying a preset
+  // records, and two libraries (factory and custom) can hold the same name
+  // while only one of them is the sound that is playing.
+  const activePresetId = activeSynth.sourcePresetId;
   const activePresetItem = useMemo(
-    () => findPresetByName(params.preset, allPresets),
-    [params.preset, allPresets],
+    () => (activePresetId ? allPresets.find((p) => p.id === activePresetId) : undefined),
+    [activePresetId, allPresets],
   );
 
   const activeCategoryMeta = useMemo(() => {
@@ -120,26 +129,23 @@ export function useSynthPresetBrowser(
     setCustomPresets(useAppStore.getState().customSynthPresets);
   }, []);
 
-  const handleSelectPreset = (preset: SynthPresetItem) => {
-    onChangeParams(applyPreset(params, preset));
+  const handleSelectPreset = (preset: SynthPreset) => {
+    loadSynthPreset(target, preset);
     setSaveToast(`Loaded [${preset.category}] "${preset.name}"`);
     setTimeout(() => setSaveToast(null), 2500);
   };
 
-  // Saving reloads first (the new preset is in the store, not in the mirror),
-  // then announces: `handleSelectPreset`'s "Loaded ..." line is overwritten by
-  // the saved line on the next statement, exactly as the original did it.
-  const notifySaved = (preset: SynthPresetItem) => {
-    handleSelectPreset(preset);
+  // Adopting a just-saved preset never stops the bus — see
+  // `store/synthPresetInstall.ts` for why that is the caller's call to make.
+  const adoptSavedPreset = (preset: SynthPreset) => {
+    adoptSavedSynthPreset(target, preset);
     setSaveToast(`Preset "${preset.name}" saved to ${preset.category}!`);
     setTimeout(() => setSaveToast(null), 3000);
   };
 
   const handleStepPreset = (direction: -1 | 1) => {
     if (selectablePresets.length === 0) return;
-    const currentIndex = selectablePresets.findIndex(
-      (p) => p.name === params.preset,
-    );
+    const currentIndex = selectablePresets.findIndex((p) => p.id === activePresetId);
     let nextIndex = currentIndex + direction;
     if (nextIndex < 0) nextIndex = selectablePresets.length - 1;
     if (nextIndex >= selectablePresets.length) nextIndex = 0;
@@ -156,7 +162,7 @@ export function useSynthPresetBrowser(
     if (catId === "All") return;
     const matching = presetsInCategory(allPresets, catId);
     if (matching.length > 0) {
-      const currentInCat = matching.some((p) => p.name === params.preset);
+      const currentInCat = matching.some((p) => p.id === activePresetId);
       if (!currentInCat) {
         handleSelectPreset(matching[0]);
       }
@@ -172,7 +178,7 @@ export function useSynthPresetBrowser(
     saveToast,
     reloadPresets,
     selectPreset: handleSelectPreset,
-    notifySaved,
+    adoptSavedPreset,
     stepPreset: handleStepPreset,
     selectByName: handleDropdownChange,
     filterByCategory: handleCategoryFilterClick,
@@ -185,14 +191,15 @@ export function useSynthPresetBrowser(
  */
 export function useSynthOverlays({
   focusTrack,
-  params,
+  target,
   reloadPresets,
   onSaved,
 }: {
   focusTrack: MixLayerId;
-  params: SynthParams;
+  /** Which bus a quick-save captures — the same target the browser follows. */
+  target: SynthControlTarget;
   reloadPresets: () => void;
-  onSaved: (preset: SynthPresetItem) => void;
+  onSaved: (preset: SynthPreset) => void;
 }) {
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
@@ -227,7 +234,11 @@ export function useSynthOverlays({
     e.preventDefault();
     if (!quickSaveName.trim()) return;
 
-    const saved = useAppStore.getState().saveCustomPreset(quickSaveName, params, quickSaveCategory);
+    // Read at submit time, not captured: the patch the user is saving is
+    // whatever the track holds NOW, including any knob moved while the
+    // popover was open.
+    const state = useAppStore.getState();
+    const saved = state.saveCustomPreset(quickSaveName, state[SYNTH_PARAM_FIELD[target]], quickSaveCategory);
     reloadPresets();
     setIsQuickSaving(false);
     setQuickSaveName("");

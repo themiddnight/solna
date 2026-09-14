@@ -1,10 +1,10 @@
 import React, { useMemo } from "react";
 import { useAppStore } from "@/store/store";
+import type { SynthPreset } from "@/data/synthPresets";
 import {
-  applyPreset,
   getAllSynthPresets,
-  getPresetsGroupedByCategory,
-} from "@/audio/presetRegistry";
+  groupPresets,
+} from "@/utils/synthPresets";
 import { FIELD_LABEL, JOIN_LANE } from "@/components/ui/fieldClasses";
 import { SYNTH_TARGET_STYLES } from "@/utils/synthControl";
 import { PAD_INTERVALS } from "@/types";
@@ -13,6 +13,7 @@ import { ModulePanelCard } from "./ModulePanelCard";
 import { ModulePasteButton } from "../ModulePasteButton";
 import { OctaveSelect, SoundPresetField } from "./moduleFields";
 import { droneDegreeButtons, padPresetGroups } from "./padPanel";
+import { loadSynthPreset } from '@/store/synthPresetInstall';
 
 // Oct 1 reaches a bass-register drone, Oct 5 a high pad. Wider at the bottom
 // than the chord module (2-6) and at the top than the bass module (1-4),
@@ -166,21 +167,20 @@ function PadVoicingField() {
 
 export function PadModulePanel() {
   const padSynthParams = useAppStore((s) => s.padSynthParams);
-  const setPadSynthParams = useAppStore((s) => s.setPadSynthParams);
   const customPresets = useAppStore((s) => s.customSynthPresets);
   const padMode = useAppStore((s) => s.padMode);
   const setPadMode = useAppStore((s) => s.setPadMode);
   const padOctave = useAppStore((s) => s.padOctave);
   const setPadOctave = useAppStore((s) => s.setPadOctave);
 
-  const presetName = padSynthParams.preset ?? "";
+  const selectedPresetId = padSynthParams.sourcePresetId;
   const allPresets = useMemo(
     () => getAllSynthPresets(customPresets),
     [customPresets],
   );
   const presetGroups = useMemo(
-    () => padPresetGroups(getPresetsGroupedByCategory(allPresets), presetName),
-    [allPresets, presetName],
+    () => padPresetGroups(groupPresets(allPresets), selectedPresetId),
+    [allPresets, selectedPresetId],
   );
 
   // Mode is NOT in the header. It used to sit between the solo button and
@@ -188,6 +188,13 @@ export function PadModulePanel() {
   // a control in it and left the pad's most consequential switch floating away
   // from everything it governs. It is a labelled field in the row below now,
   // which is what let all three headers collapse into `ModulePanelCard`.
+  // The bus stop, the Arp read and the patch write all live in
+  // `store/synthPresetInstall.ts` — see there for why a load stops the bus and
+  // adopting a just-saved preset does not.
+  const pickPreset = (preset: SynthPreset) => {
+    loadSynthPreset('pad', preset);
+  };
+
   return (
     <ModulePanelCard
       target="pad"
@@ -207,8 +214,8 @@ export function PadModulePanel() {
           placeholder="Pad Preset…"
           groups={presetGroups}
           allPresets={allPresets}
-          value={presetName}
-          onPick={(preset) => setPadSynthParams(applyPreset(padSynthParams, preset))}
+          selectedPresetId={selectedPresetId}
+          onPick={pickPreset}
         />
 
         {/* Octave sits OUTSIDE the mode branch: padOctave feeds resolveDroneNotes as

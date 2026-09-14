@@ -13,6 +13,7 @@ import { DEFAULT_VELOCITY } from '@/audio/constants';
 import { stepDurationSec } from '@/utils/musicTheory';
 import { arpStepFor, getMeter } from '@/utils/meter';
 import { TICKS_PER_SIXTEENTH, columnsPerBar, strideFor } from '@/utils/stepResolution';
+import { synthReleaseSeconds } from '@/utils/synthPatch';
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from '@/components/playerStop';
 import { melodyTrack, type MelodyTrackId } from '@/store/melodyTracks';
 import type { PlayerState } from '@/store/types';
@@ -42,7 +43,7 @@ export function leadStepAction(
 
 /**
  * Drives a melody track's notes into its synth voice on the shared clock.
- * The arp is a synth feature, not a note mode: `synthParams.arpActive` gates
+ * The arp is a performance setting, not a note mode: `ArpSettings.active` gates
  * arpeggiation (on = arp, off = block), never whether the melody runs. Notes
  * and params are read LIVE from the store inside the clock callback, so a
  * knob tweak reaches the next hit without re-subscribing.
@@ -100,9 +101,11 @@ export function useLeadPlayback(trackId: MelodyTrackId): { isPlaying: boolean } 
       const action = leadStepAction(playerState, step, armingRef.current, stepsPerBar);
       const tickDur = stepDurationSec(s.bpm) / TICKS_PER_SIXTEENTH;
       const params = s[track.synthParams];
+      const arp = s[track.arpSettings];
+      const releaseSeconds = synthReleaseSeconds(params);
 
       if (action === 'soft-stop') {
-        playbackStopOwnedVoices(track.engineSource, params.release, time);
+        playbackStopOwnedVoices(track.engineSource, releaseSeconds, time);
         softStopPendingRef.current = true;
         hardStop(track.module);
         return;
@@ -115,7 +118,7 @@ export function useLeadPlayback(trackId: MelodyTrackId): { isPlaying: boolean } 
       // "when to strike them", and that answer comes off the clock's 16ths
       // via arpRate. leadScheduleHits is where the two part company, and
       // arpStep stays bar-phased by arpStepFor either way.
-      const hits = leadScheduleHits(step, stride, columns, params.arpActive, tickDur);
+      const hits = leadScheduleHits(step, stride, columns, arp.active, tickDur);
 
       for (const hit of hits) {
         const column = hit.column;
@@ -123,9 +126,8 @@ export function useLeadPlayback(trackId: MelodyTrackId): { isPlaying: boolean } 
         const sounding = leadSoundingNotes(s[track.steps], column, stepsPerBar, stride);
         const triggers = resolveLeadStepTriggers(
           sounding,
-          params.arpActive,
+          arp,
           arpStep,
-          params,
           tickDur,
           s[track.gate],
           stride,
@@ -136,13 +138,13 @@ export function useLeadPlayback(trackId: MelodyTrackId): { isPlaying: boolean } 
           { tickInLoop: column * stride, melodyTicks },
         );
         for (const trigger of triggers) {
-          playbackNoteOn(trigger.note, params, DEFAULT_VELOCITY, at + trigger.timeOffsetSec, track.engineSource);
-          playbackNoteOff(
-            trigger.note,
-            params.release,
-            at + trigger.timeOffsetSec + trigger.holdSec,
-            track.engineSource,
-          );
+          const start = at + trigger.timeOffsetSec;
+          // The ID this hit started, released at the end of its own hold: a
+          // melody grid shares its bus with the live keyboard and the arp, so
+          // a release by note name would cut whichever of the three the
+          // engine found first.
+          const voiceId = playbackNoteOn(trigger.note, params, DEFAULT_VELOCITY, start, track.engineSource);
+          playbackNoteOff(voiceId, releaseSeconds, start + trigger.holdSec);
         }
       }
     });

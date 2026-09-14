@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { SynthPresetLibrary } from './SynthPresetLibrary';
-import { INITIAL_SYNTH_PARAMS } from '@/store/initialState';
+import { TRACK_SYNTH_PRESET_IDS } from '@/store/initialState';
 
 const noop = () => {};
 
@@ -9,9 +9,9 @@ const html = renderToString(
   <SynthPresetLibrary
     isOpen
     onClose={noop}
-    currentParams={INITIAL_SYNTH_PARAMS}
     target="synth"
     onSelectPreset={noop}
+    onSavedPreset={noop}
   />
 );
 
@@ -76,9 +76,9 @@ describe('SynthPresetLibrary edit target', () => {
       <SynthPresetLibrary
         isOpen
         onClose={noop}
-        currentParams={INITIAL_SYNTH_PARAMS}
         target={target}
         onSelectPreset={noop}
+        onSavedPreset={noop}
       />
     );
 
@@ -118,10 +118,10 @@ describe('SynthPresetLibrary sound badges', () => {
       <SynthPresetLibrary
         isOpen
         onClose={noop}
-        currentParams={INITIAL_SYNTH_PARAMS}
         target="synth"
         showSoundBadges={showSoundBadges}
         onSelectPreset={noop}
+        onSavedPreset={noop}
       />
     );
 
@@ -151,9 +151,10 @@ describe('SynthPresetLibrary sound badges', () => {
 describe('SynthPresetLibrary open-scroll anchor', () => {
   test('every entry is addressable by id so the open scroll can find the active one', () => {
     expect(html).toContain('data-entry-id=');
-    // The default patch is the one INITIAL_SYNTH_PARAMS names, so its own card
-    // must carry an anchor — an Active badge with nothing to scroll to is the
-    // exact failure this guards.
+    // The Lead track's default patch records its preset id, so that card must
+    // carry an anchor — an Active badge with nothing to scroll to is the exact
+    // failure this guards.
+    expect(html).toContain(`data-entry-id="${TRACK_SYNTH_PRESET_IDS.synth}"`);
     expect(html).toContain('badge badge-xs badge-primary');
   });
 });
@@ -164,9 +165,9 @@ describe('SynthPresetLibrary closed', () => {
       <SynthPresetLibrary
         isOpen={false}
         onClose={noop}
-        currentParams={INITIAL_SYNTH_PARAMS}
         target="synth"
         onSelectPreset={noop}
+        onSavedPreset={noop}
       />,
     );
     expect(closedHtml).toBe('');

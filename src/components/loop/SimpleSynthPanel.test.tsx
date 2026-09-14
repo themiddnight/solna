@@ -1,19 +1,24 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { SimpleSynthPanel } from './SimpleSynthPanel';
+import { SimpleSynthPanel, SIMPLE_CONTROL_SPECS } from './SimpleSynthPanel';
+import { SubtractiveProPanel } from './synth/SubtractiveProPanel';
 import { synthChannelForFocus } from './synth/useSynthChannel';
-import type { SynthChannels } from './synth/useSynthChannel';
-import type { SynthParams } from '@/types';
+import type { SynthChannel, SynthChannels } from './synth/useSynthChannel';
+import { SIMPLE_CONTROL_IDS } from '@/utils/subtractiveSimple';
+import { defaultTrackArp, defaultTrackSynth } from '@/store/initialState';
+import type { ActiveSynth, ArpSettings } from '@/types/synth';
 
-// Five distinct, otherwise-meaningless param stand-ins, one per channel. The
-// store's real slices all default to the very same `INITIAL_SYNTH_PARAMS`
-// object until a user edits one of them, so asserting identity against
-// `useAppStore.getState()`'s defaults would pass even for a wrong channel —
-// these have to be distinguishable by reference on their own.
+// Five distinct, otherwise-meaningless channel stand-ins, one per target. Two
+// tracks can legitimately hold the SAME patch — every track starts on a factory
+// preset and nothing has been edited yet — so asserting against the store's
+// defaults would pass even for a wrong channel. These are distinguishable by
+// reference on their own.
 function fakeChannels(): SynthChannels {
-  const make = (): { params: SynthParams; setParams: (p: SynthParams) => void } => ({
-    params: {} as SynthParams,
-    setParams: () => {},
+  const make = (): SynthChannel => ({
+    activeSynth: {} as ActiveSynth,
+    arpSettings: {} as ArpSettings,
+    setActiveSynth: () => {},
+    setArpSettings: () => {},
   });
   return {
     synth: make(),
@@ -24,76 +29,138 @@ function fakeChannels(): SynthChannels {
   };
 }
 
-const params = {
-  filterCutoff: 4000,
-  release: 0.3,
-  detune: 10,
-  subOscVolume: 0.2,
-  attack: 0.02,
-  sustain: 0.5,
-  arpActive: true,
-  arpRate: '16n',
-  arpMode: 'up',
-} as unknown as SynthParams;
+/** A channel plus the writes it recorded, so "no write" is a fact, not a hope. */
+interface RecordingChannel extends SynthChannel {
+  patches: ActiveSynth[];
+  arps: ArpSettings[];
+}
 
-describe('SimpleSynthPanel theming', () => {
-  const html = renderToString(<SimpleSynthPanel params={params} onChangeParams={() => {}} />);
+function makeChannel(): RecordingChannel {
+  const patches: ActiveSynth[] = [];
+  const arps: ArpSettings[] = [];
+  const synth = defaultTrackSynth('synth');
+  // Pulled off the resting Init values so a descriptor that was hard-coded
+  // rather than derived would read the same either way.
+  synth.patch.common.stereoWidth = 0.82;
+  synth.patch.synth.filter.cutoffHz = 3200;
+  synth.patch.synth.filter.resonance = 0.38;
+  return {
+    activeSynth: synth,
+    arpSettings: { ...defaultTrackArp('synth'), active: true, rate: '16n', mode: 'up' },
+    setActiveSynth: (next) => void patches.push(next),
+    setArpSettings: (next) => void arps.push(next),
+    patches,
+    arps,
+  };
+}
 
-  test('macro cards use card/card-body and badge components', () => {
-    expect(html).toContain('card bg-base-200');
-    expect(html).toContain('card-body');
-    expect(html).toContain('badge badge-sm');
+const channel = makeChannel();
+const html = renderToString(<SimpleSynthPanel channel={channel} onSwitchToPro={() => {}} />);
+
+describe('the approved Simple surface (prototype Variant B)', () => {
+  test('one continuous deck with the four listening-intent groups', () => {
+    for (const heading of ['Source', 'Tone', 'Feel', 'Motion']) {
+      expect(html).toContain(`>${heading}<`);
+    }
+    for (const kicker of ['core character', 'colour &amp; impact', 'note response', 'movement &amp; size']) {
+      expect(html).toContain(kicker);
+    }
+    // One deck, not one card per knob: eight controls must not produce eight
+    // `card` shells (the four groups sit inside a single panel).
+    expect((html.match(/card bg-base-200/g) ?? []).length).toBe(1);
   });
 
-  /**
-   * Each macro is coloured by the Pro-Mode stage it actually writes to, so a
-   * knob keeps its identity when the user switches modes. Tone→filterCutoff,
-   * Space→release/sustain, Vibe→detune+lfoDepth, Punch→subOscVolume+attack.
-   */
-  test('every macro wears its Pro-Mode stage colour', () => {
-    expect(html).toContain('text-module-filter');
-    expect(html).toContain('text-module-env-vca');
-    expect(html).toContain('text-module-lfo');
-    expect(html).toContain('text-module-osc');
+  test('the eight approved controls, each with its own knob', () => {
+    for (const id of SIMPLE_CONTROL_IDS) {
+      expect(html).toContain(`id="slider-simple-${id}"`);
+      expect(html).toContain(`>${SIMPLE_CONTROL_SPECS[id].label}<`);
+    }
+    expect((html.match(/id="slider-simple-/g) ?? []).length).toBe(8);
   });
 
-  test('no macro borrows a daisyUI semantic role', () => {
-    for (const semantic of [
-      'text-primary',
-      'text-secondary',
-      'text-accent',
-      'text-success',
-      'badge-primary',
-      'badge-secondary',
-      'badge-accent',
-      'badge-success',
-    ]) {
-      expect(html).not.toContain(semantic);
+  test('the header carries the Current feel summary, derived from the patch', () => {
+    expect(html).toContain('Shape the sound');
+    expect(html).toContain('Current feel');
+    expect(html).toContain('Wide &amp; rounded');
+  });
+
+  test('descriptors read out of the patch, not out of a default', () => {
+    expect(html).toContain('>Open<');
+    expect(html).toContain('>Warm<');
+    expect(html).toContain('>Wide<');
+  });
+
+  test('play style is a Mono/Poly pair with real pressed state', () => {
+    expect(html).toContain('id="btn-simple-voice-mono"');
+    expect(html).toContain('id="btn-simple-voice-poly"');
+    expect(html).toContain('Play style');
+    // The default track patch is poly, so Poly is the pressed one.
+    const poly = html.indexOf('id="btn-simple-voice-poly"');
+    expect(html.slice(poly, poly + 120)).toContain('aria-pressed="true"');
+  });
+
+  test('the compact Arp strip covers every rate and direction the patch can hold', () => {
+    expect(html).toContain('id="btn-simple-arp-toggle"');
+    for (const rate of ['4n', '8n', '16n', '32n']) {
+      expect(html).toContain(`id="btn-simple-arp-rate-${rate}"`);
+    }
+    for (const mode of ['up', 'down', 'updown', 'random']) {
+      expect(html).toContain(`id="btn-simple-arp-mode-${mode}"`);
     }
   });
 
-  test('arp controls are daisyUI join groups on the arp module token', () => {
-    expect(html).toContain('join');
-    expect(html).toContain('btn join-item');
+  test('every knob exposes its canonical value to assistive tech', () => {
+    expect((html.match(/role="slider"/g) ?? []).length).toBe(8);
+    expect(html).toContain('aria-valuetext');
+  });
+});
+
+describe('Simple never speaks Pro', () => {
+  test('no Pro-only vocabulary appears anywhere in the markup', () => {
+    for (const term of [
+      'cents',
+      ' ct',
+      'Key track',
+      'ENV 2',
+      'ENV2',
+      'Unison',
+      'Spread',
+      'Resonance',
+      'Cutoff',
+      'LFO',
+      'ADSR',
+      'Detune',
+      'Q factor',
+      'Destination',
+    ]) {
+      expect(html).not.toContain(term);
+    }
+  });
+});
+
+describe('Simple theming', () => {
+  test('every group wears the Pro module identity of what it writes', () => {
+    for (const token of [
+      'text-module-osc',
+      'text-module-filter',
+      'text-module-env-vca',
+      'text-module-lfo',
+    ]) {
+      expect(html).toContain(token);
+    }
+    // The Arp strip is buttons, not knobs, so its identity arrives as the
+    // pressed fill rather than as a text token.
     expect(html).toContain('--btn-color:var(--color-module-arp)');
-    expect(html).toContain('--btn-fg:var(--color-module-arp-content)');
-    expect(html).toContain('text-module-arp');
   });
 
   /**
-   * Simple Mode edits the same four destinations as Pro Mode, and the panel
-   * still has to say which — but it no longer says it five times. The macro
-   * cards are compartments of SoundView's Synth section, which carries the
-   * target tint for all of them (docs/design.md §6.5); repeating it per card
-   * painted one fact five times inside one card.
+   * Width's canonical parameter is `common.stereoWidth`, which Pro draws in its
+   * Voice module — so the knob keeps the amplitude-stage identity even though
+   * Variant B files it under Motion. The identity follows the parameter.
    */
-  test('the macro cards are recessed compartments, and none of them tints itself', () => {
-    const cards = html.match(/class="[^"]*card bg-base-200[^"]*"/g) ?? [];
-    expect(cards).toHaveLength(5);
-    expect(html).not.toContain('bg-panel');
-    expect(html).not.toContain('shadow-md');
-    expect(html).not.toContain('tint-chord');
-    expect(html).not.toContain('tint-bass');
+  test('Width keeps its Pro identity inside the Motion group', () => {
+    const width = html.indexOf('id="slider-simple-width"');
+    expect(html.slice(width - 400, width)).toContain('text-module-env-vca');
   });
 
   test('no dark: variants survive — they key off the OS, not data-theme', () => {
@@ -101,9 +168,32 @@ describe('SimpleSynthPanel theming', () => {
   });
 
   test('no raw palette colours or absolute white survive', () => {
-    for (const legacy of ['amber-', 'cyan-', 'pink-', 'emerald-', 'purple-', 'text-white']) {
+    for (const legacy of ['amber-', 'cyan-', 'pink-', 'emerald-', 'purple-', 'text-white', '#']) {
       expect(html).not.toContain(legacy);
     }
+  });
+
+  test('no macro borrows a daisyUI semantic role', () => {
+    for (const semantic of ['text-secondary', 'badge-primary', 'badge-secondary', 'badge-accent']) {
+      expect(html).not.toContain(semantic);
+    }
+  });
+});
+
+describe('switching depth writes nothing', () => {
+  /**
+   * Simple is a VIEW of the patch Pro edits: it holds no state of its own, so
+   * showing either surface — or both, one after the other — must leave the
+   * store exactly where it was. A projection that normalised the patch on
+   * mount would silently mark every project dirty on a mode toggle.
+   */
+  test('rendering Simple, then Pro, then Simple again performs no store write', () => {
+    const recording = makeChannel();
+    renderToString(<SimpleSynthPanel channel={recording} onSwitchToPro={() => {}} />);
+    renderToString(<SubtractiveProPanel channel={recording} />);
+    renderToString(<SimpleSynthPanel channel={recording} onSwitchToPro={() => {}} />);
+    expect(recording.patches).toHaveLength(0);
+    expect(recording.arps).toHaveLength(0);
   });
 });
 
@@ -113,17 +203,17 @@ describe('the synth panels follow focusTrack', () => {
   // directly with a channel map built from distinct references.
   test('the FX focus resolves the FX patch, not the Lead one', () => {
     const channels = fakeChannels();
-    expect(synthChannelForFocus('fx', channels).params).toBe(channels.fx.params);
-    expect(synthChannelForFocus('bass', channels).params).toBe(channels.bass.params);
+    expect(synthChannelForFocus('fx', channels).activeSynth).toBe(channels.fx.activeSynth);
+    expect(synthChannelForFocus('bass', channels).activeSynth).toBe(channels.bass.activeSynth);
   });
 
-  // Pins the drum branch specifically: `controlTargetForFocus` refuses a
-  // drum focus by type, so `synthChannelForFocus` falls back to the Lead
-  // patch (safe only because SoundView unmounts the Synth section on a drum
-  // focus — see the comment on the function itself). Flipping that fallback
-  // to any other channel must turn this red.
+  // Pins the drum branch specifically: `synthTargetForFocus` refuses a drum
+  // focus by type, so `synthChannelForFocus` falls back to the Lead patch
+  // (safe only because SoundView unmounts the Synth section on a drum focus —
+  // see the comment on the function itself). Flipping that fallback to any
+  // other channel must turn this red.
   test('the drum focus falls back to the Lead patch', () => {
     const channels = fakeChannels();
-    expect(synthChannelForFocus('drum', channels).params).toBe(channels.synth.params);
+    expect(synthChannelForFocus('drum', channels).activeSynth).toBe(channels.synth.activeSynth);
   });
 });

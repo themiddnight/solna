@@ -8,29 +8,42 @@ import {
   Upload,
   Volume2,
 } from 'lucide-react';
-import type { SynthParams } from '@/types';
-import type { SynthPresetItem, SynthPresetCategory } from '@/data/synthPresets';
+import type { SynthPreset, SynthPresetCategory } from '@/data/synthPresets';
 import { SYNTH_CATEGORIES } from '@/data/synthPresets';
 import {
+  applySynthPreset,
   getAllSynthPresets,
   getCategoryMeta,
-  getPresetsGroupedByCategory,
-} from '@/audio/presetRegistry';
+  groupPresets,
+} from '@/utils/synthPresets';
 import { useAppStore } from '@/store/store';
-import { INITIAL_SYNTH_PARAMS } from '@/store/initialState';
+import { SYNTH_ARP_FIELD, SYNTH_PARAM_FIELD } from '@/store/sourceBuses';
+import { validateActiveSynth } from '@/store/sanitizeSynth';
 import { PresetLibrary } from '../ui/PresetLibrary';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { IconButton } from '../ui/IconButton';
 import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from '../ui/PresetLibrary';
-import { previewSynthPreset } from '@/audio/playback/presetPreview';
+import { previewSynthPatch } from '@/audio/playback/presetPreview';
 import type { PreviewHandle } from '@/audio/playback/presetPreview';
 import { SYNTH_TARGET_STYLES } from '@/utils/synthControl';
 import type { SynthControlTarget } from '@/utils/synthControl';
 
 interface SynthPresetLibraryProps {
-  currentParams: SynthParams;
-  onSelectPreset: (preset: SynthPresetItem) => void;
-  /** Which destination `currentParams` belongs to — selecting a preset rewrites that one. */
+  onSelectPreset: (preset: SynthPreset) => void;
+  /**
+   * Adopting the preset a Save just created, which is deliberately NOT
+   * `onSelectPreset`: selecting stops the bus so a complete sound installs
+   * cleanly, and the saved patch IS the sound already playing, so taking that
+   * path would cut a held key to swap a patch for itself. Separate props
+   * rather than one with a flag, because only the caller knows which happened.
+   */
+  onSavedPreset: (preset: SynthPreset) => void;
+  /**
+   * Which destination this drawer acts on. Selecting a preset rewrites that
+   * track, Save captures its current patch, and the "this one is loaded"
+   * highlight reads its `sourcePresetId` — all three from the store, so the
+   * drawer cannot be pointed at one track while showing another's state.
+   */
   target: SynthControlTarget;
   /** Per-entry oscillator/filter badges. Off in Simple Mode, which hides those stages entirely. */
   showSoundBadges?: boolean;
@@ -38,14 +51,14 @@ interface SynthPresetLibraryProps {
   onClose: () => void;
 }
 
-// Wrapper entries: one per SynthPresetItem (custom first via getAllSynthPresets);
+// Wrapper entries: one per SynthPreset (custom first via getAllSynthPresets);
 // the underlying preset is what onSelect hands to onSelectPreset.
 interface SynthLibraryEntry extends PresetLibraryEntry {
-  preset: SynthPresetItem;
+  preset: SynthPreset;
 }
 
 /** The drawer entry for one preset: the generic's shape, plus the preset itself. */
-function toLibraryEntry(p: SynthPresetItem): SynthLibraryEntry {
+function toLibraryEntry(p: SynthPreset): SynthLibraryEntry {
   return {
     id: p.id,
     name: p.name,
@@ -61,7 +74,7 @@ function toLibraryEntry(p: SynthPresetItem): SynthLibraryEntry {
 // SYNTH_CATEGORIES order; chip labels are the original's ('Custom' for User)
 // and counts live in `count`; the save-form select uses selectLabel to keep
 // the original 'Custom / User' wording.
-function buildCategories(allPresets: readonly SynthPresetItem[]): PresetCategory[] {
+function buildCategories(allPresets: readonly SynthPreset[]): PresetCategory[] {
   return [
     { id: 'All', label: 'All', badgeClass: 'badge badge-primary', description: '', count: String(allPresets.length) },
     ...SYNTH_CATEGORIES.map((meta) => {
@@ -87,15 +100,15 @@ function buildCategories(allPresets: readonly SynthPresetItem[]): PresetCategory
  * four are derived from the same `customSynthPresets` plus the current patch,
  * and reading them together is the whole of "what the drawer shows".
  */
-function useSynthLibraryIndex(currentParams: SynthParams) {
+function useSynthLibraryIndex(currentPresetId: string | null) {
   const customPresets = useAppStore((s) => s.customSynthPresets);
   const allPresets = useMemo(() => getAllSynthPresets(customPresets), [customPresets]);
 
   // Which entry the drawer should reveal on open — the one the card list marks
-  // Active, matched the same way (`isCurrent`, by preset name).
+  // Active, matched the same way (`isCurrent`, by preset ID).
   const activeEntryId = useMemo(
-    () => allPresets.find((p) => p.name === currentParams.preset)?.id,
-    [allPresets, currentParams.preset]
+    () => (currentPresetId ? allPresets.find((p) => p.id === currentPresetId)?.id : undefined),
+    [allPresets, currentPresetId]
   );
 
   const entries = useMemo<SynthLibraryEntry[]>(() => allPresets.map(toLibraryEntry), [allPresets]);
@@ -147,12 +160,12 @@ function useSynthPresetToast() {
  * are the only state any of them needs.
  */
 function useSynthPresetActions({
-  currentParams,
-  onSelectPreset,
+  target,
+  onSavedPreset,
   showToast,
 }: {
-  currentParams: SynthParams;
-  onSelectPreset: (preset: SynthPresetItem) => void;
+  target: SynthControlTarget;
+  onSavedPreset: (preset: SynthPreset) => void;
   showToast: (msg: string, tone?: 'success' | 'error') => void;
 }) {
   const customPresets = useAppStore((s) => s.customSynthPresets);
@@ -164,19 +177,23 @@ function useSynthPresetActions({
 
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
-  // PORT of the original save handler: save the current params (the store
-  // action strips the `preset` label and trims name/description internally),
-  // toast the original message, then select the created preset. Always returns
-  // true — there is no guard, so the generic always closes on submit.
+  // Save the current params (the store action strips the `preset` label and
+  // trims name/description internally), toast, then ADOPT the created preset —
+  // not select it. Selecting stops the bus, and the patch just saved is the one
+  // already sounding, so that would cut a held key to install a sound for
+  // itself. Always returns true — there is no guard, so the generic always
+  // closes on submit.
   const handleSave = (draft: PresetSaveDraft): boolean => {
+    // Read at submit time: the patch being saved is whatever the target track
+    // holds now, not whatever it held when the drawer opened.
     const created = savePreset(
       draft.name,
-      currentParams,
+      useAppStore.getState()[SYNTH_PARAM_FIELD[target]],
       draft.category as SynthPresetCategory,
       draft.description
     );
     showToast(`Preset "${created.name}" saved to [${created.category}]!`);
-    onSelectPreset(created);
+    onSavedPreset(created);
     return true;
   };
 
@@ -189,9 +206,14 @@ function useSynthPresetActions({
 
   const cancelDelete = () => setPendingDelete(null);
 
-  const handleAudition = (preset: SynthPresetItem) => {
+  const handleAudition = (preset: SynthPreset) => {
     previewRef.current?.();
-    previewRef.current = previewSynthPreset(preset, currentParams);
+    // The PRESET's own patch, not the track's. Every entry is complete now, so
+    // the audition is the sound the card promises — it used to play whatever
+    // the track was already holding, which made every card sound identical.
+    // Nothing is written to the store: auditioning is not selecting.
+    const arp = useAppStore.getState()[SYNTH_ARP_FIELD[target]];
+    previewRef.current = previewSynthPatch(applySynthPreset(arp, preset).activeSynth);
   };
 
   const handleExport = () => {
@@ -212,22 +234,34 @@ function useSynthPresetActions({
     reader.onload = (evt) => {
       try {
         const imported = JSON.parse(evt.target?.result as string);
+        let skipped = 0;
         if (Array.isArray(imported)) {
           // Each save prepends to the store, so walk backwards to keep the
           // imported file's original order on top of the existing list.
           [...imported]
             .reverse()
-            .forEach((item: SynthPresetItem) => {
-              savePreset(
-                item.name,
-                // Imported params may be partial; save the full shape so the
-                // stored preset stands on its own (all saved presets do).
-                { ...INITIAL_SYNTH_PARAMS, ...item.params },
-                item.category,
-                item.description
-              );
+            .forEach((item: SynthPreset) => {
+              // Validated, never repaired. An imported file is untrusted input
+              // and a preset is a named thing: handing an unreadable body the
+              // init patch under the name in the file would be the app
+              // inventing a sound and attributing it to the user.
+              const { value } = validateActiveSynth({
+                engine: item?.engine,
+                patch: item?.patch,
+                sourcePresetId: null,
+              });
+              if (!value) {
+                skipped += 1;
+                return;
+              }
+              savePreset(item.name, value, item.category, item.description);
             });
-          showToast(`Imported ${imported.length} presets!`);
+          showToast(
+            skipped === 0
+              ? `Imported ${imported.length} presets!`
+              : `Imported ${imported.length - skipped} presets, skipped ${skipped} unreadable`,
+            skipped === 0 ? 'success' : 'error',
+          );
         }
       } catch {
         showToast('Invalid JSON preset file', 'error');
@@ -262,7 +296,7 @@ function groupSynthEntries(
     ];
   }
 
-  return getPresetsGroupedByCategory(filtered.map((e) => e.preset)).map((group) => ({
+  return groupPresets(filtered.map((e) => e.preset)).map((group) => ({
     key: group.category,
     className: 'space-y-2',
     header: (
@@ -314,24 +348,27 @@ function SynthEmptyState({
 // (osc type + filter label/cutoff), audition + delete buttons.
 function SynthPresetCard({
   entry,
-  currentPresetName,
+  currentPresetId,
   showSoundBadges,
   onSelect,
   onAudition,
   onRequestDelete,
 }: {
   entry: SynthLibraryEntry;
-  currentPresetName: string | undefined;
+  currentPresetId: string | null;
   showSoundBadges: boolean;
-  onSelect: (preset: SynthPresetItem) => void;
-  onAudition: (preset: SynthPresetItem) => void;
+  onSelect: (preset: SynthPreset) => void;
+  onAudition: (preset: SynthPreset) => void;
   onRequestDelete: (id: string, name: string) => void;
 }) {
   const preset = entry.preset;
-  const isCurrent = currentPresetName === preset.name;
-  const oscType = preset.params.oscType || 'sawtooth';
-  const filterType = preset.params.filterType || 'lowpass';
-  const cutoff = preset.params.filterCutoff || 2000;
+  const isCurrent = currentPresetId === preset.id;
+  // Straight off the patch: OSC 1 is the voice's headline waveform, and the
+  // filter pair is what the old badges showed. No defaults are needed any
+  // more — every entry states all three.
+  const oscType = preset.patch.synth.oscillators[0].waveform;
+  const filterType = preset.patch.synth.filter.type;
+  const cutoff = Math.round(preset.patch.synth.filter.cutoffHz);
   const meta = getCategoryMeta(preset.category);
 
   return (
@@ -467,17 +504,19 @@ function SynthLibraryFooter({ isOpen, onClose }: { isOpen: boolean; onClose: () 
 }
 
 export function SynthPresetLibrary({
-  currentParams,
   onSelectPreset,
+  onSavedPreset,
   target,
   showSoundBadges = true,
   isOpen,
   onClose,
 }: SynthPresetLibraryProps) {
+  const currentPresetId = useAppStore((s) => s[SYNTH_PARAM_FIELD[target]].sourcePresetId);
   const { allPresets, activeEntryId, entries, categories, filterEntries } =
-    useSynthLibraryIndex(currentParams);
+    useSynthLibraryIndex(currentPresetId);
+  const currentPresetName = allPresets.find((p) => p.id === currentPresetId)?.name;
   const { toastMsg, toastTone, showToast } = useSynthPresetToast();
-  const actions = useSynthPresetActions({ currentParams, onSelectPreset, showToast });
+  const actions = useSynthPresetActions({ target, onSavedPreset, showToast });
 
   return (
     <>
@@ -519,7 +558,7 @@ export function SynthPresetLibrary({
         renderEntry={(entry) => (
           <SynthPresetCard
             entry={entry}
-            currentPresetName={currentParams.preset}
+            currentPresetId={currentPresetId}
             showSoundBadges={showSoundBadges}
             onSelect={onSelectPreset}
             onAudition={actions.handleAudition}
@@ -539,7 +578,7 @@ export function SynthPresetLibrary({
           withRoman: false,
           defaultCategory: 'Lead',
           variant: 'inline',
-          initialName: currentParams.preset ? `${currentParams.preset} (Custom)` : 'My Synth Patch',
+          initialName: currentPresetName ? `${currentPresetName} (Custom)` : 'My Synth Patch',
         }}
         onSelect={(entry) => onSelectPreset(entry.preset)}
         onDelete={(id) => {

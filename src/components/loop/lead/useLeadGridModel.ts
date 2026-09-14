@@ -14,6 +14,7 @@ import {
 } from '@/audio/leadMelody';
 import { clampLoopLength, loopLengthDivisors } from '@/utils/patternTimeline';
 import { previewSequencerNote } from '@/audio/playback/presetPreview';
+import { synthReleaseSeconds } from '@/utils/synthPatch';
 import {
   LEAD_WINDOW_OCTAVES,
   leadColumnCells,
@@ -210,7 +211,7 @@ export function useLeadGridCommands(trackId: MelodyTrackId, model: LeadGridModel
       const params = state[track.synthParams];
       previewSequencerNote(note, params, undefined, {
         holdSec: leadPreviewHoldSec(state.bpm, stride, lenTicks),
-        releaseSec: params.release,
+        releaseSec: synthReleaseSeconds(params),
       });
     },
     [stride, track.synthParams],

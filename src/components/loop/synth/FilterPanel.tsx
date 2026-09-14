@@ -1,97 +1,118 @@
-import React from "react";
-import { Sliders } from "lucide-react";
-import { Knob } from "@/components/ui/Knob";
-import { ModuleHeader } from "@/components/ui/ModuleHeader";
-import { PanelCard } from "@/components/ui/PanelCard";
-import { FIELD_LABEL } from "@/components/ui/fieldClasses";
-import { useSynthChannel } from "./useSynthChannel";
-import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
+import type { FilterParams, FilterType } from '@/types/synth';
+import { FIELD_LABEL } from '@/components/ui/fieldClasses';
+import {
+  FILTER_TYPES,
+  FILTER_TYPE_CODES,
+  FILTER_TYPE_LABELS,
+  FilterTypeIcon,
+} from './FilterTypeIcon';
+import {
+  KnobGrid,
+  ModuleChip,
+  ProModule,
+  ToggleButton,
+  type PatchPanelProps,
+} from './proControls';
 
 /**
- * Pro-Mode panel — Filter. Reads the active synth channel from the store
- * rather than taking props, so SoundView renders `<FilterPanel />` with no
- * wiring. Its identity colour is `module-filter` (docs/design.md §6.5); the
- * token is named in the class strings that moved with the markup.
+ * Pro-Mode module 3 — filter and drive (prototype Variant A's
+ * `filter-primary`).
+ *
+ * Four types now, not three: `FilterParams` has carried `notch` since the
+ * engine cutover, and a type the patch can hold but the panel cannot show is a
+ * preset a user can load and then never get back to.
+ *
+ * `resonance` is the unitless 0..1 synth control, NOT the Web Audio `Q` the
+ * biquad adapter maps it onto — the old panel's 0.1..20 range was the Q, which
+ * is why it is gone.
  */
-export function FilterPanel() {
-  const { params, onChangeParams } = useSynthChannel();
-  // 2. Filter Section
+const FILTER_COLOR = 'text-module-filter' as const;
+
+export function FilterPanel({ patch, onPatch }: PatchPanelProps) {
+  const filter = patch.synth.filter;
+  const write = (next: Partial<FilterParams>) =>
+    onPatch({ ...patch, synth: { ...patch.synth, filter: { ...filter, ...next } } });
+
   return (
-          <PanelCard inset className="flex-1">
-            <div className="card-body p-4 space-y-3.5">
-            <ModuleHeader
-              badge={2}
-              icon={<Sliders className="w-3.5 h-3.5 text-module-filter" />}
-              title="VCF Filter"
-            />
+    <ProModule
+      badge={3}
+      title="Filter + drive"
+      color={FILTER_COLOR}
+      chip={<ModuleChip color={FILTER_COLOR}>{FILTER_TYPE_CODES[filter.type]}</ModuleChip>}
+    >
+      <div>
+        <span className={FIELD_LABEL} id="label-filter-type">
+          Response
+        </span>
+        <div
+          role="group"
+          aria-labelledby="label-filter-type"
+          className="grid grid-cols-4 gap-1"
+        >
+          {FILTER_TYPES.map((type: FilterType) => (
+            <ToggleButton
+              key={type}
+              id={`btn-filter-${type}`}
+              label={FILTER_TYPE_LABELS[type]}
+              pressed={filter.type === type}
+              color={FILTER_COLOR}
+              onPress={() => write({ type })}
+              className="flex-col gap-0 h-auto py-1 px-0"
+            >
+              <FilterTypeIcon type={type} />
+              <span className="text-[9px] leading-none">{FILTER_TYPE_CODES[type]}</span>
+            </ToggleButton>
+          ))}
+        </div>
+      </div>
 
-            <div>
-              <span className={FIELD_LABEL} id="label-filter-type">
-                Filter Type
-              </span>
-              <div className="grid grid-cols-3 gap-1" role="group" aria-labelledby="label-filter-type">
-                {(["lowpass", "bandpass", "highpass"] as const).map((t) => (
-                  <button
-                    key={t}
-                    id={`btn-filter-${t}`}
-                    onClick={() => onChangeParams({ ...params, filterType: t })}
-                    className={`btn btn-xs text-[11px] font-semibold uppercase ${
-                      params.filterType === t
-                        ? "[--btn-color:var(--color-module-filter)] [--btn-fg:var(--color-module-filter-content)]"
-                        : TOOLBAR_BUTTON_IDLE
-                    }`}
-                  >
-                    {t === "lowpass" ? "LPF" : t === "bandpass" ? "BPF" : "HPF"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-start justify-between gap-2">
-              <Knob
-                id="slider-filter-cutoff"
-                label="Cutoff"
-                color="text-module-filter"
-                value={params.filterCutoff}
-                min={50}
-                max={12000}
-                step={10}
-                scale="log"
-                format={(v) => `${Math.round(v)} Hz`}
-                onChange={(v) => onChangeParams({ ...params, filterCutoff: v })}
-              />
-
-              <Knob
-                id="slider-filter-resonance"
-                label="Resonance"
-                color="text-module-filter"
-                value={params.filterResonance}
-                min={0.1}
-                max={20}
-                step={0.1}
-                scale="linear"
-                format={(v) => v.toFixed(1)}
-                onChange={(v) =>
-                  onChangeParams({ ...params, filterResonance: v })
-                }
-              />
-
-              <Knob
-                id="slider-filter-env"
-                label="Env Mod"
-                color="text-module-filter"
-                value={params.filterEnvAmount}
-                min={0}
-                max={6000}
-                step={50}
-                scale="linear"
-                format={(v) => `+${Math.round(v)} Hz`}
-                onChange={(v) =>
-                  onChangeParams({ ...params, filterEnvAmount: v })
-                }
-              />
-            </div>
-            </div>
-          </PanelCard>
+      <KnobGrid
+        color={FILTER_COLOR}
+        size="md"
+        specs={[
+          {
+            id: 'slider-filter-cutoff',
+            label: 'Cutoff',
+            value: filter.cutoffHz,
+            min: 20,
+            max: 20_000,
+            step: 1,
+            scale: 'log',
+            format: (v) => (v >= 1000 ? `${(v / 1000).toFixed(2)} kHz` : `${Math.round(v)} Hz`),
+            onChange: (cutoffHz) => write({ cutoffHz }),
+          },
+          {
+            id: 'slider-filter-resonance',
+            label: 'Reso',
+            value: filter.resonance,
+            min: 0,
+            max: 1,
+            step: 0.01,
+            format: (v) => `${Math.round(v * 100)}%`,
+            onChange: (resonance) => write({ resonance }),
+          },
+          {
+            id: 'slider-filter-drive',
+            label: 'Drive',
+            value: filter.driveDb,
+            min: 0,
+            max: 24,
+            step: 0.5,
+            format: (v) => `${v.toFixed(1)} dB`,
+            onChange: (driveDb) => write({ driveDb }),
+          },
+          {
+            id: 'slider-filter-keytrack',
+            label: 'Key track',
+            value: filter.keyTrack,
+            min: 0,
+            max: 1,
+            step: 0.01,
+            format: (v) => `${Math.round(v * 100)}%`,
+            onChange: (keyTrack) => write({ keyTrack }),
+          },
+        ]}
+      />
+    </ProModule>
   );
 }

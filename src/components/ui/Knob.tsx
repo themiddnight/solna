@@ -88,6 +88,20 @@ export interface KnobProps {
    * Do not rely on it for a horizontal knob until horizontal support lands.
    */
   descriptor?: string;
+  /**
+   * The accessible name, when the visible `label` is not enough to tell this
+   * knob from another one on screen. Defaults to `label`.
+   *
+   * It exists because a knob's visible label is squeezed into ~48px — "Oct",
+   * "Semi", "Attack" — and the synth's Pro panel draws the same four labels
+   * under OSC 1 and OSC 2, and the same ADSR four under ENV 1 and ENV 2. A
+   * screen-reader user hearing "Attack" four times cannot tell which envelope
+   * is which, and widening the visible label to say so would break the grid.
+   *
+   * It must CONTAIN the visible label (WCAG 2.5.3, Label in Name): "OSC 1 Oct"
+   * is a legal name for a knob captioned "Oct", "OSC 1 octave trim" is not.
+   */
+  ariaLabel?: string;
   /** Needle + progress arc + value tint. Token classes only (default 'text-primary'). */
   color?: KnobColor;
   format?: (v: number) => string;
@@ -356,6 +370,7 @@ export const Knob = ({
   scale = 'linear',
   size = 'md',
   label,
+  ariaLabel,
   descriptor,
   color,
   format = String,
@@ -398,7 +413,7 @@ export const Knob = ({
       <svg
         id={id}
         role="slider"
-        aria-label={label}
+        aria-label={ariaLabel ?? label}
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={value}

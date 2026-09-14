@@ -12,8 +12,8 @@ import { LOOP_COPY_GROUPS } from '@/store/loopCopy';
 import { FIELD_LABEL, FIELD_LANE, HEADER_GROUP, SECTION_HEADER } from '../ui/fieldClasses';
 import { PANEL_CARD } from '../ui/PanelCard';
 import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from '@/utils/synthControl';
-import type { SynthControlTarget, SynthParamChannel } from '@/utils/synthControl';
-import type { SynthParams } from '@/types';
+import type { SynthChannel, SynthControlTarget } from '@/utils/synthControl';
+import { defaultTrackArp, defaultTrackSynth } from '@/store/initialState';
 
 /** The full opening tag of the element whose markup contains `needle` — pins the tag name, not text position. */
 function openTagContaining(html: string, needle: string): string {
@@ -268,41 +268,20 @@ describe('the Drum Sound card, moved from the sequencer (nav restructure Task 6)
 // Lead: the resolver's trailing `?? channels.synth` would absorb a stray
 // 'drum' silently, which is why the fallback is never reached with one.
 describe('the keyboard auditions the focused track', () => {
-  // The `const baseParams: SynthParams = { … }` literal, the `channel(name)`
-  // factory and the `channels` object below the describe header are UNCHANGED
-  // — do not retype them, do not touch them. Only the header, the comment
-  // above it and the tests inside it change.
+  // The channel fixture below is the ENGINE-discriminated shape: an
+  // `ActiveSynth` plus its own Arp object and the two writers, not the flat
+  // `SynthParams` pair this block used before the Task 7 cutover. The marker
+  // that tells the five channels apart is `sourcePresetId` — display
+  // provenance, the one field on `ActiveSynth` a test may set to an arbitrary
+  // string without inventing a patch that could never be produced.
 
-  const baseParams: SynthParams = {
-    oscType: 'sine',
-    subOscVolume: 0,
-    noiseVolume: 0,
-    detune: 0,
-    filterType: 'lowpass',
-    filterCutoff: 500,
-    filterResonance: 1,
-    filterEnvAmount: 0,
-    attack: 0.01,
-    decay: 0.2,
-    sustain: 0.8,
-    release: 0.3,
-    filterAttack: 0.01,
-    filterDecay: 0.2,
-    filterSustain: 1,
-    filterRelease: 0.3,
-    lfoRate: 0,
-    lfoDepth: 0,
-    lfoTarget: 'volume',
-    octave: 0,
-    arpActive: false,
-    arpMode: 'up',
-    arpRate: '16n',
-    arpOctaves: 1,
-    preset: '',
-  };
-
-  function channel(name: string): SynthParamChannel {
-    return { params: { ...baseParams, preset: name }, setParams: () => {} };
+  function channel(sourcePresetId: string): SynthChannel {
+    return {
+      activeSynth: { ...defaultTrackSynth('synth'), sourcePresetId },
+      arpSettings: defaultTrackArp('synth'),
+      setActiveSynth: () => {},
+      setArpSettings: () => {},
+    };
   }
 
   const channels = {
@@ -330,7 +309,7 @@ describe('the keyboard auditions the focused track', () => {
     for (const [focus, preset] of cases) {
       const target = synthTargetForFocus(focus);
       if (target === null) throw new Error(`expected a melodic target for ${focus}`);
-      expect(resolveSynthControlChannel(target, channels).params.preset).toBe(preset);
+      expect(resolveSynthControlChannel(target, channels).activeSynth.sourcePresetId).toBe(preset);
     }
   });
 
@@ -561,6 +540,18 @@ describe('SoundView mode switch', () => {
     expect(simple).toBeGreaterThan(title);
     expect(simple).toBeLessThan(synthBand);
     expect(html.slice(title, simple)).toContain(HEADER_GROUP);
+  });
+
+  /**
+   * Which depth is showing must reach a screen reader, not only a colour.
+   * `btn-active` is the whole visual cue for the selected segment, so without
+   * `aria-pressed` the switcher announced two identical buttons and no way to
+   * tell which view was open.
+   */
+  test('the selected depth is announced, not just coloured', () => {
+    const html = renderToString(<SoundView />);
+    expect(openTagContaining(html, 'id="btn-mode-simple"')).toContain('aria-pressed="true"');
+    expect(openTagContaining(html, 'id="btn-mode-pro"')).toContain('aria-pressed="false"');
   });
 });
 

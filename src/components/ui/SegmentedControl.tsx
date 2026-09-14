@@ -64,7 +64,15 @@ export function SegmentedButton({
     <button
       id={id}
       type="button"
+      // BOTH, and they answer different questions. `aria-current` says which
+      // view the app is showing — what the tab bar and the layer switcher use,
+      // and what Header.test.tsx pins. `aria-pressed` says whether THIS button
+      // is the selected one, which is the only cue a screen-reader user gets
+      // for a mutually-exclusive selector whose selected state is otherwise
+      // carried by `btn-active` colour alone. Without it the Sound tab's
+      // Simple/Pro switcher announced neither option as chosen.
       aria-current={active ? 'page' : undefined}
+      aria-pressed={active}
       aria-label={label}
       onClick={onSelect}
       className={segmentedButtonClass(active)}

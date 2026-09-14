@@ -26,10 +26,14 @@ const SIZE_CLASS: Record<IconButtonSize, string> = {
  * explicit base-300 border — not daisyUI's `btn-outline`, which paints the
  * border in the button's own colour and would change four call sites' look.
  * This closed union ends the `btn-ghost border border-base-300` drift for
- * every icon-only call site. Three hand-written text-button copies remain
- * out of scope — `LeadMelodyGrid.tsx`'s octave `-`/`+` buttons and
- * `LfoPanel.tsx`'s octave selector (`-2`…`+2`) — because `IconButton`
- * requires an `icon` and these render literal text, not an icon.
+ * every icon-only call site. Two hand-written text-button copies remain out of
+ * scope — `LeadGridControls.tsx`'s octave `-`/`+` pair — because `IconButton`
+ * requires an `icon` and those render literal text, not an icon.
+ *
+ * The synth Pro panel's module toggles (`loop/synth/proControls.tsx`) are
+ * deliberately not `IconButton`s either, icon or not: they are pressed-state
+ * toggles carrying `aria-pressed` and a per-module `--btn-color`, neither of
+ * which this variant union expresses.
  */
 const VARIANT_CLASS: Record<IconButtonVariant, string> = {
   ghost: 'btn-ghost',

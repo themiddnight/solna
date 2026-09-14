@@ -1,5 +1,5 @@
 import React from "react";
-import type { CategoryPresetGroup } from "@/audio/presetRegistry";
+import type { CategoryPresetGroup } from "@/utils/synthPresets";
 import { FIELD_LABEL, FIELD_SELECT } from "@/components/ui/fieldClasses";
 
 export interface PresetSelectProps {

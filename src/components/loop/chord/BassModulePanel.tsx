@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { useAppStore } from "@/store/store";
+import type { SynthPreset } from "@/data/synthPresets";
 import { BASS_STYLE_GROUPS } from "@/audio/bassPatterns";
 import {
-  applyPreset,
   getAllSynthPresets,
-  getPresetsGroupedByCategory,
-} from "@/audio/presetRegistry";
+  groupPresets,
+} from "@/utils/synthPresets";
 import { getMeter } from "@/utils/meter";
 import { foldPatternBoundaries, loopLengthDivisors } from "@/utils/patternTimeline";
 import { loopBars } from "@/utils/songStructure";
@@ -22,6 +22,7 @@ import {
   SoundPresetField,
 } from "./moduleFields";
 import { BASS_TOOLS, bassStepLabel, bassToolValue, type BassPatternTool } from "./bassStepChoice";
+import { loadSynthPreset } from '@/store/synthPresetInstall';
 
 export interface BassModulePanelProps {
   onPatternPreviewDown: (e: React.MouseEvent | React.TouchEvent) => void;
@@ -157,7 +158,6 @@ function BassPatternFields({
   const meterId = useAppStore((s) => s.meterId);
   const chords = useAppStore((s) => s.chords);
   const bassSynthParams = useAppStore((s) => s.bassSynthParams);
-  const setBassSynthParams = useAppStore((s) => s.setBassSynthParams);
   const customPresets = useAppStore((s) => s.customSynthPresets);
   const bassOctave = useAppStore((s) => s.bassOctave);
   const setBassOctave = useAppStore((s) => s.setBassOctave);
@@ -175,7 +175,7 @@ function BassPatternFields({
     [customPresets],
   );
   const presetGroups = useMemo(
-    () => getPresetsGroupedByCategory(allPresets),
+    () => groupPresets(allPresets),
     [allPresets],
   );
   // The bass lane's own divisors — the progression's, not the chord lane's
@@ -194,6 +194,13 @@ function BassPatternFields({
     setBassPatternId(value);
   };
 
+  // The bus stop, the Arp read and the patch write all live in
+  // `store/synthPresetInstall.ts` — see there for why a load stops the bus and
+  // adopting a just-saved preset does not.
+  const pickPreset = (preset: SynthPreset) => {
+    loadSynthPreset('bass', preset);
+  };
+
   return (
     <div className="flex flex-row flex-wrap items-end gap-3">
           <SoundPresetField
@@ -202,10 +209,8 @@ function BassPatternFields({
             placeholder="Bass Preset…"
             groups={presetGroups}
             allPresets={allPresets}
-            value={bassSynthParams.preset ?? ""}
-            onPick={(preset) =>
-              setBassSynthParams(applyPreset(bassSynthParams, preset))
-            }
+            selectedPresetId={bassSynthParams.sourcePresetId}
+            onPick={pickPreset}
           />
 
           <OctaveSelect
