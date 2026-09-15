@@ -175,6 +175,9 @@ export const BeatSoundSection = React.memo(function BeatSoundSection({ depth, ac
   const activeLoopId = useLiveStore((s) => s.activeLoopId);
   const customBeatPresets = useLiveStore((s) => s.customBeatPresets);
 
+  // useLiveStore: a test sets `beatMix` before rendering, and only this hook
+  // serves getState() for the server snapshot (.claude/rules/testing.md).
+  const mutedVoices = useLiveStore((s) => s.beatMix.voices);
   const setBeatParams = useAppStore((s) => s.setBeatParams);
   const setBeatPreset = useAppStore((s) => s.setBeatPreset);
   const saveCustomBeatPreset = useAppStore((s) => s.saveCustomBeatPreset);
@@ -297,6 +300,7 @@ export const BeatSoundSection = React.memo(function BeatSoundSection({ depth, ac
           onCancel={cancel}
           onResetVoice={resetBeatVoice}
           resetDisabled={!baseResolves}
+          mutedVoices={mutedVoices}
         />
       )}
     </SectionCard>

@@ -13,6 +13,11 @@ export interface BeatVoiceGridProps {
   onCancel: () => void;
   onResetVoice: (voice: BeatVoiceId) => void;
   resetDisabled: boolean;
+  /** The mixer's per-voice mix entries, by voice id. Passed as the store's own
+   *  object rather than a mapped set of booleans: `useLiveStore` runs its
+   *  selector through `useSyncExternalStore`, so a selector that built a fresh
+   *  object every call would never compare equal to itself. */
+  mutedVoices: Readonly<Record<BeatVoiceId, { muted: boolean }>>;
 }
 
 /**
@@ -43,6 +48,7 @@ export function BeatVoiceGrid({
   onCancel,
   onResetVoice,
   resetDisabled,
+  mutedVoices,
 }: BeatVoiceGridProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-3 items-start">
@@ -60,6 +66,7 @@ export function BeatVoiceGrid({
           onCancel={onCancel}
           onReset={() => onResetVoice(row.id)}
           resetDisabled={resetDisabled}
+          muted={mutedVoices[row.id].muted}
         />
       ))}
     </div>

@@ -73,6 +73,11 @@ export interface BeatVoiceCardProps {
    *  SAME lane, because at that depth they are one set. */
   depth: SoundDepth;
   onPreview: () => void;
+  /** This voice's mixer mute. The per-voice mute drives the voice's gain node
+   *  to 0 (`engineSync.pushBeatVoiceGains`), so Preview is genuinely silent
+   *  while it is set — and the control that sets it lives on another tab, so
+   *  the button has to name the reason rather than just doing nothing. */
+  muted: boolean;
   /** Writes one parameter into the draft and previews it. */
   onDraft: (key: string, value: number) => void;
   onCommit: () => void;
@@ -125,6 +130,7 @@ export function BeatVoiceCard({
   onCommit,
   onCancel,
   onReset,
+  muted,
   resetDisabled,
 }: BeatVoiceCardProps) {
   const { primary, more } = BEAT_CONTROL_SCHEMA[voice];
@@ -182,8 +188,9 @@ export function BeatVoiceCard({
               <button
                 id={`btn-beat-preview-${voice}`}
                 type="button"
+                disabled={muted}
                 className={VOICE_ACTION}
-                title={`Preview ${meta.label}`}
+                title={muted ? `${meta.label} is muted in the mixer` : `Preview ${meta.label}`}
                 aria-label={`Preview ${meta.label}`}
                 onClick={onPreview}
               >

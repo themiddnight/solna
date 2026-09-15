@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { BEAT_PRESETS, BEAT_VOICE_IDS, DEFAULT_BEAT_PRESET_ID } from '@/data/beatPresets';
 import { useAppStore } from '@/store/store';
+import { defaultBeatState } from '@/store/beatPresets';
 import { PANEL_CARD_INSET } from '@/components/ui/PanelCard';
 import { BEAT_VOICE_META } from './beatVoices';
 import { BEAT_CONTROL_SCHEMA } from './beatControlSchema';
@@ -29,10 +30,31 @@ afterEach(() => {
   useAppStore.setState({
     beatParams: { basePresetId: DEFAULT_BEAT_PRESET_ID, ...structuredClone(BEAT_PRESETS[0].patch) },
     customBeatPresets: [],
+    beatMix: defaultBeatState().beatMix,
   });
 });
 
 describe('the Beat Sound section', () => {
+  test("a muted voice's Preview button is disabled and says why", () => {
+    // The per-voice mute drives that voice's gain node to 0, so Preview is
+    // genuinely silent. An enabled button that does nothing reads as "Preview
+    // is broken", and the control that caused it lives on another tab — so the
+    // card has to name the reason, the way its Reset button already does.
+    const mix = structuredClone(useAppStore.getState().beatMix);
+    mix.voices.hihat.muted = true;
+    useAppStore.setState({ beatMix: mix });
+
+    const html = render('pro');
+    const hat = html.slice(html.indexOf('id="btn-beat-preview-hihat"'));
+    expect(hat.slice(0, 400)).toContain('disabled');
+    expect(html).toContain(`${BEAT_VOICE_META.hihat.label} is muted in the mixer`);
+
+    // ...and an unmuted sibling is untouched.
+    const kick = html.slice(html.indexOf('id="btn-beat-preview-kick"'));
+    expect(kick.slice(0, 400)).not.toContain('disabled');
+    expect(html).toContain(`Preview ${BEAT_VOICE_META.kick.label}`);
+  });
+
   test('is one section, and there is no Simple/Pro depth toggle', () => {
     const html = render();
     expect(html.split('>Beat Sound<').length - 1).toBe(1);
