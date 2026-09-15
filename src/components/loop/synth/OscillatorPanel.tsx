@@ -139,7 +139,6 @@ export function OscillatorPanel({ patch, onPatch }: PatchPanelProps) {
       badge={2}
       title="Oscillators"
       color={OSC_COLOR}
-      className="md:col-span-2 xl:col-span-1"
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <OscUnit index={0} osc={osc1} onOsc={(next) => writeOsc(0, next)} />

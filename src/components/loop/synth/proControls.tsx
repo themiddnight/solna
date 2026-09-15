@@ -330,7 +330,6 @@ export function ProModule({
   title,
   color,
   chip,
-  className,
   children,
 }: {
   badge: number;
@@ -338,11 +337,14 @@ export function ProModule({
   color: ProModuleColor;
   /** The header's right cell — the LOCKED note, the voice count, the Arp switch. */
   chip?: ReactNode;
-  className?: string;
   children: ReactNode;
 }) {
   return (
-    <PanelCard inset className={`min-w-0 grow ${className ?? ''}`}>
+    /* No per-module sizing hook. The rack is a flex wrap, so a module's width
+       comes from its own content and `grow`; the two `md:col-span-2` overrides
+       that used to arrive through a `className` prop were grid-item properties
+       a flex item ignores, and they outlived the grid by a commit. */
+    <PanelCard inset className="min-w-0 grow">
       <div className="card-body p-3 gap-2.5">
         <ModuleHeader
           badge={badge}
