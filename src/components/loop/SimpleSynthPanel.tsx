@@ -48,8 +48,10 @@ interface SimpleControlSpec {
    * Pro, so a knob keeps its identity across a mode switch.
    *
    * Width is the one that does not match its GROUP: `common.stereoWidth` lives
-   * in Pro's Voice module (`module-env-vca`) while Variant B files Width under
-   * Motion. The identity follows the parameter, not the box it is drawn in.
+   * in Pro's Voice module (`module-voice`) while Variant B files Width under
+   * Motion. The identity follows the parameter, not the box it is drawn in —
+   * which only became visible once Voice stopped borrowing the envelope's hue,
+   * since before that Width wore the Feel group's colour by coincidence.
    */
   color: ProModuleColor;
   min: number;
@@ -112,7 +114,7 @@ export const SIMPLE_CONTROL_SPECS: Record<SimpleControlId, SimpleControlSpec> = 
   attack: {
     label: 'Attack',
     hint: 'soft to punchy',
-    color: 'text-module-env-vca',
+    color: 'text-module-env-amp',
     min: 0.001,
     max: 8,
     scale: 'log',
@@ -121,7 +123,7 @@ export const SIMPLE_CONTROL_SPECS: Record<SimpleControlId, SimpleControlSpec> = 
   tail: {
     label: 'Tail',
     hint: 'short to lasting',
-    color: 'text-module-env-vca',
+    color: 'text-module-env-amp',
     min: 0.001,
     max: 8,
     scale: 'log',
@@ -139,7 +141,7 @@ export const SIMPLE_CONTROL_SPECS: Record<SimpleControlId, SimpleControlSpec> = 
   width: {
     label: 'Width',
     hint: 'narrow to wide',
-    color: 'text-module-env-vca',
+    color: 'text-module-voice',
     min: 0,
     max: 1,
     step: 0.01,
@@ -173,7 +175,7 @@ const SIMPLE_GROUPS: readonly {
     id: 'feel',
     title: 'Feel',
     kicker: 'note response',
-    color: 'text-module-env-vca',
+    color: 'text-module-env-amp',
     controls: ['attack', 'tail'],
   },
   {
@@ -267,7 +269,11 @@ function SimplePerformance({
       <ToggleRow
         idPrefix="btn-simple-voice"
         caption="Play style"
-        color="text-module-env-vca"
+        /* `common.voiceMode` is a Voice parameter, so it wears Voice — the
+           same "identity follows the parameter" rule the knob table above
+           states. It read as the envelope's colour only while Voice had no
+           hue of its own. */
+        color="text-module-voice"
         value={common.voiceMode}
         options={[
           { value: 'mono', label: 'Mono, monophonic', content: 'Mono' },

@@ -1,12 +1,7 @@
 import type { OscillatorParams, OscillatorWaveform } from '@/types/synth';
 import { SYNTH_GAIN_FLOOR_DB } from '@/utils/synthPatch';
 import { OSCILLATOR_WAVEFORMS, WAVEFORM_LABELS, WaveformIcon } from './WaveformIcon';
-import {
-  KnobGrid,
-  ProModule,
-  ToggleButton,
-  type PatchPanelProps,
-} from './proControls';
+import { EnableToggle, KnobGrid, ProModule, ToggleButton, type PatchPanelProps } from './proControls';
 
 /**
  * Pro-Mode module 1 — the two full oscillators (prototype Variant A's
@@ -41,15 +36,13 @@ function OscUnit({
     <div className="min-w-0 rounded-box border border-base-300 bg-base-100 p-2 space-y-2">
       <div className="flex items-center justify-between gap-1">
         <span className="text-[10px] font-bold text-base-content">{name}</span>
-        <ToggleButton
+        <EnableToggle
           id={`btn-${id}-enabled`}
-          label={`${name} ${osc.enabled ? 'ON' : 'OFF'}`}
-          pressed={osc.enabled}
+          name={name}
+          enabled={osc.enabled}
           color={OSC_COLOR}
-          onPress={() => onOsc({ ...osc, enabled: !osc.enabled })}
-        >
-          {osc.enabled ? 'ON' : 'OFF'}
-        </ToggleButton>
+          onToggle={() => onOsc({ ...osc, enabled: !osc.enabled })}
+        />
       </div>
 
       <div
@@ -143,7 +136,7 @@ export function OscillatorPanel({ patch, onPatch }: PatchPanelProps) {
 
   return (
     <ProModule
-      badge={1}
+      badge={2}
       title="Oscillators"
       color={OSC_COLOR}
       className="md:col-span-2 xl:col-span-1"

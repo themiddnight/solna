@@ -34,7 +34,7 @@ export function FilterPanel({ patch, onPatch }: PatchPanelProps) {
 
   return (
     <ProModule
-      badge={3}
+      badge={4}
       title="Filter + drive"
       color={FILTER_COLOR}
     >

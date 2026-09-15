@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Power, PowerOff } from 'lucide-react';
 import { Knob } from '@/components/ui/Knob';
 import type { KnobColor, KnobScale, KnobSize } from '@/components/ui/Knob';
 import { ModuleHeader } from '@/components/ui/ModuleHeader';
@@ -40,19 +41,25 @@ export interface PatchPanelProps {
  * signal STAGE — colouring the filter with the bass token would say the filter
  * belongs to the bass track.
  *
- * `text-module-env-vca` does double duty, on ENV 1 and on Voice. Those are the
- * two amplitude-stage modules — the prototype's own flow ribbon reads
- * "VOICE · AMP + UNISON" — and `index.css` records that the module ring is full
- * at nine hues with a 25 degree floor, so a tenth hue could not be more than
- * about 13 degrees from a neighbour. A shared identity that says something true
- * beats a new one that breaks the palette's own spacing rule.
+ * Seven identities for seven panels, but ENV 1 and ENV 2 are two SHADES of
+ * one — same green family, about 8 degrees apart — because they are one module
+ * type instanced twice. Related, not interchangeable: a reader sweeping the
+ * rack sees one envelope family, and a reader looking at the two side by side
+ * can tell which is which without reading the badge. It used to be ENV 1 and Voice that shared, on the argument that
+ * both are the amplitude stage and that the ring was full at nine hues with a
+ * 25 degree floor. The count was right and the pairing was wrong: the two
+ * envelopes are the panels a reader most needs to see as related, and Voice —
+ * mono/poly, unison, spread, glide, width — is not a signal stage at all. The
+ * ring did not have to grow; collapsing the envelopes freed the tenth slot
+ * that was never available.
  */
 export type ProModuleColor = Extract<
   KnobColor,
   | 'text-module-osc'
   | 'text-module-filter'
-  | 'text-module-env-vca'
-  | 'text-module-env-vcf'
+  | 'text-module-env-amp'
+  | 'text-module-env-mod'
+  | 'text-module-voice'
   | 'text-module-lfo'
   | 'text-module-arp'
 >;
@@ -69,10 +76,12 @@ const ACTIVE_BUTTON: Record<ProModuleColor, string> = {
     '[--btn-color:var(--color-module-osc)] [--btn-fg:var(--color-module-osc-content)]',
   'text-module-filter':
     '[--btn-color:var(--color-module-filter)] [--btn-fg:var(--color-module-filter-content)]',
-  'text-module-env-vca':
-    '[--btn-color:var(--color-module-env-vca)] [--btn-fg:var(--color-module-env-vca-content)]',
-  'text-module-env-vcf':
-    '[--btn-color:var(--color-module-env-vcf)] [--btn-fg:var(--color-module-env-vcf-content)]',
+  'text-module-env-amp':
+    '[--btn-color:var(--color-module-env-amp)] [--btn-fg:var(--color-module-env-amp-content)]',
+  'text-module-env-mod':
+    '[--btn-color:var(--color-module-env-mod)] [--btn-fg:var(--color-module-env-mod-content)]',
+  'text-module-voice':
+    '[--btn-color:var(--color-module-voice)] [--btn-fg:var(--color-module-voice-content)]',
   'text-module-lfo':
     '[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]',
   'text-module-arp':
@@ -120,6 +129,62 @@ export function ToggleButton({
       } ${className ?? ''}`}
     >
       {children}
+    </button>
+  );
+}
+
+/**
+ * The Pro rack's ENABLE switch: OSC 1, OSC 2, SUB OSC, NOISE and the Arp.
+ *
+ * Those five are one family — "this source or section is part of the sound" —
+ * and nothing else on the surface is. The segmented rows (waveform, filter
+ * response, rate, Mono/Poly) are CHOICES between options, and the Solo button
+ * outside this rack is a monitoring gesture; neither belongs here, which is
+ * what keeps "a round icon button is an enable switch" a rule rather than a
+ * look applied wherever it happened to fit.
+ *
+ * Round, and the only round buttons in the rack. It reads as a panel switch
+ * rather than one more rectangular cell among rectangular cells — and it ends
+ * the reflow the words caused: "ON" and "OFF" are different widths, and the
+ * switch sits in a `justify-between` header, so every toggle nudged the module
+ * title sideways.
+ *
+ * State is NOT colour alone. Three things carry it — the glyph swaps (Power /
+ * PowerOff), the fill swaps (module colour / idle outline), and `aria-pressed`
+ * is on the button — so it survives a colour-blind reader and a screen reader
+ * alike. The word that used to be the visible label is still the accessible
+ * name, which is what WCAG 2.5.3 asks for once the visible content is an icon
+ * carrying no text of its own.
+ */
+export function EnableToggle({
+  id,
+  name,
+  enabled,
+  color,
+  onToggle,
+}: {
+  id: string;
+  /** What is being switched — "OSC 1", "NOISE", "Arpeggiator". */
+  name: string;
+  enabled: boolean;
+  color: ProModuleColor;
+  onToggle: () => void;
+}) {
+  const Glyph = enabled ? Power : PowerOff;
+  const label = `${name} ${enabled ? 'ON' : 'OFF'}`;
+  return (
+    <button
+      id={id}
+      type="button"
+      aria-pressed={enabled}
+      aria-label={label}
+      title={label}
+      onClick={onToggle}
+      className={`btn btn-xs btn-circle min-w-0 ${
+        enabled ? ACTIVE_BUTTON[color] : TOOLBAR_BUTTON_IDLE
+      }`}
+    >
+      <Glyph className="w-3 h-3" aria-hidden="true" />
     </button>
   );
 }
@@ -277,7 +342,7 @@ export function ProModule({
   children: ReactNode;
 }) {
   return (
-    <PanelCard inset className={`min-w-0 ${className ?? ''}`}>
+    <PanelCard inset className={`min-w-0 grow ${className ?? ''}`}>
       <div className="card-body p-3 gap-2.5">
         <ModuleHeader
           badge={badge}

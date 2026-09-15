@@ -187,7 +187,7 @@ export function LfoPanel({ patch, onPatch }: PatchPanelProps) {
 
   return (
     <ProModule
-      badge={6}
+      badge={7}
       title="LFO"
       color={LFO_COLOR}
     >
@@ -268,7 +268,7 @@ export function LfoPanel({ patch, onPatch }: PatchPanelProps) {
       <RouteRow
         dbRange={{ min: -LFO_DB_ROUTE_LIMIT, max: LFO_DB_ROUTE_LIMIT }}
         idPrefix="lfo-route"
-        caption="Destination"
+        caption="Target"
         amountLabel="LFO route Amount"
         route={lfo.route}
         color={LFO_COLOR}

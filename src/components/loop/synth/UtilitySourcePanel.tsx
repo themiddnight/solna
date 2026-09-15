@@ -2,13 +2,7 @@ import type { ReactNode } from 'react';
 import type { NoiseColor, UtilitySourceParams } from '@/types/synth';
 import { FIELD_LABEL } from '@/components/ui/fieldClasses';
 import { SYNTH_GAIN_FLOOR_DB } from '@/utils/synthPatch';
-import {
-  KnobGrid,
-  ProModule,
-  ToggleButton,
-  ToggleRow,
-  type PatchPanelProps,
-} from './proControls';
+import { EnableToggle, KnobGrid, ProModule, ToggleRow, type PatchPanelProps } from './proControls';
 
 /**
  * Pro-Mode module 2 — the utility source (prototype Variant A's "OSC 3").
@@ -47,15 +41,13 @@ function UtilityHalf({
     <div className="min-w-0 rounded-box border border-base-300 bg-base-100 p-2 space-y-2">
       <div className="flex items-center justify-between gap-1">
         <span className="text-[10px] font-bold text-base-content">{title}</span>
-        <ToggleButton
+        <EnableToggle
           id={enabledId}
-          label={`${title} ${enabled ? 'ON' : 'OFF'}`}
-          pressed={enabled}
+          name={title}
+          enabled={enabled}
           color={OSC_COLOR}
-          onPress={onToggle}
-        >
-          {enabled ? 'ON' : 'OFF'}
-        </ToggleButton>
+          onToggle={onToggle}
+        />
       </div>
       {children}
     </div>
@@ -69,7 +61,7 @@ export function UtilitySourcePanel({ patch, onPatch }: PatchPanelProps) {
 
   return (
     <ProModule
-      badge={2}
+      badge={3}
       title="Sub & Noise"
       color={OSC_COLOR}
     >

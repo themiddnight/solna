@@ -1,5 +1,5 @@
 import type { ArpSettings } from '@/types/synth';
-import { KnobGrid, ProModule, ToggleButton, ToggleRow } from './proControls';
+import { EnableToggle, KnobGrid, ProModule, ToggleRow } from './proControls';
 
 /**
  * Pro-Mode module 8 — the Arpeggiator (prototype Variant A's modulation row).
@@ -33,15 +33,13 @@ export function ArpeggiatorPanel({ arp, onArp }: ArpeggiatorPanelProps) {
       title="Arpeggiator"
       color={ARP_COLOR}
       chip={
-        <ToggleButton
+        <EnableToggle
           id="btn-toggle-arp"
-          label={`Arpeggiator ${arp.active ? 'ON' : 'OFF'}`}
-          pressed={arp.active}
+          name="Arpeggiator"
+          enabled={arp.active}
           color={ARP_COLOR}
-          onPress={() => onArp({ ...arp, active: !arp.active })}
-        >
-          {arp.active ? 'ON' : 'OFF'}
-        </ToggleButton>
+          onToggle={() => onArp({ ...arp, active: !arp.active })}
+        />
       }
     >
       <ToggleRow

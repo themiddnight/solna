@@ -18,8 +18,22 @@ import {
  * the knob set. What differs is what they reach — ENV 1 is wired to amplitude
  * and says so, ENV 2 owns two assignable routes.
  */
-const AMP_COLOR = 'text-module-env-vca' as const;
-const MOD_COLOR = 'text-module-env-vcf' as const;
+/**
+ * Two SHADES of one identity, not two identities. They are the same module
+ * type instanced twice — same four knobs, same curve, different destination —
+ * so they share a green family; ENV 1 sits warmer, toward the oscillator's
+ * gold, which is enough to tell them apart side by side and not enough to read
+ * as unrelated modules.
+ *
+ * The split is INSIDE a family, so it does not consume a second slot on the
+ * hue ring and the ring's 25 degree floor does not apply between these two —
+ * that floor separates module IDENTITIES, and these two are one. index.css
+ * carries the numbers, the one floor exception ENV 1 does make against
+ * --module-chord, and why the two themes separate the pair by different
+ * amounts.
+ */
+const ENV1_COLOR = 'text-module-env-amp' as const;
+const ENV2_COLOR = 'text-module-env-mod' as const;
 
 /** The envelope time readout: milliseconds while it is one, seconds after. */
 const envTime = (value: number) =>
@@ -51,7 +65,11 @@ function AdsrKnobs({
   return (
     <KnobGrid
       color={color}
-      size={idPrefix === 'env1' ? 'md' : 'sm'}
+      /* One size for both, for the same reason they share one hue: they are
+         the same module twice over. ENV 1 was `md` and ENV 2 `sm`, which read
+         as a hierarchy that does not exist — ENV 2 is not a lesser envelope,
+         it is the one whose destination you choose. */
+      size="md"
       specs={[
         {
           id: `slider-${idPrefix}-attack`,
@@ -106,17 +124,17 @@ function AdsrKnobs({
 export function AmpEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
   return (
     <ProModule
-      badge={4}
+      badge={5}
       title="ENV 1"
-      color={AMP_COLOR}
-      chip={<ModuleChip color={AMP_COLOR}>AMP · LOCKED</ModuleChip>}
+      color={ENV1_COLOR}
+      chip={<ModuleChip color={ENV1_COLOR}>AMP · LOCKED</ModuleChip>}
       className="md:col-span-2 xl:col-span-1"
     >
       <AdsrKnobs
         idPrefix="env1"
         moduleName="ENV 1"
         envelope={patch.synth.ampEnvelope}
-        color={AMP_COLOR}
+        color={ENV1_COLOR}
         onEnvelope={(ampEnvelope) => onPatch({ ...patch, synth: { ...patch.synth, ampEnvelope } })}
       />
       {/* Read-only by construction, not a disabled control: ENV 1 is wired to
@@ -124,10 +142,10 @@ export function AmpEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
           could hold anything else, so there is nothing here to operate. */}
       <div
         id="env1-destination"
-        className="flex items-center justify-between gap-2 rounded-box border border-base-300 bg-base-100 px-2 py-1.5 mt-auto"
+        className="flex items-center justify-between gap-2 rounded-box border border-base-300 bg-base-100 px-2 py-1.5 mt-3"
       >
-        <span className={`${FIELD_LABEL} mb-0`}>Destination</span>
-        <span className={`text-[11px] font-semibold ${AMP_COLOR}`}>Amplitude</span>
+        <span className={`${FIELD_LABEL} m-0!`}>Target</span>
+        <span className={`text-[11px] font-semibold ${ENV1_COLOR}`}>Amplitude</span>
       </div>
     </ProModule>
   );
@@ -155,16 +173,16 @@ export function ModEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
 
   return (
     <ProModule
-      badge={5}
+      badge={6}
       title="ENV 2"
-      color={MOD_COLOR}
-      chip={<ModuleChip color={MOD_COLOR}>MOD</ModuleChip>}
+      color={ENV2_COLOR}
+      chip={<ModuleChip color={ENV2_COLOR}>MOD</ModuleChip>}
     >
       <AdsrKnobs
         idPrefix="env2"
         moduleName="ENV 2"
         envelope={patch.synth.modEnvelope}
-        color={MOD_COLOR}
+        color={ENV2_COLOR}
         onEnvelope={(modEnvelope) => onPatch({ ...patch, synth: { ...patch.synth, modEnvelope } })}
       />
       {[0, 1].map((index) => (
@@ -174,7 +192,7 @@ export function ModEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
           caption={`Target ${index + 1}`}
           amountLabel={`ENV 2 target ${index + 1} Amount`}
           route={routes[index] ?? null}
-          color={MOD_COLOR}
+          color={ENV2_COLOR}
           onChange={(next) => writeRoute(index, next)}
         />
       ))}

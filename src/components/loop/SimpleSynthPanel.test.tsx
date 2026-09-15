@@ -143,8 +143,11 @@ describe('Simple theming', () => {
     for (const token of [
       'text-module-osc',
       'text-module-filter',
-      'text-module-env-vca',
+      'text-module-env-amp',
       'text-module-lfo',
+      // Voice, which Width and Play style write. It shared the envelope's
+      // token until the envelopes collapsed onto one hue and freed this one.
+      'text-module-voice',
     ]) {
       expect(html).toContain(token);
     }
@@ -155,12 +158,21 @@ describe('Simple theming', () => {
 
   /**
    * Width's canonical parameter is `common.stereoWidth`, which Pro draws in its
-   * Voice module — so the knob keeps the amplitude-stage identity even though
-   * Variant B files it under Motion. The identity follows the parameter.
+   * Voice module — so the knob wears VOICE even though Variant B files it
+   * under Motion. The identity follows the parameter, not the box.
+   *
+   * This is the assertion that had been passing for the wrong reason: Voice
+   * used to borrow the amplitude envelope's token, so Width wore a colour that
+   * was simultaneously its Pro identity and the Feel group's, and nothing here
+   * could tell the two apart. Now it can.
    */
   test('Width keeps its Pro identity inside the Motion group', () => {
     const width = html.indexOf('id="slider-simple-width"');
-    expect(html.slice(width - 400, width)).toContain('text-module-env-vca');
+    const before = html.slice(width - 400, width);
+    expect(before).toContain('text-module-voice');
+    // Not the group it is drawn in, and not the envelope it used to share with.
+    expect(before).not.toContain('text-module-lfo');
+    expect(before).not.toContain('text-module-env-amp ');
   });
 
   test('no dark: variants survive — they key off the OS, not data-theme', () => {

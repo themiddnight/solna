@@ -303,12 +303,13 @@ daisyUI's semantic roles are about *meaning* (`success` = saved, `error` = destr
 | `module-bass` / `-content` | steel blue 256° | Bass module, the Bass target in `SoundView`'s toggle |
 | `module-osc` / `-content` | butter gold 87° | `loop/synth/OscillatorPanel.tsx` |
 | `module-filter` / `-content` | rose 356° | `loop/synth/FilterPanel.tsx` |
-| `module-env-vca` / `-content` | emerald 162° | `loop/synth/EnvelopePanel.tsx` — AMP / VCA half |
-| `module-env-vcf` / `-content` | violet 294° | `loop/synth/EnvelopePanel.tsx` — FILTER / VCF half |
+| `module-env-amp` / `-content` | green 141° | `loop/synth/EnvelopePanel.tsx` — ENV 1, and Simple's Feel group |
+| `module-env-mod` / `-content` | emerald 162° | `loop/synth/EnvelopePanel.tsx` — ENV 2 |
+| `module-voice` / `-content` | violet 294° | `loop/synth/VoicePanel.tsx`, and Simple's Width and Play style |
 | `module-lfo` / `-content` | cyan 213° | `loop/synth/LfoPanel.tsx` |
 | `module-arp` / `-content` | orchid 322° | `loop/synth/ArpeggiatorPanel.tsx` |
 
-The synth's **six signal stages each own a hue** — the two ADSR halves share one card, so they are the pair that has to contrast hardest. Values come straight from Tailwind's palette (the `400` step on the espresso base, the `600` step on warm paper, where the `400`s wash out) and are ordered so no two neighbours land in the same family, with every adjacent pair ~50°+ apart on the wheel:
+**A hue names a module TYPE, not a destination.** The two ADSR panels are one module instanced twice — same four knobs, same curve, pointed at different targets — so they share `module-env-amp`, and which target each one drives is what its badge says (`AMP · LOCKED`, `MOD`). Splitting them across two hues put the destination in the colour and left the type unsaid, so the two envelopes scanned as unrelated modules while the badge carrying the real difference went unread. Collapsing them freed the hue `module-voice` now wears: Voice had been borrowing the amplitude envelope's, which made the two modules furthest apart in what they do the only two that looked alike — and Voice is not a signal stage at all, since mono/poly, unison, spread, glide and width say how a voice is *built*. Values come straight from Tailwind's palette (the `400` step on the espresso base, the `600` step on warm paper, where the `400`s wash out) and are ordered so no two neighbours land in the same family, with every adjacent pair ~50°+ apart on the wheel:
 
 > 1 Oscillators amber 43° → 2 VCF rose 350° → 3 ADSR emerald 160° + fuchsia 292° → 4 LFO sky 199° → 5 Arp violet 255°
 
@@ -317,12 +318,12 @@ The synth's **six signal stages each own a hue** — the two ADSR halves share o
 | macro | writes | colour |
 |---|---|---|
 | Tone | `filterCutoff` | `module-filter` |
-| Space | `release` + `sustain` | `module-env-vca` |
+| Space | `release` + `sustain` | `module-env-amp` — Simple's envelope macros write ENV 1 |
 | Vibe | `detune` + `lfoDepth` | `module-lfo` — the only macro that touches modulation; Punch already owns the oscillator identity |
 | Punch | `subOscVolume` + `attack` | `module-osc` |
 | 1-Click Arp card | arp params | `module-arp` |
 
-`module-env-vcf` has no Simple-Mode counterpart because Simple Mode exposes no filter envelope. Chrome that is *not* a signal stage — the Simple/Pro switcher, preset picker, category filters, keyboard octave — stays on `primary`, which now unambiguously means "the thing you picked".
+`module-voice` reaches Simple Mode through Width and Play style, the two controls whose canonical parameters (`common.stereoWidth`, `common.voiceMode`) live in Pro's Voice module — the identity follows the parameter, not the group it is drawn in. Chrome that is *not* a signal stage — the Simple/Pro switcher, preset picker, category filters, keyboard octave — stays on `primary`, which now unambiguously means "the thing you picked".
 
 Hues are spaced around the **OKLCH** wheel rather than sRGB HSL (which bunches the yellows), at a fixed lightness per theme — ~0.75 dark, ~0.57 light — so no stage reads as merely a darker version of its neighbour; every adjacent pair is at least 28° apart. Two rules constrain the set: the 20–60° amber band belongs to `primary` alone, so `module-osc` is a pale butter gold separated from the brand by lightness rather than hue, and no module may reuse a semantic hex — which is exactly what `module-filter` and `secondary` used to do (both `#FB7185`), and `module-osc` and `primary` in the light theme (both `#D97706`). No synth panel rides a daisyUI semantic any more, which keeps `primary` free to mean "the thing you picked" everywhere else. Because daisyUI components are variable-driven, a module colour fills a control through arbitrary-value overrides (`btn` + `[--btn-color:var(--color-module-lfo)] [--btn-fg:var(--color-module-lfo-content)]`), a badge through `[--badge-color:…]`, and a range through `text-module-*` + `[--range-thumb:…]` (ranges read `color`, not a variable).
 

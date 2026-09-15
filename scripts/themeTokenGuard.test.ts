@@ -238,7 +238,7 @@ describe('scanRepo — every non-allowlisted src file is token-clean', () => {
 
 describe('module palette — the fx pair clears AA in both themes', () => {
   // Scoped to `fx` on purpose, NOT the whole module palette: three of the
-  // existing LIGHT module colours (osc 4.409, chord 4.471, env-vca 4.201) sit
+  // existing LIGHT module colours (osc 4.409, chord 4.471, env 4.201) sit
   // below 4.5:1 today, and retuning them is not this change's job. What this
   // pins is that the colour ADDED here is not a fourth one.
   //

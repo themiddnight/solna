@@ -15,11 +15,15 @@ import { KnobGrid, ProModule, ToggleRow, type PatchPanelProps } from './proContr
  * synonym: **Spread** is `common.unisonDetuneCents`, **Width** is
  * `common.stereoWidth`.
  *
- * It wears `module-env-vca`, the amplitude stage's identity, which ENV 1 also
- * wears — see `proControls.ts`'s `ProModuleColor` note for why a tenth module
- * hue was rejected.
+ * It wears its OWN identity. It used to borrow the amplitude envelope's, on
+ * the argument that both are the amplitude stage and that the hue ring had no
+ * tenth slot — which made ENV 1 and Voice, the two modules furthest apart in
+ * what they do, the only two that looked alike. Collapsing the two envelopes
+ * onto one hue freed the slot, and the argument was weak anyway: mono/poly,
+ * unison, spread, glide and width say how a voice is BUILT, not what happens
+ * at a point in the signal path.
  */
-const VOICE_COLOR = 'text-module-env-vca' as const;
+const VOICE_COLOR = 'text-module-voice' as const;
 
 export function VoicePanel({ patch, onPatch }: PatchPanelProps) {
   const common = patch.common;
@@ -28,7 +32,7 @@ export function VoicePanel({ patch, onPatch }: PatchPanelProps) {
 
   return (
     <ProModule
-      badge={7}
+      badge={1}
       title="Voice"
       color={VOICE_COLOR}
     >

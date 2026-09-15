@@ -9,6 +9,7 @@ import { ArpeggiatorPanel } from './ArpeggiatorPanel';
 import { defaultTrackArp, defaultTrackSynth } from '@/store/initialState';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import { SYNTH_GAIN_FLOOR_DB } from '@/utils/synthPatch';
+import { SIZE_PX } from '@/utils/knob';
 import { DEFAULT_PARKED_RATE, switchLfoRateMode } from './LfoPanel';
 import type { SynthChannel } from '@/utils/synthControl';
 import type { ActiveSynth, ArpSettings } from '@/types/synth';
@@ -283,6 +284,41 @@ describe('SubtractiveProPanel renders every approved modulation module', () => {
     expect(html).not.toContain('drift');
   });
 
+  /**
+   * A module hue names a module TYPE. The two ADSR panels are one type
+   * instanced twice — same four knobs, same curve, different destination — so
+   * they share one, and the destination is carried by their badges instead.
+   *
+   * The inverse half is the one that had been wrong: Voice wore the amplitude
+   * envelope's token, on the argument that both are the amplitude stage. That
+   * made ENV 1 and Voice the only two modules on the surface that looked
+   * alike, which is the reverse of what colour is for here — Voice is not a
+   * signal stage at all. Both halves are asserted, because fixing either one
+   * alone re-creates the other's defect.
+   */
+  test('the two envelopes are two shades of one family, and Voice is not', () => {
+    const html = proMarkup(makeChannel());
+    const env1 = html.indexOf('id="slider-env1-attack"');
+    const env2 = html.indexOf('id="slider-env2-attack"');
+    const voice = html.indexOf('id="slider-voice-glide"');
+    expect(env1).toBeGreaterThan(-1);
+    expect(env2).toBeGreaterThan(-1);
+    expect(voice).toBeGreaterThan(-1);
+    // One family, two members: ENV 1 warmer, ENV 2 the base emerald. Asserted
+    // as distinct tokens AND as the same family prefix — either half alone
+    // would pass while the other regressed.
+    const before1 = html.slice(env1 - 600, env1);
+    const before2 = html.slice(env2 - 600, env2);
+    expect(before1).toContain('text-module-env-amp');
+    expect(before2).toContain('text-module-env-mod');
+    expect(before2).not.toContain('text-module-env-amp');
+    // Voice on its own, and specifically NOT back on the envelope's.
+    const beforeVoice = html.slice(voice - 600, voice);
+    expect(beforeVoice).toContain('text-module-voice');
+    expect(beforeVoice).not.toContain('text-module-env-amp');
+    expect(beforeVoice).not.toContain('text-module-env-mod');
+  });
+
   test('the Arp strip reads the Arp object, not the patch', () => {
     const html = proMarkup(
       makeChannel({ arpSettings: { active: true, mode: 'down', rate: '8n', octaves: 3 } }),
@@ -508,4 +544,105 @@ describe('the LFO clock switch is reversible', () => {
     expect(result.rate).toBe(rate);
     expect(result.parked).toBe(DEFAULT_PARKED_RATE);
   });
+});
+
+/**
+ * The rack as a whole, rather than any one module: the things that are only
+ * wrong relative to their neighbours, and so cannot be seen in a panel on its
+ * own.
+ */
+describe('the Pro rack reads as one numbered set', () => {
+  /**
+   * Each panel hard-codes its own badge number while the ORDER those numbers
+   * describe lives in SubtractiveProPanel — so a reorder leaves eight literals
+   * in seven files stale, and nothing about the page looks wrong except the
+   * counting. That is exactly how they went stale: Voice moved to the front of
+   * the rack and kept the 7 it had while it sat last.
+   *
+   * Reading them back out of the rendered rack is what makes the numbers
+   * answerable to the order instead of to whoever edited last. It stays a test
+   * rather than a derived prop because the badge is also a stable name a user
+   * says out loud ("module 5"), and deriving it would renumber every module
+   * silently on any reorder — this way a reorder is a red test that asks
+   * whether the renumbering was intended.
+   */
+  /**
+   * The five enable switches — OSC 1, OSC 2, SUB OSC, NOISE, Arp — are the one
+   * family that wears a round icon button, and they are the ONLY round buttons
+   * in the rack. That second half is the half worth a test: the shape means
+   * "this switches a source or section on", and it says nothing at all once a
+   * segmented option or an action borrows it.
+   */
+  test('every enable switch is round, and nothing else in the rack is', () => {
+    const html = proMarkup(makeChannel());
+    const ENABLES = [
+      'btn-osc1-enabled',
+      'btn-osc2-enabled',
+      'btn-sub-enabled',
+      'btn-noise-enabled',
+      'btn-toggle-arp',
+    ];
+    const roundIds = [...html.matchAll(/id="([^"]+)"[^>]*class="[^"]*btn-circle/g)].map(
+      (m) => m[1],
+    );
+    expect(roundIds.sort()).toEqual([...ENABLES].sort());
+  });
+
+  /**
+   * Losing the "ON"/"OFF" text is what makes this worth pinning: with no word
+   * on the button, state has to survive both a colour-blind reader and a
+   * screen reader. `aria-pressed` covers the second; the glyph swap covers the
+   * first, which colour alone would not.
+   */
+  test('an enable switch states its state without relying on colour', () => {
+    const on = proMarkup(makeChannel());
+    const at = (html: string, id: string) => {
+      const i = html.indexOf(`id="${id}"`);
+      expect(i).toBeGreaterThan(-1);
+      return html.slice(i, i + 700);
+    };
+    // Arp defaults off, OSC 1 defaults on — one markup carries both states.
+    expect(at(on, 'btn-osc1-enabled')).toContain('aria-pressed="true"');
+    expect(at(on, 'btn-toggle-arp')).toContain('aria-pressed="false"');
+    // The accessible name still carries the word the button used to show.
+    expect(at(on, 'btn-osc1-enabled')).toContain('aria-label="OSC 1 ON"');
+    expect(at(on, 'btn-toggle-arp')).toContain('aria-label="Arpeggiator OFF"');
+    // And the two render different glyphs, so the fill is not the only cue.
+    const glyph = (html: string, id: string) =>
+      /class="lucide[^"]*"/.exec(at(html, id))?.[0];
+    expect(glyph(on, 'btn-osc1-enabled')).toBeDefined();
+    expect(glyph(on, 'btn-toggle-arp')).not.toBe(glyph(on, 'btn-osc1-enabled'));
+  });
+
+  test('the module badges count 1..8 down the rack, in render order', () => {
+    const html = proMarkup(makeChannel());
+    const badges = [...html.matchAll(/badge-outline tabular-nums">(\d+)</g)].map((m) =>
+      Number(m[1]),
+    );
+    expect(badges).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  /**
+   * The two ADSR panels are one module type instanced twice, so they are drawn
+   * at one knob size. ENV 1 was `md` and ENV 2 `sm`, which read as a hierarchy
+   * that is not there — ENV 2 is not a smaller envelope, it is the one whose
+   * destination is a choice.
+   */
+  test('both envelopes draw their knobs at the same size', () => {
+    const html = proMarkup(makeChannel());
+    // `size` reaches the markup only as the dial's pixel box (SIZE_PX in
+    // utils/knob.ts), and those attributes sit on the same <svg> the id is on,
+    // just after it — so the window runs forward from the id, not back.
+    const sizeAt = (id: string) => {
+      const at = html.indexOf(`id="${id}"`);
+      expect(at).toBeGreaterThan(-1);
+      return /width="(\d+)" height="(\d+)"/.exec(html.slice(at, at + 400))?.[0];
+    };
+    const env1 = sizeAt('slider-env1-attack');
+    // Pinned to `md` outright, not just to "equal": two knobs agreeing at `sm`
+    // would satisfy an equality check and still be the wrong call.
+    expect(env1).toBe(`width="${SIZE_PX.md}" height="${SIZE_PX.md}"`);
+    expect(sizeAt('slider-env2-attack')).toBe(env1);
+  });
+
 });

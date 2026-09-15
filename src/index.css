@@ -138,14 +138,53 @@
    success's "saved" toast) elsewhere in the app. Same indirection pattern as
    the piano-key colours above.
 
-   The synth's six signal stages must stay distinguishable side by side — the
-   two ADSR halves share one card, so they are the pair that has to contrast
-   hardest. Hues are spaced around the OKLCH wheel (not sRGB HSL, which bunches
-   the yellows), at a fixed lightness per theme — ~0.75 for dark, ~0.57 for
-   light — so no stage reads as merely a darker version of its neighbour:
+   A module hue names a module TYPE, and two instances of one type share a
+   FAMILY rather than a single value. That is why the two ADSR panels are
+   --module-env-amp and --module-env-mod, ~8 degrees apart in one green: they
+   are the same module twice over — the same four knobs, the same curve —
+   pointed at different destinations, and which destination is also what each
+   panel's own badge says (AMP · LOCKED, MOD). ENV 1 is the warmer of the two,
+   leaning toward --module-osc's gold, so the pair reads as related at a sweep
+   and as distinct when compared.
 
-     osc 87° · chord 125° · env-vca 162° · fx 187° · lfo 213° ·
-     bass 256° · env-vcf 294° · arp 322° · filter 356°
+   The family split does NOT occupy a second slot on the ring, and the 25
+   degree floor does not apply between its two members — that floor separates
+   IDENTITIES, and these two are one.
+
+   ENV 1 DOES break the floor against a neighbour, and it is the one recorded
+   exception on the synth side: it sits at 141 degrees in both themes, 16.4
+   from --module-chord in dark (124.9) and 11.8 in light (129.5). Chosen by eye
+   and kept, because chord is a TRACK identity that never renders inside the
+   Pro rack — the floor's job is keeping modules apart SIDE BY SIDE, and these
+   two never are. Written down rather than waved through: a palette that
+   quietly breaks its own rule teaches the next reader to ignore the next one.
+   The light gap is the tighter of the two and is the one to re-measure first
+   if chord and an envelope ever do end up on screen together.
+
+   The two themes carry the SAME relationship, on purpose: ENV 1 is ENV 2 plus
+   21 degrees of hue, +0.035 lightness and +0.037 chroma in both, so a light
+   theme reader gets the same cue at the same strength rather than a fainter
+   copy of it. That is also why ENV 1 is the one module sitting above its
+   theme's nominal lightness — the lift is half of what separates the pair, not
+   a drifted value. The palette used to spend two hues on them, under
+   the names --module-env-vca and --module-env-vcf, which put the destination
+   in the colour and left the TYPE unsaid: scanning the rack, the two
+   envelopes read as unrelated modules while the badge that actually carried
+   the difference went unread. A reader looking for "the envelopes" now has one
+   colour to find, and the freed hue is what --module-voice wears — Voice had
+   been borrowing the amplitude envelope's, on the argument that both are the
+   amplitude stage, which made the only two modules a user could confuse
+   identical. Voice is not a signal stage at all: mono/poly, unison, spread,
+   glide and width say how a voice is BUILT.
+
+   Hues are spaced around the OKLCH wheel (not sRGB HSL, which bunches the
+   yellows), at a fixed lightness per theme — ~0.75 for dark, ~0.57 for
+   light — so no module reads as merely a darker version of its neighbour:
+
+     osc 87° · chord 125° · env 141°+162° · fx 187° · lfo 213° ·
+     bass 256° · voice 294° · arp 322° · filter 356°
+
+   (env is one slot holding two shades; every other entry is one value.)
 
    Every adjacent pair is at least 25° apart. It was 28° until --module-fx
    landed: 162→213 was the widest gap left in the ring, so a ninth hue could be
@@ -170,10 +209,12 @@
   --color-module-osc-content: var(--module-osc-content);
   --color-module-filter: var(--module-filter);
   --color-module-filter-content: var(--module-filter-content);
-  --color-module-env-vca: var(--module-env-vca);
-  --color-module-env-vca-content: var(--module-env-vca-content);
-  --color-module-env-vcf: var(--module-env-vcf);
-  --color-module-env-vcf-content: var(--module-env-vcf-content);
+  --color-module-env-amp: var(--module-env-amp);
+  --color-module-env-amp-content: var(--module-env-amp-content);
+  --color-module-env-mod: var(--module-env-mod);
+  --color-module-env-mod-content: var(--module-env-mod-content);
+  --color-module-voice: var(--module-voice);
+  --color-module-voice-content: var(--module-voice-content);
   --color-module-lfo: var(--module-lfo);
   --color-module-lfo-content: var(--module-lfo-content);
   --color-module-arp: var(--module-arp);
@@ -244,8 +285,10 @@
      a --module-beat token nothing else would use. Same 10%-alpha shape as the
      module tints above; see tint-accent. */
   --accent-tint: #8C7BE01A;
-  --module-env-vca: #4FD69E;      /* emerald 162° */
-  --module-env-vca-content: #17100F;
+  --module-env-amp: #7CE16E;      /* green 141° — ENV 1, picked by eye */
+  --module-env-amp-content: #17100F;
+  --module-env-mod: #4FD69E;      /* emerald 162° — ENV 2 */
+  --module-env-mod-content: #17100F;
   --module-fx: #33C6BB;           /* teal 187° — L0.75 C0.12, the dark set's lightness */
   --module-fx-content: #17100F;
   --module-fx-tint: #33C6BB1A;    /* the same teal at 10% — see tint-fx */
@@ -258,8 +301,8 @@
                                      the 20-60° band; see the comment above */
   --module-pad-content: #17100F;
   --module-pad-tint: #F0B2651A;   /* the same amber at 10% — see tint-pad */
-  --module-env-vcf: #AE96F5;      /* violet 294° */
-  --module-env-vcf-content: #17100F;
+  --module-voice: #AE96F5;      /* violet 294° */
+  --module-voice-content: #17100F;
   --module-arp: #DC8EE8;          /* orchid 322° */
   --module-arp-content: #17100F;
   --module-filter: #F181AE;       /* rose 356° */
@@ -318,7 +361,7 @@
   /* L ~0.57 — the dark set's lightness washes out on warm paper.
 
      Content is white on the six darker fills. The three lightest — osc, chord
-     and env-vca — need ink, and it is the DEEP ember ink (#17100F, the dark
+     and env — need ink, and it is the DEEP ember ink (#17100F, the dark
      theme's base-200) rather than this theme's --color-base-content (#2A1A20):
      base-content lands at 4.409, 4.471 and 4.201 against those three, all under
      the 4.5 AA floor, and the deeper ink clears it at 4.999, 5.070 and 4.764.
@@ -333,8 +376,10 @@
   /* See the dark theme's comment: the Beat card's own tint, off the accent
      role rather than a module token. */
   --accent-tint: #6A4FD11A;
-  --module-env-vca: #099268;      /* emerald 162° */
-  --module-env-vca-content: #17100F;
+  --module-env-amp: #469D3A;      /* green 141° — ENV 1, mirroring dark */
+  --module-env-amp-content: #17100F;
+  --module-env-mod: #099268;      /* emerald 162° — ENV 2 */
+  --module-env-mod-content: #17100F;
   --module-fx: #19827A;           /* teal 187° — L0.55, two steps below the light set's
                                      0.57 because 0.57 at this hue reads 4.28:1 against
                                      white; 0.55 clears AA at 4.65:1, level with lfo */
@@ -352,8 +397,8 @@
                                       and ~0.07 lower in OKLCH L */
   --module-pad-content: #FFFFFF;
   --module-pad-tint: #8A4E1C1A;   /* the same amber at 10% — see tint-pad */
-  --module-env-vcf: #7C56D6;      /* violet 294° */
-  --module-env-vcf-content: #FFFFFF;
+  --module-voice: #7C56D6;      /* violet 294° */
+  --module-voice-content: #FFFFFF;
   --module-arp: #A93FB0;          /* orchid 322° */
   --module-arp-content: #FFFFFF;
   --module-filter: #C13B70;       /* rose 356° */

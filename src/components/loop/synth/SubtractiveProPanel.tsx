@@ -46,19 +46,16 @@ export function SubtractiveProPanel({ channel }: { channel: SynthChannel }) {
        Each module already draws its own recessed card, so a second surface
        around them inset the whole rack from the section card that holds it and
        bought nothing but a frame around a frame. */
-    <div className="w-full min-w-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1.45fr_1.08fr_1fr_1.1fr] gap-2">
+    <div className="w-full min-w-0 flex flex-wrap gap-2">
+      <VoicePanel patch={patch} onPatch={onPatch} />
       <OscillatorPanel patch={patch} onPatch={onPatch} />
       <UtilitySourcePanel patch={patch} onPatch={onPatch} />
       <FilterPanel patch={patch} onPatch={onPatch} />
       <AmpEnvelopePanel patch={patch} onPatch={onPatch} />
-
-      <div className="col-span-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1.22fr_1.08fr_0.94fr_1.08fr] gap-2">
-        <ModEnvelopePanel patch={patch} onPatch={onPatch} />
-        <LfoPanel patch={patch} onPatch={onPatch} />
-        <VoicePanel patch={patch} onPatch={onPatch} />
-        {/* Arp takes the Arp object and no patch — see ArpeggiatorPanel. */}
-        <ArpeggiatorPanel arp={channel.arpSettings} onArp={channel.setArpSettings} />
-      </div>
+      <ModEnvelopePanel patch={patch} onPatch={onPatch} />
+      <LfoPanel patch={patch} onPatch={onPatch} />
+      {/* Arp takes the Arp object and no patch — see ArpeggiatorPanel. */}
+      <ArpeggiatorPanel arp={channel.arpSettings} onArp={channel.setArpSettings} />
     </div>
   );
 }
