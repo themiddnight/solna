@@ -3,6 +3,7 @@ import { DEFAULT_VELOCITY, ENV_FLOOR, clampVelocity } from './constants';
 import { random } from './rng';
 import { BEAT_VOICE_IDS, DEFAULT_BEAT_VOICES } from '@/data/beatPresets';
 import { dbToGain, toDecibels } from '@/utils/gainUnits';
+import { BEAT_FILTER_XFADE_SEC } from './masterRack';
 import type { EngineHooks, MasterRack } from './masterRack';
 
 /**
@@ -287,16 +288,36 @@ export class DrumSynth {
    * inconsistency for a worse one.
    */
   setBeatFilter(cutoff: number, resonance: number, type: FilterType, time?: number): void {
+    const previousType = this.masterRack.beatFilterType;
     this.masterRack.beatFilterCutoff = cutoff;
     this.masterRack.beatFilterResonance = resonance;
     this.masterRack.beatFilterType = type;
     if (!this.ctx) return;
     const now = Math.max(time ?? this.ctx.currentTime, this.ctx.currentTime);
-    for (const node of [this.masterRack.drumBusFilter, this.masterRack.drumSendFilter]) {
-      if (!node) continue;
-      node.frequency.setTargetAtTime(cutoff, now, 0.03);
-      node.Q.setTargetAtTime(resonance, now, 0.03);
-      node.type = type;
+    // Cutoff and resonance go to EVERY lane, open or not: a lane that opens
+    // later must already be tracking the sweep, or the type change would also
+    // snap the frequency back to whatever it was when that lane last closed.
+    for (const lanes of [this.masterRack.drumBusFilterLanes, this.masterRack.drumSendFilterLanes]) {
+      for (const lane of lanes) {
+        lane.filter.frequency.setTargetAtTime(cutoff, now, 0.03);
+        lane.filter.Q.setTargetAtTime(resonance, now, 0.03);
+      }
+    }
+    // The TYPE is a crossfade between lanes, and it is scheduled rather than
+    // assigned — that is the whole reason the bank exists. Skipped entirely
+    // when the type has not moved, so a knob drag (which re-pushes the whole
+    // patch every frame) does not re-book a ramp per frame on six gains.
+    if (type === previousType) return;
+    for (const lanes of [this.masterRack.drumBusFilterLanes, this.masterRack.drumSendFilterLanes]) {
+      for (const lane of lanes) {
+        const target = lane.type === type ? 1 : 0;
+        // The anchor is COMPUTED, never read off `gain.value`: exactly one
+        // lane was open and it was `previousType`'s, so the value at `now` is
+        // known without asking the param — which would answer about the
+        // current render quantum, not about the time being scheduled.
+        lane.gain.gain.setValueAtTime(lane.type === previousType ? 1 : 0, now);
+        lane.gain.gain.linearRampToValueAtTime(target, now + BEAT_FILTER_XFADE_SEC);
+      }
     }
   }
 

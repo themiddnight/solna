@@ -69,9 +69,13 @@ synth voice (one per bus): osc1/osc2 + sub (+ noise), each through its own level
                           |      |       |     \
                         dry   delay   reverb  distortion
                                  |       |         |
-drums: osc/noise -> drumEnv -> drumBusFilter -> sequencer TAP -> sequencer bus -> dryGain
+drums: osc/noise -> drumEnv -> drumBusFilter(bank) -> sequencer TAP -> sequencer bus -> dryGain
                             \_ (snare/clap/crash only) send gain (kit's
-                               reverbSend LEVEL) -> drumSendFilter -> reverbNode
+                               reverbSend LEVEL) -> drumSendFilter(bank) -> reverbNode
+
+   each Beat filter is a BANK, not a node: input gain -> three fixed-type
+   biquads (lowpass/bandpass/highpass) -> one gain each -> the output above.
+   Exactly one lane is open; a TYPE change crossfades between them.
                                  |       |         |
    delayNode <-> delayFeedbackGain, delayNode -> delayGain
    reverbNode(Convolver) -> reverbGain
@@ -108,6 +112,15 @@ Key consequences:
   `levelAnalyser` (fftSize 2048) is what `getMasterLevelAnalyser()` returns and `useMeterLevel`
   reads for `VuMeter` and `AmbientBackdrop`. They are NOT interchangeable, and because the tap
   ends both dynamics stages' reach, the `over` zone (≥ −1 dBFS) is reachable.
+- **Each Beat bus filter is a three-lane BANK, not one node.** `BiquadFilterNode.type` is a plain
+  field, not an `AudioParam`, so it cannot be scheduled — and the offline mixdown schedules every
+  pass before `startRendering()`, so a direct `.type` write meant the LAST loop's response applied
+  to the whole export. `drumBusFilter`/`drumSendFilter` are therefore INPUT GainNodes fanning into
+  one fixed-type biquad per response, each behind its own gain (`drumBusFilterLanes` /
+  `drumSendFilterLanes`); `setBeatFilter` sweeps cutoff/Q on EVERY lane (so a lane that opens later
+  is already tracking) and crossfades the lane gains for a type change. Both banks are built by
+  `buildBeatFilterBank`, which is what keeps the dry and send paths in lockstep. A repeat of the
+  SAME type books no ramp, so a knob drag does not re-arm six gains per frame.
 - Drums bypass delay and distortion entirely — the dry path hits `drumBusFilter → dryGain` only.
   The snare/clap/crash reverb send is a per-voice gain (the kit's authored `reverbSend` LEVEL,
   not a boolean) that feeds a second shared `drumSendFilter` — a mirror of `drumBusFilter` kept in

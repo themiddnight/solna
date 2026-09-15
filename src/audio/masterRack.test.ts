@@ -83,26 +83,32 @@ describe('drum bus filter', () => {
     const { engine } = freshEngine();
     const freqTargets: number[] = [];
     const qTargets: number[] = [];
-    const filter = fakeNode();
-    filter.frequency.setTargetAtTime = (v: number) => {
-      freqTargets.push(v);
-    };
-    filter.Q.setTargetAtTime = (v: number) => {
-      qTargets.push(v);
-    };
-    (engine as any).masterRack.drumBusFilter = filter;
+    const lanes = (engine as any).masterRack.drumBusFilterLanes;
+    for (const lane of lanes) {
+      lane.filter.frequency.setTargetAtTime = (v: number) => {
+        freqTargets.push(v);
+      };
+      lane.filter.Q.setTargetAtTime = (v: number) => {
+        qTargets.push(v);
+      };
+    }
 
     engine.setBeatFilter(400, 8, 'bandpass');
 
     expect(freqTargets).toContain(400);
     expect(qTargets).toContain(8);
-    expect(filter.type).toBe('bandpass');
+    // The TYPE is a crossfade between fixed-type lanes, not a field write:
+    // the bandpass lane opens and the other two close. Every lane keeps
+    // tracking cutoff/Q so a later reopen does not snap the frequency back.
+    const open = lanes.find((l: { type: string }) => l.type === 'bandpass');
+    const shut = lanes.filter((l: { type: string }) => l.type !== 'bandpass');
+    expect(open.gain.gain.linearRamps.at(-1).v).toBe(1);
+    for (const lane of shut) expect(lane.gain.gain.linearRamps.at(-1).v).toBe(0);
   });
 
   test('setBeatFilter can schedule cutoff and resonance on the audio timeline', () => {
     const { engine } = freshEngine();
-    const filter = fakeNode();
-    (engine as any).masterRack.drumBusFilter = filter;
+    const lanes = (engine as any).masterRack.drumBusFilterLanes;
 
     (engine.setBeatFilter as unknown as (
       cutoff: number,
@@ -111,8 +117,79 @@ describe('drum bus filter', () => {
       time: number,
     ) => void)(500, 2, 'lowpass', 42);
 
-    expect(filter.frequency.targets.at(-1)).toEqual({ v: 500, t: 42, tc: 0.03 });
-    expect(filter.Q.targets.at(-1)).toEqual({ v: 2, t: 42, tc: 0.03 });
+    for (const lane of lanes) {
+      expect(lane.filter.frequency.targets.at(-1)).toEqual({ v: 500, t: 42, tc: 0.03 });
+      expect(lane.filter.Q.targets.at(-1)).toEqual({ v: 2, t: 42, tc: 0.03 });
+    }
+  });
+
+});
+
+/**
+ * The three-lane Beat filter bank. `BiquadFilterNode.type` is a plain field
+ * and cannot be scheduled, so a type change is a crossfade between lanes of
+ * fixed type — which is what makes the offline mixdown, where every pass is
+ * scheduled before rendering starts, keep each loop's own filter response.
+ */
+describe('the Beat filter bank', () => {
+  test('a filter TYPE change is scheduled at the given time, not applied at once', () => {
+    // The defect this bank replaced: `BiquadFilterNode.type` is a plain field,
+    // so the offline mixdown — which schedules every pass before rendering —
+    // ended up with the LAST pass's type applied to the whole export.
+    const { engine } = freshEngine();
+    const lanes = (engine as any).masterRack.drumBusFilterLanes;
+
+    (engine.setBeatFilter as unknown as (
+      c: number, r: number, t: 'highpass', time: number,
+    ) => void)(800, 1, 'highpass', 12);
+
+    const hp = lanes.find((l: { type: string }) => l.type === 'highpass');
+    const lp = lanes.find((l: { type: string }) => l.type === 'lowpass');
+    // Anchored at the scheduled time, then ramped — so two passes at two
+    // different times cannot collapse onto one another.
+    expect(hp.gain.gain.events.some((e: { t: number }) => e.t === 12)).toBe(true);
+    expect(hp.gain.gain.linearRamps.at(-1).v).toBe(1);
+    expect(lp.gain.gain.linearRamps.at(-1).v).toBe(0);
+    expect(hp.gain.gain.linearRamps.at(-1).t).toBeGreaterThan(12);
+  });
+
+  test('two passes scheduled at different times each keep their own filter type', () => {
+    // This is the export bug, in miniature. `scheduleArrangement` applies every
+    // pass synchronously before `startRendering()`, so when the type was a
+    // plain `BiquadFilterNode.type` write the SECOND call simply overwrote the
+    // first and the whole render came out highpass — loop A's bars exported
+    // with the kick stripped out while monitoring had played them lowpassed.
+    const { engine } = freshEngine();
+    const lanes = (engine as any).masterRack.drumBusFilterLanes;
+    const at = (t: number, type: 'lowpass' | 'highpass') =>
+      (engine.setBeatFilter as unknown as (c: number, r: number, ty: string, time: number) => void)(
+        800, 1, type, t,
+      );
+
+    at(0, 'lowpass');     // pass 1 starts at 0 — already the resting type
+    at(10, 'highpass');   // pass 2 starts at 10
+
+    const lp = lanes.find((l: any) => l.type === 'lowpass');
+    const hp = lanes.find((l: any) => l.type === 'highpass');
+
+    // Both transitions are on the timeline at their own times, so neither pass
+    // can erase the other: lowpass is open until 10 and closes there, highpass
+    // opens there.
+    expect(hp.gain.gain.events.some((e: any) => e.t === 10)).toBe(true);
+    expect(hp.gain.gain.linearRamps.at(-1).v).toBe(1);
+    expect(lp.gain.gain.linearRamps.at(-1).v).toBe(0);
+    expect(lp.gain.gain.linearRamps.at(-1).t).toBeGreaterThan(10);
+  });
+
+  test('re-applying the SAME type books no crossfade', () => {
+    // A knob drag re-pushes the whole patch every frame; only cutoff and Q
+    // moved, so six lane gains must not collect a ramp per frame.
+    const { engine } = freshEngine();
+    const lanes = (engine as any).masterRack.drumBusFilterLanes;
+    engine.setBeatFilter(900, 1, 'lowpass');
+    const before = lanes.map((l: any) => l.gain.gain.linearRamps.length);
+    engine.setBeatFilter(950, 1, 'lowpass');
+    expect(lanes.map((l: any) => l.gain.gain.linearRamps.length)).toEqual(before);
   });
 
   test('setBeatFilter before the drum bus filter exists is a safe no-op', () => {
@@ -148,10 +225,22 @@ describe("master chain", () => {
     const tap = (engine as any).masterRack.sourceTaps.get('sequencer');
     const bus = (engine as any).masterRack.sourceBuses.get('sequencer');
     const drumFilter = (engine as any).masterRack.drumBusFilter;
+    const lanes = (engine as any).masterRack.drumBusFilterLanes;
 
     // masterChainCtx's nodes record into _connectTargets, not connectedTo.
     expect(tap).toBeDefined();
-    expect(drumFilter._connectTargets).toContain(tap);
+    // The bank's INPUT is what drum voices connect to; it fans out to one
+    // fixed-type lane per response, and it is the LANE GAINS that reach the
+    // tap. The rule the test is really pinning is unchanged: the drum path
+    // reaches the sequencer TAP (pre-fader, so the scope draws the patch) and
+    // never the bus directly.
+    expect(lanes).toHaveLength(3);
+    for (const lane of lanes) {
+      expect(drumFilter._connectTargets).toContain(lane.filter);
+      expect(lane.filter._connectTargets).toContain(lane.gain);
+      expect(lane.gain._connectTargets).toContain(tap);
+      expect(lane.gain._connectTargets).not.toContain(bus);
+    }
     expect(drumFilter._connectTargets).not.toContain(bus);
     expect(tap._connectTargets).toContain(bus);
   });
@@ -443,17 +532,26 @@ describe("master chain rebuild invalidates derived state", () => {
 
   test('drumBusFilter and drumSendFilter start in lockstep', () => {
     // Only the LIVE setBeatFilter path had a test; this pins the initial
-    // parity too, since the two nodes are six hand-written assignments with
-    // no shared construction helper.
+    // parity too. Both banks are built by `buildBeatFilterBank`, so the six
+    // hand-written assignments that could drift are gone — this now pins that
+    // the shared helper really is used for both paths.
     const engine = makeEngine();
     bindFakeCtx(engine, masterChainCtx());
     (engine as any).masterRack.setupMasterChain();
 
-    const bus = (engine as any).masterRack.drumBusFilter;
-    const send = (engine as any).masterRack.drumSendFilter;
-    expect(send.type).toBe(bus.type);
-    expect(send.frequency.value).toBe(bus.frequency.value);
-    expect(send.Q.value).toBe(bus.Q.value);
+    const busLanes = (engine as any).masterRack.drumBusFilterLanes;
+    const sendLanes = (engine as any).masterRack.drumSendFilterLanes;
+    expect(busLanes).toHaveLength(3);
+    expect(sendLanes.map((l: any) => l.type)).toEqual(busLanes.map((l: any) => l.type));
+    for (let i = 0; i < busLanes.length; i += 1) {
+      expect(sendLanes[i].filter.frequency.value).toBe(busLanes[i].filter.frequency.value);
+      expect(sendLanes[i].filter.Q.value).toBe(busLanes[i].filter.Q.value);
+      expect(sendLanes[i].gain.gain.value).toBe(busLanes[i].gain.gain.value);
+    }
+    // Exactly one lane is open at rest, and it is the rack's declared type.
+    const open = busLanes.filter((l: any) => l.gain.gain.value === 1);
+    expect(open).toHaveLength(1);
+    expect(open[0].type).toBe((engine as any).masterRack.beatFilterType);
   });
 
   test('reports each stage\'s live gain reduction, and 0 before the context exists', () => {

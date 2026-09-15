@@ -622,8 +622,14 @@ function applyLoopAudioState(engine: AudioEngine, state: LoopAudioAutomation): v
   // The Beat patch, BEFORE this pass schedules a single hit: a drum voice is
   // built from the kit installed at the moment it is scheduled, so a patch
   // applied after the walk has passed is a patch nothing in this loop plays.
-  // The bus filter inside it is an AudioParam and carries the pass time; the
-  // voices are plain fields the next `triggerDrum` reads.
+  // The bus filter inside it carries the pass time on every axis, INCLUDING
+  // its response type: `BiquadFilterNode.type` is a plain field and cannot be
+  // scheduled, so the filter is a three-lane bank of fixed-type biquads whose
+  // GAINS (real AudioParams) crossfade — see `BeatFilterLane` in masterRack.ts.
+  // Before that, every pass here wrote `.type` directly and the last one won
+  // for the whole render, because these calls all happen before
+  // `ctx.startRendering()`. The voices are plain fields, which is fine: they
+  // are read by the next `triggerDrum`, and those run at schedule time too.
   applyBeatParams(engine, state.beatParams, state.time);
   for (const { voice, gain } of state.beatVoiceGains) {
     engine.setDrumTrackGain(voice, gain, state.time);

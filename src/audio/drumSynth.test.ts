@@ -50,17 +50,19 @@ describe('drum reverb sends', () => {
     bindFakeCtx(engine, ctx);
     (engine as any).masterRack.setupMasterChain();
 
-    const sendFilter = (engine as any).masterRack.drumSendFilter;
+    const sendLanes = (engine as any).masterRack.drumSendFilterLanes;
     const sendGate = (engine as any).masterRack.drumSendGate;
     const reverb = (engine as any).masterRack.reverbNode;
 
     // A gate downstream of the convolver would erase its existing tail. A
     // direct filter -> convolver edge would let newly-triggered muted hits
     // leak into it. The only topology satisfying both source-mute semantics
-    // is filter -> gate -> convolver.
+    // is filter -> gate -> convolver. The filter is a three-lane bank now, so
+    // it is every LANE that must land on the gate and nothing that may skip it.
     expect(sendGate).toBeDefined();
     if (!sendGate) return;
-    expect(sendFilter._connectTargets).toEqual([sendGate]);
+    expect(sendLanes).toHaveLength(3);
+    for (const lane of sendLanes) expect(lane.gain._connectTargets).toEqual([sendGate]);
     expect(sendGate._connectTargets).toEqual([reverb]);
   });
 
@@ -128,11 +130,21 @@ describe('drum reverb sends', () => {
     const { engine } = drumEngine();
     engine.setBeatFilter(800, 4, 'highpass');
 
-    const bus = (engine as any).masterRack.drumBusFilter;
-    const send = (engine as any).masterRack.drumSendFilter;
-    expect(send.frequency.targets.at(-1)).toEqual(bus.frequency.targets.at(-1));
-    expect(send.Q.targets.at(-1)).toEqual(bus.Q.targets.at(-1));
-    expect(send.type).toBe('highpass');
+    const busLanes = (engine as any).masterRack.drumBusFilterLanes;
+    const sendLanes = (engine as any).masterRack.drumSendFilterLanes;
+    // Lane for lane, in the same order: the two banks are built by one helper,
+    // so they cannot drift the way six hand-written assignments could.
+    expect(sendLanes.map((l: any) => l.type)).toEqual(busLanes.map((l: any) => l.type));
+    for (let i = 0; i < busLanes.length; i += 1) {
+      expect(sendLanes[i].filter.frequency.targets.at(-1))
+        .toEqual(busLanes[i].filter.frequency.targets.at(-1));
+      expect(sendLanes[i].filter.Q.targets.at(-1)).toEqual(busLanes[i].filter.Q.targets.at(-1));
+      // ...and the same lane is opening on both paths.
+      expect(sendLanes[i].gain.gain.linearRamps.at(-1))
+        .toEqual(busLanes[i].gain.gain.linearRamps.at(-1));
+    }
+    const openSend = sendLanes.find((l: any) => l.type === 'highpass');
+    expect(openSend.gain.gain.linearRamps.at(-1).v).toBe(1);
   });
 });
 

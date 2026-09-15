@@ -275,6 +275,22 @@ export function bindFakeCtx(engine: EngineInstance, ctx: unknown): void {
   (engine as any).bindSubsystems();
 }
 
+/**
+ * The three lanes of one Beat filter bank, as `setupMasterChain` builds them.
+ *
+ * `freshEngine` seeds the bank INPUTS as plain fake nodes (that is what drum
+ * voices connect to), so the lanes behind them have to be seeded too or
+ * `setBeatFilter` walks an empty list and silently does nothing.
+ */
+function fakeBeatFilterLanes(opts: FakeOpts = {}) {
+  return (['lowpass', 'bandpass', 'highpass'] as const).map((type) => {
+    const gain = fakeNode(opts);
+    // Exactly one lane is open, matching the rack's default type.
+    gain.gain.value = type === 'lowpass' ? 1 : 0;
+    return { type, filter: fakeNode(opts), gain };
+  });
+}
+
 export function freshEngine(opts: FakeOpts = {}) {
   const engine = makeEngine();
   const ctx = fakeCtx(opts);
@@ -282,6 +298,8 @@ export function freshEngine(opts: FakeOpts = {}) {
   (engine as any).masterRack.dryGain = fakeNode(opts);
   (engine as any).masterRack.drumBusFilter = fakeNode(opts);
   (engine as any).masterRack.drumSendFilter = fakeNode(opts);
+  (engine as any).masterRack.drumBusFilterLanes = fakeBeatFilterLanes(opts);
+  (engine as any).masterRack.drumSendFilterLanes = fakeBeatFilterLanes(opts);
   (engine as any).masterRack.delayNode = undefined;
   (engine as any).masterRack.reverbNode = undefined;
   (engine as any).masterRack.distortionNode = undefined;

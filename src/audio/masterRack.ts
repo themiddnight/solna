@@ -30,6 +30,37 @@ export interface EngineHooks {
  * own: `release()` (disconnect a group of nodes, ignoring the already-dead ones) and
  * `cancelAndHold()` (a `cancelAndHoldAtTime` with a Firefox fallback).
  */
+/**
+ * One lane of a Beat bus filter: a biquad fixed to ONE response type, behind
+ * its own gain. Exactly one lane is open at a time, so the bank as a whole
+ * behaves as a single filter whose type can be CHANGED ON THE AUDIO CLOCK.
+ *
+ * `BiquadFilterNode.type` is a plain field, not an `AudioParam`, so it cannot
+ * be scheduled: writing it applies to the whole render immediately. Live that
+ * is harmless — a type change means "now" — but the offline mixdown schedules
+ * every pass synchronously before `startRendering()`, so the last pass's type
+ * won for the ENTIRE export. A song whose loops used different filter types
+ * rendered with one of them applied to all of them: loop A's bars exported
+ * with the kick stripped out while monitoring had played them lowpassed, and
+ * nothing failed. Gains ARE `AudioParam`s, so crossfading between fixed-type
+ * lanes is automatable and the export matches what was heard.
+ *
+ * The crossfade is short but not instant: a step would click, and the ramp
+ * doubles as the click-free type switch the single-node path never had.
+ */
+export interface BeatFilterLane {
+  type: FilterType;
+  filter: BiquadFilterNode;
+  gain: GainNode;
+}
+
+/** Every response type a Beat bus filter offers — one lane each. Matches the
+ *  three-way switch on the Beat editor's filter panel. */
+const BEAT_FILTER_TYPES: readonly FilterType[] = ['lowpass', 'bandpass', 'highpass'];
+
+/** Seconds of crossfade when the Beat filter TYPE changes. */
+export const BEAT_FILTER_XFADE_SEC = 0.008;
+
 export class MasterRack {
   // Master bus nodes
   private masterGain: GainNode | null = null;
@@ -97,7 +128,9 @@ export class MasterRack {
   // (SequencerView "Drum Filter" card controls cutoff/resonance/type). The
   // param fields survive the AudioContext chain being (re)built, so values
   // set before init() apply to the filter node created later.
-  drumBusFilter: BiquadFilterNode | null = null;
+  drumBusFilter: GainNode | null = null;
+  /** The dry path's lanes. See `BeatFilterLane` for why there are three. */
+  drumBusFilterLanes: BeatFilterLane[] = [];
 
   // A mirror of drumBusFilter used only for the drum reverb sends. The dry
   // path and the send path must be filtered identically, but drumBusFilter is
@@ -105,7 +138,9 @@ export class MasterRack {
   // without a per-voice filter copy — which would lose the live filter sweeps
   // on ringing tails that the shared node exists to provide. A second shared
   // filter fed by the per-voice send gains gets both.
-  drumSendFilter: BiquadFilterNode | null = null;
+  drumSendFilter: GainNode | null = null;
+  /** The send path's lanes, kept in lockstep with the dry path's. */
+  drumSendFilterLanes: BeatFilterLane[] = [];
   /**
    * The Beat source fader/mute for authored drum reverb sends. Drum sends do
    * not use getSourceBus('sequencer'): that bus fans out to the dry path and
@@ -176,6 +211,36 @@ export class MasterRack {
   bind(ctx: BaseAudioContext): void {
     this.ctx = ctx;
   }
+
+  /**
+   * One Beat filter bank, wired `input -> [lane filter -> lane gain] -> out`.
+   *
+   * Both the dry path and the reverb-send mirror are built through here, which
+   * is also what ends the six hand-written parity assignments the two nodes
+   * used to carry: they cannot start out of lockstep if one function seeds
+   * both. Only the lane matching `beatFilterType` opens; the rest sit at 0 and
+   * contribute nothing until a type change ramps them.
+   */
+  private buildBeatFilterBank(out: AudioNode): { input: GainNode; lanes: BeatFilterLane[] } {
+    const ctx = this.ctx;
+    if (!ctx) throw new Error('buildBeatFilterBank called before init()');
+    const input = ctx.createGain();
+    input.gain.value = 1;
+    const lanes = BEAT_FILTER_TYPES.map((type) => {
+      const filter = ctx.createBiquadFilter();
+      filter.type = type;
+      filter.frequency.value = this.beatFilterCutoff;
+      filter.Q.value = this.beatFilterResonance;
+      const gain = ctx.createGain();
+      gain.gain.value = type === this.beatFilterType ? 1 : 0;
+      input.connect(filter);
+      filter.connect(gain);
+      gain.connect(out);
+      return { type, filter, gain };
+    });
+    return { input, lanes };
+  }
+
 
   setupMasterChain(): void {
     if (!this.ctx) return;
@@ -273,18 +338,15 @@ export class MasterRack {
     this.dryGain.gain.value = 1.0;
 
     // Drum bus filter — routed through the sequencer source bus for volume and mute control
-    this.drumBusFilter = this.ctx.createBiquadFilter();
-    this.drumBusFilter.type = this.beatFilterType;
-    this.drumBusFilter.frequency.value = this.beatFilterCutoff;
-    this.drumBusFilter.Q.value = this.beatFilterResonance;
-    this.drumBusFilter.connect(this.getSourceTap('sequencer'));
+    const busBank = this.buildBeatFilterBank(this.getSourceTap('sequencer'));
+    this.drumBusFilter = busBank.input;
+    this.drumBusFilterLanes = busBank.lanes;
 
     // Same settings, wired to the reverb send only.
-    this.drumSendFilter = this.ctx.createBiquadFilter();
-    this.drumSendFilter.type = this.beatFilterType;
-    this.drumSendFilter.frequency.value = this.beatFilterCutoff;
-    this.drumSendFilter.Q.value = this.beatFilterResonance;
     this.drumSendGate = this.ctx.createGain();
+    const sendBank = this.buildBeatFilterBank(this.drumSendGate);
+    this.drumSendFilter = sendBank.input;
+    this.drumSendFilterLanes = sendBank.lanes;
     // getSourceTap('sequencer') above has already created and seeded the dry
     // bus from sourceGains/sourceMuted. Copy that exact source level so a
     // pre-init snapshot starts both branches in the same state.
@@ -326,7 +388,6 @@ export class MasterRack {
     this.reverbNode.connect(this.reverbGain);
     // Gate BEFORE the convolver: mute blocks new drum input while the reverb
     // tail already inside the shared processor keeps decaying naturally.
-    this.drumSendFilter.connect(this.drumSendGate);
     this.drumSendGate.connect(this.reverbNode);
 
     // Connect effects back to EQ chain
