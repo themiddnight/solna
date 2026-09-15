@@ -1,6 +1,6 @@
 ---
 name: dsp-audio
-description: Use when touching anything under src/audio/ in solna — the audioEngine singleton, the master effect rack or signal routing, AudioContext lifecycle/first-click init, synth voice allocation, drum kits, the shared 16th clock, or when new audio state must reach the engine from the store. Also use when audio is silent, clicks, drones, or a knob has no audible effect.
+description: Use when touching anything under src/audio/ in solna — the audioEngine singleton, the master effect rack or signal routing, AudioContext lifecycle/first-click init, synth voice allocation, the Beat instrument (drum patches, presets, per-voice mix), the shared 16th clock, or when new audio state must reach the engine from the store. Also use when audio is silent, clicks, drones, or a knob has no audible effect.
 ---
 
 # Solna DSP & Audio Routing
@@ -19,7 +19,7 @@ Everything lives in one singleton: `src/audio/engine.ts` → `export const audio
    `ui/GainReductionMeter.tsx`, `ui/SourceMeter.tsx` — plus test files). That file is the list
    that binds; this one has drifted behind it before.
 2. **`src/audio/` must not import `src/store/` or `src/components/`.** The engine takes plain
-   data (`ActiveSynth`, `MasterEffects`, `DrumKit`) and knows nothing about Zustand. The one
+   data (`ActiveSynth`, `MasterEffects`, `BeatParams`) and knows nothing about Zustand. The one
    door left open is `createRenderEngine(ctx)`, which binds a throwaway engine to a
    caller-supplied context for the offline mixdown.
 3. **Every setter no-ops before `init()`.** They all start `if (!this.ctx) return;`. That is why
@@ -47,9 +47,9 @@ applyEngineSnapshot();     // re-pushes the whole persisted audio state into the
 background), so `engineSync.ts` calls it on **every** transport play/stop transition too.
 `resetClock()` is called only on the fully-stopped → playing transition.
 
-Values set before the first click are *not* lost — plain fields (`drumFilterCutoff`,
-`sourceGains`, `sourceMuted`, `clockBpm`, `metronomeEnabled`, `drumKit`) are stored on the
-instance and read when nodes are later created.
+Values set before the first click are *not* lost — plain fields (`masterRack.beatFilter*`,
+`sourceGains`, `sourceMuted`, `clockBpm`, `metronomeEnabled`, and the drum synth's Beat voices
+patch) are stored on the instance and read when nodes are later created.
 
 ## Signal graph (from `setupMasterChain()`)
 
@@ -111,7 +111,7 @@ Key consequences:
 - Drums bypass delay and distortion entirely — the dry path hits `drumBusFilter → dryGain` only.
   The snare/clap/crash reverb send is a per-voice gain (the kit's authored `reverbSend` LEVEL,
   not a boolean) that feeds a second shared `drumSendFilter` — a mirror of `drumBusFilter` kept in
-  lockstep by `setDrumFilter` — so the wet path is filtered too, then on to `reverbNode`.
+  lockstep by `setBeatFilter` — so the wet path is filtered too, then on to `reverbNode`.
 - `masterGain` is the user's master trim only (`setMasterVolume()`, clamped 0..1, seeded at
   unity). The master compressor and limiter are explicit, toggleable master FX
   (`compressorEnabled` / `limiterEnabled` in `MasterEffects`). `compressorEnabled` defaults
@@ -245,28 +245,59 @@ subs.push(useAppStore.subscribe(
 ```
 Then add the same call to `applySliceState()` so `applyEngineSnapshot()` re-applies it after the
 context is created. Multi-field engine setters are subscribed as one encoded primitive string
-(see the drum-filter subscription) so the subscription fires only on real changes.
+(see the Beat-filter subscription) so the subscription fires only on real changes.
 
-## Drum kits
+## The Beat instrument
 
-`src/data/drumKits.ts`: `DRUM_TYPES` declares 11 voices, and its order is the canonical one —
-`kick, snare, rimshot, clap, hihat, openhat, hitom, lowtom, ride, crash, bell`. `DrumKit` and
-`triggerDrum`'s dispatch follow it, so any two of those lists compare as sorted lists.
-`mergeDrumKit` is in `src/audio/drumKits.ts`.
-`DRUM_KITS` holds `Partial<DrumKit>` overrides merged onto `DEFAULT_DRUM_KIT` by `mergeDrumKit()`.
-`triggerDrum(type, velocity, time?)` resolves `DRUM_ALIASES` before its dispatch, and that table is
-exactly `{ closedhat: 'hihat' }` — an alias pointing at a voice that has since gained its own case
-would make that case dead code silently, which is why a test asserts the table exhaustively.
+There is no kit table and no merge. A **Beat patch is COMPLETE**: `BeatParams` carries `voices`
+(every voice stating every field), an `outputTrimDb` calibration figure and its own bus `filter`,
+so a patch a user edits, saves or exports is self-contained — no `Partial` over a shared default,
+no `mergeDrumKit`, and no trim table beside the engine (`src/audio/trims.ts` does not exist).
+
+- `src/data/beatPresets.ts` — `BEAT_PRESETS`, the factory library: `FactoryBeatPreset` literals
+  with stable ids, each carrying a whole patch and its own provenance. A user's saved presets live
+  in the store (`customBeatPresets`), never here. Installing a preset installs it WHOLE
+  (`structuredClone`d on the way in).
+- `src/data/beatPresets.ts` also exports `BEAT_VOICE_IDS` (beside `DEFAULT_BEAT_VOICES`, the
+  default preset's own voices object, shared by reference with its entry in the table). It declares
+  the eleven voices and their canonical order: `kick, snare, rimshot, clap, hihat, openhat, hitom,
+  lowtom, ride, crash, bell`. The types are elsewhere — `BeatVoiceId`, `BeatVoices`, `BeatParams`
+  and `FactoryBeatPreset` are all in `src/types.ts`. The `BeatVoices` interface, every preset patch,
+  `DEFAULT_PADS` (`src/components/ui/DrumPadGrid.tsx`) and `triggerDrum`'s dispatch all follow that
+  order, so any two of those lists compare as sorted lists. `BeatVoices` carries no
+  `reference` field — provenance sits on `FactoryBeatPreset` — so `keyof BeatVoices` stays exactly
+  the voice roster.
+- `src/audio/beatAdapter.ts` — `applyBeatParams(engine, params, time?)` is the ONE hop from a patch
+  to the DSP: `engine.setDrumKit(params.voices, params.outputTrimDb)` plus
+  `engine.setBeatFilter(cutoff, resonance, type, time)`. It takes the engine as an argument, so the
+  live bridge (`store/engineSync.ts`), the transient drag preview (`store/beatPreview.ts`) and the
+  offline mixdown all install a Beat by the same definition, and the render never touches the
+  singleton. Do not add a second installer.
+- `triggerDrum(type, velocity, time?)` resolves `DRUM_ALIASES` (`src/audio/drumSynth.ts`) before
+  its dispatch, and that table
+  is exactly `{ closedhat: 'hihat' }` — an alias pointing at a voice that has since gained its own
+  case would make that case dead code silently, which is why a test asserts the table exhaustively.
+- **The Beat is per LOOP**, and the store holds it as three sibling fields — `beatParams` (sound),
+  `beatPattern` (events), `beatMix` (levels). A per-voice mute is applied twice on purpose:
+  `audio/beatSteps.ts` skips a muted voice's scheduled hits, and `engineSync.pushBeatVoiceGains`
+  drives its gain to 0 so a drum-PAD hit or a live trigger the step walk never sees is silent too.
+- **Legacy drum state (`soundKit`, `drumFilter*`, `masterSequencerVolume`, `drumMuted`,
+  `sequencerTracks`, `DrumKit`, `DRUM_KITS`) is gone from the app.** The only place those names may
+  appear is the read boundary `src/store/sanitizeBeat.ts`, pinned by a literal allowlist in
+  `src/store/beatLegacyBoundary.test.ts`. Reintroducing one is a test failure, not a judgement call.
 
 **Invariant, enforced by `bun run check:drums`** (`scripts/check-drum-kit-separation.ts`):
-1. every kit must override **every** one of the 11 voices (no voice left equal to defaults);
-2. listed params must spread far enough across kits (`max >= factor * min`), e.g. `kick.decay` 3×,
-   `snare.noiseFilter` 2.8×, `hihat.filter` 2.5×;
-3. voices that could collapse into a sibling *inside one kit* — rimshot against that kit's snare, the
-   two toms, ride against crash — are covered by the separate `withinKit` check, not by the
-   across-kit spread, and it fails closed on an unmeasurable pair.
+1. every preset must voice **every** one of the 11 voices away from the default — the one skipped
+   entry is the default preset itself, and the script asserts exactly one baseline exists, so that
+   exclusion cannot quietly grow;
+2. listed params must spread far enough across presets (`max >= factor * min`); new parameters enter
+   through `spread()`/`spreadDefined()`, never `PAIRWISE_PARAMS`;
+3. voices that could collapse into a sibling *inside one patch* — rimshot against that preset's
+   snare, the two toms, ride against crash — are covered by the separate `withinKit` check, which
+   fails closed on an unmeasurable pair.
 
-Adding or editing a kit means running `bun run check:drums`. `bun run verify` includes it.
+`bun run check:levels` re-measures the calibration trims against today's preset defaults. Adding or
+editing a preset means running both; `bun run verify` includes them.
 
 ## Synth presets
 

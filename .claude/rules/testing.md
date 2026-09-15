@@ -57,5 +57,5 @@ Two scripts import straight from source and must keep passing:
 
 - `check-key-bindings.ts` — drum and synth `KeyboardEvent.code` sets are unique,
   non-overlapping, and well-formed.
-- `check-drum-kit-separation.ts` — every kit overrides every drum type, and parameters spread
-  far enough apart to stay audibly distinct.
+- `check-drum-kit-separation.ts` — every Beat preset voices every one of the eleven voices away
+  from the default, and parameters spread far enough apart to stay audibly distinct.

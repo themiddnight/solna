@@ -20,9 +20,9 @@ bun test src/audio/engine.test.ts          # one file
 bun test -t "reverb decay"                 # one test by name
 bun run check:theme    # theme-token guard suite only
 bun run check:keys     # drum-pad vs synth key-binding collision check
-bun run check:drums    # drum-kit audible-separation check
-bun run check:contrast # drum- and module-palette AA contrast floor (both themes)
-bun run check:levels   # calibration trim table still matches today's kit/preset defaults
+bun run check:drums    # Beat-preset audible-separation check
+bun run check:contrast # Beat-voice and module palette AA contrast floor (both themes)
+bun run check:levels   # calibration trim table still matches today's Beat-preset defaults
 bun run check:dead-code             # unused files, exports, types and dependencies across app + tooling
 bun run check:dead-code:production  # strict shipped-code file and dependency graph
 bun run verify         # all tests, static/domain checks, both dead-code scans, and the production build
@@ -43,7 +43,8 @@ than a rule relaxed for everybody. `check:contrast`
 holds **both** namespaced palettes — `--drum-*` and `--module-*` — above the AA floor in both
 themes; the closest pair sits a few thousandths above 4.5, so that step is a gate a palette can
 fail, not a report of what the palettes are. The two rosters are named differently on purpose:
-drum voices come from `DRUM_TYPES` (a voice exists in code whether or not it has a colour), while
+Beat voices come from `BEAT_VOICE_IDS` (a voice exists in code whether or not it has a colour;
+the CSS tokens are still named `--drum-*`, and the ids are the same strings), while
 module names are read out of `index.css` itself, since the only module list is `Knob`'s
 `KnobColor` union and a CLI gate should not import a React component to learn a list of colours.
 What stops the CSS-derived half passing vacuously is that the script asserts both themes declare
@@ -67,7 +68,7 @@ shows it, never in a slice.
 `no-restricted-syntax` for the first):**
 
 1. `src/data/` — **imports nothing at runtime, not even a sibling in `src/data/`.** Factory
-   content only: synth presets, drum kits, drum grids, chord progressions,
+   content only: synth presets, Beat presets, drum grids, chord progressions,
    chord rhythms, bass patterns, effect chains, scales. It reads no impure global (`Math`,
    `Date`, `crypto`, …),
    declares no function, constructs no object with `new`, and holds no module-scope `let`/`var`;
@@ -87,7 +88,7 @@ shows it, never in a slice.
    (`src/audio/export/renderMixdown.ts`) works — it never touches `audioEngine`, and the snapshot
    it renders is assembled by `store/mixdownSlice.ts`, because `src/audio/` may not read the store.**
 3. `src/store/` — never imports `components/`. One Zustand store composed from slices
-   (`transport`, `musicContext`, `synth`, `chords`, `bass`, `sequencer`, `effects`, `ui`,
+   (`transport`, `musicContext`, `synth`, `chords`, `bass`, `beat`, `effects`, `ui`,
    `presets`, `loop`, `lead`, `project`), with `persist` (key `musibox_project_state_v1`, `partialize` +
    `migrate` in `store.ts`, legacy-key adoption in `migrate.ts`) and `subscribeWithSelector`.
    There is no per-version migration step to add any more — `PERSIST_VERSION` is stamped on
@@ -95,7 +96,7 @@ shows it, never in a slice.
    identity except for the legacy localStorage-key adoption it still calls, kept only because
    zustand's `persist` throws without a `migrate` function at all). A
    persisted shape change is handled by validating the new key in `merge`'s
-   `sanitizePersistedState`/`sanitizeLoops`, not by bumping the version. See the "no migration
+   `sanitizePersistedState`, not by bumping the version. See the "no migration
    chains" note further down for why, and for the precondition under which that stops being
    true. **`store/driveAuth.ts` holds the only Google access token, in a closure** — no getter
    hands it out, and **no slice may read it**: `driveSignedIn` in the drive slice is a
@@ -153,18 +154,19 @@ plus `chords`, `drumPattern` and `effects` — and `applyVibeToStore` writes tha
 **There is one drum-grid library, not one per consumer.** `DRUM_GRIDS` serves both
 the sequencer's grid menu and the vibes; an entry carries its own `name`, `meter`,
 `kit` and `rows`, so a vibe may reference any grid and the menu may offer any grid.
-**A drum grid determines the whole kit.** `replaceDrumPattern` looks a row up by
-the sequencer track's instrument name and **clears every track no row names** — so
-picking a grid gives you that grid, never that grid plus leftovers. It was
-`applyDrumPattern` and it merged, which was invisible while every grid declared
-every row the five tracks had and became a bug the moment `tom` and `crash` tracks
-existed. Clearing goes through `writeStepWindow`, so only the active window clears
-and the wider-meter padding survives. **Every row in a grid must name a voice a
-sequencer track can play.** The 53 `bass` cells 23 grids used to carry are deleted,
-not kept as authored intent: `bass` is not a drum voice — no `DRUM_KITS` field, no
-`triggerDrum` case, no track — and a row that cannot sound is not a rhythm.
-`drumGrids.test.ts` now rejects any row name no track plays, so re-adding one turns
-the suite red. Every grid still
+**A drum grid determines the whole pattern.** `replaceBeatPattern` looks a row up by
+Beat voice id and **clears every voice no row names** — so picking a grid gives you
+that grid, never that grid plus leftovers. It was `applyDrumPattern` and it merged,
+which was invisible while every grid declared every row the five tracks had and
+became a bug the moment `tom` and `crash` tracks existed. Clearing goes through
+`writeStepWindow`, so only the active window clears and the wider-meter padding
+survives. **A grid changes the pattern and never the sound**: `beatPresetId` on a
+grid entry is provenance nothing applies, so the Beat patch stays the user's to pick
+on Sound. **Every row in a grid must name a voice the Beat instrument can play.**
+The 53 `bass` cells 23 grids used to carry are deleted, not kept as authored intent:
+`bass` is not a Beat voice — no `BeatVoices` field, no `triggerDrum` case — and a row
+that cannot sound is not a rhythm. `drumGrids.test.ts` now rejects any row name no
+voice plays, so re-adding one turns the suite red. Every grid still
 writes every row its origin group defines, empty or not, because a grid should
 state what it plays. Each entry also carries a `provenance` — a source URL or the literal `'authored'` —
 and the `'authored'` set is an allowlist in `drumGrids.test.ts`, so shipping an
@@ -181,35 +183,57 @@ Each vibe's dice pool is its own explicit arrays (`random.progressions` and the
 rest), not the output of a filter over the shared library — so adding a
 progression never reaches into a vibe that did not ask for it.
 
-**Eleven drum voices, and the canonical order is written once.** `kick snare rimshot clap hihat
-openhat hitom lowtom ride crash bell` is the order `DRUM_TYPES` declares, and the `DrumKit`
-interface, `DEFAULT_DRUM_KIT`, `mergeDrumKit`, `INITIAL_SEQUENCER_TRACKS`, `DEFAULT_PADS` and
-`triggerDrum`'s dispatch all follow it, so a reviewer comparing any two of those lists is comparing
-sorted lists. `DrumKit.reference` does not exist — `reference` lives on `DRUM_KITS`'s value type
-instead, deliberately off the interface, so `keyof DrumKit` stays exactly the voice roster and
+**Beat is a per-loop INSTRUMENT, and it is exactly three sibling fields.** `beatParams` is the
+sound, `beatPattern` is the events, `beatMix` is the levels, and every action writes exactly one of
+them — a sound edit can never replace a pattern. There is no fourth field and no flat sibling: the
+kit-name-only state this replaced (`soundKit`, `drumFilter*`, `masterSequencerVolume`, `drumMuted`,
+`sequencerTracks`) is gone from the app, and `src/store/beatLegacyBoundary.test.ts` enforces that
+those seven names appear in exactly three files — `sanitizeBeat.ts`, its test, and the guard — with
+a LITERAL allowlist, so a second compatibility reader fails review visibly rather than merging as a
+one-line addition. **Old input is accepted, new writes never contain old fields**: `readBeatState`
+converts a body written in the old shape, and it is the only thing in the app that may read one.
+**`beatParams` carries its own output trim** (`outputTrimDb`, the measured calibration figure) and
+its own bus filter, so a patch a user edits, saves or exports is self-contained — there is no
+trim table beside the engine to look a kit's level up in, and `src/audio/trims.ts` does not exist.
+**Every control writes the patch directly**; a knob mid-drag previews through a draft and commits
+once (`useBeatParamDraft`), and `applyBeatParams` (`src/audio/beatAdapter.ts`) is the one hop from a
+patch to the DSP, shared by the live bridge, the preview and the offline render.
+
+**Eleven Beat voices, and the canonical order is written once.** `kick snare rimshot clap hihat
+openhat hitom lowtom ride crash bell` is the order `BEAT_VOICE_IDS` declares, and the `BeatVoices`
+interface, `DEFAULT_BEAT_VOICES`, every `BEAT_PRESETS` patch, `DEFAULT_PADS` and `triggerDrum`'s
+dispatch all follow it, so a reviewer comparing any two of those lists is comparing sorted lists.
+`BeatVoices` carries no `reference` field — a preset's provenance lives on `FactoryBeatPreset`
+instead, deliberately off the voices type, so `keyof BeatVoices` stays exactly the voice roster and
 never drifts into carrying documentation. `DRUM_ALIASES` is `{ closedhat: 'hihat' }` and nothing
 else: `triggerDrum` resolves an alias BEFORE its dispatch, so an alias pointing at a voice that has
 since gained its own case makes that case dead code with no error and no failing test — a guard
 asserts the table exhaustively (`toEqual`, not a subset check).
 
-**`mergeDrumKit` enumerates every voice by hand, deliberately.** Each voice has a differently
-shaped params type, so merging a partial kit against the default by looping over `DRUM_TYPES` would
-need a cast inside the loop — trading a compile error for a runtime hole the first time a partial
-kit is malformed.
+**A Beat patch is COMPLETE, and that is what removed the merge.** Every voice states every field, so
+there is no `Partial` laid over a shared default and no `mergeDrumKit` to enumerate voices by hand.
+`DEFAULT_BEAT_VOICES` is the default preset's own voices object — the drum synth seeds its pre-patch
+default from it, and `beatPresets.test.ts` pins that the two are the same object rather than copies
+that can drift. A preset is installed WHOLE (`structuredClone`d on the way in), never merged over
+whatever the track was already holding.
 
 **`check:drums` asks two different questions, and neither can pass vacuously.** `PAIRWISE_PARAMS`
-asks whether two KITS differ, and its separation for a pair is a `max` over the list — so adding a
-parameter can only raise every pair's separation and make the floor easier to clear. New parameters
-therefore enter through `spread()`/`spreadDefined()`, never `PAIRWISE_PARAMS`; a voice that could
-collapse into a sibling voice inside one kit (a rimshot against that kit's own snare, a tom against
-its own sibling tom) is covered by the separate within-kit check instead, which asks whether two
-VOICES differ inside the same kit. `spread()` asserts `max >= factor * min`, which is vacuously
-true at `min = 0`, so a parameter that must never be zero carries its own explicit `> 0`
-assertion; `withinKit` fails CLOSED on a non-finite ratio — an unmeasurable pair is dropped, never
-treated as passing — plus a counted minimum, so a kit that goes entirely unmeasurable fails the
-count instead of silently clearing the floor. A `spread()` factor chosen after its values were
-measured is calibration, and its comment says so: from the commit that adds it, the factor is a
-floor, never lowered to make a retune easier.
+asks whether two PRESETS differ, and its separation for a pair is a `max` over the list — so adding
+a parameter can only raise every pair's separation and make the floor easier to clear. New
+parameters therefore enter through `spread()`/`spreadDefined()`, never `PAIRWISE_PARAMS`; a voice
+that could collapse into a sibling voice inside one preset (a rimshot against that preset's own
+snare, a tom against its own sibling tom) is covered by the separate within-kit check instead, which
+asks whether two VOICES differ inside the same patch. `spread()` asserts `max >= factor * min`,
+which is vacuously true at `min = 0`, so `spreadDefined` DROPS a zero — a zero is the disabled state
+stated explicitly (`clickLevel: 0`), not a measurement — and its counted minimum then makes "too few
+presets carry one" a failure rather than a silent pass. `withinKit` fails CLOSED on a non-finite
+ratio — an unmeasurable pair is dropped, never treated as passing — plus a counted minimum, so a
+preset that goes entirely unmeasurable fails the count instead of silently clearing the floor. The
+"every preset voices every voice away from the default" check skips exactly ONE entry, the default
+preset itself, because a baseline cannot differ from itself; the script asserts that exactly one
+entry is the baseline, so that exclusion cannot quietly grow. A `spread()` factor chosen after its
+values were measured is calibration, and its comment says so: from the commit that adds it, the
+factor is a floor, never lowered to make a retune easier.
 
 **The dice repoints the drum grid; it does not decorate one.** All five reroll axes
 are id pools now (`keys`, `progressions`, `chordRhythms`, `bassPatterns`,
@@ -342,8 +366,11 @@ doing so once the user has left the loop it was set in or moved to a different t
 audibility is computed **only** in `engineSync.ts`, off the same `SOURCE_BUSES` table that drives
 the snapshot and the subscriptions, using `isTrackAudible` from `store/trackAudibility.ts` —
 `src/components/` may not import `audio/engine`, so a view may never compute it. Solo moves the
-drums **bus** only; the per-voice drum mute in `sequencerTracks` is a second, independent layer
-applied in `useSequencerPlayback`, and both must pass for a voice to sound.
+Beat **bus** only; the per-voice mute in `beatMix.voices` is a second, independent layer, and both
+must pass for a voice to sound. That layer has TWO appliers by design: `audio/beatSteps.ts` skips a
+muted voice's scheduled hits so no silent voice is ever built, and `engineSync`'s
+`pushBeatVoiceGains` drives the voice's gain to 0 — which is the one that silences what the step
+walk never sees, a drum PAD hit or a live trigger. Neither cancels the other; both mean silence.
 
 **The keyboard, the on-screen keyboard and the arp all play whichever track `focusTrack`
 names — bus AND patch.** A note's bus is CAPTURED at note-on and never recomputed at release, so
@@ -491,8 +518,9 @@ throws on a version mismatch with no `migrate` function at all. `PERSIST_VERSION
 `PROJECT_FORMAT_VERSION` still exist and are still stamped on every write — the latter is still
 the murva-facing interop marker and still what `parseProjectFile` refuses a *newer* body
 against — but neither drives a read-time transform any more. In place of a chain,
-`sanitizePersistedState`/`sanitizeLoops` (store.ts) and `sanitizeContent` (projectFile.ts,
-which also calls `sanitizeLoops`) validate every key on every read regardless of which version
+`sanitizePersistedState` (store.ts) and `sanitizeContent` (projectFile.ts, which is the only
+non-test caller of `sanitizeLoops` — loops live in the IndexedDB slot, not in `localStorage`, so
+the persist path never reads one) validate every key on every read regardless of which version
 wrote it: out of range, wrong type, missing, or not a member of an allowed set gets the default;
 a value that is in range passes through untouched, whatever unit or shape convention was current
 when it was written. The precondition is **solna has no real users yet** — a fader value is a
