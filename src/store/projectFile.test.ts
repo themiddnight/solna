@@ -93,53 +93,66 @@ describe('parseProjectFile sanitises wrong-typed content instead of refusing', (
     expect(result.ok && result.body.content.loops).toHaveLength(1);
   });
 
-  // DEV-386 fix round 2: a .solna body is an external contract, not this
-  // app's own localStorage — a malformed sequencerTracks[].volume here is
-  // ordinary untrusted input, and the old, unguarded isSequencerTrack let it
-  // straight through to faderDbToGain, which fails SAFE TO SILENCE. Both
-  // cases are asserted through the real import path (parseProjectFile), not
-  // by calling a sanitize helper directly.
-  test('an out-of-range sequencer track volume imports at its default, not clamped or silenced', () => {
-    const track = { ...createDefaultLoop().sequencerTracks[0], volume: 999 };
-    const loop = { ...createDefaultLoop(), sequencerTracks: [track] };
+  // DEV-386 fix round 2, re-homed: a .solna body is an external contract, not
+  // this app's own localStorage, so a malformed fader inside it is ordinary
+  // untrusted input and an unguarded read reaches faderDbToGain, which fails
+  // SAFE TO SILENCE. The per-voice faders now live inside `beatMix`, and both
+  // cases are still asserted through the real import path (parseProjectFile),
+  // not by calling a sanitize helper directly.
+  test('an out-of-range Beat voice level imports at its default, not clamped or silenced', () => {
+    const fallback = createDefaultLoop();
+    const loop = {
+      ...fallback,
+      beatMix: {
+        ...fallback.beatMix,
+        voices: { ...fallback.beatMix.voices, kick: { levelDb: 999, muted: false } },
+      },
+    };
     const result = parseProjectFile(JSON.stringify({ ...body, content: { ...body.content, loops: [loop] } }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     // DEFAULT_FADER_DB (unity): 999's UNIT is unknown, not just its
     // magnitude, so it is not clamped to FADER_MAX_DB — and not silenced.
-    expect(result.body.content.loops[0].sequencerTracks[0].volume).toBe(0);
+    expect(result.body.content.loops[0].beatMix.voices.kick.levelDb).toBe(0);
   });
 
-  test('a non-numeric sequencer track volume imports at unity, not silence', () => {
-    const track = { ...createDefaultLoop().sequencerTracks[0], volume: 'loud' };
-    const loop = { ...createDefaultLoop(), sequencerTracks: [track] };
+  test('a non-numeric Beat voice level imports at unity, not silence', () => {
+    const fallback = createDefaultLoop();
+    const loop = {
+      ...fallback,
+      beatMix: {
+        ...fallback.beatMix,
+        voices: { ...fallback.beatMix.voices, kick: { levelDb: 'loud', muted: false } },
+      },
+    };
     const result = parseProjectFile(JSON.stringify({ ...body, content: { ...body.content, loops: [loop] } }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     // asFaderDb's fallback for a non-finite/wrong-typed value is
     // DEFAULT_FADER_DB (0 dB, unity) — the safe direction. Before this fix,
     // an unclamped garbage value reached faderDbToGain, which maps anything
-    // non-finite to a LINEAR gain of exactly 0: a muted drum track, silently.
-    expect(result.body.content.loops[0].sequencerTracks[0].volume).toBe(0);
+    // non-finite to a LINEAR gain of exactly 0: a muted drum voice, silently.
+    expect(result.body.content.loops[0].beatMix.voices.kick.levelDb).toBe(0);
   });
 
-  // sanitizeLoops now validates these three against their own libraries
-  // (DRUM_KITS / BASS_PATTERNS / CHORD_RHYTHMS), so an unknown id/name falls
-  // back to the default loop's value INSIDE sanitizeContent, before
+  // sanitizeLoops validates these against their own libraries, so an unknown
+  // id falls back to the default loop's value INSIDE sanitizeContent, before
   // unknownLibraryReferences ever sees it — the import still succeeds, but
-  // nothing "unknown" survives to import verbatim or to warn about.
-  test('unknown soundKit / bassPatternId / chordRhythmId fall back to the default loop, with no warning', () => {
+  // nothing "unknown" survives to import verbatim or to warn about. The Beat
+  // preset id is the exception and is deliberately not asserted here: a
+  // `.solna` may legitimately name a preset from a library THIS browser does
+  // not have, so it is resolved against the factory set only and an
+  // unresolvable base is recorded as `null` with the stored patch kept.
+  test('unknown bassPatternId / chordRhythmId fall back to the default loop, with no warning', () => {
     const fallback = createDefaultLoop();
     const loop = {
       ...fallback,
-      soundKit: 'Kit From The Future',
       bassPatternId: 'bp-ghost',
       chordRhythmId: 'cr-ghost',
     };
     const result = parseProjectFile(JSON.stringify({ ...body, content: { ...body.content, loops: [loop] } }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.body.content.loops[0].soundKit).toBe(fallback.soundKit);
     expect(result.body.content.loops[0].bassPatternId).toBe(fallback.bassPatternId);
     expect(result.body.content.loops[0].chordRhythmId).toBe(fallback.chordRhythmId);
     expect(result.warnings).toHaveLength(0);
@@ -168,6 +181,73 @@ describe('parseProjectFile sanitises wrong-typed content instead of refusing', (
 // with no warnings at all while opening a `.solna` had just learned to warn. A
 // user whose stored project held a patch this build cannot read got all five
 // track sounds replaced by factory defaults on the first boot, silently.
+describe('the Beat instrument through the real import path', () => {
+  const contentWith = (loop: Loop | Record<string, unknown>) =>
+    JSON.stringify({ ...body, content: { ...body.content, loops: [loop] } });
+
+  test('a current-shape body keeps the Beat sound, pattern and mix it carries', () => {
+    const loop = createDefaultLoop();
+    loop.beatParams = { ...loop.beatParams, basePresetId: 'trap-beat' };
+    loop.beatPattern.rows.kick[0] = true;
+    loop.beatMix.voices.snare = { levelDb: -4.5, muted: true };
+
+    const result = parseProjectFile(contentWith(loop));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const read = result.body.content.loops[0];
+    expect(read.beatParams.basePresetId).toBe('trap-beat');
+    expect(read.beatPattern.rows.kick[0]).toBe(true);
+    expect(read.beatMix.voices.snare).toEqual({ levelDb: -4.5, muted: true });
+  });
+
+  test('an unknown Beat base is dropped to null and the complete patch imports intact', () => {
+    // Provenance ONLY: a base is a label on a patch, and the patch is all
+    // here. An id this build cannot resolve — a user preset saved in another
+    // browser — reads back as `null` and rejects nothing, warns about nothing
+    // and changes not one parameter of the sound.
+    const loop = createDefaultLoop();
+    const sent = structuredClone(loop.beatParams);
+    sent.basePresetId = 'user-beat-from-another-browser';
+    sent.voices.kick.decay = 0.41;
+
+    const result = parseProjectFile(contentWith({ ...loop, beatParams: sent } as unknown as Record<string, unknown>));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const read = result.body.content.loops[0];
+    expect(read.beatParams.basePresetId).toBeNull();
+    expect(read.beatParams.voices.kick.decay).toBe(0.41);
+    expect(read.beatParams.voices).toEqual(sent.voices);
+    expect(read.beatParams.filter).toEqual(sent.filter);
+    expect(result.warnings).toEqual([]);
+  });
+
+  // The OTHER read shape — a body written before the Beat instrument existed,
+  // carrying the kit-name-only drum state — is exercised in
+  // `sanitizeBeat.test.ts`, through this same `parseProjectFile` entry point.
+  // It lives there rather than here because the old field names may appear in
+  // exactly three files (`beatLegacyBoundary.test.ts` holds that line), and
+  // the suite that owns the conversion is the honest home for the test that
+  // proves the conversion is wired into the import.
+
+  test('a garbage Beat body falls back without taking its siblings down', () => {
+    const loop = createDefaultLoop() as unknown as Record<string, unknown>;
+    loop.beatParams = 'loud';
+    loop.beatPattern = { rows: { kick: 'four on the floor' } };
+    loop.beatMix = 7;
+
+    const result = parseProjectFile(contentWith(loop));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const read = result.body.content.loops[0];
+    expect(read.beatParams.voices.kick).toEqual(createDefaultLoop().beatParams.voices.kick);
+    expect(read.beatPattern.rows.kick).toHaveLength(MAX_STEPS_PER_BAR);
+    expect(read.beatPattern.rows.kick.every((hit) => !hit)).toBe(true);
+    expect(read.beatMix.voices.kick.muted).toBe(false);
+    // The rest of the loop is untouched by a bad Beat body.
+    expect(read.chords).toEqual(createDefaultLoop().chords);
+  });
+});
+
 describe('normalizeStoredBody names what the read could not carry', () => {
   const storedWith = (loop: Record<string, unknown>) =>
     ({
@@ -185,6 +265,23 @@ describe('normalizeStoredBody names what the read could not carry', () => {
 
   test('a body every track of which reads fine warns about nothing', () => {
     expect(normalizeStoredBody(storedWith({})).warnings).toEqual([]);
+  });
+
+  test('the slot read resolves a base against the ids it is GIVEN, the import against factory ids only', () => {
+    // The one asymmetry between this reader and parseProjectFile, both halves
+    // pinned on one body: the local slot is read on the machine whose library
+    // the base names, so the caller hands its ids in and the base survives; a
+    // `.solna` may come from anywhere, so the same id is unresolvable and
+    // becomes null with the complete patch untouched.
+    const base = createDefaultLoop().beatParams;
+    const stored = storedWith({ beatParams: { ...base, basePresetId: 'user-beat-local' } });
+
+    const local = normalizeStoredBody(stored, new Set(['retro-drive', 'user-beat-local']));
+    expect(local.body.content.loops[0].beatParams.basePresetId).toBe('user-beat-local');
+
+    const factoryOnly = normalizeStoredBody(stored);
+    expect(factoryOnly.body.content.loops[0].beatParams.basePresetId).toBeNull();
+    expect(factoryOnly.body.content.loops[0].beatParams.voices).toEqual(base.voices);
   });
 
   test('a body from a newer build is returned verbatim and warns about nothing', () => {
@@ -506,10 +603,27 @@ describe('unknownLibraryReferences', () => {
     expect(unknownLibraryReferences(factoryProjectContent())).toEqual([]);
     const content = factoryProjectContent();
     content.loops = [
-      { ...createDefaultLoop(), id: 'x', soundKit: 'Nope' },
-      { ...createDefaultLoop(), id: 'y', soundKit: 'Nope' },
+      { ...createDefaultLoop(), id: 'x', chordRhythmId: 'cr-ghost' },
+      { ...createDefaultLoop(), id: 'y', chordRhythmId: 'cr-ghost' },
     ];
-    expect(unknownLibraryReferences(content)).toEqual(['drum kit "Nope"']);
+    expect(unknownLibraryReferences(content)).toEqual(['chord rhythm "cr-ghost"']);
+  });
+
+  test('an unresolvable Beat base is provenance, not a missing resource', () => {
+    // The opposite rule to the vibe and grid tables, on purpose. Shipped
+    // factory data must reference a factory preset that exists, because a vibe
+    // RESOLVES its id to a sound. A project body carries its Beat patch in
+    // full, so a base this build cannot resolve — a preset from the author's
+    // own user library, say — loses nothing and warns about nothing.
+    const content = factoryProjectContent();
+    content.loops = [
+      {
+        ...createDefaultLoop(),
+        id: 'x',
+        beatParams: { ...createDefaultLoop().beatParams, basePresetId: 'user-beat-from-another-browser' },
+      },
+    ];
+    expect(unknownLibraryReferences(content)).toEqual([]);
   });
 });
 

@@ -43,7 +43,15 @@ interface LoadedProject extends ProjectSlotRecord {
 
 export interface ProjectStore {
   status(): ProjectStoreStatus;
-  load(): Promise<ProjectStoreResult<LoadedProject>>;
+  /**
+   * `knownBeatPresetIds` is the caller's own resolvable Beat preset set —
+   * factory plus the user's saved library. It belongs to the CALLER because
+   * the library lives in the store and this module may not read it, and it is
+   * passed here rather than left out because the slot is LOCAL: the browser
+   * reading it is the browser whose library those ids are in. An import from a
+   * `.solna` file deliberately gets no such set (projectFile.ts).
+   */
+  load(knownBeatPresetIds?: ReadonlySet<string>): Promise<ProjectStoreResult<LoadedProject>>;
   save(record: ProjectSlotRecord): Promise<ProjectStoreResult<ProjectSlotRecord>>;
   clear(): Promise<ProjectStoreResult<null>>;
 }
@@ -90,7 +98,7 @@ export function createProjectStore(openBackend: () => Promise<ProjectStoreBacken
 
   return {
     status: () => status,
-    load: () =>
+    load: (knownBeatPresetIds) =>
       run(async (b) => {
         // The slot VALUE widened from a body to a record; the shape test lives
         // in sanitizeSlotRecord, so this is where a pre-source slot widens and
@@ -102,7 +110,7 @@ export function createProjectStore(openBackend: () => Promise<ProjectStoreBacken
         // warning set, which cannot be recomputed above this line: the pass is
         // lossy, and by the time a caller holds the body the reset patch it
         // would report is already gone.
-        const { body, warnings } = normalizeStoredBody(record.body);
+        const { body, warnings } = normalizeStoredBody(record.body, knownBeatPresetIds);
         return { ok: true as const, value: { body, source: record.source, warnings } };
       }),
     save: (record) =>

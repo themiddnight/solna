@@ -1,8 +1,7 @@
-import { MasterEffects, FilterType } from '../types';
+import { type BeatVoices, MasterEffects, FilterType } from '../types';
 import { STEPS_PER_BAR } from '../utils/musicTheory';
 import type { Meter } from '../utils/meter';
 import { DEFAULT_VELOCITY } from './constants';
-import type { DrumKit } from '@/data/drumKits';
 import type { ActiveSynth } from '@/types/synth';
 import type { VoiceOwner } from './voiceOwner';
 import { IDLE_SUSPEND_MS, shouldSuspendWhenIdle } from './idleSuspend';
@@ -147,16 +146,23 @@ export class AudioEngine {
     this.drumSynth.triggerDrum(type, velocity, time);
   }
 
-  setDrumKit(kit?: Partial<DrumKit>, kitName?: string): void {
-    this.drumSynth.setDrumKit(kit, kitName);
+  /**
+   * Install a COMPLETE set of Beat voices and the patch's own measured output
+   * trim, in dB. Neither argument is optional and neither is a name: the trim
+   * travels inside the patch (`BeatParams.outputTrimDb`), so an edited or
+   * user-saved Beat stays calibrated where a name-keyed lookup silently gave
+   * it somebody else's trim — or none.
+   */
+  setDrumKit(voices: BeatVoices, outputTrimDb: number): void {
+    this.drumSynth.setDrumKit(voices, outputTrimDb);
   }
 
-  setDrumFilter(cutoff: number, resonance: number, type: FilterType, time?: number): void {
-    this.drumSynth.setDrumFilter(cutoff, resonance, type, time);
+  setBeatFilter(cutoff: number, resonance: number, type: FilterType, time?: number): void {
+    this.drumSynth.setBeatFilter(cutoff, resonance, type, time);
   }
 
-  setDrumTrackGain(instrument: string, gain: number): void {
-    this.drumSynth.setDrumTrackGain(instrument, gain);
+  setDrumTrackGain(instrument: string, gain: number, time?: number): void {
+    this.drumSynth.setDrumTrackGain(instrument, gain, time);
   }
 
   __drumTrackGainValueForTests(instrument: string): number | undefined {

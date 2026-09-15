@@ -1,18 +1,30 @@
 /**
- * Verifies that the 13 drum kits in DRUM_KITS are audibly distinguishable:
- *  1. Every kit overrides EVERY drum type (no type left at DEFAULT_DRUM_KIT values).
- *  2. Each listed parameter has enough spread (max >= factor * min) across merged kits.
+ * Verifies that the 13 factory Beat presets are audibly distinguishable:
+ *  1. Every preset voices EVERY voice of the roster away from the default
+ *     preset's (no voice left sounding like `retro-drive`'s).
+ *  2. Each listed parameter has enough spread (max >= factor * min) across the
+ *     catalogue.
  *
  * Run with: bun scripts/check-drum-kit-separation.ts
  * Exit code 1 if any check fails.
+ *
+ * WHAT CHANGED WHEN THE KIT TABLE BECAME A PRESET CATALOGUE, and what did not.
+ * A kit used to be a `Partial<DrumKit>` laid over one shared `DEFAULT_DRUM_KIT`
+ * by `mergeDrumKit`, so check 1 could ask "did this kit override this voice at
+ * all" and a kit that forgot one inherited it silently. A Beat patch is
+ * COMPLETE by type, so that particular silent inheritance is gone — but the
+ * AUDIBLE failure it guarded against is not: thirteen presets that copy one
+ * voice verbatim are still twelve presets with somebody else's hat. So the
+ * question is asked of the VALUES instead of the overrides, against the default
+ * preset's patch, which is the object the old default table became.
+ *
+ * Every factor and floor below is unchanged, and every one of them is a FLOOR
+ * from the commit that introduced it — a failure is retuned, never relaxed.
  */
-import {
-  DEFAULT_DRUM_KIT,
-  DRUM_KITS,
-  DRUM_TYPES,
-  type DrumKit,
-} from '../src/data/drumKits.ts';
-import { mergeDrumKit } from '../src/audio/drumKits.ts';
+import { BEAT_PRESETS, BEAT_VOICE_IDS, DEFAULT_BEAT_PRESET_ID, DEFAULT_BEAT_VOICES } from '../src/data/beatPresets.ts';
+import type { BeatVoices } from '../src/types.ts';
+
+type DrumKit = BeatVoices;
 
 let failures = 0;
 
@@ -21,22 +33,45 @@ function report(label: string, pass: boolean, detail = '') {
   if (!pass) failures += 1;
 }
 
-const kits = Object.entries(DRUM_KITS).map(([name, partial]) => ({
-  name,
-  kit: mergeDrumKit(partial),
+const kits = BEAT_PRESETS.map((preset) => ({
+  name: preset.name,
+  id: preset.id,
+  kit: preset.patch.voices as DrumKit,
 }));
 
-// --- Check 1: every kit overrides every drum type ---
-for (const { name, kit } of kits) {
-  for (const type of DRUM_TYPES) {
-    const merged = kit[type] as Record<string, unknown>;
-    const defaults = DEFAULT_DRUM_KIT[type] as Record<string, unknown>;
-    const differingParams = Object.keys(merged).filter((key) => merged[key] !== defaults[key]);
-    const pass = differingParams.length > 0;
-    const detail = pass
-      ? `differs in ${differingParams.length} of ${Object.keys(merged).length} params`
-      : `NO override: ${type} equals DEFAULT_DRUM_KIT`;
-    report(`kit "${name}" overrides ${type}`, pass, detail);
+// The roster and the catalogue must both be non-empty and the roster must be
+// the full eleven, or every check below measures a shorter list than it claims
+// to. An emptied `kits` would make `spread`'s min/max degenerate and
+// `withinKit`'s count trivially unmeetable; an emptied roster would make
+// check 1 pass without looking at anything at all.
+report(`the catalogue is non-empty`, kits.length > 0, `${kits.length} presets`);
+report(`the voice roster is the full eleven`, BEAT_VOICE_IDS.length === 11, `${BEAT_VOICE_IDS.length} voices`);
+
+// --- Check 1: every preset voices every voice away from the default preset ---
+// The default preset IS the baseline, so it is the one entry that cannot be
+// measured against it — skipped by name here rather than silently passing on a
+// zero-difference comparison. That exclusion is exactly one entry, and the
+// count below is what stops it quietly growing.
+const baselinePresets = kits.filter((k) => k.id === DEFAULT_BEAT_PRESET_ID);
+report(
+  `exactly one preset is the baseline (${DEFAULT_BEAT_PRESET_ID})`,
+  baselinePresets.length === 1,
+  `${baselinePresets.length} matched`,
+);
+for (const { name, id, kit } of kits) {
+  if (id === DEFAULT_BEAT_PRESET_ID) continue;
+  for (const type of BEAT_VOICE_IDS) {
+    const voiced = kit[type] as unknown as Record<string, unknown>;
+    const defaults = DEFAULT_BEAT_VOICES[type] as unknown as Record<string, unknown>;
+    const keys = Object.keys(voiced);
+    const differingParams = keys.filter((key) => voiced[key] !== defaults[key]);
+    const pass = differingParams.length > 0 && keys.every((key) => Number.isFinite(voiced[key] as number));
+    const detail = differingParams.length === 0
+      ? `NO voicing: ${type} is identical to ${DEFAULT_BEAT_PRESET_ID}'s`
+      : pass
+        ? `differs in ${differingParams.length} of ${keys.length} params`
+        : `${type} carries a non-finite parameter`;
+    report(`preset "${name}" voices ${type}`, pass, detail);
   }
 }
 
@@ -52,9 +87,18 @@ function spreadDefined(
   factor: number,
   minCount: number,
 ) {
-  const values = kits.map((k) => pick(k.kit)).filter((v): v is number => v !== undefined);
+  // A ZERO IS NOT A MEASUREMENT, it is the disabled state stated explicitly —
+  // which is what an absent optional field became when patches went complete
+  // (`clickLevel: 0` is "this kit has no click"). Counting one would put 0 in
+  // `min`, make `factor * min` zero and let any max clear the floor: the
+  // vacuous-at-min-zero trap, arriving through the back door of a field that
+  // used to be `undefined`. Dropped here, and `minCount` is what then makes
+  // "too few kits actually have one" a failure rather than a silent pass.
+  const values = kits
+    .map((k) => pick(k.kit))
+    .filter((v): v is number => v !== undefined && Number.isFinite(v) && v > 0);
   if (values.length < minCount) {
-    report(`${label} spread`, false, `only ${values.length} of ${kits.length} kits define it, need ${minCount}`);
+    report(`${label} spread`, false, `only ${values.length} of ${kits.length} kits carry a non-zero value, need ${minCount}`);
     return;
   }
   const min = Math.min(...values);
@@ -63,7 +107,8 @@ function spreadDefined(
   report(
     `${label} spread`,
     max >= required,
-    `${values.length} kits define it, max=${max}, min=${min}, required max >= ${factor}*min=${required.toFixed(3)}` +
+    `${values.length} of ${kits.length} kits carry a non-zero value, max=${max}, min=${min}, ` +
+      `required max >= ${factor}*min=${required.toFixed(3)}` +
       // A failure here means one kit's value is too close to another's, not
       // that the factor is too strict. Say so, or the cheapest-looking fix
       // is lowering the factor, which is the one response this gate forbids.
@@ -136,7 +181,8 @@ spread('kick.pitchTime', (k) => k.kick.pitchTime, 3.0);
 spreadDefined('kick.clickLevel', (k) => k.kick.clickLevel, 2.0, 8);
 
 // --- Check 2c: the routing parameters (spec decision 25) ---
-// Every kit's value is > 0 by construction (asserted in audio/drumKits.test.ts):
+// Every kit's value is > 0 by construction (`spreadDefined` drops a zero and
+// `spread` then fails the count, so a kit that zeroed one is caught here):
 // a single kit at 0 would make `factor * min` zero and this check vacuous.
 // The 3.0 factor is CALIBRATION, not a prior constraint the values were tuned
 // to meet: the thirteen reverbSend values (and their measured ratios, kick

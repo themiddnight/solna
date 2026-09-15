@@ -30,7 +30,7 @@ export type SaveTarget =
  *
  * The route carries its payload (the id, the handle) rather than being a bare
  * string, so the caller that switches on it needs no cast to recover what it
- * already narrowed — see `mergeDrumKit` in CLAUDE.md for the scar that rule
+ * already narrowed — see `releaseSoundingVoices` in CLAUDE.md for the scar that rule
  * comes from.
  */
 export function saveTarget(source: ProjectSource): SaveTarget {

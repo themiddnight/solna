@@ -1,7 +1,7 @@
 /**
  * What changed in DRUM_GRIDS (per grid, per row, as step indices) and in
- * DRUM_KITS (per kit, per voice, per parameter), between a git rev and the
- * working tree.
+ * BEAT_PRESETS (per preset, per voice, per parameter), between a git rev and
+ * the working tree.
  *
  *   bun run report:drums-diff <baseline-commit>
  *
@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DRUM_GRIDS, type DrumGrid } from '../src/data/drumGrids.ts';
-import { DEFAULT_DRUM_KIT, DRUM_KITS } from '../src/data/drumKits.ts';
+import { BEAT_PRESETS } from '../src/data/beatPresets.ts';
 
 /**
  * The "before" side, as a git rev. REQUIRED, and deliberately not a default:
@@ -40,7 +40,7 @@ import { DEFAULT_DRUM_KIT, DRUM_KITS } from '../src/data/drumKits.ts';
  */
 const BASELINE = Bun.argv[2];
 const TABLE_PATH = 'src/data/drumGrids.ts';
-const KIT_TABLE_PATH = 'src/data/drumKits.ts';
+const KIT_TABLE_PATH = 'src/data/beatPresets.ts';
 
 if (!BASELINE) {
   console.log('Usage: bun run report:drums-diff <baseline-commit>');
@@ -177,51 +177,35 @@ if (!BASELINE_VALID) {
   }
 }
 
-// --- DRUM_KITS: per kit, per voice, per parameter -------------------------
+// --- BEAT_PRESETS: per preset, per voice, per parameter --------------------
 // A second, self-contained block with its own temp dir. It deliberately does
 // NOT share the grid block's scaffolding: the contract is "stdout only, exit
-// code always 0" for each half independently, and a kit-side failure must not
-// take the working grid report down with it. Six duplicated lines is the
+// code always 0" for each half independently, and a preset-side failure must
+// not take the working grid report down with it. Six duplicated lines is the
 // cheaper of the two risks in a script that asserts nothing.
+//
+// There is no merge and no [kit]/[inherited] column here any more. Those
+// existed because a kit was a `Partial` laid over one shared default, so a
+// change to the default moved every kit that had not overridden it and the
+// report was unreadable without saying which side a number came from. A Beat
+// patch is COMPLETE: every number in it was typed into that entry, so every
+// changed line is authoring by construction.
+//
+// Presets are matched by ID, never by display name — that is the whole reason
+// ids exist, and a renamed preset must read as one changed name rather than as
+// one deleted kit and one new one.
 
 type Voices = Record<string, Record<string, number>>;
 
-/**
- * mergeDrumKit's one-level-per-voice spread, rewritten locally on purpose.
- * Importing mergeDrumKit would merge the OLD table against TODAY's default and
- * against today's fixed list of voice names, so a slice that adds a voice would
- * report it as unchanged.
- */
-const mergeVoices = (def: Voices, partial: Voices): Voices => {
-  const out: Voices = {};
-  // 'reference' is DRUM_KITS-entry documentation (DrumKitReference), not a
-  // voice — Object.keys(def) never has it (DEFAULT_DRUM_KIT is pure engine
-  // params) but Object.keys(partial) always does now, so it must be dropped
-  // here or every kit reports a phantom "reference" voice changed.
-  for (const voice of new Set([...Object.keys(def), ...Object.keys(partial)].filter((k) => k !== 'reference'))) {
-    out[voice] = { ...(def[voice] ?? {}), ...(partial[voice] ?? {}) };
-  }
-  return out;
-};
+interface PresetRow {
+  id: string;
+  name: string;
+  patch: { voices: Voices };
+}
 
 const val = (v: number | undefined): string => (v === undefined ? '-' : String(v));
 
-/**
- * Where a merged value came from: the kit's own literal, or DEFAULT_DRUM_KIT.
- * Without this column a slice that adds a voice or a field to the DEFAULT makes
- * every parameter of every kit change at once, and the report is unreadable
- * exactly when it matters most. With it, a reader collapses the `inherited`
- * rows and is left with what someone actually typed.
- */
-const originOf = (partial: Voices, voice: string, param: string): string =>
-  partial[voice] !== undefined && param in partial[voice] ? 'kit' : 'inherited';
-
-function reportKit(
-  before: Voices,
-  after: Voices,
-  beforePartial: Voices,
-  afterPartial: Voices,
-): string[] {
+function reportVoices(before: Voices, after: Voices): string[] {
   const lines: string[] = [];
   for (const voice of [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()) {
     const b = before[voice] ?? {};
@@ -231,17 +215,14 @@ function reportKit(
     if (changed.length === 0) continue;
     lines.push(`      ${voice}`);
     for (const p of changed) {
-      const from = originOf(beforePartial, voice, p);
-      const to = originOf(afterPartial, voice, p);
-      const origin = from === to ? to : `${from} -> ${to}`;
-      lines.push(
-        `        ${p.padEnd(16)} ${val(b[p]).padStart(9)}  ->  ${val(a[p]).padStart(9)}` +
-          `   [${origin}]`,
-      );
+      lines.push(`        ${p.padEnd(16)} ${val(b[p]).padStart(9)}  ->  ${val(a[p]).padStart(9)}`);
     }
   }
   return lines;
 }
+
+const byId = (presets: readonly PresetRow[]): Record<string, PresetRow> =>
+  Object.fromEntries(presets.map((preset) => [preset.id, preset]));
 
 {
   let kitDir: string | undefined;
@@ -251,10 +232,23 @@ function reportKit(
 
     if (!BASELINE_VALID) {
       console.log(`\n${BASELINE} is not a valid git revision — check what you typed.`);
-      console.log('No kit-value diff. This is still a clean exit.');
+      console.log('No preset-value diff. This is still a clean exit.');
     } else if (!shownKits || shownKits.exitCode !== 0) {
-      console.log(`\nCannot read ${BASELINE}:${KIT_TABLE_PATH} — it did not exist at that rev.`);
-      console.log('No kit-value diff. This is still a clean exit.');
+      // NOT a clean result — a blind one. `beatPresets.ts` is newer than most
+      // revisions anyone would name here, and the interesting comparison (the
+      // thirteen patches against the kit table they were ported from) lives
+      // across exactly that boundary. Saying "no diff" for a comparison that
+      // never ran is how a port gets called verified when nothing read it.
+      const legacy = Bun.spawnSync(['git', 'show', `${BASELINE}:src/data/drumKits.ts`]);
+      console.log(`\nNOT COMPARED: ${KIT_TABLE_PATH} does not exist at ${BASELINE}.`);
+      if (legacy.exitCode === 0) {
+        console.log(`  ${BASELINE} predates the preset table and still carries the legacy`);
+        console.log('  kit table (src/data/drumKits.ts). Comparing across that rename is not');
+        console.log('  something this report does — the two shapes differ (PARTIAL voices');
+        console.log('  merged over a shared default, versus complete patches), so a value');
+        console.log('  diff across it would need mergeDrumKit.');
+      }
+      console.log('  No preset values were checked. This is a report, not a verdict.');
     } else {
       kitDir = mkdtempSync(join(tmpdir(), 'solna-kit-diff-'));
       const source = shownKits.stdout
@@ -262,63 +256,47 @@ function reportKit(
         .split('\n')
         .filter((line) => !line.startsWith('import '))
         .join('\n');
-      const file = join(kitDir, 'baselineDrumKits.ts');
+      const file = join(kitDir, 'baselineBeatPresets.ts');
       writeFileSync(file, source, 'utf8');
-      const mod = (await import(pathToFileURL(file).href)) as {
-        DEFAULT_DRUM_KIT: Voices;
-        DRUM_KITS: Record<string, Voices>;
-      };
+      const mod = (await import(pathToFileURL(file).href)) as { BEAT_PRESETS: readonly PresetRow[] };
 
-      const beforePartials = mod.DRUM_KITS;
-      const afterPartials = DRUM_KITS as unknown as Record<string, Voices>;
-      const before: Record<string, Voices> = {};
-      for (const [name, partial] of Object.entries(beforePartials)) {
-        before[name] = mergeVoices(mod.DEFAULT_DRUM_KIT, partial);
-      }
-      const after: Record<string, Voices> = {};
-      const todayDefault = DEFAULT_DRUM_KIT as unknown as Voices;
-      for (const [name, partial] of Object.entries(afterPartials)) {
-        after[name] = mergeVoices(todayDefault, partial);
-      }
+      const before = byId(mod.BEAT_PRESETS);
+      const after = byId(BEAT_PRESETS as unknown as readonly PresetRow[]);
 
-      console.log(`\nDRUM_KITS, ${BASELINE} -> working tree.`);
-      console.log('Values are MERGED (default + override), so a DEFAULT_DRUM_KIT change shows');
-      console.log('in every kit that does not override it. A missing value prints as "-", and');
-      console.log('the [kit] / [inherited] column says whether the kit typed that value or got');
-      console.log('it from DEFAULT_DRUM_KIT — collapse the inherited rows to see the authoring.\n');
-      console.log(`  kits: ${Object.keys(before).length} -> ${Object.keys(after).length}\n`);
+      console.log(`\nBEAT_PRESETS, ${BASELINE} -> working tree.`);
+      console.log('Every value is authored: a Beat patch is complete, so nothing here is');
+      console.log('inherited from a default and every changed line is somebody\'s edit.');
+      console.log('Presets are matched by id, so a rename shows as a changed name.\n');
+      console.log(`  presets: ${Object.keys(before).length} -> ${Object.keys(after).length}\n`);
 
-      const allKitNames = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
-      let changedKits = 0;
-      for (const name of allKitNames) {
-        if (!(name in before)) {
-          console.log(`  + ${name}  NEW KIT\n`);
-          changedKits += 1;
+      const allIds = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+      let changedPresets = 0;
+      for (const id of allIds) {
+        if (!(id in before)) {
+          console.log(`  + ${id}  NEW PRESET ("${after[id].name}")\n`);
+          changedPresets += 1;
           continue;
         }
-        if (!(name in after)) {
-          console.log(`  - ${name}  DELETED\n`);
-          changedKits += 1;
+        if (!(id in after)) {
+          console.log(`  - ${id}  DELETED ("${before[id].name}")\n`);
+          changedPresets += 1;
           continue;
         }
-        const lines = reportKit(
-          before[name],
-          after[name],
-          beforePartials[name],
-          afterPartials[name],
-        );
-        if (lines.length === 0) continue;
-        changedKits += 1;
-        console.log(`  ~ ${name}`);
+        const renamed = before[id].name !== after[id].name;
+        const lines = reportVoices(before[id].patch.voices, after[id].patch.voices);
+        if (lines.length === 0 && !renamed) continue;
+        changedPresets += 1;
+        console.log(`  ~ ${id}`);
+        if (renamed) console.log(`      name  "${before[id].name}"  ->  "${after[id].name}"`);
         for (const line of lines) console.log(line);
         console.log('');
       }
-      console.log(`  ${changedKits} of ${allKitNames.length} kits changed.`);
-      console.log('A changed kit parameter is a fact about content, not a defect.');
+      console.log(`  ${changedPresets} of ${allIds.length} presets changed.`);
+      console.log('A changed preset parameter is a fact about content, not a defect.');
     }
   } catch (err) {
     console.log(
-      `\nCannot build a comparable kit baseline from ${BASELINE}:${KIT_TABLE_PATH}: ` +
+      `\nCannot build a comparable preset baseline from ${BASELINE}:${KIT_TABLE_PATH}: ` +
         `${err instanceof Error ? err.message : String(err)}`,
     );
     console.log('Nothing to diff against. This is still a clean exit.');

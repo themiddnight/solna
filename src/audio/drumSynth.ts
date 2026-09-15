@@ -1,9 +1,8 @@
-import { FilterType } from '../types';
+import { type BeatHatParams, type BeatSnareParams, type BeatVoiceId, type BeatVoices, FilterType } from '../types';
 import { DEFAULT_VELOCITY, ENV_FLOOR, clampVelocity } from './constants';
 import { random } from './rng';
-import { mergeDrumKit } from './drumKits';
-import { type DrumKit, type DrumType, type HatParams, type SnareParams, DRUM_TYPES } from '@/data/drumKits';
-import { NEUTRAL_TRIM_GAIN, drumTrimGainFor } from './trims';
+import { BEAT_VOICE_IDS, DEFAULT_BEAT_VOICES } from '@/data/beatPresets';
+import { dbToGain, toDecibels } from '@/utils/gainUnits';
 import type { EngineHooks, MasterRack } from './masterRack';
 
 /**
@@ -90,6 +89,9 @@ const OPENHAT_CHOKE_RELEASE = 0.008;
  */
 const HAT_Q = 5;
 
+/** Unity. What an uncalibrated Beat gets — never a guess, never a clamp. */
+const NEUTRAL_TRIM_GAIN = 1;
+
 /**
  * One sounding hat, as the choke group needs to see it.
  *
@@ -136,15 +138,21 @@ export class DrumSynth {
    *  no-ops safely like every other and applyEngineSnapshot re-applies. */
   private drumTrackLevels = new Map<string, number>();
 
-  private drumKit: DrumKit = mergeDrumKit();
+  // The patch the DSP holds before any store write reaches it. A COPY: the
+  // table it comes from is a `src/data/` literal, and a voice edit that wrote
+  // through to it would repoint the factory default for the rest of the
+  // session. Every real sound comes from `setDrumKit`, which the engine bridge
+  // calls with `fireImmediately` on the first subscription.
+  private drumKit: BeatVoices = structuredClone(DEFAULT_BEAT_VOICES);
 
   /**
-   * The calibration trim for the CURRENT kit, as a single linear gain — per KIT,
-   * not per voice, because a drum kit's voices are not independent (see the
-   * comment on `DRUM_TRIMS` in src/data/trimTable.ts). Resolved once in
-   * setDrumKit, read once per hit. NEUTRAL_TRIM_GAIN until a kit name arrives or
-   * the kit has no committed entry — which is why no existing engine test's
-   * absolute peak assertion moves.
+   * The calibration trim for the CURRENT patch, as a single linear gain — per
+   * PATCH, not per voice, because a Beat's voices are not independent (see the
+   * comment on `DRUM_TRIMS` in src/data/trimTable.ts, which is the EVIDENCE the
+   * number was measured from; runtime audio never reads that table). Converted
+   * once in setDrumKit, read once per hit: `triggerDrum` is the hot path and a
+   * field read is cheaper than a dB conversion on every trigger.
+   * NEUTRAL_TRIM_GAIN until a patch arrives.
    */
   private drumTrimGain: number = NEUTRAL_TRIM_GAIN;
 
@@ -205,13 +213,18 @@ export class DrumSynth {
    * setSourceGain ramps.
    *
    * Unknown instrument names are IGNORED, deliberately (decision, DEV-386
-   * fix round 1): a name outside DRUM_TYPES will never be resolved by
+   * fix round 1): a name outside BEAT_VOICE_IDS will never be resolved by
    * triggerDrum's dispatch, so no voice will ever route through a node built
    * for it. Minting one anyway — the earlier behaviour — allocates a GainNode
    * wired to drumBusFilter that lives forever with nothing feeding it, for
    * every typo'd or future non-drum sequencer track instrument. Silently
    * dropping the write (not throwing) matches every other engine setter's
    * fail-safe posture.
+   *
+   * `time` is optional and means "now" when omitted, like every other setter
+   * that takes one: the live bridge omits it, and the offline mixdown supplies
+   * the absolute time of a loop's pass boundary so each loop's Beat Mix moves
+   * where that loop starts rather than all of them landing at 0.
    *
    * Keyed by INSTRUMENT, not by trigger source — wireDrumVoice inserts the
    * same node for every path that ends up calling triggerDrum for that
@@ -222,15 +235,15 @@ export class DrumSynth {
    * but it is easy to miss reading only the sequencer call site, hence this
    * note.
    */
-  setDrumTrackGain(instrument: string, gain: number): void {
-    if (!DRUM_TYPES.includes(instrument as DrumType)) return;
+  setDrumTrackGain(instrument: string, gain: number, time?: number): void {
+    if (!BEAT_VOICE_IDS.includes(instrument as BeatVoiceId)) return;
     this.drumTrackLevels.set(instrument, gain);
     if (!this.ctx) return;
     const node = this.drumTrackGain(instrument);
     if (!node) return;
-    const now = this.ctx.currentTime;
-    node.gain.cancelScheduledValues(now);
-    node.gain.setTargetAtTime(Math.max(0, gain), now, 0.01);
+    const at = Math.max(time ?? this.ctx.currentTime, this.ctx.currentTime);
+    node.gain.cancelScheduledValues(at);
+    node.gain.setTargetAtTime(Math.max(0, gain), at, 0.01);
   }
 
   /**
@@ -247,16 +260,36 @@ export class DrumSynth {
     return this.masterRack.drumTrackGains.size;
   }
 
-  setDrumKit(kit?: Partial<DrumKit>, kitName?: string): void {
-    this.drumKit = mergeDrumKit(kit);
-    this.drumTrimGain = drumTrimGainFor(kitName);
+  /**
+   * `BeatVoices` is COMPLETE by type, so nothing is merged here: a patch a user
+   * can edit, save and export must not depend on a default table it does not
+   * carry. `DEFAULT_BEAT_VOICES` is the seed for the pre-patch default only.
+   *
+   * A non-finite trim is unity rather than NaN — a NaN gain poisons every node
+   * it reaches for the rest of the session.
+   */
+  setDrumKit(voices: BeatVoices, outputTrimDb: number): void {
+    this.drumKit = voices;
+    this.drumTrimGain = Number.isFinite(outputTrimDb)
+      ? dbToGain(toDecibels(outputTrimDb))
+      : NEUTRAL_TRIM_GAIN;
   }
 
-  /** Live drum-bus filter control (SequencerView "Drum Filter" card). */
-  setDrumFilter(cutoff: number, resonance: number, type: FilterType, time?: number): void {
-    this.masterRack.drumFilterCutoff = cutoff;
-    this.masterRack.drumFilterResonance = resonance;
-    this.masterRack.drumFilterType = type;
+  /**
+   * The Beat bus filter: the three fields `BeatParams.filter` carries, reached
+   * through `applyBeatParams` and edited on the Beat sound page.
+   *
+   * Named for what it WRITES (`masterRack.beatFilter*`), which is the rule the
+   * node fields below do not break: `drumBusFilter`, `drumSendFilter`,
+   * `drumSendGate` and `drumTrackGain` are the drum BUS's own nodes and share
+   * that prefix with `triggerDrum` and `setDrumTrackGain`, so renaming one
+   * pair of them while the rest of the bus kept its name would trade this
+   * inconsistency for a worse one.
+   */
+  setBeatFilter(cutoff: number, resonance: number, type: FilterType, time?: number): void {
+    this.masterRack.beatFilterCutoff = cutoff;
+    this.masterRack.beatFilterResonance = resonance;
+    this.masterRack.beatFilterType = type;
     if (!this.ctx) return;
     const now = Math.max(time ?? this.ctx.currentTime, this.ctx.currentTime);
     for (const node of [this.masterRack.drumBusFilter, this.masterRack.drumSendFilter]) {
@@ -537,7 +570,7 @@ export class DrumSynth {
    * rimshot is a preset over this same path, and the two have separate track
    * faders.
    */
-  private snareVoice(s: SnareParams, v: number, now: number, voice: string): void {
+  private snareVoice(s: BeatSnareParams, v: number, now: number, voice: string): void {
     this.drumTone({
       type: 'triangle', freq: s.bodyFreqStart, freqEnd: s.bodyFreqEnd,
       pitchTime: s.bodyTime, peak: v * s.bodyGain, decay: s.bodyDecay,
@@ -742,7 +775,7 @@ export class DrumSynth {
     const name = type.toLowerCase();
     const resolved = DRUM_ALIASES[name] ?? name;
     // The measured trim lands on hitLevel, BEFORE the per-voice authored `gain`,
-    // so DRUM_KITS keeps stating what a reviewer tuned by ear. `clampVelocity`
+    // so the Beat catalogue keeps stating what a reviewer tuned by ear. `clampVelocity`
     // bounds only its own argument to 0..1 (see `clampVelocity`'s and
     // `Velocity`'s docs) — the trim multiplies AFTER that clamp, deliberately,
     // so a calibration boost is not silently discarded the way it would be if
@@ -883,7 +916,7 @@ export class DrumSynth {
    */
   private triggerHatVoice(
     voiceName: 'hihat' | 'openhat',
-    h: HatParams,
+    h: BeatHatParams,
     peak: number,
     now: number,
     bandBLevel: number,

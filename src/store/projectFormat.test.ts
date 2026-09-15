@@ -79,6 +79,40 @@ describe('pinned key sets', () => {
   });
 });
 
+describe('the Beat instrument is project content', () => {
+  test('all three Beat keys are per-loop content, so they are saved and fingerprinted', () => {
+    for (const key of ['beatParams', 'beatPattern', 'beatMix']) {
+      expect(LOOP_FLAT_KEYS as readonly string[], key).toContain(key);
+      expect(PROJECT_LOOP_KEYS as readonly string[], key).toContain(key);
+    }
+  });
+
+  test('a Beat edit changes what buildProjectContent serialises', () => {
+    const edited: Loop = {
+      ...loopA,
+      beatPattern: {
+        rows: {
+          ...loopA.beatPattern.rows,
+          // Step 1, which the starter groove leaves silent — so this really is
+          // an edit. Index 0 is a kick the default already has, and flipping it
+          // to `true` changed nothing at all.
+          kick: loopA.beatPattern.rows.kick.map((hit, i) => (i === 1 ? true : hit)),
+        },
+      },
+    };
+    const before = JSON.stringify(buildProjectContent({ ...liveState, loops: [loopA] } as never));
+    const after = JSON.stringify(buildProjectContent({ ...liveState, loops: [edited] } as never));
+    expect(after).not.toBe(before);
+  });
+
+  test('a project install writes the Beat state into the flat slices', () => {
+    const patch = applyProjectContent(buildProjectContent(liveState as never));
+    expect(patch.beatParams).toEqual(loopA.beatParams);
+    expect(patch.beatPattern).toEqual(loopA.beatPattern);
+    expect(patch.beatMix).toEqual(loopA.beatMix);
+  });
+});
+
 describe('applyProjectContent (the reset rules)', () => {
   test('resets selectedVibeId and points activeLoopId at loops[0]', () => {
     const patch = applyProjectContent(buildProjectContent(liveState as never));
@@ -140,7 +174,7 @@ describe('provenance is preserved verbatim', () => {
       bassSynthParams: { ...createDefaultLoop().bassSynthParams, sourcePresetId: 'ghost-bass' },
       chordRhythmId: 'rhythm-that-does-not-exist',
       bassPatternId: 'bass-that-does-not-exist',
-      soundKit: 'Kit From The Future',
+      beatParams: { ...createDefaultLoop().beatParams, basePresetId: 'preset-from-the-future' },
     };
     const content = buildProjectContent({ ...liveState, loops: [ghost] } as never);
     const patch = applyProjectContent(content);
@@ -149,7 +183,7 @@ describe('provenance is preserved verbatim', () => {
     expect(patch.bassSynthParams.sourcePresetId).toBe('ghost-bass');
     expect(patch.chordRhythmId).toBe('rhythm-that-does-not-exist');
     expect(patch.bassPatternId).toBe('bass-that-does-not-exist');
-    expect(patch.soundKit).toBe('Kit From The Future');
+    expect(patch.beatParams.basePresetId).toBe('preset-from-the-future');
   });
 });
 
@@ -274,7 +308,7 @@ describe('the dB level contract in the format docblock', () => {
 
   test('names PROJECT_FORMAT_VERSION as the current, directly-read version', () => {
     expect(block).toContain('PROJECT_FORMAT_VERSION');
-    expect(PROJECT_FORMAT_VERSION).toBe(10);
+    expect(PROJECT_FORMAT_VERSION).toBe(11);
   });
 
   test('it states the unit, the unity, the range and the silence encoding', () => {
@@ -303,13 +337,14 @@ describe('the dB level contract in the format docblock', () => {
 
   test('it lists flat keys only — the per-track fader is contract prose, not an entry', () => {
     // The list is iterated by sanitizePersistedState (store.ts), so an entry has
-    // to be a real top-level key. 'sequencerTracks[].volume' used to sit in here
-    // as prose, which is what stopped the constant being usable as code at all;
-    // it is still covered by the contract, and still validated, one level down.
+    // to be a real top-level key. A nested fader's path used to sit in here as
+    // prose, which is what stopped the constant being usable as code at all;
+    // the nested ones are still covered by the contract, and still validated,
+    // one level down.
     for (const key of PROJECT_DB_LEVEL_KEYS) {
       expect(key, key).not.toContain('[');
     }
-    expect(block).toContain('sequencerTracks[].volume');
+    expect(block).toContain('beatMix.levelDb');
   });
 
   test('every per-loop level key it names is a real per-loop key', () => {

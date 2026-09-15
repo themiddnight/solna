@@ -12,8 +12,11 @@
  * actually reading the dark palette, and reported a pass.
  *
  * The two palettes name their members differently on purpose. The drum roster
- * is `DRUM_TYPES`, imported from source, because a drum voice exists in code
- * whether or not anyone gave it a colour. The module roster has no equivalent
+ * is `BEAT_VOICE_IDS`, imported from source, because a Beat voice exists in
+ * code whether or not anyone gave it a colour. The CSS custom properties are
+ * still named `--drum-<id>` and the ids are the same eleven strings, so the
+ * voice roster maps onto the token names unchanged — this gate reads the
+ * stylesheet, it does not rename it. The module roster has no equivalent
  * in `src/data/` — the only list is `Knob`'s closed `KnobColor` union, and a
  * CLI gate that imports a React component to learn a list of colours is worse
  * than one that reads the stylesheet it is already parsing. So module names
@@ -21,7 +24,9 @@
  * declares nothing measures nothing and "passes") is closed by asserting the
  * two themes declare exactly the same module set, and that the set is not
  * empty. A module colour added to one theme only is a failure here, not a
- * silent skip.
+ * silent skip. BOTH rosters carry the non-emptiness guard — the source-derived
+ * one cannot disagree with itself, but it can still be empty, and an empty
+ * roster measures nothing just as loudly as an undeclared palette does.
  *
  * Run with: bun scripts/check-contrast.ts
  * Exit code 1 if any pair falls below 4.5:1, if brace-matching does not find
@@ -30,7 +35,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { DRUM_TYPES } from '../src/data/drumKits.ts';
+import { BEAT_VOICE_IDS } from '../src/data/beatPresets.ts';
 
 const CSS_PATH = fileURLToPath(new URL('../src/index.css', import.meta.url));
 const THEMES = ['dark', 'light'] as const;
@@ -136,6 +141,14 @@ function contrastRatio(a: string, b: string): number {
 const drumBlocks = paletteBlocks('drum-kick');
 const moduleBlocks = paletteBlocks('module-osc');
 
+// The drum roster comes from SOURCE, so it cannot disagree with itself — but
+// it can still be EMPTY, and an empty roster measures nothing while reporting
+// a pass. The module half has carried a non-emptiness guard since it was
+// written; this is its missing twin, and it is the same class of hole: the
+// loop below is `for (const name of names)`, which over an empty list is a
+// no-op with no output and no failure.
+if (BEAT_VOICE_IDS.length === 0) throw new Error('the Beat voice roster is empty — nothing to measure');
+
 // The module roster comes from the CSS, so it has to agree with itself before
 // it can be trusted to say what "the whole palette" is.
 const moduleNames = moduleNamesIn(moduleBlocks.get('dark')!);
@@ -148,7 +161,7 @@ if (moduleNames.join() !== lightModuleNames.join()) {
 }
 
 const palettes = [
-  { prefix: 'drum', names: DRUM_TYPES as readonly string[], blocks: drumBlocks },
+  { prefix: 'drum', names: BEAT_VOICE_IDS as readonly string[], blocks: drumBlocks },
   { prefix: 'module', names: moduleNames, blocks: moduleBlocks },
 ];
 

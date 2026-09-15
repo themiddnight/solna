@@ -95,6 +95,18 @@ describe('loop live-write sync (now folded into set)', () => {
     expect(loop.scaleRoot).toBe('D');
   });
 
+  // The three Beat fields are per-loop content like any other, so a Beat edit
+  // must ride the same single mirroring set() — never a second write of its
+  // own, and never a flat edit that loops[] does not learn about.
+  test('a Beat edit reaches loops[activeLoopId] as the SAME object', () => {
+    const id = useAppStore.getState().activeLoopId;
+    useAppStore.getState().toggleBeatStep('kick', 2);
+    const s = useAppStore.getState();
+    const loop = s.loops.find((r) => r.id === id)!;
+    expect(loop.beatPattern).toBe(s.beatPattern);
+    expect(loop.beatPattern.rows.kick[2]).toBe(true);
+  });
+
   test('syncs into the CURRENT active loop after a loadLoop switch', () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B', scaleRoot: 'C' };
     useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });

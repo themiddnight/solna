@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { renderTrimTableSource } from './writeTrimTable.ts';
 
 const DRUMS = {
-  'Retro Drive': { measuredDbfs: -12.4, trimDb: -5.6, configHash: 'aaa' },
+  'retro-drive': { measuredDbfs: -12.4, trimDb: -5.6, configHash: 'aaa' },
 };
 const PRESETS = { 'factory-cosmic-lead': { measuredDbfs: -24.1, trimDb: 6.1, configHash: 'bbb' } };
 
@@ -38,9 +38,9 @@ describe('renderTrimTableSource', () => {
     expect(source).not.toMatch(/\b(Math|Date|crypto)\./);
   });
 
-  test('sorts kits and presets, so a re-run reorders nothing and the diff stays readable', () => {
+  test('sorts both halves, so a re-run reorders nothing and the diff stays readable', () => {
     const source = renderTrimTableSource(
-      { Zed: DRUMS['Retro Drive'], Alpha: DRUMS['Retro Drive'] },
+      { Zed: DRUMS['retro-drive'], Alpha: DRUMS['retro-drive'] },
       { 'z-preset': PRESETS['factory-cosmic-lead'], 'a-preset': PRESETS['factory-cosmic-lead'] },
     );
     expect(source.indexOf('"Alpha"')).toBeLessThan(source.indexOf('"Zed"'));

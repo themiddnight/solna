@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   asLeadNoteMatrix,
   clampFinite,
+  isPlainObject,
   sanitizeEffectsValue,
   sanitizeLoops,
   sanitizeTrackArp,
@@ -16,6 +17,13 @@ import { MAX_CUSTOM_PATTERN_BARS } from './loop';
 import type { ChordItem } from '../types';
 
 describe('sanitize (shared by persist hydration and project import)', () => {
+  test('isPlainObject accepts a record and rejects arrays, null and primitives', () => {
+    expect(isPlainObject({ a: 1 })).toBe(true);
+    expect(isPlainObject([1, 2])).toBe(false);
+    expect(isPlainObject(null)).toBe(false);
+    expect(isPlainObject('object')).toBe(false);
+  });
+
   test('clampFinite rejects NaN, strings and out-of-range numbers', () => {
     expect(clampFinite('fast', 20, 300, 120)).toBe(120);
     expect(clampFinite(Number.NaN, 20, 300, 120)).toBe(120);
@@ -80,34 +88,32 @@ describe('sanitize (shared by persist hydration and project import)', () => {
     expect(sanitizeLoops('loops')).toBeUndefined();
   });
 
-  // Five enumerated fields each name a real library entry, so an id/label
-  // outside that library's set is invalid input, not "unknown but honoured"
-  // — the deleted migrateDrumVoices step used to carry a kit rename
-  // ('909 Modern' -> 'Club Standard'), so a stale session holding the old
-  // name must fall back to the default kit rather than resolve to nothing.
-  test('sanitizeLoops falls back an unrecognised soundKit / pattern id / scale to the default loop', () => {
+  // Four enumerated fields each name a real library entry, so an id outside
+  // that library's set is invalid input, not "unknown but honoured": a stale
+  // session holding an id a rename retired must fall back to the default
+  // rather than resolve to nothing. (The Beat preset id is the fifth such
+  // field and is checked in sanitizeBeat.test.ts, where it falls back
+  // differently — the stored PATCH is kept and only its base is dropped.)
+  test('sanitizeLoops falls back an unrecognised pattern id / scale to the default loop', () => {
     const fallback = createDefaultLoop();
     const loop = {
       ...fallback,
-      soundKit: '909 Modern',
       bassPatternId: 'bp-ghost',
       chordRhythmId: 'rhythm-ghost',
       scaleRoot: 'H#',
       scaleType: 'bogus-scale',
     };
     const [out] = sanitizeLoops([loop]) ?? [];
-    expect(out.soundKit).toBe(fallback.soundKit);
     expect(out.bassPatternId).toBe(fallback.bassPatternId);
     expect(out.chordRhythmId).toBe(fallback.chordRhythmId);
     expect(out.scaleRoot).toBe(fallback.scaleRoot);
     expect(out.scaleType).toBe(fallback.scaleType);
   });
 
-  test('sanitizeLoops keeps a valid soundKit / pattern id / scale untouched', () => {
+  test('sanitizeLoops keeps a valid pattern id / scale untouched', () => {
     const [out] = sanitizeLoops([
-      { ...createDefaultLoop(), soundKit: 'Club Standard', scaleRoot: 'F#', scaleType: 'Major' },
+      { ...createDefaultLoop(), scaleRoot: 'F#', scaleType: 'Major' },
     ]) ?? [];
-    expect(out.soundKit).toBe('Club Standard');
     expect(out.scaleRoot).toBe('F#');
     expect(out.scaleType).toBe('Major');
   });
@@ -272,33 +278,11 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
     });
   }
 
-  // sequencerTracks does NOT join the all-or-nothing table above: it is a
-  // SET keyed by instrument, not a sequence, so dropping one invalid row
-  // loses one voice and shifts nothing else (see sanitizeSequencerTracks's
-  // own docblock) — UNLESS every row is invalid, in which case the roster
-  // would otherwise sanitize to `[]` with no UI affordance to add a track
-  // back, so an all-stale result falls back to the full default roster too.
-  test('sequencerTracks of strings (not an array of objects) falls back to the default roster — nothing survives', () => {
-    expect(field('sequencerTracks', ['kick', 'snare'])).toEqual(fallback.sequencerTracks);
-  });
-
-  test('a wholly invalid roster (bad steps) falls back to the default roster, not []', () => {
-    expect(field('sequencerTracks', [{ instrument: 'kick', steps: [1, 0] }])).toEqual(fallback.sequencerTracks);
-  });
-
-  test('a single row with no instrument falls back to the default roster', () => {
-    expect(field('sequencerTracks', [{ steps: [true, false] }])).toEqual(fallback.sequencerTracks);
-  });
-
-  test('a partially-stale roster still drops only the bad rows, not the whole roster', () => {
-    const good = fallback.sequencerTracks[0];
-    const out = field('sequencerTracks', [good, { instrument: 'tom', steps: [true, false] }]);
-    expect(out).toEqual([good]);
-  });
-
-  test('sequencerTracks is not an array at all falls back to the default roster', () => {
-    expect(field('sequencerTracks', 'nope')).toEqual(fallback.sequencerTracks);
-  });
+  // The drum roster's own per-row validation moved OUT of this file with the
+  // array it validated. A voice-keyed `beatPattern`/`beatMix` has no rows to
+  // drop and no roster to shrink, and reading a body written in the old shape
+  // is `sanitizeBeat.ts`'s job — including dropping a row naming a voice the
+  // roster does not have, which is covered in sanitizeBeat.test.ts.
 
   test('valid elements are kept as they are', () => {
     const loop = createDefaultLoop();
@@ -308,7 +292,7 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
     bass[2] = 'octave';
     const [out] = sanitizeLoops([{ ...loop, customBassPattern: bass }]) ?? [];
     expect(out.chords).toEqual(loop.chords);
-    expect(out.sequencerTracks).toEqual(loop.sequencerTracks);
+    expect(out.beatPattern).toEqual(loop.beatPattern);
     expect(out.customBassPattern).toEqual(bass);
   });
 

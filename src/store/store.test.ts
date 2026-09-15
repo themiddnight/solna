@@ -7,17 +7,19 @@ import { customBassSpans, customChordSpans } from './loop';
 import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
 import { deriveChordNotes } from '../utils/musicTheory';
 import type { SynthPreset } from '../data/synthPresets';
-import type { CustomChordProgressionItem } from '../types';
+import type { BeatVoiceId, CustomChordProgressionItem } from '../types';
 import { faderDbToGain } from './levelUnits';
 import {
   INITIAL_CHORDS,
   INITIAL_EFFECTS,
-  INITIAL_SEQUENCER_TRACKS,
   TRACK_ARP_DEFAULTS,
 } from './initialState';
 import { TRACK_SYNTH_DEFAULTS } from '@/store/initialState';
 import { SYNTH_ARP_FIELD, SYNTH_PARAM_FIELD, SYNTH_PARAM_TARGETS } from './sourceBuses';
 import type { AppStore } from './types';
+import { BEAT_PRESETS, BEAT_VOICE_IDS, DEFAULT_BEAT_PRESET_ID } from '@/data/beatPresets';
+import { buildProjectContent } from './projectFormat';
+import type { BeatParams, BeatPatch } from '@/types';
 import { getMeter, MAX_STEPS_PER_BAR, type MeterId } from '../utils/meter';
 
 // ---------------------------------------------------------------------------
@@ -162,11 +164,9 @@ describe('store defaults', () => {
     expect(s.scaleRoot).toBe('A');
     expect(s.scaleType).toBe('Natural Minor');
     expect(s.selectedVibeId).toBe(null);
-    expect(s.soundKit).toBe('Retro Drive');
-    expect(s.masterSequencerVolume).toBe(-6); // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
-    expect(s.drumFilterCutoff).toBe(12000);
-    expect(s.drumFilterResonance).toBe(0.7);
-    expect(s.drumFilterType).toBe('lowpass');
+    expect(s.beatParams.basePresetId).toBe('retro-drive');
+    expect(s.beatMix.levelDb).toBe(-6); // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
+    expect(s.beatParams.filter).toEqual({ type: 'lowpass', cutoff: 12000, resonance: 0.7 });
     expect(s.chordRhythmId).toBe('sustained');
     expect(s.chordFeel).toBe(0.5);
     expect(s.chordOctave).toBe(4);
@@ -197,7 +197,6 @@ describe('store defaults', () => {
     // And no patch carries an Arp field at all — Arp lives beside the sound.
     expect(s.synthParams.patch).not.toHaveProperty('arpActive');
     expect(s.chords).toEqual(INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)));
-    expect(s.sequencerTracks).toEqual(INITIAL_SEQUENCER_TRACKS);
     expect(s.effects).toEqual(INITIAL_EFFECTS);
     expect(s.customSynthPresets).toEqual([]);
     expect(s.customChordProgressions).toEqual([]);
@@ -241,132 +240,41 @@ describe('transport semantics', () => {
   });
 });
 
-describe('replaceDrumPattern', () => {
-  test('maps a 16-step pattern onto the matching track window and clears the tracks it does not name', async () => {
-    const { useAppStore } = await getStore();
-    const initial = useAppStore.getState().sequencerTracks;
-
-    // Seed the padding (indices 16-23, normally all `false` in
-    // INITIAL_SEQUENCER_TRACKS) with a distinguishing `true` before the write.
-    // An assertion that padding is `false` both before and after cannot tell
-    // "genuinely preserved" from "reset to false" — seeding a `true` value that
-    // must survive makes this an independent proof of the invariant.
-    const seededSteps = initial[0].steps.map((v, i) => (i === 20 ? true : v));
-    useAppStore
-      .getState()
-      .setSequencerTracks(initial.map((t, i) => (i === 0 ? { ...t, steps: seededSteps } : t)));
-    const before = useAppStore.getState().sequencerTracks;
-
-    // Real callers (DRUM_GRIDS, via the sequencer menu or a vibe) hand in a 16-step row —
-    // the width of the default 4/4 window, not the 24-wide storage array.
-    const newKickWindow = before[0].steps.slice(0, 16).map((v) => !v);
-
-    useAppStore.getState().replaceDrumPattern({ kick: newKickWindow });
-    const after = useAppStore.getState().sequencerTracks;
-
-    expect(after[0].instrument).toBe('kick');
-    expect(after[0].steps.slice(0, 16)).toEqual(newKickWindow);
-    // Padding invariant: the seeded `true` at index 20 must survive untouched.
-    expect(after[0].steps[20]).toBe(true);
-    expect(after[0].steps.slice(16)).toEqual(before[0].steps.slice(16));
-    expect(after[0].id).toBe(before[0].id); // rest of the track is preserved
-    expect(after[0].volume).toBe(before[0].volume);
-    // WAS: `for (let i = 1; i < after.length; i++) expect(after[i]).toEqual(before[i]);`
-    // — the old merge contract, where an unnamed track was skipped. A grid
-    // determines the whole kit now, so an unnamed track is CLEARED. Rewritten,
-    // not deleted: this is the assertion that says what happens to the tracks
-    // the pattern is silent about, and something has to say it.
-    for (let i = 1; i < after.length; i++) {
-      expect(after[i].steps.slice(0, 16), after[i].instrument).toEqual(
-        new Array(16).fill(false),
-      );
-      // ...and only the window clears. Everything past stepsPerBar is the
-      // wider-meter content and survives, exactly as it does for a named row.
-      expect(after[i].steps.length, after[i].instrument).toBe(MAX_STEPS_PER_BAR);
-      expect(after[i].steps.slice(16), after[i].instrument).toEqual(
-        before[i].steps.slice(16),
-      );
-      expect(after[i].id).toBe(before[i].id);
-      expect(after[i].volume).toBe(before[i].volume);
-      expect(after[i].muted).toBe(before[i].muted);
-    }
-  });
-
-  test('a pattern naming only unknown instruments clears every track', async () => {
-    // WAS: "a pattern key with no matching instrument changes nothing".
-    // The sharpest statement of the new contract, and the one that would have
-    // caught the stale crash on its own: a grid with no `crash` row silences
-    // the crash, rather than leaving the previous grid's ringing under it.
-    const { useAppStore } = await getStore();
-    const before = useAppStore.getState().sequencerTracks;
-    useAppStore.getState().replaceDrumPattern({ cowbell: [true, false] });
-    const after = useAppStore.getState().sequencerTracks;
-    for (const [i, track] of after.entries()) {
-      // Non-vacuity guard, and it is not decorative: `before` is whatever the
-      // previous test left behind, so if the action ever truncated `steps` to
-      // the window BOTH sides of the slice(16) comparison would become [] and
-      // this loop would pass while user programming past the window was
-      // destroyed. That is the exact shape of the mutation that survived here
-      // before. Assert the width first, then the two halves mean something.
-      expect(track.steps.length, track.instrument).toBe(MAX_STEPS_PER_BAR);
-      expect(track.steps.slice(0, 16), track.instrument).toEqual(new Array(16).fill(false));
-      expect(track.steps.slice(16), track.instrument).toEqual(before[i].steps.slice(16));
-    }
-  });
-
-  test('clearing an unnamed track goes through writeStepWindow, so its padding survives', async () => {
-    // The failure this pins: `steps: new Array(stepsPerBar).fill(false)` looks
-    // correct, passes the window assertions above, and silently truncates every
-    // track to 16 — destroying the wider-meter content the non-destructive
-    // scheme stores past stepsPerBar. Seeded like the kick test above, on a
-    // track the pattern does NOT name.
-    const { useAppStore } = await getStore();
-    const initial = useAppStore.getState().sequencerTracks;
-    const seeded = initial[1].steps.map((v, i) => (i === 20 ? true : v));
-    useAppStore
-      .getState()
-      .setSequencerTracks(initial.map((t, i) => (i === 1 ? { ...t, steps: seeded } : t)));
-
-    useAppStore.getState().replaceDrumPattern({ kick: new Array(16).fill(true) });
-
-    const after = useAppStore.getState().sequencerTracks;
-    expect(after[1].steps.length).toBe(MAX_STEPS_PER_BAR);
-    expect(after[1].steps[20]).toBe(true);
-    expect(after[1].steps.slice(0, 16)).toEqual(new Array(16).fill(false));
-  });
-
+describe('replaceBeatPattern, through the real store', () => {
+  // The per-action unit coverage lives in beatSlice.test.ts against a harness.
+  // What is here is what only the REAL store can show: the action reading the
+  // live `meterId`, at a meter that is not the default.
   test('at 3/4 the clear stops at step 12, not at MAX_STEPS_PER_BAR', async () => {
-    // Every other test here runs at 4/4, where the window (16) and the visible
-    // half of the storage array coincide closely enough that a clear path using
-    // MAX_STEPS_PER_BAR instead of stepsPerBar would stay green. At 3/4 the
-    // window is 12 and steps 12-23 are the user's programming for wider meters,
-    // so this is the meter at which that substitution becomes visible. Without
-    // this test a change from `stepsPerBar` to `MAX_STEPS_PER_BAR` in the clear
-    // path silently destroys programming in every meter narrower than 12/8.
+    // Every other test of this action runs at 4/4, where the window (16) and
+    // the visible half of the storage array coincide closely enough that a
+    // clear path using MAX_STEPS_PER_BAR instead of stepsPerBar would stay
+    // green. At 3/4 the window is 12 and steps 12-23 are the user's
+    // programming for wider meters, so this is the meter at which that
+    // substitution becomes visible. Without this test a change from
+    // `stepsPerBar` to `MAX_STEPS_PER_BAR` in the clear path silently destroys
+    // programming in every meter narrower than 12/8.
     const { useAppStore } = await getStore();
     useAppStore.getState().setMeter('3/4');
     expect(getMeter(useAppStore.getState().meterId).stepsPerBar).toBe(12);
 
-    // Fill EVERY cell of every track, so "cleared" and "preserved" are both
-    // reads of a `true` that had to be acted on — no cell is incidentally false.
-    useAppStore
-      .getState()
-      .setSequencerTracks(
-        useAppStore
-          .getState()
-          .sequencerTracks.map((t) => ({ ...t, steps: new Array(MAX_STEPS_PER_BAR).fill(true) })),
-      );
+    // Fill EVERY cell of every voice, so "cleared" and "preserved" are both
+    // reads of a `true` that had to be acted on — no cell is incidentally
+    // false, which the shipped starter groove would otherwise make several.
+    const filled = { rows: {} as Record<BeatVoiceId, boolean[]> };
+    for (const voice of BEAT_VOICE_IDS) {
+      filled.rows[voice] = new Array<boolean>(MAX_STEPS_PER_BAR).fill(true);
+    }
+    useAppStore.setState({ beatPattern: filled });
 
-    // Names the kick only: every other track takes the clear path.
-    useAppStore.getState().replaceDrumPattern({ kick: new Array(12).fill(false) });
+    // Names the kick only: every other voice takes the clear path.
+    useAppStore.getState().replaceBeatPattern({ kick: new Array(12).fill(false) });
 
-    for (const track of useAppStore.getState().sequencerTracks) {
-      expect(track.steps.length, track.instrument).toBe(MAX_STEPS_PER_BAR);
-      expect(track.steps.slice(0, 12), track.instrument).toEqual(new Array(12).fill(false));
+    for (const voice of BEAT_VOICE_IDS) {
+      const row = useAppStore.getState().beatPattern.rows[voice];
+      expect(row.length, voice).toBe(MAX_STEPS_PER_BAR);
+      expect(row.slice(0, 12), voice).toEqual(new Array(12).fill(false));
       // Steps 12-23 are outside the 3/4 window: untouched, still true.
-      expect(track.steps.slice(12), track.instrument).toEqual(
-        new Array(MAX_STEPS_PER_BAR - 12).fill(true),
-      );
+      expect(row.slice(12), voice).toEqual(new Array(MAX_STEPS_PER_BAR - 12).fill(true));
     }
 
     useAppStore.getState().setMeter('4/4');
@@ -435,6 +343,9 @@ const PERSISTED_KEYS = [
   'focusTrack',
   'customSynthPresets',
   'customChordProgressions',
+  // The user's Beat library: app-level beside the synth one, and deliberately
+  // NOT project content — see PROJECT_CONTENT_KEYS.
+  'customBeatPresets',
   'activeLoopId',
 ];
 
@@ -490,7 +401,7 @@ const NON_PERSISTED_KEYS = [
   'chordSynthParams',
   'bassSynthParams',
   'chords',
-  'sequencerTracks',
+  'beatPattern',
   // A live top-level LeadSlice field with no partialize entry — the same
   // leak guard as `chords` above, and the mistake this list already made once
   // by swapping it for the custom-pattern keys instead of adding to them.
@@ -592,6 +503,141 @@ describe('persist partialize', () => {
     expect(merged.customBassPattern).toBe(initial.customBassPattern);
     expect(merged.customBassLoopLength).toBe(initial.customBassLoopLength);
     expect(merged.customBassHoldSteps).toBe(initial.customBassHoldSteps);
+  });
+});
+
+/**
+ * The user's Beat preset library: saved app-level, beside custom Synth presets,
+ * and never inside a project.
+ */
+describe('the user Beat preset library', () => {
+  const patchOf = (params: BeatParams): BeatPatch => ({
+    outputTrimDb: params.outputTrimDb,
+    filter: params.filter,
+    voices: params.voices,
+  });
+
+  test('a saved preset carries the LIVE patch, is persisted, and is not project content', async () => {
+    const { useAppStore, partializeAppState } = await getStore();
+    // Edit first, and pass the live object rather than a clone: a save that
+    // merely echoed its argument back would pass either way, so the value that
+    // must come out is one only the live state has.
+    useAppStore.getState().updateBeatVoice('kick', { decay: 0.31 });
+    useAppStore.getState().updateBeatVoice('snare', { noiseDecay: 0.27 });
+    const live = useAppStore.getState().beatParams;
+
+    const saved = useAppStore.getState().saveCustomBeatPreset('My Beat', live);
+
+    expect(saved.origin).toBe('user');
+    expect(saved.name).toBe('My Beat');
+    expect(saved.patch).toEqual(patchOf(live));
+    expect(saved.patch.voices.kick.decay).toBe(0.31);
+    expect(saved.patch.voices.snare.noiseDecay).toBe(0.27);
+    // A COPY, not the live object: the library would otherwise be rewritten by
+    // the next knob edit, exactly as saveCustomPreset clones its patch.
+    expect(saved.patch.voices.kick).not.toBe(live.voices.kick);
+    useAppStore.getState().updateBeatVoice('kick', { decay: 0.62 });
+    expect(saved.patch.voices.kick.decay).toBe(0.31);
+    expect(partializeAppState(useAppStore.getState()).customBeatPresets).toContainEqual(saved);
+    expect(buildProjectContent(useAppStore.getState())).not.toHaveProperty('customBeatPresets');
+    useAppStore.getState().deleteCustomBeatPreset(saved.id);
+  });
+
+  test('saving makes the new preset the base without changing the live sound', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.getState().updateBeatVoice('kick', { decay: 0.44 });
+    const before = structuredClone(useAppStore.getState().beatParams);
+    // A DIFFERENT patch as the argument, so "the live sound is untouched"
+    // cannot pass by the argument happening to equal the live state: the saved
+    // entry takes these values, and `beatParams` keeps its own.
+    const other = structuredClone(before);
+    other.voices.kick.decay = 0.19;
+    other.filter.cutoff = 3000;
+
+    const saved = useAppStore.getState().saveCustomBeatPreset('Quick Save', other);
+
+    const after = useAppStore.getState().beatParams;
+    expect(saved.patch.voices.kick.decay).toBe(0.19);
+    expect(after.basePresetId).toBe(saved.id);
+    expect(after.voices.kick.decay).toBe(0.44);
+    expect(patchOf(after)).toEqual(patchOf(before));
+    useAppStore.getState().deleteCustomBeatPreset(saved.id);
+  });
+
+  test('deleting returns the remaining library and leaves every loop patch alone', async () => {
+    const { useAppStore } = await getStore();
+    const keep = useAppStore.getState().saveCustomBeatPreset('Keep', useAppStore.getState().beatParams);
+    const drop = useAppStore.getState().saveCustomBeatPreset('Drop', useAppStore.getState().beatParams);
+
+    const loopsBefore = structuredClone(useAppStore.getState().loops.map((l) => l.beatParams));
+    const paramsBefore = structuredClone(useAppStore.getState().beatParams);
+
+    const remaining = useAppStore.getState().deleteCustomBeatPreset(drop.id);
+
+    expect(remaining.map((p) => p.id)).not.toContain(drop.id);
+    expect(remaining).toContainEqual(keep);
+    expect(useAppStore.getState().customBeatPresets).toEqual(remaining);
+    // The sound a loop was built on survives its source preset: a project
+    // stores the complete patch, so deleting a preset is a library edit only.
+    expect(useAppStore.getState().loops.map((l) => l.beatParams)).toEqual(loopsBefore);
+    expect(useAppStore.getState().beatParams).toEqual(paramsBefore);
+  });
+
+  test('a persisted library is sanitized before it enters the store', async () => {
+    const { useAppStore } = await getStore();
+    const initial = useAppStore.getInitialState();
+    const merge = useAppStore.persist.getOptions().merge!;
+    const good = structuredClone(BEAT_PRESETS[1]);
+
+    const merged = merge(
+      {
+        customBeatPresets: [
+          // Kept, with the factory-only `reference` dropped and the patch read
+          // field by field.
+          { id: 'user-beat-1', name: 'Mine', origin: 'user', patch: good.patch },
+          // Dropped whole: no id, no name, no patch at all.
+          { name: 'No id', origin: 'user', patch: good.patch },
+          { id: 'user-beat-2', name: '', origin: 'user', patch: good.patch },
+          { id: 'user-beat-3', name: 'No patch', origin: 'user' },
+          'not an object',
+        ],
+      },
+      initial,
+    );
+
+    const library = (merged as AppStore).customBeatPresets;
+    expect(library.map((p) => p.id)).toEqual(['user-beat-1']);
+    expect(library[0]).toEqual({
+      id: 'user-beat-1',
+      name: 'Mine',
+      origin: 'user',
+      patch: good.patch,
+    });
+  });
+
+  test('a stored entry with a broken field keeps the rest of its patch', async () => {
+    const { useAppStore } = await getStore();
+    const initial = useAppStore.getInitialState();
+    const merge = useAppStore.persist.getOptions().merge!;
+    // NOT the default preset: the per-field fallback IS the default preset's
+    // value, so a source that already matched it could not fail this test.
+    const source = structuredClone(BEAT_PRESETS[1]);
+    const broken = structuredClone(source.patch);
+    (broken.voices.kick as unknown as Record<string, unknown>).decay = 'loud';
+
+    const merged = merge(
+      { customBeatPresets: [{ id: 'user-beat-9', name: 'Half', origin: 'user', patch: broken }] },
+      initial,
+    );
+
+    const [entry] = (merged as AppStore).customBeatPresets;
+    // Per field, never per patch: one unreadable number falls back to the
+    // default preset's value and its siblings survive.
+    const fallback = BEAT_PRESETS.find((p) => p.id === DEFAULT_BEAT_PRESET_ID)!;
+    expect(fallback.patch.voices.kick.decay).not.toBe(source.patch.voices.kick.decay);
+    expect(entry.patch.voices.kick.decay).toBe(fallback.patch.voices.kick.decay);
+    expect(entry.patch.voices.snare).toEqual(source.patch.voices.snare);
+    expect(entry.patch.filter).toEqual(source.patch.filter);
   });
 });
 

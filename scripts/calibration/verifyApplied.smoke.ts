@@ -1,6 +1,6 @@
 /**
  * Proves the AC end to end rather than by arithmetic: re-renders representative
- * drum KITS (DEV-387: a trim is per kit, not per voice — see the comment on
+ * BEAT PRESETS (DEV-387: a trim is per patch, not per voice — see the comment on
  * `DRUM_TRIMS` in src/data/trimTable.ts) with the committed trim applied, and
  * representative synth presets with their own `common.outputGainDb` applied,
  * and measures the result again, asserting each lands within TOLERANCE_DB of
@@ -11,8 +11,8 @@
  * real audio. Manual: it renders and shells out to ffmpeg.
  *
  * The +/-3 dB assertion below has enormous margin by design, not by accident:
- * the last measured worst deviation across all thirteen kits was -0.20 dB, with
- * every kit inside +/-0.2 dB of -18 dBFS. Read a PASS here as "the harness and
+ * the last measured worst deviation across all thirteen patches was -0.20 dB, with
+ * every one inside +/-0.2 dB of -18 dBFS. Read a PASS here as "the harness and
  * the table still agree with real audio", not as a precision measurement — a
  * FAIL means something is badly wrong, not that a patch drifted a fraction of
  * a dB.
@@ -27,12 +27,12 @@
  */
 import { SYNTH_PRESETS } from '@/data/synthPresets';
 import { TARGET_DBFS, TOLERANCE_DB } from './trimMath';
-import { measureDrumKit, measurePreset } from './renderOffline.ts';
+import { measureBeatPreset, measurePreset } from './renderOffline.ts';
 
-/** A spread of measured levels and one deliberately extreme case: Trap Beat and
- *  Tight Pocket sit at the low and high ends of the committed kit range
+/** A spread of measured levels and one deliberately extreme case: trap-beat and
+ *  tight-pocket sit at the low and high ends of the committed beat range
  *  uncalibrated, so this proves the band is cleared at both ends. */
-const SAMPLE_KITS = ['Retro Drive', '808 Vintage', 'Trap Beat', 'Tight Pocket'];
+const SAMPLE_BEAT_PRESETS = ['retro-drive', '808-vintage', 'trap-beat', 'tight-pocket'];
 /**
  * One patch per family the library's output gains are authored BY (see the
  * header of src/data/synthPresets.ts): a bass, a lead, a six-voice unison lead,
@@ -68,12 +68,12 @@ function report(label: string, measured: number) {
   if (!pass) failures += 1;
 }
 
-// measureDrumKit/measurePreset render, measure and (for kits only — see the
+// measureBeatPreset/measurePreset render, measure and (for beat presets only — see the
 // asymmetry noted on measurePreset in renderOffline.ts) compensate for
 // CALIBRATION_HEADROOM_DB internally, so this file never holds a raw
 // attenuated value.
-for (const kitName of SAMPLE_KITS) {
-  report(`${kitName} (whole kit) with its trim applied`, await measureDrumKit(kitName, true));
+for (const presetId of SAMPLE_BEAT_PRESETS) {
+  report(`${presetId} (whole patch) with its trim applied`, await measureBeatPreset(presetId, true));
 }
 
 for (const id of SAMPLE_PRESETS) {

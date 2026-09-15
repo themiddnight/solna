@@ -31,19 +31,18 @@
  *    the property `omit()` below relies on for the excluded-field lists.
  */
 import { createHash } from 'node:crypto';
-import { mergeDrumKit } from '@/audio/drumKits';
-import { DRUM_KITS, DRUM_TYPES } from '@/data/drumKits';
+import { BEAT_PRESETS, BEAT_VOICE_IDS } from '@/data/beatPresets';
 import type { SynthPreset } from '@/data/synthPresets';
 
 /**
  * `reverbSend` only feeds the drum reverb send, and the calibration render zeroes
  * `reverbGain` — so it cannot move a measurement and must not fire the lock test.
- * Applied per voice, inside `drumLoudnessHash`'s whole-kit hash, below.
- * `DRUM_KITS[name].reference` is not here because it is not part of a voice's
- * params at all: it lives on the DRUM_KITS entry type, deliberately off `DrumKit`,
- * and `triggerDrum` never reads it.
+ * Applied per voice, inside `beatLoudnessHash`'s whole-patch hash, below.
+ * A preset's `reference` is not here because it is not part of a voice's params
+ * at all: it sits on the FACTORY entry beside `patch`, and `triggerDrum` never
+ * reads it.
  */
-export const DRUM_HASH_EXCLUDED = ['reverbSend'] as const;
+export const BEAT_HASH_EXCLUDED = ['reverbSend'] as const;
 
 /**
  * One field, from `patch.common` — NOT from the top level, which is why
@@ -98,32 +97,39 @@ function omit(source: Record<string, unknown>, excluded: readonly string[]): Rec
 }
 
 /**
- * Hashes the WHOLE kit — every voice, folded into one fingerprint — because the
- * kit is what a single measurement now covers: `DRUM_TRIMS` is keyed by kit name,
- * not voice (see src/data/trimTable.ts), and the reference pattern that measures
- * a kit plays several voices together. Retuning ANY voice in the kit must fire
- * the lock test for that kit, so no voice may be measured, or hashed, alone.
+ * Hashes the WHOLE patch — every voice plus the bus filter, folded into one
+ * fingerprint — because the patch is what a single measurement now covers:
+ * `DRUM_TRIMS` is keyed by Beat preset id, not by voice (see src/data/trimTable.ts),
+ * and the reference pattern that measures a preset plays several voices together.
+ * Retuning ANY voice must fire the lock test for that preset, so no voice may be
+ * measured, or hashed, alone.
+ *
+ * `outputTrimDb` is deliberately outside the hash, for the same reason
+ * `common.outputGainDb` is on the synth half: the uncalibrated pass withholds it
+ * (`renderBeatPreset` names the preset only when `applyTrim` is set), so it
+ * provably cannot move `measuredDbfs`. Hashing it would make a retune demand a
+ * multi-minute regeneration that reproduced the identical measurement. Nothing is
+ * left unguarded: `findOutOfToleranceEntries` reads it off the live patch on every
+ * `check:levels` run, and the lock test compares it with the table's `trimDb`.
  *
  * Consequence worth knowing before treating a hash mismatch as drift: the hash
  * can move while `measuredDbfs` does not. `DRUM_KIT_BAR` (renderOffline.ts) only
  * plays kick, snare and hihat — retuning a voice the pattern never sounds (e.g.
- * `ride.gain`) moves that kit's hash here (correctly: the config changed) but a
+ * `ride.gain`) moves that preset's hash here (correctly: the config changed) but a
  * regeneration reproduces the identical `measuredDbfs`, because the render never
  * exercised the changed voice. That is safe and intended, not a harness bug —
  * `bun run check:levels` should expect and report it as "hash moved, measurement
  * unchanged" rather than as a discrepancy.
  */
-export function drumLoudnessHash(kitName: string): string {
-  const partial = DRUM_KITS[kitName];
-  if (!partial) throw new Error(`No such drum kit: ${kitName}`);
-  // The MERGED kit, not the partial: a change to DEFAULT_DRUM_KIT changes what
-  // a partial kit actually renders as, and must fire.
-  const merged = mergeDrumKit(partial) as unknown as Record<string, Record<string, unknown>>;
+export function beatLoudnessHash(presetId: string): string {
+  const preset = BEAT_PRESETS.find((entry) => entry.id === presetId);
+  if (!preset) throw new Error(`No such beat preset: ${presetId}`);
+  const patch = preset.patch as unknown as { voices: Record<string, Record<string, unknown>> };
   const voices: Record<string, unknown> = {};
-  for (const voice of DRUM_TYPES) {
-    voices[voice] = omit(merged[voice]!, DRUM_HASH_EXCLUDED);
+  for (const voice of BEAT_VOICE_IDS) {
+    voices[voice] = omit(patch.voices[voice]!, BEAT_HASH_EXCLUDED);
   }
-  return hashLoudnessConfig({ kit: kitName, voices });
+  return hashLoudnessConfig({ preset: presetId, filter: preset.patch.filter, voices });
 }
 
 export function presetLoudnessHash(preset: SynthPreset): string {

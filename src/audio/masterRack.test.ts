@@ -52,12 +52,19 @@ describe('drum bus filter', () => {
       // enough: that would accept a dry path aimed at either one.
       expect(track.connectedTo, `${type} track fader`).toContain(filter);
       const dryEnvelopes = gains.filter((g) => g.connectedTo.includes(track));
-      expect(dryEnvelopes, `${type} dry envelope`).toHaveLength(1);
+      // DERIVED from the installed patch, not fixed at 1: a kick whose patch
+      // states a beater click schedules TWO dry envelopes, the body and the
+      // click, and both are correctly dry. The literal 1 was only ever right
+      // because the engine's seed patch happened to carry no click — it is a
+      // real preset's patch now, and one that does.
+      const expectedDry = type === 'kick' && kit.kick.clickLevel > 0 ? 2 : 1;
+      expect(dryEnvelopes, `${type} dry envelope`).toHaveLength(expectedDry);
       const dryEnv = dryEnvelopes[0];
 
-      // The kit's authored reverbSend for this voice is > 0 (asserted
-      // independently, over all 13 kits, in drumKits.test.ts), so a send must
-      // exist. It is identified structurally — a gain the dry envelope itself
+      // The patch's authored reverbSend for this voice is > 0 (asserted
+      // independently, over all 13 factory presets, by `check:drums`'
+      // `spread('kick.reverbSend')` / `spread('lowtom.reverbSend')`, which
+      // drop a zero rather than counting one), so a send must exist. It is identified structurally — a gain the dry envelope itself
       // connects to (env.connect(send)) which in turn connects to
       // sendFilter — not merely by being *some* node whose target is
       // sendFilter, which would equally accept a send fed by a different
@@ -72,7 +79,7 @@ describe('drum bus filter', () => {
     }
   });
 
-  test('setDrumFilter applies cutoff, resonance and type with smoothing', () => {
+  test('setBeatFilter applies cutoff, resonance and type with smoothing', () => {
     const { engine } = freshEngine();
     const freqTargets: number[] = [];
     const qTargets: number[] = [];
@@ -85,19 +92,19 @@ describe('drum bus filter', () => {
     };
     (engine as any).masterRack.drumBusFilter = filter;
 
-    engine.setDrumFilter(400, 8, 'bandpass');
+    engine.setBeatFilter(400, 8, 'bandpass');
 
     expect(freqTargets).toContain(400);
     expect(qTargets).toContain(8);
     expect(filter.type).toBe('bandpass');
   });
 
-  test('setDrumFilter can schedule cutoff and resonance on the audio timeline', () => {
+  test('setBeatFilter can schedule cutoff and resonance on the audio timeline', () => {
     const { engine } = freshEngine();
     const filter = fakeNode();
     (engine as any).masterRack.drumBusFilter = filter;
 
-    (engine.setDrumFilter as unknown as (
+    (engine.setBeatFilter as unknown as (
       cutoff: number,
       resonance: number,
       type: 'lowpass',
@@ -108,23 +115,23 @@ describe('drum bus filter', () => {
     expect(filter.Q.targets.at(-1)).toEqual({ v: 2, t: 42, tc: 0.03 });
   });
 
-  test('setDrumFilter before the drum bus filter exists is a safe no-op', () => {
+  test('setBeatFilter before the drum bus filter exists is a safe no-op', () => {
     const { engine } = freshEngine();
     let threw = false;
     try {
-      engine.setDrumFilter(400, 8, 'lowpass');
+      engine.setBeatFilter(400, 8, 'lowpass');
     } catch {
       threw = true;
     }
     expect(threw).toBe(false);
   });
 
-  test('setDrumFilter before init stores the values for the chain built later', () => {
+  test('setBeatFilter before init stores the values for the chain built later', () => {
     const { engine } = freshEngine();
-    engine.setDrumFilter(400, 8, 'highpass');
-    expect((engine as any).masterRack.drumFilterCutoff).toBe(400);
-    expect((engine as any).masterRack.drumFilterResonance).toBe(8);
-    expect((engine as any).masterRack.drumFilterType).toBe('highpass');
+    engine.setBeatFilter(400, 8, 'highpass');
+    expect((engine as any).masterRack.beatFilterCutoff).toBe(400);
+    expect((engine as any).masterRack.beatFilterResonance).toBe(8);
+    expect((engine as any).masterRack.beatFilterType).toBe('highpass');
   });
 });
 
@@ -435,7 +442,7 @@ describe("master chain rebuild invalidates derived state", () => {
   });
 
   test('drumBusFilter and drumSendFilter start in lockstep', () => {
-    // Only the LIVE setDrumFilter path had a test; this pins the initial
+    // Only the LIVE setBeatFilter path had a test; this pins the initial
     // parity too, since the two nodes are six hand-written assignments with
     // no shared construction helper.
     const engine = makeEngine();

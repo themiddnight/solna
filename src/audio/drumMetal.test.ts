@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ENV_FLOOR } from './constants';
 import { METAL_RATIOS } from './engine';
-import { DEFAULT_DRUM_KIT } from '@/data/drumKits';
+import { DEFAULT_BEAT_VOICES } from '@/data/beatPresets';
 import { freshEngine } from './testFakes';
 import { recordNodes } from './engineTestHelpers';
 
@@ -175,7 +175,7 @@ describe("metal crossfades the hat between bank and noise", () => {
   test('a mid-metal hat creates both halves, scaled by the crossfade', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).drumSynth.drumKit = {
-      ...DEFAULT_DRUM_KIT,
+      ...DEFAULT_BEAT_VOICES,
       hihat: { filter: 8000, topCut: 12000, decay: 0.05, gain: 0.4, metal: 0.75 },
     };
     const made = recordNodes(ctx);
@@ -191,7 +191,7 @@ describe("metal crossfades the hat between bank and noise", () => {
   test('metal 0 creates no oscillator and metal 1 creates no noise', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).drumSynth.drumKit = {
-      ...DEFAULT_DRUM_KIT,
+      ...DEFAULT_BEAT_VOICES,
       hihat: { filter: 8000, topCut: 12000, decay: 0.05, gain: 0.4, metal: 0 },
       openhat: { filter: 6000, topCut: 12000, decay: 0.3, gain: 0.4, metal: 1 },
     };
@@ -211,7 +211,7 @@ describe("the hat band across the metal crossfade", () => {
   test('the open hat rings longer in its LOW band than the closed hat does', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).drumSynth.drumKit = {
-      ...DEFAULT_DRUM_KIT,
+      ...DEFAULT_BEAT_VOICES,
       openhat: { filter: 6000, topCut: 12000, decay: 0.3, gain: 0.4, metal: 1 },
     };
     const made = recordNodes(ctx);
@@ -230,7 +230,7 @@ describe("the hat band across the metal crossfade", () => {
     // the same treatment here, or the unpinned one is the hole.
     const { engine, ctx } = freshEngine();
     (engine as any).drumSynth.drumKit = {
-      ...DEFAULT_DRUM_KIT,
+      ...DEFAULT_BEAT_VOICES,
       hihat: { filter: 8000, topCut: 12000, decay: 0.05, gain: 0.4, metal: 1 },
     };
     const made = recordNodes(ctx);
@@ -248,7 +248,7 @@ describe("the hat band across the metal crossfade", () => {
   test('the hat bank uses METAL_TONE_HAT (205.3), not the crash tone', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).drumSynth.drumKit = {
-      ...DEFAULT_DRUM_KIT,
+      ...DEFAULT_BEAT_VOICES,
       hihat: { filter: 8000, topCut: 12000, decay: 0.05, gain: 0.4, metal: 1 },
     };
     const made = recordNodes(ctx);
@@ -261,7 +261,7 @@ describe("the hat band across the metal crossfade", () => {
   test('a closed hat chokes BOTH halves of a ringing open hat, and only those halves', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).drumSynth.drumKit = {
-      ...DEFAULT_DRUM_KIT,
+      ...DEFAULT_BEAT_VOICES,
       hihat: { filter: 8000, topCut: 12000, decay: 0.05, gain: 0.4, metal: 0.5 },
       openhat: { filter: 6000, topCut: 12000, decay: 0.3, gain: 0.4, metal: 0.5 },
     };
@@ -299,7 +299,7 @@ describe("the hat bank's envelope parity and stopAt", () => {
   test('metal 0 registers exactly one envelope — the parity guard does not fire (pure noise)', () => {
     const { engine } = freshEngine();
     (engine as any).drumSynth.drumKit = {
-      ...DEFAULT_DRUM_KIT,
+      ...DEFAULT_BEAT_VOICES,
       hihat: { filter: 8000, topCut: 12000, decay: 0.05, gain: 0.4, metal: 0 },
     };
     expect(() => engine.triggerDrum('hihat', 1)).not.toThrow();
@@ -311,7 +311,7 @@ describe("the hat bank's envelope parity and stopAt", () => {
   test('metal 1 registers exactly one envelope — the parity guard does not fire (pure bank)', () => {
     const { engine } = freshEngine();
     (engine as any).drumSynth.drumKit = {
-      ...DEFAULT_DRUM_KIT,
+      ...DEFAULT_BEAT_VOICES,
       openhat: { filter: 6000, topCut: 12000, decay: 0.3, gain: 0.4, metal: 1 },
     };
     expect(() => engine.triggerDrum('openhat', 1)).not.toThrow();
@@ -323,7 +323,7 @@ describe("the hat bank's envelope parity and stopAt", () => {
   test("stopAt is derived from the bank's own schedule, not recomputed from bandBDecayMult", () => {
     const { engine, ctx } = freshEngine();
     (engine as any).drumSynth.drumKit = {
-      ...DEFAULT_DRUM_KIT,
+      ...DEFAULT_BEAT_VOICES,
       hihat: { filter: 8000, topCut: 12000, decay: 0.3, gain: 0.4, metal: 1 },
     };
     const now = ctx.currentTime;
@@ -344,7 +344,7 @@ describe("the crash's metal crossfade is pinned end to end", () => {
   test('every link in the crash bank path is wired, using the crash tone, corner, attack and send', () => {
     const { engine, ctx } = freshEngine();
     (engine as any).drumSynth.drumKit = {
-      ...DEFAULT_DRUM_KIT,
+      ...DEFAULT_BEAT_VOICES,
       crash: { filter: 6000, decay: 1.0, gain: 0.5, reverbSend: 0.4, metal: 0.6 },
     };
     // Pre-warm the crash track fader so `made.gain`'s creation order below
@@ -412,7 +412,7 @@ describe("the crash's metal crossfade is pinned end to end", () => {
   test('crash metal 0 runs no bank; crash metal 1 runs no noise — metal actually gates the branch', () => {
     const { engine: e0, ctx: c0 } = freshEngine();
     (e0 as any).drumSynth.drumKit = {
-      ...DEFAULT_DRUM_KIT,
+      ...DEFAULT_BEAT_VOICES,
       crash: { filter: 6000, decay: 1.0, gain: 0.5, reverbSend: 0.4, metal: 0 },
     };
     const made0 = recordNodes(c0);
@@ -423,7 +423,7 @@ describe("the crash's metal crossfade is pinned end to end", () => {
 
     const { engine: e1, ctx: c1 } = freshEngine();
     (e1 as any).drumSynth.drumKit = {
-      ...DEFAULT_DRUM_KIT,
+      ...DEFAULT_BEAT_VOICES,
       crash: { filter: 6000, decay: 1.0, gain: 0.5, reverbSend: 0.4, metal: 1 },
     };
     const made1 = recordNodes(c1);

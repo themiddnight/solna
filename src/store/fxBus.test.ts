@@ -4,13 +4,25 @@ import { SOLO_TRACKS, SOLO_TRACK_LABELS, isTrackAudible } from './trackAudibilit
 import { MIX_GROUP_IDS, MIX_GROUP_LABELS, MIX_LAYERS, MIX_LAYER_IDS } from '@/components/mixLayers';
 
 describe('SOURCE_BUSES — the fx row', () => {
-  test('names the fx store fields and its own engine source', () => {
-    expect(sourceBus('fx')).toEqual({
-      source: 'fx',
-      volume: 'fxVolume',
-      muted: 'fxMuted',
-      solo: 'fx',
-    });
+  test('reads the fx store fields and names its own engine source and solo track', () => {
+    const row = sourceBus('fx');
+    expect(row.source).toBe('fx');
+    expect(row.solo).toBe('fx');
+    // The readers are functions now — the five melodic buses are flat and the
+    // Beat bus is nested — so what is asserted is what they READ, not a field
+    // name a row happens to spell.
+    const state = { fxVolume: -7, fxMuted: true } as Parameters<typeof row.selectLevelDb>[0];
+    expect(row.selectLevelDb(state)).toBe(-7);
+    expect(row.selectMuted(state)).toBe(true);
+  });
+
+  test('the Beat bus reads the nested beatMix, which is the whole reason the columns are functions', () => {
+    const row = sourceBus('sequencer');
+    const state = {
+      beatMix: { levelDb: -3, muted: true, voices: {} },
+    } as unknown as Parameters<typeof row.selectLevelDb>[0];
+    expect(row.selectLevelDb(state)).toBe(-3);
+    expect(row.selectMuted(state)).toBe(true);
   });
 
   test('is the six buses, fx beside the other melodic ones', () => {
@@ -73,12 +85,25 @@ describe('the mixer — fx', () => {
   });
 
   test('the fx row names the fx store keys, the fx bus, the fx colour, and the lead group', () => {
-    const row = MIX_LAYERS.find((l) => l.idPrefix === 'fx');
-    expect(row).toEqual({
+    const row = MIX_LAYERS.find((l) => l.idPrefix === 'fx')!;
+    // The four accessors are functions, so the row's own two store fields are
+    // asserted through them rather than as key names: hand the row a mix in
+    // which every fader and every mute is distinguishable, and it must read
+    // back FX's pair and patch FX's pair.
+    const mix = { fxVolume: -13, fxMuted: true, synthVolume: 1, synthMuted: false } as never;
+    expect(row.readLevelDb(mix)).toBe(-13);
+    expect(row.readMuted(mix)).toBe(true);
+    expect(row.levelPatch(-4, mix)).toEqual({ fxVolume: -4 });
+    expect(row.mutePatch(false, mix)).toEqual({ fxMuted: false });
+    // The four accessors are compared above, by behaviour; what is left must
+    // be exactly this and nothing more, so a column added to the row without a
+    // decision about FX's value for it fails here.
+    const rest = Object.fromEntries(
+      Object.entries(row).filter(([, value]) => typeof value !== 'function'),
+    );
+    expect(rest).toEqual({
       idPrefix: 'fx',
       label: 'FX',
-      volumeKey: 'fxVolume',
-      muteKey: 'fxMuted',
       engineSource: 'fx',
       tone: 'module-fx',
       accentClass: 'text-module-fx',

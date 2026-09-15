@@ -55,7 +55,7 @@ export type LinearGain = number & { readonly __brand: 'LinearGain' };
  * DIFFERENT brand from the three above, so a fader value and a velocity cannot be assigned to
  * each other by accident. The rule, in both directions: a fader value is never passed into a
  * velocity parameter, and a velocity is never written to a gain node a fader owns. See the
- * epic's decision D-383-3 — `masterSequencerVolume` was doing exactly the first of those, which
+ * epic's decision D-383-3 — the Beat bus fader was doing exactly the first of those, which
  * made the drum fader's law `volume²`.
  */
 /** Unchecked casts. These are the only place a raw number becomes a branded one. */

@@ -1,11 +1,10 @@
-import type { SequencerTrack, ChordItem, MasterEffects } from '../types';
+import type { ChordItem, MasterEffects } from '../types';
 import type { ArpSettings } from '@/types/synth';
 import type { SynthControlTarget } from '@/utils/synthControl';
 import type { ActiveSynth } from '@/types/synth';
 import { resolveFactorySynth } from '@/utils/synthPresets';
 import type { PadState, FxState } from './types';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
-import { DEFAULT_BUS_TRIM_DB, DEFAULT_FADER_DB } from './levelUnits';
+import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
 import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
 import { DEFAULT_LEAD_STEP_RESOLUTION, LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 
@@ -81,117 +80,6 @@ export function defaultTrackSynth(target: SynthControlTarget): ActiveSynth {
 export function defaultTrackArp(target: SynthControlTarget): ArpSettings {
   return structuredClone(TRACK_ARP_DEFAULTS[target]);
 }
-
-/**
- * One empty bar at the widest storable width. Spread at each use site, never
- * shared: two tracks holding the same array would toggle together.
- */
-const SILENT_BAR: boolean[] = new Array<boolean>(MAX_STEPS_PER_BAR).fill(false);
-
-export const INITIAL_SEQUENCER_TRACKS: SequencerTrack[] = [
-  // Every track starts at unity. Until DEV-386 these were 0.7 .. 0.9 LINEAR and
-  // nothing read them; the field is a real gain node now, so unity is what keeps
-  // a factory kit sounding the way it always has.
-  {
-    id: 'track-kick',
-    name: 'Kick 808',
-    instrument: 'kick',
-    steps: [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false],
-    volume: DEFAULT_FADER_DB,
-    muted: false,
-    color: 'bg-drum-kick',
-  },
-  {
-    id: 'track-snare',
-    name: 'Snare Snap',
-    instrument: 'snare',
-    steps: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false],
-    volume: DEFAULT_FADER_DB,
-    muted: false,
-    color: 'bg-drum-snare',
-  },
-  {
-    id: 'track-rimshot',
-    name: 'Rim Shot',
-    instrument: 'rimshot',
-    steps: [...SILENT_BAR],
-    volume: DEFAULT_FADER_DB,
-    muted: false,
-    color: 'bg-drum-rimshot',
-  },
-  {
-    id: 'track-clap',
-    name: 'Hand Clap',
-    instrument: 'clap',
-    steps: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false],
-    volume: DEFAULT_FADER_DB,
-    muted: false,
-    color: 'bg-drum-clap',
-  },
-  {
-    id: 'track-hihat',
-    name: 'Closed Hat',
-    instrument: 'hihat',
-    steps: [true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, false, false, false, false, false, false, false, false],
-    volume: DEFAULT_FADER_DB,
-    muted: false,
-    color: 'bg-drum-hihat',
-  },
-  {
-    id: 'track-openhat',
-    name: 'Open Hat',
-    instrument: 'openhat',
-    steps: [false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    volume: DEFAULT_FADER_DB,
-    muted: false,
-    color: 'bg-drum-openhat',
-  },
-  {
-    id: 'track-hitom',
-    name: 'Hi Tom',
-    instrument: 'hitom',
-    steps: [...SILENT_BAR],
-    volume: DEFAULT_FADER_DB,
-    muted: false,
-    color: 'bg-drum-hitom',
-  },
-  {
-    id: 'track-lowtom',
-    name: 'Low Tom',
-    instrument: 'lowtom',
-    steps: [...SILENT_BAR],
-    volume: DEFAULT_FADER_DB,
-    muted: false,
-    color: 'bg-drum-lowtom',
-  },
-  {
-    id: 'track-ride',
-    name: 'Ride',
-    instrument: 'ride',
-    steps: [...SILENT_BAR],
-    volume: DEFAULT_FADER_DB,
-    muted: false,
-    color: 'bg-drum-ride',
-  },
-  {
-    id: 'track-crash',
-    name: 'Crash',
-    instrument: 'crash',
-    steps: [...SILENT_BAR],
-    volume: DEFAULT_FADER_DB,
-    muted: false,
-    color: 'bg-drum-crash',
-  },
-  {
-    id: 'track-bell',
-    name: 'Bell',
-    instrument: 'bell',
-    steps: [...SILENT_BAR],
-    volume: DEFAULT_FADER_DB,
-    muted: false,
-    color: 'bg-drum-bell',
-  },
-];
 
 export const INITIAL_CHORDS: ChordItem[] = [
   { id: 'chord-1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] },

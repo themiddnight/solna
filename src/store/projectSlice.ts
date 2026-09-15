@@ -19,6 +19,7 @@ import {
   type ProjectEnvelope,
 } from './projectFormat';
 import { serializeProject, unknownLibraryReferences } from './projectFile';
+import { beatPresetIdsWithLibrary } from './sanitizeBeat';
 import { loopStatePatch, resolveActiveLoop } from './loop';
 import type { ProjectStore, ProjectStoreResult, ProjectStoreStatus } from './projectStore';
 import {
@@ -236,7 +237,11 @@ async function writeProjectText(
 
 /** Boot: read the one slot and install it, or keep the factory session. */
 async function loadProjectFromStore(ctx: ProjectContext): Promise<void> {
-  const result = await ctx.store.load();
+  // The user's library travels INTO the read: a loop based on a preset they
+  // saved must come back still saying so, and this is the only reader that can
+  // know — the slot is local, and by now hydration has already sanitized the
+  // library it names.
+  const result = await ctx.store.load(beatPresetIdsWithLibrary(ctx.get().customBeatPresets));
   publishStoreStatus(ctx);
   if (result.ok === false) {
     if (result.error === 'not-found') {

@@ -28,12 +28,19 @@ import type { AppStore, Loop, LoopStatePatch } from './types';
  * substitute the default, the same way regardless of which version wrote the
  * body. Three cases DEV-388 found that could not be caught this way were
  * re-homed as validation rules instead of a migration step: an unrecognised
- * `sequencerTracks[].instrument` is now rejected by `isSequencerTrack`
- * (sanitize.ts), a missing `padMuted` takes the plain default, and a
+ * drum voice name is now dropped by the Beat reader (sanitizeBeat.ts), a
+ * missing `padMuted` takes the plain default, and a
  * pre-tick-resolution `leadMelodySteps` is a valid shape and passes through
  * unchanged. Bump this constant only when the CONTENT CONTRACT itself changes
  * again, not for every field that gets added, renamed or reshaped —
  * sanitizeContent already defaults those.
+ *
+ * It bumped to 11 for exactly that reason: the Beat instrument replaced the
+ * kit-name-only drum state, so a loop's content set itself changed. The bump
+ * drives NO read-time transform and no version-gated branch — the only
+ * behaviour it has is `parseProjectFile` refusing a body newer than this
+ * number. An older body is read by `readBeatState` (sanitizeBeat.ts), which
+ * accepts both shapes as ordinary validation.
  */
 
 /**
@@ -56,10 +63,11 @@ import type { AppStore, Loop, LoopStatePatch } from './types';
  *
  * The contract, at PROJECT_FORMAT_VERSION:
  *   keys     the flat faders PROJECT_DB_LEVEL_KEYS lists below — masterVolume
- *            (content root), synthVolume, chordVolume, bassVolume, padVolume,
- *            fxVolume, masterSequencerVolume (per-loop) — PLUS sequencerTracks[].volume
- *            (per-track, per-loop), which is a nested row key rather than a flat
- *            one and so is covered here but not listed there.
+ *            (content root) and synthVolume, chordVolume, bassVolume,
+ *            padVolume, fxVolume (per-loop) — PLUS the Beat mix's own faders,
+ *            `beatMix.levelDb` and each `beatMix.voices[].levelDb`, which are
+ *            nested inside a loop rather than flat on it and so are covered
+ *            here but not listed there.
  *   unit     decibels, relative (a fader), NOT dBFS.
  *   unity    0 dB is unity gain — the signal passes at the level it arrived.
  *            Linear gain is 10 ** (db / 20); see src/utils/gainUnits.ts.
@@ -79,10 +87,15 @@ import type { AppStore, Loop, LoopStatePatch } from './types';
  * What this contract does NOT cover, and never will: the internal voicing
  * constants nested inside `synthParams` / `chordSynthParams` / `bassSynthParams`
  * / `padSynthParams` (`SynthParams.subOscVolume`, `noiseVolume`), each
- * `DrumKit` voice's `gain`, a vibe's authored `pad.volume` and `DEFAULT_PADS`'
- * pad `volume` are all still LINEAR gain and are never converted — they are
- * mix-time trims baked into presets and factory content, not a fader a user
- * moves, and widening this paragraph to "every level key" would be exactly the
+ * Beat voice's `gain`, a vibe's authored `pad.volume` and `DEFAULT_PADS`'
+ * pad `volume` are all still LINEAR gain and are never converted. They are
+ * voicing constants, not bus faders: the dB half of this contract is the MIXER
+ * — the source-bus levels and `beatMix` — and a voice `gain` is a term inside
+ * a patch, which is why `beatControlSchema.ts` gives it a 0..1 percent knob
+ * rather than a dB one. (The Beat editor does now expose that `gain` as a
+ * per-voice "Level" control, so it is no longer true that no user touches it;
+ * what stays true, and is what this paragraph is for, is that it is not
+ * dB-encoded on the wire.) Widening this paragraph to "every level key" would be exactly the
  * failure mode this contract exists to prevent: a reader that assumed the
  * whole body were dB would read a linear `subOscVolume` of 1.0 as +1 dB —
  * plausible, silent and wrong.
@@ -92,7 +105,7 @@ import type { AppStore, Loop, LoopStatePatch } from './types';
  * literals. This section is itself pinned, by the dB-level-contract tests in
  * projectFormat.test.ts, so it cannot rot away from the exports below.
  */
-export const PROJECT_FORMAT_VERSION = 10;
+export const PROJECT_FORMAT_VERSION = 11;
 
 /**
  * The dB level contract's keys AT THE CONTENT ROOT AND ON A LOOP — the flat
@@ -104,18 +117,18 @@ export const PROJECT_FORMAT_VERSION = 10;
  * a corrupt stored value muted the pad bus instead of defaulting to the trim
  * every other bus got. Adding an eighth fader is now an edit to this list.
  *
- * `masterVolume` is the content root's own fader and the other six are the
- * source buses; per-loop, all six live on the loop. The contract also covers
- * `sequencerTracks[].volume`, which is deliberately NOT in this array: it is a
- * per-row key nested inside each loop, validated by `sanitizeFlatSequencerTracks`
- * and `sanitizeLoops`, and putting a piece of prose like `'sequencerTracks[].volume'`
- * in a list of real key names is what made this constant unusable as code before.
+ * `masterVolume` is the content root's own fader and the other five are the
+ * melodic source buses; per-loop, all five live on the loop. The Beat bus and
+ * its eleven voices are deliberately NOT in this array: their faders are
+ * nested inside `beatMix` rather than flat on the loop, validated by
+ * `sanitizeBeatMix`, and putting a piece of prose like `'beatMix.levelDb'` in
+ * a list of real key names is what made this constant unusable as code before.
  *
  * A literal list, not derived from a per-key version map — DEV-388 deleted the
  * migration chain that map served, and there is no version-based rule left for a
  * per-key version to distinguish; validation (asFaderDb / sanitize.ts) treats every
  * one of these keys the same way regardless of which formatVersion wrote them.
- * Everything else that looks like a level — drum-kit `gain`, `clickLevel`,
+ * Everything else that looks like a level — a Beat voice's `gain`, `clickLevel`,
  * `reverbSend`, preset `subOscVolume`, vibe pad `volume` — is internal voicing, not
  * a fader, and stays linear (see the dB LEVEL CONTRACT block above).
  */
@@ -126,7 +139,6 @@ export const PROJECT_DB_LEVEL_KEYS: readonly string[] = [
   'bassVolume',
   'padVolume',
   'fxVolume',
-  'masterSequencerVolume',
 ];
 
 export interface ProjectEnvelope {

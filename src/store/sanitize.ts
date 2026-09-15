@@ -7,18 +7,16 @@ import type { SynthControlTarget } from '@/utils/synthControl';
 import { EFFECT_LIMITS, clampEffectValue, type EffectNumericKey } from '../audio/effectLimits';
 import type {
   ChordItem,
-  SequencerTrack,
-  FilterType,
   PadInterval,
   PadMode,
   PadVoicing,
 } from '../types';
 import { PAD_INTERVALS, PAD_MODES, PAD_VOICINGS } from '../types';
 import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
-import { DRUM_KITS, DRUM_TYPES } from '@/data/drumKits';
 import { CHORD_RHYTHMS } from '@/data/chordRhythms';
 import { SCALES } from '@/data/scales';
 import { createDefaultLoop } from './loopSlice';
+import { readBeatState, type BeatState } from './sanitizeBeat';
 import { MAX_CUSTOM_PATTERN_BARS, normalizeCustomPattern, progressionBars } from './loop';
 import { resizePatternBars } from '../utils/customPattern';
 import { DEFAULT_METER_ID, getMeter, MAX_STEPS_PER_BAR, type MeterId } from '../utils/meter';
@@ -37,8 +35,6 @@ import { asFaderDb } from './levelUnits';
 // Wrong-typed values survive JSON.parse and would flow straight into engine
 // setters (`bpm: "fast"` -> NaN clock, a string volume -> setTargetAtTime(NaN)),
 // so both readers go through this one module — see projectFile.ts.
-const FILTER_TYPES = new Set(['lowpass', 'highpass', 'bandpass']);
-
 /**
  * A stored step-resolution id, or the fallback. Its own rule rather than an
  * inline ternary because BOTH readers need it: the loop body below and the
@@ -247,34 +243,27 @@ const memberOr =
   (value: unknown, fallback: T): T =>
     isMember(value) ? (value as T) : fallback;
 
-const asFilterType = memberOr<FilterType>(memberTest(FILTER_TYPES));
-
-// Five persisted ids/labels that each name a real library entry, not just a
-// string: the deleted migrateDrumVoices step used to carry a rename
-// ('909 Modern' -> 'Club Standard'), so a session written before that rename
-// landed can hold a soundKit the current DRUM_KITS table no longer has, and
-// nothing short of a membership check catches it — a bare `typeof ===
-// 'string'` lets it through to resolve to nothing and silently play the
-// default kit. Same reasoning for a stale scale/root/rhythm/bass-pattern id.
-// Built from the tables themselves (never re-typed), so a table edit updates
-// the allowed set with no second place to touch.
+// Four persisted ids that each name a real library entry, not just a string: a
+// session written before a library rename landed can hold an id the current
+// table no longer has, and nothing short of a membership check catches it — a
+// bare `typeof === 'string'` lets it through to resolve to nothing and
+// silently play the default. Built from the tables themselves (never
+// re-typed), so a table edit updates the allowed set with no second place to
+// touch.
 const ROOT_SET = new Set<string>(ROOTS);
 const SCALE_TYPE_SET = new Set(Object.keys(SCALES));
 const CHORD_RHYTHM_ID_SET = new Set(CHORD_RHYTHMS.map((p) => p.id));
 const BASS_PATTERN_ID_SET = new Set(BASS_PATTERNS.map((p) => p.id));
-const SOUND_KIT_SET = new Set(Object.keys(DRUM_KITS));
 
 const isRootNote = memberTest(ROOT_SET);
 const isScaleType = memberTest(SCALE_TYPE_SET);
 const isChordRhythmId = memberTest(CHORD_RHYTHM_ID_SET);
 const isBassPatternId = memberTest(BASS_PATTERN_ID_SET);
-const isSoundKit = memberTest(SOUND_KIT_SET);
 
 const asRootNote = memberOr<string>(isRootNote);
 const asScaleType = memberOr<string>(isScaleType);
 const asChordRhythmId = memberOr<string>(isChordRhythmId);
 const asBassPatternId = memberOr<string>(isBassPatternId);
-const asSoundKit = memberOr<string>(isSoundKit);
 
 // Built from the const arrays the unions derive from, never re-typed here: a
 // hand-written set has no link to the union, so a value the UI offers and the
@@ -362,7 +351,7 @@ export function asLeadNoteMatrix(value: unknown): LeadNote[][] | undefined {
   return out;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -398,57 +387,6 @@ function isChordItem(value: unknown): boolean {
     value.bars > 0 &&
     isStringArray(value.notes)
   );
-}
-
-// `instrument` must name a real drum voice, not just be a string: a value
-// outside DRUM_TYPES (an old `tom` row from before the v6 rename, a typo, a
-// hand-edited file) matches no `triggerDrum` case and would otherwise sit in
-// the array as a silently dead row. This is a plain validation rule, not a
-// version check — it rejects a bad instrument name from ANY source, on both
-// the persist and `.solna` read paths that share this function.
-const DRUM_INSTRUMENT_SET = new Set<string>(DRUM_TYPES);
-
-/** The engine reads `instrument` and indexes `steps`; the rest is presentation. */
-function isSequencerTrack(value: unknown): boolean {
-  if (!isPlainObject(value)) return false;
-  return (
-    typeof value.instrument === 'string' &&
-    DRUM_INSTRUMENT_SET.has(value.instrument) &&
-    Array.isArray(value.steps) &&
-    value.steps.every((s) => typeof s === 'boolean')
-  );
-}
-
-/**
- * `sequencerTracks` is a SET keyed by `instrument`, not a sequence — dropping
- * one invalid row loses one voice and shifts nothing else, unlike
- * `chords`/`customChordRhythm` where a per-element drop would rewrite the
- * music (see `asCheckedArray`'s docblock, which is why THAT function stays
- * all-or-nothing and this one does not reuse it). So this filters per-row: a
- * row naming an instrument outside the drum-voice roster (a pre-rename
- * `tom`, a typo, a hand-edited file) is DROPPED, never defaulted — inventing
- * a track for a name nobody recognises has no meaning, and a short roster is
- * already an outcome this app accepts (DEV-388 deleted the version-gated
- * auto-completion that used to backfill a short roster to the full
- * eleven-voice kit). An EMPTY roster is not a short one, though: nothing in
- * the UI can add a track back (`replaceDrumPattern` only maps over tracks
- * that already exist), so a loop whose every row was stale would otherwise
- * be permanently drumless with no recovery. `value` not being an array at
- * all is the same failure (no set to filter) and both fall back to
- * `fallback` whole. The flat-key sanitizer
- * (the flat top-level key, a pre-loop-wrap shape this function never sees)
- * applies the same rule.
- */
-function sanitizeSequencerTracks(
-  value: unknown,
-  fallback: SequencerTrack[],
-): SequencerTrack[] {
-  if (!Array.isArray(value)) return fallback;
-  const filtered = (value as unknown[]).filter(isSequencerTrack).map((track) => {
-    const t = track as SequencerTrack;
-    return { ...t, volume: asFaderDb(t.volume) };
-  });
-  return filtered.length > 0 ? filtered : fallback;
 }
 
 // Exhaustive by construction: a new BassStepChoice member fails to compile
@@ -501,6 +439,36 @@ function resolveTempName(
 }
 
 /**
+ * The three Beat fields, read through the ONE reader that accepts both the
+ * current shape and a body written under the kit-name-only drum model
+ * (sanitizeBeat.ts). They are read TOGETHER because an old body's pattern and
+ * its mix both come out of one array; reading them independently would parse
+ * that array twice.
+ *
+ * `raw` is the RAW row, never sanitizeLoops' `{ ...fallback, ...rawLoop }`:
+ * that object always carries the three Beat keys off the default loop, and
+ * `readBeatState` picks its read shape by whether they are PRESENT — so
+ * handing it the merged row makes every legacy body look current and silently
+ * drops the kit and the grid the user saved. Same reason `tempName` is read
+ * off the raw row.
+ */
+function readLoopBeatState(
+  raw: Record<string, unknown>,
+  fallback: Loop,
+  knownPresetIds?: ReadonlySet<string>,
+): BeatState {
+  return readBeatState(
+    raw,
+    {
+      beatParams: fallback.beatParams,
+      beatPattern: fallback.beatPattern,
+      beatMix: fallback.beatMix,
+    },
+    knownPresetIds,
+  );
+}
+
+/**
  * Validates a persisted `loops` array. Each loop is rebuilt through the
  * same per-field guards/clamps the flat payload used (synth params, finite
  * clamps, string/enum checks), with createDefaultLoop() as the fallback for
@@ -512,8 +480,19 @@ function resolveTempName(
  * is also the import path for a `.solna` file that came from somebody else's
  * device (projectFile.ts), so `{"chords": [1, 2, 3]}` must never reach the
  * chord scheduler.
+ *
+ * The Beat half of a loop is read by `readLoopBeatState` and nowhere else
+ * here. That one call is where a body written under the kit-name-only drum
+ * model is converted, and `sanitizeBeat.ts` behind it is the only file in the
+ * app that still spells those old field names — `beatLegacyBoundary.test.ts`
+ * is what keeps that true.
+ *
+ * `knownBeatPresetIds` is the set a loop's `beatParams.basePresetId` is
+ * checked against, and it is OMITTED on the `.solna` import path (factory ids
+ * only) and supplied on the local-slot read (factory plus the user's library).
+ * See `readBeatState` for why the two paths differ.
  */
-export function sanitizeLoops(value: unknown, meterId: MeterId = DEFAULT_METER_ID): Loop[] | undefined {
+export function sanitizeLoops(value: unknown, meterId: MeterId = DEFAULT_METER_ID, knownBeatPresetIds?: ReadonlySet<string>): Loop[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const stepsPerBar = getMeter(meterId).stepsPerBar;
   // Every EXPLICIT tempName the raw array already carries, gathered up front.
@@ -622,17 +601,8 @@ export function sanitizeLoops(value: unknown, meterId: MeterId = DEFAULT_METER_I
         r.fxMelodyOctave, LEAD_OCTAVE_MIN, LEAD_OCTAVE_MAX, fallback.fxMelodyOctave,
       ),
       fxGate: clampFinite(r.fxGate, 0.05, 1, fallback.fxGate),
-      // `sanitizeLoops` is ONE function reached from BOTH untrusted-input
-      // paths — projectFile.ts's `.solna` import and store.ts's
-      // `sanitizePersistedState` on rehydrate — so `sanitizeSequencerTracks`
-      // (per-row filter, then a volume clamp per surviving row so an
-      // unclamped number never reaches faderDbToGain, which fails safe to
-      // SILENCE) is a single shared site, not a second copy.
-      sequencerTracks: sanitizeSequencerTracks(r.sequencerTracks, fallback.sequencerTracks),
-      soundKit: asSoundKit(r.soundKit, fallback.soundKit),
-      drumFilterCutoff: clampFinite(r.drumFilterCutoff, 50, 12000, fallback.drumFilterCutoff),
-      drumFilterResonance: clampFinite(r.drumFilterResonance, 0.1, 20, fallback.drumFilterResonance),
-      drumFilterType: asFilterType(r.drumFilterType, fallback.drumFilterType),
+      // The RAW row, not `r` — see readLoopBeatState.
+      ...readLoopBeatState(rawLoop, fallback, knownBeatPresetIds),
       synthVolume: asFaderDb(r.synthVolume, fallback.synthVolume),
       synthMuted: asBoolean(r.synthMuted),
       chordVolume: asFaderDb(r.chordVolume, fallback.chordVolume),
@@ -641,8 +611,6 @@ export function sanitizeLoops(value: unknown, meterId: MeterId = DEFAULT_METER_I
       bassMuted: asBoolean(r.bassMuted),
       fxVolume: asFaderDb(r.fxVolume, fallback.fxVolume),
       fxMuted: asBoolean(r.fxMuted),
-      masterSequencerVolume: asFaderDb(r.masterSequencerVolume, fallback.masterSequencerVolume),
-      drumMuted: asBoolean(r.drumMuted),
     }, stepsPerBar));
   }
   return loops.length > 0 ? loops : undefined;

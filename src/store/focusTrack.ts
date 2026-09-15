@@ -5,7 +5,7 @@ import type { Assert, MelodyTrackId } from './melodyTracks';
 /**
  * DOM id prefix, mixer lookup key, and — since the focus-track change — the id
  * of the ONE thing the user is working on. These track the STORE fields
- * (`drumMuted`, `synthVolume`), not the labels, which is why the drum bus is
+ * (`synthVolume`, `chordMuted`), not the labels, which is why the Beat bus is
  * `drum` here and "Beat" on screen, and why `'synth'` means Lead.
  *
  * WHY THIS DECLARATION IS HERE AND NOT IN components/mixLayers.ts, where it

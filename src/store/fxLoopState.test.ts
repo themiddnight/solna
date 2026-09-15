@@ -108,7 +108,10 @@ describe('PROJECT_DB_LEVEL_KEYS', () => {
     expect(PROJECT_DB_LEVEL_KEYS).toContain('fxVolume');
   });
 
-  test('is the seven flat faders, in bus order', () => {
+  // Six, not seven: the Beat bus's fader is nested inside `beatMix` rather
+  // than flat on the loop, and this list is iterated as real top-level key
+  // names. It is still covered by the dB contract, one level down.
+  test('is the six flat faders, in bus order', () => {
     expect([...PROJECT_DB_LEVEL_KEYS]).toEqual([
       'masterVolume',
       'synthVolume',
@@ -116,7 +119,6 @@ describe('PROJECT_DB_LEVEL_KEYS', () => {
       'bassVolume',
       'padVolume',
       'fxVolume',
-      'masterSequencerVolume',
     ]);
   });
 });

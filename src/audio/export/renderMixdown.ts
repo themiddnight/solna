@@ -27,7 +27,6 @@
  *    gets its params at trigger time, which is where they come from anyway.
  */
 import { createRenderEngine, type AudioEngine } from '../engine';
-import { sequencerStepEvents } from '../sequencerSteps';
 import {
   leadScheduleHits,
   leadSoundingNotes,
@@ -56,15 +55,18 @@ import { arpStepFor, getMeter, type MeterId } from '@/utils/meter';
 import { encodeWav } from '@/utils/encodeWav';
 import type { BassPattern, BassStepChoice } from '@/data/bassPatterns';
 import type { RhythmPattern } from '@/data/chordRhythms';
-import type { DrumKit } from '@/data/drumKits';
+import { applyBeatParams } from '../beatAdapter';
+import { beatStepEvents } from '../beatSteps';
 import type {
+  BeatMix,
+  BeatParams,
+  BeatPattern,
+  BeatVoiceId,
   ChordItem,
-  FilterType,
   MasterEffects,
   PadInterval,
   PadMode,
   PadVoicing,
-  SequencerTrack,
 } from '@/types';
 import type { ActiveSynth, ArpSettings } from '@/types/synth';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
@@ -81,16 +83,15 @@ interface MixdownBusState {
   muted: boolean;
 }
 
-/** One drum track's fader, already converted from dB to linear. */
-interface MixdownDrumTrack {
-  instrument: string;
+/**
+ * One Beat voice's fader, already converted from the store's dB to linear at
+ * the slice boundary, with the voice's MUTE folded in as a gain of 0 — the
+ * same one-line rule `engineSync.ts` applies live, so the exported mix and the
+ * monitored one cannot drift apart.
+ */
+interface MixdownBeatVoiceGain {
+  voice: BeatVoiceId;
   gain: number;
-}
-
-interface MixdownDrumFilter {
-  cutoff: number;
-  resonance: number;
-  type: FilterType;
 }
 
 /**
@@ -189,7 +190,20 @@ export interface MixdownLoop {
   padVoicing: PadVoicing;
   padDroneDegree: number;
   padDroneIntervals: PadInterval[];
-  sequencerTracks: SequencerTrack[];
+  /**
+   * The Beat instrument, per loop: the sound, the events and the mix.
+   *
+   * `beatParams` and `beatPattern` are the store's own shapes. `beatMix` is
+   * too, and the renderer reads only its per-voice MUTE flags — the dB in it
+   * is never read here, because the levels arrive already converted as
+   * `beatVoiceGains` and the bus level arrives in `buses`. Two fields rather
+   * than one because the mute is a SCHEDULING decision (`beatStepEvents`
+   * builds no voice for a muted row) while the level is an AudioParam.
+   */
+  beatParams: BeatParams;
+  beatPattern: BeatPattern;
+  beatMix: BeatMix;
+  beatVoiceGains: MixdownBeatVoiceGain[];
   leadMelodySteps: LeadNote[][];
   leadLoopLength: number;
   leadStepResolution: LeadStepResolutionId;
@@ -200,7 +214,6 @@ export interface MixdownLoop {
   fxGate: number;
   /** Per-loop source mixer, converted to linear gain by the store boundary. */
   buses: MixdownBusState[];
-  drumFilter: MixdownDrumFilter;
 }
 
 export interface MixdownSnapshot {
@@ -212,12 +225,12 @@ export interface MixdownSnapshot {
   masterVolume: number;
   effects: MasterEffects;
   buses: MixdownBusState[];
-  drumTracks: MixdownDrumTrack[];
-  drumKit: Partial<DrumKit>;
-  drumKitName: string | undefined;
-  drumFilter: MixdownDrumFilter;
-  /** Lead's patch — what a sequencer NOTE row voices on (the DEV-386 note). */
-  sequencerParams: ActiveSynth;
+  /**
+   * There is no arrangement-wide Beat here, deliberately: a Beat belongs to a
+   * LOOP, and a single snapshot-level kit is precisely the defect this
+   * replaced — a song whose second loop used a different Beat exported the
+   * first loop's sound over the whole arrangement.
+   */
   loops: MixdownLoop[];
 }
 
@@ -261,7 +274,8 @@ export interface LoopAudioAutomation {
   loopIndex: number;
   time: number;
   buses: MixdownBusState[];
-  drumFilter: MixdownDrumFilter;
+  beatParams: BeatParams;
+  beatVoiceGains: MixdownBeatVoiceGain[];
 }
 
 /**
@@ -299,7 +313,8 @@ export function planLoopAudioAutomation(
     loopIndex: pass.loopIndex,
     time: pass.startStep * stepDur,
     buses: snapshot.loops[pass.loopIndex].buses,
-    drumFilter: snapshot.loops[pass.loopIndex].drumFilter,
+    beatParams: snapshot.loops[pass.loopIndex].beatParams,
+    beatVoiceGains: snapshot.loops[pass.loopIndex].beatVoiceGains,
   }));
 }
 
@@ -592,11 +607,8 @@ function applyMasterState(engine: AudioEngine, snapshot: MixdownSnapshot): void 
     engine.setSourceGain(bus.source, bus.gain, 0);
     engine.setSourceMuted(bus.source, bus.muted, 0);
   }
-  engine.setDrumKit(snapshot.drumKit, snapshot.drumKitName);
-  for (const track of snapshot.drumTracks) {
-    engine.setDrumTrackGain(track.instrument, track.gain);
-  }
-  engine.setDrumFilter(snapshot.drumFilter.cutoff, snapshot.drumFilter.resonance, snapshot.drumFilter.type);
+  // No Beat here: every loop installs its own at its pass boundary below, so
+  // there is nothing arrangement-wide left to settle.
   engine.updateEffects(snapshot.effects);
   engine.setReverbDecay(snapshot.effects.reverbDecay);
 }
@@ -607,12 +619,15 @@ function applyLoopAudioState(engine: AudioEngine, state: LoopAudioAutomation): v
     engine.setSourceGain(bus.source, bus.gain, state.time);
     engine.setSourceMuted(bus.source, bus.muted, state.time);
   }
-  engine.setDrumFilter(
-    state.drumFilter.cutoff,
-    state.drumFilter.resonance,
-    state.drumFilter.type,
-    state.time,
-  );
+  // The Beat patch, BEFORE this pass schedules a single hit: a drum voice is
+  // built from the kit installed at the moment it is scheduled, so a patch
+  // applied after the walk has passed is a patch nothing in this loop plays.
+  // The bus filter inside it is an AudioParam and carries the pass time; the
+  // voices are plain fields the next `triggerDrum` reads.
+  applyBeatParams(engine, state.beatParams, state.time);
+  for (const { voice, gain } of state.beatVoiceGains) {
+    engine.setDrumTrackGain(voice, gain, state.time);
+  }
 }
 
 /**
@@ -702,15 +717,13 @@ function scheduleArrangement(
       const barInPass = Math.floor(stepInPass / stepsPerBar);
       const isLoopStart = stepInPass === 0;
 
-      // Drums: the same per-step decision the sequencer hook makes, with the
-      // explicit time the render needs.
-      for (const ev of sequencerStepEvents(loop.sequencerTracks, stepInBar, snapshot.sequencerParams, snapshot.bpm)) {
-        if (ev.kind === 'note') {
-          const voiceId = engine.triggerSynthNoteOn(ev.note, snapshot.sequencerParams, DEFAULT_VELOCITY, time, 'synth', 1, 'sequencer');
-          if (voiceId) engine.triggerSynthNoteOff(voiceId, ev.release, time + ev.offsetSec);
-        } else {
-          engine.triggerDrum(ev.instrument, DEFAULT_VELOCITY, time);
-        }
+      // The Beat, through the SAME pure decision the live stepper uses: one
+      // function answers "what sounds at this step" for both, so an export can
+      // never disagree with what the grid played. The per-voice mute is
+      // honoured inside it; solo is not, and must not be — solo is a
+      // session-only monitoring gesture and never reaches an export.
+      for (const event of beatStepEvents(loop.beatPattern, loop.beatMix, stepInBar)) {
+        engine.triggerDrum(event.voice, DEFAULT_VELOCITY, time);
       }
 
       if (!chordless) {

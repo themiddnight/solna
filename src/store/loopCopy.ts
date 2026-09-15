@@ -22,8 +22,8 @@ export type LoopCopyGroupId =
   | 'bass-pattern'
   | 'pad-sound'
   | 'pad-pattern'
-  | 'drums-sound'
-  | 'drums-pattern'
+  | 'beat-sound'
+  | 'beat-pattern'
   | 'key'
   | 'mix';
 
@@ -131,13 +131,15 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
     keys: ['padMode', 'padOctave', 'padVoicing', 'padDroneDegree', 'padDroneIntervals'],
   },
   {
-    id: 'drums-sound',
+    id: 'beat-sound',
     track: 'drums',
     aspect: 'sound',
-    label: 'Drums sound',
-    keys: ['soundKit', 'drumFilterCutoff', 'drumFilterResonance', 'drumFilterType'],
+    label: 'Beat sound',
+    // `beatParams` is the WHOLE of the drums' sound — the patch, its output
+    // trim and the bus filter all sit inside it — so this group is one key.
+    keys: ['beatParams'],
   },
-  { id: 'drums-pattern', track: 'drums', aspect: 'pattern', label: 'Drums pattern', keys: ['sequencerTracks'] },
+  { id: 'beat-pattern', track: 'drums', aspect: 'pattern', label: 'Beat pattern', keys: ['beatPattern'] },
   { id: 'key', track: 'loop', aspect: 'whole', label: 'Key / Scale', keys: ['scaleRoot', 'scaleType'] },
   {
     id: 'mix',
@@ -155,8 +157,7 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
       'padMuted',
       'fxVolume',
       'fxMuted',
-      'masterSequencerVolume',
-      'drumMuted',
+      'beatMix',
     ],
   },
 ];
@@ -166,18 +167,21 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
  * absent, not undefined, so a caller can spread the patch straight over the
  * target loop.
  *
- * `target` exists for one field alone: `sequencerTracks`. Bass and pad each
- * had their per-voice volume/mute pulled out into `mix`, but a
- * `SequencerTrack` bundles a drum voice's `steps` together with its OWN
- * `volume`/`muted` — the fields TrackRow's per-instrument faders own — and no
- * group here names them separately, so a plain copy of the key would drag a
- * mix the user never ticked along with the pattern. 'drums-pattern' copies
- * `steps` only; volume/muted always stay whatever the target track already
- * had.
+ * A group's `keys` are the WHOLE of what it copies, for every group. That is
+ * what splitting the Beat instrument into three sibling fields bought:
+ * `beatParams` holds the sound, `beatPattern` holds the rows and `beatMix`
+ * holds the faders and mutes, each complete and each voice-keyed, so no group
+ * needs the target loop to work out what a copy means.
+ *
+ * There is therefore no `target` parameter any more. It existed for one
+ * special case — the drum roster used to be an ARRAY a loop could legitimately
+ * carry a short version of, so copying it whole would delete the voices the
+ * source never named, and the walk had to be off the target's rows matched by
+ * id. A voice-keyed record cannot be short: every loop has all eleven, so a
+ * copy is a copy.
  */
 export function buildLoopCopyPatch(
   source: Loop,
-  target: Loop,
   selected: readonly LoopCopyGroupId[],
 ): Partial<LoopStatePatch> {
   const wanted = new Set<LoopCopyGroupId>(selected);
@@ -187,28 +191,9 @@ export function buildLoopCopyPatch(
     if (!wanted.has(group.id)) continue;
     for (const key of group.keys) patch[key] = src[key];
   }
-  if (patch.sequencerTracks) {
-    const sourceTracks = patch.sequencerTracks as Loop['sequencerTracks'];
-    // Walked off the TARGET's roster, not the source's: sanitizeSequencerTracks
-    // accepts a short per-loop drum roster as a normal outcome (a loop loaded
-    // from an older or hand-edited .solna file may only carry 8 of the 11
-    // voices), so a source shorter than target must leave the target's own
-    // tracks for the voices it doesn't name untouched rather than deleting
-    // them — mapping off `sourceTracks` did exactly that, silently shrinking
-    // the target's roster to the source's. Matched by `id`, which is a fixed
-    // per-voice constant (`track-kick`, …) every loop's sequencerTracks
-    // shares — never by array position, which would silently misalign the
-    // moment the roster's order changes.
-    patch.sequencerTracks = target.sequencerTracks.map((targetTrack) => {
-      const sourceTrack = sourceTracks.find((t) => t.id === targetTrack.id);
-      return sourceTrack
-        ? { ...sourceTrack, volume: targetTrack.volume, muted: targetTrack.muted }
-        : targetTrack;
-    });
-  }
   // Deep-clone the whole assembled patch, the same way cloneLoop deep-clones
-  // a duplicated loop and for the same reason: sequencerTracks,
-  // leadMelodySteps, chords, customChordRhythm, customChordHoldSteps,
+  // a duplicated loop and for the same reason: beatPattern, beatParams,
+  // beatMix, leadMelodySteps, chords, customChordRhythm, customChordHoldSteps,
   // customBassPattern, customBassHoldSteps and padDroneIntervals are mutable
   // substructure the target must own outright.
   return structuredClone(patch) as Partial<LoopStatePatch>;

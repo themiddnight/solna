@@ -7,10 +7,10 @@
  * is easier to read against the smallest arrangement that produces sound than
  * against a five-loop fixture whose silent bar could be hiding the bug.
  */
-import { DEFAULT_DRUM_KIT, DRUM_TYPES } from '@/data/drumKits';
+import { BEAT_PRESETS, BEAT_VOICE_IDS } from '@/data/beatPresets';
 import { MAX_STEPS_PER_BAR } from '@/utils/meter';
 import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
-import type { MasterEffects } from '@/types';
+import type { BeatMix, BeatParams, BeatPattern, BeatVoiceId, BeatVoiceMix, MasterEffects } from '@/types';
 import type { ActiveSynth, ArpSettings } from '@/types/synth';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import type { MixdownLoop, MixdownSnapshot } from './renderMixdown';
@@ -51,6 +51,34 @@ export function mixdownMelodyBar(note: string): { note: string; len: number }[][
 /** The kick row of a one-bar 4/4 grid: steps 0 and 8. */
 const KICK_STEPS = Array.from({ length: 16 }, (_, i) => i === 0 || i === 8);
 
+/**
+ * A complete factory Beat patch with the provenance a loop's params carry.
+ * Built from the catalogue rather than hand-written: every voice must be
+ * complete, and a fixture that stated its own eleven voices would be a second
+ * roster to keep in step.
+ */
+export function beatParamsFixture(over: Partial<BeatParams> = {}): BeatParams {
+  const preset = BEAT_PRESETS[0];
+  return structuredClone({ basePresetId: preset.id, ...preset.patch, ...over });
+}
+
+/** Silent rows at the stored width, with the kick playing the fixture's bar. */
+export function beatPatternFixture(): BeatPattern {
+  const rows = {} as Record<BeatVoiceId, boolean[]>;
+  for (const voice of BEAT_VOICE_IDS) {
+    rows[voice] = new Array<boolean>(MAX_STEPS_PER_BAR).fill(false);
+  }
+  rows.kick = [...KICK_STEPS, ...new Array<boolean>(MAX_STEPS_PER_BAR - KICK_STEPS.length).fill(false)];
+  return { rows };
+}
+
+/** Unity faders, nothing muted — the mix a fixture's loudness assertions assume. */
+export function beatMixFixture(over: Partial<BeatMix> = {}): BeatMix {
+  const voices = {} as Record<BeatVoiceId, BeatVoiceMix>;
+  for (const voice of BEAT_VOICE_IDS) voices[voice] = { levelDb: 0, muted: false };
+  return { levelDb: 0, muted: false, voices, ...over };
+}
+
 export function mixdownLoop(over: Partial<MixdownLoop> = {}): MixdownLoop {
   return {
     id: 'loop-1',
@@ -85,17 +113,10 @@ export function mixdownLoop(over: Partial<MixdownLoop> = {}): MixdownLoop {
     padVoicing: 'triad',
     padDroneDegree: 1,
     padDroneIntervals: [1, 5, 8],
-    sequencerTracks: [
-      {
-        id: 'track-kick',
-        name: 'Kick',
-        instrument: 'kick',
-        color: 'bg-drum-kick',
-        volume: 0,
-        muted: false,
-        steps: KICK_STEPS,
-      },
-    ],
+    beatParams: beatParamsFixture(),
+    beatPattern: beatPatternFixture(),
+    beatMix: beatMixFixture(),
+    beatVoiceGains: BEAT_VOICE_IDS.map((voice) => ({ voice, gain: 1 })),
     synthParams: synthFixture(),
     fxSynthParams: synthFixture(),
     synthArpSettings: arpFixture(),
@@ -109,7 +130,6 @@ export function mixdownLoop(over: Partial<MixdownLoop> = {}): MixdownLoop {
     fxStepResolution: '1/16',
     fxGate: 0.85,
     buses: BUSES.map((source) => ({ source, gain: 1, muted: false })),
-    drumFilter: { cutoff: 20000, resonance: 0.7, type: 'lowpass' },
     ...over,
   };
 }
@@ -122,11 +142,6 @@ export function mixdownSnapshot(over: Partial<MixdownSnapshot> = {}): MixdownSna
     masterVolume: 1,
     effects: FACTORY_EFFECTS,
     buses: BUSES.map((source) => ({ source, gain: 1, muted: false })),
-    drumTracks: DRUM_TYPES.map((instrument) => ({ instrument, gain: 1 })),
-    drumKit: DEFAULT_DRUM_KIT,
-    drumKitName: 'default',
-    drumFilter: { cutoff: 20000, resonance: 0.7, type: 'lowpass' },
-    sequencerParams: synthFixture(),
     loops: [mixdownLoop()],
     ...over,
   };

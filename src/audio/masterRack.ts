@@ -115,9 +115,9 @@ export class MasterRack {
    * Beat would incorrectly erase a tail that was already ringing.
    */
   private drumSendGate: GainNode | null = null;
-  drumFilterCutoff = 12000;
-  drumFilterResonance = 0.7;
-  drumFilterType: FilterType = 'lowpass';
+  beatFilterCutoff = 12000;
+  beatFilterResonance = 0.7;
+  beatFilterType: FilterType = 'lowpass';
 
   // Per-source buses: one gain bus per source string ('synth', 'chord', 'bass', ...).
   // Voice gains connect here instead of straight to dry/effects, so a whole layer
@@ -274,16 +274,16 @@ export class MasterRack {
 
     // Drum bus filter — routed through the sequencer source bus for volume and mute control
     this.drumBusFilter = this.ctx.createBiquadFilter();
-    this.drumBusFilter.type = this.drumFilterType;
-    this.drumBusFilter.frequency.value = this.drumFilterCutoff;
-    this.drumBusFilter.Q.value = this.drumFilterResonance;
+    this.drumBusFilter.type = this.beatFilterType;
+    this.drumBusFilter.frequency.value = this.beatFilterCutoff;
+    this.drumBusFilter.Q.value = this.beatFilterResonance;
     this.drumBusFilter.connect(this.getSourceTap('sequencer'));
 
     // Same settings, wired to the reverb send only.
     this.drumSendFilter = this.ctx.createBiquadFilter();
-    this.drumSendFilter.type = this.drumFilterType;
-    this.drumSendFilter.frequency.value = this.drumFilterCutoff;
-    this.drumSendFilter.Q.value = this.drumFilterResonance;
+    this.drumSendFilter.type = this.beatFilterType;
+    this.drumSendFilter.frequency.value = this.beatFilterCutoff;
+    this.drumSendFilter.Q.value = this.beatFilterResonance;
     this.drumSendGate = this.ctx.createGain();
     // getSourceTap('sequencer') above has already created and seeded the dry
     // bus from sourceGains/sourceMuted. Copy that exact source level so a

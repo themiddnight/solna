@@ -23,7 +23,7 @@
  *    both dynamics stages disconnected, not "engaged but not meaningfully so" — a
  *    deliberate departure from a fresh session's actual default, kept so the
  *    committed trim table stays independent of whichever dynamics defaults ship.
- *    The ONE exception is the kit reference pattern (`renderDrumKit`), which runs
+ *    The ONE exception is the kit reference pattern (`renderBeatPreset`), which runs
  *    at `CALIBRATION_HEADROOM_DB` below unity — see that constant's comment.
  */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -32,7 +32,8 @@ import { join } from 'node:path';
 import { OfflineAudioContext } from 'node-web-audio-api';
 import { createRenderEngine, type AudioEngine } from '@/audio/engine';
 import { withSeededRandom } from '@/audio/rng';
-import { DRUM_KITS, type DrumType } from '@/data/drumKits';
+import { BEAT_PRESETS } from '@/data/beatPresets';
+import type { BeatVoiceId } from '@/types';
 import type { SynthPreset } from '@/data/synthPresets';
 import type { ActiveSynth, EnginePatch } from '@/types/synth';
 import { dbToGain, toDbfs, toDecibels, type Dbfs } from '@/utils/gainUnits';
@@ -153,7 +154,7 @@ const DRUM_KIT_BAR_COUNT = 2;
 const DRUM_KIT_BEATS_PER_BAR = 4;
 
 interface DrumKitPatternHit {
-  voice: DrumType;
+  voice: BeatVoiceId;
   /** Offset from the start of the bar, in beats (quarter notes); 0.5 = an
    *  off-beat 8th note. */
   beat: number;
@@ -347,31 +348,39 @@ async function renderToWav(ctx: any): Promise<Uint8Array> {
 }
 
 /**
- * One render per KIT, playing `DRUM_KIT_BAR` twice through (DEV-387: drum trims
- * are per kit, not per voice — see the comment on `DRUM_TRIMS` in
+ * One render per BEAT PRESET, playing `DRUM_KIT_BAR` twice through (DEV-387: a
+ * trim is per patch, not per voice — see the comment on `DRUM_TRIMS` in
  * src/data/trimTable.ts).
  *
- * `applyTrim` routes through the engine's OWN trim path — `setDrumKit`'s kit-name
- * argument — rather than folding a gain into velocity. That seam is the ONLY
- * thing that makes a render calibrated: `triggerDrum` runs `clampVelocity`, which
- * caps at 1, so a caller multiplying a boost into velocity would silently lose it
- * and measure the untrimmed kit believing otherwise. Withholding the name is what
- * makes a render uncalibrated, since `setDrumKit` resolves trims from the name and
- * an unnamed kit resolves to none.
+ * The bus filter is installed from the patch, not left at whatever the harness
+ * defaults to: it is part of the sound being measured, and every shipped patch
+ * currently states exactly the engine default, so this is a no-op today and the
+ * honest thing the day a preset ships a filtered one.
+ *
+ * `applyTrim` routes through the engine's OWN trim path — `setDrumKit`'s trim
+ * argument, which carries the patch's own `outputTrimDb` — rather than folding
+ * a gain into velocity. That seam is the ONLY thing that makes a render
+ * calibrated: `triggerDrum` runs `clampVelocity`, which caps at 1, so a caller
+ * multiplying a boost into velocity would silently lose it and measure the
+ * untrimmed patch believing otherwise. Passing 0 dB is what makes a render
+ * uncalibrated — the same neutralisation the synth pass below performs on
+ * `common.outputGainDb`, now that both halves carry their trim in the patch.
  *
  * The generator renders with `applyTrim` false (uncalibrated, which is what a trim
  * is computed FROM); `verifyApplied.smoke.ts` renders with it true, to prove the
  * applied result lands inside the tolerance band.
  */
-export async function renderDrumKit(kitName: string, applyTrim = false): Promise<Uint8Array> {
-  const kit = DRUM_KITS[kitName];
-  if (!kit) throw new Error(`No such drum kit: ${kitName}`);
+export async function renderBeatPreset(presetId: string, applyTrim = false): Promise<Uint8Array> {
+  const preset = BEAT_PRESETS.find((entry) => entry.id === presetId);
+  if (!preset) throw new Error(`No such beat preset: ${presetId}`);
   return withSeededRandom(CALIBRATION_SEED, async () => {
     // Same headroom whether or not the trim is applied — the trimmed path peaks
     // even hotter (Tight Pocket measured 2.02 pre-headroom), so applyTrim=true
     // needs the clamp-avoidance at least as much as the uncalibrated render.
     const { engine, ctx } = createHarness(DRUM_KIT_RENDER_SECONDS, CALIBRATION_HEADROOM_DB);
-    engine.setDrumKit(kit, applyTrim ? kitName : undefined);
+    const { filter } = preset.patch;
+    engine.setBeatFilter(filter.cutoff, filter.resonance, filter.type);
+    engine.setDrumKit(preset.patch.voices, applyTrim ? preset.patch.outputTrimDb : 0);
     for (let bar = 0; bar < DRUM_KIT_BAR_COUNT; bar += 1) {
       for (const hit of DRUM_KIT_BAR) {
         const at = DRUM_FIRST_HIT_S + (bar * DRUM_KIT_BEATS_PER_BAR + hit.beat) * DRUM_KIT_BEAT_S;
@@ -463,8 +472,8 @@ async function measureWav(bytes: Uint8Array, slug: string, label: string): Promi
 }
 
 /**
- * Renders `kitName`'s reference pattern, measures it, and returns the level the
- * kit ACTUALLY plays at. Every caller of `renderDrumKit` used to have to
+ * Renders a preset's reference pattern, measures it, and returns the level the
+ * patch ACTUALLY plays at. Every caller of `renderBeatPreset` used to have to
  * remember to add `CALIBRATION_HEADROOM_DB` back to the raw measurement by
  * hand — Task 12 got this wrong on its first pass (every kit measured ~12 dB
  * low) and caught it only because the number was absurd; a subtler slip in the
@@ -474,9 +483,9 @@ async function measureWav(bytes: Uint8Array, slug: string, label: string): Promi
  * value — see that constant's comment for why the kit render needs headroom
  * at all (nine overlapping voices vs. the WAV encoder's +/-1.0 clamp).
  */
-export async function measureDrumKit(kitName: string, applyTrim = false): Promise<Dbfs> {
-  const wav = await renderDrumKit(kitName, applyTrim);
-  const raw = await measureWav(wav, kitName.replace(/\W+/g, '-'), kitName);
+export async function measureBeatPreset(presetId: string, applyTrim = false): Promise<Dbfs> {
+  const wav = await renderBeatPreset(presetId, applyTrim);
+  const raw = await measureWav(wav, presetId.replace(/\W+/g, '-'), presetId);
   return toDbfs(raw + CALIBRATION_HEADROOM_DB);
 }
 
@@ -488,7 +497,7 @@ export async function measureDrumKit(kitName: string, applyTrim = false): Promis
  * subtracting headroom before the render and adding it back after the
  * measurement recovers the true level exactly rather than approximately.
  *
- * It lives HERE, once, for the reason `measureDrumKit` records: a call site
+ * It lives HERE, once, for the reason `measureBeatPreset` records: a call site
  * that had to remember to add the number back got it wrong the first time, and
  * a subtler slip in the same place looks like a plausible measurement.
  *

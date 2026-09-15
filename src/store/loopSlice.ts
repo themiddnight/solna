@@ -8,8 +8,8 @@ import {
   defaultTrackArp,
   defaultTrackSynth,
   INITIAL_CHORDS,
-  INITIAL_SEQUENCER_TRACKS,
 } from './initialState';
+import { defaultBeatState } from './beatPresets';
 import { cloneLoop, fallbackActiveLoopId, newLoopId, nextDuplicateLabel, nextUntitledName } from './loop';
 import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
 import { rescopeToLoop, scopedLoopId, SCOPE_NONE } from './playbackScope';
@@ -61,11 +61,9 @@ export function createDefaultLoop(): Loop {
     leadMelodyView: 'scale-locked',
     leadMelodyOctave: 3,
     leadGate: DEFAULT_LEAD_GATE,
-    sequencerTracks: INITIAL_SEQUENCER_TRACKS.map((t) => ({ ...t, steps: [...t.steps] })),
-    soundKit: 'Retro Drive',
-    drumFilterCutoff: 12000,
-    drumFilterResonance: 0.7,
-    drumFilterType: 'lowpass',
+    // A fresh deep copy per loop: two loops sharing one row object would
+    // toggle together the first time a step was drawn.
+    ...defaultBeatState(),
     // Decibels from here down: unity is 0 dB. The old 0.8 drum-bus default
     // was a -1.9 dB trim nobody chose; DEV-383 sets a measured one
     // (DEFAULT_BUS_TRIM_DB — see its comment in levelUnits.ts for the
@@ -77,8 +75,6 @@ export function createDefaultLoop(): Loop {
     chordMuted: false,
     bassVolume: DEFAULT_BUS_TRIM_DB,
     bassMuted: false,
-    masterSequencerVolume: DEFAULT_BUS_TRIM_DB,
-    drumMuted: false,
   };
 }
 

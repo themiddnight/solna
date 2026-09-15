@@ -1,31 +1,77 @@
+import type { BeatMix } from '@/types';
 import type { SynthControlTarget } from '@/utils/synthControl';
 import type { AppStore } from './types';
 
 /**
- * Every source bus the store owns, as `[volume field, mute field, engine
- * source, solo track]`. Both the snapshot pass and the subscription block
- * below are driven from this one table, on the `synthSources` precedent
- * further down — the two used to be ten hand-written lines each, and a bus
- * added to one and forgotten in the other is silent until the first apply.
+ * Every source bus the store owns, as `[level reader, mute reader, engine
+ * source, solo track]`. Both the snapshot pass and the subscription block in
+ * `engineSync.ts` are driven from this one table, on the `synthSources`
+ * precedent further down — the two used to be ten hand-written lines each, and
+ * a bus added to one and forgotten in the other is silent until the first
+ * apply.
  *
- * The field names are table data rather than a `${source}Volume` convention on
- * purpose: 'sequencer' is irregular (`masterSequencerVolume` / `drumMuted`),
- * and encoding that as a special case in the loop would cost more than
- * spelling all twelve names out.
+ * The readers are FUNCTIONS rather than field names because the six buses no
+ * longer live at one depth: the five melodic ones keep a flat pair of fields,
+ * while the Beat bus reads `beatMix.levelDb` / `beatMix.muted`. A field-name
+ * column can only name a top-level key, so the alternative was a special case
+ * inside every consumer's loop — which is exactly the per-bus irregularity
+ * this table exists to absorb.
  *
- * `solo` is the same irregularity in the other direction: the ENGINE calls the
+ * A reader takes the smallest state it needs (`SourceBusLevels`), not the
+ * store: the mixdown slice runs the same table over a LOOP, which carries the
+ * same fields, so one table serves the live bridge and the per-loop export.
+ *
+ * `solo` is the same irregularity in another direction: the ENGINE calls the
  * drum bus 'sequencer' and the lead bus 'synth', while the USER-facing solo
  * vocabulary (store/trackAudibility.ts) calls them 'drums' and 'lead'. The
  * translation is written once, here, because this table is already the place
  * that owns the per-bus name mapping.
  */
+export interface SourceBusLevels {
+  synthVolume: number;
+  synthMuted: boolean;
+  chordVolume: number;
+  chordMuted: boolean;
+  bassVolume: number;
+  bassMuted: boolean;
+  padVolume: number;
+  padMuted: boolean;
+  fxVolume: number;
+  fxMuted: boolean;
+  beatMix: BeatMix;
+}
+
 export const SOURCE_BUSES = [
-  { source: 'synth', volume: 'synthVolume', muted: 'synthMuted', solo: 'lead' },
-  { source: 'chord', volume: 'chordVolume', muted: 'chordMuted', solo: 'chord' },
-  { source: 'bass', volume: 'bassVolume', muted: 'bassMuted', solo: 'bass' },
-  { source: 'pad', volume: 'padVolume', muted: 'padMuted', solo: 'pad' },
-  { source: 'fx', volume: 'fxVolume', muted: 'fxMuted', solo: 'fx' },
-  { source: 'sequencer', volume: 'masterSequencerVolume', muted: 'drumMuted', solo: 'drums' },
+  {
+    source: 'synth', solo: 'lead',
+    selectLevelDb: (s: SourceBusLevels) => s.synthVolume,
+    selectMuted: (s: SourceBusLevels) => s.synthMuted,
+  },
+  {
+    source: 'chord', solo: 'chord',
+    selectLevelDb: (s: SourceBusLevels) => s.chordVolume,
+    selectMuted: (s: SourceBusLevels) => s.chordMuted,
+  },
+  {
+    source: 'bass', solo: 'bass',
+    selectLevelDb: (s: SourceBusLevels) => s.bassVolume,
+    selectMuted: (s: SourceBusLevels) => s.bassMuted,
+  },
+  {
+    source: 'pad', solo: 'pad',
+    selectLevelDb: (s: SourceBusLevels) => s.padVolume,
+    selectMuted: (s: SourceBusLevels) => s.padMuted,
+  },
+  {
+    source: 'fx', solo: 'fx',
+    selectLevelDb: (s: SourceBusLevels) => s.fxVolume,
+    selectMuted: (s: SourceBusLevels) => s.fxMuted,
+  },
+  {
+    source: 'sequencer', solo: 'drums',
+    selectLevelDb: (s: SourceBusLevels) => s.beatMix.levelDb,
+    selectMuted: (s: SourceBusLevels) => s.beatMix.muted,
+  },
 ] as const;
 
 /**

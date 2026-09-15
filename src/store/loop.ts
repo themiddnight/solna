@@ -64,11 +64,9 @@ export const LOOP_FLAT_KEYS = [
   'fxMelodyView',
   'fxMelodyOctave',
   'fxGate',
-  'sequencerTracks',
-  'soundKit',
-  'drumFilterCutoff',
-  'drumFilterResonance',
-  'drumFilterType',
+  'beatParams',
+  'beatPattern',
+  'beatMix',
   'synthVolume',
   'synthMuted',
   'chordVolume',
@@ -77,8 +75,6 @@ export const LOOP_FLAT_KEYS = [
   'bassMuted',
   'fxVolume',
   'fxMuted',
-  'masterSequencerVolume',
-  'drumMuted',
 ] as const;
 
 /** Loop ids are new and unique per project (same style as presetsSlice). */

@@ -1,6 +1,23 @@
 import { describe, expect, test } from 'bun:test';
 import { VIBES } from './vibes';
 import { SYNTH_PRESETS } from './synthPresets';
+import { BEAT_PRESETS } from './beatPresets';
+
+describe('beatPresetId', () => {
+  /**
+   * STRICT, unlike the project-file reader: shipped factory data must name a
+   * factory preset that exists. A user's stored `basePresetId` may go
+   * unresolvable — their library is theirs to delete from, and the patch is
+   * complete without it — but a VIBE resolves its id at apply time and would
+   * otherwise install the default preset's sound under another vibe's name.
+   */
+  test('every vibe names a real factory Beat preset by stable id', () => {
+    const presetIds = new Set(BEAT_PRESETS.map((p) => p.id));
+    for (const vibe of VIBES) {
+      expect(presetIds.has(vibe.beatPresetId), `${vibe.id} -> ${vibe.beatPresetId}`).toBe(true);
+    }
+  });
+});
 
 describe('fxPresetId', () => {
   test('every vibe names one', () => {

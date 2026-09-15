@@ -1,16 +1,16 @@
 import { useEffect } from 'react';
 import { startMelodyRecordBridges } from './leadRecord';
-import { shallow } from 'zustand/shallow';
 import { audioEngine } from '../audio/engine';
-import { DRUM_KITS, DRUM_TYPES } from '@/data/drumKits';
+import { BEAT_VOICE_IDS } from '@/data/beatPresets';
+import { applyBeatParams } from '../audio/beatAdapter';
 import { useAppStore } from './store';
 import { isPlayerActive } from './transportSlice';
 import { getMeter } from '../utils/meter';
 import { startMidiInputBridge } from './midiInput';
 import { createFrameCoalescer } from '../utils/frameCoalescer';
 import { createTrailingDebounce } from '../utils/trailingDebounce';
-import type { MasterEffects, SequencerTrack } from '../types';
-import { DEFAULT_FADER_DB, faderDbToGain } from './levelUnits';
+import type { BeatMix, BeatParams, MasterEffects } from '../types';
+import { faderDbToGain } from './levelUnits';
 import { isTrackAudible } from './trackAudibility';
 import { SOURCE_BUSES, SYNTH_PARAM_FIELD, SYNTH_PARAM_TARGETS, type SourceBus } from './sourceBuses';
 import { sourceTransitionTime } from './sourceTransition';
@@ -139,7 +139,7 @@ export type {
  * never solos.
  */
 function busAudible(s: AppStore, bus: SourceBus): boolean {
-  return isTrackAudible(bus.solo, s.soloTracks, s[bus.muted]);
+  return isTrackAudible(bus.solo, s.soloTracks, bus.selectMuted(s));
 }
 
 /** Preserve ordinary two-argument engine calls; only a song boundary carries time. */
@@ -157,58 +157,27 @@ function pushSourceMuted(bus: SourceBus, audible: boolean): void {
 }
 
 /**
- * The track gains reach the engine on a selector over `sequencerTracks`, not
- * one subscription per track: the roster is data, tracks can be added, and a
- * per-track subscription would have to be torn down and rebuilt whenever it
- * changed. The equality function compares only (instrument, volume) pairs and
- * short-circuits on reference identity, so an unrelated `set()` costs one
- * reference compare — which matters, because subscribeWithSelector runs every
- * selector on every set().
+ * Every Beat voice's fader, as the engine's linear per-voice gain.
+ *
+ * ONE of the two mute layers, and the other one is `beatStepEvents`, which
+ * skips a muted voice's scheduled hits so no silent voice is ever built. They
+ * are the same decision expressed where each consumer can act on it: a gain of
+ * 0 also covers what the step walk cannot reach — a drum PAD hit, a live MIDI
+ * trigger — so a muted voice is silent from every surface, live and exported.
+ * Neither cancels the other; both mean silence.
+ *
+ * `faderDbToGain`, never `dbToGain`: a voice pulled to the bottom of its fader
+ * passes exactly nothing, the same boundary rule the source buses follow.
+ *
+ * Every voice is written on every push. The roster is fixed and complete
+ * (eleven voices, always present in `beatMix`), so there is no stale-voice
+ * reset to do — the case the old drum-track ARRAY needed, where a vanished
+ * row would otherwise keep its attenuation forever.
  */
-function drumTrackGainsEqual(
-  a: readonly SequencerTrack[],
-  b: readonly SequencerTrack[],
-): boolean {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) {
-    if (a[i].instrument !== b[i].instrument || a[i].volume !== b[i].volume) return false;
-  }
-  return true;
-}
-
-function pushDrumTrackGains(tracks: readonly SequencerTrack[]): void {
-  const named = new Set<string>();
-  for (const track of tracks) {
-    // dB in the store, linear in the engine — the same boundary rule the
-    // source buses follow, through the same faderDbToGain, so a track pulled
-    // to the bottom of its fader is silent rather than 60 dB down.
-    audioEngine.setDrumTrackGain(track.instrument, faderDbToGain(track.volume));
-    named.add(track.instrument);
-  }
-  // Every canonical voice the incoming roster does NOT name is reset to
-  // unity. The engine's drumTrackGains map outlives any one roster, so a
-  // voice whose track disappears — a loop switch, or a persisted/imported
-  // roster with a row sanitizeSequencerTracks dropped — would otherwise keep
-  // the vanished track's attenuation forever, and its drum pad would play
-  // 30 dB down with no fader anywhere on screen explaining why.
-  //
-  // Skipped outright when the roster already covers the roster: this runs on
-  // every (instrument, volume) change, so a fader drag walks it once per
-  // detent, and a full roster can leave nothing stale by definition. The
-  // guard is on `named.size`, not `tracks.length` — `named` is a Set, so it
-  // counts DISTINCT instruments, where two rows on one instrument would clear
-  // a length check while a voice went unnamed. It is exact rather than
-  // merely conservative because `sanitizeSequencerTracks` drops any row whose
-  // instrument is outside DRUM_TYPES on every read path, so a name in `named`
-  // is always one of the names this loop would look for; if that ever stops
-  // being true, this must count canonical coverage instead of set size.
-  // Stateless by construction — no remembered previous roster — so it cannot
-  // go stale the way a diff against a cached list would.
-  if (named.size < DRUM_TYPES.length) {
-    for (const voice of DRUM_TYPES) {
-      if (!named.has(voice)) audioEngine.setDrumTrackGain(voice, faderDbToGain(DEFAULT_FADER_DB));
-    }
+function pushBeatVoiceGains(voices: BeatMix['voices']): void {
+  for (const voice of BEAT_VOICE_IDS) {
+    const { levelDb, muted } = voices[voice];
+    audioEngine.setDrumTrackGain(voice, muted ? 0 : faderDbToGain(levelDb));
   }
 }
 
@@ -251,12 +220,15 @@ function applySliceState(): void {
   audioEngine.setMasterVolume(faderDbToGain(s.masterVolume));
   audioEngine.setMetronomeEnabled(s.metronomeActive);
   for (const bus of SOURCE_BUSES) {
-    audioEngine.setSourceGain(bus.source, faderDbToGain(s[bus.volume]));
+    audioEngine.setSourceGain(bus.source, faderDbToGain(bus.selectLevelDb(s)));
     audioEngine.setSourceMuted(bus.source, !busAudible(s, bus));
   }
-  audioEngine.setDrumKit(DRUM_KITS[s.soundKit], s.soundKit);
-  pushDrumTrackGains(s.sequencerTracks);
-  audioEngine.setDrumFilter(s.drumFilterCutoff, s.drumFilterResonance, s.drumFilterType);
+  // The Beat instrument: one patch — voices, trim and bus filter — and the
+  // per-voice faders beside it. Both halves go through the same calls the
+  // subscriptions below use, so an engine settled by the snapshot and one
+  // settled by a store write are settled identically.
+  applyBeatParams(audioEngine, s.beatParams);
+  pushBeatVoiceGains(s.beatMix.voices);
   audioEngine.updateEffects(s.effects);
   // Applied DIRECTLY, not through the debounce: applyEngineSnapshot runs once
   // right after init(), when every earlier setter was a no-op, so the impulse
@@ -313,7 +285,7 @@ export function startEngineSync(): Stop {
   // is why no engine setter signature had to change for DEV-386. faderDbToGain
   // rather than dbToGain: a bus pulled to the bottom passes exactly nothing.
   for (const bus of SOURCE_BUSES) {
-    subs.push(useAppStore.subscribe((s) => s[bus.volume], (db) => pushSourceGain(bus, db), { fireImmediately: true }));
+    subs.push(useAppStore.subscribe(bus.selectLevelDb, (db) => pushSourceGain(bus, db), { fireImmediately: true }));
     // Audibility, not the raw mute flag — solo beats mute. The selector returns
     // a BOOLEAN, so the default === equality fires this listener only when the
     // bus actually flips: a solo toggle re-runs five selectors and calls the
@@ -321,27 +293,32 @@ export function startEngineSync(): Stop {
     subs.push(useAppStore.subscribe((s) => busAudible(s, bus), (audible) => pushSourceMuted(bus, audible), { fireImmediately: true }));
   }
 
-  // sequencer slice: kit + drum-bus filter. The filter is watched as one
-  // derived object compared with `shallow`, so the subscription fires once
-  // when any of the three values actually changes — and the listener gets all
-  // three from the same snapshot instead of re-reading the store.
-  subs.push(useAppStore.subscribe((s) => s.soundKit, (kit) => audioEngine.setDrumKit(DRUM_KITS[kit], kit), { fireImmediately: true }));
+  // The Beat instrument: the whole patch on one subscription, because
+  // `beatParams` is replaced as a unit by every writer (a preset pick, a vibe,
+  // a committed knob release) and installing it is two engine calls that
+  // belong together. Transient drag audio does NOT come through here — it goes
+  // to `store/beatPreview.ts`, which writes no store state at all.
   subs.push(
     useAppStore.subscribe(
-      (s) => s.sequencerTracks,
-      (tracks) => pushDrumTrackGains(tracks),
-      { equalityFn: drumTrackGainsEqual, fireImmediately: true },
+      (s) => s.beatParams,
+      (params: BeatParams) => applyBeatParams(audioEngine, params),
+      { fireImmediately: true },
     ),
   );
+  // The per-voice faders, watched on `beatMix.voices` alone: the bus level and
+  // bus mute beside it are the source-bus loop's business (the 'sequencer' row
+  // above reads them), and a bus fader drag must not re-push eleven voices.
   subs.push(
     useAppStore.subscribe(
-      (s) => ({
-        cutoff: s.drumFilterCutoff,
-        resonance: s.drumFilterResonance,
-        type: s.drumFilterType,
-      }),
-      ({ cutoff, resonance, type }) => audioEngine.setDrumFilter(cutoff, resonance, type),
-      { equalityFn: shallow, fireImmediately: true },
+      // The selector narrows to `voices`, so the contract is ENFORCED rather
+      // than remembered: handing the whole `BeatMix` in while gating on
+      // `a.voices === b.voices` passed two fields — the bus level and bus mute
+      // — that this subscription will never fire for, inviting a reader to
+      // fold `mix.muted` into the gain where it would then apply only on the
+      // next per-voice edit and stay stale otherwise.
+      (s) => s.beatMix.voices,
+      (voices) => pushBeatVoiceGains(voices),
+      { fireImmediately: true },
     ),
   );
 

@@ -1,13 +1,18 @@
 /**
- * Batch calibration orchestrator. For every drum KIT (13 kits, each measured as a
- * whole via its fixed reference backbeat — `DRUM_KIT_BAR` in renderOffline.ts, not
- * per voice; see the comment on `DRUM_TRIMS` in src/data/trimTable.ts) and every
+ * Batch calibration orchestrator. For every BEAT PRESET (13 patches, each measured
+ * as a whole via its fixed reference backbeat — `DRUM_KIT_BAR` in renderOffline.ts,
+ * not per voice; see the comment on `DRUM_TRIMS` in src/data/trimTable.ts) and every
  * synth preset: render the pattern through the offline harness, measure short-term
  * LUFS, compute the trim, hash the loudness-relevant config, and write the result
  * into the committed `src/data/trimTable.ts`.
  *
  * MANUAL / ON-DEMAND ONLY. It never runs in CI: rendering plus ffmpeg is minutes,
  * where the lock test that guards its output is milliseconds. See README.md.
+ *
+ * The embedded copy is NOT written by this script: `BEAT_PRESETS[i].patch.outputTrimDb`
+ * is authored in src/data/beatPresets.ts, and the lock test fails until a human
+ * copies a regenerated `trimDb` across. That is deliberate — a generator that
+ * silently rewrote the shipped patches would make a retune invisible in review.
  *
  * Partial-failure policy: a render/measure failure on one voice does NOT abort the
  * run — a render that already cost minutes is worth finishing so every OTHER
@@ -21,13 +26,13 @@
  *
  * Run: bun run calibration:generate
  */
-import { DRUM_KITS } from '@/data/drumKits';
+import { BEAT_PRESETS } from '@/data/beatPresets';
 import { SYNTH_PRESETS } from '@/data/synthPresets';
 import { FADER_MAX_DB } from '@/utils/gainUnits';
 import { TARGET_DBFS, computeTrimDb } from './trimMath';
 import { resolveFfmpegPath } from './ffmpegPath.ts';
-import { drumLoudnessHash, presetLoudnessHash } from './loudnessConfig.ts';
-import { measureDrumKit, measurePreset } from './renderOffline.ts';
+import { beatLoudnessHash, presetLoudnessHash } from './loudnessConfig.ts';
+import { measureBeatPreset, measurePreset } from './renderOffline.ts';
 import { TRIM_TABLE_PATH, writeTrimTable, type GeneratedTrimEntry } from './writeTrimTable.ts';
 
 /**
@@ -51,8 +56,8 @@ const presets: Record<string, GeneratedTrimEntry> = {};
 const flagged: string[] = [];
 const failed: string[] = [];
 
-const kitNames = Object.keys(DRUM_KITS);
-const total = kitNames.length + SYNTH_PRESETS.length;
+const beatPresetIds = BEAT_PRESETS.map((preset) => preset.id);
+const total = beatPresetIds.length + SYNTH_PRESETS.length;
 let done = 0;
 
 function flagIfOutOfRange(label: string, trimDb: number) {
@@ -63,21 +68,21 @@ function flagIfOutOfRange(label: string, trimDb: number) {
 
 console.log(`Calibrating ${total} voices toward ${TARGET_DBFS} dBFS...`);
 
-for (const kitName of kitNames) {
+for (const presetId of beatPresetIds) {
   done += 1;
-  const label = kitName;
+  const label = presetId;
   process.stdout.write(`[${done}/${total}] ${label}... `);
-  // One kit's failure must not abort a run that already cost minutes; it is
+  // One preset's failure must not abort a run that already cost minutes; it is
   // reported at the end alongside the out-of-range flags instead. The table is
   // written only if nothing failed (see the policy note above).
   try {
-    // measureDrumKit renders and compensates for CALIBRATION_HEADROOM_DB
+    // measureBeatPreset renders and compensates for CALIBRATION_HEADROOM_DB
     // internally (see its comment in renderOffline.ts) — the level it returns
     // is already the true, unclipped one.
-    const measuredDbfs = await measureDrumKit(kitName);
+    const measuredDbfs = await measureBeatPreset(presetId);
     const trimDb = computeTrimDb(measuredDbfs);
     flagIfOutOfRange(label, trimDb);
-    drums[kitName] = { measuredDbfs, trimDb, configHash: drumLoudnessHash(kitName) };
+    drums[presetId] = { measuredDbfs, trimDb, configHash: beatLoudnessHash(presetId) };
     console.log(`${measuredDbfs.toFixed(1)} dBFS -> trim ${trimDb.toFixed(1)} dB`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -119,7 +124,9 @@ if (failed.length > 0) {
 }
 
 writeTrimTable(drums, presets);
-console.log(`\nWrote ${Object.keys(presets).length} preset and ${kitNames.length} kit blocks to ${TRIM_TABLE_PATH}`);
+console.log(
+  `\nWrote ${Object.keys(presets).length} synth preset and ${beatPresetIds.length} beat preset blocks to ${TRIM_TABLE_PATH}`,
+);
 console.log('Review the diff before committing — see scripts/calibration/README.md.');
 
 // An OfflineAudioContext render, plus the engine's idle/teardown timers, keep the

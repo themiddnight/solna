@@ -6,8 +6,9 @@ import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 import type { LeadNote } from '../audio/leadMelody';
 import { CHORD_RHYTHMS } from '../data/chordRhythms';
 import { BASS_PATTERNS } from '../data/bassPatterns';
-import { DRUM_KITS } from '../data/drumKits';
 import { DRUM_GRIDS } from '../data/drumGrids';
+import { BEAT_PRESETS, BEAT_VOICE_IDS } from '@/data/beatPresets';
+import { beatPresetById } from './beatPresets';
 import { presetById } from '@/utils/synthPresets';
 import { useAppStore } from './store';
 import { createDefaultLoop } from './loopSlice';
@@ -61,12 +62,12 @@ describe('Instant Vibes Mode', () => {
       expect(Boolean(vibe.scaleRoot)).toBe(true);
       expect(Boolean(vibe.scaleType)).toBe(true);
       
-      // Drum Beat & Kit
-      // Was `expect(Boolean(vibe.soundKit)).toBe(true)`, which passes on any
-      // non-empty string — which is how three vibes shipped naming a kit that
-      // resolved to nothing at all.
-      expect(Object.keys(DRUM_KITS), `${vibe.id} names a kit that does not exist`)
-        .toContain(vibe.soundKit);
+      // Drum Beat & Sound
+      // Was a bare `Boolean(...)` on the kit NAME a vibe used to carry, which
+      // passes on any non-empty string — which is how three vibes shipped
+      // naming a kit that resolved to nothing at all.
+      expect(BEAT_PRESETS.map((p) => p.id), `${vibe.id} names a Beat preset that does not exist`)
+        .toContain(vibe.beatPresetId);
       expect(Boolean(vibe.drumPattern)).toBe(true);
       expect(Boolean(vibe.drumPattern.kick)).toBe(true);
       // No `snare` assertion: `house` (cyber-edm's grid) is clap-only by
@@ -99,32 +100,32 @@ describe('Instant Vibes Mode', () => {
     }
   });
 
-  test("every vibe's soundKit is a real kit", () => {
-    // The sibling of drumGrids.test.ts's "every grid names a real drum kit".
-    // mergeDrumKit takes DRUM_KITS[name] as a Partial<DrumKit> and spreads it
-    // over DEFAULT_DRUM_KIT, so an unknown name silently yields the default
-    // kit — no error, no warning, just the wrong sound. Three vibes shipped
-    // that way ('Hyperpop 2000', 'Minimal Glitch' x2) because the only
-    // assertion here was that soundKit is truthy.
+  test("every vibe's beatPresetId is a real Beat preset", () => {
+    // The sibling of drumGrids.test.ts's "every grid names a real Beat
+    // preset", and strict for the reason recorded there: `setBeatPreset`
+    // falls an unknown id back to the DEFAULT preset, so a typo here is not
+    // an error and not a warning, just the wrong sound under the vibe's name.
+    // Three vibes shipped that way ('Hyperpop 2000', 'Minimal Glitch' x2)
+    // back when the only assertion here was that the field is truthy.
     for (const vibe of RESOLVED_VIBES) {
-      expect(DRUM_KITS[vibe.soundKit], `${vibe.id} -> ${vibe.soundKit}`).toBeTruthy();
+      expect(beatPresetById(vibe.beatPresetId), `${vibe.id} -> ${vibe.beatPresetId}`).toBeTruthy();
     }
   });
 
-  test("a vibe's soundKit agrees with its own grid's kit, or says why not", () => {
+  test("a vibe's beatPresetId agrees with its own grid's, or says why not", () => {
     // A vibe chooses a sound as well as a rhythm, so it MAY disagree with its
     // grid — but every disagreement is deliberate and listed here. An
     // unlisted one is a repoint that forgot its grid, which is exactly how the
     // three dangling names went unnoticed.
     const DELIBERATE_DISAGREEMENT: Record<string, string> = {};
     for (const vibe of RESOLVED_VIBES) {
-      const gridKit = DRUM_GRIDS[vibe.drumGridId].kit;
-      const expected = DELIBERATE_DISAGREEMENT[vibe.id] ?? gridKit;
-      expect(vibe.soundKit, `${vibe.id} (grid ${vibe.drumGridId} -> ${gridKit})`).toBe(expected);
+      const gridPreset = DRUM_GRIDS[vibe.drumGridId].beatPresetId;
+      const expected = DELIBERATE_DISAGREEMENT[vibe.id] ?? gridPreset;
+      expect(vibe.beatPresetId, `${vibe.id} (grid ${vibe.drumGridId} -> ${gridPreset})`).toBe(expected);
     }
   });
 
-  test('applyVibeToStore sets drum pattern, kit, chords, bass, feel, synth presets, and master effects', () => {
+  test('applyVibeToStore sets drum pattern, Beat sound, chords, bass, feel, synth presets, and master effects', () => {
     const lofiVibe = RESOLVED_VIBES.find((v) => v.id === 'lofi-chill')!;
     applyVibeToStore(lofiVibe);
 
@@ -132,7 +133,10 @@ describe('Instant Vibes Mode', () => {
     expect(state.bpm).toBe(lofiVibe.bpm);
     expect(state.scaleRoot).toBe(lofiVibe.scaleRoot);
     expect(state.scaleType).toBe(lofiVibe.scaleType);
-    expect(state.soundKit).toBe(lofiVibe.soundKit);
+    // The Beat SOUND, installed whole and recorded as the base — the patch is
+    // the preset's own, not a merge over whatever the loop was holding.
+    expect(state.beatParams.basePresetId).toBe(lofiVibe.beatPresetId);
+    expect(state.beatParams.voices).toEqual(beatPresetById(lofiVibe.beatPresetId)!.patch.voices);
     expect(state.chordRhythmId).toBe(lofiVibe.chordRhythmId);
     expect(state.chordFeel).toBe(lofiVibe.chordFeel);
     expect(state.chordSynthParams.sourcePresetId).toBe(presetById(lofiVibe.chordPresetId)!.id);
@@ -142,7 +146,7 @@ describe('Instant Vibes Mode', () => {
     expect(state.synthParams.sourcePresetId).toBe(presetById(lofiVibe.synthPresetId)!.id);
   });
 
-  test('applyVibeToStore actually rewrites the sequencer track steps to match the vibe drum pattern', () => {
+  test('applyVibeToStore actually rewrites the Beat pattern to match the vibe drum grid', () => {
     const synthwave = RESOLVED_VIBES.find((v) => v.id === 'synthwave-80s')!;
 
     // Seed TWO distinguishing `true`s before applying the vibe: one in the
@@ -155,49 +159,52 @@ describe('Instant Vibes Mode', () => {
     // own unit tests.
     //
     // The in-window one is what makes the omitted-row branch below able to
-    // fail. The four tracks this grid omits are exactly the four that ship
-    // silent, so without a seeded hit inside the window, "cleared to false"
-    // and "left untouched" are the same array — and replaceDrumPattern
-    // regressing from clearing to merging would pass unnoticed.
-    const before = useAppStore.getState().sequencerTracks;
-    useAppStore
-      .getState()
-      .setSequencerTracks(before.map((t) => ({ ...t, steps: t.steps.map((v, i) => (i === 3 || i === 20 ? true : v)) })));
+    // fail. The four voices this grid omits ship silent, so without a seeded
+    // hit inside the window, "cleared to false" and "left untouched" are the
+    // same array — and replaceBeatPattern regressing from clearing to merging
+    // would pass unnoticed.
+    const seeded = { ...useAppStore.getState().beatPattern.rows };
+    for (const voice of BEAT_VOICE_IDS) {
+      seeded[voice] = seeded[voice].map((v, i) => (i === 3 || i === 20 ? true : v));
+    }
+    useAppStore.setState({ beatPattern: { rows: seeded } });
 
     applyVibeToStore(synthwave);
 
-    const tracks = useAppStore.getState().sequencerTracks;
+    const rows = useAppStore.getState().beatPattern.rows;
     // Every row this grid's pattern defines shares one meter width; borrow it
     // from any defined row to check the omitted rows' active window below.
     const windowLength = Object.values(synthwave.drumPattern)[0]!.length;
-    for (const track of tracks) {
-      const vibeSteps = synthwave.drumPattern[track.instrument];
-      // drum-slice4 task 7 renamed INITIAL_SEQUENCER_TRACKS's `tom` entry to
-      // `lowtom`, matching the grid row's own name — replaceDrumPattern
-      // matches rows to tracks BY NAME, so every canonical track this grid's
-      // origin group actually defines finds its row.
+    for (const voice of BEAT_VOICE_IDS) {
+      const vibeSteps = synthwave.drumPattern[voice];
+      const row = rows[voice];
       if (vibeSteps === undefined) {
-        // Decision 10 (permanent, not a Task 11 gap): an omitted row is as
-        // legal as an all-false one, because replaceDrumPattern clears any
-        // track the pattern does not name. Task 8 is what first creates
-        // tracks in this state — four of the eleven, since this grid still
-        // carries only the seven rows it was authored with — so this branch
-        // pins the shape that clearing takes: the active window clears to
-        // false, and the wider-meter padding beyond it survives untouched.
-        expect(track.steps.slice(0, windowLength).every((v) => v === false), track.instrument).toBe(true);
-        expect(track.steps[20], track.instrument).toBe(true);
+        // An omitted row is as legal as an all-false one, because
+        // replaceBeatPattern CLEARS any voice the grid does not name: a vibe
+        // gives you that grid, never that grid plus the last one's leftovers.
+        // Only the active window clears; the wider-meter padding survives.
+        expect(row.slice(0, windowLength).every((v) => v === false), voice).toBe(true);
+        expect(row[20], voice).toBe(true);
         continue;
       }
-      // Store rows are always 24-wide; the vibe's 16-step pattern lands in the
-      // window and the untouched padding stays silent.
-      expect(track.steps.length).toBe(24);
-      expect(track.steps.slice(0, vibeSteps.length)).toEqual(vibeSteps);
-      // Padding invariant: the seeded `true` at index 20 must survive.
-      expect(track.steps[20]).toBe(true);
+      // Stored rows are always 24-wide; the vibe's 16-step grid lands in the
+      // window and the untouched padding keeps its seeded hit.
+      expect(row.length).toBe(MAX_STEPS_PER_BAR);
+      expect(row.slice(0, vibeSteps.length), voice).toEqual(vibeSteps);
+      expect(row[20], voice).toBe(true);
       expect(
-        track.steps.slice(vibeSteps.length).every((v, i) => (vibeSteps.length + i === 20 ? v === true : v === false)),
+        row.slice(vibeSteps.length).every((v, i) => (vibeSteps.length + i === 20 ? v === true : v === false)),
+        voice,
       ).toBe(true);
     }
+    // ...and the hits are genuinely inside the WINDOW the stepper reads. The
+    // sweep above compares against the grid, so it would pass on an all-false
+    // row if the grid had one; and a whole-row `some` would be satisfied by
+    // the seeded padding hit at index 20 alone, which is outside the 16-step
+    // window and never sounds. This is the assertion that says the vibe put
+    // audible hits where playback looks.
+    expect(rows.kick.slice(0, windowLength).filter((v) => v).length).toBeGreaterThan(0);
+    expect(synthwave.drumPattern.kick!.filter((v) => v).length).toBeGreaterThan(0);
   });
 
   test('applies synthwave vibe with tight feel and its own arp setting', () => {
@@ -214,6 +221,22 @@ describe('Instant Vibes Mode', () => {
     // "exactly one vibe arms an arpeggiator" test below owns the rule itself.
     expect(state.synthArpSettings).toEqual(synthwave.arp.synth);
     expect(synthwave.arp.synth.active).toBe(false);
+  });
+});
+
+describe("a vibe's Beat sound and Beat pattern", () => {
+  test('the Beat sound and the Beat pattern are two independent writes', () => {
+    // The grid a vibe names carries its own `beatPresetId` as provenance and
+    // nothing applies it; the vibe's own `beatPresetId` is what becomes the
+    // sound. Applying the vibe must therefore write the VIBE's preset, never
+    // the grid's, and must write the grid's rows either way.
+    const vibe = RESOLVED_VIBES.find((v) => v.id === 'lofi-chill')!;
+    applyVibeToStore(vibe);
+    const state = useAppStore.getState();
+    expect(state.beatParams.basePresetId).toBe(vibe.beatPresetId);
+    expect(state.beatPattern.rows.kick.slice(0, vibe.drumPattern.kick!.length)).toEqual(
+      vibe.drumPattern.kick!,
+    );
   });
 });
 
@@ -680,7 +703,7 @@ describe('vibe meters', () => {
     // End-state sanity check only — NOT an ordering pin. Starting from a
     // narrower meter, applying a vibe leaves the transport at the vibe's own
     // meter and the grid holding the vibe's authored hits. It cannot by
-    // itself prove setMeter ran before replaceDrumPattern: adaptStepRow
+    // itself prove setMeter ran before replaceBeatPattern: adaptStepRow
     // truncates a longer source row rather than stretching it, so
     // synthwave's kick step 12 — inside both a 14- and a 16-step window —
     // survives either call order (confirmed by manually swapping the two
@@ -688,15 +711,14 @@ describe('vibe meters', () => {
     // call-order recorder in the next test.
     useAppStore.getState().setMeter('7/8');
     applyVibeToStore(RESOLVED_VIBES[1]);
-    const kick = useAppStore.getState().sequencerTracks.find((t) => t.instrument === 'kick')!;
     expect(useAppStore.getState().meterId).toBe('4/4');
-    expect(kick.steps[12]).toBe(true);
+    expect(useAppStore.getState().beatPattern.rows.kick[12]).toBe(true);
   });
 
-  test('setMeter runs before replaceDrumPattern — the order the drum grid depends on', () => {
+  test('setMeter runs before replaceBeatPattern — the order the drum grid depends on', () => {
     // Order-pin via a call recorder (same technique as `focusSynthTarget` in
     // synthControl.test.ts), rather than relying on drum-cell data to expose
-    // a reorder: replaceDrumPattern reads the ACTIVE meter to decide
+    // a reorder: replaceBeatPattern reads the ACTIVE meter to decide
     // how to window the incoming rows, so if setMeter ran after it, the grid
     // would be adapted against the OUTGOING vibe's bar length. This directly
     // observes which of the two ran first, independent of any one vibe's
@@ -704,26 +726,26 @@ describe('vibe meters', () => {
     const order: string[] = [];
     const originals = {
       setMeter: useAppStore.getState().setMeter,
-      replaceDrumPattern: useAppStore.getState().replaceDrumPattern,
+      replaceBeatPattern: useAppStore.getState().replaceBeatPattern,
     };
     useAppStore.setState({
       setMeter: (id) => {
         order.push('setMeter');
         originals.setMeter(id);
       },
-      replaceDrumPattern: (pattern) => {
-        order.push('replaceDrumPattern');
-        originals.replaceDrumPattern(pattern);
+      replaceBeatPattern: (rows) => {
+        order.push('replaceBeatPattern');
+        originals.replaceBeatPattern(rows);
       },
     });
 
     try {
       applyVibeToStore(RESOLVED_VIBES[0]);
     } finally {
-      useAppStore.setState({ setMeter: originals.setMeter, replaceDrumPattern: originals.replaceDrumPattern });
+      useAppStore.setState({ setMeter: originals.setMeter, replaceBeatPattern: originals.replaceBeatPattern });
     }
 
-    expect(order).toEqual(['setMeter', 'replaceDrumPattern']);
+    expect(order).toEqual(['setMeter', 'replaceBeatPattern']);
   });
 
   test("each vibe's rhythm and bass pools stay inside its own meter", () => {
@@ -981,5 +1003,32 @@ describe('applyVibeToStore — the FX track', () => {
     useAppStore.setState({ leadMelodySteps: steps });
     applyVibeToStore(resolveVibe(VIBES.find((v) => v.id === 'lofi-chill')!));
     expect(useAppStore.getState().leadMelodySteps[0]).toEqual([{ note: 'E4', len: 6 }]);
+  });
+});
+
+describe("a vibe's Beat filter override", () => {
+  /**
+   * The filter override, laid OVER the preset's own filter and not merged into
+   * it — the one part of a Beat patch a vibe may state for itself.
+   *
+   * Its own test because it is the half that silently stopped working: the
+   * write went to a legacy field the audio path had already stopped reading,
+   * so eight vibes shipped an override that reached nothing. The assertion is
+   * the OVERRIDE's values and explicitly not the preset's, so an apply that
+   * quietly drops it fails here rather than agreeing with the preset.
+   */
+  test('applyVibeToStore lays the vibe\'s Beat filter over the preset it installed', () => {
+    const lofiVibe = RESOLVED_VIBES.find((v) => v.id === 'lofi-chill')!;
+    expect(lofiVibe.beatFilterCutoff).toBeDefined();
+    applyVibeToStore(lofiVibe);
+    const { beatParams } = useAppStore.getState();
+    expect(beatParams.filter).toEqual({
+      type: lofiVibe.beatFilterType!,
+      cutoff: lofiVibe.beatFilterCutoff!,
+      resonance: lofiVibe.beatFilterResonance!,
+    });
+    expect(beatParams.filter).not.toEqual(beatPresetById(lofiVibe.beatPresetId)!.patch.filter);
+    // The rest of the patch is still the preset's, untouched by the override.
+    expect(beatParams.voices).toEqual(beatPresetById(lofiVibe.beatPresetId)!.patch.voices);
   });
 });

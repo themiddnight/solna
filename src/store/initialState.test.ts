@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { presetById } from '@/utils/synthPresets';
-import { PAD_INTERVALS } from '../types';
+import { PAD_INTERVALS, type BeatVoiceId } from '../types';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
-import { DRUM_TYPES } from '../data/drumKits';
-import { defaultPadState, defaultTrackSynth, INITIAL_SEQUENCER_TRACKS, TRACK_SYNTH_PRESET_IDS } from './initialState';
+import { BEAT_VOICE_IDS, DEFAULT_BEAT_PRESET_ID } from '../data/beatPresets';
+import { defaultBeatState } from './beatPresets';
+import { defaultPadState, defaultTrackSynth, TRACK_SYNTH_PRESET_IDS } from './initialState';
 import { SUBTRACTIVE_INIT, SUBTRACTIVE_INIT_PRESET_ID } from '@/utils/synthPresets';
 
 describe('track patch defaults', () => {
@@ -60,45 +61,57 @@ describe('pad defaults', () => {
   });
 });
 
-describe('INITIAL_SEQUENCER_TRACKS', () => {
-  test('every track is coloured from the drum namespace, one token per voice', () => {
-    expect(INITIAL_SEQUENCER_TRACKS.map((t) => t.color)).toEqual(
-      DRUM_TYPES.map((voice) => `bg-drum-${voice}`),
+describe('the Beat state a fresh loop starts on', () => {
+  test('it names the default preset and stores one full-width row per voice', () => {
+    const { beatPattern, beatMix, beatParams } = defaultBeatState();
+    expect(beatParams.basePresetId).toBe(DEFAULT_BEAT_PRESET_ID);
+    for (const voice of BEAT_VOICE_IDS) {
+      expect(beatPattern.rows[voice], voice).toHaveLength(MAX_STEPS_PER_BAR);
+      expect(beatMix.voices[voice].muted, voice).toBe(false);
+    }
+  });
+
+  /**
+   * THE STARTER BEAT, pinned as step indexes.
+   *
+   * It is not decoration and it is not new: these are exactly the rows the
+   * table this model replaced shipped, and they are what a brand-new project
+   * plays the first time somebody presses play. An empty grid there means the
+   * first thing a new user hears is nothing, which is why this is a test and
+   * not a comment — the default went briefly empty during this rewrite with
+   * nothing failing.
+   *
+   * Written as indexes rather than as a row of twenty-four booleans so a
+   * reader can see the groove: four-on-the-floor kick, backbeat snare and
+   * clap, eighths on the closed hat, one open hat lifting into beat four.
+   */
+  test('it ships the starter groove, and the accent voices ship silent', () => {
+    const { beatPattern } = defaultBeatState();
+    const onsets = (voice: BeatVoiceId) =>
+      beatPattern.rows[voice].flatMap((on, i) => (on ? [i] : []));
+    expect(onsets('kick')).toEqual([0, 4, 8, 12]);
+    expect(onsets('snare')).toEqual([4, 12]);
+    expect(onsets('clap')).toEqual([4, 12]);
+    expect(onsets('hihat')).toEqual([0, 2, 4, 6, 8, 10, 12, 14]);
+    expect(onsets('openhat')).toEqual([10]);
+    for (const voice of ['rimshot', 'hitom', 'lowtom', 'ride', 'crash', 'bell'] as const) {
+      expect(onsets(voice), voice).toEqual([]);
+    }
+    // Every onset is inside a 4/4 bar, so the starter beat is fully audible at
+    // the default meter rather than partly parked in wider-meter padding.
+    for (const voice of BEAT_VOICE_IDS) {
+      for (const step of onsets(voice)) expect([voice, step < 16]).toEqual([voice, true]);
+    }
+  });
+
+  test('no two rows share an array', () => {
+    const rows = BEAT_VOICE_IDS.map((voice) => defaultBeatState().beatPattern.rows[voice]);
+    expect(new Set(rows).size).toBe(rows.length);
+  });
+
+  test('two calls never share a row object', () => {
+    expect(defaultBeatState().beatPattern.rows.kick).not.toBe(
+      defaultBeatState().beatPattern.rows.kick,
     );
-  });
-
-  test('every track stores a full-width bar', () => {
-    for (const t of INITIAL_SEQUENCER_TRACKS) {
-      expect(t.steps.length, t.instrument).toBe(MAX_STEPS_PER_BAR);
-    }
-  });
-
-  test('the sequencer ships one track per drum voice, in the canonical order', () => {
-    expect(INITIAL_SEQUENCER_TRACKS.map((t) => t.instrument)).toEqual([...DRUM_TYPES]);
-  });
-
-  test('every track id follows its instrument, and every bar is stored at the widest width', () => {
-    for (const track of INITIAL_SEQUENCER_TRACKS) {
-      expect(track.id, `${track.instrument} id`).toBe(`track-${track.instrument}`);
-      expect(track.steps, `${track.instrument} bar width`).toHaveLength(24);
-    }
-  });
-
-  test('the four new voices ship silent — a fresh session sounds like the old one plus nothing', () => {
-    for (const added of ['rimshot', 'hitom', 'ride', 'bell']) {
-      const track = INITIAL_SEQUENCER_TRACKS.find((t) => t.instrument === added)!;
-      expect(track.steps.some(Boolean), `${added} must ship silent`).toBe(false);
-    }
-  });
-
-  test('the factory beat that was on `tom` is now on `lowtom`, and it is still empty', () => {
-    expect(INITIAL_SEQUENCER_TRACKS.some((t) => t.instrument === 'tom')).toBe(false);
-    const lowtom = INITIAL_SEQUENCER_TRACKS.find((t) => t.instrument === 'lowtom')!;
-    expect(lowtom.steps.some(Boolean)).toBe(false);
-  });
-
-  test('no two tracks share a steps array', () => {
-    const arrays = INITIAL_SEQUENCER_TRACKS.map((t) => t.steps);
-    expect(new Set(arrays).size).toBe(arrays.length);
   });
 });

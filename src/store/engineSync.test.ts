@@ -26,7 +26,7 @@ function withCutoff(base: ActiveSynth, cutoffHz: number): ActiveSynth {
     },
   };
 }
-import { DEFAULT_FADER_DB, faderDbToGain } from './levelUnits';
+import { DEFAULT_BUS_TRIM_DB, DEFAULT_FADER_DB, faderDbToGain } from './levelUnits';
 
 // bun's parallel workers share module singletons (the store) across test
 // files, so transport state can leak in from earlier files — normalize what
@@ -237,53 +237,121 @@ describe('engineSync: synth params and drum levels', () => {
     updateSynthPatch.mockRestore();
   });
 
-  test('a per-track drum level converts dB to linear gain at the boundary', () => {
+  test('a per-voice Beat level converts dB to linear gain at the boundary', () => {
     startEngineSync();
-    const kick = useAppStore.getState().sequencerTracks[0];
-    // Cleared AFTER startEngineSync's fireImmediately push (every factory
-    // track starts at unity, DEV-386's own change) so each assertion below
-    // is a genuine change, not a same-value no-op the equality-guarded
-    // subscription would (correctly) suppress.
+    // Cleared AFTER startEngineSync's fireImmediately push (every voice starts
+    // at unity) so each assertion below is a genuine change, not a same-value
+    // no-op the equality-guarded subscription would (correctly) suppress.
     const setDrumTrackGain = spyOn(audioEngine, 'setDrumTrackGain').mockClear();
-    // pushDrumTrackGains re-pushes every track on any change (see its own
-    // comment in engineSync.ts), so kick's own call is found by instrument,
-    // not by position.
-    const callFor = (instrument: string) =>
-      setDrumTrackGain.mock.calls.find((c) => c[0] === instrument) as [string, number];
+    // The push re-sends every voice on any change, so kick's own call is found
+    // by voice, not by position.
+    const callFor = (voice: string) =>
+      setDrumTrackGain.mock.calls.find((c) => c[0] === voice) as [string, number];
 
-    useAppStore.getState().setTrackVolume(kick.id, -6);
-    expect(callFor(kick.instrument)[1]).toBeCloseTo(0.5011872, 6);
+    useAppStore.getState().setBeatVoiceLevel('kick', -6);
+    expect(callFor('kick')[1]).toBeCloseTo(0.5011872, 6);
 
     setDrumTrackGain.mockClear();
-    useAppStore.getState().setTrackVolume(kick.id, 0);
-    expect(callFor(kick.instrument)[1]).toBeCloseTo(1, 6);
+    useAppStore.getState().setBeatVoiceLevel('kick', 0);
+    expect(callFor('kick')[1]).toBeCloseTo(1, 6);
   });
 
-  test('a voice whose track disappears is reset to unity, not left attenuated', () => {
-    // The engine's drumTrackGains map outlives any one roster. Pull hitom
-    // down, then swap in a roster that has no hitom track at all — reachable
-    // from a loop switch or a sanitized import — and the vanished track's
-    // attenuation must not survive on the pad.
+  /**
+   * One mute decision, expressed in two places that must agree: the engine
+   * voice gain here and the scheduled hit `beatStepEvents` skips. A muted
+   * voice therefore builds no voice AND would be silent if one were built —
+   * never a fader value the pads would still play through.
+   */
+  test('a muted Beat voice reaches the engine as a gain of 0, not as its fader value', () => {
+    useAppStore.getState().setBeatVoiceLevel('snare', 0);
     startEngineSync();
-    const tracks = useAppStore.getState().sequencerTracks;
-    const hitom = tracks.find((t) => t.instrument === 'hitom')!;
-    useAppStore.getState().setTrackVolume(hitom.id, -30);
-
     const setDrumTrackGain = spyOn(audioEngine, 'setDrumTrackGain').mockClear();
-    useAppStore.setState({ sequencerTracks: tracks.filter((t) => t.instrument !== 'hitom') });
+    const callFor = (voice: string) =>
+      setDrumTrackGain.mock.calls.find((c) => c[0] === voice) as [string, number];
 
-    const call = setDrumTrackGain.mock.calls.find((c) => c[0] === 'hitom') as [string, number];
-    expect(call).toBeDefined();
-    expect(call[1]).toBeCloseTo(1, 6);
+    useAppStore.getState().toggleBeatVoiceMuted('snare');
+    expect(callFor('snare')[1]).toBe(0);
+
+    setDrumTrackGain.mockClear();
+    useAppStore.getState().toggleBeatVoiceMuted('snare');
+    expect(callFor('snare')[1]).toBeCloseTo(1, 6);
   });
 
-  test('an unrelated store write does not re-push the track gains', () => {
+  test('an unrelated store write does not re-push the voice gains', () => {
     startEngineSync();
     const setDrumTrackGain = spyOn(audioEngine, 'setDrumTrackGain').mockClear();
     useAppStore.getState().setBpm(131);
     expect(setDrumTrackGain).not.toHaveBeenCalled();
   });
 
+});
+
+describe('engineSync: the Beat instrument', () => {
+  afterEach(() => {
+    useAppStore.getState().setBeatPreset('retro-drive');
+  });
+
+  test('the bootstrap installs the loop`s own Beat Params — voices, trim and filter', () => {
+    const setDrumKit = spyOn(audioEngine, 'setDrumKit').mockClear();
+    const setBeatFilter = spyOn(audioEngine, 'setBeatFilter').mockClear();
+    startEngineSync();
+
+    const params = useAppStore.getState().beatParams;
+    expect(setDrumKit).toHaveBeenCalledWith(params.voices, params.outputTrimDb);
+    // `undefined` for the time: a live push means "now", and only the offline
+    // render's pass boundary supplies one.
+    expect(setBeatFilter).toHaveBeenCalledWith(
+      params.filter.cutoff, params.filter.resonance, params.filter.type, undefined,
+    );
+    setDrumKit.mockRestore();
+    setBeatFilter.mockRestore();
+  });
+
+  /**
+   * A vibe, a preset pick and a committed knob release all land here: they
+   * write `beatParams` and nothing else, so this subscription is the ONLY
+   * thing that makes the kit a user picked the kit a user hears.
+   */
+  test('a committed params change reaches the engine', () => {
+    startEngineSync();
+    const setDrumKit = spyOn(audioEngine, 'setDrumKit').mockClear();
+
+    useAppStore.getState().setBeatPreset('lo-fi-vinyl');
+
+    const params = useAppStore.getState().beatParams;
+    expect(setDrumKit).toHaveBeenCalledWith(params.voices, params.outputTrimDb);
+    setDrumKit.mockRestore();
+  });
+
+  test('applyEngineSnapshot re-applies the Beat Params after the AudioContext exists', () => {
+    startEngineSync();
+    useAppStore.getState().setBeatPreset('lo-fi-vinyl');
+    const setDrumKit = spyOn(audioEngine, 'setDrumKit').mockClear();
+
+    applyEngineSnapshot();
+
+    const params = useAppStore.getState().beatParams;
+    expect(setDrumKit).toHaveBeenCalledWith(params.voices, params.outputTrimDb);
+    setDrumKit.mockRestore();
+  });
+
+  test('the Beat bus fader and mute read beatMix, not a flat field', () => {
+    startEngineSync();
+    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
+    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+
+    useAppStore.getState().setBeatLevel(-12);
+    const gainCall = setSourceGain.mock.calls.find((c) => c[0] === 'sequencer') as [string, number];
+    expect(gainCall[1]).toBeCloseTo(faderDbToGain(-12), 6);
+
+    useAppStore.getState().toggleBeatMuted();
+    expect(lastMutedFor(setSourceMuted.mock.calls, 'sequencer')).toBe(true);
+
+    useAppStore.getState().toggleBeatMuted();
+    useAppStore.getState().setBeatLevel(DEFAULT_BUS_TRIM_DB);
+    setSourceGain.mockRestore();
+    setSourceMuted.mockRestore();
+  });
 });
 
 describe('engineSync meter bridge: the meter and the snapshot', () => {
@@ -342,8 +410,8 @@ describe('engineSync meter bridge: effects debounce and bus faders', () => {
       chordVolume: -60,
       bassVolume: 3,
       padVolume: -12,
-      masterSequencerVolume: 12,
     });
+    useAppStore.getState().setBeatLevel(12);
     const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
     applyEngineSnapshot();
     expect(setSourceGain).toHaveBeenCalledWith('synth', faderDbToGain(-6));
@@ -356,8 +424,8 @@ describe('engineSync meter bridge: effects debounce and bus faders', () => {
       chordVolume: DEFAULT_FADER_DB,
       bassVolume: DEFAULT_FADER_DB,
       padVolume: DEFAULT_FADER_DB,
-      masterSequencerVolume: DEFAULT_FADER_DB,
     });
+    useAppStore.getState().setBeatLevel(DEFAULT_BUS_TRIM_DB);
   });
 
   // The knob path, not the bus path. Without this subscription a filter/detune
@@ -442,8 +510,8 @@ describe('engineSync meter bridge: every bus fader from dB to gain', () => {
       chordVolume: -60,
       bassVolume: 6,
       padVolume: -12,
-      masterSequencerVolume: 12,
     });
+    useAppStore.getState().setBeatLevel(12);
     const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
     startEngineSync();
     expect(setSourceGain).toHaveBeenCalledWith('synth', faderDbToGain(-3));
@@ -459,8 +527,8 @@ describe('engineSync meter bridge: every bus fader from dB to gain', () => {
       chordVolume: DEFAULT_FADER_DB,
       bassVolume: DEFAULT_FADER_DB,
       padVolume: DEFAULT_FADER_DB,
-      masterSequencerVolume: DEFAULT_FADER_DB,
     });
+    useAppStore.getState().setBeatLevel(DEFAULT_BUS_TRIM_DB);
   });
 
   // Optional-1 (bass on the subscription path was the one bus whose live
@@ -485,15 +553,15 @@ describe('engineSync meter bridge: every bus fader from dB to gain', () => {
     useAppStore.getState().setBassVolume(-6);
     expect(setSourceGain.mock.calls.at(-1)).toEqual(['bass', faderDbToGain(-6)]);
 
-    useAppStore.getState().setMasterSequencerVolume(12);
-    expect((setSourceGain.mock.calls.at(-1) as [string, number])[1]).toBeCloseTo(3.9810717, 6);
+    useAppStore.getState().setBeatLevel(12);
+    expect(setSourceGain.mock.calls.at(-1)).toEqual(['sequencer', faderDbToGain(12)]);
 
     useAppStore.setState({
       synthVolume: DEFAULT_FADER_DB,
       chordVolume: DEFAULT_FADER_DB,
       bassVolume: DEFAULT_FADER_DB,
-      masterSequencerVolume: DEFAULT_FADER_DB,
     });
+    useAppStore.getState().setBeatLevel(DEFAULT_BUS_TRIM_DB);
   });
 
   // DEV-387 shipped this as four setPresetTrim calls in the snapshot path plus
@@ -566,6 +634,12 @@ function lastMutedFor(calls: readonly unknown[][], source: string): boolean {
   throw new Error(`setSourceMuted was never called with source '${source}'`);
 }
 
+/** The Beat bus mute is a field of `beatMix`, and the slice's own toggle is the
+ *  only writer — so these tests set it the way the app does. */
+function setBeatBusMuted(muted: boolean): void {
+  if (useAppStore.getState().beatMix.muted !== muted) useAppStore.getState().toggleBeatMuted();
+}
+
 describe('track solo reaches the engine as bus audibility', () => {
   afterEach(() => {
     useAppStore.setState({
@@ -574,8 +648,8 @@ describe('track solo reaches the engine as bus audibility', () => {
       chordMuted: false,
       bassMuted: false,
       padMuted: false,
-      drumMuted: false,
     });
+    setBeatBusMuted(false);
   });
 
   test('soloing drums silences the four melodic buses and keeps the drum bus open', () => {
@@ -594,7 +668,8 @@ describe('track solo reaches the engine as bus audibility', () => {
   });
 
   test('solo beats mute: a muted bus opens when it is soloed', () => {
-    useAppStore.setState({ soloTracks: [], drumMuted: true });
+    useAppStore.setState({ soloTracks: [] });
+    setBeatBusMuted(true);
     const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
     startEngineSync();
     setSourceMuted.mockClear();
@@ -671,8 +746,8 @@ describe('track solo reaches the engine as bus audibility', () => {
       chordMuted: true,
       bassMuted: false,
       padMuted: true,
-      drumMuted: false,
     });
+    setBeatBusMuted(false);
     const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
 
     startEngineSync();
@@ -694,9 +769,10 @@ describe('track solo reaches the engine as bus audibility', () => {
   // guards the boundary between the bus-audibility layer here and the
   // per-voice drum mute layer in useSequencerPlayback.ts, so it stays even
   // though it is off-target for engineSync.ts itself.
-  test('solo leaves the per-voice drum mute layer untouched', () => {
-    const before = useAppStore.getState().sequencerTracks.map((t) => t.muted);
+  test('solo leaves the per-voice Beat mute layer untouched', () => {
+    const voiceMutes = () => Object.values(useAppStore.getState().beatMix.voices).map((v) => v.muted);
+    const before = voiceMutes();
     useAppStore.getState().toggleSoloTrack('drums');
-    expect(useAppStore.getState().sequencerTracks.map((t) => t.muted)).toEqual(before);
+    expect(voiceMutes()).toEqual(before);
   });
 });

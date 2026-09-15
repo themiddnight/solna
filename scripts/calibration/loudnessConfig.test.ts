@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { mergeDrumKit } from '@/audio/drumKits';
-import { DRUM_KITS, DRUM_TYPES, type DrumKit } from '@/data/drumKits';
+import { BEAT_PRESETS, BEAT_VOICE_IDS } from '@/data/beatPresets';
 import { SYNTH_PRESETS } from '@/data/synthPresets';
+import type { BeatVoices } from '@/types';
 import {
-  DRUM_HASH_EXCLUDED,
+  BEAT_HASH_EXCLUDED,
   SYNTH_HASH_EXCLUDED,
-  drumLoudnessHash,
+  beatLoudnessHash,
   hashLoudnessConfig,
   presetLoudnessHash,
 } from './loudnessConfig.ts';
@@ -22,47 +22,96 @@ describe('hashLoudnessConfig', () => {
   });
 });
 
-describe('the drum hash', () => {
+describe('the beat hash', () => {
   test('excludes reverbSend and nothing else', () => {
-    expect(DRUM_HASH_EXCLUDED).toEqual(['reverbSend']);
+    expect(BEAT_HASH_EXCLUDED).toEqual(['reverbSend']);
   });
 
-  test('two different kits hash differently', () => {
-    expect(drumLoudnessHash('Retro Drive')).not.toBe(drumLoudnessHash('808 Vintage'));
+  test('two different presets hash differently', () => {
+    expect(beatLoudnessHash('retro-drive')).not.toBe(beatLoudnessHash('808-vintage'));
   });
 
-  test('the kit name is inside the hash, so an entry cannot be copy-pasted between kits', () => {
-    // Even were two kits' merged voices identical, their hashes must differ.
-    const a = hashLoudnessConfig({ kit: 'A', voices: { kick: { gain: 0.9 } } });
-    const b = hashLoudnessConfig({ kit: 'B', voices: { kick: { gain: 0.9 } } });
+  test('every factory preset produces a distinct hash', () => {
+    const hashes = BEAT_PRESETS.map((preset) => beatLoudnessHash(preset.id));
+    expect(new Set(hashes).size).toBe(BEAT_PRESETS.length);
+  });
+
+  test('the preset id is inside the hash, so an entry cannot be copy-pasted between presets', () => {
+    // Even were two presets' voices identical, their hashes must differ.
+    const a = hashLoudnessConfig({ preset: 'a', voices: { kick: { gain: 0.9 } } });
+    const b = hashLoudnessConfig({ preset: 'b', voices: { kick: { gain: 0.9 } } });
     expect(a).not.toBe(b);
   });
 
-  test('is stable across repeated calls', () => {
-    expect(drumLoudnessHash('Warehouse')).toBe(drumLoudnessHash('Warehouse'));
+  test('an unknown id throws rather than hashing nothing', () => {
+    expect(() => beatLoudnessHash('no-such-preset')).toThrow();
   });
 
-  test('a change to ANY voice moves the hash, not just kick — the whole kit is one fingerprint', () => {
-    // Mirrors drumLoudnessHash's own construction (merge, then omit DRUM_HASH_EXCLUDED
-    // per voice) so this proves the real function's sensitivity, not a reimplementation's.
-    const buildVoices = (kit: DrumKit): Record<string, unknown> => {
-      const record = kit as unknown as Record<string, Record<string, unknown>>;
-      const voices: Record<string, unknown> = {};
-      for (const voice of DRUM_TYPES) {
-        const params = { ...record[voice]! };
-        for (const excluded of DRUM_HASH_EXCLUDED) delete params[excluded];
-        voices[voice] = params;
-      }
-      return voices;
-    };
-    const base = mergeDrumKit(DRUM_KITS['Retro Drive']);
-    const baseHash = hashLoudnessConfig({ kit: 'Retro Drive', voices: buildVoices(base) });
-    expect(baseHash).toBe(drumLoudnessHash('Retro Drive'));
+  test('is stable across repeated calls', () => {
+    expect(beatLoudnessHash('warehouse')).toBe(beatLoudnessHash('warehouse'));
+  });
 
-    // ride — not kick, not snare, not hihat — proves the fingerprint is whole-kit.
-    const rideChanged: DrumKit = { ...base, ride: { ...base.ride, gain: base.ride.gain + 0.05 } };
-    const rideHash = hashLoudnessConfig({ kit: 'Retro Drive', voices: buildVoices(rideChanged) });
+  test('retuning the embedded output trim does NOT move the hash', () => {
+    // The uncalibrated render withholds it, exactly as it neutralises the
+    // synth half's `common.outputGainDb`, so it provably cannot move the
+    // measurement. The lock test is what guards it instead.
+    const preset = BEAT_PRESETS[0];
+    if (!preset) throw new Error('Unreachable: BEAT_PRESETS is non-empty');
+    const before = beatLoudnessHash(preset.id);
+    const original = preset.patch.outputTrimDb;
+    (preset.patch as { outputTrimDb: number }).outputTrimDb = original + 4;
+    try {
+      expect(beatLoudnessHash(preset.id)).toBe(before);
+    } finally {
+      (preset.patch as { outputTrimDb: number }).outputTrimDb = original;
+    }
+  });
+
+  test('a change to ANY voice moves the hash, not just kick — the whole patch is one fingerprint', () => {
+    // Mirrors beatLoudnessHash's own construction (omit BEAT_HASH_EXCLUDED per
+    // voice) so this proves the real function's sensitivity, not a
+    // reimplementation's.
+    const preset = BEAT_PRESETS[0];
+    if (!preset) throw new Error('Unreachable: BEAT_PRESETS is non-empty');
+    const buildVoices = (voices: BeatVoices): Record<string, unknown> => {
+      const record = voices as unknown as Record<string, Record<string, unknown>>;
+      const built: Record<string, unknown> = {};
+      for (const voice of BEAT_VOICE_IDS) {
+        const params = { ...record[voice]! };
+        for (const excluded of BEAT_HASH_EXCLUDED) delete params[excluded];
+        built[voice] = params;
+      }
+      return built;
+    };
+    const base = structuredClone(preset.patch.voices);
+    const baseHash = hashLoudnessConfig({
+      preset: preset.id,
+      filter: preset.patch.filter,
+      voices: buildVoices(base),
+    });
+    expect(baseHash).toBe(beatLoudnessHash(preset.id));
+
+    // ride — not kick, not snare, not hihat — proves the fingerprint is whole-patch.
+    const rideChanged: BeatVoices = { ...base, ride: { ...base.ride, gain: base.ride.gain + 0.05 } };
+    const rideHash = hashLoudnessConfig({
+      preset: preset.id,
+      filter: preset.patch.filter,
+      voices: buildVoices(rideChanged),
+    });
     expect(rideHash).not.toBe(baseHash);
+  });
+
+  test('the bus filter is inside the hash — a filtered patch measures differently', () => {
+    const preset = BEAT_PRESETS[0];
+    if (!preset) throw new Error('Unreachable: BEAT_PRESETS is non-empty');
+    const open = beatLoudnessHash(preset.id);
+    const original = preset.patch.filter.cutoff;
+    preset.patch.filter.cutoff = 400;
+    try {
+      expect(beatLoudnessHash(preset.id)).not.toBe(open);
+    } finally {
+      preset.patch.filter.cutoff = original;
+    }
   });
 });
 

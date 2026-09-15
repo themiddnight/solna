@@ -29,7 +29,7 @@ export function createLoopCopySlice(set: Set, get: Get): Pick<LoopSlice, 'applyL
       const target = state.loops.find((loop) => loop.id === targetId);
       if (!source || !target) return;
 
-      const patch = buildLoopCopyPatch(source, target, selected);
+      const patch = buildLoopCopyPatch(source, selected);
       const loops = state.loops.map((loop) =>
         loop.id === targetId ? { ...loop, ...patch } : loop,
       );

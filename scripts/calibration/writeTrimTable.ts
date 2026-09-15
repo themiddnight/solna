@@ -32,8 +32,8 @@ const round = (value: number) => Number(value.toFixed(2));
 const entryLiteral = (entry: GeneratedTrimEntry) =>
   `{ measuredDbfs: ${round(entry.measuredDbfs)}, trimDb: ${round(entry.trimDb)}, configHash: ${JSON.stringify(entry.configHash)} }`;
 
-/** Same flat shape as PRESET_TRIMS now: DRUM_TRIMS is keyed by kit name, one entry
- *  per kit — see the comment on it in src/data/trimTable.ts. */
+/** Same flat shape as PRESET_TRIMS now: DRUM_TRIMS is keyed by Beat preset id, one
+ *  entry per patch — see the comment on it in src/data/trimTable.ts. */
 const renderEntries = (entries: Record<string, GeneratedTrimEntry>): string =>
   Object.keys(entries)
     .sort()
@@ -52,7 +52,7 @@ export function renderTrimTableSource(
  * (scripts/calibration/generateTrimTable.ts); hand edits are overwritten on the next run.
  * See scripts/calibration/README.md for when to re-run and what a flagged entry means.
  *
- * One measured trim per drum KIT (not per voice — a drum kit's voices are not
+ * One measured trim per BEAT PRESET (not per voice — a patch's voices are not
  * independent; see the comment on DRUM_TRIMS below) and per synth preset.
  * \`measuredDbfs\` is what the uncalibrated render measured at; \`trimDb\` is
  * TARGET_DBFS (-18) minus it; \`configHash\` fingerprints exactly the
@@ -62,13 +62,18 @@ export function renderTrimTableSource(
 export interface TrimEntry {
   /** The uncalibrated render's short-term LUFS median, in dBFS. */
   measuredDbfs: number;
-  /** TARGET_DBFS - measuredDbfs. Applied as a linear gain by src/audio/trims.ts. */
+  /** TARGET_DBFS - measuredDbfs. This table is EVIDENCE: the number that ships is
+   *  the copy embedded in the preset's own patch (\`outputTrimDb\`), which the lock
+   *  test keeps equal to this one. */
   trimDb: number;
   /** sha256 over the loudness-affecting config, per scripts/calibration/loudnessConfig.ts. */
   configHash: string;
 }
 
-/** Kit name -> entry, measured from the kit's whole reference pattern (DEV-387). */
+/** Beat preset id -> entry, measured from the patch's whole reference pattern
+ *  (DEV-387). Runtime audio never reads this: the same number is embedded in
+ *  \`BEAT_PRESETS[i].patch.outputTrimDb\`, and the lock test keeps the two equal.
+ *  This table is the calibration EVIDENCE — the measurement the trim came from. */
 export const DRUM_TRIMS: Record<string, TrimEntry> = {
 ${drumBody}
 };

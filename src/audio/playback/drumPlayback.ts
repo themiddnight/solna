@@ -6,6 +6,18 @@ import { audioEngine } from '../engine';
  * second during playback. Callers that fire on a user gesture call this once;
  * the per-step path does not call it at all.
  */
+/**
+ * The velocity an AUDITION tap plays a Beat voice at — the Sound tab's
+ * per-voice Preview button and the Pattern tab's per-track Play button.
+ *
+ * ONE constant, because both buttons exist to compare a voice against its
+ * siblings while tuning: the two surfaces used to pass 0.9 and a bare literal
+ * 0.8, so the same kick was ~1.9 dB louder depending on which tab you pressed
+ * it from, which makes the comparison the buttons are for wrong. A performance
+ * attribute in 0..1, not a level — the Beat fader reaches the bus elsewhere.
+ */
+export const BEAT_PREVIEW_VELOCITY = 0.9;
+
 export function ensureDrumEngine(): void {
   audioEngine.init();
 }

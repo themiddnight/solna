@@ -134,19 +134,6 @@ export interface DrumPad {
   decay: number;
 }
 
-export interface SequencerTrack {
-  id: string;
-  name: string;
-  instrument: string;
-  color: string;
-  /** DECIBELS, relative: unity is 0, the range is -60..+12. A LEVEL a fader
-   *  owns, not a velocity: it becomes a per-instrument GainNode in the drum
-   *  path, fed from engineSync via setDrumTrackGain. */
-  volume: number;
-  muted: boolean;
-  steps: boolean[];
-}
-
 export interface ChordItem {
   id: string;
   root: string;
@@ -213,4 +200,218 @@ export interface MasterEffects {
   limiterAttack: number;
   /** Seconds. */
   limiterRelease: number;
+}
+
+/**
+ * ============================ The Beat instrument ============================
+ *
+ * Beat is the loop's rhythmic instrument. Its three sibling fields — `BeatParams`
+ * (sound), `BeatPattern` (events) and `BeatMix` (levels) — are stored separately
+ * so a sound edit can never replace the pattern or the mix object.
+ *
+ * These replaced an engine-facing kit shape whose voices were PARTIAL — a voice
+ * could omit a field and a merge against one shared default table supplied it.
+ * Every field here is REQUIRED and finite instead, because a patch a user can
+ * edit, save and export must not depend on a default table it does not carry:
+ * a kick with no click is `clickLevel: 0`, not three missing keys.
+ */
+/**
+ * The eleven voices. A literal union rather than a union derived from a const
+ * array, which is the pattern `PAD_MODES` sets, because the array a consumer
+ * iterates cannot live here: it belongs to the factory catalogue, and
+ * `src/data/beatPresets.ts` is a leaf that may import no sibling — so it
+ * declares `BEAT_VOICE_IDS` itself. Two lists and no more:
+ * `beatPresets.test.ts` asserts that array is exactly this union, in this
+ * order, so neither can drift without the other.
+ */
+export type BeatVoiceId =
+  | 'kick' | 'snare' | 'rimshot' | 'clap' | 'hihat' | 'openhat'
+  | 'hitom' | 'lowtom' | 'ride' | 'crash' | 'bell';
+
+/** Kick: a pitch-swept body plus a beater click that is always stated. */
+export interface BeatKickParams {
+  freqStart: number;
+  freqEnd: number;
+  pitchTime: number;
+  decay: number;
+  gain: number;
+  /** Hz. Inert while `clickLevel` is 0, and kept anyway: it is where the click
+   *  lands the moment a user raises the level, so it must be a real value. */
+  clickFreq: number;
+  /** 0..1. Zero IS "no click" — the disabled state, not a missing field. */
+  clickLevel: number;
+  clickDecay: number;
+  /** Level into the drum reverb send, 0..1. The BODY only — the click stays dry. */
+  reverbSend: number;
+}
+
+/** Snare and rimshot: the same two-partial body plus noise block, voiced apart. */
+export interface BeatSnareParams {
+  bodyFreqStart: number;
+  bodyFreqEnd: number;
+  bodyTime: number;
+  bodyDecay: number;
+  bodyGain: number;
+  bodyFreqStart2: number;
+  bodyFreqEnd2: number;
+  bodyGain2: number;
+  noiseFilter: number;
+  noiseDecay: number;
+  noiseGain: number;
+  reverbSend: number;
+}
+
+/** Closed and open hat: a band (`filter` floor, `topCut` ceiling) over a
+ *  bank/noise crossfade. */
+export interface BeatHatParams {
+  filter: number;
+  topCut: number;
+  decay: number;
+  gain: number;
+  /** 0..1 crossfade: 0 is pure noise, 1 is pure metallic bank. */
+  metal: number;
+}
+
+export interface BeatClapParams {
+  filter: number;
+  decay: number;
+  gain: number;
+  reverbSend: number;
+}
+
+export interface BeatTomParams {
+  freqStart: number;
+  freqEnd: number;
+  pitchTime: number;
+  decay: number;
+  gain: number;
+  reverbSend: number;
+}
+
+export interface BeatRideParams {
+  tone: number;
+  ping: number;
+  pingFilter: number;
+  pingDecay: number;
+  washFilter: number;
+  washDecay: number;
+  bodyFilter: number;
+  metal: number;
+  gain: number;
+  reverbSend: number;
+}
+
+export interface BeatCrashParams {
+  filter: number;
+  decay: number;
+  gain: number;
+  reverbSend: number;
+  metal: number;
+}
+
+export interface BeatBellParams {
+  freq1: number;
+  freq2: number;
+  filter: number;
+  decay: number;
+  gain: number;
+  reverbSend: number;
+}
+
+/**
+ * One member per `BeatVoiceId`, written out in canonical order rather than as a
+ * `Record<BeatVoiceId, …>`: the eight parameter families are differently shaped,
+ * so a mapped type would need a cast at every read.
+ */
+export interface BeatVoices {
+  kick: BeatKickParams;
+  snare: BeatSnareParams;
+  rimshot: BeatSnareParams;
+  clap: BeatClapParams;
+  hihat: BeatHatParams;
+  openhat: BeatHatParams;
+  hitom: BeatTomParams;
+  lowtom: BeatTomParams;
+  ride: BeatRideParams;
+  crash: BeatCrashParams;
+  bell: BeatBellParams;
+}
+
+/** The Beat-wide bus filter. `cutoff` is Hz; it drives both the dry and the send
+ *  filter, exactly as the loop's `drumFilter*` fields do today. */
+export interface BeatFilterParams {
+  type: FilterType;
+  cutoff: number;
+  resonance: number;
+}
+
+/**
+ * A complete Beat sound, with no reference to where it came from.
+ *
+ * `outputTrimDb` is measured calibration metadata and is NOT user-editable. It
+ * lives in the patch — the `common.outputGainDb` precedent — so a patch a user
+ * edits, saves or exports stays calibrated, where a name-keyed lookup silently
+ * gave a renamed or user-authored patch somebody else's trim.
+ */
+export interface BeatPatch {
+  outputTrimDb: number;
+  filter: BeatFilterParams;
+  voices: BeatVoices;
+}
+
+/**
+ * What one loop holds. The patch plus the id it was copied from: `basePresetId`
+ * is display and reset provenance, never a DSP input, and it survives editing so
+ * `Edited` can be derived by comparing the patch with its base. An unresolvable
+ * base is `null` — the sound stays exactly as stored and the UI says so.
+ */
+export interface BeatParams extends BeatPatch {
+  basePresetId: string | null;
+}
+
+/** Fixed-width boolean rows, one per voice. Width is the widest meter's bar. */
+export interface BeatPattern {
+  rows: Record<BeatVoiceId, boolean[]>;
+}
+
+/** A user-owned dB fader and mute, per voice. Distinct from the voice `gain`
+ *  inside `BeatPatch`, which is preset voicing a reset restores. */
+export interface BeatVoiceMix {
+  levelDb: number;
+  muted: boolean;
+}
+
+export interface BeatMix {
+  levelDb: number;
+  muted: boolean;
+  voices: Record<BeatVoiceId, BeatVoiceMix>;
+}
+
+/** A named template a patch is copied FROM. User presets carry the same shape. */
+export interface BeatPreset {
+  id: string;
+  name: string;
+  origin: 'factory' | 'user';
+  patch: BeatPatch;
+}
+
+/**
+ * What a factory Beat preset is modelled on. Required, not optional, for the
+ * reason that field records: an optional field makes omission the default and
+ * silence indistinguishable from "nobody looked". It sits on the FACTORY entry
+ * type only — a user preset has no referent, and `BeatPatch` is pure engine
+ * params either way.
+ *
+ * NOT exported: `FactoryBeatPreset` below is the shape every consumer names,
+ * and an exported alias nothing imports is a second public name for one idea.
+ */
+interface BeatPresetReference {
+  referent: string;
+  source: string;
+  reachable: string;
+}
+
+export interface FactoryBeatPreset extends BeatPreset {
+  origin: 'factory';
+  reference: BeatPresetReference;
 }

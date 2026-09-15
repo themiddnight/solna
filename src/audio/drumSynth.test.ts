@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { DRUM_ALIASES, METAL_BAND_B_HZ } from './engine';
-import { DEFAULT_DRUM_KIT, DRUM_TYPES } from '@/data/drumKits';
-import { mergeDrumKit } from './drumKits';
+import { BEAT_VOICE_IDS, DEFAULT_BEAT_VOICES } from '@/data/beatPresets';
 import { bindFakeCtx, fakeNode, freshEngine, makeEngine } from './testFakes';
 import { masterChainCtx, recordNodes } from './engineTestHelpers';
 
@@ -22,7 +21,8 @@ describe('drum reverb sends', () => {
 
   test('the kit reverbSend is a real level, not a boolean', () => {
     const { engine, ctx } = drumEngine();
-    engine.setDrumKit({ snare: { ...(engine as any).drumSynth.drumKit.snare, reverbSend: 0.15 } });
+    const voices = (engine as any).drumSynth.drumKit;
+    engine.setDrumKit({ ...voices, snare: { ...voices.snare, reverbSend: 0.15 } }, 0);
     const before = ctx._gains.length;
 
     engine.triggerDrum('snare', 1.0);
@@ -112,7 +112,8 @@ describe('drum reverb sends', () => {
 
   test('a kit with reverbSend 0 creates no send node at all', () => {
     const { engine, ctx } = drumEngine();
-    engine.setDrumKit({ clap: { ...(engine as any).drumSynth.drumKit.clap, reverbSend: 0 } });
+    const voices = (engine as any).drumSynth.drumKit;
+    engine.setDrumKit({ ...voices, clap: { ...voices.clap, reverbSend: 0 } }, 0);
     // Pre-warm the per-track fader so the count below reflects only what THIS
     // hit creates — DEV-386's track gain node is created lazily on first use.
     (engine as any).drumSynth.drumTrackGain('clap');
@@ -123,9 +124,9 @@ describe('drum reverb sends', () => {
     expect(ctx._gains.slice(before)).toHaveLength(1); // the envelope only
   });
 
-  test('setDrumFilter keeps the send filter in lockstep with the drum bus filter', () => {
+  test('setBeatFilter keeps the send filter in lockstep with the drum bus filter', () => {
     const { engine } = drumEngine();
-    engine.setDrumFilter(800, 4, 'highpass');
+    engine.setBeatFilter(800, 4, 'highpass');
 
     const bus = (engine as any).masterRack.drumBusFilter;
     const send = (engine as any).masterRack.drumSendFilter;
@@ -138,7 +139,7 @@ describe('drum reverb sends', () => {
 describe("drum voice details", () => {
   test('every drum envelope floors at the same 0.0001', () => {
     const { engine, ctx } = freshEngine();
-    for (const type of DRUM_TYPES) {
+    for (const type of BEAT_VOICE_IDS) {
       const before = ctx._gains.length;
       engine.triggerDrum(type, 1.0);
       for (const g of ctx._gains.slice(before)) {
@@ -366,7 +367,7 @@ describe("a hat is a band, and its topCut", () => {
   test('the crash and the clap get no topCut — only the hats are a band', () => {
     const { engine, ctx } = freshEngine();
 
-    // DEFAULT_DRUM_KIT.crash.metal is 0.55, so a crash hit runs BOTH the
+    // DEFAULT_BEAT_VOICES.crash.metal is 0.55, so a crash hit runs BOTH the
     // noise burst (1 bandpass) and the metallic bank (2 bandpass + 1
     // highpass) — 4 filters total, none of them a lowpass. That absence,
     // not the count, is what "no topCut" asserts; the count is pinned too so
@@ -412,7 +413,7 @@ describe("a hat is a band, and its topCut", () => {
 describe('snare pair and rimshot', () => {
   test('a snare schedules TWO body oscillators plus its noise', () => {
     const { engine, ctx } = freshEngine();
-    (engine as any).drumSynth.drumKit = DEFAULT_DRUM_KIT;
+    (engine as any).drumSynth.drumKit = DEFAULT_BEAT_VOICES;
     // Pre-warm the per-track fader so `made.gain`'s order is the two body
     // envelopes only — DEV-386's track gain node is created lazily on first
     // use and would otherwise land between them.
@@ -421,8 +422,17 @@ describe('snare pair and rimshot', () => {
     engine.triggerDrum('snare', 1);
     expect(made.osc).toHaveLength(2);
     expect(made.osc.map((o) => o.type)).toEqual(['triangle', 'triangle']);
-    expect(made.osc.map((o) => o.frequency.events[0].v)).toEqual([220, 407]);
-    expect(made.osc.map((o) => o.frequency.ramps[0].v)).toEqual([195, 361]);
+    // Read off the installed patch rather than written out as two numbers:
+    // what this pins is that each oscillator starts on ITS OWN field, which a
+    // literal would stop doing the moment the default patch is re-voiced.
+    expect(made.osc.map((o) => o.frequency.events[0].v)).toEqual([
+      DEFAULT_BEAT_VOICES.snare.bodyFreqStart,
+      DEFAULT_BEAT_VOICES.snare.bodyFreqStart2,
+    ]);
+    expect(made.osc.map((o) => o.frequency.ramps[0].v)).toEqual([
+      DEFAULT_BEAT_VOICES.snare.bodyFreqEnd,
+      DEFAULT_BEAT_VOICES.snare.bodyFreqEnd2,
+    ]);
     expect(made.noise).toHaveLength(1);
     // Pin the SECOND partial's own gain (0.3, not 0.5 = bodyGain and not 0 —
     // an inert second partial still schedules a node that ramps to ENV_FLOOR
@@ -430,26 +440,33 @@ describe('snare pair and rimshot', () => {
     // each oscillator reaches its OWN envelope: drumTone's osc.connect(env)
     // is a shared edge across every toned voice, and a node built but never
     // connected passes every value/count check that does not read `connectedTo`.
-    expect(made.gain[0].gain.events[0].v).toBe(0.5);
-    expect(made.gain[1].gain.events[0].v).toBe(0.3);
+    expect(made.gain[0].gain.events[0].v).toBe(DEFAULT_BEAT_VOICES.snare.bodyGain);
+    expect(made.gain[1].gain.events[0].v).toBe(DEFAULT_BEAT_VOICES.snare.bodyGain2);
+    expect(DEFAULT_BEAT_VOICES.snare.bodyGain).not.toBe(DEFAULT_BEAT_VOICES.snare.bodyGain2);
     expect(made.osc[0].connectedTo).toEqual([made.gain[0]]);
     expect(made.osc[1].connectedTo).toEqual([made.gain[1]]);
   });
 
   test('rimshot runs the same path off its own params, with almost no noise', () => {
     const { engine, ctx } = freshEngine();
-    (engine as any).drumSynth.drumKit = DEFAULT_DRUM_KIT;
+    (engine as any).drumSynth.drumKit = DEFAULT_BEAT_VOICES;
     // Pre-warm for the same reason the snare test above does.
     (engine as any).drumSynth.drumTrackGain('rimshot');
     const made = recordNodes(ctx);
     engine.triggerDrum('rimshot', 1);
-    expect(made.osc.map((o) => o.frequency.events[0].v)).toEqual([455, 1667]);
-    const noiseEnv = made.gain.find((g) => g.gain.events[0]?.v === 0.15);
+    expect(made.osc.map((o) => o.frequency.events[0].v)).toEqual([
+      DEFAULT_BEAT_VOICES.rimshot.bodyFreqStart,
+      DEFAULT_BEAT_VOICES.rimshot.bodyFreqStart2,
+    ]);
+    const noiseEnv = made.gain.find(
+      (g) => g.gain.events[0]?.v === DEFAULT_BEAT_VOICES.rimshot.noiseGain,
+    );
     expect(noiseEnv).toBeDefined();
-    // Same two pins as the snare test, off rimshot's own params: 0.45/0.55,
-    // not 0/0 and not equal to each other.
-    expect(made.gain[0].gain.events[0].v).toBe(0.45);
-    expect(made.gain[1].gain.events[0].v).toBe(0.55);
+    // Same two pins as the snare test, off rimshot's own params: the two body
+    // partials take their OWN gains, not 0/0 and not each other's.
+    expect(made.gain[0].gain.events[0].v).toBe(DEFAULT_BEAT_VOICES.rimshot.bodyGain);
+    expect(made.gain[1].gain.events[0].v).toBe(DEFAULT_BEAT_VOICES.rimshot.bodyGain2);
+    expect(DEFAULT_BEAT_VOICES.rimshot.bodyGain).not.toBe(DEFAULT_BEAT_VOICES.rimshot.bodyGain2);
     expect(made.osc[0].connectedTo).toEqual([made.gain[0]]);
     expect(made.osc[1].connectedTo).toEqual([made.gain[1]]);
   });
@@ -473,12 +490,18 @@ describe("drum aliases and unknown types", () => {
 
   test('hitom and lowtom are two different pitched voices', () => {
     const { engine, ctx } = freshEngine();
-    (engine as any).drumSynth.drumKit = DEFAULT_DRUM_KIT;
+    (engine as any).drumSynth.drumKit = DEFAULT_BEAT_VOICES;
     const made = recordNodes(ctx);
     engine.triggerDrum('lowtom', 1);
     engine.triggerDrum('hitom', 1);
-    expect(made.osc.map((o) => o.frequency.events[0].v)).toEqual([88, 176]);
-    expect(made.osc.map((o) => o.frequency.ramps[0].v)).toEqual([65, 130]);
+    expect(made.osc.map((o) => o.frequency.events[0].v)).toEqual([
+      DEFAULT_BEAT_VOICES.lowtom.freqStart,
+      DEFAULT_BEAT_VOICES.hitom.freqStart,
+    ]);
+    expect(made.osc.map((o) => o.frequency.ramps[0].v)).toEqual([
+      DEFAULT_BEAT_VOICES.lowtom.freqEnd,
+      DEFAULT_BEAT_VOICES.hitom.freqEnd,
+    ]);
   });
 
   test('a plain "tom" is no longer a recognized type, and "ride" is no longer aliased to crash: both stale aliases are gone', () => {
@@ -507,13 +530,13 @@ describe("drum aliases and unknown types", () => {
 
   test('every drum type reaches its own case, with no alias in the way', () => {
     const { engine, ctx } = freshEngine();
-    (engine as any).drumSynth.drumKit = DEFAULT_DRUM_KIT;
-    for (const type of DRUM_TYPES) {
+    (engine as any).drumSynth.drumKit = DEFAULT_BEAT_VOICES;
+    for (const type of BEAT_VOICE_IDS) {
       const before = ctx._gains.length;
       engine.triggerDrum(type, 1.0);
       expect(ctx._gains.length, `${type} produced no audio`).toBeGreaterThan(before);
     }
-    expect(DRUM_TYPES).toHaveLength(11);
+    expect(BEAT_VOICE_IDS).toHaveLength(11);
   });
 
   // The counts-only test above would still pass if closedhat silently
@@ -529,8 +552,8 @@ describe("drum aliases and unknown types", () => {
     // that position rather than by "last", which the bank's own envelopes
     // now occupy.
     const env = ctx._gains[before];
-    const hihatNoisePeak = DEFAULT_DRUM_KIT.hihat.gain * (1 - DEFAULT_DRUM_KIT.hihat.metal);
-    const openhatNoisePeak = DEFAULT_DRUM_KIT.openhat.gain * (1 - DEFAULT_DRUM_KIT.openhat.metal);
+    const hihatNoisePeak = DEFAULT_BEAT_VOICES.hihat.gain * (1 - DEFAULT_BEAT_VOICES.hihat.metal);
+    const openhatNoisePeak = DEFAULT_BEAT_VOICES.openhat.gain * (1 - DEFAULT_BEAT_VOICES.openhat.metal);
     expect(env.gain.value).toBeCloseTo(hihatNoisePeak, 9);
     expect(env.gain.value).not.toBeCloseTo(openhatNoisePeak, 9);
   });
@@ -551,8 +574,8 @@ describe("drum aliases and unknown types", () => {
     const env = ctx._gains.slice(before).find((g) => g.connectedTo.includes(track))!;
     expect(env).toBeDefined();
     expect(track.connectedTo).toContain(filter);
-    expect(env.gain.value).toBeCloseTo(DEFAULT_DRUM_KIT.lowtom.gain, 9);
-    expect(env.gain.value).not.toBeCloseTo(DEFAULT_DRUM_KIT.kick.gain, 9);
+    expect(env.gain.value).toBeCloseTo(DEFAULT_BEAT_VOICES.lowtom.gain, 9);
+    expect(env.gain.value).not.toBeCloseTo(DEFAULT_BEAT_VOICES.kick.gain, 9);
   });
 });
 
@@ -599,8 +622,8 @@ describe("stale and hostile drum types are inert", () => {
     const sends = ctx._gains.slice(before).filter((g) => g.connectedTo.includes(sendFilter));
     expect(sends.length).toBeGreaterThan(0);
     for (const send of sends) {
-      expect(send.gain.value).toBeCloseTo(DEFAULT_DRUM_KIT.ride.reverbSend, 9);
-      expect(send.gain.value).not.toBeCloseTo(DEFAULT_DRUM_KIT.crash.reverbSend, 9);
+      expect(send.gain.value).toBeCloseTo(DEFAULT_BEAT_VOICES.ride.reverbSend, 9);
+      expect(send.gain.value).not.toBeCloseTo(DEFAULT_BEAT_VOICES.crash.reverbSend, 9);
     }
   });
 
@@ -617,18 +640,19 @@ describe("stale and hostile drum types are inert", () => {
 describe("the ride's bands and wash", () => {
   test('a ride schedules a ping band, a body band and a long wash', () => {
     const { engine, ctx } = freshEngine();
-    (engine as any).drumSynth.drumKit = DEFAULT_DRUM_KIT;
+    (engine as any).drumSynth.drumKit = DEFAULT_BEAT_VOICES;
     const made = recordNodes(ctx);
     engine.triggerDrum('ride', 1);
     const centres = made.biquad.filter((b) => b.type === 'bandpass').map((b) => b.frequency.value);
-    expect(centres).toContain(4200);   // ping
-    expect(centres).toContain(450);    // body
-    expect(centres).toContain(8000);   // wash
+    expect(centres).toContain(DEFAULT_BEAT_VOICES.ride.pingFilter);  // ping
+    expect(centres).toContain(DEFAULT_BEAT_VOICES.ride.bodyFilter);  // body
+    expect(centres).toContain(DEFAULT_BEAT_VOICES.ride.washFilter);  // wash
     // The wash outlives the ping by more than an order of magnitude: that bed
     // surviving the next strike is what makes it a ride and not a crash.
     const ends = made.gain.map((g) => g.gain.ramps.at(-1)?.t).filter(Boolean) as number[];
     expect(Math.max(...ends) - 10).toBeGreaterThan(1.5);
-    expect(ends).toContain(10.12);
+    // The PING's own tail: `pingDecay` after the strike at t=10.
+    expect(ends).toContain(10 + DEFAULT_BEAT_VOICES.ride.pingDecay);
   });
 
   test("the metallic wash bands' own decay scales with washDecay, not a value borrowed from elsewhere", () => {
@@ -636,7 +660,7 @@ describe("the ride's bands and wash", () => {
     // hit creates, so collapsing ONLY the two metallic wash bands
     // (metallicBurst's bandA/bandB in the r.metal>0 branch, engine.ts's ride
     // wash call) to some other decay - crash.decay, say - while leaving the
-    // metal<1 noise-burst wash untouched (DEFAULT_DRUM_KIT's ride.metal=0.5
+    // metal<1 noise-burst wash untouched (DEFAULT_BEAT_VOICES's ride.metal=0.5
     // fires both branches) still produces a long tail from that OTHER branch,
     // and the aggregate max stays green - decision 33's central case, a ride
     // that is really a re-filtered crash, survives undetected. Vary washDecay
@@ -646,7 +670,7 @@ describe("the ride's bands and wash", () => {
     // would not move at all when washDecay does.
     function washBandEnds(washDecay: number) {
       const { engine, ctx } = freshEngine();
-      const kit = mergeDrumKit({ ride: { ...DEFAULT_DRUM_KIT.ride, washDecay } });
+      const kit = { ...DEFAULT_BEAT_VOICES, ride: { ...DEFAULT_BEAT_VOICES.ride, washDecay } };
       (engine as any).drumSynth.drumKit = kit;
       const made = recordNodes(ctx);
       engine.triggerDrum('ride', 1);
@@ -664,7 +688,7 @@ describe("the ride's bands and wash", () => {
 
   test('a bell is two squares a detuned fifth apart through one bandpass', () => {
     const { engine, ctx } = freshEngine();
-    (engine as any).drumSynth.drumKit = DEFAULT_DRUM_KIT;
+    (engine as any).drumSynth.drumKit = DEFAULT_BEAT_VOICES;
     const made = recordNodes(ctx);
     engine.triggerDrum('bell', 1);
     expect(made.osc).toHaveLength(2);
@@ -687,7 +711,7 @@ describe("the bell voice", () => {
     // extreme, or swapping it for (1 - ping) at all four call sites, produces
     // a wrong pair of numbers here, not just a wrong node COUNT or TIMING.
     const { engine, ctx } = freshEngine();
-    const kit = mergeDrumKit({ ride: { ...DEFAULT_DRUM_KIT.ride, ping: 0.8, metal: 1 } });
+    const kit = { ...DEFAULT_BEAT_VOICES, ride: { ...DEFAULT_BEAT_VOICES.ride, ping: 0.8, metal: 1 } };
     (engine as any).drumSynth.drumKit = kit;
     // Pre-warm the track fader so it does not land in `made.gain` as a third
     // unautomated node below.
@@ -716,7 +740,7 @@ describe("the bell voice", () => {
     // so a wash peak of `metal * (1 - ping)` = 0 means the wash call never
     // builds a node in the first place, not a node built and then zeroed.
     const { engine, ctx } = freshEngine();
-    const kit = mergeDrumKit({ ride: { ...DEFAULT_DRUM_KIT.ride, ping: 1, metal: 1 } });
+    const kit = { ...DEFAULT_BEAT_VOICES, ride: { ...DEFAULT_BEAT_VOICES.ride, ping: 1, metal: 1 } };
     (engine as any).drumSynth.drumKit = kit;
     // Pre-warm for the same reason the ping=0.8 test above does.
     (engine as any).drumSynth.drumTrackGain('ride');
@@ -734,7 +758,7 @@ describe("the bell voice", () => {
 
   test('a bell wires both squares through its bandpass, its envelope, and out to the dry bus and the reverb send', () => {
     const { engine, ctx } = freshEngine();
-    (engine as any).drumSynth.drumKit = DEFAULT_DRUM_KIT;
+    (engine as any).drumSynth.drumKit = DEFAULT_BEAT_VOICES;
     const dryBus = (engine as any).masterRack.drumBusFilter;
     const sendBus = (engine as any).masterRack.drumSendFilter;
     const made = recordNodes(ctx);
@@ -784,7 +808,7 @@ describe("the hi-hat choke group", () => {
     // hat's decay (0.35 s) but well after its attack, so the true envelope
     // value there is strictly below the peak (0.4) — a re-swelling choke would
     // instead show the peak itself at this instant.
-    const peak = DEFAULT_DRUM_KIT.openhat.gain;
+    const peak = DEFAULT_BEAT_VOICES.openhat.gain;
     expect(openEnv.valueAt(t0 + 0.05)).toBeLessThan(peak);
     // It cannot ramp to 0 — exponentialRampToValueAtTime rejects a zero target
     // — so it lands on the shared ENV_FLOOR, 20 ms later.
@@ -828,7 +852,7 @@ describe("the hi-hat choke group", () => {
     const { engine, ctx } = freshEngine();
     const t0 = ctx.currentTime;
     const before = ctx._gains.length;
-    // DEFAULT_DRUM_KIT.hihat.decay is 0.05 and the default stopPad is 0.01, so
+    // DEFAULT_BEAT_VOICES.hihat.decay is 0.05 and the default stopPad is 0.01, so
     // this voice is over at t0 + 0.06.
     engine.triggerDrum('hihat', 1.0, t0);
     const deadEnv = ctx._gains[before].gain;
@@ -1014,7 +1038,7 @@ describe('per-track drum gain', () => {
   });
 
   test('an unknown instrument is ignored, not minted as an orphan node', () => {
-    // Decision, DEV-386 fix round 1: a name outside DRUM_TYPES will never be
+    // Decision, DEV-386 fix round 1: a name outside BEAT_VOICE_IDS will never be
     // resolved by triggerDrum's dispatch, so a node built for it would live
     // forever with nothing feeding it. See setDrumTrackGain's own comment.
     const { engine } = freshEngine();

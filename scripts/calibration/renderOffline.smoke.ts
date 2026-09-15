@@ -8,7 +8,7 @@
 import {
   CALIBRATION_SAMPLE_RATE,
   DRUM_KIT_RENDER_SECONDS,
-  renderDrumKit,
+  renderBeatPreset,
   renderPreset,
 } from './renderOffline.ts';
 import { SYNTH_PRESETS } from '@/data/synthPresets';
@@ -30,16 +30,16 @@ function peakOf(wav: Uint8Array): number {
   return peak;
 }
 
-const retroKit = await renderDrumKit('Retro Drive');
+const retroKit = await renderBeatPreset('retro-drive');
 report(
-  'a rendered kit is 5.0 s of stereo 16-bit audio',
+  'a rendered beat patch is 5.0 s of stereo 16-bit audio',
   retroKit.byteLength === 44 + CALIBRATION_SAMPLE_RATE * DRUM_KIT_RENDER_SECONDS * 2 * 2,
   `${retroKit.byteLength} bytes`,
 );
-report('a rendered kit is not silent', peakOf(retroKit) > 0.01, `peak ${peakOf(retroKit).toFixed(3)}`);
+report('a rendered beat patch is not silent', peakOf(retroKit) > 0.01, `peak ${peakOf(retroKit).toFixed(3)}`);
 
 // Reproducibility (Task 8b): the noise buffer and its read offset route through the
-// seeded rng seam, reset at the start of every renderDrumKit/renderPreset call. The
+// seeded rng seam, reset at the start of every renderBeatPreset/renderPreset call. The
 // reference pattern's hihat is the worst case (pure noise, no tonal component to
 // mask a drifting sample), and it sounds on every 8th note of the render.
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -50,20 +50,20 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   return true;
 }
 
-const trapKit1 = await renderDrumKit('Trap Beat');
-const trapKit2 = await renderDrumKit('Trap Beat');
+const trapKit1 = await renderBeatPreset('trap-beat');
+const trapKit2 = await renderBeatPreset('trap-beat');
 report(
-  'rendering a kit twice back to back is byte-identical',
+  'rendering a patch twice back to back is byte-identical',
   bytesEqual(trapKit1, trapKit2),
   `${trapKit1.byteLength} bytes each`,
 );
 
 // Something else rendered in between must not shift the stream: the seed resets
 // at the START of every call, so this render must reproduce trapKit1/2 exactly.
-await renderDrumKit('808 Vintage');
-const trapKit3 = await renderDrumKit('Trap Beat');
+await renderBeatPreset('808-vintage');
+const trapKit3 = await renderBeatPreset('trap-beat');
 report(
-  'rendering a kit after rendering another kit still reproduces the same bytes',
+  'rendering a patch after rendering another patch still reproduces the same bytes',
   bytesEqual(trapKit1, trapKit3),
   `${trapKit3.byteLength} bytes`,
 );
@@ -99,7 +99,7 @@ report(`a rendered pluck preset (${pluck.name}) is not silent`, peakOf(pluckWav)
 // The kit must actually reach the engine. A `setDrumKit` that silently no-opped
 // would render thirteen identical patterns and produce thirteen identical trims
 // that all looked plausible — the exact failure this harness exists to catch.
-const otherKit = await renderDrumKit('808 Vintage');
+const otherKit = await renderBeatPreset('808-vintage');
 // The reference pattern is the same notes for both kits, so the only thing that
 // can move the peak is the kit itself. Calibrated once, with headroom below the
 // currently measured gap (Retro Drive 0.388 vs 808 Vintage 0.232, a gap of
@@ -108,9 +108,9 @@ const otherKit = await renderDrumKit('808 Vintage');
 // move before this flaps.
 const KIT_PEAK_DELTA_FLOOR = 0.01;
 report(
-  'two kits render the same reference pattern at different peaks',
+  'two patches render the same reference pattern at different peaks',
   Math.abs(peakOf(otherKit) - peakOf(retroKit)) > KIT_PEAK_DELTA_FLOOR,
-  `Retro Drive ${peakOf(retroKit).toFixed(3)} vs 808 Vintage ${peakOf(otherKit).toFixed(3)}`,
+  `retro-drive ${peakOf(retroKit).toFixed(3)} vs 808-vintage ${peakOf(otherKit).toFixed(3)}`,
 );
 
 // The applied-gain half. `renderPreset(preset, true)` installs the patch with its

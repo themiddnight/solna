@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
 import { useAppStore } from './store';
 import { SOURCE_BUSES } from './sourceBuses';
-import { DRUM_TYPES } from '@/data/drumKits';
+import { BEAT_VOICE_IDS } from '@/data/beatPresets';
 import { MIXDOWN_FAILURE_MESSAGE, wavFileName } from './mixdownSlice';
 
 // renderMixdown's capability probe reads `globalThis.OfflineAudioContext`, so
@@ -19,10 +19,34 @@ describe('wavFileName', () => {
 });
 
 describe('buildMixdownSnapshot', () => {
-  test('carries one bus row per SOURCE_BUSES entry and one drum row per voice', () => {
+  test('carries one bus row per SOURCE_BUSES entry, and one Beat voice row per loop', () => {
     const snapshot = useAppStore.getState().buildMixdownSnapshot();
     expect(snapshot.buses.map((b) => b.source)).toEqual(SOURCE_BUSES.map((b) => b.source));
-    expect(snapshot.drumTracks.map((t) => t.instrument)).toEqual([...DRUM_TYPES]);
+    // Per LOOP, not per snapshot: a Beat belongs to a loop, and a roster is
+    // complete because `beatMix` always holds every voice.
+    for (const loop of snapshot.loops) {
+      expect(loop.beatVoiceGains.map((v) => v.voice)).toEqual([...BEAT_VOICE_IDS]);
+    }
+  });
+
+  test('a muted Beat voice crosses the boundary as a gain of 0, not as its fader value', () => {
+    const before = useAppStore.getState().loops[0].beatMix;
+    const muted = {
+      ...before,
+      voices: { ...before.voices, kick: { levelDb: 0, muted: true } },
+    };
+    useAppStore.setState((state) => ({ loops: [{ ...state.loops[0], beatMix: muted }] }));
+    try {
+      const snapshot = useAppStore.getState().buildMixdownSnapshot();
+      const gains = snapshot.loops[0].beatVoiceGains;
+      expect(gains.find((v) => v.voice === 'kick')?.gain).toBe(0);
+      expect(gains.find((v) => v.voice === 'snare')?.gain).toBeGreaterThan(0);
+      // The raw mix travels too: it is the SCHEDULING half of the same mute,
+      // and `beatStepEvents` reads it to build no voice at all.
+      expect(snapshot.loops[0].beatMix.voices.kick.muted).toBe(true);
+    } finally {
+      useAppStore.setState((state) => ({ loops: [{ ...state.loops[0], beatMix: before }] }));
+    }
   });
 
   test('converts the store\'s dB to linear gain, exactly once', () => {
@@ -56,9 +80,10 @@ describe('buildMixdownSnapshot', () => {
       ...before.loops[0],
       chordVolume: -12,
       chordMuted: true,
-      drumFilterCutoff: 2170,
-      drumFilterResonance: 1,
-      drumFilterType: 'lowpass' as const,
+      beatParams: {
+        ...before.loops[0].beatParams,
+        filter: { cutoff: 2170, resonance: 1, type: 'lowpass' as const },
+      },
     };
     useAppStore.setState({
       loops: [loop],
@@ -75,7 +100,7 @@ describe('buildMixdownSnapshot', () => {
       expect(chordBus?.source).toBe('chord');
       expect(chordBus?.gain).toBeCloseTo(10 ** (-12 / 20), 6);
       expect(chordBus?.muted).toBe(true);
-      expect(snapshot.loops[0].drumFilter).toEqual({
+      expect(snapshot.loops[0].beatParams.filter).toEqual({
         cutoff: 2170,
         resonance: 1,
         type: 'lowpass',

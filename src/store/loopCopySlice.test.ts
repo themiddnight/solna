@@ -42,7 +42,9 @@ function seedTwoLoops(activeId: string) {
     bassOctave: 3,
     synthVolume: -3,
   };
-  source.sequencerTracks[0].steps[1] = true;
+  // Step 1 of the kick row, which the starter groove leaves silent — so a
+  // copy that carried it really did carry something.
+  source.beatPattern.rows.kick[1] = true;
   const active = activeId === target.id ? target : source;
   useAppStore.setState({ loops: [target, source], activeLoopId: activeId, ...loopStatePatch(active) });
   return { target, source };
@@ -127,18 +129,18 @@ describe('applyLoopCopy — target IS the active loop', () => {
 
     useAppStore
       .getState()
-      .applyLoopCopy('loop-target', 'loop-source', ['chord-pattern', 'key', 'drums-pattern']);
+      .applyLoopCopy('loop-target', 'loop-source', ['chord-pattern', 'key', 'beat-pattern']);
 
     const after = useAppStore.getState();
     const patched = after.loops.find((loop) => loop.id === 'loop-target')!;
     // loops[] took the patch...
     expect(patched.scaleRoot).toBe('C');
     expect(patched.chordFeel).toBe(0.9);
-    expect(patched.sequencerTracks[0].steps[1]).toBe(true);
+    expect(patched.beatPattern.rows.kick[1]).toBe(true);
     // ...and loadLoop mirrored it into the flat slices the engine reads.
     expect(after.scaleRoot).toBe('C');
     expect(after.chordFeel).toBe(0.9);
-    expect(after.sequencerTracks[0].steps[1]).toBe(true);
+    expect(after.beatPattern.rows.kick[1]).toBe(true);
     expect(loopStatePatch(after)).toEqual(loopStatePatch(patched));
     expect(after.activeLoopId).toBe('loop-target');
   });
@@ -156,10 +158,10 @@ describe('applyLoopCopy — target IS the active loop', () => {
 
   test('the deep clone holds across the store write', () => {
     const { source } = seedTwoLoops('loop-target');
-    useAppStore.getState().applyLoopCopy('loop-target', 'loop-source', ['drums-pattern']);
+    useAppStore.getState().applyLoopCopy('loop-target', 'loop-source', ['beat-pattern']);
     const stored = useAppStore.getState().loops.find((loop) => loop.id === 'loop-target')!;
-    expect(stored.sequencerTracks).not.toBe(source.sequencerTracks);
-    expect(stored.sequencerTracks[0]).not.toBe(source.sequencerTracks[0]);
+    expect(stored.beatPattern).not.toBe(source.beatPattern);
+    expect(stored.beatPattern.rows.kick).not.toBe(source.beatPattern.rows.kick);
   });
 
   test('the copied lane length and holds reach the flat slices through loadLoop', () => {

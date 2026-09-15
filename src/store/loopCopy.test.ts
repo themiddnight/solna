@@ -41,25 +41,23 @@ const sourceLoop = (): Loop => ({
   customBassHoldSteps: new Array<number>(MAX_STEPS_PER_BAR * 2).fill(2),
 });
 
-const targetLoop = (): Loop => ({ ...createDefaultLoop(), id: 'loop-target' });
-
 describe('buildLoopCopyPatch', () => {
   test('an empty selection builds an empty patch', () => {
-    expect(Object.keys(buildLoopCopyPatch(sourceLoop(), targetLoop(), []))).toEqual([]);
+    expect(Object.keys(buildLoopCopyPatch(sourceLoop(), []))).toEqual([]);
   });
 
   test('one group contributes exactly its own keys', () => {
-    const patch = buildLoopCopyPatch(sourceLoop(), targetLoop(), ['lead-sound']);
+    const patch = buildLoopCopyPatch(sourceLoop(), ['lead-sound']);
     // A sound group carries the track's Arp settings with its patch: copying a
     // track's sound and leaving its arpeggiator behind copies half a sound.
     expect(Object.keys(patch)).toEqual(['synthParams', 'synthArpSettings']);
   });
 
   test('chord-progression copies only the progression; chord-pattern only the rhythm', () => {
-    const progression = buildLoopCopyPatch(sourceLoop(), targetLoop(), ['chord-progression']);
+    const progression = buildLoopCopyPatch(sourceLoop(), ['chord-progression']);
     expect(Object.keys(progression)).toEqual(['chords']);
 
-    const rhythm = buildLoopCopyPatch(sourceLoop(), targetLoop(), ['chord-pattern']);
+    const rhythm = buildLoopCopyPatch(sourceLoop(), ['chord-pattern']);
     expect(Object.keys(rhythm)).toEqual([
       'chordRhythmId',
       'chordRhythmMode',
@@ -75,11 +73,11 @@ describe('buildLoopCopyPatch', () => {
     // A pattern is its onsets AND the cycle they repeat over: copying the grid
     // without the length would replay a two-bar phrase as a one-bar one, and
     // without the holds every span would collapse to a single step.
-    const chord = buildLoopCopyPatch(sourceLoop(), targetLoop(), ['chord-pattern']);
+    const chord = buildLoopCopyPatch(sourceLoop(), ['chord-pattern']);
     expect(chord.customChordLoopLength).toBe(2);
     expect(chord.customChordHoldSteps).toEqual(new Array<number>(MAX_STEPS_PER_BAR * 2).fill(4));
 
-    const bass = buildLoopCopyPatch(sourceLoop(), targetLoop(), ['bass-pattern']);
+    const bass = buildLoopCopyPatch(sourceLoop(), ['bass-pattern']);
     expect(Object.keys(bass)).toEqual([
       'bassPatternId',
       'bassPatternMode',
@@ -94,7 +92,7 @@ describe('buildLoopCopyPatch', () => {
   });
 
   test('several groups contribute exactly their union and nothing else', () => {
-    const patch = buildLoopCopyPatch(sourceLoop(), targetLoop(), ['chord-progression', 'chord-pattern', 'key']);
+    const patch = buildLoopCopyPatch(sourceLoop(), ['chord-progression', 'chord-pattern', 'key']);
     expect(new Set(Object.keys(patch))).toEqual(
       new Set([
         'chords',
@@ -115,7 +113,7 @@ describe('buildLoopCopyPatch', () => {
     // Not selected: the mixer and the drum grid stay out of the patch, so a
     // merge over the target cannot move a field the user did not tick.
     expect('synthVolume' in patch).toBe(false);
-    expect('sequencerTracks' in patch).toBe(false);
+    expect('beatPattern' in patch).toBe(false);
     expect('name' in patch).toBe(false);
   });
 
@@ -125,7 +123,7 @@ describe('buildLoopCopyPatch', () => {
     // so an id with no matching group is simply never found — this pins that
     // a bogus id neither throws nor writes a stray key, which a refactor to
     // iterate `selected` instead could silently break.
-    const patch = buildLoopCopyPatch(sourceLoop(), targetLoop(), [
+    const patch = buildLoopCopyPatch(sourceLoop(), [
       'lead-sound',
       'not-a-real-group' as LoopCopyGroupId,
     ]);
@@ -141,49 +139,76 @@ describe('buildLoopCopyPatch', () => {
 describe('buildLoopCopyPatch — the value it hands back', () => {
   test('values are deep-cloned, so a later edit to the source cannot reach the patch', () => {
     const source = sourceLoop();
-    const patch = buildLoopCopyPatch(source, targetLoop(), ['drums-pattern', 'lead-pattern']);
+    const patch = buildLoopCopyPatch(source, ['beat-pattern', 'lead-pattern']);
     const before = JSON.stringify(patch);
 
     // Mutate the SOURCE one level DOWN in each structure. A shallow pick
-    // passes a `!==` check on the outer array and still shares every
-    // element, which is the failure cloneLoop exists to prevent: a later
-    // edit to one loop's grid silently rewriting the other's.
-    source.sequencerTracks[0].steps[0] = !source.sequencerTracks[0].steps[0];
-    source.sequencerTracks[0].muted = true;
+    // passes a `!==` check on the outer object and still shares every row,
+    // which is the failure cloneLoop exists to prevent: a later edit to one
+    // loop's grid silently rewriting the other's.
+    source.beatPattern.rows.kick[0] = !source.beatPattern.rows.kick[0];
     source.leadMelodySteps[0].push({ note: 'C4', len: 1 });
 
     expect(JSON.stringify(patch)).toBe(before);
-    expect(patch.sequencerTracks?.[0].muted).toBe(false);
-    expect(patch.sequencerTracks?.[0].steps[0]).toBe(!source.sequencerTracks[0].steps[0]);
+    expect(patch.beatPattern?.rows.kick[0]).toBe(!source.beatPattern.rows.kick[0]);
     expect(patch.leadMelodySteps?.[0]).toEqual([]);
   });
 
-  test('drums-pattern copies steps only — the target keeps its own per-voice volume/mute', () => {
-    // A SequencerTrack bundles a drum voice's pattern together with the
-    // volume/mute TrackRow's own fader owns; neither 'drums-pattern' nor any
-    // other checkbox names those two fields, so a mixed-in-place target must
-    // come back untouched even though the whole key is what gets copied.
+  test('beat-pattern carries the pattern alone; the mix travels with Mix', () => {
+    // The three Beat keys are exactly separable now, which is what replacing
+    // the old per-track bundle bought: that bundle held a voice's steps
+    // together with the volume and mute its fader owns, so copying a pattern
+    // needed a special case that reached into the TARGET to put the mix back.
+    // There is no bundle and no special case — a group's keys are the whole
+    // of what it copies, and `buildLoopCopyPatch` no longer takes a target at
+    // all.
     const source = sourceLoop();
-    source.sequencerTracks = source.sequencerTracks.map((track) => ({
-      ...track,
-      volume: -12,
-      muted: true,
-    }));
-    const target = targetLoop();
-    target.sequencerTracks = target.sequencerTracks.map((track) => ({
-      ...track,
-      volume: -3,
-      muted: false,
-    }));
+    source.beatMix.voices.kick.levelDb = -12;
+    source.beatMix.voices.kick.muted = true;
 
-    const patch = buildLoopCopyPatch(source, target, ['drums-pattern']);
+    const pattern = buildLoopCopyPatch(source, ['beat-pattern']);
+    expect(pattern.beatPattern).toEqual(source.beatPattern);
+    expect('beatMix' in pattern).toBe(false);
+    expect('beatParams' in pattern).toBe(false);
 
-    expect(patch.sequencerTracks?.every((t) => t.volume === -3)).toBe(true);
-    expect(patch.sequencerTracks?.every((t) => t.muted === false)).toBe(true);
-    // The pattern itself still comes from the source.
-    expect(patch.sequencerTracks?.map((t) => t.steps)).toEqual(
-      source.sequencerTracks.map((t) => t.steps),
+    const mix = buildLoopCopyPatch(source, ['mix']);
+    expect(mix.beatMix).toEqual(source.beatMix);
+    expect('beatPattern' in mix).toBe(false);
+
+    const sound = buildLoopCopyPatch(source, ['beat-sound']);
+    expect(sound.beatParams).toEqual(source.beatParams);
+    expect('beatPattern' in sound).toBe(false);
+    expect('beatMix' in sound).toBe(false);
+  });
+
+  /**
+   * What replaced the short-roster special case, and why there is nothing left
+   * to guard.
+   *
+   * The drum roster used to be an ARRAY a loop could legitimately carry a
+   * short version of, so copying the key whole would delete the voices the
+   * source never named — and each of those rows carried that voice's audible
+   * level. `buildLoopCopyPatch` therefore walked the TARGET's rows and matched
+   * by id. `beatPattern` and `beatMix` are voice-keyed records with every
+   * voice always present, so there is no short side to protect: this pins that
+   * a copy is now a plain copy, complete on both halves.
+   */
+  test('every voice travels, on both halves, with no target to reconcile against', () => {
+    const source = sourceLoop();
+    source.beatMix.voices.bell.levelDb = -12;
+    source.beatPattern.rows.bell = source.beatPattern.rows.bell.map((_, i) => i === 3);
+
+    const pattern = buildLoopCopyPatch(source, ['beat-pattern']);
+    expect(Object.keys(pattern.beatPattern!.rows).sort()).toEqual(
+      Object.keys(source.beatPattern.rows).sort(),
     );
+    expect(pattern.beatPattern!.rows.bell).toEqual(source.beatPattern.rows.bell);
+
+    const mix = buildLoopCopyPatch(source, ['mix']);
+    expect(Object.keys(mix.beatMix!.voices).sort()).toEqual(
+      Object.keys(source.beatMix.voices).sort(),
+    );
+    expect(mix.beatMix!.voices.bell.levelDb).toBe(-12);
   });
 });
 
@@ -228,7 +253,7 @@ describe('the custom pattern fixture survives a module copy', () => {
   const source = (): Loop => customPatternLoop();
 
   test('the chord lane carries its own two-bar cycle, its onsets and its holds', () => {
-    const patch = buildLoopCopyPatch(source(), targetLoop(), ['chord-pattern']);
+    const patch = buildLoopCopyPatch(source(), ['chord-pattern']);
 
     expect(patch.customChordLoopLength).toBe(2);
     expect(patch.customChordRhythm).toHaveLength(2 * MAX_STEPS_PER_BAR);
@@ -239,7 +264,7 @@ describe('the custom pattern fixture survives a module copy', () => {
   });
 
   test('the bass lane carries four bars, uncut to the chord lane’s two', () => {
-    const patch = buildLoopCopyPatch(source(), targetLoop(), ['bass-pattern']);
+    const patch = buildLoopCopyPatch(source(), ['bass-pattern']);
 
     expect(patch.customBassLoopLength).toBe(4);
     expect(patch.customBassPattern).toHaveLength(4 * MAX_STEPS_PER_BAR);
@@ -251,12 +276,12 @@ describe('the custom pattern fixture survives a module copy', () => {
   });
 
   test('copying one lane never carries the other', () => {
-    const chord = buildLoopCopyPatch(source(), targetLoop(), ['chord-pattern']);
+    const chord = buildLoopCopyPatch(source(), ['chord-pattern']);
     expect('customBassPattern' in chord).toBe(false);
     expect('customBassLoopLength' in chord).toBe(false);
     expect('customBassHoldSteps' in chord).toBe(false);
 
-    const bass = buildLoopCopyPatch(source(), targetLoop(), ['bass-pattern']);
+    const bass = buildLoopCopyPatch(source(), ['bass-pattern']);
     expect('customChordRhythm' in bass).toBe(false);
     expect('customChordLoopLength' in bass).toBe(false);
     expect('customChordHoldSteps' in bass).toBe(false);
@@ -264,7 +289,7 @@ describe('the custom pattern fixture survives a module copy', () => {
 
   test('the copied spans are the patch owner’s, so a later edit to the source cannot reach them', () => {
     const src = source();
-    const patch = buildLoopCopyPatch(src, targetLoop(), ['chord-pattern', 'bass-pattern']);
+    const patch = buildLoopCopyPatch(src, ['chord-pattern', 'bass-pattern']);
     const before = JSON.stringify(patch);
 
     // Mutate the SOURCE one level down in each lane. A shallow pick passes a
@@ -299,7 +324,7 @@ describe('impliesKeyCopy', () => {
   });
 
   test('without the chord progression nothing is implied, whatever the keys are', () => {
-    expect(impliesKeyCopy(inC, inAMinor, ['lead-sound', 'mix', 'drums-pattern'])).toBe(false);
+    expect(impliesKeyCopy(inC, inAMinor, ['lead-sound', 'mix', 'beat-pattern'])).toBe(false);
     expect(impliesKeyCopy(inC, inAMinor, [])).toBe(false);
   });
 });

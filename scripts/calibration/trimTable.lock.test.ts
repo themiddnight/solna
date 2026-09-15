@@ -1,5 +1,5 @@
 import { DRUM_TRIMS, PRESET_TRIMS } from '@/data/trimTable';
-import { DRUM_KITS } from '@/data/drumKits';
+import { BEAT_PRESETS } from '@/data/beatPresets';
 import { SYNTH_PRESETS } from '@/data/synthPresets';
 import { TARGET_DBFS } from './trimMath';
 import { afterEach, describe, expect, mock, test } from 'bun:test';
@@ -13,12 +13,12 @@ import {
 const ids = (findings: { id: string }[]) => findings.map((f) => f.id);
 
 describe('the committed trim table is a lock on today s defaults', () => {
-  test('every drum kit and every synth preset has a committed entry', () => {
+  test('every beat preset and every synth preset has a committed entry', () => {
     const missing = findMissingEntries();
     expect(ids(missing).join(', ')).toBe('');
   });
 
-  test('no committed entry names a kit or preset that no longer exists', () => {
+  test('no committed entry names a beat or synth preset that no longer exists', () => {
     expect(ids(findOrphanEntries()).join(', ')).toBe('');
   });
 
@@ -31,8 +31,8 @@ describe('the committed trim table is a lock on today s defaults', () => {
   });
 
   test('every committed measurement plus the gain that is actually applied lands within the tolerance band', () => {
-    // For a kit that is `measuredDbfs + trimDb`; for a preset it is
-    // `measuredDbfs + patch.common.outputGainDb`, read off the live library.
+    // Both halves read the gain off the LIVE patch: `patch.outputTrimDb` for a
+    // beat preset, `patch.common.outputGainDb` for a synth one.
     expect(ids(findOutOfToleranceEntries()).join(', ')).toBe('');
   });
 
@@ -55,8 +55,9 @@ describe('the committed trim table is a lock on today s defaults', () => {
  * nothing reading it is exactly where a stale value hides, so the derivation
  * is pinned here rather than trusted.
  *
- * The drum half is deliberately included: there `trimDb` IS applied
- * (`drumTrimGainFor`), and the same identity must hold for the same reason.
+ * The beat half is deliberately included: its `trimDb` is the number a human
+ * copies into `patch.outputTrimDb`, and the same identity must hold for the same
+ * reason. The describe below is what checks the copy actually landed.
  *
  * Placed ABOVE the two `mock.module` describes on purpose: this one reads the
  * imported bindings directly rather than through `levelChecks`, and a swapped
@@ -71,9 +72,7 @@ describe('the committed trimDb is still TARGET minus the measurement', () => {
     // the same vacuity the empty-table guard below exists for. `findMissing`
     // owns "the table is empty"; what this needs is only that it did not
     // silently become a no-op. One live kit and one live preset is the floor.
-    expect(entries.length).toBeGreaterThanOrEqual(
-      Object.keys(DRUM_KITS).length + SYNTH_PRESETS.length,
-    );
+    expect(entries.length).toBeGreaterThanOrEqual(BEAT_PRESETS.length + SYNTH_PRESETS.length);
 
     const offenders: string[] = [];
     for (const [id, entry] of entries) {
@@ -81,6 +80,40 @@ describe('the committed trimDb is still TARGET minus the measurement', () => {
       // identity holds to within one rounding step in each, not exactly.
       if (Math.abs(entry.trimDb - (TARGET_DBFS - entry.measuredDbfs)) > 0.02) {
         offenders.push(`${id}: ${entry.trimDb} != ${TARGET_DBFS} - ${entry.measuredDbfs}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * The embedded trim is what runtime audio actually applies (`patch.outputTrimDb`),
+ * and this table is the measurement it came from. Two copies of one number, so
+ * the only thing keeping them honest is an assertion that they are equal: a
+ * regenerated table whose new `trimDb` was never copied across would otherwise
+ * ship a patch calibrated to a measurement that no longer exists.
+ *
+ * The roster assertions come first and are not decoration. An empty or
+ * half-populated `BEAT_PRESETS` would make the loop below iterate nothing and
+ * pass having compared nothing — the same vacuity Ruling 8 exists for, one level
+ * down.
+ */
+describe('every factory patch embeds the trim this table measured', () => {
+  test('the roster is the full thirteen, so the comparison below cannot be vacuous', () => {
+    expect(BEAT_PRESETS.length).toBe(13);
+    expect(Object.keys(DRUM_TRIMS).length).toBe(BEAT_PRESETS.length);
+  });
+
+  test('embedded outputTrimDb equals the committed trimDb, preset for preset', () => {
+    const offenders: string[] = [];
+    for (const preset of BEAT_PRESETS) {
+      const entry = DRUM_TRIMS[preset.id];
+      if (!entry) {
+        offenders.push(`${preset.id}: no committed entry`);
+        continue;
+      }
+      if (preset.patch.outputTrimDb !== entry.trimDb) {
+        offenders.push(`${preset.id}: embeds ${preset.patch.outputTrimDb}, table says ${entry.trimDb}`);
       }
     }
     expect(offenders).toEqual([]);
@@ -103,13 +136,13 @@ describe('an empty table fails loudly, and for the right reason (Ruling 8)', () 
     mock.module('@/data/trimTable', () => ({ DRUM_TRIMS, PRESET_TRIMS }));
   });
 
-  test('findMissingEntries reports every live kit and every live preset, and nothing else misreports it', () => {
+  test('findMissingEntries reports every live beat preset and every live synth preset, and nothing else misreports it', () => {
     mock.module('@/data/trimTable', () => ({ DRUM_TRIMS: {}, PRESET_TRIMS: {} }));
 
     const missing = ids(findMissingEntries());
-    for (const kitName of Object.keys(DRUM_KITS)) expect(missing).toContain(kitName);
+    for (const preset of BEAT_PRESETS) expect(missing).toContain(preset.id);
     for (const preset of SYNTH_PRESETS) expect(missing).toContain(preset.id);
-    expect(missing.length).toBe(Object.keys(DRUM_KITS).length + SYNTH_PRESETS.length);
+    expect(missing.length).toBe(BEAT_PRESETS.length + SYNTH_PRESETS.length);
 
     // An empty table has no entries to be an orphan, drifted, or out of
     // tolerance — a collector that mis-fired here would be reporting the

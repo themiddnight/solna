@@ -14,7 +14,8 @@
     "!src/**/*.test.{ts,tsx}!",
     "!src/**/{engineTestHelpers,testFakes,*Fixture,*Fixtures}.{ts,tsx}!",
     "scripts/**/*.{ts,mts}",
-    ".claude/skills/**/scripts/**/*.ts"
+    ".claude/skills/**/scripts/**/*.ts",
+    "!src/data/trimTable.ts!"
   ],
   "includeEntryExports": true
 }

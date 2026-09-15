@@ -45,7 +45,7 @@ describe('loadLoop: the swap', () => {
       name: 'Loop B',
       scaleRoot: 'C',
       chordFeel: 0.1,
-      drumMuted: true,
+      beatMix: { ...createDefaultLoop().beatMix, muted: true },
     };
     useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });
     expect(useAppStore.getState().scaleRoot).toBe('A');
@@ -56,7 +56,7 @@ describe('loadLoop: the swap', () => {
     expect(after.activeLoopId).toBe('loop-b');
     expect(after.scaleRoot).toBe('C');
     expect(after.chordFeel).toBe(0.1);
-    expect(after.drumMuted).toBe(true);
+    expect(after.beatMix.muted).toBe(true);
     expect(after.loops).toHaveLength(2);
     // The target loop in loops[] is the source of truth and stays untouched.
     expect(after.loops.find((r) => r.id === 'loop-b')?.scaleRoot).toBe('C');
@@ -151,8 +151,9 @@ describe('loadLoop: a song advance', () => {
 
   test('a song advance applies every incoming track mute before re-arming step 0', () => {
     const loopA = createDefaultLoop();
+    const base = createDefaultLoop();
     const loopB: Loop = {
-      ...createDefaultLoop(),
+      ...base,
       id: 'loop-b',
       name: 'B',
       synthMuted: true,
@@ -160,7 +161,9 @@ describe('loadLoop: a song advance', () => {
       chordMuted: true,
       bassMuted: true,
       padMuted: true,
-      drumMuted: true,
+      // The Beat bus mute lives in `beatMix`, which is where the source-bus
+      // table reads it.
+      beatMix: { ...base.beatMix, muted: true },
     };
     useAppStore.setState({
       loops: [loopA, loopB],

@@ -1,7 +1,7 @@
 /**
  * One-off measurement for DEV-383: how much default trim the five source
- * buses (`synthVolume`, `chordVolume`, `bassVolume`, `padVolume`,
- * `masterSequencerVolume`) need so an ordinary just-created project — every
+ * buses (`synthVolume`, `chordVolume`, `bassVolume`, `padVolume` and the Beat
+ * bus, now `beatMix.levelDb`) need so an ordinary just-created project — every
  * fader at unity, compressor and limiter both off — does not clip on its own.
  *
  * Not a `bun test` file, for the same reason as the other `*.smoke.ts` files
@@ -11,7 +11,7 @@
  * SOURCES RENDERED — one drum kit plus three synth-engine voices, matching
  * the brief exactly:
  *   - drum kit: "Club Standard" through the existing reference backbeat
- *     (`renderDrumKit`, trim applied). Picked for its name: a generic,
+ *     (`renderBeatPreset`, trim applied). Picked for its name: a generic,
  *     middle-of-the-road kit, not the loudest (Trap Beat) or the quietest
  *     pre-trim (Tight Pocket) in the roster.
  *   - lead: "factory-cosmic-lead" (category Lead) for `synthVolume`.
@@ -50,9 +50,9 @@ import { SYNTH_PRESETS } from '@/data/synthPresets';
 import { dbToGain, toDecibels } from '@/utils/gainUnits';
 import { encodeWav } from '@/utils/encodeWav';
 import { measureLoudness } from './measureLoudness.ts';
-import { CALIBRATION_HEADROOM_DB, CALIBRATION_SAMPLE_RATE, renderDrumKit, renderPreset } from './renderOffline.ts';
+import { CALIBRATION_HEADROOM_DB, CALIBRATION_SAMPLE_RATE, renderBeatPreset, renderPreset } from './renderOffline.ts';
 
-const DRUM_KIT_NAME = 'Club Standard';
+const BEAT_PRESET_ID = 'club-standard';
 const LEAD_PRESET_ID = 'factory-cosmic-lead';
 const CHORD_PRESET_ID = 'factory-dream-keys';
 const BASS_PRESET_ID = 'factory-808-deep-bass';
@@ -127,7 +127,7 @@ async function measureCandidate(candidateDb: number, sources: Float32Array[][]):
 
 async function main() {
   console.log('Rendering sources...');
-  const kitWav = await renderDrumKit(DRUM_KIT_NAME, true);
+  const kitWav = await renderBeatPreset(BEAT_PRESET_ID, true);
   const leadWav = await renderPreset(findPreset(LEAD_PRESET_ID), true);
   const chordWav = await renderPreset(findPreset(CHORD_PRESET_ID), true);
   const bassWav = await renderPreset(findPreset(BASS_PRESET_ID), true);
@@ -136,7 +136,7 @@ async function main() {
   // (see renderOffline.ts) so it doesn't clip the WAV encoder on its own nine
   // overlapping voices; adding the headroom back onto the decoded samples
   // recovers the true, live-level signal before it enters the sum, the same
-  // way measureDrumKit() adds it back onto the measured LUFS reading.
+  // way measureBeatPreset() adds it back onto the measured LUFS reading.
   const headroomGain = dbToGain(toDecibels(CALIBRATION_HEADROOM_DB));
   const kitChannels = decodeWav16(kitWav).map((channel) => channel.map((sample) => sample * headroomGain));
   const leadChannels = decodeWav16(leadWav);

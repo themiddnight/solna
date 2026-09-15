@@ -1,10 +1,15 @@
 import type {
+  BeatMix,
+  BeatParams,
+  BeatPreset,
+  BeatPattern,
+  BeatVoiceId,
+  BeatFilterParams,
+  BeatVoices,
   ChordItem,
-  SequencerTrack,
   MasterEffects,
   ViewMode,
   CustomChordProgressionItem,
-  FilterType,
   KeyboardMode,
   InputPanelMode,
   PadInterval,
@@ -357,38 +362,61 @@ export interface FxSlice {
   toggleFxMuted: () => void;
 }
 
-export interface SequencerSlice {
-  sequencerTracks: SequencerTrack[];
-  soundKit: string;
-  /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at
-   *  the store->engine boundary in engineSync.ts, never in a component. */
-  masterSequencerVolume: number;
-  drumMuted: boolean;
-  drumFilterCutoff: number;
-  drumFilterResonance: number;
-  drumFilterType: FilterType;
+/**
+ * The Beat instrument's per-loop state: sound, events and levels as three
+ * SIBLING fields, never one object. A sound edit must not be able to replace
+ * the pattern or the mix, and every action below writes exactly one of them.
+ *
+ * Every write is immutable at the NARROWEST nested object it changes — one
+ * voice's params, one row, one mix entry — so a knob tick on the kick leaves
+ * the other ten voices' objects identical and a subscriber selecting a sibling
+ * never re-renders.
+ */
+export interface BeatSlice {
+  beatParams: BeatParams;
+  beatPattern: BeatPattern;
+  beatMix: BeatMix;
+  /** Install a factory (or, from Task 5, a user) preset's patch whole, recording it as the base. */
+  setBeatPreset: (presetId: string) => void;
+  /** Install a complete patch as-is; the caller owns its `basePresetId`. */
+  setBeatParams: (params: BeatParams) => void;
+  updateBeatVoice: <T extends BeatVoiceId>(voice: T, patch: Partial<BeatVoices[T]>) => void;
   /**
-   * Write a whole drum grid onto the sequencer.
+   * Some of the Beat bus filter's three fields, laid over whatever the patch is
+   * holding right now.
    *
-   * REPLACES, it does not merge. A track whose instrument the pattern does not
-   * name has its active window CLEARED — a drum grid determines the whole kit,
-   * so picking "Techno" gives you techno and not techno plus leftovers.
-   *
-   * It was `applyDrumPattern` and it skipped unnamed tracks. That was invisible
-   * while every grid declared every row the five tracks had; it became a bug
-   * the moment `tom` and `crash` tracks existed, because the 14 sequencer genre
-   * grids declare no `crash` and a vibe's crash would ring on underneath one.
+   * Its own action rather than a `setBeatParams` call built by the caller,
+   * because the one caller that needs it — applying a vibe — writes a PRESET
+   * first and then an override on top of it: reading `beatParams` back to
+   * build that object means reading a snapshot taken before the preset landed,
+   * which silently applies the override to the outgoing sound. The Beat
+   * editor does NOT use it; a knob mid-drag has a draft to preview and commits
+   * the whole patch once (see `useBeatParamDraft`).
    */
-  replaceDrumPattern: (pattern: Record<string, boolean[]>) => void;
-  setSequencerTracks: (tracks: SequencerTrack[]) => void;
-  /** Sets one track's level, in DECIBELS. */
-  setTrackVolume: (trackId: string, db: number) => void;
-  setSoundKit: (kit: string) => void;
-  setMasterSequencerVolume: (volume: number) => void;
-  toggleDrumMuted: () => void;
-  setDrumFilterCutoff: (cutoff: number) => void;
-  setDrumFilterResonance: (resonance: number) => void;
-  setDrumFilterType: (type: FilterType) => void;
+  updateBeatFilter: (patch: Partial<BeatFilterParams>) => void;
+  /**
+   * Restore one voice — or, for `resetBeatParams`, the whole patch — from
+   * `basePresetId`. A null base makes reset unanswerable, so both are a NO-OP
+   * then: substituting another preset would silently replace a sound the user
+   * still has.
+   */
+  resetBeatVoice: (voice: BeatVoiceId) => void;
+  resetBeatParams: () => void;
+  /**
+   * Write a whole grid. REPLACES, it does not merge: a voice the rows do not
+   * name is cleared, the same rule `replaceDrumPattern` follows and for the
+   * same reason. Only the ACTIVE meter's window is written, so wider-meter
+   * programming past `stepsPerBar` survives.
+   */
+  replaceBeatPattern: (rows: Partial<Record<BeatVoiceId, readonly boolean[]>>) => void;
+  /** Flip one cell. `step` indexes the STORED row, which the visible window is a prefix of. */
+  toggleBeatStep: (voice: BeatVoiceId, step: number) => void;
+  /** One voice's user fader, in DECIBELS. Distinct from the voice `gain` inside the patch. */
+  setBeatVoiceLevel: (voice: BeatVoiceId, levelDb: number) => void;
+  toggleBeatVoiceMuted: (voice: BeatVoiceId) => void;
+  /** The Beat bus fader, in DECIBELS. */
+  setBeatLevel: (levelDb: number) => void;
+  toggleBeatMuted: () => void;
 }
 
 export interface MidiMapping {
@@ -543,6 +571,13 @@ export interface UiSlice {
 export interface PresetsSlice {
   customSynthPresets: SynthPreset[];
   customChordProgressions: CustomChordProgressionItem[];
+  /**
+   * The user's saved Beat sounds, app-level beside `customSynthPresets` and
+   * deliberately absent from `PROJECT_CONTENT_KEYS`: a library travels with the
+   * BROWSER, a project carries its own complete `beatParams`. Deleting an entry
+   * therefore never changes how a loop sounds.
+   */
+  customBeatPresets: BeatPreset[];
   saveCustomPreset: (
     name: string,
     activeSynth: ActiveSynth,
@@ -558,6 +593,17 @@ export interface PresetsSlice {
     roman?: string
   ) => CustomChordProgressionItem;
   deleteCustomChordProgression: (id: string) => CustomChordProgressionItem[];
+  /**
+   * Capture `params` as a new user preset and make it the current base.
+   *
+   * The patch is stored as a deep copy with `basePresetId` stripped — a preset
+   * IS a source, so carrying the id it was derived from would make every saved
+   * sound claim the factory one behind it. The sound does not change: only the
+   * loop's `basePresetId` moves, onto the entry just written.
+   */
+  saveCustomBeatPreset: (name: string, params: BeatParams) => BeatPreset;
+  /** Remove one entry and hand back what is left. No loop's patch is touched. */
+  deleteCustomBeatPreset: (id: string) => BeatPreset[];
 }
 
 /** A full per-loop musical snapshot: identity + every per-loop field. */
@@ -635,11 +681,10 @@ export interface Loop extends PadState, FxState {
   leadMelodyView: LeadMelodyView;
   leadMelodyOctave: number;
   leadGate: number;
-  sequencerTracks: SequencerTrack[];
-  soundKit: string;
-  drumFilterCutoff: number;
-  drumFilterResonance: number;
-  drumFilterType: FilterType;
+  /** The Beat instrument: sound, events and levels. Canonical — see BeatSlice. */
+  beatParams: BeatParams;
+  beatPattern: BeatPattern;
+  beatMix: BeatMix;
   /** DECIBELS, relative: unity is 0, the range is -60..+12. faderDbToGain runs at
    *  the store->engine boundary in engineSync.ts, never in a component. */
   synthVolume: number;
@@ -648,14 +693,21 @@ export interface Loop extends PadState, FxState {
   chordMuted: boolean;
   bassVolume: number;
   bassMuted: boolean;
-  masterSequencerVolume: number;
-  drumMuted: boolean;
 }
 
 /** The per-loop fields, without identity — what loadLoop writes to the flat slices. */
 export type LoopStatePatch = Omit<Loop, 'id' | 'name' | 'repeatCount' | 'tempName'>;
 
-/** The per-loop mixer: the 12 volume/mute fields edited on each Arrange card. */
+/**
+ * The per-loop mixer: what an Arrange card's channel strips edit.
+ *
+ * Ten flat fader/mute fields plus `beatMix`, which is the whole Beat mix
+ * object rather than a flat pair — the Beat bus level and mute live inside it
+ * beside the eleven per-voice entries, and a card writing the bus half has to
+ * hand back the object with those entries intact. `components/mixLayers.ts`
+ * is where each row says how to read and how to patch its own half, so no
+ * caller spreads this by hand.
+ */
 export type LoopMixPatch = Pick<
   Loop,
   | 'synthVolume'
@@ -668,8 +720,7 @@ export type LoopMixPatch = Pick<
   | 'padMuted'
   | 'fxVolume'
   | 'fxMuted'
-  | 'masterSequencerVolume'
-  | 'drumMuted'
+  | 'beatMix'
 >;
 
 export interface LoopSlice {
@@ -711,7 +762,7 @@ export interface AppStore
     PadSlice,
     LeadSlice,
     FxSlice,
-    SequencerSlice,
+    BeatSlice,
     EffectsSlice,
     UiSlice,
     PresetsSlice,
@@ -729,5 +780,6 @@ export interface PersistedState {
   focusTrack: MixLayerId;
   customSynthPresets: SynthPreset[];
   customChordProgressions: CustomChordProgressionItem[];
+  customBeatPresets: BeatPreset[];
   activeLoopId: string;
 }

@@ -7,23 +7,23 @@
  * because it is on the `bun run verify` critical path and the generator that
  * produced the table is not.
  *
- * The two halves are no longer symmetric in what they APPLY: a kit's trim is the
- * committed `trimDb`, resolved by name at `setDrumKit`; a preset's is
- * `patch.common.outputGainDb`, inside the patch itself, so the committed entry
- * records only the measurement and its provenance. `TrimDomain.appliedDb` is
- * where that difference lives, and it is the only place it does.
+ * The two halves are symmetric again in what they APPLY: both read the gain out
+ * of the live patch — `patch.outputTrimDb` for a Beat preset,
+ * `patch.common.outputGainDb` for a synth one — so the committed entry records
+ * only the measurement and its provenance in both cases. `TrimDomain.appliedDb`
+ * is where that would show if they ever diverged again.
  *
- * DEV-387 design change: `DRUM_TRIMS` is keyed by drum KIT, not by kit+voice — a
- * drum kit's voices are not independent, so one measurement and one trim cover
- * the whole kit (see the comment on `DRUM_TRIMS` in src/data/trimTable.ts). Every
- * collector below therefore iterates kits, never kit->voice.
+ * DEV-387 design change: `DRUM_TRIMS` is keyed by BEAT PRESET, not by kit+voice —
+ * a patch's voices are not independent, so one measurement and one trim cover
+ * the whole patch (see the comment on `DRUM_TRIMS` in src/data/trimTable.ts). Every
+ * collector below therefore iterates presets, never preset->voice.
  */
-import { DRUM_KITS } from '@/data/drumKits';
+import { BEAT_PRESETS } from '@/data/beatPresets';
 import { SYNTH_PRESETS } from '@/data/synthPresets';
 import { DRUM_TRIMS, PRESET_TRIMS, type TrimEntry } from '@/data/trimTable';
 import { toDbfs, toDecibels } from '@/utils/gainUnits';
 import { isWithinTolerance } from './trimMath';
-import { drumLoudnessHash, presetLoudnessHash } from './loudnessConfig.ts';
+import { beatLoudnessHash, presetLoudnessHash } from './loudnessConfig.ts';
 
 export interface LevelFinding {
   id: string;
@@ -65,12 +65,10 @@ interface TrimDomain {
    * The dB that is ACTUALLY applied on top of `measuredDbfs`, or null when
    * nothing live claims the id.
    *
-   * The two halves answer this from different places, and that asymmetry is
-   * the whole shape of the synth-engine change: a kit's trim is a measured
-   * number this table owns and `setDrumKit` resolves by name, while a
-   * preset's is `patch.common.outputGainDb` — inside the patch, so a patch a
-   * user edits, saves or exports carries its own calibration. Reading the
-   * table's `trimDb` for a preset would check a number nothing applies.
+   * Both halves answer it from the live patch — `patch.outputTrimDb` for a
+   * Beat preset, `patch.common.outputGainDb` for a synth one — because a patch
+   * a user edits, saves or exports carries its own calibration. Reading the
+   * table's `trimDb` would check a number nothing applies.
    *
    * null for a committed entry no live id claims: there is no applied gain to
    * combine, and an orphan is `findOrphanEntries`' finding, not this one's.
@@ -81,15 +79,19 @@ interface TrimDomain {
 /** Live presets by id, so a domain's `hashOf` is a lookup rather than a scan. */
 const PRESETS_BY_ID = new Map(SYNTH_PRESETS.map((preset) => [preset.id, preset]));
 
+/** Live Beat presets by id, so a domain's `hashOf` is a lookup rather than a scan. */
+const BEAT_PRESETS_BY_ID = new Map(BEAT_PRESETS.map((preset) => [preset.id, preset]));
+
 const TRIM_DOMAINS: readonly TrimDomain[] = [
   {
-    noun: 'kit',
+    noun: 'beat preset',
     trims: () => DRUM_TRIMS,
-    liveIds: () => Object.keys(DRUM_KITS),
-    hashOf: (id) => drumLoudnessHash(id),
-    // A kit's trim is applied by name (`setDrumKit` -> `drumTrimGainFor`), so
-    // the table IS the live value and an orphan entry is still self-checkable.
-    appliedDb: (_id, entry) => entry.trimDb,
+    liveIds: () => [...BEAT_PRESETS_BY_ID.keys()],
+    hashOf: (id) => beatLoudnessHash(id),
+    // The EMBEDDED trim, not the table's: `patch.outputTrimDb` is what runtime
+    // audio applies, and a collector reading `trimDb` here would check a number
+    // nothing plays. That the two agree is the lock test's own assertion.
+    appliedDb: (id) => BEAT_PRESETS_BY_ID.get(id)?.patch.outputTrimDb ?? null,
   },
   {
     noun: 'preset',
@@ -105,7 +107,7 @@ const TRIM_DOMAINS: readonly TrimDomain[] = [
  * Ruling 8: the empty table is indistinguishable from "never generated" — an
  * empty `DRUM_TRIMS`/`PRESET_TRIMS` has no marker saying so. A collector that
  * only diffs the entries PRESENT against the live config would pass vacuously
- * on `{}`, which guards nothing. This walks every LIVE kit and preset instead,
+ * on `{}`, which guards nothing. This walks every LIVE preset instead,
  * so an empty (or partially-emptied) table fails loudly, for the right reason.
  */
 export function findMissingEntries(): LevelFinding[] {
@@ -138,10 +140,10 @@ export function findOrphanEntries(): LevelFinding[] {
 
 /**
  * A subtlety worth knowing before reading a mismatch as wrong: the hash can
- * move while the measurement would not. `drumLoudnessHash` fingerprints every
- * voice in the kit, but the shared reference pattern (`DRUM_KIT_BAR`) only ever
+ * move while the measurement would not. `beatLoudnessHash` fingerprints every
+ * voice in the patch, but the shared reference pattern (`DRUM_KIT_BAR`) only ever
  * plays kick, snare and closed hihat — so retuning e.g. `ride.gain` moves the
- * kit's hash (correctly: the config changed) even though regenerating would
+ * patch's hash (correctly: the config changed) even though regenerating would
  * reproduce the identical `measuredDbfs`. That is intended, not a harness bug:
  * the hash is deliberately broader than the pattern it is meant to guard.
  */
@@ -167,7 +169,7 @@ export function findDriftedEntries(): LevelFinding[] {
  * land on target" — where `domain.appliedDb` is what "actually applied" means
  * for each half, and they differ (see its docblock).
  *
- * A hand-edited or corrupted table, not an unusual patch: a kit needing more
+ * A hand-edited or corrupted table, not an unusual patch: a patch needing more
  * than the +/-12 dB fader range still PASSES here, because its trim is honoured
  * (the engine applies it directly, not through a fader) and so
  * `measuredDbfs + trimDb` still lands at TARGET_DBFS. The fader-range flag is

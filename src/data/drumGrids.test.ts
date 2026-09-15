@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { DRUM_GRIDS } from './drumGrids';
-import { DRUM_KITS, DRUM_TYPES } from '@/data/drumKits';
+import { BEAT_VOICE_IDS } from '@/data/beatPresets';
+import { BEAT_PRESETS } from '@/data/beatPresets';
 import { getMeter, isMeterId } from '@/utils/meter';
 
 // The three origin groups, kept apart in the test even though the table is
@@ -119,13 +120,16 @@ describe('DRUM_GRIDS data sanity', () => {
     expect(new Set(names).size, 'duplicate display name').toBe(names.length);
   });
 
-  test('every grid names a real drum kit', () => {
-    // The sequencer's grid menu writes both in one action: pick "Trap" and it
-    // loads the Trap grid AND the Trap Beat kit. A grid naming a kit that does
-    // not exist is a menu entry that half-works.
+  test('every grid names a real Beat preset', () => {
+    // STRICT, even though nothing applies the field: shipped factory data must
+    // reference a factory preset that exists. A dangling id here is a claim
+    // about what the rhythm was heard on that no reader can check, which is
+    // exactly the hole the old kit NAMES left — three vibes shipped naming a
+    // kit that resolved to nothing.
+    const presetIds = new Set(BEAT_PRESETS.map((p) => p.id));
     for (const id of ALL_IDS) {
-      const kit = DRUM_GRIDS[id].kit;
-      expect(DRUM_KITS[kit], `${id} -> ${kit}`).toBeTruthy();
+      const presetId = DRUM_GRIDS[id].beatPresetId;
+      expect(presetIds.has(presetId), `${id} -> ${presetId}`).toBe(true);
     }
   });
 
@@ -205,12 +209,12 @@ describe('DRUM_GRIDS genre voicing', () => {
     }
   });
 
-  test('the four boom-bap-family grids name Dusty Break, not 808 Vintage', () => {
+  test('the four boom-bap-family grids name dusty-break, not 808-vintage', () => {
     // Boom bap's instrument is acoustic breaks through a 12-bit SP-1200
     // (LANDR; Levels), the opposite of a bridged-T sine. Moving them off the
     // 808 is also what frees 808 Vintage to be an actual 808.
     for (const id of ['boom-bap', 'boombap-swung-break', 'boombap-8th-hat', 'lofi-half-time-brush']) {
-      expect(DRUM_GRIDS[id].kit, id).toBe('Dusty Break');
+      expect(DRUM_GRIDS[id].beatPresetId, id).toBe('dusty-break');
     }
   });
 
@@ -218,19 +222,19 @@ describe('DRUM_GRIDS genre voicing', () => {
     // They disagreed: Warm Riddim vs Acoustic Studio for the same idiom. Warm
     // Riddim's 4500 Hz hat is the second-darkest in the library and a bembe
     // bell is bright and cutting, so both take Acoustic Studio.
-    expect(DRUM_GRIDS['afro-6-8'].kit).toBe('Acoustic Studio');
-    expect(DRUM_GRIDS['afro-six-eight-bell'].kit).toBe('Acoustic Studio');
+    expect(DRUM_GRIDS['afro-6-8'].beatPresetId).toBe('acoustic-studio');
+    expect(DRUM_GRIDS['afro-six-eight-bell'].beatPresetId).toBe('acoustic-studio');
   });
 
   test('ambient-sparse-drift is on the kit with the long tails, not the techno kit', () => {
     // Warehouse has the shortest decays in the library; ambient wants the wash
     // on the cymbal, and Acoustic Studio is the only kit with a long crash
     // (1.7 s) and a full-bodied tom (0.45 s decay).
-    expect(DRUM_GRIDS['ambient-sparse-drift'].kit).toBe('Acoustic Studio');
+    expect(DRUM_GRIDS['ambient-sparse-drift'].beatPresetId).toBe('acoustic-studio');
   });
 
-  test('no grid still names 808 Vintage, which is now free to be an actual 808', () => {
-    const stragglers = ALL_IDS.filter((id) => DRUM_GRIDS[id].kit === '808 Vintage');
+  test('no grid still names 808-vintage, which is now free to be an actual 808', () => {
+    const stragglers = ALL_IDS.filter((id) => DRUM_GRIDS[id].beatPresetId === '808-vintage');
     expect(stragglers).toEqual([]);
   });
 });
@@ -241,7 +245,7 @@ describe('DRUM_GRIDS row shape', () => {
   // triggerDrum case, no track — which is why slice 2 deleted the row instead
   // of keeping it as "unplayable but authored". With that gone, a grid row name
   // and a kit voice name are the same set, and this assertion is what says so.
-  const KNOWN_ROW_NAMES: readonly string[] = DRUM_TYPES;
+  const KNOWN_ROW_NAMES: readonly string[] = BEAT_VOICE_IDS;
 
   const unknownRows = (rows: Record<string, boolean[]>) =>
     Object.keys(rows).filter((row) => !KNOWN_ROW_NAMES.includes(row));
@@ -439,12 +443,12 @@ describe('what the two former tables actually share', () => {
     // count `kit` as a distinguisher, because picking a grid in the sequencer
     // loaded its kit as well as its rows — the comment then said the predicate
     // "has to narrow again" if the picker ever stopped doing that, and it has:
-    // `SequencerView.applyDrumGrid` now calls `replaceDrumPattern(grid.rows)`
-    // and writes no kit, so two grids with identical playable rows are
-    // identical on screen and in the speakers whatever kit each was authored
-    // against. `DRUM_GRIDS[id].kit` survives as provenance — the kit the grid
+    // `SequencerView.applyDrumGrid` now calls `replaceBeatPattern(grid.rows)`
+    // and writes no sound, so two grids with identical playable rows are
+    // identical on screen and in the speakers whatever sound each was authored
+    // against. `DRUM_GRIDS[id].beatPresetId` survives as provenance — the sound
     // was transcribed with — and nothing in production reads it: the vibe/dice
-    // path writes `vibe.soundKit`, never `grid.kit`.
+    // path writes `vibe.beatPresetId`, never `grid.beatPresetId`.
     //
     // The sweep covers every unordered pair of the 30 ids, because a genre x
     // genre collision cannot be expressed by a vibe-only sweep and would sound

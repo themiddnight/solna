@@ -19,11 +19,11 @@ import {
   type MixdownRenderProgress,
   type MixdownSnapshot,
 } from '../audio/export/renderMixdown';
-import { DRUM_KITS, DRUM_TYPES } from '../data/drumKits';
+import { BEAT_VOICE_IDS } from '../data/beatPresets';
 import { getMeter } from '../utils/meter';
 import { slugifyProjectName } from '../utils/projectFileIO';
 import { buildProjectContent } from './projectFormat';
-import { DEFAULT_FADER_DB, faderDbToGain } from './levelUnits';
+import { faderDbToGain } from './levelUnits';
 import { SOURCE_BUSES } from './sourceBuses';
 import type { AppStore } from './types';
 
@@ -95,14 +95,18 @@ function buildMixdownSnapshot(get: () => AppStore): MixdownSnapshot {
     ...loop,
     buses: SOURCE_BUSES.map((bus) => ({
       source: bus.source,
-      gain: faderDbToGain(loop[bus.volume]),
-      muted: loop[bus.muted],
+      gain: faderDbToGain(bus.selectLevelDb(loop)),
+      muted: bus.selectMuted(loop),
     })),
-    drumFilter: {
-      cutoff: loop.drumFilterCutoff,
-      resonance: loop.drumFilterResonance,
-      type: loop.drumFilterType,
-    },
+    // One row per voice, in canonical order, with the voice's MUTE folded into
+    // its gain — `muted ? 0 : faderDbToGain(levelDb)` is the same one-line rule
+    // `engineSync.ts` applies live, written here because src/audio/ may not
+    // read the store and so may not convert dB. The raw `beatMix` travels
+    // beside it for the scheduling half of that same mute (see `MixdownLoop`).
+    beatVoiceGains: BEAT_VOICE_IDS.map((voice) => {
+      const { levelDb, muted } = loop.beatMix.voices[voice];
+      return { voice, gain: muted ? 0 : faderDbToGain(levelDb) };
+    }),
   }));
 
   return {
@@ -116,25 +120,11 @@ function buildMixdownSnapshot(get: () => AppStore): MixdownSnapshot {
     // and must.
     buses: SOURCE_BUSES.map((bus) => ({
       source: bus.source,
-      gain: faderDbToGain(s[bus.volume]),
-      muted: s[bus.muted],
+      gain: faderDbToGain(bus.selectLevelDb(s)),
+      muted: bus.selectMuted(s),
     })),
-    // One row per CANONICAL voice, named or not. `pushDrumTrackGains` resets
-    // every voice no track names to DEFAULT_FADER_DB, so a roster missing a
-    // voice ends up at unity — stating that here makes the snapshot total and
-    // saves the engine from having to know which rows it did not get.
-    drumTracks: DRUM_TYPES.map((instrument) => {
-      const track = s.sequencerTracks.find((t) => t.instrument === instrument);
-      return { instrument, gain: faderDbToGain(track ? track.volume : DEFAULT_FADER_DB) };
-    }),
-    drumKit: DRUM_KITS[s.soundKit],
-    drumKitName: s.soundKit,
-    drumFilter: {
-      cutoff: s.drumFilterCutoff,
-      resonance: s.drumFilterResonance,
-      type: s.drumFilterType,
-    },
-    sequencerParams: s.synthParams,
+    // No arrangement-wide Beat: it belongs to a loop, and every loop row above
+    // carries its own.
     loops,
   };
 }

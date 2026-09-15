@@ -16,11 +16,11 @@ describe('drumGridById', () => {
     expect(drumGridById('')).toBeUndefined();
   });
 
-  test('carries the entry\'s name, meter and kit through, not just its rows', () => {
+  test('carries the entry\'s name, meter and Beat preset through, not just its rows', () => {
     const grid = drumGridById('waltz-brush-three')!;
     expect(grid.meter).toBe('3/4');
     expect(grid.name).toBe('Waltz Brush Three');
-    expect(grid.kit).toBe('Lo-Fi Vinyl');
+    expect(grid.beatPresetId).toBe('lo-fi-vinyl');
   });
 
   test('returns a fresh deep copy, so mutating the result cannot reach module state', () => {
@@ -51,7 +51,7 @@ describe('drumGridById', () => {
     // sequencer menu may offer any of the 30. One library, one lookup.
     const trap = drumGridById('trap')!;
     expect(trap.name).toBe('Trap');
-    expect(trap.kit).toBe('Trap Beat');
+    expect(trap.beatPresetId).toBe('trap-beat');
     expect(trap.rows.kick.length).toBe(16);
   });
 });

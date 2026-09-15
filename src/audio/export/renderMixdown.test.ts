@@ -11,8 +11,16 @@ import {
   type MixdownLoop,
   type MixdownRenderProgress,
 } from './renderMixdown';
-import { mixdownLoop, mixdownMelodyBar, mixdownSnapshot, FACTORY_EFFECTS } from './mixdownFixture';
-import { audioEngine } from '../engine';
+import {
+  beatMixFixture,
+  beatParamsFixture,
+  beatPatternFixture,
+  mixdownLoop,
+  mixdownMelodyBar,
+  mixdownSnapshot,
+  FACTORY_EFFECTS,
+} from './mixdownFixture';
+import { AudioEngine, audioEngine } from '../engine';
 import { random } from '../rng';
 import { cycleHoldScale, resolvePlaybackBassCycle, resolvePlaybackRhythmCycle } from '../chordRhythms';
 import { buildChordEvents, eventsForCycleStep } from '../playback/chordPlayback';
@@ -21,6 +29,7 @@ import { patternStoredIndexAt } from '@/utils/patternTimeline';
 import { generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
 import { MAX_STEPS_PER_BAR } from '@/utils/meter';
 import type { BassStepChoice } from '@/data/bassPatterns';
+import type { BeatPattern, BeatVoices } from '@/types';
 
 // The capability probe reads `globalThis.OfflineAudioContext`, so the TEST
 // provides it — the same way a browser does. There is no injection seam in
@@ -91,15 +100,15 @@ describe('planArrangement', () => {
     expect(absent.totalSteps).toBe(16);
   });
 
-  test('positions every loop\'s drum filter on its arrangement boundary', () => {
+  test('positions every loop\'s Beat patch on its arrangement boundary', () => {
+    const filtered = (cutoff: number, resonance: number) => {
+      const base = beatParamsFixture();
+      return { ...base, filter: { ...base.filter, cutoff, resonance } };
+    };
     const snapshot = mixdownSnapshot({
       loops: [
-        mixdownLoop({
-          drumFilter: { cutoff: 500, resonance: 2, type: 'lowpass' },
-        }),
-        mixdownLoop({
-          drumFilter: { cutoff: 12000, resonance: 1, type: 'lowpass' },
-        }),
+        mixdownLoop({ beatParams: filtered(500, 2) }),
+        mixdownLoop({ beatParams: filtered(12000, 1) }),
       ],
     });
 
@@ -107,19 +116,11 @@ describe('planArrangement', () => {
       planLoopAudioAutomation(snapshot, planArrangement(snapshot)).map((entry) => ({
         loopIndex: entry.loopIndex,
         time: entry.time,
-        drumFilter: entry.drumFilter,
+        filter: entry.beatParams.filter,
       })),
     ).toEqual([
-      {
-        loopIndex: 0,
-        time: 0,
-        drumFilter: { cutoff: 500, resonance: 2, type: 'lowpass' },
-      },
-      {
-        loopIndex: 1,
-        time: 2,
-        drumFilter: { cutoff: 12000, resonance: 1, type: 'lowpass' },
-      },
+      { loopIndex: 0, time: 0, filter: { cutoff: 500, resonance: 2, type: 'lowpass' } },
+      { loopIndex: 1, time: 2, filter: { cutoff: 12000, resonance: 1, type: 'lowpass' } },
     ]);
   });
 });
@@ -172,6 +173,13 @@ describe('buildLoopVoices', () => {
  * the second bar and to the third chord — a step a bar-relative filter maps
  * onto column 4, under a different chord.
  */
+/** A Beat that plays nothing, for the tests that measure one melodic source. */
+function silentBeatPattern(): BeatPattern {
+  const pattern = beatPatternFixture();
+  pattern.rows.kick = pattern.rows.kick.map(() => false);
+  return pattern;
+}
+
 const CHORD_DURATIONS = [16, 16, 16];
 const STEP_DUR = stepDurationSec(120);
 
@@ -393,12 +401,12 @@ describe('renderMixdown: the rendered buffer', () => {
     const first = mixdownLoop({
       id: 'muted-chord',
       chords: [],
-      sequencerTracks: [],
+      beatPattern: silentBeatPattern(),
       buses: loopMix(true),
     });
     const second = mixdownLoop({
       id: 'audible-chord',
-      sequencerTracks: [],
+      beatPattern: silentBeatPattern(),
       buses: loopMix(false),
     });
     const snapshot = mixdownSnapshot({
@@ -553,7 +561,7 @@ describe('renderMixdown: every melodic source plays its own patch', () => {
   function fiveSourceLoop(over: Partial<MixdownLoop> = {}): MixdownLoop {
     return mixdownLoop({
       // Drums would add energy no patch change can move, diluting every ratio.
-      sequencerTracks: [],
+      beatPattern: silentBeatPattern(),
       leadMelodySteps: mixdownMelodyBar('C4'),
       fxMelodySteps: mixdownMelodyBar('G4'),
       ...over,
@@ -611,7 +619,7 @@ describe('renderMixdown: Arp reads each track`s own settings', () => {
   const ARP_ON = { active: true, mode: 'up' as const, rate: '16n' as const, octaves: 1 };
 
   async function samplesOf(over: Partial<MixdownLoop>): Promise<Float32Array> {
-    const loop = mixdownLoop({ sequencerTracks: [], ...over });
+    const loop = mixdownLoop({ beatPattern: silentBeatPattern(), ...over });
     const result = await renderMixdown(mixdownSnapshot({ effects: DRY_EFFECTS, loops: [loop] }));
     if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result.reason)}`);
     return result.buffer.getChannelData(0);
@@ -658,6 +666,119 @@ describe('renderMixdown: the session engine is not involved', () => {
     } finally {
       noteOn.mockRestore();
       drum.mockRestore();
+    }
+  });
+});
+
+describe('renderMixdown: every loop plays its OWN Beat patch', () => {
+  /**
+   * The defect this replaces: the snapshot carried ONE kit and one trim for
+   * the whole arrangement, installed once in `applyMasterState`, so a song
+   * whose second loop used a different Beat exported the first loop's sound
+   * over both. The assertion is deliberately about ORDER — a patch installed
+   * after a hit has already been scheduled is inaudible on that hit, so
+   * "the engine saw both patches" is not enough.
+   */
+  test('each loop`s Beat Params reach the engine before that loop`s first hit', async () => {
+    const beat = (kickDecay: number, kickFreqStart: number, outputTrimDb: number) => {
+      const base = beatParamsFixture();
+      return {
+        ...base,
+        outputTrimDb,
+        voices: {
+          ...base.voices,
+          kick: { ...base.voices.kick, decay: kickDecay, freqStart: kickFreqStart },
+        },
+      };
+    };
+    const first = beat(0.12, 120, -4.5);
+    const second = beat(0.6, 60, 3.5);
+
+    const snapshot = mixdownSnapshot({
+      loops: [
+        mixdownLoop({ id: 'loop-first', beatParams: first }),
+        mixdownLoop({ id: 'loop-second', beatParams: second }),
+      ],
+    });
+
+    type Entry =
+      | { kind: 'kit'; decay: number; freqStart: number; trim: number }
+      | { kind: 'hit'; voice: string; time: number };
+    const log: Entry[] = [];
+
+    const realSetDrumKit = AudioEngine.prototype.setDrumKit;
+    const realTriggerDrum = AudioEngine.prototype.triggerDrum;
+    const kitSpy = spyOn(AudioEngine.prototype, 'setDrumKit').mockImplementation(
+      function (this: AudioEngine, voices: BeatVoices, outputTrimDb: number) {
+        log.push({ kind: 'kit', decay: voices.kick.decay, freqStart: voices.kick.freqStart, trim: outputTrimDb });
+        realSetDrumKit.call(this, voices, outputTrimDb);
+      },
+    );
+    const drumSpy = spyOn(AudioEngine.prototype, 'triggerDrum').mockImplementation(
+      function (this: AudioEngine, type: string, velocity?: number, time?: number) {
+        log.push({ kind: 'hit', voice: type, time: time ?? 0 });
+        realTriggerDrum.call(this, type, velocity, time);
+      },
+    );
+
+    try {
+      const result = await renderMixdown(snapshot);
+      if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result.reason)}`);
+
+      const hits = log.filter((e): e is Extract<Entry, { kind: 'hit' }> => e.kind === 'hit');
+      expect(hits.length).toBeGreaterThan(2);
+
+      // One bar of 4/4 at 120 bpm: the second loop starts at 2 s.
+      const secondLoopStart = 16 * stepDurationSec(120);
+      const firstIndex = log.findIndex((e) => e.kind === 'hit');
+      const secondIndex = log.findIndex((e) => e.kind === 'hit' && e.time >= secondLoopStart - 1e-9);
+      expect(firstIndex).toBeGreaterThanOrEqual(0);
+      expect(secondIndex).toBeGreaterThan(firstIndex);
+
+      const kitBefore = (index: number) => {
+        for (let i = index - 1; i >= 0; i -= 1) {
+          const entry = log[i];
+          if (entry.kind === 'kit') return entry;
+        }
+        return undefined;
+      };
+
+      expect(kitBefore(firstIndex)).toEqual({
+        kind: 'kit', decay: 0.12, freqStart: 120, trim: -4.5,
+      });
+      expect(kitBefore(secondIndex)).toEqual({
+        kind: 'kit', decay: 0.6, freqStart: 60, trim: 3.5,
+      });
+    } finally {
+      kitSpy.mockRestore();
+      drumSpy.mockRestore();
+    }
+  });
+
+  /** The per-voice mute layer travels with the loop, and a muted voice
+   *  schedules nothing at all — the same decision `beatStepEvents` takes live. */
+  test('a voice muted in a loop`s Beat Mix is never scheduled for that loop', async () => {
+    const muted = beatMixFixture();
+    muted.voices.kick = { levelDb: 0, muted: true };
+
+    const snapshot = mixdownSnapshot({
+      loops: [mixdownLoop({ id: 'loop-muted', beatMix: muted })],
+    });
+
+    const realTriggerDrum = AudioEngine.prototype.triggerDrum;
+    const voices: string[] = [];
+    const drumSpy = spyOn(AudioEngine.prototype, 'triggerDrum').mockImplementation(
+      function (this: AudioEngine, type: string, velocity?: number, time?: number) {
+        voices.push(type);
+        realTriggerDrum.call(this, type, velocity, time);
+      },
+    );
+    try {
+      const result = await renderMixdown(snapshot);
+      if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result.reason)}`);
+      expect(voices).not.toContain('kick');
+    } finally {
+      drumSpy.mockRestore();
     }
   });
 });

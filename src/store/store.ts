@@ -10,7 +10,7 @@ import { createBassSlice } from './bassSlice';
 import { createPadSlice } from './padSlice';
 import { createLeadSlice } from './leadSlice';
 import { createFxSlice } from './fxSlice';
-import { createSequencerSlice } from './sequencerSlice';
+import { createBeatSlice } from './beatSlice';
 import { createEffectsSlice } from './effectsSlice';
 import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
@@ -33,6 +33,7 @@ import { loadGapi, loadGis } from '../utils/googleScriptLoader';
 import type { GapiRoot } from '../utils/googleScriptLoader';
 import type { AppStore, PersistedState } from './types';
 import { asBoolean, sanitizeCustomSynthPresets } from './sanitize';
+import { sanitizeCustomBeatPresets } from './sanitizeBeat';
 
 export const PERSIST_KEY = 'musibox_project_state_v1';
 
@@ -164,7 +165,7 @@ let storeApi: StoreApi<AppStore> | undefined;
  * no longer here — IndexedDB is its home now, written by the autosave path
  * below. What is left is exactly what must survive a reload but is not a
  * project: which track/loop the user was on, the metronome, the last vibe chip,
- * and the cross-project preset/progression library (never project content —
+ * and the cross-project preset/progression/Beat library (never project content —
  * the 2026-09-03 "excluded — user library" rule).
  */
 export function partializeAppState(state: AppStore): PersistedState {
@@ -174,6 +175,7 @@ export function partializeAppState(state: AppStore): PersistedState {
     focusTrack: state.focusTrack,
     customSynthPresets: state.customSynthPresets,
     customChordProgressions: state.customChordProgressions,
+    customBeatPresets: state.customBeatPresets,
     activeLoopId: state.activeLoopId,
   };
 }
@@ -197,6 +199,7 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
     selectedVibeId: input.selectedVibeId,
     customSynthPresets: input.customSynthPresets,
     customChordProgressions: input.customChordProgressions,
+    customBeatPresets: input.customBeatPresets,
     activeLoopId: input.activeLoopId,
   };
 
@@ -216,6 +219,11 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   // Invalid entries are DROPPED — see sanitizeCustomSynthPresets for why they
   // are not repaired into the init patch under the user's own name.
   sanitized.customSynthPresets = sanitizeCustomSynthPresets(sanitized.customSynthPresets);
+  // The Beat library gets the same real read, for the same reason: it is the
+  // other persisted key holding a complete engine patch. An entry is dropped
+  // whole or read field by field — see sanitizeCustomBeatPresets — and the
+  // result is the set of user preset ids a `basePresetId` may resolve to.
+  sanitized.customBeatPresets = sanitizeCustomBeatPresets(sanitized.customBeatPresets);
   // Only the TYPE is checked here. Whether the id names a loop can only be
   // decided once the loops themselves have loaded from IndexedDB, which happens
   // after hydration — `reconcileActiveLoop` in projectSlice.ts owns that.
@@ -285,7 +293,7 @@ export const useAppStore = create<AppStore>()(
         ...createPadSlice(setWithLoopMirror),
         ...createLeadSlice(setWithLoopMirror, get),
         ...createFxSlice(setWithLoopMirror, get),
-        ...createSequencerSlice(setWithLoopMirror),
+        ...createBeatSlice(setWithLoopMirror),
         ...createEffectsSlice(setWithLoopMirror),
         ...createUiSlice(setWithLoopMirror),
         ...createPresetsSlice(setWithLoopMirror),

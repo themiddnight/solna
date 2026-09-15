@@ -1,5 +1,4 @@
 import { BASS_PATTERNS } from '@/data/bassPatterns';
-import { DRUM_KITS } from '@/data/drumKits';
 import { CHORD_RHYTHMS } from '@/data/chordRhythms';
 import type { MasterEffects } from '../types';
 import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
@@ -48,11 +47,20 @@ const malformed = (): ProjectParseResult => ({ ok: false, error: 'malformed', me
  * too, not just at `buildProjectContent`'s write site: this function is the
  * OTHER producer of a `ProjectContent`, and a `ProjectLoop` must never carry
  * `tempName` regardless of which producer built it.
+ *
+ * `knownBeatPresetIds` is the ONE thing the two readers below disagree about,
+ * and the asymmetry is the point. `normalizeStoredBody` reads THIS machine's
+ * slot, so it passes the user's own Beat library along with the factory ids
+ * and a loop based on a saved preset keeps its base across a reload.
+ * `parseProjectFile` reads a file that may come from anywhere, so it passes
+ * nothing and gets factory ids only: a base naming a preset from the author's
+ * library is unresolvable HERE by definition, and the complete patch beside it
+ * is what the file is actually carrying.
  */
-function sanitizeContent(raw: unknown): ProjectContent {
+function sanitizeContent(raw: unknown, knownBeatPresetIds?: ReadonlySet<string>): ProjectContent {
   const c = isPlainObject(raw) ? raw : {};
   const meterId = isMeterId(c.meterId) ? c.meterId : DEFAULT_METER_ID;
-  const loops = sanitizeLoops(c.loops, meterId) ?? [createDefaultLoop()];
+  const loops = sanitizeLoops(c.loops, meterId, knownBeatPresetIds) ?? [createDefaultLoop()];
   return {
     bpm: clampFinite(c.bpm, 20, 300, 120),
     meterId,
@@ -123,11 +131,18 @@ function unreadableSynthPatches(raw: unknown): string[] {
 }
 
 /**
- * Soft references a loop carries by id or name. The file is still valid when
- * one is unknown — the resolution paths already degrade (CHORD_RHYTHMS[0],
- * BASS_PATTERNS[0], the default kit) — so this only names them for a notice.
- * A patch's `sourcePresetId` is display provenance nobody resolves and is not
- * checked.
+ * Soft references a loop carries by id. The file is still valid when one is
+ * unknown — the resolution paths already degrade (CHORD_RHYTHMS[0],
+ * BASS_PATTERNS[0]) — so this only names them for a notice.
+ *
+ * TWO kinds of reference are deliberately NOT checked here, for the same
+ * reason: nothing resolves them. A synth patch's `sourcePresetId` is display
+ * provenance, and so is a loop's `beatParams.basePresetId` — the Beat patch in
+ * the file is COMPLETE, so a base naming a preset this build does not have (a
+ * preset from the author's own user library, most often) costs the file
+ * nothing at all. `sanitizeBeatParams` has already read such an id back as
+ * `null`, the patch beside it untouched; warning about it would tell a user
+ * their sound was lost when every value of it is right there in the file.
  */
 export function unknownLibraryReferences(content: ProjectContent): string[] {
   const rhythmIds = new Set(CHORD_RHYTHMS.map((p) => p.id));
@@ -136,7 +151,6 @@ export function unknownLibraryReferences(content: ProjectContent): string[] {
   for (const loop of content.loops) {
     if (!rhythmIds.has(loop.chordRhythmId)) found.add(`chord rhythm "${loop.chordRhythmId}"`);
     if (!bassIds.has(loop.bassPatternId)) found.add(`bass pattern "${loop.bassPatternId}"`);
-    if (!(loop.soundKit in DRUM_KITS)) found.add(`drum kit "${loop.soundKit}"`);
   }
   return [...found];
 }
@@ -216,7 +230,10 @@ export function parseProjectFile(text: string): ProjectParseResult {
  *
  * A newer body warns about nothing, because nothing was sanitised out of it.
  */
-export function normalizeStoredBody(body: ProjectBody): { body: ProjectBody; warnings: string[] } {
+export function normalizeStoredBody(
+  body: ProjectBody,
+  knownBeatPresetIds?: ReadonlySet<string>,
+): { body: ProjectBody; warnings: string[] } {
   const raw = body as unknown as Record<string, unknown>;
   const version = isFiniteNumber(raw.formatVersion) ? raw.formatVersion : 1;
   if (version > PROJECT_FORMAT_VERSION) return { body, warnings: [] };
@@ -225,7 +242,7 @@ export function normalizeStoredBody(body: ProjectBody): { body: ProjectBody; war
     body: {
       ...(raw as unknown as ProjectBody),
       formatVersion: PROJECT_FORMAT_VERSION,
-      content: sanitizeContent(raw.content),
+      content: sanitizeContent(raw.content, knownBeatPresetIds),
     },
     warnings,
   };

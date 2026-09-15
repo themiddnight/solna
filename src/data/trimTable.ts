@@ -3,7 +3,7 @@
  * (scripts/calibration/generateTrimTable.ts); hand edits are overwritten on the next run.
  * See scripts/calibration/README.md for when to re-run and what a flagged entry means.
  *
- * One measured trim per drum KIT (not per voice — a drum kit's voices are not
+ * One measured trim per BEAT PRESET (not per voice — a patch's voices are not
  * independent; see the comment on DRUM_TRIMS below) and per synth preset.
  * `measuredDbfs` is what the uncalibrated render measured at; `trimDb` is
  * TARGET_DBFS (-18) minus it; `configHash` fingerprints exactly the
@@ -13,27 +13,32 @@
 export interface TrimEntry {
   /** The uncalibrated render's short-term LUFS median, in dBFS. */
   measuredDbfs: number;
-  /** TARGET_DBFS - measuredDbfs. Applied as a linear gain by src/audio/trims.ts. */
+  /** TARGET_DBFS - measuredDbfs. This table is EVIDENCE: the number that ships is
+   *  the copy embedded in the preset's own patch (`outputTrimDb`), which the lock
+   *  test keeps equal to this one. */
   trimDb: number;
   /** sha256 over the loudness-affecting config, per scripts/calibration/loudnessConfig.ts. */
   configHash: string;
 }
 
-/** Kit name -> entry, measured from the kit's whole reference pattern (DEV-387). */
+/** Beat preset id -> entry, measured from the patch's whole reference pattern
+ *  (DEV-387). Runtime audio never reads this: the same number is embedded in
+ *  `BEAT_PRESETS[i].patch.outputTrimDb`, and the lock test keeps the two equal.
+ *  This table is the calibration EVIDENCE — the measurement the trim came from. */
 export const DRUM_TRIMS: Record<string, TrimEntry> = {
-  "808 Vintage": { measuredDbfs: -17.9, trimDb: -0.1, configHash: "3590040766507f0ae4bda1f22aa65ee2be3c904046782c7efae06241dc5ea7d8" },
-  "Acoustic Studio": { measuredDbfs: -17.5, trimDb: -0.5, configHash: "ba030ce008f907e424748412567a5721a6629f71a80db6cca55ebe52b457475e" },
-  "Chrome Pulse": { measuredDbfs: -16.8, trimDb: -1.2, configHash: "6333a89a8cc4349193575d89cfb850635f08b1cb231fd0738614746f1bc5fc06" },
-  "Club Standard": { measuredDbfs: -18.2, trimDb: 0.2, configHash: "b0838dc238774b5d63c32309263dc5f26acf06fb2e37ba2b7f892db8129e0c6c" },
-  "Dusty Break": { measuredDbfs: -18.8, trimDb: 0.8, configHash: "4c2895e9e3399a51a932c9c6c1c759eab7ee17ae4596c6be1515d514982db866" },
-  "Lo-Fi Vinyl": { measuredDbfs: -21.2, trimDb: 3.2, configHash: "d5d9fd4d669994e9a741c59361b16af1eca9556037d93c439c5963878897b074" },
-  "Retro Drive": { measuredDbfs: -19.1, trimDb: 1.1, configHash: "62cc846f58b631c011af29d9b5b4a1dad1e7c7a2cbf8f9790e26c2378e9671c1" },
-  "Sub Weight": { measuredDbfs: -16.5, trimDb: -1.5, configHash: "0cc09204cd53f8d09090cfbe56afd726a70aa7868e6ba63381af74332fd16afb" },
-  "Tight Pocket": { measuredDbfs: -21.7, trimDb: 3.7, configHash: "7c39746e19b08c028de8f128f0119a450e4be543b9650628862770e8c84c777d" },
-  "Trap Beat": { measuredDbfs: -15.6, trimDb: -2.4, configHash: "df63d1aa70345ae6258943ce7ac62fdb5770c771710651bce6c529ad36b62356" },
-  "Velocity Breaks": { measuredDbfs: -20.6, trimDb: 2.6, configHash: "430715b0effc4a9433a756aa4cd25cdaa88500e6ddce206514060aaaa4afba29" },
-  "Warehouse": { measuredDbfs: -18.8, trimDb: 0.8, configHash: "37d1459114bf558a43190d3ede45a4056d0cb2c31afe3bdf9b74e4e70d61cb0f" },
-  "Warm Riddim": { measuredDbfs: -20.7, trimDb: 2.7, configHash: "d7adcb20c1b4ed1bed6e6398c05e60e7cc29bdea20bfb53edfb1c1e8736f3a0a" },
+  "808-vintage": { measuredDbfs: -17.9, trimDb: -0.1, configHash: "423c6ae829e61f52283bfaea3333d5bd998512738cba139efd433826ca5d493e" },
+  "acoustic-studio": { measuredDbfs: -17.5, trimDb: -0.5, configHash: "a90acdc7dbada61bc5e5b101ba6c36fbc9828d89a983c97b744672a7d0ed6f91" },
+  "chrome-pulse": { measuredDbfs: -16.8, trimDb: -1.2, configHash: "d1ac33d34da0a6f804da70bf5436da5f0140ca40463f140016845761b02bda13" },
+  "club-standard": { measuredDbfs: -18.2, trimDb: 0.2, configHash: "7df938b69b860e8e567ca947652e4582351fabc28475425793b36590eb2f6ef0" },
+  "dusty-break": { measuredDbfs: -18.8, trimDb: 0.8, configHash: "0405d5a6147ee1f53caffd4db26e18bb22803d2809d0c54637a28a2f1781954a" },
+  "lo-fi-vinyl": { measuredDbfs: -21.2, trimDb: 3.2, configHash: "d5dafe29c10ed7a873b30d0ca9d40046f5192ba5385ea0e38dcea89072fec14e" },
+  "retro-drive": { measuredDbfs: -19.1, trimDb: 1.1, configHash: "e89067e2d5aa9cf3475cef0e83735d1307b49e75ce7b689834a50c77309d90ff" },
+  "sub-weight": { measuredDbfs: -16.5, trimDb: -1.5, configHash: "598587eca7310fcbc031f691f5f671450389c0ac959cb7bcbec363abdf16d185" },
+  "tight-pocket": { measuredDbfs: -21.7, trimDb: 3.7, configHash: "948bdc492cf424161c4a9395719d7c1e0523972aed99078e204565dd7f01b9b2" },
+  "trap-beat": { measuredDbfs: -15.6, trimDb: -2.4, configHash: "7b258bd4a9a3e1360f764647a737d50bf1bc3724de473270c1f3d359835e1ca6" },
+  "velocity-breaks": { measuredDbfs: -20.6, trimDb: 2.6, configHash: "b1dc69e8ec0151c1d75cd1fdfc03e9da17afa1fbf8b7372829775d0ac87018b6" },
+  "warehouse": { measuredDbfs: -18.8, trimDb: 0.8, configHash: "7a0be2af64593be63880f538134cce994d02d675f8120039a9fdb8273856d9f7" },
+  "warm-riddim": { measuredDbfs: -20.7, trimDb: 2.7, configHash: "e9f079d23ac23bbb12822175ea565cb61f44cdc30478f5736d886a9e9055f613" },
 };
 
 /** Synth preset id -> entry. */

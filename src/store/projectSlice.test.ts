@@ -2,7 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 
 import { audioEngine } from '../audio/engine';
 import { createMemoryBackend, createProjectStore } from './projectStore';
 import { UNTITLED_SOURCE, type ProjectSlotRecord } from './projectSource';
-import { unknownLibraryReferences } from './projectFile';
+import { parseProjectFile, unknownLibraryReferences } from './projectFile';
 import { buildProjectContent, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
 import { DEFAULT_LOOP_ID, createDefaultLoop } from './loopSlice';
 import { LOOP_FLAT_KEYS } from './loop';
@@ -130,19 +130,22 @@ describe('loadProject (boot)', () => {
   // The spec says a body with unknown library references "still loads, and says
   // so". The load half holds; the notice half cannot fire from here any more:
   // projectStore.load() runs normalizeStoredBody() at the read site, and
-  // sanitizeContent substitutes an unknown soundKit with the fallback kit
+  // sanitizeContent has already resolved an unknown Beat preset id to `null`
   // before this slice ever sees the body. The notice stays live on the
   // openProjectFile path below, which receives the body directly. Whether
   // sanitizeContent should keep library ids verbatim (as the spec's "Library
   // provenance" bullet states) is a sanitize.ts question, not this slice's.
-  test('a stored body naming an unknown kit still loads, with the reference already substituted', async () => {
+  test('a stored body naming an unknown Beat preset still loads, with the reference already resolved', async () => {
     const p = stored('Alpha', 77);
-    p.content.loops[0].soundKit = 'Nonexistent Kit';
+    p.content.loops[0].beatParams.basePresetId = 'nonexistent-preset';
     const { useAppStore, slice } = await sliceWithBackend(p);
     await slice.loadProject();
     const s = useAppStore.getState();
     expect(s.bpm).toBe(77);
-    expect(s.loops[0].soundKit).not.toBe('Nonexistent Kit');
+    // The PATCH is kept and only its unresolvable base is dropped — the
+    // sanitizer's rule for a stored patch whose origin is gone.
+    expect(s.loops[0].beatParams.basePresetId).toBeNull();
+    expect(s.loops[0].beatParams.voices.kick).toEqual(p.content.loops[0].beatParams.voices.kick);
     expect(s.projectNotice).toBeNull();
   });
 
@@ -295,7 +298,7 @@ describe('openProjectFile', () => {
 
   // DEFENSIVE CONTRACT — no production caller reaches this. Both readers run
   // `sanitizeContent` before the slice ever sees a body, and `sanitizeLoops`
-  // substitutes an unknown `soundKit`/`chordRhythmId`/`bassPatternId` with its
+  // substitutes an unknown `chordRhythmId`/`bassPatternId` with its
   // library fallback, so `unknownLibraryReferences` is empty on every real path
   // and the notice never fires (the spec's "Library provenance" bullet says so).
   // This test hands the slice a RAW, unsanitized body to pin the guard the slice
@@ -304,11 +307,42 @@ describe('openProjectFile', () => {
   test('guards a raw unsanitized body — a notice production cannot produce', async () => {
     const { useAppStore, slice } = await sliceWithBackend();
     const file = stored('From Disk', 99);
-    file.content.loops[0].soundKit = 'Nonexistent Kit';
+    file.content.loops[0].chordRhythmId = 'cr-nonexistent';
     await slice.openProjectFile(file);
     const notice = useAppStore.getState().projectNotice ?? '';
     expect(notice).toContain('unrecognised references');
-    expect(notice).toContain('drum kit "Nonexistent Kit"');
+    expect(notice).toContain('chord rhythm "cr-nonexistent"');
+  });
+
+  test('a loop based on a SAVED USER preset keeps its base across a slot reload', async () => {
+    // The local slot is read on the same machine whose library the base names,
+    // so the library travels into the read. Without that, a user preset id is
+    // indistinguishable from a dangling one and the loop comes back reading
+    // `Custom patch` for a preset the user still has.
+    const { useAppStore } = await storeModule;
+    const saved = useAppStore.getState().saveCustomBeatPreset('Mine', useAppStore.getState().beatParams);
+    const body = stored('With User Beat', 101);
+    body.content.loops[0] = {
+      ...body.content.loops[0],
+      beatParams: { ...body.content.loops[0].beatParams, basePresetId: saved.id },
+    };
+
+    const { slice } = await sliceWithBackend(body);
+    await slice.loadProject();
+
+    const loop = useAppStore.getState().loops[0];
+    expect(loop.beatParams.basePresetId).toBe(saved.id);
+    expect(useAppStore.getState().beatParams.basePresetId).toBe(saved.id);
+
+    // ...and the SAME body arriving as a .solna import gets factory ids only,
+    // so the identical base reads back as unresolvable with the patch intact.
+    const imported = parseProjectFile(JSON.stringify(body));
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.body.content.loops[0].beatParams.basePresetId).toBeNull();
+    expect(imported.body.content.loops[0].beatParams.voices).toEqual(loop.beatParams.voices);
+
+    useAppStore.getState().deleteCustomBeatPreset(saved.id);
   });
 
   test('an empty name in the file reads back as untitled', async () => {
@@ -344,12 +378,12 @@ describe('openProjectFile', () => {
     const slice = createProjectSlice(useAppStore.setState, useAppStore.getState, failed, () => 5_000);
     useAppStore.setState({ ...slice, projectName: null });
     const file = stored('From Disk', 99);
-    file.content.loops[0].soundKit = 'Nonexistent Kit';
+    file.content.loops[0].chordRhythmId = 'cr-nonexistent';
     await slice.openProjectFile(file);
     const notice = useAppStore.getState().projectNotice ?? '';
     expect(notice).toContain('storage is unavailable');
     expect(notice).toContain('unrecognised references');
-    expect(notice).toContain('drum kit "Nonexistent Kit"');
+    expect(notice).toContain('chord rhythm "cr-nonexistent"');
   });
 
   // The defect this pins: parseProjectFile computes a warning set for an

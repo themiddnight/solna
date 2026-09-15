@@ -3,7 +3,6 @@ import {
   defaultFxState,
   defaultPadState,
   INITIAL_CHORDS,
-  INITIAL_SEQUENCER_TRACKS,
   defaultTrackArp,
   defaultTrackSynth,
 } from './initialState';
@@ -19,6 +18,7 @@ import {
   LOOP_FLAT_KEYS,
 } from './loop';
 import { createDefaultLoop } from './loopSlice';
+import { defaultBeatState } from './beatPresets';
 import type { Loop } from './types';
 import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
 import { loopBars, loopLengthSteps } from '@/utils/songStructure';
@@ -58,11 +58,7 @@ function makeLoop(overrides: Partial<Loop> = {}): Loop {
     leadMelodyOctave: 3,
     leadGate: DEFAULT_LEAD_GATE,
     ...defaultFxState(),
-    sequencerTracks: INITIAL_SEQUENCER_TRACKS.map((t) => ({ ...t, steps: [...t.steps] })),
-    soundKit: 'Retro Drive',
-    drumFilterCutoff: 12000,
-    drumFilterResonance: 0.7,
-    drumFilterType: 'lowpass',
+    ...defaultBeatState(),
     synthVolume: 1.0,
     synthMuted: false,
     chordVolume: 1.0,
@@ -70,8 +66,6 @@ function makeLoop(overrides: Partial<Loop> = {}): Loop {
     bassVolume: 1.0,
     bassMuted: false,
     ...defaultPadState(),
-    masterSequencerVolume: 0.8,
-    drumMuted: false,
     ...overrides,
   };
 }
@@ -262,18 +256,20 @@ describe('cloneLoop', () => {
     expect(clone).not.toBe(loop);
     expect(clone.synthParams).not.toBe(loop.synthParams);
     expect(clone.chords).not.toBe(loop.chords);
-    expect(clone.sequencerTracks).not.toBe(loop.sequencerTracks);
-    expect(clone.sequencerTracks[0].steps).not.toBe(loop.sequencerTracks[0].steps);
+    expect(clone.beatPattern.rows).not.toBe(loop.beatPattern.rows);
+    expect(clone.beatPattern.rows.kick).not.toBe(loop.beatPattern.rows.kick);
+    expect(clone.beatParams.voices.kick).not.toBe(loop.beatParams.voices.kick);
+    expect(clone.beatMix.voices.kick).not.toBe(loop.beatMix.voices.kick);
   });
 });
 
 describe('loopStatePatch', () => {
   test('picks exactly the 31 per-loop keys, never id or name', () => {
-    const loop = makeLoop({ scaleRoot: 'D', drumMuted: true });
+    const loop = makeLoop({ scaleRoot: 'D', synthMuted: true });
     const patch = loopStatePatch(loop);
     expect(Object.keys(patch).sort()).toEqual([...LOOP_FLAT_KEYS].sort());
     expect(patch.scaleRoot).toBe('D');
-    expect(patch.drumMuted).toBe(true);
+    expect(patch.synthMuted).toBe(true);
     expect('id' in patch).toBe(false);
     expect('name' in patch).toBe(false);
   });

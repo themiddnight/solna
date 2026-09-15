@@ -296,7 +296,7 @@ describe('resolveVibeVariation: what a draw preserves', () => {
         expect(out.bassOctave).toBe(v.bassOctave);
         expect(out.chordFeel).toBe(v.chordFeel);
         expect(out.bassFeel).toBe(v.bassFeel);
-        expect(out.soundKit).toBe(v.soundKit);
+        expect(out.beatPresetId).toBe(v.beatPresetId);
         expect(out.synthPresetId).toBe(v.synthPresetId);
         expect(out.chordPresetId).toBe(v.chordPresetId);
         expect(out.bassPresetId).toBe(v.bassPresetId);

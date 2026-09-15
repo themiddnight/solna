@@ -1,10 +1,10 @@
 /**
  * Verifies the committed calibration trim table still describes today's defaults:
- *  1. every drum kit and every synth preset has an entry;
- *  2. no entry names a kit or preset that no longer exists;
+ *  1. every Beat preset and every synth preset has an entry;
+ *  2. no entry names a preset that no longer exists;
  *  3. no entry's loudness-affecting config has drifted since it was calibrated;
  *  4. every entry's measurement plus the gain actually applied on top of it — a
- *     kit's committed trim, a preset's own `common.outputGainDb` — lands within
+ *     Beat patch's own `outputTrimDb`, a synth preset's own `common.outputGainDb` — lands within
  *     TOLERANCE_DB of TARGET_DBFS.
  *
  * Reads the table and hashes data. It NEVER renders audio and never spawns ffmpeg:
@@ -33,8 +33,8 @@ function report(label: string, findings: LevelFinding[]) {
 }
 
 console.log(`Calibration target ${TARGET_DBFS} dBFS, tolerance +/-${TOLERANCE_DB} dB.\n`);
-report('every kit and preset has a committed entry', findMissingEntries());
-report('no entry outlives the kit or preset it names', findOrphanEntries());
+report('every Beat and synth preset has a committed entry', findMissingEntries());
+report('no entry outlives the preset it names', findOrphanEntries());
 report('no loudness-affecting default has drifted since calibration', findDriftedEntries());
 report('every measurement plus its applied gain lands within tolerance', findOutOfToleranceEntries());
 

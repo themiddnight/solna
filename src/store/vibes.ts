@@ -136,7 +136,7 @@ export function applyVibeToStore(vibe: ResolvedVibe) {
 
   // 1. Context & BPM
   store.setBpm(vibe.bpm);
-  // MUST precede replaceDrumPattern below: that action adapts the incoming rows
+  // MUST precede replaceBeatPattern below: that action adapts the incoming rows
   // to whatever meter is active when it runs, so setting the meter afterwards
   // would leave the grid adapted to the OUTGOING vibe's bar length.
   store.setMeter(vibe.meter);
@@ -151,19 +151,34 @@ export function applyVibeToStore(vibe: ResolvedVibe) {
   // with a user `name` still tracks the last vibe applied behind it.
   store.setLoopTempName(store.activeLoopId, vibe.name);
 
-  // 2. Drums & Sequencer (Pattern + Sound Kit + Drum Filter)
-  store.setSoundKit(vibe.soundKit);
-  store.replaceDrumPattern(vibe.drumPattern);
+  // 2. Beat (Sound + Pattern + Drum Filter)
+  //
+  // TWO INDEPENDENT WRITES, in this order. A vibe chooses a sound AND a
+  // rhythm, and they are separate state: `setBeatPreset` installs the named
+  // preset's complete patch as `beatParams` and records it as the base, and
+  // `replaceBeatPattern` writes the grid's rows. Neither implies the other —
+  // the grid's own `beatPresetId` is provenance nothing applies, so picking a
+  // grid in the sequencer still changes no sound, and a vibe naming a sound
+  // still cannot smuggle a rhythm in behind it.
+  //
+  // `replaceBeatPattern` REPLACES: a voice the grid does not name is cleared,
+  // so a vibe gives you that grid and never that grid plus the last one's
+  // leftovers. The clear goes through `writeStepWindow`, so only the active
+  // meter's window moves and wider-meter programming past it survives.
+  store.setBeatPreset(vibe.beatPresetId);
+  store.replaceBeatPattern(vibe.drumPattern);
 
-  if (vibe.drumFilterCutoff !== undefined) {
-    store.setDrumFilterCutoff(vibe.drumFilterCutoff);
-  }
-  if (vibe.drumFilterResonance !== undefined) {
-    store.setDrumFilterResonance(vibe.drumFilterResonance);
-  }
-  if (vibe.drumFilterType !== undefined) {
-    store.setDrumFilterType(vibe.drumFilterType);
-  }
+  // The filter override, AFTER the preset and never before it: `setBeatPreset`
+  // installs a complete patch including that preset's own filter, so an
+  // override written first would be the thing the preset overwrote. Only the
+  // fields the vibe actually states are written — a vibe that names none
+  // leaves the preset's filter exactly as the preset voiced it.
+  const beatFilter = {
+    ...(vibe.beatFilterCutoff !== undefined && { cutoff: vibe.beatFilterCutoff }),
+    ...(vibe.beatFilterResonance !== undefined && { resonance: vibe.beatFilterResonance }),
+    ...(vibe.beatFilterType !== undefined && { type: vibe.beatFilterType }),
+  };
+  if (Object.keys(beatFilter).length > 0) store.updateBeatFilter(beatFilter);
 
   // 3. Chords & Rhythm Pattern & Feel (Tight/Loose) & Sound Preset
   store.setChords(vibe.chords);

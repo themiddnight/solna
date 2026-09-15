@@ -101,7 +101,13 @@ export interface VibeSpec {
   scaleType: string;
 
   // Beat & Drum Kit
-  soundKit: string;
+  /**
+   * Library reference into `BEAT_PRESETS`, by stable id. Applying the vibe
+   * installs that preset's complete patch as the loop's Beat Params and
+   * records it as the base — unlike `drumGridId`'s own `beatPresetId`, which
+   * is provenance nothing applies.
+   */
+  beatPresetId: string;
   /**
    * Library reference into DRUM_GRIDS — any of the 30, not a vibe-only subset:
    * the sequencer's genre grids and the vibes' own grids are one library.
@@ -110,9 +116,15 @@ export interface VibeSpec {
    * names the grid actually playing.
    */
   drumGridId: string;
-  drumFilterCutoff?: number;
-  drumFilterResonance?: number;
-  drumFilterType?: FilterType;
+  /**
+   * An optional override of the Beat bus filter — the same three fields
+   * `BeatParams.filter` carries. A vibe that omits them leaves the preset's own
+   * filter alone; `store/vibes.ts` applies whichever are present on top of the
+   * patch `beatPresetId` installs.
+   */
+  beatFilterCutoff?: number;
+  beatFilterResonance?: number;
+  beatFilterType?: FilterType;
 
   // Chords
   /** Library reference into CHORD_PROGRESSIONS. */
@@ -211,10 +223,10 @@ export const VIBES: VibeSpec[] = [
     progressionId: 'lofi-morning-turnaround',
 
     // Beat: Dusty Break with warm lowpass filter
-    soundKit: 'Dusty Break',
-    drumFilterCutoff: 6200,
-    drumFilterResonance: 1.0,
-    drumFilterType: 'lowpass',
+    beatPresetId: 'dusty-break',
+    beatFilterCutoff: 6200,
+    beatFilterResonance: 1.0,
+    beatFilterType: 'lowpass',
     drumGridId: 'lofi-half-time-brush',
 
     // Chords: Dream Keys, relaxed swung feel
@@ -280,10 +292,10 @@ export const VIBES: VibeSpec[] = [
     progressionId: 'cine-epic-ostinato',
 
     // Beat: Retro Drive, tight 80s gate
-    soundKit: 'Retro Drive',
-    drumFilterCutoff: 12000,
-    drumFilterResonance: 1.0,
-    drumFilterType: 'lowpass',
+    beatPresetId: 'retro-drive',
+    beatFilterCutoff: 12000,
+    beatFilterResonance: 1.0,
+    beatFilterType: 'lowpass',
     drumGridId: 'synthwave-four-on-floor',
 
     // Chords: Neon Polysynth, grid-tight 8th pads
@@ -349,10 +361,10 @@ export const VIBES: VibeSpec[] = [
     // Repointed from the non-existent 'Hyperpop 2000' to the kit its own grid
     // (house) names. Slice 4 renamed this kit ('909 Modern' -> 'Club Standard');
     // this line moved with it.
-    soundKit: 'Club Standard',
-    drumFilterCutoff: 14000,
-    drumFilterResonance: 1.0,
-    drumFilterType: 'lowpass',
+    beatPresetId: 'club-standard',
+    beatFilterCutoff: 14000,
+    beatFilterResonance: 1.0,
+    beatFilterType: 'lowpass',
     drumGridId: 'house',
 
     // Chords: Upbeat EDM stabs, laser-tight
@@ -421,10 +433,10 @@ export const VIBES: VibeSpec[] = [
     // Repointed from the non-existent 'Minimal Glitch'. Follows its grid
     // (ambient-sparse-drift), which left Warehouse — the shortest decays in
     // the library — for the long crash and tom ambient wants.
-    soundKit: 'Acoustic Studio',
-    drumFilterCutoff: 4800,
-    drumFilterResonance: 1.0,
-    drumFilterType: 'lowpass',
+    beatPresetId: 'acoustic-studio',
+    beatFilterCutoff: 4800,
+    beatFilterResonance: 1.0,
+    beatFilterType: 'lowpass',
     drumGridId: 'ambient-sparse-drift',
 
     // Chords: Celestial Shimmer, very loose and floating
@@ -486,10 +498,10 @@ export const VIBES: VibeSpec[] = [
     progressionId: 'boombap-soul-piano',
 
     // Beat: Dusty Break / Boom bap swing
-    soundKit: 'Dusty Break',
-    drumFilterCutoff: 7800,
-    drumFilterResonance: 1.0,
-    drumFilterType: 'lowpass',
+    beatPresetId: 'dusty-break',
+    beatFilterCutoff: 7800,
+    beatFilterResonance: 1.0,
+    beatFilterType: 'lowpass',
     drumGridId: 'boombap-swung-break',
 
     // Chords: Mellow E-Piano with syncopated push
@@ -549,10 +561,10 @@ export const VIBES: VibeSpec[] = [
     progressionId: 'zen-bamboo-vamp',
 
     // Beat: Acoustic Studio bamboo acoustic clicks
-    soundKit: 'Acoustic Studio',
-    drumFilterCutoff: 6500,
-    drumFilterResonance: 1.0,
-    drumFilterType: 'lowpass',
+    beatPresetId: 'acoustic-studio',
+    beatFilterCutoff: 6500,
+    beatFilterResonance: 1.0,
+    beatFilterType: 'lowpass',
     drumGridId: 'zen-bamboo-pulse',
 
     // Chords: Glocken Bell & peaceful sustained pads
@@ -618,10 +630,10 @@ export const VIBES: VibeSpec[] = [
     progressionId: 'lofi-rainy-window',
 
     // Beat: brushed three-four, one kick per bar
-    soundKit: 'Lo-Fi Vinyl',
-    drumFilterCutoff: 6800,
-    drumFilterResonance: 1.0,
-    drumFilterType: 'lowpass',
+    beatPresetId: 'lo-fi-vinyl',
+    beatFilterCutoff: 6800,
+    beatFilterResonance: 1.0,
+    beatFilterType: 'lowpass',
     drumGridId: 'waltz-brush-three',
 
     // Chords: FM tines comping the literal oom-pah-pah
@@ -686,10 +698,10 @@ export const VIBES: VibeSpec[] = [
     progressionId: 'cine-dorian-voyage',
 
     // Beat: two dotted-quarter beats, snare pushing off the last eighth of each
-    soundKit: 'Acoustic Studio',
-    drumFilterCutoff: 9000,
-    drumFilterResonance: 1.0,
-    drumFilterType: 'lowpass',
+    beatPresetId: 'acoustic-studio',
+    beatFilterCutoff: 9000,
+    beatFilterResonance: 1.0,
+    beatFilterType: 'lowpass',
     drumGridId: 'afro-six-eight-bell',
 
     // Chords: tines on the one-bar 6/8 bell cell

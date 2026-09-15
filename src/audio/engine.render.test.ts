@@ -5,7 +5,7 @@
 import { describe, expect, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
 import { AudioEngine, createRenderEngine } from './engine';
-import { DEFAULT_DRUM_KIT } from '@/data/drumKits';
+import { BEAT_PRESETS } from '@/data/beatPresets';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 
 /** A real offline context, at the app's working rate and channel count. */
@@ -24,7 +24,7 @@ describe('createRenderEngine', () => {
   test('builds the master chain, so a bus exists and a kick makes sound', async () => {
     const ctx = offlineCtx(0.25);
     const engine = createRenderEngine(ctx);
-    engine.setDrumKit(DEFAULT_DRUM_KIT, 'default');
+    engine.setDrumKit(BEAT_PRESETS[0].patch.voices, 0);
     engine.setMasterVolume(1);
     engine.triggerDrum('kick', 1, 0);
     const buffer: any = await ctx.startRendering();
@@ -97,7 +97,7 @@ describe('a render engine never takes the idle path', () => {
   test('no idle timer is armed and no suspend() is called on the offline context', () => {
     const ctx = offlineCtx(0.05);
     const engine = createRenderEngine(ctx);
-    engine.setDrumKit(DEFAULT_DRUM_KIT, 'default');
+    engine.setDrumKit(BEAT_PRESETS[0].patch.voices, 0);
     let suspendCalls = 0;
     ctx.suspend = () => {
       suspendCalls += 1;

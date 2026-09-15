@@ -36,11 +36,11 @@
  * The `rows` wrapper exists because bar length alone is not a sufficient tag:
  * 3/4 and 6/8 are both 12 steps and differ only in accent grouping.
  *
- * NOTE — every row here plays. `INITIAL_SEQUENCER_TRACKS` has eleven tracks
+ * NOTE — every row here plays. The Beat roster has eleven voices
  * (kick, snare, rimshot, clap, hihat, openhat, hitom, lowtom, ride, crash,
  * bell) and every row below names one of them. The table used to carry a
  * `bass` row in 23 entries — 53 authored hits that could never sound, because
- * `bass` is not a drum voice at all: no `DRUM_KITS` field, no `triggerDrum`
+ * `bass` is not a drum voice at all: no Beat voice, no `triggerDrum`
  * case, no track. It was deleted
  * rather than kept as authored intent, because a row that cannot sound is not
  * a rhythm, and `drumGrids.test.ts` now rejects any row name a track cannot
@@ -80,16 +80,21 @@ export interface DrumGrid {
   /** The meter this grid was authored in. */
   meter: MeterId;
   /**
-   * The drum kit this rhythm was written for, by `DRUM_KITS` name.
+   * The Beat sound this rhythm was written for, by stable `BEAT_PRESETS` id.
+   *
+   * An ID, not a display name: a preset can be renamed, and a rename must not
+   * silently unhook every grid that was transcribed against it. The values are
+   * the same sounds the old kit names pointed at, repointed and not
+   * re-voiced — no hit moved when this field changed.
    *
    * Provenance, not an instruction: nothing applies it. The sequencer's grid
-   * menu loads rows only — the kit is a Sound-tab control and a Pattern-tab
-   * pick must not rewrite it — and a vibe names its own `soundKit`, because a
-   * vibe chooses a sound as well as a rhythm. The field stays because it
-   * records what the rhythm was heard on, which is what a re-voicing decision
-   * is judged against.
+   * menu loads rows only — the sound is a Sound-tab control and a Pattern-tab
+   * pick must not rewrite it — and a vibe names its own `beatPresetId`,
+   * because a vibe chooses a sound as well as a rhythm. The field stays
+   * because it records what the rhythm was heard on, which is what a
+   * re-voicing decision is judged against.
    */
-  kit: string;
+  beatPresetId: string;
   /**
    * Where this rhythm came from: a source URL, or the literal `'authored'`.
    *
@@ -117,7 +122,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   synthwave: {
     name: 'Synthwave',
     meter: '4/4',
-    kit: 'Retro Drive',
+    beatPresetId: 'retro-drive',
     provenance: 'attackmagazine.com/technique/beat-dissected/synthwave-drums/',
     rows: {
       kick:    [true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true],
@@ -137,7 +142,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   house: {
     name: 'House',
     meter: '4/4',
-    kit: 'Club Standard',
+    beatPresetId: 'club-standard',
     // The survey found house MATCHES a sourced canonical pattern (kick 0,4,8,12,
     // backbeat 4,12, offbeat open hats) but did not record which page. Until
     // someone writes the URL down, 'authored' is the honest label — that is the
@@ -166,7 +171,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   trap: {
     name: 'Trap',
     meter: '4/4',
-    kit: 'Trap Beat',
+    beatPresetId: 'trap-beat',
     provenance: 'reasonstudios.com/news/post/trap-drum-basics-super-neat-beat-cheat-sheet',
     rows: {
       kick:    [true, false, false, false, false, false, true, false, false, false, true, false, false, false, false, false],
@@ -180,7 +185,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'boom-bap': {
     name: 'Boom Bap',
     meter: '4/4',
-    kit: 'Dusty Break',
+    beatPresetId: 'dusty-break',
     provenance: 'attackmagazine.com/technique/beat-dissected/90s-boom-bap-hip-hop/',
     rows: {
       kick:    [true, false, false, false, false, false, true, false, true, false, false, false, false, false, false, false],
@@ -193,7 +198,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   cyberpunk: {
     name: 'Cyberpunk',
     meter: '4/4',
-    kit: 'Chrome Pulse',
+    beatPresetId: 'chrome-pulse',
     provenance: 'authored',
     rows: {
       kick:    [true, false, false, true, false, false, true, false, false, true, false, false, true, false, false, false],
@@ -211,7 +216,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   dnb: {
     name: 'DnB',
     meter: '4/4',
-    kit: 'Velocity Breaks',
+    beatPresetId: 'velocity-breaks',
     // As with house: the survey verified dnb against a source and recorded the
     // verdict, not the URL.
     provenance: 'authored',
@@ -226,7 +231,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   dubstep: {
     name: 'Dubstep',
     meter: '4/4',
-    kit: 'Sub Weight',
+    beatPresetId: 'sub-weight',
     provenance: 'unison.audio/how-to-make-dubstep/',
     rows: {
       kick:    [true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
@@ -240,7 +245,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   techno: {
     name: 'Techno',
     meter: '4/4',
-    kit: 'Warehouse',
+    beatPresetId: 'warehouse',
     provenance: 'attackmagazine.com/technique/beat-dissected/motor-city-detroit-techno/',
     // The exception, and it keeps its two hits on one drum. This 14/15 pair
     // is a timekeeping device, a 16th roll into the next bar, not a fill; it
@@ -259,7 +264,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   funk: {
     name: 'Funk',
     meter: '4/4',
-    kit: 'Tight Pocket',
+    beatPresetId: 'tight-pocket',
     provenance: 'articles.roland.com/behind-the-beat-funky-drummer-by-james-brown/',
     rows: {
       kick:    [true, false, false, false, false, false, false, true, false, false, true, false, false, false, false, false],
@@ -272,7 +277,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   rock: {
     name: 'Rock',
     meter: '4/4',
-    kit: 'Acoustic Studio',
+    beatPresetId: 'acoustic-studio',
     // The survey checked rock against a sourced transcription and it MATCHED —
     // kick 0,8 with the backbeat at 4,12 and straight 8th hats. It is the only
     // grid whose rows and whose source already agree, which is why it is the
@@ -289,7 +294,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   reggae: {
     name: 'Reggae',
     meter: '4/4',
-    kit: 'Warm Riddim',
+    beatPresetId: 'warm-riddim',
     provenance: 'soundbrenner.com/blogs/articles/rockers-rhythm',
     rows: {
       kick:    [false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false],
@@ -304,7 +309,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'lofi-hip-hop': {
     name: 'Lo-Fi Hip-Hop',
     meter: '4/4',
-    kit: 'Lo-Fi Vinyl',
+    beatPresetId: 'lo-fi-vinyl',
     provenance: 'blog.native-instruments.com/lo-fi-hip-hop-beats/',
     rows: {
       kick:    [true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false],
@@ -319,7 +324,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   waltz: {
     name: 'Waltz',
     meter: '3/4',
-    kit: 'Acoustic Studio',
+    beatPresetId: 'acoustic-studio',
     // `hihat 0,4,6,8` was the jazz-waltz RIDE figure, written on the hi-hat
     // row because slice 1 had no ride voice. It moves to `ride` unchanged;
     // the cross-stick moves off `snare` onto `rimshot`. Re-voicing only —
@@ -338,7 +343,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'afro-6-8': {
     name: 'Afro 6/8',
     meter: '6/8',
-    kit: 'Acoustic Studio',
+    beatPresetId: 'acoustic-studio',
     // The 7-stroke bembé bell — steps 0,2,4,5,7,9,11 — was written onto `hihat`
     // in slice 1 as the half of the fix that needed no new voice, and it was
     // recorded then that the timbre stayed wrong. It moves to `bell` unchanged,
@@ -360,7 +365,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'lofi-half-time-brush': {
     name: 'Lo-Fi Half-Time Brush',
     meter: '4/4',
-    kit: 'Dusty Break',
+    beatPresetId: 'dusty-break',
     provenance: 'authored',
     rows: {
       kick:    [true, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false],
@@ -375,7 +380,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'synthwave-four-on-floor': {
     name: 'Synthwave Four-on-Floor',
     meter: '4/4',
-    kit: 'Retro Drive',
+    beatPresetId: 'retro-drive',
     provenance: 'authored',
     // One added hit, in two rows: the snare gains 13 and the clap gains 13
     // with it — drumGrids.test.ts pins this grid's clap as byte-identical to
@@ -395,7 +400,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'ambient-sparse-drift': {
     name: 'Ambient Sparse Drift',
     meter: '4/4',
-    kit: 'Acoustic Studio',
+    beatPresetId: 'acoustic-studio',
     provenance: 'authored',
     rows: {
       kick:    [true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
@@ -410,7 +415,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'boombap-swung-break': {
     name: 'Boom Bap Swung Break',
     meter: '4/4',
-    kit: 'Dusty Break',
+    beatPresetId: 'dusty-break',
     provenance: 'authored',
     rows: {
       kick:    [true, false, false, false, false, false, true, false, false, true, false, false, false, false, false, false],
@@ -424,7 +429,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'zen-bamboo-pulse': {
     name: 'Zen Bamboo Pulse',
     meter: '4/4',
-    kit: 'Acoustic Studio',
+    beatPresetId: 'acoustic-studio',
     provenance: 'authored',
     rows: {
       kick:    [true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false],
@@ -439,7 +444,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'waltz-brush-three': {
     name: 'Waltz Brush Three',
     meter: '3/4',
-    kit: 'Lo-Fi Vinyl',
+    beatPresetId: 'lo-fi-vinyl',
     provenance: 'authored',
     rows: {
       kick:    [true, false, false, false, false, false, false, false, false, false, false, false],
@@ -453,7 +458,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'afro-six-eight-bell': {
     name: 'Afro 6/8 Bell',
     meter: '6/8',
-    kit: 'Acoustic Studio',
+    beatPresetId: 'acoustic-studio',
     provenance: 'authored',
     rows: {
       kick:    [true, false, false, false, false, false, true, false, false, false, false, false],
@@ -483,7 +488,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'techno-rolling': {
     name: 'Techno Rolling 16ths',
     meter: '4/4',
-    kit: 'Warehouse',
+    beatPresetId: 'warehouse',
     provenance: 'attackmagazine.com/technique/beat-dissected/motor-city-detroit-techno/',
     rows: {
       kick:    [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false],
@@ -497,7 +502,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'synthwave-attack': {
     name: 'Synthwave Attack',
     meter: '4/4',
-    kit: 'Retro Drive',
+    beatPresetId: 'retro-drive',
     provenance: 'attackmagazine.com/technique/beat-dissected/synthwave-drums/',
     rows: {
       kick:    [true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true],
@@ -511,7 +516,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'dubstep-halftime': {
     name: 'Dubstep Half-Time',
     meter: '4/4',
-    kit: 'Sub Weight',
+    beatPresetId: 'sub-weight',
     provenance: 'unison.audio/how-to-make-dubstep/',
     rows: {
       kick:    [true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
@@ -525,7 +530,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'trap-quarter-hat': {
     name: 'Trap Quarter Hat',
     meter: '4/4',
-    kit: 'Trap Beat',
+    beatPresetId: 'trap-beat',
     provenance: 'reasonstudios.com/news/post/trap-drum-basics-super-neat-beat-cheat-sheet',
     rows: {
       kick:    [true, false, false, false, false, false, true, false, false, false, true, false, false, false, false, false],
@@ -539,7 +544,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'boombap-8th-hat': {
     name: 'Boom Bap 8th Hat',
     meter: '4/4',
-    kit: 'Dusty Break',
+    beatPresetId: 'dusty-break',
     provenance: 'attackmagazine.com/technique/beat-dissected/90s-boom-bap-hip-hop/',
     rows: {
       kick:    [true, false, false, false, false, false, true, false, true, false, false, false, false, false, false, false],
@@ -553,7 +558,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'lofi-ghost-kick': {
     name: 'Lo-Fi Ghost Kick',
     meter: '4/4',
-    kit: 'Lo-Fi Vinyl',
+    beatPresetId: 'lo-fi-vinyl',
     provenance: 'blog.native-instruments.com/lo-fi-hip-hop-beats/',
     rows: {
       kick:    [true, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false],
@@ -567,7 +572,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'funky-drummer': {
     name: 'Funky Drummer',
     meter: '4/4',
-    kit: 'Tight Pocket',
+    beatPresetId: 'tight-pocket',
     // MEASURED: this differs from the corrected `funk` entry on CLAP ALONE
     // (funk claps 4,12; this source specifies none). They stay two entries
     // because they came from two places, and the ghost-note velocities that
@@ -586,7 +591,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'rock-driving-8th': {
     name: 'Rock Driving 8ths',
     meter: '4/4',
-    kit: 'Acoustic Studio',
+    beatPresetId: 'acoustic-studio',
     provenance: 'fundamental-changes.com/learn-to-play-backbeat-on-drums/',
     rows: {
       kick:    [true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false],
@@ -600,7 +605,7 @@ export const DRUM_GRIDS: Record<string, DrumGrid> = {
   'reggae-rockers': {
     name: 'Reggae Rockers',
     meter: '4/4',
-    kit: 'Warm Riddim',
+    beatPresetId: 'warm-riddim',
     provenance: 'soundbrenner.com/blogs/articles/rockers-rhythm',
     rows: {
       kick:    [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false],

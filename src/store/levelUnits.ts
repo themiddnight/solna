@@ -24,10 +24,11 @@ import { FADER_MAX_DB, SILENCE_DB, UNITY_DB, dbToGain, toDecibels } from '../uti
 export const DEFAULT_FADER_DB: number = UNITY_DB;
 
 /**
- * DEV-383: the measured default for the five SOURCE buses — `synthVolume`,
- * `chordVolume`, `bassVolume`, `padVolume`, `masterSequencerVolume` — as
- * distinct from `DEFAULT_FADER_DB`, which still means UNITY and stays the
- * default for `masterVolume` and `SequencerTrack.volume`. The two constants
+ * DEV-383: the measured default for the six SOURCE buses — `synthVolume`,
+ * `fxVolume`, `chordVolume`, `bassVolume`, `padVolume` and the Beat bus's own
+ * `beatMix.levelDb` — as distinct from `DEFAULT_FADER_DB`, which still means
+ * UNITY and stays the default for `masterVolume` and for each Beat VOICE's
+ * fader inside `beatMix.voices`. The two constants
  * now mean different things: unity is "untouched", this is "how much headroom
  * a fresh project needs so its five buses don't sum past full scale before a
  * user has touched a single fader" — the compressor still defaults OFF, and

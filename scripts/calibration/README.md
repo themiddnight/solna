@@ -4,14 +4,15 @@ Regenerates `src/data/trimTable.ts` — the committed, measured trim every drum 
 and every synth preset ships with, so all of them land within 3 dB of −18 dBFS
 instead of wherever they happened to be tuned by ear.
 
-The table does **not** rewrite `src/data/drumKits.ts` or `src/data/synthPresets.ts`.
-Those numbers stay as authored, so the diff of a retune is still readable; the
-measured trim multiplies on top, in `src/audio/trims.ts`.
+The table does **not** rewrite the voicing in `src/data/beatPresets.ts` or
+`src/data/synthPresets.ts`. Those numbers stay as authored, so the diff of a retune is
+still readable; the measured trim is carried separately, as each patch's own
+`outputTrimDb` / `common.outputGainDb`, which the lock test keeps equal to this table.
 
 ## When to re-run
 
-- A drum-kit voice's `gain`, envelope, pitch or filter changed.
-- A synth preset's patch changed, or `TRACK_SYNTH_DEFAULTS` / `DEFAULT_DRUM_KIT` did.
+- A Beat preset voice's `gain`, envelope, pitch or filter changed.
+- A synth preset's patch changed, or `TRACK_SYNTH_DEFAULTS` / `DEFAULT_BEAT_VOICES` did.
 - A kit, a voice or a preset was added or removed.
 - `bun run check:levels` failed — it means one of the above happened without a re-run.
 
@@ -35,7 +36,7 @@ judgement call a human makes, not a threshold the generator can decide on your b
 
 ## Why the drum trim is per kit, not per voice
 
-`DRUM_TRIMS` is keyed by kit name and holds one trim for the whole kit, not one per
+`DRUM_TRIMS` is keyed by Beat preset id and holds one trim for the whole patch, not one per
 voice. This was a mid-branch reversal, and the measurement that settled it is worth
 repeating here because someone will eventually propose changing it back: Trap Beat
 renders kick −13.7, snare −19.7, hihat −47.5, ride −45.9 dBFS — a 33.8 dB span
@@ -110,7 +111,7 @@ clip this way, which is why only kits carry this compensation. It was got wrong 
 an earlier version returned the raw attenuated measurement and left every call site to
 remember to add the headroom back, and the first real `verifyApplied` run measured
 every kit ~12 dB low as a result — so the compensation now lives inside
-`measureDrumKit`/`measurePreset` themselves, and no call site imports the headroom
+`measureBeatPreset`/`measurePreset` themselves, and no call site imports the headroom
 constant or ever holds a raw attenuated value.
 
 ## Positive trims move kits closer to full scale on live playback
@@ -220,7 +221,8 @@ Both are sized by the EBU gate and median-plateau reasoning above, not by taste.
   patch. There is no longer a preset-id-to-name bridge (`synthTrimGainFor` is gone);
   a user preset that reuses a factory patch's name no longer inherits its trim,
   because a patch carries its own. The DRUM half is unchanged: a kit has no patch, so
-  `DRUM_TRIMS` is still keyed by name and still applied by `drumTrimGainFor`.
+  `DRUM_TRIMS` is keyed by Beat preset id and is the calibration EVIDENCE only — the
+  number runtime audio applies is the copy embedded in `BEAT_PRESETS[i].patch.outputTrimDb`.
 - **A synth note is held for `attack + decay`, not a fixed gate.** Each preset is
   measured playing a note long enough to reach its own sustain plateau (floored at
   `SYNTH_NOTE_GATE_FLOOR_S`), so a patch whose attack outlasts a fixed gate is

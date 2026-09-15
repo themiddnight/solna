@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { StoreApi } from 'zustand';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { BEAT_VOICE_IDS, DEFAULT_BEAT_PRESET_ID } from '@/data/beatPresets';
 import { createDefaultLoop, createLoopSlice } from './loopSlice';
 import { SCOPE_NONE } from './playbackScope';
 import { useAppStore } from './store';
@@ -184,6 +185,32 @@ describe('loopSlice: defaults, add and duplicate', () => {
 // lane fields are carried by the whole-object clone instead of by a key list,
 // so nothing else would notice `cloneLoop` ceasing to be a deep clone — or a
 // lane's width being flattened into the other lane's.
+describe('the Beat instrument on a loop', () => {
+  test('default loop ships a complete Beat instrument at the default preset', () => {
+    const loop = createDefaultLoop();
+    expect(loop.beatParams.basePresetId).toBe(DEFAULT_BEAT_PRESET_ID);
+    expect(Object.keys(loop.beatPattern.rows).sort()).toEqual([...BEAT_VOICE_IDS].sort());
+    expect(loop.beatPattern.rows.kick).toHaveLength(MAX_STEPS_PER_BAR);
+    expect(loop.beatMix.voices.kick).toEqual({ levelDb: 0, muted: false });
+  });
+
+  test('an added loop shares no Beat substructure with the loop it was copied from', () => {
+    const h = makeSlice();
+    const first = h.state.loops[0];
+    h.state.addLoop();
+    const added = h.state.loops[1];
+    expect(added.beatPattern.rows.kick).not.toBe(first.beatPattern.rows.kick);
+    expect(added.beatParams.voices.kick).not.toBe(first.beatParams.voices.kick);
+    expect(added.beatMix.voices.kick).not.toBe(first.beatMix.voices.kick);
+    // Step 1, which the starter groove leaves silent in both loops — so the
+    // flip below is visible, and it is the WRITE that this asserts does not
+    // travel, not a difference the default pattern already had.
+    expect(first.beatPattern.rows.kick[1]).toBe(false);
+    added.beatPattern.rows.kick[1] = true;
+    expect(first.beatPattern.rows.kick[1]).toBe(false);
+  });
+});
+
 describe('the custom pattern fixture survives a duplicate', () => {
   function duplicateFixture() {
     const fixture = customPatternLoop();
@@ -362,15 +389,18 @@ describe('loopSlice: the flat setters', () => {
     const h = makeSlice();
     h.state.addLoop(); // active is now loop 2
     const firstId = h.state.loops[0].id;
-    h.state.setLoopMix(firstId, { bassVolume: 0.1, drumMuted: true });
+    h.state.setLoopMix(firstId, { bassVolume: 0.1, beatMix: { ...h.state.loops[0].beatMix, muted: true } });
     expect(h.state.loops[0].bassVolume).toBe(0.1);
-    expect(h.state.loops[0].drumMuted).toBe(true);
-    // The non-active edit must not touch the flat slices (the live sound)...
+    expect(h.state.loops[0].beatMix.muted).toBe(true);
+    // The non-active edit must not touch the flat slices (the live sound).
+    // This harness holds the loop slice alone, so an untouched flat key is
+    // ABSENT rather than at its default — which is exactly what makes a
+    // mirroring write visible here.
     expect(h.state.bassVolume).toBeUndefined();
-    expect(h.state.drumMuted).toBeUndefined();
+    expect(h.state.beatMix).toBeUndefined();
     // ...nor the active loop's copy.
     expect(h.state.loops[1].bassVolume).toBe(-6); // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
-    expect(h.state.loops[1].drumMuted).toBe(false);
+    expect(h.state.loops[1].beatMix.muted).toBe(false);
   });
 
   test('setLoopName updates the name of the specified loop', () => {
