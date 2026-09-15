@@ -13,8 +13,12 @@ export const PANEL_CARD = 'card bg-panel border border-base-300 shadow-md';
  * compartments. This recesses instead: `bg-base-200`, no shadow — the well
  * idiom the oscilloscope box and `JOIN_LANE` already use, so a nested panel
  * looks like part of its parent and not a sibling that landed there.
+ *
+ * Exported beside `PANEL_CARD` for the same reason that one is: a caller's
+ * test asserts on the shell its markup wears, and a hand-copied literal in a
+ * test is a second spelling of a token that can drift from this one silently.
  */
-const PANEL_CARD_INSET = 'card bg-base-200 border border-base-300';
+export const PANEL_CARD_INSET = 'card bg-base-200 border border-base-300';
 
 export interface PanelCardProps {
   /**

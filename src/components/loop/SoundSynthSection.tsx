@@ -1,7 +1,5 @@
 import React, { Suspense } from "react";
 import {
-  Sliders,
-  Zap,
   Sparkles,
   Bookmark,
   Library,
@@ -10,17 +8,7 @@ import {
   ChevronRight,
   AudioWaveform,
 } from "lucide-react";
-import { soloTrackForFocus } from "@/store/trackAudibility";
-import { SoloButton } from "../ui/SoloButton";
-import {
-  MIX_LAYER_IDS,
-  controlTargetForFocus,
-  isMelodicFocus,
-  melodyTrackForFocus,
-  synthTargetForFocus,
-  type MixLayerId,
-} from "@/store/focusTrack";
-import { MIX_LAYER_LABELS } from "../mixLayers";
+import type { MixLayerId } from "@/store/focusTrack";
 import type { SynthPreset, SynthPresetCategory } from "@/data/synthPresets";
 import { SYNTH_CATEGORIES } from "@/data/synthPresets";
 // The drawer is never needed on first paint — PresetLibrary early-returns
@@ -28,73 +16,29 @@ import { SYNTH_CATEGORIES } from "@/data/synthPresets";
 const SynthPresetLibrary = React.lazy(() =>
   import("./SynthPresetLibrary").then((m) => ({ default: m.SynthPresetLibrary })),
 );
-import { AudioVisualizer } from "../AudioVisualizer";
+import { SoundScope } from "./SoundScope";
 import { SubtractiveProPanel } from "./synth/SubtractiveProPanel";
 import { SimpleSynthPanel } from "./SimpleSynthPanel";
 import { useSynthChannel } from "./synth/useSynthChannel";
 import type { SynthChannel } from "./synth/useSynthChannel";
 import { ModulePasteButton } from "./ModulePasteButton";
 import { QuickSavePopover } from "../ui/QuickSavePopover";
-import { ViewHeader } from "../ui/ViewHeader";
 import { SectionCard } from "../ui/SectionCard";
 import { IconButton } from "../ui/IconButton";
-import { GROUP_LABEL, COUNT_BADGE } from "../ui/fieldClasses";
+import { COUNT_BADGE } from "../ui/fieldClasses";
 import { SYNTH_TARGET_STYLES } from "@/utils/synthControl";
 import type { SynthControlTarget } from "@/utils/synthControl";
 import type { LoopCopyGroupId } from "@/store/loopCopy";
-import { GroupFrame } from "../ui/GroupFrame";
 import { TOOLBAR_BUTTON_IDLE } from "@/components/ui/Toolbar";
-import { SegmentedButton, SegmentedGroup } from "@/components/ui/SegmentedControl";
 import {
   categoryPresetCount,
   groupInCategory,
   useSynthOverlays,
   useSynthPresetBrowser,
-  useSynthViewMode,
   type SynthOverlays,
   type SynthPresetBrowser,
 } from "./synth/synthPresetBrowser";
-
-/**
- * The two depths the Sound tab can show the same patch at, in toggle order.
- * A table rather than two hand-written buttons for the reason the segment row
- * is one: the pair must stay identical in everything but their label and icon.
- */
-const SYNTH_VIEW_MODES = [
-  { mode: "simple", label: "Simple", icon: Sliders },
-  { mode: "pro", label: "Pro", icon: Zap },
-] as const;
-
-// The two MELODY focuses render as bare chips, the three accompaniment ones go
-// in the framed group, and Beat sits last on its own — the same pitched-first,
-// rhythm-after order MIX_LAYERS uses. Derived from the roster rather than
-// hand-listed so a seventh layer renders somewhere instead of silently
-// nowhere, and the melody split asks the store which focuses ARE melody
-// tracks rather than listing them or testing `!== 'synth'`: FX is a melody
-// track beside Lead, and putting it under a frame labelled "Accompaniment"
-// would make the frame say something untrue — as would a third melody track
-// that a hand-written pair had never heard of. Module scope for the same reason
-// a static record is: this section re-renders per pointermove during a Knob
-// drag.
-const MELODY_FOCUSES: readonly MixLayerId[] = MIX_LAYER_IDS.filter(
-  (id) => melodyTrackForFocus(id) !== null,
-);
-const BEAT_FOCUS: MixLayerId = 'drum';
-const ACCOMPANIMENT_FOCUSES = MIX_LAYER_IDS.filter(
-  (id) => !MELODY_FOCUSES.includes(id) && id !== BEAT_FOCUS,
-);
-
-// The Beat chip's label comes from MIX_LAYERS' drum row; its styling is
-// literal rather than from SYNTH_TARGET_STYLES, which has five entries and no
-// sixth to add: a drum focus has no synth channel, so a row in that table
-// would be a claim that it does. Both class strings are literals — Tailwind v4
-// scans source statically, so a class assembled at runtime would never be
-// emitted.
-const BEAT_CHIP = {
-  label: MIX_LAYER_LABELS[BEAT_FOCUS],
-  activeBtn: 'btn-accent',
-  softBtn: 'btn-soft btn-accent',
-};
+import type { SoundDepth } from "./useSoundDepth";
 
 /** The Pro mode category tabs, in the order the original listed them. */
 const PRO_CATEGORY_TABS: readonly { id: string; label: string }[] = [
@@ -120,132 +64,6 @@ const SIMPLE_CATEGORY_CHIPS: readonly { id: string; label: string; emoji: string
   { id: "Brass", label: "Brass Stabs", emoji: "🎷" },
   { id: "FX", label: "Sci-Fi FX", emoji: "🛸" },
 ];
-
-/**
- * The focus row: the one "what am I working on" control, and the only place on
- * this tab that can change it. It sits OUTSIDE the Synth section, not inside it
- * as the old Target row did, because the Synth section is unmounted on a drum
- * focus — inside, the row would take the only way back to a melodic focus down
- * with it.
- */
-function SoundFocusRow({
-  focusTrack,
-  synthTarget,
-  activeTab,
-  onFocus,
-}: {
-  focusTrack: MixLayerId;
-  synthTarget: SynthControlTarget | null;
-  activeTab: string;
-  onFocus: (focus: MixLayerId) => void;
-}) {
-  const renderFocusChip = (focus: MixLayerId) => {
-    const style = isMelodicFocus(focus)
-      ? SYNTH_TARGET_STYLES[controlTargetForFocus(focus)]
-      : BEAT_CHIP;
-    return (
-      <button
-        key={focus}
-        id={`btn-focus-${focus}`}
-        aria-current={focusTrack === focus ? 'true' : undefined}
-        onClick={() => onFocus(focus)}
-        className={`btn btn-xs text-[11px] font-semibold rounded-sm ${
-          focusTrack === focus ? style.activeBtn : style.softBtn
-        }`}
-      >
-        {style.label}
-      </button>
-    );
-  };
-
-  return (
-    /* Six chips, not five: `drum` is a focus like any other and Beat is
-       where the drum kit is edited. Kept as its own row, visible in both
-       Simple and Pro mode, because it is the control that switches which
-       channel every knob below points at. */
-    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-      {/* Control Destination Selector */}
-      <div
-        className={`flex items-center gap-1 flex-wrap bg-base-200 border rounded-box px-2 py-1 ${synthTarget ? SYNTH_TARGET_STYLES[synthTarget].border : 'border-accent'}`}
-      >
-        <span className={`${GROUP_LABEL} pl-1 pr-1 hidden sm:inline`}>
-          Focus:
-        </span>
-        {MELODY_FOCUSES.map(renderFocusChip)}
-        {/* Chord, bass and pad are one job done three ways. The frame is
-            inside the tinted outer group, not replacing it: the outer
-            tint tracks the ACTIVE target, this one groups three of the
-            four. See ui/GroupFrame for why it adds no colour.
-            daisyUI's join requires its direct children to be the joined
-            items, and a GroupFrame between the outer div and three of
-            the four chips breaks that contract, so join/join-item are
-            dropped from this whole row; gap-1 (already on the row and
-            the frame) carries the spacing join used to. */}
-        <GroupFrame label="Accompaniment" className="flex items-center gap-1 p-1">
-          {ACCOMPANIMENT_FOCUSES.map(renderFocusChip)}
-        </GroupFrame>
-        {renderFocusChip(BEAT_FOCUS)}
-      </div>
-
-      {/* ONE solo button, following the focus — Sound edits exactly one
-          layer at a time, so five buttons here would be four controls for
-          layers this view is not editing. It sits beside the Focus chips
-          rather than in the view header because "it follows the focus" is
-          only legible next to the focus. Session-only, and cleared by LEAVING the loop layer, by a change
-          of active loop, or by a project swap — NOT by a focus change,
-          which is what makes a set spanning two tracks buildable from this
-          row at all. store/soloNav.ts owns that rule and says why. */}
-      <SoloButton
-        id="btn-solo-target"
-        track={soloTrackForFocus(focusTrack)}
-        size="sm"
-      />
-
-      {/* Per-target oscilloscope, the way a hardware synth puts a scope
-          beside the section you are editing. It taps the TARGET layer's
-          own pre-fader tap — after the VCA, before that layer's bus gain
-          and the sends — so it shows the patch being edited rather than
-          the finished mix the transport bar's master meter reads, and a
-          fader move does not resize a wave that has not changed.
-
-          The trace is raw -1..+1 mapped straight onto the box height: no
-          normalisation, no AGC, no dB curve. A quiet patch draws a small
-          wave and a patch at full scale fills the box, which is only true
-          because the tap is ahead of the -6 dB bus default.
-
-          The label is not decoration: the global input deck's keyboard now
-          plays whichever layer is focused (useInputDeck.ts,
-          synthTargetForFocus), the same layer this scope taps, so the trace
-          moves while keys are pressed regardless of which target is
-          focused. Naming the tapped layer keeps that legible instead of
-          reading as a scope tied to nothing in particular. A drum focus
-          taps no melodic bus, so the scope is absent rather than flat. */}
-      {synthTarget !== null && (
-        <div
-          className="ml-auto hidden sm:flex items-center gap-2 bg-base-200 border border-base-300 rounded-box px-2 py-1 shrink-0 self-stretch"
-          title={`Oscilloscope — ${SYNTH_TARGET_STYLES[synthTarget].label} layer`}
-        >
-          <span className="text-[10px] uppercase tracking-wider font-semibold text-base-content/50">
-            {SYNTH_TARGET_STYLES[synthTarget].label}
-          </span>
-          <AudioVisualizer
-            mode="oscilloscope"
-            variant="inline"
-            source={synthTarget}
-            paused={activeTab !== 'sound'}
-            /* auto + self-stretch, not a pixel height: the box is
-               self-stretch to the Target group's height, so the scope
-               fills whatever is left inside its padding rather than
-               tracking that height with a second number to keep in sync. */
-            height="auto"
-            className="w-28 lg:w-40 rounded self-stretch"
-            colorTheme={synthTarget === "chord" ? "accent" : "primary"}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
 
 /**
  * The Synth band's three actions: Save (raises the quick-save popover), Sounds
@@ -582,15 +400,15 @@ function SimplePresetBar({ browser }: { browser: SynthPresetBrowser }) {
 
 /** The preset bar above the body, in whichever depth mode is showing. */
 function SynthPresetBar({
-  synthViewMode,
+  depth,
   synthTarget,
   browser,
 }: {
-  synthViewMode: 'simple' | 'pro';
+  depth: SoundDepth;
   synthTarget: SynthControlTarget;
   browser: SynthPresetBrowser;
 }) {
-  if (synthViewMode === 'pro') {
+  if (depth === 'pro') {
     return <ProPresetBar synthTarget={synthTarget} browser={browser} />;
   }
   return <SimplePresetBar browser={browser} />;
@@ -610,15 +428,15 @@ function SynthPresetBar({
  * repeating the footer would state the same fact twice on one screen.
  */
 function SynthPanels({
-  synthViewMode,
+  depth,
   channel,
   onSwitchToPro,
 }: {
-  synthViewMode: 'simple' | 'pro';
+  depth: SoundDepth;
   channel: SynthChannel;
   onSwitchToPro: () => void;
 }) {
-  if (synthViewMode === 'pro') {
+  if (depth === 'pro') {
     return <SubtractiveProPanel channel={channel} />;
   }
   return <SimpleSynthPanel channel={channel} onSwitchToPro={onSwitchToPro} />;
@@ -702,30 +520,24 @@ function SynthPresetDrawer({
  * panels that shape whichever patch the focus points at.
  */
 function SynthCard({
-  focusTrack,
-  synthViewMode,
+  synthTarget,
+  activeTab,
+  depth,
   channel,
   browser,
   overlays,
   soundGroups,
   onSwitchToPro,
 }: {
-  focusTrack: MixLayerId;
-  synthViewMode: 'simple' | 'pro';
+  synthTarget: SynthControlTarget;
+  activeTab: string;
+  depth: SoundDepth;
   channel: SynthChannel;
   browser: SynthPresetBrowser;
   overlays: SynthOverlays;
   soundGroups: Record<SynthControlTarget, LoopCopyGroupId>;
   onSwitchToPro: () => void;
 }) {
-  // Null when the focus is `drum`: `controlTargetForFocus` refuses that focus
-  // by type, and the Synth section, its quick-save popover and the preset
-  // library are all gated on this being non-null. The Lead channel is what the
-  // preset handlers close over so they stay total, and every control that could
-  // invoke one of them lives inside the un-rendered section.
-  const synthTarget = synthTargetForFocus(focusTrack);
-  if (synthTarget === null) return null;
-
   const tintClass = [SYNTH_TARGET_STYLES[synthTarget].ring, SYNTH_TARGET_STYLES[synthTarget].tint]
     .filter(Boolean)
     .join(" ");
@@ -741,6 +553,20 @@ function SynthCard({
       icon={AudioWaveform}
       title="Synth"
       tint={tintClass}
+      /* The scope rides the band beside the name, not the card body: it
+         monitors the very patch this section's title names, and a full-width
+         row of its own between the band and the preset bar spent a whole line
+         on a 25px-tall readout. */
+      monitor={
+        <SoundScope
+          source={synthTarget}
+          label={SYNTH_TARGET_STYLES[synthTarget].label}
+          /* The Chord target is the one whose identity is the accent role;
+             every other melodic target traces in primary. */
+          colorTheme={synthTarget === 'chord' ? 'accent' : 'primary'}
+          paused={activeTab !== 'sound'}
+        />
+      }
       /* Save and Sounds ride the SYNTH band, not the tab header: both act on
          the synth patch and nothing else on this tab, and a synth-only
          control sitting in the tab's own header is part of what made the tab
@@ -762,12 +588,12 @@ function SynthCard({
       }
     >
       <SynthPresetBar
-        synthViewMode={synthViewMode}
+        depth={depth}
         synthTarget={synthTarget}
         browser={browser}
       />
       <SynthPanels
-        synthViewMode={synthViewMode}
+        depth={depth}
         channel={channel}
         onSwitchToPro={onSwitchToPro}
       />
@@ -776,96 +602,73 @@ function SynthCard({
 }
 
 /**
- * The Synth half of the Sound tab: the depth switch, the focus row, the Synth
- * card and the two overlays it raises. It reads the five synth channels from
- * the store itself rather than taking them as props, so SoundView stays the
- * tab's shell — the header, this section, the Drum Sound card and the mixer.
+ * The Synth half of the Sound tab: the Synth card and the two overlays it
+ * raises. It reads the five synth channels from the store itself rather than
+ * taking them as props.
+ *
+ * It does NOT render the tab's header, and the focus chips that used to sit
+ * above it live in the header now too — the header is SoundView's, because
+ * the tab's identity, AND the control that changes what the tab is focused
+ * on, must not belong to a section that is unmounted on a drum focus.
+ *
+ * SoundView unmounts this section entirely on a drum focus rather than
+ * rendering it bodiless, so `synthTarget` arrives here already non-null.
  */
 export function SoundSynthSection({
   focusTrack,
+  synthTarget,
   activeTab,
-  onFocus,
   soundGroups,
+  depth,
+  onDepth,
 }: {
   focusTrack: MixLayerId;
+  synthTarget: SynthControlTarget;
   activeTab: string;
-  onFocus: (focus: MixLayerId) => void;
   /** SYNTH_SOUND_GROUP, owned by SoundView — see its docblock for why the
    *  paste button follows the FOCUS rather than the tab. */
   soundGroups: Record<SynthControlTarget, LoopCopyGroupId>;
+  /** The MELODIC-scope depth (see `DepthScope` in `useSoundDepth.ts`): a
+   *  synth preference held independently of Beat's, owned by SoundView, so
+   *  going deep here never drags Beat's editor along with it. */
+  depth: SoundDepth;
+  /** Raised by the Simple deck's own "switch to Pro" footer invitation. */
+  onDepth: (next: SoundDepth) => void;
 }) {
   // The focused track's patch, its Arp and the writer for each. The five-way
   // routing lives in `useSynthChannel` now — it was a sixth hand-maintained
   // copy of the same table here.
   const channel = useSynthChannel(focusTrack);
-  const synthTarget = synthTargetForFocus(focusTrack);
 
-  const { synthViewMode, handleToggleSynthViewMode } = useSynthViewMode();
-  const browser = useSynthPresetBrowser(synthTarget ?? 'synth');
+  const browser = useSynthPresetBrowser(synthTarget);
   const overlays = useSynthOverlays({
-    focusTrack,
-    target: synthTarget ?? 'synth',
+    target: synthTarget,
     reloadPresets: browser.reloadPresets,
     onSaved: browser.adoptSavedPreset,
   });
 
   return (
     <>
-      {/* Names the tab and holds what belongs to the TAB. The preset Save and
-          the Sounds library used to sit here too; both act on the synth patch
-          and nothing else on this screen, so they moved onto the Synth
-          section's own band below. */}
-      <ViewHeader
-        view="sound"
-        viewControls={
-          /* Mode Switcher: Simple vs Pro. It chooses how deep the SAME patch
-             is shown, so it belongs beside the title with Pattern's segment
-             row — same slot, same `HEADER_GROUP` shell, same height — and not
-             in `actions`, which is for what you do TO what is on screen. */
-          <SegmentedGroup>
-            {SYNTH_VIEW_MODES.map(({ mode, label, icon }) => (
-              <SegmentedButton
-                key={mode}
-                id={`btn-mode-${mode}`}
-                icon={icon}
-                label={label}
-                active={synthViewMode === mode}
-                onSelect={() => handleToggleSynthViewMode(mode)}
-                title={`${label} Mode`}
-              />
-            ))}
-          </SegmentedGroup>
-        }
-      />
-
-      <SoundFocusRow
-        focusTrack={focusTrack}
+      <SynthCard
         synthTarget={synthTarget}
         activeTab={activeTab}
-        onFocus={onFocus}
-      />
-
-      <SynthCard
-        focusTrack={focusTrack}
-        synthViewMode={synthViewMode}
+        depth={depth}
         channel={channel}
         browser={browser}
         overlays={overlays}
         soundGroups={soundGroups}
-        onSwitchToPro={() => handleToggleSynthViewMode("pro")}
+        onSwitchToPro={() => onDepth("pro")}
       />
 
-      {synthTarget !== null && <SynthQuickSaveOverlay overlays={overlays} />}
+      <SynthQuickSaveOverlay overlays={overlays} />
 
-      {synthTarget !== null && (
-        <SynthPresetDrawer
-          overlays={overlays}
-          synthTarget={synthTarget}
-          showSoundBadges={synthViewMode === "pro"}
-          onSelectPreset={browser.selectPreset}
-          onSavedPreset={browser.adoptSavedPreset}
-        />
-      )}
+      <SynthPresetDrawer
+        overlays={overlays}
+        synthTarget={synthTarget}
+        showSoundBadges={depth === "pro"}
+        onSelectPreset={browser.selectPreset}
+        onSavedPreset={browser.adoptSavedPreset}
+      />
     </>
   );
 }

@@ -233,6 +233,20 @@ describe('TabButton rendering', () => {
     expect(fxHtml).toContain('Master FX');
     expect(fxHtml).toContain('class="truncate sm:inline"');
   });
+
+  /* The tab group is the SUBSET of the layer already chosen, so its active
+     fill is lighter than the layer switch's solid one. Pinned because the two
+     groups sit in the same bar and the regression is a one-word edit that
+     makes them identical again — at which point the bar shows a parent and
+     its child as peers, with nothing else on screen saying otherwise. */
+  test('the active tab is soft-filled, never the layer switch\'s solid primary', () => {
+    const active = renderToString(<TabButton view="sound" activeTab="sound" onSelect={() => {}} />);
+    expect(active).toContain('btn-primary btn-soft');
+    expect(active).not.toContain('btn-active');
+    const idle = renderToString(<TabButton view="pattern" activeTab="sound" onSelect={() => {}} />);
+    expect(idle).toContain('btn-ghost');
+    expect(idle).not.toContain('btn-primary');
+  });
 });
 
 // ProjectNameLabel takes `layer` as a plain prop rather than reading

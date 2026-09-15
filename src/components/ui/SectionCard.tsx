@@ -13,6 +13,16 @@ export interface SectionCardProps {
    * HERE rather than on the panels inside: see design.md §6.5.
    */
   tint?: string;
+  /**
+   * A read-only display that belongs BESIDE the section's name — the Synth
+   * card's oscilloscope is the one caller. It rides the title cell rather
+   * than `actions` on purpose: `actions` is the cluster a user presses, and a
+   * monitor mixed into it makes the buttons harder to find by making the
+   * cluster wider without adding anything pressable. Keep it narrow and
+   * fixed-width; the band is one row and a monitor that grows pushes the
+   * whole actions cell onto a second line.
+   */
+  monitor?: ReactNode;
   /** The band's right-hand cell — controls that belong to this section alone. */
   actions?: ReactNode;
   children: ReactNode;
@@ -35,6 +45,7 @@ export function SectionCard({
   icon: Icon,
   title,
   tint,
+  monitor,
   actions,
   children,
 }: SectionCardProps) {
@@ -53,6 +64,10 @@ export function SectionCard({
           <div className="flex items-center gap-2">
             <Icon className="w-3.5 h-3.5 text-primary" />
             <span className={SECTION_HEADER}>{title}</span>
+            {/* Inside the title cell, so a narrow band wraps the name and its
+                monitor together and never strands the monitor on a line of
+                its own above the actions. */}
+            {monitor}
           </div>
           {/* Its own cell, the way HeaderCard gives its actions one: a bare
               fragment here makes each button a direct child of a

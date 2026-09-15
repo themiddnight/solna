@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   RotateCcw,
   Shuffle,
@@ -9,10 +9,9 @@ import { useAppStore } from "@/store/store";
 import { getMeter } from "@/utils/meter";
 import type { MeterId } from "@/utils/meter";
 import { sequencerMeterBadge, stepCells } from "../sequencerGrid";
-import { rotateStepWindow, writeStepWindow } from "@/utils/patternAdapt";
-import { ensureDrumEngine, triggerPad } from "@/audio/playback/drumPlayback";
-import { previewSequencerNote } from "@/audio/playback/presetPreview";
-import type { PreviewHandle } from "@/audio/playback/presetPreview";
+import { rotateStepWindow } from "@/utils/patternAdapt";
+import { BEAT_PREVIEW_VELOCITY, ensureDrumEngine, triggerPad } from "@/audio/playback/drumPlayback";
+import { BEAT_VOICE_IDS } from "@/data/beatPresets";
 import { DRUM_GRIDS } from "@/data/drumGrids";
 import { patternMeterTitle, patternOptionLabel } from "../meterSelect";
 import { SegmentHeader } from "../ui/SegmentHeader";
@@ -24,111 +23,79 @@ import { ModuleHeader } from "../ui/ModuleHeader";
 import { ToolbarButton, ToolbarGroup, ToolbarLane } from "../ui/Toolbar";
 import { SequencerGrid } from "./sequencer/SequencerGrid";
 import { ModulePasteButton } from "./ModulePasteButton";
-import type { SequencerTrack } from "@/types";
+import type { BeatPattern, BeatVoiceId } from "@/types";
 
 /**
- * The callbacks each memoized TrackRow receives, plus the bass/synth note
- * preview that backs its Play button.
+ * The callbacks each memoized TrackRow receives, plus the drum preview that
+ * backs its Play button.
  *
- * Their identity must be stable, so they read `sequencerTracks` LIVE from the
- * store rather than from the render scope: a useCallback([]) over a
- * closed-over `tracks` would capture the tracks as of the first render and
- * silently drop every edit made after it. The slice's setter takes a plain
- * value, not an updater.
+ * Their identity must be stable, so every one of them is a `useCallback([])`
+ * over a store ACTION read at call time rather than over render-scope state.
+ * The slice owns the read-modify-write — `toggleBeatStep` reads the row, the
+ * active meter and the window boundary itself — so this layer holds nothing
+ * that could go stale.
  */
-function useSequencerTrackActions() {
-  const previewRef = useRef<PreviewHandle | null>(null);
-  useEffect(() => () => previewRef.current?.(), []);
-
-  const toggleStep = useCallback((trackId: string, stepIndex: number) => {
-    const { sequencerTracks, setSequencerTracks } = useAppStore.getState();
-    setSequencerTracks(
-      sequencerTracks.map((t) => {
-        if (t.id !== trackId) return t;
-        const newSteps = [...t.steps];
-        newSteps[stepIndex] = !newSteps[stepIndex];
-        return { ...t, steps: newSteps };
-      }),
-    );
+function useBeatVoiceActions() {
+  const toggleStep = useCallback((voice: BeatVoiceId, stepIndex: number) => {
+    useAppStore.getState().toggleBeatStep(voice, stepIndex);
   }, []);
 
-  const toggleMute = useCallback((trackId: string) => {
-    const { sequencerTracks, setSequencerTracks } = useAppStore.getState();
-    setSequencerTracks(
-      sequencerTracks.map((t) => (t.id === trackId ? { ...t, muted: !t.muted } : t)),
-    );
+  const toggleMute = useCallback((voice: BeatVoiceId) => {
+    useAppStore.getState().toggleBeatVoiceMuted(voice);
   }, []);
 
-  const setTrackVolume = useCallback((trackId: string, db: number) => {
-    useAppStore.getState().setTrackVolume(trackId, db);
+  const setVoiceLevel = useCallback((voice: BeatVoiceId, db: number) => {
+    useAppStore.getState().setBeatVoiceLevel(voice, db);
   }, []);
 
-  const previewTrack = useCallback((track: SequencerTrack) => {
-    if (track.instrument === "synth" || track.instrument === "bass") {
-      const note = track.instrument === "bass" ? "C2" : "C4";
-      previewRef.current?.();
-      previewRef.current = previewSequencerNote(
-        note,
-        useAppStore.getState().synthParams,
-        0.8,
-      );
-    } else {
-      ensureDrumEngine();
-      triggerPad(track.instrument, 0.8);
-    }
+  // Every voice is a drum one-shot, so there is nothing to hold and nothing to
+  // cancel: the note preview this replaced existed for the `'synth'`/`'bass'`
+  // tracks the roster never had, and it took the component's only ref and its
+  // only effect with it.
+  const previewVoice = useCallback((voice: BeatVoiceId) => {
+    ensureDrumEngine();
+    triggerPad(voice, BEAT_PREVIEW_VELOCITY);
   }, []);
 
-  return { toggleStep, toggleMute, setTrackVolume, previewTrack };
+  return { toggleStep, toggleMute, setVoiceLevel, previewVoice };
 }
 
 /**
- * The three pattern edits the toolbar fires. They act on the VISIBLE window
- * only: the cells past it are the row's programming for a wider meter, and
- * destroying them would make a meter switch lossy — which is exactly what
- * windowing exists to prevent.
+ * The three pattern edits the toolbar fires, as PURE transforms over
+ * `BeatPattern.rows`: each returns one WINDOW-wide row per voice, and
+ * `replaceBeatPattern` writes those into the active window. The cells past it
+ * are the pattern's programming for a wider meter, and destroying them would
+ * make a meter switch lossy — which is exactly what windowing exists to
+ * prevent, and why none of these three ever writes a full-width row itself.
  */
-function useDrumPatternTools(
-  tracks: SequencerTrack[],
+type BeatRows = BeatPattern['rows'];
+
+const mapRows = (fn: (voice: BeatVoiceId) => boolean[]): BeatRows => {
+  const rows = {} as BeatRows;
+  for (const voice of BEAT_VOICE_IDS) rows[voice] = fn(voice);
+  return rows;
+};
+
+const clearedRows = (stepsPerBar: number): BeatRows =>
+  mapRows(() => new Array<boolean>(stepsPerBar).fill(false));
+
+const randomizedRows = (stepsPerBar: number): BeatRows =>
+  mapRows(() => Array.from({ length: stepsPerBar }, () => Math.random() > 0.75));
+
+const shiftedRows = (
+  rows: BeatRows,
   stepsPerBar: number,
-  onChangeTracks: (tracks: SequencerTrack[]) => void,
-) {
-  const clearAllSteps = () => {
-    onChangeTracks(
-      tracks.map((t) => ({
-        ...t,
-        steps: writeStepWindow(t.steps, stepsPerBar, new Array(stepsPerBar).fill(false)),
-      })),
-    );
-  };
-
-  const randomizeSteps = () => {
-    onChangeTracks(
-      tracks.map((t) => ({
-        ...t,
-        steps: writeStepWindow(
-          t.steps,
-          stepsPerBar,
-          Array.from({ length: stepsPerBar }, () => Math.random() > 0.75),
-        ),
-      })),
-    );
-  };
-
-  const shiftSteps = (direction: "left" | "right") => {
-    onChangeTracks(
-      tracks.map((t) => ({ ...t, steps: rotateStepWindow(t.steps, stepsPerBar, direction) })),
-    );
-  };
-
-  return { clearAllSteps, randomizeSteps, shiftSteps };
-}
+  direction: "left" | "right",
+): BeatRows =>
+  mapRows((voice) => rotateStepWindow(rows[voice], stepsPerBar, direction).slice(0, stepsPerBar));
 
 export const SequencerView = React.memo(function SequencerView() {
-  // Sequencer/transport/synth state + setters (named after the old props so the
-  // rest of the component body is unchanged).
-  const tracks = useAppStore((s) => s.sequencerTracks);
-  const onChangeTracks = useAppStore((s) => s.setSequencerTracks);
-  const replaceDrumPattern = useAppStore((s) => s.replaceDrumPattern);
+  // The Beat pattern and the Beat mix, each read whole: a step toggle and a
+  // fader move are user gestures, so this subscription is not a high-frequency
+  // one — the playhead, which IS, stays inside SequencerGrid's own publisher.
+  const pattern = useAppStore((s) => s.beatPattern);
+  const mix = useAppStore((s) => s.beatMix);
+  const replaceBeatPattern = useAppStore((s) => s.replaceBeatPattern);
   const meterId = useAppStore((s) => s.meterId);
   // getMeter returns the shared METERS[id] object, so `meter` is a stable
   // identity per meterId and this memo only rebuilds on a real meter change.
@@ -146,13 +113,7 @@ export const SequencerView = React.memo(function SequencerView() {
   // name nothing chose.
   const [selectedGridId, setSelectedGridId] = useState<string>("");
 
-  const { toggleStep, toggleMute, setTrackVolume, previewTrack } =
-    useSequencerTrackActions();
-  const { clearAllSteps, randomizeSteps, shiftSteps } = useDrumPatternTools(
-    tracks,
-    stepsPerBar,
-    onChangeTracks,
-  );
+  const { toggleStep, toggleMute, setVoiceLevel, previewVoice } = useBeatVoiceActions();
 
   // A grid loads its PATTERN and nothing else. It still names, in
   // `DRUM_GRIDS[id].kit`, the kit it was transcribed against — that field is
@@ -168,8 +129,8 @@ export const SequencerView = React.memo(function SequencerView() {
   // write here to "restore" that separation — the kit is the user's to pick on
   // Sound. (Nor as a `useEffect` keyed on
   // `selectedGridId`: that local state starts at `""` and does not track the
-  // hydrated `soundKit`, so such an effect fired on every mount, refresh
-  // included, and overwrote the rehydrated kit with synthwave's 'Retro Drive'
+  // hydrated Beat patch, so such an effect fired on every mount, refresh
+  // included, and overwrote the rehydrated sound with synthwave's 'Retro Drive'
   // — the "kit resets to Retro Drive on refresh" bug.)
   //
   // The menu offers all 30 grids — the sequencer's own 14 genre grids, the 7
@@ -179,10 +140,10 @@ export const SequencerView = React.memo(function SequencerView() {
     setSelectedGridId(id);
     const grid = DRUM_GRIDS[id];
     if (!grid) return;
-    // Apply-time adaptation: replaceDrumPattern trims or loops each row to the
+    // Apply-time adaptation: replaceBeatPattern trims or loops each row to the
     // active bar length and writes it into the window, so what the grid shows
     // is exactly what will sound.
-    replaceDrumPattern(grid.rows);
+    replaceBeatPattern(grid.rows);
   };
 
   return (
@@ -212,7 +173,7 @@ export const SequencerView = React.memo(function SequencerView() {
           className="flex-wrap gap-2.5"
           right={
             <div className="flex items-center gap-1.5">
-              <ModulePasteButton groups={['drums-pattern']} />
+              <ModulePasteButton groups={['beat-pattern']} />
               <SoloButton track="drums" />
             </div>
           }
@@ -231,18 +192,19 @@ export const SequencerView = React.memo(function SequencerView() {
           meterId={meterId}
           selectedGridId={selectedGridId}
           onSelectGrid={applyDrumGrid}
-          onShift={shiftSteps}
-          onRandomize={randomizeSteps}
-          onClear={clearAllSteps}
+          onShift={(direction) => replaceBeatPattern(shiftedRows(pattern.rows, stepsPerBar, direction))}
+          onRandomize={() => replaceBeatPattern(randomizedRows(stepsPerBar))}
+          onClear={() => replaceBeatPattern(clearedRows(stepsPerBar))}
         />
 
         <SequencerGrid
-          tracks={tracks}
+          pattern={pattern}
+          mix={mix}
           cells={cells}
           onToggleStep={toggleStep}
           onToggleMute={toggleMute}
-          onPreview={previewTrack}
-          onVolumeChange={setTrackVolume}
+          onPreview={previewVoice}
+          onVolumeChange={setVoiceLevel}
         />
         </div>
       </PanelCard>

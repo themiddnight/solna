@@ -5,7 +5,6 @@ import { LFO_WAVEFORMS, WAVEFORM_LABELS, WaveformIcon } from './WaveformIcon';
 import { LFO_DB_ROUTE_LIMIT } from '@/utils/synthPatch';
 import {
   KnobGrid,
-  ModuleChip,
   ProModule,
   RouteRow,
   ToggleButton,
@@ -191,7 +190,6 @@ export function LfoPanel({ patch, onPatch }: PatchPanelProps) {
       badge={6}
       title="LFO"
       color={LFO_COLOR}
-      chip={<ModuleChip color={LFO_COLOR}>{lfo.rate.mode === 'sync' ? 'SYNC' : 'FREE'}</ModuleChip>}
     >
       <div role="group" aria-label="LFO waveform" className="grid grid-cols-5 gap-1">
         {LFO_WAVEFORMS.map((waveform: LfoWaveform) => (
@@ -237,7 +235,7 @@ export function LfoPanel({ patch, onPatch }: PatchPanelProps) {
       <div className="flex items-end gap-2">
         <LfoRateField rate={lfo.rate} onRate={writeRate} />
         <KnobGrid
-          className="flex-[2]"
+          className="flex-2"
           color={LFO_COLOR}
           columns={2}
           specs={[

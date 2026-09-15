@@ -21,31 +21,13 @@ import type { SubtractivePatch } from './proControls';
  * subscribed.
  *
  * The order on screen is the order the signal travels: sources, then shape,
- * then motion, then voice. The ribbon above the grid says so in words, because
- * a four-column grid does not read as a chain on its own.
+ * then motion, then voice. It is stated by the ORDER and by each module's own
+ * heading, not by a caption above the grid: the prototype's flow ribbon spelled
+ * the same four stages out a second time in a row of its own, which cost a
+ * whole band of vertical space on the densest surface in the app to repeat what
+ * the modules underneath it already say. A reader who needs the chain named
+ * reads the module headings left to right.
  */
-const FLOW_STAGES: readonly { id: string; step: string; detail: string; tone: string }[] = [
-  { id: 'source', step: 'SOURCE', detail: 'OSC 1 + OSC 2 + SUB + NOISE', tone: 'text-module-osc' },
-  { id: 'shape', step: 'SHAPE', detail: 'DRIVE + FILTER', tone: 'text-module-filter' },
-  { id: 'motion', step: 'MOTION', detail: 'ENV + LFO', tone: 'text-module-lfo' },
-  { id: 'voice', step: 'VOICE', detail: 'AMP + UNISON', tone: 'text-module-env-vca' },
-];
-
-/** The ribbon: the chain in words, scrollable rather than wrapped on a phone. */
-function FlowRibbon() {
-  return (
-    <ol className="flex items-center gap-3 overflow-x-auto no-scrollbar px-3 py-2 text-[9px] text-base-content/60 bg-base-300 border border-base-300 rounded-t-box">
-      {FLOW_STAGES.map((stage) => (
-        <li key={stage.id} className="flex items-center gap-1.5 whitespace-nowrap">
-          <span className={`font-bold tracking-wider ${stage.tone}`}>{stage.step}</span>
-          <span aria-hidden="true" className={`w-4 h-px bg-current ${stage.tone}`} />
-          <span>{stage.detail}</span>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 export function SubtractiveProPanel({ channel }: { channel: SynthChannel }) {
   const activeSynth = channel.activeSynth;
   const patch: SubtractivePatch = activeSynth.patch;
@@ -53,27 +35,29 @@ export function SubtractiveProPanel({ channel }: { channel: SynthChannel }) {
     channel.setActiveSynth({ ...activeSynth, patch: next });
 
   return (
-    <div className="w-full min-w-0">
-      <FlowRibbon />
-      {/* One module column on a phone, two at tablet width, the prototype's
-          four-column circuit above `xl`, at the prototype's own column ratios
-          (the dual oscillator needs the widest column; the Voice module the
-          narrowest). The two widest modules — the dual
-          oscillator and ENV 1 — span the tablet grid rather than being squeezed
-          into half of it; the modulation row always spans the whole width. */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1.45fr_1.08fr_1fr_1.1fr] gap-2 p-2 border border-base-300 border-t-0 rounded-b-box bg-base-300/40">
-        <OscillatorPanel patch={patch} onPatch={onPatch} />
-        <UtilitySourcePanel patch={patch} onPatch={onPatch} />
-        <FilterPanel patch={patch} onPatch={onPatch} />
-        <AmpEnvelopePanel patch={patch} onPatch={onPatch} />
+    /* One module column on a phone, two at tablet width, the prototype's
+       four-column circuit above `xl`, at the prototype's own column ratios
+       (the dual oscillator needs the widest column; the Voice module the
+       narrowest). The two widest modules — the dual oscillator and ENV 1 —
+       span the tablet grid rather than being squeezed into half of it; the
+       modulation row always spans the whole width.
 
-        <div className="col-span-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1.22fr_1.08fr_0.94fr_1.08fr] gap-2">
-          <ModEnvelopePanel patch={patch} onPatch={onPatch} />
-          <LfoPanel patch={patch} onPatch={onPatch} />
-          <VoicePanel patch={patch} onPatch={onPatch} />
-          {/* Arp takes the Arp object and no patch — see ArpeggiatorPanel. */}
-          <ArpeggiatorPanel arp={channel.arpSettings} onArp={channel.setArpSettings} />
-        </div>
+       Bare layout, deliberately: no padding, no border, no ground of its own.
+       Each module already draws its own recessed card, so a second surface
+       around them inset the whole rack from the section card that holds it and
+       bought nothing but a frame around a frame. */
+    <div className="w-full min-w-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1.45fr_1.08fr_1fr_1.1fr] gap-2">
+      <OscillatorPanel patch={patch} onPatch={onPatch} />
+      <UtilitySourcePanel patch={patch} onPatch={onPatch} />
+      <FilterPanel patch={patch} onPatch={onPatch} />
+      <AmpEnvelopePanel patch={patch} onPatch={onPatch} />
+
+      <div className="col-span-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1.22fr_1.08fr_0.94fr_1.08fr] gap-2">
+        <ModEnvelopePanel patch={patch} onPatch={onPatch} />
+        <LfoPanel patch={patch} onPatch={onPatch} />
+        <VoicePanel patch={patch} onPatch={onPatch} />
+        {/* Arp takes the Arp object and no patch — see ArpeggiatorPanel. */}
+        <ArpeggiatorPanel arp={channel.arpSettings} onArp={channel.setArpSettings} />
       </div>
     </div>
   );

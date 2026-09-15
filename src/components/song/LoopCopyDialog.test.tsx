@@ -28,7 +28,7 @@ const inCMajor = (): Loop => ({
 describe('quickChipSelection', () => {
   test('All sounds ticks the six Sound cells and nothing else', () => {
     expect(new Set(quickChipSelection('sounds'))).toEqual(
-      new Set(['lead-sound', 'fx-sound', 'chord-sound', 'bass-sound', 'pad-sound', 'drums-sound']),
+      new Set(['lead-sound', 'fx-sound', 'chord-sound', 'bass-sound', 'pad-sound', 'beat-sound']),
     );
   });
 
@@ -40,7 +40,7 @@ describe('quickChipSelection', () => {
         'chord-pattern',
         'bass-pattern',
         'pad-pattern',
-        'drums-pattern',
+        'beat-pattern',
       ]),
     );
   });

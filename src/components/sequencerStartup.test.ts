@@ -1,10 +1,9 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import { audioEngine } from '../audio/engine';
 import { freshEngine } from '../audio/testFakes';
-import { sequencerStepEvents } from '../audio/sequencerSteps';
-import { INITIAL_SEQUENCER_TRACKS } from '../store/initialState';
-import { fireSequencerStepEvents, sequencerStepAction } from './useSequencerPlayback';
+import { beatStepEvents } from '../audio/beatSteps';
+import { defaultBeatState } from '../store/beatPresets';
+import { fireBeatStepEvents, sequencerStepAction } from './useSequencerPlayback';
 
 /**
  * The song-start kick. When Play All starts the transport from fully stopped,
@@ -28,16 +27,19 @@ describe('sequencer song-start kick', () => {
       if (type === 'kick') kickAt.push(time as number);
     });
 
+    // A kick on the downbeat, stated here rather than taken from the shipped
+    // default: this test is about WHEN the first dispatched step sounds, so
+    // the pattern it plays must not be something a later default could
+    // quietly empty.
+    const beat = defaultBeatState();
+    beat.beatPattern.rows.kick[0] = true;
+
     // The arming ref the real hook keeps across the stopped->playing transition.
     const arming = { armed: false };
     const unsubscribe = engine.subscribeClock((step, _beat, time) => {
       const action = sequencerStepAction('playing', step, arming, 16);
       if (action !== 'play') return;
-      fireSequencerStepEvents(
-        sequencerStepEvents(INITIAL_SEQUENCER_TRACKS, step % 16, SUBTRACTIVE_INIT, 120),
-        SUBTRACTIVE_INIT,
-        time,
-      );
+      fireBeatStepEvents(beatStepEvents(beat.beatPattern, beat.beatMix, step % 16), time);
     });
 
     const tick = () => (engine as unknown as { clock: { clockTick(): void } }).clock.clockTick();

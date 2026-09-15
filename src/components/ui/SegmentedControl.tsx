@@ -8,11 +8,14 @@ import { HEADER_GROUP } from './fieldClasses';
  * The chrome's segmented control: a `join` of icon+label buttons where exactly
  * one is current.
  *
- * Two of them exist — Pattern's Lead/Accompaniment/Beat row and the Sound
- * tab's Simple/Pro switcher — and they sit in the SAME slot of the same header
- * card (`viewControls`), one tab-click apart. They were two copies of one class
- * string in two files, which is a match held by coincidence: the next padding
- * or active-colour tweak would have landed on whichever file the author opened.
+ * Two of them exist — Pattern's Lead/Accompaniment/Beat row (`viewControls`)
+ * and the Sound tab's depth switch (`actions`) — and they render through the
+ * same shared card, `viewControls` and `actions` apart: the depth switch used
+ * to sit in `viewControls` too, before Sound's focus chips took that slot and
+ * put depth on the opposite side (see `ui/ViewHeader.tsx`). They were two
+ * copies of one class string in two files, which is a match held by
+ * coincidence: the next padding or active-colour tweak would have landed on
+ * whichever file the author opened.
  *
  * It lives in `ui/` rather than beside the nav in `Header.tsx` because
  * `ui/SegmentHeader` renders one of them, and a `ui/` primitive reaching back

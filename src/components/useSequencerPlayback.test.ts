@@ -89,59 +89,72 @@ describe('the clock effect resubscribes only on isPlaying/hardStop', () => {
   });
 });
 
-import { fireSequencerStepEvents } from './useSequencerPlayback';
+import { fireBeatStepEvents } from './useSequencerPlayback';
 import { audioEngine } from '../audio/engine';
 import { DEFAULT_VELOCITY } from '../audio/constants';
 import { useAppStore } from '../store/store';
 
-describe('the sequencer fader is a bus gain, never a velocity', () => {
-  const initialVolume = useAppStore.getState().masterSequencerVolume;
+describe('the Beat fader is a bus gain, never a velocity', () => {
+  const initialVolume = useAppStore.getState().beatMix.levelDb;
   afterEach(() => {
     (audioEngine.triggerDrum as unknown as { mockRestore?: () => void }).mockRestore?.();
-    (audioEngine.triggerSynthNoteOn as unknown as { mockRestore?: () => void }).mockRestore?.();
-    useAppStore.getState().setMasterSequencerVolume(initialVolume);
+    useAppStore.getState().setBeatLevel(initialVolume);
   });
 
-  // The bug this pins: masterSequencerVolume was handed to triggerPad/
-  // playbackNoteOn as the velocity AND set on the sequencer source bus, so
-  // drum output was proportional to the fader SQUARED. Both values default
-  // to 0.8, so a test that only checks the default is inaudible to the bug —
-  // this moves the fader to a value that is NOT 0.8, reads it back off the
-  // LIVE store the way the clock callback does, and asserts the engine
-  // never sees that value as a velocity.
-  test('a fader moved away from 0.8 never reaches triggerDrum as velocity', () => {
+  // The bug this pins: the Beat bus fader was handed to triggerPad as the
+  // velocity AND set on the sequencer source bus, so drum output was
+  // proportional to the fader SQUARED. Both values defaulted to 0.8, so a test
+  // that only checks the default is inaudible to the bug — this moves the
+  // fader to a value that is NOT the default, reads it back off the LIVE store
+  // the way the clock callback does, and asserts the engine never sees that
+  // value as a velocity.
+  test('a fader moved off its default never reaches triggerDrum as velocity', () => {
     const drumSpy = spyOn(audioEngine, 'triggerDrum').mockImplementation(() => {});
-    useAppStore.getState().setMasterSequencerVolume(0.3);
+    useAppStore.getState().setBeatLevel(0.3);
     const live = useAppStore.getState();
-    expect(live.masterSequencerVolume).toBe(0.3);
-    fireSequencerStepEvents([{ kind: 'pad', instrument: 'kick' }], live.synthParams, 1);
+    expect(live.beatMix.levelDb).toBe(0.3);
+    fireBeatStepEvents([{ voice: 'kick' }], 1);
     expect(drumSpy).toHaveBeenCalledWith('kick', DEFAULT_VELOCITY, 1);
-    expect(drumSpy.mock.calls[0]?.[1]).not.toBe(live.masterSequencerVolume);
+    expect(drumSpy.mock.calls[0]?.[1]).not.toBe(live.beatMix.levelDb);
   });
 
-  test('a fader moved away from 0.8 never reaches triggerSynthNoteOn as velocity', () => {
-    const noteSpy = spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation(() => {});
-    useAppStore.getState().setMasterSequencerVolume(0.3);
-    const live = useAppStore.getState();
-    fireSequencerStepEvents(
-      [{ kind: 'note', note: 'C4', release: 0.4, offsetSec: 0.1 }],
-      live.synthParams,
-      1,
-    );
-    expect(noteSpy.mock.calls[0]?.[2]).toBe(DEFAULT_VELOCITY);
-    expect(noteSpy.mock.calls[0]?.[2]).not.toBe(live.masterSequencerVolume);
+  test('every event in a step is fired at the same time, in the order given', () => {
+    const drumSpy = spyOn(audioEngine, 'triggerDrum').mockImplementation(() => {});
+    fireBeatStepEvents([{ voice: 'kick' }, { voice: 'hihat' }], 2);
+    expect(drumSpy.mock.calls.map((call) => [call[0], call[2]])).toEqual([
+      ['kick', 2],
+      ['hihat', 2],
+    ]);
   });
 
   // Static pin, cheap and precise: the exact buggy assignment/call shapes
   // must not reappear even if a future edit re-threads a volume variable
-  // through by another name.
-  test('the source no longer threads masterSequencerVolume into a velocity argument', () => {
+  // through by another name. The synth branch this used to guard is gone with
+  // `sequencerSteps.ts` — a Beat event names a drum voice, so there is no
+  // longer a path from a sequencer step to a synth note at all.
+  test('the source no longer threads the Beat bus fader into a velocity argument', () => {
     const source = readFileSync(
       join(process.cwd(), 'src/components/useSequencerPlayback.ts'),
       'utf8',
     );
-    expect(source).not.toContain('triggerPad(event.instrument, live.masterSequencerVolume');
-    expect(source).not.toContain('const volume = live.masterSequencerVolume');
+    expect(source).not.toContain('triggerPad(event.voice, live.beatMix.levelDb');
+    expect(source).not.toContain('const volume = live.beatMix.levelDb');
     expect(source).toContain('DEFAULT_VELOCITY');
+    expect(source).not.toContain('playbackNoteOn');
+  });
+});
+
+describe('the clock callback plays the Beat pattern', () => {
+  test('it reads beatPattern/beatMix live off the store and fires the voices they name', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/components/useSequencerPlayback.ts'),
+      'utf8',
+    );
+    expect(source).toContain(
+      'fireBeatStepEvents(beatStepEvents(live.beatPattern, live.beatMix, stepInLoop), time)',
+    );
+    // The legacy per-track array it replaced is named nowhere: a reader of
+    // that shape reappearing here would be a second source of what plays.
+    expect(source).not.toContain('.tracks');
   });
 });

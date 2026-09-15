@@ -4,16 +4,64 @@ import type { MixLayerId } from '@/store/focusTrack';
 import type { PowerToggleTone } from './ui/PowerToggle';
 
 /**
- * `volumeKey`/`muteKey` index `LoopMixPatch` — the twelve fields a loop's mix
- * override touches — so a renamed or removed store field fails here rather
- * than leaving a table self-consistent but wrong.
+ * How one row READS its level and mute out of a loop's mix, and how it PATCHES
+ * them back.
+ *
+ * Four functions rather than the pair of `keyof LoopMixPatch` key names this
+ * used to be, because the six rows no longer share one shape: nine of the ten
+ * melodic halves are flat fields on the loop (`synthVolume`, `synthMuted`, …)
+ * while the Beat bus's level and mute live inside `beatMix`, beside the eleven
+ * per-voice entries a patch must hand back untouched. A key name cannot
+ * express the second, and the alternative — flattening the Beat bus back out
+ * onto the loop — is exactly the split state this whole model removed.
+ *
+ * `LoopMixPatch` is still what every one of them is typed against, so a row
+ * reading a field the store does not have is a compile error here rather than
+ * a fader and the meter beside it describing different buses.
+ *
+ * NOT exported: `MixLayer` extends it and is the name every consumer already
+ * imports, so an exported alias nothing names would be a second public name
+ * for one idea.
  */
+interface MixLayerAccess {
+  readLevelDb: (mix: LoopMixPatch) => number;
+  readMuted: (mix: LoopMixPatch) => boolean;
+  levelPatch: (levelDb: number, mix: LoopMixPatch) => Partial<LoopMixPatch>;
+  mutePatch: (muted: boolean, mix: LoopMixPatch) => Partial<LoopMixPatch>;
+}
+
 type MixVolumeKey = {
   [K in keyof LoopMixPatch]: LoopMixPatch[K] extends number ? K : never;
 }[keyof LoopMixPatch];
 type MixMuteKey = {
   [K in keyof LoopMixPatch]: LoopMixPatch[K] extends boolean ? K : never;
 }[keyof LoopMixPatch];
+
+/**
+ * The flat case, written once: a row whose two halves are a `number` field and
+ * a `boolean` field on the loop. Five of the six rows are built from this, so
+ * their four accessors cannot drift apart from each other row by row.
+ */
+function flatAccess(volumeKey: MixVolumeKey, muteKey: MixMuteKey): MixLayerAccess {
+  return {
+    readLevelDb: (mix) => mix[volumeKey] as number,
+    readMuted: (mix) => mix[muteKey] as boolean,
+    levelPatch: (levelDb) => ({ [volumeKey]: levelDb }) as Partial<LoopMixPatch>,
+    mutePatch: (muted) => ({ [muteKey]: muted }) as Partial<LoopMixPatch>,
+  };
+}
+
+/**
+ * The Beat row. Its two halves sit on `beatMix`, and every patch it builds
+ * SPREADS the current object — the eleven per-voice faders live there too, and
+ * a patch carrying only `levelDb` would silently reset all of them to nothing.
+ */
+const BEAT_ACCESS: MixLayerAccess = {
+  readLevelDb: (mix) => mix.beatMix.levelDb,
+  readMuted: (mix) => mix.beatMix.muted,
+  levelPatch: (levelDb, mix) => ({ beatMix: { ...mix.beatMix, levelDb } }),
+  mutePatch: (muted, mix) => ({ beatMix: { ...mix.beatMix, muted } }),
+};
 
 /**
  * The layer roster is declared in `@/store/focusTrack` and re-exported here.
@@ -44,11 +92,9 @@ export const MIX_GROUP_LABELS: Record<MixGroupId, string> = {
   beat: 'Beat',
 };
 
-export interface MixLayer {
+export interface MixLayer extends MixLayerAccess {
   idPrefix: MixLayerId;
   label: string;
-  volumeKey: MixVolumeKey;
-  muteKey: MixMuteKey;
   tone: PowerToggleTone;
   /** Icon tint. Typed as ChannelStrip's `accentClass` (KnobColor) accepts it. */
   accentClass: 'text-primary' | 'text-module-chord' | 'text-module-bass' | 'text-module-pad' | 'text-module-fx' | 'text-accent';
@@ -91,18 +137,18 @@ export interface MixLayer {
  * same story the header tabs tell.
  */
 export const MIX_LAYERS: ReadonlyArray<MixLayer> = [
-  { idPrefix: 'synth', label: 'Lead', volumeKey: 'synthVolume', muteKey: 'synthMuted', engineSource: 'synth', tone: 'primary', accentClass: 'text-primary', group: 'lead' },
+  { idPrefix: 'synth', label: 'Lead', ...flatAccess('synthVolume', 'synthMuted'), engineSource: 'synth', tone: 'primary', accentClass: 'text-primary', group: 'lead' },
   // group: 'lead', not its own group — Lead and FX are two melody tracks
   // sharing one heading, the way the two of them already sit as bare chips
   // (not framed groups) in the Sound view's focus row.
-  { idPrefix: 'fx', label: 'FX', volumeKey: 'fxVolume', muteKey: 'fxMuted', engineSource: 'fx', tone: 'module-fx', accentClass: 'text-module-fx', group: 'lead' },
-  { idPrefix: 'chord', label: 'Chord', volumeKey: 'chordVolume', muteKey: 'chordMuted', engineSource: 'chord', tone: 'module-chord', accentClass: 'text-module-chord', group: 'accompaniment' },
-  { idPrefix: 'bass', label: 'Bass', volumeKey: 'bassVolume', muteKey: 'bassMuted', engineSource: 'bass', tone: 'module-bass', accentClass: 'text-module-bass', group: 'accompaniment' },
-  { idPrefix: 'pad', label: 'Pad', volumeKey: 'padVolume', muteKey: 'padMuted', engineSource: 'pad', tone: 'module-pad', accentClass: 'text-module-pad', group: 'accompaniment' },
+  { idPrefix: 'fx', label: 'FX', ...flatAccess('fxVolume', 'fxMuted'), engineSource: 'fx', tone: 'module-fx', accentClass: 'text-module-fx', group: 'lead' },
+  { idPrefix: 'chord', label: 'Chord', ...flatAccess('chordVolume', 'chordMuted'), engineSource: 'chord', tone: 'module-chord', accentClass: 'text-module-chord', group: 'accompaniment' },
+  { idPrefix: 'bass', label: 'Bass', ...flatAccess('bassVolume', 'bassMuted'), engineSource: 'bass', tone: 'module-bass', accentClass: 'text-module-bass', group: 'accompaniment' },
+  { idPrefix: 'pad', label: 'Pad', ...flatAccess('padVolume', 'padMuted'), engineSource: 'pad', tone: 'module-pad', accentClass: 'text-module-pad', group: 'accompaniment' },
   // `accent`, deliberately NOT the `primary` the old standalone "Drum Level"
   // strip wore: primary is Lead's tone, and the two rows now sit in one grid
   // where they must not read as the same layer.
-  { idPrefix: 'drum', label: 'Beat', volumeKey: 'masterSequencerVolume', muteKey: 'drumMuted', engineSource: 'sequencer', tone: 'accent', accentClass: 'text-accent', group: 'beat' },
+  { idPrefix: 'drum', label: 'Beat', ...BEAT_ACCESS, engineSource: 'sequencer', tone: 'accent', accentClass: 'text-accent', group: 'beat' },
 ];
 
 

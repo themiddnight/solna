@@ -4,16 +4,18 @@ import { useSequencerPlayback } from '@/components/useSequencerPlayback';
 import { useCurrentStep } from '@/components/playbackStep';
 import { StepHeader } from '@/components/ui/StepHeader';
 import { TrackRow } from './TrackRow';
+import { BEAT_VOICE_ROWS } from '@/components/loop/beat/beatVoices';
 import type { StepCell } from '@/components/sequencerGrid';
-import type { SequencerTrack } from '@/types';
+import type { BeatMix, BeatPattern, BeatVoiceId } from '@/types';
 
 export interface SequencerGridProps {
-  tracks: SequencerTrack[];
+  pattern: BeatPattern;
+  mix: BeatMix;
   cells: StepCell[];
-  onToggleStep: (trackId: string, stepIndex: number) => void;
-  onToggleMute: (trackId: string) => void;
-  onPreview: (track: SequencerTrack) => void;
-  onVolumeChange: (trackId: string, db: number) => void;
+  onToggleStep: (voice: BeatVoiceId, stepIndex: number) => void;
+  onToggleMute: (voice: BeatVoiceId) => void;
+  onPreview: (voice: BeatVoiceId) => void;
+  onVolumeChange: (voice: BeatVoiceId, db: number) => void;
 }
 
 /**
@@ -30,7 +32,8 @@ export interface SequencerGridProps {
  * removes is everything ABOVE the grid re-rendering with them.
  */
 export function SequencerGrid({
-  tracks,
+  pattern,
+  mix,
   cells,
   onToggleStep,
   onToggleMute,
@@ -53,10 +56,16 @@ export function SequencerGrid({
           scrolls and TrackRow's gutter stays pinned. Any change here must be
           mirrored in StepHeader's DRUM_HEADER_CLASS. */}
       <div className="space-y-1.5 sm:space-y-2 min-w-[660px] sm:min-w-[700px]">
-        {tracks.map((track) => (
+        {/* One row per CANONICAL voice, in the roster's order — not per stored
+            row. The roster is the same list `beatStepEvents` walks, so what the
+            grid draws and what the clock plays can never be two different
+            rosters. */}
+        {BEAT_VOICE_ROWS.map((voice) => (
           <TrackRow
-            key={track.id}
-            track={track}
+            key={voice.id}
+            voiceId={voice.id}
+            steps={pattern.rows[voice.id]}
+            mix={mix.voices[voice.id]}
             cells={cells}
             currentStep={currentStep}
             isPlaying={isPlaying}

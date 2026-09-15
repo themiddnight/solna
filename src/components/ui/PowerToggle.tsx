@@ -5,10 +5,10 @@ import { Power } from 'lucide-react';
  * Closed union, in the spirit of `KnobColor` in Knob.tsx: the set of legal
  * toggle tones stays reviewable, and Tailwind can see every class literally.
  *
- * Sequencer track mutes deliberately do NOT pass their track's colour —
- * `SequencerTrack.color` is a persisted string (store/initialState.ts) and so
- * cannot join a closed union, and the coloured dot beside the track name
- * already carries that identity. Track mutes pass 'primary'.
+ * Beat voice mutes deliberately do NOT pass their voice's colour — a voice's
+ * colour is a `--drum-*` token name looked up in `BEAT_VOICE_META` and so
+ * cannot join a closed union, and the coloured dot beside the voice name
+ * already carries that identity. Voice mutes pass 'primary'.
  */
 export const POWER_TOGGLE_TONES = ['primary', 'accent', 'module-chord', 'module-bass', 'module-pad', 'module-fx'] as const;
 export type PowerToggleTone = (typeof POWER_TOGGLE_TONES)[number];

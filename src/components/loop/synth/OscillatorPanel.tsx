@@ -3,7 +3,6 @@ import { SYNTH_GAIN_FLOOR_DB } from '@/utils/synthPatch';
 import { OSCILLATOR_WAVEFORMS, WAVEFORM_LABELS, WaveformIcon } from './WaveformIcon';
 import {
   KnobGrid,
-  ModuleChip,
   ProModule,
   ToggleButton,
   type PatchPanelProps,
@@ -147,7 +146,6 @@ export function OscillatorPanel({ patch, onPatch }: PatchPanelProps) {
       badge={1}
       title="Oscillators"
       color={OSC_COLOR}
-      chip={<ModuleChip color={OSC_COLOR}>dual source</ModuleChip>}
       className="md:col-span-2 xl:col-span-1"
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

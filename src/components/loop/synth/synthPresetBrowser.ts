@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAppStore } from '@/store/store';
-import { isMelodicFocus, type MixLayerId } from '@/store/focusTrack';
 import type { SynthPreset, SynthPresetCategory } from '@/data/synthPresets';
 import {
   findPresetByName,
@@ -12,20 +11,6 @@ import {
 import { SYNTH_PARAM_FIELD } from '@/store/sourceBuses';
 import { adoptSavedSynthPreset, loadSynthPreset } from '@/store/synthPresetInstall';
 import type { SynthControlTarget } from '@/utils/synthControl';
-
-/**
- * `isLibraryOpen` / `isQuickSaving` are SoundSynthSection's own `useState`, and
- * that section never unmounts (every tab stays mounted — see the layering note
- * in SoundView's neighbours). Unmounting the Synth section on a drum focus does
- * not reset them, so without this the preset library or the quick-save popover
- * a user opened, then left by switching focus to Beat, pops back open the
- * moment focus returns to a melodic track — a surface the user never asked to
- * see again. Exported so the decision is testable directly: `renderToString`
- * runs no effect, so a render-only test can only ever see the FIRST render's
- * default state and could never actually catch this regression.
- */
-export const shouldCloseSynthOverlays = (focusTrack: MixLayerId): boolean =>
-  !isMelodicFocus(focusTrack);
 
 /** Whether a preset group belongs in the dropdown under a category filter. */
 export const groupInCategory = (groupCategory: string, categoryId: string): boolean =>
@@ -55,28 +40,6 @@ const presetsInCategory = (
 /** What a category chip's badge counts. */
 export const categoryPresetCount = (allPresets: SynthPreset[], categoryId: string): number =>
   presetsInCategory(allPresets, categoryId).length;
-
-/** Simple vs Pro UI Mode, with its localStorage persistence. */
-export function useSynthViewMode() {
-  const [synthViewMode, setSynthViewMode] = useState<"simple" | "pro">(() => {
-    if (typeof window !== "undefined" && window.localStorage) {
-      const stored = localStorage.getItem("musibox_synth_view_mode") || localStorage.getItem("murva_synth_view_mode");
-      if (stored === "simple" || stored === "pro") return stored;
-    }
-    return "simple";
-  });
-
-  const handleToggleSynthViewMode = (mode: "simple" | "pro") => {
-    setSynthViewMode(mode);
-    try {
-      localStorage.setItem("musibox_synth_view_mode", mode);
-    } catch {
-      // best-effort: ignore localStorage failures (e.g. private mode)
-    }
-  };
-
-  return { synthViewMode, handleToggleSynthViewMode };
-}
 
 /**
  * The preset the patch is on, the list it can be stepped through, and the four
@@ -190,12 +153,10 @@ export function useSynthPresetBrowser(target: SynthControlTarget) {
  * popover, what that popover's form holds, and the focus rule that closes both.
  */
 export function useSynthOverlays({
-  focusTrack,
   target,
   reloadPresets,
   onSaved,
 }: {
-  focusTrack: MixLayerId;
   /** Which bus a quick-save captures — the same target the browser follows. */
   target: SynthControlTarget;
   reloadPresets: () => void;
@@ -207,15 +168,10 @@ export function useSynthOverlays({
   const [quickSaveCategory, setQuickSaveCategory] =
     useState<SynthPresetCategory>("User");
 
-  // Close the two synth-only overlays the moment focus leaves a melodic
-  // track — see shouldCloseSynthOverlays above for why leaving them open is
-  // a bug rather than a no-op.
-  useEffect(() => {
-    if (shouldCloseSynthOverlays(focusTrack)) {
-      setIsLibraryOpen(false);
-      setIsQuickSaving(false);
-    }
-  }, [focusTrack]);
+  // This section unmounts on a drum focus (SoundView's gate), which is what
+  // discards this overlay state now — there is no focus-driven close guard
+  // here any more because there is nothing left for one to reach: a focus
+  // change away from melodic never leaves this hook mounted to close.
 
   useEffect(() => {
     reloadPresets();

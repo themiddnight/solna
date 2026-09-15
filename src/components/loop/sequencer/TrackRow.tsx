@@ -1,28 +1,39 @@
 import React, { useCallback } from "react";
 import { Play } from "lucide-react";
-import type { SequencerTrack } from "@/types";
+import type { BeatVoiceId, BeatVoiceMix } from "@/types";
 import type { StepCell } from "@/components/sequencerGrid";
+import { BEAT_VOICE_META } from "@/components/loop/beat/beatVoices";
 import { PowerToggle } from "@/components/ui/PowerToggle";
 import { StepRow } from "@/components/ui/StepRow";
 import { IconButton } from "@/components/ui/IconButton";
 import { VolumeFader } from "@/components/ui/VolumeFader";
 
+/**
+ * A voice id, its own stored row and its own mix entry — the three things a
+ * Beat lane is, kept apart. The per-track bundle these replaced held
+ * a voice's steps together with the volume and mute its fader owns and with a
+ * persisted display name and colour; those last two are looked up in
+ * `BEAT_VOICE_META` now, so no loop stores what a kick is called.
+ */
 export interface TrackRowProps {
-  track: SequencerTrack;
+  voiceId: BeatVoiceId;
+  /** The STORED row. `cells` is what decides how much of it is drawn. */
+  steps: boolean[];
+  mix: BeatVoiceMix;
   cells: StepCell[];
   currentStep: number;
   isPlaying: boolean;
-  onToggleStep: (trackId: string, stepIndex: number) => void;
-  onToggleMute: (trackId: string) => void;
-  onPreview: (track: SequencerTrack) => void;
-  onVolumeChange: (trackId: string, db: number) => void;
+  onToggleStep: (voice: BeatVoiceId, stepIndex: number) => void;
+  onToggleMute: (voice: BeatVoiceId) => void;
+  onPreview: (voice: BeatVoiceId) => void;
+  onVolumeChange: (voice: BeatVoiceId, db: number) => void;
 }
 
 /** Module-level so its identity never changes across renders. */
 const IS_ON = (value: boolean) => value === true;
 
 /**
- * One drum/synth lane. Memoized: the three callbacks are stable useCallbacks
+ * One drum voice's lane. Memoized: the three callbacks are stable useCallbacks
  * in SequencerView and `cells` is memoized there, so a knob drag or a genre
  * change in the parent no longer rebuilds this row's 16 step buttons.
  * `currentStep` is a real prop, so a transport tick DOES still re-render
@@ -36,7 +47,9 @@ const IS_ON = (value: boolean) => value === true;
  */
 export const TrackRow = React.memo(
   function TrackRow({
-    track,
+    voiceId,
+    steps,
+    mix,
     cells,
     currentStep,
     isPlaying,
@@ -45,23 +58,27 @@ export const TrackRow = React.memo(
     onPreview,
     onVolumeChange,
   }: TrackRowProps) {
-    // Derived from track.id, so they are memoized on it: StepRow is not itself
+    // The label and the dot colour are DERIVED here, at render time, from the
+    // one registry — never props, and never fields a loop persisted.
+    const { label, color } = BEAT_VOICE_META[voiceId];
+
+    // Derived from voiceId, so they are memoized on it: StepRow is not itself
     // memoized today, so this is not load-bearing yet — it is what makes
     // wrapping StepRow in React.memo later a one-line change instead of a
     // silent no-op.
     const handleStepClick = useCallback(
-      (index: number) => onToggleStep(track.id, index),
-      [track.id, onToggleStep],
+      (index: number) => onToggleStep(voiceId, index),
+      [voiceId, onToggleStep],
     );
-    const getButtonId = useCallback((index: number) => `step-${track.id}-${index}`, [track.id]);
+    const getButtonId = useCallback((index: number) => `step-${voiceId}-${index}`, [voiceId]);
     const handleVolume = useCallback(
-      (db: number) => onVolumeChange(track.id, db),
-      [track.id, onVolumeChange],
+      (db: number) => onVolumeChange(voiceId, db),
+      [voiceId, onVolumeChange],
     );
 
     return (
       <div
-        id={`sequencer-row-${track.id}`}
+        id={`sequencer-row-${voiceId}`}
         // `overflow-clip`, not `overflow-hidden`: steps scrolling under the
         // sticky gutter would otherwise show through the row's rounded left
         // corners, and only a clip rect trims them to the card's own shape.
@@ -95,9 +112,9 @@ export const TrackRow = React.memo(
                 "Closed Hat" plus the two buttons simply overran the gutter and
                 painted on top of the steps at the phone's narrower `w-36`. */}
             <div className="flex items-center gap-2 min-w-0">
-              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${track.color}`} />
+              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${color}`} />
               <span className="text-xs font-bold text-base-content truncate">
-                {track.name}
+                {label}
               </span>
             </div>
 
@@ -112,13 +129,13 @@ export const TrackRow = React.memo(
                 icon={<Play className="w-3.5 h-3.5" />}
                 size="xs"
                 className="hover:text-primary hidden sm:inline-flex"
-                onClick={() => onPreview(track)}
+                onClick={() => onPreview(voiceId)}
               />
               <PowerToggle
-                id={`btn-mute-${track.id}`}
-                on={!track.muted}
-                onToggle={() => onToggleMute(track.id)}
-                name={track.name}
+                id={`btn-mute-${voiceId}`}
+                on={!mix.muted}
+                onToggle={() => onToggleMute(voiceId)}
+                name={label}
                 tone="primary"
                 iconOnly
                 size="xs"
@@ -133,9 +150,9 @@ export const TrackRow = React.memo(
                 back. No visible readout: the gutter is 144px on a phone, so
                 the level lives in the title. */}
             <VolumeFader
-              id={`slider-track-${track.id}`}
-              label={`${track.name} level`}
-              valueDb={track.volume}
+              id={`slider-track-${voiceId}`}
+              label={`${label} level`}
+              valueDb={mix.levelDb}
               onChangeDb={handleVolume}
               className="range range-xs range-primary w-full"
               showReadout={false}
@@ -146,10 +163,10 @@ export const TrackRow = React.memo(
         {/* Step Buttons — the visible window of this row */}
         <StepRow<boolean>
           cells={cells}
-          steps={track.steps}
+          steps={steps}
           currentStep={currentStep}
           isPlaying={isPlaying}
-          color={track.color}
+          color={color}
           isActive={IS_ON}
           getButtonId={getButtonId}
           activeOverlay="pulse"

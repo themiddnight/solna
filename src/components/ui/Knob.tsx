@@ -34,6 +34,17 @@ export const KNOB_COLORS = [
   'text-module-lfo',
   'text-module-arp',
   'text-module-fx',
+  'text-drum-kick',
+  'text-drum-snare',
+  'text-drum-rimshot',
+  'text-drum-clap',
+  'text-drum-hihat',
+  'text-drum-openhat',
+  'text-drum-hitom',
+  'text-drum-lowtom',
+  'text-drum-ride',
+  'text-drum-crash',
+  'text-drum-bell',
 ] as const;
 
 export type KnobColor = (typeof KNOB_COLORS)[number];
@@ -61,6 +72,17 @@ const BADGE_COLOR: Record<KnobColor, string> = {
   'text-module-lfo': '[--badge-color:var(--color-module-lfo)]',
   'text-module-arp': '[--badge-color:var(--color-module-arp)]',
   'text-module-fx': '[--badge-color:var(--color-module-fx)]',
+  'text-drum-kick': '[--badge-color:var(--color-drum-kick)]',
+  'text-drum-snare': '[--badge-color:var(--color-drum-snare)]',
+  'text-drum-rimshot': '[--badge-color:var(--color-drum-rimshot)]',
+  'text-drum-clap': '[--badge-color:var(--color-drum-clap)]',
+  'text-drum-hihat': '[--badge-color:var(--color-drum-hihat)]',
+  'text-drum-openhat': '[--badge-color:var(--color-drum-openhat)]',
+  'text-drum-hitom': '[--badge-color:var(--color-drum-hitom)]',
+  'text-drum-lowtom': '[--badge-color:var(--color-drum-lowtom)]',
+  'text-drum-ride': '[--badge-color:var(--color-drum-ride)]',
+  'text-drum-crash': '[--badge-color:var(--color-drum-crash)]',
+  'text-drum-bell': '[--badge-color:var(--color-drum-bell)]',
 };
 
 export function badgeColorFor(color: KnobColor = 'text-primary'): string {
@@ -70,6 +92,19 @@ export function badgeColorFor(color: KnobColor = 'text-primary'): string {
 export interface KnobProps {
   value: number;
   onChange: (value: number) => void;
+  /**
+   * Called exactly once when a gesture ends by committing — pointerup, or a
+   * single keypress (which is its own whole gesture). Optional: a caller that
+   * omits it gets exactly today's behavior, since `onChange` already fires on
+   * every intermediate move/keypress.
+   */
+  onCommit?: (value: number) => void;
+  /**
+   * Called exactly once when a gesture ends by cancelling — pointercancel or
+   * a lost pointer capture — and never together with `onCommit` for the same
+   * gesture. Optional, same rule as `onCommit`.
+   */
+  onCancel?: () => void;
   min?: number;
   max?: number;
   step?: number;
@@ -115,11 +150,13 @@ export interface KnobProps {
 }
 
 /** Per-gesture drag state (a ref — survives re-renders mid-drag). */
-interface GestureState {
+export interface KnobGestureState {
   axis: 'x' | 'y' | null;
   startT: number;
   startX: number;
   startY: number;
+  /** The last value `onChange` was called with, committed on a terminal event. */
+  latestValue: number;
 }
 
 /** Detent angle in degrees, or null when no detent is configured. */
@@ -141,6 +178,99 @@ interface KnobDrag {
   scale: KnobScale;
   disabled: boolean;
   onChange: (value: number) => void;
+  onCommit?: (value: number) => void;
+  onCancel?: () => void;
+}
+
+/**
+ * Starts a drag gesture: captures the starting t (so a resumed drag begins
+ * from the CURRENT value, not from a stale ref) and the pointer's origin.
+ * Pure — no DOM, no React — so the whole gesture lifecycle is testable by
+ * calling these three functions directly.
+ */
+export function beginKnobGesture(
+  value: number,
+  min: number,
+  max: number,
+  scale: KnobScale,
+  clientX: number,
+  clientY: number,
+): KnobGestureState {
+  return {
+    axis: null,
+    startT: clamp(valueToT(value, min, max, scale), 0, 1),
+    startX: clientX,
+    startY: clientY,
+    latestValue: value,
+  };
+}
+
+/**
+ * Advances a gesture by one pointer move: picks the drag axis once the
+ * accumulated delta clears `AXIS_PICK_THRESHOLD_PX` (and it sticks for the
+ * rest of the gesture), then maps the delta to a value. Mutates `gesture`'s
+ * `axis` and `latestValue` in place — the ref IS the gesture's identity, the
+ * same way `useRef` state survives re-renders — and returns the next value,
+ * or null while still below the axis-pick threshold (nothing to report yet).
+ */
+export function updateKnobGesture(
+  gesture: KnobGestureState,
+  min: number,
+  max: number,
+  scale: KnobScale,
+  step: number | undefined,
+  clientX: number,
+  clientY: number,
+  shiftKey: boolean,
+): number | null {
+  const dx = clientX - gesture.startX;
+  const dy = clientY - gesture.startY;
+  if (gesture.axis === null) {
+    if (Math.abs(dx) < AXIS_PICK_THRESHOLD_PX && Math.abs(dy) < AXIS_PICK_THRESHOLD_PX) {
+      return null;
+    }
+    gesture.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+  }
+  const delta = gesture.axis === 'x' ? dx : -dy;
+  const nextT = clamp(gesture.startT + dragDeltaT(delta, shiftKey), 0, 1);
+  const next = snapToStep(tToValue(nextT, min, max, scale), min, step);
+  gesture.latestValue = next;
+  return next;
+}
+
+export type KnobGestureOutcome = 'commit' | 'cancel';
+
+/**
+ * Ends a gesture exactly once. The ref is cleared BEFORE either callback
+ * runs, so a terminal event arriving after the gesture is already finished —
+ * pointerup followed by a lost-capture, the two `pointercancel`/
+ * `lostpointercapture` handlers on the same release — reads a cleared ref and
+ * is a no-op. A double terminal callback is therefore structurally
+ * impossible, not merely unlikely: there is no branch in which both `if`
+ * bodies below can run for the same gesture.
+ */
+export function finishKnobGesture(
+  gestureRef: { current: KnobGestureState | null },
+  outcome: KnobGestureOutcome,
+  onCommit?: (value: number) => void,
+  onCancel?: () => void,
+): void {
+  const gesture = gestureRef.current;
+  gestureRef.current = null;
+  if (!gesture) return;
+  if (outcome === 'commit') {
+    // A gesture that never picked an axis never cleared
+    // `AXIS_PICK_THRESHOLD_PX`, so `latestValue` is still the value the knob
+    // already had and `onChange` never fired: there is nothing to commit and
+    // nothing previewed to restore. Committing it anyway made a bare TAP on a
+    // knob cost a whole-patch `structuredClone`, a store write mirrored into
+    // the active loop, a persist re-serialise and a full engine re-install —
+    // for a pointer down/up that changed nothing.
+    if (gesture.axis === null) return;
+    onCommit?.(gesture.latestValue);
+  } else {
+    onCancel?.();
+  }
 }
 
 /**
@@ -148,44 +278,38 @@ interface KnobDrag {
  * mid-drag: pointer capture, the axis with the larger accumulated delta winning
  * (past AXIS_PICK_THRESHOLD_PX) and sticking for the whole gesture, right/up
  * increasing and left/down decreasing, Shift dividing sensitivity by 10.
+ * `onCommit`/`onCancel` are optional: a caller that omits them gets exactly
+ * today's behavior, since the callbacks are only ever invoked through `?.`.
  */
-function useKnobDrag({ value, min, max, scale, step, disabled, onChange }: KnobDrag) {
-  const gestureRef = useRef<GestureState | null>(null);
+function useKnobDrag({ value, min, max, scale, step, disabled, onChange, onCommit, onCancel }: KnobDrag) {
+  const gestureRef = useRef<KnobGestureState | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (disabled) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    gestureRef.current = {
-      axis: null,
-      startT: clamp(valueToT(value, min, max, scale), 0, 1),
-      startX: e.clientX,
-      startY: e.clientY,
-    };
+    gestureRef.current = beginKnobGesture(value, min, max, scale, e.clientX, e.clientY);
   };
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const gesture = gestureRef.current;
     if (disabled || !gesture) return;
-    const dx = e.clientX - gesture.startX;
-    const dy = e.clientY - gesture.startY;
-    if (gesture.axis === null) {
-      if (Math.abs(dx) < AXIS_PICK_THRESHOLD_PX && Math.abs(dy) < AXIS_PICK_THRESHOLD_PX) {
-        return;
-      }
-      gesture.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-    }
-    const delta = gesture.axis === 'x' ? dx : -dy;
-    const nextT = clamp(gesture.startT + dragDeltaT(delta, e.shiftKey), 0, 1);
-    onChange(snapToStep(tToValue(nextT, min, max, scale), min, step));
+    const next = updateKnobGesture(gesture, min, max, scale, step, e.clientX, e.clientY, e.shiftKey);
+    if (next !== null) onChange(next);
   };
 
-  const endGesture = (e: React.PointerEvent<SVGSVGElement>) => {
-    gestureRef.current = null;
+  const finishGesture = (outcome: KnobGestureOutcome) => (e: React.PointerEvent<SVGSVGElement>) => {
+    finishKnobGesture(gestureRef, outcome, onCommit, onCancel);
     e.currentTarget.blur();
   };
 
-  return { handlePointerDown, handlePointerMove, endGesture };
+  return {
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp: finishGesture('commit'),
+    handlePointerCancel: finishGesture('cancel'),
+    handleLostPointerCapture: finishGesture('cancel'),
+  };
 }
 
 /**
@@ -211,6 +335,43 @@ function keyDirFor(key: string): KeyDir | null {
     default:
       return null;
   }
+}
+
+/**
+ * Keyboard gesture: a single keypress is its own whole gesture, so it goes
+ * straight to `onChange` then `onCommit` — never a preview left uncommitted.
+ * Exported so the exact function the `<svg onKeyDown>` handler calls is what
+ * a test drives, not a re-implementation of it. Returns false (and calls
+ * neither callback) for a key the knob does not bind or while disabled.
+ *
+ * AUTO-REPEAT IS A DRAG, NOT A STREAM OF GESTURES. A held arrow key repeats at
+ * the platform rate (~30/s), and committing each repeat made the keyboard the
+ * one path that still did per-event persisted writes: every repeat ran a whole
+ * patch `structuredClone`, a store write mirrored into the active loop, a
+ * persist re-serialise and a full engine re-install — exactly what the pointer
+ * path's draft/commit machine exists to prevent. While `repeat` is set the key
+ * therefore PREVIEWS only, and the commit lands once on `keyup`.
+ */
+export function handleKnobKeyDown(
+  key: string,
+  config: {
+    value: number;
+    min: number;
+    max: number;
+    step: number | undefined;
+    disabled: boolean;
+    repeat?: boolean;
+  },
+  onChange: (value: number) => void,
+  onCommit?: (value: number) => void,
+): boolean {
+  if (config.disabled) return false;
+  const dir = keyDirFor(key);
+  if (!dir) return false;
+  const next = nextKeyValue(config.value, config.min, config.max, config.step, dir);
+  onChange(next);
+  if (!config.repeat) onCommit?.(next);
+  return true;
 }
 
 /** Ring rendering behind the needle, per `indicator`: progress arc on a dark
@@ -364,6 +525,8 @@ const VerticalReadout = ({
 export const Knob = ({
   value,
   onChange,
+  onCommit,
+  onCancel,
   min = 0,
   max = 1,
   step,
@@ -388,22 +551,35 @@ export const Knob = ({
   const display = format(value);
   const detentAngleDeg = detentAngleFor(detent, min, max, scale);
 
-  const { handlePointerDown, handlePointerMove, endGesture } = useKnobDrag({
-    value,
-    min,
-    max,
-    scale,
-    step,
-    disabled,
-    onChange,
-  });
+  const { handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel, handleLostPointerCapture } =
+    useKnobDrag({
+      value,
+      min,
+      max,
+      scale,
+      step,
+      disabled,
+      onChange,
+      onCommit,
+      onCancel,
+    });
+
+  // Set while an auto-repeat run is previewing, so `keyup` knows it owes a
+  // commit. A single press commits inside `handleKnobKeyDown` and leaves this
+  // false, so the `keyup` below is a no-op for it.
+  const keyRepeatingRef = useRef(false);
 
   const handleKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {
-    if (disabled) return;
-    const dir = keyDirFor(e.key);
-    if (!dir) return;
-    e.preventDefault();
-    onChange(nextKeyValue(value, min, max, step, dir));
+    if (handleKnobKeyDown(e.key, { value, min, max, step, disabled, repeat: e.repeat }, onChange, onCommit)) {
+      if (e.repeat) keyRepeatingRef.current = true;
+      e.preventDefault();
+    }
+  };
+
+  const handleKeyUp = () => {
+    if (!keyRepeatingRef.current) return;
+    keyRepeatingRef.current = false;
+    if (!disabled) onCommit?.(value);
   };
 
   return (
@@ -428,10 +604,11 @@ export const Knob = ({
         }`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerUp={endGesture}
-        onPointerCancel={endGesture}
-        onLostPointerCapture={endGesture}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onLostPointerCapture={handleLostPointerCapture}
         onKeyDown={handleKeyDown}
+        onKeyUp={handleKeyUp}
       >
         <IndicatorRing indicator={indicator} dash={dash} />
         <DetentTick angleDeg={detentAngleDeg} />

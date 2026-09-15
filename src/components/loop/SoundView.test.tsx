@@ -1,15 +1,17 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import * as synthChannelModule from './synth/useSynthChannel';
+import * as synthPresetBrowserModule from './synth/synthPresetBrowser';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { useAppStore } from '@/store/store';
 import { ChromaticKeyboard, getBlackKeyLeft, whiteKeysBefore } from '../ui/Keyboard';
-import { shouldCloseSynthOverlays, SoundView, SYNTH_SOUND_GROUP } from './SoundView';
+import { SoundView, SYNTH_SOUND_GROUP } from './SoundView';
 import { MIX_GROUP_IDS, MIX_GROUP_LABELS, MIX_LAYERS } from '../mixLayers';
 import { MIX_LAYER_IDS, melodyTrackForFocus } from '@/store/focusTrack';
 import type { MixLayerId } from '@/store/focusTrack';
 import { synthTargetForFocus } from '@/store/focusTrack';
 import { LOOP_COPY_GROUPS } from '@/store/loopCopy';
-import { FIELD_LABEL, FIELD_LANE, HEADER_GROUP, SECTION_HEADER } from '../ui/fieldClasses';
+import { ACTION_CLUSTER, FIELD_LABEL, FIELD_LANE, HEADER_GROUP, SECTION_HEADER } from '../ui/fieldClasses';
 import { PANEL_CARD } from '../ui/PanelCard';
 import { resolveSynthControlChannel, SYNTH_TARGET_STYLES } from '@/utils/synthControl';
 import type { SynthChannel, SynthControlTarget } from '@/utils/synthControl';
@@ -130,7 +132,7 @@ describe('chromatic keyboard black key geometry', () => {
 
   test('SoundView still renders', () => {
     const html = renderToString(<SoundView />);
-    expect(html).toContain('Focus:');
+    expect(html).toContain('id="btn-focus-synth"');
   });
 
   // Guards the Focus chip row against going back to a hand-listed literal:
@@ -169,7 +171,7 @@ describe('chromatic keyboard black key geometry', () => {
     // that follows in this file.
     useAppStore.setState({ focusTrack: 'drum' });
     try {
-      expect(bandsOf(renderToString(<SoundView />))).toEqual(['Drum Sound', 'Mixer']);
+      expect(bandsOf(renderToString(<SoundView />))).toEqual(['Beat Sound', 'Mixer']);
     } finally {
       useAppStore.setState({ focusTrack: 'synth' });
     }
@@ -193,18 +195,17 @@ describe('chromatic keyboard black key geometry', () => {
 });
 
 /**
- * The Drum Sound card (kit, filter, level) moved here from the sequencer's
- * Beat segment (nav restructure Task 6). These three regression guards moved
- * with it, verbatim in what they assert — only the render target changed.
- *
- * Task 7 then moved the LEVEL out of the card and into the one Mixer, which is
- * the only reason two of the three read differently now: the drum bus fader is
- * still rendered by this view (so the dB guard still belongs here) but wears
- * SoundMixer's `drum` id prefix, and the card's field row is one field
- * shorter.
+ * The drum-focus sound surface. It was the Drum Sound card (kit, filter,
+ * level), moved here from the sequencer's Beat segment (nav restructure Task
+ * 6); it is the Beat Sound section now, and the kit SELECT went with the card —
+ * a preset name is no longer what a loop stores, so there is nothing for a kit
+ * picker to write. These guards survive because none of them was ever about the
+ * kit: the drum bus fader still renders from this view (it is SoundMixer's row,
+ * with the `drum` id prefix), the filter row is still one control row of
+ * label+lane fields, and the filter-type switch is still a 32px daisyUI join.
  */
-describe('the Drum Sound card, moved from the sequencer (nav restructure Task 6)', () => {
-  // Drum Sound only renders on a drum focus now (Task 4) — set before the one
+describe('the drum-focus sound surface (Beat Sound)', () => {
+  // It only renders on a drum focus (Task 4) — set before the one
   // render this whole describe block shares, and restore afterward so later
   // describes in this file see the default melodic focus again.
   useAppStore.setState({ focusTrack: 'drum' });
@@ -215,11 +216,11 @@ describe('the Drum Sound card, moved from the sequencer (nav restructure Task 6)
   // regression back to a %/linear readout on this call site is caught here
   // and not only inside ChannelStrip's own unit tests.
   test('the drum bus fader renders its dB tooltip and position step', () => {
-    // DEV-383: masterSequencerVolume's factory default is DEFAULT_BUS_TRIM_DB
+    // DEV-383: the Beat bus fader's factory default is DEFAULT_BUS_TRIM_DB
     // (-6 dB), not unity — this view renders the store's creation-time
     // snapshot with no explicit setState, so the tooltip reflects that.
     // `Drum`, not `Drums`: the fader is SoundMixer's row now (idPrefix 'drum',
-    // which tracks the store field `drumMuted`), no longer the card's own
+    // which is the store's name for the Beat bus), no longer the card's own
     // "Drum Level" strip. Same view, same bus, same dB contract.
     expect(html).toContain('title="Drum Layer Gain: -6.0 dB"');
     expect(html).toContain('step="0.005"');
@@ -236,16 +237,19 @@ describe('the Drum Sound card, moved from the sequencer (nav restructure Task 6)
   // numbers below would stop meaning "this row". `>Mixer<` is the mixer's
   // SECTION_HEADER span, i.e. the first byte after the card.
   test('every field in a control row shares one label line and one control lane', () => {
-    const start = html.indexOf('Drum Sound');
+    const start = html.indexOf('Beat Sound');
     const end = html.indexOf('>Mixer<');
     expect(end).toBeGreaterThan(start);
     const soundRow = html.slice(start, end);
     const labels = soundRow.split(FIELD_LABEL).length - 1;
     const lanes = soundRow.split(FIELD_LANE).length - 1;
-    // Kit, Filter, Cutoff, Res each own a label + lane. The fifth label was
-    // "Drum Level"'s, from the ChannelStrip that is now a Mixer row.
-    expect(labels).toBe(4);
-    expect(lanes).toBe(4);
+    // Filter, Cutoff, Res each own a label + lane — the Beat filter panel's
+    // whole row. "Kit" was the fourth until the kit select went away with the
+    // card, and "Drum Level"'s was the fifth before the ChannelStrip became a
+    // Mixer row. The voice rows below use no `Field`: a knob grid labels its
+    // knobs individually.
+    expect(labels).toBe(3);
+    expect(lanes).toBe(3);
   });
 
   test('the drum filter type switch is a daisyUI join on the 32px control lane', () => {
@@ -405,6 +409,61 @@ describe('the Sound focus row', () => {
       useAppStore.setState({ focusTrack: 'synth' });
     }
   });
+
+  /**
+   * The chips select WHAT this view shows, so they are the header's
+   * `viewControls` occupant — beside the title, opposite the depth switch.
+   * `SoloButton id="btn-solo-target"` moves with them: "it follows the focus"
+   * is only legible beside the focus.
+   */
+  test('the chips and the focus solo ride the header, before the depth switch', () => {
+    const html = renderToString(<SoundView />);
+    const title = html.indexOf('>Sound</h2>');
+    const chips = html.indexOf('id="btn-focus-synth"');
+    const solo = html.indexOf('id="btn-solo-target"');
+    const depth = html.indexOf('id="btn-mode-simple"');
+    const synthBand = html.indexOf('>Synth<');
+    expect(chips).toBeGreaterThan(title);
+    expect(solo).toBeGreaterThan(chips);
+    expect(depth).toBeGreaterThan(solo);
+    expect(chips).toBeLessThan(synthBand);
+  });
+
+  /**
+   * `SoloChip` and `SoloButton` look adjacent now and must never be deduped.
+   * One says "something is silenced, stop it"; the other says "silence
+   * everything but this".
+   */
+  test('the loop-wide solo chip and the per-track solo toggle both exist', () => {
+    useAppStore.setState({ soloTracks: ['lead'] });
+    try {
+      const html = renderToString(<SoundView />);
+      expect(html).toContain('id="btn-solo-target"');
+      // The chip carries `data-solo-chip`, never an id: every view header
+      // stays mounted, so an id would be several copies of one id in the live
+      // page — the same trap `btn-solo-target` exists to avoid.
+      expect(html).toContain('data-solo-chip');
+    } finally {
+      useAppStore.setState({ soloTracks: [] });
+    }
+  });
+
+  /**
+   * The oscilloscope taps the TARGET layer's own pre-fader tap, so it belongs
+   * to the synth channel and not to the tab — which also means a drum focus
+   * shows none, because the component that draws it is not mounted.
+   */
+  test('the oscilloscope rides the Synth band between the name and the actions', () => {
+    const html = renderToString(<SoundView />);
+    const synthBand = html.indexOf('>Synth<');
+    const scope = html.indexOf('Oscilloscope —');
+    const firstAction = html.indexOf('id="btn-quick-save-preset"');
+    expect(scope).toBeGreaterThan(synthBand);
+    // Ordered against a real action, not just the title: "after the title" was
+    // also true of the full-width row this replaced, so that assertion alone
+    // would pass unchanged if the scope fell back into the card body.
+    expect(firstAction).toBeGreaterThan(scope);
+  });
 });
 
 describe('the Sound page on a drum focus', () => {
@@ -419,50 +478,98 @@ describe('the Sound page on a drum focus', () => {
    * anything. Hiding it with `block`/`hidden` instead would leave the panels
    * mounted and pointed at the Lead patch.
    */
-  test('shows Drum Sound and no Synth section', () => {
+  test('shows Beat Sound and no Synth section', () => {
     useAppStore.setState({ focusTrack: 'drum' });
     const html = renderToString(<SoundView />);
-    expect(html).toContain('Drum Sound');
+    expect(html).toContain('Beat Sound');
     expect(html).not.toContain('>Synth<');
     expect(html).not.toContain('id="btn-quick-save-preset"');
   });
 
-  test('a melodic focus shows the Synth section and no Drum Sound', () => {
+  test('a melodic focus shows the Synth section and no Beat Sound', () => {
     useAppStore.setState({ focusTrack: 'pad' });
     const html = renderToString(<SoundView />);
     expect(html).toContain('id="btn-quick-save-preset"');
-    expect(html).not.toContain('Drum Sound');
+    expect(html).not.toContain('Beat Sound');
+    expect(html).not.toContain('id="select-beat-preset"');
   });
 
   // The focus row is outside the Synth section on purpose: inside it, a drum
   // focus would hide the only control that can get back to a melodic one.
-  test('the focus row is still on screen with the Synth section gone', () => {
+  /**
+   * The chips are in the HEADER now, so a drum focus keeps every way back to a
+   * melodic focus even though the whole Synth section is gone.
+   */
+  test('the focus chips are still on screen with the Synth section gone', () => {
     useAppStore.setState({ focusTrack: 'drum' });
     const html = renderToString(<SoundView />);
     expect(html).toContain('id="btn-focus-synth"');
     expect(html).toContain('id="btn-focus-drum"');
+    expect(html).toContain('id="btn-solo-target"');
+  });
+
+  /**
+   * The section must be ABSENT from the markup, not merely bodiless. That is
+   * the gate `useSynthChannel`'s drum branch relies on: with the section
+   * unmounted no panel calls that hook, so its Lead fallback can never edit
+   * anything. It is also what removes the empty card that used to sit between
+   * the header and the real editor.
+   *
+   * The oscilloscope named here is the SYNTH one. Beat draws its own, off the
+   * drum bus, so "no scope at all" stopped being the assertion the moment the
+   * Beat band grew one — this checks that the well on screen taps the Beat bus
+   * and not a synth layer whose editor is not even mounted.
+   */
+  test('no synth card, no synth scope and no preset overlays on a drum focus', () => {
+    useAppStore.setState({ focusTrack: 'drum' });
+    const html = renderToString(<SoundView />);
+    expect(html).not.toContain('>Synth<');
+    expect(html).toContain('Oscilloscope — Beat layer');
+    for (const target of ['Lead', 'FX', 'Chord', 'Bass', 'Pad']) {
+      expect(html).not.toContain(`Oscilloscope — ${target} layer`);
+    }
+    expect(html).not.toContain('id="btn-quick-save-preset"');
+    expect(html).not.toContain('id="btn-open-presets-library"');
+  });
+
+  /**
+   * A bodiless `SynthCard` and an unmounted `SoundSynthSection` render
+   * byte-identical markup — an absent component and an empty fragment both
+   * contribute nothing to a `renderToString` string — so the markup
+   * assertions above cannot tell the two apart and prove nothing about
+   * `SoundSynthSection` itself unmounting. This is the assertion that can:
+   * before this section unmounted, `SoundSynthSection` called these three
+   * hooks unconditionally on every render, drum focus included, and only
+   * `SynthCard` bailed out afterwards. With `SoundView` gating the section
+   * out entirely, none of them ever run for a drum focus.
+   */
+  test('a drum focus never invokes the synth hooks at all', () => {
+    useAppStore.setState({ focusTrack: 'drum' });
+    const channelSpy = spyOn(synthChannelModule, 'useSynthChannel');
+    const browserSpy = spyOn(synthPresetBrowserModule, 'useSynthPresetBrowser');
+    const overlaysSpy = spyOn(synthPresetBrowserModule, 'useSynthOverlays');
+    try {
+      renderToString(<SoundView />);
+      expect(channelSpy).not.toHaveBeenCalled();
+      expect(browserSpy).not.toHaveBeenCalled();
+      expect(overlaysSpy).not.toHaveBeenCalled();
+    } finally {
+      channelSpy.mockRestore();
+      browserSpy.mockRestore();
+      overlaysSpy.mockRestore();
+    }
   });
 });
 
 /**
- * `isLibraryOpen` / `isQuickSaving` are SoundView's own state and SoundView
- * never unmounts, so a naive gate on the drum focus alone leaves them true
- * underneath and re-opens the drawer the moment focus returns to a melodic
- * track. `renderToString` runs no effect (see .claude/rules/testing.md), so
- * a fresh render can never carry a stale "library flag set" into view — the
- * closing decision itself is what is tested, per the same file's
- * pure-logic-first convention.
+ * `isLibraryOpen` / `isQuickSaving` are the Synth section's own state, and
+ * the section unmounts entirely on a drum focus (`SoundView`'s gate), which
+ * is what discards them — there is no focus-driven close guard to pin here
+ * any more. What remains checkable is the surface: `renderToString` runs no
+ * effect (see .claude/rules/testing.md), so a fresh render can never carry a
+ * stale "library flag set" into view regardless of what unmounted it.
  */
 describe('the preset overlays close when focus leaves a melodic track', () => {
-  test('shouldCloseSynthOverlays is true only for the drum focus', () => {
-    expect(shouldCloseSynthOverlays('drum')).toBe(true);
-    expect(shouldCloseSynthOverlays('synth')).toBe(false);
-    expect(shouldCloseSynthOverlays('fx')).toBe(false);
-    expect(shouldCloseSynthOverlays('chord')).toBe(false);
-    expect(shouldCloseSynthOverlays('bass')).toBe(false);
-    expect(shouldCloseSynthOverlays('pad')).toBe(false);
-  });
-
   // Regression pin for the surface itself: whatever the library flag holds,
   // a drum focus must never render the drawer or its Suspense fallback.
   test('a drum focus renders neither the drawer nor its loading fallback', () => {
@@ -478,19 +585,35 @@ describe('the preset overlays close when focus leaves a melodic track', () => {
 });
 
 /**
- * The Synth and Drum Sound bands each carry a paste button for the groups
+ * The Synth and Beat Sound bands each carry a paste button for the groups
  * their own controls edit. Photo-pinned against the source, not rendered: the
  * Synth band's paste button names a DIFFERENT group depending on `synthTarget`
  * (Lead vs FX) and both branches cannot be seen in one render, so the source
  * is the only place the pairing is checkable in full.
+ *
+ * The Beat half moved into `beat/BeatSoundSection.tsx` with the editor, so the
+ * pin follows it there rather than asserting against a file that no longer
+ * renders it — and the drum-focus render below proves the button reaches the
+ * screen from this view.
  */
 describe('the Sound sections carry paste buttons', () => {
-  test('the Drum Sound and Synth sections carry paste buttons', () => {
+  test('the Beat Sound and Synth sections carry paste buttons', () => {
     const src = readFileSync(new URL('./SoundView.tsx', import.meta.url), 'utf8');
-    expect(src).toContain('<ModulePasteButton');
-    expect(src).toContain('groups={[\'drums-sound\']}');
+    const beatSrc = readFileSync(
+      new URL('./beat/BeatSoundSection.tsx', import.meta.url),
+      'utf8',
+    );
+    expect(beatSrc).toContain('<ModulePasteButton');
+    expect(beatSrc).toContain('groups={[\'beat-sound\']}');
     expect(src).toContain("'fx-sound'");
     expect(src).toContain("'lead-sound'");
+
+    useAppStore.setState({ focusTrack: 'drum' });
+    try {
+      expect(renderToString(<SoundView />)).toContain('id="btn-paste-beat-sound"');
+    } finally {
+      useAppStore.setState({ focusTrack: 'synth' });
+    }
   });
 
   /**
@@ -525,33 +648,55 @@ describe('the Sound sections carry paste buttons', () => {
 });
 
 describe('SoundView mode switch', () => {
+  afterEach(() => {
+    useAppStore.setState({ focusTrack: 'synth' });
+  });
+
   /**
-   * Simple/Pro chooses how deep the SAME patch is shown, so it belongs beside
-   * the title with Pattern's segment row rather than in `actions` — and it
-   * wears the same `HEADER_GROUP` shell, which is what makes the two the same
-   * height. It used to sit at the far right in a `JOIN_LANE` of `btn-xs`.
+   * `viewControls` holds the control that selects WHAT this view shows;
+   * `actions` holds everything else in the right-hand cluster, including HOW
+   * DEEP the selected thing is shown. Focus and depth are different axes —
+   * which track, versus how much of it — so they sit on opposite sides rather
+   * than reading as one compound switcher.
    */
-  test('rides the title cluster in the shared header shell', () => {
+  test('rides the right-hand action cluster, after the solo chip', () => {
     const html = renderToString(<SoundView />);
     const title = html.indexOf('>Sound</h2>');
+    const cluster = html.indexOf(ACTION_CLUSTER);
     const simple = html.indexOf('id="btn-mode-simple"');
     const synthBand = html.indexOf('>Synth<');
     expect(title).toBeGreaterThan(-1);
-    expect(simple).toBeGreaterThan(title);
+    expect(cluster).toBeGreaterThan(title);
+    expect(simple).toBeGreaterThan(cluster);
     expect(simple).toBeLessThan(synthBand);
-    expect(html.slice(title, simple)).toContain(HEADER_GROUP);
+    // Still the shared segmented shell, so it is one height with the tab bar.
+    expect(html.slice(cluster, simple)).toContain(HEADER_GROUP);
   });
 
   /**
    * Which depth is showing must reach a screen reader, not only a colour.
-   * `btn-active` is the whole visual cue for the selected segment, so without
-   * `aria-pressed` the switcher announced two identical buttons and no way to
-   * tell which view was open.
+   * `btn-active` is the whole visual cue for the selected segment.
    */
   test('the selected depth is announced, not just coloured', () => {
     const html = renderToString(<SoundView />);
     expect(openTagContaining(html, 'id="btn-mode-simple"')).toContain('aria-pressed="true"');
     expect(openTagContaining(html, 'id="btn-mode-pro"')).toContain('aria-pressed="false"');
+  });
+
+  /** One header for the tab, drawn by the tab — not one per section. */
+  test('the Sound header is rendered exactly once', () => {
+    const html = renderToString(<SoundView />);
+    expect(html.split('>Sound</h2>').length - 1).toBe(1);
+  });
+
+  /** The same stored value, in the vocabulary of whatever is focused. */
+  test('a drum focus relabels the same switch Essential and All', () => {
+    useAppStore.setState({ focusTrack: 'drum' });
+    const html = renderToString(<SoundView />);
+    expect(html).toContain('id="btn-mode-simple"');
+    expect(html).toContain('>Essential<');
+    expect(html).toContain('>All<');
+    expect(html).not.toContain('>Pro<');
   });
 });
 

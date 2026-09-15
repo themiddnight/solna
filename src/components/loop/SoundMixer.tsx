@@ -30,10 +30,10 @@ import { formatDb } from '@/utils/gainUnits';
 const MIXER_WRITERS: Record<MixLayerId, {
   setVolumeKey:
     | 'setSynthVolume' | 'setFxVolume' | 'setChordVolume' | 'setBassVolume' | 'setPadVolume'
-    | 'setMasterSequencerVolume';
+    | 'setBeatLevel';
   toggleKey:
     | 'toggleSynthMuted' | 'toggleFxMuted' | 'toggleChordMuted' | 'toggleBassMuted' | 'togglePadMuted'
-    | 'toggleDrumMuted';
+    | 'toggleBeatMuted';
   sliderClassName: string;
 }> = {
   synth: { setVolumeKey: 'setSynthVolume', toggleKey: 'toggleSynthMuted', sliderClassName: SYNTH_TARGET_STYLES.synth.slider },
@@ -43,7 +43,7 @@ const MIXER_WRITERS: Record<MixLayerId, {
   pad: { setVolumeKey: 'setPadVolume', toggleKey: 'togglePadMuted', sliderClassName: SYNTH_TARGET_STYLES.pad.slider },
   // The drum bus has no SynthControlTarget entry — it is not a synth voice —
   // so its slider class is a literal.
-  drum: { setVolumeKey: 'setMasterSequencerVolume', toggleKey: 'toggleDrumMuted', sliderClassName: 'range range-xs range-accent' },
+  drum: { setVolumeKey: 'setBeatLevel', toggleKey: 'toggleBeatMuted', sliderClassName: 'range range-xs range-accent' },
 };
 
 export type MixerChannel = MixLayer & (typeof MIXER_WRITERS)[MixLayerId];
@@ -58,8 +58,8 @@ export type MixerChannel = MixLayer & (typeof MIXER_WRITERS)[MixLayerId];
  * whichever loop it was handed. store/loopSync.ts's mirroring `set` carries
  * every one of these ten fields into loops[activeLoopId] in the same update.
  *
- * Two of these ten controls are new rather than moved: synthMuted and
- * drumMuted have existed in the store and been honoured by the audio path
+ * Two of these controls are new rather than moved: the Lead and Beat mutes
+ * have existed in the store and been honoured by the audio path
  * (engineSync.ts's SOURCE_BUSES) since before this file, with no UI anywhere
  * except the Arrange loop cards.
  */
@@ -117,9 +117,13 @@ export const MIXER_GROUP_PLACEMENT: Record<MixGroupId, string> = {
  * ChannelStrip call sites this replaces already had.
  */
 function MixerRow({ channel, isPlaying }: { channel: MixerChannel; isPlaying: boolean }) {
-  const volume = useAppStore((s) => s[channel.volumeKey]);
+  // The row's own two values, read through the layer's accessors rather than
+  // by indexing a key name: five rows read a flat loop field and the Beat row
+  // reads `beatMix`, and both selectors return a PRIMITIVE either way, so the
+  // row still re-renders only when its own number or boolean changes.
+  const volume = useAppStore((s) => channel.readLevelDb(s));
   const setVolume = useAppStore((s) => s[channel.setVolumeKey]);
-  const muted = useAppStore((s) => s[channel.muteKey]);
+  const muted = useAppStore((s) => channel.readMuted(s));
   const toggleMuted = useAppStore((s) => s[channel.toggleKey]);
   const focusTrack = useLiveStore((s) => s.focusTrack);
   const setFocusTrack = useLiveStore((s) => s.setFocusTrack);

@@ -1,9 +1,11 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { SequencerView } from './SequencerView';
 import { useAppStore } from '@/store/store';
-import { DRUM_TYPES } from '@/data/drumKits';
+import { BEAT_VOICE_IDS } from '@/data/beatPresets';
+import { DRUM_GRIDS } from '@/data/drumGrids';
+import type { BeatParams, BeatPattern } from '@/types';
 
 describe('SequencerView theming', () => {
   const html = renderToString(<SequencerView />);
@@ -21,14 +23,11 @@ describe('SequencerView theming', () => {
   });
 
   test('track dots render the drum-namespace token for every voice', () => {
-    for (const voice of DRUM_TYPES) {
+    for (const voice of BEAT_VOICE_IDS) {
       expect(html, `${voice} row colour`).toContain(`bg-drum-${voice}`);
     }
   });
 
-  test('the active-step shadow that used to read shadow-indigo-500/20 is now shadow-primary/20', () => {
-    expect(html).toContain('shadow-primary/20');
-  });
 
   test('no legacy palette utilities survive', () => {
     for (const cls of [
@@ -142,12 +141,14 @@ import React from 'react';
 
 describe('SequencerGrid', () => {
   const cells = stepCells(getMeter('4/4'));
-  const tracks = useAppStore.getState().sequencerTracks;
+  const pattern = useAppStore.getState().beatPattern;
+  const mix = useAppStore.getState().beatMix;
 
   const render = () =>
     renderToString(
       <SequencerGrid
-        tracks={tracks}
+        pattern={pattern}
+        mix={mix}
         cells={cells}
         onToggleStep={() => {}}
         onToggleMute={() => {}}
@@ -156,10 +157,13 @@ describe('SequencerGrid', () => {
       />,
     );
 
-  test('renders the step header and one row per track', () => {
+  test('renders the step header and one row per CANONICAL voice', () => {
     const html = render();
-    for (const track of tracks) {
-      expect(html).toContain(`id="sequencer-row-${track.id}"`);
+    // The roster, not the stored rows: the grid draws every voice the Beat
+    // model has, in `BEAT_VOICE_IDS` order, so a pattern missing a row is a
+    // silent lane rather than a lane that vanishes.
+    for (const voice of BEAT_VOICE_IDS) {
+      expect(html, `${voice} row`).toContain(`id="sequencer-row-${voice}"`);
     }
     expect(html).toContain('pl-44'); // StepHeader's strip
   });
@@ -190,6 +194,28 @@ describe('SequencerGrid', () => {
     expect(renderToString(<Probe />)).toBe(atZero);
   });
 
+  // The pattern is seeded HERE rather than taken off the store, so the
+  // assertion says what it means: this fixture's kick is on every fourth step
+  // by construction, and the test does not quietly depend on whichever groove
+  // `defaultBeatState` happens to ship. It is also the whole reason this
+  // assertion moved down from the theming block above, which renders the view
+  // straight off the creation-time store.
+  test('an active step keeps the shadow that used to read shadow-indigo-500/20', () => {
+    const seeded = { rows: { ...pattern.rows, kick: pattern.rows.kick.map((_, i) => i % 4 === 0) } };
+    const html = renderToString(
+      <SequencerGrid
+        pattern={seeded}
+        mix={mix}
+        cells={cells}
+        onToggleStep={() => {}}
+        onToggleMute={() => {}}
+        onPreview={() => {}}
+        onVolumeChange={() => {}}
+      />,
+    );
+    expect(html).toContain('shadow-primary/20');
+  });
+
   test('no raw palette or absolute black/white classes leak in', () => {
     const html = render();
     expect(html).not.toContain('indigo-');
@@ -215,10 +241,12 @@ describe('SequencerGrid', () => {
       <div className="overflow-x-auto">
         <StepHeader cells={cells} currentStep={5} isPlaying={isPlaying} />
         <div className="space-y-1.5 sm:space-y-2 min-w-[660px] sm:min-w-[700px]">
-          {tracks.map((track) => (
+          {BEAT_VOICE_IDS.map((voice) => (
             <TrackRow
-              key={track.id}
-              track={track}
+              key={voice}
+              voiceId={voice}
+              steps={pattern.rows[voice]}
+              mix={mix.voices[voice]}
               cells={cells}
               currentStep={5}
               isPlaying={isPlaying}
@@ -241,12 +269,27 @@ describe('SequencerGrid', () => {
     const html = renderToString(<SequencerView />);
     // Creation-time store state: the eleven factory tracks are all at unity.
     expect(html).toContain('id="slider-track-');
-    expect(html).toContain('title="Kick 808 level: 0.0 dB"');
+    expect(html).toContain('title="Kick level: 0.0 dB"');
     expect(html).toContain('step="0.005"');
   });
 });
 
 describe('DEV-388: the drum-kit-resets-on-refresh fix', () => {
+  // The store is one singleton for the whole bun process, and a test here
+  // writes Beat state. The snapshot/restore is a `beforeEach`/`afterEach` pair
+  // and not a trailing line in the test body on purpose: a trailing restore is
+  // SKIPPED when an expectation above it throws, so a failing test would leak
+  // its mutated Beat state into every file that runs after it in the same
+  // process — one real failure reported as several unrelated ones.
+  let beatSnapshot: { beatParams: BeatParams; beatPattern: BeatPattern };
+  beforeEach(() => {
+    const { beatParams, beatPattern } = useAppStore.getState();
+    beatSnapshot = { beatParams, beatPattern };
+  });
+  afterEach(() => {
+    useAppStore.setState(beatSnapshot);
+  });
+
   // What CANNOT be exercised here, said plainly rather than pointed at a test
   // that doesn't exist: `renderToString` never runs `useEffect` at all (see
   // .claude/rules/testing.md's zustand+renderToString trap and React's own
@@ -263,37 +306,69 @@ describe('DEV-388: the drum-kit-resets-on-refresh fix', () => {
   // `useEffect`, the preview cleanup, so a reviewer (or this test) catching a
   // second one is the signal a mount-time kit effect has come back.
   //
-  // Nav restructure Task 6 moved the kit <select> (and its own
-  // `onChangeSoundKit` call) to SoundView; the pattern/sound split then took
-  // the last one away from `applyDrumGrid` too. This file must now write NO
-  // kit at all: the grid picker on Pattern loads rows, and the kit is the
-  // user's to pick on Sound.
-  test('SequencerView writes no drum kit at all — the picker loads rows only', () => {
+  // Nav restructure Task 6 moved the kit <select> (and its own write) to
+  // SoundView; the pattern/sound split then took the last one away from
+  // `applyDrumGrid` too. This file must now write NO sound at all: the grid
+  // picker on Pattern loads rows, and the Beat patch is the user's to pick on
+  // Sound.
+  test('SequencerView writes no Beat sound at all — the picker loads rows only', () => {
     const src = readFileSync(
       new URL('./SequencerView.tsx', import.meta.url),
       'utf8',
     );
-    // Guard on the CALL COUNT, and on the setter this component would have to
-    // subscribe to in order to make one, so a reintroduced write — a mount
-    // effect included — turns this red without needing to name it.
-    expect(src.match(/onChangeSoundKit\(/g) ?? []).toHaveLength(0);
-    expect(src).not.toContain('s.setSoundKit');
+    // Guard on the two SETTERS this component would have to subscribe to in
+    // order to write a sound at all, so a reintroduced write — a mount effect
+    // included — turns this red without needing to name the shape of it.
+    expect(src).not.toContain('setBeatPreset');
+    expect(src).not.toContain('setBeatParams');
     const applyDrumGridBody = src.slice(
       src.indexOf('const applyDrumGrid ='),
       src.indexOf('const gridOptions ='),
     );
-    expect(applyDrumGridBody).toContain('replaceDrumPattern(grid.rows)');
-    expect(applyDrumGridBody).not.toContain('grid.kit');
+    expect(applyDrumGridBody).toContain('replaceBeatPattern(grid.rows)');
+    // NOT `grid.kit`, which no longer exists as a string anywhere and could
+    // therefore never fail. These two can: `beatPresetId` is the field the grid
+    // still carries as provenance, and `setBeatPreset` is the call a "restore
+    // the old picker behaviour" change would reach for.
+    expect(applyDrumGridBody).not.toContain('beatPresetId');
+    expect(applyDrumGridBody).not.toContain('setBeatPreset');
   });
 
-  test('the component declares exactly one useEffect (the preview cleanup)', () => {
+  // The behavioural half of the rule above. This repo has no DOM, so the
+  // <select>'s own change event cannot be fired; what IS executed here is the
+  // one store call `applyDrumGrid`'s body is pinned to make, against a grid
+  // whose authored sound differs from the loop's — so "picking a grid loads
+  // rows only" is observed as state, not only as source text.
+  test('choosing a grid rewrites the Pattern and leaves Beat Params untouched', () => {
+    const { replaceBeatPattern, setBeatPreset } = useAppStore.getState();
+    setBeatPreset('club-standard');
+    const gridId = 'boom-bap'; // authored on dusty-break, not club-standard
+    const grid = DRUM_GRIDS[gridId];
+    expect(grid.beatPresetId).not.toBe('club-standard');
+    const soundBefore = useAppStore.getState().beatParams;
+
+    replaceBeatPattern(grid.rows);
+
+    const after = useAppStore.getState();
+    expect(after.beatPattern.rows.kick.slice(0, grid.rows.kick.length)).toEqual(grid.rows.kick);
+    expect(after.beatPattern.rows.kick.some((hit) => hit)).toBe(true);
+    // Identity, not equality: a sound write of any kind rebuilds this object.
+    expect(after.beatParams).toBe(soundBefore);
+    expect(after.beatParams.basePresetId).toBe('club-standard');
+  });
+
+  // Now ZERO, not one. The single effect this used to allow was the note
+  // preview's cleanup, and the note preview existed for the `'synth'`/`'bass'`
+  // sequencer tracks the roster never had; every Beat voice is a drum one-shot
+  // with nothing to cancel. A component with no effect at all cannot grow a
+  // mount-time write by accident, which is what this test has always been for.
+  test('the component declares no useEffect at all', () => {
     const src = readFileSync(
       new URL('./SequencerView.tsx', import.meta.url),
       'utf8',
     );
     const effects = src.match(/useEffect\(/g) ?? [];
-    expect(effects.length).toBe(1);
-    expect(src).toContain('useEffect(() => () => previewRef.current?.(), [])');
+    expect(effects.length).toBe(0);
   });
 
   test('the grid select starts unselected, not claiming a grid nothing chose', () => {
@@ -315,8 +390,8 @@ describe('Pattern › Beat track solo', () => {
 });
 
 describe('Pattern › Beat segment paste button', () => {
-  test('the drum pattern card body carries the drums-pattern paste button', () => {
+  test('the drum pattern card body carries the beat-pattern paste button', () => {
     const src = readFileSync(new URL('./SequencerView.tsx', import.meta.url), 'utf8');
-    expect(src).toContain("groups={['drums-pattern']}");
+    expect(src).toContain("groups={['beat-pattern']}");
   });
 });

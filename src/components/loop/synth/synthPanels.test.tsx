@@ -132,7 +132,7 @@ describe('SubtractiveProPanel renders every approved Variant A module', () => {
   test('the eight module headings', () => {
     const html = proMarkup(makeChannel());
     expect(html).toContain('Oscillators');
-    expect(html).toContain('OSC 3 / Utility');
+    expect(html).toContain('Sub &amp; Noise');
     expect(html).toContain('Filter + drive');
     expect(html).toContain('ENV 1');
     expect(html).toContain('ENV 2');
@@ -141,11 +141,29 @@ describe('SubtractiveProPanel renders every approved Variant A module', () => {
     expect(html).toContain('Arpeggiator');
   });
 
-  test('the signal-flow ribbon names the four stages', () => {
+  /**
+   * The chain is stated by the ORDER the modules sit in and by their own
+   * headings. The caption row that named the same four stages a second time is
+   * gone, and so is the rack's own ground: each module already draws a recessed
+   * card, so a surface around them framed a frame and inset the whole rack from
+   * the section card holding it — both cost vertical space on the densest
+   * surface in the app and bought nothing.
+   *
+   * Matched on the caption DETAILS, not on the stage words: 'VOICE' and
+   * 'SOURCE' appear inside module headings and aria-labels, so asserting those
+   * absent would fail on markup that is not the ribbon.
+   */
+  test('no flow-ribbon caption and no ground of its own', () => {
     const html = proMarkup(makeChannel());
-    for (const stage of ['SOURCE', 'SHAPE', 'MOTION', 'VOICE']) {
-      expect(html).toContain(stage);
+    for (const caption of [
+      'OSC 1 + OSC 2 + SUB + NOISE',
+      'DRIVE + FILTER',
+      'ENV + LFO',
+      'AMP + UNISON',
+    ]) {
+      expect(html).not.toContain(caption);
     }
+    expect(html).not.toContain('bg-base-300/40');
   });
 
   test('OSC 1 and OSC 2 are distinct inset units with their own four controls', () => {
@@ -284,7 +302,18 @@ describe('icons carry full accessible names and pressed state', () => {
     const html = proMarkup(makeChannel());
     // Scoped to module 1: the LFO's row shares the same four names (plus
     // sample-and-hold), so an unscoped count would pass with one unit missing.
-    const oscillators = html.slice(html.indexOf('>Oscillators<'), html.indexOf('>OSC 3 / Utility<'));
+    //
+    // Both ends are asserted BEFORE the slice. `indexOf` answers -1 for a
+    // heading that has been renamed, and `slice(a, -1)` is not an error — it
+    // is the rest of the panel minus one character, so the scope silently
+    // widens to include the LFO and only the sample-and-hold line below
+    // notices. That is how a module rename reached this test as a confusing
+    // failure in an unrelated assertion.
+    const start = html.indexOf('>Oscillators<');
+    const end = html.indexOf('>Sub &amp; Noise<');
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const oscillators = html.slice(start, end);
     for (const name of ['Sawtooth', 'Square', 'Triangle', 'Sine']) {
       for (const unit of ['OSC 1', 'OSC 2']) {
         expect(oscillators).toContain(`aria-label="${unit} ${name}"`);

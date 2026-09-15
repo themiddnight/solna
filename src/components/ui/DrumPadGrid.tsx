@@ -43,10 +43,10 @@ export const DEFAULT_PADS: DrumPad[] = [
 /**
  * Voices with no pad. Ten pads fit one physical keyboard row (the QWERTY
  * bottom row); an eleventh did not, so `bell` was dropped from the grid. It
- * keeps its sequencer track, colour, kit entry and engine case — only the
- * pad goes. `DrumPadGrid.test.tsx` asserts that `DEFAULT_PADS`'s notes,
- * unioned with this list, equal `DRUM_TYPES` — so removing another voice
- * from the pads without adding it here fails loudly instead of silently.
+ * keeps its Beat row, colour, patch entry and engine case — only the pad
+ * goes. `DrumPadGrid.test.tsx` asserts that `DEFAULT_PADS`'s notes, unioned
+ * with this list, equal `BEAT_VOICE_IDS` — so removing another voice from the
+ * pads without adding it here fails loudly instead of silently.
  */
 export const PADLESS_VOICES = ['bell'] as const;
 

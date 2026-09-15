@@ -762,12 +762,12 @@ function LoopCardMixer({ card }: { card: SortableLoopCardProps }) {
           key={ch.idPrefix}
           idPrefix={`${ch.idPrefix}-${loop.id}`}
           label={ch.label}
-          volumeDb={loop[ch.volumeKey]}
-          muted={loop[ch.muteKey]}
+          volumeDb={ch.readLevelDb(loop)}
+          muted={ch.readMuted(loop)}
           tone={ch.tone}
           sliderAccent={ch.accentClass}
-          onVolumeDbChange={(v) => onSetMix(loop.id, { [ch.volumeKey]: v })}
-          onToggleMute={() => onSetMix(loop.id, { [ch.muteKey]: !loop[ch.muteKey] })}
+          onVolumeDbChange={(v) => onSetMix(loop.id, ch.levelPatch(v, loop))}
+          onToggleMute={() => onSetMix(loop.id, ch.mutePatch(!ch.readMuted(loop), loop))}
         />
       ))}
     </div>

@@ -21,22 +21,56 @@ describe('MIXER_CHANNELS', () => {
   // seventh grouping of the same layers, and a table that drifted in order
   // would be exactly that.
   test('lists the six layers in the canonical order', () => {
-    expect(MIXER_CHANNELS.map((c) => c.volumeKey)).toEqual([
-      'synthVolume', 'fxVolume', 'chordVolume', 'bassVolume', 'padVolume', 'masterSequencerVolume',
+    expect(MIXER_CHANNELS.map((c) => c.idPrefix)).toEqual([
+      'synth', 'fx', 'chord', 'bass', 'pad', 'drum',
     ]);
-    expect(MIXER_CHANNELS.map((c) => c.muteKey)).toEqual([
-      'synthMuted', 'fxMuted', 'chordMuted', 'bassMuted', 'padMuted', 'drumMuted',
-    ]);
+  });
+
+  /**
+   * Each row reads and patches ITS OWN half of the mix. A row is no longer a
+   * pair of key names, so this is behavioural: build a mix out of one row's
+   * own patches and read it back through that same row's accessors. A row that
+   * patched one layer and read another — the transposition the key-name pair
+   * used to make visible by eye — comes back with the wrong value here.
+   */
+  test('every row reads back exactly what its own patch wrote', () => {
+    const base = useAppStore.getState();
+    for (const channel of MIXER_CHANNELS) {
+      const mix = { ...base, ...channel.levelPatch(-13, base) };
+      const muted = { ...mix, ...channel.mutePatch(true, mix) };
+      expect([channel.idPrefix, channel.readLevelDb(muted), channel.readMuted(muted)])
+        .toEqual([channel.idPrefix, -13, true]);
+      // And it wrote nothing anyone else reads: every OTHER row still reads
+      // the value it started on.
+      for (const other of MIXER_CHANNELS) {
+        if (other.idPrefix === channel.idPrefix) continue;
+        expect([channel.idPrefix, other.idPrefix, other.readLevelDb(muted)])
+          .toEqual([channel.idPrefix, other.idPrefix, other.readLevelDb(base)]);
+      }
+    }
+  });
+
+  /**
+   * The Beat row's patch must carry the eleven per-voice faders through. They
+   * live inside the same object as the bus level, so a patch built as
+   * `{ beatMix: { levelDb } }` would silently drop every one of them.
+   */
+  test('the Beat row keeps the per-voice mix its patch travels inside', () => {
+    const base = useAppStore.getState();
+    const beat = MIXER_CHANNELS.find((c) => c.idPrefix === 'drum')!;
+    const patched = { ...base, ...beat.levelPatch(-9, base) };
+    expect(patched.beatMix.voices).toEqual(base.beatMix.voices);
+    expect(patched.beatMix.levelDb).toBe(-9);
   });
 
   test('every channel has both a volume setter and a mute toggle', () => {
     expect(MIXER_CHANNELS.map((c) => c.setVolumeKey)).toEqual([
       'setSynthVolume', 'setFxVolume', 'setChordVolume', 'setBassVolume', 'setPadVolume',
-      'setMasterSequencerVolume',
+      'setBeatLevel',
     ]);
     expect(MIXER_CHANNELS.map((c) => c.toggleKey)).toEqual([
       'toggleSynthMuted', 'toggleFxMuted', 'toggleChordMuted', 'toggleBassMuted', 'togglePadMuted',
-      'toggleDrumMuted',
+      'toggleBeatMuted',
     ]);
   });
 

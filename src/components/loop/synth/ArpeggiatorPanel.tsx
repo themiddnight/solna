@@ -35,12 +35,12 @@ export function ArpeggiatorPanel({ arp, onArp }: ArpeggiatorPanelProps) {
       chip={
         <ToggleButton
           id="btn-toggle-arp"
-          label={`Arpeggiator ${arp.active ? 'ON' : 'BYPASS'}`}
+          label={`Arpeggiator ${arp.active ? 'ON' : 'OFF'}`}
           pressed={arp.active}
           color={ARP_COLOR}
           onPress={() => onArp({ ...arp, active: !arp.active })}
         >
-          {arp.active ? 'ON' : 'BYPASS'}
+          {arp.active ? 'ON' : 'OFF'}
         </ToggleButton>
       }
     >

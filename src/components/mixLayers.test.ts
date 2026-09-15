@@ -7,8 +7,8 @@ import { SOURCE_BUSES, sourceBus } from '@/store/sourceBuses';
  * the mixer row knows which store fields its fader and mute toggle write, and
  * the engine table knows which fields belong to which bus. Only the bus NAME is
  * type-checked between them — `engineSource: SourceBusId` — so a row pairing
- * `engineSource: 'chord'` with `volumeKey: 'bassVolume'` compiles and ships a
- * fader and the meter beside it describing different buses, with nothing red.
+ * `engineSource: 'chord'` with Bass's accessors compiles and ships a fader and
+ * the meter beside it describing different buses, with nothing red.
  *
  * The tables stay separate on purpose: each is readable as a flat literal, and
  * deriving half of one from the other would make a mixer row something you
@@ -21,13 +21,32 @@ describe('MIX_LAYERS agrees with the engine bus table', () => {
     );
   });
 
+  /**
+   * Both tables' readers are FUNCTIONS now, so the check is behavioural: a
+   * state carrying only what the layer's own patches wrote must read back
+   * through the BUS's own selectors. A row pairing `engineSource: 'chord'`
+   * with Bass's accessors still fails, which is the whole point.
+   *
+   * EVERY layer is checked, Beat included. The Beat row used to be excluded
+   * because the engine read `beatMix` while the mixer row still wrote a flat
+   * legacy pair; both sides now name `beatMix`, so the exclusion is gone and
+   * `filter` is deliberately absent below — a row skipped here is a row whose
+   * fader and meter can describe different buses with nothing red.
+   */
   test('every layer writes the store fields the engine reads for its bus', () => {
-    const pairs = MIX_LAYERS.map((layer) => {
+    expect(MIX_LAYERS).toHaveLength(6);
+    for (const layer of MIX_LAYERS) {
       const bus = sourceBus(layer.engineSource);
-      return [layer.idPrefix, layer.volumeKey, layer.muteKey, bus.volume, bus.muted];
-    });
-    for (const [id, volumeKey, muteKey, busVolume, busMuted] of pairs) {
-      expect([id, volumeKey, muteKey]).toEqual([id, busVolume, busMuted]);
+      // Seeded with an empty Beat mix so the Beat row's own spread has
+      // something to spread; the melodic rows never look at it.
+      const seed = { beatMix: { levelDb: 0, muted: false, voices: {} } };
+      const written = { ...seed, ...layer.levelPatch(-13, seed as never) };
+      const state = {
+        ...written,
+        ...layer.mutePatch(true, written as never),
+      } as unknown as Parameters<typeof bus.selectLevelDb>[0];
+      expect([layer.idPrefix, bus.selectLevelDb(state), bus.selectMuted(state)])
+        .toEqual([layer.idPrefix, -13, true]);
     }
   });
 });

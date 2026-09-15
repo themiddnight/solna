@@ -354,7 +354,23 @@ function signed(value: number, digits = 1): string {
   return rounded > 0 ? `+${rounded}` : String(rounded);
 }
 
-/** The amount knob and target select for ONE route slot. */
+/**
+ * The amount knob and target select for ONE route slot, on ONE LINE.
+ *
+ * The knob is `layout="horizontal"` — caption and reading stacked to its LEFT
+ * rather than above and below it. Vertically it made the row 74px tall against
+ * a label-and-select column of 38, so more than half the row's height was the
+ * knob's own caption and readout wrapping around a 36px dial. Three route rows
+ * are on the rack at once (ENV 2 twice, LFO once), which is the height of a
+ * whole module spent on six lines of 10px text.
+ *
+ * The rows are NOT paired two-across instead, which is the other way to get
+ * the height back: the rack's columns run ~270-310px, so halving one leaves a
+ * select too narrow for its own longest option ("Filter resonance") while the
+ * knob beside it keeps its full width. Flattening the row costs no width at
+ * all — the readout is `shrink-0` and the select is `flex-1`, so the select
+ * absorbs the difference at whatever width the column happens to be.
+ */
 export function RouteRow({
   idPrefix,
   caption,
@@ -381,11 +397,21 @@ export function RouteRow({
 }) {
   const amount = route ? amountControlFor(route, dbRange) : null;
   return (
+    /* ONE LINE: caption, select and dial abreast, not a captioned column beside
+       a dial. The caption used to sit ABOVE the select, which made every route
+       a two-line block — and three of them are on screen at once (ENV 2 has
+       two, the LFO one), so the stacked caption cost the rack a knob row's
+       worth of height for three words. Inline, the row is as tall as the dial
+       and nothing else.
+
+       `items-center` follows from that: with every cell now a single line,
+       their centres are what line up. It was `items-end` for exactly as long
+       as the left cell was two lines tall and the right cell one. */
     <div className="flex items-center gap-2 min-w-0">
+      <label className={`${FIELD_LABEL} mb-0 shrink-0`} htmlFor={`select-${idPrefix}-target`}>
+        {caption}
+      </label>
       <div className="min-w-0 flex-1">
-        <label className={FIELD_LABEL} htmlFor={`select-${idPrefix}-target`}>
-          {caption}
-        </label>
         <select
           id={`select-${idPrefix}-target`}
           className="select select-xs w-full text-[11px] font-semibold"
@@ -413,6 +439,7 @@ export function RouteRow({
           ariaLabel={amountLabel}
           color={color}
           size="sm"
+          layout="horizontal"
           value={route.amount}
           min={amount.min}
           max={amount.max}

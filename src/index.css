@@ -238,6 +238,12 @@
   --module-chord: #A9C96D;        /* olive 125° */
   --module-chord-content: #17100F;
   --module-chord-tint: #A9C96D1A; /* the same olive at 10% — see tint-chord */
+  /* Not a module: the Beat card has eleven voices and no single one to tint
+     by, so it borrows the ACCENT role — already what a drum focus's chip
+     border falls back to in SoundView's SoundFocusChips — rather than adding
+     a --module-beat token nothing else would use. Same 10%-alpha shape as the
+     module tints above; see tint-accent. */
+  --accent-tint: #8C7BE01A;
   --module-env-vca: #4FD69E;      /* emerald 162° */
   --module-env-vca-content: #17100F;
   --module-fx: #33C6BB;           /* teal 187° — L0.75 C0.12, the dark set's lightness */
@@ -324,6 +330,9 @@
   --module-chord: #6D8F45;        /* olive 125° */
   --module-chord-content: #17100F;
   --module-chord-tint: #6D8F451A; /* the same olive at 10% — see tint-chord */
+  /* See the dark theme's comment: the Beat card's own tint, off the accent
+     role rather than a module token. */
+  --accent-tint: #6A4FD11A;
   --module-env-vca: #099268;      /* emerald 162° */
   --module-env-vca-content: #17100F;
   --module-fx: #19827A;           /* teal 187° — L0.55, two steps below the light set's
@@ -465,6 +474,13 @@
 
 @utility tint-fx {
   background-image: linear-gradient(var(--module-fx-tint), var(--module-fx-tint));
+}
+
+/* The Beat Sound card's tint — same image-layer shape as the module tints
+   above (so it composites over bg-panel rather than fighting it for
+   background-color), off --accent-tint rather than a --module-* token. */
+@utility tint-accent {
+  background-image: linear-gradient(var(--accent-tint), var(--accent-tint));
 }
 
 @layer base {

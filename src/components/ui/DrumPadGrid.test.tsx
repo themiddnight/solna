@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { DrumPadGrid, DEFAULT_PADS, PADLESS_VOICES } from './DrumPadGrid';
-import { DRUM_TYPES } from '@/data/drumKits';
+import { BEAT_VOICE_IDS } from '@/data/beatPresets';
 
 const noop = () => {};
 const props = {
@@ -34,17 +34,17 @@ describe('DEFAULT_PADS', () => {
 
   test('there is one pad per drum voice, in the canonical order', () => {
     expect(DEFAULT_PADS.map((p) => p.note)).toEqual(
-      DRUM_TYPES.filter((t) => !(PADLESS_VOICES as readonly string[]).includes(t)),
+      BEAT_VOICE_IDS.filter((t) => !(PADLESS_VOICES as readonly string[]).includes(t)),
     );
   });
 
-  test('DEFAULT_PADS unioned with PADLESS_VOICES equals DRUM_TYPES', () => {
+  test('DEFAULT_PADS unioned with PADLESS_VOICES equals BEAT_VOICE_IDS', () => {
     // bell is deliberately dropped from the pad grid (ten pads fit one
     // physical keyboard row, eleven did not) — this must stay a visible,
     // asserted omission rather than a silently-relaxed subset check.
     const combined = new Set([...DEFAULT_PADS.map((p) => p.note), ...PADLESS_VOICES]);
-    expect(combined.size).toBe(DRUM_TYPES.length);
-    expect(DRUM_TYPES.every((t) => combined.has(t))).toBe(true);
+    expect(combined.size).toBe(BEAT_VOICE_IDS.length);
+    expect(BEAT_VOICE_IDS.every((t) => combined.has(t))).toBe(true);
   });
 
   test('the two tom pads name the voice they actually play', () => {

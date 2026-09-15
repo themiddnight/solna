@@ -4,7 +4,6 @@ import { FIELD_LABEL } from '@/components/ui/fieldClasses';
 import { SYNTH_GAIN_FLOOR_DB } from '@/utils/synthPatch';
 import {
   KnobGrid,
-  ModuleChip,
   ProModule,
   ToggleButton,
   ToggleRow,
@@ -71,9 +70,8 @@ export function UtilitySourcePanel({ patch, onPatch }: PatchPanelProps) {
   return (
     <ProModule
       badge={2}
-      title="OSC 3 / Utility"
+      title="Sub & Noise"
       color={OSC_COLOR}
-      chip={<ModuleChip color={OSC_COLOR}>sub + noise</ModuleChip>}
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <UtilityHalf

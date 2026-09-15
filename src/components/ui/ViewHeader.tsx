@@ -49,16 +49,28 @@ export interface HeaderCardProps {
   title: string;
   badge?: React.ReactNode;
   /**
-   * The switcher that selects WHAT this view shows — Pattern's segment row
-   * (which content) and the Sound tab's Simple/Pro (how deep the same content
-   * is shown). It sits beside the title rather than in `actions` because
-   * `actions` is the right-hand cluster of things you DO to what is on screen
-   * (save this patch, open that library), and a control that changes the
-   * screen itself is not one of them.
+   * The control that selects WHAT this view shows — Pattern's segment row
+   * (which content) and the Sound tab's focus chips (which track).
    *
-   * Both callers wear `HEADER_GROUP`, so the two are one height and read as
-   * one kind of control. Simple/Pro used to sit in `actions` in a `JOIN_LANE`
-   * of `btn-xs`, which is the mismatch this slot removes.
+   * `actions` holds everything else in the header's right cluster, INCLUDING
+   * how deep the selected thing is shown. Focus and depth are different axes —
+   * which track, versus how much of it — and putting both on the same side
+   * would read as one compound switcher rather than two controls.
+   *
+   * This slot used to hold the Sound tab's depth switch, on the argument that
+   * `actions` is for things you DO to what is on screen and a control that
+   * changes the screen itself is not one of them. That argument was made when
+   * the slot had exactly one candidate to sort, which made it untestable;
+   * opposite sides is more honest than that placement was, not a relaxation
+   * of it.
+   *
+   * Only Pattern's occupant wears `HEADER_GROUP`, the join shell a segmented
+   * control needs to read as one control at one height. Sound's occupant,
+   * `SoundFocusChips`, is not that shape — a focus selector is a set of
+   * independent choices, not a segmented switcher — so it wears its own
+   * `bg-base-200` group instead; assuming `HEADER_GROUP` on every occupant
+   * here would be reading a rule off the one caller that no longer holds it.
+   * `HEADER_GROUP` still governs the depth switch, just in `actions` now.
    */
   viewControls?: React.ReactNode;
   actions?: React.ReactNode;

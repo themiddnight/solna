@@ -2,18 +2,13 @@ import { useEffect, useRef } from "react";
 import { useAppStore } from "../store/store";
 import { publishStepAt, resetStep } from "./playbackStep";
 import { ensureDrumEngine, triggerPad } from "../audio/playback/drumPlayback";
-import { sequencerStepEvents, type SequencerStepEvent } from "@/audio/sequencerSteps";
+import { beatStepEvents, type BeatStepEvent } from "@/audio/beatSteps";
 import { STEPS_PER_BAR } from "../utils/musicTheory";
-import {
-  playbackNoteOff,
-  playbackNoteOn,
-  subscribePlaybackClock,
-} from "../audio/playback/playbackEngine";
+import { subscribePlaybackClock } from "../audio/playback/playbackEngine";
 import { getMeter } from "../utils/meter";
 import { DEFAULT_VELOCITY } from "../audio/constants";
 import { armOnBarLine, isSoftStopBoundary } from "./playerStop";
 import type { PlayerState } from "../store/types";
-import type { ActiveSynth } from "../types/synth";
 
 /** Whether the stepper has caught a bar line and started running. */
 export interface SequencerArming {
@@ -52,23 +47,18 @@ export function sequencerStepAction(
  * connects drumBusFilter into that bus. This used to ALSO hand the fader
  * value to triggerPad as the velocity argument, where clampVelocity(v)
  * scales every voice's peak, so drum output was proportional to
- * masterSequencerVolume SQUARED: the 0.8 default read as -3.9 dB rather than
+ * the bus fader SQUARED: the 0.8 default read as -3.9 dB rather than
  * -1.9, and a fader at -6 dB delivered -12. Exported (pure, no store read) so
  * the fix is testable directly — the hook's clock effect never runs under
  * `renderToString`.
+ *
+ * Drums only, and there is no branch left to take: `beatStepEvents` can name
+ * eleven drum voices and nothing else, so this is the whole of what a Beat
+ * step does.
  */
-export function fireSequencerStepEvents(
-  events: readonly SequencerStepEvent[],
-  synth: ActiveSynth,
-  time: number,
-): void {
+export function fireBeatStepEvents(events: readonly BeatStepEvent[], time: number): void {
   for (const event of events) {
-    if (event.kind === 'note') {
-      const voiceId = playbackNoteOn(event.note, synth, DEFAULT_VELOCITY, time);
-      playbackNoteOff(voiceId, event.release, time + event.offsetSec);
-    } else {
-      triggerPad(event.instrument, DEFAULT_VELOCITY, time);
-    }
+    triggerPad(event.voice, DEFAULT_VELOCITY, time);
   }
 }
 
@@ -78,7 +68,7 @@ export function fireSequencerStepEvents(
 // the engine is reached only through the audio-layer bridge in
 // playbackEngine.ts (layering rule 3).
 export function useSequencerPlayback(): void {
-  // tracks / synthParams / masterSequencerVolume / bpm are deliberately NOT
+  // beatPattern and beatMix are deliberately NOT
   // selected here: they are read LIVE inside the clock callback below. As
   // render-scope values they landed in playStepSounds' useCallback deps and
   // then in the clock effect's deps, so every knob pointermove tore down and
@@ -146,11 +136,7 @@ export function useSequencerPlayback(): void {
       // the meter read above, and the pattern the lead and chord schedulers'
       // own clock callbacks already use.
       const live = useAppStore.getState();
-      fireSequencerStepEvents(
-        sequencerStepEvents(live.sequencerTracks, stepInLoop, live.synthParams, live.bpm),
-        live.synthParams,
-        time,
-      );
+      fireBeatStepEvents(beatStepEvents(live.beatPattern, live.beatMix, stepInLoop), time);
     });
   }, [isPlaying, hardStop]);
 }

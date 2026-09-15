@@ -8,7 +8,6 @@ import {
 } from './FilterTypeIcon';
 import {
   KnobGrid,
-  ModuleChip,
   ProModule,
   ToggleButton,
   type PatchPanelProps,
@@ -38,7 +37,6 @@ export function FilterPanel({ patch, onPatch }: PatchPanelProps) {
       badge={3}
       title="Filter + drive"
       color={FILTER_COLOR}
-      chip={<ModuleChip color={FILTER_COLOR}>{FILTER_TYPE_CODES[filter.type]}</ModuleChip>}
     >
       <div>
         <span className={FIELD_LABEL} id="label-filter-type">

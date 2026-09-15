@@ -65,8 +65,16 @@ export function TabButton({ view, activeTab, onSelect, labelClassName }: TabButt
       aria-current={isActive ? 'page' : undefined}
       aria-label={tabLabel}
       onClick={() => onSelect(view)}
+      /* `btn-soft`, where the LAYER switch beside it is solid: this group is
+         the SUBSET of the layer the user has already chosen — Loop offers
+         Sound and Pattern, Song offers Arrange and Master — and two identical
+         solid-primary groups in one bar read as peers when one is the other's
+         child. The subordinate cue is WEIGHT, not hue: a second colour would
+         say "a different kind of control", which is the opposite of true
+         here, and `btn-secondary` already means "selected" inside a panel
+         (the Beat bus filter's LPF/BPF/HPF). Same hue, lighter fill. */
       className={`btn btn-sm join-item min-w-0 px-2 sm:px-2.5 xl:px-3 gap-1 xl:gap-1.5 text-xs font-bold ${
-        isActive ? 'btn-active btn-primary' : 'btn-ghost'
+        isActive ? 'btn-primary btn-soft' : 'btn-ghost'
       }`}
       title={tabLabel}
     >

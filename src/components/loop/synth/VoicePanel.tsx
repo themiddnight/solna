@@ -1,5 +1,5 @@
 import type { CommonVoiceParams } from '@/types/synth';
-import { KnobGrid, ModuleChip, ProModule, ToggleRow, type PatchPanelProps } from './proControls';
+import { KnobGrid, ProModule, ToggleRow, type PatchPanelProps } from './proControls';
 
 /**
  * Pro-Mode module 7 — Voice (prototype Variant A's modulation row).
@@ -31,11 +31,6 @@ export function VoicePanel({ patch, onPatch }: PatchPanelProps) {
       badge={7}
       title="Voice"
       color={VOICE_COLOR}
-      chip={
-        <ModuleChip color={VOICE_COLOR}>
-          {common.voiceMode === 'poly' ? `POLY ${common.unisonVoices}` : 'MONO'}
-        </ModuleChip>
-      }
     >
       <ToggleRow
         idPrefix="btn-voice-mode"
