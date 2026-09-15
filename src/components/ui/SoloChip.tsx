@@ -38,7 +38,17 @@ export function SoloChip() {
          the same trap SoundView's `btn-solo-target` exists to avoid. */
       data-solo-chip
       className="badge badge-lg badge-warning text-xs font-bold gap-1 pe-1 max-w-52 sm:max-w-none"
-      title="Track solo — cleared when you change Pattern segment, layer or loop"
+      /* The clearing rule spelled out, because a control that silences
+         tracks and then stops doing so on its own owes the user that
+         sentence. It is stated HERE and not on SoloButton: IconButton
+         emits one string as both `title` and `aria-label` (it omits
+         `title` from its props on purpose), so the rule on the button
+         would be read out by a screen reader at all six placements on
+         every focus. The chip is the one affordance that appears only
+         while a set is live, which is the only moment the rule matters.
+         Kept in lockstep with SOLO_NAV_SOURCES (store/soloNav.ts) plus
+         projectSlice's own clear; ViewHeader.test.tsx pins the text. */
+      title="Track solo is a monitoring gesture: it survives the Sound / Pattern hop, and clears itself when you leave the Loop layer, change loop, or open another project."
     >
       <span className="truncate">{soloLabel}</span>
       <IconButton

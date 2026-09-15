@@ -66,6 +66,32 @@ describe('the header solo chip', () => {
   });
 
   /**
+   * The chip's tooltip is the only place the clearing rule is written for the
+   * user, so it has to match SOLO_NAV_SOURCES (store/soloNav.ts) — layer and
+   * active loop — plus projectSlice's own clear on an install. It said
+   * "Pattern segment, layer or loop" until this test existed: the segment axis
+   * was dropped when `focusTrack` merged the segment and the Sound target
+   * (soloNav.ts records the argument), and the sentence describing the
+   * behaviour was left behind, telling the user a set would clear on a hop it
+   * actually survives. Pinned clause by clause rather than as one string so a
+   * rewording is free and a dropped rule is not.
+   */
+  test('the tooltip states the clearing rule, and states the real one', () => {
+    useAppStore.setState({ soloTracks: ['drums'] });
+    const html = renderToString(<ViewHeader view="sound" />);
+    // The two navigation axes soloNav watches, plus the project swap it
+    // cannot see (loop ids are not unique across projects).
+    expect(html).toContain('leave the Loop layer');
+    expect(html).toContain('change loop');
+    expect(html).toContain('open another project');
+    // And the hop it deliberately survives, which is the half a user is
+    // likelier to be surprised by in the other direction.
+    expect(html).toContain('survives the Sound / Pattern hop');
+    // The axis that was removed must not be advertised as one.
+    expect(html).not.toContain('Pattern segment');
+  });
+
+  /**
    * A solo set survives the Sound <-> Pattern hop (store/soloNav.ts), so the
    * chip has to survive it too — which is why it lives in the shared card
    * rather than in one view.
