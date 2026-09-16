@@ -366,8 +366,8 @@ describe('applyVibeToStore re-clamps the custom pattern lanes', () => {
 
   // Three bars, so 4/4's divisors are 1 and 3 rather than the factory's 1, 2, 4.
   const THREE_BAR_CHORDS: ChordItem[] = [
-    { id: 'c1', root: 'A', quality: 'min7', bars: 2, notes: ['A3', 'C4', 'E4', 'G4'] },
-    { id: 'c2', root: 'F', quality: 'maj7', bars: 1, notes: ['F3', 'A3', 'C4', 'E4'] },
+    { id: 'c1', root: 'A', quality: 'min7', bars: 2 },
+    { id: 'c2', root: 'F', quality: 'maj7', bars: 1 },
   ];
 
   test('the new progression lowers the dormant cycle without deleting its bars', () => {

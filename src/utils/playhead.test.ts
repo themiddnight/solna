@@ -15,7 +15,6 @@ const chord = (id: string, root: string, quality: ChordQuality, bars = 1): Chord
   root,
   quality,
   bars,
-  notes: [],
 });
 
 describe('getNextChordIndex', () => {

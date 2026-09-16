@@ -824,7 +824,7 @@ describe('legacy preset migration', () => {
         category: 'User',
         description: '',
         roman: 'i - iv',
-        chords: [{ id: 'c1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] }],
+        chords: [{ id: 'c1', root: 'A', quality: 'min7', bars: 1 }],
         createdAt: 2000,
       },
     ];

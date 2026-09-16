@@ -122,7 +122,7 @@ describe('resolvePadArm', () => {
   const base: PadArmInput = {
     mode: 'pad',
     isLoopStart: false,
-    chord: { id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] },
+    chord: { id: 'c1', root: 'C', quality: 'maj', bars: 1 },
     // 0-based: degree 0 is the scale's tonic, so 1 would be D, not C.
     degree: 0,
     intervals: [1, 5, 8],

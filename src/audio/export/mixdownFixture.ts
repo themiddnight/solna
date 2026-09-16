@@ -85,7 +85,7 @@ export function mixdownLoop(over: Partial<MixdownLoop> = {}): MixdownLoop {
     repeatCount: 1,
     scaleRoot: 'C',
     scaleType: 'major',
-    chords: [{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] }],
+    chords: [{ id: 'c1', root: 'C', quality: 'maj', bars: 1 }],
     chordSynthParams: synthFixture(),
     chordArpSettings: arpFixture(),
     chordRhythmId: 'sustained',

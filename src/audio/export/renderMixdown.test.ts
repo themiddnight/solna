@@ -80,7 +80,7 @@ describe('planArrangement', () => {
       mixdownSnapshot({
         loops: [
           mixdownLoop({ id: 'a', repeatCount: 2 }),
-          mixdownLoop({ id: 'b', chords: [{ id: 'c2', root: 'F', quality: 'maj', bars: 2, notes: ['F4', 'A4', 'C5'] }] }),
+          mixdownLoop({ id: 'b', chords: [{ id: 'c2', root: 'F', quality: 'maj', bars: 2 }] }),
         ],
       }),
     );
@@ -129,8 +129,8 @@ describe('buildLoopVoices', () => {
   test('maps every bar of a pass to the chord that covers it', () => {
     const loop = mixdownLoop({
       chords: [
-        { id: 'a', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] },
-        { id: 'b', root: 'F', quality: 'maj', bars: 3, notes: ['F4'] },
+        { id: 'a', root: 'C', quality: 'maj', bars: 1 },
+        { id: 'b', root: 'F', quality: 'maj', bars: 3 },
       ],
     });
     const voices = buildLoopVoices(loop, '4/4', 120, 16);
@@ -192,9 +192,9 @@ function customCycleLoop(): MixdownLoop {
   bassRow[patternStoredIndexAt(20, 16)] = 'fifth';
   return mixdownLoop({
     chords: [
-      { id: 'a', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] },
-      { id: 'b', root: 'F', quality: 'maj', bars: 1, notes: ['F4', 'A4', 'C5'] },
-      { id: 'c', root: 'G', quality: 'maj', bars: 1, notes: ['G4', 'B4', 'D5'] },
+      { id: 'a', root: 'C', quality: 'maj', bars: 1 },
+      { id: 'b', root: 'F', quality: 'maj', bars: 1 },
+      { id: 'c', root: 'G', quality: 'maj', bars: 1 },
     ],
     chordRhythmMode: 'custom',
     customChordRhythm: chordRow,
@@ -241,10 +241,10 @@ function asymmetricCycleLoop(): MixdownLoop {
 
   return mixdownLoop({
     chords: [
-      { id: 'a', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] },
-      { id: 'b', root: 'F', quality: 'maj', bars: 1, notes: ['F4', 'A4', 'C5'] },
-      { id: 'c', root: 'G', quality: 'maj', bars: 1, notes: ['G4', 'B4', 'D5'] },
-      { id: 'd', root: 'A', quality: 'min', bars: 1, notes: ['A3', 'C4', 'E4'] },
+      { id: 'a', root: 'C', quality: 'maj', bars: 1 },
+      { id: 'b', root: 'F', quality: 'maj', bars: 1 },
+      { id: 'c', root: 'G', quality: 'maj', bars: 1 },
+      { id: 'd', root: 'A', quality: 'min', bars: 1 },
     ],
     chordRhythmMode: 'custom',
     customChordRhythm: chordRow,

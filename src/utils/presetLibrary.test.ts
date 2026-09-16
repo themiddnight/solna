@@ -123,7 +123,6 @@ describe('custom chord progression helpers (store-backed wrappers)', () => {
       root: 'C',
       quality: 'maj7',
       bars: 1,
-      notes: ['C4', 'E4', 'G4', 'B4'],
     };
     const saved = useAppStore
       .getState()
@@ -144,7 +143,6 @@ describe('custom chord progression helpers (store-backed wrappers)', () => {
       root: 'C',
       quality: 'maj7',
       bars: 1,
-      notes: ['C4', 'E4', 'G4', 'B4'],
     };
     const imported = [
       { name: 'Prog A', category: 'User', description: '', roman: 'I', chords: [chord] },
