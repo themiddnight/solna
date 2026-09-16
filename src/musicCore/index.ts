@@ -8,7 +8,10 @@
  *
  * `resolveTonalChord`/`TonalChordResult` (tonalAdapter.ts) are deliberately
  * NOT re-exported: nothing outside `chordQuality.ts`'s `resolveChordNotes`
- * needs a near-passthrough of a raw Tonal chord lookup.
+ * needs a near-passthrough of a raw Tonal chord lookup. `ReharmonizationCategory`
+ * is likewise absent, and is not exported from `chordQuality.ts` either — it
+ * types one field of `ChordQualityEntry` and has no reader until DEV-393, so
+ * exporting it would be dead surface Knip is right to flag.
  */
 export {
   chromaOfNote,
@@ -32,4 +35,4 @@ export {
   isChordQuality,
   resolveChordNotes,
 } from './chordQuality';
-export type { ChordQuality, ChordQualityEntry, ReharmonizationCategory } from './chordQuality';
+export type { ChordQuality, ChordQualityEntry } from './chordQuality';

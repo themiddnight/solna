@@ -4,17 +4,29 @@ import { intervalSemitones, noteMidi, resolveTonalChord } from './tonalAdapter';
 export const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 
 /**
- * How a quality reharmonizes when a progression is snapped to a new key
- * (DEV-393's concern, not this issue's). A plain triad or seventh can be
- * replaced by the target scale's own diatonic chord at that degree; every
- * other category names a shape snapping cannot safely regenerate (a 6th, an
- * added tone, an extension, a suspension, a half-diminished/diminished
- * shape, or an altered chord like minMaj7/maj7#5) and today is preserved
- * verbatim by `snapProgressionToScale`'s own hardcoded list
- * (`src/utils/musicTheory.ts`). This issue only assigns the category; it
- * wires nothing to read it.
+ * The chord FAMILY a quality belongs to — a shape axis, not a policy.
+ *
+ * Each member names the kind of chord the quality is: a plain triad, a plain
+ * seventh, a 6th, an added tone, an upper extension, a suspension, a
+ * diminished/half-diminished shape, or an altered chord (aug, minMaj7,
+ * maj7#5). It states nothing about what should HAPPEN to that chord when a
+ * progression is snapped to a new key — deliberately. Which families
+ * `snapProgressionToScale` regenerates from the target scale's own diatonic
+ * chord and which it preserves verbatim is DEV-393's decision, and DEV-393
+ * has not started; today that behaviour is a hardcoded list inside
+ * `src/utils/musicTheory.ts` that reads none of this.
+ *
+ * Note for whoever picks DEV-393 up: family does NOT line up with
+ * regenerability in the obvious way. The eleven qualities
+ * `resolveDegreeQuality` derives — the most regenerable chords in the app,
+ * since the scale itself produces them — include every `dim`, `aug`, `dim7`,
+ * `m7b5`, `minMaj7` and `maj7#5`, which sit under
+ * `diminished-half-diminished` and `altered` here. Treating either of those
+ * families as "preserve verbatim" would freeze chords the scale can
+ * regenerate perfectly well. This issue only assigns the family; it wires
+ * nothing to read it.
  */
-export type ReharmonizationCategory =
+type ReharmonizationCategory =
   | 'triad'
   | 'seventh'
   | 'sixth'
@@ -35,7 +47,12 @@ export interface ChordQualityEntry {
   pickerLabel: string;
   /** The chord picker's `<optgroup>` label; option order within a group follows registry order. */
   pickerGroup: 'Triads' | '7th Chords' | 'Extensions & Additions';
-  /** DEV-393's classification axis — read but not yet acted on by anything in this issue. */
+  /**
+   * The chord family this quality belongs to — data DEV-393 will read, acted
+   * on by nothing today. The union is intentionally not exported: until a
+   * consumer exists, `ChordQualityEntry` is the only thing that needs to name
+   * it, and an exported type with no reader is dead surface.
+   */
   reharmonizationCategory: ReharmonizationCategory;
 }
 
@@ -84,7 +101,21 @@ const registryByLowercaseToken = new Map<string, ChordQualityEntry>(
   CHORD_QUALITY_REGISTRY.map((entry) => [entry.token.toLowerCase(), entry]),
 );
 
-/** Whether `value` is a registered chord-quality token (case-insensitive, matching the historical `.toLowerCase()` lookup contract `formatChordQuality`/`generateBlockChordNotes` used). */
+/**
+ * Whether `value` is a registered chord-quality token (case-insensitive,
+ * matching the historical `.toLowerCase()` lookup contract
+ * `formatChordQuality`/`generateBlockChordNotes` used).
+ *
+ * The narrow is deliberately UNSOUND, and a caller has to know it: the match
+ * ignores case, so `'MINMAJ7'` and `'MinMaj7'` both return `true` and both get
+ * narrowed to `ChordQuality` even though neither is a member of that literal
+ * union — only `'minMaj7'` is. A true result therefore means "names a
+ * registered quality", NOT "is already written in canonical form". Anything
+ * that PERSISTS the value, compares it against a token, or uses it as a lookup
+ * key (a `ChordItem.quality` write, a `<select>` value, a registry index) must
+ * canonicalize through `getChordQualityEntry(value)?.token` first rather than
+ * trusting the narrow; only a read-and-discard check can use this on its own.
+ */
 export function isChordQuality(value: string): value is ChordQuality {
   return registryByLowercaseToken.has(value.toLowerCase());
 }
@@ -122,11 +153,29 @@ export const CHORD_QUALITY_GROUPS: readonly {
  * A chord quality's notes at a root/octave, canonical sharp-spelled (DEV-380).
  *
  * Every registered quality resolves through Tonal's `Chord.getChord` (proven
- * exhaustively by this file's own test); an unregistered quality — or a
- * registered one Tonal still cannot resolve for the given root — throws
- * instead of silently becoming a `maj` triad, which is what
- * `generateBlockChordNotes` did before this issue (the one explicit behavior
- * fix DEV-394's acceptance criteria require).
+ * exhaustively by this file's own test). It THROWS, rather than silently
+ * returning a `maj` triad the way `generateBlockChordNotes` did before this
+ * issue — the one explicit behavior fix DEV-394's acceptance criteria
+ * require — in all three of these cases:
+ *
+ * 1. **Any quality this registry does not list, whether or not Tonal itself
+ *    could resolve it.** The registry is the authority, not Tonal: `'13'`,
+ *    `'11'`, `'7b9'` and `'sus'` are all perfectly good Tonal chord types and
+ *    all four throw here, because Solna cannot store, render or pick them. So
+ *    "unregistered" is a much wider class than "Tonal rejected it", and a
+ *    caller holding a quality from outside this module — a persisted
+ *    `ChordItem.quality`, a `.solna` body, a URL — must validate or
+ *    sanitize it before calling.
+ * 2. **A registered quality Tonal cannot resolve at the given root**, which in
+ *    practice means an unparseable root: `'H'` and `'x'` both throw. (`'Cb'`
+ *    parses fine and comes back sharp-spelled, as `B3`.)
+ * 3. Never for a valid pair — a registered quality at a parseable root always
+ *    returns at least one note.
+ *
+ * One edge that is NOT a throw, recorded so nobody reads case 2 as broader
+ * than it is: an EMPTY-string root resolves as `C`, because Tonal treats it as
+ * a chord with no tonic and the MIDI fallback lands on `C{octave}`. Pass a
+ * real root.
  */
 export function resolveChordNotes(quality: string, root = 'C', octave = 4): string[] {
   const entry = getChordQualityEntry(quality);
