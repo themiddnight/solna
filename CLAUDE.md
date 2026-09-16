@@ -189,6 +189,22 @@ then written into a saved progression's name, so spelling it would put an accide
 persisted state. Nothing spelled is persisted, so spelling never moves a persist `version` or a
 `.solna` `formatVersion`.
 
+**Music Core owns pitch parsing, octave extraction and scale-fallback resolution, and nothing
+outside `src/musicCore/` hand-rolls a note-name regex.** `tonalAdapter.ts` wraps `octaveOfNote`
+(a note's octave, `null` for none or for an unparseable name) alongside the DEV-394 primitives
+(`noteMidi`, `pitchClassOfNote`, `chromaOfNote`, `midiToSharpName`); `pitch.ts` composes
+`transposePitchClassPreservingOctave` (shift a pitch class, keep the written octave — what a
+slash bass needs on a key change) on top of them; `scale.ts` (moved from `src/utils/scaleLookup.ts`,
+DEV-392) is the one place an unrecognised scale type resolves to Major. Every one of these fails
+explicitly on invalid input — `null`/`NaN`, never a silent substitution — because that is Music
+Core's contract for a core function; a consumer's own defensive default, where one exists (real-time
+audio scheduling code that would rather keep an unreachable-in-practice fallback than risk a
+throw mid-callback), stays visible in the consumer's file, not folded into the core function.
+`eslint.config.js`'s `NOTE_REGEX_BAN` bans any regex literal at all in the five files this
+centralization touched (`leadStepRecord.ts`, `bassPatterns.ts`, `melodyGrid.ts`, `Keyboard.tsx`,
+`musicTheory.ts`) — a blanket ban is correct there, not just convenient, because none of the five
+has any other legitimate use for one.
+
 **A vibe is pure data, and every library id in it is written once.** `VIBES` in
 `src/data/vibes.ts` is a list of `VibeSpec` literals that name ids and nothing else;
 `resolveVibe` in `src/store/vibes.ts` turns them into a `ResolvedVibe` — the spec
