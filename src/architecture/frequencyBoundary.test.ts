@@ -59,7 +59,7 @@ function sourceFiles(dir: string): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) out.push(...sourceFiles(full));
-    else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) out.push(full);
+    else if (/\.(m|c)?tsx?$/.test(entry.name)) out.push(full);
   }
   return out;
 }
