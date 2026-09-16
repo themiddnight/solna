@@ -1,0 +1,14 @@
+{
+  "epic": "DEV-391",
+  "loopStarted": false,
+  "issues": [
+    { "id": "DEV-395", "status": "pending" },
+    { "id": "DEV-394", "status": "pending" },
+    { "id": "DEV-392", "status": "pending" },
+    { "id": "DEV-393", "status": "pending" },
+    { "id": "DEV-396", "status": "pending" },
+    { "id": "DEV-397", "status": "pending" },
+    { "id": "DEV-399", "status": "pending" },
+    { "id": "DEV-398", "status": "pending" }
+  ]
+}
