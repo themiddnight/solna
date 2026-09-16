@@ -8,7 +8,7 @@ import {
   formatChordLabel,
   generateBlockChordNotes,
 } from '@/utils/musicTheory';
-import { SCALES } from '@/data/scales';
+import { midiToSharpName, octaveOfNote, pitchClassOfNote, scaleEntry } from '@/musicCore';
 import { shortcutLabel } from '@/utils/keyboard';
 import { spellNoteInKey } from '@/utils/noteSpelling';
 import { GROUP_LABEL } from './fieldClasses';
@@ -69,7 +69,7 @@ function scaleStepNote(
   const degree = ((step % scaleLength) + scaleLength) % scaleLength;
   const pitch =
     tonicPitch + 12 * Math.floor(step / scaleLength) + scaleSemitones[degree];
-  return `${ROOTS[pitch % 12]}${Math.floor(pitch / 12) - 1}`;
+  return midiToSharpName(pitch);
 }
 
 function scaleSemitonesFor(root: string, scaleNotes: string[]): number[] {
@@ -324,7 +324,7 @@ export function getChordKeyboardRows(
   triadRow: ChordKeyboardButton[];
   melodyRow: ChordKeyboardButton[];
 } {
-  const scale = SCALES[scaleType] || SCALES['Major'];
+  const scale = scaleEntry(scaleType);
   const degreeCount = scale.intervals.length;
   const triadOctave = 3 + octaveOffset;
 
@@ -644,21 +644,20 @@ export function getBlackKeyLeft(noteIndex: number): string {
   return `calc(${whiteKeysBefore(noteIndex)} * var(${KEY_STRIDE_VAR}) - var(${KEY_BLACK_WIDTH_VAR}) / 2)`;
 }
 
-// Chromatic keyboard always starts from C — octaveOffset shifts the range up/down
-// Not affected by master key/scale; regex supports any octave number
+// Chromatic keyboard always starts from C — octaveOffset shifts the range up/down.
+// KEYBOARD_NOTES entries are always well-formed literals, so a null octave never
+// actually occurs here; the guard exists only so this function's return type
+// matches its input type exactly, with no `!` assertion.
 export function getChromaticKeyboardNotes(octaveOffset: number) {
   return KEYBOARD_NOTES.map((k) => {
-    const match = k.note.match(/^([A-G][#b]?)(-?\d+)/);
-    if (match) {
-      const noteName = match[1];
-      const origOct = parseInt(match[2], 10);
-      const targetOct = origOct + octaveOffset;
-      return {
-        ...k,
-        note: `${noteName}${targetOct}`,
-        label: k.isBlack ? noteName : `${noteName}${targetOct}`,
-      };
-    }
-    return k;
+    const origOct = octaveOfNote(k.note);
+    if (origOct === null) return k;
+    const noteName = pitchClassOfNote(k.note);
+    const targetOct = origOct + octaveOffset;
+    return {
+      ...k,
+      note: `${noteName}${targetOct}`,
+      label: k.isBlack ? noteName : `${noteName}${targetOct}`,
+    };
   });
 }
