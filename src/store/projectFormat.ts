@@ -41,6 +41,15 @@ import type { AppStore, Loop, LoopStatePatch } from './types';
  * behaviour it has is `parseProjectFile` refusing a body newer than this
  * number. An older body is read by `readBeatState` (sanitizeBeat.ts), which
  * accepts both shapes as ordinary validation.
+ *
+ * It bumped again to 12 under DEV-396: `ChordItem` dropped its stored `notes`
+ * field from the content set a `.solna` body carries — every consumer now
+ * derives a chord's pitches from `root`/`quality`/`bassNote` instead of
+ * reading a persisted array. Same rule as every bump above: this drives NO
+ * read-time transform. A body that still carries a stray `notes` key on a
+ * chord is handled by ordinary validation (`sanitizeLoops` / `toChordItem` in
+ * sanitize.ts), which reconstructs each `ChordItem` from only its valid
+ * fields and simply ignores anything else present, whatever version wrote it.
  */
 
 /**
@@ -105,7 +114,10 @@ import type { AppStore, Loop, LoopStatePatch } from './types';
  * literals. This section is itself pinned, by the dB-level-contract tests in
  * projectFormat.test.ts, so it cannot rot away from the exports below.
  */
-export const PROJECT_FORMAT_VERSION = 11;
+// Bumped for DEV-396: ChordItem dropped `notes` from the content set a .solna
+// body carries. The bump signals the shape change to murva; it drives no
+// read-time transform here, per the "no migration chains" policy.
+export const PROJECT_FORMAT_VERSION = 12;
 
 /**
  * The dB level contract's keys AT THE CONTENT ROOT AND ON A LOOP — the flat

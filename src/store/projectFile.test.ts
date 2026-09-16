@@ -30,6 +30,16 @@ describe('serializeProject / parseProjectFile round trip', () => {
   test('the file is plain JSON a text editor can read', () => {
     expect(JSON.parse(serializeProject(body)).content.bpm).toBe(120);
   });
+
+  test('a serialized project carries no notes field on any chord', () => {
+    const wire = JSON.parse(serializeProject(body));
+    expect(wire.content.loops[0].chords.length).toBeGreaterThan(0);
+    for (const loop of wire.content.loops) {
+      for (const chord of loop.chords) {
+        expect('notes' in chord).toBe(false);
+      }
+    }
+  });
 });
 
 describe('parseProjectFile rejections (table-driven)', () => {
