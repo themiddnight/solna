@@ -375,8 +375,6 @@ function asCheckedArray<T>(value: unknown, isElement: (v: unknown) => boolean, f
  * A chord is read by deriveChordNotes and played straight out of `notes`, so
  * every field the chord path dereferences must be the right type — a missing
  * `notes` array is a crash in the chord scheduler, not a wrong sound.
- * The same element check is applied to the flat top-level `chords` key, a
- * pre-loop-wrap shape sanitizeLoops never sees.
  *
  * `root` and `quality` are both checked against a closed set, not just
  * `typeof === 'string'`: `resolveChordNotes` (Music Core) throws on either an
@@ -384,11 +382,20 @@ function asCheckedArray<T>(value: unknown, isElement: (v: unknown) => boolean, f
  * stands between a stale/imported string and that throw. `isRootNote` reuses
  * the same `ROOT_SET` membership check every other persisted root field in
  * this file uses (`scaleRoot`, above), rather than re-deriving root validity a
- * second way. A chord failing either check is rejected WHOLE by
- * `asCheckedArray`'s all-or-nothing rule (see its call site in
- * sanitizeLoops) — the array falls back to the default loop's chords rather
- * than being repaired field by field, matching every other array of records in
- * this file.
+ * second way. `ROOT_SET` is exactly the 12 canonical sharp-spelled names in
+ * `ROOTS` — per DEV-380's canonical-identity contract, everything persisted is
+ * `ROOTS`-spelled, so a flat-spelled root (e.g. `Db`) is rejected here even
+ * though it is musically equivalent and would previously have resolved fine;
+ * a valid chord's `root` must already be in its exact canonical spelling, not
+ * merely a spelling Tonal could parse.
+ *
+ * A chord failing either check is rejected WHOLE by `asCheckedArray`'s
+ * all-or-nothing rule (see its call site in sanitizeLoops) — one invalid
+ * chord anywhere in a loop's `chords` array falls the WHOLE array back to the
+ * default loop's chords, not just the offending element, matching every other
+ * array of records in this file. This is a wider blast radius than the
+ * pre-hardening behavior, where a bad quality simply rendered as a
+ * wrong-but-non-crashing chord instead of discarding its siblings too.
  *
  * Quality is checked with `getChordQualityEntry(...)?.token === value.quality`,
  * NOT the bare `isChordQuality` guard: `isChordQuality`'s own docblock says

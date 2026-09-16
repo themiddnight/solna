@@ -73,6 +73,24 @@ describe('musicCore layering (DEV-394)', () => {
     ).toContainEqual(err('no-restricted-imports'));
   });
 
+  test('src/musicCore/ is banned from importing src/utils/ (src/utils/ already imports @/musicCore; the reverse would be a cycle)', async () => {
+    expect(
+      await guardedMessages(
+        "import { getScale } from '@/utils/musicTheory';\nexport const S = getScale;\n",
+        'src/musicCore/chordQuality.ts',
+      ),
+    ).toContainEqual(err('no-restricted-imports'));
+  });
+
+  test('src/musicCore/tonalAdapter.ts is also banned from importing src/utils/', async () => {
+    expect(
+      await guardedMessages(
+        "import { getScale } from '@/utils/musicTheory';\nexport const S = getScale;\n",
+        'src/musicCore/tonalAdapter.ts',
+      ),
+    ).toContainEqual(err('no-restricted-imports'));
+  });
+
   test('the six original call sites are no longer allowlisted for tonal', async () => {
     for (const file of [
       'src/utils/noteSpelling.ts',

@@ -268,14 +268,16 @@ export default tseslint.config(
     // Music Core (DEV-394): sits below store/audio/components, parallel to
     // src/utils/ and src/data/ in the dependency graph — see
     // docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md.
-    // May import src/data/ (SCALES); must not import store/, components/ or
-    // src/audio/ — the contract doc states Music Core "does not read the
-    // store, the engine, or AudioContext" (line 128), so the engine ban is a
-    // fourth entry alongside the two explicit layering mirrors, not just
-    // those two. `tonalAdapter.ts` is the ONE file in the whole app permitted
-    // to import `tonal`/`@tonaljs/*` — every other file here (chordQuality.ts,
-    // index.ts) is banned from it too, so confinement is to one file, not
-    // "somewhere in musicCore".
+    // May import src/data/ (SCALES); must not import store/, components/,
+    // src/audio/ or src/utils/ — the contract doc states Music Core "does not
+    // read the store, the engine, or AudioContext" (line 128), so the engine
+    // ban is a third entry alongside the two explicit layering mirrors. The
+    // utils/ ban is a fourth: src/utils/ already imports `@/musicCore`
+    // (musicTheory.ts, noteSpelling.ts), so the reverse direction would be a
+    // real import cycle, not just a layering violation. `tonalAdapter.ts` is
+    // the ONE file in the whole app permitted to import `tonal`/`@tonaljs/*`
+    // — every other file here (chordQuality.ts, index.ts) is banned from it
+    // too, so confinement is to one file, not "somewhere in musicCore".
     files: ['src/musicCore/**/*.{ts,tsx}'],
     ignores: ['src/musicCore/tonalAdapter.ts'],
     rules: {
@@ -288,6 +290,7 @@ export default tseslint.config(
             { group: ['**/store/**'], message: 'src/musicCore/ must not import store/ (mirrors layering rule 2)' },
             { group: ['**/components/**'], message: 'src/musicCore/ must not import components/ (mirrors layering rule 3)' },
             { group: ['**/audio/**'], message: 'src/musicCore/ must not import src/audio/ (Music Core must not read the engine)' },
+            { group: ['**/utils/**'], message: 'src/musicCore/ must not import src/utils/ (src/utils/ already imports @/musicCore; the reverse would be a cycle)' },
             TAPER_CONVERSION_BAN,
           ],
         },
@@ -297,8 +300,8 @@ export default tseslint.config(
   {
     // DEV-394: the Tonal adapter. The only production file permitted to
     // `import ... from 'tonal'` anywhere in the app. Still Music Core, so it
-    // inherits the same store/components/audio bans as the rest of the folder
-    // — only the tonal ban itself is lifted here.
+    // inherits the same store/components/audio/utils bans as the rest of the
+    // folder — only the tonal ban itself is lifted here.
     files: ['src/musicCore/tonalAdapter.ts'],
     rules: {
       'no-restricted-imports': [
@@ -308,6 +311,7 @@ export default tseslint.config(
             { group: ['**/store/**'], message: 'src/musicCore/ must not import store/ (mirrors layering rule 2)' },
             { group: ['**/components/**'], message: 'src/musicCore/ must not import components/ (mirrors layering rule 3)' },
             { group: ['**/audio/**'], message: 'src/musicCore/ must not import src/audio/ (Music Core must not read the engine)' },
+            { group: ['**/utils/**'], message: 'src/musicCore/ must not import src/utils/ (src/utils/ already imports @/musicCore; the reverse would be a cycle)' },
             TAPER_CONVERSION_BAN,
           ],
         },

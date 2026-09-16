@@ -127,8 +127,9 @@ options, `formatChordQuality`/`formatChordLabel` and chord-note resolution (`res
 all derive from; a quality absent from the registry is a compile error anywhere it is written as a
 literal, and a runtime string that names no registered quality is a thrown error at
 `resolveChordNotes`, never a silent `maj` chord. `src/musicCore/**` is itself ESLint-enforced to
-import nothing from `src/store/`, `src/components/`, or `src/audio/` — the dependency runs
-audio → Music Core, never the reverse. A **musical intent** (a persisted, user-authored
+import nothing from `src/store/`, `src/components/`, `src/audio/`, or `src/utils/` — the
+dependency runs audio → Music Core and utils → Music Core, never the reverse (`src/utils/`
+already imports `@/musicCore`; see the `src/utils/` paragraph below). A **musical intent** (a persisted, user-authored
 decision — a chord's root/quality, a key, a note's pitch and timing) is not the same thing as a
 **derived representation** (a value a pure function computes from musical intent, such as a
 resolved chord quality or a display-spelled label) or a **playable event** (a fully resolved,
@@ -151,7 +152,10 @@ own.
 
 `src/utils/` stays outside the chain, above `data/`: it may read `data/` at runtime
 (`musicTheory.ts` imports `SCALES`), but nothing in `data/` may read it back except through an
-`import type` (e.g. `MeterId`), which is erased at compile. **One deliberate inversion is
+`import type` (e.g. `MeterId`), which is erased at compile. `src/utils/` may also import
+`@/musicCore` (`musicTheory.ts`, `noteSpelling.ts`, DEV-394) — never the reverse: `src/musicCore/`
+is ESLint-banned from importing `src/utils/`, alongside its store/components/audio bans, so this
+relationship reads in one direction from either paragraph. **One deliberate inversion is
 recorded here so a reader does not have to discover it: `utils/localFileSave.ts` and
 `utils/driveBrowser.ts` import *types and constants* from `src/store/`** — the `.solna` MIME
 type and the Drive MIME type. It is an exception because the alternative is duplicating a
