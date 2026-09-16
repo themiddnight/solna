@@ -122,7 +122,7 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'pop-club-house',
     name: 'Club Dance & House Groove',
-    roman: 'i – VI – VII – v',
+    roman: 'i – bVI – bVII – v',
     description:
       'Driving natural minor cadence standard in modern deep house and electronic dance music.',
     category: 'Pop & EDM',
@@ -191,7 +191,7 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'lofi-trapsoul',
     name: 'Contemporary R&B / Trap-Soul Flow',
-    roman: 'i9 – iv7 – VII9 – IIImaj7',
+    roman: 'i9 – iv7 – bVII9 – IIImaj7',
     description:
       'Sultry, atmospheric minor progression standard in contemporary R&B and downtempo production.',
     category: 'Lofi & R&B',
@@ -342,7 +342,7 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'baroque-passacaglia',
     name: 'Passacaglia / Circle of Fifths Descent',
-    roman: 'i – iv – VII – III – VI – iio – V – i',
+    roman: 'i – iv – bVII – III – bVI – iio – V – i',
     description:
       'Hypnotic circular resolution driving classical drama, emotional tension, and resolve.',
     category: 'Classical & Baroque',
@@ -409,7 +409,7 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'edm-cyber-drop',
     name: 'Cyber Drop Loop',
-    roman: 'i – VII – VI – VII',
+    roman: 'i – bVII – bVI – bVII',
     description:
       'The workhorse main-stage loop: a minor tonic rocking between its two flat neighbours.',
     category: 'Pop & EDM',
@@ -421,7 +421,7 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'edm-neon-rise',
     name: 'Neon Rise',
-    roman: 'i – VI – III – VII',
+    roman: 'i – bVI – III – bVII',
     description:
       'Descending-then-lifting minor cycle that carries a build without needing a key change.',
     category: 'Pop & EDM',
@@ -433,7 +433,7 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'edm-arena-sweep',
     name: 'Arena Sweep',
-    roman: 'i – III – VII – VI',
+    roman: 'i – III – bVII – bVI',
     description:
       'Bright relative-major lift on the second chord, then a long fall back to the tonic.',
     category: 'Pop & EDM',
@@ -448,7 +448,7 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'synthwave-midnight-drive',
     name: 'Midnight Drive',
-    roman: 'i – iv – VI – V',
+    roman: 'i – iv – bVI – V',
     description:
       'A major V borrowed over the natural-minor scale — the one bright chord in an otherwise dark loop.',
     category: 'Pop & EDM',
@@ -460,7 +460,7 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'synthwave-neon-horizon',
     name: 'Neon Horizon',
-    roman: 'i – VII – III – VI',
+    roman: 'i – bVII – III – bVI',
     description:
       'Strictly diatonic minor cycle with a chord per bar, built for arpeggiated pads.',
     category: 'Pop & EDM',
@@ -512,7 +512,7 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'boombap-crate-dig',
     name: 'Crate Dig',
-    roman: 'im9 – VIImaj7 – IIImaj7 – IV7',
+    roman: 'im9 – bVIImaj7 – IIImaj7 – IV7',
     description:
       'Two major sevenths lifted out of the mode, then the Dorian major IV that gives the style its colour.',
     category: 'Lofi & R&B',
@@ -601,7 +601,7 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'edm-cyber-vamp',
     name: 'Cyber Vamp',
-    roman: 'i – VII – VI – v',
+    roman: 'i – bVII – bVI – v',
     description:
       'A minor tonic rocking between its two flat neighbours before dipping to the minor v, one bar per chord for a tight festival-drop loop.',
     category: 'Pop & EDM',
@@ -625,7 +625,7 @@ export const CHORD_PROGRESSIONS: ChordProgression[] = [
   {
     id: 'boombap-soul-piano',
     name: 'Soul Piano Loop',
-    roman: 'im7 – IV7 – VIImaj7 – IIImaj7',
+    roman: 'im7 – IV7 – bVIImaj7 – IIImaj7',
     description:
       'A Dorian loop built for a mellow keys sample: minor seventh tonic, dominant modal IV, then two major sevenths on the way back home.',
     category: 'Lofi & R&B',

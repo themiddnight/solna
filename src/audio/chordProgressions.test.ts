@@ -3,7 +3,8 @@ import { Chord } from 'tonal';
 import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
 import { progressionById, resolveProgression } from './chordProgressions';
 import { SCALES } from '@/data/scales';
-import { TONAL_CHORD_ALIASES } from '../utils/musicTheory';
+import { degreeToRoman, getDiatonicChordForDegree, TONAL_CHORD_ALIASES } from '../utils/musicTheory';
+import { resolveScaleKey, type ChordQuality } from '@/musicCore';
 
 describe('CHORD_PROGRESSIONS structure', () => {
   test('ids are unique and non-empty, and every entry has steps', () => {
@@ -12,7 +13,6 @@ describe('CHORD_PROGRESSIONS structure', () => {
     for (const p of CHORD_PROGRESSIONS) {
       expect(p.id.length).toBeGreaterThan(0);
       expect(p.name.length).toBeGreaterThan(0);
-      expect(p.roman.length).toBeGreaterThan(0);
       expect(p.description.length).toBeGreaterThan(0);
       expect(p.steps.length).toBeGreaterThan(0);
       expect(progressionById(p.id)).toBe(p);
@@ -58,6 +58,29 @@ describe('CHORD_PROGRESSIONS structure', () => {
       }
     }
   });
+});
+
+function expectedRomanNumeral(referenceScale: string, degree: number, quality: ChordQuality | undefined): string {
+  const resolvedType = resolveScaleKey(referenceScale);
+  const numDegrees = SCALES[resolvedType].intervals.length;
+  const normDegree = ((degree % numDegrees) + numDegrees) % numDegrees;
+  const resolvedQuality = quality ?? getDiatonicChordForDegree(degree, 'C', referenceScale, false).quality;
+  return degreeToRoman(referenceScale, normDegree, resolvedQuality);
+}
+
+describe('CHORD_PROGRESSIONS roman summaries match their step data', () => {
+  for (const progression of CHORD_PROGRESSIONS) {
+    test(`${progression.id}: roman numerals match degree/quality/referenceScale`, () => {
+      const tokens = progression.roman.split(' – ');
+      expect(tokens.length).toBe(progression.steps.length);
+      progression.steps.forEach((step, i) => {
+        const expected = expectedRomanNumeral(progression.referenceScale, step.degree, step.quality);
+        const match = tokens[i].match(/^[b#]?[IViv]+/);
+        expect(match).not.toBeNull();
+        expect(match![0]).toBe(expected);
+      });
+    });
+  }
 });
 
 // The tagged sets as authored today, written out. They used to be computed

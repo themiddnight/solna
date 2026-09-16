@@ -242,6 +242,17 @@ describe('degreeToRoman', () => {
     // Major's iii is diatonically minor; a secondary-dominant override makes it major-quality.
     expect(degreeToRoman('Major', 2, '7')).toBe('III');
   });
+
+  test('an extended quality override (min9, min6) still gets a minor-third case', () => {
+    // resolveDegreeQuality can never emit these two — only an explicit
+    // ProgressionStep.quality override does — so they exercise the path the
+    // diatonic triad/seventh interval tables don't cover. DEV-398 Task 3.
+    expect(degreeToRoman('Major', 1, 'min9')).toBe('ii');
+    expect(degreeToRoman('Major', 5, 'min9')).toBe('vi');
+    expect(degreeToRoman('Natural Minor', 0, 'min6')).toBe('i');
+    // A major-quality extension keeps the uppercase default, unaffected.
+    expect(degreeToRoman('Major', 4, '9')).toBe('V');
+  });
 });
 
 describe('TONAL_CHORD_ALIASES', () => {

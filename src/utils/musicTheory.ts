@@ -152,14 +152,35 @@ const SEVENTH_QUALITY_BY_INTERVALS: Record<string, ChordQuality> = {
 // || === 'dim'`) put an uppercase numeral under every `m7b5` and `dim7` while
 // the same degree's triad stayed lowercase: C major's vii became VII the
 // moment the 7ths toggle went on.
-const MINOR_THIRD_QUALITIES: ReadonlySet<string> = new Set(
-  [
+//
+// TRIAD_QUALITY_BY_INTERVALS and SEVENTH_QUALITY_BY_INTERVALS only cover
+// resolveDegreeQuality's own output set (see that function's docblock) — they
+// were never meant to enumerate every registered ChordQuality. An explicit
+// ProgressionStep.quality override can name any of the registry's other
+// "Extensions & Additions" qualities too, and degreeToRoman's own contract
+// ("an explicit quality override changes the case, independent of the
+// diatonic default", pinned in musicTheory.test.ts) applies to those exactly
+// as much as to a plain triad or seventh. `min9` and `min6` are the only two
+// registered extended qualities stacked on a minor third (root-b3-5-b7-9 and
+// root-b3-5-6); every other extended quality (`9`, `maj9`, `add9`, `6`) and
+// every suspended quality (`sus2`, `sus4`, `7sus4`, which have no third at
+// all) keeps the uppercase default correctly without an entry here. Found by
+// DEV-398 Task 3's roman-numeral validator: several factory progressions
+// (`lofi-coffeehouse`, `lofi-trapsoul`, `lofi-rainy-window`, `lofi-tape-loop`,
+// `boombap-dusty-ii-v`, `boombap-crate-dig`, `jazz-neosoul-butter`) already
+// authored their `min9` steps' roman numerals lowercase and correct —
+// degreeToRoman was the one with the gap.
+const EXTENDED_MINOR_THIRD_QUALITIES: ReadonlySet<string> = new Set(['min9', 'min6']);
+
+const MINOR_THIRD_QUALITIES: ReadonlySet<string> = new Set([
+  ...[
     ...Object.entries(TRIAD_QUALITY_BY_INTERVALS),
     ...Object.entries(SEVENTH_QUALITY_BY_INTERVALS),
   ]
     .filter(([intervals]) => intervals.startsWith('3m'))
     .map(([, quality]) => quality),
-);
+  ...EXTENDED_MINOR_THIRD_QUALITIES,
+]);
 
 // The app quality tokens whose OWN shape carries a seventh, read off the same
 // table SEVENTH_QUALITY_BY_INTERVALS assigns — so a scale-produced quality and
