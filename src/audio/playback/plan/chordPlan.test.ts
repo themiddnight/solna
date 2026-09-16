@@ -341,4 +341,33 @@ describe('planChordArm', () => {
     // boundaries onto; the renderer floored both. One planner, one answer.
     expect(planChordArm(malformed, { chordIndex: 0, startProgressionStep: 0 }).totalBars).toBe(1);
   });
+
+  test('the two lanes fold independently: a custom chord cycle and a preset bass cycle differ, and neither field is the other', () => {
+    // Chord rhythm is custom with a 2-bar loop (cycleSteps = 2 * 16 = 32); bass
+    // stays on the default preset, which always resolves cycleSteps to one bar
+    // (stepsPerBar = 16). If planChordArm's assignment ever swapped
+    // chordCycleSteps/bassCycleSteps, this is the one fixture where that swap
+    // is observable — every other test in this suite has both lanes land on the
+    // same width (16) and would pass silently either way.
+    const values = new Array(32).fill(false);
+    const holds = new Array(32).fill(1);
+    values[0] = true;
+    holds[0] = 1;
+    const snap = snapshot({
+      chordRhythmMode: 'custom',
+      customChordRhythm: values,
+      customChordHoldSteps: holds,
+      customChordLoopLength: 2,
+    });
+    const plan = planChordArm(snap, { chordIndex: 0, startProgressionStep: 0 });
+    expect(plan.chordCycleSteps).toBe(32);
+    expect(plan.bassCycleSteps).toBe(16);
+    expect(plan.chordCycleSteps).not.toBe(plan.bassCycleSteps);
+    expect(plan.chordCycleSteps).toBe(
+      planChordLane(snap, { chordNotes: plan.chordNotes, totalBars: 2 }).cycleSteps,
+    );
+    expect(plan.bassCycleSteps).toBe(
+      planBassLane(snap, { chordIndex: 0, totalBars: 2 }).cycleSteps,
+    );
+  });
 });
