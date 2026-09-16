@@ -27,19 +27,25 @@ export interface PadPlanSnapshot {
 }
 
 /**
- * The pad's arm for the chord at `chordIndex`, or null when nothing should
- * sound.
+ * The pad's arm for the chord at `context.chordIndex`, or null when nothing
+ * should sound.
  *
  * `isLoopStart` is derived here rather than passed: the caller already knows
  * the chord's index inside the progression, and "index 0" is the only thing
  * `shouldArmPad` ever meant by the top of a pass. `loopBars` is still paid for
  * by drone mode only — pad mode arms on EVERY chord and must not walk the
  * progression to learn a number it will not read.
+ *
+ * The second parameter is an object, not a bare scalar, by the binding
+ * convention every `plan<Lane>` function follows: a later per-call value
+ * (a chord/bass planner's feel, a melody planner's live synth params) is then
+ * an additive change to `context`'s shape rather than a signature change.
  */
 export function planPadArm(
   snapshot: PadPlanSnapshot,
-  chordIndex: number,
+  context: { chordIndex: number },
 ): { notes: string[]; holdSec: number } | null {
+  const { chordIndex } = context;
   const chord = snapshot.chords[chordIndex];
   if (!chord) return null;
   return resolvePadArm({
