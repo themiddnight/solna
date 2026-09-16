@@ -352,7 +352,6 @@ export function padSnapshotForLoop(
   };
 }
 
-
 /**
  * The chord+bass ARM-time snapshot for one loop — the offline twin of
  * `chordPlanSnapshot` (src/store/playbackPlanSnapshots.ts).
