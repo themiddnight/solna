@@ -11,6 +11,7 @@ import {
   scaleEntry,
   scaleNotesForTonal,
   transposeByInterval,
+  transposePitchClassPreservingOctave,
   type ChordQuality,
 } from '@/musicCore';
 import { ChordItem } from '../types';
@@ -398,13 +399,13 @@ export function transposeProgression(
 /**
  * Shifts a note's pitch class and keeps its written octave, so a slash bass
  * never jumps a register on a key change — and a transpose round trip is exact.
- * Returns the input unchanged when it is not a note name.
+ * Returns the input unchanged when it is not a note name — this function's own
+ * contract, preserved verbatim; Music Core's `transposePitchClassPreservingOctave`
+ * fails explicitly (`null`) per its own typed-failure contract, and this is the
+ * one place that "unchanged" default belongs.
  */
 function transposePitchClass(note: string, shift: number): string {
-  const match = note.match(/^([A-Ga-g][#b]?)(-?\d+)?$/);
-  if (!match) return note;
-  const shifted = ROOTS[(rootSemitone(match[1]) + shift) % 12];
-  return match[2] === undefined ? shifted : `${shifted}${match[2]}`;
+  return transposePitchClassPreservingOctave(note, shift) ?? note;
 }
 
 /**
