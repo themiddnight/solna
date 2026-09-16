@@ -84,7 +84,7 @@ Five area audits converged on one dominant pattern: **components subscribe to wh
 **Impact: Medium · Effort: Medium**
 `src/store/midiInput.ts:122,180,225`
 
-**Problem:** `applyCcMapping` calls `s.setMasterVolume(...)` or `s.setSynthParams(...)` synchronously inside `onmidimessage` for every 0xB0 CC byte-pair, inheriting the same full loops-array-rebuild + persist-reserialize cost as item 4, but with no draft/preview stage at all — a hardware fader sweep transmits at a rate comparable to or higher than a mouse drag.
+**Problem:** `applyCcMapping` calls `s.setMasterVolume(...)` or `s.setSynthParams(...)` synchronously inside `onmidimessage` for every 0xB0 CC byte-pair, inheriting the same full loops-array-rebuild cost as item 4, but with no draft/preview stage at all — a hardware fader sweep transmits at a rate comparable to or higher than a mouse drag. **Corrected cost model (same correction as item 4):** neither setter's target is written to disk on every call — `masterVolume` and `synthParams` are NOT in `localStorage`; `partializeAppState()` persists only 7 small session/library keys (see item 4's correction above).
 
 **Fix:** Route continuous CC targets (filterCutoff, filterResonance, attack, release, masterVolume) through the same preview/commit machine proposed in item 4.
 

@@ -815,7 +815,11 @@ content contract, and a body's `.solna` shape must never be read by treating it 
 `localStorage` payload or vice versa. Neither version drives a transform any more (see the "no
 migration chains" note above), but they still mean different things and must not collapse into
 one — `parseProjectFile` refuses a body whose `formatVersion` is newer than
-`PROJECT_FORMAT_VERSION` regardless of what `PERSIST_VERSION` is doing.
+`PROJECT_FORMAT_VERSION` regardless of what `PERSIST_VERSION` is doing. Each user library array —
+`customSynthPresets`, `customChordProgressions`, `customBeatPresets` (`src/store/presetsSlice.ts`)
+— is bounded at save time via a write-time cap that evicts the oldest entry first once the array
+would grow past it, never a read-time repair, by the same "no migration chains" rule as
+everything else here.
 
 **Project content changes are autosaved, not dirty-tracked.** `projectDirty.ts`/`projectFingerprint.ts`
 are gone (deleted in the same change that added continuous IndexedDB autosave) — there is no
@@ -825,9 +829,9 @@ are gone (deleted in the same change that added continuous IndexedDB autosave) �
 than firing per `set()`. A pending write is scheduled once per idle window (the same
 `idleWriteScheduler` `coalescedStorage.ts` uses) and flushed immediately on `pagehide`/
 `visibilitychange`, so a killed tab never loses its last edit. It starts **disarmed**: boot's
-`load()` reads the IndexedDB slot asynchronously, and a write scheduled before that settles could
-overwrite the freshly-loaded project with placeholder boot content — `store.ts` arms it in a
-`finally` only after `load()` resolves.
+`loadProject()` reads the IndexedDB slot asynchronously, and a write scheduled before that
+settles could overwrite the freshly-loaded project with placeholder boot content — `store.ts`
+arms it in a `finally` only after `loadProject()` resolves.
 
 ## Testing — the one trap worth knowing up front
 
