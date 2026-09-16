@@ -13,7 +13,7 @@ import { SCALES, type ScaleDefinition } from '@/data/scales';
  * dependency on `src/utils/`.
  */
 export function resolveScaleKey(scaleType: string): string {
-  return SCALES[scaleType] ? scaleType : 'Major';
+  return Object.hasOwn(SCALES, scaleType) ? scaleType : 'Major';
 }
 
 /** The SCALES entry a scale type names, with the same fallback. */
