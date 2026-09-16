@@ -44,7 +44,7 @@ const TAPER_CONVERSION_BAN = {
 const TONAL_IMPORT_BAN = {
   name: 'tonal',
   message:
-    "DEV-395: 'tonal' is confined to today's allowlisted call sites until DEV-394 builds the Music Core/Tonal adapter — see docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md.",
+    "DEV-394: 'tonal' is confined to src/musicCore/tonalAdapter.ts — import from '@/musicCore' instead of 'tonal' directly.",
 };
 
 // `@tonaljs/*` scoped subpackages (`@tonaljs/core`, `@tonaljs/chord`, etc.) are
@@ -57,7 +57,7 @@ const TONAL_IMPORT_BAN = {
 const TONAL_SCOPED_PACKAGE_BAN = {
   group: ['@tonaljs/*'],
   message:
-    "DEV-395: '@tonaljs/*' scoped subpackages are confined to the same allowlist as the bare 'tonal' import — see docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md.",
+    "DEV-394: '@tonaljs/*' scoped subpackages are confined to the same one file as the bare 'tonal' import, src/musicCore/tonalAdapter.ts — import from '@/musicCore' instead.",
 };
 
 // The two bans that must reach EVERY file: React.FC (decision D1) and the
