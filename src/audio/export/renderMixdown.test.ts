@@ -854,6 +854,15 @@ const CHORD_BASS_EQUIVALENCE_CHORDS = [
   { id: 'c1', root: 'C', quality: 'maj' as const, bars: 2 }, { id: 'c2', root: 'A', quality: 'min' as const, bars: 1 }, { id: 'c3', root: 'F', quality: 'maj' as const, bars: 1 },
 ];
 
+// A real two-bar custom chord row (adapted from customCycleLoop() above), so a
+// case that sets chordRhythmMode: 'custom' actually exercises eventsForCycleStep's
+// fold logic instead of degenerating to `[] === []` on both sides — c2 (1 bar)
+// then c3 (1 bar) together make one more 2-bar cycle repetition, so the c2/c3
+// boundary lands in the MIDDLE of that repetition, not on a cycle seam.
+const CUSTOM_CHORD_ROW = new Array<boolean>(2 * MAX_STEPS_PER_BAR).fill(false);
+CUSTOM_CHORD_ROW[patternStoredIndexAt(0, 16)] = true; CUSTOM_CHORD_ROW[patternStoredIndexAt(20, 16)] = true;
+const CUSTOM_CHORD_HOLD_STEPS = new Array<number>(2 * MAX_STEPS_PER_BAR).fill(1);
+
 const CHORD_SNAPSHOT_FIELDS = [
   'chordOctave', 'bassOctave', 'scaleRoot', 'scaleType', 'chordRhythmMode', 'chordRhythmId', 'customChordRhythm', 'customChordHoldSteps', 'customChordLoopLength',
   'chordFeel', 'bassPatternMode', 'bassPatternId', 'customBassPattern', 'customBassHoldSteps', 'customBassLoopLength', 'bassFeel', 'chordArpSettings', 'bassArpSettings',
@@ -868,28 +877,35 @@ function pairChordSnapshots(over: Partial<MixdownLoop>, meterId: MeterId, stepsP
 }
 
 const CHORD_BASS_EQUIVALENCE_CASES: { name: string; over: Partial<MixdownLoop>; meterId: MeterId; spb: number }[] = [
-  { name: '4/4 presets', over: {}, meterId: '4/4', spb: 16 }, { name: '3/4 presets', over: {}, meterId: '3/4', spb: 12 },
-  { name: '12/8 presets', over: {}, meterId: '12/8', spb: 24 },
+  { name: '4/4 presets', over: {}, meterId: '4/4', spb: 16 },
   { name: '7/8 walking bass', over: { bassPatternId: 'classic-walk' }, meterId: '7/8', spb: 14 },
+  // Non-default preset ids on purpose below: the fixture's own defaults
+  // ('sustained' / 'whole-note-root') are BOTH full-hold, which planChordStep
+  // never reads plan.chordFullHold for and just replays an empty cycle — a
+  // [] === [] comparison at every step. Waltz/6-8 ids are real, multi-hit
+  // patterns (the 6/8-authored ones adapt to 12/8 at playback time), so these
+  // two cases actually exercise eventsForCycleStep at their own meters.
+  { name: '3/4 presets', over: { chordRhythmId: 'waltzOompah', bassPatternId: 'waltz-root-fifth' }, meterId: '3/4', spb: 12 },
+  { name: '12/8 presets', over: { chordRhythmId: 'compoundEighthPads', bassPatternId: 'six-eight-root-pulse' }, meterId: '12/8', spb: 24 },
   {
     name: 'a two-bar custom chord lane under a one-bar bass preset',
-    over: { chordRhythmMode: 'custom', customChordLoopLength: 2, bassPatternId: 'classic-walk' }, meterId: '4/4', spb: 16,
-  },
-  { name: 'both lanes full hold', over: { chordRhythmId: 'sustained', bassPatternId: 'whole-note-root' }, meterId: '4/4', spb: 16 },
-  {
-    // Every field a builder could swap chord<->bass on differs: feel,
-    // rhythm/pattern mode and Arp active — closing the blind spot the
-    // other fixtures leave (most share 0.5/'preset'/false on both lanes,
-    // where a swap is invisible).
-    name: 'chord and bass diverge on every field a builder could swap',
-    over: {
-      chordFeel: 0.85, bassFeel: 0.15, chordRhythmMode: 'custom', customChordLoopLength: 2,
-      bassPatternMode: 'preset', bassPatternId: 'classic-walk',
-      chordArpSettings: { active: true, mode: 'up', rate: '8n', octaves: 2 },
-      bassArpSettings: { active: false, mode: 'down', rate: '16n', octaves: 1 },
-    },
+    over: { chordRhythmMode: 'custom', customChordRhythm: CUSTOM_CHORD_ROW, customChordHoldSteps: CUSTOM_CHORD_HOLD_STEPS, customChordLoopLength: 2, bassPatternId: 'classic-walk' },
     meterId: '4/4', spb: 16,
   },
+  // Every field a builder could swap chord<->bass on differs below: feel,
+  // rhythm/pattern mode and Arp active — closing the blind spot the other
+  // fixtures leave (most share 0.5/'preset'/false on both lanes, where a
+  // swap is invisible). customChordHoldSteps also diverges from
+  // customBassHoldSteps here (a real 2-bar row vs the untouched 1-bar
+  // default), closing that blind spot too, as a side effect of using a real
+  // custom row rather than the empty one this case shipped with.
+  {
+    name: 'chord and bass diverge on every field a builder could swap',
+    over: {
+      chordFeel: 0.85, bassFeel: 0.15, chordRhythmMode: 'custom', customChordLoopLength: 2, bassPatternMode: 'preset', bassPatternId: 'classic-walk',
+      customChordRhythm: CUSTOM_CHORD_ROW, customChordHoldSteps: CUSTOM_CHORD_HOLD_STEPS,
+      chordArpSettings: { active: true, mode: 'up', rate: '8n', octaves: 2 }, bassArpSettings: { active: false, mode: 'down', rate: '16n', octaves: 1 } },
+    meterId: '4/4', spb: 16 },
 ];
 
 describe('live and offline chord+bass planning are the same computation', () => {
