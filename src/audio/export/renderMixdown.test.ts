@@ -948,11 +948,17 @@ describe('live and offline chord+bass planning are the same computation', () => 
   });
 
   test('an ARP over a CUSTOM lane holds the same length live and offline', () => {
-    // The convergence this plan lands: the renderer used to scale arp holds by
-    // cycleHoldScale (clamps a CUSTOM lane to <= 1); planChordStep now always
-    // uses feelToHoldScale, unclamped, matching what live always did. Feel is
-    // pinned above 0.5, where the two forms actually disagree in value, rather
-    // than at the 0.5 every other fixture in this file sits at.
+    // NOT a regression guard for a live/offline divergence — there never was
+    // one to detect at this call site. `cycleHoldScale` and `feelToHoldScale`
+    // are bit-identical downstream of `arpEventsForStep`'s own internal
+    // `Math.min(1, holdScale)` clamp (see `ChordPlanSnapshot`'s docblock in
+    // chordPlan.ts), and both the live and offline plans here call the exact
+    // same shared `planChordStep`, so this test is structurally incapable of
+    // distinguishing the two forms even if they did disagree. It is kept as a
+    // general live/offline equality check over an arp on a CUSTOM lane, one
+    // shape this file's other fixtures (preset lanes, feel pinned at 0.5)
+    // don't cover — not because feel is pinned above 0.5 for any behavioral
+    // reason.
     const over = {
       chordRhythmMode: 'custom' as const, customChordLoopLength: 2, chordFeel: 0.9,
       chordArpSettings: { active: true, mode: 'up' as const, rate: '8n' as const, octaves: 2 },

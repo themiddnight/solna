@@ -271,3 +271,19 @@ describe('useChordPlayback stops only its own voices, not the whole bus', () => 
     expect(source.match(/\bplaybackStopOwnedVoices\(/g)?.length).toBe(2);
   });
 });
+
+describe('useChordPlayback routes emission through the shared chord planner', () => {
+  test('calls planChordStep and never reintroduces the raw event builders inline', () => {
+    // Nothing else pins that the LIVE controller still routes through the
+    // planner rather than a reintroduced inline eventsForCycleStep/
+    // arpEventsForStep call — those two must only ever be called from inside
+    // chordPlan.ts, never from the controller directly.
+    const source = readFileSync(
+      join(process.cwd(), 'src/components/loop/chord/useChordPlayback.ts'),
+      'utf8',
+    );
+    expect(source).toContain('planChordStep(plan, {');
+    expect(source).not.toMatch(/\beventsForCycleStep\(/);
+    expect(source).not.toMatch(/\barpEventsForStep\(/);
+  });
+});

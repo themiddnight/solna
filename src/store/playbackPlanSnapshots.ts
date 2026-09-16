@@ -17,9 +17,16 @@ import type { AppStore } from './types';
  * why live/offline equivalence is a deep-equality assertion on two snapshots.
  *
  * What is NOT here is as deliberate as what is: no synth patch, no arp
- * settings that a lane reads live, no feel. Those are EMIT-time reads passed to
+ * settings that a lane reads live. Those are EMIT-time-ONLY reads passed to
  * the planner per step by the controller, which is what keeps a knob tweak
- * audible on the very next hit instead of on the next chord.
+ * audible on the very next hit instead of on the next chord. `chordFeel`/
+ * `bassFeel` are the one exception to "arm-time snapshot excludes anything
+ * read live": `chordPlanSnapshot` DOES capture them (for `cycleHoldScale`,
+ * which scales a pattern note's hold duration and is fixed for the plan's
+ * life), and the controller ALSO reads them live per step for `planChordStep`'s
+ * `feelToHoldScale` (which scales an arp hit's hold duration). See
+ * `ChordPlanSnapshot`'s own docblock in `chordPlan.ts` for why both reads are
+ * needed rather than one being redundant.
  */
 export function padPlanSnapshot(s: AppStore): PadPlanSnapshot {
   return {

@@ -28,6 +28,15 @@ const ENGINE_IMPORT = "import { audioEngine } from '@/audio/engine';\nexport con
 const STORE_IMPORT = "import { useAppStore } from '@/store/store';\nexport const s = useAppStore;\n";
 const CLOCK_READ = 'export const now = Date.now();\n';
 const TIMER = 'export const t = () => setTimeout(() => {}, 0);\n';
+/**
+ * The natural way a file inside src/audio/playback/plan/ reaches
+ * src/audio/playback/playbackEngine.ts — the same relative idiom the
+ * planners already use for '../chordPlayback' and '../padPlayback'. A
+ * one-level `../` import does not trip the file-wide `../../` ban, so the
+ * planner purity block must ban this specifically.
+ */
+const RELATIVE_PLAYBACK_ENGINE_IMPORT =
+  "import { playbackNoteOn } from '../playbackEngine';\nexport const p = playbackNoteOn;\n";
 
 describe('playback planner purity guard (DEV-397)', () => {
   test('importing the engine from a planner is an error', async () => {
@@ -54,6 +63,13 @@ describe('playback planner purity guard (DEV-397)', () => {
   test('arming a timer from a planner is an error', async () => {
     expect(await messagesFor(TIMER, PLANNER)).toContainEqual({
       ruleId: 'no-restricted-globals',
+      severity: 2,
+    });
+  });
+
+  test('importing the engine from a planner via the relative form is also an error', async () => {
+    expect(await messagesFor(RELATIVE_PLAYBACK_ENGINE_IMPORT, PLANNER)).toContainEqual({
+      ruleId: 'no-restricted-imports',
       severity: 2,
     });
   });

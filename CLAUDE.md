@@ -668,15 +668,24 @@ returns RESOLVED PLAYABLE EVENTS — note identity, timing, hold, velocity — a
 calls no engine setter, opens no `AudioContext`, reads no wall clock and arms no timer. That is an
 ESLint block scoped to the folder, not a convention: `src/architecture/playbackPlannerPurity.test.ts`
 is the committed proof that the block is armed, and it asserts SEVERITY, because `verify` tolerates
-warnings. Everything else — the clock subscription, the arming state, the full-hold strikes, the
-note-ons — is the CONTROLLER's (`useChordPlayback.ts`, `useLeadPlayback.ts`, and
-`renderMixdown.ts` offline).
+warnings. The gate blocks the engine MODULE (`@/audio/engine` and `playbackEngine`, both aliased
+and relative forms), not every impure function reachable from `plan/`: `../chordPlayback`, which
+the chord/bass planner legitimately imports for its pure event builders, also exports engine-touching
+functions (`playFullHoldChord`, `emitStepEvents`, `scheduleWholeChord`) that a planner must not call
+but that nothing stops it from calling — the pure/impure split INSIDE that file stays a convention,
+not something the gate enforces. Everything else — the clock subscription, the arming state, the
+full-hold strikes, the note-ons — is the CONTROLLER's (`useChordPlayback.ts`, `useLeadPlayback.ts`,
+and `renderMixdown.ts` offline).
 
 **There are FOUR snapshots, not one, and that is forced rather than chosen.** Every lane has its
 own arm-time/emit-time split: chord and bass fix their cycle, their notes and the arp's ACTIVE
-flag when a chord is armed, but read both synth patches, both Arp SETTINGS objects and both feel
-values live on every step — which is exactly what makes a knob tweak audible on the next hit
-instead of the next chord. Pad is arm-time only; melody is emit-time only. One unified
+flag when a chord is armed, and read both synth patches and both Arp SETTINGS objects live on every
+step — which is exactly what makes a knob tweak audible on the next hit instead of the next chord.
+`chordFeel`/`bassFeel` are the one value each lane reads at BOTH points: captured at arm-time (for
+`cycleHoldScale`, scaling a pattern note's hold duration) AND read live at emit-time (for
+`feelToHoldScale`, scaling an arp hit's hold duration) — so moving the feel knob mid-chord changes
+arp hold lengths on the very next hit but not pattern-note hold lengths until the next chord is
+armed, the same split the pre-DEV-397 code had. Pad is arm-time only; melody is emit-time only. One unified
 `PlaybackSnapshot` would freeze the emit-time half of three lanes to kill one type. So the
 SNAPSHOT is arm-time immutable and the CONTEXT is the live read, passed in per step.
 

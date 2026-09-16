@@ -414,12 +414,12 @@ describe('planChordStep', () => {
   test('withholds a last-bar-only approach tone until the chord\'s final bar', () => {
     const plan = planChordArm(snapshot(), { chordIndex: 0, startProgressionStep: 0 });
     const approach = plan.bassEvents.find((e) => e.lastBarOnly);
-    if (!approach) return; // classic-walk without an approach token: nothing to prove
+    expect(approach, 'no approach tone in this fixture').toBeDefined();
     expect(
-      planChordStep(plan, ctx({ progressionStep: approach.step, step: approach.step, isLastBar: false })).bass,
+      planChordStep(plan, ctx({ progressionStep: approach!.step, step: approach!.step, isLastBar: false })).bass,
     ).toEqual([]);
     expect(
-      planChordStep(plan, ctx({ progressionStep: approach.step, step: approach.step, isLastBar: true })).bass,
+      planChordStep(plan, ctx({ progressionStep: approach!.step, step: approach!.step, isLastBar: true })).bass,
     ).not.toEqual([]);
   });
 

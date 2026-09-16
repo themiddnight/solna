@@ -24,13 +24,22 @@ import {
 /**
  * Everything the chord and bass lanes read when a chord is ARMED.
  *
- * Arm-time, and only arm-time. The synth patches, the two Arp SETTINGS objects
- * and both feel values are read LIVE by the controller on every step and handed
- * to `planChordStep` instead — that split is what makes a knob tweak audible on
- * the very next hit rather than on the next chord, and folding them in here
- * would silently take that away. What IS captured is the arp's ACTIVE flag:
- * flipping Arp mid-chord must not stack an arpeggio on top of a chord already
- * sounding, so the pattern/arp choice is fixed for the plan's whole life.
+ * Arm-time, but not arm-time ONLY for everything: the synth patches and the
+ * two Arp SETTINGS objects are read LIVE by the controller on every step and
+ * handed to `planChordStep` instead — that split is what makes a patch or arp
+ * setting tweak audible on the very next hit rather than on the next chord.
+ * `chordFeel`/`bassFeel` are read at BOTH points and for two different jobs:
+ * captured here for `cycleHoldScale`, which scales a PATTERN note's hold
+ * duration and is fixed for the plan's whole life like everything else in
+ * this snapshot, and read live again inside `planChordStep`'s `ctx` for
+ * `feelToHoldScale`, which scales an ARP hit's hold duration on every step.
+ * Consequence: moving the feel knob mid-chord changes arp hold lengths on the
+ * very next hit but does not change pattern-note hold lengths until the next
+ * chord is armed — the same split the pre-DEV-397 code had (it read
+ * `s.chordFeel` once at arm and again live at emit), not a regression here.
+ * What IS captured ELSE is the arp's ACTIVE flag: flipping Arp mid-chord must
+ * not stack an arpeggio on top of a chord already sounding, so the
+ * pattern/arp choice is fixed for the plan's whole life.
  *
  * One snapshot serves both lanes because they are armed together, from one read
  * of the loop state — but their CYCLES stay independent (a two-bar chord cycle

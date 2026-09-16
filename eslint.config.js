@@ -303,7 +303,21 @@ export default tseslint.config(
             { group: ['**/components/**'], message: 'audio/ must not import components/ (layering rule 1)' },
             TAPER_CONVERSION_BAN,
             {
-              group: ['**/audio/engine', '**/audio/engine/**', '**/playback/playbackEngine'],
+              // The `@/`-aliased forms are the ones a planner would reach for
+              // by habit; the `../` forms are the ones it would ACTUALLY reach
+              // for, since `plan/` sits one level below `playback/` and every
+              // other cross-file import in this folder (`../chordPlayback`,
+              // `../padPlayback`) already uses that exact idiom. A single
+              // `../playbackEngine` has only one `../` level, so the file-wide
+              // `../../` ban (decision D2, GLOBAL_RESTRICTED_SYNTAX) does not
+              // catch it — this group must ban it explicitly.
+              group: [
+                '**/audio/engine',
+                '**/audio/engine/**',
+                '**/engine',
+                '**/playback/playbackEngine',
+                '../playbackEngine',
+              ],
               message: 'a planner returns events; the controller calls the engine (DEV-397).',
             },
           ],
