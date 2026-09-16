@@ -90,17 +90,21 @@ types and depends on it landing first.
   snapshot doesn't (an index, live synth/feel/arp params, a step number). This keeps adding a new
   per-call value an additive change to `context`'s shape rather than a signature change. Pad's
   `chordIndex` is `{ chordIndex: number }`, not a bare number, even though it has only one field
-  today. **This convention was added after Tasks 5-11's task text below was drafted.** Every code
-  snippet in Tasks 5-11 below showing `planChordLane(snapshot, chordNotes, totalBars)`,
+  today. **This convention was added after Tasks 5-14's task text below was drafted.** Every code
+  snippet in Tasks 5-14 below showing `planChordLane(snapshot, chordNotes, totalBars)`,
   `planBassLane(snapshot, chordIndex, totalBars)`, `planChordArm(snapshot, chordIndex,
-  startProgressionStep)` or any other bare-positional-argument call is STALE — the convention,
-  not the stale snippet, is authoritative. Every one of these functions takes
-  `(snapshot, context: { ...fields })` — e.g. `planChordLane(snapshot, { chordNotes, totalBars })`,
-  `planBassLane(snapshot, { chordIndex, totalBars })`, `planChordArm(snapshot, { chordIndex,
-  startProgressionStep })`. Implementers of Tasks 6-11 must use the object form throughout,
-  including at every call site the stale snippets show as positional (test files, other planners
-  calling these, live/offline wiring) — do not propagate the positional form because a code
-  block in this document still shows it.
+  startProgressionStep)`, `planMelodyStep(snapshot, stepInLoop, stepsPerBar, tickDurSec)` or any
+  other bare-positional-argument call is STALE — the convention, not the stale snippet, is
+  authoritative. Every one of these functions takes `(snapshot, context: { ...fields })` — e.g.
+  `planChordLane(snapshot, { chordNotes, totalBars })`, `planBassLane(snapshot, { chordIndex,
+  totalBars })`, `planChordArm(snapshot, { chordIndex, startProgressionStep })`,
+  `planMelodyStep(snapshot, { stepInLoop, stepsPerBar, tickDurSec })`. Implementers of Tasks
+  6-14 must use the object form throughout, including at every call site the stale snippets show
+  as positional (test files, other planners calling these, live/offline wiring) — do not
+  propagate the positional form because a code block in this document still shows it.
+  (Confirmed by Tasks 5-11's execution: every one of them needed this correction and applied it
+  cleanly once told — the same applies to Task 12's `planMelodyStep` and its two consumers,
+  Tasks 13-14.)
 - **Planner output-type naming convention (set by Task 1's review, binding for every later
   task):** a small (2-3 field) output shape that mirrors an already-wrapped pure function's own
   return type may stay an inline/anonymous type, as pad's `{ notes, holdSec } | null` does
