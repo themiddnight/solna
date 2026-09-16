@@ -150,6 +150,7 @@ describe('buildLoopVoices', () => {
     const voices = buildLoopVoices(mixdownLoop({ chordRhythmId: 'sustained' }), '4/4', 120, 16);
     expect(voices.plans[0].chordEvents).toEqual([]);
     expect(voices.plans[0].chordFullHold?.holdSec).toBeGreaterThan(0);
+    expect(voices.plans[0].bassFullHold).not.toBeNull();
   });
 
   test('a one-hit rhythm produces per-step events and no hold', () => {
@@ -157,6 +158,7 @@ describe('buildLoopVoices', () => {
     const voices = buildLoopVoices(mixdownLoop({ chordRhythmId: 'fourOnFloor' }), '4/4', 120, 16);
     expect(voices.plans[0].chordEvents.length).toBeGreaterThan(0);
     expect(voices.plans[0].chordFullHold).toBeNull();
+    expect(voices.plans[0].bassFullHold).not.toBeNull();
   });
 
   test('buildLoopVoices is chordSnapshotForLoop + planChordArm, chord by chord', () => {
