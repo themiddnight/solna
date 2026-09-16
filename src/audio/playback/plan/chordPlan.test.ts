@@ -1,14 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import { planChordLane, type ChordPlanSnapshot } from './chordPlan';
+import { planBassLane, planChordLane, type ChordPlanSnapshot } from './chordPlan';
 import { buildChordEvents } from '../chordPlayback';
 import {
   cycleHoldScale,
   feelToHoldScale,
   fullHoldDuration,
+  resolvePlaybackBassCycle,
   resolvePlaybackRhythmCycle,
 } from '@/audio/chordRhythms';
+import { isApproachToken, resolveBassSteps } from '@/audio/bassPatterns';
 import { barDurationSec, generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
 import type { ChordItem } from '@/types';
+import type { BassStepChoice } from '@/data/bassPatterns';
 
 const CHORDS: ChordItem[] = [
   { id: 'c1', root: 'C', quality: 'maj', bars: 2 },
@@ -160,5 +163,134 @@ describe('planChordLane', () => {
   test('the lane is a plain function of its inputs: two calls agree', () => {
     const context = { chordNotes: NOTES, totalBars: 2 };
     expect(planChordLane(snapshot(), context)).toEqual(planChordLane(snapshot(), context));
+  });
+});
+
+describe('planBassLane', () => {
+  test('a per-step preset wraps resolveBassSteps, flagging approach tones as last-bar-only', () => {
+    const cycle = resolvePlaybackBassCycle('preset', 'classic-walk', [], [], 1, 16, '4/4', DURATIONS);
+    const lane = planBassLane(snapshot(), { chordIndex: 0, totalBars: 2 });
+    const expected = resolveBassSteps(cycle.pattern, CHORDS, 0, 2, 'C', 'major', 120, 1).map((ev) => ({
+      step: ev.step,
+      noteName: ev.noteName,
+      velocity: ev.velocity,
+      timeOffset: 0,
+      hold: ev.holdSec,
+      lastBarOnly: isApproachToken(ev.token),
+    }));
+    expect(lane.fullHold).toBeNull();
+    expect(lane.cycleSteps).toBe(cycle.cycleSteps);
+    expect(lane.events).toEqual(expected);
+  });
+
+  test('a full-hold PRESET returns one note and a hold, and no events', () => {
+    const lane = planBassLane(snapshot({ bassPatternId: 'whole-note-root' }), { chordIndex: 0, totalBars: 2 });
+    expect(lane.events).toEqual([]);
+    // The ROOT is resolved at hold scale 1; only the DURATION carries the feel.
+    const cycle = resolvePlaybackBassCycle('preset', 'whole-note-root', [], [], 1, 16, '4/4', DURATIONS);
+    const root = resolveBassSteps(cycle.pattern, CHORDS, 0, 2, 'C', 'major', 120, 1)[0];
+    expect(lane.fullHold).toEqual({
+      noteName: root.noteName,
+      velocity: root.velocity,
+      holdSec: 4,
+    });
+  });
+
+  test('an active bass arp replaces the lane', () => {
+    expect(
+      planBassLane(snapshot({ bassArpActive: true, bassPatternId: 'whole-note-root' }), {
+        chordIndex: 0,
+        totalBars: 2,
+      }),
+    ).toEqual({
+      cycleSteps: 16,
+      events: [],
+      fullHold: null,
+    });
+  });
+
+  test('the second chord resolves its OWN approach tones, so the index is load-bearing', () => {
+    const first = planBassLane(snapshot(), { chordIndex: 0, totalBars: 2 }).events.map((e) => e.noteName);
+    const second = planBassLane(snapshot(), { chordIndex: 1, totalBars: 2 }).events.map((e) => e.noteName);
+    expect(second).not.toEqual(first);
+  });
+});
+
+// Split from the describe above only to stay under max-lines-per-function; the
+// two lanes' feel/boundary regressions still document the same real behavior.
+describe('planBassLane feel and boundary edge cases', () => {
+  test('a non-neutral bass feel scales per-step holdSec, not just the full-hold duration', () => {
+    // bassFeel 0.5 (the fixture default) is the one value where
+    // feelToHoldScale === 1, which would make this plumbing pass even if the
+    // feel argument were never threaded through at all — so exercise a value
+    // that actually moves the scale.
+    const lane = planBassLane(snapshot({ bassFeel: 0.25 }), { chordIndex: 0, totalBars: 2 });
+    const cycle = resolvePlaybackBassCycle('preset', 'classic-walk', [], [], 1, 16, '4/4', DURATIONS);
+    // A preset cycle is not custom, so cycleHoldScale passes feelToHoldScale through unclamped.
+    const holdScale = cycleHoldScale(cycle.custom, 0.25);
+    expect(feelToHoldScale(0.25)).not.toBe(1);
+    expect(holdScale).not.toBe(1);
+    const expected = resolveBassSteps(cycle.pattern, CHORDS, 0, 2, 'C', 'major', 120, holdScale).map((ev) => ({
+      step: ev.step,
+      hold: ev.holdSec,
+    }));
+    expect(lane.events.map((e) => ({ step: e.step, hold: e.hold }))).toEqual(expected);
+    // Distinguishes the scaled run from the neutral-feel one: same steps, different holds.
+    const neutralHolds = planBassLane(snapshot(), { chordIndex: 0, totalBars: 2 }).events.map((e) => e.hold);
+    expect(lane.events.map((e) => e.hold)).not.toEqual(neutralHolds);
+  });
+
+  test('a full-hold bass at a non-neutral feel scales holdSec but never the resolved root', () => {
+    const lane = planBassLane(snapshot({ bassPatternId: 'whole-note-root', bassFeel: 0.25 }), {
+      chordIndex: 0,
+      totalBars: 2,
+    });
+    const cycle = resolvePlaybackBassCycle('preset', 'whole-note-root', [], [], 1, 16, '4/4', DURATIONS);
+    const root = resolveBassSteps(cycle.pattern, CHORDS, 0, 2, 'C', 'major', 120, 1)[0];
+    const expectedHoldSec = fullHoldDuration(2, barDurationSec(120, 16), feelToHoldScale(0.25));
+    expect(feelToHoldScale(0.25)).not.toBe(1);
+    expect(lane.fullHold).toEqual({
+      noteName: root.noteName,
+      velocity: root.velocity,
+      holdSec: expectedHoldSec,
+    });
+  });
+
+  test('a bars:0 chord still floors its folded boundary to one bar, not zero, on the bass lane too', () => {
+    // chordDurations() is shared between the two lanes: an unfloored
+    // `bars * stepsPerBar` would fold no boundary at column 16 here either, the
+    // same regression the chord-lane suite pins above.
+    const values = new Array<BassStepChoice>(48).fill('rest');
+    const holds = new Array(48).fill(1);
+    values[8] = 'root';
+    holds[8] = 20;
+    const zeroBarsChords: ChordItem[] = [
+      { id: 'c1', root: 'C', quality: 'maj', bars: 0 },
+      { id: 'c2', root: 'F', quality: 'maj', bars: 2 },
+    ];
+    const lane = planBassLane(
+      snapshot({
+        chords: zeroBarsChords,
+        bassPatternMode: 'custom',
+        customBassPattern: values,
+        customBassHoldSteps: holds,
+        customBassLoopLength: 2,
+      }),
+      { chordIndex: 0, totalBars: 2 },
+    );
+    expect(lane.cycleSteps).toBe(32);
+    // Floored chordDurations fold a boundary at column 16, capping the 20-step
+    // request to 8; an un-floored `0 * 16 === 0` boundary would leave it
+    // unclamped at its full 20-step request instead.
+    const cycle = resolvePlaybackBassCycle('custom', 'classic-walk', values, holds, 2, 16, '4/4', [16, 32]);
+    const expected = resolveBassSteps(cycle.pattern, zeroBarsChords, 0, 2, 'C', 'major', 120, 1);
+    expect(lane.events.map((e) => ({ step: e.step, hold: e.hold }))).toEqual(
+      expected.map((e) => ({ step: e.step, hold: e.holdSec })),
+    );
+  });
+
+  test('the lane is a plain function of its inputs: two calls agree', () => {
+    const context = { chordIndex: 0, totalBars: 2 };
+    expect(planBassLane(snapshot(), context)).toEqual(planBassLane(snapshot(), context));
   });
 });

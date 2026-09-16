@@ -5,9 +5,12 @@ import { barDurationSec, stepDurationSec } from '@/utils/musicTheory';
 import {
   cycleHoldScale,
   fullHoldDuration,
+  isFullHoldBassCycle,
   isFullHoldRhythmCycle,
+  resolvePlaybackBassCycle,
   resolvePlaybackRhythmCycle,
 } from '@/audio/chordRhythms';
+import { isApproachToken, resolveBassSteps } from '@/audio/bassPatterns';
 import { buildChordEvents, type BarInvariantEvent } from '../chordPlayback';
 
 /**
@@ -131,6 +134,92 @@ export function planChordLane(
   return {
     cycleSteps: cycle.cycleSteps,
     events: buildChordEvents(cycle.pattern, chordNotes, stepDurationSec(snapshot.bpm), holdScale),
+    fullHold: null,
+  };
+}
+
+/** The bass lane's twin of ChordLanePlan. Bass is monophonic: one held note, not a voicing. */
+interface BassLanePlan {
+  cycleSteps: number;
+  events: BarInvariantEvent[];
+  fullHold: { noteName: string; velocity: number; holdSec: number } | null;
+}
+
+/**
+ * The bass lane of a plan, over its own cycle, hold scale and tone resolution.
+ *
+ * The chord INDEX matters, not the chord object: `resolveBassSteps` walks
+ * `chords[(i + 1) % length]` for its approach tones, which is what makes the
+ * last chord lead back into the first at the loop seam.
+ *
+ * A full hold resolves its root at hold scale 1 and carries the feel in the
+ * DURATION only, so the note-off and the hold it is paired with are measured
+ * the same way.
+ *
+ * The second parameter is an object for the same reason `planChordLane`'s is
+ * (see its docblock): a later per-call addition is a shape change to
+ * `context`, never a signature change every call site must follow in
+ * argument order.
+ */
+export function planBassLane(
+  snapshot: ChordPlanSnapshot,
+  context: { chordIndex: number; totalBars: number },
+): BassLanePlan {
+  const { chordIndex, totalBars } = context;
+  if (snapshot.bassArpActive) {
+    return { cycleSteps: snapshot.stepsPerBar, events: [], fullHold: null };
+  }
+  const cycle = resolvePlaybackBassCycle(
+    snapshot.bassPatternMode,
+    snapshot.bassPatternId,
+    snapshot.customBassPattern,
+    snapshot.customBassHoldSteps,
+    snapshot.customBassLoopLength,
+    snapshot.stepsPerBar,
+    snapshot.meterId,
+    chordDurations(snapshot),
+  );
+  const stepsAtHold = (holdScale: number) =>
+    resolveBassSteps(
+      cycle.pattern,
+      // resolveBassSteps only indexes into this array (never mutates it), but
+      // its signature predates ChordPlanSnapshot's readonly field.
+      snapshot.chords as ChordItem[],
+      chordIndex,
+      snapshot.bassOctave,
+      snapshot.scaleRoot,
+      snapshot.scaleType,
+      snapshot.bpm,
+      holdScale,
+    );
+  const holdSec = () =>
+    fullHoldDuration(
+      totalBars,
+      barDurationSec(snapshot.bpm, snapshot.stepsPerBar),
+      cycleHoldScale(cycle.custom, snapshot.bassFeel),
+    );
+
+  if (isFullHoldBassCycle(cycle)) {
+    const root = stepsAtHold(1)[0];
+    return {
+      cycleSteps: cycle.cycleSteps,
+      events: [],
+      fullHold: root
+        ? { noteName: root.noteName, velocity: root.velocity, holdSec: holdSec() }
+        : null,
+    };
+  }
+  return {
+    cycleSteps: cycle.cycleSteps,
+    events: stepsAtHold(cycleHoldScale(cycle.custom, snapshot.bassFeel)).map((ev) => ({
+      step: ev.step,
+      noteName: ev.noteName,
+      velocity: ev.velocity,
+      timeOffset: 0,
+      hold: ev.holdSec,
+      // Approach tones lead into the NEXT chord, so they belong to the last bar.
+      lastBarOnly: isApproachToken(ev.token),
+    })),
     fullHold: null,
   };
 }
