@@ -141,7 +141,6 @@ export interface ChordItem {
   root: string;
   quality: ChordQuality;
   bars: number;
-  notes: string[];
   bassNote?: string | null; // bass override note name ('E4'); null/absent = auto root
 }
 

@@ -8,7 +8,6 @@ import {
   TONAL_CHORD_ALIASES,
   barDurationSec,
   clampBpm,
-  deriveChordNotes,
   formatChordLabel,
   formatChordQuality,
   generateBlockChordNotes,
@@ -223,8 +222,9 @@ describe('TONAL_CHORD_ALIASES', () => {
   });
 });
 
-const chord = (id: string, root: string, quality: ChordQuality, bars = 1): ChordItem =>
-  deriveChordNotes({ id, root, quality, bars, notes: [] }, 4);
+const chord = (id: string, root: string, quality: ChordQuality, bars = 1): ChordItem => ({
+  id, root, quality, bars,
+});
 
 // A Natural Minor, i - VI - III - VII. The progression the spec measured.
 const A_MINOR_PROGRESSION: ChordItem[] = [
@@ -240,14 +240,14 @@ describe('transposeProgression', () => {
   test('the measured case: A to C keeps the tonic first', () => {
     // Today's reharmonize turns this into G#maj - Fmin - Cmin - Gmin, moving
     // the tonic from position 1 to position 3. Transposition must not.
-    expect(names(transposeProgression(A_MINOR_PROGRESSION, 'A', 'C', 4))).toEqual([
+    expect(names(transposeProgression(A_MINOR_PROGRESSION, 'A', 'C'))).toEqual([
       'Cmin', 'G#maj', 'D#maj', 'A#maj',
     ]);
   });
 
   test('quality, bars and id are preserved verbatim', () => {
     const source = [chord('x1', 'D', 'min9', 2), chord('x2', 'G', '7sus4', 4)];
-    const moved = transposeProgression(source, 'C', 'F#', 4);
+    const moved = transposeProgression(source, 'C', 'F#');
     expect(moved.map((c) => c.id)).toEqual(['x1', 'x2']);
     expect(moved.map((c) => c.quality)).toEqual(['min9', '7sus4']);
     expect(moved.map((c) => c.bars)).toEqual([2, 4]);
@@ -258,7 +258,7 @@ describe('transposeProgression', () => {
       chords.slice(1).map((c, i) => (rootSemitone(c.root) - rootSemitone(chords[i].root) + 12) % 12);
     for (const from of ROOTS) {
       for (const to of ROOTS) {
-        expect(gaps(transposeProgression(A_MINOR_PROGRESSION, from, to, 4))).toEqual(
+        expect(gaps(transposeProgression(A_MINOR_PROGRESSION, from, to))).toEqual(
           gaps(A_MINOR_PROGRESSION),
         );
       }
@@ -270,7 +270,7 @@ describe('transposeProgression', () => {
       SCALES['Natural Minor'].intervals.indexOf(
         (rootSemitone(chordRoot) - rootSemitone(keyRoot) + 12) % 12,
       );
-    const moved = transposeProgression(A_MINOR_PROGRESSION, 'A', 'F#', 4);
+    const moved = transposeProgression(A_MINOR_PROGRESSION, 'A', 'F#');
     expect(moved.map((c) => degreeOf(c.root, 'F#'))).toEqual(
       A_MINOR_PROGRESSION.map((c) => degreeOf(c.root, 'A')),
     );
@@ -280,21 +280,23 @@ describe('transposeProgression', () => {
     // Pitch class only: a bass note that jumped a register on a key change
     // would leave the bass line, and it is what makes the round trip exact.
     const source = [{ ...chord('s1', 'C', 'maj'), bassNote: 'E4' }];
-    expect(transposeProgression(source, 'C', 'D#', 4)[0].bassNote).toBe('G4');
+    expect(transposeProgression(source, 'C', 'D#')[0].bassNote).toBe('G4');
     const nulled = [{ ...chord('s2', 'C', 'maj'), bassNote: null }];
-    expect(transposeProgression(nulled, 'C', 'D', 4)[0].bassNote).toBeNull();
+    expect(transposeProgression(nulled, 'C', 'D')[0].bassNote).toBeNull();
   });
 
-  test('notes are re-derived at the requested octave', () => {
-    const moved = transposeProgression(A_MINOR_PROGRESSION, 'A', 'C', 3);
-    expect(moved[0].notes).toEqual(generateBlockChordNotes('min', 'C', 3));
+  test('the result carries no notes field', () => {
+    const moved = transposeProgression(A_MINOR_PROGRESSION, 'A', 'C');
+    for (const c of moved) {
+      expect('notes' in c).toBe(false);
+    }
   });
 
   test('round trips exactly for all 144 ordered root pairs', () => {
     for (const a of ROOTS) {
       for (const b of ROOTS) {
         expect(
-          transposeProgression(transposeProgression(A_MINOR_PROGRESSION, a, b, 4), b, a, 4),
+          transposeProgression(transposeProgression(A_MINOR_PROGRESSION, a, b), b, a),
         ).toEqual(A_MINOR_PROGRESSION);
       }
     }
@@ -313,19 +315,19 @@ describe('snapProgressionToScale', () => {
   ];
 
   test('chords already in the target key and scale come back unchanged', () => {
-    expect(names(snapProgressionToScale(EXTENDED, 'C', 'Major', 4))).toEqual([
+    expect(names(snapProgressionToScale(EXTENDED, 'C', 'Major'))).toEqual([
       'Dmin9', 'G7', 'Cmaj9', 'Fmaj7',
     ]);
   });
 
   test('maj9 / min9 / 7sus4 / sus4 survive a snap into a five-note scale', () => {
-    expect(names(snapProgressionToScale(EXTENDED, 'G', 'Major Pentatonic', 4))).toEqual([
+    expect(names(snapProgressionToScale(EXTENDED, 'G', 'Major Pentatonic'))).toEqual([
       'Dmin9', 'Gmaj7', 'Bmaj9', 'Emin7',
     ]);
   });
 
   test('the old key-change behaviour is preserved verbatim under the new name', () => {
-    expect(names(snapProgressionToScale(A_MINOR_PROGRESSION, 'C', 'Natural Minor', 4))).toEqual([
+    expect(names(snapProgressionToScale(A_MINOR_PROGRESSION, 'C', 'Natural Minor'))).toEqual([
       'G#maj', 'Fmin', 'Cmin', 'Gmin',
     ]);
   });
@@ -333,11 +335,18 @@ describe('snapProgressionToScale', () => {
   test('every output root is a degree of the target scale', () => {
     for (const root of ROOTS) {
       for (const scaleType of Object.keys(SCALES)) {
-        const snapped = snapProgressionToScale(A_MINOR_PROGRESSION, root, scaleType, 4);
+        const snapped = snapProgressionToScale(A_MINOR_PROGRESSION, root, scaleType);
         for (const c of snapped) {
           expect(getScaleNotes(root, scaleType)).toContain(c.root);
         }
       }
+    }
+  });
+
+  test('the result carries no notes field', () => {
+    const snapped = snapProgressionToScale(A_MINOR_PROGRESSION, 'C', 'Natural Minor');
+    for (const c of snapped) {
+      expect('notes' in c).toBe(false);
     }
   });
 
@@ -359,7 +368,7 @@ describe('snapProgressionToScale', () => {
     const snappedQualities = (qualities: ChordQuality[]): [ChordQuality, ChordQuality][] =>
       qualities.map((quality) => [
         quality,
-        snapProgressionToScale([chord('c', 'C', quality)], 'C', 'Major', 4)[0].quality,
+        snapProgressionToScale([chord('c', 'C', quality)], 'C', 'Major')[0].quality,
       ]);
 
     test('a triad-shaped quality regenerates to the tonic triad, maj', () => {
@@ -384,10 +393,10 @@ describe('snapProgressionToScale', () => {
       // both at some degree of some scale, so the target key has its own
       // correct version to regenerate to.
       expect(
-        snapProgressionToScale([chord('c', 'C', 'minMaj7')], 'C', 'Major', 4)[0].quality,
+        snapProgressionToScale([chord('c', 'C', 'minMaj7')], 'C', 'Major')[0].quality,
       ).toBe('maj7');
       expect(
-        snapProgressionToScale([chord('c', 'C', 'maj7#5')], 'C', 'Major', 4)[0].quality,
+        snapProgressionToScale([chord('c', 'C', 'maj7#5')], 'C', 'Major')[0].quality,
       ).toBe('maj7');
     });
 
@@ -408,7 +417,7 @@ describe('snapProgressionToScale', () => {
       // is an equally good landing spot"). Pinned here so the policy has a
       // test, not just a comment. Root-snapping itself is unchanged by
       // DEV-393; this only documents the existing behavior.
-      const snapped = snapProgressionToScale([chord('c', 'C#', 'maj')], 'C', 'Major', 4);
+      const snapped = snapProgressionToScale([chord('c', 'C#', 'maj')], 'C', 'Major');
       expect(snapped[0].root).toBe('C');
     });
 
@@ -417,10 +426,9 @@ describe('snapProgressionToScale', () => {
       // degree to land on, so the root must snap (to F or G) while the add9
       // survives — proving the fix did not turn "preserve the quality" into
       // "leave the chord alone".
-      const snapped = snapProgressionToScale([chord('c', 'F#', 'add9')], 'C', 'Major', 4);
+      const snapped = snapProgressionToScale([chord('c', 'F#', 'add9')], 'C', 'Major');
       expect(snapped[0].quality).toBe('add9');
       expect(getScaleNotes('C', 'Major')).toContain(snapped[0].root);
-      expect(snapped[0].notes).toEqual(generateBlockChordNotes('add9', snapped[0].root, 4));
     });
   });
 });
@@ -451,7 +459,7 @@ describe('factory progressions affected by the classification fix (DEV-393)', ()
   test('lofi-trapsoul: VII9 survives a reharmonize into a different scale', () => {
     const progression = progressionById('lofi-trapsoul')!;
     const resolved = resolveProgression(progression, 'A', 'Natural Minor', 4);
-    const snapped = snapProgressionToScale(resolved, 'D', 'Dorian', 4);
+    const snapped = snapProgressionToScale(resolved, 'D', 'Dorian');
     // Step index 2 is the VII9 step (step(6, 1, '9')).
     expect(snapped[2].quality).toBe('9');
   });
@@ -459,7 +467,7 @@ describe('factory progressions affected by the classification fix (DEV-393)', ()
   test('lofi-tape-loop: the closing V9 survives a reharmonize into a different scale', () => {
     const progression = progressionById('lofi-tape-loop')!;
     const resolved = resolveProgression(progression, 'C', 'Major', 4);
-    const snapped = snapProgressionToScale(resolved, 'D', 'Dorian', 4);
+    const snapped = snapProgressionToScale(resolved, 'D', 'Dorian');
     // Step index 3 is the V9 step (step(4, 1, '9')); maj9/min9 at indices 0
     // and 2 were already preserved by the old explicit four-name list, so
     // only this step's behavior actually changed.
@@ -469,14 +477,14 @@ describe('factory progressions affected by the classification fix (DEV-393)', ()
   test('ambient-open-fourths: both Isus2/IIsus2 steps survive a reharmonize', () => {
     const progression = progressionById('ambient-open-fourths')!;
     const resolved = resolveProgression(progression, 'C', 'Lydian', 4);
-    const snapped = snapProgressionToScale(resolved, 'G', 'Major', 4);
+    const snapped = snapProgressionToScale(resolved, 'G', 'Major');
     expect(snapped.map((c) => c.quality)).toEqual(['sus2', 'sus2']);
   });
 
   test('ambient-glass-horizon: the closing IIsus2 step survives a reharmonize', () => {
     const progression = progressionById('ambient-glass-horizon')!;
     const resolved = resolveProgression(progression, 'C', 'Lydian', 4);
-    const snapped = snapProgressionToScale(resolved, 'G', 'Major', 4);
+    const snapped = snapProgressionToScale(resolved, 'G', 'Major');
     // Step index 3 is the IIsus2 step (step(1, 4, 'sus2')).
     expect(snapped[3].quality).toBe('sus2');
   });
