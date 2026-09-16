@@ -60,6 +60,52 @@ const TONAL_SCOPED_PACKAGE_BAN = {
     "DEV-394: '@tonaljs/*' scoped subpackages are confined to the same one file as the bare 'tonal' import, src/musicCore/tonalAdapter.ts — import from '@/musicCore' instead.",
 };
 
+// DEV-399: the ENGINE — src/audio/engine.ts, src/audio/synth/**, and the two
+// other DSP runtimes beside them — receives already-resolved playable events
+// and takes no key, scale, chord, spelling or notation decision. It therefore
+// imports no music-domain module. The controllers in src/audio/playback/ and
+// the theory modules beside them (arpeggiator.ts, bassPatterns.ts,
+// chordProgressions.ts, leadMelody.ts) are deliberately NOT in this block's
+// file set: resolving a pitch is their job, and this ban would be wrong there.
+//
+// `@/utils/musicTheory` is split rather than banned whole, because that module
+// holds the TIMING helpers too (STEPS_PER_BAR, stepDurationSec) and an engine
+// legitimately reads those. `allowImportNames` is an ALLOWLIST on purpose: a
+// music-domain export added to musicTheory.ts later is banned here on the day
+// it is written, with no edit to this file. The four names allowed are the
+// timing half and nothing else.
+//
+// Both import forms are covered: the `@/`-aliased one a reader reaches for by
+// habit and the `../`/`../../` relative one the engine files actually use
+// today (`src/audio/engine.ts` imports `'../utils/musicTheory'`). A DEV-397
+// re-review found a real gate that had closed only the aliased form.
+const ENGINE_MUSIC_DOMAIN_BAN = [
+  {
+    group: [
+      '**/musicCore',
+      '**/musicCore/**',
+      '**/utils/noteSpelling',
+      '**/data/scales',
+      '**/data/chordProgressions',
+      '**/data/chordRhythms',
+      '**/data/bassPatterns',
+      '**/audio/arpeggiator',
+      '**/audio/bassPatterns',
+      '**/audio/chordProgressions',
+      '**/audio/chordRhythms',
+      '**/audio/leadMelody',
+    ],
+    message:
+      'DEV-399: the engine receives resolved playable events — resolve pitch/scale/chord in a controller under src/audio/playback/ and pass a frequency in Hz.',
+  },
+  {
+    group: ['**/utils/musicTheory'],
+    allowImportNames: ['STEPS_PER_BAR', 'clampBpm', 'stepDurationSec', 'barDurationSec'],
+    message:
+      'DEV-399: the engine may read the TIMING half of musicTheory only — pitch, chord, scale and reharmonization helpers belong to the controllers (see noteFrequency at the playback boundary).',
+  },
+];
+
 // The two bans that must reach EVERY file: React.FC (decision D1) and the
 // `../../` deep-relative-import ban (decision D2). `no-restricted-syntax` is
 // not additive — a config block that sets it REPLACES this entry for the files
@@ -334,6 +380,51 @@ export default tseslint.config(
         ...GLOBAL_RESTRICTED_GLOBALS,
       ],
       'no-restricted-syntax': ['error', ...GLOBAL_RESTRICTED_SYNTAX, ...AUDIO_RANDOM_BAN_SYNTAX],
+    },
+  },
+  {
+    // DEV-399: the audio ENGINE is a domain-agnostic runtime. It takes a
+    // resolved frequency in Hz, an opaque VoiceId and an owner; it parses no
+    // note name and reads no scale, chord, spelling or reharmonization module.
+    //
+    // The file set is the runtime itself: the engine facade, the synth voice
+    // runtime, and the two DSP units beside them. src/audio/clock.ts is
+    // deliberately absent — it is a timing service whose whole job is bpm math
+    // — and so is every controller under src/audio/playback/, whose job is to
+    // do the resolving this block forbids here.
+    //
+    // Landed directly at 'error' per D5: Task 2 emptied the file set of every
+    // music-domain import before this block existed, so there is nothing to
+    // phase in a 'warn' for.
+    //
+    // The list below REPLACES the src/audio/** entry rather than merging with
+    // it (flat config semantics — see the src/data/ block's own comments), so
+    // the audio-wide bans are spread back in. Leaving them out would silently
+    // un-ban `tonal`, the store and components in exactly the folder that must
+    // be the most domain-free code in the app — and the store half of that is
+    // also what keeps "the audio engine never writes persisted application
+    // state" true.
+    files: [
+      'src/audio/engine.ts',
+      'src/audio/synth/**/*.{ts,tsx}',
+      'src/audio/drumSynth.ts',
+      'src/audio/masterRack.ts',
+    ],
+    ignores: ['src/audio/**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [TONAL_IMPORT_BAN],
+          patterns: [
+            TONAL_SCOPED_PACKAGE_BAN,
+            { group: ['**/store/**'], message: 'audio/ must not import store/ (layering rule 1)' },
+            { group: ['**/components/**'], message: 'audio/ must not import components/ (layering rule 1)' },
+            TAPER_CONVERSION_BAN,
+            ...ENGINE_MUSIC_DOMAIN_BAN,
+          ],
+        },
+      ],
     },
   },
   {
