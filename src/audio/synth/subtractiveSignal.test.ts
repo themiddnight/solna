@@ -31,11 +31,13 @@ import { createRenderEngine } from '../engine';
 import { createSubtractiveVoice } from './subtractiveVoice';
 import { withSeededRandom } from '../rng';
 import { SUBTRACTIVE_INIT, presetById } from '@/utils/synthPresets';
+import { noteFrequency } from '@/utils/musicTheory';
 import type { ActiveSynth, FilterType, LfoTriggerMode, ModRoute, ModTarget, NoiseColor, SubtractiveParams } from '@/types/synth';
 
 const SAMPLE_RATE = 44100;
 /** The note every fixture plays. C3 — the same note the calibration harness uses. */
 const NOTE = 'C3';
+const NOTE_FREQ = noteFrequency(NOTE);
 /**
  * Every render here runs on a seeded random source, and the noise comparisons
  * are the reason. A noise buffer is drawn from `src/audio/rng.ts`'s shared
@@ -76,7 +78,7 @@ async function renderNote(
     const ctx: any = new OfflineAudioContext(2, Math.round(SAMPLE_RATE * seconds), SAMPLE_RATE);
     const engine = createRenderEngine(ctx);
     engine.setMasterVolume(1);
-    const voiceId = engine.triggerSynthNoteOn(NOTE, synth, 1, 0, 'synth', 1, 'sequencer');
+    const voiceId = engine.triggerSynthNoteOn(NOTE_FREQ, synth, 1, 0, 'synth', 1, 'sequencer');
     if (!voiceId) throw new Error('the render engine returned no voice id — nothing was scheduled');
     engine.triggerSynthNoteOff(voiceId, synth.patch.synth.ampEnvelope.release, holdSeconds);
     const buffer: any = await ctx.startRendering();
@@ -688,7 +690,7 @@ describe('an LFO edit reaches a voice that is already sounding', () => {
       const ctx: any = new OfflineAudioContext(2, Math.round(SAMPLE_RATE * 1.4), SAMPLE_RATE);
       const engine = createRenderEngine(ctx);
       engine.setMasterVolume(1);
-      const voiceId = engine.triggerSynthNoteOn(NOTE, before, 1, 0, 'synth', 1, 'sequencer');
+      const voiceId = engine.triggerSynthNoteOn(NOTE_FREQ, before, 1, 0, 'synth', 1, 'sequencer');
       if (!voiceId) throw new Error('the render engine returned no voice id — nothing was scheduled');
       engine.updateSynthPatch(before, after, 'synth');
       engine.triggerSynthNoteOff(voiceId, after.patch.synth.ampEnvelope.release, 1.2);
@@ -1032,6 +1034,7 @@ describe('every LFO target reaches the param it names: filter, amplitude and pan
 describe('a polyphony re-balance keeps the ramp it interrupts', () => {
   /** C7, ~2093 Hz: six cycles fit in the 3 ms window, so a short RMS is steady. */
   const NOTE_HZ_NAME = 'C7';
+  const NOTE_HZ = noteFrequency(NOTE_HZ_NAME);
   const SETTLED_AT_S = 0.05;
   const FIRST_AT_S = 0.1;
   /** 8 ms into the first ramp's 15 ms — inside it, which is the whole case. */
@@ -1061,7 +1064,7 @@ describe('a polyphony re-balance keeps the ramp it interrupts', () => {
     const voice = createSubtractiveVoice(
       ctx,
       steadyTone().patch,
-      { source: 'synth', owner: 'live', noteName: NOTE_HZ_NAME, velocity: 1, at: 0 },
+      { source: 'synth', owner: 'live', frequency: NOTE_HZ, velocity: 1, at: 0 },
       { output: ctx.destination },
     );
     // The two scales a third key-down produces: 1 -> 1/5 -> 1/10. Deeper than

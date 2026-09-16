@@ -10,6 +10,7 @@ import { useAppStore } from './store';
 import { sliderPosTodB } from '../utils/gainUnits';
 import type { VoiceId } from '../audio/synth/voiceId';
 import type { ActiveSynth } from '../types/synth';
+import { noteFrequency } from '@/utils/musicTheory';
 
 /** The NEXT patch of one `updateSynthPatch` call — argument 1, not argument 0.
  *  Argument 0 is what the engine is told the patch WAS; the pair is what the
@@ -140,14 +141,14 @@ function disconnectByRemoval(input: FakeMidiInput): void {
  */
 function spyNotePair() {
   const on = spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation(
-    (note: string) => `voice-${note}` as VoiceId,
+    (frequency: number) => `voice-${frequency}` as VoiceId,
   );
   const off = spyOn(audioEngine, 'triggerSynthNoteOff').mockClear();
   return {
     on,
     off,
-    /** The NOTES the releases addressed, recovered from the ids they were given. */
-    releasedNotes: () => off.mock.calls.map((call) => String(call[0]).replace('voice-', '')),
+    /** The FREQUENCIES the releases addressed, recovered from the ids they were given. */
+    releasedFrequencies: () => off.mock.calls.map((call) => Number(String(call[0]).replace('voice-', ''))),
     restore: () => {
       on.mockRestore();
       off.mockRestore();
@@ -163,7 +164,7 @@ describe('startMidiInputBridge releases held notes on disconnect (state flip —
 
     disconnectByStateFlip(input);
 
-    expect(spies.off.mock.calls.map((call) => call[0])).toEqual(['voice-C4' as VoiceId]);
+    expect(spies.off.mock.calls.map((call) => call[0])).toEqual([`voice-${noteFrequency('C4')}` as VoiceId]);
     spies.restore();
   });
 
@@ -175,7 +176,7 @@ describe('startMidiInputBridge releases held notes on disconnect (state flip —
 
     disconnectByStateFlip(input);
 
-    expect(spies.releasedNotes().sort()).toEqual(['C4', 'E4']);
+    expect(spies.releasedFrequencies().sort((a, b) => a - b)).toEqual(['C4', 'E4'].map((n) => noteFrequency(n)).sort((a, b) => a - b));
     spies.restore();
   });
 
@@ -198,7 +199,7 @@ describe('startMidiInputBridge releases held notes on disconnect (map removal fa
 
     disconnectByRemoval(input);
 
-    expect(spies.releasedNotes()).toEqual(['G4']);
+    expect(spies.releasedFrequencies()).toEqual(['G4'].map((n) => noteFrequency(n)));
     spies.restore();
   });
 
@@ -214,7 +215,7 @@ describe('startMidiInputBridge releases held notes on disconnect (map removal fa
     access.inputs.delete(input.id);
     access.onstatechange?.({ port: input });
 
-    expect(spies.releasedNotes()).toEqual(['C4']);
+    expect(spies.releasedFrequencies()).toEqual(['C4'].map((n) => noteFrequency(n)));
     spies.restore();
   });
 });

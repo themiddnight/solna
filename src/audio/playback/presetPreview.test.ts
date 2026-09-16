@@ -4,7 +4,7 @@ import { freshEngine } from '../testFakes';
 import type { ChordItem } from '@/types';
 import type { ActiveSynth } from '@/types/synth';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
-import { generateBlockChordNotes } from '@/utils/musicTheory';
+import { generateBlockChordNotes, noteFrequency } from '@/utils/musicTheory';
 import { previewChordProgression, previewSequencerNote, previewSynthPatch } from './presetPreview';
 import {
   resetNoteInputListeners,
@@ -40,14 +40,15 @@ function withFakeAudioEngine() {
 /**
  * The voice groups the manager is holding on the shared preview bus.
  *
- * One entry per NOTE-ON (a unison stack is one group), with the note it
- * sounds, the audio-clock instant it starts and whether it has been released.
+ * One entry per NOTE-ON (a unison stack is one group), with the resolved
+ * frequency it sounds, the audio-clock instant it starts and whether it has
+ * been released.
  * Reached through the manager's private map because the engine deliberately
  * exposes no per-source voice accessor — a public one would be a door into
  * voice state for `src/components/`, which may not have it.
  */
 interface PreviewGroup {
-  noteName: string;
+  frequency: number;
   startedAt: number;
   releasing: boolean;
   voices: { nodes: { ampGain: { gain: { cancels: number[] } } } }[];
@@ -119,7 +120,7 @@ describe('preview handle lifetimes', () => {
       // to reach into the 2nd preview it no longer owns.
       const current = previewSequencerNote('E4', SYNTH, 0.8);
 
-      const currentGroup = previewGroups().find((g) => g.noteName === 'E4')!;
+      const currentGroup = previewGroups().find((g) => g.frequency === noteFrequency('E4'))!;
       expect(currentGroup).toBeTruthy();
       const cancels = currentGroup.voices[0].nodes.ampGain.gain.cancels;
       const before = cancels.length;
@@ -387,9 +388,9 @@ describe('a preview auditions the patch it is handed', () => {
     const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
     try {
       previewSequencerNote('C4', LOUD, 0.8);
-      const [note, synth, velocity, , source, scaleFactor, owner] = onSpy.mock.calls[0];
-      expect([note, synth, velocity, source, scaleFactor, owner]).toEqual(
-        ['C4', LOUD, 0.8, 'preview', 1, 'preview'],
+      const [freq, synth, velocity, , source, scaleFactor, owner] = onSpy.mock.calls[0];
+      expect([freq, synth, velocity, source, scaleFactor, owner]).toEqual(
+        [noteFrequency('C4'), LOUD, 0.8, 'preview', 1, 'preview'],
       );
     } finally {
       onSpy.mockRestore();
@@ -402,9 +403,9 @@ describe('a preview auditions the patch it is handed', () => {
     const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
     try {
       previewSynthPatch(LOUD);
-      const [note, synth, , , source, scaleFactor, owner] = onSpy.mock.calls[0];
-      expect([note, synth, source, scaleFactor, owner]).toEqual(
-        ['C4', LOUD, 'preview', 1, 'preview'],
+      const [freq, synth, , , source, scaleFactor, owner] = onSpy.mock.calls[0];
+      expect([freq, synth, source, scaleFactor, owner]).toEqual(
+        [noteFrequency('C4'), LOUD, 'preview', 1, 'preview'],
       );
     } finally {
       onSpy.mockRestore();
@@ -418,7 +419,7 @@ describe('a preview auditions the patch it is handed', () => {
     try {
       const chords: ChordItem[] = [{ id: 'p1', root: 'A', quality: 'min7', bars: 1 }];
       previewChordProgression(chords, SYNTH, undefined);
-      const expected = generateBlockChordNotes('min7', 'A', 4);
+      const expected = generateBlockChordNotes('min7', 'A', 4).map((n) => noteFrequency(n));
       const played = onSpy.mock.calls.map((call) => call[0]);
       expect(played).toEqual(expected);
     } finally {

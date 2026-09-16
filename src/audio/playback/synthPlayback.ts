@@ -4,6 +4,7 @@ import type { ActiveSynth } from "@/types/synth";
 import type { VoiceId } from "../synth/voiceId";
 import type { SynthControlTarget } from "@/utils/synthControl";
 import type { VoiceOwner } from "../voiceOwner";
+import { noteFrequency } from "@/utils/musicTheory";
 
 // Thin engine bridge for SoundView's keyboard/arp handlers (layering rule 3):
 // the view never touches audio/engine directly. The handlers keep all their
@@ -55,7 +56,9 @@ export function synthPlaybackNoteOn(
   scaleFactor = 1,
 ): VoiceId | null {
   const voiceId = audioEngine.triggerSynthNoteOn(
-    note,
+    // DEV-399: the boundary. Below this line the engine knows only Hz; `note`
+    // survives for the note-input bus, which is what a recorder reads.
+    noteFrequency(note),
     synth,
     velocity,
     time,

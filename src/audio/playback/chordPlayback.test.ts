@@ -8,6 +8,7 @@ import type { VoiceId } from '../synth/voiceId';
 import { cycleStepAt, equalPowerVelocityScale } from '@/audio/chordRhythms';
 import type { RhythmPattern } from '@/data/chordRhythms';
 import { arpStepFor } from '@/utils/meter';
+import { noteFrequency } from '@/utils/musicTheory';
 import {
   arpEventsForStep,
   buildChordEvents,
@@ -36,10 +37,10 @@ const RELEASE = SUBTRACTIVE_INIT.patch.synth.ampEnvelope.release;
  * twice inside one assertion, and `toHaveBeenCalledWith` only needs the pair
  * to agree.
  */
-const voiceIdFor = (note: string) => `voice-${note}` as VoiceId;
+const voiceIdFor = (frequency: number) => `voice-${frequency}` as VoiceId;
 
-/** The inverse of `voiceIdFor`, for a spy that logs by note name. */
-const noteOfVoice = (voiceId: VoiceId) => voiceId.replace('voice-', '');
+/** The inverse of `voiceIdFor`, for a spy that logs by the frequency it played. */
+const freqOfVoice = (voiceId: VoiceId) => Number(voiceId.replace('voice-', ''));
 
 /**
  * The note-on spy every scheduling test needs. It must RETURN an id: the
@@ -48,8 +49,8 @@ const noteOfVoice = (voiceId: VoiceId) => voiceId.replace('voice-', '');
  * release the test is about to assert on.
  */
 function spyNoteOn() {
-  return spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation((note: string) =>
-    voiceIdFor(note),
+  return spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation((frequency: number) =>
+    voiceIdFor(frequency),
   );
 }
 
@@ -69,9 +70,9 @@ describe('legato chord preview', () => {
     // `undefined`, not a literal 0: triggerSynthNoteOn only falls back to
     // ctx.currentTime for a nullish time, so passing 0 would pin the whole
     // envelope to the audio clock's origin instead of "now".
-    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, scaled, undefined, 'chord', 1, 'preview');
-    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, scaled, undefined, 'chord', 1, 'preview');
-    expect(onSpy).toHaveBeenCalledWith('G4', SYNTH, scaled, undefined, 'chord', 1, 'preview');
+    expect(onSpy).toHaveBeenCalledWith(noteFrequency('C4'), SYNTH, scaled, undefined, 'chord', 1, 'preview');
+    expect(onSpy).toHaveBeenCalledWith(noteFrequency('E4'), SYNTH, scaled, undefined, 'chord', 1, 'preview');
+    expect(onSpy).toHaveBeenCalledWith(noteFrequency('G4'), SYNTH, scaled, undefined, 'chord', 1, 'preview');
     // Legato = the envelope sustains until the caller releases the preview.
     expect(offSpy).not.toHaveBeenCalled();
 
@@ -306,7 +307,7 @@ describe('scheduleWholeChord walks exactly the cycle it is handed', () => {
       32,
       32,
     );
-    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, 1, 2.5, 'chord', 1, 'sequencer');
+    expect(onSpy).toHaveBeenCalledWith(noteFrequency('E4'), SYNTH, 1, 2.5, 'chord', 1, 'sequencer');
     onSpy.mockRestore();
   });
 
@@ -321,7 +322,7 @@ describe('scheduleWholeChord walks exactly the cycle it is handed', () => {
       16,
       16,
     );
-    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, 1, 0.5, 'chord', 1, 'sequencer');
+    expect(onSpy).toHaveBeenCalledWith(noteFrequency('E4'), SYNTH, 1, 0.5, 'chord', 1, 'sequencer');
     onSpy.mockRestore();
   });
 
@@ -341,8 +342,8 @@ describe('scheduleWholeChord walks exactly the cycle it is handed', () => {
       32,
     );
     expect(onSpy).toHaveBeenCalledTimes(1);
-    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, 1, 0, 'chord', 1, 'sequencer');
-    expect(offSpy).toHaveBeenCalledWith(voiceIdFor('C4'), RELEASE, 4);
+    expect(onSpy).toHaveBeenCalledWith(noteFrequency('C4'), SYNTH, 1, 0, 'chord', 1, 'sequencer');
+    expect(offSpy).toHaveBeenCalledWith(voiceIdFor(noteFrequency('C4')), RELEASE, 4);
     onSpy.mockRestore();
     offSpy.mockRestore();
   });
@@ -393,8 +394,8 @@ describe('emitStepEvents note-off clamping', () => {
       12,
     );
 
-    expect(onSpy).toHaveBeenCalledWith('C4', SYNTH, 0.8, 11.5, 'chord', 1, 'sequencer');
-    expect(offSpy).toHaveBeenCalledWith(voiceIdFor('C4'), RELEASE, 12);
+    expect(onSpy).toHaveBeenCalledWith(noteFrequency('C4'), SYNTH, 0.8, 11.5, 'chord', 1, 'sequencer');
+    expect(offSpy).toHaveBeenCalledWith(voiceIdFor(noteFrequency('C4')), RELEASE, 12);
 
     onSpy.mockRestore();
     offSpy.mockRestore();
@@ -414,7 +415,7 @@ describe('emitStepEvents note-off clamping', () => {
       14,
     );
 
-    expect(offSpy).toHaveBeenCalledWith(voiceIdFor('C4'), RELEASE, 13);
+    expect(offSpy).toHaveBeenCalledWith(voiceIdFor(noteFrequency('C4')), RELEASE, 13);
 
     onSpy.mockRestore();
     offSpy.mockRestore();
@@ -432,32 +433,35 @@ describe('emitStepEvents note-off clamping', () => {
       14,
     );
 
-    expect(onSpy).toHaveBeenCalledWith('E4', SYNTH, 0.7, 11.53, 'chord', 1, 'sequencer');
-    expect(offSpy).toHaveBeenCalledWith(voiceIdFor('E4'), RELEASE, 11.78);
+    expect(onSpy).toHaveBeenCalledWith(noteFrequency('E4'), SYNTH, 0.7, 11.53, 'chord', 1, 'sequencer');
+    expect(offSpy).toHaveBeenCalledWith(voiceIdFor(noteFrequency('E4')), RELEASE, 11.78);
 
     onSpy.mockRestore();
     offSpy.mockRestore();
   });
 
   test('a strummed note on a chord last step never gets an off before its on', () => {
-    const calls: Array<{ kind: 'on' | 'off'; note: string; time: number }> = [];
+    const calls: Array<{ kind: 'on' | 'off'; freq: number; time: number }> = [];
     const spyOn_ = spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation(
-      (note: string, _s, _v, time) => {
-        calls.push({ kind: 'on', note, time: time ?? 0 });
-        return voiceIdFor(note);
+      (frequency: number, _s, _v, time) => {
+        calls.push({ kind: 'on', freq: frequency, time: time ?? 0 });
+        return voiceIdFor(frequency);
       },
     );
     const spyOff = spyOn(audioEngine, 'triggerSynthNoteOff').mockImplementation(
-      (voiceId, _r, time) => { calls.push({ kind: 'off', note: noteOfVoice(voiceId), time: time ?? 0 }); },
+      (voiceId, _r, time) => { calls.push({ kind: 'off', freq: freqOfVoice(voiceId), time: time ?? 0 }); },
     );
     try {
       // 200 BPM: one 16th is 0.075 s. A 4-note strum spreads 3 * 30 ms = 0.09 s,
       // so the last note's start is already past the chord's own end.
       const time = 10;
       const chordEnd = 10.075;
+      // Four distinct real note names — distinct so each resolves to its own
+      // Hz and the on/off pairing below can tell them apart by frequency.
+      const notes = ['C4', 'D4', 'E4', 'F4'];
       emitStepEvents(
-        [0, 1, 2, 3].map((i) => ({
-          noteName: `N${i}`, velocity: 0.8, timeOffset: i * 0.03, hold: 0.2,
+        notes.map((noteName, i) => ({
+          noteName, velocity: 0.8, timeOffset: i * 0.03, hold: 0.2,
         })),
         SYNTH,
         'chord',
@@ -465,9 +469,10 @@ describe('emitStepEvents note-off clamping', () => {
         chordEnd,
       );
 
-      for (const note of ['N0', 'N1', 'N2', 'N3']) {
-        const on = calls.find((c) => c.kind === 'on' && c.note === note)!;
-        const off = calls.find((c) => c.kind === 'off' && c.note === note)!;
+      for (const note of notes) {
+        const freq = noteFrequency(note);
+        const on = calls.find((c) => c.kind === 'on' && c.freq === freq)!;
+        const off = calls.find((c) => c.kind === 'off' && c.freq === freq)!;
         expect(off.time).toBeGreaterThan(on.time);
       }
     } finally {
@@ -518,9 +523,9 @@ describe('scheduleWholeChord', () => {
     // Bar 0's C4 may ring over the bar line at 12; bar 1's is cut at the chord
     // end (14). The approach note fires only on the last bar.
     expect(offSpy.mock.calls).toEqual([
-      [voiceIdFor('C4'), RELEASE, 13],
-      [voiceIdFor('C4'), RELEASE, 14],
-      [voiceIdFor('B3'), RELEASE, 14],
+      [voiceIdFor(noteFrequency('C4')), RELEASE, 13],
+      [voiceIdFor(noteFrequency('C4')), RELEASE, 14],
+      [voiceIdFor(noteFrequency('B3')), RELEASE, 14],
     ]);
 
     onSpy.mockRestore();
@@ -753,8 +758,9 @@ describe('full-hold chord scheduling', () => {
 
     const scaled = 0.8 * equalPowerVelocityScale(7);
     for (const n of notes) {
-      expect(onSpy).toHaveBeenCalledWith(n, SYNTH, scaled, 10, 'chord', 1, 'sequencer');
-      expect(offSpy).toHaveBeenCalledWith(voiceIdFor(n), RELEASE, 14);
+      const freq = noteFrequency(n);
+      expect(onSpy).toHaveBeenCalledWith(freq, SYNTH, scaled, 10, 'chord', 1, 'sequencer');
+      expect(offSpy).toHaveBeenCalledWith(voiceIdFor(freq), RELEASE, 14);
     }
     expect(onSpy).toHaveBeenCalledTimes(7);
 

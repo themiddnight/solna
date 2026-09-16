@@ -60,6 +60,104 @@ const TONAL_SCOPED_PACKAGE_BAN = {
     "DEV-394: '@tonaljs/*' scoped subpackages are confined to the same one file as the bare 'tonal' import, src/musicCore/tonalAdapter.ts — import from '@/musicCore' instead.",
 };
 
+// DEV-399: the ENGINE — src/audio/engine.ts, src/audio/synth/**, and the two
+// other DSP runtimes beside them — receives already-resolved playable events
+// and takes no key, scale, chord, spelling or notation decision. It therefore
+// imports no music-domain module. The controllers in src/audio/playback/ and
+// the theory modules beside them (arpeggiator.ts, bassPatterns.ts,
+// chordProgressions.ts, leadMelody.ts) are deliberately NOT in this block's
+// file set: resolving a pitch is their job, and this ban would be wrong there.
+//
+// `@/utils/musicTheory` is split rather than banned whole, because that module
+// holds timing helpers too (STEPS_PER_BAR, stepDurationSec) and an engine
+// legitimately reads those. `allowImportNames` is an ALLOWLIST on purpose: a
+// music-domain export added to musicTheory.ts later is banned here on the day
+// it is written, with no edit to this file. The allowlist is narrower than
+// "every timing export" — musicTheory.ts also exports timing values like
+// `sixteenthNoteMs`, `MIN_BPM` and `MAX_BPM` that stay BANNED here, because the
+// engine has never needed them; the four names below are exactly what
+// `src/audio/engine.ts` and its neighbours actually read today, not a claim
+// about the module's shape.
+//
+// `**/leadStepRecord` bans `noteOctave`, a hand-rolled note-name parser living
+// beside the sequencer's step-record helpers — the same kind of thing as the
+// banned `@/musicCore` `octaveOfNote`, just not routed through Music Core.
+// Nothing in the engine's file set imports it today; it is named here so it
+// stays that way rather than becoming a silent second door into note-name
+// parsing.
+//
+// Every audio-side theory module below — `arpeggiator.ts`, `bassPatterns.ts`,
+// `chordProgressions.ts`, `chordRhythms.ts`, `leadMelody.ts`, plus
+// `leadStepRecord.ts` above — lives directly inside `src/audio/`, a sibling of
+// `engine.ts`, `drumSynth.ts` and `masterRack.ts`, so every one of them is
+// banned by a BARE pattern (`**/arpeggiator`, not `**/audio/arpeggiator`). A
+// prefixed pattern only matches an import path that literally contains an
+// `audio/` segment — true for the `@/`-aliased form (`@/audio/arpeggiator`)
+// but never true for the relative form a sibling file actually writes
+// (`./arpeggiator` from `engine.ts`, `../arpeggiator` from
+// `src/audio/synth/**`) — neither contains `audio/` at all, because the
+// traversal never leaves the `src/audio/` directory. A first pass at this
+// list used the prefixed form for these five and shipped a real gap, caught
+// only by testing the relative form on-disk rather than trusting the pattern;
+// `**/leadStepRecord` was fixed the same way one round earlier and is the
+// precedent this generalizes. `**/bassPatterns`, `**/chordProgressions` and
+// `**/chordRhythms` also subsume the separate `**/data/*` entries those three
+// names used to need below — a data-layer catalog and an audio-side resolver
+// share a basename for each of the three, and one bare pattern now bans both
+// copies, so the redundant `**/data/*` entries were removed rather than kept
+// duplicated.
+//
+// Both import forms are covered for every entry in this list: the
+// `@/`-aliased one a reader reaches for by habit and the `../`/`../../`/`./`
+// relative one the engine files actually use today (`src/audio/engine.ts`
+// imports `'../utils/musicTheory'`). A DEV-397 re-review found a real gate
+// that had closed only the aliased form for one entry; this DEV-399 guard's
+// own review found the same hole across six.
+//
+// `**/playback/**` (+ `**/playback`, for the folder-index form) closes the
+// last route back to a note name: DEV-397's planners (`src/audio/playback/
+// plan/**`) export shapes carrying note names — `ArmedChordPlan`'s
+// `chordNotes`/`bassNotes`/`bassFullHold.noteName`, `chordPlayback.ts`'s
+// `BarInvariantEvent`/`StepEvent` — and the controllers under
+// `src/audio/playback/` that the message above tells an author to write live
+// there too — so even a TYPE-ONLY import of a planner's output, or an import
+// of a controller bridge, would put a note name straight back into a file
+// this guard is supposed to keep domain-agnostic, with no runtime cycle for
+// anything else to catch. `playback/` is a real path segment for both import
+// forms an engine file would actually write (`@/audio/playback/...` aliased,
+// `./playback/...` relative from `engine.ts`), so — unlike the six
+// sibling-file entries above — the bare `**/playback/**` form needs no
+// special-casing here; the separate bare `**/playback` entry is only for the
+// folder-index import (`from '@/audio/playback'`/`'./playback'`) that
+// `**/playback/**` alone does not reach, matching the `**/musicCore` +
+// `**/musicCore/**` pair in the same group for the same reason.
+const ENGINE_MUSIC_DOMAIN_BAN = [
+  {
+    group: [
+      '**/musicCore',
+      '**/musicCore/**',
+      '**/utils/noteSpelling',
+      '**/data/scales',
+      '**/arpeggiator',
+      '**/bassPatterns',
+      '**/chordProgressions',
+      '**/chordRhythms',
+      '**/leadMelody',
+      '**/leadStepRecord',
+      '**/playback',
+      '**/playback/**',
+    ],
+    message:
+      'DEV-399: the engine receives resolved playable events — resolve pitch/scale/chord in a controller under src/audio/playback/ and pass a frequency in Hz.',
+  },
+  {
+    group: ['**/utils/musicTheory'],
+    allowImportNames: ['STEPS_PER_BAR', 'clampBpm', 'stepDurationSec', 'barDurationSec'],
+    message:
+      'DEV-399: the engine may read the TIMING half of musicTheory only — pitch, chord, scale and reharmonization helpers belong to the controllers (see noteFrequency at the playback boundary).',
+  },
+];
+
 // The two bans that must reach EVERY file: React.FC (decision D1) and the
 // `../../` deep-relative-import ban (decision D2). `no-restricted-syntax` is
 // not additive — a config block that sets it REPLACES this entry for the files
@@ -334,6 +432,51 @@ export default tseslint.config(
         ...GLOBAL_RESTRICTED_GLOBALS,
       ],
       'no-restricted-syntax': ['error', ...GLOBAL_RESTRICTED_SYNTAX, ...AUDIO_RANDOM_BAN_SYNTAX],
+    },
+  },
+  {
+    // DEV-399: the audio ENGINE is a domain-agnostic runtime. It takes a
+    // resolved frequency in Hz, an opaque VoiceId and an owner; it parses no
+    // note name and reads no scale, chord, spelling or reharmonization module.
+    //
+    // The file set is the runtime itself: the engine facade, the synth voice
+    // runtime, and the two DSP units beside them. src/audio/clock.ts is
+    // deliberately absent — it is a timing service whose whole job is bpm math
+    // — and so is every controller under src/audio/playback/, whose job is to
+    // do the resolving this block forbids here.
+    //
+    // Landed directly at 'error' per D5: Task 2 emptied the file set of every
+    // music-domain import before this block existed, so there is nothing to
+    // phase in a 'warn' for.
+    //
+    // The list below REPLACES the src/audio/** entry rather than merging with
+    // it (flat config semantics — see the src/data/ block's own comments), so
+    // the audio-wide bans are spread back in. Leaving them out would silently
+    // un-ban `tonal`, the store and components in exactly the folder that must
+    // be the most domain-free code in the app — and the store half of that is
+    // also what keeps "the audio engine never writes persisted application
+    // state" true.
+    files: [
+      'src/audio/engine.ts',
+      'src/audio/synth/**/*.{ts,tsx}',
+      'src/audio/drumSynth.ts',
+      'src/audio/masterRack.ts',
+    ],
+    ignores: ['src/audio/**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [TONAL_IMPORT_BAN],
+          patterns: [
+            TONAL_SCOPED_PACKAGE_BAN,
+            { group: ['**/store/**'], message: 'audio/ must not import store/ (layering rule 1)' },
+            { group: ['**/components/**'], message: 'audio/ must not import components/ (layering rule 1)' },
+            TAPER_CONVERSION_BAN,
+            ...ENGINE_MUSIC_DOMAIN_BAN,
+          ],
+        },
+      ],
     },
   },
   {

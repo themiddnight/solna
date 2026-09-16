@@ -7,7 +7,6 @@ import type {
   OscillatorParams,
   SubtractiveParams,
 } from '@/types/synth';
-import { noteFrequency } from '@/utils/musicTheory';
 import { dbToGain, GAIN_PER_DB_AT_UNITY, semitonesToRatio } from '@/utils/synthPatch';
 import { random } from '../rng';
 import type { VoiceOwner } from '../voiceOwner';
@@ -93,7 +92,14 @@ export interface SubtractiveVoiceDestinations {
 export interface SubtractiveVoiceEvent {
   source: string;
   owner: VoiceOwner;
-  noteName: string;
+  /**
+   * The pitch this voice sounds, in Hz, ALREADY RESOLVED by whatever
+   * scheduled it (DEV-399). Never a note name: a name is a notation decision
+   * and the engine takes none — and a name in here is the raw material a
+   * `${source}:${noteName}` voice lookup gets rebuilt from, which is the exact
+   * defect `voiceId.ts` exists to prevent.
+   */
+  frequency: number;
   velocity: number;
   at: number;
   unisonIndex?: number;
@@ -137,11 +143,12 @@ export interface SubtractiveVoice {
   readonly source: string;
   readonly owner: VoiceOwner;
   /**
-   * The note this voice is sounding NOW, which is not always the note that
-   * built it: `glideTo` rewrites it, so a Mono voice carried across a legato
-   * phrase reports the pitch in the air rather than the one it was born on.
+   * The frequency this voice is sounding NOW in Hz, which is not always the
+   * one that built it: `glideTo` rewrites it, so a Mono voice carried across a
+   * legato phrase reports the pitch in the air rather than the one it was born
+   * on.
    */
-  readonly noteName: string;
+  readonly frequency: number;
   readonly startedAt: number;
   readonly nodes: SubtractiveVoiceNodes;
   /**
@@ -205,8 +212,8 @@ export interface SubtractiveVoice {
   setPolyphonyScale(scale: number, at: number): void;
   /**
    * Retunes every pitched source — both oscillator slots and the sub — to
-   * `noteName`, exponentially in Hz over `seconds`; `seconds` of 0 moves the
-   * pitch on the instant. A key-tracked cutoff follows, unless ENV2 owns it.
+   * `frequency` Hz, exponentially; `seconds` of 0 moves the pitch on the
+   * instant. A key-tracked cutoff follows, unless ENV2 owns it.
    *
    * No envelope is touched: this is the legato half of Mono voice mode, where
    * an overlapping note bends the sounding voice instead of starting a new
@@ -217,7 +224,7 @@ export interface SubtractiveVoice {
    * from the ramp, never read off `param.value`, for the same reason
    * `release` computes its own anchors.
    */
-  glideTo(noteName: string, at: number, seconds: number): void;
+  glideTo(frequency: number, at: number, seconds: number): void;
   /**
    * Schedules every source to stop at the audio-clock time `at`, and touches
    * no edge of the graph. Idempotent. This is the half of teardown that can be
@@ -977,8 +984,8 @@ function createVoiceRelease(
 
 /** The glide half of a voice: the note it is sounding, and how to bend it to another. */
 interface VoiceGlide {
-  readonly noteName: string;
-  glideTo(noteName: string, at: number, seconds: number): void;
+  readonly frequency: number;
+  glideTo(frequency: number, at: number, seconds: number): void;
   /**
    * Re-applies one pitched source's STATIC tuning after `tuning.ratios` has
    * changed, preserving any glide still in flight. A plain `setValueAtTime`
@@ -1005,10 +1012,8 @@ interface VoiceGlide {
 function createVoiceGlide(
   nodes: SubtractiveVoiceNodes,
   tuning: VoiceTuning,
-  startNoteName: string,
   startAt: number,
 ): VoiceGlide {
-  let currentNoteName = startNoteName;
   let ramp: PitchRamp = {
     from: tuning.baseFrequency,
     to: tuning.baseFrequency,
@@ -1076,13 +1081,14 @@ function createVoiceGlide(
   }
 
   return {
-    get noteName(): string {
-      return currentNoteName;
+    get frequency(): number {
+      // `tuning.baseFrequency` IS the note in the air — `glideTo` writes it on
+      // every bend — so there is no second copy to keep in step.
+      return tuning.baseFrequency;
     },
-    glideTo(noteName: string, at: number, seconds: number): void {
-      ramp = { from: frequencyAt(at), to: noteFrequency(noteName), startAt: at, endAt: at + Math.max(0, seconds) };
+    glideTo(frequency: number, at: number, seconds: number): void {
+      ramp = { from: frequencyAt(at), to: frequency, startAt: at, endAt: at + Math.max(0, seconds) };
       tuning.baseFrequency = ramp.to;
-      currentNoteName = noteName;
       retuneOscillator(0, at);
       retuneOscillator(1, at);
       retuneSub(at);
@@ -1115,7 +1121,7 @@ export function createSubtractiveVoice(
   const spread = unisonSpread(event.unisonIndex ?? 0, unisonCount);
   const unisonCents = spread * common.unisonDetuneCents;
   const panPosition = clamp(spread * clamp(common.stereoWidth, 0, 1), -1, 1);
-  const baseFrequency = noteFrequency(event.noteName);
+  const baseFrequency = event.frequency;
   const amounts = sumRouteAmounts(synth.env2Routes);
   let currentSynth = synth; // What is playing NOW; see `lfoDestinationFor`.
 
@@ -1150,7 +1156,7 @@ export function createSubtractiveVoice(
     filter: { cutoffHz: synth.filter.cutoffHz, keyTrack: synth.filter.keyTrack },
     sampleRate: ctx.sampleRate,
   };
-  const glide = createVoiceGlide(nodes, tuning, event.noteName, at);
+  const glide = createVoiceGlide(nodes, tuning, at);
   // Every anchor is COMPUTED, never read off `param.value` — a sequenced
   // note-off is booked ahead of time, and `.value` reports the value now.
   const release = createVoiceRelease(
@@ -1202,8 +1208,8 @@ export function createSubtractiveVoice(
     id: `subtractive-${nextVoiceSerial}`,
     source: event.source,
     owner: event.owner,
-    get noteName(): string {
-      return glide.noteName;
+    get frequency(): number {
+      return glide.frequency;
     },
     startedAt: at,
     nodes,

@@ -173,19 +173,27 @@ export class AudioEngine {
 
   // SynthVoiceManager
   /**
-   * Starts one logical voice and hands back the identity that addresses it.
+   * Starts one logical voice at a RESOLVED FREQUENCY and hands back the
+   * identity that addresses it.
+   *
+   * `frequency` is Hz, already resolved by the controller that scheduled this
+   * note (DEV-399). The engine takes no key, scale, chord or notation
+   * decision, and it never parses a note name: a name is domain vocabulary,
+   * and the one place it would be read from here is a
+   * `` `${source}:${noteName}` `` voice lookup — the defect `VoiceId` exists to
+   * make unrepresentable.
    *
    * The return value is the whole point of this API: three players share every
    * melodic bus (the live keyboard, the arp, the melody-track sequencer), so a
-   * `` `${source}:${noteName}` `` lookup names as many voices as happen to be
-   * sounding that note and a note-off resolved that way cuts whichever one it
-   * finds. A bridge keeps the ID it was given and releases THAT instance.
+   * source-and-pitch pair names as many voices as happen to be sounding and a
+   * note-off resolved that way cuts whichever one it finds. A bridge keeps the
+   * ID it was given and releases THAT instance.
    *
    * `null` before the AudioContext exists — the same no-op-before-init
    * contract every setter on this class follows.
    */
   triggerSynthNoteOn(
-    noteName: string,
+    frequency: number,
     synth: ActiveSynth,
     velocity = DEFAULT_VELOCITY,
     time: number | undefined,
@@ -202,7 +210,7 @@ export class AudioEngine {
     return this.synthManager.noteOn({
       source,
       owner,
-      noteName,
+      frequency,
       velocity,
       at: time ?? ctx.currentTime,
       scaleFactor,

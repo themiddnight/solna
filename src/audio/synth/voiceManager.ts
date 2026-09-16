@@ -97,10 +97,10 @@ import { createVoiceIdAllocator, type VoiceId } from './voiceId';
  */
 export interface ManagedVoice extends LfoVoiceHandle {
   readonly owner: VoiceOwner;
-  readonly noteName: string;
+  readonly frequency: number;
   readonly startedAt: number;
   release(at: number, seconds: number): void;
-  glideTo(noteName: string, at: number, seconds: number): void;
+  glideTo(frequency: number, at: number, seconds: number): void;
   update(previous: EnginePatch<'subtractive'>, next: EnginePatch<'subtractive'>, at: number): void;
   /** Ramps this voice's polyphony gain — see `SynthVoiceManager.setPolyphonyScale`. */
   setPolyphonyScale(scale: number, at: number): void;
@@ -144,7 +144,8 @@ export type TeardownSchedule = (callback: () => void, delayMs: number) => () => 
 export interface SynthVoiceNoteOn {
   source: string;
   owner: VoiceOwner;
-  noteName: string;
+  /** The pitch to sound, in Hz, resolved by the caller — see `SubtractiveVoiceEvent.frequency`. */
+  frequency: number;
   velocity: number;
   at: number;
   /**
@@ -245,7 +246,7 @@ interface VoiceGroup {
   readonly voices: ManagedVoice[];
   /** This group's own amp release, the default `releaseOwner` falls back to. */
   readonly ampReleaseSeconds: number;
-  noteName: string;
+  frequency: number;
   releasing: boolean;
   stolen: boolean;
   cancelTeardown: (() => void) | null;
@@ -261,7 +262,7 @@ interface VoiceGroup {
 /** One held note on a Mono channel. The ID is what makes the stack owner-safe. */
 interface MonoEntry {
   id: VoiceId;
-  noteName: string;
+  frequency: number;
   owner: VoiceOwner;
 }
 
@@ -450,7 +451,7 @@ export class SynthVoiceManager {
       // and follows whatever note is now on top.
       channel.stack = kept;
       const top = kept[kept.length - 1];
-      if (top.noteName !== channel.group.noteName) this.glideChannel(channel, top.noteName, at);
+      if (top.frequency !== channel.group.frequency) this.glideChannel(channel, top.frequency, at);
       return;
     }
     // Nothing holds it any more. Unlike `monoRelease`, this cuts a group that
@@ -583,13 +584,13 @@ export class SynthVoiceManager {
    */
   private monoNoteOn(input: SynthVoiceNoteOn, destinations: SubtractiveVoiceDestinations): VoiceId {
     const id = this.nextVoiceId();
-    const entry: MonoEntry = { id, noteName: input.noteName, owner: input.owner };
+    const entry: MonoEntry = { id, frequency: input.frequency, owner: input.owner };
     const glideSeconds = Math.max(0, input.synth.patch.common.glideSeconds);
     const channel = this.mono.get(input.source);
     if (channel && channel.stack.length > 0) {
       channel.glideSeconds = glideSeconds;
       channel.stack.push(entry);
-      this.glideChannel(channel, input.noteName, input.at);
+      this.glideChannel(channel, input.frequency, input.at);
     } else {
       const group = this.createGroup(this.nextVoiceId(), input, destinations);
       this.mono.set(input.source, { group, stack: [entry], glideSeconds });
@@ -613,7 +614,7 @@ export class SynthVoiceManager {
       const event: SubtractiveVoiceEvent = {
         source: input.source,
         owner: input.owner,
-        noteName: input.noteName,
+        frequency: input.frequency,
         velocity: input.velocity,
         at: input.at,
         unisonIndex,
@@ -630,7 +631,7 @@ export class SynthVoiceManager {
       startedAt: input.at,
       voices,
       ampReleaseSeconds: patch.synth.ampEnvelope.release * scaleFactor,
-      noteName: input.noteName,
+      frequency: input.frequency,
       releasing: false,
       stolen: false,
       cancelTeardown: null,
@@ -645,9 +646,9 @@ export class SynthVoiceManager {
     return group;
   }
 
-  private glideChannel(channel: MonoChannel, noteName: string, at: number): void {
-    for (const voice of channel.group.voices) voice.glideTo(noteName, at, channel.glideSeconds);
-    channel.group.noteName = noteName;
+  private glideChannel(channel: MonoChannel, frequency: number, at: number): void {
+    for (const voice of channel.group.voices) voice.glideTo(frequency, at, channel.glideSeconds);
+    channel.group.frequency = frequency;
   }
 
   /**
@@ -672,7 +673,7 @@ export class SynthVoiceManager {
       return;
     }
     const top = kept[kept.length - 1];
-    if (top.noteName !== channel.group.noteName) this.glideChannel(channel, top.noteName, at);
+    if (top.frequency !== channel.group.frequency) this.glideChannel(channel, top.frequency, at);
   }
 
   private releaseGroup(group: VoiceGroup, at: number, releaseSeconds: number): void {

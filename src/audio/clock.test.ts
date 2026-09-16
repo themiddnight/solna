@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { bindFakeCtx, fakeCtx, freshEngine, makeEngine, type EngineInstance } from './testFakes';
-import { barDurationSec, STEPS_PER_BAR, stepDurationSec } from '../utils/musicTheory';
+import { barDurationSec, noteFrequency, STEPS_PER_BAR, stepDurationSec } from '../utils/musicTheory';
 import { getMeter } from '../utils/meter';
 import { ACTIVE_SYNTH, suspendableEngine } from './engineTestHelpers';
 
@@ -14,6 +14,7 @@ import { ACTIVE_SYNTH, suspendableEngine } from './engineTestHelpers';
 // after the test that created it finishes, so every engine this file creates
 // is tracked here and stopped in afterEach.
 const activeEngines: EngineInstance[] = [];
+const C4_HZ = noteFrequency('C4');
 
 afterEach(() => {
   for (const engine of activeEngines) {
@@ -562,7 +563,7 @@ describe("idle suspend and wakeIfIdle", () => {
 
   test('a live voice blocks the suspend', () => {
     const { engine, ctx } = suspendableEngine();
-    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn(C4_HZ, ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     (engine as any).maybeSuspendNow();
     expect(ctx.suspendCalls).toBe(0);
   });
@@ -612,7 +613,7 @@ describe("a suspended context freezes the audio clock", () => {
   test('a releasing voice also blocks the suspend — a release tail must never be cut', () => {
     const { engine, ctx } = suspendableEngine();
     const e = engine as any;
-    const id = engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    const id = engine.triggerSynthNoteOn(C4_HZ, ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     engine.triggerSynthNoteOff(id!, 0.5, ctx.currentTime);
     e.maybeSuspendNow();
     expect(ctx.suspendCalls).toBe(0);
@@ -622,7 +623,7 @@ describe("a suspended context freezes the audio clock", () => {
   test('wakeIfIdle re-arms every pending teardown against the frozen audio clock, when THIS engine idle-suspended', () => {
     const { engine, ctx } = suspendableEngine();
     const e = engine as any;
-    const id = engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    const id = engine.triggerSynthNoteOn(C4_HZ, ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     engine.triggerSynthNoteOff(id!, 0.5, ctx.currentTime);
     const rearm = spyOn(e.synthManager, 'rearmTeardowns');
 
@@ -648,7 +649,7 @@ describe("a suspended context freezes the audio clock", () => {
     const { engine, ctx } = suspendableEngine();
     const e = engine as any;
     ctx.state = 'suspended';
-    const id = engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    const id = engine.triggerSynthNoteOn(C4_HZ, ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     engine.triggerSynthNoteOff(id!, 0.5, ctx.currentTime);
     const rearm = spyOn(e.synthManager, 'rearmTeardowns');
 
@@ -675,7 +676,7 @@ describe("every activity path re-arms the idle countdown", () => {
     e.maybeSuspendNow();
     expect(ctx.state).toBe('suspended');
 
-    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn(C4_HZ, ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     expect(ctx.resumeCalls).toBe(1);
   });
 
@@ -705,7 +706,7 @@ describe("every activity path re-arms the idle countdown", () => {
     const { engine, ctx } = freshEngine();
     const e = engine as any;
     expect(e.idleTimer).toBeNull();
-    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn(C4_HZ, ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     expect(e.idleTimer).not.toBeNull();
   });
 
@@ -801,7 +802,7 @@ describe("activity marks and the resume-failure path", () => {
     // Prove recoverability end-to-end: the very next sound-producing trigger
     // retries resume(), it is not stuck silent forever.
     ctx.resume = async () => { resumeAttempts++; ctx.state = 'running'; };
-    engine.triggerSynthNoteOn('C4', ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
+    engine.triggerSynthNoteOn(C4_HZ, ACTIVE_SYNTH, 0.8, ctx.currentTime, 'synth', 1, 'live');
     expect(resumeAttempts).toBe(2);
   });
 });

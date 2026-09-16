@@ -8,6 +8,7 @@ import {
   getDiatonicChordForDegree,
   shiftNoteOctave,
   barDurationSec,
+  noteFrequency,
   stepDurationSec,
 } from "@/utils/musicTheory";
 import { DEFAULT_VELOCITY } from "../constants";
@@ -134,7 +135,7 @@ export function emitStepEvents(
   const releaseSeconds = synthReleaseSeconds(synth);
   for (const ev of events) {
     const start = time + ev.timeOffset;
-    const voiceId = engine.triggerSynthNoteOn(ev.noteName, synth, ev.velocity, start, source, 1, "sequencer");
+    const voiceId = engine.triggerSynthNoteOn(noteFrequency(ev.noteName), synth, ev.velocity, start, source, 1, "sequencer");
     // The clamp to chordEnd stops a long feel hold from overlapping the next
     // chord — but a strum's later notes start up to (n-1)*30 ms after `time`,
     // and on a chord's LAST step at high bpm (200 bpm = 0.075 s/step) that
@@ -280,7 +281,7 @@ export function playFullHoldChord(
 ): void {
   for (const n of notes) {
     const voiceId = engine.triggerSynthNoteOn(
-      n,
+      noteFrequency(n),
       synth,
       DEFAULT_VELOCITY * equalPowerVelocityScale(notes.length),
       startTime,
@@ -324,7 +325,7 @@ export function playChordLegato(
   engine.stopSource("chord", 0.05);
   for (const note of notes) {
     engine.triggerSynthNoteOn(
-      note,
+      noteFrequency(note),
       synth,
       DEFAULT_VELOCITY * equalPowerVelocityScale(notes.length),
       undefined,
