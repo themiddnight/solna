@@ -16,7 +16,6 @@
 export {
   chromaOfNote,
   intervalDistance,
-  intervalSemitones,
   midiToFlatName,
   midiToSharpName,
   noteMidi,
@@ -28,11 +27,10 @@ export {
 export {
   CHORD_QUALITY_ALIASES,
   CHORD_QUALITY_GROUPS,
-  CHORD_QUALITY_REGISTRY,
   ROOTS,
   formatChordQuality,
   getChordQualityEntry,
   isChordQuality,
   resolveChordNotes,
 } from './chordQuality';
-export type { ChordQuality, ChordQualityEntry } from './chordQuality';
+export type { ChordQuality } from './chordQuality';
