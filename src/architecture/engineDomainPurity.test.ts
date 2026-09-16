@@ -125,6 +125,8 @@ const PLAYBACK_ROUTE_CASES: Array<[label: string, source: string]> = [
     "import type { ArmedChordPlan } from '@/audio/playback/plan/chordPlan';\nexport type X = ArmedChordPlan;\n"],
   ['a controller bridge, relative',
     "import { synthPlaybackNoteOn } from '../playback/synthPlayback';\nexport const f = synthPlaybackNoteOn;\n"],
+  ['the playback folder index, aliased (no barrel file exists today, but the pattern must reach it)',
+    "import { chordPlayback } from '@/audio/playback';\nexport const c = chordPlayback;\n"],
 ];
 
 describe('engine music-domain guard (DEV-399)', () => {

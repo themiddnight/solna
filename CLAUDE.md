@@ -534,10 +534,13 @@ engine may still read the TIMING half of `utils/musicTheory.ts`** (`STEPS_PER_BA
 allowlist over that module rather than a ban on it, so a pitch, chord, scale or reharmonization
 export added there later is banned in the engine on the day it is written, with no config edit.
 The gate covers `src/audio/engine.ts`, `src/audio/synth/**`, `drumSynth.ts` and `masterRack.ts`,
-and deliberately not `clock.ts` (a timing service) or `src/audio/playback/**` (the controllers
-whose job is the resolving it forbids); `src/architecture/engineDomainPurity.test.ts` is the
-committed proof that the block is armed, at `error`, in both the aliased and the relative import
-form.
+and deliberately not `clock.ts` (a timing service) or `src/audio/playback/**` itself (the
+controllers whose job is the resolving it forbids) — but the guarded files may not IMPORT from
+`src/audio/playback/**` either, since a planner's own output types there still name a pitch
+(`ArmedChordPlan`, `BarInvariantEvent`), so even a type-only import would smuggle a note name
+back into the engine with no runtime cycle to catch it; `src/architecture/engineDomainPurity.test.ts`
+is the committed proof that the block is armed, at `error`, in both the aliased and the relative
+import form.
 
 **Equal-power polyphony rides a gain of its own, never the envelope.** One bus's total level stays
 flat as keys are added to it: `applySynthVelocityScale(scale, source)` reaches

@@ -114,18 +114,23 @@ const TONAL_SCOPED_PACKAGE_BAN = {
 // that had closed only the aliased form for one entry; this DEV-399 guard's
 // own review found the same hole across six.
 //
-// `**/playback/**` closes the last route back to a note name: DEV-397's
-// planners (`src/audio/playback/plan/**`) return shapes carrying
-// `noteName: string` (`ChordLanePlan`, `BassLanePlan`, `PlannedMelodyNote`),
-// and the controllers under `src/audio/playback/` that the message above
-// tells an author to write live there too — so even a TYPE-ONLY import of a
-// planner's output, or an import of a controller bridge, would put
-// `noteName` straight back into a file this guard is supposed to keep
-// domain-agnostic, with no runtime cycle for anything else to catch.
-// `playback/` is a real path segment for both import forms an engine file
-// would actually write (`@/audio/playback/...` aliased, `./playback/...`
-// relative from `engine.ts`), so — unlike the six sibling-file entries above
-// — the bare form needs no special-casing here.
+// `**/playback/**` (+ `**/playback`, for the folder-index form) closes the
+// last route back to a note name: DEV-397's planners (`src/audio/playback/
+// plan/**`) export shapes carrying note names — `ArmedChordPlan`'s
+// `chordNotes`/`bassNotes`/`bassFullHold.noteName`, `chordPlayback.ts`'s
+// `BarInvariantEvent`/`StepEvent` — and the controllers under
+// `src/audio/playback/` that the message above tells an author to write live
+// there too — so even a TYPE-ONLY import of a planner's output, or an import
+// of a controller bridge, would put a note name straight back into a file
+// this guard is supposed to keep domain-agnostic, with no runtime cycle for
+// anything else to catch. `playback/` is a real path segment for both import
+// forms an engine file would actually write (`@/audio/playback/...` aliased,
+// `./playback/...` relative from `engine.ts`), so — unlike the six
+// sibling-file entries above — the bare `**/playback/**` form needs no
+// special-casing here; the separate bare `**/playback` entry is only for the
+// folder-index import (`from '@/audio/playback'`/`'./playback'`) that
+// `**/playback/**` alone does not reach, matching the `**/musicCore` +
+// `**/musicCore/**` pair in the same group for the same reason.
 const ENGINE_MUSIC_DOMAIN_BAN = [
   {
     group: [
@@ -139,6 +144,7 @@ const ENGINE_MUSIC_DOMAIN_BAN = [
       '**/chordRhythms',
       '**/leadMelody',
       '**/leadStepRecord',
+      '**/playback',
       '**/playback/**',
     ],
     message:
