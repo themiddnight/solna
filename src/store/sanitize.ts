@@ -7,6 +7,7 @@ import type { SynthControlTarget } from '@/utils/synthControl';
 import { EFFECT_LIMITS, clampEffectValue, type EffectNumericKey } from '../audio/effectLimits';
 import type {
   ChordItem,
+  CustomChordProgressionItem,
   PadInterval,
   PadMode,
   PadVoicing,
@@ -22,7 +23,7 @@ import { resizePatternBars } from '../utils/customPattern';
 import { DEFAULT_METER_ID, getMeter, MAX_STEPS_PER_BAR, type MeterId } from '../utils/meter';
 import { clampLoopLength } from '../utils/patternTimeline';
 import { LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
-import { isChordQuality } from '@/musicCore';
+import { getChordQualityEntry } from '@/musicCore';
 import type { Loop } from './types';
 import type { LeadNote } from '../audio/leadMelody';
 import {
@@ -388,6 +389,16 @@ function asCheckedArray<T>(value: unknown, isElement: (v: unknown) => boolean, f
  * sanitizeLoops) — the array falls back to the default loop's chords rather
  * than being repaired field by field, matching every other array of records in
  * this file.
+ *
+ * Quality is checked with `getChordQualityEntry(...)?.token === value.quality`,
+ * NOT the bare `isChordQuality` guard: `isChordQuality`'s own docblock says
+ * its case-insensitive narrow is unsound for anything that persists the value
+ * or uses it as a lookup key, and this function admits the original-case
+ * string straight into `ChordItem.quality`, typed as canonical `ChordQuality`.
+ * A wrong-case-but-registered token (`'Min7'`) would pass `isChordQuality` yet
+ * match no `<select>` option and no exact-token comparison downstream — the
+ * token-equality check rejects anything not already in its exact canonical
+ * spelling.
  */
 function isChordItem(value: unknown): boolean {
   if (!isPlainObject(value)) return false;
@@ -396,12 +407,54 @@ function isChordItem(value: unknown): boolean {
     typeof value.root === 'string' &&
     isRootNote(value.root) &&
     typeof value.quality === 'string' &&
-    isChordQuality(value.quality) &&
+    getChordQualityEntry(value.quality)?.token === value.quality &&
     typeof value.bars === 'number' &&
     Number.isFinite(value.bars) &&
     value.bars > 0 &&
     isStringArray(value.notes)
   );
+}
+
+/**
+ * The user's saved chord-progression library, read back out of `localStorage`
+ * OR validated inline before an imported JSON file's entries ever reach
+ * `saveCustomChordProgression` (see `ChordPresetLibrary.tsx`'s `handleImport`,
+ * which calls this same function on the parsed file before saving anything —
+ * the persisted-state read alone only protects a later reload, not the
+ * same-session apply this import feeds into).
+ *
+ * DROPS rather than repairs, the same policy `sanitizeCustomSynthPresets`
+ * documents above: a progression is a named library entry, and a chord
+ * `resolveChordNotes` can no longer render (an unregistered quality, a root
+ * Tonal can't resolve, a wrong-case quality) is not a progression to hand
+ * back under the user's own name with the sound silently swapped for
+ * something else. Every chord in an entry is checked with the same
+ * `isChordItem` guard `sanitizeLoops` uses for a loop's own chords, so the
+ * two paths a bad chord could reach `resolveChordNotes` through — a loop
+ * body and this library — reject it the same way.
+ */
+export function sanitizeCustomChordProgressions(value: unknown): CustomChordProgressionItem[] {
+  if (!Array.isArray(value)) return [];
+  const kept: CustomChordProgressionItem[] = [];
+  for (const raw of value) {
+    if (!isPlainObject(raw)) continue;
+    if (typeof raw.id !== 'string' || raw.id === '') continue;
+    if (typeof raw.name !== 'string' || raw.name === '') continue;
+    if (!Array.isArray(raw.chords) || raw.chords.length === 0 || !raw.chords.every(isChordItem)) continue;
+    kept.push({
+      id: raw.id,
+      name: raw.name,
+      category: typeof raw.category === 'string' ? raw.category : 'User',
+      description: typeof raw.description === 'string' ? raw.description : '',
+      roman: typeof raw.roman === 'string' ? raw.roman : '',
+      chords: raw.chords as ChordItem[],
+      createdAt:
+        typeof raw.createdAt === 'number' && Number.isFinite(raw.createdAt)
+          ? raw.createdAt
+          : Date.now(),
+    });
+  }
+  return kept;
 }
 
 // Exhaustive by construction: a new BassStepChoice member fails to compile

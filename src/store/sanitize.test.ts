@@ -3,6 +3,7 @@ import {
   asLeadNoteMatrix,
   clampFinite,
   isPlainObject,
+  sanitizeCustomChordProgressions,
   sanitizeEffectsValue,
   sanitizeLoops,
   sanitizeTrackArp,
@@ -261,6 +262,10 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
     // playback rather than letting the throw surface deep inside the engine.
     ['a chord with an unregistered quality', 'chords', [{ id: 'c', root: 'A', quality: 'not-a-real-quality', bars: 1, notes: ['A3'] }]],
     ['a chord with an unresolvable root', 'chords', [{ id: 'c', root: 'H', quality: 'min', bars: 1, notes: ['A3'] }]],
+    // isChordQuality's own docblock (musicCore/chordQuality.ts) says its
+    // case-insensitive narrow is unsound for anything that persists the
+    // value — a registered-but-wrong-case token must still be rejected here.
+    ['a chord with a wrong-case quality', 'chords', [{ id: 'c', root: 'A', quality: 'Min7', bars: 1, notes: ['A3'] }]],
     ['customChordRhythm of strings', 'customChordRhythm', ['on', 'off']],
     ['customBassPattern outside the union', 'customBassPattern', ['root', 'ninth']],
     // A hold is a finite positive integer, so a zero, a negative, a fraction or
@@ -463,6 +468,48 @@ describe('sanitizeLoops keeps the custom pattern lanes dormant-safe and bounded'
     // path would have produced from a non-finite width.
     expect(out.customChordHoldSteps.every((hold) => Number.isInteger(hold) && hold >= 1)).toBe(true);
     expect(out.customBassHoldSteps.every((hold) => Number.isInteger(hold) && hold >= 1)).toBe(true);
+  });
+});
+
+describe('sanitizeCustomChordProgressions', () => {
+  const validProgression = {
+    id: 'chord-prog-1',
+    name: 'My Progression',
+    category: 'User',
+    description: '',
+    roman: 'i - iv',
+    chords: [{ id: 'c1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] }],
+    createdAt: 2000,
+  };
+
+  test('a non-array value sanitizes to an empty library', () => {
+    expect(sanitizeCustomChordProgressions('not-an-array')).toEqual([]);
+    expect(sanitizeCustomChordProgressions(null)).toEqual([]);
+  });
+
+  test('a valid entry is kept as it stands', () => {
+    expect(sanitizeCustomChordProgressions([validProgression])).toEqual([validProgression]);
+  });
+
+  test('an entry with an unregistered quality is dropped whole, not repaired', () => {
+    const bad = {
+      ...validProgression,
+      chords: [{ id: 'c1', root: 'A', quality: 'not-a-real-quality', bars: 1, notes: ['A3'] }],
+    };
+    expect(sanitizeCustomChordProgressions([bad])).toEqual([]);
+  });
+
+  test('an entry with an unresolvable root is dropped whole, not repaired', () => {
+    const bad = {
+      ...validProgression,
+      chords: [{ id: 'c1', root: 'H', quality: 'min', bars: 1, notes: ['A3'] }],
+    };
+    expect(sanitizeCustomChordProgressions([bad])).toEqual([]);
+  });
+
+  test('a bad entry does not knock out a valid sibling entry', () => {
+    const bad = { ...validProgression, id: 'chord-prog-2', chords: [{ id: 'c1', root: 'A', quality: 'nope' }] };
+    expect(sanitizeCustomChordProgressions([validProgression, bad])).toEqual([validProgression]);
   });
 });
 

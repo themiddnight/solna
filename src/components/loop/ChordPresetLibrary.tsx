@@ -3,6 +3,7 @@ import { Download, Music, Play, Sparkles, Trash2, Upload } from 'lucide-react';
 import type { ChordItem, CustomChordProgressionItem } from '@/types';
 import type { ActiveSynth } from '@/types/synth';
 import { useAppStore } from '@/store/store';
+import { sanitizeCustomChordProgressions } from '@/store/sanitize';
 import { CHORD_PROGRESSIONS, type ChordProgression } from '@/data/chordProgressions';
 import { resolveProgression } from '@/audio/chordProgressions';
 import { PresetLibrary } from '../ui/PresetLibrary';
@@ -318,9 +319,16 @@ function useChordPresetFiles({
       try {
         const imported = JSON.parse(evt.target?.result as string);
         if (Array.isArray(imported)) {
+          // Validated, never repaired — same contract as SynthPresetLibrary's
+          // handleImport. An imported file is untrusted input, and a chord
+          // whose root or quality resolveChordNotes can no longer render
+          // (an unregistered quality, a root Tonal can't resolve) would
+          // otherwise crash the first time this progression is applied,
+          // uncaught, inside a click handler.
+          const validated = sanitizeCustomChordProgressions(imported);
           // Each save prepends to the store, so walk backwards to keep the
           // imported file's original order on top of the existing list.
-          [...imported]
+          [...validated]
             .reverse()
             .forEach((item: CustomChordProgressionItem) => {
               useAppStore.getState().saveCustomChordProgression(
@@ -331,7 +339,13 @@ function useChordPresetFiles({
                 item.roman
               );
             });
-          showToast(`Imported ${imported.length} chord progressions!`);
+          const skipped = imported.length - validated.length;
+          showToast(
+            skipped === 0
+              ? `Imported ${validated.length} chord progressions!`
+              : `Imported ${validated.length} chord progressions, skipped ${skipped} unreadable`,
+            skipped === 0 ? 'success' : 'error',
+          );
         }
       } catch {
         showToast('Invalid JSON chord progression file', 'error');
