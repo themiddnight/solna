@@ -1,3 +1,4 @@
+import type { ChordPlanSnapshot } from '@/audio/playback/plan/chordPlan';
 import type { PadPlanSnapshot } from '@/audio/playback/plan/padPlan';
 import { getMeter } from '@/utils/meter';
 import type { AppStore } from './types';
@@ -30,5 +31,42 @@ export function padPlanSnapshot(s: AppStore): PadPlanSnapshot {
     scaleType: s.scaleType,
     bpm: s.bpm,
     stepsPerBar: getMeter(s.meterId).stepsPerBar,
+  };
+}
+
+/**
+ * The chord+bass lanes' ARM-time snapshot. Both lanes are armed together off
+ * one read of the loop state, so one snapshot serves both — but each lane
+ * resolves its own cycle from it, because their widths are independent.
+ *
+ * Arp arrives as a boolean, not as the settings object: the arp/pattern CHOICE
+ * is fixed when the chord is armed (flipping Arp mid-chord must not stack an
+ * arpeggio on a chord already sounding), while the arp's mode, rate and octaves
+ * are read live on every step and handed to `planChordStep`.
+ */
+export function chordPlanSnapshot(s: AppStore): ChordPlanSnapshot {
+  return {
+    chords: s.chords,
+    bpm: s.bpm,
+    meterId: s.meterId,
+    stepsPerBar: getMeter(s.meterId).stepsPerBar,
+    chordOctave: s.chordOctave,
+    bassOctave: s.bassOctave,
+    scaleRoot: s.scaleRoot,
+    scaleType: s.scaleType,
+    chordRhythmMode: s.chordRhythmMode,
+    chordRhythmId: s.chordRhythmId,
+    customChordRhythm: s.customChordRhythm,
+    customChordHoldSteps: s.customChordHoldSteps,
+    customChordLoopLength: s.customChordLoopLength,
+    chordFeel: s.chordFeel,
+    bassPatternMode: s.bassPatternMode,
+    bassPatternId: s.bassPatternId,
+    customBassPattern: s.customBassPattern,
+    customBassHoldSteps: s.customBassHoldSteps,
+    customBassLoopLength: s.customBassLoopLength,
+    bassFeel: s.bassFeel,
+    chordArpActive: s.chordArpSettings.active,
+    bassArpActive: s.bassArpSettings.active,
   };
 }
