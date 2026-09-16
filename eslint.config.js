@@ -271,6 +271,58 @@ export default tseslint.config(
     },
   },
   {
+    // DEV-397: src/audio/playback/plan/ holds PURE PLANNERS. A planner takes an
+    // immutable snapshot plus an explicit per-step context and returns resolved
+    // playable events; it may not read the store, touch the engine or an
+    // AudioContext, read a wall clock, arm a timer, or reach any other ambient
+    // global. Every scheduled time is an argument, which is what lets the live
+    // controllers and the offline renderer share one implementation and what
+    // makes a planner testable with no DOM, no zustand and no AudioContext.
+    //
+    // Landed directly at 'error' per D5: the folder is new, so the rule starts
+    // with nothing to phase in a 'warn' for.
+    //
+    // Both lists below REPLACE the broader src/audio/** entries rather than
+    // merging with them (flat config semantics — see the src/data/ block's own
+    // comments), so the audio-wide bans are spread back in. Leaving either
+    // spread out would silently un-ban `tonal` and `Math.random` in exactly the
+    // folder that must be the most deterministic code in the app.
+    //
+    // `Math` itself is NOT banned: planners legitimately use Math.max/floor.
+    // Math.random is covered by AUDIO_RANDOM_BAN_SYNTAX below.
+    files: ['src/audio/playback/plan/**/*.{ts,tsx}'],
+    ignores: ['src/audio/playback/plan/**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [TONAL_IMPORT_BAN],
+          patterns: [
+            TONAL_SCOPED_PACKAGE_BAN,
+            { group: ['**/store/**'], message: 'audio/ must not import store/ (layering rule 1)' },
+            { group: ['**/components/**'], message: 'audio/ must not import components/ (layering rule 1)' },
+            TAPER_CONVERSION_BAN,
+            {
+              group: ['**/audio/engine', '**/audio/engine/**', '**/playback/playbackEngine'],
+              message: 'a planner returns events; the controller calls the engine (DEV-397).',
+            },
+          ],
+        },
+      ],
+      'no-restricted-globals': [
+        'error',
+        ...['Date', 'performance', 'crypto', 'fetch', 'process', 'globalThis', 'window', 'document',
+          'localStorage', 'sessionStorage', 'setTimeout', 'setInterval', 'requestAnimationFrame',
+        ].map((name) => ({
+          name,
+          message: 'a planner is deterministic: no wall clock, no timers, no ambient globals (DEV-397).',
+        })),
+        ...GLOBAL_RESTRICTED_GLOBALS,
+      ],
+      'no-restricted-syntax': ['error', ...GLOBAL_RESTRICTED_SYNTAX, ...AUDIO_RANDOM_BAN_SYNTAX],
+    },
+  },
+  {
     // Layering rule 2: store/ must not import components/.
     // DEV-394 confines every `tonal` import to `src/musicCore/tonalAdapter.ts`,
     // so this ban now applies uniformly across `src/store/**` with no
