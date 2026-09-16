@@ -36,7 +36,7 @@ import {
 } from '../leadMelody';
 import { isApproachToken, resolveBassSteps } from '../bassPatterns';
 import { buildChordEvents, emitStepEvents, eventsForCycleStep, arpEventsForStep, playFullHoldChord, type BarInvariantEvent, type StepEvent } from '../playback/chordPlayback';
-import { resolvePadArm } from '../playback/padPlayback';
+import { planPadArm, type PadPlanSnapshot } from '../playback/plan/padPlan';
 import {
   cycleHoldScale,
   fullHoldDuration,
@@ -443,6 +443,31 @@ function resolveLoopCycles(
 }
 
 /**
+ * The pad lane's snapshot for one loop — the offline twin of
+ * `padPlanSnapshot` (src/store/playbackPlanSnapshots.ts). Both feed the same
+ * `planPadArm`, so an export and a live session can only disagree about the pad
+ * if these two builders disagree, which renderMixdown.test.ts pins directly.
+ */
+export function padSnapshotForLoop(
+  loop: MixdownLoop,
+  bpm: number,
+  stepsPerBar: number,
+): PadPlanSnapshot {
+  return {
+    mode: loop.padMode,
+    chords: loop.chords,
+    degree: loop.padDroneDegree,
+    intervals: loop.padDroneIntervals,
+    padOctave: loop.padOctave,
+    voicing: loop.padVoicing,
+    scaleRoot: loop.scaleRoot,
+    scaleType: loop.scaleType,
+    bpm,
+    stepsPerBar,
+  };
+}
+
+/**
  * One chord's bass events: empty when the pattern is arpeggiated or a full hold
  * (`skip` is the caller's `bassFullHold || bassArp`, computed once for the
  * loop), otherwise the steps resolved against the chord at `chordIndex`.
@@ -711,6 +736,7 @@ function scheduleArrangement(
     // for and nobody reads.
     const leadTrack = mixdownLeadTrack(loop);
     const fxTrack = mixdownFxTrack(loop);
+    const padSnapshot = padSnapshotForLoop(loop, snapshot.bpm, stepsPerBar);
 
     for (let i = 0; i < pass.dwellSteps; i += 1) {
       // Pass-relative, so repeats 2..n reset the chord plan exactly as a live
@@ -721,7 +747,6 @@ function scheduleArrangement(
       const time = step * stepDur;
       const stepInBar = stepInPass % stepsPerBar;
       const barInPass = Math.floor(stepInPass / stepsPerBar);
-      const isLoopStart = stepInPass === 0;
 
       // The Beat, through the SAME pure decision the live stepper uses: one
       // function answers "what sounds at this step" for both, so an export can
@@ -781,27 +806,12 @@ function scheduleArrangement(
           );
         }
 
-        // Pad. `resolvePadArm` is called per chord because pad mode arms on
-        // EVERY chord and drone mode only at the top of a pass — see its own
-        // docblock. The trigger is `playFullHoldChord` on the pad bus, which
-        // is exactly how the live hook holds a drone.
+        // Pad, through the SAME planner the live hook arms with. `chordIndex`
+        // carries what `isLoopStart` used to: the pad block only runs at
+        // `stepsIntoChord === 0`, and chord 0 starts at step 0 of the pass, so
+        // `chordIndex === 0` there is exactly the old `stepInPass === 0`.
         if (stepsIntoChord === 0) {
-          const arm = resolvePadArm({
-            mode: loop.padMode,
-            isLoopStart,
-            chord: loop.chords[chordIndex],
-            degree: loop.padDroneDegree,
-            intervals: loop.padDroneIntervals,
-            padOctave: loop.padOctave,
-            voicing: loop.padVoicing,
-            scaleRoot: loop.scaleRoot,
-            scaleType: loop.scaleType,
-            barDur: barDurationSec(snapshot.bpm, stepsPerBar),
-            // Only a drone reads the loop's length, and loopBars walks the
-            // whole progression — pad mode arms on every chord and must not
-            // pay for it. `pass.passSteps / stepsPerBar` is the pass's bars.
-            loopBarCount: pass.passSteps / stepsPerBar,
-          });
+          const arm = planPadArm(padSnapshot, { chordIndex });
           if (arm) {
             playFullHoldChord(arm.notes, loop.padSynthParams, time, arm.holdSec, 'pad', engine);
           }

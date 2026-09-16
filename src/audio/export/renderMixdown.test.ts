@@ -3,6 +3,7 @@ import { OfflineAudioContext } from 'node-web-audio-api';
 import {
   buildLoopVoices,
   MIXDOWN_SAMPLE_RATE,
+  padSnapshotForLoop,
   planArrangement,
   planLoopAudioAutomation,
   renderBassEventsAt,
@@ -30,6 +31,9 @@ import { generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
 import { MAX_STEPS_PER_BAR } from '@/utils/meter';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { BeatPattern, BeatVoices } from '@/types';
+import { padPlanSnapshot } from '@/store/playbackPlanSnapshots';
+import { planPadArm } from '../playback/plan/padPlan';
+import type { AppStore } from '@/store/types';
 
 // The capability probe reads `globalThis.OfflineAudioContext`, so the TEST
 // provides it — the same way a browser does. There is no injection seam in
@@ -779,6 +783,47 @@ describe('renderMixdown: every loop plays its OWN Beat patch', () => {
       expect(voices).not.toContain('kick');
     } finally {
       drumSpy.mockRestore();
+    }
+  });
+});
+
+describe('live and offline build the same pad snapshot', () => {
+  const chords = [
+    { id: 'c1', root: 'C', quality: 'maj' as const, bars: 2 },
+    { id: 'c2', root: 'A', quality: 'min' as const, bars: 2 },
+  ];
+  const loop = mixdownLoop({
+    chords,
+    padMode: 'drone',
+    padOctave: 4,
+    padVoicing: 'triad',
+    padDroneDegree: 1,
+    padDroneIntervals: [1, 5, 8],
+    scaleRoot: 'C',
+    scaleType: 'major',
+  });
+  const state = {
+    padMode: loop.padMode,
+    chords: loop.chords,
+    padDroneDegree: loop.padDroneDegree,
+    padDroneIntervals: loop.padDroneIntervals,
+    padOctave: loop.padOctave,
+    padVoicing: loop.padVoicing,
+    scaleRoot: loop.scaleRoot,
+    scaleType: loop.scaleType,
+    bpm: 120,
+    meterId: '4/4',
+  } as unknown as AppStore;
+
+  test('the offline snapshot deep-equals the store snapshot', () => {
+    expect(padSnapshotForLoop(loop, 120, 16)).toEqual(padPlanSnapshot(state));
+  });
+
+  test('and therefore both plan the same arm at every chord', () => {
+    for (const chordIndex of [0, 1, 2]) {
+      expect(planPadArm(padSnapshotForLoop(loop, 120, 16), { chordIndex })).toEqual(
+        planPadArm(padPlanSnapshot(state), { chordIndex }),
+      );
     }
   });
 });
