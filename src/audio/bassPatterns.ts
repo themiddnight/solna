@@ -1,6 +1,5 @@
-import { midiToSharpName, noteMidi } from '@/musicCore';
+import { midiToSharpName, noteMidi, pitchClassOfNote, scaleEntry } from '@/musicCore';
 import type { ChordItem } from '../types';
-import { SCALES } from '@/data/scales';
 import { rootSemitone, stepDurationSec } from '../utils/musicTheory';
 import { DEFAULT_VELOCITY } from './constants';
 import { groupByStyle } from './groupByStyle';
@@ -24,10 +23,6 @@ const FALLBACK_CHAIN: Record<'third' | 'fifth' | 'seventh', ('third' | 'fifth' |
   fifth: ['fifth', 'third'],
   third: ['third'],
 };
-
-function pitchClass(noteName: string): string {
-  return noteName.replace(/[0-9-]/g, '');
-}
 
 function midiAtOctave(pc: string, octave: number): number {
   return noteMidi(`${pc}${octave}`) ?? noteMidi(`C${octave}`) ?? 60;
@@ -83,8 +78,8 @@ export function resolveBassSteps(
   const nextChord = chords[(chordIndex + 1) % chords.length];
 
   // bassRoot = bassNote override (octave stripped, re-placed at bass octave) or chord.root
-  const bassRootMidi = midiAtOctave(pitchClass(chord.bassNote ?? chord.root), octave);
-  const nextRootMidi = midiAtOctave(pitchClass(nextChord.bassNote ?? nextChord.root), octave);
+  const bassRootMidi = midiAtOctave(pitchClassOfNote(chord.bassNote ?? chord.root), octave);
+  const nextRootMidi = midiAtOctave(pitchClassOfNote(nextChord.bassNote ?? nextChord.root), octave);
 
   const stepDur = stepDurationSec(bpm);
 
@@ -92,7 +87,7 @@ export function resolveBassSteps(
   const toneMidi = (token: 'third' | 'fifth' | 'seventh'): number => {
     for (const t of FALLBACK_CHAIN[token]) {
       const note = chord.notes[TONE_INDEX[t]];
-      if (note) return midiAtOctave(pitchClass(note), octave);
+      if (note) return midiAtOctave(pitchClassOfNote(note), octave);
     }
     return bassRootMidi;
   };
@@ -100,7 +95,7 @@ export function resolveBassSteps(
   // First scale degree (rootSemitone + intervals) above the target pitch class; wraps to next octave
   const diatonicStepAbove = (targetPc: number): number => {
     const rootPc = rootSemitone(scaleRoot);
-    const intervals = SCALES[scaleType]?.intervals ?? [0, 2, 4, 5, 7, 9, 11];
+    const intervals = scaleEntry(scaleType).intervals;
     let above: number | null = null;
     let lowest = 12;
     for (const ivl of intervals) {
