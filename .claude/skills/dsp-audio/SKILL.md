@@ -149,9 +149,14 @@ Key consequences:
 
 ## Voices and per-source buses
 
-- `triggerSynthNoteOn(noteName, synth, velocity, time, source, scaleFactor, owner)` takes a whole
-  `ActiveSynth` (engine id + patch + `sourcePresetId`) and RETURNS a `VoiceId | null` — the only
-  handle a note-off can address, and dropping it is how a note drones forever.
+- `triggerSynthNoteOn(frequency, synth, velocity, time, source, scaleFactor, owner)` takes an
+  already-resolved frequency in Hz — never a note name; the engine has no display vocabulary and
+  imports no Tonal/musicTheory pitch helper (`ENGINE_MUSIC_DOMAIN_BAN` in `eslint.config.js`,
+  DEV-399) — plus a whole `ActiveSynth` (engine id + patch + `sourcePresetId`), and RETURNS a
+  `VoiceId | null` — the only handle a note-off can address, and dropping it is how a note drones
+  forever. The `noteFrequency` conversion happens in the CONTROLLER that schedules the note
+  (`src/audio/playback/*.ts`), and `src/architecture/frequencyBoundary.test.ts` holds the
+  allowlist of every file permitted to call it.
   Sources in use: `'synth'`, `'fx'`, `'chord'`, `'bass'`, `'pad'`, `'preview'`. `owner` is a
   `VoiceOwner` (`src/audio/voiceOwner.ts`: `live` / `arp` / `sequencer` / `preview`), is
   **required with no default**, and is stored on the voice. The bridges in `audio/playback/`
@@ -164,13 +169,16 @@ Key consequences:
   owner's STARTED voices and leaves its future-scheduled hits alone — the arp key-release path.
   All three take the owner (or pointedly do not) as a required argument: whole-bus reach must
   never be reachable by leaving one off, which is how the pre-provenance defect existed.
-- Two maps: `activeVoices` keyed `${source}:${noteName}` (latest voice per note, for dedup) and
-  `sourceVoices: Map<string, Set<Voice>>` (every live *or future-scheduled* voice, so a whole
-  layer can be silenced).
+- `SynthVoiceManager` (`src/audio/synth/voiceManager.ts`) addresses a voice by its own `VoiceId`,
+  never by source-and-note: `registered: Map<VoiceId, Registration>` is every live voice, `groups`
+  is the poly groups per source, `mono` is the one shared group per mono source. A poly note-on
+  always allocates a NEW voice (no note-name dedup); the per-source budget (`maxVoicesPerSource`)
+  bounds the count and steals the oldest voice when it is exceeded.
 - `'bass'` is forced monophonic — a new bass note releases all other bass voices first.
-- One voice slot per `${source}:${noteName}` is still shared BETWEEN owners — see the deferred
-  note at `activeVoices` in `engine.ts`. Two players sounding the same note on one bus cut each
-  other short; that is known, and not what provenance fixed.
+- Two players sounding the "same" note on one bus never collide: each holds its own `VoiceId`, so
+  the live keyboard, the arp and the melody sequencer can never cut each other's notes short. A
+  mono bus is the one deliberately SHARED voice — several players can hold notes on it and
+  `group.owner` records only which of them built it.
 - Layer control goes through the lazy per-source `GainNode` bus: `setSourceGain(source, v)` /
   `setSourceMuted(source, bool)`, both with a ~10 ms `setTargetAtTime` ramp (click-free).
   `setupMasterChain()` clears `sourceBuses` because old buses point at dead nodes.

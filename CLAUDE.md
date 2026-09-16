@@ -134,7 +134,7 @@ decision — a chord's root/quality, a key, a note's pitch and timing) is not th
 **derived representation** (a value a pure function computes from musical intent, such as a
 resolved chord quality or a display-spelled label) or a **playable event** (a fully resolved,
 timestamped instruction — pitch and timing already resolved, voice ownership already assigned —
-that is the sole input the audio engine may take once DEV-399 narrows its contract); the full
+that is the sole input the audio engine takes (DEV-399); the full
 contract, including the compile-time, runtime-flow and data-ownership diagrams, lives in
 `docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md` (updated by
 DEV-394). `src/data/`'s own block already forbids every value import including `tonal`, so it
@@ -515,6 +515,28 @@ owner. A mono bus is the one SHARED voice: several players can hold notes on it,
 records only which of them built it, and every decision about it is therefore taken on the held-note
 stack — keying one off the owner stranded a sounding voice and left another player's id resolving
 to nothing.
+
+**The engine takes a frequency, not a note name, and that is where the music domain stops.**
+`triggerSynthNoteOn(frequency, synth, velocity, time, source, scaleFactor, owner)` takes Hz
+already resolved by its caller (DEV-399); `SynthVoiceNoteOn`, `ManagedVoice` and
+`SubtractiveVoiceEvent` all carry `frequency: number` and no note name at all. The conversion is
+`noteFrequency` — the same function, unmoved and unchanged — called by the CONTROLLER that
+schedules the note, and `src/architecture/frequencyBoundary.test.ts` holds the allowlist of the
+seven files permitted to name it, so adding an eighth is a decision a reviewer sees. Two things
+follow that are easy to undo by accident. **The engine has no display vocabulary and must not
+regain one**: a note name passed in "just for logging" is the raw material a
+`` `${source}:${noteName}` `` voice lookup gets rebuilt from, which is the exact defect `VoiceId`
+exists to make unrepresentable — the name belongs to the note-input bus
+(`emitNoteInput({ kind, note, … })` in `synthPlayback.ts`), which is a controller. And **the
+engine may still read the TIMING half of `utils/musicTheory.ts`** (`STEPS_PER_BAR`,
+`stepDurationSec`) — `ENGINE_MUSIC_DOMAIN_BAN` in `eslint.config.js` is an `allowImportNames`
+allowlist over that module rather than a ban on it, so a pitch, chord, scale or reharmonization
+export added there later is banned in the engine on the day it is written, with no config edit.
+The gate covers `src/audio/engine.ts`, `src/audio/synth/**`, `drumSynth.ts` and `masterRack.ts`,
+and deliberately not `clock.ts` (a timing service) or `src/audio/playback/**` (the controllers
+whose job is the resolving it forbids); `src/architecture/engineDomainPurity.test.ts` is the
+committed proof that the block is armed, at `error`, in both the aliased and the relative import
+form.
 
 **Equal-power polyphony rides a gain of its own, never the envelope.** One bus's total level stays
 flat as keys are added to it: `applySynthVelocityScale(scale, source)` reaches

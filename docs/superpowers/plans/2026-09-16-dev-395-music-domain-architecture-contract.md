@@ -34,9 +34,9 @@ src/store/ (application state: musical intent + runtime state)
     v                                              v
 playback planners                        src/audio/ (engine/DSP)
   <- NEW CONCEPT (DEV-397), pure                (never imports store/ or components/;
-     functions: snapshot of musical               may import data/; today may still import
-     intent in, playable events out.              Tonal/musicTheory directly — DEV-399
-     MUST NOT read the store, the engine,          narrows this once planners exist)
+     functions: snapshot of musical               may import data/; takes an
+     intent in, playable events out.              already-resolved frequency in Hz —
+     MUST NOT read the store, the engine,          DEV-399 — never a note name)
      `AudioContext`, or the wall clock.
     |
     v
@@ -48,7 +48,7 @@ playback controllers
      engine calls (`playbackNoteOn` etc.)
     |
     v
-src/audio/ (engine/DSP) — receives playable events only, once DEV-399 lands
+src/audio/ (engine/DSP) — receives playable events only (DEV-399)
 
 src/components/ (UI)
   -> may read src/store/ (musical intent, runtime state, derived representations)
@@ -132,7 +132,7 @@ The two flows use the *same* resolution functions in most lanes already (e.g. `u
 - **Application/store (`src/store/`)** — one Zustand store composed of slices; owns musical intent and non-playback-tick runtime state (`soloTracks`, `recordingTrack`, etc.). Never imports `components/` (existing layering rule 2, unchanged). Calls Music Core for anything Tonal-shaped; never calls a playback planner directly from a component-facing action (a planner is invoked by a controller, not by a store action).
 - **Playback planners (future, DEV-397)** — pure functions. Input: an immutable snapshot of musical intent (never the live Zustand singleton, never `useAppStore.getState()`). Output: playable events. Must not read the store, the audio engine, `AudioContext`, or the wall clock (`Date.now()`, `performance.now()`), and must not apply display spelling (a planner's output is for the engine, not for a person to read).
 - **Playback controllers (future, DEV-397)** — own the store subscription, the shared 16th-clock lifecycle (`subscribeClock`/`stopClockTimer` — "the clock runs iff a player holds a subscription", CLAUDE.md), and the hand-off of a planner's playable events into `src/audio/`'s engine calls. This is where side effects, `AudioContext` time, and the live store singleton are allowed to meet the planner's pure output.
-- **Audio engine/DSP (`src/audio/`)** — raw Web Audio API DSP plus the `audioEngine` singleton. Never imports `store/` or `components/` (existing layering rule 1, unchanged). May import `data/`. Once DEV-399 lands, takes only opaque voice identity and already-resolved pitch/timing — no Tonal, scale, chord, spelling or reharmonization import. Today, several files under `src/audio/` (`arpeggiator.ts`, `bassPatterns.ts`, `playback/padPlayback.ts`, and others via `musicTheory.ts`) still resolve pitch/chord logic inline rather than receiving pre-resolved playable events; none of them import `tonal` directly any more (DEV-394 routed them through `@/musicCore` instead), but that inline resolution is the pre-DEV-399 state this issue documents and partially gates, not a defect this issue fixes.
+- **Audio engine/DSP (`src/audio/`)** — raw Web Audio API DSP plus the `audioEngine` singleton. Never imports `store/` or `components/` (existing layering rule 1, unchanged). May import `data/`. Takes only an opaque `VoiceId`/owner for identity and an already-resolved `frequency: number` for pitch — no note name, no Tonal, scale, chord, spelling or reharmonization import — gated by `ENGINE_MUSIC_DOMAIN_BAN` in `eslint.config.js` and proven armed by `src/architecture/engineDomainPurity.test.ts` (DEV-399). `arpeggiator.ts`, `bassPatterns.ts` and `playback/padPlayback.ts` still resolve pitch/chord logic inline, and that is correct, not a gap: they are playback *controllers*, not the engine, and resolving pitch for the note they are about to schedule is precisely a controller's job. None of them import `tonal` directly (DEV-394 routed them through `@/musicCore` instead), and `src/architecture/frequencyBoundary.test.ts` holds the literal allowlist of every file permitted to call the `noteFrequency` conversion — a controller resolving pitch inline is the deliberate split this plan drew, not unfinished work toward removing it.
 - **UI (`src/components/`)** — dumb views. Must not import `audio/engine` (existing layering rule 3; the read-only analyser exceptions below are unchanged). Reads musical intent, derived representations and runtime state from the store via selectors; applies no music-domain logic of its own; never imports `tonal` and never will, at any point in the epic.
 
 ## Confirming the analyser exceptions remain compatible
