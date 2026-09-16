@@ -294,6 +294,56 @@ export function resolveDegreeQuality(scaleType: string, degree: number, use7ths:
   return quality;
 }
 
+/** Major-scale reference intervals, degree-index 0-6. Accidentals below are
+ *  relative to THIS, never to the active scale's own parent. */
+const MAJOR_REFERENCE_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
+
+/**
+ * A degree's Roman-numeral label — accidental, numeral and case, no quality
+ * suffix (the caller appends `formatChordQuality(quality)` itself, the same
+ * pairing `formatChordLabel` uses for a spelled root: this function is that
+ * function's Roman-numeral counterpart).
+ *
+ * Case comes from the chord's own third (`MINOR_THIRD_QUALITIES`) — the same
+ * test `formatChordLabel` and `getDiatonicChordForDegree`'s return already
+ * use — so a step with an explicit `ProgressionStep.quality` override still
+ * gets the numeral its ACTUAL chord implies, not the scale's plain diatonic
+ * one.
+ *
+ * Accidentals name a degree that differs from the identically-numbered
+ * Major-scale degree — the standard way to describe a mode's colour relative
+ * to its parent (Mixolydian's b7, Lydian's #4, Phrygian's b2/b3/b6/b7).
+ * Degree index 2 (the mediant) is a deliberate exception: common practice
+ * never marks a minor key's relative-major mediant (`III`, not `bIII`) —
+ * there is no competing raised form to distinguish it from, unlike VI/VII,
+ * which distinguish the natural- and harmonic/melodic-minor forms. A scale
+ * with fewer than 7 degrees has no meaningful position-by-position
+ * comparison against a 7-note Major scale, so it never gets an accidental.
+ */
+export function degreeToRoman(scaleType: string, normDegree: number, quality: ChordQuality): string {
+  const resolvedType = resolveScaleKey(scaleType);
+  const scale = SCALES[resolvedType];
+  const numDegrees = scale.intervals.length;
+
+  const ROMAN_NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+  const rawNumeral = ROMAN_NUMERALS[normDegree] || `${normDegree + 1}`;
+
+  const accidental =
+    numDegrees === 7 && normDegree !== 2
+      ? romanAccidental(scale.intervals[normDegree] - MAJOR_REFERENCE_INTERVALS[normDegree])
+      : '';
+
+  const numeral = accidental + rawNumeral;
+  return MINOR_THIRD_QUALITIES.has(quality) ? numeral.toLowerCase() : numeral;
+}
+
+function romanAccidental(semitoneDiff: number): string {
+  if (semitoneDiff === -1) return 'b';
+  if (semitoneDiff === 1) return '#';
+  if (semitoneDiff === 0) return '';
+  throw new Error(`Unrepresentable Roman-numeral accidental: ${semitoneDiff} semitones`);
+}
+
 /**
  * Given a scale degree index (0-based, 0 = Degree I, 1 = Degree II, etc.)
  * returns the diatonic root note and chord quality according to the active scale.
@@ -321,11 +371,7 @@ export function getDiatonicChordForDegree(
   // an unresolvable degree now throws inside the resolver rather than sounding
   // a wrong chord.
   const quality = resolveDegreeQuality(resolvedType, normDegree, use7ths);
-
-  const ROMAN_NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
-  const isMinor = MINOR_THIRD_QUALITIES.has(quality);
-  const rawNumeral = ROMAN_NUMERALS[normDegree] || `${normDegree + 1}`;
-  const degreeName = isMinor ? rawNumeral.toLowerCase() : rawNumeral;
+  const degreeName = degreeToRoman(scaleType, normDegree, quality);
 
   return {
     root: chordRoot,
