@@ -521,9 +521,10 @@ to nothing.
 already resolved by its caller (DEV-399); `SynthVoiceNoteOn`, `ManagedVoice` and
 `SubtractiveVoiceEvent` all carry `frequency: number` and no note name at all. The conversion is
 `noteFrequency` — the same function, unmoved and unchanged — called by the CONTROLLER that
-schedules the note, and `src/architecture/frequencyBoundary.test.ts` holds the allowlist of the
-seven files permitted to name it, so adding an eighth is a decision a reviewer sees. Two things
-follow that are easy to undo by accident. **The engine has no display vocabulary and must not
+schedules the note, and `src/architecture/frequencyBoundary.test.ts` holds the literal allowlist
+of files permitted to name it (walking both `src/` and `scripts/`, since a calibration script is
+a controller too), so widening the list is a decision a reviewer sees. Two things follow that are
+easy to undo by accident. **The engine has no display vocabulary and must not
 regain one**: a note name passed in "just for logging" is the raw material a
 `` `${source}:${noteName}` `` voice lookup gets rebuilt from, which is the exact defect `VoiceId`
 exists to make unrepresentable — the name belongs to the note-input bus
