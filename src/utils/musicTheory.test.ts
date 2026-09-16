@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isChordQuality, type ChordQuality } from '@/musicCore';
+import { CHORD_QUALITY_GROUPS, isChordQuality, type ChordQuality } from '@/musicCore';
 import {
   MAX_BPM,
   MIN_BPM,
@@ -28,6 +28,9 @@ import {
   transposeProgression,
 } from './musicTheory';
 import { SCALES } from '@/data/scales';
+import { progressionById, resolveProgression } from '@/audio/chordProgressions';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ChordItem } from '../types';
 
 const SCALE_KEYS = Object.keys(SCALES);
@@ -336,6 +339,146 @@ describe('snapProgressionToScale', () => {
         }
       }
     }
+  });
+
+  describe('quality classification on snap (DEV-393)', () => {
+    // Every chord here is rooted at C and snapped onto C Major's own tonic
+    // (degree 0) — root position never moves, so only the quality policy is
+    // under test. Degree 0's own diatonic qualities are 'maj' (triad) and
+    // 'maj7' (seventh), both different from every non-maj/maj7 input below,
+    // so "changed to maj/maj7" unambiguously means REGENERATED and
+    // "unchanged" unambiguously means PRESERVED.
+    const REGENERATE_TO_TRIAD: ChordQuality[] = ['min', 'dim', 'aug'];
+    const REGENERATE_TO_SEVENTH: ChordQuality[] = [
+      'min7', '7', 'm7b5', 'dim7', 'minMaj7', 'maj7#5',
+    ];
+    const PRESERVE: ChordQuality[] = [
+      'sus2', 'sus4', '7sus4', '9', 'maj9', 'min9', 'add9', '6', 'min6',
+    ];
+
+    const snappedQualities = (qualities: ChordQuality[]): [ChordQuality, ChordQuality][] =>
+      qualities.map((quality) => [
+        quality,
+        snapProgressionToScale([chord('c', 'C', quality)], 'C', 'Major', 4)[0].quality,
+      ]);
+
+    test('a triad-shaped quality regenerates to the tonic triad, maj', () => {
+      const inputs: ChordQuality[] = [...REGENERATE_TO_TRIAD, 'maj'];
+      expect(snappedQualities(inputs)).toEqual(inputs.map((q) => [q, 'maj']));
+    });
+
+    test('a seventh-shaped quality regenerates to the tonic seventh, maj7', () => {
+      const inputs: ChordQuality[] = [...REGENERATE_TO_SEVENTH, 'maj7'];
+      expect(snappedQualities(inputs)).toEqual(inputs.map((q) => [q, 'maj7']));
+    });
+
+    test('a sixth / added-tone / extension / suspended quality survives the snap verbatim', () => {
+      expect(snappedQualities(PRESERVE)).toEqual(PRESERVE.map((q) => [q, q]));
+    });
+
+    test('minMaj7 and maj7#5 regenerate — NOT preserved (see Task 1 finding)', () => {
+      // Both contain '7', so the substring heuristic put them in the
+      // preserve-CONSIDERATION branch and then dropped them: the four-item
+      // hand-written list did not name them. The classifier reaches the same
+      // answer on purpose rather than by omission — resolveDegreeQuality emits
+      // both at some degree of some scale, so the target key has its own
+      // correct version to regenerate to.
+      expect(
+        snapProgressionToScale([chord('c', 'C', 'minMaj7')], 'C', 'Major', 4)[0].quality,
+      ).toBe('maj7');
+      expect(
+        snapProgressionToScale([chord('c', 'C', 'maj7#5')], 'C', 'Major', 4)[0].quality,
+      ).toBe('maj7');
+    });
+
+    test("exercises every one of the registry's 20 qualities, none skipped", () => {
+      const covered = [
+        ...REGENERATE_TO_TRIAD, 'maj',
+        ...REGENERATE_TO_SEVENTH, 'maj7',
+        ...PRESERVE,
+      ].sort();
+      const registered = CHORD_QUALITY_GROUPS.flatMap((g) => g.options.map((o) => o.value)).sort();
+      expect(covered).toEqual(registered);
+    });
+
+    test('an equidistant root snap takes the lower-indexed scale degree (documented tie policy)', () => {
+      // C# sits exactly one semitone from both C (degree 0) and D (degree 1)
+      // of C Major — nearestDegrees returns both and snapProgressionToScale
+      // takes the first, matching its own inline comment ("either neighbour
+      // is an equally good landing spot"). Pinned here so the policy has a
+      // test, not just a comment. Root-snapping itself is unchanged by
+      // DEV-393; this only documents the existing behavior.
+      const snapped = snapProgressionToScale([chord('c', 'C#', 'maj')], 'C', 'Major', 4);
+      expect(snapped[0].root).toBe('C');
+    });
+
+    test('a preserved quality still moves its ROOT to the nearest degree', () => {
+      // Preservation is a quality rule only. F#add9 into C Major has no F#
+      // degree to land on, so the root must snap (to F or G) while the add9
+      // survives — proving the fix did not turn "preserve the quality" into
+      // "leave the chord alone".
+      const snapped = snapProgressionToScale([chord('c', 'F#', 'add9')], 'C', 'Major', 4);
+      expect(snapped[0].quality).toBe('add9');
+      expect(getScaleNotes('C', 'Major')).toContain(snapped[0].root);
+      expect(snapped[0].notes).toEqual(generateBlockChordNotes('add9', snapped[0].root, 4));
+    });
+  });
+});
+
+describe('reharmonization reads no quality substring (DEV-393 guard)', () => {
+  test('musicTheory.ts never calls .includes on a chord quality', () => {
+    // Regression guard: the bug this issue fixes was exactly
+    // `chord.quality.includes('7') || chord.quality.includes('9')`. Reading
+    // the file's own source rather than re-testing behavior, because a
+    // future rewrite could reproduce the same substring trap under a
+    // different variable name while still passing every behavioral test
+    // above by coincidence on the specific fixtures they use.
+    const source = readFileSync(join(process.cwd(), 'src/utils/musicTheory.ts'), 'utf8');
+    expect(source).not.toMatch(/\.quality\.includes\(/);
+  });
+});
+
+describe('factory progressions affected by the classification fix (DEV-393)', () => {
+  // The four progressions in src/data/chordProgressions.ts whose authored
+  // quality overrides (sus2, plain 9) used to be silently destroyed by a
+  // reharmonize and now survive it. Confirmed by grepping chordProgressions.ts
+  // for the qualities the old substring heuristic mishandled
+  // (sus2 / plain '9' / add9 / 6 / min6 — see shouldPreserveQualityOnSnap's
+  // SNAP_PRESERVED_CATEGORIES) rather than trusting a stale count: this task's
+  // brief said three, but lofi-tape-loop's closing V9 (step(4, 1, '9')) is a
+  // fourth instance of the same class the brief missed, so it is pinned here
+  // too.
+  test('lofi-trapsoul: VII9 survives a reharmonize into a different scale', () => {
+    const progression = progressionById('lofi-trapsoul')!;
+    const resolved = resolveProgression(progression, 'A', 'Natural Minor', 4);
+    const snapped = snapProgressionToScale(resolved, 'D', 'Dorian', 4);
+    // Step index 2 is the VII9 step (step(6, 1, '9')).
+    expect(snapped[2].quality).toBe('9');
+  });
+
+  test('lofi-tape-loop: the closing V9 survives a reharmonize into a different scale', () => {
+    const progression = progressionById('lofi-tape-loop')!;
+    const resolved = resolveProgression(progression, 'C', 'Major', 4);
+    const snapped = snapProgressionToScale(resolved, 'D', 'Dorian', 4);
+    // Step index 3 is the V9 step (step(4, 1, '9')); maj9/min9 at indices 0
+    // and 2 were already preserved by the old explicit four-name list, so
+    // only this step's behavior actually changed.
+    expect(snapped[3].quality).toBe('9');
+  });
+
+  test('ambient-open-fourths: both Isus2/IIsus2 steps survive a reharmonize', () => {
+    const progression = progressionById('ambient-open-fourths')!;
+    const resolved = resolveProgression(progression, 'C', 'Lydian', 4);
+    const snapped = snapProgressionToScale(resolved, 'G', 'Major', 4);
+    expect(snapped.map((c) => c.quality)).toEqual(['sus2', 'sus2']);
+  });
+
+  test('ambient-glass-horizon: the closing IIsus2 step survives a reharmonize', () => {
+    const progression = progressionById('ambient-glass-horizon')!;
+    const resolved = resolveProgression(progression, 'C', 'Lydian', 4);
+    const snapped = snapProgressionToScale(resolved, 'G', 'Major', 4);
+    // Step index 3 is the IIsus2 step (step(1, 4, 'sus2')).
+    expect(snapped[3].quality).toBe('sus2');
   });
 });
 

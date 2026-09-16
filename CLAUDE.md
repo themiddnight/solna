@@ -189,6 +189,33 @@ then written into a saved progression's name, so spelling it would put an accide
 persisted state. Nothing spelled is persisted, so spelling never moves a persist `version` or a
 `.solna` `formatVersion`.
 
+**A chord's reharmonization behavior is named on the registry, not sniffed from its token.**
+`ChordQualityEntry.reharmonizationCategory` (`src/musicCore/chordQuality.ts`) states which shape
+family a quality belongs to — `triad`, `seventh`, `sixth`, `added-tone`, `extension`,
+`suspended`, `diminished-half-diminished` or `altered` — and `shouldPreserveQualityOnSnap`
+derives a binary policy from it: `sixth`, `added-tone`, `extension` and `suspended` PRESERVE a
+chord's quality verbatim through `snapProgressionToScale`'s scale snap, and every other family
+REGENERATES the landing degree's own diatonic quality instead. The split is not "7th chord vs
+triad" and does not track family names by feel — it tracks `resolveDegreeQuality`'s actual
+output set: `triad`, `seventh`, `diminished-half-diminished` and `altered` are exactly the
+families whose members that function CAN emit at some degree of some scale, so regenerating them
+asks the target key for its own version of the same shape; `sixth`, `added-tone`, `extension`
+and `suspended` name colour no scale degree's diatonic derivation ever produces, so there is no
+diatonic version to regenerate to and a snap keeps what the user picked. `dim`, `aug` and `dim7`
+regenerate for the unsurprising reason — a diminished or augmented triad and a `dim7` are
+ordinary diatonic degrees of scales already in the registry. `minMaj7` and `maj7#5` regenerate
+for a less obvious one, worth stating because it reads against intuition: both sound like the
+most "altered", freeze-worthy qualities on the roster, yet they are Harmonic Minor's own plain
+diatonic i and III — stack a seventh on Harmonic Minor's degree 0 and the result is `minMaj7`, on
+degree 2 it is `maj7#5`. Preserving either across a key or scale change would carry a
+Harmonic-Minor-specific color into a target scale that may have no such color at all;
+regenerating asks the new scale what its own i or III actually is. `snapProgressionToScale`
+(`src/utils/musicTheory.ts`) reads no substring of a quality token —
+`chord.quality.includes('7')`/`includes('9')` do not appear anywhere in the reharmonization
+path, a regression a source-scan test in `musicTheory.test.ts` pins — and root-snapping stays
+nearest-degree with a tie going to the lower-indexed scale degree (`nearestDegrees(...)[0]`),
+unchanged by this.
+
 **Music Core owns pitch parsing, octave extraction and scale-fallback resolution, and nothing
 outside `src/musicCore/` hand-rolls a note-name regex.** `tonalAdapter.ts` wraps `octaveOfNote`
 (a note's octave, `null` for none or for an unparseable name) alongside the DEV-394 primitives

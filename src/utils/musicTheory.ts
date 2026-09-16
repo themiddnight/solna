@@ -10,6 +10,7 @@ import {
   resolveScaleKey,
   scaleEntry,
   scaleNotesForTonal,
+  shouldPreserveQualityOnSnap,
   transposeByInterval,
   transposePitchClassPreservingOctave,
   type ChordQuality,
@@ -158,6 +159,19 @@ const MINOR_THIRD_QUALITIES: ReadonlySet<string> = new Set(
   ]
     .filter(([intervals]) => intervals.startsWith('3m'))
     .map(([, quality]) => quality),
+);
+
+// The app quality tokens whose OWN shape carries a seventh, read off the same
+// table SEVENTH_QUALITY_BY_INTERVALS assigns — so a scale-produced quality and
+// a registered quality can never disagree about whether it has one. This is
+// what decides which of TRIAD_QUALITY_BY_INTERVALS / SEVENTH_QUALITY_BY_INTERVALS
+// snapProgressionToScale's regenerate branch reads from, replacing the
+// `quality.includes('7') || quality.includes('9')` substring test DEV-393
+// removed. Only meaningful for a REGENERATE-category quality (see
+// shouldPreserveQualityOnSnap in src/musicCore/chordQuality.ts) — every such
+// quality is, by construction, one of the eleven names in these two tables.
+const SEVENTH_SHAPED_QUALITIES: ReadonlySet<ChordQuality> = new Set(
+  Object.values(SEVENTH_QUALITY_BY_INTERVALS),
 );
 
 // Keyed `${scaleType}|${degree}|${use7ths}`. Correct forever because SCALES is
@@ -410,14 +424,26 @@ function transposePitchClass(note: string, shift: number): string {
 
 /**
  * Snaps each chord to the nearest diatonic degree of the given key/scale.
- * Body carried over verbatim from reharmonizeProgressionToScale, including the
- * maj9 / min9 / 7sus4 / sus4 quality-preservation clause.
  *
  * This is the operation a SCALE change needs. It measures the chords against
  * `root`, so it is only correct when they are already in that key — feeding it
  * chords from another key is the bug this split exists to remove. Two chords a
  * scale cannot distinguish still collapse onto one degree; that is inherent to
  * snapping and is why five-note scales lose the most.
+ *
+ * A chord's QUALITY is either regenerated to the landing degree's own diatonic
+ * quality or preserved verbatim, decided by `shouldPreserveQualityOnSnap`
+ * (src/musicCore/chordQuality.ts) reading the chord-quality registry — never by
+ * testing `quality` for the substrings `'7'`/`'9'`. That substring test plus a
+ * four-name preserve list (`maj9`, `min9`, `7sus4`, `sus4`) is what DEV-393
+ * removed: it silently collapsed `sus2`, `6` and `min6` into the landing
+ * degree's triad and `9` and `add9` into its seventh, on every reharmonize. See
+ * that function's docblock for the exact policy and why it is not "7th chord
+ * vs triad".
+ *
+ * Root-snapping is unchanged: nearest scale degree by semitone distance,
+ * measured around the octave (`nearestDegrees`); an equidistant tie takes the
+ * lower-indexed degree, since a snap has no reason to prefer either neighbour.
  */
 export function snapProgressionToScale(
   currentChords: ChordItem[],
@@ -438,13 +464,17 @@ export function snapProgressionToScale(
     // takes the first.
     const bestDegree = nearestDegrees(scale.intervals, intervalFromNewRoot)[0];
 
-    const diatonic = getDiatonicChordForDegree(bestDegree, root, scaleType, chord.quality.includes('7') || chord.quality.includes('9'));
+    const preserveQuality = shouldPreserveQualityOnSnap(chord.quality);
+    const use7ths = !preserveQuality && SEVENTH_SHAPED_QUALITIES.has(chord.quality);
+    const diatonic = getDiatonicChordForDegree(bestDegree, root, scaleType, use7ths);
 
-    // Preserve custom qualities if user intentionally used extended qualities like maj9, 7sus4, otherwise use diatonic
-    let targetQuality: ChordQuality = diatonic.quality;
-    if (chord.quality === 'maj9' || chord.quality === 'min9' || chord.quality === '7sus4' || chord.quality === 'sus4') {
-      targetQuality = chord.quality;
-    }
+    // A preserve-category quality (sixth / added-tone / extension / suspended)
+    // has no diatonic version at any degree of any scale, so the snap keeps it
+    // verbatim and only the root moves. Every other quality IS one of
+    // resolveDegreeQuality's own eleven emittable qualities, so the snap
+    // regenerates the landing degree's own version instead of freezing the one
+    // the chord had before the scale changed.
+    const targetQuality: ChordQuality = preserveQuality ? chord.quality : diatonic.quality;
 
     return {
       ...chord,

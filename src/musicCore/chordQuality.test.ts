@@ -7,7 +7,9 @@ import {
   getChordQualityEntry,
   isChordQuality,
   resolveChordNotes,
+  shouldPreserveQualityOnSnap,
 } from './chordQuality';
+import type { ChordQuality } from './chordQuality';
 
 describe('CHORD_QUALITY_REGISTRY', () => {
   test('every registered quality resolves through Tonal at a natural root', () => {
@@ -123,5 +125,50 @@ describe('CHORD_QUALITY_GROUPS', () => {
     const values = CHORD_QUALITY_GROUPS.flatMap((g) => g.options.map((o) => o.value));
     expect(values).toContain('minMaj7');
     expect(values).toContain('maj7#5');
+  });
+});
+
+describe('shouldPreserveQualityOnSnap', () => {
+  // resolveDegreeQuality (src/utils/musicTheory.ts) can itself emit exactly
+  // these eleven qualities at some degree of some scale — regenerating them
+  // on a snap asks the target key for its OWN version of the same shape.
+  const REGENERATE: ChordQuality[] = [
+    'maj', 'min', 'dim', 'aug',
+    'maj7', 'min7', '7', 'm7b5', 'dim7', 'minMaj7', 'maj7#5',
+  ];
+  // No interval tuple resolveDegreeQuality resolves ever names one of these —
+  // there is no diatonic version to regenerate to, so a snap preserves them.
+  const PRESERVE: ChordQuality[] = [
+    'sus2', 'sus4', '7sus4', '9', 'maj9', 'min9', 'add9', '6', 'min6',
+  ];
+
+  test('regenerates every quality resolveDegreeQuality can itself emit', () => {
+    for (const quality of REGENERATE) {
+      expect(shouldPreserveQualityOnSnap(quality), quality).toBe(false);
+    }
+  });
+
+  test('preserves every quality resolveDegreeQuality can never emit', () => {
+    for (const quality of PRESERVE) {
+      expect(shouldPreserveQualityOnSnap(quality), quality).toBe(true);
+    }
+  });
+
+  test('covers every registered token exactly once between the two lists', () => {
+    const registered = CHORD_QUALITY_REGISTRY.map((e) => e.token).sort();
+    expect([...REGENERATE, ...PRESERVE].sort()).toEqual(registered);
+  });
+
+  test('altered 7th-shaped qualities (minMaj7, maj7#5) regenerate — NOT preserved', () => {
+    // The one pairing the issue's own hypothesis got backwards: altered is a
+    // regenerate category (resolveDegreeQuality can emit both), not a
+    // preserve one. Named explicitly so a future reader does not "fix" this
+    // back the other way.
+    expect(shouldPreserveQualityOnSnap('minMaj7')).toBe(false);
+    expect(shouldPreserveQualityOnSnap('maj7#5')).toBe(false);
+  });
+
+  test('throws for an unregistered quality, same contract as resolveChordNotes', () => {
+    expect(() => shouldPreserveQualityOnSnap('not-a-real-quality' as ChordQuality)).toThrow();
   });
 });
