@@ -10,25 +10,21 @@ import {
   resizePatternSpanAt,
   writePatternEvent,
 } from './loop';
-import { deriveChordNotes } from '../utils/musicTheory';
 import { getMeter, MAX_STEPS_PER_BAR } from '../utils/meter';
 import type { AppStore, ChordsSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
 
 /**
- * Chords slice. `setChordOctave` derives the new chord notes INSIDE the same
- * `set()` call (replacing the old App.tsx effect that mapped the chords
- * afterwards), so the octave and the notes can never be observed out of sync.
- * `setChords` re-clamps BOTH custom lanes in the same `set()` for the same
- * reason: a chord boundary and a hold that may not cross it are one fact, and
- * a subscriber must never see new chords under an old cycle.
+ * Chords slice. `setChordOctave` writes only the octave: `ChordItem` carries
+ * no `notes` to keep in sync, so there is nothing left for this action to
+ * derive. `setChords` re-clamps BOTH custom lanes in the same `set()` for a
+ * similar reason: a chord boundary and a hold that may not cross it are one
+ * fact, and a subscriber must never see new chords under an old cycle.
  */
 export function createChordsSlice(set: Set): ChordsSlice {
   return {
-    // The old App derived the chord notes on mount (useEffect on chordOctave),
-    // so the initial chords displayed at octave 4 — keep that exact value.
-    chords: INITIAL_CHORDS.map((chord) => deriveChordNotes(chord, 4)),
+    chords: INITIAL_CHORDS,
     chordRhythmId: 'sustained',
     chordRhythmMode: 'preset',
     customChordRhythm: new Array<boolean>(MAX_STEPS_PER_BAR).fill(false),
@@ -124,10 +120,6 @@ export function createChordsSlice(set: Set): ChordsSlice {
     setChordVolume: (chordVolume) => set({ chordVolume }),
     toggleChordMuted: () => set((state) => ({ chordMuted: !state.chordMuted })),
 
-    setChordOctave: (chordOctave) =>
-      set((state) => ({
-        chordOctave,
-        chords: state.chords.map((chord) => deriveChordNotes(chord, chordOctave)),
-      })),
+    setChordOctave: (chordOctave) => set({ chordOctave }),
   };
 }

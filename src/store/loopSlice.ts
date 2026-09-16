@@ -1,6 +1,5 @@
 import type { StoreApi } from 'zustand';
 import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
-import { deriveChordNotes } from '../utils/musicTheory';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import {
   defaultFxState,
@@ -38,7 +37,7 @@ export function createDefaultLoop(): Loop {
     synthArpSettings: defaultTrackArp('synth'),
     chordArpSettings: defaultTrackArp('chord'),
     bassArpSettings: defaultTrackArp('bass'),
-    chords: INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)),
+    chords: INITIAL_CHORDS,
     chordRhythmId: 'sustained',
     chordRhythmMode: 'preset',
     customChordRhythm: new Array<boolean>(MAX_STEPS_PER_BAR).fill(false),

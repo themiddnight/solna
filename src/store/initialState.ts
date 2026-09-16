@@ -82,10 +82,10 @@ export function defaultTrackArp(target: SynthControlTarget): ArpSettings {
 }
 
 export const INITIAL_CHORDS: ChordItem[] = [
-  { id: 'chord-1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] },
-  { id: 'chord-2', root: 'F', quality: 'maj7', bars: 1, notes: ['F3', 'A3', 'C4', 'E4'] },
-  { id: 'chord-3', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] },
-  { id: 'chord-4', root: 'G', quality: '7', bars: 1, notes: ['G3', 'B3', 'D4', 'F4'] },
+  { id: 'chord-1', root: 'A', quality: 'min7', bars: 1 },
+  { id: 'chord-2', root: 'F', quality: 'maj7', bars: 1 },
+  { id: 'chord-3', root: 'C', quality: 'maj', bars: 1 },
+  { id: 'chord-4', root: 'G', quality: '7', bars: 1 },
 ];
 
 // The ONLY source of truth for the audible effect defaults. setupMasterChain()
