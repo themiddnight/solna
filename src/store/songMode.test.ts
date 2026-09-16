@@ -15,7 +15,7 @@ function shortLoop(id: string, bars: number): Loop {
     ...createDefaultLoop(),
     id,
     name: `Loop ${id}`,
-    chords: [{ id: `c-${id}`, root: 'C', quality: 'maj', bars, notes: ['C4'] }],
+    chords: [{ id: `c-${id}`, root: 'C', quality: 'maj', bars }],
   };
 }
 
@@ -165,7 +165,7 @@ describe('song mode coordinator: entering and advancing', () => {
       ...createDefaultLoop(),
       id: 'loop-b',
       name: 'Loop B',
-      chords: [{ id: 'c1', root: 'C', quality: 'maj', bars: 2, notes: ['C4'] }],
+      chords: [{ id: 'c1', root: 'C', quality: 'maj', bars: 2 }],
     };
     const loopC = { ...createDefaultLoop(), id: 'loop-c', name: 'Loop C' };
     useAppStore.setState({
@@ -282,7 +282,7 @@ describe('song mode coordinator: leaving and re-entering', () => {
       ...createDefaultLoop(),
       id: 'loop-b',
       name: 'Loop B',
-      chords: [{ id: 'c1', root: 'C', quality: 'maj', bars: 2, notes: ['C4'] }],
+      chords: [{ id: 'c1', root: 'C', quality: 'maj', bars: 2 }],
     };
     useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });
     useAppStore.setState({ activeTab: 'arrange', songLoopIndex: null });
@@ -630,7 +630,7 @@ describe('song mode coordinator: Play All again, and reaching the end', () => {
       ...createDefaultLoop(),
       id: 'loop-c',
       name: 'Loop C',
-      chords: [{ id: 'c-c', root: 'C', quality: 'maj', bars: 2, notes: ['C4'] }],
+      chords: [{ id: 'c-c', root: 'C', quality: 'maj', bars: 2 }],
     };
     useAppStore.setState({
       loops: [createDefaultLoop(), loopB, loopC],

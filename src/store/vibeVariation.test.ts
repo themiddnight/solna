@@ -221,7 +221,7 @@ describe('authored random data', () => {
 
 import { resolveVibeVariation, type VibeDraw } from './vibeVariation';
 import type { VibeSpec } from '../data/vibes';
-import { getScaleNotes } from '../utils/musicTheory';
+import { generateBlockChordNotes, getScaleNotes } from '../utils/musicTheory';
 import { progressionById } from '@/audio/chordProgressions';
 
 function authoredCurrent(v: VibeSpec) {
@@ -331,7 +331,7 @@ describe('resolveVibeVariation: what a draw preserves', () => {
         const scaleNotes = getScaleNotes(out.scaleRoot, v.scaleType);
         for (const chord of out.chords) {
           expect(scaleNotes).toContain(chord.root);
-          expect(chord.notes.length).toBeGreaterThan(0);
+          expect(generateBlockChordNotes(chord.quality, chord.root, out.chordOctave).length).toBeGreaterThan(0);
         }
         const source = progressionById(summary.progressionId)!;
         expect(out.chords.length).toBe(source.steps.length);

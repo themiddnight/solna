@@ -20,7 +20,7 @@ import { Loop, LoopMixPatch } from '@/store/types';
 import { ChordItem } from '@/types';
 import { loopBars } from '@/utils/songStructure';
 import { formatDb } from '@/utils/gainUnits';
-import { formatChordQuality } from '@/utils/musicTheory';
+import { formatChordQuality, generateBlockChordNotes } from '@/utils/musicTheory';
 import { getTonicSpelling } from '@/utils/noteSpelling';
 import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
 import { MIX_LAYERS } from '../mixLayers';
@@ -307,6 +307,7 @@ function LoopStatusBadge({
 
 interface LoopChordStripProps {
   chords: ChordItem[] | undefined;
+  chordOctave: number;
   isPlaying: boolean;
   activeChordIndex: number | null;
 }
@@ -316,7 +317,7 @@ interface LoopChordStripProps {
  * the same reason as LoopStatusBadge: every branch here is about one chord
  * badge, so counting them against the whole card measured nothing.
  */
-function LoopChordStrip({ chords, isPlaying, activeChordIndex }: LoopChordStripProps) {
+function LoopChordStrip({ chords, chordOctave, isPlaying, activeChordIndex }: LoopChordStripProps) {
   if (!chords || chords.length === 0) {
     return <span className="text-base-content/40 italic">No chords</span>;
   }
@@ -324,6 +325,7 @@ function LoopChordStrip({ chords, isPlaying, activeChordIndex }: LoopChordStripP
     <div className="flex flex-wrap items-center gap-1 min-w-0">
       {chords.map((chord, cIdx) => {
         const isChordActive = isPlaying && cIdx === activeChordIndex;
+        const notes = generateBlockChordNotes(chord.quality, chord.root, chordOctave);
         return (
           <span
             key={chord.id || `${chord.root}-${cIdx}`}
@@ -332,7 +334,7 @@ function LoopChordStrip({ chords, isPlaying, activeChordIndex }: LoopChordStripP
                 ? 'badge-primary font-bold ring-2 ring-primary/60 shadow-sm scale-105'
                 : 'bg-base-200 border border-base-300'
             }`}
-            title={chord.notes?.length ? `Notes: ${chord.notes.join(', ')}` : undefined}
+            title={notes.length ? `Notes: ${notes.join(', ')}` : undefined}
           >
             <span
               className={
@@ -736,6 +738,7 @@ function LoopCardMetaRow({
         </span>
         <LoopChordStrip
           chords={loop.chords}
+          chordOctave={loop.chordOctave}
           isPlaying={isPlaying}
           activeChordIndex={activeChordIndex}
         />

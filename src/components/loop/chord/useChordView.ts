@@ -28,11 +28,11 @@ import { getMeter } from '@/utils/meter';
 import { scaleEntry } from '@/musicCore';
 import type { ChordQuality } from '@/musicCore';
 import {
-  deriveChordNotes,
   snapProgressionToScale,
   getDiatonicChordForDegree,
   getBorrowedChords,
   formatChordLabel,
+  generateBlockChordNotes,
 } from '@/utils/musicTheory';
 import { formatKeyLabel } from '@/utils/noteSpelling';
 import { isProgressionAvailable } from './progressionAvailability';
@@ -190,10 +190,9 @@ function appendChord(
   chords: ChordItem[],
   root: string,
   quality: ChordQuality,
-  octave: number,
   id: string,
 ): ChordItem[] {
-  return [...chords, deriveChordNotes({ id, root, quality, bars: 1, notes: [] }, octave)];
+  return [...chords, { id, root, quality, bars: 1 }];
 }
 
 /**
@@ -207,7 +206,7 @@ export function useProgressionEditor(
   state: ChordViewState,
   clearReharmonizeBadge: () => void,
 ) {
-  const { chords, setChords, scaleRoot, scaleType, chordOctave } = state;
+  const { chords, setChords, scaleRoot, scaleType } = state;
   const [use7thsInQuickAdd, setUse7thsInQuickAdd] = useState<boolean>(false);
 
   const sensors = useSensors(
@@ -233,10 +232,10 @@ export function useProgressionEditor(
   };
 
   // Props of the memoized SortableChordCard, so their identity must be
-  // stable. `chords` and `chordOctave` are read LIVE from the store: a
-  // useCallback([]) over the render-scope values would pin the progression
-  // as of the first render and silently corrupt every later edit. The
-  // chords slice exposes a plain-value setter, not an updater.
+  // stable. `chords` is read LIVE from the store: a useCallback([]) over the
+  // render-scope value would pin the progression as of the first render and
+  // silently corrupt every later edit. The chords slice exposes a
+  // plain-value setter, not an updater.
   const handleMoveChord = useCallback((index: number, direction: -1 | 1) => {
     const { chords: liveChords, setChords: writeChords } = useAppStore.getState();
     const newIndex = index + direction;
@@ -257,18 +256,12 @@ export function useProgressionEditor(
   }, []);
 
   const updateChord = useCallback((id: string, updates: Partial<ChordItem>) => {
-    const { chords: liveChords, chordOctave: liveChordOctave, setChords: writeChords } =
-      useAppStore.getState();
-    writeChords(
-      liveChords.map((c) => {
-        if (c.id !== id) return c;
-        return deriveChordNotes({ ...c, ...updates }, liveChordOctave);
-      }),
-    );
+    const { chords: liveChords, setChords: writeChords } = useAppStore.getState();
+    writeChords(liveChords.map((c) => (c.id === id ? { ...c, ...updates } : c)));
   }, []);
 
   const addChord = () => {
-    setChords(appendChord(chords, scaleRoot, 'maj7', chordOctave, `chord-${Date.now()}`));
+    setChords(appendChord(chords, scaleRoot, 'maj7', `chord-${Date.now()}`));
   };
 
   const addDiatonicChord = (degreeIndex: number) => {
@@ -279,22 +272,20 @@ export function useProgressionEditor(
       use7thsInQuickAdd,
     );
     setChords(
-      appendChord(chords, diatonic.root, diatonic.quality, chordOctave, `chord-${Date.now()}`),
+      appendChord(chords, diatonic.root, diatonic.quality, `chord-${Date.now()}`),
     );
   };
 
   const addBorrowedChord = (root: string, quality: ChordQuality) => {
-    setChords(appendChord(chords, root, quality, chordOctave, `chord-${Date.now()}`));
+    setChords(appendChord(chords, root, quality, `chord-${Date.now()}`));
   };
 
   const handleApplyLibraryChords = (libraryChords: ChordItem[]) => {
     // ChordPresetLibrary hands over chords already resolved in the active key
     // and scale (factory entries from their degrees, custom ones snapped), so
-    // there is nothing left to harmonize here. Re-id and re-derive only.
+    // there is nothing left to harmonize here. Re-id only.
     setChords(
-      libraryChords.map((c, i) =>
-        deriveChordNotes({ ...c, id: `lib-chord-${Date.now()}-${i}` }, chordOctave),
-      ),
+      libraryChords.map((c, i) => ({ ...c, id: `lib-chord-${Date.now()}-${i}` })),
     );
     clearReharmonizeBadge();
   };
@@ -315,22 +306,20 @@ export type ProgressionEditor = ReturnType<typeof useProgressionEditor>;
  * declaration order that keeps the refs fresh stops being visible.
  */
 export function useProgressionHarmonize(state: ChordViewState, saves: ProgressionSaves) {
-  const { chords, setChords, scaleRoot, scaleType, chordOctave } = state;
+  const { chords, setChords, scaleRoot, scaleType } = state;
   const [autoReharmonize, setAutoReharmonize] = useState<boolean>(true);
   const [isAutoReharmonizedIndicator, setIsAutoReharmonizedIndicator] = useState<boolean>(false);
 
-  // Auto-harmonize refs. The effect must not re-run when the toggle or the
-  // octave changes — only when the key or the chords do — so those two are read
-  // through refs kept fresh by an effect declared above it (effects run in
-  // declaration order, so these are current by the time the next one runs).
+  // Auto-harmonize refs. The effect must not re-run when the toggle changes —
+  // only when the key or the chords do — so the toggle is read through a ref
+  // kept fresh by an effect declared above it (effects run in declaration
+  // order, so this is current by the time the next one runs).
   const keyRef = useRef({ root: scaleRoot, scaleType });
   const chordsRef = useRef(chords);
   const autoReharmonizeRef = useRef(autoReharmonize);
-  const chordOctaveRef = useRef(chordOctave);
 
   useEffect(() => {
     autoReharmonizeRef.current = autoReharmonize;
-    chordOctaveRef.current = chordOctave;
   });
 
   useEffect(() => {
@@ -358,7 +347,6 @@ export function useProgressionHarmonize(state: ChordViewState, saves: Progressio
       chords,
       previousKey,
       keyRef.current,
-      chordOctaveRef.current,
       chordsReplaced,
     );
     if (!next) return;
@@ -385,7 +373,7 @@ export function useProgressionHarmonize(state: ChordViewState, saves: Progressio
   };
 
   const reharmonizeNow = () => {
-    const updated = snapProgressionToScale(chords, scaleRoot, scaleType, chordOctave);
+    const updated = snapProgressionToScale(chords, scaleRoot, scaleType);
     setChords(updated);
     setIsAutoReharmonizedIndicator(true);
     saves.setSaveToast(
@@ -421,14 +409,7 @@ export function useHeldChordPreview(state: ChordViewState) {
     e.stopPropagation();
     e.preventDefault();
     ensurePreviewEngine();
-    const tempChord: ChordItem = {
-      id: 'preview',
-      root,
-      quality,
-      bars: 1,
-      notes: [],
-    };
-    playChordLegatoWithEngine(deriveChordNotes(tempChord, chordOctave), chordSynthParams);
+    playChordLegatoWithEngine(generateBlockChordNotes(quality, root, chordOctave), chordSynthParams);
   };
 
   const handlePreviewMouseUp = (
@@ -445,7 +426,11 @@ export function useHeldChordPreview(state: ChordViewState) {
     (e: React.MouseEvent | React.TouchEvent, chord: ChordItem) => {
       e.stopPropagation();
       ensurePreviewEngine();
-      playChordLegatoWithEngine(chord, useAppStore.getState().chordSynthParams);
+      const { chordOctave: liveOctave, chordSynthParams: liveSynth } = useAppStore.getState();
+      playChordLegatoWithEngine(
+        generateBlockChordNotes(chord.quality, chord.root, liveOctave),
+        liveSynth,
+      );
       setActiveChordId(chord.id);
     },
     [setActiveChordId],
@@ -476,7 +461,7 @@ export type HeldChordPreview = ReturnType<typeof useHeldChordPreview>;
  * I triad as their sound source until the mouse is released.
  */
 export function usePatternPreviews(state: ChordViewState) {
-  const { bpm, scaleRoot, scaleType, chordOctave, chordCycle, bassCycle } = state;
+  const { bpm, scaleRoot, scaleType, chordCycle, bassCycle } = state;
   const { playChordWithRhythm, playBassWithPattern } = state.playback;
   const chordPatternPreviewStopRef = useRef<(() => void) | null>(null);
   const bassPatternPreviewStopRef = useRef<(() => void) | null>(null);
@@ -498,7 +483,7 @@ export function usePatternPreviews(state: ChordViewState) {
    * exactly the material the callback lays down — one bar for a preset, the
    * lane's own `loopLength * stepsPerBar` for a custom row.
    */
-  const previewSource = () => previewChordForScale(scaleRoot, scaleType, chordOctave);
+  const previewSource = () => previewChordForScale(scaleRoot, scaleType);
 
   const handleChordPatternPreviewMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();

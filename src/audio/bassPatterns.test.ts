@@ -5,10 +5,11 @@ import type { BassPattern, BassStepChoice } from '@/data/bassPatterns';
 import type { ChordItem } from '../types';
 import { getMeter, MAX_STEPS_PER_BAR } from '../utils/meter';
 import type { MeterId } from '../utils/meter';
+import { generateBlockChordNotes } from '../utils/musicTheory';
 
-const Cmaj7: ChordItem = { id: 'c1', root: 'C', quality: 'maj7', bars: 1, notes: ['C4', 'E4', 'G4', 'B4'] };
-const F7: ChordItem = { id: 'c2', root: 'F', quality: '7', bars: 1, notes: ['F4', 'A4', 'C5', 'Eb5'] };
-const Cmaj: ChordItem = { id: 'c3', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] };
+const Cmaj7: ChordItem = { id: 'c1', root: 'C', quality: 'maj7', bars: 1 };
+const F7: ChordItem = { id: 'c2', root: 'F', quality: '7', bars: 1 };
+const Cmaj: ChordItem = { id: 'c3', root: 'C', quality: 'maj', bars: 1 };
 
 const names = (events: { noteName: string }[]) => events.map((e) => e.noteName);
 function byId(id: string): BassPattern {
@@ -236,7 +237,6 @@ const oneBarPattern = (choices: BassStepChoice[]): BassPattern =>
 describe('custom pattern resolution reuses the existing quality-aware resolver', () => {
   const maj7: ChordItem = {
     id: 't', root: 'C', quality: 'maj7', bars: 1,
-    notes: ['C4', 'E4', 'G4', 'B4'],
   };
 
   test('octave resolves an octave above the bass root', () => {
@@ -251,7 +251,6 @@ describe('custom pattern resolution reuses the existing quality-aware resolver',
   test('seventh falls back through the FALLBACK_CHAIN to fifth on a triad', () => {
     const triad: ChordItem = {
       id: 't', root: 'C', quality: 'maj', bars: 1,
-      notes: ['C4', 'E4', 'G4'],
     };
     const choices: BassStepChoice[] = ['seventh', ...new Array<BassStepChoice>(15).fill('rest')];
     const events = resolveBassSteps(
@@ -259,6 +258,19 @@ describe('custom pattern resolution reuses the existing quality-aware resolver',
       [triad], 0, 2, 'C', 'major', 120,
     );
     expect(events[0].noteName).toBe('G2'); // C2 + 7 semitones
+  });
+
+  test('a fallback tone is derived from quality/root, not a stored notes array', () => {
+    // Both chords name the SAME quality/root; only their id differs. Under the
+    // old chord.notes[TONE_INDEX[t]] lookup this test would be meaningless —
+    // there was nothing to disagree with once notes always matched. It exists
+    // to pin that the derivation, not a stored array, is what resolveBassSteps
+    // now reads.
+    const thirdOnlyChoices: BassStepChoice[] = ['third', ...new Array<BassStepChoice>(15).fill('rest')];
+    const chords: ChordItem[] = [{ id: 'c1', root: 'D', quality: 'min7', bars: 1 }];
+    const events = resolveBassSteps(oneBarPattern(thirdOnlyChoices), chords, 0, 2, 'C', 'major', 120);
+    const expectedThird = generateBlockChordNotes('min7', 'D', 2)[1]; // TONE_INDEX.third
+    expect(events[0].noteName).toBe(expectedThird);
   });
 });
 

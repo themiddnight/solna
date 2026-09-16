@@ -68,6 +68,11 @@ describe('migrateLegacyPresets', () => {
       description: '',
       isFactory: false,
     };
+    // The raw legacy body: pre-cutover data may still carry a stray `notes`
+    // field on a chord (ChordItem dropped it under DEV-396), and adoption
+    // runs it through sanitizeCustomChordProgressions same as any other
+    // legacy entry, which validates it away along with everything else that
+    // isn't a recognised ChordItem field.
     const legacyProgression = {
       id: 'c1',
       name: 'Legacy Progression',
@@ -77,12 +82,16 @@ describe('migrateLegacyPresets', () => {
       chords: [{ id: 'ch1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] }],
       createdAt: 0,
     };
+    const sanitizedProgression = {
+      ...legacyProgression,
+      chords: [{ id: 'ch1', root: 'C', quality: 'maj', bars: 1 }],
+    };
     fakeLocalStorage.setItem(LEGACY_SYNTH_PRESETS_KEY, JSON.stringify([legacyPreset]));
     fakeLocalStorage.setItem(LEGACY_CHORD_PROGRESSIONS_KEY, JSON.stringify([legacyProgression]));
 
     const result = migrateLegacyPresets({ customSynthPresets: [], customChordProgressions: [] });
     expect(result.customSynthPresets).toEqual([legacyPreset] as never);
-    expect(result.customChordProgressions).toEqual([legacyProgression] as never);
+    expect(result.customChordProgressions).toEqual([sanitizedProgression] as never);
   });
 
   test('a legacy chord progression with an unregistered quality or unresolvable root is dropped, not adopted', () => {

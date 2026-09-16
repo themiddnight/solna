@@ -4,6 +4,7 @@ import { freshEngine } from '../testFakes';
 import type { ChordItem } from '@/types';
 import type { ActiveSynth } from '@/types/synth';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
+import { generateBlockChordNotes } from '@/utils/musicTheory';
 import { previewChordProgression, previewSequencerNote, previewSynthPatch } from './presetPreview';
 import {
   resetNoteInputListeners,
@@ -79,8 +80,8 @@ describe('preview handle lifetimes', () => {
       // A 2-chord progression schedules its 2nd chord in the future relative
       // to ctx.currentTime.
       const chords: ChordItem[] = [
-        { id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] },
-        { id: 'c2', root: 'G', quality: 'maj', bars: 1, notes: ['G4'] },
+        { id: 'c1', root: 'C', quality: 'maj', bars: 1 },
+        { id: 'c2', root: 'G', quality: 'maj', bars: 1 },
       ];
       const handle = previewChordProgression(chords, SYNTH);
 
@@ -219,12 +220,13 @@ function fakeScheduler(startNow: number) {
   return { scheduler, state };
 }
 
+// maj7 so each chord derives exactly 4 notes (C4 E4 G4 B4), preserving the
+// note-count arithmetic below now that notes are derived, not stored.
 const sixteenChords: ChordItem[] = Array.from({ length: 16 }, (_, i) => ({
   id: `c${i}`,
   root: 'C',
-  quality: 'maj',
+  quality: 'maj7',
   bars: 1,
-  notes: ['C4', 'E4', 'G4', 'B4'],
 }));
 
 describe('progression audition streams instead of bursting', () => {
@@ -410,15 +412,30 @@ describe('a preview auditions the patch it is handed', () => {
     }
   });
 
+  test('plays notes derived from quality/root at the audition octave, not a stored array', () => {
+    const { restore } = withFakeAudioEngine();
+    const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
+    try {
+      const chords: ChordItem[] = [{ id: 'p1', root: 'A', quality: 'min7', bars: 1 }];
+      previewChordProgression(chords, SYNTH, undefined);
+      const expected = generateBlockChordNotes('min7', 'A', 4);
+      const played = onSpy.mock.calls.map((call) => call[0]);
+      expect(played).toEqual(expected);
+    } finally {
+      onSpy.mockRestore();
+      restore();
+    }
+  });
+
   test('previewChordProgression plays every note of a chord on the same patch', () => {
     const { restore } = withFakeAudioEngine();
     const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
     try {
       previewChordProgression(
-        [{ id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4'] }] as ChordItem[],
+        [{ id: 'c1', root: 'C', quality: 'maj', bars: 1 }] as ChordItem[],
         LOUD,
       );
-      expect(onSpy).toHaveBeenCalledTimes(2);
+      expect(onSpy).toHaveBeenCalledTimes(3);
       for (const call of onSpy.mock.calls) expect(call[1]).toBe(LOUD);
     } finally {
       onSpy.mockRestore();

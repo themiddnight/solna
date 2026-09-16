@@ -1,6 +1,6 @@
 import { midiToSharpName, noteMidi, pitchClassOfNote, scaleEntry } from '@/musicCore';
 import type { ChordItem } from '../types';
-import { rootSemitone, stepDurationSec } from '../utils/musicTheory';
+import { generateBlockChordNotes, rootSemitone, stepDurationSec } from '../utils/musicTheory';
 import { DEFAULT_VELOCITY } from './constants';
 import { groupByStyle } from './groupByStyle';
 import type { MeterId } from '../utils/meter';
@@ -84,9 +84,10 @@ export function resolveBassSteps(
   const stepDur = stepDurationSec(bpm);
 
   // Fallback: seventh → fifth → third → root
+  const chordNotes = generateBlockChordNotes(chord.quality, chord.root, octave);
   const toneMidi = (token: 'third' | 'fifth' | 'seventh'): number => {
     for (const t of FALLBACK_CHAIN[token]) {
-      const note = chord.notes[TONE_INDEX[t]];
+      const note = chordNotes[TONE_INDEX[t]];
       if (note) return midiAtOctave(pitchClassOfNote(note), octave);
     }
     return bassRootMidi;

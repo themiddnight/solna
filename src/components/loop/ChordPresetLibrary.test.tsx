@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { ChordPresetLibrary, isProgressionAvailable, templateAuditionClassName, customAuditionClassName } from './ChordPresetLibrary';
+import {
+  ChordPresetLibrary,
+  isProgressionAvailable,
+  resolveCustomChords,
+  templateAuditionClassName,
+  customAuditionClassName,
+} from './ChordPresetLibrary';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
 import { progressionById } from '@/audio/chordProgressions';
@@ -13,7 +19,7 @@ const html = renderToString(
     isOpen
     onClose={noop}
     currentChords={[
-      { id: 'chord-1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] },
+      { id: 'chord-1', root: 'A', quality: 'min7', bars: 1 },
     ]}
     scaleRoot="C"
     scaleType="Major"
@@ -123,6 +129,29 @@ describe('isProgressionAvailable', () => {
       'zen-still-pond',
       'zen-temple-bell',
     ]);
+  });
+});
+
+describe('resolveCustomChords', () => {
+  const spellingKey = { scaleRoot: 'C', scaleType: 'Major' };
+
+  test('installs id/root/quality/bars with no notes field, whether or not reharmonized', () => {
+    const source = [{ id: '', root: 'D', quality: 'min7' as const, bars: 1 }];
+
+    const plain = resolveCustomChords(source, spellingKey, false);
+    expect(plain[0].root).toBe('D');
+    expect(plain[0].quality).toBe('min7');
+    expect(plain[0].id).not.toBe('');
+    expect(plain[0]).not.toHaveProperty('notes');
+
+    const reharmonized = resolveCustomChords(source, spellingKey, true);
+    expect(reharmonized[0]).not.toHaveProperty('notes');
+  });
+
+  test('a preserved id survives reharmonization', () => {
+    const source = [{ id: 'kept-id', root: 'D', quality: 'min7' as const, bars: 1 }];
+    const reharmonized = resolveCustomChords(source, spellingKey, true);
+    expect(reharmonized[0].id).toBe('kept-id');
   });
 });
 

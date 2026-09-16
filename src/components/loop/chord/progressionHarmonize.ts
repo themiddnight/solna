@@ -49,7 +49,6 @@ export function applyKeyScaleChange(
   chords: ChordItem[],
   from: { root: string; scaleType: string },
   to: { root: string; scaleType: string },
-  octave: number,
   chordsReplaced: boolean,
 ): ChordItem[] | null {
   if (chordsReplaced || chords.length === 0) return null;
@@ -59,7 +58,7 @@ export function applyKeyScaleChange(
   if (!rootChanged && !scaleChanged) return null;
 
   let next = chords;
-  if (rootChanged) next = transposeProgression(next, from.root, to.root, octave);
-  if (scaleChanged) next = snapProgressionToScale(next, to.root, to.scaleType, octave);
+  if (rootChanged) next = transposeProgression(next, from.root, to.root);
+  if (scaleChanged) next = snapProgressionToScale(next, to.root, to.scaleType);
   return next;
 }

@@ -1,7 +1,6 @@
 import { describe, expect, test, spyOn } from 'bun:test';
 import { audioEngine } from '@/audio/engine';
 import { freshEngine } from '@/audio/testFakes';
-import type { ChordItem } from '@/types';
 import type { ActiveSynth, ArpSettings } from '@/types/synth';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import { TRACK_ARP_DEFAULTS } from '@/store/initialState';
@@ -60,11 +59,7 @@ describe('legato chord preview', () => {
     const offSpy = spyOn(audioEngine, 'triggerSynthNoteOff');
     const stopSpy = spyOn(audioEngine, 'stopSource');
 
-    playChordLegato(
-      { root: 'C', quality: 'maj', bars: 1, notes: ['C4', 'E4', 'G4'] } as ChordItem,
-      SYNTH,
-      audioEngine,
-    );
+    playChordLegato(['C4', 'E4', 'G4'], SYNTH, audioEngine);
 
     expect(stopSpy).toHaveBeenCalledWith('chord', 0.05);
     expect(onSpy).toHaveBeenCalledTimes(3);
@@ -94,11 +89,7 @@ describe('legato chord preview', () => {
     // entirely and landing directly on the sustain level.
     const { engine, ctx } = freshEngine();
 
-    playChordLegato(
-      { root: 'C', quality: 'maj', bars: 1, notes: ['C4'] } as ChordItem,
-      SYNTH,
-      engine,
-    );
+    playChordLegato(['C4'], SYNTH, engine);
 
     // ctx._gains[0] is the C4 voice's main amp gain (createGain is called for
     // the main gain before the sub-osc gain inside triggerSynthNoteOn).
@@ -267,6 +258,11 @@ describe('pattern preview chord & timing', () => {
     const seventh = previewChordForScale('D', 'Major');
     expect(seventh.quality).toBe('maj');
     expect(seventh.root).toBe('D');
+  });
+
+  test('has no notes field', () => {
+    const preview = previewChordForScale('C', 'Major');
+    expect('notes' in preview).toBe(false);
   });
 
   test('one bar lasts 16 sixteenth steps at the given bpm', () => {

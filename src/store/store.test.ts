@@ -5,7 +5,6 @@ import { createChordsSlice } from './chordsSlice';
 import { createBassSlice } from './bassSlice';
 import { customBassSpans, customChordSpans } from './loop';
 import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
-import { deriveChordNotes } from '../utils/musicTheory';
 import type { SynthPreset } from '../data/synthPresets';
 import type { BeatVoiceId, CustomChordProgressionItem } from '../types';
 import { faderDbToGain } from './levelUnits';
@@ -196,7 +195,7 @@ describe('store defaults', () => {
     }
     // And no patch carries an Arp field at all — Arp lives beside the sound.
     expect(s.synthParams.patch).not.toHaveProperty('arpActive');
-    expect(s.chords).toEqual(INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)));
+    expect(s.chords).toEqual(INITIAL_CHORDS);
     expect(s.effects).toEqual(INITIAL_EFFECTS);
     expect(s.customSynthPresets).toEqual([]);
     expect(s.customChordProgressions).toEqual([]);
@@ -282,20 +281,12 @@ describe('replaceBeatPattern, through the real store', () => {
 });
 
 describe('setChordOctave', () => {
-  test('derives the new chord notes inside the same set (atomic octave + notes)', async () => {
+  test('setChordOctave only writes chordOctave', async () => {
     const { useAppStore } = await getStore();
-    const chordsBefore = useAppStore.getState().chords;
-
-    const snapshots: AppStore[] = [];
-    const unsubscribe = useAppStore.subscribe((s) => snapshots.push(s));
+    const before = useAppStore.getState().chords;
     useAppStore.getState().setChordOctave(6);
-    unsubscribe();
-
-    // Exactly one notification: octave and notes changed together
-    expect(snapshots).toHaveLength(1);
-    expect(snapshots[0].chordOctave).toBe(6);
-    expect(snapshots[0].chords).toEqual(chordsBefore.map((c) => deriveChordNotes(c, 6)));
-    expect(useAppStore.getState().chords).toEqual(chordsBefore.map((c) => deriveChordNotes(c, 6)));
+    expect(useAppStore.getState().chordOctave).toBe(6);
+    expect(useAppStore.getState().chords).toBe(before); // same reference: nothing else was touched
   });
 });
 
@@ -312,19 +303,15 @@ describe('setKeyboardMode', () => {
   });
 });
 
-describe('chords initial octave', () => {
+describe('chords initial state', () => {
   // Unit-test the slice factory directly: the shared singleton store is
   // mutated by earlier tests (e.g. setChordOctave(6)), so its live state
   // cannot be assumed pristine.
-  test('initial chords are derived at octave 4 (matches the old App mount effect)', () => {
+  test('initial chords are INITIAL_CHORDS verbatim (no per-loop derivation)', () => {
     const slice = createChordsSlice(
       (() => {}) as unknown as StoreApi<AppStore>['setState']
     );
-    // The old App ran deriveChordNotes(c, chordOctave) on mount with octave 4
-    expect(slice.chords).toEqual(INITIAL_CHORDS.map((c) => deriveChordNotes(c, 4)));
-    // Sanity: this is NOT the raw INITIAL_CHORDS (those sit one octave lower)
-    expect(slice.chords).not.toEqual(INITIAL_CHORDS);
-    expect(slice.chords[0].notes).toEqual(deriveChordNotes(INITIAL_CHORDS[0], 4).notes);
+    expect(slice.chords).toEqual(INITIAL_CHORDS);
   });
 
   // The "stored chords come back verbatim, never re-derived" case that used to
@@ -837,7 +824,7 @@ describe('legacy preset migration', () => {
         category: 'User',
         description: '',
         roman: 'i - iv',
-        chords: [{ id: 'c1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] }],
+        chords: [{ id: 'c1', root: 'A', quality: 'min7', bars: 1 }],
         createdAt: 2000,
       },
     ];

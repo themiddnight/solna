@@ -366,8 +366,8 @@ describe('applyVibeToStore re-clamps the custom pattern lanes', () => {
 
   // Three bars, so 4/4's divisors are 1 and 3 rather than the factory's 1, 2, 4.
   const THREE_BAR_CHORDS: ChordItem[] = [
-    { id: 'c1', root: 'A', quality: 'min7', bars: 2, notes: ['A3', 'C4', 'E4', 'G4'] },
-    { id: 'c2', root: 'F', quality: 'maj7', bars: 1, notes: ['F3', 'A3', 'C4', 'E4'] },
+    { id: 'c1', root: 'A', quality: 'min7', bars: 2 },
+    { id: 'c2', root: 'F', quality: 'maj7', bars: 1 },
   ];
 
   test('the new progression lowers the dormant cycle without deleting its bars', () => {
@@ -625,7 +625,7 @@ describe('applyVibeToStore audible cut', () => {
   });
 });
 
-import { isNoteInScale } from '../utils/musicTheory';
+import { generateBlockChordNotes, isNoteInScale } from '../utils/musicTheory';
 import { SCALES } from '@/data/scales';
 import { progressionById, resolveProgression } from '@/audio/chordProgressions';
 import { isMeterId } from '../utils/meter';
@@ -644,9 +644,9 @@ describe('vibe scales', () => {
     expect(zen.scaleRoot).toBe('G');
     expect(zen.scaleType).toBe('Hirajoshi');
 
-    const resolved = resolveProgression(progressionById('zen-bamboo-vamp')!, 'G', 'Hirajoshi', 4);
-    expect(zen.chords.map((c) => ({ root: c.root, quality: c.quality, bars: c.bars, notes: c.notes })))
-      .toEqual(resolved.map((c) => ({ root: c.root, quality: c.quality, bars: c.bars, notes: c.notes })));
+    const resolved = resolveProgression(progressionById('zen-bamboo-vamp')!, 'G', 'Hirajoshi');
+    expect(zen.chords.map((c) => ({ root: c.root, quality: c.quality, bars: c.bars })))
+      .toEqual(resolved.map((c) => ({ root: c.root, quality: c.quality, bars: c.bars })));
   });
 
   test('every note Zen Garden plays is inside G Hirajoshi, except the iv chord borrowed from the parent', () => {
@@ -656,7 +656,8 @@ describe('vibe scales', () => {
     // every other Zen Garden chord stays entirely inside it.
     const zen = RESOLVED_VIBES.find((v) => v.id === 'zen-garden')!;
     for (const chord of zen.chords) {
-      const outside = chord.notes.filter((note) => !isNoteInScale(note, 'G', 'Hirajoshi'));
+      const notes = generateBlockChordNotes(chord.quality, chord.root, 4);
+      const outside = notes.filter((note) => !isNoteInScale(note, 'G', 'Hirajoshi'));
       if (chord.root === 'D' && chord.quality === 'min') {
         expect(outside).toEqual(['F4']);
       } else {

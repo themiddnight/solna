@@ -20,9 +20,11 @@ it into the store.
 
 **Every library id is written exactly once.** It used to be written twice (an id
 beside its resolved value), and the second copy was a documented typo hazard.
-`resolveVibe` also passes the vibe's own `scaleRoot`, `scaleType` and
-`chordOctave` to `resolveProgression`, so those cannot disagree with the vibe
-any more either.
+`resolveVibe` also passes the vibe's own `scaleRoot` and `scaleType` to
+`resolveProgression`, so those cannot disagree with the vibe any more either.
+`resolveProgression` takes no octave — the resulting `ChordItem`s carry no `notes`,
+only `{id, root, quality, bars}`; the vibe's own `chordOctave` is applied later,
+at derivation time, by whichever surface plays or displays the chords.
 
 ## Start by surveying, not by writing
 

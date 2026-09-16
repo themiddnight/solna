@@ -16,6 +16,7 @@ import type { BassStepChoice } from '@/data/bassPatterns';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import { MAX_CUSTOM_PATTERN_BARS } from './loop';
 import type { ChordItem } from '../types';
+import { generateBlockChordNotes } from '../utils/musicTheory';
 
 describe('sanitize (shared by persist hydration and project import)', () => {
   test('isPlainObject accepts a record and rejects arrays, null and primitives', () => {
@@ -254,18 +255,16 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
 
   const cases: Array<[string, keyof ReturnType<typeof createDefaultLoop>, unknown]> = [
     ['chords of numbers', 'chords', [1, 2, 3]],
-    ['a chord missing notes', 'chords', [{ id: 'c', root: 'A', quality: 'min', bars: 1 }]],
-    ['a chord with string notes', 'chords', [{ id: 'c', root: 'A', quality: 'min', bars: 1, notes: 'A3' }]],
-    ['a chord with zero bars', 'chords', [{ id: 'c', root: 'A', quality: 'min', bars: 0, notes: ['A3'] }]],
+    ['a chord with zero bars', 'chords', [{ id: 'c', root: 'A', quality: 'min', bars: 0 }]],
     // resolveChordNotes (Music Core) throws on either of these; the sanitize
     // boundary must reject them before a persisted/imported body ever reaches
     // playback rather than letting the throw surface deep inside the engine.
-    ['a chord with an unregistered quality', 'chords', [{ id: 'c', root: 'A', quality: 'not-a-real-quality', bars: 1, notes: ['A3'] }]],
-    ['a chord with an unresolvable root', 'chords', [{ id: 'c', root: 'H', quality: 'min', bars: 1, notes: ['A3'] }]],
+    ['a chord with an unregistered quality', 'chords', [{ id: 'c', root: 'A', quality: 'not-a-real-quality', bars: 1 }]],
+    ['a chord with an unresolvable root', 'chords', [{ id: 'c', root: 'H', quality: 'min', bars: 1 }]],
     // isChordQuality's own docblock (musicCore/chordQuality.ts) says its
     // case-insensitive narrow is unsound for anything that persists the
     // value — a registered-but-wrong-case token must still be rejected here.
-    ['a chord with a wrong-case quality', 'chords', [{ id: 'c', root: 'A', quality: 'Min7', bars: 1, notes: ['A3'] }]],
+    ['a chord with a wrong-case quality', 'chords', [{ id: 'c', root: 'A', quality: 'Min7', bars: 1 }]],
     // bassNote is optional but, when present, must resolve (via Music Core's
     // pitchClassOfNote) to a pitch class in the same ROOT_SET root uses. A
     // double-accidental like 'C##4' resolves to the pitch class 'C##', which
@@ -273,7 +272,7 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
     [
       'a chord with a malformed bassNote',
       'chords',
-      [{ id: 'c', root: 'A', quality: 'min', bars: 1, notes: ['A3'], bassNote: 'C##4' }],
+      [{ id: 'c', root: 'A', quality: 'min', bars: 1, bassNote: 'C##4' }],
     ],
     ['customChordRhythm of strings', 'customChordRhythm', ['on', 'off']],
     ['customBassPattern outside the union', 'customBassPattern', ['root', 'ninth']],
@@ -317,9 +316,9 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
 
   test('a chord with a valid bassNote is kept, and null/absent bassNote both pass', () => {
     const chords = [
-      { id: 'c1', root: 'A', quality: 'min', bars: 1, notes: ['A3'], bassNote: 'E4' },
-      { id: 'c2', root: 'F', quality: 'maj', bars: 1, notes: ['F3'], bassNote: null },
-      { id: 'c3', root: 'C', quality: 'maj', bars: 1, notes: ['C3'] },
+      { id: 'c1', root: 'A', quality: 'min', bars: 1, bassNote: 'E4' },
+      { id: 'c2', root: 'F', quality: 'maj', bars: 1, bassNote: null },
+      { id: 'c3', root: 'C', quality: 'maj', bars: 1 },
     ];
     const [out] = sanitizeLoops([{ ...createDefaultLoop(), chords }]) ?? [];
     expect(out.chords).toEqual(chords);
@@ -338,14 +337,51 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
   });
 });
 
+describe('a chord body with a contradictory notes field is accepted, because notes is not part of the validated shape', () => {
+  test('sanitizeLoops keeps root/quality and drops the stray notes key from what the app trusts', () => {
+    const contradictory = {
+      id: 'c1',
+      root: 'C',
+      quality: 'maj',
+      bars: 1,
+      notes: ['F#3', 'A3', 'C4'], // a different chord's notes entirely
+    };
+    const [out] = sanitizeLoops([{ ...createDefaultLoop(), chords: [contradictory] }]) ?? [];
+    expect(out.chords[0].root).toBe('C');
+    expect(out.chords[0].quality).toBe('maj');
+    // The stray key must not merely be unread — it must not survive into the
+    // rebuilt object at all, or a pre-DEV-396 session would carry a dangling
+    // notes array forever with nothing left to clean it.
+    expect('notes' in out.chords[0]).toBe(false);
+    // The derived pitches for what was actually stored (root/quality), proving
+    // nothing downstream can observe the contradictory stray array:
+    expect(generateBlockChordNotes('maj', 'C', 4)).not.toEqual(contradictory.notes);
+  });
+
+  test('sanitizeCustomChordProgressions drops the stray notes key too', () => {
+    const [out] = sanitizeCustomChordProgressions([
+      {
+        id: 'p1',
+        name: 'Progression',
+        chords: [
+          { id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['F#3', 'A3', 'C4'] },
+        ],
+      },
+    ]);
+    expect(out.chords[0].root).toBe('C');
+    expect(out.chords[0].quality).toBe('maj');
+    expect('notes' in out.chords[0]).toBe(false);
+  });
+});
+
 // The four keys this feature adds, on the read path. There is no version-gated
 // upgrade: a body written before the keys existed simply lacks them, and every
 // missing key takes its default through the same validation every other key
 // goes through.
 describe('sanitizeLoops validates the custom pattern spans without a migration gate', () => {
   const threeBarChords = (): ChordItem[] => [
-    { id: 'c1', root: 'A', quality: 'min7', bars: 2, notes: ['A3', 'C4', 'E4', 'G4'] },
-    { id: 'c2', root: 'F', quality: 'maj7', bars: 1, notes: ['F3', 'A3', 'C4', 'E4'] },
+    { id: 'c1', root: 'A', quality: 'min7', bars: 2 },
+    { id: 'c2', root: 'F', quality: 'maj7', bars: 1 },
   ];
 
   const bareLoop = (): Record<string, unknown> => {
@@ -497,7 +533,7 @@ describe('sanitizeCustomChordProgressions', () => {
     category: 'User',
     description: '',
     roman: 'i - iv',
-    chords: [{ id: 'c1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] }],
+    chords: [{ id: 'c1', root: 'A', quality: 'min7', bars: 1 }],
     createdAt: 2000,
   };
 

@@ -395,19 +395,13 @@ export function transposeProgression(
   chords: ChordItem[],
   fromRoot: string,
   toRoot: string,
-  octave = 4,
 ): ChordItem[] {
   const shift = (rootSemitone(toRoot) - rootSemitone(fromRoot) + 12) % 12;
-  return chords.map((chord) =>
-    deriveChordNotes(
-      {
-        ...chord,
-        root: ROOTS[(rootSemitone(chord.root) + shift) % 12],
-        ...(chord.bassNote ? { bassNote: transposePitchClass(chord.bassNote, shift) } : {}),
-      },
-      octave,
-    ),
-  );
+  return chords.map((chord) => ({
+    ...chord,
+    root: ROOTS[(rootSemitone(chord.root) + shift) % 12],
+    ...(chord.bassNote ? { bassNote: transposePitchClass(chord.bassNote, shift) } : {}),
+  }));
 }
 
 /**
@@ -449,7 +443,6 @@ export function snapProgressionToScale(
   currentChords: ChordItem[],
   root: string,
   scaleType: string,
-  octave = 4
 ): ChordItem[] {
   const newRootIndex = rootSemitone(root);
   const scale = scaleEntry(scaleType);
@@ -481,14 +474,8 @@ export function snapProgressionToScale(
       id: chord.id || `chord-${Date.now()}-${idx}`,
       root: diatonic.root,
       quality: targetQuality,
-      notes: generateBlockChordNotes(targetQuality, diatonic.root, octave),
     };
   });
-}
-
-/** Single source of truth for deriving a chord's note list from its root/quality/octave. */
-export function deriveChordNotes(chord: ChordItem, octave: number): ChordItem {
-  return { ...chord, notes: generateBlockChordNotes(chord.quality, chord.root, octave) };
 }
 
 export function rootSemitone(root: string): number {

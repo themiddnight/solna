@@ -357,10 +357,6 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isStringArray(value: unknown): boolean {
-  return Array.isArray(value) && value.every((n) => typeof n === 'string');
-}
-
 /**
  * An array is kept only when EVERY element passes. All-or-nothing on purpose:
  * a per-element drop would silently shorten a chord progression or a drum
@@ -372,9 +368,14 @@ function asCheckedArray<T>(value: unknown, isElement: (v: unknown) => boolean, f
 }
 
 /**
- * A chord is read by deriveChordNotes and played straight out of `notes`, so
- * every field the chord path dereferences must be the right type — a missing
- * `notes` array is a crash in the chord scheduler, not a wrong sound.
+ * `notes` is not part of the validated shape here because it is not part of
+ * `ChordItem` — every reader derives a chord's pitches from `root`/`quality`
+ * and an octave it already owns (Music Core's `resolveChordNotes`), so a
+ * persisted body carrying a stray `notes` key (old data, a hand-edited file)
+ * has it silently dropped rather than validated, checked or passed through.
+ * That is deliberate, not an oversight: per this repo's "no migration
+ * chains" rule, this is validation, not a migration step, and the fields
+ * below are exactly the fields `ChordItem` has.
  *
  * `root` and `quality` are both checked against a closed set, not just
  * `typeof === 'string'`: `resolveChordNotes` (Music Core) throws on either an
@@ -389,8 +390,9 @@ function asCheckedArray<T>(value: unknown, isElement: (v: unknown) => boolean, f
  * a valid chord's `root` must already be in its exact canonical spelling, not
  * merely a spelling Tonal could parse.
  *
- * A chord failing either check is rejected WHOLE by `asCheckedArray`'s
- * all-or-nothing rule (see its call site in sanitizeLoops) — one invalid
+ * A chord failing either check is rejected WHOLE by `sanitizeChordsArray`'s
+ * all-or-nothing rule (its call site in sanitizeLoops; `sanitizeCustomChordProgressions`
+ * applies the same `isChordItem`-then-`toChordItem` pair inline) — one invalid
  * chord anywhere in a loop's `chords` array falls the WHOLE array back to the
  * default loop's chords, not just the offending element, matching every other
  * array of records in this file. This is a wider blast radius than the
@@ -427,11 +429,44 @@ function isChordItem(value: unknown): boolean {
     typeof value.bars === 'number' &&
     Number.isFinite(value.bars) &&
     value.bars > 0 &&
-    isStringArray(value.notes) &&
     (value.bassNote === undefined ||
       value.bassNote === null ||
       (typeof value.bassNote === 'string' && isRootNote(pitchClassOfNote(value.bassNote))))
   );
+}
+
+/**
+ * Rebuilds a chord from ONLY the fields `isChordItem` just validated, never
+ * the raw input object. A cast (`value as ChordItem`) would let any other key
+ * on the raw object — most notably a stray `notes` array a pre-DEV-396
+ * session persisted — ride through untouched into the live, trusted
+ * `ChordItem` the rest of the app reads; a fresh object literal is what
+ * actually enforces "validation, not migration" for a field the type no
+ * longer has. Callers must only pass a `value` that already passed
+ * `isChordItem`.
+ */
+function toChordItem(value: Record<string, unknown>): ChordItem {
+  const chord: ChordItem = {
+    id: value.id as string,
+    root: value.root as string,
+    quality: value.quality as ChordItem['quality'],
+    bars: value.bars as number,
+  };
+  if (value.bassNote !== undefined) {
+    chord.bassNote = value.bassNote as string | null;
+  }
+  return chord;
+}
+
+/**
+ * The all-or-nothing array check `asCheckedArray` performs, plus the rebuild
+ * `toChordItem` performs per element — split out because chords are the one
+ * array in this file whose elements must never be cast through as-is (see
+ * `toChordItem`'s docblock).
+ */
+function sanitizeChordsArray(value: unknown, fallback: ChordItem[]): ChordItem[] {
+  if (!Array.isArray(value) || !value.every(isChordItem)) return fallback;
+  return (value as Record<string, unknown>[]).map(toChordItem);
 }
 
 /**
@@ -466,7 +501,7 @@ export function sanitizeCustomChordProgressions(value: unknown): CustomChordProg
       category: typeof raw.category === 'string' ? raw.category : 'User',
       description: typeof raw.description === 'string' ? raw.description : '',
       roman: typeof raw.roman === 'string' ? raw.roman : '',
-      chords: raw.chords as ChordItem[],
+      chords: (raw.chords as Record<string, unknown>[]).map(toChordItem),
       createdAt:
         typeof raw.createdAt === 'number' && Number.isFinite(raw.createdAt)
           ? raw.createdAt
@@ -643,7 +678,7 @@ export function sanitizeLoops(value: unknown, meterId: MeterId = DEFAULT_METER_I
       synthArpSettings: sanitizeTrackArp(r.synthArpSettings, 'synth'),
       chordArpSettings: sanitizeTrackArp(r.chordArpSettings, 'chord'),
       bassArpSettings: sanitizeTrackArp(r.bassArpSettings, 'bass'),
-      chords: asCheckedArray<ChordItem>(r.chords, isChordItem, fallback.chords),
+      chords: sanitizeChordsArray(r.chords, fallback.chords),
       chordRhythmId: asChordRhythmId(r.chordRhythmId, fallback.chordRhythmId),
       chordRhythmMode: asPatternMode(r.chordRhythmMode, fallback.chordRhythmMode),
       customChordRhythm: asCheckedArray<boolean>(r.customChordRhythm, (v) => typeof v === 'boolean', fallback.customChordRhythm),

@@ -3,6 +3,7 @@ import { DEFAULT_VELOCITY } from '../constants';
 import type { ChordItem } from '@/types';
 import type { ActiveSynth } from '@/types/synth';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
+import { generateBlockChordNotes } from '@/utils/musicTheory';
 
 /**
  * One-shot previews for library entries (synth patches, chord templates,
@@ -161,7 +162,8 @@ export function previewChordProgression(
     );
     for (; nextIndex < end; nextIndex++) {
       const start = startTime + nextIndex * PREVIEW_CHORD_DURATION;
-      for (const n of chords[nextIndex].notes) {
+      const chord = chords[nextIndex];
+      for (const n of generateBlockChordNotes(chord.quality, chord.root, 4)) {
         const voiceId = audioEngine.triggerSynthNoteOn(n, synth, 0.75, start, PREVIEW_SOURCE, 1, "preview");
         if (voiceId) {
           audioEngine.triggerSynthNoteOff(voiceId, 0.3, start + PREVIEW_CHORD_DURATION * 0.85);

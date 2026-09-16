@@ -308,7 +308,7 @@ describe('the dB level contract in the format docblock', () => {
 
   test('names PROJECT_FORMAT_VERSION as the current, directly-read version', () => {
     expect(block).toContain('PROJECT_FORMAT_VERSION');
-    expect(PROJECT_FORMAT_VERSION).toBe(11);
+    expect(PROJECT_FORMAT_VERSION).toBe(12);
   });
 
   test('it states the unit, the unity, the range and the silence encoding', () => {
