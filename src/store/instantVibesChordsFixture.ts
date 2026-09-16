@@ -1,5 +1,6 @@
 import type { ChordItem } from '../types';
 import { deriveChordNotes } from '../utils/musicTheory';
+import type { ChordQuality } from '@/musicCore';
 
 /**
  * A golden snapshot of every Instant Vibe's `chords` array, originally
@@ -21,7 +22,7 @@ import { deriveChordNotes } from '../utils/musicTheory';
  * (or a vibe's reference into it) without meaning to change this vibe's
  * chords — revert the library/vibe change instead.
  */
-function snapshotChord(id: string, root: string, quality: string, bars: number, octave: number): ChordItem {
+function snapshotChord(id: string, root: string, quality: ChordQuality, bars: number, octave: number): ChordItem {
   return deriveChordNotes({ id, root, quality, bars, notes: [] }, octave);
 }
 

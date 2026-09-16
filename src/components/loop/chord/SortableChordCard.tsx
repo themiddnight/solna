@@ -267,7 +267,7 @@ function ChordEditControls({
         <select
           id={`select-chord-quality-${chord.id}`}
           value={chord.quality}
-          onChange={(e) => updateChord(chord.id, { quality: e.target.value })}
+          onChange={(e) => updateChord(chord.id, { quality: e.target.value as ChordItem['quality'] })}
           className="select select-xs w-full"
         >
           {QUALITY_GROUPS.map((group) => (

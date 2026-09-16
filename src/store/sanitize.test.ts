@@ -256,6 +256,11 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
     ['a chord missing notes', 'chords', [{ id: 'c', root: 'A', quality: 'min', bars: 1 }]],
     ['a chord with string notes', 'chords', [{ id: 'c', root: 'A', quality: 'min', bars: 1, notes: 'A3' }]],
     ['a chord with zero bars', 'chords', [{ id: 'c', root: 'A', quality: 'min', bars: 0, notes: ['A3'] }]],
+    // resolveChordNotes (Music Core) throws on either of these; the sanitize
+    // boundary must reject them before a persisted/imported body ever reaches
+    // playback rather than letting the throw surface deep inside the engine.
+    ['a chord with an unregistered quality', 'chords', [{ id: 'c', root: 'A', quality: 'not-a-real-quality', bars: 1, notes: ['A3'] }]],
+    ['a chord with an unresolvable root', 'chords', [{ id: 'c', root: 'H', quality: 'min', bars: 1, notes: ['A3'] }]],
     ['customChordRhythm of strings', 'customChordRhythm', ['on', 'off']],
     ['customBassPattern outside the union', 'customBassPattern', ['root', 'ninth']],
     // A hold is a finite positive integer, so a zero, a negative, a fraction or

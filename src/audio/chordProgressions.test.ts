@@ -46,8 +46,10 @@ describe('CHORD_PROGRESSIONS structure', () => {
   });
 
   test('every explicit quality is a chord type tonal actually knows', () => {
-    // generateBlockChordNotes silently falls back to `maj` on an unknown
-    // token, so without this a typo is inaudible rather than a failure.
+    // Since DEV-394, `generateBlockChordNotes` throws on an unregistered
+    // quality token rather than silently falling back to `maj` — this test
+    // catches an authored typo at data-layer scope, before it can reach that
+    // throw at playback time.
     for (const p of CHORD_PROGRESSIONS) {
       for (const step of p.steps) {
         if (step.quality === undefined) continue;

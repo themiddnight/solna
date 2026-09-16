@@ -7,6 +7,7 @@ import { SortableChordCard } from './SortableChordCard';
 import { beatsPerBarFor, resolveBeatCounter } from '@/utils/playhead';
 import { formatChordLabel } from '@/utils/musicTheory';
 import { formatKeyLabel } from '@/utils/noteSpelling';
+import type { ChordQuality } from '@/musicCore';
 import type {
   ChordPalette,
   ChordViewState,
@@ -82,7 +83,7 @@ interface QuickAddPaletteProps {
   use7thsInQuickAdd: boolean;
   onToggle7ths: () => void;
   onAddDiatonic: (degreeIndex: number) => void;
-  onAddBorrowed: (root: string, quality: string) => void;
+  onAddBorrowed: (root: string, quality: ChordQuality) => void;
   previews: HeldChordPreview;
 }
 
@@ -101,7 +102,7 @@ function QuickAddPalette({
   previews,
 }: QuickAddPaletteProps) {
   const { handlePreviewMouseDown, handlePreviewMouseUp } = previews;
-  const hold = (root: string, quality: string) => ({
+  const hold = (root: string, quality: ChordQuality) => ({
     onDown: (e: PreviewEvent) => handlePreviewMouseDown(e, root, quality),
     onUp: handlePreviewMouseUp,
   });

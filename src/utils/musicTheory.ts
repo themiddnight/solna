@@ -439,7 +439,7 @@ export function snapProgressionToScale(
     const diatonic = getDiatonicChordForDegree(bestDegree, root, scaleType, chord.quality.includes('7') || chord.quality.includes('9'));
 
     // Preserve custom qualities if user intentionally used extended qualities like maj9, 7sus4, otherwise use diatonic
-    let targetQuality: string = diatonic.quality;
+    let targetQuality: ChordQuality = diatonic.quality;
     if (chord.quality === 'maj9' || chord.quality === 'min9' || chord.quality === '7sus4' || chord.quality === 'sus4') {
       targetQuality = chord.quality;
     }

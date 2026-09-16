@@ -1,3 +1,5 @@
+import type { ChordQuality } from './musicCore';
+
 /**
  * The four tabs, two per layer. The loop layer's split is a rule, not a
  * grouping of what happened to exist: changes the SOUND but not the notes →
@@ -137,7 +139,7 @@ export interface DrumPad {
 export interface ChordItem {
   id: string;
   root: string;
-  quality: string;
+  quality: ChordQuality;
   bars: number;
   notes: string[];
   bassNote?: string | null; // bass override note name ('E4'); null/absent = auto root

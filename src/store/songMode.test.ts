@@ -161,7 +161,7 @@ describe('song mode coordinator: entering and advancing', () => {
   });
 
   test('advances to the next loop at each boundary', async () => {
-    const loopB = {
+    const loopB: Loop = {
       ...createDefaultLoop(),
       id: 'loop-b',
       name: 'Loop B',
@@ -278,7 +278,7 @@ describe('song mode coordinator: leaving and re-entering', () => {
   const { startSync } = trackLiveSyncs();
 
   test('a user-initiated Stop still clears the song scope after a boundary crossing', async () => {
-    const loopB = {
+    const loopB: Loop = {
       ...createDefaultLoop(),
       id: 'loop-b',
       name: 'Loop B',
@@ -626,7 +626,7 @@ describe('song mode coordinator: Play All again, and reaching the end', () => {
   // a real (fake) clock, rather than a shortcut that starts mid-sequence.
   test('reported bug repro: Play All, solo-loop a loop from its card, Play All again must resume and advance the song', async () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
-    const loopC = {
+    const loopC: Loop = {
       ...createDefaultLoop(),
       id: 'loop-c',
       name: 'Loop C',

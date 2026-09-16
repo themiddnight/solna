@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { SortableChordCard } from './SortableChordCard';
+import type { ChordItem } from '@/types';
 
-const chord = {
+const chord: ChordItem = {
   id: 'chord-1',
   root: 'A',
   quality: 'min7',
@@ -80,7 +81,7 @@ describe('SortableChordCard theming', () => {
 });
 
 describe('SortableChordCard spelling', () => {
-  const flatChord = {
+  const flatChord: ChordItem = {
     id: 'chord-2',
     root: 'D#',
     quality: 'maj',

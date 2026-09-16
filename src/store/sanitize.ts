@@ -22,6 +22,7 @@ import { resizePatternBars } from '../utils/customPattern';
 import { DEFAULT_METER_ID, getMeter, MAX_STEPS_PER_BAR, type MeterId } from '../utils/meter';
 import { clampLoopLength } from '../utils/patternTimeline';
 import { LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
+import { isChordQuality } from '@/musicCore';
 import type { Loop } from './types';
 import type { LeadNote } from '../audio/leadMelody';
 import {
@@ -375,13 +376,27 @@ function asCheckedArray<T>(value: unknown, isElement: (v: unknown) => boolean, f
  * `notes` array is a crash in the chord scheduler, not a wrong sound.
  * The same element check is applied to the flat top-level `chords` key, a
  * pre-loop-wrap shape sanitizeLoops never sees.
+ *
+ * `root` and `quality` are both checked against a closed set, not just
+ * `typeof === 'string'`: `resolveChordNotes` (Music Core) throws on either an
+ * unregistered quality or a root Tonal can't resolve, and this guard is what
+ * stands between a stale/imported string and that throw. `isRootNote` reuses
+ * the same `ROOT_SET` membership check every other persisted root field in
+ * this file uses (`scaleRoot`, above), rather than re-deriving root validity a
+ * second way. A chord failing either check is rejected WHOLE by
+ * `asCheckedArray`'s all-or-nothing rule (see its call site in
+ * sanitizeLoops) — the array falls back to the default loop's chords rather
+ * than being repaired field by field, matching every other array of records in
+ * this file.
  */
 function isChordItem(value: unknown): boolean {
   if (!isPlainObject(value)) return false;
   return (
     typeof value.id === 'string' &&
     typeof value.root === 'string' &&
+    isRootNote(value.root) &&
     typeof value.quality === 'string' &&
+    isChordQuality(value.quality) &&
     typeof value.bars === 'number' &&
     Number.isFinite(value.bars) &&
     value.bars > 0 &&

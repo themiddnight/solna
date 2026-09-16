@@ -15,6 +15,8 @@
  * of the helper, and it is why the helper must stay in this file, four lines
  * above the table it builds.
  */
+import type { ChordQuality } from '@/musicCore';
+
 type ProgressionCategory =
   | 'Pop & EDM'
   | 'Jazz & Neo-Soul'
@@ -34,7 +36,7 @@ interface ProgressionStep {
    * the two readings are silently different music. Genres whose identity is
    * extended harmony (lo-fi, boom bap) write their qualities out.
    */
-  quality?: string;
+  quality?: ChordQuality;
   /** Bars this chord is held. 1 for lofi/boom bap, 2 for EDM, 4+ for ambient. */
   bars: number;
 }
@@ -65,7 +67,7 @@ export interface ChordProgression {
   steps: ProgressionStep[];
 }
 
-const step = (degree: number, bars = 1, quality?: string): ProgressionStep =>
+const step = (degree: number, bars = 1, quality?: ChordQuality): ProgressionStep =>
   quality === undefined ? { degree, bars } : { degree, quality, bars };
 
 export const CHORD_PROGRESSIONS: ChordProgression[] = [
