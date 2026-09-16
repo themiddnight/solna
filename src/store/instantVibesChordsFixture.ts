@@ -1,5 +1,4 @@
 import type { ChordItem } from '../types';
-import { deriveChordNotes } from '../utils/musicTheory';
 import type { ChordQuality } from '@/musicCore';
 
 /**
@@ -22,57 +21,57 @@ import type { ChordQuality } from '@/musicCore';
  * (or a vibe's reference into it) without meaning to change this vibe's
  * chords — revert the library/vibe change instead.
  */
-function snapshotChord(id: string, root: string, quality: ChordQuality, bars: number, octave: number): ChordItem {
-  return deriveChordNotes({ id, root, quality, bars, notes: [] }, octave);
+function snapshotChord(id: string, root: string, quality: ChordQuality, bars: number): ChordItem {
+  return { id, root, quality, bars };
 }
 
 export const ORIGINAL_VIBE_CHORDS: Record<string, ChordItem[]> = {
   'lofi-chill': [
-    snapshotChord('c1', 'C', 'maj7', 1, 4),
-    snapshotChord('c2', 'A', 'min7', 1, 4),
-    snapshotChord('c3', 'D', 'min7', 1, 4),
-    snapshotChord('c4', 'G', '7', 1, 4),
+    snapshotChord('c1', 'C', 'maj7', 1),
+    snapshotChord('c2', 'A', 'min7', 1),
+    snapshotChord('c3', 'D', 'min7', 1),
+    snapshotChord('c4', 'G', '7', 1),
   ],
   'synthwave-80s': [
-    snapshotChord('sw1', 'A', 'min', 1, 4),
-    snapshotChord('sw2', 'F', 'maj', 1, 4),
-    snapshotChord('sw3', 'C', 'maj', 1, 4),
-    snapshotChord('sw4', 'G', 'maj', 1, 4),
+    snapshotChord('sw1', 'A', 'min', 1),
+    snapshotChord('sw2', 'F', 'maj', 1),
+    snapshotChord('sw3', 'C', 'maj', 1),
+    snapshotChord('sw4', 'G', 'maj', 1),
   ],
   'cyber-edm': [
-    snapshotChord('cy1', 'F', 'min', 1, 4),
-    snapshotChord('cy2', 'D#', 'maj', 1, 4),
-    snapshotChord('cy3', 'C#', 'maj', 1, 4),
-    snapshotChord('cy4', 'C', 'min', 1, 4),
+    snapshotChord('cy1', 'F', 'min', 1),
+    snapshotChord('cy2', 'D#', 'maj', 1),
+    snapshotChord('cy3', 'C#', 'maj', 1),
+    snapshotChord('cy4', 'C', 'min', 1),
   ],
   'deep-ambient': [
-    snapshotChord('am1', 'D', 'maj7', 4, 4),
-    snapshotChord('am2', 'E', 'maj', 4, 4),
-    snapshotChord('am3', 'F#', 'min7', 4, 4),
-    snapshotChord('am4', 'G#', 'm7b5', 4, 4),
+    snapshotChord('am1', 'D', 'maj7', 4),
+    snapshotChord('am2', 'E', 'maj', 4),
+    snapshotChord('am3', 'F#', 'min7', 4),
+    snapshotChord('am4', 'G#', 'm7b5', 4),
   ],
   'boom-bap': [
-    snapshotChord('bb1', 'E', 'min7', 1, 4),
-    snapshotChord('bb2', 'A', '7', 1, 4),
-    snapshotChord('bb3', 'D', 'maj7', 1, 4),
-    snapshotChord('bb4', 'G', 'maj7', 1, 4),
+    snapshotChord('bb1', 'E', 'min7', 1),
+    snapshotChord('bb2', 'A', '7', 1),
+    snapshotChord('bb3', 'D', 'maj7', 1),
+    snapshotChord('bb4', 'G', 'maj7', 1),
   ],
   'zen-garden': [
-    snapshotChord('zn1', 'G', 'min', 2, 4),
-    snapshotChord('zn2', 'D', 'min', 2, 4),
-    snapshotChord('zn3', 'G', 'min', 2, 4),
-    snapshotChord('zn4', 'D#', 'maj', 2, 4),
+    snapshotChord('zn1', 'G', 'min', 2),
+    snapshotChord('zn2', 'D', 'min', 2),
+    snapshotChord('zn3', 'G', 'min', 2),
+    snapshotChord('zn4', 'D#', 'maj', 2),
   ],
   'lofi-waltz': [
-    snapshotChord('lw1', 'D', 'min9', 1, 4),
-    snapshotChord('lw2', 'A#', 'maj7', 1, 4),
-    snapshotChord('lw3', 'G', 'min9', 1, 4),
-    snapshotChord('lw4', 'C', '7', 1, 4),
+    snapshotChord('lw1', 'D', 'min9', 1),
+    snapshotChord('lw2', 'A#', 'maj7', 1),
+    snapshotChord('lw3', 'G', 'min9', 1),
+    snapshotChord('lw4', 'C', '7', 1),
   ],
   'afro-six-eight': [
-    snapshotChord('af1', 'D', 'min7', 1, 4),
-    snapshotChord('af2', 'G', '7', 1, 4),
-    snapshotChord('af3', 'D', 'min7', 1, 4),
-    snapshotChord('af4', 'G', '7', 1, 4),
+    snapshotChord('af1', 'D', 'min7', 1),
+    snapshotChord('af2', 'G', '7', 1),
+    snapshotChord('af3', 'D', 'min7', 1),
+    snapshotChord('af4', 'G', '7', 1),
   ],
 };

@@ -458,7 +458,7 @@ describe('factory progressions affected by the classification fix (DEV-393)', ()
   // too.
   test('lofi-trapsoul: VII9 survives a reharmonize into a different scale', () => {
     const progression = progressionById('lofi-trapsoul')!;
-    const resolved = resolveProgression(progression, 'A', 'Natural Minor', 4);
+    const resolved = resolveProgression(progression, 'A', 'Natural Minor');
     const snapped = snapProgressionToScale(resolved, 'D', 'Dorian');
     // Step index 2 is the VII9 step (step(6, 1, '9')).
     expect(snapped[2].quality).toBe('9');
@@ -466,7 +466,7 @@ describe('factory progressions affected by the classification fix (DEV-393)', ()
 
   test('lofi-tape-loop: the closing V9 survives a reharmonize into a different scale', () => {
     const progression = progressionById('lofi-tape-loop')!;
-    const resolved = resolveProgression(progression, 'C', 'Major', 4);
+    const resolved = resolveProgression(progression, 'C', 'Major');
     const snapped = snapProgressionToScale(resolved, 'D', 'Dorian');
     // Step index 3 is the V9 step (step(4, 1, '9')); maj9/min9 at indices 0
     // and 2 were already preserved by the old explicit four-name list, so
@@ -476,14 +476,14 @@ describe('factory progressions affected by the classification fix (DEV-393)', ()
 
   test('ambient-open-fourths: both Isus2/IIsus2 steps survive a reharmonize', () => {
     const progression = progressionById('ambient-open-fourths')!;
-    const resolved = resolveProgression(progression, 'C', 'Lydian', 4);
+    const resolved = resolveProgression(progression, 'C', 'Lydian');
     const snapped = snapProgressionToScale(resolved, 'G', 'Major');
     expect(snapped.map((c) => c.quality)).toEqual(['sus2', 'sus2']);
   });
 
   test('ambient-glass-horizon: the closing IIsus2 step survives a reharmonize', () => {
     const progression = progressionById('ambient-glass-horizon')!;
-    const resolved = resolveProgression(progression, 'C', 'Lydian', 4);
+    const resolved = resolveProgression(progression, 'C', 'Lydian');
     const snapped = snapProgressionToScale(resolved, 'G', 'Major');
     // Step index 3 is the IIsus2 step (step(1, 4, 'sus2')).
     expect(snapped[3].quality).toBe('sus2');

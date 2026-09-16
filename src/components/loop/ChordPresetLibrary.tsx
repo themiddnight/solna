@@ -162,7 +162,7 @@ function resolveFactoryChords(
   progression: ChordProgression,
   spellingKey: SpellingKey,
 ): ChordItem[] {
-  return resolveProgression(progression, spellingKey.scaleRoot, spellingKey.scaleType, 4);
+  return resolveProgression(progression, spellingKey.scaleRoot, spellingKey.scaleType);
 }
 
 function resolveCustomChords(

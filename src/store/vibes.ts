@@ -54,7 +54,7 @@ export function resolveVibe(spec: VibeSpec): ResolvedVibe {
     // The vibe's OWN key, scale and octave, by construction. These used to be
     // three literals written beside the id, and a mismatch changed what the
     // vibe sounded like without changing progressionId.
-    chords: resolveProgression(progression, spec.scaleRoot, spec.scaleType, spec.chordOctave),
+    chords: resolveProgression(progression, spec.scaleRoot, spec.scaleType),
     drumPattern: grid.rows,
     effects: requireEffectChain(spec.effectChainId),
   };

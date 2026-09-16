@@ -3,7 +3,7 @@ import { Chord } from 'tonal';
 import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
 import { progressionById, resolveProgression } from './chordProgressions';
 import { SCALES } from '@/data/scales';
-import { deriveChordNotes, TONAL_CHORD_ALIASES } from '../utils/musicTheory';
+import { TONAL_CHORD_ALIASES } from '../utils/musicTheory';
 
 describe('CHORD_PROGRESSIONS structure', () => {
   test('ids are unique and non-empty, and every entry has steps', () => {
@@ -118,19 +118,19 @@ describe('resolveProgression', () => {
   const popAnthem = progressionById('pop-i-v-vi-iv')!;
 
   test('resolves I - V - vi - IV in C Major to C - G - Am - F', () => {
-    expect(resolveProgression(popAnthem, 'C', 'Major', 4).map((c) => `${c.root}${c.quality}`)).toEqual(
+    expect(resolveProgression(popAnthem, 'C', 'Major').map((c) => `${c.root}${c.quality}`)).toEqual(
       ['Cmaj', 'Gmaj', 'Amin', 'Fmaj'],
     );
   });
 
   test('an omitted quality yields the triad, never the seventh', () => {
-    const chords = resolveProgression(popAnthem, 'C', 'Major', 4);
+    const chords = resolveProgression(popAnthem, 'C', 'Major');
     expect(chords.map((c) => c.quality)).toEqual(['maj', 'maj', 'min', 'maj']);
   });
 
   test('an explicit quality survives verbatim', () => {
     const lofi = progressionById('lofi-tape-loop')!;
-    expect(resolveProgression(lofi, 'C', 'Major', 4).map((c) => c.quality)).toEqual([
+    expect(resolveProgression(lofi, 'C', 'Major').map((c) => c.quality)).toEqual([
       'maj9',
       'min7',
       'min9',
@@ -140,7 +140,7 @@ describe('resolveProgression', () => {
 
   test('bars carry through and ids are unique within the result', () => {
     const zen = progressionById('zen-still-pond')!;
-    const chords = resolveProgression(zen, 'G', 'Hirajoshi', 4);
+    const chords = resolveProgression(zen, 'G', 'Hirajoshi');
     expect(chords.map((c) => c.bars)).toEqual([4, 4]);
     expect(chords.map((c) => c.id)).toEqual(['zen-still-pond-0', 'zen-still-pond-1']);
     expect(new Set(chords.map((c) => c.id)).size).toBe(chords.length);
@@ -149,15 +149,15 @@ describe('resolveProgression', () => {
   test('returns exactly one chord per step, even in a five-note scale', () => {
     // B2 depends on this: a collapsed progression would silently shorten a loop.
     for (const p of CHORD_PROGRESSIONS.filter((x) => x.minScaleLength === 5)) {
-      expect(resolveProgression(p, 'G', 'Hirajoshi', 4)).toHaveLength(p.steps.length);
+      expect(resolveProgression(p, 'G', 'Hirajoshi')).toHaveLength(p.steps.length);
     }
   });
 
-  test('notes come from deriveChordNotes at the requested octave', () => {
-    const chords = resolveProgression(popAnthem, 'C', 'Major', 3);
-    expect(chords[0].notes).toEqual(
-      deriveChordNotes({ id: 'x', root: 'C', quality: 'maj', bars: 1, notes: [] }, 3).notes,
-    );
+  test('the result carries no notes field', () => {
+    const chords = resolveProgression(popAnthem, 'C', 'Major');
+    for (const c of chords) {
+      expect('notes' in c).toBe(false);
+    }
   });
 });
 
@@ -165,7 +165,7 @@ describe('the four Phase 1 vibe-chord progressions', () => {
   test('lofi-morning-turnaround resolves to Cmaj7 Amin7 Dmin7 G7 in C Major', () => {
     const p = progressionById('lofi-morning-turnaround')!;
     expect(p).toBeDefined();
-    expect(resolveProgression(p, 'C', 'Major', 4).map((c) => `${c.root}${c.quality}`)).toEqual([
+    expect(resolveProgression(p, 'C', 'Major').map((c) => `${c.root}${c.quality}`)).toEqual([
       'Cmaj7', 'Amin7', 'Dmin7', 'G7',
     ]);
   });
@@ -173,7 +173,7 @@ describe('the four Phase 1 vibe-chord progressions', () => {
   test('edm-cyber-vamp resolves to Fmin D#maj C#maj Cmin in F Natural Minor', () => {
     const p = progressionById('edm-cyber-vamp')!;
     expect(p).toBeDefined();
-    expect(resolveProgression(p, 'F', 'Natural Minor', 4).map((c) => `${c.root}${c.quality}`)).toEqual([
+    expect(resolveProgression(p, 'F', 'Natural Minor').map((c) => `${c.root}${c.quality}`)).toEqual([
       'Fmin', 'D#maj', 'C#maj', 'Cmin',
     ]);
   });
@@ -181,7 +181,7 @@ describe('the four Phase 1 vibe-chord progressions', () => {
   test('ambient-lydian-halo resolves to Dmaj7 Emaj F#min7 G#m7b5 in D Lydian, 4 bars each', () => {
     const p = progressionById('ambient-lydian-halo')!;
     expect(p).toBeDefined();
-    const chords = resolveProgression(p, 'D', 'Lydian', 4);
+    const chords = resolveProgression(p, 'D', 'Lydian');
     expect(chords.map((c) => `${c.root}${c.quality}`)).toEqual([
       'Dmaj7', 'Emaj', 'F#min7', 'G#m7b5',
     ]);
@@ -191,7 +191,7 @@ describe('the four Phase 1 vibe-chord progressions', () => {
   test('boombap-soul-piano resolves to Emin7 A7 Dmaj7 Gmaj7 in E Dorian', () => {
     const p = progressionById('boombap-soul-piano')!;
     expect(p).toBeDefined();
-    expect(resolveProgression(p, 'E', 'Dorian', 4).map((c) => `${c.root}${c.quality}`)).toEqual([
+    expect(resolveProgression(p, 'E', 'Dorian').map((c) => `${c.root}${c.quality}`)).toEqual([
       'Emin7', 'A7', 'Dmaj7', 'Gmaj7',
     ]);
   });

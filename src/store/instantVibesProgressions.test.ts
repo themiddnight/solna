@@ -4,12 +4,12 @@ import { resolveVibe, VIBE_IDS } from './vibes';
 import { ORIGINAL_VIBE_CHORDS } from './instantVibesChordsFixture';
 import { progressionById, resolveProgression } from '../audio/chordProgressions';
 
-// Root/quality/bars/notes only — resolveProgression ids are
+// Root/quality/bars only — resolveProgression ids are
 // `${progressionId}-${i}`, which never matches the fixture's hand-authored
 // ids (`c1`, `sw1`, ...), and that difference is not part of what "the same
 // chords" means here.
-function withoutId(chords: { root: string; quality: string; bars: number; notes: string[] }[]) {
-  return chords.map(({ root, quality, bars, notes }) => ({ root, quality, bars, notes }));
+function withoutId(chords: { root: string; quality: string; bars: number }[]) {
+  return chords.map(({ root, quality, bars }) => ({ root, quality, bars }));
 }
 
 describe('ORIGINAL_VIBE_CHORDS fixture', () => {
@@ -36,7 +36,7 @@ describe('ResolvedVibe.progressionId reproduces the fixture exactly', () => {
     for (const id of VIBE_IDS) {
       const vibe = VIBES.find((v) => v.id === id)!;
       const progression = progressionById(vibe.progressionId)!;
-      const resolved = resolveProgression(progression, vibe.scaleRoot, vibe.scaleType, vibe.chordOctave);
+      const resolved = resolveProgression(progression, vibe.scaleRoot, vibe.scaleType);
       expect(withoutId(resolved)).toEqual(withoutId(ORIGINAL_VIBE_CHORDS[id]));
     }
   });

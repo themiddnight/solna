@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { progressionById, resolveProgression } from './chordProgressions';
-import { generateBlockChordNotes, resolveDegreeQuality, ROOTS, rootSemitone } from '../utils/musicTheory';
+import { resolveDegreeQuality, ROOTS, rootSemitone } from '../utils/musicTheory';
 
 /**
  * The 22 original interval-form templates, copied verbatim. `interval` is
@@ -91,7 +91,7 @@ describe('migration equivalence: degree form reproduces interval form', () => {
       expect(progression.steps).toHaveLength(original.relativeChords.length);
 
       for (const root of ROOTS) {
-        const resolved = resolveProgression(progression, root, progression.referenceScale, 4);
+        const resolved = resolveProgression(progression, root, progression.referenceScale);
         expect(resolved).toHaveLength(original.relativeChords.length);
         original.relativeChords.forEach((rc, i) => {
           const expectedRoot = ROOTS[(rootSemitone(root) + rc.interval) % 12];
@@ -99,12 +99,10 @@ describe('migration equivalence: degree form reproduces interval form', () => {
             root: resolved[i].root,
             quality: resolved[i].quality,
             bars: resolved[i].bars,
-            notes: resolved[i].notes,
           }).toEqual({
             root: expectedRoot,
             quality: rc.quality,
             bars: rc.bars,
-            notes: generateBlockChordNotes(rc.quality, expectedRoot, 4),
           });
         });
       }
