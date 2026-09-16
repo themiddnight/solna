@@ -333,9 +333,13 @@ export function planChordArm(
  * across chords and bar lines rather than restarting on every one.
  *
  * The arp's hold scale is `feelToHoldScale`, NOT `cycleHoldScale`: "feel may
- * only tighten" is a rule about a span the USER DREW, and an arp has none. The
- * offline renderer used the clamped form and so held arp notes shorter than the
- * live player on a custom lane; Task 11 pins that they now agree.
+ * only tighten" is a rule about a span the USER DREW, and an arp has none.
+ * `arpEventsForStep` itself clamps its `hold` output with `Math.min(1, holdScale)`
+ * (`chordPlayback.ts`), so `feelToHoldScale` and `cycleHoldScale` are indistinguishable
+ * at every feel value here — offline and live have always produced identical arp
+ * holds, before and after this migration. `feelToHoldScale` is used because it
+ * states the actual rule directly; the choice is behavior-neutral today and would
+ * only become observable if that inner clamp were ever removed (Task 11 traced this).
  */
 export function planChordStep(
   plan: ArmedChordPlan,
