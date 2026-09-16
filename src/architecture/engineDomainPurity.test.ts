@@ -62,8 +62,50 @@ const CASES: Array<[label: string, source: string]> = [
     "import { snapProgressionToScale } from '@/utils/musicTheory';\nexport const s = snapProgressionToScale;\n"],
 ];
 
+/**
+ * The five audio-side theory modules banned by `ENGINE_MUSIC_DOMAIN_BAN`
+ * (`arpeggiator.ts`, `bassPatterns.ts`, `chordProgressions.ts`,
+ * `chordRhythms.ts`, `leadMelody.ts`) all live directly inside `src/audio/`,
+ * siblings of `engine.ts`/`drumSynth.ts`/`masterRack.ts` — exactly like
+ * `leadStepRecord.ts`. A round-2 review found the block's entries for these
+ * five were still the prefixed `**` + `/audio/xyz` form, which matches the
+ * `@/`-aliased import but NOT the relative form a sibling file actually
+ * writes (`./arpeggiator`, `../bassPatterns`, etc. — none of those contain an
+ * `audio/` path segment). Each module gets both forms tested here, the same
+ * discipline that already caught and fixed the identical hole for
+ * `leadStepRecord` one round earlier.
+ */
+const THEORY_SIBLING_CASES: Array<[label: string, source: string]> = [
+  ['arpeggiator, aliased',
+    "import { buildArpSequenceUncached } from '@/audio/arpeggiator';\nexport const a = buildArpSequenceUncached;\n"],
+  ['arpeggiator, relative',
+    "import { buildArpSequenceUncached } from '../arpeggiator';\nexport const a = buildArpSequenceUncached;\n"],
+  ['bassPatterns (audio-side resolver), aliased',
+    "import { resolveBassSteps } from '@/audio/bassPatterns';\nexport const b = resolveBassSteps;\n"],
+  ['bassPatterns (audio-side resolver), relative',
+    "import { resolveBassSteps } from '../bassPatterns';\nexport const b = resolveBassSteps;\n"],
+  ['chordProgressions (audio-side resolver), aliased',
+    "import { resolveProgression } from '@/audio/chordProgressions';\nexport const c = resolveProgression;\n"],
+  ['chordProgressions (audio-side resolver), relative',
+    "import { resolveProgression } from '../chordProgressions';\nexport const c = resolveProgression;\n"],
+  ['chordRhythms, aliased',
+    "import { feelToHoldScale } from '@/audio/chordRhythms';\nexport const c = feelToHoldScale;\n"],
+  ['chordRhythms, relative',
+    "import { feelToHoldScale } from '../chordRhythms';\nexport const c = feelToHoldScale;\n"],
+  ['leadMelody, aliased',
+    "import { DEFAULT_LEAD_GATE } from '@/audio/leadMelody';\nexport const l = DEFAULT_LEAD_GATE;\n"],
+  ['leadMelody, relative',
+    "import { DEFAULT_LEAD_GATE } from '../leadMelody';\nexport const l = DEFAULT_LEAD_GATE;\n"],
+];
+
 describe('engine music-domain guard (DEV-399)', () => {
   for (const [label, source] of CASES) {
+    test(`${label} is an error inside the engine`, async () => {
+      expect(await messagesFor(source, ENGINE)).toContainEqual(RESTRICTED);
+    });
+  }
+
+  for (const [label, source] of THEORY_SIBLING_CASES) {
     test(`${label} is an error inside the engine`, async () => {
       expect(await messagesFor(source, ENGINE)).toContainEqual(RESTRICTED);
     });

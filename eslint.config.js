@@ -84,18 +84,35 @@ const TONAL_SCOPED_PACKAGE_BAN = {
 // banned `@/musicCore` `octaveOfNote`, just not routed through Music Core.
 // Nothing in the engine's file set imports it today; it is named here so it
 // stays that way rather than becoming a silent second door into note-name
-// parsing. The pattern is bare (no `audio/` prefix, unlike the
-// `**/audio/arpeggiator`-style entries above it) because `leadStepRecord.ts`
-// lives directly inside `src/audio/`, a sibling of `engine.ts`, `drumSynth.ts`
-// and `masterRack.ts` — the realistic relative form from any of them is
-// `./leadStepRecord` or, from `src/audio/synth/**`, `../leadStepRecord`,
-// neither of which contains an `audio/` path segment for a prefixed pattern
-// to match.
+// parsing.
 //
-// Both import forms are covered: the `@/`-aliased one a reader reaches for by
-// habit and the `../`/`../../` relative one the engine files actually use
-// today (`src/audio/engine.ts` imports `'../utils/musicTheory'`). A DEV-397
-// re-review found a real gate that had closed only the aliased form.
+// Every audio-side theory module below — `arpeggiator.ts`, `bassPatterns.ts`,
+// `chordProgressions.ts`, `chordRhythms.ts`, `leadMelody.ts`, plus
+// `leadStepRecord.ts` above — lives directly inside `src/audio/`, a sibling of
+// `engine.ts`, `drumSynth.ts` and `masterRack.ts`, so every one of them is
+// banned by a BARE pattern (`**/arpeggiator`, not `**/audio/arpeggiator`). A
+// prefixed pattern only matches an import path that literally contains an
+// `audio/` segment — true for the `@/`-aliased form (`@/audio/arpeggiator`)
+// but never true for the relative form a sibling file actually writes
+// (`./arpeggiator` from `engine.ts`, `../arpeggiator` from
+// `src/audio/synth/**`) — neither contains `audio/` at all, because the
+// traversal never leaves the `src/audio/` directory. A first pass at this
+// list used the prefixed form for these five and shipped a real gap, caught
+// only by testing the relative form on-disk rather than trusting the pattern;
+// `**/leadStepRecord` was fixed the same way one round earlier and is the
+// precedent this generalizes. `**/bassPatterns`, `**/chordProgressions` and
+// `**/chordRhythms` also subsume the separate `**/data/*` entries those three
+// names used to need below — a data-layer catalog and an audio-side resolver
+// share a basename for each of the three, and one bare pattern now bans both
+// copies, so the redundant `**/data/*` entries were removed rather than kept
+// duplicated.
+//
+// Both import forms are covered for every entry in this list: the
+// `@/`-aliased one a reader reaches for by habit and the `../`/`../../`/`./`
+// relative one the engine files actually use today (`src/audio/engine.ts`
+// imports `'../utils/musicTheory'`). A DEV-397 re-review found a real gate
+// that had closed only the aliased form for one entry; this DEV-399 guard's
+// own review found the same hole across six.
 const ENGINE_MUSIC_DOMAIN_BAN = [
   {
     group: [
@@ -103,14 +120,11 @@ const ENGINE_MUSIC_DOMAIN_BAN = [
       '**/musicCore/**',
       '**/utils/noteSpelling',
       '**/data/scales',
-      '**/data/chordProgressions',
-      '**/data/chordRhythms',
-      '**/data/bassPatterns',
-      '**/audio/arpeggiator',
-      '**/audio/bassPatterns',
-      '**/audio/chordProgressions',
-      '**/audio/chordRhythms',
-      '**/audio/leadMelody',
+      '**/arpeggiator',
+      '**/bassPatterns',
+      '**/chordProgressions',
+      '**/chordRhythms',
+      '**/leadMelody',
       '**/leadStepRecord',
     ],
     message:
