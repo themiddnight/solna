@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -319,6 +319,22 @@ interface LoopChordStripProps {
  * badge, so counting them against the whole card measured nothing.
  */
 function LoopChordStrip({ chords, chordOctave, isPlaying, activeChordIndex, spellingKey }: LoopChordStripProps) {
+  // A chord's notes are derived, not stored (DEV-396). This card re-renders
+  // every step while the loop plays (`activeChordIndex` tracks the playhead),
+  // so the whole strip's Tonal resolution is memoized on the loop's own
+  // chords/octave/key rather than re-run on every one of those ticks. Keyed
+  // on the two spelling primitives, not `spellingKey` itself — the caller
+  // passes a fresh object literal every render, which would defeat the memo.
+  const chordNotes = useMemo(
+    () =>
+      (chords ?? []).map((chord) =>
+        generateBlockChordNotes(chord.quality, chord.root, chordOctave).map((n) =>
+          spellNoteInKey(n, spellingKey.scaleRoot, spellingKey.scaleType),
+        ),
+      ),
+    [chords, chordOctave, spellingKey.scaleRoot, spellingKey.scaleType],
+  );
+
   if (!chords || chords.length === 0) {
     return <span className="text-base-content/40 italic">No chords</span>;
   }
@@ -326,8 +342,7 @@ function LoopChordStrip({ chords, chordOctave, isPlaying, activeChordIndex, spel
     <div className="flex flex-wrap items-center gap-1 min-w-0">
       {chords.map((chord, cIdx) => {
         const isChordActive = isPlaying && cIdx === activeChordIndex;
-        const notes = generateBlockChordNotes(chord.quality, chord.root, chordOctave)
-          .map((n) => spellNoteInKey(n, spellingKey.scaleRoot, spellingKey.scaleType));
+        const notes = chordNotes[cIdx];
         return (
           <span
             key={chord.id || `${chord.root}-${cIdx}`}

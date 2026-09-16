@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { FIELD_LABEL } from '@/components/ui/fieldClasses';
 import { GripVertical, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
@@ -147,6 +147,17 @@ function ChordTriggerPad({
   onDown: SortableChordCardProps['handleCardPreviewMouseDown'];
   onUp: SortableChordCardProps['handleCardPreviewMouseUp'];
 }) {
+  // A chord's notes are derived, not stored (DEV-396) — memoized here so an
+  // activeBeat-only re-render (every beat while this chord plays) does not
+  // re-run the Tonal resolution behind it on every tick.
+  const spelledNotes = useMemo(
+    () =>
+      generateBlockChordNotes(chord.quality, chord.root, octave).map((n) =>
+        spellNoteInKey(n, scaleRoot, scaleType),
+      ),
+    [chord.quality, chord.root, octave, scaleRoot, scaleType],
+  );
+
   return (
     <button
       id={`btn-play-chord-${chord.id}`}
@@ -169,9 +180,7 @@ function ChordTriggerPad({
         </span>
       </span>
       <span className="text-[10px] opacity-70 mt-1">
-        {generateBlockChordNotes(chord.quality, chord.root, octave)
-          .map((n) => spellNoteInKey(n, scaleRoot, scaleType))
-          .join(" • ")}
+        {spelledNotes.join(" • ")}
       </span>
       <BeatDots
         size="sm"
