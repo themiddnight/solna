@@ -8,6 +8,7 @@ import {
   TONAL_CHORD_ALIASES,
   barDurationSec,
   clampBpm,
+  degreeToRoman,
   formatChordLabel,
   formatChordQuality,
   generateBlockChordNotes,
@@ -201,6 +202,56 @@ describe('Hirajoshi', () => {
         expect(outside).toHaveLength(expected);
       }
     }
+  });
+});
+
+describe('degreeToRoman', () => {
+  test('plain numeral, case from quality, no accidental in Major', () => {
+    expect(degreeToRoman('Major', 0, 'maj')).toBe('I');
+    expect(degreeToRoman('Major', 5, 'min')).toBe('vi');
+  });
+
+  test('Mixolydian flats the seventh degree', () => {
+    expect(degreeToRoman('Mixolydian', 6, 'maj')).toBe('bVII');
+  });
+
+  test('Lydian sharps the fourth degree', () => {
+    // degreeToRoman returns the numeral only — the m7b5 suffix is the
+    // caller's job (formatChordQuality), not this function's.
+    expect(degreeToRoman('Lydian', 3, 'm7b5')).toBe('#iv');
+    expect(degreeToRoman('Lydian', 3, 'min')).toBe('#iv');
+  });
+
+  test('Natural Minor flats VI and VII but never the mediant', () => {
+    expect(degreeToRoman('Natural Minor', 5, 'maj')).toBe('bVI');
+    expect(degreeToRoman('Natural Minor', 6, 'maj')).toBe('bVII');
+    expect(degreeToRoman('Natural Minor', 2, 'maj')).toBe('III'); // the carve-out
+  });
+
+  test('Harmonic Minor flats VI but the raised leading tone needs no accidental', () => {
+    expect(degreeToRoman('Harmonic Minor', 5, 'maj')).toBe('bVI');
+    expect(degreeToRoman('Harmonic Minor', 4, 'maj')).toBe('V'); // raised 7th makes the dominant major, no accidental
+  });
+
+  test('a scale with fewer than 7 degrees never gets an accidental', () => {
+    expect(degreeToRoman('Hirajoshi', 2, 'min')).toBe('iii');
+    expect(degreeToRoman('Hirajoshi', 4, 'maj')).toBe('V');
+  });
+
+  test('an explicit quality override changes the case, independent of the diatonic default', () => {
+    // Major's iii is diatonically minor; a secondary-dominant override makes it major-quality.
+    expect(degreeToRoman('Major', 2, '7')).toBe('III');
+  });
+
+  test('an extended quality override (min9, min6) still gets a minor-third case', () => {
+    // resolveDegreeQuality can never emit these two — only an explicit
+    // ProgressionStep.quality override does — so they exercise the path the
+    // diatonic triad/seventh interval tables don't cover. DEV-398 Task 3.
+    expect(degreeToRoman('Major', 1, 'min9')).toBe('ii');
+    expect(degreeToRoman('Major', 5, 'min9')).toBe('vi');
+    expect(degreeToRoman('Natural Minor', 0, 'min6')).toBe('i');
+    // A major-quality extension keeps the uppercase default, unaffected.
+    expect(degreeToRoman('Major', 4, '9')).toBe('V');
   });
 });
 

@@ -160,7 +160,7 @@ export function useProgressionSaves(state: ChordViewState) {
       chords,
       'User',
       'Saved from Chord View',
-      chords.map((c) => formatChordLabel(c.root, c.quality)).join(' → '),
+      chords.map((c) => formatChordLabel(c.root, c.quality, state.spellingKey)).join(' → '),
     );
 
     setCustomProgressions(useAppStore.getState().customChordProgressions);
