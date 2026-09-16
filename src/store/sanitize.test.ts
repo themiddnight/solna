@@ -316,9 +316,9 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
 
   test('a chord with a valid bassNote is kept, and null/absent bassNote both pass', () => {
     const chords = [
-      { id: 'c1', root: 'A', quality: 'min', bars: 1, notes: ['A3'], bassNote: 'E4' },
-      { id: 'c2', root: 'F', quality: 'maj', bars: 1, notes: ['F3'], bassNote: null },
-      { id: 'c3', root: 'C', quality: 'maj', bars: 1, notes: ['C3'] },
+      { id: 'c1', root: 'A', quality: 'min', bars: 1, bassNote: 'E4' },
+      { id: 'c2', root: 'F', quality: 'maj', bars: 1, bassNote: null },
+      { id: 'c3', root: 'C', quality: 'maj', bars: 1 },
     ];
     const [out] = sanitizeLoops([{ ...createDefaultLoop(), chords }]) ?? [];
     expect(out.chords).toEqual(chords);
@@ -349,9 +349,28 @@ describe('a chord body with a contradictory notes field is accepted, because not
     const [out] = sanitizeLoops([{ ...createDefaultLoop(), chords: [contradictory] }]) ?? [];
     expect(out.chords[0].root).toBe('C');
     expect(out.chords[0].quality).toBe('maj');
+    // The stray key must not merely be unread — it must not survive into the
+    // rebuilt object at all, or a pre-DEV-396 session would carry a dangling
+    // notes array forever with nothing left to clean it.
+    expect('notes' in out.chords[0]).toBe(false);
     // The derived pitches for what was actually stored (root/quality), proving
     // nothing downstream can observe the contradictory stray array:
     expect(generateBlockChordNotes('maj', 'C', 4)).not.toEqual(contradictory.notes);
+  });
+
+  test('sanitizeCustomChordProgressions drops the stray notes key too', () => {
+    const [out] = sanitizeCustomChordProgressions([
+      {
+        id: 'p1',
+        name: 'Progression',
+        chords: [
+          { id: 'c1', root: 'C', quality: 'maj', bars: 1, notes: ['F#3', 'A3', 'C4'] },
+        ],
+      },
+    ]);
+    expect(out.chords[0].root).toBe('C');
+    expect(out.chords[0].quality).toBe('maj');
+    expect('notes' in out.chords[0]).toBe(false);
   });
 });
 
@@ -514,7 +533,7 @@ describe('sanitizeCustomChordProgressions', () => {
     category: 'User',
     description: '',
     roman: 'i - iv',
-    chords: [{ id: 'c1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] }],
+    chords: [{ id: 'c1', root: 'A', quality: 'min7', bars: 1 }],
     createdAt: 2000,
   };
 
