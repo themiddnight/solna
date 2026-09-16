@@ -8,6 +8,14 @@ type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
 
 /**
+ * Soft cap on each user library array. A cap is a validation-time guard, not
+ * a persisted-shape migration (CLAUDE.md: "no migration chains") — it simply
+ * bounds what a save action writes going forward; it never reads or repairs
+ * an existing over-cap array on load.
+ */
+export const MAX_LIBRARY_ENTRIES = 200;
+
+/**
  * Presets slice: the user's custom synth presets, chord progressions and Beat
  * presets, persisted app-level in localStorage (replacing the old per-key
  * writes — see migrate.ts for the one-time adoption of those legacy keys).
@@ -55,7 +63,9 @@ export function createPresetsSlice(set: Set): PresetsSlice {
         createdAt: Date.now(),
         description: description.trim() || 'Custom user preset',
       };
-      set((state) => ({ customSynthPresets: [newPreset, ...state.customSynthPresets] }));
+      set((state) => ({
+        customSynthPresets: [newPreset, ...state.customSynthPresets].slice(0, MAX_LIBRARY_ENTRIES),
+      }));
       return newPreset;
     },
 
@@ -82,7 +92,7 @@ export function createPresetsSlice(set: Set): PresetsSlice {
         customChordProgressions: [
           newItem,
           ...state.customChordProgressions.filter((c) => c.name !== name),
-        ],
+        ].slice(0, MAX_LIBRARY_ENTRIES),
       }));
       return newItem;
     },
@@ -122,7 +132,7 @@ export function createPresetsSlice(set: Set): PresetsSlice {
         patch,
       };
       set((state) => ({
-        customBeatPresets: [preset, ...state.customBeatPresets],
+        customBeatPresets: [preset, ...state.customBeatPresets].slice(0, MAX_LIBRARY_ENTRIES),
         // ONE FIELD of the live params, never a patch written back over them.
         // This is what makes "saving does not change the sound" structural
         // rather than a coincidence of the caller having passed the live
