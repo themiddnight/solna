@@ -37,3 +37,5 @@ export {
 export type { ChordQuality } from './chordQuality';
 
 export { resolveScaleKey, scaleEntry } from './scale';
+
+export { transposePitchClassPreservingOctave } from './pitch';
