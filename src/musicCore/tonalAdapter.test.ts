@@ -7,6 +7,7 @@ import {
   midiToFlatName,
   midiToSharpName,
   noteMidi,
+  octaveOfNote,
   pitchClassOfNote,
   resolveTonalChord,
   scaleNotesForTonal,
@@ -38,6 +39,20 @@ describe('tonalAdapter', () => {
   test('pitchClassOfNote matches Note.pitchClass', () => {
     expect(pitchClassOfNote('Db5')).toBe(Note.pitchClass('Db5'));
     expect(pitchClassOfNote('Db5')).toBe('Db');
+  });
+
+  test('octaveOfNote matches Note.get(...).oct, narrowed to null', () => {
+    expect(octaveOfNote('C4')).toBe(Note.get('C4').oct);
+    expect(octaveOfNote('C4')).toBe(4);
+    expect(octaveOfNote('F#3')).toBe(3);
+    expect(octaveOfNote('Bb10')).toBe(10);
+    expect(octaveOfNote('C-1')).toBe(-1);
+  });
+
+  test('octaveOfNote is null for a pitch class with no octave, or an unparseable name', () => {
+    expect(octaveOfNote('C')).toBeNull();
+    expect(octaveOfNote('')).toBeNull();
+    expect(octaveOfNote('not-a-note')).toBeNull();
   });
 
   test('transposeByInterval matches transpose verbatim, including empty string on failure', () => {

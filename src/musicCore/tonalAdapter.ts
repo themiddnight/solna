@@ -44,6 +44,11 @@ export function pitchClassOfNote(note: string): string {
   return Note.pitchClass(note);
 }
 
+/** `Note.get(note).oct` — the note's octave, or `null` when `note` has no octave or does not parse (Tonal returns `undefined` for both; this wrapper narrows to `null` so every Music Core typed failure reads the same way). */
+export function octaveOfNote(note: string): number | null {
+  return Note.get(note).oct ?? null;
+}
+
 /** `transpose(note, intervalName)` verbatim — Tonal's own interval notation (e.g. `'8P'`); an empty string on failure, exactly as Tonal returns it. Callers already guard the falsy result themselves. */
 export function transposeByInterval(note: string, intervalName: string): string {
   return transpose(note, intervalName);

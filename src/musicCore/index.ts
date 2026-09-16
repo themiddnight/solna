@@ -19,6 +19,7 @@ export {
   midiToFlatName,
   midiToSharpName,
   noteMidi,
+  octaveOfNote,
   pitchClassOfNote,
   scaleNotesForTonal,
   transposeByInterval,
