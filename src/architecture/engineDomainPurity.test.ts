@@ -23,6 +23,14 @@ const ENGINE = 'src/audio/synth/__domainFixture__.ts';
 const ENGINE_ROOT = 'src/audio/engine.ts';
 /** A file under src/audio/ that is NOT the engine, to prove the block is scoped. */
 const CONTROLLER = 'src/audio/playback/chordPlayback.ts';
+/**
+ * The two DSP runtimes named in the block's `files` list beside the synth
+ * folder and the engine facade, each a real on-disk path rather than a glob
+ * match — proving the block's `files` array genuinely reaches both rather
+ * than relying on `src/audio/synth/**` alone to cover them.
+ */
+const DRUM_SYNTH = 'src/audio/drumSynth.ts';
+const MASTER_RACK = 'src/audio/masterRack.ts';
 
 async function messagesFor(source: string, filePath: string) {
   const [result] = await eslint.lintText(source, { filePath });
@@ -66,6 +74,26 @@ describe('engine music-domain guard (DEV-399)', () => {
     expect(await messagesFor(source, ENGINE_ROOT)).toContainEqual(RESTRICTED);
   });
 
+  test('the ban reaches src/audio/drumSynth.ts, not just the synth folder and the engine facade', async () => {
+    const source = "import { noteFrequency } from '@/utils/musicTheory';\nexport const f = noteFrequency;\n";
+    expect(await messagesFor(source, DRUM_SYNTH)).toContainEqual(RESTRICTED);
+  });
+
+  test('the ban reaches src/audio/masterRack.ts, not just the synth folder and the engine facade', async () => {
+    const source = "import { noteFrequency } from '@/utils/musicTheory';\nexport const f = noteFrequency;\n";
+    expect(await messagesFor(source, MASTER_RACK)).toContainEqual(RESTRICTED);
+  });
+
+  test('the hand-rolled note-name parser in leadStepRecord is banned, aliased', async () => {
+    const source = "import { noteOctave } from '@/audio/leadStepRecord';\nexport const o = noteOctave;\n";
+    expect(await messagesFor(source, ENGINE)).toContainEqual(RESTRICTED);
+  });
+
+  test('the hand-rolled note-name parser in leadStepRecord is banned, relative', async () => {
+    const source = "import { noteOctave } from '../leadStepRecord';\nexport const o = noteOctave;\n";
+    expect(await messagesFor(source, ENGINE)).toContainEqual(RESTRICTED);
+  });
+
   test('the TIMING half of musicTheory is still allowed — the ban is about the domain, not the module', async () => {
     const source = "import { STEPS_PER_BAR } from '../utils/musicTheory';\nexport const s = STEPS_PER_BAR;\n";
     expect(await messagesFor(source, ENGINE_ROOT)).not.toContainEqual(RESTRICTED);
@@ -78,15 +106,17 @@ describe('engine music-domain guard (DEV-399)', () => {
 
   test('the wider audio bans still apply inside the engine', async () => {
     // The narrower block REPLACES the broader rule rather than merging with it,
-    // so every list it overrides has to be spread back in. These three prove it:
+    // so every list it overrides has to be spread back in. These four prove it:
     // tonal (DEV-394), the store (layering rule 1 — which is also what keeps
-    // "the audio engine never writes persisted application state" true), and
-    // components.
+    // "the audio engine never writes persisted application state" true),
+    // components, and the DEV-386 slider-position <-> dB taper ban.
     expect(await messagesFor("import { note } from 'tonal';\nexport const n = note;\n", ENGINE))
       .toContainEqual(RESTRICTED);
     expect(await messagesFor("import { useAppStore } from '@/store/store';\nexport const s = useAppStore;\n", ENGINE))
       .toContainEqual(RESTRICTED);
     expect(await messagesFor("import { Knob } from '@/components/ui/Knob';\nexport const k = Knob;\n", ENGINE))
+      .toContainEqual(RESTRICTED);
+    expect(await messagesFor("import { dbToSliderPos } from '@/utils/gainUnits';\nexport const d = dbToSliderPos;\n", ENGINE))
       .toContainEqual(RESTRICTED);
   });
 });

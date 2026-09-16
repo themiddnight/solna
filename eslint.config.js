@@ -69,11 +69,28 @@ const TONAL_SCOPED_PACKAGE_BAN = {
 // file set: resolving a pitch is their job, and this ban would be wrong there.
 //
 // `@/utils/musicTheory` is split rather than banned whole, because that module
-// holds the TIMING helpers too (STEPS_PER_BAR, stepDurationSec) and an engine
+// holds timing helpers too (STEPS_PER_BAR, stepDurationSec) and an engine
 // legitimately reads those. `allowImportNames` is an ALLOWLIST on purpose: a
 // music-domain export added to musicTheory.ts later is banned here on the day
-// it is written, with no edit to this file. The four names allowed are the
-// timing half and nothing else.
+// it is written, with no edit to this file. The allowlist is narrower than
+// "every timing export" — musicTheory.ts also exports timing values like
+// `sixteenthNoteMs`, `MIN_BPM` and `MAX_BPM` that stay BANNED here, because the
+// engine has never needed them; the four names below are exactly what
+// `src/audio/engine.ts` and its neighbours actually read today, not a claim
+// about the module's shape.
+//
+// `**/leadStepRecord` bans `noteOctave`, a hand-rolled note-name parser living
+// beside the sequencer's step-record helpers — the same kind of thing as the
+// banned `@/musicCore` `octaveOfNote`, just not routed through Music Core.
+// Nothing in the engine's file set imports it today; it is named here so it
+// stays that way rather than becoming a silent second door into note-name
+// parsing. The pattern is bare (no `audio/` prefix, unlike the
+// `**/audio/arpeggiator`-style entries above it) because `leadStepRecord.ts`
+// lives directly inside `src/audio/`, a sibling of `engine.ts`, `drumSynth.ts`
+// and `masterRack.ts` — the realistic relative form from any of them is
+// `./leadStepRecord` or, from `src/audio/synth/**`, `../leadStepRecord`,
+// neither of which contains an `audio/` path segment for a prefixed pattern
+// to match.
 //
 // Both import forms are covered: the `@/`-aliased one a reader reaches for by
 // habit and the `../`/`../../` relative one the engine files actually use
@@ -94,6 +111,7 @@ const ENGINE_MUSIC_DOMAIN_BAN = [
       '**/audio/chordProgressions',
       '**/audio/chordRhythms',
       '**/audio/leadMelody',
+      '**/leadStepRecord',
     ],
     message:
       'DEV-399: the engine receives resolved playable events — resolve pitch/scale/chord in a controller under src/audio/playback/ and pass a frequency in Hz.',
