@@ -85,24 +85,19 @@ interface MixdownBeatVoiceGain {
 }
 
 /**
- * One melody track's render material: the four per-track columns the renderer
- * reads, plus the engine source its voices belong on (`'synth'` for Lead,
- * `'fx'` for FX) and the patch it plays. Built by `mixdownLeadTrack` /
- * `mixdownFxTrack` below, because the store spells the Lead row irregularly
- * (`synthParams`, not `leadSynthParams`) and that irregularity is exactly what
- * `MELODY_TRACKS` exists to encode — a table this module may not import.
- */
-/**
  * One melody track as the renderer holds it: the planner's snapshot plus the
  * two things the planner must not know about — the patch to play it with and
- * the bus to play it on.
+ * the bus to play it on. Built by `mixdownLeadTrack` / `mixdownFxTrack`
+ * below, because the store spells the Lead row irregularly (`synthParams`,
+ * not `leadSynthParams`) and that irregularity is exactly what
+ * `MELODY_TRACKS` exists to encode — a table this module may not import.
  */
 interface MixdownMelodyTrack extends MelodyPlanSnapshot {
   params: ActiveSynth;
   source: string;
 }
 
-function mixdownLeadTrack(loop: MixdownLoop): MixdownMelodyTrack {
+export function mixdownLeadTrack(loop: MixdownLoop): MixdownMelodyTrack {
   return {
     steps: loop.leadMelodySteps,
     loopLength: loop.leadLoopLength,
@@ -114,7 +109,7 @@ function mixdownLeadTrack(loop: MixdownLoop): MixdownMelodyTrack {
   };
 }
 
-function mixdownFxTrack(loop: MixdownLoop): MixdownMelodyTrack {
+export function mixdownFxTrack(loop: MixdownLoop): MixdownMelodyTrack {
   return {
     steps: loop.fxMelodySteps,
     loopLength: loop.fxLoopLength,
