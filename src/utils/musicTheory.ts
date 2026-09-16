@@ -38,7 +38,7 @@ export { ROOTS, formatChordQuality, CHORD_QUALITY_ALIASES as TONAL_CHORD_ALIASES
  */
 export function getScaleNotes(root: string, scaleType: string): string[] {
   const rootIndex = rootSemitone(root);
-  const scale = SCALES[scaleType] || SCALES['Major'];
+  const scale = scaleEntry(scaleType);
   return scale.intervals.map((int) => ROOTS[(rootIndex + int) % 12]);
 }
 
@@ -50,7 +50,7 @@ export function getScaleNotes(root: string, scaleType: string): string[] {
  */
 export function getScaleNotesInOctave(root: string, scaleType: string, octave: number): string[] {
   const rootIndex = rootSemitone(root);
-  const scale = SCALES[scaleType] || SCALES['Major'];
+  const scale = scaleEntry(scaleType);
   return scale.intervals.map((int) => {
     const abs = rootIndex + int;
     return `${ROOTS[abs % 12]}${octave + Math.floor(abs / 12)}`;
@@ -67,7 +67,7 @@ export function isNoteInScale(noteWithOrWithoutOctave: string, root: string, sca
   if (!Number.isFinite(rootChroma)) return false;
 
   const interval = (chroma - rootChroma + 12) % 12;
-  const scale = SCALES[scaleType] || SCALES['Major'];
+  const scale = scaleEntry(scaleType);
   return scale.intervals.includes(interval);
 }
 
@@ -97,10 +97,10 @@ export function remapNoteByScaleDegree(
   const rootRef = rootSemitone(fromRoot);
   const block = Math.floor((midi - rootRef) / 12);
   const offset = ((midi - rootRef) % 12 + 12) % 12;
-  const fromIntervals = (SCALES[fromScaleType] || SCALES['Major']).intervals;
+  const fromIntervals = scaleEntry(fromScaleType).intervals;
   const degree = fromIntervals.indexOf(offset);
   if (degree === -1) return note;
-  const toIntervals = (SCALES[toScaleType] || SCALES['Major']).intervals;
+  const toIntervals = scaleEntry(toScaleType).intervals;
   if (degree >= toIntervals.length) return note;
   return midiToSharpName(rootSemitone(toRoot) + block * 12 + toIntervals[degree]);
 }
@@ -112,7 +112,7 @@ function isInScalePaletteChord(
   root: string,
   scaleType: string,
 ): boolean {
-  const scale = SCALES[scaleType] || SCALES['Major'];
+  const scale = scaleEntry(scaleType);
   for (let degree = 0; degree < scale.intervals.length; degree++) {
     for (const use7ths of [false, true]) {
       const chord = getDiatonicChordForDegree(degree, root, scaleType, use7ths);
