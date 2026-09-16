@@ -1,5 +1,5 @@
 import { type BeatVoices, MasterEffects, FilterType } from '../types';
-import { STEPS_PER_BAR } from '../utils/musicTheory';
+import { noteFrequency, STEPS_PER_BAR } from '../utils/musicTheory';
 import type { Meter } from '../utils/meter';
 import { DEFAULT_VELOCITY } from './constants';
 import type { ActiveSynth } from '@/types/synth';
@@ -202,7 +202,10 @@ export class AudioEngine {
     return this.synthManager.noteOn({
       source,
       owner,
-      noteName,
+      // DEV-399, stage 1: resolved ONCE here rather than once per unison voice
+      // inside the voice itself. Task 2 moves this out to the callers and this
+      // import goes with it.
+      frequency: noteFrequency(noteName),
       velocity,
       at: time ?? ctx.currentTime,
       scaleFactor,

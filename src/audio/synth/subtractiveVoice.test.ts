@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { EnginePatch, ModRoute, SubtractiveParams } from '@/types/synth';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
+import { noteFrequency } from '@/utils/musicTheory';
 import { dbToGain } from '@/utils/synthPatch';
 import {
   asAudioContext,
@@ -40,8 +41,10 @@ function threeSourcePatch(): EnginePatch<'subtractive'> {
   });
 }
 
+const C4 = noteFrequency('C4');
+
 function noteEvent(over: Partial<SubtractiveVoiceEvent> = {}): SubtractiveVoiceEvent {
-  return { source: 'synth', owner: 'live', noteName: 'C4', velocity: 1, at: 2, ...over };
+  return { source: 'synth', owner: 'live', frequency: C4, velocity: 1, at: 2, ...over };
 }
 
 function build(ctx: FakeVoiceContext, patch: EnginePatch<'subtractive'>, event = noteEvent()) {
@@ -69,7 +72,7 @@ describe('createSubtractiveVoice graph construction', () => {
     expect(voice.nodes.filter.type).toBe('lowpass');
     expect(voice.owner).toBe('live');
     expect(voice.source).toBe('synth');
-    expect(voice.noteName).toBe('C4');
+    expect(voice.frequency).toBeCloseTo(noteFrequency('C4'), 9);
     expect(voice.startedAt).toBe(2);
   });
 
@@ -401,7 +404,7 @@ describe('createSubtractiveVoice pitch and filter routing', () => {
   test('key tracking raises the base cutoff with the note', () => {
     const ctx = fakeVoiceContext();
     const patch = patchWith({ filter: { ...INIT.synth.filter, cutoffHz: 1_000, keyTrack: 1 } });
-    const { voice } = build(ctx, patch, noteEvent({ noteName: 'C5' }));
+    const { voice } = build(ctx, patch, noteEvent({ frequency: noteFrequency('C5') }));
 
     // C5 is one octave above the C4 key-track reference.
     expect(logged(voice.nodes.filter.frequency).value).toBeCloseTo(2_000, 3);

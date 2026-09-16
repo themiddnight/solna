@@ -1,18 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import type { ActiveSynth, CommonVoiceParams, EnginePatch } from '@/types/synth';
+import type { ActiveSynth, CommonVoiceParams, EnginePatch, LfoParams } from '@/types/synth';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
+import { noteFrequency } from '@/utils/musicTheory';
 import { asAudioContext, fakeVoiceContext, type LoggedParam } from '../engineTestHelpers';
 import { createSubtractiveVoice, type SubtractiveVoice } from './subtractiveVoice';
-import type { LfoParams } from '@/types/synth';
-import {
-  SynthVoiceManager,
-  type ManagedVoice,
-  type SynthVoiceFactory,
-  type SynthVoiceManagerOptions,
-  type SynthVoiceNoteOn,
-} from './voiceManager';
+import { SynthVoiceManager, type ManagedVoice, type SynthVoiceFactory, type SynthVoiceManagerOptions, type SynthVoiceNoteOn } from './voiceManager';
 
 const logged = (param: unknown): LoggedParam => param as unknown as LoggedParam;
+
+const C2 = noteFrequency('C2');
+const C4 = noteFrequency('C4');
+const E4 = noteFrequency('E4');
+const G4 = noteFrequency('G4');
 
 /**
  * A voice that records what the manager asked of it. The manager's whole
@@ -21,9 +20,9 @@ const logged = (param: unknown): LoggedParam => param as unknown as LoggedParam;
  * graph (unison equal power) wrap the real `createSubtractiveVoice` instead.
  */
 interface FakeVoice extends ManagedVoice {
-  noteName: string;
+  frequency: number;
   releases: [number, number][];
-  glides: [string, number, number][];
+  glides: [number, number, number][];
   stops: number[];
   disconnects: number;
   updates: [EnginePatch<'subtractive'>, EnginePatch<'subtractive'>, number][];
@@ -38,7 +37,7 @@ function recordingFactory(): { create: SynthVoiceFactory; created: FakeVoice[] }
       id: `fake-${created.length + 1}`,
       source: event.source,
       owner: event.owner,
-      noteName: event.noteName,
+      frequency: event.frequency,
       startedAt: event.at,
       unisonIndex: event.unisonIndex ?? 0,
       releases: [],
@@ -51,9 +50,9 @@ function recordingFactory(): { create: SynthVoiceFactory; created: FakeVoice[] }
       release(at, seconds) {
         voice.releases.push([at, seconds]);
       },
-      glideTo(noteName, at, seconds) {
-        voice.noteName = noteName;
-        voice.glides.push([noteName, at, seconds]);
+      glideTo(frequency, at, seconds) {
+        voice.frequency = frequency;
+        voice.glides.push([frequency, at, seconds]);
       },
       update(previous, next, at) {
         voice.updates.push([previous, next, at]);
@@ -156,7 +155,7 @@ function event(over: Partial<SynthVoiceNoteOn> = {}): SynthVoiceNoteOn {
   return {
     source: 'synth',
     owner: 'live',
-    noteName: 'C4',
+    frequency: C4,
     velocity: 1,
     at: 1,
     synth: SUBTRACTIVE_INIT,
@@ -168,8 +167,8 @@ describe('SynthVoiceManager voice identity', () => {
   test('a key-up on one owner cannot cut short another owner playing the same note', () => {
     const { manager } = harness();
 
-    const live = manager.noteOn(event({ owner: 'live', noteName: 'C4' }));
-    const arp = manager.noteOn(event({ owner: 'arp', noteName: 'C4' }));
+    const live = manager.noteOn(event({ owner: 'live', frequency: C4 }));
+    const arp = manager.noteOn(event({ owner: 'arp', frequency: C4 }));
     manager.noteOff(arp!, 2, 0.1);
 
     expect(manager.has(live!)).toBe(true);
@@ -179,8 +178,8 @@ describe('SynthVoiceManager voice identity', () => {
   test('the same owner retriggering the same note gets a second, separately addressable voice', () => {
     const { manager, created } = harness();
 
-    const first = manager.noteOn(event({ noteName: 'C4', at: 1 }));
-    const second = manager.noteOn(event({ noteName: 'C4', at: 2 }));
+    const first = manager.noteOn(event({ frequency: C4, at: 1 }));
+    const second = manager.noteOn(event({ frequency: C4, at: 2 }));
 
     expect(first).not.toBe(second);
     expect(created).toHaveLength(2);
@@ -205,10 +204,10 @@ describe('SynthVoiceManager voice identity', () => {
   test('releaseOwner releases that owner on that source and leaves every other voice alone', () => {
     const { manager, created } = harness();
 
-    const live = manager.noteOn(event({ owner: 'live', noteName: 'C4' }));
-    const arpLow = manager.noteOn(event({ owner: 'arp', noteName: 'E4' }));
-    const arpHigh = manager.noteOn(event({ owner: 'arp', noteName: 'G4' }));
-    const otherBus = manager.noteOn(event({ owner: 'arp', noteName: 'E4', source: 'bass' }));
+    const live = manager.noteOn(event({ owner: 'live', frequency: C4 }));
+    const arpLow = manager.noteOn(event({ owner: 'arp', frequency: E4 }));
+    const arpHigh = manager.noteOn(event({ owner: 'arp', frequency: G4 }));
+    const otherBus = manager.noteOn(event({ owner: 'arp', frequency: E4, source: 'bass' }));
 
     manager.releaseOwner('synth', 'arp', 4, 0.25);
 
@@ -223,7 +222,7 @@ describe('SynthVoiceManager voice identity', () => {
     const { manager, created } = harness();
 
     const live = manager.noteOn(event({ owner: 'live' }));
-    const sequenced = manager.noteOn(event({ owner: 'sequencer', noteName: 'E4' }));
+    const sequenced = manager.noteOn(event({ owner: 'sequencer', frequency: E4 }));
     const bass = manager.noteOn(event({ source: 'bass' }));
 
     manager.stopSource('synth', 5);
@@ -239,8 +238,8 @@ describe('SynthVoiceManager voice identity', () => {
   test('teardown disconnects only the voice whose id was released', () => {
     const { manager, created, runTimers } = harness();
 
-    const first = manager.noteOn(event({ noteName: 'C4' }));
-    manager.noteOn(event({ noteName: 'E4' }));
+    const first = manager.noteOn(event({ frequency: C4 }));
+    manager.noteOn(event({ frequency: E4 }));
     manager.noteOff(first!, 2, 0.3);
     runTimers();
 
@@ -271,7 +270,7 @@ describe('SynthVoiceManager mono legato', () => {
   test('the first mono note builds exactly one voice and glides nothing', () => {
     const { manager, created } = harness();
 
-    manager.noteOn(event({ synth: MONO, noteName: 'C4', at: 1 }));
+    manager.noteOn(event({ synth: MONO, frequency: C4, at: 1 }));
 
     expect(created).toHaveLength(1);
     expect(created[0].startedAt).toBe(1);
@@ -281,11 +280,11 @@ describe('SynthVoiceManager mono legato', () => {
   test('an overlapping note reuses the sounding voice and glides instead of retriggering', () => {
     const { manager, created } = harness();
 
-    manager.noteOn(event({ synth: MONO, noteName: 'C4', at: 1 }));
-    const e4 = manager.noteOn(event({ synth: MONO, noteName: 'E4', at: 2 }));
+    manager.noteOn(event({ synth: MONO, frequency: C4, at: 1 }));
+    const e4 = manager.noteOn(event({ synth: MONO, frequency: E4, at: 2 }));
 
     expect(created).toHaveLength(1);
-    expect(created[0].glides).toEqual([['E4', 2, 0.1]]);
+    expect(created[0].glides).toEqual([[E4, 2, 0.1]]);
     expect(created[0].releases).toEqual([]);
     expect(manager.has(e4!)).toBe(true);
     expect(manager.liveVoiceCount()).toBe(1);
@@ -294,13 +293,13 @@ describe('SynthVoiceManager mono legato', () => {
   test('releasing the top note glides back to the note still held underneath', () => {
     const { manager, created } = harness();
 
-    const c4 = manager.noteOn(event({ synth: MONO, noteName: 'C4', at: 1 }));
-    const e4 = manager.noteOn(event({ synth: MONO, noteName: 'E4', at: 2 }));
+    const c4 = manager.noteOn(event({ synth: MONO, frequency: C4, at: 1 }));
+    const e4 = manager.noteOn(event({ synth: MONO, frequency: E4, at: 2 }));
     manager.noteOff(e4!, 3, 0.4);
 
     expect(created[0].glides).toEqual([
-      ['E4', 2, 0.1],
-      ['C4', 3, 0.1],
+      [E4, 2, 0.1],
+      [C4, 3, 0.1],
     ]);
     expect(created[0].releases).toEqual([]);
     expect(manager.has(c4!)).toBe(true);
@@ -310,19 +309,19 @@ describe('SynthVoiceManager mono legato', () => {
   test('a glide of zero moves the pitch immediately and still does not retrigger', () => {
     const { manager, created } = harness();
 
-    manager.noteOn(event({ synth: MONO_NO_GLIDE, noteName: 'C4', at: 1 }));
-    manager.noteOn(event({ synth: MONO_NO_GLIDE, noteName: 'E4', at: 2 }));
+    manager.noteOn(event({ synth: MONO_NO_GLIDE, frequency: C4, at: 1 }));
+    manager.noteOn(event({ synth: MONO_NO_GLIDE, frequency: E4, at: 2 }));
 
     expect(created).toHaveLength(1);
-    expect(created[0].glides).toEqual([['E4', 2, 0]]);
+    expect(created[0].glides).toEqual([[E4, 2, 0]]);
     expect(created[0].releases).toEqual([]);
   });
 
   test('releasing the last held note releases the voice and tears it down', () => {
     const { manager, created, runTimers } = harness();
 
-    const c4 = manager.noteOn(event({ synth: MONO, noteName: 'C4', at: 1 }));
-    const e4 = manager.noteOn(event({ synth: MONO, noteName: 'E4', at: 2 }));
+    const c4 = manager.noteOn(event({ synth: MONO, frequency: C4, at: 1 }));
+    const e4 = manager.noteOn(event({ synth: MONO, frequency: E4, at: 2 }));
     manager.noteOff(e4!, 3, 0.4);
     manager.noteOff(c4!, 4, 0.4);
     runTimers();
@@ -336,9 +335,9 @@ describe('SynthVoiceManager mono legato', () => {
   test('a note-on after the mono voice has been released starts a fresh voice', () => {
     const { manager, created } = harness();
 
-    const c4 = manager.noteOn(event({ synth: MONO, noteName: 'C4', at: 1 }));
+    const c4 = manager.noteOn(event({ synth: MONO, frequency: C4, at: 1 }));
     manager.noteOff(c4!, 2, 0.4);
-    manager.noteOn(event({ synth: MONO, noteName: 'E4', at: 3 }));
+    manager.noteOn(event({ synth: MONO, frequency: E4, at: 3 }));
 
     expect(created).toHaveLength(2);
     expect(created[1].startedAt).toBe(3);
@@ -347,14 +346,14 @@ describe('SynthVoiceManager mono legato', () => {
   test("one owner's key-up never removes another owner's stack entry", () => {
     const { manager, created } = harness();
 
-    const held = manager.noteOn(event({ synth: MONO, owner: 'live', noteName: 'C4', at: 1 }));
-    const arp = manager.noteOn(event({ synth: MONO, owner: 'arp', noteName: 'E4', at: 2 }));
+    const held = manager.noteOn(event({ synth: MONO, owner: 'live', frequency: C4, at: 1 }));
+    const arp = manager.noteOn(event({ synth: MONO, owner: 'arp', frequency: E4, at: 2 }));
     manager.noteOff(arp!, 3, 0.4);
 
     expect(created[0].releases).toEqual([]);
     expect(created[0].glides).toEqual([
-      ['E4', 2, 0.1],
-      ['C4', 3, 0.1],
+      [E4, 2, 0.1],
+      [C4, 3, 0.1],
     ]);
     expect(manager.has(held!)).toBe(true);
   });
@@ -362,34 +361,34 @@ describe('SynthVoiceManager mono legato', () => {
   test("an owner-scoped release drops only that owner's entries and glides to what is left", () => {
     const { manager, created } = harness();
 
-    const live = manager.noteOn(event({ synth: MONO, owner: 'live', noteName: 'C4', at: 1 }));
-    const arp = manager.noteOn(event({ synth: MONO, owner: 'arp', noteName: 'E4', at: 2 }));
+    const live = manager.noteOn(event({ synth: MONO, owner: 'live', frequency: C4, at: 1 }));
+    const arp = manager.noteOn(event({ synth: MONO, owner: 'arp', frequency: E4, at: 2 }));
     manager.releaseOwner('synth', 'arp', 3, 0.4);
 
     expect(manager.has(live!)).toBe(true);
     expect(manager.has(arp!)).toBe(false);
     expect(created[0].releases).toEqual([]);
-    expect(created[0].glides[1]).toEqual(['C4', 3, 0.1]);
+    expect(created[0].glides[1]).toEqual([C4, 3, 0.1]);
   });
 
   test("releasing the underneath note keeps the top note sounding and does not re-glide", () => {
     const { manager, created } = harness();
 
-    const c4 = manager.noteOn(event({ synth: MONO, owner: 'live', noteName: 'C4', at: 1 }));
-    const e4 = manager.noteOn(event({ synth: MONO, owner: 'arp', noteName: 'E4', at: 2 }));
+    const c4 = manager.noteOn(event({ synth: MONO, owner: 'live', frequency: C4, at: 1 }));
+    const e4 = manager.noteOn(event({ synth: MONO, owner: 'arp', frequency: E4, at: 2 }));
     manager.noteOff(c4!, 3, 0.4);
 
     expect(created[0].releases).toEqual([]);
-    expect(created[0].glides).toEqual([['E4', 2, 0.1]]);
+    expect(created[0].glides).toEqual([[E4, 2, 0.1]]);
     expect(manager.has(e4!)).toBe(true);
   });
 
   test('stopSource empties the mono stack so the next note starts a new voice', () => {
     const { manager, created } = harness();
 
-    const c4 = manager.noteOn(event({ synth: MONO, noteName: 'C4', at: 1 }));
+    const c4 = manager.noteOn(event({ synth: MONO, frequency: C4, at: 1 }));
     manager.stopSource('synth', 2);
-    manager.noteOn(event({ synth: MONO, noteName: 'E4', at: 3 }));
+    manager.noteOn(event({ synth: MONO, frequency: E4, at: 3 }));
 
     expect(manager.has(c4!)).toBe(false);
     expect(created).toHaveLength(2);
@@ -401,8 +400,8 @@ describe('SynthVoiceManager poly allocation and unison', () => {
   test('poly gives every note-on its own independent voice', () => {
     const { manager, created } = harness();
 
-    const first = manager.noteOn(event({ noteName: 'C4', at: 1 }));
-    const second = manager.noteOn(event({ noteName: 'E4', at: 2 }));
+    const first = manager.noteOn(event({ frequency: C4, at: 1 }));
+    const second = manager.noteOn(event({ frequency: E4, at: 2 }));
 
     expect(created).toHaveLength(2);
     expect(created[0].glides).toEqual([]);
@@ -459,11 +458,11 @@ describe('SynthVoiceManager voice stealing', () => {
   test('a voice already releasing is stolen before any held voice, and never lifted back up', () => {
     const { manager, real } = realHarness(budget);
 
-    const first = manager.noteOn(event({ synth: FLAT, noteName: 'C4', at: 0 }));
-    manager.noteOn(event({ synth: FLAT, noteName: 'E4', at: 1 }));
+    const first = manager.noteOn(event({ synth: FLAT, frequency: C4, at: 0 }));
+    manager.noteOn(event({ synth: FLAT, frequency: E4, at: 1 }));
     manager.noteOff(first!, 2, 4);
     const untouched = logged(real[1].nodes.ampGain.gain).events.length;
-    manager.noteOn(event({ synth: FLAT, noteName: 'G4', at: 3 }));
+    manager.noteOn(event({ synth: FLAT, frequency: G4, at: 3 }));
 
     // A quarter of the way down a four-second tail. Anchoring at sustain here
     // would snap the gain back to full and fade it over 20 ms — a click.
@@ -477,8 +476,8 @@ describe('SynthVoiceManager voice stealing', () => {
   test('a stolen voice stops answering has() and lets go of its group', () => {
     const { manager, created, runTimers } = harness({ maxVoicesPerSource: 1 });
 
-    const first = manager.noteOn(event({ noteName: 'C4', at: 0 }));
-    manager.noteOn(event({ noteName: 'E4', at: 1 }));
+    const first = manager.noteOn(event({ frequency: C4, at: 0 }));
+    manager.noteOn(event({ frequency: E4, at: 1 }));
 
     expect(created[0].releases).toEqual([[1, 0.02]]);
     expect(manager.has(first!)).toBe(false);
@@ -491,9 +490,9 @@ describe('SynthVoiceManager voice stealing', () => {
   test('a voice scheduled in the future is never stolen', () => {
     const { manager, created } = harness(budget);
 
-    manager.noteOn(event({ noteName: 'C4', at: 0 }));
-    manager.noteOn(event({ noteName: 'E4', at: 10 }));
-    manager.noteOn(event({ noteName: 'G4', at: 3 }));
+    manager.noteOn(event({ frequency: C4, at: 0 }));
+    manager.noteOn(event({ frequency: E4, at: 10 }));
+    manager.noteOn(event({ frequency: G4, at: 3 }));
 
     expect(created[0].releases).toEqual([[3, 0.02]]);
     expect(created[1].releases).toEqual([]);
@@ -502,9 +501,9 @@ describe('SynthVoiceManager voice stealing', () => {
   test('the oldest held voice is the last resort', () => {
     const { manager, created } = harness(budget);
 
-    manager.noteOn(event({ noteName: 'C4', at: 0 }));
-    manager.noteOn(event({ noteName: 'E4', at: 1 }));
-    manager.noteOn(event({ noteName: 'G4', at: 2 }));
+    manager.noteOn(event({ frequency: C4, at: 0 }));
+    manager.noteOn(event({ frequency: E4, at: 1 }));
+    manager.noteOn(event({ frequency: G4, at: 2 }));
 
     expect(created[0].releases).toEqual([[2, 0.02]]);
     expect(created[1].releases).toEqual([]);
@@ -514,9 +513,9 @@ describe('SynthVoiceManager voice stealing', () => {
   test('nothing is stolen when every other voice is still scheduled ahead', () => {
     const { manager, created } = harness(budget);
 
-    manager.noteOn(event({ noteName: 'C4', at: 10 }));
-    manager.noteOn(event({ noteName: 'E4', at: 11 }));
-    manager.noteOn(event({ noteName: 'G4', at: 3 }));
+    manager.noteOn(event({ frequency: C4, at: 10 }));
+    manager.noteOn(event({ frequency: E4, at: 11 }));
+    manager.noteOn(event({ frequency: G4, at: 3 }));
 
     expect(created.map((voice) => voice.releases)).toEqual([[], [], []]);
   });
@@ -524,22 +523,22 @@ describe('SynthVoiceManager voice stealing', () => {
   test('the mono voice a player is holding is never the victim', () => {
     const { manager, created } = harness({ maxVoicesPerSource: 1 });
 
-    const held = manager.noteOn(event({ synth: MONO, noteName: 'C4', at: 0 }));
-    manager.noteOn(event({ noteName: 'G4', at: 1 }));
-    manager.noteOn(event({ synth: MONO, noteName: 'E4', at: 2 }));
+    const held = manager.noteOn(event({ synth: MONO, frequency: C4, at: 0 }));
+    manager.noteOn(event({ frequency: G4, at: 1 }));
+    manager.noteOn(event({ synth: MONO, frequency: E4, at: 2 }));
 
     expect(created[0].releases).toEqual([]);
-    expect(created[0].glides).toEqual([['E4', 2, 0.1]]);
+    expect(created[0].glides).toEqual([[E4, 2, 0.1]]);
     expect(manager.has(held!)).toBe(true);
   });
 
   test('the budget is per source — a busy bus never steals from a quiet one', () => {
     const { manager, created } = harness(budget);
 
-    manager.noteOn(event({ noteName: 'C4', at: 0, source: 'bass' }));
-    manager.noteOn(event({ noteName: 'C4', at: 1 }));
-    manager.noteOn(event({ noteName: 'E4', at: 2 }));
-    manager.noteOn(event({ noteName: 'G4', at: 3 }));
+    manager.noteOn(event({ frequency: C4, at: 0, source: 'bass' }));
+    manager.noteOn(event({ frequency: C4, at: 1 }));
+    manager.noteOn(event({ frequency: E4, at: 2 }));
+    manager.noteOn(event({ frequency: G4, at: 3 }));
 
     expect(created[0].releases).toEqual([]);
     expect(created[1].releases).toEqual([[3, 0.02]]);
@@ -592,9 +591,9 @@ describe('SynthVoiceManager teardown lifecycle', () => {
   test('a teardown already booked is cancelled and re-armed when the voice is stolen', () => {
     const { manager, created, timers } = harness({ maxVoicesPerSource: 1 });
 
-    const first = manager.noteOn(event({ noteName: 'C4', at: 0 }));
+    const first = manager.noteOn(event({ frequency: C4, at: 0 }));
     manager.noteOff(first!, 1, 4);
-    manager.noteOn(event({ noteName: 'E4', at: 2 }));
+    manager.noteOn(event({ frequency: E4, at: 2 }));
 
     expect(timers).toHaveLength(2);
     expect(timers[0].cancelled).toBe(true);
@@ -737,9 +736,9 @@ describe('SynthVoiceManager patch updates', () => {
   test('a continuous control change reaches every sounding voice on that source only', () => {
     const { manager, created } = harness();
 
-    manager.noteOn(event({ noteName: 'C4', at: 1 }));
-    manager.noteOn(event({ noteName: 'E4', at: 1 }));
-    manager.noteOn(event({ noteName: 'C2', at: 1, source: 'bass' }));
+    manager.noteOn(event({ frequency: C4, at: 1 }));
+    manager.noteOn(event({ frequency: E4, at: 1 }));
+    manager.noteOn(event({ frequency: C2, at: 1, source: 'bass' }));
 
     const next = synthWith({ stereoWidth: 1 });
     manager.updatePatch('synth', SUBTRACTIVE_INIT, next, 5);
@@ -752,8 +751,8 @@ describe('SynthVoiceManager patch updates', () => {
   test('a voice-mode change quickly releases the bus instead of updating it', () => {
     const { manager, created } = harness();
 
-    const poly = manager.noteOn(event({ noteName: 'C4', at: 1 }));
-    manager.noteOn(event({ noteName: 'C4', at: 1, source: 'bass' }));
+    const poly = manager.noteOn(event({ frequency: C4, at: 1 }));
+    manager.noteOn(event({ frequency: C4, at: 1, source: 'bass' }));
     manager.updatePatch('synth', SUBTRACTIVE_INIT, MONO, 2);
 
     expect(created[0].releases).toEqual([[2, 0.02]]);
@@ -773,7 +772,7 @@ describe('SynthVoiceManager patch updates', () => {
   test('a differing preset id does not by itself release the bus', () => {
     const { manager, created } = harness();
 
-    const poly = manager.noteOn(event({ noteName: 'C4', at: 1 }));
+    const poly = manager.noteOn(event({ frequency: C4, at: 1 }));
     manager.updatePatch('synth', SUBTRACTIVE_INIT, presetNamed('factory-lead-saw-stack'), 2);
 
     expect(created[0].releases).toEqual([]);
@@ -786,7 +785,7 @@ describe('SynthVoiceManager patch updates', () => {
   test('a manual edit keeps the preset id and is a live update', () => {
     const { manager, created } = harness();
 
-    manager.noteOn(event({ noteName: 'C4', at: 1 }));
+    manager.noteOn(event({ frequency: C4, at: 1 }));
     const edited = { ...synthWith({ stereoWidth: 1 }), sourcePresetId: 'factory-lead-saw-stack' };
     manager.updatePatch('synth', presetNamed('factory-lead-saw-stack'), edited, 5);
 
@@ -797,7 +796,7 @@ describe('SynthVoiceManager patch updates', () => {
   test('a patch arriving under the preset already playing is a live update', () => {
     const { manager, created } = harness();
 
-    manager.noteOn(event({ noteName: 'C4', at: 1 }));
+    manager.noteOn(event({ frequency: C4, at: 1 }));
     manager.updatePatch('synth', SUBTRACTIVE_INIT, synthWith({ stereoWidth: 1 }), 5);
 
     expect(created[0].releases).toEqual([]);
@@ -807,9 +806,9 @@ describe('SynthVoiceManager patch updates', () => {
   test('a mono bus that changes mode leaves no stale stack for a later note to glide', () => {
     const { manager, created } = harness();
 
-    manager.noteOn(event({ synth: MONO, noteName: 'C4', at: 1 }));
+    manager.noteOn(event({ synth: MONO, frequency: C4, at: 1 }));
     manager.updatePatch('synth', MONO, SUBTRACTIVE_INIT, 2);
-    manager.noteOn(event({ synth: MONO, noteName: 'E4', at: 3 }));
+    manager.noteOn(event({ synth: MONO, frequency: E4, at: 3 }));
 
     expect(created).toHaveLength(2);
     expect(created[0].glides).toEqual([]);
@@ -819,12 +818,12 @@ describe('SynthVoiceManager patch updates', () => {
   test('a mono glide time change applies to the next glide', () => {
     const { manager, created } = harness();
 
-    manager.noteOn(event({ synth: MONO, noteName: 'C4', at: 1 }));
+    manager.noteOn(event({ synth: MONO, frequency: C4, at: 1 }));
     const slower = synthWith({ voiceMode: 'mono', glideSeconds: 0.5 });
     manager.updatePatch('synth', MONO, slower, 2);
-    manager.noteOn(event({ synth: slower, noteName: 'E4', at: 3 }));
+    manager.noteOn(event({ synth: slower, frequency: E4, at: 3 }));
 
-    expect(created[0].glides).toEqual([['E4', 3, 0.5]]);
+    expect(created[0].glides).toEqual([[E4, 3, 0.5]]);
   });
 });
 
@@ -832,8 +831,8 @@ describe('SynthVoiceManager owner-scoped and schedule-scoped silencing', () => {
   test('stopOwner silences one player\'s voices including ones already releasing', () => {
     const { manager, created } = harness();
 
-    const held = manager.noteOn(event({ owner: 'live', noteName: 'C4', at: 1 }))!;
-    const scheduled = manager.noteOn(event({ owner: 'sequencer', noteName: 'E4', at: 1 }))!;
+    const held = manager.noteOn(event({ owner: 'live', frequency: C4, at: 1 }))!;
+    const scheduled = manager.noteOn(event({ owner: 'sequencer', frequency: E4, at: 1 }))!;
     // The transport books its release at scheduling time, the way every
     // sequencer bridge does — this is exactly the voice releaseOwner skips.
     manager.noteOff(scheduled, 5, 0.5);
@@ -851,7 +850,7 @@ describe('SynthVoiceManager owner-scoped and schedule-scoped silencing', () => {
   test('stopOwner leaves a mono channel belonging to another owner holding its stack', () => {
     const { manager, created } = harness();
 
-    manager.noteOn(event({ synth: MONO, owner: 'live', noteName: 'C4', at: 1 }));
+    manager.noteOn(event({ synth: MONO, owner: 'live', frequency: C4, at: 1 }));
     manager.stopOwner('synth', 'sequencer', 2);
 
     expect(created[0].releases).toEqual([]);
@@ -860,8 +859,8 @@ describe('SynthVoiceManager owner-scoped and schedule-scoped silencing', () => {
   test('dropScheduledFrom silences only the voices that start at or after the boundary', () => {
     const { manager, created } = harness();
 
-    const sounding = manager.noteOn(event({ noteName: 'C4', at: 1 }))!;
-    const ahead = manager.noteOn(event({ noteName: 'E4', at: 4 }))!;
+    const sounding = manager.noteOn(event({ frequency: C4, at: 1 }))!;
+    const ahead = manager.noteOn(event({ frequency: E4, at: 4 }))!;
 
     manager.dropScheduledFrom('synth', 4);
 
@@ -874,13 +873,13 @@ describe('SynthVoiceManager owner-scoped and schedule-scoped silencing', () => {
   test('dropScheduledFrom reaches a mono bus whose sounding group starts past the boundary', () => {
     const { manager, created } = harness();
 
-    manager.noteOn(event({ synth: MONO, noteName: 'C4', at: 4 }));
+    manager.noteOn(event({ synth: MONO, frequency: C4, at: 4 }));
     manager.dropScheduledFrom('synth', 4);
 
     expect(created[0].releases.length).toBe(1);
     // The stack goes with it: a later note must build a new voice, not glide
     // one that has already been told to die.
-    manager.noteOn(event({ synth: MONO, noteName: 'E4', at: 5 }));
+    manager.noteOn(event({ synth: MONO, frequency: E4, at: 5 }));
     expect(created).toHaveLength(2);
     expect(created[0].glides).toEqual([]);
   });
@@ -935,9 +934,9 @@ describe('SynthVoiceManager mono channels are shared, so stopOwner may not orpha
 
     // The player holds C4: this creates the channel, and the group records
     // 'live' as the owner that built it.
-    const liveId = manager.noteOn(event({ synth: MONO, owner: 'live', noteName: 'C4', at: 1 }))!;
+    const liveId = manager.noteOn(event({ synth: MONO, owner: 'live', frequency: C4, at: 1 }))!;
     // The sequencer plays E4 on the same mono bus — one voice, glided.
-    manager.noteOn(event({ synth: MONO, owner: 'sequencer', noteName: 'E4', at: 2 }));
+    manager.noteOn(event({ synth: MONO, owner: 'sequencer', frequency: E4, at: 2 }));
     expect(created).toHaveLength(1);
     // The player lets go. The stack pops to the sequencer's entry and the
     // group keeps sounding, still carrying 'live' as its own owner.
@@ -955,8 +954,8 @@ describe('SynthVoiceManager mono channels are shared, so stopOwner may not orpha
   test('stopping the owner that BUILT a channel leaves the other holders addressable', () => {
     const { manager, created } = harness();
 
-    const liveId = manager.noteOn(event({ synth: MONO, owner: 'live', noteName: 'C4', at: 1 }))!;
-    const seqId = manager.noteOn(event({ synth: MONO, owner: 'sequencer', noteName: 'E4', at: 2 }))!;
+    const liveId = manager.noteOn(event({ synth: MONO, owner: 'live', frequency: C4, at: 1 }))!;
+    const seqId = manager.noteOn(event({ synth: MONO, owner: 'sequencer', frequency: E4, at: 2 }))!;
 
     manager.stopOwner('synth', 'live', 3);
 
@@ -977,8 +976,8 @@ describe('SynthVoiceManager polyphony ducking', () => {
   test('setPolyphonyScale reaches every voice a bus is holding', () => {
     const { manager, created } = harness();
 
-    manager.noteOn(event({ noteName: 'C4', at: 1 }));
-    manager.noteOn(event({ noteName: 'E4', at: 1 }));
+    manager.noteOn(event({ frequency: C4, at: 1 }));
+    manager.noteOn(event({ frequency: E4, at: 1 }));
     manager.setPolyphonyScale('synth', 0.5, 2);
 
     expect(created[0].polyphonyScales).toEqual([[0.5, 2]]);
@@ -988,8 +987,8 @@ describe('SynthVoiceManager polyphony ducking', () => {
   test('a voice already releasing keeps its level, so a key-up cannot duck a fading tail', () => {
     const { manager, created } = harness();
 
-    const held = manager.noteOn(event({ noteName: 'C4', at: 1 }))!;
-    manager.noteOn(event({ noteName: 'E4', at: 1 }));
+    const held = manager.noteOn(event({ frequency: C4, at: 1 }))!;
+    manager.noteOn(event({ frequency: E4, at: 1 }));
     manager.noteOff(held, 2, 0.5);
 
     manager.setPolyphonyScale('synth', 0.7, 3);
@@ -1001,8 +1000,8 @@ describe('SynthVoiceManager polyphony ducking', () => {
   test('the scale is per BUS — ducking Lead never touches FX', () => {
     const { manager, created } = harness();
 
-    manager.noteOn(event({ source: 'synth', noteName: 'C4', at: 1 }));
-    manager.noteOn(event({ source: 'fx', noteName: 'C4', at: 1 }));
+    manager.noteOn(event({ source: 'synth', frequency: C4, at: 1 }));
+    manager.noteOn(event({ source: 'fx', frequency: C4, at: 1 }));
     manager.setPolyphonyScale('synth', 0.5, 2);
 
     expect(created[0].polyphonyScales).toEqual([[0.5, 2]]);

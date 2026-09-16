@@ -26,8 +26,12 @@ function patchWith(synth: Partial<SubtractiveParams>, common: Partial<EnginePatc
   };
 }
 
+const C4 = noteFrequency('C4');
+const E4 = noteFrequency('E4');
+const C5 = noteFrequency('C5');
+
 function noteEvent(over: Partial<SubtractiveVoiceEvent> = {}): SubtractiveVoiceEvent {
-  return { source: 'synth', owner: 'live', noteName: 'C4', velocity: 1, at: 2, ...over };
+  return { source: 'synth', owner: 'live', frequency: C4, velocity: 1, at: 2, ...over };
 }
 
 function build(ctx: FakeVoiceContext, patch: EnginePatch<'subtractive'>, event = noteEvent()) {
@@ -37,10 +41,6 @@ function build(ctx: FakeVoiceContext, patch: EnginePatch<'subtractive'>, event =
   });
   return { voice, output };
 }
-
-const C4 = noteFrequency('C4');
-const E4 = noteFrequency('E4');
-const C5 = noteFrequency('C5');
 
 /** Osc 1 at unity, osc 2 a fifth up, the sub an octave down: three different ratios to follow. */
 function glidePatch(over: Partial<SubtractiveParams> = {}): EnginePatch<'subtractive'> {
@@ -60,7 +60,7 @@ describe('SubtractiveVoice glide', () => {
     const ctx = fakeVoiceContext();
     const { voice } = build(ctx, glidePatch(), noteEvent({ at: 2 }));
 
-    voice.glideTo('E4', 2.5, 0.4);
+    voice.glideTo(E4, 2.5, 0.4);
 
     const fifth = Math.pow(2, 7 / 12);
     for (const [param, ratio] of [
@@ -81,7 +81,7 @@ describe('SubtractiveVoice glide', () => {
     const ctx = fakeVoiceContext();
     const { voice } = build(ctx, glidePatch(), noteEvent({ at: 2 }));
 
-    voice.glideTo('E4', 3, 0);
+    voice.glideTo(E4, 3, 0);
 
     const events = logged(ctx.oscillators[0].frequency).events;
     expect(events).toHaveLength(2);
@@ -94,8 +94,8 @@ describe('SubtractiveVoice glide', () => {
     const ctx = fakeVoiceContext();
     const { voice } = build(ctx, glidePatch(), noteEvent({ at: 2 }));
 
-    voice.glideTo('C5', 2, 1);
-    voice.glideTo('E4', 2.5, 0.5);
+    voice.glideTo(C5, 2, 1);
+    voice.glideTo(E4, 2.5, 0.5);
 
     const events = logged(ctx.oscillators[0].frequency).events;
     // Halfway through an octave glide, in the exponential space the ramp runs in.
@@ -108,7 +108,7 @@ describe('SubtractiveVoice glide', () => {
     const patch = glidePatch();
     const { voice } = build(ctx, patch, noteEvent({ at: 2 }));
 
-    voice.glideTo('C5', 2, 1);
+    voice.glideTo(C5, 2, 1);
     voice.update(patch, patchWith({
       oscillators: [
         { ...patch.synth.oscillators[0], octave: 1 },
@@ -131,7 +131,7 @@ describe('SubtractiveVoice glide', () => {
     const patch = glidePatch();
     const { voice } = build(ctx, patch, noteEvent({ at: 2 }));
 
-    voice.glideTo('C5', 5, 1);
+    voice.glideTo(C5, 5, 1);
     voice.update(patch, patchWith({
       oscillators: [
         { ...patch.synth.oscillators[0], octave: 1 },
@@ -153,13 +153,36 @@ describe('SubtractiveVoice glide', () => {
     expect(events[6][2]).toBe(6);
   });
 
-  test('the voice reports the note it is now sounding, not the note that built it', () => {
+  test('the voice reports the frequency it is now sounding, not the one that built it', () => {
     const ctx = fakeVoiceContext();
     const { voice } = build(ctx, glidePatch(), noteEvent({ at: 2 }));
 
-    expect(voice.noteName).toBe('C4');
-    voice.glideTo('E4', 3, 0.4);
-    expect(voice.noteName).toBe('E4');
+    expect(voice.frequency).toBeCloseTo(C4, 9);
+    voice.glideTo(E4, 3, 0.4);
+    expect(voice.frequency).toBeCloseTo(E4, 9);
+  });
+
+  /**
+   * DEV-399: the endpoint is the CALLER's resolved frequency, used verbatim.
+   * 444.5 Hz is deliberately a pitch no note name names — under the old
+   * note-name signature this bend was unrepresentable, and any re-derivation
+   * of the target through a name (a round-trip to the nearest semitone, say)
+   * would land on 440 and fail here.
+   */
+  test('a glide lands on exactly the frequency it was given, semitone grid or not', () => {
+    const ctx = fakeVoiceContext();
+    const { voice } = build(ctx, glidePatch(), noteEvent({ at: 2 }));
+
+    voice.glideTo(444.5, 2.5, 0.4);
+
+    const events = logged(ctx.oscillators[0].frequency).events;
+    expect(events[0]).toEqual(['cancel', 2.5]);
+    expect(events[1][0]).toBe('set');
+    expect(events[1][1]).toBeCloseTo(C4, 6);
+    expect(events[2][0]).toBe('exp');
+    expect(events[2][1]).toBeCloseTo(444.5, 9);
+    expect(events[2][2]).toBeCloseTo(2.9, 6);
+    expect(voice.frequency).toBeCloseTo(444.5, 9);
   });
 
 });
@@ -170,7 +193,7 @@ describe('SubtractiveVoice glide and the filter', () => {
     const patch = glidePatch({ filter: { ...INIT.synth.filter, cutoffHz: 4000, keyTrack: 1 } });
     const { voice } = build(ctx, patch, noteEvent({ at: 2 }));
 
-    voice.glideTo('C5', 2, 0.4);
+    voice.glideTo(C5, 2, 0.4);
 
     const events = logged(ctx.filters[0].frequency).events;
     expect(events[1][1]).toBeCloseTo(4000, 6);
@@ -183,7 +206,7 @@ describe('SubtractiveVoice glide and the filter', () => {
     const patch = glidePatch({ filter: { ...INIT.synth.filter, cutoffHz: 4000, keyTrack: 0 } });
     const { voice } = build(ctx, patch, noteEvent({ at: 2 }));
 
-    voice.glideTo('C5', 2, 0.4);
+    voice.glideTo(C5, 2, 0.4);
 
     expect(logged(ctx.filters[0].frequency).events).toEqual([]);
   });
@@ -197,7 +220,7 @@ describe('SubtractiveVoice glide and the filter', () => {
     const { voice } = build(ctx, patch, noteEvent({ at: 2 }));
     const before = logged(ctx.filters[0].frequency).events.length;
 
-    voice.glideTo('C5', 2, 0.4);
+    voice.glideTo(C5, 2, 0.4);
 
     expect(logged(ctx.filters[0].frequency).events).toHaveLength(before);
   });
@@ -207,7 +230,7 @@ describe('SubtractiveVoice glide and the filter', () => {
     const patch = glidePatch();
     const { voice } = build(ctx, patch, noteEvent({ at: 2 }));
 
-    voice.glideTo('E4', 3, 0);
+    voice.glideTo(E4, 3, 0);
     voice.update(patch, patchWith({
       oscillators: [
         { ...patch.synth.oscillators[0], octave: 1 },

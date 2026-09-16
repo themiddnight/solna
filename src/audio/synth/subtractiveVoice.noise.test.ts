@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { EnginePatch, SubtractiveParams } from '@/types/synth';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
+import { noteFrequency } from '@/utils/musicTheory';
 import { dbToGain } from '@/utils/synthPatch';
 import {
   asAudioContext,
@@ -27,8 +28,10 @@ function patchWith(synth: Partial<SubtractiveParams>): EnginePatch<'subtractive'
   return { common: INIT.common, synth: { ...INIT.synth, ...synth } };
 }
 
+const C4 = noteFrequency('C4');
+
 function noteEvent(over: Partial<SubtractiveVoiceEvent> = {}): SubtractiveVoiceEvent {
-  return { source: 'synth', owner: 'live', noteName: 'C4', velocity: 1, at: 2, ...over };
+  return { source: 'synth', owner: 'live', frequency: C4, velocity: 1, at: 2, ...over };
 }
 
 function build(ctx: FakeVoiceContext, patch: EnginePatch<'subtractive'>, event = noteEvent()) {
