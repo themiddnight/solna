@@ -1,4 +1,4 @@
-import { Note } from 'tonal';
+import { midiToFlatName } from '@/musicCore';
 import { audioEngine } from '../audio/engine';
 import type { VoiceId } from '../audio/synth/voiceId';
 import type { ActiveSynth, SubtractiveParams } from '../types/synth';
@@ -206,7 +206,7 @@ export function startMidiInputBridge(): void {
         if (command === 0x90 || command === 0x80) {
           const noteMapping = mappings.find((m) => m.enabled && m.type === 'note');
           if (noteMapping) {
-            const noteName = Note.fromMidi(data1);
+            const noteName = midiToFlatName(data1);
             if (!noteName) return;
             const synth = s.synthParams;
             const velocity = data2;

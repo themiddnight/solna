@@ -1,4 +1,4 @@
-import { Note } from 'tonal';
+import { midiToSharpName, noteMidi } from '@/musicCore';
 import type { ChordItem } from '../types';
 import { SCALES } from '@/data/scales';
 import { rootSemitone, stepDurationSec } from '../utils/musicTheory';
@@ -30,7 +30,7 @@ function pitchClass(noteName: string): string {
 }
 
 function midiAtOctave(pc: string, octave: number): number {
-  return Note.midi(`${pc}${octave}`) ?? Note.midi(`C${octave}`) ?? 60;
+  return noteMidi(`${pc}${octave}`) ?? noteMidi(`C${octave}`) ?? 60;
 }
 
 // Deterministic above/below alternation: odd bars flip the direction
@@ -125,7 +125,7 @@ export function resolveBassSteps(
 
     const holdSec = (step.holdSteps ?? 1) * stepDur * (step.staccato ? 0.5 : 1) * holdScale;
     events.push({
-      noteName: Note.fromMidiSharps(shiftedMidi) ?? 'C2',
+      noteName: midiToSharpName(shiftedMidi) ?? 'C2',
       step: step.step,
       timeOffsetSec: step.step * stepDur,
       holdSec,
