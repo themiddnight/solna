@@ -86,12 +86,18 @@ interface ChordLanePlan {
  * full-hold cycle is PRESET-only (`isFullHoldRhythmCycle`), so a custom span
  * covering its whole cycle stays a span — it strikes, releases at the seam and
  * strikes again, which is the length the user drew.
+ *
+ * The second parameter is an object, not bare positional scalars, by the
+ * binding convention every `plan<Lane>` function follows (Task 1's review;
+ * see `planPadArm`'s `{ chordIndex }`): a later per-call addition is then a
+ * shape change to `context`, not a signature change every call site must
+ * follow in argument order.
  */
 export function planChordLane(
   snapshot: ChordPlanSnapshot,
-  chordNotes: string[],
-  totalBars: number,
+  context: { chordNotes: string[]; totalBars: number },
 ): ChordLanePlan {
+  const { chordNotes, totalBars } = context;
   if (snapshot.chordArpActive) {
     return { cycleSteps: snapshot.stepsPerBar, events: [], fullHold: null };
   }
