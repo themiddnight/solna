@@ -1,6 +1,8 @@
 import type { ChordPlanSnapshot } from '@/audio/playback/plan/chordPlan';
+import type { MelodyPlanSnapshot } from '@/audio/playback/plan/melodyPlan';
 import type { PadPlanSnapshot } from '@/audio/playback/plan/padPlan';
 import { getMeter } from '@/utils/meter';
+import { melodyTrack, type MelodyTrackId } from './melodyTracks';
 import type { AppStore } from './types';
 
 /**
@@ -68,5 +70,22 @@ export function chordPlanSnapshot(s: AppStore): ChordPlanSnapshot {
     bassFeel: s.bassFeel,
     chordArpActive: s.chordArpSettings.active,
     bassArpActive: s.bassArpSettings.active,
+  };
+}
+
+/**
+ * One melody track's snapshot, read through `MELODY_TRACKS` so Lead and FX are
+ * one implementation with two rows. Built per DISPATCH, not per arm: melody has
+ * no arm-time half, and rebuilding it each tick is what lets a note drawn while
+ * the loop runs sound on the next step.
+ */
+export function melodyPlanSnapshot(s: AppStore, trackId: MelodyTrackId): MelodyPlanSnapshot {
+  const track = melodyTrack(trackId);
+  return {
+    steps: s[track.steps],
+    loopLength: s[track.loopLength],
+    stepResolution: s[track.stepResolution],
+    gate: s[track.gate],
+    arp: s[track.arpSettings],
   };
 }

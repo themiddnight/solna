@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { chordPlanSnapshot, padPlanSnapshot } from './playbackPlanSnapshots';
+import { chordPlanSnapshot, melodyPlanSnapshot, padPlanSnapshot } from './playbackPlanSnapshots';
 import type { AppStore } from './types';
 import type { ChordItem } from '@/types';
 
@@ -96,5 +96,42 @@ describe('chordPlanSnapshot', () => {
     expect(snap.bassPatternMode).toBe('preset');
     expect(snap.chordArpActive).toBe(true);
     expect(snap.bassArpActive).toBe(false);
+  });
+});
+
+describe('melodyPlanSnapshot', () => {
+  const LEAD_STEPS = [[{ note: 'C4', len: 8 }]];
+  const FX_STEPS = [[{ note: 'G5', len: 4 }]];
+  const STATE = {
+    leadMelodySteps: LEAD_STEPS,
+    leadLoopLength: 2,
+    leadStepResolution: '1/8',
+    leadGate: 0.5,
+    synthArpSettings: { active: false, mode: 'up', rate: '1/8', octaves: 1 },
+    fxMelodySteps: FX_STEPS,
+    fxLoopLength: 4,
+    fxStepResolution: '1/32',
+    fxGate: 0.9,
+    fxArpSettings: { active: true, mode: 'down', rate: '1/16', octaves: 2 },
+  } as unknown as AppStore;
+
+  test('reads the LEAD row of MELODY_TRACKS', () => {
+    expect(melodyPlanSnapshot(STATE, 'lead')).toEqual({
+      steps: LEAD_STEPS,
+      loopLength: 2,
+      stepResolution: '1/8',
+      gate: 0.5,
+      arp: { active: false, mode: 'up', rate: '1/8', octaves: 1 },
+    });
+  });
+
+  test('reads the FX row — one builder, two tracks, no hardcoded `lead`', () => {
+    expect(melodyPlanSnapshot(STATE, 'fx')).toEqual({
+      steps: FX_STEPS,
+      loopLength: 4,
+      stepResolution: '1/32',
+      gate: 0.9,
+      arp: { active: true, mode: 'down', rate: '1/16', octaves: 2 },
+    });
   });
 });
