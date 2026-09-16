@@ -23,7 +23,7 @@ import { resizePatternBars } from '../utils/customPattern';
 import { DEFAULT_METER_ID, getMeter, MAX_STEPS_PER_BAR, type MeterId } from '../utils/meter';
 import { clampLoopLength } from '../utils/patternTimeline';
 import { LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
-import { getChordQualityEntry } from '@/musicCore';
+import { getChordQualityEntry, pitchClassOfNote } from '@/musicCore';
 import type { Loop } from './types';
 import type { LeadNote } from '../audio/leadMelody';
 import {
@@ -406,6 +406,15 @@ function asCheckedArray<T>(value: unknown, isElement: (v: unknown) => boolean, f
  * match no `<select>` option and no exact-token comparison downstream — the
  * token-equality check rejects anything not already in its exact canonical
  * spelling.
+ *
+ * `bassNote` is optional (`null`/absent means "auto root") but, when present,
+ * is checked too: `bassPatterns.ts` reads it through Music Core's
+ * `pitchClassOfNote(chord.bassNote ?? chord.root)`, octave stripped and
+ * re-placed at the bass octave, so only the pitch class it resolves to ever
+ * matters at playback time. That pitch class is checked against the same
+ * `ROOT_SET` membership `root` uses — a malformed note (e.g. a double-sharp
+ * `'C##4'`) resolves to a pitch class (`'C##'`) that is not a member and is
+ * rejected here rather than reaching `midiAtOctave` unchecked.
  */
 function isChordItem(value: unknown): boolean {
   if (!isPlainObject(value)) return false;
@@ -418,7 +427,10 @@ function isChordItem(value: unknown): boolean {
     typeof value.bars === 'number' &&
     Number.isFinite(value.bars) &&
     value.bars > 0 &&
-    isStringArray(value.notes)
+    isStringArray(value.notes) &&
+    (value.bassNote === undefined ||
+      value.bassNote === null ||
+      (typeof value.bassNote === 'string' && isRootNote(pitchClassOfNote(value.bassNote))))
   );
 }
 

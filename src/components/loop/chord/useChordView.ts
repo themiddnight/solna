@@ -25,7 +25,7 @@ import {
   stopChordPreviewSource,
 } from '@/audio/playback/chordPlayback';
 import { getMeter } from '@/utils/meter';
-import { SCALES } from '@/data/scales';
+import { scaleEntry } from '@/musicCore';
 import type { ChordQuality } from '@/musicCore';
 import {
   deriveChordNotes,
@@ -574,7 +574,7 @@ export function useChordPalette(
 
   const diatonicChords = useMemo(
     () =>
-      Array.from({ length: SCALES[scaleType]?.intervals.length || 7 }).map((_, i) =>
+      Array.from({ length: scaleEntry(scaleType).intervals.length }).map((_, i) =>
         getDiatonicChordForDegree(i, scaleRoot, scaleType, use7thsInQuickAdd),
       ),
     [scaleRoot, scaleType, use7thsInQuickAdd],

@@ -13,13 +13,14 @@
  * inside an event handler cannot be tested at all.
  */
 
+import { octaveOfNote } from '@/musicCore';
+
 /** Number of octaves the melody grid's window shows. Fixed at 2 (spec default). */
 export const LEAD_WINDOW_OCTAVES = 2;
 
 /** The trailing digits of a note name, e.g. 'F#4' -> 4. Null if there are none. */
 export function noteOctave(note: string): number | null {
-  const match = /(-?\d+)$/.exec(note);
-  return match ? Number(match[1]) : null;
+  return octaveOfNote(note);
 }
 
 /**

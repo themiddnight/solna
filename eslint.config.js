@@ -109,6 +109,43 @@ const GLOBAL_RESTRICTED_SYNTAX = [
   },
 ];
 
+// The three Math.random selectors the `src/audio/**` block below already enforces —
+// extracted to a const (DEV-392) so the two new note-regex-guard blocks (below) can
+// spread it in too, rather than silently dropping this ban the moment a
+// later-in-array block also sets `no-restricted-syntax` for the same two files
+// (`src/audio/leadStepRecord.ts`, `src/audio/bassPatterns.ts`). See the
+// `no-restricted-syntax` replace-not-merge note above GLOBAL_RESTRICTED_SYNTAX.
+const AUDIO_RANDOM_BAN_SYNTAX = [
+  {
+    selector: "MemberExpression[object.name='Math'][computed=false][property.name='random']",
+    message: 'src/audio/ routes randomness through src/audio/rng.ts (setRandomSource) so calibration renders stay reproducible — call the seam, not Math.random directly (also bans an alias assignment like `const r = Math.random`).',
+  },
+  {
+    selector: "MemberExpression[object.name='Math'][computed=true][property.value='random']",
+    message: "src/audio/ routes randomness through src/audio/rng.ts (setRandomSource) — Math['random'] is the same ban as Math.random, just spelled to dodge it.",
+  },
+  {
+    selector: "VariableDeclarator[init.name='Math'] ObjectPattern > Property[key.name='random']",
+    message: 'src/audio/ routes randomness through src/audio/rng.ts (setRandomSource) — destructuring `random` out of `Math` is the same ban as Math.random.',
+  },
+];
+
+// DEV-392: guards against a new local note-name/octave regex being reintroduced
+// into the five files this issue centralized onto Music Core's pitch API
+// (src/musicCore/tonalAdapter.ts's octaveOfNote, pitchClassOfNote, noteMidi,
+// midiToSharpName; src/musicCore/pitch.ts's transposePitchClassPreservingOctave).
+// A blanket "no regex literal" ban is correct here, not just convenient: each of
+// the five files was audited and confirmed (see the DEV-392 plan's survey) to
+// contain no OTHER regex literal, so this cannot false-positive against
+// legitimate unrelated use without the file changing shape first — at which
+// point the failing lint is the prompt to reconsider whether this file still
+// belongs in the list, not to silently loosen the rule.
+const NOTE_REGEX_BAN = {
+  selector: 'Literal[regex]',
+  message:
+    'DEV-392: note/pitch parsing is centralized in @/musicCore — this file must not reintroduce a local regex-based note parser. If this really is an unrelated regex, that is a sign this file has grown a second responsibility worth splitting out, not a reason to loosen this rule.',
+};
+
 export default tseslint.config(
   { ignores: ['dist/**', 'node_modules/**'] },
   js.configs.recommended,
@@ -229,18 +266,7 @@ export default tseslint.config(
       'no-restricted-syntax': [
         'error',
         ...GLOBAL_RESTRICTED_SYNTAX,
-        {
-          selector: "MemberExpression[object.name='Math'][computed=false][property.name='random']",
-          message: 'src/audio/ routes randomness through src/audio/rng.ts (setRandomSource) so calibration renders stay reproducible — call the seam, not Math.random directly (also bans an alias assignment like `const r = Math.random`).',
-        },
-        {
-          selector: "MemberExpression[object.name='Math'][computed=true][property.value='random']",
-          message: "src/audio/ routes randomness through src/audio/rng.ts (setRandomSource) — Math['random'] is the same ban as Math.random, just spelled to dodge it.",
-        },
-        {
-          selector: "VariableDeclarator[init.name='Math'] ObjectPattern > Property[key.name='random']",
-          message: 'src/audio/ routes randomness through src/audio/rng.ts (setRandomSource) — destructuring `random` out of `Math` is the same ban as Math.random.',
-        },
+        ...AUDIO_RANDOM_BAN_SYNTAX,
       ],
     },
   },
@@ -501,5 +527,34 @@ export default tseslint.config(
       '**/*.test.tsx',
     ],
     rules: { 'no-restricted-imports': 'off' },
+  },
+  {
+    // DEV-392 note-regex guard, audio half — see AUDIO_RANDOM_BAN_SYNTAX and
+    // NOTE_REGEX_BAN above for why these two files need their own block rather
+    // than folding into the src/audio/** Math.random block above: that block's
+    // glob (`src/audio/**`) is far wider than "the two files this issue
+    // centralized," and this repo's whole `src/audio/` tree legitimately uses
+    // regex elsewhere (unaudited by this issue) — only these two are confirmed
+    // regex-free apart from what Tasks 6 and 8 just deleted.
+    files: ['src/audio/leadStepRecord.ts', 'src/audio/bassPatterns.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...GLOBAL_RESTRICTED_SYNTAX,
+        ...AUDIO_RANDOM_BAN_SYNTAX,
+        NOTE_REGEX_BAN,
+      ],
+    },
+  },
+  {
+    // DEV-392 note-regex guard, non-audio half.
+    files: [
+      'src/components/loop/lead/melodyGrid.ts',
+      'src/components/ui/Keyboard.tsx',
+      'src/utils/musicTheory.ts',
+    ],
+    rules: {
+      'no-restricted-syntax': ['error', ...GLOBAL_RESTRICTED_SYNTAX, NOTE_REGEX_BAN],
+    },
   },
 );

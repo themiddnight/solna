@@ -7,8 +7,11 @@ import {
   midiToSharpName,
   noteMidi,
   resolveChordNotes,
+  resolveScaleKey,
+  scaleEntry,
   scaleNotesForTonal,
   transposeByInterval,
+  transposePitchClassPreservingOctave,
   type ChordQuality,
 } from '@/musicCore';
 import { ChordItem } from '../types';
@@ -21,7 +24,6 @@ import { METERS } from './meter';
 // compile and is what keeps every data file an independent leaf.
 import { SCALES } from '@/data/scales';
 import { spellPitchClassInKey, type SpellingKey } from './noteSpelling';
-import { resolveScaleKey, scaleEntry } from './scaleLookup';
 
 // Backward-compatible re-exports: these three names are now owned by Music
 // Core's chord-quality registry (src/musicCore/chordQuality.ts) — kept under
@@ -37,7 +39,7 @@ export { ROOTS, formatChordQuality, CHORD_QUALITY_ALIASES as TONAL_CHORD_ALIASES
  */
 export function getScaleNotes(root: string, scaleType: string): string[] {
   const rootIndex = rootSemitone(root);
-  const scale = SCALES[scaleType] || SCALES['Major'];
+  const scale = scaleEntry(scaleType);
   return scale.intervals.map((int) => ROOTS[(rootIndex + int) % 12]);
 }
 
@@ -49,7 +51,7 @@ export function getScaleNotes(root: string, scaleType: string): string[] {
  */
 export function getScaleNotesInOctave(root: string, scaleType: string, octave: number): string[] {
   const rootIndex = rootSemitone(root);
-  const scale = SCALES[scaleType] || SCALES['Major'];
+  const scale = scaleEntry(scaleType);
   return scale.intervals.map((int) => {
     const abs = rootIndex + int;
     return `${ROOTS[abs % 12]}${octave + Math.floor(abs / 12)}`;
@@ -66,7 +68,7 @@ export function isNoteInScale(noteWithOrWithoutOctave: string, root: string, sca
   if (!Number.isFinite(rootChroma)) return false;
 
   const interval = (chroma - rootChroma + 12) % 12;
-  const scale = SCALES[scaleType] || SCALES['Major'];
+  const scale = scaleEntry(scaleType);
   return scale.intervals.includes(interval);
 }
 
@@ -96,10 +98,10 @@ export function remapNoteByScaleDegree(
   const rootRef = rootSemitone(fromRoot);
   const block = Math.floor((midi - rootRef) / 12);
   const offset = ((midi - rootRef) % 12 + 12) % 12;
-  const fromIntervals = (SCALES[fromScaleType] || SCALES['Major']).intervals;
+  const fromIntervals = scaleEntry(fromScaleType).intervals;
   const degree = fromIntervals.indexOf(offset);
   if (degree === -1) return note;
-  const toIntervals = (SCALES[toScaleType] || SCALES['Major']).intervals;
+  const toIntervals = scaleEntry(toScaleType).intervals;
   if (degree >= toIntervals.length) return note;
   return midiToSharpName(rootSemitone(toRoot) + block * 12 + toIntervals[degree]);
 }
@@ -111,7 +113,7 @@ function isInScalePaletteChord(
   root: string,
   scaleType: string,
 ): boolean {
-  const scale = SCALES[scaleType] || SCALES['Major'];
+  const scale = scaleEntry(scaleType);
   for (let degree = 0; degree < scale.intervals.length; degree++) {
     for (const use7ths of [false, true]) {
       const chord = getDiatonicChordForDegree(degree, root, scaleType, use7ths);
@@ -397,13 +399,13 @@ export function transposeProgression(
 /**
  * Shifts a note's pitch class and keeps its written octave, so a slash bass
  * never jumps a register on a key change — and a transpose round trip is exact.
- * Returns the input unchanged when it is not a note name.
+ * Returns the input unchanged when it is not a note name — this function's own
+ * contract, preserved verbatim; Music Core's `transposePitchClassPreservingOctave`
+ * fails explicitly (`null`) per its own typed-failure contract, and this is the
+ * one place that "unchanged" default belongs.
  */
 function transposePitchClass(note: string, shift: number): string {
-  const match = note.match(/^([A-Ga-g][#b]?)(-?\d+)?$/);
-  if (!match) return note;
-  const shifted = ROOTS[(rootSemitone(match[1]) + shift) % 12];
-  return match[2] === undefined ? shifted : `${shifted}${match[2]}`;
+  return transposePitchClassPreservingOctave(note, shift) ?? note;
 }
 
 /**

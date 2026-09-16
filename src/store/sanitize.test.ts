@@ -266,6 +266,15 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
     // case-insensitive narrow is unsound for anything that persists the
     // value — a registered-but-wrong-case token must still be rejected here.
     ['a chord with a wrong-case quality', 'chords', [{ id: 'c', root: 'A', quality: 'Min7', bars: 1, notes: ['A3'] }]],
+    // bassNote is optional but, when present, must resolve (via Music Core's
+    // pitchClassOfNote) to a pitch class in the same ROOT_SET root uses. A
+    // double-accidental like 'C##4' resolves to the pitch class 'C##', which
+    // is not a member.
+    [
+      'a chord with a malformed bassNote',
+      'chords',
+      [{ id: 'c', root: 'A', quality: 'min', bars: 1, notes: ['A3'], bassNote: 'C##4' }],
+    ],
     ['customChordRhythm of strings', 'customChordRhythm', ['on', 'off']],
     ['customBassPattern outside the union', 'customBassPattern', ['root', 'ninth']],
     // A hold is a finite positive integer, so a zero, a negative, a fraction or
@@ -304,6 +313,16 @@ describe('sanitizeLoops checks array elements, not just Array.isArray', () => {
     expect(out.chords).toEqual(loop.chords);
     expect(out.beatPattern).toEqual(loop.beatPattern);
     expect(out.customBassPattern).toEqual(bass);
+  });
+
+  test('a chord with a valid bassNote is kept, and null/absent bassNote both pass', () => {
+    const chords = [
+      { id: 'c1', root: 'A', quality: 'min', bars: 1, notes: ['A3'], bassNote: 'E4' },
+      { id: 'c2', root: 'F', quality: 'maj', bars: 1, notes: ['F3'], bassNote: null },
+      { id: 'c3', root: 'C', quality: 'maj', bars: 1, notes: ['C3'] },
+    ];
+    const [out] = sanitizeLoops([{ ...createDefaultLoop(), chords }]) ?? [];
+    expect(out.chords).toEqual(chords);
   });
 
   test('a short value array is padded out to the lane width, not left ragged', () => {
