@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { cancelBeatPreview, previewBeatParams, restoreBeatParams } from '@/store/beatPreview';
 import type { BeatParams } from '@/types';
 
@@ -163,19 +163,33 @@ export function useBeatParamDraft(
   // which is exactly right — a DOM-less render has no gesture to abandon.
   useEffect(() => () => machine.cancelIfDragging(), [machine]);
 
-  return {
-    draft: machine.getDraft(),
-    update: (updater) => {
+  // `useCallback`, not inline closures: `machine` and `forceRender` are both
+  // stable for the lifetime of this hook instance (the former lives in a
+  // `useRef` created once, the latter is `useReducer`'s dispatch), so these
+  // three are genuinely stable across every render — which is what lets
+  // `BeatVoiceCard`'s `React.memo` bail on a card whose own voice a drag
+  // didn't touch. `commitParamsRef` is the indirection that keeps `commit`
+  // from needing `commitParams` itself in its dependency array.
+  const update = useCallback(
+    (updater: (params: BeatParams) => BeatParams) => {
       machine.update(updater);
       forceRender();
     },
-    commit: () => {
-      machine.commit((params) => commitParamsRef.current(params));
-      forceRender();
-    },
-    cancel: () => {
-      machine.cancel();
-      forceRender();
-    },
+    [machine],
+  );
+  const commit = useCallback(() => {
+    machine.commit((params) => commitParamsRef.current(params));
+    forceRender();
+  }, [machine]);
+  const cancel = useCallback(() => {
+    machine.cancel();
+    forceRender();
+  }, [machine]);
+
+  return {
+    draft: machine.getDraft(),
+    update,
+    commit,
+    cancel,
   };
 }
