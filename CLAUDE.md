@@ -129,9 +129,16 @@ take once DEV-399 narrows its contract); the full contract, including the compil
 runtime-flow and data-ownership diagrams, lives in
 `docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md`. `src/data/`'s
 own block already forbids every value import including `tonal`, so it carries no separate
-carve-out. The analyser exceptions two paragraphs up (`AudioVisualizer.tsx`, `ui/VuMeter.tsx`,
-`ui/AmbientBackdrop.tsx`, `ui/GainReductionMeter.tsx`, `ui/SourceMeter.tsx`) are unrelated to this
-axis and unchanged by it.
+carve-out. The gate covers non-test files under `src/` only — the config's final block exempts
+`**/*.test.{ts,tsx}` from every import ban, which is how `scales.test.ts`, `musicTheory.test.ts`
+and `noteSpelling.test.ts` deliberately pin behavior against tonal, and `scripts/` sits outside
+the gate's `src/**` scope entirely. The analyser exceptions two paragraphs up
+(`AudioVisualizer.tsx`, `ui/VuMeter.tsx`, `ui/AmbientBackdrop.tsx`, `ui/GainReductionMeter.tsx`,
+`ui/SourceMeter.tsx`) are unrelated to this axis and unchanged by it. `src/architecture/` holds
+cross-cutting architecture tests that don't belong to any single layer — `dependencyLayers.test.ts`
+proves this axis and the four layers above it — and a non-test file placed there would fall under
+the `src/**` catch-all block like everything else, since the folder has no layering block of its
+own.
 
 `src/utils/` stays outside the chain, above `data/`: it may read `data/` at runtime
 (`musicTheory.ts` imports `SCALES`), but nothing in `data/` may read it back except through an

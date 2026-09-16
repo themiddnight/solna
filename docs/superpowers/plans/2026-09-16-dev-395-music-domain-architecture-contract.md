@@ -72,6 +72,11 @@ src/components/ (UI)
 
 This list is deliberately **today's importers, not the future adapter's file path** — the adapter does not exist yet, so allowlisting a path nothing occupies would enforce nothing. DEV-394 replaces this allowlist with the adapter's own file(s) as part of consolidating these six call sites; from that point on, the six paths above are no longer allowlisted directly, only the adapter is. The enforcement mechanism (an ESLint `no-restricted-imports` rule with a `paths` ban plus per-file carve-outs) does not change — only the file list it names does.
 
+The gate covers non-test files under `src/` only — the config's final block exempts
+`**/*.test.{ts,tsx}` from every import ban, which is how `scales.test.ts`, `musicTheory.test.ts`
+and `noteSpelling.test.ts` deliberately pin behavior against tonal, and `scripts/` sits outside
+the gate's `src/**` scope entirely.
+
 The planner/store and planner/engine boundaries in the diagram above are **not** ESLint-enforceable yet, because a planner is not yet a distinct file — today's bridge functions (`src/components/loop/chord/useChordPlayback.ts`, `src/components/loop/lead/useLeadPlayback.ts`, `src/components/useSequencerPlayback.ts`) legitimately read the store *and* call the engine in the same function, because they are both the planner and the controller until DEV-397 splits them. Banning a store read from those files today would break working code with no replacement to move it to. DEV-397 is where this boundary becomes a file boundary and therefore an ESLint boundary.
 
 ## 2. Runtime command/event flow

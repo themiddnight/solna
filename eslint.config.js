@@ -45,13 +45,28 @@ const TAPER_CONVERSION_BAN = {
 // anywhere in this repo to accidentally miss or over-match.
 // Same replace-not-merge trap as TAPER_CONVERSION_BAN: this is spread into
 // every block that already owns a `no-restricted-imports` entry for a folder
-// none of today's six importers live in, and each of the six gets its own
-// carve-out block (mirroring VolumeFader.tsx's existing carve-out) that keeps
-// every OTHER ban for that file but omits this one.
+// that DOES contain one or more of today's six importers (`src/audio/**`,
+// `src/store/**`, the `src/**` catch-all covering `src/utils/`), with each of
+// those six importers excluded from that block via its `ignores` array and
+// re-covered by its own carve-out block (mirroring VolumeFader.tsx's existing
+// carve-out) that keeps every OTHER ban for that file but omits this one.
 const TONAL_IMPORT_BAN = {
   name: 'tonal',
   message:
     "DEV-395: 'tonal' is confined to today's allowlisted call sites until DEV-394 builds the Music Core/Tonal adapter — see docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md.",
+};
+
+// `@tonaljs/*` scoped subpackages (`@tonaljs/core`, `@tonaljs/chord`, etc.) are
+// real, separately-importable packages Tonal itself documents — the bare
+// `tonal` ban above does not touch them, so this closes the same door for the
+// scoped form. `patterns` (a glob group), not `paths` (an exact specifier),
+// because this bans a whole namespace of subpaths rather than one bare
+// specifier. Spread into the same `patterns` arrays TONAL_IMPORT_BAN's `paths`
+// entry sits beside; the six carve-out blocks below omit both.
+const TONAL_SCOPED_PACKAGE_BAN = {
+  group: ['@tonaljs/*'],
+  message:
+    "DEV-395: '@tonaljs/*' scoped subpackages are confined to the same allowlist as the bare 'tonal' import — see docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md.",
 };
 
 // The two bans that must reach EVERY file: React.FC (decision D1) and the
@@ -182,6 +197,7 @@ export default tseslint.config(
         {
           paths: [TONAL_IMPORT_BAN],
           patterns: [
+            TONAL_SCOPED_PACKAGE_BAN,
             { group: ['**/store/**'], message: 'audio/ must not import store/ (layering rule 1)' },
             { group: ['**/components/**'], message: 'audio/ must not import components/ (layering rule 1)' },
             TAPER_CONVERSION_BAN,
@@ -278,6 +294,7 @@ export default tseslint.config(
         {
           paths: [TONAL_IMPORT_BAN],
           patterns: [
+            TONAL_SCOPED_PACKAGE_BAN,
             { group: ['**/components/**'], message: 'store/ must not import components/ (layering rule 2)' },
             TAPER_CONVERSION_BAN,
           ],
@@ -324,6 +341,7 @@ export default tseslint.config(
         {
           paths: [TONAL_IMPORT_BAN],
           patterns: [
+            TONAL_SCOPED_PACKAGE_BAN,
             { group: ['**/audio/engine'], message: 'components must not import audio/engine (layering rule 3)' },
             TAPER_CONVERSION_BAN,
           ],
@@ -343,6 +361,7 @@ export default tseslint.config(
         {
           paths: [TONAL_IMPORT_BAN],
           patterns: [
+            TONAL_SCOPED_PACKAGE_BAN,
             { group: ['**/audio/engine'], message: 'components must not import audio/engine (layering rule 3)' },
           ],
         },
@@ -367,7 +386,7 @@ export default tseslint.config(
       'src/utils/musicTheory.ts',
     ],
     rules: {
-      'no-restricted-imports': ['error', { paths: [TONAL_IMPORT_BAN], patterns: [TAPER_CONVERSION_BAN] }],
+      'no-restricted-imports': ['error', { paths: [TONAL_IMPORT_BAN], patterns: [TONAL_SCOPED_PACKAGE_BAN, TAPER_CONVERSION_BAN] }],
     },
   },
   {

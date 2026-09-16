@@ -73,9 +73,36 @@ describe('tonal import confinement (DEV-395)', () => {
     ).toContainEqual(err('no-restricted-imports'));
   });
 
+  test('src/audio/bassPatterns.ts is still banned from importing store/ (layering rule 1 survives the carve-out)', async () => {
+    expect(
+      await guardedMessages(
+        "import { useAppStore } from '@/store/store';\nexport const S = useAppStore;\n",
+        'src/audio/bassPatterns.ts',
+      ),
+    ).toContainEqual(err('no-restricted-imports'));
+  });
+
+  test('src/audio/playback/padPlayback.ts is still banned from importing components/ (layering rule 1 survives the carve-out)', async () => {
+    expect(
+      await guardedMessages(
+        "import { Keyboard } from '@/components/ui/Keyboard';\nexport const K = Keyboard;\n",
+        'src/audio/playback/padPlayback.ts',
+      ),
+    ).toContainEqual(err('no-restricted-imports'));
+  });
+
   test('the allowlisted src/utils/noteSpelling.ts may still import tonal', async () => {
     const messages = await guardedMessages(TONAL_IMPORT, 'src/utils/noteSpelling.ts');
     expect(messages.filter((m) => m.ruleId === 'no-restricted-imports')).toEqual([]);
+  });
+
+  test('src/utils/noteSpelling.ts is still banned by TAPER_CONVERSION_BAN (DEV-386 taper ban survives the carve-out)', async () => {
+    expect(
+      await guardedMessages(
+        "import { dbToSliderPos } from '@/utils/gainUnits';\nexport const F = dbToSliderPos;\n",
+        'src/utils/noteSpelling.ts',
+      ),
+    ).toContainEqual(err('no-restricted-imports'));
   });
 
   test('a new src/utils/ file importing tonal is an error', async () => {
