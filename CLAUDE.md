@@ -817,12 +817,17 @@ migration chains" note above), but they still mean different things and must not
 one — `parseProjectFile` refuses a body whose `formatVersion` is newer than
 `PROJECT_FORMAT_VERSION` regardless of what `PERSIST_VERSION` is doing.
 
-**`dirty` is derived, never persisted.** One idle pass fingerprints the content set and compares
-it to the project's baseline (or, untitled, to the default project) — see `projectDirty.ts`;
-computing it per `set()` would fingerprint the whole arrangement on every knob tick. Because
-hydration runs synchronously *inside* `create()`, before the tracker exists, `store.ts` schedules
-**one pass at boot** — that pass is what makes a reloaded session honest, and without it a
-restored session with unsaved work gets no badge and no dirty guard.
+**Project content changes are autosaved, not dirty-tracked.** `projectDirty.ts`/`projectFingerprint.ts`
+are gone (deleted in the same change that added continuous IndexedDB autosave) — there is no
+"unsaved changes" concept left to compute. `src/store/projectAutosave.ts` instead holds one
+`subscribeWithSelector` subscription over `PROJECT_CONTENT_KEYS` (plus `projectName`) with
+`equalityFn: shallow`, so an entire knob-drag gesture collapses to a single pending write rather
+than firing per `set()`. A pending write is scheduled once per idle window (the same
+`idleWriteScheduler` `coalescedStorage.ts` uses) and flushed immediately on `pagehide`/
+`visibilitychange`, so a killed tab never loses its last edit. It starts **disarmed**: boot's
+`load()` reads the IndexedDB slot asynchronously, and a write scheduled before that settles could
+overwrite the freshly-loaded project with placeholder boot content — `store.ts` arms it in a
+`finally` only after `load()` resolves.
 
 ## Testing — the one trap worth knowing up front
 
