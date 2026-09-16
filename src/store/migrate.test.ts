@@ -68,12 +68,45 @@ describe('migrateLegacyPresets', () => {
       description: '',
       isFactory: false,
     };
+    const legacyProgression = {
+      id: 'c1',
+      name: 'Legacy Progression',
+      category: 'User',
+      description: '',
+      roman: 'I - V',
+      chords: [{ id: 'ch1', root: 'C', quality: 'maj', bars: 1, notes: ['C4'] }],
+      createdAt: 0,
+    };
     fakeLocalStorage.setItem(LEGACY_SYNTH_PRESETS_KEY, JSON.stringify([legacyPreset]));
-    fakeLocalStorage.setItem(LEGACY_CHORD_PROGRESSIONS_KEY, JSON.stringify([{ id: 'c1' }]));
+    fakeLocalStorage.setItem(LEGACY_CHORD_PROGRESSIONS_KEY, JSON.stringify([legacyProgression]));
 
     const result = migrateLegacyPresets({ customSynthPresets: [], customChordProgressions: [] });
     expect(result.customSynthPresets).toEqual([legacyPreset] as never);
-    expect(result.customChordProgressions).toEqual([{ id: 'c1' }] as never);
+    expect(result.customChordProgressions).toEqual([legacyProgression] as never);
+  });
+
+  test('a legacy chord progression with an unregistered quality or unresolvable root is dropped, not adopted', () => {
+    // Same "validated after sanitizePersistedState already ran" reasoning as
+    // the synth-preset case above: without this, a legacy chord this bad
+    // would be the one progression in the app that reaches resolveChordNotes
+    // uncaught.
+    fakeLocalStorage.setItem(
+      LEGACY_CHORD_PROGRESSIONS_KEY,
+      JSON.stringify([
+        {
+          id: 'c1',
+          name: 'Bad Progression',
+          category: 'User',
+          description: '',
+          roman: '',
+          chords: [{ id: 'ch1', root: 'C', quality: 'not-a-real-quality', bars: 1, notes: ['C4'] }],
+          createdAt: 0,
+        },
+      ]),
+    );
+
+    const result = migrateLegacyPresets({ customSynthPresets: [], customChordProgressions: [] });
+    expect(result.customChordProgressions).toEqual([]);
   });
 
   test('a legacy entry that is not a complete patch is dropped, not adopted', () => {

@@ -1,4 +1,4 @@
-import { Note, transpose } from 'tonal';
+import { noteMidi, transposeByInterval } from '@/musicCore';
 import type { ArpMode } from '../types';
 import { random } from './rng';
 
@@ -15,8 +15,8 @@ export function buildArpSequenceUncached(
   octaves: number,
 ): string[] {
   const notesArray = Array.from(heldNotes).sort((a, b) => {
-    const midiA = Note.midi(a) ?? 0;
-    const midiB = Note.midi(b) ?? 0;
+    const midiA = noteMidi(a) ?? 0;
+    const midiB = noteMidi(b) ?? 0;
     return midiA - midiB;
   });
 
@@ -29,7 +29,7 @@ export function buildArpSequenceUncached(
     // 8th, two is a perfect 15th, so octave N is a perfect (7N + 1)th.
     const interval = `${7 * oct + 1}P`;
     for (const noteStr of notesArray) {
-      const transposed = transpose(noteStr, interval);
+      const transposed = transposeByInterval(noteStr, interval);
       if (transposed) expanded.push(transposed);
     }
   }

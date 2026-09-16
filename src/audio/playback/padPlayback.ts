@@ -1,4 +1,4 @@
-import { transpose } from 'tonal';
+import { transposeByInterval } from '@/musicCore';
 import { generateBlockChordNotes, getDiatonicChordForDegree } from '@/utils/musicTheory';
 import type { ChordItem, PadInterval, PadMode, PadVoicing } from '@/types';
 
@@ -42,7 +42,7 @@ export function resolveDroneNotes(
   const base = `${root}${octave}`;
   const out: string[] = [];
   for (const interval of intervals) {
-    const note = transpose(base, INTERVAL_NAME[interval]);
+    const note = transposeByInterval(base, INTERVAL_NAME[interval]);
     if (note) out.push(note);
   }
   return out;

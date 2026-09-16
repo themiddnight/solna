@@ -111,30 +111,40 @@ shows it, never in a slice.
    every subscriber. **`eslint.config.js` is the list that binds**; this one has drifted behind it
    before, so add to both or the allowlist quietly grows without anyone reading it.
 
-**A fifth axis sits on top of the four layers: Tonal.js is confined to an explicit allowlist,
-not yet a directory.** `tonal` may be imported only from the paths `eslint.config.js`'s
-`TONAL_IMPORT_BAN` carve-outs name — today that is `src/utils/noteSpelling.ts`,
-`src/utils/musicTheory.ts`, `src/audio/arpeggiator.ts`, `src/audio/bassPatterns.ts`,
-`src/audio/playback/padPlayback.ts` and `src/store/midiInput.ts`, enforced with the same
+**A fifth axis sits on top of the four layers: Tonal.js is confined to one file.** `tonal` may be
+imported only from `src/musicCore/tonalAdapter.ts` (DEV-394), enforced with the same
 replace-not-merge `no-restricted-imports` pattern as the four layers above (see
-`TAPER_CONVERSION_BAN` and its carve-outs for the mechanism this reuses). The allowlist names
-today's importers, not a future adapter path, because Music Core and its Tonal adapter
-(DEV-394) do not exist as modules yet — allowlisting a path nothing occupies would enforce
-nothing. A **musical intent** (a persisted, user-authored decision — a chord's root/quality, a
-key, a note's pitch and timing) is not the same thing as a **derived representation** (a value a
-pure function computes from musical intent, such as a resolved chord quality or a display-spelled
-label) or a **playable event** (a fully resolved, timestamped instruction — pitch and timing
-already resolved, voice ownership already assigned — that is the sole input the audio engine may
-take once DEV-399 narrows its contract); the full contract, including the compile-time,
-runtime-flow and data-ownership diagrams, lives in
-`docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md`. `src/data/`'s
-own block already forbids every value import including `tonal`, so it carries no separate
-carve-out. The gate covers non-test files under `src/` only — the config's final block exempts
-`**/*.test.{ts,tsx}` from every import ban, which is how `scales.test.ts`, `musicTheory.test.ts`
-and `noteSpelling.test.ts` deliberately pin behavior against tonal, and `scripts/` sits outside
-the gate's `src/**` scope entirely. The analyser exceptions two paragraphs up
-(`AudioVisualizer.tsx`, `ui/VuMeter.tsx`, `ui/AmbientBackdrop.tsx`, `ui/GainReductionMeter.tsx`,
-`ui/SourceMeter.tsx`) are unrelated to this axis and unchanged by it. `src/architecture/` holds
+`TAPER_CONVERSION_BAN` and its carve-outs for the mechanism this reuses). Every other file that
+needs pitch, interval or chord-quality operations imports Music Core's public API
+(`src/musicCore/index.ts`) instead — including the six files that carried a temporary,
+file-named allowlist under DEV-395 (`src/utils/noteSpelling.ts`, `src/utils/musicTheory.ts`,
+`src/audio/arpeggiator.ts`, `src/audio/bassPatterns.ts`, `src/audio/playback/padPlayback.ts`,
+`src/store/midiInput.ts`); none of them import `tonal` directly any more, and each keeps its own
+pre-existing public exports unchanged. `src/musicCore/chordQuality.ts` also owns the one canonical
+chord-quality registry — app token, Tonal alias, display suffix, picker label/group and
+reharmonization category — that `ChordItem['quality']`'s TypeScript type, the chord picker's
+options, `formatChordQuality`/`formatChordLabel` and chord-note resolution (`resolveChordNotes`)
+all derive from; a quality absent from the registry is a compile error anywhere it is written as a
+literal, and a runtime string that names no registered quality is a thrown error at
+`resolveChordNotes`, never a silent `maj` chord. `src/musicCore/**` is itself ESLint-enforced to
+import nothing from `src/store/`, `src/components/`, `src/audio/`, or `src/utils/` — the
+dependency runs audio → Music Core and utils → Music Core, never the reverse (`src/utils/`
+already imports `@/musicCore`; see the `src/utils/` paragraph below). A **musical intent** (a persisted, user-authored
+decision — a chord's root/quality, a key, a note's pitch and timing) is not the same thing as a
+**derived representation** (a value a pure function computes from musical intent, such as a
+resolved chord quality or a display-spelled label) or a **playable event** (a fully resolved,
+timestamped instruction — pitch and timing already resolved, voice ownership already assigned —
+that is the sole input the audio engine may take once DEV-399 narrows its contract); the full
+contract, including the compile-time, runtime-flow and data-ownership diagrams, lives in
+`docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md` (updated by
+DEV-394). `src/data/`'s own block already forbids every value import including `tonal`, so it
+carries no separate carve-out. The gate covers non-test files under `src/` only — the config's
+final block exempts `**/*.test.{ts,tsx}` from every import ban, which is how `scales.test.ts`,
+`src/musicCore/tonalAdapter.test.ts` and `noteSpelling.test.ts` deliberately pin behavior against
+tonal, and `scripts/` sits outside the gate's `src/**` scope entirely. The analyser exceptions two
+paragraphs up (`AudioVisualizer.tsx`, `ui/VuMeter.tsx`, `ui/AmbientBackdrop.tsx`,
+`ui/GainReductionMeter.tsx`, `ui/SourceMeter.tsx`) are unrelated to this axis and unchanged by it.
+`src/architecture/` holds
 cross-cutting architecture tests that don't belong to any single layer — `dependencyLayers.test.ts`
 proves this axis and the four layers above it — and a non-test file placed there would fall under
 the `src/**` catch-all block like everything else, since the folder has no layering block of its
@@ -142,7 +152,10 @@ own.
 
 `src/utils/` stays outside the chain, above `data/`: it may read `data/` at runtime
 (`musicTheory.ts` imports `SCALES`), but nothing in `data/` may read it back except through an
-`import type` (e.g. `MeterId`), which is erased at compile. **One deliberate inversion is
+`import type` (e.g. `MeterId`), which is erased at compile. `src/utils/` may also import
+`@/musicCore` (`musicTheory.ts`, `noteSpelling.ts`, DEV-394) — never the reverse: `src/musicCore/`
+is ESLint-banned from importing `src/utils/`, alongside its store/components/audio bans, so this
+relationship reads in one direction from either paragraph. **One deliberate inversion is
 recorded here so a reader does not have to discover it: `utils/localFileSave.ts` and
 `utils/driveBrowser.ts` import *types and constants* from `src/store/`** — the `.solna` MIME
 type and the Drive MIME type. It is an exception because the alternative is duplicating a

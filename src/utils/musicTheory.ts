@@ -1,8 +1,18 @@
-import { Chord, Interval, Note, Scale, transpose } from 'tonal';
+import {
+  CHORD_QUALITY_ALIASES,
+  ROOTS,
+  chromaOfNote,
+  formatChordQuality,
+  intervalDistance,
+  midiToSharpName,
+  noteMidi,
+  resolveChordNotes,
+  scaleNotesForTonal,
+  transposeByInterval,
+  type ChordQuality,
+} from '@/musicCore';
 import { ChordItem } from '../types';
 import { METERS } from './meter';
-
-export const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 // SCALES is authored content and lives in src/data/, below this file in the
 // layering: data -> audio -> store -> components. Reading DOWN into it, as
 // this line does, is the allowed direction. The other way is not: src/data/
@@ -12,6 +22,12 @@ export const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#'
 import { SCALES } from '@/data/scales';
 import { spellPitchClassInKey, type SpellingKey } from './noteSpelling';
 import { resolveScaleKey, scaleEntry } from './scaleLookup';
+
+// Backward-compatible re-exports: these three names are now owned by Music
+// Core's chord-quality registry (src/musicCore/chordQuality.ts) — kept under
+// their historical names so this file's ~20 existing consumers need no
+// import-path change.
+export { ROOTS, formatChordQuality, CHORD_QUALITY_ALIASES as TONAL_CHORD_ALIASES };
 
 /**
  * Returns all notes contained in the given scale for a root note (e.g. ['C', 'D', 'E', 'F', 'G', 'A', 'B']).
@@ -44,21 +60,21 @@ export function getScaleNotesInOctave(root: string, scaleType: string, octave: n
  * Checks if a note (with or without octave, e.g. 'C#4' or 'A') is in the specified scale
  */
 export function isNoteInScale(noteWithOrWithoutOctave: string, root: string, scaleType: string): boolean {
-  const note = Note.get(noteWithOrWithoutOctave);
-  if (note.empty) return false;
-  const rootNote = Note.get(root);
-  if (rootNote.empty) return false;
+  const chroma = chromaOfNote(noteWithOrWithoutOctave);
+  if (!Number.isFinite(chroma)) return false;
+  const rootChroma = chromaOfNote(root);
+  if (!Number.isFinite(rootChroma)) return false;
 
-  const interval = (note.chroma - rootNote.chroma + 12) % 12;
+  const interval = (chroma - rootChroma + 12) % 12;
   const scale = SCALES[scaleType] || SCALES['Major'];
   return scale.intervals.includes(interval);
 }
 
 /** Transpose a note by a raw semitone count (sharp-spelled via ROOTS convention). */
 export function transposeNoteBySemitones(note: string, semitones: number): string {
-  const midi = Note.midi(note);
+  const midi = noteMidi(note);
   if (midi == null) return note;
-  return Note.fromMidiSharps(midi + semitones);
+  return midiToSharpName(midi + semitones);
 }
 
 /**
@@ -75,7 +91,7 @@ export function remapNoteByScaleDegree(
   toRoot: string,
   toScaleType: string,
 ): string {
-  const midi = Note.midi(note);
+  const midi = noteMidi(note);
   if (midi == null) return note;
   const rootRef = rootSemitone(fromRoot);
   const block = Math.floor((midi - rootRef) / 12);
@@ -85,7 +101,7 @@ export function remapNoteByScaleDegree(
   if (degree === -1) return note;
   const toIntervals = (SCALES[toScaleType] || SCALES['Major']).intervals;
   if (degree >= toIntervals.length) return note;
-  return Note.fromMidiSharps(rootSemitone(toRoot) + block * 12 + toIntervals[degree]);
+  return midiToSharpName(rootSemitone(toRoot) + block * 12 + toIntervals[degree]);
 }
 
 // True when the in-scale palette (triads or 7ths) renders the same root+quality.
@@ -110,14 +126,14 @@ function isInScalePaletteChord(
 // tuple THROWS: a silent fallback to `maj` is how a wrong chord reaches the UI
 // with nothing to notice it, and a twelfth scale whose stacking produces a
 // tuple nobody has named should stop, not guess.
-const TRIAD_QUALITY_BY_INTERVALS: Record<string, string> = {
+const TRIAD_QUALITY_BY_INTERVALS: Record<string, ChordQuality> = {
   '3M 5P': 'maj',
   '3m 5P': 'min',
   '3m 5d': 'dim',
   '3M 5A': 'aug',
 };
 
-const SEVENTH_QUALITY_BY_INTERVALS: Record<string, string> = {
+const SEVENTH_QUALITY_BY_INTERVALS: Record<string, ChordQuality> = {
   '3M 5P 7M': 'maj7',
   '3M 5P 7m': '7',
   '3m 5P 7m': 'min7',
@@ -145,7 +161,7 @@ const MINOR_THIRD_QUALITIES: ReadonlySet<string> = new Set(
 // Keyed `${scaleType}|${degree}|${use7ths}`. Correct forever because SCALES is
 // frozen content. The cache lives in utils/, not data/ — a src/data/ file holds
 // no mutable module-scope binding.
-const degreeQualityCache = new Map<string, string>();
+const degreeQualityCache = new Map<string, ChordQuality>();
 
 /**
  * The degree indices whose interval sits nearest `target`, measured around the
@@ -207,13 +223,12 @@ export function resolveParentDegreeQuality(
   parentKey: string,
   parentDegree: number,
   use7ths: boolean,
-): string {
-  const notes = Scale.get(`C ${SCALES[parentKey].tonal}`).notes;
+): ChordQuality {
+  const notes = scaleNotesForTonal('C', SCALES[parentKey].tonal);
   const chordRoot = notes[parentDegree];
-  const third = Interval.distance(chordRoot, notes[(parentDegree + 2) % 7]);
-  const fifth = Interval.distance(chordRoot, notes[(parentDegree + 4) % 7]);
-
-  const seventh = Interval.distance(chordRoot, notes[(parentDegree + 6) % 7]);
+  const third = intervalDistance(chordRoot, notes[(parentDegree + 2) % 7]);
+  const fifth = intervalDistance(chordRoot, notes[(parentDegree + 4) % 7]);
+  const seventh = intervalDistance(chordRoot, notes[(parentDegree + 6) % 7]);
 
   const tuple = use7ths ? `${third} ${fifth} ${seventh}` : `${third} ${fifth}`;
   const table = use7ths ? SEVENTH_QUALITY_BY_INTERVALS : TRIAD_QUALITY_BY_INTERVALS;
@@ -237,7 +252,7 @@ export function resolveParentDegreeQuality(
  * specific degree belongs in a CHORD_PROGRESSIONS step's explicit `quality`,
  * which is authored content and cannot leak into every other song in the scale.
  */
-export function resolveDegreeQuality(scaleType: string, degree: number, use7ths: boolean): string {
+export function resolveDegreeQuality(scaleType: string, degree: number, use7ths: boolean): ChordQuality {
   const cacheKey = `${scaleType}|${degree}|${use7ths}`;
   const cached = degreeQualityCache.get(cacheKey);
   if (cached !== undefined) return cached;
@@ -272,7 +287,7 @@ export function getDiatonicChordForDegree(
   root: string,
   scaleType: string,
   use7ths = false
-): { root: string; quality: string; degreeName: string } {
+): { root: string; quality: ChordQuality; degreeName: string } {
   const rootIndex = rootSemitone(root);
   // Resolved ONCE and handed down. Normalising the degree against the fallback
   // entry and then passing the original `scaleType` on left the resolver to
@@ -305,7 +320,7 @@ export function getDiatonicChordForDegree(
 
 export interface BorrowedChord {
   root: string;
-  quality: string;
+  quality: ChordQuality;
   label: string;
 }
 
@@ -424,7 +439,7 @@ export function snapProgressionToScale(
     const diatonic = getDiatonicChordForDegree(bestDegree, root, scaleType, chord.quality.includes('7') || chord.quality.includes('9'));
 
     // Preserve custom qualities if user intentionally used extended qualities like maj9, 7sus4, otherwise use diatonic
-    let targetQuality = diatonic.quality;
+    let targetQuality: ChordQuality = diatonic.quality;
     if (chord.quality === 'maj9' || chord.quality === 'min9' || chord.quality === '7sus4' || chord.quality === 'sus4') {
       targetQuality = chord.quality;
     }
@@ -445,8 +460,8 @@ export function deriveChordNotes(chord: ChordItem, octave: number): ChordItem {
 }
 
 export function rootSemitone(root: string): number {
-  const n = Note.get(root);
-  return n.empty ? 0 : n.chroma;
+  const chroma = chromaOfNote(root);
+  return Number.isFinite(chroma) ? chroma : 0;
 }
 
 export function sixteenthNoteMs(bpm: number): number {
@@ -493,7 +508,7 @@ export function barDurationSec(bpm: number, stepsPerBar: number = STEPS_PER_BAR)
 }
 
 export function noteFrequency(note: string, octaveOffset = 0): number {
-  const midi = Note.midi(note);
+  const midi = noteMidi(note);
   if (midi == null) return 440;
   return 440 * Math.pow(2, (midi + 12 * octaveOffset - 69) / 12);
 }
@@ -501,49 +516,8 @@ export function noteFrequency(note: string, octaveOffset = 0): number {
 export function shiftNoteOctave(note: string, octaves: number): string {
   if (octaves === 0) return note;
   const degree = 8 + 7 * (Math.abs(octaves) - 1);
-  const shifted = transpose(note, `${octaves > 0 ? '' : '-'}${degree}P`);
+  const shifted = transposeByInterval(note, `${octaves > 0 ? '' : '-'}${degree}P`);
   return shifted || note;
-}
-
-// App quality names that differ from tonal's chord-type tokens (keys are lowercase — lookups use toLowerCase()).
-// Exported so authored chord data can be validated against tonal in tests:
-// generateBlockChordNotes falls back to `maj` on an unknown token, so a typo
-// in a progression's quality is inaudible unless something checks it.
-export const TONAL_CHORD_ALIASES: Record<string, string> = {
-  min9: 'm9',
-  min6: 'm6',
-  minmaj7: 'mMaj7',
-};
-
-// Standard display labels for chord quality tokens (keys lowercase; lookups use toLowerCase()).
-// Internal tokens stored in ChordItem.quality stay unchanged everywhere else.
-const CHORD_QUALITY_LABELS: Record<string, string> = {
-  maj: '',
-  min: 'm',
-  maj7: 'maj7',
-  min7: 'm7',
-  '7': '7',
-  m7b5: 'm7b5',
-  dim: 'dim',
-  dim7: 'dim7',
-  aug: 'aug',
-  sus2: 'sus2',
-  sus4: 'sus4',
-  '7sus4': '7sus4',
-  '9': '9',
-  maj9: 'maj9',
-  min9: 'm9',
-  add9: 'add9',
-  '6': '6',
-  min6: 'm6',
-  minmaj7: 'mM7',
-  'maj7#5': 'maj7#5',
-};
-
-/** Display suffix for a chord quality token, e.g. 'maj' → '', 'min7' → 'm7', 'minMaj7' → 'mM7'. */
-export function formatChordQuality(quality: string): string {
-  const label = CHORD_QUALITY_LABELS[quality.toLowerCase()];
-  return label === undefined ? quality : label;
 }
 
 /**
@@ -574,19 +548,12 @@ export function spellChordRoot(root: string, key?: SpellingKey): string {
   return key ? spellPitchClassInKey(rootSemitone(root), key.scaleRoot, key.scaleType) : root;
 }
 
+/**
+ * Notes for a chord quality at a root/octave. The resolution itself —
+ * registry lookup, the Tonal call, the unregistered-quality failure — now
+ * lives in Music Core's `resolveChordNotes` (src/musicCore/chordQuality.ts);
+ * this name and signature stay so the app's many callers need no change.
+ */
 export function generateBlockChordNotes(chord: string, root = 'C', octave = 4): string[] {
-  const tonalType = TONAL_CHORD_ALIASES[chord.toLowerCase()] || chord.toLowerCase();
-  const chordData = Chord.getChord(tonalType, root);
-  const resolved = chordData.empty ? Chord.getChord('maj', root) : chordData;
-  if (resolved.empty) return [];
-
-  const rootMidi = Note.midi(`${root}${octave}`) ?? Note.midi(`C${octave}`) ?? 60;
-
-  return resolved.intervals.map((ivl) => {
-    const semitones = Interval.semitones(ivl);
-    const midi = rootMidi + (Number.isFinite(semitones) ? semitones : 0);
-    const noteName = ROOTS[((midi % 12) + 12) % 12];
-    const oct = Math.floor(midi / 12) - 1;
-    return `${noteName}${oct}`;
-  });
+  return resolveChordNotes(chord, root, octave);
 }

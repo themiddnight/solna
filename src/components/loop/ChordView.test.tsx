@@ -240,8 +240,9 @@ describe('ChordView pattern selects carry each pattern\'s meter', () => {
 import { applyKeyScaleChange, shouldClearReharmonizeIndicator } from './ChordView';
 import { deriveChordNotes } from '@/utils/musicTheory';
 import type { ChordItem } from '@/types';
+import type { ChordQuality } from '@/musicCore';
 
-const chord = (id: string, root: string, quality: string): ChordItem =>
+const chord = (id: string, root: string, quality: ChordQuality): ChordItem =>
   deriveChordNotes({ id, root, quality, bars: 1, notes: [] }, 4);
 
 // A Natural Minor, i - VI - III - VII.

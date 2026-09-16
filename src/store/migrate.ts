@@ -1,6 +1,6 @@
 import type { SynthPreset } from '../data/synthPresets';
 import type { CustomChordProgressionItem } from '../types';
-import { sanitizeCustomSynthPresets } from './sanitize';
+import { sanitizeCustomChordProgressions, sanitizeCustomSynthPresets } from './sanitize';
 
 // Legacy localStorage keys written by the pre-Zustand app:
 // - synth presets:   the preset registry that preceded src/utils/synthPresets.ts (STORAGE_KEY)
@@ -42,7 +42,12 @@ function readLegacyChordProgressions(): CustomChordProgressionItem[] | null {
     const raw = localStorage.getItem(LEGACY_CHORD_PROGRESSIONS_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : null;
+    // Same real read as readLegacySynthPresets, above, and for the same
+    // reason: this runs AFTER sanitizePersistedState (see store.ts's `merge`),
+    // so an unvalidated legacy entry would be the one chord progression in
+    // the app that never met a chord-quality/root check before reaching
+    // resolveChordNotes.
+    return Array.isArray(parsed) ? sanitizeCustomChordProgressions(parsed) : null;
   } catch {
     return null;
   }

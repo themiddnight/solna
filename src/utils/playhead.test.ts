@@ -8,8 +8,9 @@ import {
   resolveNowNext,
 } from './playhead';
 import type { ChordItem } from '../types';
+import type { ChordQuality } from '@/musicCore';
 
-const chord = (id: string, root: string, quality: string, bars = 1): ChordItem => ({
+const chord = (id: string, root: string, quality: ChordQuality, bars = 1): ChordItem => ({
   id,
   root,
   quality,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Chord } from 'tonal';
+import { isChordQuality, type ChordQuality } from '@/musicCore';
 import {
   MAX_BPM,
   MIN_BPM,
@@ -206,7 +206,13 @@ describe('TONAL_CHORD_ALIASES', () => {
   test('is exported and every alias resolves to a chord tonal knows', () => {
     expect(TONAL_CHORD_ALIASES.min9).toBe('m9');
     for (const [app, tonalType] of Object.entries(TONAL_CHORD_ALIASES)) {
-      expect(Chord.getChord(tonalType, 'C').empty).toBe(false);
+      // Routed through the real app-token pipeline (generateBlockChordNotes ->
+      // Music Core's resolveChordNotes -> the tonal alias) rather than calling
+      // tonal directly: resolveChordNotes throws if tonal can't resolve the
+      // alias, so a non-throwing, non-empty result proves the same thing the
+      // old direct Chord.getChord(tonalType, 'C').empty check did.
+      expect(() => generateBlockChordNotes(app, 'C')).not.toThrow();
+      expect(generateBlockChordNotes(app, 'C').length).toBeGreaterThan(0);
       // The app token itself is the one tonal does NOT know — that is why the
       // alias exists, and why authored-quality validation must go through it.
       expect(app).not.toBe(tonalType);
@@ -214,7 +220,7 @@ describe('TONAL_CHORD_ALIASES', () => {
   });
 });
 
-const chord = (id: string, root: string, quality: string, bars = 1): ChordItem =>
+const chord = (id: string, root: string, quality: ChordQuality, bars = 1): ChordItem =>
   deriveChordNotes({ id, root, quality, bars, notes: [] }, 4);
 
 // A Natural Minor, i - VI - III - VII. The progression the spec measured.
@@ -509,5 +515,19 @@ describe('resolveDegreeQuality', () => {
       'F min',
       'A# maj',
     ]);
+  });
+});
+
+describe('resolveDegreeQuality output vs. the chord-quality registry', () => {
+  test('every triad and seventh quality every scale can emit is a registered, picker-representable token', () => {
+    for (const scaleType of SCALE_KEYS) {
+      const numDegrees = SCALES[scaleType].intervals.length;
+      for (let degree = 0; degree < numDegrees; degree++) {
+        for (const use7ths of [false, true]) {
+          const quality = resolveDegreeQuality(scaleType, degree, use7ths);
+          expect(isChordQuality(quality)).toBe(true);
+        }
+      }
+    }
   });
 });

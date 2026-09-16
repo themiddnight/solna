@@ -26,6 +26,7 @@ import {
 } from '@/audio/playback/chordPlayback';
 import { getMeter } from '@/utils/meter';
 import { SCALES } from '@/data/scales';
+import type { ChordQuality } from '@/musicCore';
 import {
   deriveChordNotes,
   snapProgressionToScale,
@@ -188,7 +189,7 @@ export type ProgressionSaves = ReturnType<typeof useProgressionSaves>;
 function appendChord(
   chords: ChordItem[],
   root: string,
-  quality: string,
+  quality: ChordQuality,
   octave: number,
   id: string,
 ): ChordItem[] {
@@ -282,7 +283,7 @@ export function useProgressionEditor(
     );
   };
 
-  const addBorrowedChord = (root: string, quality: string) => {
+  const addBorrowedChord = (root: string, quality: ChordQuality) => {
     setChords(appendChord(chords, root, quality, chordOctave, `chord-${Date.now()}`));
   };
 
@@ -415,7 +416,7 @@ export function useHeldChordPreview(state: ChordViewState) {
   const handlePreviewMouseDown = (
     e: React.MouseEvent | React.TouchEvent | React.KeyboardEvent,
     root: string,
-    quality: string,
+    quality: ChordQuality,
   ) => {
     e.stopPropagation();
     e.preventDefault();

@@ -32,7 +32,7 @@ import { createCoalescedStorage } from '../utils/coalescedStorage';
 import { loadGapi, loadGis } from '../utils/googleScriptLoader';
 import type { GapiRoot } from '../utils/googleScriptLoader';
 import type { AppStore, PersistedState } from './types';
-import { asBoolean, sanitizeCustomSynthPresets } from './sanitize';
+import { asBoolean, sanitizeCustomChordProgressions, sanitizeCustomSynthPresets } from './sanitize';
 import { sanitizeCustomBeatPresets } from './sanitizeBeat';
 
 export const PERSIST_KEY = 'musibox_project_state_v1';
@@ -212,7 +212,15 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (typeof sanitized.selectedVibeId !== 'string' && sanitized.selectedVibeId !== null) {
     delete sanitized.selectedVibeId;
   }
-  if (!Array.isArray(sanitized.customChordProgressions)) delete sanitized.customChordProgressions;
+  // The chord-progression library gets a real read, not just an array check,
+  // for the same reason the two below it do: an entry holds chords
+  // `resolveChordNotes` can throw on (an unregistered quality, an
+  // unresolvable root), and this is also the one persisted key whose
+  // corresponding import feature (ChordPresetLibrary.tsx) calls this same
+  // sanitizer directly on the parsed file before ever reaching the store.
+  sanitized.customChordProgressions = sanitizeCustomChordProgressions(
+    sanitized.customChordProgressions,
+  );
   // Custom presets get a real read, not just an array check: they are the one
   // persisted key holding a complete engine patch, and a legacy flat entry
   // saved before the engine cutover would otherwise reach the voice manager.

@@ -2,9 +2,9 @@
 
 **Context:** This document is the deliverable of [DEV-395](https://linear.app/pathompong-thitithan/issue/DEV-395), the first child of epic [DEV-391](https://linear.app/pathompong-thitithan/issue/DEV-391/epic-music-domain-architecture-tonal-boundary-derived-state-and) (music-domain architecture). It must not regress [DEV-380](https://linear.app/pathompong-thitithan/issue/DEV-380/music-theory-rework-derive-chord-qualities-and-enharmonic-spelling)'s contract: canonical-sharp identity is what every generated/computed/persisted note name uses, and key-aware display spelling (`src/utils/noteSpelling.ts`) is applied only where a value is rendered, never where it is stored, compared or used as a lookup key.
 
-This document separates three concerns the repo's existing `data → audio → store → components` layering rule (CLAUDE.md, enforced in `eslint.config.js`) currently conflates: **compile-time dependency direction**, **runtime command/event flow**, and **persisted-vs-derived data ownership**. It also names the two music-domain concepts that do not exist as code yet — Music Core / the Tonal adapter (DEV-394), and playback planners / playback controllers (DEV-397) — and states their contract now, so later children build to a spec instead of inventing one mid-implementation.
+This document separates three concerns the repo's existing `data → audio → store → components` layering rule (CLAUDE.md, enforced in `eslint.config.js`) currently conflates: **compile-time dependency direction**, **runtime command/event flow**, and **persisted-vs-derived data ownership**. It also names two music-domain concepts this contract governs — Music Core / the Tonal adapter (`src/musicCore/`, DEV-394, now implemented) and playback planners / playback controllers (DEV-397, still concepts, not yet code) — and states their contract, so later children build to a spec instead of inventing one mid-implementation.
 
-**This issue changes boundaries and guards only.** No audible, persisted or user-visible behaviour changes. Music Core, the Tonal adapter, playback planners and playback controllers are **not created by this issue** — they are documented here and partially gated (see "Gated but not yet moved" below) so DEV-394/396/397/399 build inside a contract that already exists.
+**This issue changes boundaries and guards only.** No audible, persisted or user-visible behaviour changes. Music Core and the Tonal adapter were **not created by this issue (DEV-395)** — they were documented here first and then implemented by DEV-394 (see "Gated and moved" below). Playback planners and playback controllers remain concepts, not code, so that DEV-397/399 can build them inside a contract that already exists.
 
 ## Canonical terms
 
@@ -22,10 +22,10 @@ This extends the existing enforced layering (CLAUDE.md "Four layers, enforced by
 src/data/ (authored catalogs)
     |  (imports nothing at runtime, not even a sibling — unchanged)
     v
-Music Core                              <- NEW CONCEPT (DEV-394), does not exist as a module yet
-  +-- Tonal adapter (the ONLY code       <- NEW CONCEPT (DEV-394), does not exist as a module yet
-  |     allowed to `import ... from 'tonal'`
-  |     once DEV-394 lands)
+Music Core (src/musicCore/)             <- DEV-394, implemented
+  +-- Tonal adapter (src/musicCore/tonalAdapter.ts —
+  |     the ONLY file in production code allowed to
+  |     `import ... from 'tonal'`)
     |  (Music Core's public API only — never `tonal` directly, from anywhere outside the adapter)
     v
 src/store/ (application state: musical intent + runtime state)
@@ -61,19 +61,21 @@ src/components/ (UI)
      not call a planner
 ```
 
-**Gated but not yet moved.** Music Core, the Tonal adapter, playback planners and playback controllers are concepts, not directories, as of this issue. What DEV-395 gates today is the one boundary that is already mechanically checkable without those modules existing: **no file outside the current, explicit allowlist of six call sites may `import ... from 'tonal'`.** The allowlist (verified against `grep -rn "from 'tonal'" src` at the time this document was written) is:
-
-- `src/utils/noteSpelling.ts`
-- `src/utils/musicTheory.ts`
-- `src/audio/arpeggiator.ts`
-- `src/audio/bassPatterns.ts`
-- `src/audio/playback/padPlayback.ts`
-- `src/store/midiInput.ts`
-
-This list is deliberately **today's importers, not the future adapter's file path** — the adapter does not exist yet, so allowlisting a path nothing occupies would enforce nothing. DEV-394 replaces this allowlist with the adapter's own file(s) as part of consolidating these six call sites; from that point on, the six paths above are no longer allowlisted directly, only the adapter is. The enforcement mechanism (an ESLint `no-restricted-imports` rule with a `paths` ban plus per-file carve-outs) does not change — only the file list it names does.
+**Gated and moved (DEV-394).** Music Core and its Tonal adapter now exist as real modules:
+`src/musicCore/index.ts` is the public API, `src/musicCore/tonalAdapter.ts` is the one production
+file in the whole app permitted to `import ... from 'tonal'`, and `src/musicCore/chordQuality.ts`
+owns the chord-quality registry (app token, Tonal alias, display suffix, picker label/group,
+reharmonization category) that `ChordItem['quality']`'s type, the chord picker's options,
+`formatChordQuality`/`formatChordLabel` and chord-note resolution all derive from. The six files
+DEV-395 allowlisted directly (`src/utils/noteSpelling.ts`, `src/utils/musicTheory.ts`,
+`src/audio/arpeggiator.ts`, `src/audio/bassPatterns.ts`, `src/audio/playback/padPlayback.ts`,
+`src/store/midiInput.ts`) no longer import `tonal` at all — each calls `@/musicCore` instead, and
+each keeps its own pre-existing public exports unchanged. The enforcement mechanism (an ESLint
+`no-restricted-imports` rule with a `paths` ban plus a carve-out) is unchanged; only the carve-out
+target moved, from the six files to `src/musicCore/tonalAdapter.ts` alone.
 
 The gate covers non-test files under `src/` only — the config's final block exempts
-`**/*.test.{ts,tsx}` from every import ban, which is how `scales.test.ts`, `musicTheory.test.ts`
+`**/*.test.{ts,tsx}` from every import ban, which is how `scales.test.ts`, `src/musicCore/tonalAdapter.test.ts`
 and `noteSpelling.test.ts` deliberately pin behavior against tonal, and `scripts/` sits outside
 the gate's `src/**` scope entirely.
 
@@ -125,12 +127,12 @@ The two flows use the *same* resolution functions in most lanes already (e.g. `u
 ## 4. Named layer responsibilities
 
 - **Authored catalogs (`src/data/`)** — literal tables only (synth/Beat presets, drum grids, chord progressions, chord rhythms, bass patterns, effect chains, scales). Imports nothing at runtime, not even a sibling in `src/data/`. Already fully enforced (`eslint.config.js`'s `src/data/**` block; proven by `src/data/dataLayerPurity.test.ts`). Unaffected by this issue.
-- **Music Core (future, DEV-394)** — the one public API every other music-domain reader calls for parsing, comparing, transposing, formatting pitch, resolving chord qualities, and applying display spelling. Exposes typed results; a genuinely invalid input is a typed failure or a thrown error, never a silent fallback to a default root/quality/frequency (per DEV-392's AC). Does not read the store, the engine, or `AudioContext`.
-- **Tonal adapter (future, DEV-394)** — the only code in the whole app permitted to `import ... from 'tonal'`, once it exists. Confined behind Music Core's API; nothing outside the adapter names a Tonal type or function. Until DEV-394 lands, this issue's ESLint gate stands in for the adapter boundary by allowlisting today's six call sites directly (see "Gated but not yet moved" above).
+- **Music Core (`src/musicCore/`, DEV-394)** — the one public API (`src/musicCore/index.ts`) every other music-domain reader calls for pitch/interval operations and chord-quality resolution. `resolveChordNotes` throws on a genuinely unregistered chord quality rather than silently falling back to a default (DEV-392 will extend this "no silent fallback" stance to pitch parsing more broadly). ESLint-enforced (`eslint.config.js`'s `src/musicCore/**` block) to import nothing from `src/store/`, `src/components/`, `src/audio/`, or `src/utils/` — the dependency runs audio → Music Core and utils → Music Core, never the reverse (`src/utils/noteSpelling.ts` and `src/utils/musicTheory.ts` already import `@/musicCore`, so the utils/ ban closes a real cycle risk rather than a hypothetical one — this matters directly to DEV-392, the next child issue, which centralizes pitch/note-parsing/scale-lookup work inside Music Core).
+- **Tonal adapter (`src/musicCore/tonalAdapter.ts`, DEV-394)** — the only file in the whole app permitted to `import ... from 'tonal'`. Confined behind Music Core's public barrel; nothing outside this one file names a Tonal type or function, and nothing outside `src/musicCore/` imports this file directly (see "Gated and moved" above).
 - **Application/store (`src/store/`)** — one Zustand store composed of slices; owns musical intent and non-playback-tick runtime state (`soloTracks`, `recordingTrack`, etc.). Never imports `components/` (existing layering rule 2, unchanged). Calls Music Core for anything Tonal-shaped; never calls a playback planner directly from a component-facing action (a planner is invoked by a controller, not by a store action).
 - **Playback planners (future, DEV-397)** — pure functions. Input: an immutable snapshot of musical intent (never the live Zustand singleton, never `useAppStore.getState()`). Output: playable events. Must not read the store, the audio engine, `AudioContext`, or the wall clock (`Date.now()`, `performance.now()`), and must not apply display spelling (a planner's output is for the engine, not for a person to read).
 - **Playback controllers (future, DEV-397)** — own the store subscription, the shared 16th-clock lifecycle (`subscribeClock`/`stopClockTimer` — "the clock runs iff a player holds a subscription", CLAUDE.md), and the hand-off of a planner's playable events into `src/audio/`'s engine calls. This is where side effects, `AudioContext` time, and the live store singleton are allowed to meet the planner's pure output.
-- **Audio engine/DSP (`src/audio/`)** — raw Web Audio API DSP plus the `audioEngine` singleton. Never imports `store/` or `components/` (existing layering rule 1, unchanged). May import `data/`. Once DEV-399 lands, takes only opaque voice identity and already-resolved pitch/timing — no Tonal, scale, chord, spelling or reharmonization import. Today, several files under `src/audio/` still import Tonal or `musicTheory` directly (the six-importer allowlist above includes three of them); that is the pre-DEV-399 state this issue documents and partially gates, not a defect this issue fixes.
+- **Audio engine/DSP (`src/audio/`)** — raw Web Audio API DSP plus the `audioEngine` singleton. Never imports `store/` or `components/` (existing layering rule 1, unchanged). May import `data/`. Once DEV-399 lands, takes only opaque voice identity and already-resolved pitch/timing — no Tonal, scale, chord, spelling or reharmonization import. Today, several files under `src/audio/` (`arpeggiator.ts`, `bassPatterns.ts`, `playback/padPlayback.ts`, and others via `musicTheory.ts`) still resolve pitch/chord logic inline rather than receiving pre-resolved playable events; none of them import `tonal` directly any more (DEV-394 routed them through `@/musicCore` instead), but that inline resolution is the pre-DEV-399 state this issue documents and partially gates, not a defect this issue fixes.
 - **UI (`src/components/`)** — dumb views. Must not import `audio/engine` (existing layering rule 3; the read-only analyser exceptions below are unchanged). Reads musical intent, derived representations and runtime state from the store via selectors; applies no music-domain logic of its own; never imports `tonal` and never will, at any point in the epic.
 
 ## Confirming the analyser exceptions remain compatible
