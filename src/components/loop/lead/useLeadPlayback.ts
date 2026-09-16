@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/store';
-import { leadScheduleHits, leadSoundingNotes, resolveLeadStepTriggers } from '@/audio/leadMelody';
 import {
   HARD_STOP_RELEASE,
   initPlaybackEngine,
@@ -9,13 +8,15 @@ import {
   playbackStopOwnedVoices,
   subscribePlaybackClock,
 } from '@/audio/playback/playbackEngine';
+import { planMelodyStep } from '@/audio/playback/plan/melodyPlan';
 import { DEFAULT_VELOCITY } from '@/audio/constants';
 import { stepDurationSec } from '@/utils/musicTheory';
-import { arpStepFor, getMeter } from '@/utils/meter';
-import { TICKS_PER_SIXTEENTH, columnsPerBar, strideFor } from '@/utils/stepResolution';
+import { getMeter } from '@/utils/meter';
+import { TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from '@/components/playerStop';
 import { melodyTrack, type MelodyTrackId } from '@/store/melodyTracks';
+import { melodyPlanSnapshot } from '@/store/playbackPlanSnapshots';
 import type { PlayerState } from '@/store/types';
 
 export interface LeadArming {
@@ -95,13 +96,9 @@ export function useLeadPlayback(trackId: MelodyTrackId): { isPlaying: boolean } 
       const s = useAppStore.getState();
       const playerState = s[track.player];
       const stepsPerBar = getMeter(s.meterId).stepsPerBar;
-      const stride = strideFor(s[track.stepResolution]);
-      const columns = s[track.loopLength] * columnsPerBar(stepsPerBar, stride);
-      const melodyTicks = s[track.loopLength] * stepsPerBar * TICKS_PER_SIXTEENTH;
       const action = leadStepAction(playerState, step, armingRef.current, stepsPerBar);
       const tickDur = stepDurationSec(s.bpm) / TICKS_PER_SIXTEENTH;
       const params = s[track.synthParams];
-      const arp = s[track.arpSettings];
       const releaseSeconds = synthReleaseSeconds(params);
 
       if (action === 'soft-stop') {
@@ -112,43 +109,31 @@ export function useLeadPlayback(trackId: MelodyTrackId): { isPlaying: boolean } 
       }
       if (action !== 'play') return;
 
-      const arpStep = arpStepFor(step, stepsPerBar);
-      // One clock, two questions. The grid answers "which pitches are held
-      // right now" and resolution changes that answer; the arp answers
-      // "when to strike them", and that answer comes off the clock's 16ths
-      // via arpRate. leadScheduleHits is where the two part company, and
-      // arpStep stays bar-phased by arpStepFor either way.
-      const hits = leadScheduleHits(step, stride, columns, arp.active, tickDur);
-
-      for (const hit of hits) {
-        const column = hit.column;
-        const at = time + hit.offsetSec;
-        const sounding = leadSoundingNotes(s[track.steps], column, stepsPerBar, stride);
-        const triggers = resolveLeadStepTriggers(
-          sounding,
-          arp,
-          arpStep,
-          tickDur,
-          s[track.gate],
-          stride,
-          // The ACTIVE window in TICKS, so a note left overhanging by a
-          // METER change is capped at read time instead of ringing over
-          // the loop seam. Unread on the arp path, which never asks a note
-          // how long it is — only whether it is still held.
-          { tickInLoop: column * stride, melodyTicks },
+      // ONE call, not the three-function chain written out here and again in
+      // the renderer: the grid's "which pitches are held", the arp's "when to
+      // strike them" and the gate's "how long" are all planMelodyStep's, and
+      // this hook keeps only the clock, the store read and the engine.
+      for (const planned of planMelodyStep(melodyPlanSnapshot(s, trackId), {
+        stepInLoop: step,
+        stepsPerBar,
+        tickDurSec: tickDur,
+      })) {
+        const start = time + planned.startOffsetSec;
+        // The ID this hit started, released at the end of its own hold: a
+        // melody grid shares its bus with the live keyboard and the arp, so a
+        // release by note name would cut whichever of the three the engine
+        // found first.
+        const voiceId = playbackNoteOn(
+          planned.note,
+          params,
+          DEFAULT_VELOCITY,
+          start,
+          track.engineSource,
         );
-        for (const trigger of triggers) {
-          const start = at + trigger.timeOffsetSec;
-          // The ID this hit started, released at the end of its own hold: a
-          // melody grid shares its bus with the live keyboard and the arp, so
-          // a release by note name would cut whichever of the three the
-          // engine found first.
-          const voiceId = playbackNoteOn(trigger.note, params, DEFAULT_VELOCITY, start, track.engineSource);
-          playbackNoteOff(voiceId, releaseSeconds, start + trigger.holdSec);
-        }
+        playbackNoteOff(voiceId, releaseSeconds, start + planned.holdSec);
       }
     });
-  }, [isPlaying, hardStop, track]);
+  }, [isPlaying, hardStop, track, trackId]);
 
   return { isPlaying };
 }

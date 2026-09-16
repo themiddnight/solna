@@ -2,11 +2,11 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
 import {
   buildLoopVoices,
+  chordSnapshotForLoop,
   MIXDOWN_SAMPLE_RATE,
+  padSnapshotForLoop,
   planArrangement,
   planLoopAudioAutomation,
-  renderBassEventsAt,
-  renderChordEventsAt,
   renderMixdown,
   type MixdownLoop,
   type MixdownRenderProgress,
@@ -23,13 +23,17 @@ import {
 import { AudioEngine, audioEngine } from '../engine';
 import { random } from '../rng';
 import { cycleHoldScale, resolvePlaybackBassCycle, resolvePlaybackRhythmCycle } from '../chordRhythms';
+import { planChordArm, planChordStep } from '../playback/plan/chordPlan';
 import { buildChordEvents, eventsForCycleStep } from '../playback/chordPlayback';
 import { isApproachToken, resolveBassSteps } from '../bassPatterns';
 import { patternStoredIndexAt } from '@/utils/patternTimeline';
 import { generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
-import { MAX_STEPS_PER_BAR } from '@/utils/meter';
+import { MAX_STEPS_PER_BAR, type MeterId } from '@/utils/meter';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { BeatPattern, BeatVoices } from '@/types';
+import { chordPlanSnapshot, padPlanSnapshot } from '@/store/playbackPlanSnapshots';
+import { planPadArm } from '../playback/plan/padPlan';
+import type { AppStore } from '@/store/types';
 
 // The capability probe reads `globalThis.OfflineAudioContext`, so the TEST
 // provides it — the same way a browser does. There is no injection seam in
@@ -129,38 +133,48 @@ describe('buildLoopVoices', () => {
   test('maps every bar of a pass to the chord that covers it', () => {
     const loop = mixdownLoop({
       chords: [
-        { id: 'a', root: 'C', quality: 'maj', bars: 1 },
-        { id: 'b', root: 'F', quality: 'maj', bars: 3 },
+        { id: 'c1', root: 'C', quality: 'maj', bars: 2 },
+        { id: 'c2', root: 'F', quality: 'maj', bars: 1 },
       ],
     });
     const voices = buildLoopVoices(loop, '4/4', 120, 16);
-    expect(voices.chordsByBar).toEqual([0, 1, 1, 1]);
-    expect(voices.chordStartStep).toEqual([0, 16]);
+    expect(voices.chordsByBar).toEqual([0, 0, 1]);
+    expect(voices.chordStartStep).toEqual([0, 32]);
+    expect(voices.plans).toHaveLength(2);
+    expect(voices.plans[1].startProgressionStep).toBe(32);
   });
 
   test('a full-hold rhythm produces no per-step events, only a hold', () => {
     // 'sustained' is the full-hold chord rhythm, 'whole-note-root' the
     // full-hold bass — both short-written in the fixture above.
-    const voices = buildLoopVoices(mixdownLoop(), '4/4', 120, 16);
-    expect(voices.chordArp).toBe(false);
-    expect(voices.chordEvents[0]).toEqual([]);
-    expect(voices.chordHoldSec[0]).toBeGreaterThan(0);
-    expect(voices.bassHoldNotes[0]).not.toBeNull();
+    const voices = buildLoopVoices(mixdownLoop({ chordRhythmId: 'sustained' }), '4/4', 120, 16);
+    expect(voices.plans[0].chordEvents).toEqual([]);
+    expect(voices.plans[0].chordFullHold?.holdSec).toBeGreaterThan(0);
+    expect(voices.plans[0].bassFullHold).not.toBeNull();
   });
 
   test('a one-hit rhythm produces per-step events and no hold', () => {
-    // 'offbeatStabs' and 'offbeat-sub' are real, one-hit, non-full-hold ids
-    // (the brief's 'offbeat'/'root-8ths' would have fallen back to the
-    // full-hold library head and asserted the wrong thing).
-    const voices = buildLoopVoices(
-      mixdownLoop({ chordRhythmId: 'offbeatStabs', chordOctave: 4, bassPatternId: 'offbeat-sub' }),
-      '4/4',
-      120,
-      16,
-    );
-    expect(voices.chordHoldSec[0]).toBe(0);
-    expect(voices.chordEvents[0].length).toBeGreaterThan(0);
-    expect(voices.bassHoldNotes[0]).toBeNull();
+    // 'fourOnFloor' is a real, one-hit, non-full-hold chord rhythm id.
+    const voices = buildLoopVoices(mixdownLoop({ chordRhythmId: 'fourOnFloor' }), '4/4', 120, 16);
+    expect(voices.plans[0].chordEvents.length).toBeGreaterThan(0);
+    expect(voices.plans[0].chordFullHold).toBeNull();
+    expect(voices.plans[0].bassFullHold).not.toBeNull();
+  });
+
+  test('buildLoopVoices is chordSnapshotForLoop + planChordArm, chord by chord', () => {
+    const loop = mixdownLoop({
+      chords: [
+        { id: 'a', root: 'C', quality: 'maj', bars: 1 },
+        { id: 'b', root: 'F', quality: 'maj', bars: 2 },
+      ],
+    });
+    const snapshot = chordSnapshotForLoop(loop, '4/4', 120, 16);
+    const voices = buildLoopVoices(loop, '4/4', 120, 16);
+    voices.plans.forEach((plan, i) => {
+      expect(plan).toEqual(
+        planChordArm(snapshot, { chordIndex: i, startProgressionStep: voices.chordStartStep[i] }),
+      );
+    });
   });
 });
 
@@ -263,14 +277,14 @@ describe('offline rendering consumes the resolved cycles', () => {
 
     // Two bars of a twelve-column bar, and four — the lanes' independent
     // cycles, measured in the meter they are played in.
-    expect(voices.chordCycleSteps).toBe(2 * THREE_FOUR_STEPS);
-    expect(voices.bassCycleSteps).toBe(4 * THREE_FOUR_STEPS);
+    expect(voices.plans[0].chordCycleSteps).toBe(2 * THREE_FOUR_STEPS);
+    expect(voices.plans[0].bassCycleSteps).toBe(4 * THREE_FOUR_STEPS);
 
     // The onsets sit on CYCLE COLUMNS one active bar apart, not on their
     // stored slots (which are one widest bar apart).
-    expect([...new Set(voices.chordEvents[0].map((event) => event.step))]).toEqual([0, 12]);
+    expect([...new Set(voices.plans[0].chordEvents.map((event) => event.step))]).toEqual([0, 12]);
     const bassColumns = [
-      ...new Set(voices.bassEvents.flat().map((event) => event.step)),
+      ...new Set(voices.plans.flatMap((plan) => plan.bassEvents).map((event) => event.step)),
     ].sort((a, b) => a - b);
     expect(bassColumns).toEqual([0, 12, 24, 36]);
 
@@ -278,7 +292,7 @@ describe('offline rendering consumes the resolved cycles', () => {
     // drawn with — not one widest-meter bar, which happens to be the same
     // number of STEPS here and so is only distinguishable through the cycle.
     const barSec = THREE_FOUR_STEPS * stepDurationSec(120);
-    expect(voices.chordEvents[0][0].hold).toBeCloseTo(barSec, 6);
+    expect(voices.plans[0].chordEvents[0].hold).toBeCloseTo(barSec, 6);
 
     // The contrast that proves the numbers above came from the ACTIVE bar
     // length and not from a stored width read as if it were one: in 12/8 a bar
@@ -286,16 +300,16 @@ describe('offline rendering consumes the resolved cycles', () => {
     // very same rows report cycles twice as wide. That degeneracy is why the
     // bug is invisible in the widest meter and only shows up elsewhere.
     const widest = buildLoopVoices(asymmetricCycleLoop(), '12/8', 120, MAX_STEPS_PER_BAR);
-    expect(widest.chordCycleSteps).toBe(2 * MAX_STEPS_PER_BAR);
-    expect(widest.bassCycleSteps).toBe(4 * MAX_STEPS_PER_BAR);
+    expect(widest.plans[0].chordCycleSteps).toBe(2 * MAX_STEPS_PER_BAR);
+    expect(widest.plans[0].bassCycleSteps).toBe(4 * MAX_STEPS_PER_BAR);
   });
 
   test('a custom two-bar cycle reaches its second bar', () => {
     const voices = buildLoopVoices(customCycleLoop(), '4/4', 120, 16);
-    expect(voices.chordCycleSteps).toBe(32);
-    expect(voices.bassCycleSteps).toBe(32);
+    expect(voices.plans[0].chordCycleSteps).toBe(32);
+    expect(voices.plans[0].bassCycleSteps).toBe(32);
     // Column 20 is bar two of the cycle; a one-bar resolution drops it.
-    expect(voices.chordEvents[0].map((e) => e.step)).toContain(20);
+    expect(voices.plans[0].chordEvents.map((e) => e.step)).toContain(20);
   });
 
   test('render and live produce identical Chord/Bass events at every step', () => {
@@ -333,10 +347,22 @@ describe('offline rendering consumes the resolved cycles', () => {
       return eventsForCycleStep(events, step, bassCycle.cycleSteps, true);
     };
 
+    const offline = (step: number) =>
+      planChordStep(voices.plans[chordIndexAt(step)], {
+        progressionStep: step,
+        step,
+        isLastBar: true,
+        stepsPerBar: 16,
+        stepDurSec: STEP_DUR,
+        chordArp: loop.chordArpSettings,
+        bassArp: loop.bassArpSettings,
+        chordFeel: loop.chordFeel,
+        bassFeel: loop.bassFeel,
+      });
+
     for (const step of [0, 15, 16, 20, 31, 32, 47]) {
-      const i = chordIndexAt(step);
-      expect(renderChordEventsAt(voices, i, step, true), `chord ${step}`).toEqual(liveChord(step));
-      expect(renderBassEventsAt(voices, i, step, true), `bass ${step}`).toEqual(liveBass(step));
+      expect(offline(step).chord, `chord ${step}`).toEqual(liveChord(step));
+      expect(offline(step).bass, `bass ${step}`).toEqual(liveBass(step));
     }
   });
 });
@@ -780,5 +806,172 @@ describe('renderMixdown: every loop plays its OWN Beat patch', () => {
     } finally {
       drumSpy.mockRestore();
     }
+  });
+});
+
+describe('live and offline build the same pad snapshot', () => {
+  const chords = [
+    { id: 'c1', root: 'C', quality: 'maj' as const, bars: 2 },
+    { id: 'c2', root: 'A', quality: 'min' as const, bars: 2 },
+  ];
+  const loop = mixdownLoop({
+    chords,
+    padMode: 'drone',
+    padOctave: 4,
+    padVoicing: 'triad',
+    padDroneDegree: 1,
+    padDroneIntervals: [1, 5, 8],
+    scaleRoot: 'C',
+    scaleType: 'major',
+  });
+  const state = {
+    padMode: loop.padMode,
+    chords: loop.chords,
+    padDroneDegree: loop.padDroneDegree,
+    padDroneIntervals: loop.padDroneIntervals,
+    padOctave: loop.padOctave,
+    padVoicing: loop.padVoicing,
+    scaleRoot: loop.scaleRoot,
+    scaleType: loop.scaleType,
+    bpm: 120,
+    meterId: '4/4',
+  } as unknown as AppStore;
+
+  test('the offline snapshot deep-equals the store snapshot', () => {
+    expect(padSnapshotForLoop(loop, 120, 16)).toEqual(padPlanSnapshot(state));
+  });
+
+  test('and therefore both plan the same arm at every chord', () => {
+    for (const chordIndex of [0, 1, 2]) {
+      expect(planPadArm(padSnapshotForLoop(loop, 120, 16), { chordIndex })).toEqual(
+        planPadArm(padPlanSnapshot(state), { chordIndex }),
+      );
+    }
+  });
+});
+
+const CHORD_BASS_EQUIVALENCE_CHORDS = [
+  { id: 'c1', root: 'C', quality: 'maj' as const, bars: 2 }, { id: 'c2', root: 'A', quality: 'min' as const, bars: 1 }, { id: 'c3', root: 'F', quality: 'maj' as const, bars: 1 },
+];
+
+// A real two-bar custom chord row (adapted from customCycleLoop() above), so a
+// case that sets chordRhythmMode: 'custom' actually exercises eventsForCycleStep's
+// fold logic instead of degenerating to `[] === []` on both sides — c2 (1 bar)
+// then c3 (1 bar) together make one more 2-bar cycle repetition, so the c2/c3
+// boundary lands in the MIDDLE of that repetition, not on a cycle seam.
+const CUSTOM_CHORD_ROW = new Array<boolean>(2 * MAX_STEPS_PER_BAR).fill(false);
+CUSTOM_CHORD_ROW[patternStoredIndexAt(0, 16)] = true; CUSTOM_CHORD_ROW[patternStoredIndexAt(20, 16)] = true;
+const CUSTOM_CHORD_HOLD_STEPS = new Array<number>(2 * MAX_STEPS_PER_BAR).fill(1);
+
+const CHORD_SNAPSHOT_FIELDS = [
+  'chordOctave', 'bassOctave', 'scaleRoot', 'scaleType', 'chordRhythmMode', 'chordRhythmId', 'customChordRhythm', 'customChordHoldSteps', 'customChordLoopLength',
+  'chordFeel', 'bassPatternMode', 'bassPatternId', 'customBassPattern', 'customBassHoldSteps', 'customBassLoopLength', 'bassFeel', 'chordArpSettings', 'bassArpSettings',
+] as const satisfies readonly (keyof MixdownLoop)[];
+
+/** One loop and one store state built from the SAME values, lane config by lane config. */
+function pairChordSnapshots(over: Partial<MixdownLoop>, meterId: MeterId, stepsPerBar: number) {
+  const loop = mixdownLoop({ chords: CHORD_BASS_EQUIVALENCE_CHORDS, ...over });
+  const fields = Object.fromEntries(CHORD_SNAPSHOT_FIELDS.map((f) => [f, loop[f]]));
+  const state = { chords: loop.chords, bpm: 120, meterId, ...fields } as unknown as AppStore;
+  return { loop, live: chordPlanSnapshot(state), offline: chordSnapshotForLoop(loop, meterId, 120, stepsPerBar) };
+}
+
+const CHORD_BASS_EQUIVALENCE_CASES: { name: string; over: Partial<MixdownLoop>; meterId: MeterId; spb: number }[] = [
+  { name: '4/4 presets', over: {}, meterId: '4/4', spb: 16 },
+  { name: '7/8 walking bass', over: { bassPatternId: 'classic-walk' }, meterId: '7/8', spb: 14 },
+  // Non-default preset ids on purpose below: the fixture's own defaults
+  // ('sustained' / 'whole-note-root') are BOTH full-hold, which planChordStep
+  // never reads plan.chordFullHold for and just replays an empty cycle — a
+  // [] === [] comparison at every step. Waltz/6-8 ids are real, multi-hit
+  // patterns (the 6/8-authored ones adapt to 12/8 at playback time), so these
+  // two cases actually exercise eventsForCycleStep at their own meters.
+  { name: '3/4 presets', over: { chordRhythmId: 'waltzOompah', bassPatternId: 'waltz-root-fifth' }, meterId: '3/4', spb: 12 },
+  { name: '12/8 presets', over: { chordRhythmId: 'compoundEighthPads', bassPatternId: 'six-eight-root-pulse' }, meterId: '12/8', spb: 24 },
+  {
+    name: 'a two-bar custom chord lane under a one-bar bass preset',
+    over: { chordRhythmMode: 'custom', customChordRhythm: CUSTOM_CHORD_ROW, customChordHoldSteps: CUSTOM_CHORD_HOLD_STEPS, customChordLoopLength: 2, bassPatternId: 'classic-walk' },
+    meterId: '4/4', spb: 16,
+  },
+  // Every field a builder could swap chord<->bass on differs below: feel,
+  // rhythm/pattern mode and Arp active — closing the blind spot the other
+  // fixtures leave (most share 0.5/'preset'/false on both lanes, where a
+  // swap is invisible). customChordHoldSteps also diverges from
+  // customBassHoldSteps here (a real 2-bar row vs the untouched 1-bar
+  // default), closing that blind spot too, as a side effect of using a real
+  // custom row rather than the empty one this case shipped with.
+  {
+    name: 'chord and bass diverge on every field a builder could swap',
+    over: {
+      chordFeel: 0.85, bassFeel: 0.15, chordRhythmMode: 'custom', customChordLoopLength: 2, bassPatternMode: 'preset', bassPatternId: 'classic-walk',
+      customChordRhythm: CUSTOM_CHORD_ROW, customChordHoldSteps: CUSTOM_CHORD_HOLD_STEPS,
+      chordArpSettings: { active: true, mode: 'up', rate: '8n', octaves: 2 }, bassArpSettings: { active: false, mode: 'down', rate: '16n', octaves: 1 } },
+    meterId: '4/4', spb: 16 },
+];
+
+describe('live and offline chord+bass planning are the same computation', () => {
+  for (const { name, over, meterId, spb } of CHORD_BASS_EQUIVALENCE_CASES) {
+    test(`${name}: live and offline agree`, () => {
+      const { loop, live, offline } = pairChordSnapshots(over, meterId, spb);
+      expect(offline, 'snapshot').toEqual(live);
+      let startStep = 0;
+      for (let i = 0; i < CHORD_BASS_EQUIVALENCE_CHORDS.length; i += 1) {
+        const bars = Math.max(1, CHORD_BASS_EQUIVALENCE_CHORDS[i].bars || 1);
+        const livePlan = planChordArm(live, { chordIndex: i, startProgressionStep: startStep });
+        const offlinePlan = planChordArm(offline, { chordIndex: i, startProgressionStep: startStep });
+        expect(offlinePlan, `plan ${i}`).toEqual(livePlan);
+        // Every step of the chord, so a chord boundary, a cycle seam and the
+        // last bar (where approach tones fire) are all covered.
+        for (let s = 0; s < bars * spb; s += 1) {
+          const step = startStep + s, ctx = {
+            progressionStep: step, step, isLastBar: Math.floor(s / spb) === bars - 1, stepsPerBar: spb,
+            stepDurSec: stepDurationSec(120), chordArp: loop.chordArpSettings, bassArp: loop.bassArpSettings,
+            chordFeel: loop.chordFeel, bassFeel: loop.bassFeel,
+          };
+          expect(planChordStep(offlinePlan, ctx), `step ${step}`).toEqual(planChordStep(livePlan, ctx));
+        }
+        startStep += bars * spb;
+      }
+    });
+  }
+
+  test('an approach tone fires on the last bar of its chord and nowhere else', () => {
+    const { live } = pairChordSnapshots({ bassPatternId: 'classic-walk' }, '4/4', 16);
+    const plan = planChordArm(live, { chordIndex: 0, startProgressionStep: 0 });
+    const ev = plan.bassEvents.find((e) => e.lastBarOnly);
+    expect(ev, 'no approach tone in this fixture').toBeDefined();
+    const noArp = { active: false, mode: 'up' as const, rate: '8n' as const, octaves: 1 }, base = {
+      progressionStep: ev!.step, step: ev!.step, stepsPerBar: 16, stepDurSec: stepDurationSec(120),
+      chordArp: noArp, bassArp: noArp, chordFeel: 0.5, bassFeel: 0.5,
+    } as Parameters<typeof planChordStep>[1];
+    expect(planChordStep(plan, { ...base, isLastBar: false }).bass).toEqual([]);
+    expect(planChordStep(plan, { ...base, isLastBar: true }).bass.length).toBeGreaterThan(0);
+  });
+
+  test('an ARP over a CUSTOM lane holds the same length live and offline', () => {
+    // NOT a regression guard for a live/offline divergence — there never was
+    // one to detect at this call site. `cycleHoldScale` and `feelToHoldScale`
+    // are bit-identical downstream of `arpEventsForStep`'s own internal
+    // `Math.min(1, holdScale)` clamp (see `ChordPlanSnapshot`'s docblock in
+    // chordPlan.ts), and both the live and offline plans here call the exact
+    // same shared `planChordStep`, so this test is structurally incapable of
+    // distinguishing the two forms even if they did disagree. The shape
+    // itself (arp + custom lane + non-neutral feel) is also already covered
+    // by the "diverge on every field" case above, swept across every step of
+    // every chord; this narrower, single-assertion test is kept only because
+    // it names the specific claim ("same hold length") directly, which is
+    // easier to spot failing than one field inside a larger `toEqual`.
+    const over = {
+      chordRhythmMode: 'custom' as const, customChordLoopLength: 2, chordFeel: 0.9,
+      chordArpSettings: { active: true, mode: 'up' as const, rate: '8n' as const, octaves: 2 },
+    };
+    const { live, offline } = pairChordSnapshots(over, '4/4', 16);
+    const ctx = {
+      progressionStep: 0, step: 0, isLastBar: true, stepsPerBar: 16, stepDurSec: stepDurationSec(120),
+      chordArp: over.chordArpSettings, bassArp: { active: false, mode: 'up', rate: '8n', octaves: 1 },
+      chordFeel: 0.9, bassFeel: 0.5,
+    } as Parameters<typeof planChordStep>[1];
+    const armCtx = { chordIndex: 0, startProgressionStep: 0 }, offlineChord = planChordStep(planChordArm(offline, armCtx), ctx).chord;
+    expect(offlineChord).toEqual(planChordStep(planChordArm(live, armCtx), ctx).chord);
+    expect(offlineChord.length).toBeGreaterThan(0);
   });
 });

@@ -41,12 +41,28 @@ describe('useLeadPlayback feeds the loop gate and the sounding notes into the sc
     'utf8',
   );
 
-  test('reads the gate live from the store inside the clock callback, through the track row', () => {
-    expect(source).toContain('s[track.gate]');
+  test('reads the gate (and every other planned field) live per tick, via a fresh snapshot built inside the clock callback', () => {
+    // The gate no longer has a literal `s[track.gate]` read in this file —
+    // melodyPlanSnapshot owns that now (see playbackPlanSnapshots.ts, pinned
+    // by its own test). What this file must still guarantee is that the state
+    // feeding that snapshot is read FRESH every dispatch, inside the clock
+    // callback, rather than closed over from mount time — otherwise a gate
+    // (or steps, or arp) edit mid-loop would not reach the next hit.
+    expect(source).toMatch(
+      /subscribePlaybackClock\(\(step, _beat, time\) => \{\s*const s = useAppStore\.getState\(\);[\s\S]*melodyPlanSnapshot\(s, trackId\)/,
+    );
   });
 
-  test('resolves triggers from leadSoundingNotes, not a step note set', () => {
-    expect(source).toContain('leadSoundingNotes(s[track.steps], column, stepsPerBar, stride)');
+  test('passes the raw, unstrided steps matrix into the snapshot — no pre-striding before the planner sees it', () => {
+    // The hook hands the raw store state and trackId straight to
+    // melodyPlanSnapshot, which reads `s[track.steps]` untouched (see
+    // playbackPlanSnapshots.ts) — no `.filter`/`.map`/stride reduction runs on
+    // the matrix here first. `strideFor` (and the old direct call to
+    // leadSoundingNotes) reappearing in this file would mean the hook started
+    // striding the matrix again before the planner ever saw it.
+    expect(source).toContain('melodyPlanSnapshot(s, trackId)');
+    expect(source).not.toContain('strideFor');
+    expect(source).not.toContain('leadSoundingNotes(');
     expect(source).not.toContain('leadStepNotes');
   });
 });
