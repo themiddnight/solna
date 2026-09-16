@@ -161,5 +161,18 @@ export const SYNTH_SETTER_FIELD = {
   fx: 'setFxSynthParams',
 } as const satisfies Record<SynthControlTarget, keyof AppStore>;
 
+/**
+ * The store ACTION that writes each bus's Arp settings, keyed by the same
+ * control target — the write half of `SYNTH_ARP_FIELD`, on the same
+ * three-table precedent as `SYNTH_PARAM_FIELD`/`SYNTH_SETTER_FIELD` above.
+ */
+export const SYNTH_ARP_SETTER_FIELD = {
+  synth: 'setSynthArpSettings',
+  chord: 'setChordArpSettings',
+  bass: 'setBassArpSettings',
+  pad: 'setPadArpSettings',
+  fx: 'setFxArpSettings',
+} as const satisfies Record<SynthControlTarget, keyof AppStore>;
+
 /** The control targets, in canonical order, derived from the map above. */
 export const SYNTH_PARAM_TARGETS = Object.keys(SYNTH_PARAM_FIELD) as SynthControlTarget[];

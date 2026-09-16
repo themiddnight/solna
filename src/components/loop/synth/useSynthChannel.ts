@@ -3,6 +3,12 @@ import { synthTargetForFocus } from "@/store/focusTrack";
 import type { MixLayerId } from "@/store/focusTrack";
 import { resolveSynthControlChannel } from "@/utils/synthControl";
 import type { SynthChannel, SynthChannels } from "@/utils/synthControl";
+import {
+  SYNTH_PARAM_FIELD,
+  SYNTH_ARP_FIELD,
+  SYNTH_SETTER_FIELD,
+  SYNTH_ARP_SETTER_FIELD,
+} from "@/store/sourceBuses";
 
 export type { SynthChannel, SynthChannels };
 
@@ -42,69 +48,22 @@ export function synthChannelForFocus(focus: MixLayerId, channels: SynthChannels)
  * the Arp are separate objects with separate writers — see `SynthChannel` in
  * `utils/synthControl.ts` for why they must not be merged.
  *
- * The twenty selectors are spelled out rather than read through
- * `SYNTH_PARAM_FIELD` and its two sibling tables: those index the store by a
- * target chosen at RUNTIME, which is what the preset browser needs, while a
- * hook must call the same selectors in the same order on every render. Indexing
- * the store inside a selector expression would still work, but it would make
- * the hook's subscription list depend on the focus, which is exactly the shape
- * the rules of hooks exist to forbid.
+ * The hook indexes the store by `target`, computed once per render via a
+ * plain function call, rather than subscribing to all 5 tracks' fields and
+ * picking one after the fact — that shape re-rendered every mounted
+ * subscriber on any track's patch write, whether or not this one was even
+ * focused. This is still exactly four `useAppStore` calls on every render —
+ * the same pattern `synthPresetBrowser.ts` already uses to select a
+ * runtime-chosen target — so there is no conditional hook count and no rules-
+ * of-hooks violation: only a variable hook COUNT would be one.
  */
 export function useSynthChannel(focus: MixLayerId): SynthChannel {
-  const synthParams = useAppStore((s) => s.synthParams);
-  const chordSynthParams = useAppStore((s) => s.chordSynthParams);
-  const bassSynthParams = useAppStore((s) => s.bassSynthParams);
-  const padSynthParams = useAppStore((s) => s.padSynthParams);
-  const fxSynthParams = useAppStore((s) => s.fxSynthParams);
+  const target = synthTargetForFocus(focus) ?? 'synth';
 
-  const synthArpSettings = useAppStore((s) => s.synthArpSettings);
-  const chordArpSettings = useAppStore((s) => s.chordArpSettings);
-  const bassArpSettings = useAppStore((s) => s.bassArpSettings);
-  const padArpSettings = useAppStore((s) => s.padArpSettings);
-  const fxArpSettings = useAppStore((s) => s.fxArpSettings);
+  const activeSynth = useAppStore((s) => s[SYNTH_PARAM_FIELD[target]]);
+  const arpSettings = useAppStore((s) => s[SYNTH_ARP_FIELD[target]]);
+  const setActiveSynth = useAppStore((s) => s[SYNTH_SETTER_FIELD[target]]);
+  const setArpSettings = useAppStore((s) => s[SYNTH_ARP_SETTER_FIELD[target]]);
 
-  const setSynthParams = useAppStore((s) => s.setSynthParams);
-  const setChordSynthParams = useAppStore((s) => s.setChordSynthParams);
-  const setBassSynthParams = useAppStore((s) => s.setBassSynthParams);
-  const setPadSynthParams = useAppStore((s) => s.setPadSynthParams);
-  const setFxSynthParams = useAppStore((s) => s.setFxSynthParams);
-
-  const setSynthArpSettings = useAppStore((s) => s.setSynthArpSettings);
-  const setChordArpSettings = useAppStore((s) => s.setChordArpSettings);
-  const setBassArpSettings = useAppStore((s) => s.setBassArpSettings);
-  const setPadArpSettings = useAppStore((s) => s.setPadArpSettings);
-  const setFxArpSettings = useAppStore((s) => s.setFxArpSettings);
-
-  return synthChannelForFocus(focus, {
-    synth: {
-      activeSynth: synthParams,
-      arpSettings: synthArpSettings,
-      setActiveSynth: setSynthParams,
-      setArpSettings: setSynthArpSettings,
-    },
-    chord: {
-      activeSynth: chordSynthParams,
-      arpSettings: chordArpSettings,
-      setActiveSynth: setChordSynthParams,
-      setArpSettings: setChordArpSettings,
-    },
-    bass: {
-      activeSynth: bassSynthParams,
-      arpSettings: bassArpSettings,
-      setActiveSynth: setBassSynthParams,
-      setArpSettings: setBassArpSettings,
-    },
-    pad: {
-      activeSynth: padSynthParams,
-      arpSettings: padArpSettings,
-      setActiveSynth: setPadSynthParams,
-      setArpSettings: setPadArpSettings,
-    },
-    fx: {
-      activeSynth: fxSynthParams,
-      arpSettings: fxArpSettings,
-      setActiveSynth: setFxSynthParams,
-      setArpSettings: setFxArpSettings,
-    },
-  });
+  return { activeSynth, arpSettings, setActiveSynth, setArpSettings };
 }
