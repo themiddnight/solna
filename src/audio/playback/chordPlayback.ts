@@ -5,7 +5,6 @@ import { buildArpSequence } from "../arpeggiator";
 import { arpFiresOnStep, computeArpTriggers } from "../arpSchedule";
 import { arpStepFor } from "@/utils/meter";
 import {
-  deriveChordNotes,
   getDiatonicChordForDegree,
   shiftNoteOctave,
   barDurationSec,
@@ -318,16 +317,16 @@ export type PreviewEngine = Pick<
 // sustain level — with no attack transient at all. That is exactly "loud
 // once, then quiet" on a patch with a low sustain level.
 export function playChordLegato(
-  chord: ChordItem,
+  notes: string[],
   synth: ActiveSynth,
   engine: PreviewEngine,
 ): void {
   engine.stopSource("chord", 0.05);
-  for (const note of chord.notes) {
+  for (const note of notes) {
     engine.triggerSynthNoteOn(
       note,
       synth,
-      DEFAULT_VELOCITY * equalPowerVelocityScale(chord.notes.length),
+      DEFAULT_VELOCITY * equalPowerVelocityScale(notes.length),
       undefined,
       "chord",
       1,
@@ -386,19 +385,14 @@ export function startPatternLoop(
 export function previewChordForScale(
   scaleRoot: string,
   scaleType: string,
-  octave = 4,
 ): ChordItem {
   const tonic = getDiatonicChordForDegree(0, scaleRoot, scaleType, false);
-  return deriveChordNotes(
-    {
-      id: "preview",
-      root: tonic.root,
-      quality: tonic.quality,
-      bars: 1,
-      notes: [],
-    },
-    octave,
-  );
+  return {
+    id: "preview",
+    root: tonic.root,
+    quality: tonic.quality,
+    bars: 1,
+  };
 }
 
 /**
@@ -450,8 +444,8 @@ export function stopBassPreviewSource(fade: number): void {
 }
 
 export function playChordLegatoWithEngine(
-  chord: ChordItem,
+  notes: string[],
   synth: ActiveSynth,
 ): void {
-  playChordLegato(chord, synth, audioEngine);
+  playChordLegato(notes, synth, audioEngine);
 }
