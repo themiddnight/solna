@@ -98,6 +98,35 @@ const THEORY_SIBLING_CASES: Array<[label: string, source: string]> = [
     "import { DEFAULT_LEAD_GATE } from '../leadMelody';\nexport const l = DEFAULT_LEAD_GATE;\n"],
 ];
 
+/**
+ * `bassPatterns`/`chordRhythms`'s bare patterns are claimed to subsume the
+ * `**`/`data/bassPatterns`/`**`/`data/chordRhythms` entries a round-2 fix
+ * removed as redundant — proving that claim, not just asserting it, since a
+ * bare pattern subsuming the WRONG file would silently reopen the catalog.
+ */
+const DATA_CATALOG_SUBSUMPTION_CASES: Array<[label: string, source: string]> = [
+  ['the bass-pattern catalog (subsumed by the bare bassPatterns entry)',
+    "import { BASS_PATTERNS } from '@/data/bassPatterns';\nexport const b = BASS_PATTERNS;\n"],
+  ['the chord-rhythm catalog (subsumed by the bare chordRhythms entry)',
+    "import { CHORD_RHYTHMS } from '@/data/chordRhythms';\nexport const c = CHORD_RHYTHMS;\n"],
+];
+
+/**
+ * `**`/`playback`/`**` closes the last route back to a note name: DEV-397's
+ * planners return shapes carrying `noteName: string`, and the controllers
+ * under `src/audio/playback/` that the ban's own message tells an author to
+ * write live in the same folder — so even a TYPE-ONLY import of a planner's
+ * output, or an import of a controller bridge, would put `noteName` straight
+ * back into the engine's type surface with no runtime cycle for anything
+ * else to catch.
+ */
+const PLAYBACK_ROUTE_CASES: Array<[label: string, source: string]> = [
+  ["a planner's output type, aliased, type-only",
+    "import type { ArmedChordPlan } from '@/audio/playback/plan/chordPlan';\nexport type X = ArmedChordPlan;\n"],
+  ['a controller bridge, relative',
+    "import { synthPlaybackNoteOn } from '../playback/synthPlayback';\nexport const f = synthPlaybackNoteOn;\n"],
+];
+
 describe('engine music-domain guard (DEV-399)', () => {
   for (const [label, source] of CASES) {
     test(`${label} is an error inside the engine`, async () => {
@@ -106,6 +135,18 @@ describe('engine music-domain guard (DEV-399)', () => {
   }
 
   for (const [label, source] of THEORY_SIBLING_CASES) {
+    test(`${label} is an error inside the engine`, async () => {
+      expect(await messagesFor(source, ENGINE)).toContainEqual(RESTRICTED);
+    });
+  }
+
+  for (const [label, source] of DATA_CATALOG_SUBSUMPTION_CASES) {
+    test(`${label} is an error inside the engine`, async () => {
+      expect(await messagesFor(source, ENGINE)).toContainEqual(RESTRICTED);
+    });
+  }
+
+  for (const [label, source] of PLAYBACK_ROUTE_CASES) {
     test(`${label} is an error inside the engine`, async () => {
       expect(await messagesFor(source, ENGINE)).toContainEqual(RESTRICTED);
     });

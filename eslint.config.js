@@ -113,6 +113,19 @@ const TONAL_SCOPED_PACKAGE_BAN = {
 // imports `'../utils/musicTheory'`). A DEV-397 re-review found a real gate
 // that had closed only the aliased form for one entry; this DEV-399 guard's
 // own review found the same hole across six.
+//
+// `**/playback/**` closes the last route back to a note name: DEV-397's
+// planners (`src/audio/playback/plan/**`) return shapes carrying
+// `noteName: string` (`ChordLanePlan`, `BassLanePlan`, `PlannedMelodyNote`),
+// and the controllers under `src/audio/playback/` that the message above
+// tells an author to write live there too — so even a TYPE-ONLY import of a
+// planner's output, or an import of a controller bridge, would put
+// `noteName` straight back into a file this guard is supposed to keep
+// domain-agnostic, with no runtime cycle for anything else to catch.
+// `playback/` is a real path segment for both import forms an engine file
+// would actually write (`@/audio/playback/...` aliased, `./playback/...`
+// relative from `engine.ts`), so — unlike the six sibling-file entries above
+// — the bare form needs no special-casing here.
 const ENGINE_MUSIC_DOMAIN_BAN = [
   {
     group: [
@@ -126,6 +139,7 @@ const ENGINE_MUSIC_DOMAIN_BAN = [
       '**/chordRhythms',
       '**/leadMelody',
       '**/leadStepRecord',
+      '**/playback/**',
     ],
     message:
       'DEV-399: the engine receives resolved playable events — resolve pitch/scale/chord in a controller under src/audio/playback/ and pass a frequency in Hz.',

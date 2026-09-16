@@ -40,8 +40,9 @@ function withFakeAudioEngine() {
 /**
  * The voice groups the manager is holding on the shared preview bus.
  *
- * One entry per NOTE-ON (a unison stack is one group), with the note it
- * sounds, the audio-clock instant it starts and whether it has been released.
+ * One entry per NOTE-ON (a unison stack is one group), with the resolved
+ * frequency it sounds, the audio-clock instant it starts and whether it has
+ * been released.
  * Reached through the manager's private map because the engine deliberately
  * exposes no per-source voice accessor — a public one would be a door into
  * voice state for `src/components/`, which may not have it.
