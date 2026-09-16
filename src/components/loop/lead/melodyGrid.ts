@@ -1,5 +1,6 @@
 import { getScaleNotesInOctave, isNoteInScale, ROOTS, stepDurationSec } from '@/utils/musicTheory';
 import { spellNoteInKey } from '@/utils/noteSpelling';
+import { noteMidi, pitchClassOfNote } from '@/musicCore';
 import type { LeadMelodyView } from '@/store/types';
 import { leadStoredIndexAt, type LeadNote } from '@/audio/leadMelody';
 import { wrapColumn } from '@/audio/leadLiveRecord';
@@ -58,10 +59,7 @@ export function leadPitchRows(
  * arbitrary position.
  */
 function noteSemitone(note: string): number {
-  const match = /^([A-G]#?)(-?\d+)$/.exec(note);
-  if (!match) return Number.NaN;
-  const pitchClass = (ROOTS as readonly string[]).indexOf(match[1]);
-  return pitchClass < 0 ? Number.NaN : pitchClass + Number(match[2]) * 12;
+  return noteMidi(note) ?? Number.NaN;
 }
 
 /**
@@ -123,7 +121,7 @@ export function leadRowLabel(
  * too when a scale degree is itself a sharp/flat (e.g. F# in G major).
  */
 export function isBlackKey(note: string): boolean {
-  const pitchClass = note.replace(/\d+$/, '');
+  const pitchClass = pitchClassOfNote(note);
   return pitchClass.includes('#') || pitchClass.includes('b');
 }
 
@@ -160,7 +158,7 @@ export function leadRowLabelTone(outOfScale: boolean): string {
 
 /** True when `note`'s pitch class is the active tonic (`scaleRoot`). */
 export function isRootNote(note: string, root: string): boolean {
-  return note.replace(/\d+$/, '') === root;
+  return pitchClassOfNote(note) === root;
 }
 
 /**
