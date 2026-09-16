@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { planBassLane, planChordLane, type ChordPlanSnapshot } from './chordPlan';
+import { planBassLane, planChordArm, planChordLane, type ChordPlanSnapshot } from './chordPlan';
 import { buildChordEvents } from '../chordPlayback';
 import {
   cycleHoldScale,
@@ -292,5 +292,53 @@ describe('planBassLane feel and boundary edge cases', () => {
   test('the lane is a plain function of its inputs: two calls agree', () => {
     const context = { chordIndex: 0, totalBars: 2 };
     expect(planBassLane(snapshot(), context)).toEqual(planBassLane(snapshot(), context));
+  });
+});
+
+describe('planChordArm', () => {
+  test('carries both lanes, both note sets and both cycle widths off ONE snapshot', () => {
+    const snap = snapshot();
+    const plan = planChordArm(snap, { chordIndex: 1, startProgressionStep: 32 });
+    expect(plan.startProgressionStep).toBe(32);
+    expect(plan.totalBars).toBe(2);
+    expect(plan.chordNotes).toEqual(generateBlockChordNotes('maj', 'F', 4));
+    expect(plan.bassNotes).toEqual(generateBlockChordNotes('maj', 'F', 2));
+    expect(plan.chordArp).toBe(false);
+    expect(plan.bassArp).toBe(false);
+    expect(plan.chordEvents).toEqual(
+      planChordLane(snap, { chordNotes: plan.chordNotes, totalBars: 2 }).events,
+    );
+    expect(plan.bassEvents).toEqual(
+      planBassLane(snap, { chordIndex: 1, totalBars: 2 }).events,
+    );
+    expect(plan.chordCycleSteps).toBe(
+      planChordLane(snap, { chordNotes: plan.chordNotes, totalBars: 2 }).cycleSteps,
+    );
+    expect(plan.bassCycleSteps).toBe(
+      planBassLane(snap, { chordIndex: 1, totalBars: 2 }).cycleSteps,
+    );
+  });
+
+  test('a full-hold pair arrives as two descriptors, and nothing is scheduled', () => {
+    const plan = planChordArm(
+      snapshot({ chordRhythmId: 'sustained', bassPatternId: 'whole-note-root' }),
+      { chordIndex: 0, startProgressionStep: 0 },
+    );
+    expect(plan.chordFullHold).toEqual({ notes: plan.chordNotes, holdSec: 4 });
+    expect(plan.bassFullHold?.holdSec).toBe(4);
+    expect(plan.chordEvents).toEqual([]);
+    expect(plan.bassEvents).toEqual([]);
+  });
+
+  test('a malformed bars: 0 chord is one bar, in the plan AND in the folded boundaries', () => {
+    const malformed = snapshot({
+      chords: [
+        { id: 'c1', root: 'C', quality: 'maj', bars: 0 },
+        { id: 'c2', root: 'F', quality: 'maj', bars: 2 },
+      ],
+    });
+    // The live hook floored totalBars but NOT the durations it folded custom
+    // boundaries onto; the renderer floored both. One planner, one answer.
+    expect(planChordArm(malformed, { chordIndex: 0, startProgressionStep: 0 }).totalBars).toBe(1);
   });
 });

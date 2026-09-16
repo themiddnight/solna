@@ -1,7 +1,7 @@
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { ChordItem } from '@/types';
 import type { MeterId } from '@/utils/meter';
-import { barDurationSec, stepDurationSec } from '@/utils/musicTheory';
+import { barDurationSec, generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
 import {
   cycleHoldScale,
   fullHoldDuration,
@@ -221,5 +221,88 @@ export function planBassLane(
       lastBarOnly: isApproachToken(ev.token),
     })),
     fullHold: null,
+  };
+}
+
+/**
+ * A chord's playback shape, resolved once when the chord is armed and then
+ * emitted one clock step at a time by the controller.
+ *
+ * Holding the events here rather than pushing them onto the audio clock upfront
+ * is what keeps nothing scheduled further ahead than the clock's own lookahead
+ * — which is what lets a knob tweak reach the next hit rather than the next
+ * chord.
+ *
+ * The two `*FullHold` fields are the plan's only INSTRUCTIONS rather than
+ * events: strike them once at the chord's first step. They exist because a
+ * full-hold lane is a single long voice the patch can re-shape live, so it
+ * needs no per-step work — and because the resolver that decides it must stay
+ * callable from a test with no engine.
+ */
+export interface ArmedChordPlan {
+  /**
+   * The progression step this chord was armed on — measured from the run's
+   * origin, so `chordPlanPosition` needs no second origin. Plans tile a run:
+   * each is armed exactly one chord after the last.
+   */
+  startProgressionStep: number;
+  totalBars: number;
+  chordNotes: string[];
+  bassNotes: string[];
+  chordArp: boolean;
+  bassArp: boolean;
+  chordEvents: BarInvariantEvent[];
+  bassEvents: BarInvariantEvent[];
+  /**
+   * The two lanes' cycle widths in 16th columns, resolved when the plan was
+   * armed and carried for its whole life. A clock tick must never resolve one:
+   * a mid-chord resize would re-phase a pattern that is already sounding.
+   */
+  chordCycleSteps: number;
+  bassCycleSteps: number;
+  chordFullHold: { notes: string[]; holdSec: number } | null;
+  bassFullHold: { noteName: string; velocity: number; holdSec: number } | null;
+}
+
+/**
+ * Arms the chord at `context.chordIndex`: its notes, both lanes' events and
+ * both lanes' full holds, from ONE snapshot of the loop state.
+ *
+ * Pure. The controller does the two things this cannot: it fires the full holds
+ * on the engine, and it keeps the arming state `startProgressionStep` is
+ * measured from.
+ *
+ * The second parameter is an object for the same reason `planChordLane`'s and
+ * `planBassLane`'s are (see their docblocks): a later per-call addition is a
+ * shape change to `context`, never a signature change every call site must
+ * follow in argument order.
+ */
+export function planChordArm(
+  snapshot: ChordPlanSnapshot,
+  context: { chordIndex: number; startProgressionStep: number },
+): ArmedChordPlan {
+  const { chordIndex, startProgressionStep } = context;
+  const chord = snapshot.chords[chordIndex];
+  const totalBars = Math.max(1, chord.bars || 1);
+  const chordNotes = generateBlockChordNotes(chord.quality, chord.root, snapshot.chordOctave);
+  const bassNotes = generateBlockChordNotes(chord.quality, chord.root, snapshot.bassOctave);
+  const chordLane = planChordLane(snapshot, { chordNotes, totalBars });
+  const bassLane = planBassLane(snapshot, { chordIndex, totalBars });
+
+  return {
+    startProgressionStep,
+    totalBars,
+    chordNotes,
+    bassNotes,
+    // Off the Arp fields, never off the patch: Arp is performance state, so a
+    // preset load must not re-arm the arpeggiator.
+    chordArp: snapshot.chordArpActive,
+    bassArp: snapshot.bassArpActive,
+    chordEvents: chordLane.events,
+    bassEvents: bassLane.events,
+    chordCycleSteps: chordLane.cycleSteps,
+    bassCycleSteps: bassLane.cycleSteps,
+    chordFullHold: chordLane.fullHold,
+    bassFullHold: bassLane.fullHold,
   };
 }
