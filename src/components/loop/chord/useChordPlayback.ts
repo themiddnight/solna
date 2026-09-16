@@ -49,8 +49,8 @@ import type { ChordItem } from "@/types";
 import type { ActiveSynth } from "@/types/synth";
 import { synthReleaseSeconds } from "@/utils/synthPatch";
 import { publishStepAt, resetStep } from "@/components/playbackStep";
-import { padHoldsAcrossLoop, resolvePadArm } from "@/audio/playback/padPlayback";
-import { loopBars } from "@/utils/songStructure";
+import { planPadArm } from "@/audio/playback/plan/padPlan";
+import { padPlanSnapshot } from "@/store/playbackPlanSnapshots";
 
 /**
  * Where the chord+bass scheduler currently is on the shared grid. Kept as a
@@ -165,35 +165,15 @@ interface ChordPlan {
 /**
  * Strikes the pad's voicing and schedules its release.
  *
- * Deliberately NOT folded into startChordPlan: that function has no access to
- * `arming.chordIndex`, and threading a flag in would turn the builder of the
- * chord/bass plan into the arm of three voices with two different lifetimes.
- *
- * The pad has no rhythm pattern, so it produces no BarInvariantEvent and needs
- * no per-step emission — one arm is one note-on/note-off pair. This is why
- * ChordPlan and emitChordPlanStep are untouched.
+ * The DECISION is `planPadArm`'s and is pure; this function is the controller
+ * half — one store read, one engine call. The pad has no rhythm pattern, so one
+ * arm is one note-on/note-off pair and there is no per-step emission: ChordPlan
+ * and emitChordPlanStep stay untouched by it.
  */
-function armPad(chord: ChordItem, isLoopStart: boolean, time: number): void {
+function armPad(chordIndex: number, time: number): void {
   const s = useAppStore.getState();
-  const stepsPerBar = activeStepsPerBar();
-
-  const arm = resolvePadArm({
-    mode: s.padMode,
-    isLoopStart,
-    chord,
-    degree: s.padDroneDegree,
-    intervals: s.padDroneIntervals,
-    padOctave: s.padOctave,
-    voicing: s.padVoicing,
-    scaleRoot: s.scaleRoot,
-    scaleType: s.scaleType,
-    barDur: barDurationSec(s.bpm, stepsPerBar),
-    // Only a drone reads the loop's length, and loopBars walks the whole
-    // progression — pad mode arms on EVERY chord and must not pay for it.
-    loopBarCount: padHoldsAcrossLoop(s.padMode) ? loopBars(s.chords) : 0,
-  });
+  const arm = planPadArm(padPlanSnapshot(s), { chordIndex });
   if (!arm) return;
-
   playFullHoldChord(arm.notes, s.padSynthParams, time, arm.holdSec, 'pad');
 }
 
@@ -842,7 +822,7 @@ function useChordClock({
         const index = arming.chordIndex % liveChords.length;
         const chord = liveChords[index];
         planRef.current = startChordPlan(chord, progressionStep, time);
-        armPad(chord, index === 0, time);
+        armPad(index, time);
         showChord(index, chord);
         // The beat the chord was triggered on is what every beat counter measures
         // its progress from — a multi-bar chord spans several bar lines.
