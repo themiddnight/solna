@@ -275,7 +275,7 @@ function useChordLibraryCommands({
       draft.description.trim(),
       draft.roman?.trim()
         ? draft.roman
-        : currentChords.map((c) => formatChordLabel(c.root, c.quality)).join(' → ')
+        : currentChords.map((c) => formatChordLabel(c.root, c.quality, spellingKey)).join(' → ')
     );
     // saved.name is the trimmed name passed above, so the toast shows it trimmed.
     showToast(`Progression "${saved.name}" saved!`);

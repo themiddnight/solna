@@ -20,8 +20,8 @@ import { Loop, LoopMixPatch } from '@/store/types';
 import { ChordItem } from '@/types';
 import { loopBars } from '@/utils/songStructure';
 import { formatDb } from '@/utils/gainUnits';
-import { formatChordQuality, generateBlockChordNotes } from '@/utils/musicTheory';
-import { getTonicSpelling } from '@/utils/noteSpelling';
+import { formatChordLabel, generateBlockChordNotes } from '@/utils/musicTheory';
+import { getTonicSpelling, spellNoteInKey, type SpellingKey } from '@/utils/noteSpelling';
 import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
 import { MIX_LAYERS } from '../mixLayers';
 import { VolumeFader } from '../ui/VolumeFader';
@@ -310,6 +310,7 @@ interface LoopChordStripProps {
   chordOctave: number;
   isPlaying: boolean;
   activeChordIndex: number | null;
+  spellingKey: SpellingKey;
 }
 
 /**
@@ -317,7 +318,7 @@ interface LoopChordStripProps {
  * the same reason as LoopStatusBadge: every branch here is about one chord
  * badge, so counting them against the whole card measured nothing.
  */
-function LoopChordStrip({ chords, chordOctave, isPlaying, activeChordIndex }: LoopChordStripProps) {
+function LoopChordStrip({ chords, chordOctave, isPlaying, activeChordIndex, spellingKey }: LoopChordStripProps) {
   if (!chords || chords.length === 0) {
     return <span className="text-base-content/40 italic">No chords</span>;
   }
@@ -325,7 +326,8 @@ function LoopChordStrip({ chords, chordOctave, isPlaying, activeChordIndex }: Lo
     <div className="flex flex-wrap items-center gap-1 min-w-0">
       {chords.map((chord, cIdx) => {
         const isChordActive = isPlaying && cIdx === activeChordIndex;
-        const notes = generateBlockChordNotes(chord.quality, chord.root, chordOctave);
+        const notes = generateBlockChordNotes(chord.quality, chord.root, chordOctave)
+          .map((n) => spellNoteInKey(n, spellingKey.scaleRoot, spellingKey.scaleType));
         return (
           <span
             key={chord.id || `${chord.root}-${cIdx}`}
@@ -341,7 +343,7 @@ function LoopChordStrip({ chords, chordOctave, isPlaying, activeChordIndex }: Lo
                 isChordActive ? 'text-primary-content font-bold' : 'font-bold text-base-content'
               }
             >
-              {`${chord.root}${formatChordQuality(chord.quality)}`}
+              {formatChordLabel(chord.root, chord.quality, spellingKey)}
             </span>
             <span
               className={`text-[9px] ${
@@ -741,6 +743,7 @@ function LoopCardMetaRow({
           chordOctave={loop.chordOctave}
           isPlaying={isPlaying}
           activeChordIndex={activeChordIndex}
+          spellingKey={{ scaleRoot: loop.scaleRoot, scaleType: loop.scaleType }}
         />
       </div>
     </div>

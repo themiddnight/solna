@@ -3,7 +3,8 @@ import { describe, expect, test } from 'bun:test';
 import type React from 'react';
 import { renderToString } from 'react-dom/server';
 import { createDefaultLoop } from '@/store/loopSlice';
-import { generateBlockChordNotes } from '@/utils/musicTheory';
+import { formatChordLabel, generateBlockChordNotes } from '@/utils/musicTheory';
+import { spellNoteInKey } from '@/utils/noteSpelling';
 import { getActiveChordIndex, renameFromDraft, SortableLoopCard } from './SortableLoopCard';
 
 describe('getActiveChordIndex', () => {
@@ -314,6 +315,37 @@ describe('SortableLoopCard play scope and theming', () => {
     expect(src).toContain('value={draftName}');
     expect(src).toContain('setDraftName(loop.name)');
     expect(src).not.toContain('placeholder="Loop name..."');
+  });
+});
+
+describe('loop card chord spelling matches every other DEV-380-compliant surface', () => {
+  test('Bb Major\'s IV renders as Eb, not the canonical-sharp D#', () => {
+    // Same fixture noteSpelling.test.ts already pins: spellPitchClassInKey(3, 'A#', 'Major') -> 'Eb'.
+    const key = { scaleRoot: 'A#', scaleType: 'Major' }; // Bb Major; ROOTS-spelled tonic is A#
+    expect(formatChordLabel('D#', 'maj', key)).toBe('Eb'); // the exact call LoopChordStrip now makes
+    expect(formatChordLabel('D#', 'maj')).toBe('D#'); // the OLD, buggy call — proves the fix changed something
+  });
+
+  test('the chord tooltip spells each note the same way', () => {
+    // spellNoteInKey takes an octave-bearing note, the shape
+    // generateBlockChordNotes actually returns (LoopChordStrip's tooltip
+    // input) — a bare pitch class round-trips unchanged, since noteMidi
+    // needs the octave to resolve a MIDI value.
+    const key = { scaleRoot: 'A#', scaleType: 'Major' };
+    expect(spellNoteInKey('D#4', key.scaleRoot, key.scaleType)).toBe('Eb4');
+  });
+
+  test('a rendered card spells its chord badge in the loop\'s own key', () => {
+    const html = renderCard({
+      loop: {
+        ...createDefaultLoop(),
+        scaleRoot: 'A#',
+        scaleType: 'Major',
+        chords: [{ id: 'c1', root: 'D#', quality: 'maj', bars: 1 }],
+      },
+    });
+    expect(html).toContain('Eb');
+    expect(html).not.toContain('D#');
   });
 });
 
