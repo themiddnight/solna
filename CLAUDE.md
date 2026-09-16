@@ -111,6 +111,35 @@ shows it, never in a slice.
    every subscriber. **`eslint.config.js` is the list that binds**; this one has drifted behind it
    before, so add to both or the allowlist quietly grows without anyone reading it.
 
+**A fifth axis sits on top of the four layers: Tonal.js is confined to an explicit allowlist,
+not yet a directory.** `tonal` may be imported only from the paths `eslint.config.js`'s
+`TONAL_IMPORT_BAN` carve-outs name — today that is `src/utils/noteSpelling.ts`,
+`src/utils/musicTheory.ts`, `src/audio/arpeggiator.ts`, `src/audio/bassPatterns.ts`,
+`src/audio/playback/padPlayback.ts` and `src/store/midiInput.ts`, enforced with the same
+replace-not-merge `no-restricted-imports` pattern as the four layers above (see
+`TAPER_CONVERSION_BAN` and its carve-outs for the mechanism this reuses). The allowlist names
+today's importers, not a future adapter path, because Music Core and its Tonal adapter
+(DEV-394) do not exist as modules yet — allowlisting a path nothing occupies would enforce
+nothing. A **musical intent** (a persisted, user-authored decision — a chord's root/quality, a
+key, a note's pitch and timing) is not the same thing as a **derived representation** (a value a
+pure function computes from musical intent, such as a resolved chord quality or a display-spelled
+label) or a **playable event** (a fully resolved, timestamped instruction — pitch and timing
+already resolved, voice ownership already assigned — that is the sole input the audio engine may
+take once DEV-399 narrows its contract); the full contract, including the compile-time,
+runtime-flow and data-ownership diagrams, lives in
+`docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md`. `src/data/`'s
+own block already forbids every value import including `tonal`, so it carries no separate
+carve-out. The gate covers non-test files under `src/` only — the config's final block exempts
+`**/*.test.{ts,tsx}` from every import ban, which is how `scales.test.ts`, `musicTheory.test.ts`
+and `noteSpelling.test.ts` deliberately pin behavior against tonal, and `scripts/` sits outside
+the gate's `src/**` scope entirely. The analyser exceptions two paragraphs up
+(`AudioVisualizer.tsx`, `ui/VuMeter.tsx`, `ui/AmbientBackdrop.tsx`, `ui/GainReductionMeter.tsx`,
+`ui/SourceMeter.tsx`) are unrelated to this axis and unchanged by it. `src/architecture/` holds
+cross-cutting architecture tests that don't belong to any single layer — `dependencyLayers.test.ts`
+proves this axis and the four layers above it — and a non-test file placed there would fall under
+the `src/**` catch-all block like everything else, since the folder has no layering block of its
+own.
+
 `src/utils/` stays outside the chain, above `data/`: it may read `data/` at runtime
 (`musicTheory.ts` imports `SCALES`), but nothing in `data/` may read it back except through an
 `import type` (e.g. `MeterId`), which is erased at compile. **One deliberate inversion is
