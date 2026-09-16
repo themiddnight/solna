@@ -55,6 +55,8 @@ export default defineConfig({
     }),
   ],
   build: {
+    sourcemap: false,
+    minify: true,
     rolldownOptions: {
       output: {
         // Split the four biggest third-party trees out of the app chunk so
