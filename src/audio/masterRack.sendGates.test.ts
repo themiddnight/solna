@@ -23,7 +23,7 @@ function fxWith(overrides: Partial<MasterEffects>): Omit<MasterEffects, 'reverbD
    internals; these tests drive the private subsystem fields and the
    unexported constructor via casts. */
 describe('effect sends physically disconnect when idle', () => {
-  test('distortion send disconnects on bypass and reconnects on re-enable', () => {
+  test('distortion send is still connected right after bypass, to let the downstream gain fade settle', () => {
     const engine = makeEngine();
     const ctx = masterChainCtx();
     bindFakeCtx(engine, ctx);
@@ -34,13 +34,29 @@ describe('effect sends physically disconnect when idle', () => {
     expect(gate._connectTargets).toContain(node);
 
     engine.updateEffects(fxWith({ distortionBypass: true }));
-    expect(gate._connectTargets).not.toContain(node);
-
-    engine.updateEffects(fxWith({ distortionBypass: false, distortionWet: 0.4 }));
+    // Still connected immediately after bypass — disconnecting here would cut
+    // the waveshaper's live input while distortionGain's fade is still
+    // audibly non-zero (see DISTORTION_SEND_SETTLE_MS).
     expect(gate._connectTargets).toContain(node);
+    expect((engine as any).masterRack.distortionDisconnectTimer).not.toBeNull();
   });
 
-  test('distortion send also disconnects at 0% wet with no explicit bypass', () => {
+  test('re-enabling distortion before the settle timer fires cancels the pending disconnect', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    bindFakeCtx(engine, ctx);
+    (engine as any).masterRack.setupMasterChain();
+
+    engine.updateEffects(fxWith({ distortionBypass: true }));
+    engine.updateEffects(fxWith({ distortionBypass: false, distortionWet: 0.4 }));
+
+    const gate = (engine as any).masterRack.distortionSendGate;
+    const node = (engine as any).masterRack.distortionNode;
+    expect(gate._connectTargets).toContain(node);
+    expect((engine as any).masterRack.distortionDisconnectTimer).toBeNull();
+  });
+
+  test('distortion send also schedules a disconnect at 0% wet with no explicit bypass', () => {
     const engine = makeEngine();
     const ctx = masterChainCtx();
     bindFakeCtx(engine, ctx);
@@ -49,7 +65,8 @@ describe('effect sends physically disconnect when idle', () => {
     engine.updateEffects(fxWith({ distortionWet: 0 }));
     const gate = (engine as any).masterRack.distortionSendGate;
     const node = (engine as any).masterRack.distortionNode;
-    expect(gate._connectTargets).not.toContain(node);
+    expect(gate._connectTargets).toContain(node);
+    expect((engine as any).masterRack.distortionDisconnectTimer).not.toBeNull();
   });
 
   test('reverb send stays connected until its decay tail has finished, using fake timers', () => {
@@ -57,7 +74,7 @@ describe('effect sends physically disconnect when idle', () => {
     const ctx = masterChainCtx();
     bindFakeCtx(engine, ctx);
     (engine as any).masterRack.setupMasterChain();
-    (engine as any).masterRack.reverbDecay = 1.0; // seeded default from setupMasterChain
+    (engine as any).masterRack.reverbDecay = 1.0; // set on the instance directly for this test; setupMasterChain's own seed is 2.0
 
     engine.updateEffects(fxWith({ reverbBypass: true }));
     const gate = (engine as any).masterRack.reverbSendGate;

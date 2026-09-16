@@ -61,6 +61,17 @@ const BEAT_FILTER_TYPES: readonly FilterType[] = ['lowpass', 'bandpass', 'highpa
 /** Seconds of crossfade when the Beat filter TYPE changes. */
 export const BEAT_FILTER_XFADE_SEC = 0.008;
 
+/**
+ * How long `updateDistortionSend` waits before physically disconnecting an
+ * idle distortion send. Not a tail — a WaveShaperNode has no memory — but
+ * `updateEffects` fades `distortionGain` toward 0 with a `setTargetAtTime`
+ * time constant of 0.05s, and five time constants (~250ms) is the point a
+ * `setTargetAtTime` ramp is conventionally treated as settled (<1% of the
+ * starting value); disconnecting any earlier cuts the waveshaper's live
+ * input while the downstream gain is still audibly non-zero.
+ */
+const DISTORTION_SEND_SETTLE_MS = 250;
+
 export class MasterRack {
   // Master bus nodes
   private masterGain: GainNode | null = null;
@@ -135,10 +146,17 @@ export class MasterRack {
   private distortionSendConnected = false;
   // Reverb and delay carry a real internal tail (the convolver's impulse
   // response; the delay's own feedback loop) that must finish ringing before
-  // the send is physically cut, or an in-flight tail is truncated. Distortion
-  // (a WaveShaperNode) has no memory and disconnects immediately.
+  // the send is physically cut, or an in-flight tail is truncated.
+  // Distortion (a WaveShaperNode) has no such memory, but its physical
+  // disconnect is deferred too: updateEffects fades distortionGain toward 0
+  // over DISTORTION_SEND_SETTLE_MS via setTargetAtTime, and that fade needs
+  // live input to sound continuous. Cutting the waveshaper's input the
+  // instant the fade starts drops its raw output straight to curve(0) = 0
+  // mid-ramp — an audible click whose size tracks whatever wet level was
+  // playing — so the disconnect waits for the fade to settle first.
   private reverbDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private delayDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private distortionDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private eqLowNode: BiquadFilterNode | null = null;
   private eqMidNode: BiquadFilterNode | null = null;
   private eqHighNode: BiquadFilterNode | null = null;
@@ -295,8 +313,10 @@ export class MasterRack {
     this.distortionSendConnected = false;
     if (this.reverbDisconnectTimer) clearTimeout(this.reverbDisconnectTimer);
     if (this.delayDisconnectTimer) clearTimeout(this.delayDisconnectTimer);
+    if (this.distortionDisconnectTimer) clearTimeout(this.distortionDisconnectTimer);
     this.reverbDisconnectTimer = null;
     this.delayDisconnectTimer = null;
+    this.distortionDisconnectTimer = null;
     return { reverbSendGate, delaySendGate, distortionSendGate };
   }
 
@@ -550,13 +570,33 @@ export class MasterRack {
     this.dynamicsTopology = topology;
   }
 
-  /** Distortion has no tail — cut the send the instant it goes idle. */
+  /**
+   * Distortion has no tail of its own, but the downstream `distortionGain`
+   * fade needs live input to sound continuous (see `DISTORTION_SEND_SETTLE_MS`),
+   * so disconnecting waits out that fade the same way reverb/delay wait out
+   * their own tail. Reconnecting cancels any pending disconnect outright.
+   */
   private updateDistortionSend(active: boolean): void {
     if (!this.distortionSendGate || !this.distortionNode) return;
-    if (active === this.distortionSendConnected) return;
-    if (active) this.distortionSendGate.connect(this.distortionNode);
-    else this.distortionSendGate.disconnect(this.distortionNode);
-    this.distortionSendConnected = active;
+    if (active) {
+      if (this.distortionDisconnectTimer) {
+        clearTimeout(this.distortionDisconnectTimer);
+        this.distortionDisconnectTimer = null;
+      }
+      if (!this.distortionSendConnected) {
+        this.distortionSendGate.connect(this.distortionNode);
+        this.distortionSendConnected = true;
+      }
+      return;
+    }
+    if (!this.distortionSendConnected || this.distortionDisconnectTimer) return;
+    this.distortionDisconnectTimer = setTimeout(() => {
+      this.distortionDisconnectTimer = null;
+      if (this.distortionSendGate && this.distortionNode) {
+        this.distortionSendGate.disconnect(this.distortionNode);
+      }
+      this.distortionSendConnected = false;
+    }, DISTORTION_SEND_SETTLE_MS);
   }
 
   /**
