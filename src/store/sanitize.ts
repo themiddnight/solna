@@ -357,10 +357,6 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isStringArray(value: unknown): boolean {
-  return Array.isArray(value) && value.every((n) => typeof n === 'string');
-}
-
 /**
  * An array is kept only when EVERY element passes. All-or-nothing on purpose:
  * a per-element drop would silently shorten a chord progression or a drum
@@ -372,9 +368,14 @@ function asCheckedArray<T>(value: unknown, isElement: (v: unknown) => boolean, f
 }
 
 /**
- * A chord is read by deriveChordNotes and played straight out of `notes`, so
- * every field the chord path dereferences must be the right type — a missing
- * `notes` array is a crash in the chord scheduler, not a wrong sound.
+ * `notes` is not part of the validated shape here because it is not part of
+ * `ChordItem` — every reader derives a chord's pitches from `root`/`quality`
+ * and an octave it already owns (Music Core's `resolveChordNotes`), so a
+ * persisted body carrying a stray `notes` key (old data, a hand-edited file)
+ * has it silently dropped rather than validated, checked or passed through.
+ * That is deliberate, not an oversight: per this repo's "no migration
+ * chains" rule, this is validation, not a migration step, and the fields
+ * below are exactly the fields `ChordItem` has.
  *
  * `root` and `quality` are both checked against a closed set, not just
  * `typeof === 'string'`: `resolveChordNotes` (Music Core) throws on either an
@@ -427,7 +428,6 @@ function isChordItem(value: unknown): boolean {
     typeof value.bars === 'number' &&
     Number.isFinite(value.bars) &&
     value.bars > 0 &&
-    isStringArray(value.notes) &&
     (value.bassNote === undefined ||
       value.bassNote === null ||
       (typeof value.bassNote === 'string' && isRootNote(pitchClassOfNote(value.bassNote))))
