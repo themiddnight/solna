@@ -28,10 +28,10 @@ import { buildChordEvents, eventsForCycleStep } from '../playback/chordPlayback'
 import { isApproachToken, resolveBassSteps } from '../bassPatterns';
 import { patternStoredIndexAt } from '@/utils/patternTimeline';
 import { generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
-import { MAX_STEPS_PER_BAR } from '@/utils/meter';
+import { MAX_STEPS_PER_BAR, type MeterId } from '@/utils/meter';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { BeatPattern, BeatVoices } from '@/types';
-import { padPlanSnapshot } from '@/store/playbackPlanSnapshots';
+import { chordPlanSnapshot, padPlanSnapshot } from '@/store/playbackPlanSnapshots';
 import { planPadArm } from '../playback/plan/padPlan';
 import type { AppStore } from '@/store/types';
 
@@ -847,5 +847,108 @@ describe('live and offline build the same pad snapshot', () => {
         planPadArm(padPlanSnapshot(state), { chordIndex }),
       );
     }
+  });
+});
+
+const CHORD_BASS_EQUIVALENCE_CHORDS = [
+  { id: 'c1', root: 'C', quality: 'maj' as const, bars: 2 }, { id: 'c2', root: 'A', quality: 'min' as const, bars: 1 }, { id: 'c3', root: 'F', quality: 'maj' as const, bars: 1 },
+];
+
+const CHORD_SNAPSHOT_FIELDS = [
+  'chordOctave', 'bassOctave', 'scaleRoot', 'scaleType', 'chordRhythmMode', 'chordRhythmId', 'customChordRhythm', 'customChordHoldSteps', 'customChordLoopLength',
+  'chordFeel', 'bassPatternMode', 'bassPatternId', 'customBassPattern', 'customBassHoldSteps', 'customBassLoopLength', 'bassFeel', 'chordArpSettings', 'bassArpSettings',
+] as const satisfies readonly (keyof MixdownLoop)[];
+
+/** One loop and one store state built from the SAME values, lane config by lane config. */
+function pairChordSnapshots(over: Partial<MixdownLoop>, meterId: MeterId, stepsPerBar: number) {
+  const loop = mixdownLoop({ chords: CHORD_BASS_EQUIVALENCE_CHORDS, ...over });
+  const fields = Object.fromEntries(CHORD_SNAPSHOT_FIELDS.map((f) => [f, loop[f]]));
+  const state = { chords: loop.chords, bpm: 120, meterId, ...fields } as unknown as AppStore;
+  return { loop, live: chordPlanSnapshot(state), offline: chordSnapshotForLoop(loop, meterId, 120, stepsPerBar) };
+}
+
+const CHORD_BASS_EQUIVALENCE_CASES: { name: string; over: Partial<MixdownLoop>; meterId: MeterId; spb: number }[] = [
+  { name: '4/4 presets', over: {}, meterId: '4/4', spb: 16 }, { name: '3/4 presets', over: {}, meterId: '3/4', spb: 12 },
+  { name: '12/8 presets', over: {}, meterId: '12/8', spb: 24 },
+  { name: '7/8 walking bass', over: { bassPatternId: 'classic-walk' }, meterId: '7/8', spb: 14 },
+  {
+    name: 'a two-bar custom chord lane under a one-bar bass preset',
+    over: { chordRhythmMode: 'custom', customChordLoopLength: 2, bassPatternId: 'classic-walk' }, meterId: '4/4', spb: 16,
+  },
+  { name: 'both lanes full hold', over: { chordRhythmId: 'sustained', bassPatternId: 'whole-note-root' }, meterId: '4/4', spb: 16 },
+  {
+    // Every field a builder could swap chord<->bass on differs: feel,
+    // rhythm/pattern mode and Arp active — closing the blind spot the
+    // other fixtures leave (most share 0.5/'preset'/false on both lanes,
+    // where a swap is invisible).
+    name: 'chord and bass diverge on every field a builder could swap',
+    over: {
+      chordFeel: 0.85, bassFeel: 0.15, chordRhythmMode: 'custom', customChordLoopLength: 2,
+      bassPatternMode: 'preset', bassPatternId: 'classic-walk',
+      chordArpSettings: { active: true, mode: 'up', rate: '8n', octaves: 2 },
+      bassArpSettings: { active: false, mode: 'down', rate: '16n', octaves: 1 },
+    },
+    meterId: '4/4', spb: 16,
+  },
+];
+
+describe('live and offline chord+bass planning are the same computation', () => {
+  for (const { name, over, meterId, spb } of CHORD_BASS_EQUIVALENCE_CASES) {
+    test(`${name}: live and offline agree`, () => {
+      const { loop, live, offline } = pairChordSnapshots(over, meterId, spb);
+      expect(offline, 'snapshot').toEqual(live);
+      let startStep = 0;
+      for (let i = 0; i < CHORD_BASS_EQUIVALENCE_CHORDS.length; i += 1) {
+        const bars = Math.max(1, CHORD_BASS_EQUIVALENCE_CHORDS[i].bars || 1);
+        const livePlan = planChordArm(live, { chordIndex: i, startProgressionStep: startStep });
+        const offlinePlan = planChordArm(offline, { chordIndex: i, startProgressionStep: startStep });
+        expect(offlinePlan, `plan ${i}`).toEqual(livePlan);
+        // Every step of the chord, so a chord boundary, a cycle seam and the
+        // last bar (where approach tones fire) are all covered.
+        for (let s = 0; s < bars * spb; s += 1) {
+          const step = startStep + s, ctx = {
+            progressionStep: step, step, isLastBar: Math.floor(s / spb) === bars - 1, stepsPerBar: spb,
+            stepDurSec: stepDurationSec(120), chordArp: loop.chordArpSettings, bassArp: loop.bassArpSettings,
+            chordFeel: loop.chordFeel, bassFeel: loop.bassFeel,
+          };
+          expect(planChordStep(offlinePlan, ctx), `step ${step}`).toEqual(planChordStep(livePlan, ctx));
+        }
+        startStep += bars * spb;
+      }
+    });
+  }
+
+  test('an approach tone fires on the last bar of its chord and nowhere else', () => {
+    const { live } = pairChordSnapshots({ bassPatternId: 'classic-walk' }, '4/4', 16);
+    const plan = planChordArm(live, { chordIndex: 0, startProgressionStep: 0 });
+    const ev = plan.bassEvents.find((e) => e.lastBarOnly);
+    expect(ev, 'no approach tone in this fixture').toBeDefined();
+    const noArp = { active: false, mode: 'up' as const, rate: '8n' as const, octaves: 1 }, base = {
+      progressionStep: ev!.step, step: ev!.step, stepsPerBar: 16, stepDurSec: stepDurationSec(120),
+      chordArp: noArp, bassArp: noArp, chordFeel: 0.5, bassFeel: 0.5,
+    } as Parameters<typeof planChordStep>[1];
+    expect(planChordStep(plan, { ...base, isLastBar: false }).bass).toEqual([]);
+    expect(planChordStep(plan, { ...base, isLastBar: true }).bass.length).toBeGreaterThan(0);
+  });
+
+  test('an ARP over a CUSTOM lane holds the same length live and offline', () => {
+    // The convergence this plan lands: the renderer used to scale arp holds by
+    // cycleHoldScale (clamps a CUSTOM lane to <= 1); planChordStep now always
+    // uses feelToHoldScale, unclamped, matching what live always did. Feel is
+    // pinned above 0.5, where the two forms actually disagree in value, rather
+    // than at the 0.5 every other fixture in this file sits at.
+    const over = {
+      chordRhythmMode: 'custom' as const, customChordLoopLength: 2, chordFeel: 0.9,
+      chordArpSettings: { active: true, mode: 'up' as const, rate: '8n' as const, octaves: 2 },
+    };
+    const { live, offline } = pairChordSnapshots(over, '4/4', 16);
+    const ctx = {
+      progressionStep: 0, step: 0, isLastBar: true, stepsPerBar: 16, stepDurSec: stepDurationSec(120),
+      chordArp: over.chordArpSettings, bassArp: { active: false, mode: 'up', rate: '8n', octaves: 1 },
+      chordFeel: 0.9, bassFeel: 0.5,
+    } as Parameters<typeof planChordStep>[1];
+    const armCtx = { chordIndex: 0, startProgressionStep: 0 }, offlineChord = planChordStep(planChordArm(offline, armCtx), ctx).chord;
+    expect(offlineChord).toEqual(planChordStep(planChordArm(live, armCtx), ctx).chord);
+    expect(offlineChord.length).toBeGreaterThan(0);
   });
 });
