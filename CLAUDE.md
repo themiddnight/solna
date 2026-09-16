@@ -238,6 +238,22 @@ path, a regression a source-scan test in `musicTheory.test.ts` pins — and root
 nearest-degree with a tie going to the lower-indexed scale degree (`nearestDegrees(...)[0]`),
 unchanged by this.
 
+**A Roman numeral's accidental is relative to Major, and the mediant never carries one.**
+`degreeToRoman` (`src/utils/musicTheory.ts`) builds a degree's numeral from three independent
+parts: the position (I-VII), the case (lowercase iff the RESOLVED quality — the step's explicit
+override if it has one, never the plain diatonic default — has a minor third), and, for
+scales with exactly 7 degrees, an accidental comparing that scale's own interval at the degree's
+position against Major's interval at the same position (Mixolydian's `bVII`, Lydian's `#IV`,
+Natural/Harmonic Minor's `bVI`). The THIRD degree is a deliberate, permanent exception — common
+practice never marks a minor key's relative-major mediant (`III`, never `bIII`), because there is
+no competing raised form to distinguish it from, unlike VI/VII, which distinguish the natural- and
+harmonic/melodic-minor forms. A scale under 7 degrees (the pentatonic family, Hirajoshi) never
+gets an accidental at all — a position-by-position comparison against a 7-note Major scale has no
+meaning there. `CHORD_PROGRESSIONS`' authored `roman` summaries (`src/data/chordProgressions.ts`)
+are validated against exactly this — numeral, case and accidental — by
+`src/audio/chordProgressions.test.ts`; the trailing quality suffix (`m7`, `maj9`, `sus2`, …) stays
+unvalidated on purpose, since several progressions deliberately simplify it for readability.
+
 **Music Core owns pitch parsing, octave extraction and scale-fallback resolution, and nothing
 outside `src/musicCore/` hand-rolls a note-name regex.** `tonalAdapter.ts` wraps `octaveOfNote`
 (a note's octave, `null` for none or for an unparseable name) alongside the DEV-394 primitives
