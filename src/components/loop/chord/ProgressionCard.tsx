@@ -265,7 +265,7 @@ interface SortableProgressionProps {
 function SortableProgression({ state, editor, previews }: SortableProgressionProps) {
   const {
     chords, chordIds, scaleRoot, scaleType, meterId, playheadBeat,
-    playheadChordIndex, playheadChordStartBeat,
+    playheadChordIndex, playheadChordStartBeat, chordOctave,
   } = state;
   const { playingIndex, activeChordId } = state.playback;
   const { sensors, handleDragEnd } = editor;
@@ -293,6 +293,7 @@ function SortableProgression({ state, editor, previews }: SortableProgressionPro
               <SortableChordCard
                 key={chord.id}
                 chord={chord}
+                octave={chordOctave}
                 idx={idx}
                 totalChords={chords.length}
                 startBar={startBar}

@@ -2,13 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { SortableChordCard } from './SortableChordCard';
 import type { ChordItem } from '@/types';
+import { generateBlockChordNotes } from '@/utils/musicTheory';
+import { spellNoteInKey } from '@/utils/noteSpelling';
 
 const chord: ChordItem = {
   id: 'chord-1',
   root: 'A',
   quality: 'min7',
   bars: 1,
-  notes: ['A3', 'C4', 'E4', 'G4'],
 };
 
 const noop = () => {};
@@ -17,10 +18,12 @@ const render = (
   isActive: boolean,
   key: { scaleRoot: string; scaleType: string } = { scaleRoot: 'A', scaleType: 'Natural Minor' },
   item = chord,
+  octave = 3,
 ) =>
   renderToString(
     <SortableChordCard
       chord={item}
+      octave={octave}
       idx={0}
       totalChords={4}
       startBar={1}
@@ -86,7 +89,6 @@ describe('SortableChordCard spelling', () => {
     root: 'D#',
     quality: 'maj',
     bars: 1,
-    notes: ['D#4', 'G4', 'A#4'],
   };
   const flatKey = { scaleRoot: 'A#', scaleType: 'Major' };
 
@@ -107,6 +109,33 @@ describe('SortableChordCard spelling', () => {
     const html = render(false, { scaleRoot: 'E', scaleType: 'Major' }, flatChord);
     expect(html).toContain('D#');
     expect(html).not.toContain('Eb');
+  });
+});
+
+describe('SortableChordCard note readout', () => {
+  test('the readout shows notes derived at the given octave', () => {
+    const item: ChordItem = { id: 'c1', root: 'A', quality: 'min7', bars: 1 };
+    const html = renderToString(
+      <SortableChordCard
+        chord={item}
+        octave={3}
+        idx={0}
+        totalChords={1}
+        startBar={1}
+        isActive={false}
+        scaleRoot="C"
+        scaleType="Major"
+        updateChord={() => {}}
+        removeChord={() => {}}
+        handleMoveChord={() => {}}
+        handleCardPreviewMouseDown={() => {}}
+        handleCardPreviewMouseUp={() => {}}
+      />,
+    );
+    const expected = generateBlockChordNotes('min7', 'A', 3)
+      .map((n) => spellNoteInKey(n, 'C', 'Major'))
+      .join(' • ');
+    expect(html).toContain(expected);
   });
 });
 

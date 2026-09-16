@@ -5,7 +5,7 @@ import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChordItem } from "@/types";
-import { ROOTS, formatChordQuality, spellChordRoot } from "@/utils/musicTheory";
+import { ROOTS, formatChordQuality, generateBlockChordNotes, spellChordRoot } from "@/utils/musicTheory";
 import { CHORD_QUALITY_GROUPS, type ChordQuality } from "@/musicCore";
 import { spellNoteInKey } from "@/utils/noteSpelling";
 import { BEATS_PER_BAR } from "@/utils/playhead";
@@ -14,6 +14,7 @@ import { IconButton } from "@/components/ui/IconButton";
 
 export interface SortableChordCardProps {
   chord: ChordItem;
+  octave: number;
   idx: number;
   totalChords: number;
   startBar: number;
@@ -127,6 +128,7 @@ function ChordCardHeader({
  */
 function ChordTriggerPad({
   chord,
+  octave,
   isActive,
   activeBeat,
   beatsPerBar,
@@ -136,6 +138,7 @@ function ChordTriggerPad({
   onUp,
 }: {
   chord: ChordItem;
+  octave: number;
   isActive: boolean;
   activeBeat: number | null;
   beatsPerBar: number;
@@ -166,7 +169,9 @@ function ChordTriggerPad({
         </span>
       </span>
       <span className="text-[10px] opacity-70 mt-1">
-        {chord.notes.map((n) => spellNoteInKey(n, scaleRoot, scaleType)).join(" • ")}
+        {generateBlockChordNotes(chord.quality, chord.root, octave)
+          .map((n) => spellNoteInKey(n, scaleRoot, scaleType))
+          .join(" • ")}
       </span>
       <BeatDots
         size="sm"
@@ -266,6 +271,7 @@ function ChordEditControls({
  */
 export const SortableChordCard = React.memo(function SortableChordCard({
   chord,
+  octave,
   idx,
   totalChords,
   startBar,
@@ -320,6 +326,7 @@ export const SortableChordCard = React.memo(function SortableChordCard({
 
       <ChordTriggerPad
         chord={chord}
+        octave={octave}
         isActive={isActive}
         activeBeat={activeBeat}
         beatsPerBar={beatsPerBar}
