@@ -2125,7 +2125,9 @@ git commit -m "refactor(playback): offline chord/bass rendering goes through the
 
 ---
 
-## Task 11: Prove live/offline chord+bass equivalence, and land the arp hold-scale convergence
+## Task 11: Prove live/offline chord+bass equivalence (the arp hold-scale "convergence" this
+task originally targeted turned out, on inspection, to have never been a real divergence — see
+the amended Global Constraints note above)
 
 **Files:**
 - Modify: `src/audio/export/renderMixdown.test.ts`
