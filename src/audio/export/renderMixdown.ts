@@ -27,13 +27,7 @@
  *    gets its params at trigger time, which is where they come from anyway.
  */
 import { createRenderEngine, type AudioEngine } from '../engine';
-import {
-  leadScheduleHits,
-  leadSoundingNotes,
-  resolveLeadStepTriggers,
-  type LeadNote,
-  type LeadTrigger,
-} from '../leadMelody';
+import { type LeadNote } from '../leadMelody';
 import { emitStepEvents, playFullHoldChord } from '../playback/chordPlayback';
 import { planPadArm, type PadPlanSnapshot } from '../playback/plan/padPlan';
 import {
@@ -42,12 +36,13 @@ import {
   type ArmedChordPlan,
   type ChordPlanSnapshot,
 } from '../playback/plan/chordPlan';
+import { planMelodyStep, type MelodyPlanSnapshot } from '../playback/plan/melodyPlan';
 import { MIXDOWN_SEED, withSeededRandom } from '../rng';
 import { DEFAULT_VELOCITY } from '../constants';
 import { loopDwellSteps, loopEffectiveLengthSteps } from '@/utils/songStructure';
 import { stepDurationSec } from '@/utils/musicTheory';
-import { TICKS_PER_SIXTEENTH, columnsPerBar, strideFor, type LeadStepResolutionId } from '@/utils/stepResolution';
-import { arpStepFor, getMeter, type MeterId } from '@/utils/meter';
+import { TICKS_PER_SIXTEENTH, type LeadStepResolutionId } from '@/utils/stepResolution';
+import { getMeter, type MeterId } from '@/utils/meter';
 import { encodeWav } from '@/utils/encodeWav';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import { applyBeatParams } from '../beatAdapter';
@@ -97,15 +92,13 @@ interface MixdownBeatVoiceGain {
  * (`synthParams`, not `leadSynthParams`) and that irregularity is exactly what
  * `MELODY_TRACKS` exists to encode — a table this module may not import.
  */
-interface MixdownMelodyTrack {
-  steps: LeadNote[][];
-  /** Bars. The melody loop's own length, not the chord loop's. */
-  loopLength: number;
-  stepResolution: LeadStepResolutionId;
-  gate: number;
+/**
+ * One melody track as the renderer holds it: the planner's snapshot plus the
+ * two things the planner must not know about — the patch to play it with and
+ * the bus to play it on.
+ */
+interface MixdownMelodyTrack extends MelodyPlanSnapshot {
   params: ActiveSynth;
-  /** Beside the patch, never inside it — Arp is performance state. */
-  arp: ArpSettings;
   source: string;
 }
 
@@ -468,16 +461,10 @@ function applyLoopAudioState(engine: AudioEngine, state: LoopAudioAutomation): v
  * One melody track's material at one PASS-RELATIVE step, at an explicit
  * absolute time.
  *
- * A transcription of the live hook's clock callback with `time` supplied
- * instead of read from the scheduler, and with the store reads replaced by
- * the snapshot. `stepInPass` is the loop-relative step the live clock holds
- * (it resets to 0 at each loop boundary via `resetClock`), so the column and
- * arp phase derive from it exactly as they do live; `time` stays the absolute
- * song position, which is the only thing the explicit note-on/off times need.
- * The three-way split it keeps — `leadScheduleHits` decides which columns
- * fire, `leadSoundingNotes` decides what is held, and `resolveLeadStepTriggers`
- * decides what sounds and for how long — is the whole point: this function
- * contains no scheduling decision of its own.
+ * This used to be a transcription of the live hook's clock callback — the same
+ * three-function chain written twice, free to diverge. Both now call
+ * `planMelodyStep`; what is left here is the render's half: the time, the patch
+ * and the engine.
  */
 function scheduleMelodyStep(
   engine: AudioEngine,
@@ -487,30 +474,18 @@ function scheduleMelodyStep(
   tickDur: number,
   time: number,
 ): void {
-  const stride = strideFor(track.stepResolution);
-  const columns = track.loopLength * columnsPerBar(stepsPerBar, stride);
-  const melodyTicks = track.loopLength * stepsPerBar * TICKS_PER_SIXTEENTH;
-  const arpStep = arpStepFor(stepInPass, stepsPerBar);
-  const hits = leadScheduleHits(stepInPass, stride, columns, track.arp.active, tickDur);
-
-  for (const hit of hits) {
-    const at = time + hit.offsetSec;
-    const sounding = leadSoundingNotes(track.steps, hit.column, stepsPerBar, stride);
-    const triggers: LeadTrigger[] = resolveLeadStepTriggers(
-      sounding,
-      track.arp,
-      arpStep,
-      tickDur,
-      track.gate,
-      stride,
-      { tickInLoop: hit.column * stride, melodyTicks },
+  const planned = planMelodyStep(track, {
+    stepInLoop: stepInPass,
+    stepsPerBar,
+    tickDurSec: tickDur,
+  });
+  for (const note of planned) {
+    const start = time + note.startOffsetSec;
+    const voiceId = engine.triggerSynthNoteOn(
+      note.note, track.params, DEFAULT_VELOCITY, start, track.source, 1, 'sequencer',
     );
-    for (const trigger of triggers) {
-      const start = at + trigger.timeOffsetSec;
-      const voiceId = engine.triggerSynthNoteOn(trigger.note, track.params, DEFAULT_VELOCITY, start, track.source, 1, 'sequencer');
-      if (voiceId) {
-        engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(track.params), start + trigger.holdSec);
-      }
+    if (voiceId) {
+      engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(track.params), start + note.holdSec);
     }
   }
 }
