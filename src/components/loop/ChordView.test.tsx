@@ -1,9 +1,56 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { ChordView } from './ChordView';
 import { useAppStore } from '@/store/store';
 import { COUNT_BADGE } from '../ui/fieldClasses';
+import * as chordPlaybackModule from '@/audio/playback/chordPlayback';
+import { generateBlockChordNotes } from '@/utils/musicTheory';
+import {
+  useChordViewState,
+  useHeldChordPreview,
+  type HeldChordPreview,
+} from './chord/useChordView';
+
+let capturedPreview: HeldChordPreview | null = null;
+
+function ChordPreviewProbe() {
+  const state = useChordViewState();
+  capturedPreview = useHeldChordPreview(state);
+  return null;
+}
+
+describe('useHeldChordPreview', () => {
+  test('holding a catalog chip plays notes derived at the live chordOctave', () => {
+    // renderToString serves the INITIAL store snapshot (see the note above
+    // the meter tests), so the octave has to be set there, not via setState.
+    const initial = useAppStore.getInitialState();
+    const previousOctave = initial.chordOctave;
+    initial.chordOctave = 3;
+    const ensureSpy = spyOn(chordPlaybackModule, 'ensurePreviewEngine').mockImplementation(
+      () => {},
+    );
+    const playSpy = spyOn(chordPlaybackModule, 'playChordLegatoWithEngine').mockImplementation(
+      () => {},
+    );
+    try {
+      renderToString(<ChordPreviewProbe />);
+      const fakeEvent = {
+        stopPropagation: () => {},
+        preventDefault: () => {},
+      } as Parameters<HeldChordPreview['handlePreviewMouseDown']>[0];
+      capturedPreview!.handlePreviewMouseDown(fakeEvent, 'D', 'min7');
+      expect(playSpy).toHaveBeenCalledWith(
+        generateBlockChordNotes('min7', 'D', 3),
+        initial.chordSynthParams,
+      );
+    } finally {
+      initial.chordOctave = previousOctave;
+      ensureSpy.mockRestore();
+      playSpy.mockRestore();
+    }
+  });
+});
 
 describe('ChordView preview UI', () => {
   test('renders separate chord and bass pattern preview buttons', () => {
@@ -238,12 +285,15 @@ describe('ChordView pattern selects carry each pattern\'s meter', () => {
 });
 
 import { applyKeyScaleChange, shouldClearReharmonizeIndicator } from './ChordView';
-import { deriveChordNotes } from '@/utils/musicTheory';
 import type { ChordItem } from '@/types';
 import type { ChordQuality } from '@/musicCore';
 
-const chord = (id: string, root: string, quality: ChordQuality): ChordItem =>
-  deriveChordNotes({ id, root, quality, bars: 1, notes: [] }, 4);
+const chord = (id: string, root: string, quality: ChordQuality): ChordItem => ({
+  id,
+  root,
+  quality,
+  bars: 1,
+});
 
 // A Natural Minor, i - VI - III - VII.
 const PROGRESSION: ChordItem[] = [
@@ -263,13 +313,13 @@ describe('applyKeyScaleChange', () => {
     // The case the chordsReplaced guard could wrongly skip (ruling R1): the
     // chords array is the same object across the render, only the key moved.
     expect(
-      names(applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR, root: 'C' }, 4, false)),
+      names(applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR, root: 'C' }, false)),
     ).toEqual(['Cmin', 'G#maj', 'D#maj', 'A#maj']);
   });
 
   test('a scale-only change snaps and does not transpose', () => {
     expect(
-      names(applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR, scaleType: 'Major' }, 4, false)),
+      names(applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR, scaleType: 'Major' }, false)),
     ).toEqual(['Amaj', 'Emaj', 'Bmin', 'F#min']);
   });
 
@@ -278,7 +328,6 @@ describe('applyKeyScaleChange', () => {
       PROGRESSION,
       A_MINOR,
       { root: 'C', scaleType: 'Major' },
-      4,
       false,
     );
     expect(names(both)).toEqual(['Cmaj', 'Gmaj', 'Dmin', 'Amin']);
@@ -291,19 +340,14 @@ describe('applyKeyScaleChange', () => {
     // An Instant Vibe writes scaleRoot, scaleType and chords in one batch. Its
     // chords were authored correct in its own key; harmonizing them is the bug.
     expect(
-      applyKeyScaleChange(PROGRESSION, A_MINOR, { root: 'C', scaleType: 'Major' }, 4, true),
+      applyKeyScaleChange(PROGRESSION, A_MINOR, { root: 'C', scaleType: 'Major' }, true),
     ).toBeNull();
-    expect(applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR, root: 'C' }, 4, true)).toBeNull();
+    expect(applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR, root: 'C' }, true)).toBeNull();
   });
 
   test('an unchanged key and an empty chord list both return null', () => {
-    expect(applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR }, 4, false)).toBeNull();
-    expect(applyKeyScaleChange([], A_MINOR, { root: 'C', scaleType: 'Major' }, 4, false)).toBeNull();
-  });
-
-  test('the octave is honoured', () => {
-    const moved = applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR, root: 'C' }, 3, false);
-    expect(moved?.[0].notes).toEqual(deriveChordNotes(chord('c1', 'C', 'min'), 3).notes);
+    expect(applyKeyScaleChange(PROGRESSION, A_MINOR, { ...A_MINOR }, false)).toBeNull();
+    expect(applyKeyScaleChange([], A_MINOR, { root: 'C', scaleType: 'Major' }, false)).toBeNull();
   });
 });
 
