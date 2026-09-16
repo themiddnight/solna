@@ -16,6 +16,15 @@
  * manager level (`has(id)`); the reach-and-identity tests below read that
  * same fact off the engine's own `synthManager`, typed against the real
  * exported `SynthVoiceManager` rather than a locally re-declared shape.
+ *
+ * `liveVoiceCount()`/`has()` can prove a mono retrigger shares one physical
+ * voice with the note it followed, but neither can prove that voice's PITCH
+ * actually moved — a stack that never called `glideChannel` at all would
+ * pass every one of those checks too. The glide test below additionally
+ * reads the shared oscillator's own frequency automation off the fake
+ * context (`ctx._oscillators[0].frequency.events`, `testFakes.ts`'s
+ * `fakeParam` log) to pin the bend itself, both up on the retrigger and back
+ * down on release of the top-of-stack id.
  */
 import { describe, expect, test } from 'bun:test';
 import { noteFrequency } from '../utils/musicTheory';
@@ -118,7 +127,7 @@ describe('engine note contract: a focus change mid-hold', () => {
 
 describe('engine note contract: glide', () => {
   test('a second note on a mono bus bends the sounding voice rather than building a new one', () => {
-    const { engine } = freshEngine();
+    const { engine, ctx } = freshEngine();
     const first = engine.triggerSynthNoteOn(C4, MONO_SYNTH, 0.8, 0, 'synth', 1, 'live')!;
     const second = engine.triggerSynthNoteOn(E4, MONO_SYNTH, 0.8, 0, 'synth', 1, 'live')!;
     expect(second).not.toBe(first);
@@ -128,12 +137,34 @@ describe('engine note contract: glide', () => {
     const synthManager = synthManagerOf(engine);
     expect(synthManager.has(first)).toBe(true);
     expect(synthManager.has(second)).toBe(true);
+
+    // The voice-count/identity checks above hold even if the retrigger never
+    // actually bent the pitch — they only pin the STACK mechanics. The bend
+    // itself is only visible on the oscillator's own frequency automation:
+    // one physical oscillator (MONO_SYNTH enables a single oscillator slot),
+    // holding C4 then an exponential ramp toward E4.
+    expect(ctx._oscillators).toHaveLength(1);
+    const frequency = ctx._oscillators[0].frequency;
+    const upBend = frequency.events;
+    expect(upBend).toHaveLength(2);
+    expect(upBend[0].kind).toBe('set');
+    expect(upBend[0].v).toBeCloseTo(C4, 6);
+    expect(upBend[1].kind).toBe('exp');
+    expect(upBend[1].v).toBeCloseTo(E4, 6);
+    expect(upBend[1].t).toBeGreaterThan(upBend[0].t);
+
     engine.triggerSynthNoteOff(second, 0.3, 0);
     // Releasing the more recently held id bends the voice back to the one
     // still on the stack rather than tearing it down.
     expect(synthManager.has(second)).toBe(false);
     expect(synthManager.has(first)).toBe(true);
     expect(engine.liveVoiceCount()).toBe(1);
+    // The same oscillator's frequency now ramps BACK toward C4 — a glide, not
+    // a silent voice sitting wherever the up-bend left it.
+    const downBend = frequency.events;
+    expect(downBend[downBend.length - 1].kind).toBe('exp');
+    expect(downBend[downBend.length - 1].v).toBeCloseTo(C4, 6);
+
     engine.triggerSynthNoteOff(first, 0.3, 0);
     // The stack is now empty: the voice itself releases.
     expect(synthManager.has(first)).toBe(false);
