@@ -21,14 +21,55 @@ const OSC_COLOR = 'text-module-osc' as const;
 const signedInt = (value: number) => (value > 0 ? `+${value}` : String(value));
 
 /** One oscillator: its on/off state, its waveform, and its four trims. */
+/** Split out of `OscUnit` only to stay under `max-lines-per-function`. */
+function OscWaveformRow({
+  name,
+  id,
+  waveform,
+  onSelect,
+}: {
+  name: string;
+  id: string;
+  waveform: OscillatorWaveform;
+  onSelect: (next: OscillatorWaveform) => void;
+}) {
+  return (
+    <div role="group" aria-label={`${name} waveform`} className="grid grid-cols-4 gap-1">
+      {OSCILLATOR_WAVEFORMS.map((option: OscillatorWaveform) => (
+        <ToggleButton
+          key={option}
+          id={`btn-${id}-wave-${option}`}
+          label={`${name} ${WAVEFORM_LABELS[option]}`}
+          pressed={waveform === option}
+          color={OSC_COLOR}
+          onPress={() => onSelect(option)}
+          className="px-0"
+        >
+          <WaveformIcon waveform={option} />
+        </ToggleButton>
+      ))}
+    </div>
+  );
+}
+
 function OscUnit({
   index,
   osc,
   onOsc,
+  onOscCommitted,
+  onCommit,
+  onCancel,
 }: {
   index: 0 | 1;
   osc: OscillatorParams;
+  /** Previews a knob drag — no store write. */
   onOsc: (next: OscillatorParams) => void;
+  /** A discrete pick (enable toggle, waveform button): previews AND commits
+   *  in the same synchronous call, since neither has a `pointerup` of its
+   *  own to hook a separate commit onto. */
+  onOscCommitted: (next: OscillatorParams) => void;
+  onCommit: () => void;
+  onCancel: () => void;
 }) {
   const name = `OSC ${index + 1}`;
   const id = `osc${index + 1}`;
@@ -41,29 +82,16 @@ function OscUnit({
           name={name}
           enabled={osc.enabled}
           color={OSC_COLOR}
-          onToggle={() => onOsc({ ...osc, enabled: !osc.enabled })}
+          onToggle={() => onOscCommitted({ ...osc, enabled: !osc.enabled })}
         />
       </div>
 
-      <div
-        role="group"
-        aria-label={`${name} waveform`}
-        className="grid grid-cols-4 gap-1"
-      >
-        {OSCILLATOR_WAVEFORMS.map((waveform: OscillatorWaveform) => (
-          <ToggleButton
-            key={waveform}
-            id={`btn-${id}-wave-${waveform}`}
-            label={`${name} ${WAVEFORM_LABELS[waveform]}`}
-            pressed={osc.waveform === waveform}
-            color={OSC_COLOR}
-            onPress={() => onOsc({ ...osc, waveform })}
-            className="px-0"
-          >
-            <WaveformIcon waveform={waveform} />
-          </ToggleButton>
-        ))}
-      </div>
+      <OscWaveformRow
+        name={name}
+        id={id}
+        waveform={osc.waveform}
+        onSelect={(waveform) => onOscCommitted({ ...osc, waveform })}
+      />
 
       <KnobGrid
         color={OSC_COLOR}
@@ -78,6 +106,8 @@ function OscUnit({
             step: 1,
             format: signedInt,
             onChange: (octave) => onOsc({ ...osc, octave }),
+            onCommit,
+            onCancel,
           },
           {
             id: `slider-${id}-semitone`,
@@ -89,6 +119,8 @@ function OscUnit({
             step: 1,
             format: signedInt,
             onChange: (semitone) => onOsc({ ...osc, semitone }),
+            onCommit,
+            onCancel,
           },
           {
             id: `slider-${id}-fine`,
@@ -100,6 +132,8 @@ function OscUnit({
             step: 1,
             format: (v) => `${signedInt(v)} ct`,
             onChange: (fineCents) => onOsc({ ...osc, fineCents }),
+            onCommit,
+            onCancel,
           },
           {
             id: `slider-${id}-level`,
@@ -116,6 +150,8 @@ function OscUnit({
             step: 0.5,
             format: (v) => `${v.toFixed(1)} dB`,
             onChange: (levelDb) => onOsc({ ...osc, levelDb }),
+            onCommit,
+            onCancel,
           },
         ]}
       />
@@ -123,7 +159,7 @@ function OscUnit({
   );
 }
 
-export function OscillatorPanel({ patch, onPatch }: PatchPanelProps) {
+export function OscillatorPanel({ patch, onPatch, onCommit, onCancel }: PatchPanelProps) {
   const [osc1, osc2] = patch.synth.oscillators;
   const writeOsc = (index: 0 | 1, next: OscillatorParams) =>
     onPatch({
@@ -133,6 +169,10 @@ export function OscillatorPanel({ patch, onPatch }: PatchPanelProps) {
         oscillators: index === 0 ? [next, osc2] : [osc1, next],
       },
     });
+  const writeOscCommitted = (index: 0 | 1, next: OscillatorParams) => {
+    writeOsc(index, next);
+    onCommit();
+  };
 
   return (
     <ProModule
@@ -141,8 +181,22 @@ export function OscillatorPanel({ patch, onPatch }: PatchPanelProps) {
       color={OSC_COLOR}
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <OscUnit index={0} osc={osc1} onOsc={(next) => writeOsc(0, next)} />
-        <OscUnit index={1} osc={osc2} onOsc={(next) => writeOsc(1, next)} />
+        <OscUnit
+          index={0}
+          osc={osc1}
+          onOsc={(next) => writeOsc(0, next)}
+          onOscCommitted={(next) => writeOscCommitted(0, next)}
+          onCommit={onCommit}
+          onCancel={onCancel}
+        />
+        <OscUnit
+          index={1}
+          osc={osc2}
+          onOsc={(next) => writeOsc(1, next)}
+          onOscCommitted={(next) => writeOscCommitted(1, next)}
+          onCommit={onCommit}
+          onCancel={onCancel}
+        />
       </div>
     </ProModule>
   );

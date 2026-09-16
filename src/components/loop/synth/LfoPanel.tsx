@@ -88,7 +88,21 @@ export function switchLfoRateMode(
 }
 
 /** Free-running Hz or a tempo-locked division — the same field, two units. */
-function LfoRateField({ rate, onRate }: { rate: LfoRate; onRate: (next: LfoRate) => void }) {
+function LfoRateField({
+  rate,
+  onRate,
+  onRateCommitted,
+  onCommit,
+  onCancel,
+}: {
+  rate: LfoRate;
+  /** Previews a knob drag — no store write. */
+  onRate: (next: LfoRate) => void;
+  /** The division select: a discrete pick, previewed and committed together. */
+  onRateCommitted: (next: LfoRate) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+}) {
   if (rate.mode === 'sync') {
     return (
       <div className="min-w-0 flex-1">
@@ -99,7 +113,9 @@ function LfoRateField({ rate, onRate }: { rate: LfoRate; onRate: (next: LfoRate)
           id="select-lfo-division"
           className="select select-xs w-full text-[11px] font-semibold"
           value={divisionKey(rate.division)}
-          onChange={(e) => onRate({ mode: 'sync', division: divisionFromKey(e.target.value) })}
+          onChange={(e) =>
+            onRateCommitted({ mode: 'sync', division: divisionFromKey(e.target.value) })
+          }
         >
           {DIVISIONS.map((division) => (
             <option key={divisionKey(division)} value={divisionKey(division)}>
@@ -126,6 +142,8 @@ function LfoRateField({ rate, onRate }: { rate: LfoRate; onRate: (next: LfoRate)
           scale: 'log',
           format: (v) => `${v.toFixed(2)} Hz`,
           onChange: (hz) => onRate({ mode: 'hz', hz }),
+          onCommit,
+          onCancel,
         },
       ]}
     />
@@ -173,16 +191,94 @@ function useParkedRate(
   };
 }
 
-export function LfoPanel({ patch, onPatch }: PatchPanelProps) {
+/** The waveform row and the Clock/Trigger row — split out of `LfoPanel` only
+ *  to stay under `max-lines-per-function`; neither has state of its own. */
+function LfoWaveformRow({
+  waveform,
+  onSelect,
+}: {
+  waveform: LfoWaveform;
+  onSelect: (next: LfoWaveform) => void;
+}) {
+  return (
+    <div role="group" aria-label="LFO waveform" className="grid grid-cols-5 gap-1">
+      {LFO_WAVEFORMS.map((option: LfoWaveform) => (
+        <ToggleButton
+          key={option}
+          id={`btn-lfo-wave-${option}`}
+          label={`LFO ${WAVEFORM_LABELS[option]}`}
+          pressed={waveform === option}
+          color={LFO_COLOR}
+          onPress={() => onSelect(option)}
+          className="px-0"
+        >
+          <WaveformIcon waveform={option} />
+        </ToggleButton>
+      ))}
+    </div>
+  );
+}
+
+function LfoModeRow({
+  rateMode,
+  triggerMode,
+  onSelectRateMode,
+  onSelectTriggerMode,
+}: {
+  rateMode: LfoRate['mode'];
+  triggerMode: LfoParams['triggerMode'];
+  onSelectRateMode: (mode: LfoRate['mode']) => void;
+  onSelectTriggerMode: (mode: LfoParams['triggerMode']) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <ToggleRow
+        idPrefix="btn-lfo-rate-mode"
+        caption="Clock"
+        color={LFO_COLOR}
+        value={rateMode}
+        options={[
+          { value: 'hz', label: 'Hz, free running', content: 'Hz' },
+          { value: 'sync', label: 'Sync to tempo', content: 'Sync' },
+        ]}
+        onSelect={onSelectRateMode}
+      />
+      <ToggleRow
+        idPrefix="btn-lfo-trigger"
+        caption="Trigger"
+        color={LFO_COLOR}
+        value={triggerMode}
+        options={[
+          { value: 'transport', label: 'Transport, one shared phase', content: 'Transport' },
+          { value: 'note', label: 'Note, per voice from its own phase', content: 'Note' },
+        ]}
+        onSelect={onSelectTriggerMode}
+      />
+    </div>
+  );
+}
+
+export function LfoPanel({ patch, onPatch, onCommit, onCancel }: PatchPanelProps) {
   const lfo = patch.synth.lfo;
   const write = (next: Partial<LfoParams>) =>
     onPatch({ ...patch, synth: { ...patch.synth, lfo: { ...lfo, ...next } } });
+  // Every discrete pick on this panel (waveform, clock mode, trigger mode,
+  // sync division) previews and commits in the same synchronous call — none
+  // of them has a `pointerup` of its own to hook a separate commit onto.
+  const writeCommitted = (next: Partial<LfoParams>) => {
+    write(next);
+    onCommit();
+  };
 
   const { parked, setParked, writeRate } = useParkedRate(lfo.rate, (rate) => write({ rate }));
+  const writeRateCommitted = (next: LfoRate) => {
+    writeRate(next);
+    onCommit();
+  };
   const selectRateMode = (mode: LfoRate['mode']) => {
     const next = switchLfoRateMode(lfo.rate, parked, mode);
     setParked(next.parked);
-    writeRate(next.rate);
+    writeRateCommitted(next.rate);
   };
 
   return (
@@ -191,49 +287,23 @@ export function LfoPanel({ patch, onPatch }: PatchPanelProps) {
       title="LFO"
       color={LFO_COLOR}
     >
-      <div role="group" aria-label="LFO waveform" className="grid grid-cols-5 gap-1">
-        {LFO_WAVEFORMS.map((waveform: LfoWaveform) => (
-          <ToggleButton
-            key={waveform}
-            id={`btn-lfo-wave-${waveform}`}
-            label={`LFO ${WAVEFORM_LABELS[waveform]}`}
-            pressed={lfo.waveform === waveform}
-            color={LFO_COLOR}
-            onPress={() => write({ waveform })}
-            className="px-0"
-          >
-            <WaveformIcon waveform={waveform} />
-          </ToggleButton>
-        ))}
-      </div>
+      <LfoWaveformRow waveform={lfo.waveform} onSelect={(waveform) => writeCommitted({ waveform })} />
 
-      <div className="grid grid-cols-2 gap-2">
-        <ToggleRow
-          idPrefix="btn-lfo-rate-mode"
-          caption="Clock"
-          color={LFO_COLOR}
-          value={lfo.rate.mode}
-          options={[
-            { value: 'hz', label: 'Hz, free running', content: 'Hz' },
-            { value: 'sync', label: 'Sync to tempo', content: 'Sync' },
-          ]}
-          onSelect={selectRateMode}
-        />
-        <ToggleRow
-          idPrefix="btn-lfo-trigger"
-          caption="Trigger"
-          color={LFO_COLOR}
-          value={lfo.triggerMode}
-          options={[
-            { value: 'transport', label: 'Transport, one shared phase', content: 'Transport' },
-            { value: 'note', label: 'Note, per voice from its own phase', content: 'Note' },
-          ]}
-          onSelect={(triggerMode) => write({ triggerMode })}
-        />
-      </div>
+      <LfoModeRow
+        rateMode={lfo.rate.mode}
+        triggerMode={lfo.triggerMode}
+        onSelectRateMode={selectRateMode}
+        onSelectTriggerMode={(triggerMode) => writeCommitted({ triggerMode })}
+      />
 
       <div className="flex items-end gap-2">
-        <LfoRateField rate={lfo.rate} onRate={writeRate} />
+        <LfoRateField
+          rate={lfo.rate}
+          onRate={writeRate}
+          onRateCommitted={writeRateCommitted}
+          onCommit={onCommit}
+          onCancel={onCancel}
+        />
         <KnobGrid
           className="flex-2"
           color={LFO_COLOR}
@@ -249,6 +319,8 @@ export function LfoPanel({ patch, onPatch }: PatchPanelProps) {
               step: 0.01,
               format: (v) => `${Math.round(v * 100)}%`,
               onChange: (depth) => write({ depth }),
+              onCommit,
+              onCancel,
             },
             {
               id: 'slider-lfo-phase',
@@ -260,6 +332,8 @@ export function LfoPanel({ patch, onPatch }: PatchPanelProps) {
               step: 1,
               format: (v) => `${Math.round(v)}°`,
               onChange: (phaseDegrees) => write({ phaseDegrees }),
+              onCommit,
+              onCancel,
             },
           ]}
         />
@@ -273,6 +347,8 @@ export function LfoPanel({ patch, onPatch }: PatchPanelProps) {
         route={lfo.route}
         color={LFO_COLOR}
         onChange={(route) => write({ route })}
+        onCommit={onCommit}
+        onCancel={onCancel}
       />
     </ProModule>
   );

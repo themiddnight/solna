@@ -53,6 +53,8 @@ function AdsrKnobs({
   envelope,
   color,
   onEnvelope,
+  onCommit,
+  onCancel,
 }: {
   idPrefix: string;
   /** Qualifies each knob's accessible name — both envelopes caption theirs
@@ -61,6 +63,8 @@ function AdsrKnobs({
   envelope: AdsrParams;
   color: ProModuleColor;
   onEnvelope: (next: AdsrParams) => void;
+  onCommit: () => void;
+  onCancel: () => void;
 }) {
   return (
     <KnobGrid
@@ -81,6 +85,8 @@ function AdsrKnobs({
           scale: 'log',
           format: envTime,
           onChange: (attack) => onEnvelope({ ...envelope, attack }),
+          onCommit,
+          onCancel,
         },
         {
           id: `slider-${idPrefix}-decay`,
@@ -92,6 +98,8 @@ function AdsrKnobs({
           scale: 'log',
           format: envTime,
           onChange: (decay) => onEnvelope({ ...envelope, decay }),
+          onCommit,
+          onCancel,
         },
         {
           id: `slider-${idPrefix}-sustain`,
@@ -103,6 +111,8 @@ function AdsrKnobs({
           step: 0.01,
           format: (v) => `${Math.round(v * 100)}%`,
           onChange: (sustain) => onEnvelope({ ...envelope, sustain }),
+          onCommit,
+          onCancel,
         },
         {
           id: `slider-${idPrefix}-release`,
@@ -114,6 +124,8 @@ function AdsrKnobs({
           scale: 'log',
           format: envTime,
           onChange: (release) => onEnvelope({ ...envelope, release }),
+          onCommit,
+          onCancel,
         },
       ]}
     />
@@ -121,7 +133,7 @@ function AdsrKnobs({
 }
 
 /** ENV 1: the amp envelope, whose destination is a fact rather than a choice. */
-export function AmpEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
+export function AmpEnvelopePanel({ patch, onPatch, onCommit, onCancel }: PatchPanelProps) {
   return (
     <ProModule
       badge={5}
@@ -135,6 +147,8 @@ export function AmpEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
         envelope={patch.synth.ampEnvelope}
         color={ENV1_COLOR}
         onEnvelope={(ampEnvelope) => onPatch({ ...patch, synth: { ...patch.synth, ampEnvelope } })}
+        onCommit={onCommit}
+        onCancel={onCancel}
       />
       {/* Read-only by construction, not a disabled control: ENV 1 is wired to
           amplitude in the engine and `SubtractiveParams` has no field that
@@ -159,7 +173,7 @@ export function AmpEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
  * that is the honest consequence of a list, and the alternative (a fixed pair
  * with holes) would make "no routes assigned" unrepresentable in the type.
  */
-export function ModEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
+export function ModEnvelopePanel({ patch, onPatch, onCommit, onCancel }: PatchPanelProps) {
   const routes = patch.synth.env2Routes;
   const writeRoute = (index: number, next: ModRoute | null) => {
     const slots: (ModRoute | null)[] = [routes[0] ?? null, routes[1] ?? null];
@@ -169,7 +183,6 @@ export function ModEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
       synth: { ...patch.synth, env2Routes: slots.filter((slot): slot is ModRoute => slot !== null) },
     });
   };
-
   return (
     <ProModule
       badge={6}
@@ -183,6 +196,8 @@ export function ModEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
         envelope={patch.synth.modEnvelope}
         color={ENV2_COLOR}
         onEnvelope={(modEnvelope) => onPatch({ ...patch, synth: { ...patch.synth, modEnvelope } })}
+        onCommit={onCommit}
+        onCancel={onCancel}
       />
       {[0, 1].map((index) => (
         <RouteRow
@@ -193,6 +208,8 @@ export function ModEnvelopePanel({ patch, onPatch }: PatchPanelProps) {
           route={routes[index] ?? null}
           color={ENV2_COLOR}
           onChange={(next) => writeRoute(index, next)}
+          onCommit={onCommit}
+          onCancel={onCancel}
         />
       ))}
     </ProModule>

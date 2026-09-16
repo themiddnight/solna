@@ -430,14 +430,16 @@ function SynthPresetBar({
 function SynthPanels({
   depth,
   channel,
+  synthTarget,
   onSwitchToPro,
 }: {
   depth: SoundDepth;
   channel: SynthChannel;
+  synthTarget: SynthControlTarget;
   onSwitchToPro: () => void;
 }) {
   if (depth === 'pro') {
-    return <SubtractiveProPanel channel={channel} />;
+    return <SubtractiveProPanel channel={channel} synthTarget={synthTarget} />;
   }
   return <SimpleSynthPanel channel={channel} onSwitchToPro={onSwitchToPro} />;
 }
@@ -595,6 +597,7 @@ function SynthCard({
       <SynthPanels
         depth={depth}
         channel={channel}
+        synthTarget={synthTarget}
         onSwitchToPro={onSwitchToPro}
       />
     </SectionCard>

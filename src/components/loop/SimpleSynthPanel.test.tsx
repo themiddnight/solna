@@ -202,7 +202,7 @@ describe('switching depth writes nothing', () => {
   test('rendering Simple, then Pro, then Simple again performs no store write', () => {
     const recording = makeChannel();
     renderToString(<SimpleSynthPanel channel={recording} onSwitchToPro={() => {}} />);
-    renderToString(<SubtractiveProPanel channel={recording} />);
+    renderToString(<SubtractiveProPanel channel={recording} synthTarget="synth" />);
     renderToString(<SimpleSynthPanel channel={recording} onSwitchToPro={() => {}} />);
     expect(recording.patches).toHaveLength(0);
     expect(recording.arps).toHaveLength(0);

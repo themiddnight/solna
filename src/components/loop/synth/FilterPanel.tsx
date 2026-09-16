@@ -27,10 +27,16 @@ import {
  */
 const FILTER_COLOR = 'text-module-filter' as const;
 
-export function FilterPanel({ patch, onPatch }: PatchPanelProps) {
+export function FilterPanel({ patch, onPatch, onCommit, onCancel }: PatchPanelProps) {
   const filter = patch.synth.filter;
   const write = (next: Partial<FilterParams>) =>
     onPatch({ ...patch, synth: { ...patch.synth, filter: { ...filter, ...next } } });
+  // The Response buttons are a discrete pick, not a drag: they preview and
+  // commit in the same synchronous call.
+  const writeCommitted = (next: Partial<FilterParams>) => {
+    write(next);
+    onCommit();
+  };
 
   return (
     <ProModule
@@ -54,7 +60,7 @@ export function FilterPanel({ patch, onPatch }: PatchPanelProps) {
               label={FILTER_TYPE_LABELS[type]}
               pressed={filter.type === type}
               color={FILTER_COLOR}
-              onPress={() => write({ type })}
+              onPress={() => writeCommitted({ type })}
               className="flex-col gap-0 h-auto py-1 px-0"
             >
               <FilterTypeIcon type={type} />
@@ -78,6 +84,8 @@ export function FilterPanel({ patch, onPatch }: PatchPanelProps) {
             scale: 'log',
             format: (v) => (v >= 1000 ? `${(v / 1000).toFixed(2)} kHz` : `${Math.round(v)} Hz`),
             onChange: (cutoffHz) => write({ cutoffHz }),
+            onCommit,
+            onCancel,
           },
           {
             id: 'slider-filter-resonance',
@@ -88,6 +96,8 @@ export function FilterPanel({ patch, onPatch }: PatchPanelProps) {
             step: 0.01,
             format: (v) => `${Math.round(v * 100)}%`,
             onChange: (resonance) => write({ resonance }),
+            onCommit,
+            onCancel,
           },
           {
             id: 'slider-filter-drive',
@@ -98,6 +108,8 @@ export function FilterPanel({ patch, onPatch }: PatchPanelProps) {
             step: 0.5,
             format: (v) => `${v.toFixed(1)} dB`,
             onChange: (driveDb) => write({ driveDb }),
+            onCommit,
+            onCancel,
           },
           {
             id: 'slider-filter-keytrack',
@@ -108,6 +120,8 @@ export function FilterPanel({ patch, onPatch }: PatchPanelProps) {
             step: 0.01,
             format: (v) => `${Math.round(v * 100)}%`,
             onChange: (keyTrack) => write({ keyTrack }),
+            onCommit,
+            onCancel,
           },
         ]}
       />

@@ -127,7 +127,7 @@ function ariaLabels(html: string): string[] {
 }
 
 const proMarkup = (channel: SynthChannel) =>
-  renderToString(<SubtractiveProPanel channel={channel} />);
+  renderToString(<SubtractiveProPanel channel={channel} synthTarget="synth" />);
 
 describe('SubtractiveProPanel renders every approved Variant A module', () => {
   test('the eight module headings', () => {
@@ -406,7 +406,12 @@ describe('the panels write complete patches, and Arp writes only Arp', () => {
     const channel = makeChannel();
     const patch = channel.activeSynth.patch;
     const written: (typeof patch)[] = [];
-    const tree = VoicePanel({ patch, onPatch: (next) => void written.push(next) });
+    const tree = VoicePanel({
+      patch,
+      onPatch: (next) => void written.push(next),
+      onCommit: () => {},
+      onCancel: () => {},
+    });
 
     (byId(tree, 'slider-voice-spread').props as { onChange: (v: number) => void }).onChange(37);
     expect(written[0].common.unisonDetuneCents).toBe(37);
@@ -426,7 +431,12 @@ describe('the panels write complete patches, and Arp writes only Arp', () => {
     const channel = makeChannel();
     const patch = channel.activeSynth.patch;
     const written: (typeof patch)[] = [];
-    const tree = VoicePanel({ patch, onPatch: (next) => void written.push(next) });
+    const tree = VoicePanel({
+      patch,
+      onPatch: (next) => void written.push(next),
+      onCommit: () => {},
+      onCancel: () => {},
+    });
 
     (byId(tree, 'btn-voice-mode-mono').props as { onClick: () => void }).onClick();
     expect(written[0].common.voiceMode).toBe('mono');
@@ -450,7 +460,7 @@ describe('the panels write complete patches, and Arp writes only Arp', () => {
 
   test('the whole Pro panel routes patch writes to setActiveSynth only', () => {
     const channel = makeChannel();
-    renderToString(<SubtractiveProPanel channel={channel} />);
+    renderToString(<SubtractiveProPanel channel={channel} synthTarget="synth" />);
     expect(channel.patches).toEqual([]);
     expect(channel.arps).toEqual([]);
   });
