@@ -34,27 +34,22 @@ import {
   type LeadNote,
   type LeadTrigger,
 } from '../leadMelody';
-import { isApproachToken, resolveBassSteps } from '../bassPatterns';
-import { buildChordEvents, emitStepEvents, eventsForCycleStep, arpEventsForStep, playFullHoldChord, type BarInvariantEvent, type StepEvent } from '../playback/chordPlayback';
+import { emitStepEvents, playFullHoldChord } from '../playback/chordPlayback';
 import { planPadArm, type PadPlanSnapshot } from '../playback/plan/padPlan';
 import {
-  cycleHoldScale,
-  fullHoldDuration,
-  isFullHoldBassCycle,
-  isFullHoldRhythmCycle,
-  resolvePlaybackBassCycle,
-  resolvePlaybackRhythmCycle,
-  type PlaybackPatternCycle,
-} from '../chordRhythms';
+  planChordArm,
+  planChordStep,
+  type ArmedChordPlan,
+  type ChordPlanSnapshot,
+} from '../playback/plan/chordPlan';
 import { MIXDOWN_SEED, withSeededRandom } from '../rng';
 import { DEFAULT_VELOCITY } from '../constants';
 import { loopDwellSteps, loopEffectiveLengthSteps } from '@/utils/songStructure';
-import { barDurationSec, generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
+import { stepDurationSec } from '@/utils/musicTheory';
 import { TICKS_PER_SIXTEENTH, columnsPerBar, strideFor, type LeadStepResolutionId } from '@/utils/stepResolution';
 import { arpStepFor, getMeter, type MeterId } from '@/utils/meter';
 import { encodeWav } from '@/utils/encodeWav';
-import type { BassPattern, BassStepChoice } from '@/data/bassPatterns';
-import type { RhythmPattern } from '@/data/chordRhythms';
+import type { BassStepChoice } from '@/data/bassPatterns';
 import { applyBeatParams } from '../beatAdapter';
 import { beatStepEvents } from '../beatSteps';
 import type {
@@ -319,127 +314,17 @@ export function planLoopAudioAutomation(
 }
 
 /**
- * Everything one loop needs to sound, resolved ONCE for the whole render
- * rather than per pass: the chord patterns, the bass patterns, the arp flag,
- * the whole-chord holds and the bar→chord map. A loop is played `repeatCount`
- * times and every repeat is identical, so resolving twice would be work the
- * render pays for and nothing reads.
+ * One loop's chord/bass material, pre-resolved per chord: the SAME
+ * `ArmedChordPlan` the live scheduler arms, one per chord, built once per pass
+ * instead of on a clock tick.
  */
 export interface LoopVoices {
-  /** Chord index per bar of ONE pass; length = the pass's bars. */
+  /** Pass bar -> the index of the chord covering it. */
   chordsByBar: number[];
-  /** Per chord: its first step within a pass. */
+  /** Per chord: the pass-relative step it starts on. */
   chordStartStep: number[];
-  /** Per chord: its bars, floored at 1. */
-  chordBars: number[];
-  /** Per chord: its block notes at `chordOctave`. */
-  chordNotes: string[][];
-  /** Per chord: its block notes at `bassOctave` (the arp bus reads these per step). */
-  bassNotes: string[][];
-  /** Per chord: its rhythm events, empty when arpeggiated or a full hold. */
-  chordEvents: BarInvariantEvent[][];
-  /** Per chord: its bass events, empty when arpeggiated or a full hold. */
-  bassEvents: BarInvariantEvent[][];
-  chordArp: boolean;
-  bassArp: boolean;
-  /** Per chord: the hold length for a full-hold rhythm, else 0. */
-  chordHoldSec: number[];
-  /** Per chord: the bass root for a full-hold bass pattern, else null. */
-  bassHoldNotes: ({ noteName: string; velocity: number } | null)[];
-  /** Per chord: the hold length for a full-hold bass, else 0. */
-  bassHoldSec: number[];
-  chordHoldScale: number;
-  bassHoldScale: number;
-  /** The chord lane's cycle width in 16th columns (one bar for a preset). */
-  chordCycleSteps: number;
-  /** The bass lane's cycle width in 16th columns. */
-  bassCycleSteps: number;
-}
-
-/**
- * The chord events a pass emits at `stepInPass` — the render's own fold, and
- * deliberately the SAME call live playback makes at `progressionStep`.
- *
- * `stepInPass` is progression-relative (a pass restarts the progression, so
- * column 0 of a pass is column 0 of both cycles), which is what makes a
- * custom lane's second bar reachable here at all: folding by `stepInBar`
- * instead maps column 20 of a 32-step cycle onto column 4 of a one-bar one.
- * `isLastBar` is the ACTIVE CHORD's last bar, exactly as the live plan
- * measures it, so a preset's approach tone still lands only there.
- */
-export function renderChordEventsAt(
-  voices: LoopVoices,
-  chordIndex: number,
-  stepInPass: number,
-  isLastBar: boolean,
-): StepEvent[] {
-  return eventsForCycleStep(
-    voices.chordEvents[chordIndex],
-    stepInPass,
-    voices.chordCycleSteps,
-    isLastBar,
-  );
-}
-
-/** The bass lane's twin, over its own cycle width. */
-export function renderBassEventsAt(
-  voices: LoopVoices,
-  chordIndex: number,
-  stepInPass: number,
-  isLastBar: boolean,
-): StepEvent[] {
-  return eventsForCycleStep(
-    voices.bassEvents[chordIndex],
-    stepInPass,
-    voices.bassCycleSteps,
-    isLastBar,
-  );
-}
-
-/**
- * Both lanes' cycles, resolved once per render snapshot — the SAME resolvers
- * and the same progression-duration array live playback arms its plans with.
- *
- * The renderer previously resolved a one-bar pattern and folded every step by
- * `stepInBar`, so a custom lane's second bar was unreachable (and the two
- * producers could disagree about the seam). It also converted the custom grid
- * TWICE, `adapt*Pattern` re-adapting what the resolver had already stamped at
- * the active meter; the cycle resolvers do that once.
- */
-function resolveLoopCycles(
-  loop: MixdownLoop,
-  meterId: MeterId,
-  stepsPerBar: number,
-): {
-  chordCycle: PlaybackPatternCycle<RhythmPattern>;
-  bassCycle: PlaybackPatternCycle<BassPattern>;
-} {
-  // Chord selection is driven by the PROGRESSION's duration, never by a
-  // pattern's cycle length — a lane's loop is a divisor of it by construction.
-  const chordDurations = loop.chords.map(
-    (chord) => Math.max(1, chord.bars || 1) * stepsPerBar,
-  );
-  const chordCycle = resolvePlaybackRhythmCycle(
-    loop.chordRhythmMode,
-    loop.chordRhythmId,
-    loop.customChordRhythm,
-    loop.customChordHoldSteps,
-    loop.customChordLoopLength,
-    stepsPerBar,
-    meterId,
-    chordDurations,
-  );
-  const bassCycle = resolvePlaybackBassCycle(
-    loop.bassPatternMode,
-    loop.bassPatternId,
-    loop.customBassPattern,
-    loop.customBassHoldSteps,
-    loop.customBassLoopLength,
-    stepsPerBar,
-    meterId,
-    chordDurations,
-  );
-  return { chordCycle, bassCycle };
+  /** Per chord: its armed plan. */
+  plans: ArmedChordPlan[];
 }
 
 /**
@@ -467,68 +352,45 @@ export function padSnapshotForLoop(
   };
 }
 
-/**
- * One chord's bass events: empty when the pattern is arpeggiated or a full hold
- * (`skip` is the caller's `bassFullHold || bassArp`, computed once for the
- * loop), otherwise the steps resolved against the chord at `chordIndex`.
- */
-function bassEventsForChord(
-  loop: MixdownLoop,
-  bassPattern: BassPattern,
-  chordIndex: number,
-  bpm: number,
-  bassHoldScale: number,
-  skip: boolean,
-): BarInvariantEvent[] {
-  if (skip) return [];
-  // The chord INDEX matters, not the chord object: resolveBassSteps walks
-  // `chords[(i + 1) % length]` for its approach tones, which is what makes
-  // the last chord lead back into the first at the loop seam.
-  return resolveBassSteps(
-    bassPattern,
-    loop.chords,
-    chordIndex,
-    loop.bassOctave,
-    loop.scaleRoot,
-    loop.scaleType,
-    bpm,
-    bassHoldScale,
-  ).map((ev) => ({
-    step: ev.step,
-    noteName: ev.noteName,
-    velocity: ev.velocity,
-    timeOffset: 0,
-    hold: ev.holdSec,
-    // Approach tones lead into the NEXT chord, so they belong on the last bar.
-    lastBarOnly: isApproachToken(ev.token),
-  }));
-}
 
 /**
- * The note a full-hold bass pattern starts on, or null when the pattern is not
- * a full hold. holdScale 1: the live hook resolves the full-hold bass at full
- * length and applies the feel only through fullHoldDuration, so the note-off
- * and the hold it is paired with are measured the same way.
+ * The chord+bass ARM-time snapshot for one loop — the offline twin of
+ * `chordPlanSnapshot` (src/store/playbackPlanSnapshots.ts).
+ *
+ * `src/audio/` may not reach into the store, so every field arrives on the
+ * MixdownLoop; the names match the store's on purpose, so the two builders read
+ * as the same list and an equivalence test is a deep-equality assertion.
  */
-function fullHoldBassNote(
+export function chordSnapshotForLoop(
   loop: MixdownLoop,
-  bassPattern: BassPattern,
-  chordIndex: number,
+  meterId: MeterId,
   bpm: number,
-  fullHold: boolean,
-): { noteName: string; velocity: number } | null {
-  if (!fullHold) return null;
-  const root = resolveBassSteps(
-    bassPattern,
-    loop.chords,
-    chordIndex,
-    loop.bassOctave,
-    loop.scaleRoot,
-    loop.scaleType,
+  stepsPerBar: number,
+): ChordPlanSnapshot {
+  return {
+    chords: loop.chords,
     bpm,
-    1,
-  )[0];
-  return root ? { noteName: root.noteName, velocity: root.velocity } : null;
+    meterId,
+    stepsPerBar,
+    chordOctave: loop.chordOctave,
+    bassOctave: loop.bassOctave,
+    scaleRoot: loop.scaleRoot,
+    scaleType: loop.scaleType,
+    chordRhythmMode: loop.chordRhythmMode,
+    chordRhythmId: loop.chordRhythmId,
+    customChordRhythm: loop.customChordRhythm,
+    customChordHoldSteps: loop.customChordHoldSteps,
+    customChordLoopLength: loop.customChordLoopLength,
+    chordFeel: loop.chordFeel,
+    bassPatternMode: loop.bassPatternMode,
+    bassPatternId: loop.bassPatternId,
+    customBassPattern: loop.customBassPattern,
+    customBassHoldSteps: loop.customBassHoldSteps,
+    customBassLoopLength: loop.customBassLoopLength,
+    bassFeel: loop.bassFeel,
+    chordArpActive: loop.chordArpSettings.active,
+    bassArpActive: loop.bassArpSettings.active,
+  };
 }
 
 export function buildLoopVoices(
@@ -537,82 +399,24 @@ export function buildLoopVoices(
   bpm: number,
   stepsPerBar: number,
 ): LoopVoices {
-  const stepDur = stepDurationSec(bpm);
-  const barDur = barDurationSec(bpm, stepsPerBar);
-  const chordOctave = loop.chordOctave;
-
+  const snapshot = chordSnapshotForLoop(loop, meterId, bpm, stepsPerBar);
   const chordsByBar: number[] = [];
   const chordStartStep: number[] = [];
-  const chordBars: number[] = [];
-  const chordNotes: string[][] = [];
-  const bassNotes: string[][] = [];
-  const chordEvents: BarInvariantEvent[][] = [];
-  const bassEvents: BarInvariantEvent[][] = [];
-  const chordHoldSec: number[] = [];
-  const bassHoldNotes: ({ noteName: string; velocity: number } | null)[] = [];
-  const bassHoldSec: number[] = [];
-
-  const chordArp = loop.chordArpSettings.active;
-  const bassArp = loop.bassArpSettings.active;
-
-  const { chordCycle, bassCycle } = resolveLoopCycles(loop, meterId, stepsPerBar);
-  // The cycle wrappers are PRESET-only for the full-hold fast path, so a
-  // custom span covering the whole cycle stays a per-step span here exactly as
-  // it does live.
-  const chordFullHold = !chordArp && isFullHoldRhythmCycle(chordCycle);
-  const bassFullHold = !bassArp && isFullHoldBassCycle(bassCycle);
-
-  // Feel may only TIGHTEN a span the user drew, so a custom cycle picks the
-  // scale — the same rule the live lane follows.
-  const chordHoldScale = cycleHoldScale(chordCycle.custom, loop.chordFeel);
-  const bassHoldScale = cycleHoldScale(bassCycle.custom, loop.bassFeel);
+  const plans: ArmedChordPlan[] = [];
 
   let barCursor = 0;
   for (let i = 0; i < loop.chords.length; i += 1) {
-    const chord = loop.chords[i];
-    const bars = Math.max(1, chord.bars || 1);
-    const notes = generateBlockChordNotes(chord.quality, chord.root, chordOctave);
-    const bassChordNotes = generateBlockChordNotes(chord.quality, chord.root, loop.bassOctave);
-
-    chordStartStep.push(barCursor * stepsPerBar);
-    chordBars.push(bars);
-    chordNotes.push(notes);
-    bassNotes.push(bassChordNotes);
+    const bars = Math.max(1, loop.chords[i].bars || 1);
+    const startStep = barCursor * stepsPerBar;
+    chordStartStep.push(startStep);
     for (let b = 0; b < bars; b += 1) chordsByBar.push(i);
     barCursor += bars;
-
-    chordEvents.push(
-      chordFullHold || chordArp
-        ? []
-        : buildChordEvents(chordCycle.pattern, notes, stepDur, chordHoldScale),
-    );
-
-    bassEvents.push(
-      bassEventsForChord(loop, bassCycle.pattern, i, bpm, bassHoldScale, bassFullHold || bassArp),
-    );
-
-    chordHoldSec.push(chordFullHold ? fullHoldDuration(bars, barDur, chordHoldScale) : 0);
-    bassHoldNotes.push(fullHoldBassNote(loop, bassCycle.pattern, i, bpm, bassFullHold));
-    bassHoldSec.push(bassFullHold ? fullHoldDuration(bars, barDur, bassHoldScale) : 0);
+    // A pass restarts the progression, so a pass-relative step IS the
+    // progression-relative step live playback measures from its run origin —
+    // which is why the same `startProgressionStep` works for both.
+    plans.push(planChordArm(snapshot, { chordIndex: i, startProgressionStep: startStep }));
   }
-  return {
-    chordsByBar,
-    chordStartStep,
-    chordBars,
-    chordNotes,
-    bassNotes,
-    chordEvents,
-    bassEvents,
-    chordArp,
-    bassArp,
-    chordHoldSec,
-    bassHoldNotes,
-    bassHoldSec,
-    chordHoldScale,
-    bassHoldScale,
-    chordCycleSteps: chordCycle.cycleSteps,
-    bassCycleSteps: bassCycle.cycleSteps,
-  };
+  return { chordsByBar, chordStartStep, plans };
 }
 
 /**
@@ -759,52 +563,54 @@ function scheduleArrangement(
 
       if (!chordless) {
         const chordIndex = voices.chordsByBar[barInPass];
+        const plan = voices.plans[chordIndex];
         const stepsIntoChord = stepInPass - voices.chordStartStep[chordIndex];
-        const chordSteps = voices.chordBars[chordIndex] * stepsPerBar;
+        const chordSteps = plan.totalBars * stepsPerBar;
         const chordEnd = time + (chordSteps - stepsIntoChord) * stepDur;
-        const isLastBar = Math.floor(stepsIntoChord / stepsPerBar) === voices.chordBars[chordIndex] - 1;
-        const chordParams = loop.chordSynthParams;
+        const isLastBar = Math.floor(stepsIntoChord / stepsPerBar) === plan.totalBars - 1;
 
-        // Chord. Full hold arms once, on the chord's own first step; the arp
-        // reads the ABSOLUTE step so it keeps stride across chords and bars;
-        // otherwise the bar-invariant events are filtered to this step.
-        if (voices.chordArp) {
-          emitStepEvents(
-            arpEventsForStep(voices.chordNotes[chordIndex], loop.chordArpSettings, step, stepDur, voices.chordHoldScale, stepsPerBar),
-            chordParams, 'chord', time, chordEnd, engine,
-          );
-        } else if (voices.chordHoldSec[chordIndex] > 0) {
-          if (stepsIntoChord === 0) {
-            playFullHoldChord(voices.chordNotes[chordIndex], chordParams, time, voices.chordHoldSec[chordIndex], 'chord', engine);
-          }
-        } else {
-          emitStepEvents(
-            renderChordEventsAt(voices, chordIndex, stepInPass, isLastBar),
-            chordParams, 'chord', time, chordEnd, engine,
+        // The full holds arm once, on the chord's own first step. Both lanes
+        // report empty events when they hold, so the per-step emit below is a
+        // no-op for them rather than a branch.
+        if (stepsIntoChord === 0 && plan.chordFullHold) {
+          playFullHoldChord(
+            plan.chordFullHold.notes,
+            loop.chordSynthParams,
+            time,
+            plan.chordFullHold.holdSec,
+            'chord',
+            engine,
           );
         }
-
-        // Bass, the same three-way split on its own bus.
-        const bassParams = loop.bassSynthParams;
-        if (voices.bassArp) {
-          emitStepEvents(
-            arpEventsForStep(voices.bassNotes[chordIndex], loop.bassArpSettings, step, stepDur, voices.bassHoldScale, stepsPerBar),
-            bassParams, 'bass', time, chordEnd, engine,
+        if (stepsIntoChord === 0 && plan.bassFullHold) {
+          const voiceId = engine.triggerSynthNoteOn(
+            plan.bassFullHold.noteName, loop.bassSynthParams, plan.bassFullHold.velocity,
+            time, 'bass', 1, 'sequencer',
           );
-        } else if (voices.bassHoldSec[chordIndex] > 0) {
-          const root = voices.bassHoldNotes[chordIndex];
-          if (root && stepsIntoChord === 0) {
-            const voiceId = engine.triggerSynthNoteOn(root.noteName, bassParams, root.velocity, time, 'bass', 1, 'sequencer');
-            if (voiceId) {
-              engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(bassParams), time + voices.bassHoldSec[chordIndex]);
-            }
+          if (voiceId) {
+            engine.triggerSynthNoteOff(
+              voiceId,
+              synthReleaseSeconds(loop.bassSynthParams),
+              time + plan.bassFullHold.holdSec,
+            );
           }
-        } else {
-          emitStepEvents(
-            renderBassEventsAt(voices, chordIndex, stepInPass, isLastBar),
-            bassParams, 'bass', time, chordEnd, engine,
-          );
         }
+
+        // The SAME step decision the live scheduler makes, at the same
+        // progression-relative step.
+        const events = planChordStep(plan, {
+          progressionStep: stepInPass,
+          step,
+          isLastBar,
+          stepsPerBar,
+          stepDurSec: stepDur,
+          chordArp: loop.chordArpSettings,
+          bassArp: loop.bassArpSettings,
+          chordFeel: loop.chordFeel,
+          bassFeel: loop.bassFeel,
+        });
+        emitStepEvents(events.chord, loop.chordSynthParams, 'chord', time, chordEnd, engine);
+        emitStepEvents(events.bass, loop.bassSynthParams, 'bass', time, chordEnd, engine);
 
         // Pad, through the SAME planner the live hook arms with. `chordIndex`
         // carries what `isLoopStart` used to: the pad block only runs at

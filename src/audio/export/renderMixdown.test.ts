@@ -2,12 +2,11 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
 import {
   buildLoopVoices,
+  chordSnapshotForLoop,
   MIXDOWN_SAMPLE_RATE,
   padSnapshotForLoop,
   planArrangement,
   planLoopAudioAutomation,
-  renderBassEventsAt,
-  renderChordEventsAt,
   renderMixdown,
   type MixdownLoop,
   type MixdownRenderProgress,
@@ -24,6 +23,7 @@ import {
 import { AudioEngine, audioEngine } from '../engine';
 import { random } from '../rng';
 import { cycleHoldScale, resolvePlaybackBassCycle, resolvePlaybackRhythmCycle } from '../chordRhythms';
+import { planChordArm, planChordStep } from '../playback/plan/chordPlan';
 import { buildChordEvents, eventsForCycleStep } from '../playback/chordPlayback';
 import { isApproachToken, resolveBassSteps } from '../bassPatterns';
 import { patternStoredIndexAt } from '@/utils/patternTimeline';
@@ -133,38 +133,46 @@ describe('buildLoopVoices', () => {
   test('maps every bar of a pass to the chord that covers it', () => {
     const loop = mixdownLoop({
       chords: [
-        { id: 'a', root: 'C', quality: 'maj', bars: 1 },
-        { id: 'b', root: 'F', quality: 'maj', bars: 3 },
+        { id: 'c1', root: 'C', quality: 'maj', bars: 2 },
+        { id: 'c2', root: 'F', quality: 'maj', bars: 1 },
       ],
     });
     const voices = buildLoopVoices(loop, '4/4', 120, 16);
-    expect(voices.chordsByBar).toEqual([0, 1, 1, 1]);
-    expect(voices.chordStartStep).toEqual([0, 16]);
+    expect(voices.chordsByBar).toEqual([0, 0, 1]);
+    expect(voices.chordStartStep).toEqual([0, 32]);
+    expect(voices.plans).toHaveLength(2);
+    expect(voices.plans[1].startProgressionStep).toBe(32);
   });
 
   test('a full-hold rhythm produces no per-step events, only a hold', () => {
     // 'sustained' is the full-hold chord rhythm, 'whole-note-root' the
     // full-hold bass — both short-written in the fixture above.
-    const voices = buildLoopVoices(mixdownLoop(), '4/4', 120, 16);
-    expect(voices.chordArp).toBe(false);
-    expect(voices.chordEvents[0]).toEqual([]);
-    expect(voices.chordHoldSec[0]).toBeGreaterThan(0);
-    expect(voices.bassHoldNotes[0]).not.toBeNull();
+    const voices = buildLoopVoices(mixdownLoop({ chordRhythmId: 'sustained' }), '4/4', 120, 16);
+    expect(voices.plans[0].chordEvents).toEqual([]);
+    expect(voices.plans[0].chordFullHold?.holdSec).toBeGreaterThan(0);
   });
 
   test('a one-hit rhythm produces per-step events and no hold', () => {
-    // 'offbeatStabs' and 'offbeat-sub' are real, one-hit, non-full-hold ids
-    // (the brief's 'offbeat'/'root-8ths' would have fallen back to the
-    // full-hold library head and asserted the wrong thing).
-    const voices = buildLoopVoices(
-      mixdownLoop({ chordRhythmId: 'offbeatStabs', chordOctave: 4, bassPatternId: 'offbeat-sub' }),
-      '4/4',
-      120,
-      16,
-    );
-    expect(voices.chordHoldSec[0]).toBe(0);
-    expect(voices.chordEvents[0].length).toBeGreaterThan(0);
-    expect(voices.bassHoldNotes[0]).toBeNull();
+    // 'fourOnFloor' is a real, one-hit, non-full-hold chord rhythm id.
+    const voices = buildLoopVoices(mixdownLoop({ chordRhythmId: 'fourOnFloor' }), '4/4', 120, 16);
+    expect(voices.plans[0].chordEvents.length).toBeGreaterThan(0);
+    expect(voices.plans[0].chordFullHold).toBeNull();
+  });
+
+  test('buildLoopVoices is chordSnapshotForLoop + planChordArm, chord by chord', () => {
+    const loop = mixdownLoop({
+      chords: [
+        { id: 'a', root: 'C', quality: 'maj', bars: 1 },
+        { id: 'b', root: 'F', quality: 'maj', bars: 2 },
+      ],
+    });
+    const snapshot = chordSnapshotForLoop(loop, '4/4', 120, 16);
+    const voices = buildLoopVoices(loop, '4/4', 120, 16);
+    voices.plans.forEach((plan, i) => {
+      expect(plan).toEqual(
+        planChordArm(snapshot, { chordIndex: i, startProgressionStep: voices.chordStartStep[i] }),
+      );
+    });
   });
 });
 
@@ -267,14 +275,14 @@ describe('offline rendering consumes the resolved cycles', () => {
 
     // Two bars of a twelve-column bar, and four — the lanes' independent
     // cycles, measured in the meter they are played in.
-    expect(voices.chordCycleSteps).toBe(2 * THREE_FOUR_STEPS);
-    expect(voices.bassCycleSteps).toBe(4 * THREE_FOUR_STEPS);
+    expect(voices.plans[0].chordCycleSteps).toBe(2 * THREE_FOUR_STEPS);
+    expect(voices.plans[0].bassCycleSteps).toBe(4 * THREE_FOUR_STEPS);
 
     // The onsets sit on CYCLE COLUMNS one active bar apart, not on their
     // stored slots (which are one widest bar apart).
-    expect([...new Set(voices.chordEvents[0].map((event) => event.step))]).toEqual([0, 12]);
+    expect([...new Set(voices.plans[0].chordEvents.map((event) => event.step))]).toEqual([0, 12]);
     const bassColumns = [
-      ...new Set(voices.bassEvents.flat().map((event) => event.step)),
+      ...new Set(voices.plans.flatMap((plan) => plan.bassEvents).map((event) => event.step)),
     ].sort((a, b) => a - b);
     expect(bassColumns).toEqual([0, 12, 24, 36]);
 
@@ -282,7 +290,7 @@ describe('offline rendering consumes the resolved cycles', () => {
     // drawn with — not one widest-meter bar, which happens to be the same
     // number of STEPS here and so is only distinguishable through the cycle.
     const barSec = THREE_FOUR_STEPS * stepDurationSec(120);
-    expect(voices.chordEvents[0][0].hold).toBeCloseTo(barSec, 6);
+    expect(voices.plans[0].chordEvents[0].hold).toBeCloseTo(barSec, 6);
 
     // The contrast that proves the numbers above came from the ACTIVE bar
     // length and not from a stored width read as if it were one: in 12/8 a bar
@@ -290,16 +298,16 @@ describe('offline rendering consumes the resolved cycles', () => {
     // very same rows report cycles twice as wide. That degeneracy is why the
     // bug is invisible in the widest meter and only shows up elsewhere.
     const widest = buildLoopVoices(asymmetricCycleLoop(), '12/8', 120, MAX_STEPS_PER_BAR);
-    expect(widest.chordCycleSteps).toBe(2 * MAX_STEPS_PER_BAR);
-    expect(widest.bassCycleSteps).toBe(4 * MAX_STEPS_PER_BAR);
+    expect(widest.plans[0].chordCycleSteps).toBe(2 * MAX_STEPS_PER_BAR);
+    expect(widest.plans[0].bassCycleSteps).toBe(4 * MAX_STEPS_PER_BAR);
   });
 
   test('a custom two-bar cycle reaches its second bar', () => {
     const voices = buildLoopVoices(customCycleLoop(), '4/4', 120, 16);
-    expect(voices.chordCycleSteps).toBe(32);
-    expect(voices.bassCycleSteps).toBe(32);
+    expect(voices.plans[0].chordCycleSteps).toBe(32);
+    expect(voices.plans[0].bassCycleSteps).toBe(32);
     // Column 20 is bar two of the cycle; a one-bar resolution drops it.
-    expect(voices.chordEvents[0].map((e) => e.step)).toContain(20);
+    expect(voices.plans[0].chordEvents.map((e) => e.step)).toContain(20);
   });
 
   test('render and live produce identical Chord/Bass events at every step', () => {
@@ -337,10 +345,22 @@ describe('offline rendering consumes the resolved cycles', () => {
       return eventsForCycleStep(events, step, bassCycle.cycleSteps, true);
     };
 
+    const offline = (step: number) =>
+      planChordStep(voices.plans[chordIndexAt(step)], {
+        progressionStep: step,
+        step,
+        isLastBar: true,
+        stepsPerBar: 16,
+        stepDurSec: STEP_DUR,
+        chordArp: loop.chordArpSettings,
+        bassArp: loop.bassArpSettings,
+        chordFeel: loop.chordFeel,
+        bassFeel: loop.bassFeel,
+      });
+
     for (const step of [0, 15, 16, 20, 31, 32, 47]) {
-      const i = chordIndexAt(step);
-      expect(renderChordEventsAt(voices, i, step, true), `chord ${step}`).toEqual(liveChord(step));
-      expect(renderBassEventsAt(voices, i, step, true), `bass ${step}`).toEqual(liveBass(step));
+      expect(offline(step).chord, `chord ${step}`).toEqual(liveChord(step));
+      expect(offline(step).bass, `bass ${step}`).toEqual(liveBass(step));
     }
   });
 });
