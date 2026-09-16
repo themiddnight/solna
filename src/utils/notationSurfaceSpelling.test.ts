@@ -11,7 +11,12 @@ const REPRESENTATIVE_KEYS: { label: string; key: SpellingKey }[] = [
   { label: 'E Harmonic Minor', key: { scaleRoot: 'E', scaleType: 'Harmonic Minor' } },
 ];
 
-describe('every notation surface spells a pitch class identically, whatever entry point it calls', () => {
+// This proves the two pure spelling entry points converge on the same
+// spelling for the same pitch class + key. It does NOT prove any rendered
+// component displays that spelling correctly: this repo has no DOM/
+// testing-library (see .claude/rules/testing.md), so no rendered surface is
+// asserted against here — only the two functions those surfaces call.
+describe('the two spelling entry points (spellChordRoot/formatChordLabel and spellNoteInKey) never diverge for the same pitch class', () => {
   for (const { label, key } of REPRESENTATIVE_KEYS) {
     test(`${label}: a chord root and a bare note at the same pitch class agree`, () => {
       for (const root of ROOTS) {
