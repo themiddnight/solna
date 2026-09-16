@@ -660,6 +660,57 @@ in `App.tsx`. The `AudioContext` is created on the first user click, after which
 `applyEngineSnapshot()` re-applies the whole persisted audio state. **Never call engine setters
 from a component** — add the state to a slice and wire it in `engineSync.ts`.
 
+**Playback is PLANNED, then PERFORMED, and the planner half is pure.**
+`src/audio/playback/plan/` holds one planner per lane — `padPlan.ts`, `chordPlan.ts` (chord and
+bass, armed together) and `melodyPlan.ts` (Lead and FX, one implementation through
+`MELODY_TRACKS`). A planner takes an immutable snapshot plus an explicit per-step context and
+returns RESOLVED PLAYABLE EVENTS — note identity, timing, hold, velocity — and it reads no store,
+calls no engine setter, opens no `AudioContext`, reads no wall clock and arms no timer. That is an
+ESLint block scoped to the folder, not a convention: `src/architecture/playbackPlannerPurity.test.ts`
+is the committed proof that the block is armed, and it asserts SEVERITY, because `verify` tolerates
+warnings. Everything else — the clock subscription, the arming state, the full-hold strikes, the
+note-ons — is the CONTROLLER's (`useChordPlayback.ts`, `useLeadPlayback.ts`, and
+`renderMixdown.ts` offline).
+
+**There are FOUR snapshots, not one, and that is forced rather than chosen.** Every lane has its
+own arm-time/emit-time split: chord and bass fix their cycle, their notes and the arp's ACTIVE
+flag when a chord is armed, but read both synth patches, both Arp SETTINGS objects and both feel
+values live on every step — which is exactly what makes a knob tweak audible on the next hit
+instead of the next chord. Pad is arm-time only; melody is emit-time only. One unified
+`PlaybackSnapshot` would freeze the emit-time half of three lanes to kill one type. So the
+SNAPSHOT is arm-time immutable and the CONTEXT is the live read, passed in per step.
+
+**The snapshot is built in two places and the planner is called from both.**
+`src/store/playbackPlanSnapshots.ts` builds the live ones — taking `AppStore` as an ARGUMENT, never
+calling `useAppStore.getState()` itself, so the singleton never leaves the controller — and
+`src/audio/export/renderMixdown.ts` builds the offline twins from a `MixdownLoop`. Live/offline
+equivalence is therefore a deep-equality assertion on two snapshots plus one on the planner's
+output, not a comparison of two schedulers; the melody lane's hand-transcribed offline copy is
+gone, which is what that duplication used to cost. A new lane field belongs in BOTH builders or in
+neither.
+
+**A planner's second parameter is always a single context object, never bare positional
+scalars.** Every `plan<Lane>*` function follows this — `planPadArm(snapshot, { chordIndex })`,
+`planChordArm`/`planChordLane`/`planBassLane`/`planChordStep`, `planMelodyStep(snapshot, {
+stepInLoop, stepsPerBar, tickDurSec })` — so a later per-call addition is a shape change to
+`context`, never a signature change every call site must follow in argument order. This held
+clean through every lane this plan migrated, and it is the contract DEV-399 (the next epic,
+narrowing the engine's own input to resolved playable events) will build directly on. Output
+shape follows the same restraint rather than a blanket rule: a result read only where it is
+returned stays an inline anonymous type (`planPadArm`'s `{ notes, holdSec } | null`,
+`planChordStep`'s `{ chord, bass }`), and a result that already crosses a call boundary is named
+and exported — `ArmedChordPlan` is what `planChordArm` hands to `planChordStep` a step later,
+`PadPlanSnapshot`/`ChordPlanSnapshot`/`MelodyPlanSnapshot` are what both snapshot builders and
+both planners share. `PlannedMelodyNote` is the middle case: named for readability inside
+`melodyPlan.ts`, but not exported, because nothing outside the file currently needs to spell it —
+a type is exported when a second file needs its name, not in advance of one. One nuance worth
+recording rather than re-discovering: `planChordStep`'s arp branch uses `feelToHoldScale`, not
+`cycleHoldScale` — "feel may only tighten" is a rule about a span the user drew, and an arp has
+none — but `arpEventsForStep` itself clamps its `hold` output with `Math.min(1, holdScale)`, so
+the two are behaviorally indistinguishable at every feel value today. Live and offline arp holds
+were therefore never actually divergent; what this plan originally expected to find and converge
+as a live/offline difference turned out, on inspection, to be a difference that never existed.
+
 **A meter reads samples, not a spectrum, and it reads them before the dynamics.** Level is peak
 and windowed RMS computed from `getFloatTimeDomainData` and reported in dBFS (`src/utils/`:
 `gainUnits.ts`, `meterZones.ts`, `meterScale.ts`, `meterLevel.ts`; a zone's colour comes from

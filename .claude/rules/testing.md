@@ -51,6 +51,11 @@ form here, so assert on the recorded events instead of on a computed value.
 A test that asserts only what is in a table belongs in `src/data/`; a test that asserts the
 result of a lookup, merge or derivation belongs in `src/audio/`.
 
+A test of a planner (`src/audio/playback/plan/`) needs no DOM, no zustand singleton and no
+`AudioContext` — construct the snapshot as a plain object and assert on the returned events. If a
+planner test reaches for any of those three, the planner has grown a dependency the ESLint block
+in `eslint.config.js` is supposed to forbid; fix the planner, not the test.
+
 ## Invariant scripts
 
 Two scripts import straight from source and must keep passing:
