@@ -7,8 +7,8 @@ import type { ChordQuality } from '@/musicCore';
  * each vibe's inline chords with `progressionId` + `resolveProgression`. That
  * migration is long done; this fixture's ongoing job is to pin the resolved
  * output so `instantVibesProgressions.test.ts` fails loudly if a library
- * entry (CHORD_PROGRESSIONS) or a vibe's `progressionId`/key/scale/octave
- * changes the sound. Deliberately duplicates the id/root/quality/bars/octave
+ * entry (CHORD_PROGRESSIONS) or a vibe's `progressionId`/key/scale
+ * changes the sound. Deliberately duplicates the id/root/quality/bars
  * literals that used to live in `instantVibes.ts` (via a local
  * `snapshotChord`, not an import of anything from that file or the library)
  * so this fixture cannot silently track a later change to the vibes or the
