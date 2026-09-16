@@ -53,10 +53,17 @@ export function leadPitchRows(
 
 /**
  * A row name's absolute semitone: the key the merged list sorts by, and the
- * measure a borrowed row is bounded against. Rows are ROOTS-spelled by
- * contract (see leadRowLabel), so the pitch class is a plain ROOTS index;
- * anything that is not parses to NaN and is dropped rather than sorted to an
- * arbitrary position.
+ * measure a borrowed row is bounded against. This delegates to Music Core's
+ * `noteMidi` (Tonal-MIDI-based, not a ROOTS array index), so it is NaN and
+ * dropped for a note Tonal cannot parse at all, but NOT for every
+ * non-ROOTS-spelled input: rows are ROOTS-spelled by contract (see
+ * leadRowLabel) and the grid's own row generation is bounded to octave 1-8,
+ * but `noteMidi` can still resolve a flat-spelled or lowercase name Tonal
+ * accepts, which only reaches this function through unvalidated persisted
+ * `LeadNote.note` data. `noteMidi` also returns `null` (here, NaN) outside
+ * MIDI range 0..127, so an out-of-range octave like `G#9` is dropped too —
+ * a case the old regex-based parsing did not reject, since it had no range
+ * check of its own.
  */
 function noteSemitone(note: string): number {
   return noteMidi(note) ?? Number.NaN;

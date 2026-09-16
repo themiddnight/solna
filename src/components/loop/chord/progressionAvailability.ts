@@ -1,5 +1,5 @@
 import type { ChordProgression } from '@/data/chordProgressions';
-import { SCALES } from '@/data/scales';
+import { scaleEntry } from '@/musicCore';
 
 /**
  * A progression is only offered in a scale that has at least as many degrees
@@ -7,12 +7,12 @@ import { SCALES } from '@/data/scales';
  * resolved with wrapped degrees, which would silently produce a different
  * progression.
  *
- * An unknown scaleType is treated as seven degrees, matching SCALES' own
- * `|| SCALES['Major']` fallback.
+ * An unknown scaleType resolves to Major (seven degrees) via `@/musicCore`'s
+ * `scaleEntry`, the one place that fallback is decided.
  *
  * Lives in its own module so ChordView can import it without pulling the
  * lazily-loaded ChordPresetLibrary back into the main chunk.
  */
 export function isProgressionAvailable(p: ChordProgression, scaleType: string): boolean {
-  return (SCALES[scaleType]?.intervals.length ?? 7) >= p.minScaleLength;
+  return scaleEntry(scaleType).intervals.length >= p.minScaleLength;
 }

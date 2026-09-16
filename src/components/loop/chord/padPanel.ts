@@ -1,4 +1,4 @@
-import { SCALES } from '@/data/scales';
+import { scaleEntry } from '@/musicCore';
 import { getDiatonicChordForDegree } from '@/utils/musicTheory';
 import type { CategoryPresetGroup } from '@/utils/synthPresets';
 
@@ -16,7 +16,7 @@ export function droneDegreeButtons(
   scaleType: string,
   selected: number,
 ): { index: number; label: string; active: boolean }[] {
-  const scale = SCALES[scaleType] ?? SCALES.Major;
+  const scale = scaleEntry(scaleType);
   const length = scale.intervals.length;
   const activeIndex = ((selected % length) + length) % length;
   return Array.from({ length }, (_, index) => ({
