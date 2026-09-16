@@ -36,6 +36,24 @@ const TAPER_CONVERSION_BAN = {
     'Only src/components/ui/VolumeFader.tsx converts a slider position <-> dB (DEV-386); import a dB value/handler instead.',
 };
 
+// DEV-395: confines `tonal` to the current, explicit allowlist of production
+// call sites until DEV-394 consolidates them behind a single Music Core /
+// Tonal adapter — see
+// docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md.
+// `paths` (not `patterns`) is used because this bans one exact bare package
+// specifier, not a glob over path shapes — there is no `tonal/subpath` in use
+// anywhere in this repo to accidentally miss or over-match.
+// Same replace-not-merge trap as TAPER_CONVERSION_BAN: this is spread into
+// every block that already owns a `no-restricted-imports` entry for a folder
+// none of today's six importers live in, and each of the six gets its own
+// carve-out block (mirroring VolumeFader.tsx's existing carve-out) that keeps
+// every OTHER ban for that file but omits this one.
+const TONAL_IMPORT_BAN = {
+  name: 'tonal',
+  message:
+    "DEV-395: 'tonal' is confined to today's allowlisted call sites until DEV-394 builds the Music Core/Tonal adapter — see docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md.",
+};
+
 // The two bans that must reach EVERY file: React.FC (decision D1) and the
 // `../../` deep-relative-import ban (decision D2). `no-restricted-syntax` is
 // not additive — a config block that sets it REPLACES this entry for the files
@@ -149,7 +167,39 @@ export default tseslint.config(
   },
   {
     // Layering rule 1: audio/ never imports store/ or components/.
+    // DEV-395 excludes today's three tonal-importing files here (they keep
+    // every other ban via their own carve-out block right below) and adds
+    // the tonal ban for every other file under src/audio/.
     files: ['src/audio/**/*.{ts,tsx}'],
+    ignores: [
+      'src/audio/arpeggiator.ts',
+      'src/audio/bassPatterns.ts',
+      'src/audio/playback/padPlayback.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [TONAL_IMPORT_BAN],
+          patterns: [
+            { group: ['**/store/**'], message: 'audio/ must not import store/ (layering rule 1)' },
+            { group: ['**/components/**'], message: 'audio/ must not import components/ (layering rule 1)' },
+            TAPER_CONVERSION_BAN,
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // DEV-395 carve-out: today's three tonal-importing files under src/audio/.
+    // Same layering-rule-1 bans as the block above, minus the tonal ban —
+    // DEV-394 removes this block entirely once these files no longer import
+    // tonal directly.
+    files: [
+      'src/audio/arpeggiator.ts',
+      'src/audio/bassPatterns.ts',
+      'src/audio/playback/padPlayback.ts',
+    ],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -217,7 +267,30 @@ export default tseslint.config(
   },
   {
     // Layering rule 2: store/ must not import components/.
+    // DEV-395 excludes src/store/midiInput.ts here (it keeps the components
+    // ban via its own carve-out block right below) and adds the tonal ban
+    // for every other file under src/store/.
     files: ['src/store/**/*.{ts,tsx}'],
+    ignores: ['src/store/midiInput.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [TONAL_IMPORT_BAN],
+          patterns: [
+            { group: ['**/components/**'], message: 'store/ must not import components/ (layering rule 2)' },
+            TAPER_CONVERSION_BAN,
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // DEV-395 carve-out: today's one tonal-importing file under src/store/.
+    // Same layering-rule-2 ban as the block above, minus the tonal ban —
+    // DEV-394 removes this block once this file no longer imports tonal
+    // directly.
+    files: ['src/store/midiInput.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -249,6 +322,7 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
+          paths: [TONAL_IMPORT_BAN],
           patterns: [
             { group: ['**/audio/engine'], message: 'components must not import audio/engine (layering rule 3)' },
             TAPER_CONVERSION_BAN,
@@ -260,12 +334,14 @@ export default tseslint.config(
   {
     // VolumeFader.tsx: the one exception to the taper ban above, and the
     // reason it needs its own block rather than an `ignores` entry with no
-    // replacement — it must keep layering rule 3's audio/engine ban.
+    // replacement — it must keep layering rule 3's audio/engine ban and
+    // DEV-395's tonal ban.
     files: ['src/components/ui/VolumeFader.tsx'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
+          paths: [TONAL_IMPORT_BAN],
           patterns: [
             { group: ['**/audio/engine'], message: 'components must not import audio/engine (layering rule 3)' },
           ],
@@ -277,14 +353,29 @@ export default tseslint.config(
     // Everything else that can import `gainUnits` but is not already covered
     // by one of the layering blocks above (which each carry their own copy
     // of TAPER_CONVERSION_BAN) or by src/data/ (banned from importing any
-    // value at all, taper functions included, by its own block below).
+    // value at all, taper functions and tonal alike, by its own block below).
+    // DEV-395 excludes the two remaining tonal-importing files here (they
+    // keep the taper ban via their own carve-out block right below) and adds
+    // the tonal ban for every other file this block reaches.
     files: ['src/**/*.{ts,tsx}'],
     ignores: [
       'src/audio/**/*.{ts,tsx}',
       'src/store/**/*.{ts,tsx}',
       'src/components/**/*.{ts,tsx}',
       'src/data/**/*.{ts,tsx}',
+      'src/utils/noteSpelling.ts',
+      'src/utils/musicTheory.ts',
     ],
+    rules: {
+      'no-restricted-imports': ['error', { paths: [TONAL_IMPORT_BAN], patterns: [TAPER_CONVERSION_BAN] }],
+    },
+  },
+  {
+    // DEV-395 carve-out: the two remaining tonal-importing files, both under
+    // src/utils/. Same taper ban as the block above, minus the tonal ban —
+    // DEV-394 removes this block once these files no longer import tonal
+    // directly.
+    files: ['src/utils/noteSpelling.ts', 'src/utils/musicTheory.ts'],
     rules: {
       'no-restricted-imports': ['error', { patterns: [TAPER_CONVERSION_BAN] }],
     },
