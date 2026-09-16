@@ -1,6 +1,5 @@
-import { chromaOfNote, midiToFlatName, midiToSharpName, noteMidi, pitchClassOfNote, scaleNotesForTonal } from '@/musicCore';
+import { chromaOfNote, midiToFlatName, midiToSharpName, noteMidi, pitchClassOfNote, scaleEntry, scaleNotesForTonal } from '@/musicCore';
 import { SCALES } from '@/data/scales';
-import { scaleEntry } from './scaleLookup';
 
 /**
  * How a key is WRITTEN, as opposed to which pitches it contains.
@@ -11,8 +10,8 @@ import { scaleEntry } from './scaleLookup';
  * (scaleRoot, scaleType), at render time. Nothing spelled is ever persisted,
  * which is why this change needs no persist-version and no .solna format bump.
  *
- * This module imports `@/musicCore`, `@/data/scales` and `./scaleLookup` — leaves,
- * all three — and NOTHING ELSE. That is deliberate: musicTheory.ts imports
+ * This module imports `@/musicCore` and `@/data/scales` — leaves,
+ * both — and NOTHING ELSE. That is deliberate: musicTheory.ts imports
  * this file (formatChordLabel's key parameter), so importing musicTheory back
  * would make the cycle load-bearing at module-evaluation time. The `tonality`
  * field lives on the SCALES entry precisely so that never has to happen, and

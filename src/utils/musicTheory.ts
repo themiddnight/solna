@@ -7,6 +7,8 @@ import {
   midiToSharpName,
   noteMidi,
   resolveChordNotes,
+  resolveScaleKey,
+  scaleEntry,
   scaleNotesForTonal,
   transposeByInterval,
   type ChordQuality,
@@ -21,7 +23,6 @@ import { METERS } from './meter';
 // compile and is what keeps every data file an independent leaf.
 import { SCALES } from '@/data/scales';
 import { spellPitchClassInKey, type SpellingKey } from './noteSpelling';
-import { resolveScaleKey, scaleEntry } from './scaleLookup';
 
 // Backward-compatible re-exports: these three names are now owned by Music
 // Core's chord-quality registry (src/musicCore/chordQuality.ts) — kept under

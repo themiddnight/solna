@@ -35,3 +35,5 @@ export {
   resolveChordNotes,
 } from './chordQuality';
 export type { ChordQuality } from './chordQuality';
+
+export { resolveScaleKey, scaleEntry } from './scale';
