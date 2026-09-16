@@ -109,3 +109,11 @@ describe('SortableChordCard spelling', () => {
     expect(html).not.toContain('Eb');
   });
 });
+
+describe('SortableChordCard quality options', () => {
+  test('offers every registered quality, including the ones the pre-DEV-394 picker dropped', () => {
+    const html = render(false);
+    expect(html).toContain('value="minMaj7"');
+    expect(html).toContain('value="maj7#5"');
+  });
+});

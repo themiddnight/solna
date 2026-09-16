@@ -6,6 +6,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChordItem } from "@/types";
 import { ROOTS, formatChordQuality, spellChordRoot } from "@/utils/musicTheory";
+import { CHORD_QUALITY_GROUPS, type ChordQuality } from "@/musicCore";
 import { spellNoteInKey } from "@/utils/noteSpelling";
 import { BEATS_PER_BAR } from "@/utils/playhead";
 import { BeatDots } from "@/components/ui/BeatDots";
@@ -46,53 +47,6 @@ interface SpellingKey {
   scaleRoot: string;
   scaleType: string;
 }
-
-/**
- * The quality dropdown's option groups, as data rather than markup.
- *
- * The list is closed — `ChordItem['quality']` is a union — and it was 24
- * hand-written `<option>` lines in the middle of the card's JSX, which is what
- * pushed the component past the function limit. As a table it is one line per
- * chord and adding one is an edit to a list a reviewer can read end to end.
- */
-const QUALITY_GROUPS: {
-  label: string;
-  options: { value: ChordItem['quality']; label: string }[];
-}[] = [
-  {
-    label: "Triads",
-    options: [
-      { value: "maj", label: "Major (maj)" },
-      { value: "min", label: "Minor (min)" },
-      { value: "dim", label: "Diminished (dim)" },
-      { value: "aug", label: "Augmented (aug)" },
-      { value: "sus2", label: "Sus 2" },
-      { value: "sus4", label: "Sus 4" },
-    ],
-  },
-  {
-    label: "7th Chords",
-    options: [
-      { value: "maj7", label: "Major 7th (maj7)" },
-      { value: "min7", label: "Minor 7th (min7)" },
-      { value: "7", label: "Dominant 7th (7)" },
-      { value: "m7b5", label: "Half-Dim (m7b5)" },
-      { value: "dim7", label: "Diminished 7th (dim7)" },
-      { value: "7sus4", label: "7 Sus 4" },
-    ],
-  },
-  {
-    label: "Extensions & Additions",
-    options: [
-      { value: "9", label: "Dominant 9th (9)" },
-      { value: "maj9", label: "Major 9th (maj9)" },
-      { value: "min9", label: "Minor 9th (min9)" },
-      { value: "add9", label: "Add 9" },
-      { value: "6", label: "Major 6th (6)" },
-      { value: "min6", label: "Minor 6th (min6)" },
-    ],
-  },
-];
 
 /**
  * The card's top band: the drag handle, the bar it starts on, and the reorder
@@ -267,10 +221,10 @@ function ChordEditControls({
         <select
           id={`select-chord-quality-${chord.id}`}
           value={chord.quality}
-          onChange={(e) => updateChord(chord.id, { quality: e.target.value as ChordItem['quality'] })}
+          onChange={(e) => updateChord(chord.id, { quality: e.target.value as ChordQuality })}
           className="select select-xs w-full"
         >
-          {QUALITY_GROUPS.map((group) => (
+          {CHORD_QUALITY_GROUPS.map((group) => (
             <optgroup key={group.label} label={group.label}>
               {group.options.map((option) => (
                 <option key={option.value} value={option.value}>
