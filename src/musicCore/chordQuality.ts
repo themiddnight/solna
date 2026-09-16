@@ -4,27 +4,13 @@ import { intervalSemitones, noteMidi, resolveTonalChord } from './tonalAdapter';
 export const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 
 /**
- * The chord FAMILY a quality belongs to — a shape axis, not a policy.
- *
- * Each member names the kind of chord the quality is: a plain triad, a plain
- * seventh, a 6th, an added tone, an upper extension, a suspension, a
- * diminished/half-diminished shape, or an altered chord (aug, minMaj7,
- * maj7#5). It states nothing about what should HAPPEN to that chord when a
- * progression is snapped to a new key — deliberately. Which families
- * `snapProgressionToScale` regenerates from the target scale's own diatonic
- * chord and which it preserves verbatim is DEV-393's decision, and DEV-393
- * has not started; today that behaviour is a hardcoded list inside
- * `src/utils/musicTheory.ts` that reads none of this.
- *
- * Note for whoever picks DEV-393 up: family does NOT line up with
- * regenerability in the obvious way. The eleven qualities
- * `resolveDegreeQuality` derives — the most regenerable chords in the app,
- * since the scale itself produces them — include every `dim`, `aug`, `dim7`,
- * `m7b5`, `minMaj7` and `maj7#5`, which sit under
- * `diminished-half-diminished` and `altered` here. Treating either of those
- * families as "preserve verbatim" would freeze chords the scale can
- * regenerate perfectly well. This issue only assigns the family; it wires
- * nothing to read it.
+ * The chord FAMILY a quality belongs to — a shape axis, not a policy by
+ * itself. `shouldPreserveQualityOnSnap` below is the policy derived from it:
+ * see that function's docblock for which families preserve a quality through
+ * a scale snap and which regenerate the landing degree's own version, and why
+ * the split does not track family names the way it looks like it should
+ * (`diminished-half-diminished` and `altered` both REGENERATE, because
+ * `resolveDegreeQuality` can itself emit every member of both).
  */
 type ReharmonizationCategory =
   | 'triad'
@@ -48,10 +34,10 @@ export interface ChordQualityEntry {
   /** The chord picker's `<optgroup>` label; option order within a group follows registry order. */
   pickerGroup: 'Triads' | '7th Chords' | 'Extensions & Additions';
   /**
-   * The chord family this quality belongs to — data DEV-393 will read, acted
-   * on by nothing today. The union is intentionally not exported: until a
-   * consumer exists, `ChordQualityEntry` is the only thing that needs to name
-   * it, and an exported type with no reader is dead surface.
+   * The chord family this quality belongs to. Read by
+   * `shouldPreserveQualityOnSnap` below, this registry's only consumer of the
+   * raw category — `ReharmonizationCategory` itself stays unexported, since
+   * nothing outside this file needs the category, only the derived boolean.
    */
   reharmonizationCategory: ReharmonizationCategory;
 }
@@ -123,6 +109,50 @@ export function isChordQuality(value: string): value is ChordQuality {
 /** The registry entry for `quality`, or `undefined` if it names no registered quality. */
 export function getChordQualityEntry(quality: string): ChordQualityEntry | undefined {
   return registryByLowercaseToken.get(quality.toLowerCase());
+}
+
+/**
+ * The four categories a snap preserves verbatim rather than regenerating —
+ * see shouldPreserveQualityOnSnap for why this specific split.
+ */
+const SNAP_PRESERVED_CATEGORIES: ReadonlySet<ReharmonizationCategory> = new Set([
+  'sixth',
+  'added-tone',
+  'extension',
+  'suspended',
+]);
+
+/**
+ * Whether `snapProgressionToScale` (src/utils/musicTheory.ts) should keep `quality`
+ * verbatim on a scale snap rather than regenerating the landing degree's own
+ * diatonic quality.
+ *
+ * The split is read off `resolveDegreeQuality`'s ACTUAL output set, not off
+ * family names by feel: `triad`, `seventh`, `diminished-half-diminished` and
+ * `altered` are exactly the four families whose members `resolveDegreeQuality`
+ * (src/utils/musicTheory.ts) can itself emit at some degree of some scale — a
+ * snap regenerating one of them asks the target key for its OWN version of the
+ * same shape, e.g. a min7 ii moved into a new key becomes that key's own ii7,
+ * not a frozen min7. `sixth`, `added-tone`, `extension` and `suspended` name
+ * colour no interval tuple in that function's tables ever resolves to — there
+ * is no diatonic 6th, add9, extension or sus chord to regenerate TO at any
+ * degree of any scale — so a snap keeps the quality the user picked and only
+ * moves its root. This is why `dim`, `aug`, `dim7`, `m7b5`, `minMaj7` and
+ * `maj7#5` all REGENERATE despite sounding like the more "special" qualities:
+ * the scale itself produces every one of them at the right degree, and
+ * freezing them would mean freezing chords the key change already has a
+ * correct diatonic answer for.
+ *
+ * Throws for an unregistered quality, same "stop, don't guess" contract as
+ * `resolveChordNotes` above — a caller holding a quality from outside this
+ * module must validate or sanitize it first.
+ */
+export function shouldPreserveQualityOnSnap(quality: ChordQuality): boolean {
+  const entry = getChordQualityEntry(quality);
+  if (!entry) {
+    throw new Error(`Unregistered chord quality: "${quality}"`);
+  }
+  return SNAP_PRESERVED_CATEGORIES.has(entry.reharmonizationCategory);
 }
 
 /** Display suffix for a chord quality token, e.g. 'maj' -> '', 'min7' -> 'm7'. An unregistered token echoes itself, same contract as the pre-DEV-394 `CHORD_QUALITY_LABELS` lookup. */
