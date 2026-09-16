@@ -954,11 +954,12 @@ describe('live and offline chord+bass planning are the same computation', () => 
     // `Math.min(1, holdScale)` clamp (see `ChordPlanSnapshot`'s docblock in
     // chordPlan.ts), and both the live and offline plans here call the exact
     // same shared `planChordStep`, so this test is structurally incapable of
-    // distinguishing the two forms even if they did disagree. It is kept as a
-    // general live/offline equality check over an arp on a CUSTOM lane, one
-    // shape this file's other fixtures (preset lanes, feel pinned at 0.5)
-    // don't cover — not because feel is pinned above 0.5 for any behavioral
-    // reason.
+    // distinguishing the two forms even if they did disagree. The shape
+    // itself (arp + custom lane + non-neutral feel) is also already covered
+    // by the "diverge on every field" case above, swept across every step of
+    // every chord; this narrower, single-assertion test is kept only because
+    // it names the specific claim ("same hold length") directly, which is
+    // easier to spot failing than one field inside a larger `toEqual`.
     const over = {
       chordRhythmMode: 'custom' as const, customChordLoopLength: 2, chordFeel: 0.9,
       chordArpSettings: { active: true, mode: 'up' as const, rate: '8n' as const, octaves: 2 },
