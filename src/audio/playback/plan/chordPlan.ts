@@ -1,9 +1,11 @@
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { ChordItem } from '@/types';
 import type { MeterId } from '@/utils/meter';
+import type { ArpSettings } from '@/types/synth';
 import { barDurationSec, generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
 import {
   cycleHoldScale,
+  feelToHoldScale,
   fullHoldDuration,
   isFullHoldBassCycle,
   isFullHoldRhythmCycle,
@@ -11,7 +13,13 @@ import {
   resolvePlaybackRhythmCycle,
 } from '@/audio/chordRhythms';
 import { isApproachToken, resolveBassSteps } from '@/audio/bassPatterns';
-import { buildChordEvents, type BarInvariantEvent } from '../chordPlayback';
+import {
+  arpEventsForStep,
+  buildChordEvents,
+  eventsForCycleStep,
+  type BarInvariantEvent,
+  type StepEvent,
+} from '../chordPlayback';
 
 /**
  * Everything the chord and bass lanes read when a chord is ARMED.
@@ -304,5 +312,65 @@ export function planChordArm(
     bassCycleSteps: bassLane.cycleSteps,
     chordFullHold: chordLane.fullHold,
     bassFullHold: bassLane.fullHold,
+  };
+}
+
+/**
+ * The events this step's chord and bass lanes fire — the decision only. The
+ * controller turns them into note-ons.
+ *
+ * The context is the EMIT-time half of the seam and every field in it is read
+ * LIVE by the caller on this very step: the two Arp settings objects and the
+ * two feel values. That is what makes a timbre or feel tweak audible on the
+ * next hit instead of the next chord, and it is why they are arguments rather
+ * than snapshot fields.
+ *
+ * `progressionStep` is folded onto each lane's OWN cycle width, so a two-bar
+ * chord cycle and a three-bar bass cycle advance independently from one number.
+ * Both folds are `eventsForCycleStep`'s — a second copy of the seam rule here
+ * is exactly how a preview and the transport come to disagree about where a
+ * cycle starts. `step` stays ABSOLUTE for the arp, which keeps its stride
+ * across chords and bar lines rather than restarting on every one.
+ *
+ * The arp's hold scale is `feelToHoldScale`, NOT `cycleHoldScale`: "feel may
+ * only tighten" is a rule about a span the USER DREW, and an arp has none. The
+ * offline renderer used the clamped form and so held arp notes shorter than the
+ * live player on a custom lane; Task 11 pins that they now agree.
+ */
+export function planChordStep(
+  plan: ArmedChordPlan,
+  ctx: {
+    progressionStep: number;
+    step: number;
+    isLastBar: boolean;
+    stepsPerBar: number;
+    stepDurSec: number;
+    chordArp: ArpSettings;
+    bassArp: ArpSettings;
+    chordFeel: number;
+    bassFeel: number;
+  },
+): { chord: StepEvent[]; bass: StepEvent[] } {
+  return {
+    chord: plan.chordArp
+      ? arpEventsForStep(
+          plan.chordNotes,
+          ctx.chordArp,
+          ctx.step,
+          ctx.stepDurSec,
+          feelToHoldScale(ctx.chordFeel),
+          ctx.stepsPerBar,
+        )
+      : eventsForCycleStep(plan.chordEvents, ctx.progressionStep, plan.chordCycleSteps, ctx.isLastBar),
+    bass: plan.bassArp
+      ? arpEventsForStep(
+          plan.bassNotes,
+          ctx.bassArp,
+          ctx.step,
+          ctx.stepDurSec,
+          feelToHoldScale(ctx.bassFeel),
+          ctx.stepsPerBar,
+        )
+      : eventsForCycleStep(plan.bassEvents, ctx.progressionStep, plan.bassCycleSteps, ctx.isLastBar),
   };
 }

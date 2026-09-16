@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { planBassLane, planChordArm, planChordLane, type ChordPlanSnapshot } from './chordPlan';
-import { buildChordEvents } from '../chordPlayback';
+import {
+  planBassLane,
+  planChordArm,
+  planChordLane,
+  planChordStep,
+  type ChordPlanSnapshot,
+} from './chordPlan';
+import { arpEventsForStep, buildChordEvents, eventsForCycleStep } from '../chordPlayback';
 import {
   cycleHoldScale,
   feelToHoldScale,
@@ -10,6 +16,7 @@ import {
 } from '@/audio/chordRhythms';
 import { isApproachToken, resolveBassSteps } from '@/audio/bassPatterns';
 import { barDurationSec, generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
+import { TRACK_ARP_DEFAULTS } from '@/store/initialState';
 import type { ChordItem } from '@/types';
 import type { BassStepChoice } from '@/data/bassPatterns';
 
@@ -369,5 +376,93 @@ describe('planChordArm', () => {
     expect(plan.bassCycleSteps).toBe(
       planBassLane(snap, { chordIndex: 0, totalBars: 2 }).cycleSteps,
     );
+  });
+});
+
+describe('planChordStep', () => {
+  const ARP_OFF = { ...TRACK_ARP_DEFAULTS.chord, active: false };
+  const ARP_ON = { ...TRACK_ARP_DEFAULTS.chord, active: true };
+
+  function ctx(over: Record<string, unknown> = {}) {
+    return {
+      progressionStep: 0,
+      step: 0,
+      isLastBar: true,
+      stepsPerBar: 16,
+      stepDurSec: stepDurationSec(120),
+      chordArp: ARP_OFF,
+      bassArp: ARP_OFF,
+      chordFeel: 0.5,
+      bassFeel: 0.5,
+      ...over,
+    };
+  }
+
+  test('folds each lane onto its OWN cycle width, from one progression-relative step', () => {
+    const plan = planChordArm(snapshot(), { chordIndex: 0, startProgressionStep: 0 });
+    for (const step of [0, 4, 15, 16, 20, 31]) {
+      const events = planChordStep(plan, ctx({ progressionStep: step, step }));
+      expect(events.chord, `chord ${step}`).toEqual(
+        eventsForCycleStep(plan.chordEvents, step, plan.chordCycleSteps, true),
+      );
+      expect(events.bass, `bass ${step}`).toEqual(
+        eventsForCycleStep(plan.bassEvents, step, plan.bassCycleSteps, true),
+      );
+    }
+  });
+
+  test('withholds a last-bar-only approach tone until the chord\'s final bar', () => {
+    const plan = planChordArm(snapshot(), { chordIndex: 0, startProgressionStep: 0 });
+    const approach = plan.bassEvents.find((e) => e.lastBarOnly);
+    if (!approach) return; // classic-walk without an approach token: nothing to prove
+    expect(
+      planChordStep(plan, ctx({ progressionStep: approach.step, step: approach.step, isLastBar: false })).bass,
+    ).toEqual([]);
+    expect(
+      planChordStep(plan, ctx({ progressionStep: approach.step, step: approach.step, isLastBar: true })).bass,
+    ).not.toEqual([]);
+  });
+
+  test('an armed arp lane reads the ABSOLUTE step and the LIVE feel, never the cycle', () => {
+    const plan = planChordArm(snapshot({ chordArpActive: true }), { chordIndex: 0, startProgressionStep: 0 });
+    const events = planChordStep(plan, ctx({ progressionStep: 3, step: 19, chordArp: ARP_ON, chordFeel: 0.9 }));
+    expect(events.chord).toEqual(
+      arpEventsForStep(plan.chordNotes, ARP_ON, 19, stepDurationSec(120), feelToHoldScale(0.9), 16),
+    );
+  });
+
+  test('chord and bass fold onto DIFFERENT cycle widths, and neither lane borrows the other\'s', () => {
+    // Same fixture as planChordArm's "the two lanes fold independently" test:
+    // a custom 2-bar chord cycle (32 columns) under a default 1-bar bass cycle
+    // (16 columns). Every other fixture in this describe has both lanes land on
+    // 16, so a chord/bass cycleSteps swap inside planChordStep would pass those
+    // silently; this is the one case where it would not.
+    const values = new Array(32).fill(false);
+    const holds = new Array(32).fill(1);
+    values[0] = true;
+    holds[0] = 1;
+    const snap = snapshot({
+      chordRhythmMode: 'custom',
+      customChordRhythm: values,
+      customChordHoldSteps: holds,
+      customChordLoopLength: 2,
+    });
+    const plan = planChordArm(snap, { chordIndex: 0, startProgressionStep: 0 });
+    expect(plan.chordCycleSteps).toBe(32);
+    expect(plan.bassCycleSteps).toBe(16);
+
+    // Step 20 folds to column 4 on the 32-wide chord cycle but column 4 on the
+    // 16-wide bass cycle too (20 % 16 === 4) — pick a step where the two folds
+    // diverge instead: 18 folds to column 18 on the chord cycle (no wrap) and
+    // to column 2 on the bass cycle (18 % 16 === 2).
+    const events = planChordStep(plan, ctx({ progressionStep: 18, step: 18 }));
+    expect(events.chord).toEqual(eventsForCycleStep(plan.chordEvents, 18, 32, true));
+    expect(events.bass).toEqual(eventsForCycleStep(plan.bassEvents, 18, 16, true));
+
+    // Step 16 is silent on the correct 32-wide chord fold (16 % 32 === 16, no
+    // hit there) but would NOT be silent under a chordCycleSteps/bassCycleSteps
+    // swap (16 % 16 === 0, which IS where the lone hit sits) — the one step in
+    // this fixture where a swapped fold would fire and the correct one must not.
+    expect(planChordStep(plan, ctx({ progressionStep: 16, step: 16 })).chord).toEqual([]);
   });
 });
