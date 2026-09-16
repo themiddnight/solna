@@ -1,4 +1,4 @@
-import { Note, Scale } from 'tonal';
+import { chromaOfNote, midiToFlatName, midiToSharpName, noteMidi, pitchClassOfNote, scaleNotesForTonal } from '@/musicCore';
 import { SCALES } from '@/data/scales';
 import { scaleEntry } from './scaleLookup';
 
@@ -11,7 +11,7 @@ import { scaleEntry } from './scaleLookup';
  * (scaleRoot, scaleType), at render time. Nothing spelled is ever persisted,
  * which is why this change needs no persist-version and no .solna format bump.
  *
- * This module imports `tonal`, `@/data/scales` and `./scaleLookup` — leaves,
+ * This module imports `@/musicCore`, `@/data/scales` and `./scaleLookup` — leaves,
  * all three — and NOTHING ELSE. That is deliberate: musicTheory.ts imports
  * this file (formatChordLabel's key parameter), so importing musicTheory back
  * would make the cycle load-bearing at module-evaluation time. The `tonality`
@@ -20,10 +20,10 @@ import { scaleEntry } from './scaleLookup';
  * ROOTS that would need its own guard test.
  */
 const SHARP_NAMES: readonly string[] = Array.from({ length: 12 }, (_, pc) =>
-  Note.pitchClass(Note.fromMidiSharps(60 + pc)),
+  pitchClassOfNote(midiToSharpName(60 + pc)),
 );
 const FLAT_NAMES: readonly string[] = Array.from({ length: 12 }, (_, pc) =>
-  Note.pitchClass(Note.fromMidi(60 + pc)),
+  pitchClassOfNote(midiToFlatName(60 + pc)),
 );
 
 /**
@@ -68,7 +68,7 @@ export function getTonicSpelling(rootNote: string, scaleType: string): string {
   // `NaN`. Neither `=== undefined` nor `== null` fires on that: both read as
   // if they guard the table lookup, and the lookup returns `undefined`
   // regardless. Only a finiteness check actually catches it.
-  const chroma = Note.get(rootNote).chroma;
+  const chroma = chromaOfNote(rootNote);
   if (!Number.isFinite(chroma)) return rootNote;
   const tonics = scaleEntry(scaleType).tonality === 'minor' ? MINOR_TONICS : MAJOR_TONICS;
   return tonics[chroma];
@@ -81,7 +81,7 @@ export function getTonicSpelling(rootNote: string, scaleType: string): string {
  * key while its tonic carries no accidental at all.
  */
 export function getKeyAccidental(rootNote: string, scaleType: string): 'sharp' | 'flat' {
-  const chroma = Note.get(rootNote).chroma;
+  const chroma = chromaOfNote(rootNote);
   if (!Number.isFinite(chroma)) return 'sharp';
   return scaleEntry(scaleType).tonality === 'minor'
     ? MINOR_ACCIDENTALS[chroma]
@@ -109,8 +109,8 @@ function spellPitchClassUncached(pitchClass: number, rootNote: string, scaleType
   const entry = scaleEntry(scaleType);
   const tonic = getTonicSpelling(rootNote, scaleType);
 
-  for (const degree of Scale.get(`${tonic} ${entry.tonal}`).notes) {
-    if (Note.get(degree).chroma !== pitchClass) continue;
+  for (const degree of scaleNotesForTonal(tonic, entry.tonal)) {
+    if (chromaOfNote(degree) !== pitchClass) continue;
     // A few keys (D# blues, G# harmonic minor) reach a double accidental.
     // Those are unreadable on a grid row, so fall through to the key's plain
     // sharp/flat name; single accidentals like F# major's E# are kept, because
@@ -139,14 +139,14 @@ export function spellMidiInKey(midi: number, rootNote: string, scaleType: string
     `${pitchClass}${octave + 1}`,
     `${pitchClass}${octave - 1}`,
   ]) {
-    if (Note.midi(candidate) === midi) return candidate;
+    if (noteMidi(candidate) === midi) return candidate;
   }
   return `${pitchClass}${octave}`;
 }
 
 /** Spell a note name that carries an octave: ('D#4', 'A#', 'Major') -> 'Eb4'. */
 export function spellNoteInKey(note: string, rootNote: string, scaleType: string): string {
-  const midi = Note.midi(note);
+  const midi = noteMidi(note);
   return midi === null ? note : spellMidiInKey(midi, rootNote, scaleType);
 }
 
@@ -164,7 +164,7 @@ export function spellNoteInKey(note: string, rootNote: string, scaleType: string
  * function and getScaleNotes is not touched.
  */
 export function spellScaleNotes(rootNote: string, scaleType: string): string[] {
-  const chroma = Note.get(rootNote).chroma;
+  const chroma = chromaOfNote(rootNote);
   if (!Number.isFinite(chroma)) return [];
   return scaleEntry(scaleType).intervals.map((interval) =>
     spellPitchClassInKey(chroma + interval, rootNote, scaleType),
