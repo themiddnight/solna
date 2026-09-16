@@ -28,6 +28,9 @@ import {
   transposeProgression,
 } from './musicTheory';
 import { SCALES } from '@/data/scales';
+import { progressionById, resolveProgression } from '@/audio/chordProgressions';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ChordItem } from '../types';
 
 const SCALE_KEYS = Object.keys(SCALES);
@@ -419,6 +422,63 @@ describe('snapProgressionToScale', () => {
       expect(getScaleNotes('C', 'Major')).toContain(snapped[0].root);
       expect(snapped[0].notes).toEqual(generateBlockChordNotes('add9', snapped[0].root, 4));
     });
+  });
+});
+
+describe('reharmonization reads no quality substring (DEV-393 guard)', () => {
+  test('musicTheory.ts never calls .includes on a chord quality', () => {
+    // Regression guard: the bug this issue fixes was exactly
+    // `chord.quality.includes('7') || chord.quality.includes('9')`. Reading
+    // the file's own source rather than re-testing behavior, because a
+    // future rewrite could reproduce the same substring trap under a
+    // different variable name while still passing every behavioral test
+    // above by coincidence on the specific fixtures they use.
+    const source = readFileSync(join(process.cwd(), 'src/utils/musicTheory.ts'), 'utf8');
+    expect(source).not.toMatch(/\.quality\.includes\(/);
+  });
+});
+
+describe('factory progressions affected by the classification fix (DEV-393)', () => {
+  // The four progressions in src/data/chordProgressions.ts whose authored
+  // quality overrides (sus2, plain 9) used to be silently destroyed by a
+  // reharmonize and now survive it. Confirmed by grepping chordProgressions.ts
+  // for the qualities the old substring heuristic mishandled
+  // (sus2 / plain '9' / add9 / 6 / min6 — see shouldPreserveQualityOnSnap's
+  // SNAP_PRESERVED_CATEGORIES) rather than trusting a stale count: this task's
+  // brief said three, but lofi-tape-loop's closing V9 (step(4, 1, '9')) is a
+  // fourth instance of the same class the brief missed, so it is pinned here
+  // too.
+  test('lofi-trapsoul: VII9 survives a reharmonize into a different scale', () => {
+    const progression = progressionById('lofi-trapsoul')!;
+    const resolved = resolveProgression(progression, 'A', 'Natural Minor', 4);
+    const snapped = snapProgressionToScale(resolved, 'D', 'Dorian', 4);
+    // Step index 2 is the VII9 step (step(6, 1, '9')).
+    expect(snapped[2].quality).toBe('9');
+  });
+
+  test('lofi-tape-loop: the closing V9 survives a reharmonize into a different scale', () => {
+    const progression = progressionById('lofi-tape-loop')!;
+    const resolved = resolveProgression(progression, 'C', 'Major', 4);
+    const snapped = snapProgressionToScale(resolved, 'D', 'Dorian', 4);
+    // Step index 3 is the V9 step (step(4, 1, '9')); maj9/min9 at indices 0
+    // and 2 were already preserved by the old explicit four-name list, so
+    // only this step's behavior actually changed.
+    expect(snapped[3].quality).toBe('9');
+  });
+
+  test('ambient-open-fourths: both Isus2/IIsus2 steps survive a reharmonize', () => {
+    const progression = progressionById('ambient-open-fourths')!;
+    const resolved = resolveProgression(progression, 'C', 'Lydian', 4);
+    const snapped = snapProgressionToScale(resolved, 'G', 'Major', 4);
+    expect(snapped.map((c) => c.quality)).toEqual(['sus2', 'sus2']);
+  });
+
+  test('ambient-glass-horizon: the closing IIsus2 step survives a reharmonize', () => {
+    const progression = progressionById('ambient-glass-horizon')!;
+    const resolved = resolveProgression(progression, 'C', 'Lydian', 4);
+    const snapped = snapProgressionToScale(resolved, 'G', 'Major', 4);
+    // Step index 3 is the IIsus2 step (step(1, 4, 'sus2')).
+    expect(snapped[3].quality).toBe('sus2');
   });
 });
 
