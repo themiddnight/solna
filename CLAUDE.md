@@ -190,7 +190,7 @@ persisted state. Nothing spelled is persisted, so spelling never moves a persist
 `.solna` `formatVersion`.
 
 **A chord's notes are derived at the moment they are needed, never a second stored fact.**
-`ChordItem` carries `root`, `quality`, `bars` and an optional `bassNote` — never `notes`. Every
+`ChordItem` carries `id`, `root`, `quality`, `bars` and an optional `bassNote` — never `notes`. Every
 consumer that needs the actual pitches — live chord playback, the pad arm, bass chord-tone
 fallback, the held-chord preview, the progression audition, the chord card's readout, the loop
 card's tooltip — calls `generateBlockChordNotes(quality, root, octave)` (the single Music
@@ -205,7 +205,11 @@ display would each sound or show a different chord depending on which of them st
 derive fresh rather than trust the stored array. Deriving on every read makes that disagreement
 structurally impossible instead of merely validated against: changing `chordOctave` is now a
 single field write (`setChordOctave` in `store/chordsSlice.ts` sets nothing else) with nothing
-else to keep in sync, because there is nothing else stored to fall out of sync.
+else to keep in sync, because there is nothing else stored to fall out of sync. The sanitize
+boundary (`store/sanitize.ts`) enforces the same shape on the way in: `toChordItem` rebuilds every
+persisted chord as a fresh `{id, root, quality, bars, bassNote?}` literal rather than casting the
+raw input through, so a `notes` field left over in old or hand-edited data cannot survive
+sanitization even though nothing explicitly rejects it.
 
 **A chord's reharmonization behavior is named on the registry, not sniffed from its token.**
 `ChordQualityEntry.reharmonizationCategory` (`src/musicCore/chordQuality.ts`) states which shape

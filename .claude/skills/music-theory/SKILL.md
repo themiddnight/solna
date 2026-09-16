@@ -79,19 +79,25 @@ scale-aware; only the chord tools, the bass engine and the scale-locked keyboard
 - `getBorrowedChords(root, scaleType)` → curated modal-interchange list, then **filtered** so nothing
   fully diatonic or already reachable from the in-scale triad/7th palette survives. Tests in
   `src/utils/musicTheory.test.ts` enforce that filter — add candidates, don't loosen it.
-- `transposeProgression(chords, fromRoot, toRoot, octave)` moves a whole progression to a new key:
+- `transposeProgression(chords, fromRoot, toRoot)` moves a whole progression to a new key:
   every chord shifts by the same interval, so scale degrees and the tonic's position survive. This is
   what a **root** change needs.
-- `snapProgressionToScale(chords, root, scaleType, octave)` snaps each chord to the nearest degree of
-  the given scale; only `maj9 / min9 / 7sus4 / sus4` keep their user-chosen quality. This is what a
-  **scale** change needs, and it is only correct on chords already in `root` — feeding it chords from
-  another key collapses distinct chords onto one degree. `reharmonizeProgressionToScale` was the two
-  operations conflated and is gone.
-- `ChordView.applyKeyScaleChange(chords, from, to, octave, chordsReplaced)` picks between them:
+- `snapProgressionToScale(chords, root, scaleType)` snaps each chord to the nearest degree of
+  the given scale; `shouldPreserveQualityOnSnap` (driven by each quality's registry-declared
+  `reharmonizationCategory` in `src/musicCore/chordQuality.ts`) decides whether a chord keeps its
+  user-chosen quality or regenerates the landing degree's own diatonic quality — see CLAUDE.md's
+  "A chord's reharmonization behavior is named on the registry" section for the full rule. This is
+  what a **scale** change needs, and it is only correct on chords already in `root` — feeding it
+  chords from another key collapses distinct chords onto one degree. `reharmonizeProgressionToScale`
+  was the two operations conflated and is gone.
+- `ChordView.applyKeyScaleChange(chords, from, to, chordsReplaced)` picks between them:
   transpose, snap, or transpose-then-snap, and does nothing at all when the chords were just replaced.
-- `deriveChordNotes(chord, octave)` wrapping `generateBlockChordNotes(quality, root, octave)` is the
-  **single source of truth for `ChordItem.notes`**. Never build a `notes` array by hand: `chordsSlice`
-  re-derives on `setChordOctave` inside the same `set()`, so octave and notes can't drift.
+- `ChordItem` has no `notes` field — it never stores pitches, only `{id, root, quality, bars,
+  bassNote?}`. Every reader derives pitches at the point of use via
+  `generateBlockChordNotes(quality, root, octave)`, never by reading a stored array. Never add a
+  `notes` field back to a chord object by hand; that reintroduces exactly the "stored notes silently
+  disagree with root/quality" bug this shape removed. `setChordOctave` writes only `{chordOctave}` —
+  it has nothing else to re-derive.
 - `TONAL_CHORD_ALIASES` maps app quality tokens to `tonal` types (`min9→m9`, `min6→m6`, `minmaj7→mMaj7`).
   New quality tokens that `tonal` spells differently must be added there or they silently fall back to `maj`.
 - Display only: `formatChordQuality` / `formatChordLabel` (`'maj'` → `''`, `'min7'` → `'m7'`). Stored
@@ -109,8 +115,9 @@ snaps on demand; that is its deliberate, user-requested job.
 
 `src/data/chordProgressions.ts` holds `CHORD_PROGRESSIONS` — 44 progressions as **scale
 degrees**, never semitones. A step is `{ degree, quality?, bars }`; an omitted `quality` means the
-scale's **triad** for that degree, never the seventh. `resolveProgression(p, root, scaleType, octave)`
-is the only way to turn one into `ChordItem`s.
+scale's **triad** for that degree, never the seventh. `resolveProgression(p, root, scaleType)`
+is the only way to turn one into `ChordItem`s — no octave parameter; the resulting `ChordItem`s
+carry no `notes`, only `{id, root, quality, bars}`.
 
 Each entry declares the `referenceScale` its degrees were authored in, `minScaleLength` (that scale's
 degree count), and `genres` — a free-form browsing tag that nothing computes from.
@@ -129,8 +136,10 @@ fixture.
 `resolveBassSteps(pattern, chords, chordIndex, octave, scaleRoot, scaleType, bpm, holdScale)` turns one bar
 into `ResolvedBassEvent[]`:
 
-- Chord-tone tokens (`third`/`fifth`/`seventh`) read `chord.notes[1|2|3]` and fall back down the chain
-  `seventh → fifth → third → root`, so pentatonic triads never produce a missing note.
+- Chord-tone tokens (`third`/`fifth`/`seventh`) index `generateBlockChordNotes(chord.quality,
+  chord.root, octave)[1|2|3]` — derived once per `resolveBassSteps` call, never read off a stored
+  field — and fall back down the chain `seventh → fifth → third → root`, so pentatonic triads never
+  produce a missing note.
 - `approach*` tokens target the **next** chord's root, not the current one (`isApproachToken`).
   `approachDiatonicUp` walks to the next scale degree above via `SCALES[scaleType].intervals`.
 - `alternate: true` flips chromatic above/below on odd `chordIndex` — deterministic, not random.

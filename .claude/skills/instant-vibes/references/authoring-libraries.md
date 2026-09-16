@@ -63,7 +63,7 @@ triad, with no test to catch it unless you assert the resolved qualities.
 Write a resolution test for each new entry — the four Phase 1 entries each have one:
 
 ```ts
-expect(resolveProgression(p, 'C', 'Major', 4).map((c) => `${c.root}${c.quality}`))
+expect(resolveProgression(p, 'C', 'Major').map((c) => `${c.root}${c.quality}`))
   .toEqual(['Cmaj7', 'Amin7', 'Dmin7', 'G7']);
 ```
 
