@@ -3,7 +3,7 @@ import { DEFAULT_VELOCITY } from '../constants';
 import type { ChordItem } from '@/types';
 import type { ActiveSynth } from '@/types/synth';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
-import { generateBlockChordNotes } from '@/utils/musicTheory';
+import { generateBlockChordNotes, noteFrequency } from '@/utils/musicTheory';
 
 /**
  * One-shot previews for library entries (synth patches, chord templates,
@@ -164,7 +164,7 @@ export function previewChordProgression(
       const start = startTime + nextIndex * PREVIEW_CHORD_DURATION;
       const chord = chords[nextIndex];
       for (const n of generateBlockChordNotes(chord.quality, chord.root, 4)) {
-        const voiceId = audioEngine.triggerSynthNoteOn(n, synth, 0.75, start, PREVIEW_SOURCE, 1, "preview");
+        const voiceId = audioEngine.triggerSynthNoteOn(noteFrequency(n), synth, 0.75, start, PREVIEW_SOURCE, 1, "preview");
         if (voiceId) {
           audioEngine.triggerSynthNoteOff(voiceId, 0.3, start + PREVIEW_CHORD_DURATION * 0.85);
         }
@@ -209,7 +209,7 @@ export function previewSynthPatch(synth: ActiveSynth): PreviewHandle {
 
   const handle = beginPreview();
   const start = ctx.currentTime;
-  const voiceId = audioEngine.triggerSynthNoteOn('C4', synth, 0.85, start, PREVIEW_SOURCE, 1, "preview");
+  const voiceId = audioEngine.triggerSynthNoteOn(noteFrequency('C4'), synth, 0.85, start, PREVIEW_SOURCE, 1, "preview");
   if (voiceId) {
     audioEngine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(synth), start + 0.45);
   }
@@ -241,7 +241,7 @@ export function previewSequencerNote(
 
   const handle = beginPreview();
   const start = ctx.currentTime;
-  const voiceId = audioEngine.triggerSynthNoteOn(note, synth, velocity, start, PREVIEW_SOURCE, 1, "preview");
+  const voiceId = audioEngine.triggerSynthNoteOn(noteFrequency(note), synth, velocity, start, PREVIEW_SOURCE, 1, "preview");
   if (voiceId) audioEngine.triggerSynthNoteOff(voiceId, releaseSec, start + holdSec);
   return handle;
 }

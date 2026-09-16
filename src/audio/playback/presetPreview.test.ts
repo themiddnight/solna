@@ -387,9 +387,9 @@ describe('a preview auditions the patch it is handed', () => {
     const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
     try {
       previewSequencerNote('C4', LOUD, 0.8);
-      const [note, synth, velocity, , source, scaleFactor, owner] = onSpy.mock.calls[0];
-      expect([note, synth, velocity, source, scaleFactor, owner]).toEqual(
-        ['C4', LOUD, 0.8, 'preview', 1, 'preview'],
+      const [freq, synth, velocity, , source, scaleFactor, owner] = onSpy.mock.calls[0];
+      expect([freq, synth, velocity, source, scaleFactor, owner]).toEqual(
+        [noteFrequency('C4'), LOUD, 0.8, 'preview', 1, 'preview'],
       );
     } finally {
       onSpy.mockRestore();
@@ -402,9 +402,9 @@ describe('a preview auditions the patch it is handed', () => {
     const onSpy = spyOn(audioEngine, 'triggerSynthNoteOn');
     try {
       previewSynthPatch(LOUD);
-      const [note, synth, , , source, scaleFactor, owner] = onSpy.mock.calls[0];
-      expect([note, synth, source, scaleFactor, owner]).toEqual(
-        ['C4', LOUD, 'preview', 1, 'preview'],
+      const [freq, synth, , , source, scaleFactor, owner] = onSpy.mock.calls[0];
+      expect([freq, synth, source, scaleFactor, owner]).toEqual(
+        [noteFrequency('C4'), LOUD, 'preview', 1, 'preview'],
       );
     } finally {
       onSpy.mockRestore();
@@ -418,7 +418,7 @@ describe('a preview auditions the patch it is handed', () => {
     try {
       const chords: ChordItem[] = [{ id: 'p1', root: 'A', quality: 'min7', bars: 1 }];
       previewChordProgression(chords, SYNTH, undefined);
-      const expected = generateBlockChordNotes('min7', 'A', 4);
+      const expected = generateBlockChordNotes('min7', 'A', 4).map((n) => noteFrequency(n));
       const played = onSpy.mock.calls.map((call) => call[0]);
       expect(played).toEqual(expected);
     } finally {

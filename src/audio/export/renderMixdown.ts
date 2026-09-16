@@ -40,7 +40,7 @@ import { planMelodyStep, type MelodyPlanSnapshot } from '../playback/plan/melody
 import { MIXDOWN_SEED, withSeededRandom } from '../rng';
 import { DEFAULT_VELOCITY } from '../constants';
 import { loopDwellSteps, loopEffectiveLengthSteps } from '@/utils/songStructure';
-import { stepDurationSec } from '@/utils/musicTheory';
+import { noteFrequency, stepDurationSec } from '@/utils/musicTheory';
 import { TICKS_PER_SIXTEENTH, type LeadStepResolutionId } from '@/utils/stepResolution';
 import { getMeter, type MeterId } from '@/utils/meter';
 import { encodeWav } from '@/utils/encodeWav';
@@ -477,7 +477,7 @@ function scheduleMelodyStep(
   for (const note of planned) {
     const start = time + note.startOffsetSec;
     const voiceId = engine.triggerSynthNoteOn(
-      note.note, track.params, DEFAULT_VELOCITY, start, track.source, 1, 'sequencer',
+      noteFrequency(note.note), track.params, DEFAULT_VELOCITY, start, track.source, 1, 'sequencer',
     );
     if (voiceId) {
       engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(track.params), start + note.holdSec);
@@ -553,7 +553,7 @@ function scheduleArrangement(
         }
         if (stepsIntoChord === 0 && plan.bassFullHold) {
           const voiceId = engine.triggerSynthNoteOn(
-            plan.bassFullHold.noteName, loop.bassSynthParams, plan.bassFullHold.velocity,
+            noteFrequency(plan.bassFullHold.noteName), loop.bassSynthParams, plan.bassFullHold.velocity,
             time, 'bass', 1, 'sequencer',
           );
           if (voiceId) {

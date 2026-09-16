@@ -37,6 +37,7 @@ import type { ActiveSynth, FilterType, LfoTriggerMode, ModRoute, ModTarget, Nois
 const SAMPLE_RATE = 44100;
 /** The note every fixture plays. C3 — the same note the calibration harness uses. */
 const NOTE = 'C3';
+const NOTE_FREQ = noteFrequency(NOTE);
 /**
  * Every render here runs on a seeded random source, and the noise comparisons
  * are the reason. A noise buffer is drawn from `src/audio/rng.ts`'s shared
@@ -77,7 +78,7 @@ async function renderNote(
     const ctx: any = new OfflineAudioContext(2, Math.round(SAMPLE_RATE * seconds), SAMPLE_RATE);
     const engine = createRenderEngine(ctx);
     engine.setMasterVolume(1);
-    const voiceId = engine.triggerSynthNoteOn(NOTE, synth, 1, 0, 'synth', 1, 'sequencer');
+    const voiceId = engine.triggerSynthNoteOn(NOTE_FREQ, synth, 1, 0, 'synth', 1, 'sequencer');
     if (!voiceId) throw new Error('the render engine returned no voice id — nothing was scheduled');
     engine.triggerSynthNoteOff(voiceId, synth.patch.synth.ampEnvelope.release, holdSeconds);
     const buffer: any = await ctx.startRendering();
@@ -689,7 +690,7 @@ describe('an LFO edit reaches a voice that is already sounding', () => {
       const ctx: any = new OfflineAudioContext(2, Math.round(SAMPLE_RATE * 1.4), SAMPLE_RATE);
       const engine = createRenderEngine(ctx);
       engine.setMasterVolume(1);
-      const voiceId = engine.triggerSynthNoteOn(NOTE, before, 1, 0, 'synth', 1, 'sequencer');
+      const voiceId = engine.triggerSynthNoteOn(NOTE_FREQ, before, 1, 0, 'synth', 1, 'sequencer');
       if (!voiceId) throw new Error('the render engine returned no voice id — nothing was scheduled');
       engine.updateSynthPatch(before, after, 'synth');
       engine.triggerSynthNoteOff(voiceId, after.patch.synth.ampEnvelope.release, 1.2);

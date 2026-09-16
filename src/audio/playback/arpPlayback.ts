@@ -3,7 +3,7 @@ import { audioEngine } from '../engine';
 import { buildArpSequence } from '../arpeggiator';
 import { arpFiresOnStep, computeArpTriggers } from '../arpSchedule';
 import { heldCountFor, heldNotesFor, type HeldNoteTargets } from './heldNotes';
-import { stepDurationSec } from '@/utils/musicTheory';
+import { noteFrequency, stepDurationSec } from '@/utils/musicTheory';
 import { arpStepFor } from '@/utils/meter';
 import type { ActiveSynth, ArpSettings } from '@/types/synth';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
@@ -187,7 +187,7 @@ export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
         // Nothing outlives the tick: a key-up releases through
         // `releaseTriggeredTargets` below, which is owner-scoped and reaches
         // whatever the arp still has sounding on the bus.
-        const voiceId = audioEngine.triggerSynthNoteOn(note, synth, 0.9, at, target, 1, 'arp');
+        const voiceId = audioEngine.triggerSynthNoteOn(noteFrequency(note), synth, 0.9, at, target, 1, 'arp');
         if (voiceId) audioEngine.triggerSynthNoteOff(voiceId, releaseSeconds, at + t.holdSec);
       }
     });

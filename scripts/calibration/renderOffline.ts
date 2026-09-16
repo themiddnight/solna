@@ -37,6 +37,7 @@ import type { BeatVoiceId } from '@/types';
 import type { SynthPreset } from '@/data/synthPresets';
 import type { ActiveSynth, EnginePatch } from '@/types/synth';
 import { dbToGain, toDbfs, toDecibels, type Dbfs } from '@/utils/gainUnits';
+import { noteFrequency } from '@/utils/musicTheory';
 import { encodeWav } from '@/utils/encodeWav';
 import { measureLoudness } from './measureLoudness.ts';
 import { CALIBRATION_SEED } from './seededRandom.ts';
@@ -434,7 +435,7 @@ export async function renderPreset(preset: SynthPreset, applyOutputGain = false)
       // The ID the engine hands back is the only thing that releases THIS
       // instance; the note name is not an address any more.
       const voiceId = engine.triggerSynthNoteOn(
-        SYNTH_CALIBRATION_NOTE,
+        noteFrequency(SYNTH_CALIBRATION_NOTE),
         synth,
         CALIBRATION_VELOCITY,
         at,

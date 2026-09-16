@@ -1,6 +1,7 @@
 import { audioEngine } from "../engine";
 import type { ActiveSynth } from "@/types/synth";
 import type { VoiceId } from "../synth/voiceId";
+import { noteFrequency } from "@/utils/musicTheory";
 
 // Engine bridge for the component-layer playback hooks (layering rules 1+3):
 // the store-reading hooks (useChordPlayback, useSequencerPlayback) moved out
@@ -33,7 +34,7 @@ export function playbackNoteOn(
   // holding — cuts the wrong voice. Every caller books its note-off with the
   // ID it got here, in the same tick, while the hit is still just a plan on
   // the audio clock.
-  return audioEngine.triggerSynthNoteOn(noteName, synth, velocity, time, source, 1, "sequencer");
+  return audioEngine.triggerSynthNoteOn(noteFrequency(noteName), synth, velocity, time, source, 1, "sequencer");
 }
 
 export function playbackNoteOff(

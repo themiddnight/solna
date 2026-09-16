@@ -18,6 +18,7 @@ import { useAppStore } from '../store/store';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
 import { getChordKeyboardRows, getScaleLockedKeyboardNotes } from './ui/Keyboard';
 import { MIX_LAYER_IDS } from '@/store/focusTrack';
+import { noteFrequency } from '@/utils/musicTheory';
 import { audioEngine } from '../audio/engine';
 import { subscribeNoteInput, resetNoteInputListeners, type NoteInputEvent } from '../audio/playback/noteInputBus';
 import type { VoiceId } from '../audio/synth/voiceId';
@@ -326,7 +327,9 @@ describe('handleNoteOn (via the rendered hook)', () => {
 
     expect(initSpy).toHaveBeenCalled();
     expect(noteOnSpy).toHaveBeenCalled();
-    expect(noteOnSpy.mock.calls[0]?.[0]).toBe('C4');
+    // DEV-399: the ENGINE gets a resolved frequency; the note-input bus gets
+    // the name. One line, two vocabularies — that is the whole separation.
+    expect(noteOnSpy.mock.calls[0]?.[0]).toBeCloseTo(noteFrequency('C4'), 9);
     expect(events).toEqual([{ kind: 'on', note: 'C4', velocity: 1.0, time: undefined }]);
 
     // Proof the note-on wrote exactly one heldTargets entry on the focused
