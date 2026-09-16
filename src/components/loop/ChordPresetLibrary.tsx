@@ -13,7 +13,6 @@ import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSave
 import { previewChordProgression } from '@/audio/playback/presetPreview';
 import type { PreviewHandle } from '@/audio/playback/presetPreview';
 import {
-  generateBlockChordNotes,
   snapProgressionToScale,
   formatChordLabel,
 } from '@/utils/musicTheory';
@@ -165,7 +164,7 @@ function resolveFactoryChords(
   return resolveProgression(progression, spellingKey.scaleRoot, spellingKey.scaleType);
 }
 
-function resolveCustomChords(
+export function resolveCustomChords(
   customChords: ChordItem[],
   spellingKey: SpellingKey,
   autoReharmonize: boolean,
@@ -173,7 +172,6 @@ function resolveCustomChords(
   let chords = customChords.map((c, i) => ({
     ...c,
     id: c.id || `custom-chord-${Date.now()}-${i}`,
-    notes: generateBlockChordNotes(c.quality, c.root, 4),
   }));
 
   if (autoReharmonize) {

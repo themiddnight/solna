@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import type React from 'react';
 import { renderToString } from 'react-dom/server';
 import { createDefaultLoop } from '@/store/loopSlice';
+import { generateBlockChordNotes } from '@/utils/musicTheory';
 import { getActiveChordIndex, renameFromDraft, SortableLoopCard } from './SortableLoopCard';
 
 describe('getActiveChordIndex', () => {
@@ -163,8 +164,8 @@ describe('SortableLoopCard content', () => {
         ...createDefaultLoop(),
         repeatCount: 2,
         chords: [
-          { id: 'c1', root: 'A', quality: 'min7', bars: 1, notes: ['A3', 'C4', 'E4', 'G4'] },
-          { id: 'c2', root: 'F', quality: 'maj7', bars: 1, notes: ['F3', 'A3', 'C4', 'E4'] },
+          { id: 'c1', root: 'A', quality: 'min7', bars: 1 },
+          { id: 'c2', root: 'F', quality: 'maj7', bars: 1 },
         ],
       },
       isPlaying: true,
@@ -243,6 +244,20 @@ describe('SortableLoopCard content', () => {
     expect(html).toContain('aria-label="Delete Synthwave 80s"');
     expect(html).toContain('aria-label="Repeat count for Synthwave 80s"');
     expect(html).toContain('aria-label="Play only Synthwave 80s"');
+  });
+});
+
+describe('SortableLoopCard chord tooltip', () => {
+  test('the chord badge tooltip lists notes derived at the loop octave', () => {
+    const html = renderCard({
+      loop: {
+        ...createDefaultLoop(),
+        chordOctave: 5,
+        chords: [{ id: 'c1', root: 'D', quality: 'min7', bars: 1 }],
+      },
+    });
+    const expected = generateBlockChordNotes('min7', 'D', 5).join(', ');
+    expect(html).toContain(`Notes: ${expected}`);
   });
 });
 
