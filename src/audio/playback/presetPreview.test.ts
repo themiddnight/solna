@@ -4,7 +4,7 @@ import { freshEngine } from '../testFakes';
 import type { ChordItem } from '@/types';
 import type { ActiveSynth } from '@/types/synth';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
-import { generateBlockChordNotes } from '@/utils/musicTheory';
+import { generateBlockChordNotes, noteFrequency } from '@/utils/musicTheory';
 import { previewChordProgression, previewSequencerNote, previewSynthPatch } from './presetPreview';
 import {
   resetNoteInputListeners,
@@ -47,7 +47,7 @@ function withFakeAudioEngine() {
  * voice state for `src/components/`, which may not have it.
  */
 interface PreviewGroup {
-  noteName: string;
+  frequency: number;
   startedAt: number;
   releasing: boolean;
   voices: { nodes: { ampGain: { gain: { cancels: number[] } } } }[];
@@ -119,7 +119,7 @@ describe('preview handle lifetimes', () => {
       // to reach into the 2nd preview it no longer owns.
       const current = previewSequencerNote('E4', SYNTH, 0.8);
 
-      const currentGroup = previewGroups().find((g) => g.noteName === 'E4')!;
+      const currentGroup = previewGroups().find((g) => g.frequency === noteFrequency('E4'))!;
       expect(currentGroup).toBeTruthy();
       const cancels = currentGroup.voices[0].nodes.ampGain.gain.cancels;
       const before = cancels.length;
