@@ -16,19 +16,27 @@ describe('presetsSlice library caps', () => {
     expect(presets.some((p) => p.name === 'Preset 0')).toBe(false);
   });
 
-  test('saveCustomChordProgression caps customChordProgressions at MAX_LIBRARY_ENTRIES', () => {
+  test('saveCustomChordProgression caps customChordProgressions at MAX_LIBRARY_ENTRIES, dropping the oldest', () => {
     const { getState } = useAppStore;
     for (let i = 0; i < MAX_LIBRARY_ENTRIES + 5; i++) {
       getState().saveCustomChordProgression(`Prog ${i}`, []);
     }
-    expect(getState().customChordProgressions.length).toBe(MAX_LIBRARY_ENTRIES);
+    const progressions = getState().customChordProgressions;
+    expect(progressions.length).toBe(MAX_LIBRARY_ENTRIES);
+    // Newest (last saved) survives at the front; oldest 5 were dropped.
+    expect(progressions[0]!.name).toBe(`Prog ${MAX_LIBRARY_ENTRIES + 4}`);
+    expect(progressions.some((p) => p.name === 'Prog 0')).toBe(false);
   });
 
-  test('saveCustomBeatPreset caps customBeatPresets at MAX_LIBRARY_ENTRIES', () => {
+  test('saveCustomBeatPreset caps customBeatPresets at MAX_LIBRARY_ENTRIES, dropping the oldest', () => {
     const { getState } = useAppStore;
     for (let i = 0; i < MAX_LIBRARY_ENTRIES + 5; i++) {
       getState().saveCustomBeatPreset(`Beat ${i}`, getState().beatParams);
     }
-    expect(getState().customBeatPresets.length).toBe(MAX_LIBRARY_ENTRIES);
+    const presets = getState().customBeatPresets;
+    expect(presets.length).toBe(MAX_LIBRARY_ENTRIES);
+    // Newest (last saved) survives at the front; oldest 5 were dropped.
+    expect(presets[0]!.name).toBe(`Beat ${MAX_LIBRARY_ENTRIES + 4}`);
+    expect(presets.some((p) => p.name === 'Beat 0')).toBe(false);
   });
 });
