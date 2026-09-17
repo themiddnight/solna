@@ -4,6 +4,7 @@ import {
   THROTTLED_FRAME_INTERVAL_MS,
   initialSilenceThrottle,
   nextSilenceThrottle,
+  shouldRenderVisualizer,
   VISUALIZER_MODES,
 } from './AudioVisualizer';
 
@@ -84,5 +85,23 @@ describe('visualizer silence throttle', () => {
 
   test('the mode table is untouched by this change', () => {
     expect(VISUALIZER_MODES).toEqual(['wave', 'bars', 'oscilloscope']);
+  });
+});
+
+describe('shouldRenderVisualizer', () => {
+  test('renders only when neither paused nor hidden', () => {
+    expect(shouldRenderVisualizer(false, true)).toBe(true);
+  });
+
+  test('an explicit pause stops rendering even while visible', () => {
+    expect(shouldRenderVisualizer(true, true)).toBe(false);
+  });
+
+  test('scrolling the canvas out of view stops rendering even when not paused', () => {
+    expect(shouldRenderVisualizer(false, false)).toBe(false);
+  });
+
+  test('both conditions together still stop rendering', () => {
+    expect(shouldRenderVisualizer(true, false)).toBe(false);
   });
 });

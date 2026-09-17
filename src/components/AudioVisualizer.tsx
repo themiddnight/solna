@@ -300,6 +300,40 @@ interface VisualizerCanvasParams {
 }
 
 /**
+ * Whether the render loop may schedule a frame: never while explicitly `paused`, and never while
+ * the canvas itself is scrolled out of view. `paused` is the primary, deliberate gate (every real
+ * call site binds it to tab/segment visibility); `isVisible` is defense-in-depth against a future
+ * caller that forgets to.
+ */
+export function shouldRenderVisualizer(paused: boolean, isVisible: boolean): boolean {
+  return !paused && isVisible;
+}
+
+/**
+ * Defense-in-depth, independent of the `paused` prop: if a future caller forgets to wire `paused`
+ * to tab/segment visibility, this still lets the render loop stop itself on a genuinely hidden
+ * canvas. Real callers today all wire `paused` correctly (confirmed by the perf audit), so this
+ * observer is not the primary gate — `paused` is — but its absence would otherwise be silent.
+ * A standalone observer rather than meterScheduler.ts's `observeVisibility`: that primitive is
+ * coupled to the scheduler's own tiered-registration registry, which this byte-domain reader does
+ * not use (see the exception documented at the top of that file).
+ */
+function useCanvasVisibility(canvasRef: React.RefObject<HTMLCanvasElement | null>): boolean {
+  const [isVisible, setIsVisible] = useState(true);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsVisible(entry.isIntersecting),
+      { threshold: 0 },
+    );
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [canvasRef]);
+  return isVisible;
+}
+
+/**
  * The render loop: read a frame, classify it, throttle it, draw it. Everything
  * it paints with comes from `visualizerDraw`, so this hook is only the loop —
  * which is also the only part of the visualizer that may touch `audioEngine`
@@ -320,6 +354,8 @@ function useVisualizerCanvas(params: VisualizerCanvasParams): void {
     variant,
     paused,
   } = params;
+
+  const isVisible = useCanvasVisibility(canvasRef);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -403,7 +439,7 @@ function useVisualizerCanvas(params: VisualizerCanvasParams): void {
     // inside a still-running loop would still burn rAF callbacks forever.
     // Resize tracking stays live (cheap, and keeps the canvas correctly
     // sized for when the tab reappears); only the render loop is gated.
-    if (paused) {
+    if (!shouldRenderVisualizer(paused, isVisible)) {
       return () => {
         resizeObserver.disconnect();
       };
@@ -427,6 +463,7 @@ function useVisualizerCanvas(params: VisualizerCanvasParams): void {
     mode,
     colorTheme,
     paused,
+    isVisible,
     source,
     variant,
   ]);

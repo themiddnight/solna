@@ -8,6 +8,14 @@
  *
  * murva's `glow` tier is deliberately not ported — solna has three tiers: `master`, `track`,
  * `offscreen`.
+ *
+ * `src/components/AudioVisualizer.tsx` is a deliberate exception to "every meter goes through
+ * this scheduler": its byte-domain frequency/waveform reads (`getByteFrequencyData` / a waveform
+ * buffer) are not something this scheduler's `getFloatTimeDomainData`-only tick can serve, so it
+ * runs its own `requestAnimationFrame` loop. It stays safe only because every render site binds
+ * a `paused` prop to tab/segment visibility by hand — see `useVisualizerCanvas`'s own
+ * `IntersectionObserver` backstop in that file for the defense-in-depth this scheduler's own
+ * gating provides everywhere else.
  */
 
 export type MeterTier = 'master' | 'track' | 'offscreen';
