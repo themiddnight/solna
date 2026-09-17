@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Music, Play, Sparkles, Trash2, Upload } from 'lucide-react';
 import type { ChordItem, CustomChordProgressionItem } from '@/types';
 import { useAppStore } from '@/store/store';
@@ -682,8 +682,11 @@ export function ChordPresetLibrary({
     [customProgressions.length]
   );
 
-  const groupEntries = (filtered: ChordLibraryEntry[], _query: string, category: string) =>
-    groupChordEntries(filtered, tonic, category);
+  const groupEntries = useCallback(
+    (filtered: ChordLibraryEntry[], _query: string, category: string) =>
+      groupChordEntries(filtered, tonic, category),
+    [tonic],
+  );
 
   const requestDelete = (id: string) => {
     const entry = entries.find((en) => en.id === id);

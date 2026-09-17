@@ -724,12 +724,16 @@ export function PresetLibrary<T extends PresetLibraryEntry>(props: PresetLibrary
     [entries, category, query, filterEntries],
   );
 
+  const groups = useMemo(
+    () => buildGroups(groupEntries, filtered, query, category),
+    [groupEntries, filtered, query, category],
+  );
+
   useRevealActiveEntry(listRef, isOpen, activeEntryId);
 
   if (!isOpen) return null;
 
   const chrome = variantChrome(variant === 'chord', saveButton);
-  const groups = buildGroups(groupEntries, filtered, query, category);
 
   const handleSubmitSave = (e: React.FormEvent) => {
     e.preventDefault();

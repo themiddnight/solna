@@ -218,3 +218,52 @@ describe('ChordPresetLibrary no longer subscribes to synthParams', () => {
     expect(source).not.toContain("import type { ActiveSynth }");
   });
 });
+
+/**
+ * Perf fix (react-perf-fixes task 10): `PresetLibrary` now memoizes its
+ * `groups` derivation on `[groupEntries, filtered, query, category]`
+ * (`PresetLibrary.tsx`), which is inert unless every caller-supplied
+ * `groupEntries` closure is itself referentially stable across renders.
+ * `ChordPresetLibrary` used to build a fresh `groupEntries` closure on every
+ * render, which would defeat that memoization end to end even though
+ * `PresetLibrary.tsx` was fixed correctly (the exact "looks memoized, isn't"
+ * trap task 9 of this same plan fell into first). A runtime render-count is
+ * not testable in this no-DOM harness (same caveat noted above for the
+ * `synthParams` fix), so this proves the code-shape properties that jointly
+ * guarantee stability instead:
+ *   1. `groupEntries` is wrapped in `useCallback`, not a bare arrow function.
+ *   2. Its dependency array is exactly `[tonic]` — no more (which would be
+ *      over-invalidation, not a correctness bug, but would defeat the memo
+ *      on every scaleRoot/scaleType-unrelated render if `tonic` were rebuilt
+ *      needlessly) and no less (which would serve stale groups, per the
+ *      brief's step 3 warning).
+ *   3. The closure body is unchanged — still delegates to the module-level
+ *      `groupChordEntries` helper — so `tonic` really is the only free
+ *      variable the closure reads besides that stable top-level function.
+ */
+describe('ChordPresetLibrary groupEntries is stable across renders', () => {
+  test('groupEntries is wrapped in useCallback keyed on [tonic] only', () => {
+    expect(source).toMatch(
+      /const groupEntries = useCallback\(\s*\(filtered: ChordLibraryEntry\[\], _query: string, category: string\) =>\s*groupChordEntries\(filtered, tonic, category\),\s*\[tonic\],\s*\);/,
+    );
+  });
+
+  test('useCallback is imported from react', () => {
+    expect(source).toMatch(/import React, \{[^}]*\buseCallback\b[^}]*\} from 'react';/);
+  });
+
+  test('groupChordEntries stays a module-level helper, not redefined per render', () => {
+    // A top-level `function` declaration is hoisted and created once per
+    // module load; if this ever moved inside the component body it would
+    // become a fresh reference every render and reintroduce exactly the
+    // instability this task fixes, even with groupEntries's own useCallback
+    // still in place (its dependency array doesn't name groupChordEntries,
+    // so a change there would go undetected by [tonic] alone).
+    expect(source).toMatch(/^function groupChordEntries\(/m);
+  });
+
+  test('ChordPresetLibrary using the new groupEntries still renders its groups (smoke test)', () => {
+    expect(html).toContain('Progression Library');
+    expect(html).toContain(`Key of C`);
+  });
+});

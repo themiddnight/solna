@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { renderToString } from 'react-dom/server';
 import { centerScrollDelta, PresetLibrary } from './PresetLibrary';
 import type { PresetLibraryEntry } from './PresetLibrary';
+
+const source = readFileSync(join(process.cwd(), 'src/components/ui/PresetLibrary.tsx'), 'utf8');
 
 const entries: PresetLibraryEntry[] = [
   { id: 'p1', name: 'Sunset Pad', category: 'Pop & EDM', description: 'warm', isFactory: false },
@@ -110,6 +114,47 @@ describe('PresetLibrary chrome', () => {
       />,
     );
     expect(html).toBe('');
+  });
+});
+
+/**
+ * Perf fix (react-perf-fixes task 10): `groups = buildGroups(...)` used to
+ * run on every render with no memoization at all. `filtered` was already
+ * `useMemo`'d, but `groups` (derived from `filtered`) was not, so the
+ * grouping walk re-ran even when nothing it reads had changed.
+ *
+ * Memoizing `groups` alone is inert if `groupEntries` is a fresh closure
+ * every render at the call site (see `ChordPresetLibrary.test.tsx`'s
+ * corresponding test for the caller half of this fix) — this file only
+ * proves the half that lives here: the memo exists, depends on the right
+ * things, and — critically, since hooks must run unconditionally — is
+ * declared *before* the `if (!isOpen) return null;` early return rather
+ * than after it, which would make its call conditional on `isOpen` and
+ * violate the Rules of Hooks (a call-order bug `bun run lint`'s
+ * `react-hooks` plugin would not necessarily catch source-statically in
+ * every shape, so this is pinned directly). A runtime render-count is not
+ * testable in this no-DOM harness, so this proves the code-shape properties
+ * that jointly guarantee the memo is real and safe.
+ */
+describe('PresetLibrary groups is memoized correctly', () => {
+  test('groups is computed via useMemo depending on [groupEntries, filtered, query, category]', () => {
+    expect(source).toMatch(
+      /const groups = useMemo\(\s*\(\) => buildGroups\(groupEntries, filtered, query, category\),\s*\[groupEntries, filtered, query, category\],\s*\);/,
+    );
+  });
+
+  test('the groups useMemo is declared before the isOpen early return, not after', () => {
+    const groupsIdx = source.indexOf('const groups = useMemo(');
+    const earlyReturnIdx = source.indexOf('if (!isOpen) return null;');
+    expect(groupsIdx).toBeGreaterThan(-1);
+    expect(earlyReturnIdx).toBeGreaterThan(-1);
+    expect(groupsIdx).toBeLessThan(earlyReturnIdx);
+  });
+
+  test('filtered stays memoized (regression guard for the dependency this memo relies on)', () => {
+    expect(source).toMatch(
+      /const filtered = useMemo\(\s*\(\) => filterPresets\(entries, filterEntries, query, category\),\s*\[entries, category, query, filterEntries\],\s*\);/,
+    );
   });
 });
 
