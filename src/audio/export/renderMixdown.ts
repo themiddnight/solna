@@ -66,6 +66,17 @@ const MIXDOWN_CHANNELS = 2;
 /** The floor on the tail: release + reverb. Never shorter than this. */
 const MIXDOWN_TAIL_SEC = 2;
 
+/** How many total dwell-steps to schedule between yields. Chosen so a yield
+ * lands roughly every few hundred AudioNode constructions on a dense
+ * arrangement — frequent enough that Cancel feels responsive, rare enough
+ * that the yield overhead (a macrotask hop) stays negligible next to the
+ * scheduling work itself. */
+const SCHEDULE_YIELD_INTERVAL_STEPS = 200;
+
+function yieldToMainThread(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 /** One source bus, its gain already converted from the store's dB to linear. */
 interface MixdownBusState {
   source: string;
@@ -485,15 +496,17 @@ function scheduleMelodyStep(
   }
 }
 
-function scheduleArrangement(
+async function scheduleArrangement(
   engine: AudioEngine,
   snapshot: MixdownSnapshot,
   plan: ArrangementPlan,
-): void {
+  signal?: AbortSignal,
+): Promise<{ cancelled: boolean }> {
   const stepDur = stepDurationSec(snapshot.bpm);
   const tickDur = stepDur / TICKS_PER_SIXTEENTH;
   const { stepsPerBar, meterId } = snapshot;
   const loopAutomation = planLoopAudioAutomation(snapshot, plan);
+  let stepsSinceYield = 0;
 
   for (let passIndex = 0; passIndex < plan.passes.length; passIndex += 1) {
     const pass = plan.passes[passIndex];
@@ -601,8 +614,16 @@ function scheduleArrangement(
       // leadActivePosAt/leadSoundingNotes.
       scheduleMelodyStep(engine, leadTrack, stepInPass, stepsPerBar, tickDur, time);
       scheduleMelodyStep(engine, fxTrack, stepInPass, stepsPerBar, tickDur, time);
+
+      stepsSinceYield += 1;
+      if (stepsSinceYield >= SCHEDULE_YIELD_INTERVAL_STEPS) {
+        stepsSinceYield = 0;
+        await yieldToMainThread();
+        if (signal?.aborted) return { cancelled: true };
+      }
     }
   }
+  return { cancelled: false };
 }
 
 type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;
@@ -719,11 +740,14 @@ export async function renderMixdown(
     // default — so seeding only applyMasterState + scheduleArrangement would
     // leave an unseeded impulse in the graph for the store's default project,
     // and two renders of it would differ.
-    await withSeededRandom(MIXDOWN_SEED, () => {
+    const scheduleResult = await withSeededRandom(MIXDOWN_SEED, async () => {
       const engine = createRenderEngine(ctx);
       applyMasterState(engine, snapshot);
-      scheduleArrangement(engine, snapshot, plan);
+      return scheduleArrangement(engine, snapshot, plan, signal);
     });
+    if (scheduleResult.cancelled) {
+      return { ok: false, reason: { kind: 'cancelled' } };
+    }
 
     report({ phase: 'rendering', percent: 1 });
     scheduleProgressCheckpoints(ctx, report);
